@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  SHIPPED_CORE_VERSIONS,
   SHIPPED_CORE_DISPLAY_ROOT,
   SHIPPED_CORE_FILE_INVENTORY,
   SHIPPED_CORE_LIBRARY_LOCATOR,
@@ -65,11 +66,14 @@ describe("shipped core package files", () => {
     expect(Object.isFrozen(SHIPPED_CORE_FILE_INVENTORY)).toBe(true);
   });
 
-  it("keeps the package library tree ordinary, link-free, and exactly inventoried", async () => {
-    await expect(
-      ordinaryFileInventory(join(packageRoot, "library")),
-    ).resolves.toEqual(SHIPPED_CORE_FILE_INVENTORY);
-  });
+  it.each(Object.entries(SHIPPED_CORE_VERSIONS))(
+    "keeps core %s ordinary, link-free, and exactly inventoried",
+    async (_version, entry) => {
+      await expect(
+        ordinaryFileInventory(join(packageRoot, entry.directory)),
+      ).resolves.toEqual(entry.fileInventory);
+    },
+  );
 
   it("declares only the shipped runtime, library, README, and Apache-2.0 notices", async () => {
     const manifest = JSON.parse(
@@ -92,6 +96,7 @@ describe("shipped core package files", () => {
     expect(manifest.files).toEqual([
       "dist",
       "library",
+      "versions",
       "README.md",
       "LICENSE",
       "NOTICE",

@@ -18,7 +18,7 @@ export interface ConnectionInventoryEntry {
   source: SourceRef;
 }
 export interface CompletenessFinding {
-  code: "W903" | "W904" | "W905" | "I001" | "I002" | "I003";
+  code: "W903" | "W904" | "W905" | "I001" | "I002" | "I003" | "I005";
   severity: "warning" | "info";
   deviceUid: string;
   designation: string;
@@ -173,6 +173,11 @@ export function analyzeCompleteness(
     if (coverage.status === "partial")
       add("W904", `Incomplete connection model: ${coverage.notes}`);
     if (coverage.status === "unreviewed") add("I003", coverage.notes);
+    if (coverage.status === "generic")
+      add(
+        "I005",
+        `Generic connection interface: terminals of an actual part beyond this abstract interface cannot be checked. ${coverage.notes}`,
+      );
     const entries: ConnectionInventoryEntry[] = ir.terminals
       .filter((t) => t.id.deviceUid === device.uid)
       .sort((a, b) => compare(a.id.terminalKey, b.id.terminalKey))

@@ -3,7 +3,8 @@
 These six stateless JSON agent tools retain their existing request/result
 contracts in the Bun alpha. The examples below are executed by
 [`agents-guide.test.ts`](../packages/cli/test/agents-guide.test.ts); their JSON
-requests also remain identical to the frozen legacy examples. The additional
+reference requests remain identical to the frozen legacy examples; refresh their
+byte guard from current inspection before execution. The additional
 source-guard step is tested separately.
 
 Build the source checkout before trusting CLI output. From the checkout root:
@@ -115,10 +116,10 @@ bun "$thermite_entry" agent inspect --input inspect-source.request.json
 Expected response: exit `0`, the usual split result/report streams, and
 `value.object.source` with `file: "devices/equipment.json"`,
 `pointer: "/objects/0"`, the object's `uid`, `patchEligible: true`, and
-`integrity: "sha256-VxO18aXXz5q4BY3r4k0bRGP8Ob1IAkJi9Tx34qBIARk="` on either
-fresh starter used by this guide's test. These are the file, pointer prefix and
-integrity used by the frozen dry-run example below. Consume returned values for
-real edits; the illustrative hash will be stale after an edit.
+an `integrity` computed from the current file bytes. Core 0.2.0 starters include
+PS1's deferred AC-feed review, so their hash differs from the frozen 0.1.0
+sample below. Consume returned file, pointer, UID and integrity values; the old
+sample guard correctly fails with A004 on the new starter.
 
 For example, given the parsed result `inspection`, build a dry-run request using
 its values and a UUID test immediately before the object's edits:
@@ -195,7 +196,10 @@ Expected response: exit `0`; stdout contains the derived `PS1.+` net result; std
 
 ### Apply a guarded source patch
 
-Save this dry-run request as `patch-dry-run.request.json`:
+Save this reference dry-run request as `patch-dry-run.request.json`, replacing
+`expectedIntegrity` with `source.integrity` from the current inspection above
+before executing it. Keep its operations and review them against the returned
+pointer and UID:
 
 ```json
 {

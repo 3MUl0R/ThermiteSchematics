@@ -316,7 +316,11 @@ describe("frozen legacy AGENTS guide", () => {
       const exampleFile = patchExample.files[0]!;
       expect(source).toMatchObject({
         file: exampleFile.path,
-        integrity: exampleFile.expectedIntegrity,
+        integrity:
+          "sha256-" +
+          createHash("sha256")
+            .update(await readFile(join(root, exampleFile.path)))
+            .digest("base64"),
         uid: sourceInspection.value.object.uid,
         patchEligible: true,
       });
@@ -324,8 +328,28 @@ describe("frozen legacy AGENTS guide", () => {
       for (const operation of exampleFile.operations) {
         expect(operation.path).toBe(`${source.pointer}/description`);
       }
-      // Exercise the UUID-guarded recipe with returned fields, while keeping
-      // all six frozen requests below byte-for-byte unchanged.
+      // The frozen sample guard belongs to the old starter. A stale guard must
+      // still fail; only a fresh inspection can authorize the current bytes.
+      const beforeStale = await readFile(join(root, exampleFile.path));
+      const stale = await invoke(root, [
+        "agent",
+        "apply-source-patch",
+        "--input",
+        "patch-dry-run.request.json",
+      ]);
+      expect(stale.exitCode).toBe(1);
+      expect(JSON.parse(stale.stderr).error.code).toBe("A004");
+      expect(stale.stdout).toBe("");
+      expect(await readFile(join(root, exampleFile.path))).toEqual(beforeStale);
+      const currentPatch = structuredClone(patchExample);
+      currentPatch.files[0]!.expectedIntegrity = source.integrity;
+      await writeFile(
+        join(root, "patch-dry-run.request.json"),
+        JSON.stringify(currentPatch, undefined, 2) + "\n",
+      );
+      // Execute the documented current-inspection recipe. All six reference
+      // JSON examples remain byte-for-byte identical to the frozen guide.
+
       const guardedPatch = {
         ...patchExample,
         files: [
@@ -380,7 +404,7 @@ describe("frozen legacy AGENTS guide", () => {
       expect(dryRun.result).toMatchObject({ value: { dryRun: true } });
       expect(await readFile(equipmentPath)).toEqual(beforeDryRun);
 
-      const applyRequest = structuredClone(examples[4]) as {
+      const applyRequest = structuredClone(currentPatch) as {
         dryRun: boolean;
       };
       applyRequest.dryRun = false;

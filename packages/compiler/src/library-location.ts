@@ -1,5 +1,6 @@
 import {
   SHIPPED_CORE_DISPLAY_ROOT,
+  SHIPPED_CORE_VERSIONS,
   SHIPPED_CORE_PACKAGE_NAME,
 } from "@thermite/core-library";
 import { normalizeDiagnosticFile } from "@thermite/schema";
@@ -39,7 +40,14 @@ export function openableLibraryFile(
   if (resolutionKind !== "shipped" || !file.startsWith(prefix)) {
     return { project: file };
   }
-  const packageFile = `${SHIPPED_PACKAGE_LIBRARY_DIRECTORY}/${file.slice(prefix.length)}`;
+  const version = Object.values(SHIPPED_CORE_VERSIONS).find(
+    (entry) =>
+      entry.directory !== SHIPPED_PACKAGE_LIBRARY_DIRECTORY &&
+      file.startsWith(`${entry.displayRoot}/`),
+  );
+  const packageFile = version
+    ? `${version.directory}/${file.slice(version.displayRoot.length + 1)}`
+    : `${SHIPPED_PACKAGE_LIBRARY_DIRECTORY}/${file.slice(prefix.length)}`;
   return {
     runtime: `${SHIPPED_CORE_RUNTIME_PACKAGE_ROOT}/${packageFile}`,
     source: `${SHIPPED_CORE_SOURCE_PACKAGE_ROOT}/${packageFile}`,

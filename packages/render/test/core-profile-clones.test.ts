@@ -1,7 +1,13 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CORE_SYMBOL_BINDINGS } from "@thermite/schema";
-import { compileProject, type ElectricalIr } from "@thermite/compiler";
-import { readFile } from "node:fs/promises";
+import {
+  compileProject,
+  lockProject,
+  type ElectricalIr,
+} from "@thermite/compiler";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildDocumentation } from "@thermite/query";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { renderSchematic } from "../src/renderer.js";
@@ -12,9 +18,31 @@ import {
   projectDeviceTypeSymbolMappings,
 } from "../src/symbols/mappings.js";
 let core: ElectricalIr;
+let core02: ElectricalIr;
+let core02Root: string;
 beforeAll(async () => {
   core = await compileCoreFixture();
+  core02Root = await mkdtemp(join(tmpdir(), "thermite-core02-render-"));
+  await cp("examples/motor-starter", core02Root, { recursive: true });
+  const manifest = JSON.parse(
+    await readFile(join(core02Root, "system.json"), "utf8"),
+  );
+  manifest.libraries[0].version = "0.2.0";
+  await writeFile(join(core02Root, "system.json"), JSON.stringify(manifest));
+  expect((await lockProject(core02Root)).ok).toBe(true);
+  const compiled = await compileProject(core02Root);
+  if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+  core02 = compiled.ir;
 });
+afterAll(async () => {
+  if (core02Root) await rm(core02Root, { recursive: true, force: true });
+});
+function normalizeVersion(json: string) {
+  return json.replaceAll(
+    "@thermite/core-library/versions/0.2.0",
+    "@thermite/core-library",
+  );
+}
 // Preserve instance UUIDs, designations and every electrical object. Only the type
 // ID changes. Normalize that ID in serialized drawings; no geometry/labels removed.
 function clone(ir: ElectricalIr, id: string, symbol?: string) {
@@ -27,6 +55,18 @@ function clone(ir: ElectricalIr, id: string, symbol?: string) {
   return v;
 }
 const requests = [
+  // The thirteenth type is a cable, with physical conductor views rather than
+  // a device profile. Compare its actual 0.2.0 rendering in the same matrix.
+  {
+    format: "schematic-view-request/0.2",
+    root: { by: "designation", value: "CBL1" },
+    intent: { kind: "conductors" },
+  },
+  {
+    format: "schematic-view-request/0.1",
+    root: { by: "designation", value: "PS1" },
+    family: "power",
+  },
   {
     format: "schematic-view-request/0.1",
     root: { by: "designation", value: "M1" },
@@ -54,7 +94,12 @@ const requests = [
 ] as const;
 describe("core profile clone matrix", () => {
   for (const binding of CORE_SYMBOL_BINDINGS)
-    for (const variant of ["IEC", "profile"] as const) {
+    for (const variant of [
+      "IEC",
+      "profile",
+      "core 0.2.0",
+      "core 0.2.0 clone",
+    ] as const) {
       it(`${binding.typeId} / ${variant} matches every supported family and flow`, async () => {
         const symbol =
           variant === "profile"
@@ -64,7 +109,16 @@ describe("core profile clone matrix", () => {
           binding.typeId === "core:prox-pnp-3wire"
             ? pnpTraceFixture(core)
             : core;
-        const changed = clone(originalIr, binding.typeId, symbol);
+        const nextIr =
+          binding.typeId === "core:prox-pnp-3wire"
+            ? pnpTraceFixture(core02)
+            : core02;
+        const changed =
+          variant === "core 0.2.0"
+            ? nextIr
+            : variant === "core 0.2.0 clone"
+              ? clone(nextIr, binding.typeId)
+              : clone(originalIr, binding.typeId, symbol);
         for (const flow of ["left-to-right", "top-to-bottom"] as const) {
           for (const request of requests) {
             const original = await renderSchematic(originalIr, {
@@ -76,7 +130,7 @@ describe("core profile clone matrix", () => {
             expect(actual.ok, JSON.stringify(actual)).toBe(true);
             if (original.ok && actual.ok)
               expect(
-                JSON.stringify(actual.value).replaceAll(
+                normalizeVersion(JSON.stringify(actual.value)).replaceAll(
                   binding.typeId.replace("core:", "local:"),
                   binding.typeId,
                 ),
@@ -113,7 +167,7 @@ describe("core profile clone matrix", () => {
             const original = await prepareCircuitView(originalIr, request);
             const actual = await prepareCircuitView(changed, request);
             expect(
-              JSON.stringify(actual).replaceAll(
+              normalizeVersion(JSON.stringify(actual)).replaceAll(
                 binding.typeId.replace("core:", "local:"),
                 binding.typeId,
               ),

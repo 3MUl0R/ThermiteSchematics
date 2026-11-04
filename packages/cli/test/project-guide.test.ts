@@ -19,6 +19,9 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   agent,
+  copyProject,
+  editJson,
+  ok,
   ctx,
   describeRun,
   entry,
@@ -49,7 +52,7 @@ import {
   type GuideModel,
 } from "./project-guide/guide-model.js";
 import communication from "./project-guide/communication-completeness.js";
-import core from "./project-guide/core.js";
+import core, { assertCloneWarnings, viewRoots } from "./project-guide/core.js";
 import general from "./project-guide/general.js";
 import signalLoops from "./project-guide/signal-loops.js";
 import wiring from "./project-guide/wiring-circuits.js";
@@ -853,8 +856,17 @@ describe("generated project guide", () => {
         const line = live.spans.find((s) => s.text === span)!.line;
         await materializeInput(words, project, template, line, live);
         const run = await thermite(words, project);
-        expect(run.code, describeRun(words, run)).toBe(0);
-        await checkOutput(words, project);
+        if (
+          template === "starter" &&
+          words.join(" ") === "validate . --strict"
+        ) {
+          expect(run.code, describeRun(words, run)).toBe(1);
+          expect(run.stdout.match(/ W\d{3} /g)).toEqual([" W903 ", " W905 "]);
+          expect(run.stderr).toBe("");
+        } else {
+          expect(run.code, describeRun(words, run)).toBe(0);
+          await checkOutput(words, project);
+        }
       }
     },
     240_000,
@@ -1168,4 +1180,66 @@ describe("self-tests: weakened engine cases fail the claims on them", () => {
       'LOOP_REJECTIONS "branch" gave ""; the guide states "R006, R006"',
     ]);
   });
+});
+
+describe("self-tests: clone diagnostics remain exact", () => {
+  it.each(["W111", "W303", "W904"])(
+    "rejects an added %s on the actual site-clone fixture",
+    async (code) => {
+      const project = await copyProject(await viewRoots(), `clone-${code}`);
+      const { randomUUID } = await import("node:crypto");
+      if (code === "W111") {
+        const limit = (
+          await readJson(
+            join(project, "libraries/core/types/limit-switch-2wire.json"),
+          )
+        ).types[0];
+        await editJson(join(project, "site/types/clones.json"), (f) =>
+          f.types.push({
+            ...limit,
+            id: "site:switch-bad",
+            symbol: "thermite:motor-3ph",
+          }),
+        );
+        await editJson(join(project, "devices/equipment.json"), (f) =>
+          f.objects.push({
+            uid: randomUUID(),
+            kind: "device",
+            designation: "LS5",
+            type: "site:switch-bad",
+          }),
+        );
+      } else if (code === "W904") {
+        await editJson(join(project, "site/types/clones.json"), (f) => {
+          const limit = f.types.find(
+            (t: any) => t.id === "site:limit-switch-2wire",
+          );
+          limit.connectionCoverage = {
+            status: "partial",
+            notes: "Synthetic incomplete-interface mutation.",
+          };
+        });
+      } else {
+        const equipment = await readJson(
+          join(project, "devices/equipment.json"),
+        );
+        const source = equipment.objects.find(
+          (o: any) => o.type === "core:supply-480v-3ph",
+        );
+        await editJson(join(project, "connections/control-power.json"), (f) =>
+          f.objects.push({
+            uid: randomUUID(),
+            kind: "wire",
+            designation: "W-MUTATION-480",
+            endpoints: [
+              { device: source.designation, terminal: "L1" },
+              { device: "PLC1", terminal: "X1.0" },
+            ],
+          }),
+        );
+      }
+      await ok(["lock", "."], project);
+      await expect(assertCloneWarnings(project)).rejects.toThrow(code);
+    },
+  );
 });

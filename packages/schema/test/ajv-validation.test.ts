@@ -33,6 +33,8 @@ const NON_ERROR_SCHEMA_KEYWORDS = new Set([
   "title",
   "properties",
   "patternProperties",
+  // This applicator adds no wrapper error; child enum/type errors are walked below.
+  "dependentSchemas",
   "items",
 ]);
 

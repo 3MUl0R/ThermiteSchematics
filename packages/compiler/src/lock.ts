@@ -12,7 +12,7 @@ import {
   type LibraryLock,
   type RelatedDiagnosticLocation,
 } from "@thermite/schema";
-import { SHIPPED_CORE_LIBRARY_LOCATOR } from "@thermite/core-library";
+import { SHIPPED_CORE_VERSIONS } from "@thermite/core-library";
 
 import {
   writeFileAtomically,
@@ -244,7 +244,7 @@ function currentLibraryFiles(
 
 function libraryLockPath(library: LoadedLibrary): string {
   if (library.resolutionKind === "shipped") {
-    return SHIPPED_CORE_LIBRARY_LOCATOR;
+    return SHIPPED_CORE_VERSIONS[library.dependency.version]!.locator;
   }
   const path = library.dependency.path;
   if (path === undefined) {

@@ -1,4 +1,8 @@
-import type { ElectricalIr, TerminalId } from "@thermite/compiler";
+import type {
+  ElectricalIr,
+  IrDeviceType,
+  TerminalId,
+} from "@thermite/compiler";
 import { createQueryEngine } from "./engine.js";
 import type { QueryError, TerminalSelector } from "./types.js";
 
@@ -15,7 +19,8 @@ export interface ContinuityEndpoint {
   readonly terminal: TerminalId;
   readonly display: string;
   readonly netId: string;
-  readonly modelCoverage: "complete" | "partial" | "unreviewed";
+  readonly modelCoverage:
+    NonNullable<IrDeviceType["connectionCoverage"]>["status"] | "unreviewed";
 }
 export interface ContinuityReport {
   readonly format: "physical-continuity-report/0.1";
@@ -183,7 +188,7 @@ export function auditContinuity(
       "Checks are explicit project obligations, not inferred requirements. Only wires, jumpers and fully terminated cable cores join physical nets.",
       "Contacts (including normally closed contacts), coils, windings, channels, loads, sources and internal function relationships are not conductive edges.",
       "Missing-modeled-path means separate nets in the authored graph, not proof of a physical wiring defect. Unmodeled commoning remains outside this analysis.",
-      "Unresolved terminal selectors remain indeterminate with their query errors. Partial and unreviewed endpoint model coverage is retained.",
+      "Unresolved terminal selectors remain indeterminate with their query errors. Generic, partial and unreviewed endpoint model coverage is retained.",
       "Continuity does not prove functional supply traversal, energized state, voltage compatibility, adequate bonding, conductor sizing, protection coordination or machine safety.",
     ],
   };

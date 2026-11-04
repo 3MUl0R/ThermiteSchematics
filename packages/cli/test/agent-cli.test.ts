@@ -507,7 +507,7 @@ describe("M7 Task 7 thermite agent command namespace", () => {
         code: "E032",
         severity: "error",
         message:
-          'Shipped library "core" does not provide version "9.9.9"; available version is "0.1.0".',
+          'Shipped library "core" does not provide version "9.9.9"; available versions are "0.1.0", "0.2.0".',
         file: "system.json",
         line: 1,
         column: 162,

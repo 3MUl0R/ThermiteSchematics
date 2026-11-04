@@ -790,7 +790,9 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
           required: ["status", "notes"],
           properties: {
             status: {
-              enum: ["complete", "partial"],
+              enum: ["complete", "partial", "generic"],
+              description:
+                "complete: every connection of an exact part is modeled; partial: the model omits connections; generic: the abstract interface was reviewed, without exact-part catalog facts.",
             },
             notes: {
               type: "string",
@@ -841,6 +843,26 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
                   },
                 },
               },
+            },
+          },
+        },
+      },
+      dependentSchemas: {
+        catalog: {
+          description:
+            "An exact-part catalog requires manufacturer and orderNumber; its coverage cannot be generic.",
+          properties: {
+            connectionCoverage: {
+              type: "object",
+              properties: {
+                status: {
+                  enum: ["complete", "partial"],
+                },
+                notes: {
+                  $ref: "#/properties/connectionCoverage/properties/notes",
+                },
+              },
+              additionalProperties: false,
             },
           },
         },
@@ -1036,6 +1058,8 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
         code: {
           type: "string",
           pattern: "^[EIW][0-9]{3}$",
+          description:
+            "Stable diagnostic identifier; I005 identifies reviewed generic connection interfaces in completeness inventories.",
         },
         severity: {
           type: "string",

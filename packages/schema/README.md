@@ -32,7 +32,7 @@ dependency arm:
 
 An explicit dependency `path` retains the original local-library meaning for every
 accepted value. Omitting `path` requests a shipped library by exact name and
-version; the shipped set is currently only `core@0.1.0`.
+version; the shipped set is `core@0.1.0` and `core@0.2.0`.
 
 The referenced presentation uses `project-presentation/0.1`:
 
@@ -150,10 +150,22 @@ fails to resolve. It names the `types` entries of the expected kind in the
 open, not the logical `file` used for display. A local library path is relative to
 the project manifest directory. The shipped core library is named twice:
 `node_modules/@thermite/core-library/library/...` below the runtime package root,
-and `packages/core-library/library/...` in a source checkout. `E013`
+and `packages/core-library/library/...` in a source checkout for 0.1.0;
+0.2.0 uses `versions/0.2.0/...` in that package instead. `E013`
 pattern failures also carry `pattern`, the raw ECMAScript regular expression, and
 their message describes it in words. A pattern without a description is quoted as
 `/regex/`.
+
+## Connection coverage
+
+Device types accept `connectionCoverage.status` values `complete`, `partial` and
+`generic`, with nonblank notes. Generic means a reviewed abstract interface;
+partial still applies to a model missing part of its own interface. The published
+schema's catalog-dependent enum rejects generic coverage when exact-part
+manufacturer/order-number catalog metadata is declared (E014 at the status).
+[Connection completeness](../../docs/completeness.md) defines the review scope,
+W904 warnings and informational I005 inventory findings. Diagnostic and agent
+report schemas admit I005 with info severity.
 
 ## Diagnostic transport schemas
 

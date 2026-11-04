@@ -72,7 +72,7 @@ network sandbox; its report records `networkIsolation: "not-enforced"`. Read thi
 field before making any offline-isolation claim. It checks:
 
 - Version/help, both initialization templates, refusal to overwrite a project,
-  validation, core-library notices, and spare-conductor queries.
+  validation, both shipped core versions, core-library notices, and spare-conductor queries.
 - Repeatable SVG, HTML and PDF output, fonts, a BOM export, and diagnostics.
 - All six agent commands with separate result/report streams; guarded patch
   dry-run, apply, and rejection of a stale integrity guard.

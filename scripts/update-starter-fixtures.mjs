@@ -17,10 +17,11 @@ import {
   compileProject,
   generateLibraryLock,
   serializeLibraryLock,
-  SHIPPED_CORE_FILE_INVENTORY,
+  SHIPPED_CORE_VERSIONS,
   resolveShippedCoreLibrary,
   writeFileAtomically,
 } from "../packages/compiler/dist/index.js";
+
 import {
   DEFAULT_STARTER_PROJECT_NAME,
   DEFAULT_STARTER_REVISION,
@@ -30,6 +31,9 @@ import {
   createStarterLoadedProject,
   prepareStarterScaffoldFromAssets,
 } from "../packages/cli/dist/index.js";
+
+const STARTER_CORE = SHIPPED_CORE_VERSIONS["0.2.0"];
+const SHIPPED_CORE_FILE_INVENTORY = STARTER_CORE.fileInventory;
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const templateRoot = join(

@@ -244,6 +244,9 @@ const plant = () =>
     await cp(ctx.pristine.starter, project, { recursive: true });
     await editJson(join(project, EQUIPMENT), (file) => {
       byDesignation(file, "PLC1").io = PLC1_IO;
+      // This synthetic plant authors the PSU feed below, completing the starter
+      // deferral. Required flags and generic coverage stay on the library types.
+      delete byDesignation(file, "PS1").connectionReview;
       file.objects.push(
         device("SRC1", "core:supply-480v-3ph"),
         device("M1", "core:motor-3ph"),
@@ -263,6 +266,10 @@ const plant = () =>
         wire("PS1.+", "LS1.13"),
         wire("LS1.14", "PLC1.X1.0"),
         wire("PS1.+", "S1.11"),
+        wire("S1.12", "PLC2.X1.0"),
+        // PLC2 supply stays unwired under the L0 helm decision (#51).
+        wire("SRC1.L1", "PS1.L"),
+        wire("SRC1.L2", "PS1.N"),
       ),
     );
     await editJson(join(project, "system.json"), (manifest) =>
@@ -365,14 +372,18 @@ const plantValidate = () =>
     agent("validate", request({}), await plant()),
   );
 /**
- * The plant's only finding is information: its coil net (PLC1.X2.0 to K1.A1)
- * joins two rated terminals and has no potential, so it is unassessed.
+ * PLC2's required supply is unwired (W903). The coil net (PLC1.X2.0 to
+ * K1.A1) joins two rated terminals without a potential and is unassessed (I304).
  */
-function expectPlantInfoOnly(diagnostics: readonly any[]) {
+function expectPlantDiagnostics(diagnostics: readonly any[]) {
   expect(diagnostics.map((d) => [d.code, d.severity, d.jsonPointer])).toEqual([
+    ["W903", "warning", "/objects/6"],
     ["I304", "info", "/project"],
   ]);
-  expect(diagnostics[0].message).toMatch(
+  expect(diagnostics[0].message).toBe(
+    "PLC2: Required terminal PLC2.L+ has no connection. Required terminal PLC2.M has no connection.",
+  );
+  expect(diagnostics[1].message).toMatch(
     /^Voltage compatibility is unassessed on rated nets without voltage facts in potentials \(1 net: \["K1\.A1, PLC1\.X2\.0 \[net:sha256:[0-9a-f]{64}\]"\]\)\./,
   );
 }
@@ -786,7 +797,7 @@ const module: FactModule = {
         ]);
         expect(valid.result.value.valid).toBe(true);
         expect(valid.report).toMatchObject({ error: null });
-        expectPlantInfoOnly(valid.report.diagnostics);
+        expectPlantDiagnostics(valid.report.diagnostics);
         expect(expected.code).toBe(1);
         expect(expected.report.error.code).toBe("Q001");
         expect(tool.code).toBe(2);
@@ -981,7 +992,7 @@ const module: FactModule = {
         expect(manifest.sources).not.toContain(UNLISTED);
         expect(unlisted.objects[0].uid).not.toMatch(ctx.uidPattern);
         expect(valid.result.value.valid).toBe(true);
-        expectPlantInfoOnly(valid.report.diagnostics);
+        expectPlantDiagnostics(valid.report.diagnostics);
         const patch = await agent(
           "apply-source-patch",
           await patchRequest(project, UNLISTED, [
@@ -1050,9 +1061,13 @@ const module: FactModule = {
         expect(plc2.map((d: any) => [d.code, d.severity])).toEqual([
           ["W303", "warning"],
           ["W303", "warning"],
+          ["W903", "warning"],
           ["I304", "info"],
         ]);
-        expect(plc2[2].message).toMatch(
+        expect(plc2[2].message).toBe(
+          "PLC2: Required terminal PLC2.L+ has no connection. Required terminal PLC2.M has no connection.",
+        );
+        expect(plc2[3].message).toMatch(
           /\(2 nets: \["PLC2\.X1\.0, SRC1\.L3 \[net:sha256:[0-9a-f]{64}\]", "PLC2\.X1\.1, SRC2\.L1 \[net:sha256:[0-9a-f]{64}\]"\]\)/,
         );
         expect(
@@ -1073,13 +1088,35 @@ const module: FactModule = {
           semanticErrors(),
           plant(),
         ]);
-        // The plant's coil net is listed, and nothing else: exit 0, valid,
-        // through the agent and through a strict CLI validate.
+        // Default validation succeeds with the plant's exact warning/info pair;
+        // strict fails for PLC2's unwired required supply, retaining both codes.
         expect(valid.code).toBe(0);
         expect(valid.result.value.valid).toBe(true);
-        expectPlantInfoOnly(valid.report.diagnostics);
-        const strict = await ok(["validate", ".", "--strict"], project);
-        expect(strict.stdout + strict.stderr).toMatch(/ I304 Voltage /);
+        expectPlantDiagnostics(valid.report.diagnostics);
+        const strict = await thermite(
+          ["validate", ".", "--strict", "--json"],
+          project,
+        );
+        expect(strict.code, describeRun(["validate", "--strict"], strict)).toBe(
+          1,
+        );
+        expect(strict.stderr).toBe("");
+        expectPlantDiagnostics(JSON.parse(strict.stdout));
+        // The unchanged machine-demo example isolates info-only validation.
+        // Keep proving strict exit 0 without suppressing the plant's warning.
+        const info = await ok(
+          [
+            "validate",
+            join(repositoryRoot, "examples/machine-demo"),
+            "--strict",
+            "--json",
+          ],
+          project,
+        );
+        expect(info.stderr).toBe("");
+        expect(
+          JSON.parse(info.stdout).map((d: any) => [d.code, d.severity]),
+        ).toEqual([["I304", "info"]]);
         // The second name on +24VDC (E300) skips E301 and E302 on that net,
         // and E301 at PLC1.X1.0 skips E302 there; nothing else is skipped.
         expect(
@@ -1176,18 +1213,19 @@ const module: FactModule = {
     },
     {
       claim:
-        "The generic core library lives in editable `libraries/core`, referenced by system.json and pinned by electrical-system.lock.json.",
+        "Init copies `core@0.2.0` to `libraries/core`; 0.1.0 locks persist. system.json selects path/version; electrical-system.lock.json pins bytes.",
       async check() {
         const project = ctx.pristine.starter;
         expect(
           (await readJson(join(project, "system.json"))).libraries,
-        ).toEqual([{ name: "core", version: "0.1.0", path: "libraries/core" }]);
+        ).toEqual([{ name: "core", version: "0.2.0", path: "libraries/core" }]);
         const lock = (
           await readJson(join(project, "electrical-system.lock.json"))
         ).libraries.core;
         expect(lock).toMatchObject({
           path: "libraries/core",
           resolutionKind: "local",
+          version: "0.2.0",
         });
         const pinned = Object.entries(lock.files as Record<string, string>);
         expect(pinned.map(([path]) => path)).toContain(
@@ -1199,11 +1237,67 @@ const module: FactModule = {
             path,
           ).toBe(hash);
         await ok(["lock", ".", "--check"], project);
+        const oldProject = join(repositoryRoot, "examples/motor-starter");
+        const oldLock = join(oldProject, "electrical-system.lock.json");
+        const before = await readFile(oldLock);
+        expect((await readJson(oldLock)).libraries.core.version).toBe("0.1.0");
+        await ok(["validate", oldProject], project);
+        expect(await readFile(oldLock)).toEqual(before);
+        // Observe the new shipped locator as well as the local init inventory.
+        const shipped = await freshProject("cabinets");
+        await editJson(join(shipped, "system.json"), (m) => {
+          delete m.libraries[0].path;
+        });
+        await ok(["lock", "."], shipped);
+        const compiled = JSON.parse(
+          (await ok(["compile", "."], shipped)).stdout,
+        );
+        expect(compiled.libraries[0]).toMatchObject({
+          version: "0.2.0",
+          path: "ais-shipped:core@0.2.0",
+          resolutionKind: "shipped",
+        });
       },
     },
     {
       claim:
-        "After an intentional library change run `thermite lock .`, then validate (E107/E108 otherwise).",
+        "Starter PS1.L/N are required but deferred: strict fails W903/W905; cabinets passes.",
+      async check() {
+        const strict = await rejected(
+          ["validate", ".", "--strict"],
+          ctx.pristine.starter,
+          "W903",
+        );
+        expect(strict.stdout).toContain("W905");
+        expect(strict.stdout).not.toContain("W904");
+        const report = JSON.parse(
+          (await ok(["diagnostics", "--json"], ctx.pristine.starter)).stdout,
+        );
+        for (const key of ["L", "N"]) {
+          const psu = report.devices.find((d: any) => d.designation === "PS1");
+          expect(psu.connections.find((c: any) => c.key === key)).toMatchObject(
+            {
+              required: true,
+              connection: "unconnected",
+              review: { status: "deferred" },
+            },
+          );
+          expect(
+            report.findings
+              .filter((f: any) => f.designation === "PS1" && f.key === key)
+              .map((f: any) => f.code),
+          ).toEqual(["W903", "W905"]);
+        }
+        const cabinets = await ok(
+          ["validate", ".", "--strict"],
+          ctx.pristine.cabinets,
+        );
+        expect(cabinets.stderr).toBe("");
+      },
+    },
+    {
+      claim:
+        "After edits run `thermite lock .`, then validate (E107/E108 otherwise).",
       async check() {
         // A new library file: E107, not E108.
         const added = async () => {
@@ -1233,7 +1327,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Do not invent manufacturer ratings or pin assignments; keep the manufacturer's document/revision and review notes with new types. The source checkout's `siemens-pilot` library (not copied by `init`) shows exact document references and exclusions.",
+        "Invent no pins/ratings; keep manufacturer document/revision and review notes. Source-only `siemens-pilot` has exact references/exclusions.",
       async check() {
         const library = join(repositoryRoot, "libraries/siemens-pilot");
         const manifest = await readJson(join(library, "library.json"));
@@ -1643,10 +1737,10 @@ const module: FactModule = {
           ].sort(),
         );
         // The plant's PLC2 overlaps %IB0, %I0.0 and %IW0, gives an output an
-        // input address and has an invalid one, and validates with no finding
-        // but the plant's unassessed coil net.
+        // input address and has an invalid one, without address findings.
+        // Only its unwired supply and the unassessed coil net are reported.
         expect(byDesignation({ objects }, "PLC2").io).toEqual(PLC2_IO);
-        expectPlantInfoOnly(valid.report.diagnostics);
+        expectPlantDiagnostics(valid.report.diagnostics);
       },
     },
     {
@@ -1685,6 +1779,14 @@ const module: FactModule = {
           plant().then((p) => copyProject(p, "general-uids")),
           plantSnapshot(),
         ]);
+        const plc2Wires = (await sourceObjects(project))
+          .filter(
+            (o: any) =>
+              o.kind === "wire" &&
+              o.endpoints.some((e: any) => e.device === "PLC2"),
+          )
+          .map((o: any) => o.designation);
+        expect(plc2Wires).toHaveLength(1); // S1.12 to PLC2.X1.0; supply is unwired.
         let plcUid = "";
         // Rename PLC1 to PLC9 (and its wire ends), and give PLC2 a new UID.
         await editJson(join(project, EQUIPMENT), (file) => {
@@ -1701,11 +1803,14 @@ const module: FactModule = {
         const changes = await review(project, before);
         expect(
           changes.map((c) => `${c.kind}:${c.operation}:${c.label}`).sort(),
-        ).toEqual([
-          "device:added:PLC2",
-          "device:changed:PLC9",
-          "device:removed:PLC2",
-        ]);
+        ).toEqual(
+          [
+            "device:added:PLC2",
+            "device:changed:PLC9",
+            "device:removed:PLC2",
+            ...plc2Wires.map((label: string) => `wire:changed:${label}`),
+          ].sort(),
+        );
         expect(changes).toContainEqual(
           expect.objectContaining({
             id: plcUid,

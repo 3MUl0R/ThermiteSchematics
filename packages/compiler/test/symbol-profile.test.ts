@@ -661,99 +661,115 @@ describe("zero new diagnostics across repository authoring inputs", () => {
     },
   );
 
-  it("places and validates every device type in every optional/pilot library and core", async () => {
-    const root = await mkdtemp(join(tmpdir(), "thermite-profile-libraries-"));
-    temporary.push(root);
-    const entries = (
-      await readdir(join(repo, "libraries"), { withFileTypes: true })
-    ).filter((e) => e.isDirectory());
-    const libraries = [];
-    for (const entry of entries) {
-      const path = join(root, entry.name);
-      await cp(join(repo, "libraries", entry.name), path, {
-        recursive: true,
-        filter: (p) => !p.split(/[\\/]/u).includes("examples"),
-      });
-      const manifest = JSON.parse(
-        await readFile(join(path, "library.json"), "utf8"),
+  it.each(["0.1.0", "0.2.0"])(
+    "places and validates every device type in every optional/pilot library and core %s",
+    async (version) => {
+      const root = await mkdtemp(join(tmpdir(), "thermite-profile-libraries-"));
+      temporary.push(root);
+      const entries = (
+        await readdir(join(repo, "libraries"), { withFileTypes: true })
+      ).filter((e) => e.isDirectory());
+      const libraries = [];
+      for (const entry of entries) {
+        const path = join(root, entry.name);
+        await cp(join(repo, "libraries", entry.name), path, {
+          recursive: true,
+          filter: (p) => !p.split(/[\\/]/u).includes("examples"),
+        });
+        const manifest = JSON.parse(
+          await readFile(join(path, "library.json"), "utf8"),
+        );
+        libraries.push({
+          name: manifest.name,
+          version: manifest.version,
+          path: entry.name,
+        });
+      }
+      await cp(
+        join(
+          repo,
+          version === "0.1.0"
+            ? "packages/core-library/library"
+            : "packages/core-library/versions/0.2.0",
+        ),
+        join(root, "core"),
+        {
+          recursive: true,
+        },
       );
-      libraries.push({
-        name: manifest.name,
-        version: manifest.version,
-        path: entry.name,
-      });
-    }
-    await cp(join(repo, "packages/core-library/library"), join(root, "core"), {
-      recursive: true,
-    });
-    libraries.push({ name: "core", version: "0.1.0", path: "core" });
-    await writeFile(
-      join(root, "system.json"),
-      JSON.stringify({
-        format: "electrical-system/0.1",
-        project: { name: "all library types" },
-        sources: ["devices.json"],
-        libraries,
-      }),
-    );
-    await writeFile(
-      join(root, "devices.json"),
-      JSON.stringify({ objects: [] }),
-    );
-    const loaded = await loadProject(root);
-    if (!loaded.ok) throw new Error(JSON.stringify(loaded.diagnostics));
-    const types = loaded.project.libraries
-      .flatMap((l) => l.sources.flatMap((s) => s.value.types))
-      .filter((t) => t.kind === "device_type");
-    expect(types.length).toBeGreaterThan(200);
-    const unfit: string[] = [];
-    let profiledTypes = 0,
-      profiledFunctions = 0;
-    for (const type of types) {
-      if (CORE_SYMBOL_BINDINGS.some((b) => b.typeId === type.id)) continue;
-      const profile = SYMBOL_PROFILES.find(
-        (p) => p.id === type.symbol || p.aliases.includes(type.symbol ?? ""),
+      libraries.push({ name: "core", version, path: "core" });
+      await writeFile(
+        join(root, "system.json"),
+        JSON.stringify({
+          format: "electrical-system/0.1",
+          project: { name: "all library types" },
+          sources: ["devices.json"],
+          libraries,
+        }),
       );
-      if (!profile) continue;
-      profiledTypes++;
-      for (const [key, fn] of Object.entries(type.functions)) {
-        profiledFunctions++;
+      await writeFile(
+        join(root, "devices.json"),
+        JSON.stringify({ objects: [] }),
+      );
+      const loaded = await loadProject(root);
+      if (!loaded.ok) throw new Error(JSON.stringify(loaded.diagnostics));
+      const types = loaded.project.libraries
+        .flatMap((l) => l.sources.flatMap((s) => s.value.types))
+        .filter((t) => t.kind === "device_type");
+      expect(types.length).toBeGreaterThan(200);
+      const unfit: string[] = [];
+      let profiledTypes = 0,
+        profiledFunctions = 0;
+      for (const type of types) {
         if (
-          fn.kind === "mechanism" ||
-          Object.hasOwn(type.circuitSymbols ?? {}, key)
+          CORE_SYMBOL_BINDINGS.some((b) => b.typeId === type.id) &&
+          !type.symbol?.startsWith("thermite:")
         )
           continue;
-        if (
-          !profile.support.some((s) =>
-            s.functions.some((shape) =>
-              symbolFunctionMatchesShape(type, fn, shape),
-            ),
+        const profile = SYMBOL_PROFILES.find(
+          (p) => p.id === type.symbol || p.aliases.includes(type.symbol ?? ""),
+        );
+        if (!profile) continue;
+        profiledTypes++;
+        for (const [key, fn] of Object.entries(type.functions)) {
+          profiledFunctions++;
+          if (
+            fn.kind === "mechanism" ||
+            Object.hasOwn(type.circuitSymbols ?? {}, key)
           )
-        )
-          unfit.push(`${type.id}/${key}`);
+            continue;
+          if (
+            !profile.support.some((s) =>
+              s.functions.some((shape) =>
+                symbolFunctionMatchesShape(type, fn, shape),
+              ),
+            )
+          )
+            unfit.push(`${type.id}/${key}`);
+        }
       }
-    }
-    // Includes the review's 111 types/952 functions and root-file optional models.
-    expect(profiledTypes).toBeGreaterThanOrEqual(111);
-    expect(profiledFunctions).toBeGreaterThanOrEqual(952);
-    expect(unfit).toEqual([]);
-    await writeFile(
-      join(root, "devices.json"),
-      JSON.stringify({
-        objects: types.map((type, i) => ({
-          kind: "device",
-          uid: randomUUID(),
-          designation: `D${i}`,
-          type: type.id,
-        })),
-      }),
-    );
-    const withDevices = await loadProject(root);
-    if (!withDevices.ok)
-      throw new Error(JSON.stringify(withDevices.diagnostics));
-    await writeLibraryLock(withDevices.project);
-    assertClean(await compileProject(root), "every placed library type");
-  });
+      // Includes the review's 111 types/952 functions and root-file optional models.
+      expect(profiledTypes).toBeGreaterThanOrEqual(111);
+      expect(profiledFunctions).toBeGreaterThanOrEqual(952);
+      expect(unfit).toEqual([]);
+      await writeFile(
+        join(root, "devices.json"),
+        JSON.stringify({
+          objects: types.map((type, i) => ({
+            kind: "device",
+            uid: randomUUID(),
+            designation: `D${i}`,
+            type: type.id,
+          })),
+        }),
+      );
+      const withDevices = await loadProject(root);
+      if (!withDevices.ok)
+        throw new Error(JSON.stringify(withDevices.diagnostics));
+      await writeLibraryLock(withDevices.project);
+      assertClean(await compileProject(root), "every placed library type");
+    },
+  );
 
   it("keeps compiler and schema independent of render", async () => {
     for (const directory of ["packages/compiler/src", "packages/schema/src"]) {

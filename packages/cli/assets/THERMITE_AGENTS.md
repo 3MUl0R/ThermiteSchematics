@@ -172,13 +172,12 @@ Print at 100% on matching paper and disable browser headers/footers.
 
 ## Visible component libraries
 
-The generic core library lives in editable `libraries/core`, referenced by
-system.json and pinned by electrical-system.lock.json. After an intentional
-library change run `thermite lock .`, then validate (E107/E108 otherwise). Do
-not invent manufacturer ratings or pin assignments; keep the manufacturer's
-document/revision and review notes with new types. The source checkout's
-`siemens-pilot` library (not copied by `init`) shows exact document references
-and exclusions.
+Init copies `core@0.2.0` to `libraries/core`; 0.1.0 locks persist.
+system.json selects path/version; electrical-system.lock.json pins bytes.
+After edits run `thermite lock .`, then validate (E107/E108 otherwise).
+Starter PS1.L/N are required but deferred: strict fails W903/W905; cabinets passes.
+Invent no pins/ratings; keep manufacturer document/revision and review notes.
+Source-only `siemens-pilot` has exact references/exclusions.
 
 ## Multi-conductor cables
 
@@ -289,10 +288,12 @@ connections, incomplete models and review dispositions. `--device HMI1` or
 table. Compiler diagnostics remain on stderr.
 
 Library terminals and ports can declare `required: true`. Give new device types
-`connectionCoverage: {status: "complete"|"partial", notes: "..."}` after
-reviewing every physical connection, including power, return, bonding, shield
-and optional connectors. Missing coverage is unreviewed; a partial model states
-its omissions. Never invent pins to make a model appear complete.
+`connectionCoverage: {status: "complete"|"partial"|"generic", notes: "..."}` with
+nonblank notes. Complete reviews all an exact part's physical connections; generic
+reviews an abstract interface without exact-part catalog facts (E014 otherwise).
+I005 reports generic limits and notes once per device. Missing coverage is
+unreviewed; a model omitting its own interface's connections stays partial.
+Never invent pins for completeness.
 
 On a device, `connectionReview.terminals`, `.ports` and `.connectorPorts` map
 declared keys to `{status: "required"|"intentionally-unused"|"deferred", reason:

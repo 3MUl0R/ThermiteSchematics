@@ -114,7 +114,7 @@ A new manufacturer type should include:
 - Function and symbol mappings with a minimal valid wiring example.
 - Notes separating verified facts from unsupported or unmodeled features.
 - A complete inventory of power, return, protective bonding, shield, signal and communication connections, including optional pins.
-- Explicit `required: true` on universally required terminals/ports, and `connectionCoverage` with review notes. Mark incomplete models `partial`; do not claim complete coverage for a port-only device. See [connection completeness](docs/completeness.md).
+- Explicit `required: true` on universally required terminals/ports, and `connectionCoverage` with review notes. Mark incomplete models `partial`; do not claim complete coverage for a port-only device. Reviewed abstract interfaces without exact-part catalog facts may use `generic`; a model missing part of its own interface remains `partial`. See [connection completeness](docs/completeness.md).
 
 Do not copy a manufacturer's complete manual into the repository without the
 necessary permission. Do not extrapolate one part's pinout to a product family.

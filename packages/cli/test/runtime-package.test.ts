@@ -388,3 +388,28 @@ describe("public runtime package boundary", () => {
     }
   });
 });
+
+it("includes both core versions in the public release-package file boundary", async () => {
+  const { SHIPPED_CORE_VERSIONS, resolveShippedCoreLibrary } =
+    await import("@thermite/core-library");
+  const root = resolveShippedCoreLibrary().packageRootPath;
+  const manifest = JSON.parse(
+    await readFile(join(root, "package.json"), "utf8"),
+  );
+  const inventory = new Set(
+    (await listFiles(root)).filter((file) =>
+      manifest.files.some((path: string) => file.startsWith(`${path}/`)),
+    ),
+  );
+  expect(Object.keys(SHIPPED_CORE_VERSIONS)).toEqual(["0.1.0", "0.2.0"]);
+  for (const [version, entry] of Object.entries(SHIPPED_CORE_VERSIONS)) {
+    expect(entry.fileInventory).toHaveLength(14);
+    for (const file of entry.fileInventory)
+      expect(inventory.has(file), file).toBe(true);
+    expect(
+      JSON.parse(
+        await readFile(join(root, entry.directory, "library.json"), "utf8"),
+      ),
+    ).toMatchObject({ name: "core", version });
+  }
+});

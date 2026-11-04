@@ -173,6 +173,46 @@ describe("schema/render symbol profile conformance", () => {
       expect(gates.has(path), path).toBe(true);
   });
 
+  it("includes every shipped 0.2.0 device in profile conformance", async () => {
+    for (const binding of CORE_SYMBOL_BINDINGS) {
+      const source = JSON.parse(
+        await readFile(
+          `packages/core-library/versions/0.2.0/types/${binding.typeId.slice(5)}.json`,
+          "utf8",
+        ),
+      ).types[0];
+      expect(source.symbol).toBe(binding.equivalent);
+      const type = structuredClone(
+        core.deviceTypes.find((t) => t.id === binding.typeId)!,
+      );
+      type.symbol = source.symbol;
+      const profile = SYMBOL_PROFILES.find((p) => p.id === source.symbol)!;
+      expect(circuitProfile(type)).toBe(profile.id);
+      for (const [key, fn] of Object.entries(source.functions) as [
+        string,
+        any,
+      ][]) {
+        if (fn.kind === "mechanism") continue;
+        expect(
+          profile.support.some((s) =>
+            s.functions.some((shape) =>
+              symbolFunctionMatchesShape(source, fn, shape),
+            ),
+          ),
+          `${source.id}/${key}`,
+        ).toBe(true);
+        const f = materializeTypeFunctions(type, "device").find(
+          (f) => f.id.functionKey === key,
+        )!;
+        const mark = circuitMark(type, f);
+        for (const vertical of [false, true])
+          expect(emitCircuitMark(mark, vertical)).toContain(
+            `data-circuit-mark="${mark}"`,
+          );
+      }
+    }
+  });
+
   it("renders every advertised circuit/function shape and rejects every unadvertised shape", () => {
     for (const profile of SYMBOL_PROFILES) {
       const support = profile.support.find((s) => s.family === "circuit");
