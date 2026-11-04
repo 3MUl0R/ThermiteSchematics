@@ -126,10 +126,51 @@ each loader-owned exact `document.file`. The manifest, lock, `AGENTS.md`, local 
 shipped library bytes, absent presentation, new paths, deleted paths, and renamed
 paths remain ineligible.
 
-Dry-run never writes. Apply writes only changed proposals in stable file order.
+Dry-run never writes project source or acquires a writer reservation. Apply writes
+only changed proposals in stable file order.
 Successful multi-file requests provide per-file atomic replacement, not a crash-atomic
 project transaction. A process or machine crash between replacements may leave a
 partial batch.
+
+After staging, apply exclusively creates `.thermite-schematics-write.lock` with
+`wx` in the canonical project root. Directory and manifest paths share the
+reservation. It remains held through the fresh load, snapshot comparison,
+replacements, and rollback. Contention returns **A005/exit 1**, with `lockPath`,
+`owner` (`pid`, `hostname`, `createdAt`, `thermiteVersion`), `ageMs`, and
+`ownerState` (`alive`, `not-running`, `other-host`, or `unknown`). The version is
+that of the installed engine package. A004 remains reserved for integrity drift.
+After a competing edit, re-inspect the project and rebuild the patch, including
+its operations and guards; copying a new integrity alone is insufficient.
+
+There is no automatic reclamation. A same-host PID that is no longer running
+indicates an apparently abandoned reservation. Confirm all project writers have
+stopped, then remove the exact `lockPath` reported by A005. A live/reused PID,
+another hostname, missing metadata, or permission-denied liveness check does not
+establish abandonment; inspect the owning host/process first. Age alone never
+authorizes removal. Empty or malformed reservations also fail closed.
+
+The reservation is runtime state, excluded from source glob expansion (including
+explicit dotfile patterns), tree scans, staging copies, and source snapshots.
+Regular atomic writer temporary files are excluded from tree scans and copies;
+directories and symlinks with those names remain subject to path checks.
+Validation works while a reservation is held. Never commit the reservation; add
+`.thermite-schematics-write.lock` to the project's `.gitignore`. Alpha `init`
+creates this minimal ignore file; existing projects must add the entry themselves.
+
+Normal outcomes close and remove owned reservations, closing first on Windows.
+On POSIX, cleanup handlers are installed only for SIGINT/SIGTERM/SIGHUP that
+have no existing listener. They synchronously revoke and release held reservations.
+The signal is re-raised only if no host listener is present. Existing embedding
+host handlers retain control; a host listener added after acquisition receives the
+signal once and revoked reservations fail closed at commit and restore guards. SIGKILL, machine failure, and Windows forced process
+termination cannot run cleanup and may leave metadata for explicit recovery.
+If release fails after commit, success and `applied` are preserved (exit 0), with
+**W801** naming the exact reservation path and confirming the changes were
+committed. Verify that state; do not replay the patch. Once this command has
+exited and no other writer is running, it is safe to remove its leftover
+reservation. If both apply and release fail, the failure diagnostic also names
+the exact leftover path. A changed lock/root identity
+is reported rather than deleting an unowned entry.
 
 The guard snapshots the manifest, optional presentation, every source, lock state,
 and local library manifests/sources. Shipped library files are deliberately excluded
@@ -142,13 +183,25 @@ scan.
 Staging uses an exclusive ordinary sibling, validates the complete copied project,
 rechecks the guarded project state, and commits guarded replacements. Paths, links,
 junctions, reparse points, ancestor changes, duplicate targets, and integrity drift
-produce the existing deterministic A-errors. Cleanup and rollback remain bounded and
-identity-guarded; no recursive ownership of a pre-existing path is inferred.
+produce the existing deterministic A-errors. Vanished, moved, or unresolvable
+source chains (ENOENT/ENOTDIR/ELOOP) are A003; other guard I/O errors remain
+tool failures with their original sanitized cause. Before every rollback restore, the
+tool rechecks the original directory identities, source path chain, and expected
+post-commit bytes. Replacing a target with identical bytes remains safe. The atomic writer repeats the guard
+before creating its temporary file and before replacement. Changed chains or
+content are not restored; an incomplete rollback lists the exact restored and
+unrestored files plus each refusal reason (chain changed, content changed, or I/O)
+in diagnostics and returns a tool failure (exit 2), retaining the primary error. Cleanup remains bounded and identity-guarded; no recursive
+ownership of a pre-existing path is inferred. These are cooperating-writer and
+checked-path guarantees: portable path-based filesystem calls do not provide a
+transaction against an actor swapping ancestors between the final check and an
+OS write/rename operation.
 
 ## Diagnostics and serialization
 
 Malformed requests are A001. Invalid patch operations are A002, unsafe or ineligible
-targets are A003, and guarded integrity drift is A004. Query failures remain
+targets are A003, guarded integrity drift is A004, and write reservation contention
+is A005. W801 warns of reservation release failure after a successful patch. Query failures remain
 Q001-Q004. Renderer failures remain R001-R005, including `render/0.3` title-text
 preflight. Authored compiler diagnostics retain normalized logical paths.
 
@@ -162,9 +215,11 @@ result on stdout and a report with `error: null` on stderr. Failure writes no pa
 result and only the report. Serialization fixes field order, two-space indentation,
 LF, one final newline, and no ANSI.
 
-For fixed request JSON, complete guarded project bytes, immutable installed package
-bytes, and patch operations, the outcomes are deterministic. Cwd, staging names, PID,
-time, locale, timezone, enumeration order, and elapsed time do not enter output.
+Ordinary outcomes retain canonical serialization and deterministic source behavior.
+A005 intentionally includes runtime owner metadata, age, and the exact reservation
+path; W801 includes that path when cleanup needs operator attention. Redact
+hostnames and absolute paths before sharing these diagnostics. Cwd, staging
+names, locale, timezone, and enumeration order do not otherwise enter output.
 
 There is no MCP server, natural-language transport, HTTP service, daemon, plugin
 protocol, cache, or long-lived project session.

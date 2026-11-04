@@ -126,3 +126,5 @@ export {
   type CompletenessFinding,
   type ConnectionInventoryEntry,
 } from "./completeness.js";
+
+export { PROJECT_WRITE_LOCK_FILE_NAME } from "./filesystem-names.js";

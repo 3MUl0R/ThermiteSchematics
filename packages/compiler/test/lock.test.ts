@@ -1030,6 +1030,31 @@ describe("D6 atomic writes and explicit repair", () => {
     });
   });
 
+  it.each([1, 2])(
+    "preserves the destination when its guard fails at check %i",
+    async (failureCheck) => {
+      const fixture = await createFixture([]);
+      const destination = join(fixture.root, "output.json");
+      const temporary = join(fixture.root, ".guarded.tmp");
+      await writeFile(destination, "old");
+      let checks = 0;
+      await expect(
+        writeFileAtomically(destination, "new", {
+          temporaryPath: () => temporary,
+          async validateDestination() {
+            checks++;
+            if (checks === failureCheck) throw new Error("guard changed");
+          },
+        }),
+      ).rejects.toThrow("guard changed");
+      expect(checks).toBe(failureCheck);
+      expect(await readFile(destination, "utf8")).toBe("old");
+      await expect(readFile(temporary)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+
   it("repairs malformed and stale locks but never writes after structural failure", async () => {
     const malformedFixture = await createFixture();
     await writeFile(malformedFixture.lock, "{\n", "utf8");

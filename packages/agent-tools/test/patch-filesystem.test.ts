@@ -1295,7 +1295,17 @@ describe("D10 filesystem safety and rollback", () => {
           {
             code: "E001",
             message:
+              "Agent apply-source-patch tool failure (commit-write/E_COMMIT).",
+          },
+          {
+            code: "E001",
+            message:
               "Agent apply-source-patch tool failure (rollback-write/E_ROLLBACK).",
+          },
+          {
+            code: "E001",
+            message:
+              'Source patch rollback restored []; not restored [{"file":"sources/a.json","reason":"I/O (E_ROLLBACK)"}]. Only successfully replaced files were candidates for restoration.',
           },
         ],
         error: null,
@@ -1355,7 +1365,7 @@ describe("D10 real source-chain rechecks", () => {
     }
   });
 
-  it("catches a real ancestor swap at a later per-target recheck and rolls back", async (context) => {
+  it("refuses restoration after a real ancestor swap following the first write", async (context) => {
     const fixture = await createPatchProjectFixture("clean");
     try {
       await proveDirectoryLinkCapability(context, fixture);
@@ -1368,45 +1378,50 @@ describe("D10 real source-chain rechecks", () => {
           ),
         ),
       );
-      const writer = vi.fn(
-        defaultApplySourcePatchDependencies.writeFileAtomically,
-      );
-      let validationCalls = 0;
+      let swapped = false;
+      const writer = vi.fn(async (path: string, bytes: Uint8Array) => {
+        await defaultApplySourcePatchDependencies.writeFileAtomically(
+          path,
+          bytes,
+        );
+        if (!swapped) {
+          swapped = true;
+          await swapSourcesDirectoryForLink(fixture);
+        }
+      });
       const outcome = await applyWith(
         fixture,
         await requestForFiles(fixture, paths),
-        {
-          ...defaultApplySourcePatchDependencies,
-          writeFileAtomically: writer,
-          async validateSourceChain(project, document) {
-            validationCalls += 1;
-            if (validationCalls === 4) {
-              await swapSourcesDirectoryForLink(fixture);
-            }
-            return validateProjectSourceChain(
-              project,
-              document,
-              defaultApplySourcePatchDependencies.filesystem,
-            );
-          },
-        },
+        { ...defaultApplySourcePatchDependencies, writeFileAtomically: writer },
       );
       expect(outcome).toMatchObject({
         ok: false,
-        diagnostics: [],
+        diagnostics: [
+          {
+            code: "E001",
+            message:
+              "Agent apply-source-patch tool failure (rollback-write/PATCH_WRITE_GUARD_MISMATCH).",
+          },
+          {
+            code: "E001",
+            message:
+              'Source patch rollback restored []; not restored [{"file":"sources/a.json","reason":"chain changed"}]. Only successfully replaced files were candidates for restoration.',
+          },
+        ],
         error: {
           code: "A003",
           file: "sources/b.json",
           reason: "reparse-point",
         },
-        failureClass: "expected",
+        failureClass: "tool",
       });
-      expect(writer).toHaveBeenCalledTimes(2);
-      for (const path of paths) {
-        expect(await readFile(join(fixture.projectRoot, path))).toEqual(
-          originals.get(path),
-        );
-      }
+      expect(writer).toHaveBeenCalledTimes(1);
+      expect(await readFile(join(fixture.projectRoot, paths[0]))).not.toEqual(
+        originals.get(paths[0]),
+      );
+      expect(await readFile(join(fixture.projectRoot, paths[1]))).toEqual(
+        originals.get(paths[1]),
+      );
     } finally {
       await fixture.cleanup();
     }

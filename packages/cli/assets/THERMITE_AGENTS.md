@@ -12,7 +12,8 @@ When using a runtime package, report bugs, missing capabilities, and unclear
 documentation at https://github.com/BlackettApplied/ThermiteSchematics/issues.
 Check existing issues first. Include the use case, expected behavior,
 Thermite/Bun versions, and operating system; for bugs, add actual behavior, a
-minimal reproduction, and relevant diagnostics. If GitHub access is unavailable,
+minimal reproduction, and relevant diagnostics. Redact hostnames and absolute
+paths from A005/W801 diagnostics before sharing them. If GitHub access is unavailable,
 provide a ready-to-submit issue title and body. Do not patch a downloaded runtime
 in place.
 
@@ -48,7 +49,25 @@ usage or infrastructure failure.
   Only add/remove/replace/test operations on existing referenced source or
   presentation documents are allowed. Per-file atomicity and snapshot guards
   apply. The patch tool cannot create/delete/rename files or change the manifest,
-  lock, libraries, or this guide.
+  library lock (`electrical-system.lock.json`), libraries, or this guide.
+  Alpha applies reserve `.thermite-schematics-write.lock` in the canonical project
+  root through revalidation, commit, and rollback. This runtime write reservation
+  is distinct from the library lock. Never commit it; add
+  `.thermite-schematics-write.lock` to `.gitignore` (alpha `init` does this).
+  A005/exit 1 reports contention, its exact path, owner PID/hostname/version,
+  creation time, and age. Wait for a live owner. On the recorded host, a PID no
+  longer alive indicates apparent abandonment; confirm all writers are stopped,
+  then remove exactly that reservation path. Unknown/other-host owners require
+  checking that host; age alone is insufficient. Re-inspect and rebuild the patch
+  after another edit; do not just copy a new integrity into an old request.
+  On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then re-raises.
+  Embedded hosts keep their existing signal handlers; signal-revoked writes fail
+  closed. Forced termination may leave the reservation. A committed patch whose release fails stays successful with
+  W801 naming the path; verify the committed state instead of replaying it.
+  Once that command has exited and no other writer is running, it is safe to
+  remove its leftover reservation. Failed applies also name any leftover path.
+  Rollback refuses changed chains or bytes; an incomplete restore is exit 2 and
+  lists restored files and each unrestored file's reason.
 - `create-view`: `spec` containing an existing schematic view request. Legacy sources retain the original continuous SVG contract. Annotated cables
   return the complete core sheet; inventories that need multiple sheets return
   R006 and must use the printing commands below.

@@ -36,6 +36,7 @@ describe("compiler public API", () => {
       "buildProjectCatalogs",
       "resolveLoadedProject",
       "analyzeCompleteness",
+      "PROJECT_WRITE_LOCK_FILE_NAME",
     ]);
     expect(compiler.loadProject).toBeTypeOf("function");
     expect(compiler.compileLoadedProject).toBeTypeOf("function");

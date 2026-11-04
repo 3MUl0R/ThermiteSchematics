@@ -3,7 +3,7 @@ import type { RenderError } from "@thermite/render";
 
 import type { AgentToolName } from "./contracts.js";
 
-export type AgentToolErrorCode = "A001" | "A002" | "A003" | "A004";
+export type AgentToolErrorCode = "A001" | "A002" | "A003" | "A004" | "A005";
 
 export type A001Reason =
   | "invalid-json"
@@ -59,7 +59,28 @@ export interface A004Error {
   readonly actualIntegrity: string;
 }
 
-export type AgentToolError = A001Error | A002Error | A003Error | A004Error;
+export interface ProjectWriteOwner {
+  readonly pid: number;
+  readonly hostname: string;
+  readonly createdAt: string;
+  readonly thermiteVersion: string;
+}
+
+export type ProjectWriteOwnerState =
+  "alive" | "not-running" | "other-host" | "unknown";
+
+export interface A005Error {
+  readonly code: "A005";
+  readonly message: string;
+  readonly file: string;
+  readonly lockPath: string;
+  readonly owner: ProjectWriteOwner | null;
+  readonly ageMs: number | null;
+  readonly ownerState: ProjectWriteOwnerState;
+}
+
+export type AgentToolError =
+  A001Error | A002Error | A003Error | A004Error | A005Error;
 
 export type AgentToolFailure = AgentToolError | QueryError | RenderError;
 
@@ -129,4 +150,30 @@ export function createA004Error(
     actualIntegrity,
   };
   return Object.freeze(error);
+}
+
+export function createA005Error(
+  file: string,
+  lockPath: string,
+  owner: ProjectWriteOwner | null,
+  ageMs: number | null,
+  ownerState: ProjectWriteOwnerState,
+): A005Error {
+  const status =
+    owner === null
+      ? "owner metadata is unavailable"
+      : `owner ${JSON.stringify(owner)}, age ${ageMs ?? "unknown"} ms, status ${ownerState}`;
+  const recovery =
+    ownerState === "not-running"
+      ? "The recorded PID is not running on this host; the reservation appears abandoned. Stop all project writers and remove"
+      : "Wait for a live owner. To establish abandonment, check that the recorded hostname is this host and its PID is no longer alive; age alone is insufficient. With all project writers stopped, remove";
+  return Object.freeze({
+    code: "A005",
+    message: `A005 Project write reservation held or abandoned at ${quote(lockPath)}: ${status}. ${recovery} ${quote(lockPath)} only after confirming abandonment. Then re-inspect the project and rebuild the patch.`,
+    file,
+    lockPath,
+    owner,
+    ageMs,
+    ownerState,
+  });
 }

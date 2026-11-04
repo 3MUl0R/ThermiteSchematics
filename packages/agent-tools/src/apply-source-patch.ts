@@ -2,8 +2,11 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import {
   compileProject,
+  computeFileIntegrity,
+  PROJECT_WRITE_LOCK_FILE_NAME,
   loadProject,
   writeFileAtomically,
+  type AtomicWriteOptions,
   type CompileResult,
   type LoadedDocument,
   type LoadedProject,
@@ -17,10 +20,15 @@ import type {
   DeepReadonly,
   JsonValue,
 } from "./common/contracts.js";
-import { createA003Error, type AgentToolError } from "./common/errors.js";
+import {
+  createA003Error,
+  createA004Error,
+  type AgentToolError,
+} from "./common/errors.js";
 import { detachedFrozenCopy } from "./common/immutable.js";
 import {
   diagnosticForReadToolException,
+  sanitizedErrorCode,
   sanitizeToolFailureDiagnostics,
   type ReadToolFailureStage,
 } from "./common/tool-failure.js";
@@ -34,13 +42,16 @@ import {
   ownedStageCleanupNeedsFinalAttempt,
   removeOwnedStageDirectory,
   scanOrdinaryProjectTree,
+  isSourceChainMismatchError,
   stageDirectoryPrefix,
   validateProjectSourceChain,
+  type FileStatus,
   type OwnedStageCleanup,
   type PatchFilesystemDependencies,
   type ProjectControlledSnapshot,
   type ProjectControlledSnapshotResult,
 } from "./patch-filesystem.js";
+import { reserveProjectWrite } from "./project-write-lock.js";
 import {
   createSourcePatchPlan,
   type SourcePatchTargetSnapshot,
@@ -77,8 +88,10 @@ export interface ApplySourcePatchDependencies {
   readonly writeFileAtomically: (
     destinationPath: string,
     data: Uint8Array,
+    options?: AtomicWriteOptions,
   ) => Promise<void>;
   readonly filesystem: PatchFilesystemDependencies;
+  readonly reserveProjectWrite?: typeof reserveProjectWrite;
   readonly captureSnapshot?: (
     project: LoadedProject,
   ) => Promise<ProjectControlledSnapshotResult>;
@@ -114,7 +127,7 @@ type ProjectSourceDocument =
   | LoadedDocument<ProjectPresentationFile>;
 
 function failureOutcome(
-  diagnostics: readonly Diagnostic[],
+  diagnostics: readonly DeepReadonly<Diagnostic>[],
   error: AgentToolError | null,
   failureClass: "expected" | "tool",
 ): PatchFailureOutcome {
@@ -122,7 +135,7 @@ function failureOutcome(
 }
 
 function successOutcome(
-  diagnostics: readonly Diagnostic[],
+  diagnostics: readonly DeepReadonly<Diagnostic>[],
   value: ApplySourcePatchValue,
 ): PatchOutcome {
   return { ok: true, diagnostics, value };
@@ -256,7 +269,12 @@ async function sourceChainIsValid(
   dependencies: ApplySourcePatchDependencies,
 ): Promise<boolean> {
   return dependencies.validateSourceChain === undefined
-    ? validateProjectSourceChain(project, document, dependencies.filesystem)
+    ? validateProjectSourceChain(
+        project,
+        document,
+        dependencies.filesystem,
+        true,
+      )
     : dependencies.validateSourceChain(project, document);
 }
 
@@ -273,26 +291,144 @@ function proposalValue(
   };
 }
 
+interface SourceIdentity {
+  readonly directories: readonly {
+    readonly path: string;
+    readonly status: FileStatus;
+  }[];
+}
+
+function sameIdentity(a: FileStatus, b: FileStatus): boolean {
+  return a.dev === b.dev && a.ino === b.ino && !b.isSymbolicLink();
+}
+
+async function captureSourceIdentity(
+  project: LoadedProject,
+  document: ProjectSourceDocument,
+  dependencies: ApplySourcePatchDependencies,
+): Promise<SourceIdentity> {
+  const directories = [];
+  let path = dirname(document.logicalPath);
+  while (true) {
+    directories.push({
+      path,
+      status: await dependencies.filesystem.lstat(path),
+    });
+    if (path === project.logicalRootPath) break;
+    const parent = dirname(path);
+    if (parent === path)
+      throw new TypeError("Source identity escaped the project.");
+    path = parent;
+  }
+  return { directories };
+}
+
+class SourceWriteGuardError extends Error {
+  readonly code = "PATCH_WRITE_GUARD_MISMATCH";
+  constructor(readonly agentError: AgentToolError) {
+    super("Source write guard changed.");
+  }
+}
+
+async function requireWriteGuard(
+  project: LoadedProject,
+  document: ProjectSourceDocument,
+  identity: SourceIdentity,
+  expectedIntegrity: string,
+  dependencies: ApplySourcePatchDependencies,
+  assertReservationHeld: () => void,
+): Promise<void> {
+  const chainChanged = () =>
+    new SourceWriteGuardError(createA003Error(document.file, "reparse-point"));
+  assertReservationHeld();
+  try {
+    if (!(await sourceChainIsValid(project, document, dependencies)))
+      throw chainChanged();
+    for (const directory of identity.directories) {
+      const current = await dependencies.filesystem.lstat(directory.path);
+      if (!current.isDirectory() || !sameIdentity(directory.status, current))
+        throw chainChanged();
+    }
+    // Atomic replacement by an editor with identical bytes is safe. Directory
+    // identities and the ordinary path chain protect placement; bytes guard content.
+    const actualIntegrity = computeFileIntegrity(
+      await dependencies.filesystem.readFile(document.logicalPath),
+    );
+    if (actualIntegrity !== expectedIntegrity)
+      throw new SourceWriteGuardError(
+        createA004Error(document.file, expectedIntegrity, actualIntegrity),
+      );
+  } catch (error) {
+    if (isSourceChainMismatchError(error)) throw chainChanged();
+    throw error;
+  }
+  assertReservationHeld();
+}
+
 async function rollbackFiles(
+  project: LoadedProject,
   committed: readonly SourceByteProposal[],
   documents: ReadonlyMap<string, ProjectSourceDocument>,
+  identities: ReadonlyMap<string, SourceIdentity>,
   dependencies: ApplySourcePatchDependencies,
-): Promise<{ readonly error: unknown; readonly file: string } | undefined> {
+  assertReservationHeld: () => void,
+): Promise<{
+  readonly firstFailure:
+    { readonly error: unknown; readonly file: string } | undefined;
+  readonly diagnostic: Diagnostic | undefined;
+}> {
   let firstFailure:
     { readonly error: unknown; readonly file: string } | undefined;
+  const restored: string[] = [];
+  const notRestored: { file: string; reason: string }[] = [];
   for (let index = committed.length - 1; index >= 0; index -= 1) {
     const proposal = committed[index]!;
     const document = documents.get(proposal.file.path)!;
+    const validateDestination = () =>
+      requireWriteGuard(
+        project,
+        document,
+        identities.get(document.file)!,
+        proposal.file.afterIntegrity,
+        dependencies,
+        assertReservationHeld,
+      );
     try {
+      await validateDestination();
       await dependencies.writeFileAtomically(
         document.logicalPath,
         document.rawBytes,
+        { validateDestination },
       );
+      restored.push(document.file);
     } catch (error) {
       firstFailure ??= { error, file: document.file };
+      notRestored.push({
+        file: document.file,
+        reason:
+          error instanceof SourceWriteGuardError
+            ? error.agentError.code === "A004"
+              ? "content changed"
+              : "chain changed"
+            : `I/O (${sanitizedErrorCode(error)})`,
+      });
     }
   }
-  return firstFailure;
+  return {
+    firstFailure,
+    diagnostic:
+      notRestored.length === 0
+        ? undefined
+        : {
+            code: "E001",
+            severity: "error",
+            message: `Source patch rollback restored ${JSON.stringify(restored.sort())}; not restored ${JSON.stringify(notRestored.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0)))}. Only successfully replaced files were candidates for restoration.`,
+            file: "<project>",
+            line: 1,
+            column: 1,
+            jsonPointer: "",
+          },
+  };
 }
 
 async function cleanupOwnedStage(
@@ -311,60 +447,95 @@ async function commitProposals(
   project: LoadedProject,
   proposals: readonly SourceByteProposal[],
   documents: ReadonlyMap<string, ProjectSourceDocument>,
+  identities: ReadonlyMap<string, SourceIdentity>,
   dependencies: ApplySourcePatchDependencies,
+  assertReservationHeld: () => void,
 ): Promise<CommitResult> {
-  for (const proposal of proposals) {
-    const document = documents.get(proposal.file.path)!;
-    if (!(await sourceChainIsValid(project, document, dependencies))) {
-      return {
-        ok: false,
-        outcome: failureOutcome(
-          [],
-          createA003Error(proposal.file.path, "reparse-point"),
-          "expected",
-        ),
-      };
+  try {
+    assertReservationHeld();
+    for (const proposal of proposals) {
+      const document = documents.get(proposal.file.path)!;
+      if (!(await sourceChainIsValid(project, document, dependencies)))
+        return {
+          ok: false,
+          outcome: failureOutcome(
+            [],
+            createA003Error(document.file, "reparse-point"),
+            "expected",
+          ),
+        };
     }
+    assertReservationHeld();
+  } catch (error) {
+    return { ok: false, outcome: exceptionOutcome("commit-write", error) };
   }
 
   const committed: SourceByteProposal[] = [];
   for (const proposal of proposals.filter(({ file }) => file.changed)) {
     const document = documents.get(proposal.file.path)!;
     let primaryFailure: PatchFailureOutcome | undefined;
-    if (!(await sourceChainIsValid(project, document, dependencies))) {
-      primaryFailure = failureOutcome(
-        [],
-        createA003Error(proposal.file.path, "reparse-point"),
-        "expected",
-      );
-    } else {
-      try {
-        await dependencies.writeFileAtomically(
-          document.logicalPath,
-          proposal.proposalBytes,
+    try {
+      const validateDestination = () =>
+        requireWriteGuard(
+          project,
+          document,
+          identities.get(document.file)!,
+          proposal.file.beforeIntegrity,
+          dependencies,
+          assertReservationHeld,
         );
-        committed.push(proposal);
-      } catch (error) {
-        primaryFailure = exceptionOutcome("commit-write", error, document.file);
-      }
+      await validateDestination();
+      await dependencies.writeFileAtomically(
+        document.logicalPath,
+        proposal.proposalBytes,
+        { validateDestination },
+      );
+      committed.push(proposal);
+      // A host can handle a signal while the OS replacement is pending. Record
+      // the replacement first so any interrupted batch is accounted for.
+      assertReservationHeld();
+    } catch (error) {
+      primaryFailure =
+        error instanceof SourceWriteGuardError
+          ? failureOutcome([], error.agentError, "expected")
+          : exceptionOutcome("commit-write", error, document.file);
     }
     if (primaryFailure === undefined) continue;
 
-    const rollbackFailure = await rollbackFiles(
+    const rollback = await rollbackFiles(
+      project,
       committed,
       documents,
+      identities,
       dependencies,
+      assertReservationHeld,
     );
+    const rollbackFailure = rollback.firstFailure;
+    const outcome =
+      rollbackFailure === undefined
+        ? primaryFailure
+        : failureOutcome(
+            [
+              ...primaryFailure.diagnostics,
+              ...diagnosticForReadToolException(
+                "apply-source-patch",
+                "rollback-write",
+                rollbackFailure.error,
+                rollbackFailure.file,
+              ),
+            ],
+            primaryFailure.error,
+            "tool",
+          );
     return {
       ok: false,
       outcome:
-        rollbackFailure === undefined
-          ? primaryFailure
-          : exceptionOutcome(
-              "rollback-write",
-              rollbackFailure.error,
-              rollbackFailure.file,
-            ),
+        rollback.diagnostic === undefined
+          ? outcome
+          : {
+              ...outcome,
+              diagnostics: [...outcome.diagnostics, rollback.diagnostic],
+            },
     };
   }
   return {
@@ -381,6 +552,7 @@ async function runStagedPatch(
   initialSnapshot: ProjectControlledSnapshot,
   proposals: readonly SourceByteProposal[],
   documents: ReadonlyMap<string, ProjectSourceDocument>,
+  identities: ReadonlyMap<string, SourceIdentity>,
   dependencies: ApplySourcePatchDependencies,
 ): Promise<PatchOutcome> {
   const stagingParent = dirname(project.logicalRootPath);
@@ -408,6 +580,9 @@ async function runStagedPatch(
   let provisionalSuccess: PatchOutcome | undefined;
   let stagedDiagnostics: readonly Diagnostic[] | undefined;
   let stagedCompileSucceeded = false;
+  let releaseWriteReservation: (() => void) | undefined;
+  let assertWriteReservationHeld: (() => void) | undefined;
+  let writeReservationPath: string | undefined;
 
   try {
     try {
@@ -494,6 +669,25 @@ async function runStagedPatch(
     }
 
     if (terminal === undefined && !request.dryRun) {
+      try {
+        const reservation = (
+          dependencies.reserveProjectWrite ?? reserveProjectWrite
+        )(project);
+        if (reservation.ok) {
+          releaseWriteReservation = reservation.release;
+          assertWriteReservationHeld = reservation.assertHeld;
+          writeReservationPath = reservation.path;
+        } else terminal = failureOutcome([], reservation.error, "expected");
+      } catch (error) {
+        terminal = exceptionOutcome(
+          "write-reserve",
+          error,
+          project.manifest.file,
+        );
+      }
+    }
+
+    if (terminal === undefined && !request.dryRun) {
       let reloadedProject: LoadedProject | undefined;
       try {
         const reloaded = await dependencies.loadProject(
@@ -568,7 +762,9 @@ async function runStagedPatch(
           project,
           proposals,
           documents,
+          identities,
           dependencies,
+          assertWriteReservationHeld!,
         );
         if (committed.ok) {
           provisionalSuccess = successOutcome(
@@ -592,6 +788,50 @@ async function runStagedPatch(
           error,
           project.manifest.file,
         );
+      }
+    }
+    if (releaseWriteReservation !== undefined) {
+      try {
+        releaseWriteReservation();
+      } catch (error) {
+        const releaseDiagnostics = diagnosticForReadToolException(
+          "apply-source-patch",
+          "write-release",
+          error,
+          PROJECT_WRITE_LOCK_FILE_NAME,
+        ).map((diagnostic) => ({
+          ...diagnostic,
+          message: `${diagnostic.message} Write reservation ${JSON.stringify(writeReservationPath)} remains; once this command has exited and no other writer is running, it is safe to remove that reservation.`,
+        }));
+        const failure = failureOutcome(releaseDiagnostics, null, "tool");
+        if (terminal === undefined && provisionalSuccess?.ok) {
+          provisionalSuccess = successOutcome(
+            [
+              ...provisionalSuccess.diagnostics,
+              {
+                code: "W801",
+                severity: "warning",
+                file: PROJECT_WRITE_LOCK_FILE_NAME,
+                line: 1,
+                column: 1,
+                jsonPointer: "",
+                message: `Source patch ${provisionalSuccess.value.applied ? "changes were committed" : "completed without source changes"}. Could not release write reservation ${JSON.stringify(writeReservationPath)} (write-release/${sanitizedErrorCode(error)}). Do not replay the patch. Verify the committed project. Once this command has exited and no other writer is running, it is safe to remove that reservation.`,
+              },
+            ],
+            provisionalSuccess.value,
+          );
+        } else {
+          terminal =
+            terminal === undefined
+              ? failure
+              : {
+                  ...terminal,
+                  diagnostics: [
+                    ...terminal.diagnostics,
+                    ...failure.diagnostics,
+                  ],
+                };
+        }
       }
     }
   }
@@ -664,6 +904,19 @@ async function runValidatedPatch(
     return failureOutcome([], initialSnapshot.error, "expected");
   }
 
+  const identities = new Map<string, SourceIdentity>();
+  try {
+    for (const proposal of planned.proposals) {
+      const document = documents.get(proposal.file.path)!;
+      identities.set(
+        document.file,
+        await captureSourceIdentity(project, document, dependencies),
+      );
+    }
+  } catch (error) {
+    return exceptionOutcome("reachable-read", error, project.manifest.file);
+  }
+
   return runStagedPatch(
     request,
     cwd,
@@ -672,6 +925,7 @@ async function runValidatedPatch(
     initialSnapshot.snapshot,
     planned.proposals,
     documents,
+    identities,
     dependencies,
   );
 }
