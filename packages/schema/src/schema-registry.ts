@@ -9,6 +9,10 @@ import {
 } from "ajv/dist/2020.js";
 
 import { createAjv2020, validateJsonValue } from "./ajv-validation.js";
+import {
+  boundedAlternatives,
+  formatAllowedValues,
+} from "./diagnostic-alternatives.js";
 import { DIAGNOSTIC_CATALOG } from "./diagnostic-catalog.js";
 import {
   normalizeDiagnosticFile,
@@ -60,6 +64,14 @@ const SOURCE_KIND_TO_ENTITY: Readonly<Record<string, EntitySchemaName>> = {
   potential: "potential",
 };
 
+const LIBRARY_KIND_TO_ENTITY: Readonly<Record<string, EntitySchemaName>> = {
+  device_type: "device-type",
+  cable_type: "cable-type",
+};
+
+const SOURCE_OBJECT_KINDS = Object.freeze(Object.keys(SOURCE_KIND_TO_ENTITY));
+const LIBRARY_TYPE_KINDS = Object.freeze(Object.keys(LIBRARY_KIND_TO_ENTITY));
+
 export type EntitySchemaName = (typeof ENTITY_SCHEMA_NAMES)[number];
 
 export interface LoadedSchema {
@@ -85,6 +97,14 @@ function isJsonObject(
   value: unknown,
 ): value is { [key: string]: JsonValue | undefined } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Own-property lookup: inherited names such as "constructor" are unknown kinds. */
+function entityForKind(
+  kinds: Readonly<Record<string, EntitySchemaName>>,
+  kind: string,
+): EntitySchemaName | undefined {
+  return Object.hasOwn(kinds, kind) ? kinds[kind] : undefined;
 }
 
 function relativeNodes(
@@ -267,17 +287,21 @@ export class SchemaRegistry {
       context.nodes.get(pointer)?.value ??
       context.nodes.get(basePointer)?.value;
 
+    const alternatives = boundedAlternatives(LIBRARY_TYPE_KINDS);
+    const allowedKinds = formatAllowedValues(alternatives);
+
     return {
       code: "E016",
       severity: DIAGNOSTIC_CATALOG.E016.severity,
       message:
         typeof kind === "string"
-          ? `Unknown library type kind ${JSON.stringify(kind)}.`
-          : "Library type is missing a recognized kind.",
+          ? `Unknown library type kind ${JSON.stringify(kind)}; allowed kinds: ${allowedKinds}.`
+          : `Library type is missing a recognized kind; allowed kinds: ${allowedKinds}.`,
       file: normalizeDiagnosticFile(context.file),
       line: anchor?.line ?? 1,
       column: anchor?.column ?? 1,
       jsonPointer: pointer,
+      ...alternatives,
     };
   }
 
@@ -293,11 +317,9 @@ export class SchemaRegistry {
 
     value.types.forEach((typeValue, index) => {
       const entity =
-        isJsonObject(typeValue) && typeValue.kind === "device_type"
-          ? "device-type"
-          : isJsonObject(typeValue) && typeValue.kind === "cable_type"
-            ? "cable-type"
-            : undefined;
+        isJsonObject(typeValue) && typeof typeValue.kind === "string"
+          ? entityForKind(LIBRARY_KIND_TO_ENTITY, typeValue.kind)
+          : undefined;
 
       if (entity === undefined) {
         diagnostics.push(
@@ -332,17 +354,21 @@ export class SchemaRegistry {
       context.nodes.get(pointer)?.value ??
       context.nodes.get(basePointer)?.value;
 
+    const alternatives = boundedAlternatives(SOURCE_OBJECT_KINDS);
+    const allowedKinds = formatAllowedValues(alternatives);
+
     return {
       code: "E016",
       severity: DIAGNOSTIC_CATALOG.E016.severity,
       message:
         typeof kind === "string"
-          ? `Unknown source object kind ${JSON.stringify(kind)}.`
-          : "Source object is missing a recognized string kind.",
+          ? `Unknown source object kind ${JSON.stringify(kind)}; allowed kinds: ${allowedKinds}.`
+          : `Source object is missing a recognized string kind; allowed kinds: ${allowedKinds}.`,
       file: normalizeDiagnosticFile(context.file),
       line: anchor?.line ?? 1,
       column: anchor?.column ?? 1,
       jsonPointer: pointer,
+      ...alternatives,
     };
   }
 
@@ -369,7 +395,7 @@ export class SchemaRegistry {
     value.objects.forEach((objectValue, index) => {
       const entity =
         isJsonObject(objectValue) && typeof objectValue.kind === "string"
-          ? SOURCE_KIND_TO_ENTITY[objectValue.kind]
+          ? entityForKind(SOURCE_KIND_TO_ENTITY, objectValue.kind)
           : undefined;
 
       if (entity === undefined) {
@@ -418,13 +444,15 @@ export class SchemaRegistry {
       typeof value.format === "string" &&
       !(SUPPORTED_PROJECT_FORMATS as readonly string[]).includes(value.format)
     ) {
+      const alternatives = boundedAlternatives(SUPPORTED_PROJECT_FORMATS);
       diagnostics.push({
         code: "E017",
         severity: DIAGNOSTIC_CATALOG.E017.severity,
-        message: `Unsupported manifest format ${JSON.stringify(value.format)}.`,
+        message: `Unsupported manifest format ${JSON.stringify(value.format)}; supported formats: ${formatAllowedValues(alternatives)}.`,
         file,
         ...positionAt("/format"),
         jsonPointer: "/format",
+        ...alternatives,
       });
     }
 

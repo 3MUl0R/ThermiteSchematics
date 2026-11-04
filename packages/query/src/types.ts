@@ -37,6 +37,12 @@ export interface QueryError {
   readonly actualKind?: ProjectObjectKind;
   readonly deviceDesignation?: string;
   readonly terminalKey?: string;
+  /** Q004: the device's terminal keys in code-unit order (at most 50). */
+  readonly allowed?: readonly string[];
+  /** Q004: number of terminal keys the device declares. */
+  readonly allowedCount?: number;
+  /** Q004: where to read every terminal key when `allowed` is truncated. */
+  readonly allowedLookup?: string;
 }
 
 export interface ProjectObjectView {

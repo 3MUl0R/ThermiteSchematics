@@ -225,7 +225,11 @@ function buildDocumentationTable(
         (relation.fromDeviceUid === device.uid
           ? assembly!.toPort
           : assembly!.fromPort);
-      const review = device.connectionReview?.connectorPorts?.[port.key];
+      const reviews = device.connectionReview?.connectorPorts;
+      const review =
+        reviews !== undefined && Object.hasOwn(reviews, port.key)
+          ? reviews[port.key]
+          : undefined;
       rows.push({
         key: JSON.stringify([device.uid, port.key]),
         deviceUids: [device.uid, ...(peerUid ? [peerUid] : [])],
@@ -653,7 +657,10 @@ function buildDocumentationTable(
     for (const f of ir.functions
       .filter((f) => f.id.deviceUid === d.uid && f.kind === "channel")
       .sort((a, b) => compare(a.id.functionKey, b.id.functionKey))) {
-      const assignment = d.io?.channels[f.id.functionKey];
+      const assignment =
+        d.io !== undefined && Object.hasOwn(d.io.channels, f.id.functionKey)
+          ? d.io.channels[f.id.functionKey]
+          : undefined;
       const members = new Map<string, TerminalId>();
       for (const t of f.terminals)
         for (const member of netMembers.get(nets.get(tid(t)) ?? "") ?? [])

@@ -1,5 +1,6 @@
 import type { QueryError } from "@thermite/query";
 import type { RenderError } from "@thermite/render";
+import { boundedAlternatives, formatAllowedValues } from "@thermite/schema";
 
 import type { AgentToolName } from "./contracts.js";
 
@@ -33,6 +34,10 @@ export interface A001Error {
   readonly message: string;
   readonly field: string;
   readonly reason: A001Reason;
+  /** For a closed-literal field: the accepted literals in declared order (at most 50). */
+  readonly allowed?: readonly string[];
+  /** Number of accepted literals whenever `allowed` is present. */
+  readonly allowedCount?: number;
 }
 
 export interface A002Error {
@@ -100,14 +105,26 @@ export function createA001Error(
   tool: AgentToolName,
   field: string,
   reason: A001Reason,
+  allowedValues?: Iterable<string>,
 ): A001Error {
-  const error: A001Error = {
+  const message = `A001 Invalid ${tool} request at ${quote(field)}: ${reasonText(reason)}`;
+  if (allowedValues === undefined) {
+    return Object.freeze({
+      code: "A001",
+      message: `${message}.`,
+      field,
+      reason,
+    });
+  }
+  const alternatives = boundedAlternatives([...allowedValues]);
+  return Object.freeze({
     code: "A001",
-    message: `A001 Invalid ${tool} request at ${quote(field)}: ${reasonText(reason)}.`,
+    message: `${message}; allowed values: ${formatAllowedValues(alternatives)}.`,
     field,
     reason,
-  };
-  return Object.freeze(error);
+    allowed: Object.freeze(alternatives.allowed),
+    allowedCount: alternatives.allowedCount,
+  });
 }
 
 export function createA002Error(

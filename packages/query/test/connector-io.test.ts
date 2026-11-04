@@ -121,6 +121,54 @@ describe("connector I/O schedules", () => {
     }
   });
 
+  it("treats inherited key names as unreviewed and unassigned", async () => {
+    const inherited = ["constructor", "toString"] as const;
+    const f = await connectorIoFixture((types, objects) => {
+      const rack = types[0]!;
+      const cpu = types.find(({ id }) => id === "connector-fixture:cpu")!;
+      for (const [index, key] of inherited.entries()) {
+        rack.connectorPorts![key] = { connector: "M12 A-coded" };
+        cpu.terminals[`I${index + 1}`] = {};
+        cpu.functions[key] = {
+          kind: "channel",
+          direction: "input",
+          terminals: [`I${index + 1}`],
+        };
+      }
+      // R1 reviews only X3 and PLC1 assigns only di1.
+      expect(objects.some((o) => o.designation === "R1")).toBe(true);
+    });
+    try {
+      if (!f.result.ok) throw new Error(JSON.stringify(f.result.diagnostics));
+      const ports = buildDocumentation(f.result.ir, {
+        format: "documentation-view-request/0.1",
+        kind: "io-ports",
+      });
+      for (const key of inherited) {
+        const row = ports.rows.find((r) => r.cells[1].split("\n")[0] === key)!;
+        expect(row.cells[2]).toBe("Unspecified");
+        expect(row.cells[3]).toBe("PLC1\nUnassigned");
+        expect(row.cells[4]).toBe("Unspecified\nUsage: Unspecified");
+        expect(row.cells[7]).toBe("Unspecified");
+      }
+      const channels = buildDocumentation(f.result.ir, {
+        format: "documentation-view-request/0.1",
+        kind: "io",
+      });
+      for (const key of inherited) {
+        const row = channels.rows.find((r) => r.cells[1] === key)!;
+        expect(row.cells.slice(3, 6)).toEqual([
+          "PLC1",
+          "Unassigned",
+          "Unspecified",
+        ]);
+        expect(row.cells[8]).toMatch(/^Unspecified; /u);
+      }
+    } finally {
+      await f.dispose();
+    }
+  });
+
   it("quotes and neutralizes spreadsheet formulas in port-level CSV", async () => {
     const f = await connectorIoFixture((_t, objects) => {
       const rack = objects.find((o) => o.designation === "R1")!;

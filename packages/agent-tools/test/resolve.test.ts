@@ -438,9 +438,11 @@ describe("D11 resolve errors and validation precedence", () => {
       error: {
         code: "A001",
         message:
-          'A001 Invalid resolve request at "/format": unsupported value.',
+          'A001 Invalid resolve request at "/format": unsupported value; allowed values: ["agent-tool-request/0.1"].',
         field: "/format",
         reason: "unsupported-value",
+        allowed: ["agent-tool-request/0.1"],
+        allowedCount: 1,
       },
       failureClass: "expected",
     });
