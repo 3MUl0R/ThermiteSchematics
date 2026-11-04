@@ -12,7 +12,7 @@
     "bun": ">=1.4.2"
   },
   "scripts": {
-    "build": "bun --bun tsc -b && bun run --cwd packages/cli build:assets",
+    "build": "bun --bun tsc -b",
     "test": "bun scripts/test.mjs",
     "release:pack": "bash scripts/release-pack.sh",
     "release:accept": "node scripts/release-acceptance.mjs",

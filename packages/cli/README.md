@@ -70,9 +70,11 @@ I/O and terminal schedules, and a guarded source change.
 
 Each call compiles fresh against the authoritative source and verified library
 lock. Preserve compiler diagnostics on stderr even when JSON results or drawing
-files are produced. The six JSON agent commands below retain their existing
-request/result contracts in the alpha; its direct printable CLI is an additional
-workflow. For development verification use `bun run test -- <file>` and
+files are produced. The six JSON agent commands retain their existing
+request/result contracts in the alpha; see the current
+[Bun agent request examples](../../docs/agent-requests.md). Its direct printable
+CLI is an additional workflow. For development verification use
+`bun run test -- <file>` and
 `bun run check`; full checks also require Python 3.12 or later.
 
 ## Historical private 0.2.0 runtime
@@ -82,6 +84,9 @@ its source revision. In that runtime, `thermite init` targeted the current empty
 directory without a path operand. Those installation and initialization rules do
 not apply to the public alpha source entry point above. The historical runtime
 requires Node.js `^22.12.0 || >=24` (excluding Node 23).
+
+The former root guide's complete private-runtime rules and requests are in the
+[legacy agent guide](../../docs/legacy/private-release-agent-guide.md).
 
 ### Private offline install
 

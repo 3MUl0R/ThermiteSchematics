@@ -1,4 +1,12 @@
-import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,11 +14,25 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { INIT_SUCCESS_MESSAGE, runCli } from "../src/index.js";
+import { initializeAlphaProject } from "../src/alpha-init.js";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
 const rootGuide = join(repositoryRoot, "AGENTS.md");
 const packagedGuide = join(packageRoot, "assets", "AGENTS.md");
+const requestGuide = join(repositoryRoot, "docs", "agent-requests.md");
+const legacyGuide = join(
+  repositoryRoot,
+  "docs",
+  "legacy",
+  "private-release-agent-guide.md",
+);
+// This pins the current legacy asset, independently of the engine guide and the
+// historical release inventory (which belongs to its original source revision).
+const frozenGuideSha256 =
+  "5e1ec3a4d465ba2eb85d2bbe9ac802f17212f77711763a547cfe403f5a499a49";
+const historicalInstallText =
+  /\bNode\.js\b|\b(?:npm|npx)\b|\bnode[ \t]+\S+\.[cm]?js\b|thermite-cli-0\.2\.0\.tgz|isolated-prefix|--offline/iu;
 const temporaryRoots: string[] = [];
 
 interface Invocation {
@@ -80,8 +102,16 @@ afterEach(async () => {
   );
 });
 
-describe("canonical AGENTS guide", () => {
-  it("keeps root, packaged, and initialized bytes identical and link-free", async () => {
+describe("frozen legacy AGENTS guide", () => {
+  it("pins the packaged asset's SHA-256", async () => {
+    expect(
+      createHash("sha256")
+        .update(await readFile(packagedGuide))
+        .digest("hex"),
+    ).toBe(frozenGuideSha256);
+  });
+
+  it("keeps packaged and legacy-initialized bytes identical and link-free", async () => {
     const root = await mkdtemp(
       join(tmpdir(), "thermite-schematics-agents-guide-"),
     );
@@ -93,14 +123,12 @@ describe("canonical AGENTS guide", () => {
       stderr: "",
     });
 
-    const [authority, packaged, copied] = await Promise.all([
-      readFile(rootGuide),
+    const [authority, copied] = await Promise.all([
       readFile(packagedGuide),
       readFile(join(root, "AGENTS.md")),
     ]);
-    expect(packaged).toEqual(authority);
     expect(copied).toEqual(authority);
-    for (const path of [rootGuide, packagedGuide, join(root, "AGENTS.md")]) {
+    for (const path of [packagedGuide, join(root, "AGENTS.md")]) {
       const status = await lstat(path, { bigint: true });
       expect(status.isFile()).toBe(true);
       expect(status.isSymbolicLink()).toBe(false);
@@ -114,7 +142,7 @@ describe("canonical AGENTS guide", () => {
   });
 
   it("contains the ten frozen topics in order without workspace dist paths", async () => {
-    const guide = await readFile(rootGuide, "utf8");
+    const guide = await readFile(packagedGuide, "utf8");
     const headings = [
       "## 1. Runtime and private installation",
       "## 2. Project authority",
@@ -149,131 +177,203 @@ describe("canonical AGENTS guide", () => {
     expect(guide).not.toMatch(/(?:^|[\\/])dist(?:[\\/]|$)/mu);
   });
 
-  it("parses and executes every request example and its stream/exit claims", async () => {
-    const guide = await readFile(rootGuide, "utf8");
-    const examples = extractJsonExamples(guide);
-    expect(examples).toHaveLength(6);
-    for (const request of examples) {
-      expect(request).toMatchObject({
-        format: "agent-tool-request/0.1",
-        project: ".",
-      });
-    }
-
-    const root = await mkdtemp(
-      join(tmpdir(), "thermite-schematics-guide-examples-"),
+  it("preserves old root sections 1–10 verbatim in the legacy reference", async () => {
+    const frozen = await readFile(packagedGuide, "utf8");
+    const legacy = await readFile(legacyGuide, "utf8");
+    const heading = "## 1. Runtime and private installation";
+    expect(legacy.slice(legacy.indexOf(heading))).toBe(
+      frozen.slice(frozen.indexOf(heading)),
     );
-    temporaryRoots.push(root);
-    expect(await invoke(root, ["init"])).toMatchObject({ exitCode: 0 });
-    const names = [
-      "validate.request.json",
-      "resolve.request.json",
-      "inspect.request.json",
-      "query.request.json",
-      "patch-dry-run.request.json",
-      "create-view.request.json",
-    ];
-    for (const [index, name] of names.entries()) {
+  });
+
+  it("G2 migration: request JSON is unchanged from the frozen guide", async () => {
+    expect(extractJsonExamples(await readFile(requestGuide, "utf8"))).toEqual(
+      extractJsonExamples(await readFile(packagedGuide, "utf8")),
+    );
+  });
+
+  it.each(["legacy", "alpha"])(
+    "executes every request example and its stream/exit claims on the %s starter",
+    async (starter) => {
+      const guide = await readFile(requestGuide, "utf8");
+      const examples = extractJsonExamples(guide);
+      expect(examples).toHaveLength(6);
+      for (const request of examples) {
+        expect(request).toMatchObject({
+          format: "agent-tool-request/0.1",
+          project: ".",
+        });
+      }
+
+      const parent = await mkdtemp(
+        join(tmpdir(), "thermite-schematics-guide-examples-"),
+      );
+      temporaryRoots.push(parent);
+      const root = join(parent, "project");
+      if (starter === "alpha") {
+        await initializeAlphaProject(root);
+      } else {
+        await mkdir(root);
+        expect(await invoke(root, ["init"])).toMatchObject({ exitCode: 0 });
+      }
+      const executedCommands: string[] = [];
+      async function invokeExample(
+        args: readonly string[],
+        stdinFile?: string,
+      ) {
+        executedCommands.push(
+          `bun "$thermite_entry" ${args.join(" ")}${stdinFile === undefined ? "" : ` < ${stdinFile}`}`,
+        );
+        return invoke(
+          root,
+          args,
+          stdinFile === undefined
+            ? undefined
+            : await readFile(join(root, stdinFile), "utf8"),
+        );
+      }
+      const names = [
+        "validate.request.json",
+        "resolve.request.json",
+        "inspect.request.json",
+        "query.request.json",
+        "patch-dry-run.request.json",
+        "create-view.request.json",
+      ];
+      for (const [index, name] of names.entries()) {
+        await writeFile(
+          join(root, name),
+          JSON.stringify(examples[index], undefined, 2) + "\n",
+          "utf8",
+        );
+      }
+
+      const validate = parseSuccess(
+        await invokeExample([
+          "agent",
+          "validate",
+          "--input",
+          "validate.request.json",
+        ]),
+        "validate",
+      );
+      expect(validate.result).toMatchObject({ value: { valid: true } });
+
+      const resolveResult = parseSuccess(
+        await invokeExample(
+          ["agent", "resolve", "--input", "-"],
+          "resolve.request.json",
+        ),
+        "resolve",
+      );
+      expect(JSON.stringify(resolveResult.result)).toContain("PS1");
+
+      const inspect = parseSuccess(
+        await invokeExample([
+          "agent",
+          "inspect",
+          "--input",
+          "inspect.request.json",
+        ]),
+        "inspect",
+      );
+      expect(JSON.stringify(inspect.result)).toContain("PS1");
+
+      const query = parseSuccess(
+        await invokeExample([
+          "agent",
+          "query",
+          "--input",
+          "query.request.json",
+        ]),
+        "query",
+      );
+      expect(JSON.stringify(query.result)).toContain("PS1");
+
+      const equipmentPath = join(root, "devices", "equipment.json");
+      const beforeDryRun = await readFile(equipmentPath);
+      const dryRun = parseSuccess(
+        await invokeExample([
+          "agent",
+          "apply-source-patch",
+          "--input",
+          "patch-dry-run.request.json",
+        ]),
+        "apply-source-patch",
+      );
+      expect(dryRun.result).toMatchObject({ value: { dryRun: true } });
+      expect(await readFile(equipmentPath)).toEqual(beforeDryRun);
+
+      const applyRequest = structuredClone(examples[4]) as {
+        dryRun: boolean;
+      };
+      applyRequest.dryRun = false;
       await writeFile(
-        join(root, name),
-        JSON.stringify(examples[index], undefined, 2) + "\n",
+        join(root, "patch-apply.request.json"),
+        JSON.stringify(applyRequest, undefined, 2) + "\n",
         "utf8",
       );
-    }
-
-    const validate = parseSuccess(
-      await invoke(root, [
-        "agent",
-        "validate",
-        "--input",
-        "validate.request.json",
-      ]),
-      "validate",
-    );
-    expect(validate.result).toMatchObject({ value: { valid: true } });
-
-    const resolveResult = parseSuccess(
-      await invoke(
-        root,
-        ["agent", "resolve", "--input", "-"],
-        JSON.stringify(examples[1]),
-      ),
-      "resolve",
-    );
-    expect(JSON.stringify(resolveResult.result)).toContain("PS1");
-
-    const inspect = parseSuccess(
-      await invoke(root, [
-        "agent",
-        "inspect",
-        "--input",
-        "inspect.request.json",
-      ]),
-      "inspect",
-    );
-    expect(JSON.stringify(inspect.result)).toContain("PS1");
-
-    const query = parseSuccess(
-      await invoke(root, ["agent", "query", "--input", "query.request.json"]),
-      "query",
-    );
-    expect(JSON.stringify(query.result)).toContain("PS1");
-
-    const equipmentPath = join(root, "devices", "equipment.json");
-    const beforeDryRun = await readFile(equipmentPath);
-    const dryRun = parseSuccess(
-      await invoke(root, [
-        "agent",
+      const applied = parseSuccess(
+        await invokeExample([
+          "agent",
+          "apply-source-patch",
+          "--input",
+          "patch-apply.request.json",
+        ]),
         "apply-source-patch",
-        "--input",
-        "patch-dry-run.request.json",
-      ]),
-      "apply-source-patch",
-    );
-    expect(dryRun.result).toMatchObject({ value: { dryRun: true } });
-    expect(await readFile(equipmentPath)).toEqual(beforeDryRun);
+      );
+      expect(applied.result).toMatchObject({ value: { dryRun: false } });
+      expect(await readFile(equipmentPath)).not.toEqual(beforeDryRun);
 
-    const applyRequest = structuredClone(examples[4]) as {
-      dryRun: boolean;
-    };
-    applyRequest.dryRun = false;
-    await writeFile(
-      join(root, "patch-apply.request.json"),
-      JSON.stringify(applyRequest, undefined, 2) + "\n",
-      "utf8",
-    );
-    const applied = parseSuccess(
-      await invoke(root, [
-        "agent",
-        "apply-source-patch",
-        "--input",
-        "patch-apply.request.json",
-      ]),
-      "apply-source-patch",
-    );
-    expect(applied.result).toMatchObject({ value: { dryRun: false } });
-    expect(await readFile(equipmentPath)).not.toEqual(beforeDryRun);
-
-    const revalidated = parseSuccess(
-      await invoke(root, [
-        "agent",
+      const revalidated = parseSuccess(
+        await invokeExample([
+          "agent",
+          "validate",
+          "--input",
+          "validate.request.json",
+        ]),
         "validate",
-        "--input",
-        "validate.request.json",
-      ]),
-      "validate",
-    );
-    expect(revalidated.result).toMatchObject({ value: { valid: true } });
+      );
+      expect(revalidated.result).toMatchObject({ value: { valid: true } });
 
-    const view = parseSuccess(
-      await invoke(root, [
-        "agent",
+      const view = parseSuccess(
+        await invokeExample([
+          "agent",
+          "create-view",
+          "--input",
+          "create-view.request.json",
+        ]),
         "create-view",
-        "--input",
-        "create-view.request.json",
-      ]),
-      "create-view",
-    );
-    expect(JSON.stringify(view.result)).toContain("<svg");
+      );
+      expect(JSON.stringify(view.result)).toContain("<svg");
+      const documentedCommands = [
+        ...guide.matchAll(/^```sh\n([\s\S]*?)^```/gmu),
+      ]
+        .flatMap((block) => block[1]!.trim().split("\n"))
+        .filter((line) => line.startsWith('bun "$thermite_entry"'));
+      expect(documentedCommands).toEqual(executedCommands);
+    },
+  );
+});
+
+describe("root engine guide", () => {
+  it("fits the 4,096-byte budget without historical install instructions", async () => {
+    const bytes = await readFile(rootGuide);
+    expect(bytes.byteLength).toBeLessThanOrEqual(4_096);
+    expect(bytes.toString("utf8")).not.toMatch(historicalInstallText);
+  });
+
+  it.each([
+    ["ELK node placement", false],
+    ["a node in the graph", false],
+    ["Node.js 22", true],
+    ["npm install", true],
+    ["npm ci", true],
+    ["npx thermite", true],
+    ["node thermite.mjs", true],
+    ["node scripts/build.js", true],
+    ["node scripts/build.cjs", true],
+  ])("classifies historical runtime/install text: %s", (text, blocked) => {
+    expect(historicalInstallText.test(text)).toBe(blocked);
   });
 });

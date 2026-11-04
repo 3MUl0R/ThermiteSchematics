@@ -4,9 +4,6 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "scripts": {
-    "build:assets": "bun ../../scripts/copy-agent-guide.mjs"
-  },
   "engines": {
     "bun": ">=1.4.2"
   },
