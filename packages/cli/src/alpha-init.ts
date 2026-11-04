@@ -21,6 +21,7 @@ import { isValidInitText, runInit } from "./init.js";
 import { assertOrdinaryPath } from "./alpha-output.js";
 
 export interface AlphaInitOptions {
+  /** An explicit name; omit it for the default name and starter title block. */
   name?: string;
   revision?: string;
   template?: "starter" | "cabinets";
@@ -140,6 +141,11 @@ export async function initializeAlphaProject(
       presentation.titleBlock = {
         lines: ["Inter-cabinet cable / two used cores and two spare cores"],
       };
+    } else if (options.name !== undefined) {
+      // Every title block already prints project.name as its heading. The
+      // starter's "Starter project" caption is a placeholder for an unnamed
+      // project, so an explicit name replaces it instead of contradicting it.
+      delete presentation.titleBlock;
     }
     await writeFile(
       join(stage, "system.json"),
