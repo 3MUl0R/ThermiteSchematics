@@ -12,6 +12,7 @@ import {
   renderSchematicPacket,
   type SignalLoopViewRequest,
 } from "@thermite/render";
+import { packetPdf } from "../src/alpha-pdf.js";
 import { selectSignalLoop } from "../../render/src/signal-loop.js";
 
 const temporary: string[] = [],
@@ -224,6 +225,12 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     expect(document.querySelectorAll("[data-cable-assembly]")).toHaveLength(1);
     expect(cable.querySelectorAll("path")).toHaveLength(1);
     expect(cable.hasAttribute("data-net-id")).toBe(false);
+    const loopLabels = [...document.querySelectorAll("text")].map(
+      (t) => t.textContent,
+    );
+    expect(loopLabels.filter((value) => value === "unused")).toHaveLength(2);
+    expect(loopLabels).not.toContain("unuse");
+    expect(loopLabels).not.toContain("d");
     const cores = JSON.parse(cable.querySelector("desc")!.textContent!) as {
       id: string;
       net: string;
@@ -433,3 +440,62 @@ it("uses the normal CLI packet output protections and preserves an earlier drawi
   ).rejects.toThrow();
   expect(await readFile(join(f.p, "loop.html"), "utf8")).toBe(before);
 });
+
+const loopRaster = await import("./helpers/pdf-raster.js");
+const loopRasterCases = (["left-to-right", "top-to-bottom"] as const).flatMap(
+  (flow) => ["plain", "assembly"].map((mode) => ({ flow, mode })),
+);
+async function loopRasterPacket(
+  flow: "left-to-right" | "top-to-bottom",
+  mode: string,
+) {
+  const f = await fixture(),
+    ir = await compiled(f.p),
+    result = await renderSchematicPacket(
+      ir,
+      packet({ ...(mode === "assembly" ? assemblyView : view), flow }),
+    );
+  if (!result.ok) throw Error(result.error.message);
+  return result.value;
+}
+it.each(loopRasterCases)(
+  "unconditionally paints both unused labels in PDF: $mode $flow",
+  async ({ flow, mode }) => {
+    const input = await loopRasterPacket(flow, mode),
+      svg = input.sheets[0]!.svg,
+      crops = await loopRaster.svgTextCrops(svg, "unused"),
+      pdf = await packetPdf(input, "Unused labels");
+    expect(crops).toHaveLength(2);
+    expect(svg).not.toContain(">unuse</text>");
+    for (const crop of crops) {
+      const ink = loopRaster.inkBounds(await loopRaster.pdfCrop(pdf, crop));
+      expect(ink.count).toBeGreaterThan(100);
+      expect(ink.left).toBeGreaterThan(0);
+      expect(ink.right).toBeLessThan(Math.ceil((crop.width * 300) / 25.4) - 1);
+    }
+  },
+);
+for (const { flow, mode } of loopRasterCases)
+  it.skipIf(!loopRaster.browserPath)(
+    `paints unused in browser and PDF: ${mode} ${flow}`,
+    async () => {
+      const input = await loopRasterPacket(flow, mode),
+        svg = input.sheets[0]!.svg,
+        browser = await loopRaster.launchBrowser();
+      try {
+        const crops = await loopRaster.svgTextCrops(svg, "unused"),
+          pdf = await packetPdf(input, "Unused labels");
+        for (const crop of crops) {
+          const browserInk = loopRaster.inkBounds(
+              await loopRaster.browserCrop(browser, svg, crop),
+            ),
+            pdfInk = loopRaster.inkBounds(await loopRaster.pdfCrop(pdf, crop));
+          expect(browserInk.count).toBeGreaterThan(100);
+          expect(pdfInk.width / browserInk.width).toBeGreaterThan(0.8);
+          expect(pdfInk.width / browserInk.width).toBeLessThan(1.25);
+        }
+      } finally {
+        await browser.close();
+      }
+    },
+  );

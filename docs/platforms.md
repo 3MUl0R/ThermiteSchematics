@@ -97,3 +97,17 @@ All consumer checks use an empty home/cache and restricted executable search
 path. Those controls do not prove network isolation. Do not describe a Windows
 verification report as an enforced offline test unless separate network controls
 were applied and recorded.
+
+## Typography raster checks
+
+`alpha-pdf.test.ts` renders 300-dpi PDF crops with the development-only PDF.js
+and native canvas dependencies. These checks run offline and include negative
+controls for cell overpainting and proportional font substitution. Browser
+crops also run when a local Chrome/Chromium or cached Playwright Chromium is
+available. Set `THERMITE_TEST_BROWSER` to its executable path to override
+discovery. Browser tests use `it.skipIf` so missing browsers appear as skips.
+Set `THERMITE_REQUIRE_BROWSER=1` to fail when no browser is available; ordinary
+CI sets this on all three Chrome-equipped runners. An explicitly invalid
+`THERMITE_TEST_BROWSER` disables automatic discovery for policy verification.
+PDF raster checks, including all four signal-loop variants, always run.
+No browser or raster dependency is included in the runtime package.

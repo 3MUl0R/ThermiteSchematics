@@ -159,7 +159,10 @@ try {
         throw new Error(`Unsafe package file: ${file}`);
       await cp(join(directory, file), join(target, file), {
         recursive: true,
-        filter: (path) => !path.endsWith(".tsbuildinfo"),
+        filter: (path) =>
+          !path.endsWith(".tsbuildinfo") &&
+          // Generated data is consumed only as compact JS; source/maps duplicate it.
+          !/[/\\]text-metrics-data\.(?:ts|js\.map|d\.ts\.map)$/u.test(path),
       });
     }
   }

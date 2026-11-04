@@ -10,11 +10,13 @@ describe("render public API", () => {
       "RENDERER_VERSION",
       "SYMBOL_CATALOG_VERSION",
       "createSchematicRenderer",
+      "describeCodePoint",
       "normalizePaperPage",
       "printPacketHtml",
       "renderSchematic",
       "renderSchematicPacket",
       "renderSchematicSheets",
+      "supportsGlyph",
     ]);
     expect(render.RENDERER_VERSION).toBe("render/0.3");
     expect(render.SYMBOL_CATALOG_VERSION).toBe("ais-symbols/0.3");

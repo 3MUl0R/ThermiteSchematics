@@ -19,7 +19,7 @@
     "format": "bun --bun prettier --write .",
     "format:check": "bun --bun prettier --check .",
     "check:committed-json": "bun scripts/assert-prettier-stable-json.mjs",
-    "check": "bun run generate:types:check && bun run build && bun run test && bun run format:check && bun run check:committed-json",
+    "check": "bun run generate:types:check && bun run build && bun run check:text-metrics && bun run test && bun run format:check && bun run check:committed-json",
     "generate:types": "bun run --cwd packages/schema generate:types",
     "generate:types:check": "bun run --cwd packages/schema generate:types:check",
     "test:release-evidence": "node scripts/run-vitest-and-audit.mjs && node packages/cli/dist/bin.js validate \"packages/cli/fixtures/valid project\" --json",
@@ -31,14 +31,19 @@
     "demo:change": "bun scripts/demo-change.mjs",
     "package:pack": "bun scripts/runtime-package/pack.mjs",
     "package:verify": "bun scripts/runtime-package/verify.mjs",
-    "check:linux": "bun scripts/platform/check-linux.mjs"
+    "check:linux": "bun scripts/platform/check-linux.mjs",
+    "check:text-metrics": "bun scripts/update-text-metrics.mjs --check"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "@types/fontkit": "^2.0.8",
     "@types/node": "^22.20.1",
     "@types/pdfkit": "^0.17.3",
     "@types/svg-to-pdfkit": "^0.1.4",
+    "dejavu-fonts-ttf": "2.37.3",
     "linkedom": "^0.18.12",
+    "pdfjs-dist": "^6.5.438",
+    "playwright-core": "^1.64.1",
     "prettier": "^3.9.6",
     "typescript": "~5.9.3",
     "vitest": "^4.1.11"

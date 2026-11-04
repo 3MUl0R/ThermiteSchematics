@@ -83,7 +83,9 @@ describe("offline PDF glyph fallback", () => {
   it("still refuses a character outside both bundled font families", async () => {
     await expect(
       packetPdf(await packet("Unsupported 🚀"), "Unsupported"),
-    ).rejects.toThrow('does not support "🚀" on sheet 1');
+    ).rejects.toThrow(
+      "PDF font does not support U+1F680 (symbol) on sheet 1. Use SVG/HTML or a supported label.",
+    );
   });
   it("does not embed or select the fallback font when primary fonts cover all text", async () => {
     const input = await packet("Ordinary coil");
@@ -346,7 +348,7 @@ describe("PDF label clipping geometry", () => {
   });
 
   it("keeps fallback font spans inside the same label clip", async () => {
-    const input = await clippedLabel("A−B", 1500, 100, 24.6),
+    const input = await clippedLabel("A∑B", 1500, 100, 24.6),
       pdf = await packetPdf(input, "Clipped fallback"),
       texts = pdfTextClips(pdf);
     expect(texts).toHaveLength(3);
@@ -402,3 +404,478 @@ describe("PDF label clipping geometry", () => {
     },
   );
 });
+
+// These tests inspect the painted 300-dpi crops. Searchable text alone cannot
+// detect an overpainted column or a proportional substitution for monospace.
+const rasterBrowser = await import("./helpers/pdf-raster.js");
+describe("PDF painted typography parity", () => {
+  async function reportSpecimen() {
+    const input = structuredClone(ir);
+    input.wires[0]!.properties = {
+      ...input.wires[0]!.properties,
+      label: "W".repeat(120),
+    };
+    const result = await renderSchematicPacket(input, {
+      format: "schematic-packet-request/0.1",
+      views: [{ format: "documentation-view-request/0.1", kind: "wires" }],
+    });
+    if (!result.ok) throw Error(result.error.message);
+    const source = result.value,
+      sheet = source.sheets.find((s) => s.svg.includes("WWWW"))!,
+      kept = [...sheet.svg.matchAll(/<text\b[^>]*>[\s\S]*?<\/text>/gu)]
+        .map((m) => m[0])
+        .filter((t) => />W{2,}<\/text>/u.test(t));
+    expect(kept.map((t) => />\s*(W+)\s*</u.exec(t)![1]).join("")).toBe(
+      "W".repeat(120),
+    );
+    const full = sheet.svg.replace(/<text\b[^>]*>[\s\S]*?<\/text>/gu, (t) =>
+        kept.includes(t) ? t : "",
+      ),
+      reference =
+        sheet.svg.match(/<svg\b[^>]*>/u)![0] + kept.join("") + "</svg>",
+      x = Math.min(...kept.map((t) => Number(/ x="([^"]+)"/u.exec(t)![1]))),
+      ys = kept.map((t) => Number(/ y="([^"]+)"/u.exec(t)![1])),
+      // Generous enough for the complete line, including a pre-fix overflow.
+      longest = Math.max(
+        ...kept.map((t) => />\s*(W+)\s*</u.exec(t)![1]!.length),
+      ),
+      crop = {
+        x: x - 0.5,
+        y: Math.min(...ys) - 3,
+        width: longest * 2.6 + 1,
+        height: Math.max(...ys) - Math.min(...ys) + 4,
+      };
+    const asPacket = (svg: string) => ({
+      ...source,
+      sheets: [{ ...sheet, number: 1, svg }],
+    });
+    return { asPacket, full, reference, crop };
+  }
+  async function monoSpecimen() {
+    const source = await packet("Monospace specimen"),
+      sheet = source.sheets[0]!,
+      svg =
+        sheet.svg.match(/<svg\b[^>]*>/u)![0] +
+        [
+          '<text x="30" y="30" font-family="monospace" font-size="4">iiiiiiii</text>',
+          '<g font-family="monospace"><text x="30" y="40" font-size="4">WWWWWWWW</text></g>',
+        ].join("") +
+        "</svg>";
+    return { ...source, sheets: [{ ...sheet, svg }] };
+  }
+  it("paints all 120 W glyphs as completely as an unobstructed PDF reference", async () => {
+    const { pdfCrop, pixelDifference, inkBounds } =
+        await import("./helpers/pdf-raster.js"),
+      { asPacket, full, reference, crop } = await reportSpecimen(),
+      actual = await pdfCrop(
+        await packetPdf(asPacket(full), "Wide report"),
+        crop,
+      ),
+      expected = await pdfCrop(
+        await packetPdf(asPacket(reference), "Wide report"),
+        crop,
+      );
+    expect(inkBounds(actual).count).toBeGreaterThan(3000);
+    expect(pixelDifference(actual, expected)).toBe(0);
+    const obscured = full.replace(
+        "</svg>",
+        `<rect x="60" y="${crop.y}" width="24" height="${crop.height}" fill="white"/></svg>`,
+      ),
+      broken = await pdfCrop(
+        await packetPdf(asPacket(obscured), "Negative control"),
+        crop,
+      );
+    expect(pixelDifference(broken, expected)).toBeGreaterThan(1000);
+  });
+  it("paints equal advances for narrow and wide monospace glyphs, including inherited family", async () => {
+    const { pdfCrop, inkBounds } = await import("./helpers/pdf-raster.js"),
+      input = await monoSpecimen(),
+      pdf = await packetPdf(input, "Monospace"),
+      narrow = inkBounds(
+        await pdfCrop(pdf, { x: 29, y: 25, width: 35, height: 7 }),
+      ),
+      wide = inkBounds(
+        await pdfCrop(pdf, { x: 29, y: 35, width: 35, height: 7 }),
+      );
+    expect(pdf.toString("latin1")).toContain("NotoSansMono-Regular");
+    expect(narrow.width).toBeGreaterThan(210);
+    expect(Math.abs(narrow.width - wide.width)).toBeLessThanOrEqual(6);
+    const proportional = {
+        ...input,
+        sheets: input.sheets.map((sheet) => ({
+          ...sheet,
+          svg: sheet.svg.replaceAll(
+            'font-family="monospace"',
+            'font-family="sans-serif"',
+          ),
+        })),
+      },
+      broken = await packetPdf(proportional, "Negative control"),
+      brokenNarrow = inkBounds(
+        await pdfCrop(broken, { x: 29, y: 25, width: 35, height: 7 }),
+      ),
+      brokenWide = inkBounds(
+        await pdfCrop(broken, { x: 29, y: 35, width: 35, height: 7 }),
+      );
+    expect(brokenWide.width - brokenNarrow.width).toBeGreaterThan(150);
+  });
+  it("conserves every one of 1,500 row identities once in the direct PDF", async () => {
+    const input = structuredClone(ir),
+      wire = input.wires[0]!;
+    input.jumpers = [];
+    input.cables = [];
+    input.cableConductors = [];
+    input.wires = Array.from({ length: 1500 }, (_, i) => ({
+      ...wire,
+      uid: `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`,
+      designation: `W${i.toString().padStart(4, "0")}`,
+      properties: { label: `IDENTITY-${i.toString().padStart(4, "0")}` },
+    }));
+    const rendered = await renderSchematicPacket(input, {
+      format: "schematic-packet-request/0.1",
+      views: [{ format: "documentation-view-request/0.1", kind: "wires" }],
+    });
+    if (!rendered.ok) throw Error(rendered.error.message);
+    expect(rendered.value.sheets.length).toBeGreaterThan(1);
+    const { pdfText } = await import("./helpers/pdf-raster.js"),
+      text = await pdfText(
+        await packetPdf(rendered.value, "Identity conservation"),
+      ),
+      identities = text.match(/IDENTITY-\d{4}/gu) ?? [];
+    expect(identities).toHaveLength(1500);
+    expect(new Set(identities).size).toBe(1500);
+    expect(identities.sort()).toEqual(
+      Array.from(
+        { length: 1500 },
+        (_, i) => `IDENTITY-${i.toString().padStart(4, "0")}`,
+      ),
+    );
+  });
+  it("keeps unsupported Unicode explicit for monospace, including inherited spans", async () => {
+    const input = await monoSpecimen();
+    input.sheets[0]!.svg = input.sheets[0]!.svg.replace(
+      "WWWWWWWW",
+      "<tspan>🚀</tspan>",
+    );
+    await expect(packetPdf(input, "Unknown mono glyph")).rejects.toThrow(
+      "PDF font does not support U+1F680 (symbol) on sheet 1. Use SVG/HTML or a supported label.",
+    );
+  });
+  it.skipIf(!rasterBrowser.browserPath)(
+    "paints the complete report and monospace specimens in a real browser",
+    async () => {
+      const { launchBrowser, browserCrop, pixelDifference, inkBounds } =
+        await import("./helpers/pdf-raster.js");
+      const browser = await launchBrowser();
+      try {
+        const { full, reference, crop } = await reportSpecimen(),
+          actual = await browserCrop(browser, full, crop),
+          expected = await browserCrop(browser, reference, crop);
+        expect(inkBounds(actual).count).toBeGreaterThan(3000);
+        expect(pixelDifference(actual, expected)).toBe(0);
+        const input = await monoSpecimen(),
+          narrow = inkBounds(
+            await browserCrop(browser, input.sheets[0]!.svg, {
+              x: 29,
+              y: 25,
+              width: 35,
+              height: 7,
+            }),
+          ),
+          wide = inkBounds(
+            await browserCrop(browser, input.sheets[0]!.svg, {
+              x: 29,
+              y: 35,
+              width: 35,
+              height: 7,
+            }),
+          );
+        expect(narrow.width).toBeGreaterThan(210);
+        expect(Math.abs(narrow.width - wide.width)).toBeLessThanOrEqual(6);
+      } finally {
+        await browser.close();
+      }
+    },
+  );
+});
+
+describe("PDF glyph conservation for combining marks", () => {
+  it.each([
+    "MARKS e\u0301\u0302\u0323 q\u0301 a\u0308 n\u0303 Z\u030c END",
+    "q\u0301",
+    "A\u00adq\u0301B",
+  ])("refuses glyphs the PDF converter cannot paint: %s", async (label) => {
+    await expect(packetPdf(await packet(label), "Marks")).rejects.toThrow(
+      "PDF font does not support U+0301 (combining mark) on sheet 1. Use SVG/HTML or a supported label.",
+    );
+  });
+  it("checks monospace coverage against the mono face for the fi ligature", async () => {
+    const input = await packet("Mono coverage");
+    input.sheets[0]!.svg =
+      input.sheets[0]!.svg.match(/<svg\b[^>]*>/u)![0] +
+      '<text x="30" y="30" font-family="monospace" font-size="4">ﬁ</text></svg>';
+    await expect(packetPdf(input, "Mono ligature")).rejects.toThrow(
+      "PDF font does not support U+FB01 (letter) on sheet 1. Use SVG/HTML or a supported label.",
+    );
+  });
+});
+
+it("paints NFC accents against an independently authored precomposed reference", async () => {
+  const source = await packet("NFC raster"),
+    sheet = source.sheets[0]!,
+    opening = sheet.svg.match(/<svg\b[^>]*>/u)![0],
+    svg = (label: string) =>
+      opening +
+      `<text x="30" y="30" font-family="sans-serif" font-size="4">${label}</text></svg>`,
+    input = (label: string) => ({
+      ...source,
+      sheets: [{ ...sheet, svg: svg(label) }],
+    }),
+    crop = { x: 29, y: 24, width: 58, height: 8 },
+    { pdfCrop, pixelDifference } = await import("./helpers/pdf-raster.js"),
+    actual = await pdfCrop(
+      await packetPdf(
+        input("MARKS e\u0301 a\u0308 n\u0303 Z\u030c END"),
+        "Decomposed",
+      ),
+      crop,
+    ),
+    reference = await pdfCrop(
+      await packetPdf(
+        input("MARKS é ä ñ Ž END"),
+        "Authored precomposed reference",
+      ),
+      crop,
+    ),
+    stripped = await pdfCrop(
+      await packetPdf(input("MARKS e a n Z END"), "Missing marks control"),
+      crop,
+    );
+  expect(pixelDifference(actual, reference)).toBe(0);
+  expect(pixelDifference(stripped, reference)).toBeGreaterThan(200);
+});
+
+it.skipIf(!rasterBrowser.browserPath)(
+  "bounds 60 plus signs under pinned DejaVu Sans in the browser",
+  async () => {
+    const { readFile } = await import("node:fs/promises"),
+      { parseHTML } = await import("linkedom"),
+      input = structuredClone(ir);
+    input.wires[0]!.properties = {
+      ...input.wires[0]!.properties,
+      label: "+".repeat(60),
+    };
+    const result = await renderSchematicPacket(input, {
+      format: "schematic-packet-request/0.1",
+      views: [{ format: "documentation-view-request/0.1", kind: "wires" }],
+    });
+    if (!result.ok) throw Error(result.error.message);
+    const font = (
+        await readFile("node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf")
+      ).toString("base64"),
+      browser = await rasterBrowser.launchBrowser(),
+      page = await browser.newPage();
+    try {
+      await page.setContent(
+        `<style>@font-face{font-family:Arial;src:url(data:font/ttf;base64,${font})}</style>${result.value.sheets[0]!.svg}`,
+      );
+      await page.evaluate(() => document.fonts.ready);
+      const issues = await page.evaluate(() =>
+        [...document.querySelectorAll("[data-report-column] text")].flatMap(
+          (text) => {
+            const cell = text.closest("[data-report-column]")!,
+              b = text.getBBox(),
+              x = Number(cell.getAttribute("data-cell-x")),
+              w = Number(cell.getAttribute("data-cell-width"));
+            return b.x < x || b.x + b.width > x + w ? [text.textContent] : [];
+          },
+        ),
+      );
+      expect(issues).toEqual([]);
+      const text = [
+        ...parseHTML(result.value.sheets[0]!.svg).document.querySelectorAll(
+          "text",
+        ),
+      ]
+        .map((t) => t.textContent)
+        .join("");
+      expect((text.match(/\+/gu) ?? []).length).toBeGreaterThanOrEqual(60);
+    } finally {
+      await page.close();
+      await browser.close();
+    }
+  },
+);
+
+describe("PDF diagnostics for unsupported characters", () => {
+  it("names the report row and Unicode code point instead of an invisible raw mark", async () => {
+    const input = structuredClone(ir);
+    input.wires[0]!.properties = {
+      ...input.wires[0]!.properties,
+      label: "A\u00adq\u0301B",
+    };
+    const result = await renderSchematicPacket(input, {
+      format: "schematic-packet-request/0.1",
+      views: [{ format: "documentation-view-request/0.1", kind: "wires" }],
+    });
+    if (!result.ok) throw Error(result.error.message);
+    await expect(packetPdf(result.value, "Row diagnostic")).rejects.toThrow(
+      `PDF font does not support U+0301 (combining mark) on sheet 1, row ${JSON.stringify(input.wires[0]!.designation)}, column 1 "Conductor / label". Use SVG/HTML or a supported label.`,
+    );
+  });
+  it("preserves the CLI T001 class and readable code-point message", async () => {
+    const { execFileSync } = await import("node:child_process"),
+      { mkdtemp, writeFile, rm } = await import("node:fs/promises"),
+      { tmpdir } = await import("node:os"),
+      { join } = await import("node:path"),
+      root = await mkdtemp(join(tmpdir(), "thermite-pdf-unicode-"));
+    try {
+      const request = join(root, "packet.json");
+      await writeFile(
+        request,
+        JSON.stringify({
+          format: "schematic-packet-request/0.1",
+          views: [
+            {
+              format: "circuit-view-request/0.1",
+              title: "A\u00adq\u0301B",
+              groups: [
+                {
+                  id: "coil",
+                  functions: [
+                    { device: { by: "designation", value: "K1" }, key: "coil" },
+                  ],
+                  conductors: [],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      let failure: any;
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            "packages/cli/dist/thermite-bin.js",
+            "packet",
+            "--project",
+            "examples/motor-starter",
+            "--input",
+            request,
+            "-o",
+            join(root, "packet.pdf"),
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure?.status, failure?.stderr?.toString()).toBe(2);
+      expect(JSON.parse(failure.stderr.toString()).error).toEqual({
+        code: "T001",
+        message:
+          "PDF font does not support U+0301 (combining mark) on sheet 1. Use SVG/HTML or a supported label.",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    ["控", "U+63A7 (letter)"],
+    ["ป", "U+0E1B (letter)"],
+    ["न", "U+0928 (letter)"],
+    ["🚀", "U+1F680 (symbol)"],
+    ["\u0378", "U+0378 (other character)"],
+  ])("gives readable Unicode categories for %s", async (char, description) => {
+    await expect(
+      packetPdf(await packet(char), "Readable diagnostic"),
+    ).rejects.toThrow(
+      `PDF font does not support ${description} on sheet 1. Use SVG/HTML or a supported label.`,
+    );
+  });
+});
+
+const formatCases = [
+  ["PUMP\u00adSTART W\u2060J A\u200eB", "PUMPSTART WJ AB"],
+  ["\ufeffPUMP START", "PUMP START"],
+  ["PUMP\u200bSTART", "PUMPSTART"],
+  ["A\u00adB", "AB"],
+  ["A\u200dB\u200cC\u200fD\u061cE\u2066F\u2069G\ufe0f", "ABCDEFG"],
+];
+it.each(formatCases)(
+  "exports default-ignorable text without painting it: %s",
+  async (label, visible) => {
+    const source = await packet("Format specimen"),
+      sheet = source.sheets[0]!;
+    const input = (value: string) => ({
+      ...source,
+      sheets: [
+        {
+          ...sheet,
+          svg:
+            sheet.svg.match(/<svg\b[^>]*>/u)![0] +
+            `<text x="30" y="30" font-family="sans-serif" font-size="4">${value}</text></svg>`,
+        },
+      ],
+    });
+    const { pdfCrop, pixelDifference, inkBounds } = rasterBrowser;
+    const crop = { x: 29, y: 24, width: 80, height: 8 };
+    const actual = await pdfCrop(
+      await packetPdf(input(label!), "Format specimen"),
+      crop,
+    );
+    const reference = await pdfCrop(
+      await packetPdf(input(visible!), "Visible reference"),
+      crop,
+    );
+    expect(inkBounds(actual).count).toBeGreaterThan(100);
+    expect(pixelDifference(actual, reference)).toBe(0);
+  },
+);
+it.skipIf(!rasterBrowser.browserPath).each(formatCases.slice(0, 3))(
+  "matches browser visibility for default-ignorable text: %s",
+  async (label, visible) => {
+    const { readFile } = await import("node:fs/promises");
+    const font = (
+      await readFile("packages/cli/assets/fonts/NotoSans-Regular.ttf")
+    ).toString("base64");
+    const source = await packet("Browser formats"),
+      sheet = source.sheets[0]!;
+    const svg = (value: string) =>
+      sheet.svg.match(/<svg\b[^>]*>/u)![0] +
+      `<style>@font-face{font-family:ParityNoto;src:url(data:font/ttf;base64,${font})}</style>` +
+      `<text x="30" y="30" font-family="ParityNoto" font-size="4">${value}</text></svg>`;
+    const input = { ...source, sheets: [{ ...sheet, svg: svg(label!) }] };
+    const browser = await rasterBrowser.launchBrowser();
+    try {
+      const crop = { x: 29, y: 24, width: 80, height: 8 };
+      const actual = await rasterBrowser.browserCrop(
+        browser,
+        svg(label!),
+        crop,
+      );
+      const reference = await rasterBrowser.browserCrop(
+        browser,
+        svg(visible!),
+        crop,
+      );
+      expect(rasterBrowser.pixelDifference(actual, reference)).toBe(0);
+      const pdf = await rasterBrowser.pdfCrop(
+        await packetPdf(input, "Browser formats"),
+        crop,
+      );
+      const a = rasterBrowser.inkBounds(actual),
+        b = rasterBrowser.inkBounds(pdf);
+      expect(a.count).toBeGreaterThan(100);
+      expect(Math.abs(a.left - b.left)).toBeLessThanOrEqual(2);
+      expect(Math.abs(a.width - b.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(a.height - b.height)).toBeLessThanOrEqual(2);
+      // Same embedded face and baseline; browser/PDF antialiasing may differ.
+      expect(rasterBrowser.unmatchedInk(actual, pdf)).toBeLessThan(0.02);
+      expect(rasterBrowser.unmatchedInk(pdf, actual)).toBeLessThan(0.02);
+    } finally {
+      await browser.close();
+    }
+  },
+);
