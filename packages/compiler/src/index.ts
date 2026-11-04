@@ -15,6 +15,10 @@ export {
   type CompileResult,
 } from "./compiler.js";
 export {
+  symbolFunctionMatchesShape,
+  formatSymbolFunctionShape,
+} from "./symbol-shapes.js";
+export {
   expandResolvedProject,
   type ExpansionResult,
   type FunctionId,

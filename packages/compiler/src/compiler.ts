@@ -17,6 +17,7 @@ import { verifyLibraryLock } from "./lock.js";
 import { deriveProjectNets } from "./nets.js";
 import { resolveLoadedProject } from "./resolution.js";
 import { evaluateRules } from "./rules/index.js";
+import { symbolProfileDiagnostics } from "./symbol-profiles.js";
 
 export interface CompiledProjectPresentation {
   readonly format: "project-presentation/0.1" | "project-presentation/0.2";
@@ -151,6 +152,7 @@ export function compileLoadedProjectWithStages(
     const ruleDiagnostics = stages.evaluateRules(ir);
     const finalDiagnostics = normalizeDiagnostics([
       ...diagnostics,
+      ...symbolProfileDiagnostics(resolution),
       ...ruleDiagnostics,
     ]);
 

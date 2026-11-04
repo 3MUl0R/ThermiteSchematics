@@ -25,6 +25,15 @@ export {
   type DiagnosticProducer,
 } from "./diagnostic-catalog.js";
 export {
+  CORE_SYMBOL_BINDINGS,
+  SYMBOL_PROFILES,
+  type CoreSymbolBinding,
+  type SymbolProfile,
+  type SymbolFamilySupport,
+  type SymbolFunctionShape,
+  type SymbolRendererFamily,
+} from "./symbol-profiles.js";
+export {
   compareDiagnostics,
   normalizeDiagnosticFile,
   normalizeDiagnostics,

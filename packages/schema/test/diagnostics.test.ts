@@ -121,6 +121,7 @@ describe("diagnostic catalog", () => {
       "W903",
       "W904",
       "W905",
+      "W111",
     ]);
     expect(DIAGNOSTIC_CATALOG.W901.severity).toBe("warning");
     expect(DIAGNOSTIC_CATALOG.W902.severity).toBe("warning");
@@ -128,7 +129,7 @@ describe("diagnostic catalog", () => {
       DIAGNOSTIC_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CODES.length - 6);
+    ).toHaveLength(DIAGNOSTIC_CODES.length - 7);
   });
 
   it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, and W801", async () => {

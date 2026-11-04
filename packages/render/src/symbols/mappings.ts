@@ -749,6 +749,13 @@ export function findDeviceTypeSymbolMapping(
   return mappings.find((mapping) => mapping.typeId === typeId);
 }
 
+/** Reusable profiles bound by rooted views; exported for catalog conformance. */
+export const ROOTED_SYMBOL_PROFILES = Object.freeze([
+  "thermite:io-module",
+  "thermite:terminal-strip",
+  "thermite:dc-supply",
+] as const);
+
 /** Explicit reusable library profiles. Unknown types never acquire behavior by name. */
 export function projectDeviceTypeSymbolMappings(
   ir: Readonly<import("@thermite/compiler").ElectricalIr>,
@@ -759,11 +766,9 @@ export function projectDeviceTypeSymbolMappings(
   for (const type of ir.deviceTypes) {
     if (
       mappings.some((m) => m.typeId === type.id) ||
-      ![
-        "thermite:io-module",
-        "thermite:terminal-strip",
-        "thermite:dc-supply",
-      ].includes(type.symbol ?? "")
+      !ROOTED_SYMBOL_PROFILES.includes(
+        type.symbol as (typeof ROOTED_SYMBOL_PROFILES)[number],
+      )
     )
       continue;
     const functions: FunctionSymbolRule[] = [],
