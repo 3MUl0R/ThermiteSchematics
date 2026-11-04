@@ -46,6 +46,8 @@ import {
 } from "@thermite/core-library";
 import fastGlob from "fast-glob";
 
+import { PROJECT_WRITE_LOCK_FILE_NAME } from "./filesystem-names.js";
+
 export type LoadedProjectSourceFile = Omit<SourceFile, "objects"> & {
   objects: ProjectObject[];
 };
@@ -617,6 +619,7 @@ async function expandSourceGlobs(
               onlyFiles: true,
               followSymbolicLinks: false,
               unique: true,
+              ignore: projectSources ? [PROJECT_WRITE_LOCK_FILE_NAME] : [],
             });
     } catch (error) {
       diagnostics.push(

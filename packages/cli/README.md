@@ -207,6 +207,12 @@ operations.
 Dry-run first, review the returned proposed integrity and diagnostics, then send the
 same guarded request with `dryRun: false`. A successful multi-file request commits
 with per-file atomic replacement; it is not a crash-atomic project transaction.
+A005/exit 1 reports a held write reservation, including its path, owner and age;
+it is separate from A004 integrity drift. Re-inspect and rebuild stale patches.
+An incomplete rollback is exit 2 with per-file reasons. Release failure after
+commit preserves success with W801; verify the committed state before recovering
+that reservation. See the [reservation recovery contract](../agent-tools/README.md#integrity-guarded-source-patches).
+Never commit `.thermite-schematics-write.lock`; alpha `init` adds it to `.gitignore`.
 
 Only manifest-matched project source documents and the one referenced
 `project_presentation` document are eligible. The patch tool cannot create, delete,

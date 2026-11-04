@@ -12,6 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   compileProject,
+  PROJECT_WRITE_LOCK_FILE_NAME,
   lockProject,
   resolveShippedCoreLibrary,
   SHIPPED_CORE_FILE_INVENTORY,
@@ -153,6 +154,13 @@ export async function initializeAlphaProject(
       await readFile(
         fileURLToPath(new URL("../assets/THERMITE_AGENTS.md", import.meta.url)),
       ),
+    );
+    // The alpha scaffold owns a new staged directory, so this cannot overwrite
+    // a user's existing ignore rules. Legacy init retains its exact file set.
+    await writeFile(
+      join(stage, ".gitignore"),
+      `${PROJECT_WRITE_LOCK_FILE_NAME}\n`,
+      { flag: "wx" },
     );
     const locked = await lockProject(stage);
     if (!locked.ok) throw new Error(JSON.stringify(locked.diagnostics));

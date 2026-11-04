@@ -12,6 +12,7 @@ coverage/
 
 # Logs and local scratch
 *.log
+.thermite-schematics-write.lock
 .codex-reviews/
 
 # Editor/OS

@@ -247,6 +247,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "A conflict-free net's positive nominal voltage differs from a connected terminal's positive nominal-voltage rating.",
   },
+  W801: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "Source patch completed but its write reservation could not be released; verify committed changes before recovering the reservation.",
+  },
   W901: {
     severity: "warning",
     producer: "code",

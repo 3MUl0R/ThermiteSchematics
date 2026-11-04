@@ -63,6 +63,9 @@ describe("Thermite alpha physical cable semantics", () => {
       await readFile(join(path, "system.json"), "utf8"),
     );
     expect(manifest.libraries[0].path).toBe("libraries/core");
+    expect(await readFile(join(path, ".gitignore"), "utf8")).toBe(
+      ".thermite-schematics-write.lock\n",
+    );
     const shipped = resolveShippedCoreLibrary();
     for (const notice of ["LICENSE", "NOTICE"])
       expect(

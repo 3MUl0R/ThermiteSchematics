@@ -27,7 +27,8 @@ import {
   type LoadedProject,
 } from "./loader.js";
 
-export const LIBRARY_LOCK_FILE_NAME = "electrical-system.lock.json";
+import { LIBRARY_LOCK_FILE_NAME } from "./filesystem-names.js";
+export { LIBRARY_LOCK_FILE_NAME } from "./filesystem-names.js";
 export const LIBRARY_LOCK_SCHEMA_ID =
   "https://thermiteschematics.com/schemas/0.1/library-lock.schema.json";
 

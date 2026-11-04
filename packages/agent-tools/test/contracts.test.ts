@@ -7,6 +7,7 @@ import {
   createA002Error,
   createA003Error,
   createA004Error,
+  createA005Error,
 } from "../src/common/errors.js";
 import {
   detachAndFreezePlainJson,
@@ -29,7 +30,7 @@ describe("complete public contract", () => {
     ]);
   });
 
-  it("constructs the exact A001-A004 shapes and JSON-quoted messages", () => {
+  it("constructs the exact A001-A005 shapes and JSON-quoted messages", () => {
     const a001 = createA001Error(
       "create-view",
       "/spec/intent\nkind",
@@ -82,7 +83,24 @@ describe("complete public contract", () => {
       actualIntegrity: "sha256-actual=",
     });
 
-    expect([a001, a002, a003, a004].every(Object.isFrozen)).toBe(true);
+    const a005 = createA005Error(
+      '.write"lock',
+      '/project/.write"lock',
+      null,
+      null,
+      "unknown",
+    );
+    expect(a005).toMatchObject({
+      code: "A005",
+      file: '.write"lock',
+      lockPath: '/project/.write"lock',
+      owner: null,
+      ageMs: null,
+      ownerState: "unknown",
+    });
+    expect(a005).not.toHaveProperty("actualIntegrity");
+    expect(a005.message).toContain(JSON.stringify('/project/.write"lock'));
+    expect([a001, a002, a003, a004, a005].every(Object.isFrozen)).toBe(true);
   });
 
   it("serializes exact result/report bytes without failureClass", () => {
