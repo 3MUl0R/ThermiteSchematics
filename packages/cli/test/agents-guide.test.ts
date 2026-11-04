@@ -12,6 +12,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
+import type {
+  AgentToolJsonResult,
+  ApplySourcePatchRequest,
+} from "@thermite/agent-tools";
 
 import { INIT_SUCCESS_MESSAGE, runCli } from "../src/index.js";
 import { initializeAlphaProject } from "../src/alpha-init.js";
@@ -88,10 +92,18 @@ function parseSuccess(
   return { result, report };
 }
 
-function extractJsonExamples(guide: string): unknown[] {
+function extractLegacyJsonExamples(guide: string): unknown[] {
   return [...guide.matchAll(/```json\n([\s\S]*?)```/gu)].map((match) =>
     JSON.parse(match[1]!),
   );
+}
+
+function extractSourceGuardExample(guide: string): unknown {
+  const examples = [
+    ...guide.matchAll(/```json inspect-source\.request\.json\n([\s\S]*?)```/gu),
+  ];
+  expect(examples).toHaveLength(1);
+  return JSON.parse(examples[0]![1]!);
 }
 
 afterEach(async () => {
@@ -187,16 +199,16 @@ describe("frozen legacy AGENTS guide", () => {
   });
 
   it("G2 migration: request JSON is unchanged from the frozen guide", async () => {
-    expect(extractJsonExamples(await readFile(requestGuide, "utf8"))).toEqual(
-      extractJsonExamples(await readFile(packagedGuide, "utf8")),
-    );
+    expect(
+      extractLegacyJsonExamples(await readFile(requestGuide, "utf8")),
+    ).toEqual(extractLegacyJsonExamples(await readFile(packagedGuide, "utf8")));
   });
 
   it.each(["legacy", "alpha"])(
     "executes every request example and its stream/exit claims on the %s starter",
     async (starter) => {
       const guide = await readFile(requestGuide, "utf8");
-      const examples = extractJsonExamples(guide);
+      const examples = extractLegacyJsonExamples(guide);
       expect(examples).toHaveLength(6);
       for (const request of examples) {
         expect(request).toMatchObject({
@@ -278,6 +290,70 @@ describe("frozen legacy AGENTS guide", () => {
         "inspect",
       );
       expect(JSON.stringify(inspect.result)).toContain("PS1");
+
+      const sourceRequest = extractSourceGuardExample(guide);
+      expect(sourceRequest).toEqual({
+        format: "agent-tool-request/0.1",
+        project: ".",
+        selector: { by: "designation", value: "PS1" },
+        include: ["source"],
+      });
+      await writeFile(
+        join(root, "inspect-source.request.json"),
+        `${JSON.stringify(sourceRequest, undefined, 2)}\n`,
+      );
+      const sourceInspection = parseSuccess(
+        await invokeExample([
+          "agent",
+          "inspect",
+          "--input",
+          "inspect-source.request.json",
+        ]),
+        "inspect",
+      ).result as unknown as AgentToolJsonResult<"inspect">;
+      const source = sourceInspection.value.object.source!;
+      const patchExample = examples[4] as ApplySourcePatchRequest;
+      const exampleFile = patchExample.files[0]!;
+      expect(source).toMatchObject({
+        file: exampleFile.path,
+        integrity: exampleFile.expectedIntegrity,
+        uid: sourceInspection.value.object.uid,
+        patchEligible: true,
+      });
+      expect(source.pointer).toBe("/objects/0");
+      for (const operation of exampleFile.operations) {
+        expect(operation.path).toBe(`${source.pointer}/description`);
+      }
+      // Exercise the UUID-guarded recipe with returned fields, while keeping
+      // all six frozen requests below byte-for-byte unchanged.
+      const guardedPatch = {
+        ...patchExample,
+        files: [
+          {
+            path: source.file,
+            expectedIntegrity: source.integrity,
+            operations: [
+              { op: "test", path: `${source.pointer}/uid`, value: source.uid },
+              ...exampleFile.operations.filter(({ op }) => op !== "test"),
+            ],
+          },
+        ],
+      };
+      const beforeGuardedDryRun = await readFile(join(root, source.file));
+      const guardedDryRun = parseSuccess(
+        await invoke(
+          root,
+          ["agent", "apply-source-patch", "--input", "-"],
+          JSON.stringify(guardedPatch),
+        ),
+        "apply-source-patch",
+      );
+      expect(guardedDryRun.result).toMatchObject({
+        value: { dryRun: true, files: [{ beforeIntegrity: source.integrity }] },
+      });
+      expect(await readFile(join(root, source.file))).toEqual(
+        beforeGuardedDryRun,
+      );
 
       const query = parseSuccess(
         await invokeExample([

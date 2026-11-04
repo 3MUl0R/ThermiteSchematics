@@ -55,3 +55,11 @@ export type {
 export type { AppliedSourceFile } from "./source-serializer.js";
 export { createAgentTools } from "./toolbox.js";
 export type { AgentTools, CreateAgentToolsOptions } from "./toolbox.js";
+
+export type {
+  ObjectSource,
+  SourceAnnotated,
+  SourceFileIntegrity,
+  SourceMetadataRequest,
+  SourceMetadataResult,
+} from "./source-metadata.js";

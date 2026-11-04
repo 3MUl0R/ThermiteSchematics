@@ -3,7 +3,8 @@
 These six stateless JSON agent tools retain their existing request/result
 contracts in the Bun alpha. The examples below are executed by
 [`agents-guide.test.ts`](../packages/cli/test/agents-guide.test.ts); their JSON
-requests also remain identical to the frozen legacy examples.
+requests also remain identical to the frozen legacy examples. The additional
+source-guard step is tested separately.
 
 Build the source checkout before trusting CLI output. From the checkout root:
 
@@ -93,6 +94,79 @@ bun "$thermite_entry" agent inspect --input inspect.request.json
 ```
 
 Expected response: exit `0`; stdout contains the canonical inspection of `PS1`; stderr contains the success report.
+
+### Find the patch guard
+
+Save this opt-in inspection as `inspect-source.request.json`.
+
+```json inspect-source.request.json
+{
+  "format": "agent-tool-request/0.1",
+  "project": ".",
+  "selector": { "by": "designation", "value": "PS1" },
+  "include": ["source"]
+}
+```
+
+```sh
+bun "$thermite_entry" agent inspect --input inspect-source.request.json
+```
+
+Expected response: exit `0`, the usual split result/report streams, and
+`value.object.source` with `file: "devices/equipment.json"`,
+`pointer: "/objects/0"`, the object's `uid`, `patchEligible: true`, and
+`integrity: "sha256-VxO18aXXz5q4BY3r4k0bRGP8Ob1IAkJi9Tx34qBIARk="` on either
+fresh starter used by this guide's test. These are the file, pointer prefix and
+integrity used by the frozen dry-run example below. Consume returned values for
+real edits; the illustrative hash will be stale after an edit.
+
+For example, given the parsed result `inspection`, build a dry-run request using
+its values and a UUID test immediately before the object's edits:
+
+```js
+const source = inspection.value.object.source;
+if (!source.patchEligible) throw new Error(source.reason);
+const guardedPatch = {
+  format: "agent-tool-request/0.1",
+  project: ".",
+  patchFormat: "json-patch/0.1",
+  dryRun: true,
+  files: [{
+    path: source.file,
+    expectedIntegrity: source.integrity,
+    operations: [
+      { op: "test", path: `${source.pointer}/uid`, value: source.uid },
+      { op: "replace", path: `${source.pointer}/description`, value: "24 VDC starter control power supply" },
+    ],
+  }],
+};
+```
+
+Pointers refer to positions before the patch. Earlier structural operations can
+shift array indexes; the UUID test rejects a shifted target with A002
+`test-failed`. Use one `files[]` entry per file, and escape appended field segments
+by replacing `~` with `~0` and `/` with `~1`. After A004, re-inspect and rebuild the
+whole request rather than copying `actualIntegrity` into old operations.
+
+The result's `sourceFiles` includes guards for every patchable file in the
+admitted snapshot, including empty sources and referenced `presentation.json`.
+Use these guards to add a first wire or edit presentation without manual hashing.
+It also includes referenced library files, which remain ineligible. Eligibility
+is a document-class rule; the patch tool still checks project-wide path safety,
+operations, byte guards and writer reservations. Library-origin sources omit
+`uid`; use project-object sources for the UUID test.
+
+A file outside that snapshot is not reread or listed, and it is not patchable
+(A003); new or unreferenced files must first be admitted by the manifest and
+re-inspected. When the project fails to compile, inspect and resolve return no
+guards; only then, to patch the repair, hash that file's raw bytes explicitly
+(adjust the path):
+
+```sh
+bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' path/to/file.json
+```
+
+Generate UUIDs for new objects with `bun -e 'console.log(crypto.randomUUID())'`.
 
 ### Query
 
