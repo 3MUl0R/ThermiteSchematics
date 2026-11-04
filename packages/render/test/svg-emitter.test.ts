@@ -201,9 +201,19 @@ describe("canonical semantic SVG emitter", () => {
           [edge.label, edge.netLabel].filter((value) => value !== undefined),
         ),
       ].find(({ id }) => id === label.id)!;
-      expect(svg).toContain(
-        `textLength="${formatSvgNumber(semantic.textLength)}" lengthAdjust="spacingAndGlyphs"`,
-      );
+      const printed = semantic.printableText ?? semantic.text;
+      if (!printed) {
+        expect(svg).toContain(`<text clip-path="url(#${clip})"></text>`);
+      } else {
+        expect(svg).toContain(`>${escapeXmlText(printed)}</text>`);
+        const length =
+          semantic.printableText === undefined
+            ? semantic.textLength
+            : 6.2 * [...printed].length;
+        expect(svg).toContain(
+          `textLength="${formatSvgNumber(length)}" lengthAdjust="spacingAndGlyphs"`,
+        );
+      }
     }
   });
 

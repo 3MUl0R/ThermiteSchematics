@@ -1,3 +1,4 @@
+import { printableCaption } from "./symbols/printable-policy.js";
 import {
   compareConductiveElementId,
   type ConductiveElementId,
@@ -1039,7 +1040,34 @@ function buildSymbolNode(
   const portDefinitionById = new Map(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
-  const labels: PresentationLabel[] = [nodeLabel];
+  const printableText =
+    representation.kind === "aggregate"
+      ? printableCaption({ kind: "aggregate", mark: symbol.id })
+      : printableCaption({
+          kind: "function",
+          fn: required(
+            context.functionByKey.get(
+              functionIdKey(representation.functionIds[0]!),
+            ),
+            "Missing caption function",
+          ),
+          type: required(
+            context.ir.deviceTypes.find(
+              (t) => t.id === representation.device.typeId,
+            ),
+            "Missing caption type",
+          ),
+          mark: symbol.id,
+        });
+  const captionWidth = Math.max(nodeLabel.width, labelWidth(printableText));
+  const labels: PresentationLabel[] = [
+    {
+      ...nodeLabel,
+      printableText,
+      width: captionWidth,
+      textLength: Number((captionWidth - 6).toFixed(3)),
+    },
+  ];
   const ports = representationBindings(representation).map((binding) => {
     const definition: SymbolPortDefinition = required(
       portDefinitionById.get(binding.portId),
@@ -3792,7 +3820,14 @@ function sameStringSet(
 }
 
 function validateLabel(label: PresentationLabel): void {
-  invariant(label.width === labelWidth(label.text), `${label.id} width`);
+  invariant(
+    label.width ===
+      Math.max(
+        labelWidth(label.text),
+        labelWidth(label.printableText ?? label.text),
+      ),
+    `${label.id} width`,
+  );
   invariant(label.height === 14, `${label.id} height`);
   invariant(
     label.textLength === Number((label.width - 6).toFixed(3)),

@@ -581,11 +581,11 @@ function expectViewSemantics(
   expect(rendered.summary.netIds).toHaveLength(state === "baseline" ? 2 : 3);
 
   const svg = Buffer.from(rendered.svg, "utf8");
-  expect(svg.byteLength).toBe(state === "baseline" ? 69_059 : 93_501);
+  expect(svg.byteLength).toBe(state === "baseline" ? 67_589 : 92_253);
   expect(hash(svg)).toBe(
     state === "baseline"
-      ? "dc7ce9dc8e0acd306bc8a85684c50d6b57bd1e9da4a9fd1c47a2e29b4fdc29ac"
-      : "bbbc377dc603bc85afe496a06f33804553ac16ce5bda44cf12462f1cbfec6fdb",
+      ? "09900e998d3cb0609959d8b6f39f389396343526d935063a283d40630888c1eb"
+      : "7061e01e4ca3faf5083a8a2befe7b48ea672057d76d51af859c04e58f652ca1d",
   );
   return svg;
 }

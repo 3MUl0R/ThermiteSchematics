@@ -2,7 +2,6 @@ import type { ConductiveElementId, TerminalId } from "@thermite/compiler";
 
 import { comparePresentationLabel, compareText } from "../ordering.js";
 import {
-  DEFAULT_SYMBOL_STROKE,
   OUTER_SVG_PADDING,
   SYMBOL_CATALOG,
   orientSymbolDefinition,
@@ -12,6 +11,10 @@ import type {
   SymbolPrimitive,
   SymbolStyle,
 } from "../symbols/types.js";
+import {
+  PRINTABLE_SYMBOL_POLICY,
+  sourceEnclosureInk,
+} from "../symbols/printable-policy.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type {
   LayoutEdge,
@@ -85,6 +88,7 @@ type SvgAttributeName =
   | "stroke"
   | "stroke-linecap"
   | "stroke-linejoin"
+  | "stroke-dasharray"
   | "stroke-width"
   | "text-anchor"
   | "textLength"
@@ -132,6 +136,7 @@ const FIXED_ATTRIBUTE_ORDER = Object.freeze([
   "fill",
   "stroke",
   "stroke-width",
+  "stroke-dasharray",
   "stroke-linecap",
   "stroke-linejoin",
   "font-family",
@@ -374,12 +379,24 @@ function emitPrimitive(
   writer: SvgWriter,
   primitive: SymbolPrimitive,
   indent: number,
+  mmPerUnit: number,
 ): void {
-  const className = primitiveClass(primitive.style);
+  const ink = sourceEnclosureInk(mmPerUnit);
+  const attributes: SvgAttributes = {
+    class: primitiveClass(primitive.style),
+    ...(primitive.style === "enclosure"
+      ? {
+          fill: "none",
+          stroke: ink.color,
+          "stroke-width": ink.strokeWidth,
+          "stroke-dasharray": ink.dash,
+        }
+      : {}),
+  };
   switch (primitive.kind) {
     case "line":
       writer.element(indent, "line", {
-        class: className,
+        ...attributes,
         x1: primitive.from.x,
         y1: primitive.from.y,
         x2: primitive.to.x,
@@ -388,7 +405,7 @@ function emitPrimitive(
       return;
     case "polyline":
       writer.element(indent, "polyline", {
-        class: className,
+        ...attributes,
         points: primitive.points
           .map(({ x, y }) => `${formatSvgNumber(x)},${formatSvgNumber(y)}`)
           .join(" "),
@@ -396,7 +413,7 @@ function emitPrimitive(
       return;
     case "rect":
       writer.element(indent, "rect", {
-        class: className,
+        ...attributes,
         x: primitive.x,
         y: primitive.y,
         width: primitive.width,
@@ -407,7 +424,7 @@ function emitPrimitive(
       return;
     case "circle":
       writer.element(indent, "circle", {
-        class: className,
+        ...attributes,
         cx: primitive.center.x,
         cy: primitive.center.y,
         r: primitive.radius,
@@ -415,7 +432,7 @@ function emitPrimitive(
       return;
     case "arc":
       writer.element(indent, "path", {
-        class: className,
+        ...attributes,
         d: primitivePath(primitive),
       });
   }
@@ -944,6 +961,7 @@ function emitSymbols(
   >,
   catalog: readonly SymbolDefinition[],
   registry: RenderSourceRegistry,
+  mmPerUnit: number,
 ): void {
   const symbols = new Map(
     catalog.map((definition) => [definition.id, definition]),
@@ -967,7 +985,7 @@ function emitSymbols(
     );
     writer.open(1, "g", symbolGroupAttributes(node, origin, registry));
     for (const primitive of definition.primitives)
-      emitPrimitive(writer, primitive, 2);
+      emitPrimitive(writer, primitive, 2, mmPerUnit);
     for (const port of node.ports) {
       const portLayout = required(
         portLayouts.get(port.id),
@@ -1032,6 +1050,17 @@ function emitLabels(
         `label ${presentation.id} source`,
       );
     }
+    const printed = presentation.printableText ?? label.text;
+    // Empty captions retain clip identity and the PDF label contract.
+    if (!printed) {
+      writer.element(
+        1,
+        "text",
+        { "clip-path": `url(#${svgSemanticId("clip", [label.id])})` },
+        "",
+      );
+      continue;
+    }
     writer.element(1, "rect", {
       class: `label-background label-${label.role}`,
       x: global(label.x),
@@ -1051,10 +1080,13 @@ function emitLabels(
         "font-size": 10,
         "text-anchor": "start",
         "dominant-baseline": "middle",
-        textLength: presentation.textLength,
+        textLength:
+          presentation.printableText === undefined
+            ? presentation.textLength
+            : titleTextLength(printed),
         lengthAdjust: "spacingAndGlyphs",
       },
-      label.text,
+      printed,
     );
   }
 }
@@ -1124,6 +1156,7 @@ export function emitSchematicSvg(
   titleContext: Readonly<SchematicTitleContext>,
   catalog: readonly SymbolDefinition[] = SYMBOL_CATALOG,
   diagramOnly = false,
+  mmPerUnit: number = PRINTABLE_SYMBOL_POLICY.rootedMmPerUnit,
 ): RenderOutcome<string> {
   const titlePreflight = preflightTitleRenderText(
     graph.view,
@@ -1224,7 +1257,15 @@ export function emitSchematicSvg(
   emitFrames(writer, graph, nodeLayouts, registry);
   emitEdges(writer, graph, edgeLayouts, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
-  emitSymbols(writer, graph, nodeLayouts, portLayouts, catalog, registry);
+  emitSymbols(
+    writer,
+    graph,
+    nodeLayouts,
+    portLayouts,
+    catalog,
+    registry,
+    mmPerUnit,
+  );
   emitLabels(writer, graph, labels, registry);
   if (!diagramOnly)
     emitTitleBlock(

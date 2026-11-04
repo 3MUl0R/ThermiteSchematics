@@ -11,6 +11,7 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
+import { printableCaption } from "./symbols/printable-policy.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import {
   circuitAttachment,
@@ -124,6 +125,7 @@ type DeviceNode = {
   verticalOffsetX: number;
   verticalScaleX: number;
   relationLabels: string[];
+  sourceTerminalKeys: readonly string[];
   relations: {
     functionId: { deviceUid: string; functionKey: string };
     destinations: string[];
@@ -205,15 +207,31 @@ const channelAssignment = (d: IrDevice, functionKey: string) =>
   d.io && Object.hasOwn(d.io.channels, functionKey)
     ? d.io.channels[functionKey]
     : undefined;
-const channelLabelLines = (d: IrDevice, f: IrFunction): string[] => {
+// Reserve the existing caption space even when its internal key has no printable ink.
+const channelLabelLines = (
+  d: IrDevice,
+  f: IrFunction,
+  type: IrDeviceType,
+  printable = false,
+): string[] => {
   const channel = channelAssignment(d, f.id.functionKey);
   return [
-    [
-      channel?.address ?? f.id.functionKey,
-      channel?.usage === "spare" ? "SPARE" : undefined,
-    ]
-      .filter(Boolean)
-      .join(" "),
+    printable
+      ? printableCaption({
+          kind: "channel",
+          fn: f,
+          type,
+          ...(channel?.address === undefined
+            ? {}
+            : { address: channel.address }),
+          spare: channel?.usage === "spare",
+        })
+      : [
+          channel?.address ?? f.id.functionKey,
+          channel?.usage === "spare" ? "SPARE" : undefined,
+        ]
+          .filter(Boolean)
+          .join(" "),
     ...(channel?.signal
       ? circuitTextLines(channel.signal, 38, TERMINAL_TEXT_SIZE)
       : []),
@@ -519,7 +537,7 @@ function makeNodes(
       const mark = circuitMark(type, f);
       const oneSided = oneSidedFunction(f, mark);
       const channelLines =
-        f.kind === "channel" ? channelLabelLines(device, f) : undefined;
+        f.kind === "channel" ? channelLabelLines(device, f, type) : undefined;
       const slots = Math.max(
         oneSided ? f.terminals.length : 1,
         channelLines
@@ -696,22 +714,47 @@ function makeNodes(
           });
       }
     }
-    const related = [...relationGroups].map(
-      ([destination, keys]) =>
-        `${keys.length === 1 ? keys[0] : `${keys.length} functions`}: ${destination}`,
+    // Caption width is horizontal ink, not the vertical symbol body's length.
+    const priorWidth = width;
+    const captions = [...relationGroups].map(([destination, keys]) => ({
+      kind: "relation" as const,
+      destination,
+      functions: keys.map((k) =>
+        ir.functions.find(
+          (f) => f.id.deviceUid === uid && f.id.functionKey === k,
+        )!,
+      ),
+    }));
+    const fullCaptions = captions.map((caption) => printableCaption(caption));
+    width = Math.max(
+      width,
+      Math.min(
+        100,
+        Math.max(0, ...fullCaptions.map((s) => measure(s, 2.3) + 4)),
+      ),
     );
-    // Keep source-backed references concise; full membership remains in SVG metadata.
-    width = Math.max(width, ...related.map((s) => measure(s, 2.3) + 4));
-    if (width > 100)
-      throw new Error(
-        `Circuit references for ${device.designation} are too wide; shorten circuit line references.`,
-      );
+    const printableRelated = captions.flatMap((caption, i) => {
+      const value = fullCaptions[i]!,
+        available = width - 4;
+      const lines = circuitTextLines(value, available, 2.3);
+      // Never split terminal identities or let an unbounded contact mirror
+      // consume a page. A typed summary retains kind, count and destination.
+      const fits =
+        lines.length <= 4 &&
+        value.split(/\s+/u).every((word) => measure(word, 2.3) <= available);
+      return fits
+        ? lines
+        : circuitTextLines(
+            printableCaption({ ...caption, kind: "relation-summary" }),
+            available,
+            2.3,
+          );
+    });
     for (const p of pins) p.x = p.side === "WEST" ? 0 : width;
-    let height = bodyHeight + 2 + related.length * 3.1,
+    let height = bodyHeight + 2 + printableRelated.length * 3.1,
       verticalOffsetX = 0,
       verticalScaleX = 1;
     if (vertical) {
-      const priorWidth = width;
       // Vertical terminal captions remain horizontal. Reserve their actual
       // extent between adjacent pins on each caption baseline before routing.
       for (const side of ["WEST", "EAST"] as const) {
@@ -757,10 +800,15 @@ function makeNodes(
         ),
       );
       verticalOffsetX = 1 - leftBound;
+      const coilRow = rows.find((row) => row.f.kind === "coil");
+      const designationLeft =
+        printableRelated.length && coilRow
+          ? (bodyHeight - coilRow.center) * verticalScaleX + verticalOffsetX + 3
+          : 0;
       width = Math.max(
         rightBound - leftBound + 2,
-        measure(device.designation, 2.7) + 4,
-        ...related.map((s) => measure(s, 2.3) + 4),
+        measure(device.designation, 2.7) + Math.max(4, designationLeft + 2),
+        ...printableRelated.map((s) => measure(s, 2.3) + 4),
       );
       height =
         Math.max(
@@ -775,8 +823,8 @@ function makeNodes(
             .filter((row) => row.mark === "motor")
             .map((row) => row.slots * PITCH * verticalScaleX + 12),
         ) +
-        related.length * 3.1 +
-        (boundary || related.length ? 5 : 0);
+        printableRelated.length * 3.1 +
+        (boundary || printableRelated.length ? 5 : 0);
       for (const p of pins) {
         const oldY = p.y;
         p.x = (bodyHeight - oldY) * verticalScaleX + verticalOffsetX;
@@ -826,7 +874,16 @@ function makeNodes(
       bodyHeight,
       verticalOffsetX,
       verticalScaleX,
-      relationLabels: related,
+      relationLabels: printableRelated,
+      sourceTerminalKeys: ir.functions
+        .filter(
+          (f) =>
+            f.id.deviceUid === uid &&
+            f.kind === "source" &&
+            type.symbol !== "thermite:transformer" &&
+            type.circuitSymbols?.[f.id.functionKey] !== "winding",
+        )
+        .flatMap((f) => f.terminals.map((t) => t.terminalKey)),
       relations,
       gangs,
     };
@@ -853,9 +910,35 @@ function emitNode(
           circuitMark(node.type, f),
         ),
     );
-  if (block) out.push(circuitBlock(node.width, node.height));
+  if (block)
+    out.push(
+      circuitBlock(
+        node.width,
+        node.height,
+        node.pins.filter((p) =>
+          node.sourceTerminalKeys.includes(p.terminal.terminalKey),
+        ),
+        node.pins.every((p) =>
+          node.sourceTerminalKeys.includes(p.terminal.terminalKey),
+        ),
+      ),
+    );
+  const coilRow = node.rows.find((row) => row.f.kind === "coil");
+  const designationX =
+    vertical && node.relationLabels.length && coilRow
+      ? (node.bodyHeight - coilRow.center) * node.verticalScaleX +
+        node.verticalOffsetX +
+        3
+      : node.width / 2;
   out.push(
-    text(node.width / 2, 3.3, node.device.designation, 2.7, "middle", true),
+    text(
+      designationX,
+      3.3,
+      node.device.designation,
+      2.7,
+      vertical && node.relationLabels.length && coilRow ? "start" : "middle",
+      true,
+    ),
   );
   if (node.boundary)
     out.push(
@@ -908,10 +991,14 @@ function emitNode(
         out.push(
           `<g transform="translate(${n(cx - 4)} ${n(annotationTop)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`,
         );
-      for (const [i, line] of lines.entries())
+      const printableLines = channelLabelLines(node.device, f, node.type, true);
+      for (const [i] of lines.entries()) {
+        const line = printableLines[i]!;
+        if (!line) continue;
         out.push(
           `<g data-channel-line="${i === 0 ? "address" : "signal"}">${text(cx, specialized ? annotationTop + 11.5 + i * 3.1 : cy + 0.8 + (i - (lines.length - 1) / 2) * 3.1, line, TERMINAL_TEXT_SIZE, "middle")}</g>`,
         );
+      }
     } else {
       if (mark === "motor")
         out.push(
@@ -967,6 +1054,7 @@ function emitNode(
           "receptacle",
           "ac-input",
           "dc-output",
+          "source",
         ].includes(mark)
       ) {
         out.push(
@@ -978,6 +1066,7 @@ function emitNode(
               node.pins.find((p) => key(p.terminal) === key(t))!,
             ),
             vertical,
+            f.kind === "source",
           ),
         );
       } else {
