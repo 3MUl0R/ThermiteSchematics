@@ -10,6 +10,8 @@ This checklist applies only to the historical private v0.2.0 artifact and its
 protected publisher. It does not describe the current Apache-2.0 source alpha;
 see the [runtime packaging guide](../runtime-package.md). Public npm publication
 and direct GitHub Release asset uploads remain outside this legacy pipeline.
+The [private-runtime agent guide](private-release-agent-guide.md) preserves the
+former root guide's installation, project and guarded-tool rules verbatim.
 
 ## End-user prerequisite and install
 

@@ -230,8 +230,9 @@ manufacturer-model boundaries.
 Initialization writes a project-specific `AGENTS.md`. The existing six stateless
 agent tools preserve JSON requests, separate result/diagnostic streams, current
 source hashes, dry-run patches, and validation before applying changes. They do
-not invent electrical repairs. See the [alpha agent guide](packages/cli/assets/THERMITE_AGENTS.md)
-and [format notes](docs/formats-and-compatibility.md).
+not invent electrical repairs. See the [alpha agent guide](packages/cli/assets/THERMITE_AGENTS.md),
+[executable agent request examples](docs/agent-requests.md), and
+[format notes](docs/formats-and-compatibility.md).
 
 ## Improve Thermite with your agent
 
@@ -248,15 +249,18 @@ bun run check
 
 Use `bun run test`, not `bun test`: the suite runs on Vitest.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for the branch/fork workflow, engineering
-review expectations, commit sign-off, and [CLA](CLA.md). The person contributing
+Read the [engine guide](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the
+branch/fork workflow, engineering review expectations, commit sign-off, and
+[CLA](CLA.md). The person contributing
 reviews and accepts the CLA; an agent cannot accept it on their behalf. Keep
 customer drawings, credentials, and machine-specific data out of contributions.
 
 The normal check covers the source alpha. Historical private 0.2.0 packaging and
 release-evidence checks are separate; their legacy Node/npm commands and
 `package-lock.json` apply only in their original release context. They are not
-prerequisites for using or contributing to the public alpha.
+prerequisites for using or contributing to the public alpha. The former root
+guide's private-release sections are preserved in the
+[legacy agent guide](docs/legacy/private-release-agent-guide.md).
 Build and verify runtime downloads with `bun run package:pack`; see the
 [runtime packaging guide](docs/runtime-package.md).
 

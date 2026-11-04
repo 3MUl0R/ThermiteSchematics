@@ -39,7 +39,13 @@ const templateRoot = join(
   "templates",
   "starter-default",
 );
-const rootAgentGuide = join(repositoryRoot, "AGENTS.md");
+const frozenAgentGuide = join(
+  repositoryRoot,
+  "packages",
+  "cli",
+  "assets",
+  "AGENTS.md",
+);
 const STARTER_IDENTITIES = Object.freeze({
   ps1: "33a15867-296b-40e4-a56b-15282f131b4c",
   plc1: "81148ad3-8c03-4c8d-8c70-6b33bb3b0266",
@@ -136,7 +142,7 @@ async function generateOwnedBytes() {
   );
   prepareStarterScaffoldFromAssets(
     {
-      agentGuide: await readFile(rootAgentGuide),
+      agentGuide: await readFile(frozenAgentGuide),
       templates: ordered,
       shippedCore,
     },

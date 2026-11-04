@@ -84,9 +84,11 @@ or other device function does not automatically short its terminals. Internal
 functions can describe behavior without asserting physical continuity.
 
 Use the guarded patch workflow for existing project source and presentation:
-validate, inspect, dry-run, apply, validate, render. Preserve diagnostics and
-separate result/report streams. Never infer an electrical repair from a layout
-problem. Test negative cases whenever changing connectivity or validation.
+validate, inspect, dry-run, apply, validate, render. The
+[agent request reference](docs/agent-requests.md) contains executable examples.
+Preserve diagnostics and separate result/report streams. Never infer an
+electrical repair from a layout problem. Test negative cases whenever changing
+connectivity or validation.
 
 ## Rendering
 
@@ -145,6 +147,10 @@ See the [runtime packaging guide](docs/runtime-package.md) and
 targets. Workspace packages
 remain `private: true` to prevent accidental npm publication; that flag does not
 restrict the source license.
+
+The former root guide's private-runtime contract is preserved in the
+[legacy agent guide](docs/legacy/private-release-agent-guide.md); source engine
+instructions live in the compact [root guide](AGENTS.md).
 
 Keep historical private release controls intact. Do not publish a package, change repository
 visibility, select a license, or upload machine-project data as part of a routine
