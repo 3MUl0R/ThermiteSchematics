@@ -154,3 +154,16 @@ and `packages/core-library/library/...` in a source checkout. `E013`
 pattern failures also carry `pattern`, the raw ECMAScript regular expression, and
 their message describes it in words. A pattern without a description is quoted as
 `/regex/`.
+
+## Diagnostic transport schemas
+
+`diagnostic.schema.json` is the closed compiler-diagnostic contract. Its severity
+values are `error`, `warning` and `info`. Info is advisory and never changes the
+exit status, including strict validation. `agent-tool-report.schema.json` uses
+that same diagnostic schema; reports go to stderr for both success and failure.
+`agent-tool-result.schema.json` describes the separate successful stdout envelope.
+Both envelopes are closed; the tool-specific value and error payload objects
+retain their public TypeScript API contracts rather than duplicating those
+contracts in the envelope schemas. These schemas are exported through the same
+`@thermite/schema/schemas/*` subpath and bundled canonical registry as entity
+schemas. Generate their in-memory copies with `bun run generate:types`.

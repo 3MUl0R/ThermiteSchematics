@@ -1,3 +1,4 @@
+import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import {
   cp,
   lstat,
@@ -2286,7 +2287,18 @@ describe("D7 shipped-package violation phase matrix", () => {
         );
         expect(outcome).toEqual({
           ok: false,
-          diagnostics: expectedMatrixDiagnostics(change, missingStage),
+          diagnostics:
+            missingStage === "stage-compile"
+              ? [
+                  ...expectedMatrixDiagnostics(change, missingStage),
+                  {
+                    "source-mutation": gates.shippedMutation,
+                    "source-removal": gates.shippedRemoval,
+                    "manifest-version": gates.shippedVersion,
+                    "manifest-missing": gates.shippedMissing,
+                  }[change],
+                ]
+              : expectedMatrixDiagnostics(change, missingStage),
           error: null,
           failureClass: change === "manifest-missing" ? "tool" : "expected",
         });
@@ -2382,7 +2394,12 @@ describe("D7 shipped-package violation phase matrix", () => {
         );
         expect(nextCompile).toEqual({
           ok: false,
-          diagnostics: expectedShippedDiagnostic(change),
+          diagnostics: [
+            ...expectedShippedDiagnostic(change),
+            change === "source-mutation"
+              ? gates.shippedMutation
+              : gates.shippedRemoval,
+          ],
           toolFailure: false,
         });
       } finally {

@@ -13,7 +13,16 @@ import {
   describeSchemaPattern,
   hasSchemaPatternDescription,
 } from "../src/pattern-descriptions.js";
-import { loadCanonicalSchemas } from "../src/schema-registry.js";
+import {
+  ENTITY_SCHEMA_NAMES,
+  loadCanonicalSchemas,
+} from "../src/schema-registry.js";
+
+const OUTPUT_SCHEMA_FILES = new Set([
+  "diagnostic.schema.json",
+  "agent-tool-result.schema.json",
+  "agent-tool-report.schema.json",
+]);
 
 const NON_ERROR_SCHEMA_KEYWORDS = new Set([
   "$schema",
@@ -131,11 +140,20 @@ describe("closed Ajv keyword mapping", () => {
     });
   });
 
-  it("maps every error-producing keyword used by the canonical schemas", async () => {
+  it("maps every error-producing keyword used by canonical source schemas", async () => {
     const canonicalSchemas = await loadCanonicalSchemas();
+    const sourceSchemas = canonicalSchemas.filter(
+      ({ fileName }) => !OUTPUT_SCHEMA_FILES.has(fileName),
+    );
+    expect(sourceSchemas.map(({ fileName }) => fileName).sort()).toEqual(
+      [
+        ...ENTITY_SCHEMA_NAMES.map((name) => `${name}.schema.json`),
+        "common.schema.json",
+      ].sort(),
+    );
     const usedKeywords = new Set<string>();
 
-    canonicalSchemas.forEach(({ schema }) =>
+    sourceSchemas.forEach(({ schema }) =>
       collectErrorProducingSchemaKeywords(schema, usedKeywords),
     );
 
@@ -159,6 +177,37 @@ describe("closed Ajv keyword mapping", () => {
         (keyword) => !Object.hasOwn(AJV_KEYWORD_TO_CODE, keyword),
       ),
     ).toEqual([]);
+  });
+
+  it("audits output-contract keywords without expanding the D4 source error mapping", async () => {
+    const canonicalSchemas = await loadCanonicalSchemas();
+    const outputSchemas = canonicalSchemas.filter(({ fileName }) =>
+      OUTPUT_SCHEMA_FILES.has(fileName),
+    );
+    expect(outputSchemas.map(({ fileName }) => fileName).sort()).toEqual(
+      [...OUTPUT_SCHEMA_FILES].sort(),
+    );
+    const keywords = new Set<string>();
+    outputSchemas.forEach(({ schema }) =>
+      collectErrorProducingSchemaKeywords(schema, keywords),
+    );
+    expect([...keywords].sort()).toEqual([
+      "additionalProperties",
+      "anyOf",
+      "const",
+      "enum",
+      "maxItems",
+      "minLength",
+      "minimum",
+      "pattern",
+      "required",
+      "type",
+    ]);
+    // Output contracts return raw Ajv validation errors. They are not source
+    // entity validators and do not translate failures into electrical E-codes.
+    const ajv = createAjv2020(canonicalSchemas.map(({ schema }) => schema));
+    for (const { id } of outputSchemas)
+      expect(ajv.getSchema(id)).toBeTypeOf("function");
   });
 
   it("rejects an Ajv error whose keyword has no mapping", () => {

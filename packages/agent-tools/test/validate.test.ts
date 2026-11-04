@@ -1,3 +1,4 @@
+import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -61,7 +62,7 @@ describe("D7 exact compiler validation", () => {
   it.each([
     ["clean success", motorProject, true, []],
     ["warning success", warningProject, true, ["W902"]],
-    ["authored error", errorProject, false, ["E201"]],
+    ["authored error", errorProject, false, ["E201", "I208"]],
   ])(
     "matches direct compileProject for %s",
     async (_name, project, expectedOk, expectedCodes) => {
@@ -191,6 +192,7 @@ describe("D7 exact compiler validation", () => {
           column: 108,
           jsonPointer: "/libraries/0/name",
         },
+        gates.unavailable,
         {
           code: "E032",
           severity: "error",
@@ -230,6 +232,7 @@ describe("D7 compiler tool-failure routing", () => {
           column: 1,
           jsonPointer: "",
         },
+        gates.missing,
       ],
       error: null,
       failureClass: "tool",

@@ -18,6 +18,7 @@ import { deriveProjectNets } from "./nets.js";
 import { resolveLoadedProject } from "./resolution.js";
 import { evaluateRules } from "./rules/index.js";
 import { symbolProfileDiagnostics } from "./symbol-profiles.js";
+import { withSkippedChecks } from "./validation-skips.js";
 
 export interface CompiledProjectPresentation {
   readonly format: "project-presentation/0.1" | "project-presentation/0.2";
@@ -89,10 +90,15 @@ function compilerFailure(
   };
   return {
     ok: false,
-    diagnostics: normalizeDiagnostics([
-      ...(project.structuralDiagnostics ?? []),
-      diagnostic,
-    ]),
+    diagnostics: withSkippedChecks(
+      "compilation tool failure",
+      normalizeDiagnostics([
+        ...(project.structuralDiagnostics ?? []),
+        diagnostic,
+      ]),
+      undefined,
+      true,
+    ),
     toolFailure: true,
   };
 }
@@ -109,7 +115,7 @@ export function compileLoadedProjectWithStages(
   if (hasError(structuralDiagnostics)) {
     return {
       ok: false,
-      diagnostics: structuralDiagnostics,
+      diagnostics: withSkippedChecks("structural", structuralDiagnostics),
       toolFailure: false,
     };
   }
@@ -124,7 +130,7 @@ export function compileLoadedProjectWithStages(
     if (!verified.ok) {
       return {
         ok: false,
-        diagnostics: lockDiagnostics,
+        diagnostics: withSkippedChecks("library lock", lockDiagnostics),
         toolFailure: verified.toolFailure,
       };
     }
@@ -136,7 +142,11 @@ export function compileLoadedProjectWithStages(
     ]);
 
     if (!resolution.ok || hasError(diagnostics)) {
-      return { ok: false, diagnostics, toolFailure: false };
+      return {
+        ok: false,
+        diagnostics: withSkippedChecks("resolution", diagnostics),
+        toolFailure: false,
+      };
     }
 
     const expansion = expandResolvedProject(resolution);
@@ -190,7 +200,13 @@ export async function compileProjectWithStages(
   const loaded = await loadProject(inputPath, cwd, loadOptions);
 
   if (!loaded.ok) {
-    return loaded;
+    return {
+      ...loaded,
+      diagnostics: withSkippedChecks(
+        "project loading/structural",
+        loaded.diagnostics,
+      ),
+    };
   }
 
   return compileLoadedProjectWithStages(loaded.project, stages);

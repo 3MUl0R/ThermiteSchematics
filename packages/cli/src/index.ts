@@ -314,7 +314,11 @@ export function formatHumanDiagnostics(
 
     const location = `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}`;
     const severityColor =
-      diagnostic.severity === "error" ? ANSI_RED : ANSI_YELLOW;
+      diagnostic.severity === "error"
+        ? ANSI_RED
+        : diagnostic.severity === "warning"
+          ? ANSI_YELLOW
+          : ANSI_CYAN;
     lines.push(
       `${colorize(location, ANSI_CYAN, color)} ${colorize(diagnostic.code, severityColor, color)} ${diagnostic.message}`,
     );

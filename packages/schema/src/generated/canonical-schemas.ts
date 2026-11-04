@@ -7,6 +7,91 @@ import type { LoadedSchema } from "../schema-registry.js";
 
 export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
   {
+    fileName: "agent-tool-report.schema.json",
+    id: "https://thermiteschematics.com/schemas/0.1/agent-tool-report.schema.json",
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://thermiteschematics.com/schemas/0.1/agent-tool-report.schema.json",
+      title: "AgentToolJsonReport",
+      description:
+        "Agent diagnostic transport envelope, emitted on stderr for success and failure. Error payload fields depend on the selected tool.",
+      type: "object",
+      additionalProperties: false,
+      required: ["format", "tool", "diagnostics", "error"],
+      properties: {
+        format: {
+          const: "agent-tool-report/0.1",
+        },
+        tool: {
+          type: "string",
+          enum: [
+            "resolve",
+            "inspect",
+            "query",
+            "validate",
+            "create-view",
+            "apply-source-patch",
+          ],
+        },
+        diagnostics: {
+          type: "array",
+          items: {
+            $ref: "https://thermiteschematics.com/schemas/0.1/diagnostic.schema.json",
+          },
+        },
+        error: {
+          type: ["object", "null"],
+          required: ["code", "message"],
+          properties: {
+            code: {
+              type: "string",
+              minLength: 1,
+            },
+            message: {
+              type: "string",
+              minLength: 1,
+            },
+          },
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  {
+    fileName: "agent-tool-result.schema.json",
+    id: "https://thermiteschematics.com/schemas/0.1/agent-tool-result.schema.json",
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://thermiteschematics.com/schemas/0.1/agent-tool-result.schema.json",
+      title: "AgentToolJsonResult",
+      description:
+        "Successful agent transport envelope. Tool-specific value contracts remain defined by the public typed API; diagnostics belong in the separate report.",
+      type: "object",
+      additionalProperties: false,
+      required: ["format", "tool", "value"],
+      properties: {
+        format: {
+          const: "agent-tool-result/0.1",
+        },
+        tool: {
+          type: "string",
+          enum: [
+            "resolve",
+            "inspect",
+            "query",
+            "validate",
+            "create-view",
+            "apply-source-patch",
+          ],
+        },
+        value: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  },
+  {
     fileName: "cable-type.schema.json",
     id: "https://thermiteschematics.com/schemas/0.1/cable-type.schema.json",
     schema: {
@@ -923,6 +1008,117 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
               pattern: "\\S",
             },
           },
+        },
+      },
+    },
+  },
+  {
+    fileName: "diagnostic.schema.json",
+    id: "https://thermiteschematics.com/schemas/0.1/diagnostic.schema.json",
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://thermiteschematics.com/schemas/0.1/diagnostic.schema.json",
+      title: "Diagnostic",
+      description:
+        "Compiler/source diagnostic. Info is advisory and never changes exit status.",
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "code",
+        "severity",
+        "message",
+        "file",
+        "line",
+        "column",
+        "jsonPointer",
+      ],
+      properties: {
+        code: {
+          type: "string",
+          pattern: "^[EIW][0-9]{3}$",
+        },
+        severity: {
+          type: "string",
+          enum: ["error", "warning", "info"],
+        },
+        message: {
+          type: "string",
+          minLength: 1,
+        },
+        file: {
+          type: "string",
+          minLength: 1,
+        },
+        line: {
+          type: "integer",
+          minimum: 1,
+        },
+        column: {
+          type: "integer",
+          minimum: 1,
+        },
+        jsonPointer: {
+          type: "string",
+          pattern: "^(?:/(?:[^~]|~[01])*)*$",
+        },
+        uid: {
+          type: "string",
+        },
+        related: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["file", "line", "column", "note"],
+            properties: {
+              file: {
+                type: "string",
+                minLength: 1,
+              },
+              line: {
+                type: "integer",
+                minimum: 1,
+              },
+              column: {
+                type: "integer",
+                minimum: 1,
+              },
+              note: {
+                type: "string",
+                minLength: 1,
+              },
+            },
+          },
+        },
+        allowed: {
+          type: "array",
+          maxItems: 50,
+          items: {
+            anyOf: [
+              {
+                type: "string",
+              },
+              {
+                type: "number",
+              },
+              {
+                type: "boolean",
+              },
+              {
+                type: "null",
+              },
+            ],
+          },
+        },
+        allowedCount: {
+          type: "integer",
+          minimum: 0,
+        },
+        allowedLookup: {
+          type: "string",
+        },
+        pattern: {
+          type: "string",
         },
       },
     },

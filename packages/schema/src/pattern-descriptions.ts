@@ -9,6 +9,14 @@ const CONTAINED_RELATIVE_PATH =
  * tests enforce that.
  */
 const SCHEMA_PATTERN_DESCRIPTIONS: ReadonlyMap<string, string> = new Map([
+  [
+    "^[EIW][0-9]{3}$",
+    'a diagnostic code beginning with "E", "I" or "W", followed by three digits',
+  ],
+  [
+    "^(?:/(?:[^~]|~[01])*)*$",
+    'an empty JSON pointer or slash-prefixed segments with "~" escaped as "~0" and "/" as "~1"',
+  ],
   ["\\S", "text containing at least one non-whitespace character"],
   [
     "^[^\\u0009\\u000a\\u000d\\u0085\\u2028\\u2029]+$",

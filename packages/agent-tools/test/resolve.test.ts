@@ -1,3 +1,4 @@
+import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -467,6 +468,7 @@ describe("D11 resolve errors and validation precedence", () => {
           column: 1,
           jsonPointer: "",
         },
+        gates.missing,
       ],
       error: null,
       failureClass: "tool",

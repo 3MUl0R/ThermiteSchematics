@@ -1,3 +1,4 @@
+import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -446,6 +447,7 @@ async function exerciseTransportContract(
         code: "E001",
         message: "Agent validate tool failure (compile/E001).",
       },
+      { code: "I208", severity: "info" },
     ],
     error: null,
   });
@@ -491,7 +493,7 @@ async function exerciseTransportContract(
 
 describe("M7 Task 7 thermite agent command namespace", () => {
   it("serializes the exact E032 diagnostics through the agent report transport", async () => {
-    const diagnostics = [
+    const diagnostics = withSkippedChecks("project loading/structural", [
       {
         code: "E032",
         severity: "error",
@@ -511,7 +513,7 @@ describe("M7 Task 7 thermite agent command namespace", () => {
         column: 162,
         jsonPointer: "/libraries/1/version",
       },
-    ];
+    ]);
     const invocation = await invokeInProcess(
       ["agent", "validate", "--input", "-"],
       JSON.stringify({

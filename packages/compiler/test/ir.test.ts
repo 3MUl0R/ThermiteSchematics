@@ -421,9 +421,12 @@ describe("D3 compiler failure gating", () => {
     expect(compiled).toMatchObject({
       ok: false,
       toolFailure: false,
-      diagnostics: [{ code: "E105" }],
+      diagnostics: [{ code: "E105" }, { code: "I208" }],
     });
-    expect(compiled.diagnostics.map(({ code }) => code)).toEqual(["E105"]);
+    expect(compiled.diagnostics.map(({ code }) => code)).toEqual([
+      "E105",
+      "I208",
+    ]);
     expect(Object.hasOwn(compiled, "ir")).toBe(false);
   });
 
@@ -440,7 +443,7 @@ describe("D3 compiler failure gating", () => {
     expect(compiled).toMatchObject({
       ok: false,
       toolFailure: false,
-      diagnostics: [{ code: "E103" }],
+      diagnostics: [{ code: "E103" }, { code: "I208" }],
     });
     expect(Object.hasOwn(compiled, "ir")).toBe(false);
   });

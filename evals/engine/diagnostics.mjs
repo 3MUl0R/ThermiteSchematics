@@ -22,11 +22,15 @@ import {
 // Every row selects an explicit constraint predicate. All location, schema,
 // loading and protocol checks are hard assertions before any gap assessment.
 export async function actionable(report, scenario, project) {
-  const selected = scenario.expected.map((e) =>
-    report.diagnostics.find((d) =>
-      Object.entries(e).every(([k, v]) => d[k] === v),
-    ),
-  );
+  // Gate summaries are pinned by assertDiagnostics; actionability evaluates
+  // the original seeded authoring errors, not the accompanying stage report.
+  const selected = scenario.expected
+    .filter((e) => e.code !== "I208")
+    .map((e) =>
+      report.diagnostics.find((d) =>
+        Object.entries(e).every(([k, v]) => d[k] === v),
+      ),
+    );
   assert(selected.every(Boolean), "Every seeded diagnostic must be present");
   const d = selected[0],
     text = d.message;

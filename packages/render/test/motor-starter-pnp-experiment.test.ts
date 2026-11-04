@@ -1,3 +1,4 @@
+import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -657,6 +658,7 @@ describe("M6 Task 7 staged source-only PNP experiment", () => {
           allowed: ["1", "3", "4"],
           allowedCount: 3,
         },
+        gates.typeOnly,
         {
           code: "E102",
           severity: "error",

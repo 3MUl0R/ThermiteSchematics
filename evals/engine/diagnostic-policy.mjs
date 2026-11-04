@@ -19,7 +19,7 @@ export function assertLocations(diagnostics) {
       "Invalid diagnostic JSON pointer",
     );
     assert(typeof d.message === "string" && d.message.trim().length > 0);
-    assert(["error", "warning"].includes(d.severity));
+    assert(["error", "warning", "info"].includes(d.severity));
     for (const r of d.related ?? []) {
       assert(typeof r.file === "string" && r.file.length > 0);
       assert(Number.isInteger(r.line) && r.line > 0);
