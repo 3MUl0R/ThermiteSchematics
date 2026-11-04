@@ -198,8 +198,14 @@ export async function runThermite(argv = process.argv): Promise<number> {
           revision: string;
           template: "starter" | "cabinets";
         },
+        init: Command,
       ) => {
-        await initializeAlphaProject(directory, options);
+        // Commander fills the default name; only an explicit --name names it.
+        const { name, ...rest } = options;
+        await initializeAlphaProject(directory, {
+          ...rest,
+          ...(init.getOptionValueSource("name") === "cli" ? { name } : {}),
+        });
         process.stdout.write(
           `Initialized ${resolve(directory)} with a local core library.\n`,
         );

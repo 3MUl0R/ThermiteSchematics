@@ -1,18 +1,6 @@
-import { execFile } from "node:child_process";
-import {
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { promisify } from "node:util";
-import {
-  computeFileIntegrity,
-  PROJECT_WRITE_LOCK_FILE_NAME,
-} from "@thermite/compiler";
+import { mkdir, readFile, readdir, rename, symlink } from "node:fs/promises";
+import { join } from "node:path";
+import { PROJECT_WRITE_LOCK_FILE_NAME } from "@thermite/compiler";
 import { describe, expect, it } from "vitest";
 import {
   createInternalApplySourcePatchTool,
@@ -23,31 +11,17 @@ import {
   copyOrdinaryProjectTree,
   defaultPatchFilesystemDependencies,
 } from "../src/patch-filesystem.js";
-import { reserveProjectWrite } from "../src/project-write-lock.js";
 import { createPatchProjectFixture } from "./patch-project-fixture.js";
-
-async function requestFor(project: string, paths = ["sources/a.json"]) {
-  return {
-    format: "agent-tool-request/0.1" as const,
-    project,
-    patchFormat: "json-patch/0.1" as const,
-    dryRun: false,
-    files: await Promise.all(
-      paths.map(async (path) => ({
-        path,
-        expectedIntegrity: computeFileIntegrity(
-          await readFile(join(project, path)),
-        ),
-        operations: [{ op: "add" as const, path: "/$schema", value: "round3" }],
-      })),
-    ),
-  };
-}
+import {
+  HOST_HANDLER_MODES,
+  POSIX_SIGNALS_UNAVAILABLE,
+  requestFor,
+  runEmbeddedWriter,
+} from "./patch-write-chain-changes.cases.js";
+import { withFailingRelease } from "./patch-write-recovery.cases.js";
 
 describe("patch write chain changes and leftover reservations", () => {
-  it
-    .skipIf(process.platform === "win32")
-    .each(["before", "after", "after-write"])(
+  it.skipIf(POSIX_SIGNALS_UNAVAILABLE).each(HOST_HANDLER_MODES)(
     "respects a host SIGINT handler registered %s reservation acquisition",
     async (mode) => {
       const fixture = await createPatchProjectFixture("clean");
@@ -55,20 +29,9 @@ describe("patch write chain changes and leftover reservations", () => {
         const original = await readFile(
           join(fixture.projectRoot, "sources/a.json"),
         );
-        const requestPath = join(fixture.root, "request.json");
-        await writeFile(
-          requestPath,
-          JSON.stringify(await requestFor(fixture.projectRoot)),
-        );
-        const result = await promisify(execFile)(process.execPath, [
-          resolve(
-            "packages/agent-tools/test/fixtures/embedded-patch-writer.mjs",
-          ),
-          requestPath,
+        const { hostCalls, heldDuringWrite, outcome } = await runEmbeddedWriter(
+          fixture,
           mode,
-        ]);
-        const { hostCalls, heldDuringWrite, outcome } = JSON.parse(
-          result.stdout,
         );
         expect(hostCalls).toBe(1);
         expect(heldDuringWrite).toBe(mode !== "after");
@@ -230,18 +193,7 @@ describe("patch write chain changes and leftover reservations", () => {
       const outcome = await createInternalApplySourcePatchTool(
         {},
         {
-          ...defaultApplySourcePatchDependencies,
-          reserveProjectWrite(project) {
-            const reservation = reserveProjectWrite(project);
-            if (!reservation.ok) return reservation;
-            return {
-              ...reservation,
-              release() {
-                reservation.release();
-                throw Object.assign(new Error("injected"), { code: "EACCES" });
-              },
-            };
-          },
+          ...withFailingRelease(defaultApplySourcePatchDependencies),
           async writeFileAtomically() {
             throw Object.assign(new Error("injected"), { code: "EIO" });
           },

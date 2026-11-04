@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import {
   SHIPPED_CORE_FILE_INVENTORY,
@@ -1404,5 +1406,139 @@ describe("thermite init closed preparation and filesystem state machine", () => 
       messages.INIT008,
     );
     expect(filesystem.nodes.has(agentPath)).toBe(false);
+  });
+});
+
+describe("thermite init --name (alpha CLI)", () => {
+  const run = promisify(execFile);
+  const entry = join(repositoryRoot, "thermite.mjs");
+  const cabinetsCaption =
+    "Inter-cabinet cable / two used cores and two spare cores";
+  // The exact default presentation; --name must not change it when omitted.
+  const defaultPresentation = `{
+  "$schema": "https://thermiteschematics.com/schemas/0.1/project-presentation.schema.json",
+  "format": "project-presentation/0.2",
+  "revision": "A",
+  "backgroundColor": "#ffffff",
+  "titleBlock": {
+    "lines": [
+      "Starter project"
+    ]
+  },
+  "page": {
+    "size": "tabloid",
+    "orientation": "landscape",
+    "marginMm": 10
+  }
+}
+`;
+  async function alphaInit(...args: string[]): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), "thermite-alpha-init-name-"));
+    temporaryRoots.push(root);
+    await run(process.execPath, [entry, "init", "project", ...args], {
+      cwd: root,
+    });
+    return join(root, "project");
+  }
+  async function files(root: string): Promise<Map<string, Buffer>> {
+    const result = new Map<string, Buffer>();
+    const walk = async (directory: string): Promise<void> => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) await walk(path);
+        else
+          result.set(
+            path
+              .slice(root.length + 1)
+              .split(sep)
+              .join("/"),
+            await readFile(path),
+          );
+      }
+    };
+    await walk(root);
+    return new Map([...result].sort(([a], [b]) => a.localeCompare(b)));
+  }
+  const readJson = async (path: string) =>
+    JSON.parse(await readFile(path, "utf8"));
+  async function titleSvg(project: string): Promise<string> {
+    await run(
+      process.execPath,
+      [entry, "view", "PS1", "--loads", "-o", "loads.svg"],
+      { cwd: project },
+    );
+    return readFile(join(project, "loads.svg"), "utf8");
+  }
+  const occurrences = (text: string, part: string) =>
+    text.split(part).length - 1;
+
+  it("keeps the default name and starter caption when --name is omitted", async () => {
+    const project = await alphaInit();
+    expect(await readFile(join(project, "presentation.json"), "utf8")).toBe(
+      defaultPresentation,
+    );
+    expect((await readJson(join(project, "system.json"))).project.name).toBe(
+      "Thermite Electrical Project",
+    );
+    const svg = await titleSvg(project);
+    expect(occurrences(svg, "Thermite Electrical Project")).toBe(1);
+    expect(occurrences(svg, "Starter project")).toBe(1);
+  });
+
+  it("names the project and its title block, changing only system and presentation", async () => {
+    const plain = await alphaInit();
+    const named = await alphaInit("--name", "Line <A> & B");
+    const before = await files(plain),
+      after = await files(named);
+    expect([...after.keys()]).toEqual([...before.keys()]);
+    expect(
+      [...before.keys()].filter(
+        (path) => !before.get(path)!.equals(after.get(path)!),
+      ),
+    ).toEqual(["presentation.json", "system.json"]);
+    expect((await readJson(join(named, "system.json"))).project.name).toBe(
+      "Line <A> & B",
+    );
+    // The heading already prints project.name; the unnamed-project caption goes.
+    const expected = JSON.parse(defaultPresentation);
+    delete expected.titleBlock;
+    expect(await readJson(join(named, "presentation.json"))).toEqual(expected);
+    const svg = await titleSvg(named);
+    expect(occurrences(svg, "Line &lt;A&gt; &amp; B")).toBe(1);
+    expect(svg).not.toContain("Starter project");
+    expect(svg).not.toContain("Thermite Electrical Project");
+  });
+
+  it("treats an explicit --name equal to the default as a name", async () => {
+    const project = await alphaInit("--name", "Thermite Electrical Project");
+    expect(
+      await readJson(join(project, "presentation.json")),
+    ).not.toHaveProperty("titleBlock");
+  });
+
+  it("keeps the cabinets caption under an explicit name", async () => {
+    const project = await alphaInit(
+      "--template",
+      "cabinets",
+      "--name",
+      "Cabinet 7",
+    );
+    expect((await readJson(join(project, "system.json"))).project.name).toBe(
+      "Cabinet 7",
+    );
+    expect(
+      (await readJson(join(project, "presentation.json"))).titleBlock,
+    ).toEqual({ lines: [cabinetsCaption] });
+  });
+
+  it("rejects an invalid name without creating the project", async () => {
+    const root = await mkdtemp(join(tmpdir(), "thermite-alpha-init-name-"));
+    temporaryRoots.push(root);
+    await expect(
+      run(process.execPath, [entry, "init", "project", "--name", "a\nb"], {
+        cwd: root,
+      }),
+    ).rejects.toMatchObject({ code: expect.any(Number) });
+    expect(await readdir(root)).toEqual([]);
   });
 });

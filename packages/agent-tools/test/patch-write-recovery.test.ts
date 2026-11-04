@@ -1,11 +1,7 @@
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { readFile, readdir, writeFile, unlink } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { createInterface } from "node:readline";
+import { join } from "node:path";
 
 import {
-  computeFileIntegrity,
   loadProject,
   PROJECT_WRITE_LOCK_FILE_NAME,
   writeFileAtomically,
@@ -25,24 +21,14 @@ import {
   scanOrdinaryProjectTree,
 } from "../src/patch-filesystem.js";
 import { createPatchProjectFixture } from "./patch-project-fixture.js";
-
-async function requestFor(project: string) {
-  return {
-    format: "agent-tool-request/0.1" as const,
-    project,
-    patchFormat: "json-patch/0.1" as const,
-    dryRun: false,
-    files: [
-      {
-        path: "sources/a.json",
-        expectedIntegrity: computeFileIntegrity(
-          await readFile(join(project, "sources/a.json")),
-        ),
-        operations: [{ op: "add" as const, path: "/$schema", value: "review" }],
-      },
-    ],
-  };
-}
+import {
+  POSIX_SIGNALS_UNAVAILABLE,
+  requestFor,
+  RESERVATION_SIGNALS,
+  startPausedWriter,
+  stopPausedWriter,
+  withFailingRelease,
+} from "./patch-write-recovery.cases.js";
 
 describe("patch write recovery outcomes", () => {
   it("keeps committed success when reservation release fails", async () => {
@@ -50,20 +36,7 @@ describe("patch write recovery outcomes", () => {
     try {
       const outcome = await createInternalApplySourcePatchTool(
         {},
-        {
-          ...defaultApplySourcePatchDependencies,
-          reserveProjectWrite(project) {
-            const reservation = reserveProjectWrite(project);
-            if (!reservation.ok) return reservation;
-            return {
-              ...reservation,
-              release() {
-                reservation.release();
-                throw Object.assign(new Error("injected"), { code: "EACCES" });
-              },
-            };
-          },
-        },
+        withFailingRelease(defaultApplySourcePatchDependencies),
       ).applySourcePatch(await requestFor(fixture.projectRoot));
       expect(outcome).toMatchObject({
         ok: true,
@@ -173,32 +146,14 @@ describe("patch write recovery outcomes", () => {
     }
   });
 
-  // Windows terminate-process delivery cannot run JS signal handlers. POSIX Bun
-  // must clean up all three catchable termination signals and preserve the signal.
-  it
-    .skipIf(process.platform === "win32")
-    .each(["SIGINT", "SIGTERM", "SIGHUP"] as const)(
+  // POSIX_SIGNALS_UNAVAILABLE records why Windows skips these.
+  it.skipIf(POSIX_SIGNALS_UNAVAILABLE).each(RESERVATION_SIGNALS)(
     "releases a held reservation before re-raising %s",
     async (signal) => {
       const fixture = await createPatchProjectFixture("clean");
-      const requestPath = join(fixture.root, "request.json");
-      await writeFile(
-        requestPath,
-        JSON.stringify(await requestFor(fixture.projectRoot)),
-      );
-      const child = spawn(
-        process.execPath,
-        [
-          resolve("packages/agent-tools/test/fixtures/paused-patch-writer.mjs"),
-          requestPath,
-        ],
-        { stdio: "pipe" },
-      );
-      const closed = once(child, "close");
+      const writer = await startPausedWriter(fixture);
+      const { child, closed, lines } = writer;
       try {
-        const lines = createInterface({ input: child.stdout! })[
-          Symbol.asyncIterator
-        ]();
         expect((await lines.next()).value).toBe("ready");
         const owner = JSON.parse(
           await readFile(
@@ -225,10 +180,7 @@ describe("patch write recovery outcomes", () => {
           ).ok,
         ).toBe(true);
       } finally {
-        if (child.exitCode === null && child.signalCode === null) {
-          child.kill("SIGKILL");
-          await closed;
-        }
+        await stopPausedWriter(writer);
         await fixture.cleanup();
       }
     },
@@ -316,24 +268,9 @@ describe("patch write recovery outcomes", () => {
 
   it("reports a SIGKILL-abandoned reservation and permits explicit recovery", async () => {
     const fixture = await createPatchProjectFixture("clean");
-    const requestPath = join(fixture.root, "request.json");
-    await writeFile(
-      requestPath,
-      JSON.stringify(await requestFor(fixture.projectRoot)),
-    );
-    const child = spawn(
-      process.execPath,
-      [
-        resolve("packages/agent-tools/test/fixtures/paused-patch-writer.mjs"),
-        requestPath,
-      ],
-      { stdio: "pipe" },
-    );
-    const closed = once(child, "close");
+    const writer = await startPausedWriter(fixture);
+    const { child, closed, lines } = writer;
     try {
-      const lines = createInterface({ input: child.stdout! })[
-        Symbol.asyncIterator
-      ]();
       expect((await lines.next()).value).toBe("ready");
       child.kill("SIGKILL");
       await closed;
@@ -362,10 +299,7 @@ describe("patch write recovery outcomes", () => {
         ).ok,
       ).toBe(true);
     } finally {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGKILL");
-        await closed;
-      }
+      await stopPausedWriter(writer);
       await fixture.cleanup();
     }
   });
