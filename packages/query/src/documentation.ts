@@ -1,3 +1,4 @@
+import { symbolProfile } from "@thermite/schema";
 import { buildCommunicationInventory } from "./communication.js";
 import { buildConnectorAssemblyInventory } from "./connector-assemblies.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
@@ -588,12 +589,12 @@ function buildDocumentationTable(
   if (request.kind === "terminals") {
     for (const d of selected) {
       const type = types.get(d.typeId)!;
-      // Explicit selector supports any device. Automatic terminal plans use only declared strip types or legacy terminal symbols.
+      // Explicit selector supports any device. Automatic terminal plans use declared categories or resolved strip profiles.
       if (
         !request.device &&
         !request.filter?.devices &&
         type.category !== "terminal-strip" &&
-        !["core:terminal-block-8", "core:junction-box-8"].includes(type.id)
+        symbolProfile(type) !== "thermite:terminal-strip"
       )
         continue;
       const keys = type.terminalOrder ?? type.terminals.map((t) => t.key);

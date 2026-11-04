@@ -17,6 +17,7 @@
     "dist"
   ],
   "dependencies": {
-    "@thermite/compiler": "0.2.0"
+    "@thermite/compiler": "0.2.0",
+    "@thermite/schema": "0.2.0"
   }
 }

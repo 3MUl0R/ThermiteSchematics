@@ -279,10 +279,13 @@ export function incompletePowerPathError(
   deviceUid: string,
   lane: string,
   root: string,
+  acInput?: { readonly terminalKey: string; readonly unfed: boolean },
 ): IncompletePathError {
   return Object.freeze({
     code: "R002",
-    message: `Incomplete power view: lane ${JSON.stringify(lane)} does not reach a required boundary.`,
+    message: acInput
+      ? `Incomplete power view: AC input ${root}.${acInput.terminalKey} (${lane}) ${acInput.unfed ? "is unfed: no authored conductor connects this terminal to a power source." : "does not reach a required power-source boundary."}`
+      : `Incomplete power view: lane ${JSON.stringify(lane)} does not reach a required boundary.`,
     family: "power",
     deviceUid,
     lane,

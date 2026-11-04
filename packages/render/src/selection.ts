@@ -1335,7 +1335,11 @@ function resolveTraceRoot(
   context: SelectionContext,
   device: IrDevice,
 ): ResolvedTraceRoot | undefined {
-  const rule = traceRootRuleForType(device.typeId);
+  const rule = traceRootRuleForType(
+    device.typeId,
+    deviceTypeFor(context, device),
+    context.mappingByTypeId.get(device.typeId),
+  );
   if (rule === undefined) return undefined;
   const materialized = materializedTraceRootFunctions(
     rule,
@@ -2311,6 +2315,16 @@ function selectPowerPaths(context: SelectionContext):
           device.uid,
           lane.lane,
           context.view.root.designation,
+          lane.lane === "line" || lane.lane === "neutral"
+            ? {
+                terminalKey: lane.terminal.terminalKey,
+                unfed: !context.ir.indexes.conductiveElementIdsByTerminal.find(
+                  (e) =>
+                    e.key.deviceUid === lane.terminal.deviceUid &&
+                    e.key.terminalKey === lane.terminal.terminalKey,
+                )?.value.length,
+              }
+            : undefined,
         ),
       };
     }

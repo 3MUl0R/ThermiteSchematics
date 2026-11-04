@@ -1,3 +1,4 @@
+import { symbolProfile } from "./symbols/profiles.js";
 import { printableCaption } from "./symbols/printable-policy.js";
 import {
   compareConductiveElementId,
@@ -1042,7 +1043,16 @@ function buildSymbolNode(
   );
   const printableText =
     representation.kind === "aggregate"
-      ? printableCaption({ kind: "aggregate", mark: symbol.id })
+      ? printableCaption({
+          kind: "aggregate",
+          mark: symbol.id,
+          type: required(
+            context.ir.deviceTypes.find(
+              (t) => t.id === representation.device.typeId,
+            ),
+            "Missing aggregate caption type",
+          ),
+        })
       : printableCaption({
           kind: "function",
           fn: required(
@@ -2486,8 +2496,11 @@ function isTwoLanePnpTraceSignalJunction(
     view.intent !== "trace" ||
     view.root.kind !== "device" ||
     !("deviceUid" in view.root) ||
-    context.deviceByUid.get(view.root.deviceUid)?.typeId !==
-      "core:prox-pnp-3wire" ||
+    symbolProfile(
+      context.ir.deviceTypes.find(
+        (t) => t.id === context.deviceByUid.get(view.root.deviceUid)?.typeId,
+      ) ?? {},
+    ) !== "thermite:sensor-3wire" ||
     uses.length !== 2 ||
     attachments.length !== 1 ||
     uses[0]!.end !== uses[1]!.end

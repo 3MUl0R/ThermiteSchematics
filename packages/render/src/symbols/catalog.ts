@@ -516,8 +516,83 @@ function deepFreeze<Value>(value: Value, seen = new Set<object>()): Value {
 
 validateSymbolCatalog(CATALOG_DEFINITIONS);
 
-export const SYMBOL_CATALOG: readonly SymbolDefinition[] =
-  deepFreeze(CATALOG_DEFINITIONS);
+// Additional shapes have their own port inventories; no absent PE or return pin
+// is synthesized to reuse a larger symbol.
+const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
+  ...(
+    [
+      ["ais:motor-3ph", "ais:motor-3ph-unbonded"],
+      ["ais:power-source-3ph", "ais:power-source-3wire"],
+    ] as const
+  ).map(([from, id]) => {
+    const base = CATALOG_DEFINITIONS.find((s) => s.id === from)!;
+    return {
+      ...base,
+      id,
+      ports: base.ports.filter((p) => p.id !== "PE"),
+      primitives:
+        from === "ais:motor-3ph"
+          ? base.primitives.filter((_, i) => i !== 3 && i < 8)
+          : [
+              ...sourceEnclosure(
+                { x: 2, y: 1, width: 28, height: 94 },
+                [12, 36, 60].map((at) => ({ side: "east" as const, at })),
+                3,
+              ),
+              ...[12, 36, 60].flatMap((y) => [
+                line(8, y, 11, y, "body"),
+                circle(14, y, 3, "operator"),
+                line(17, y, 36, y, "body"),
+              ]),
+            ],
+    };
+  }),
+  symbol(
+    "ais:ac-load",
+    40,
+    64,
+    [port("line", "west", 1 / 8, 0), port("neutral", "west", 7 / 8, 1)],
+    [
+      line(0, 8, 8, 8, "body"),
+      line(0, 56, 8, 56, "body"),
+      rect(8, 4, 28, 56, "body"),
+    ],
+  ),
+  symbol(
+    "ais:motor",
+    48,
+    64,
+    [port("positive", "west", 1 / 8, 0), port("return", "west", 7 / 8, 1)],
+    [
+      line(0, 8, 24, 8, "body"),
+      line(24, 8, 24, 14, "body"),
+      line(0, 56, 24, 56, "body"),
+      line(24, 56, 24, 50, "body"),
+      circle(24, 32, 18, "body"),
+    ],
+  ),
+  symbol(
+    "ais:lamp",
+    48,
+    64,
+    [port("positive", "west", 1 / 8, 0), port("return", "west", 7 / 8, 1)],
+    [
+      line(0, 8, 24, 8, "body"),
+      line(24, 8, 24, 14, "body"),
+      line(0, 56, 24, 56, "body"),
+      line(24, 56, 24, 50, "body"),
+      circle(24, 32, 18, "body"),
+      line(12, 20, 36, 44, "operator"),
+      line(12, 44, 36, 20, "operator"),
+    ],
+  ),
+];
+validateSymbolCatalog(ADDITIONAL_DEFINITIONS);
+
+export const SYMBOL_CATALOG: readonly SymbolDefinition[] = deepFreeze([
+  ...CATALOG_DEFINITIONS,
+  ...ADDITIONAL_DEFINITIONS,
+]);
 
 export function findSymbolDefinition(
   id: SymbolDefinition["id"],

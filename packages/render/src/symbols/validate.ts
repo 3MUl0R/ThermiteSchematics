@@ -466,6 +466,9 @@ function validateFunctionSymbolFacts(
     case "ais:power-source-dc":
       expectFunctionFacts(definition, "source", context);
       return;
+    case "ais:ac-load":
+    case "ais:motor":
+    case "ais:lamp":
     case "ais:dc-load":
       expectFunctionFacts(definition, "load", context);
       return;
@@ -486,6 +489,12 @@ function validateFunctionSymbolFacts(
       return;
     case "ais:coil":
       expectFunctionFacts(definition, "coil", context);
+      return;
+    case "ais:fuse":
+      assertMapping(
+        ["contact", "other"].includes(definition.kind),
+        `${context} requires contact or other.`,
+      );
       return;
     case "ais:terminal":
       expectFunctionFacts(definition, "bus", context);
@@ -615,24 +624,42 @@ function validateAggregateMemberFacts(
   member: IrDeviceTypeFunction,
   context: string,
 ): void {
-  if (rule.symbolId === "ais:power-source-3ph") {
+  if (
+    rule.symbolId === "ais:power-source-3ph" ||
+    rule.symbolId === "ais:power-source-3wire"
+  ) {
     expectFunctionFacts(
       member,
-      member.key === "protective_earth" ? "bus" : "source",
+      rule.bindings.some(
+        (b) => b.memberFunctionKey === member.key && b.portId === "PE",
+      )
+        ? "bus"
+        : "source",
       context,
     );
     return;
   }
-  if (rule.symbolId === "ais:motor-3ph") {
+  if (
+    rule.symbolId === "ais:motor-3ph" ||
+    rule.symbolId === "ais:motor-3ph-unbonded"
+  ) {
     expectFunctionFacts(
       member,
-      member.key === "protective_earth" ? "bus" : "load",
+      rule.bindings.some(
+        (b) => b.memberFunctionKey === member.key && b.portId === "PE",
+      )
+        ? "bus"
+        : "load",
       context,
     );
     return;
   }
   if (rule.symbolId === "ais:switch-sensor-pnp") {
-    if (member.key === "output") {
+    if (
+      rule.bindings.some(
+        (b) => b.memberFunctionKey === member.key && b.portId === "signal",
+      )
+    ) {
       expectFunctionFacts(member, "channel", context, undefined, "output");
     } else {
       expectFunctionFacts(member, "load", context);

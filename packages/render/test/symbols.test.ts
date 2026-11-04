@@ -255,9 +255,9 @@ describe("D3 original symbol catalog", () => {
       DEVICE_GROUP_SIDE_PADDING: 8,
       OUTER_SVG_PADDING: 20,
     });
-    expect(SYMBOL_CATALOG).toHaveLength(EXPECTED_SYMBOLS.length);
+    expect(SYMBOL_CATALOG).toHaveLength(EXPECTED_SYMBOLS.length + 5);
     expect(
-      SYMBOL_CATALOG.map((definition) => ({
+      SYMBOL_CATALOG.slice(0, EXPECTED_SYMBOLS.length).map((definition) => ({
         id: definition.id,
         width: definition.size.width,
         height: definition.size.height,

@@ -30,7 +30,15 @@ import {
   ROOTED_SYMBOL_PROFILES,
   projectDeviceTypeSymbolMappings,
 } from "../src/symbols/mappings.js";
-import { validateDeviceTypeSymbolMappings } from "../src/symbols/validate.js";
+import {
+  ROOTED_CONTRACTS,
+  contractType,
+  contractProject,
+} from "./rooted-profile-contracts.js";
+import {
+  isFunctionTraversable,
+  validateDeviceTypeSymbolMappings,
+} from "../src/symbols/validate.js";
 import { prepareSignalLoopDrawing } from "../src/signal-loop.js";
 import { renderSchematic } from "../src/renderer.js";
 import { prepareCircuitView } from "../src/circuit.js";
@@ -68,6 +76,11 @@ function fixture(
       source,
       ...(variant === "DC" ? { rating: { voltage_type: "DC" as const } } : {}),
       ...(variant === "earth" ? { role: "protective_earth" } : {}),
+      ...(variant === "power"
+        ? { role: i === 0 ? "power_input" : "power_output" }
+        : {}),
+      ...(variant === "aux" ? { role: "aux" } : {}),
+      ...(variant === "phase" ? { role: `phase_${i + 1}_source` } : {}),
       ...(variant === "roles"
         ? { role: i === 0 ? "dc_positive_output" : "dc_return_output" }
         : {}),
@@ -105,7 +118,12 @@ describe("schema/render symbol profile conformance", () => {
         )
           .map((p) => p.id)
           .sort(),
-      ).toEqual([...ROOTED_SYMBOL_PROFILES].sort());
+      ).toEqual(
+        Object.entries(ROOTED_CONTRACTS)
+          .filter(([, v]) => v[family].length > 0)
+          .map(([id]) => id)
+          .sort(),
+      );
     }
     expect(CORE_SYMBOL_BINDINGS.map((b) => b.typeId).sort()).toEqual(
       CORE_DEVICE_TYPE_SYMBOL_MAPPINGS.map((m) => m.typeId).sort(),
@@ -113,7 +131,7 @@ describe("schema/render symbol profile conformance", () => {
     for (const binding of CORE_SYMBOL_BINDINGS) {
       const type = core.deviceTypes.find((t) => t.id === binding.typeId)!;
       expect(type.symbol).toBe(binding.symbol);
-      expect(binding.binding).toBe("core-type-id");
+      expect(binding.binding).toBe("symbol-alias");
       if (binding.equivalent) {
         expect(circuitProfile(type)).toBe(binding.equivalent);
         expect(
@@ -172,7 +190,14 @@ describe("schema/render symbol profile conformance", () => {
           for (const variant of kind === "contact"
             ? ["plain", "closed"]
             : ["plain"]) {
-            const type = fixture(profile.id, kind, count, variant);
+            const type = fixture(
+              profile.id,
+              kind,
+              count,
+              profile.id === "thermite:sensor-3wire" && kind === "channel"
+                ? "output"
+                : variant,
+            );
             const f = materializeTypeFunctions(type, "device")[0]!;
             const fits =
               support?.functions.some((shape) =>
@@ -216,7 +241,7 @@ describe("schema/render symbol profile conformance", () => {
         device.typeId = type.id;
       ir.indexes.instanceRefsByTypeId.find((e) => e.key === oldId)!.key =
         type.id;
-      if (symbol !== "thermite:pushbutton")
+      if (symbol === "site:custom-relay")
         expect(() => circuitProfile(type)).toThrow();
       for (const fn of materializeTypeFunctions(type, "device"))
         expect(emitCircuitMark(circuitMark(type, fn))).toContain(
@@ -387,35 +412,95 @@ describe("schema/render symbol profile conformance", () => {
         "mechanism",
       ] as const) {
         for (const count of [0, 1, 2, 3, 4]) {
-          for (const variant of ["plain", "DC", "roles", "earth", "output"]) {
+          for (const variant of [
+            "plain",
+            "DC",
+            "roles",
+            "earth",
+            "output",
+            "power",
+            "aux",
+            "phase",
+            "closed",
+          ]) {
             const type = fixture(profile.id, kind, count, variant);
+            if (profile.id === "thermite:sensor-3wire") {
+              const f = type.functions[0]!;
+              if (kind === "channel" && variant === "output") {
+                type.terminals.push(
+                  { key: "s", source: type.source },
+                  { key: "r", source: type.source },
+                );
+                type.functions.push({
+                  key: "supply",
+                  kind: "load",
+                  terminalKeys: ["s", "r"],
+                  source: type.source,
+                });
+              } else if (kind === "load" && count === 2) {
+                type.terminals.push({ key: "q", source: type.source });
+                type.functions.push({
+                  key: "output",
+                  kind: "channel",
+                  direction: "output",
+                  terminalKeys: ["q"],
+                  source: type.source,
+                });
+              }
+            }
             type.terminals.reverse();
             const mapping = projectDeviceTypeSymbolMappings({
               ...core,
               deviceTypes: [type],
             }).find((m) => m.typeId === type.id);
-            for (const family of ["power", "control", "loads"] as const) {
-              const fits = profile.support
-                .filter((s) => s.family === family)
-                .some((s) =>
-                  s.functions.some((shape) =>
-                    symbolFunctionMatchesShape(type, type.functions[0]!, shape),
-                  ),
-                );
-              const actual =
-                mapping?.functions.some(
-                  (f) =>
-                    f.functionKey === "f" &&
-                    f.families.includes(
-                      family === "loads" ? "control" : family,
+            const declaredRoles = type.functions[0]!.terminalKeys.map(
+              (key) => type.terminals.find((t) => t.key === key)!.role,
+            );
+            // Independent oracle: any authored supply role requires the exact pair.
+            const sensorSupplyFits =
+              declaredRoles.every((role) => role === undefined) ||
+              (declaredRoles.length === 2 &&
+                declaredRoles.includes("supply_positive") &&
+                declaredRoles.includes("supply_return"));
+            for (const family of ["power", "control"] as const) {
+              const fits =
+                (profile.id !== "thermite:sensor-3wire" ||
+                  kind !== "channel" ||
+                  variant === "output") &&
+                (profile.id !== "thermite:sensor-3wire" ||
+                  kind !== "load" ||
+                  sensorSupplyFits) &&
+                profile.support
+                  .filter((s) => s.family === family)
+                  .some((s) =>
+                    s.functions.some((shape) =>
+                      symbolFunctionMatchesShape(
+                        type,
+                        type.functions[0]!,
+                        shape,
+                      ),
                     ),
+                  );
+              const actual =
+                [
+                  ...(mapping?.functions ?? []).map((f) => ({
+                    ...f,
+                    functionKeys: [f.functionKey],
+                  })),
+                  ...(mapping?.aggregates ?? []),
+                ].some(
+                  (f) =>
+                    f.functionKeys.includes("f") && f.families.includes(family),
                 ) ?? false;
               expect(
                 actual,
                 `${profile.id}/${kind}/${count}/${variant}/${family}`,
               ).toBe(fits);
             }
-            if (mapping?.functions.length) {
+            if (
+              mapping &&
+              (mapping.functions.length || mapping.aggregates.length)
+            ) {
               expect(() =>
                 validateDeviceTypeSymbolMappings(
                   [type],
@@ -647,4 +732,134 @@ describe("schema/render symbol profile conformance", () => {
       }
     },
   );
+});
+
+describe("independent rooted profile contracts", () => {
+  const families = ["power", "control", "loads"] as const;
+  const normalized = (shape: import("@thermite/schema").SymbolFunctionShape) =>
+    JSON.stringify([
+      shape.kind,
+      shape.minTerminals,
+      shape.maxTerminals,
+      shape.terminalRoles ?? [],
+      shape.firstTerminalVoltageType ?? null,
+    ]);
+  it("pins every catalog family and function shape to the authored contract table", () => {
+    const actual = SYMBOL_PROFILES.filter((p) =>
+      p.support.some((s) =>
+        families.includes(s.family as (typeof families)[number]),
+      ),
+    )
+      .map((p) => p.id)
+      .sort();
+    expect(actual).toEqual(Object.keys(ROOTED_CONTRACTS).sort());
+    for (const [profile, expected] of Object.entries(ROOTED_CONTRACTS))
+      for (const family of families) {
+        const functions = SYMBOL_PROFILES.find((p) => p.id === profile)!
+          .support.filter((s) => s.family === family)
+          .flatMap((s) => s.functions);
+        expect(
+          [...new Set(functions.map(normalized))].sort(),
+          `${profile}/${family}`,
+        ).toEqual(
+          [...new Set(expected[family].map((c) => normalized(c.shape)))].sort(),
+        );
+      }
+  });
+  it("pins symbols, series traversal and boundaries independently of the catalog", () => {
+    for (const [profile, expected] of Object.entries(ROOTED_CONTRACTS))
+      for (const family of families)
+        for (const contract of expected[family]) {
+          const doc = contractType(profile, contract.mode),
+            source = {
+              file: "contract.json",
+              line: 1,
+              column: 1,
+              jsonPointer: "",
+            };
+          const type = {
+            kind: "device_type" as const,
+            id: doc.id,
+            symbol: doc.symbol,
+            libraryName: "local",
+            libraryVersion: "0.1.0",
+            aliases: [],
+            source,
+            internalRelations: [],
+            terminals: Object.entries(doc.terminals).map(([key, t]) => ({
+              key,
+              ...t,
+              source,
+            })),
+            functions: Object.entries(doc.functions).map(([key, f]) => {
+              const { terminals, ...facts } = f;
+              return { key, ...facts, terminalKeys: terminals, source };
+            }),
+          } as IrDeviceType;
+          const mapping = projectDeviceTypeSymbolMappings({
+            ...core,
+            deviceTypes: [type],
+          })[0];
+          const engineFamily = family === "loads" ? "control" : family;
+          const bound = [
+            ...(mapping?.functions ?? []).filter(
+              (f) => f.functionKey === "function",
+            ),
+            ...(mapping?.aggregates ?? []).filter((f) =>
+              f.functionKeys.includes("function"),
+            ),
+          ].filter((f) => f.families.includes(engineFamily));
+          expect(bound, `${profile}/${family}/${contract.mode}`).toHaveLength(
+            1,
+          );
+          expect(bound[0]).toMatchObject({
+            symbolId: contract.symbol,
+            traversalRole: contract.role,
+          });
+          expect(
+            isFunctionTraversable(engineFamily, bound[0]!.traversalRole),
+          ).toBe(contract.series);
+          expect(
+            mapping!.boundaryTerminals.map((b) => b.boundaryKind).sort(),
+          ).toEqual([...contract.boundary].sort());
+          expect(() =>
+            validateDeviceTypeSymbolMappings(
+              [type],
+              [mapping!],
+              SYMBOL_CATALOG,
+            ),
+          ).not.toThrow();
+        }
+  });
+  for (const [profile, expected] of Object.entries(ROOTED_CONTRACTS))
+    for (const family of families) {
+      const contract = expected[family][0];
+      if (!contract) continue;
+      it(`${profile}/${family} reaches a real boundary in both flows`, async () => {
+        const fixture = await contractProject(profile, contract.mode, family);
+        try {
+          for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+            const result = await renderSchematic(fixture.ir, {
+              ...(fixture.request as object),
+              flow,
+            });
+            expect(result.ok, JSON.stringify(result)).toBe(true);
+            if (result.ok) {
+              expect(result.value.summary.deviceUids).toContain(
+                fixture.ir.devices.find((d) => d.designation === "DUT")!.uid,
+              );
+              if (contract.mode === "dc-source" && family === "control") {
+                expect(result.value.svg).toContain("DUT.P");
+                expect(result.value.svg).toContain("DUT.N");
+              } else
+                expect(result.value.svg).toContain(
+                  `data-symbol-id="${contract.symbol}"`,
+                );
+            }
+          }
+        } finally {
+          await fixture.dispose();
+        }
+      });
+    }
 });

@@ -810,7 +810,11 @@ function rootSupportsTrace(
   mappings: readonly DeviceTypeSymbolMapping[],
 ): boolean {
   validateTraceRootRules(ir.deviceTypes, mappings);
-  const rule = traceRootRuleForType(device.typeId);
+  const rule = traceRootRuleForType(
+    device.typeId,
+    deviceType,
+    mappings.find((m) => m.typeId === device.typeId),
+  );
   if (rule === undefined) return false;
   materializedTraceRootFunctions(rule, device.uid, deviceType, ir.functions);
   return true;

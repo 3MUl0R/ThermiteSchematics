@@ -1,3 +1,4 @@
+import { symbolProfile } from "./symbols/profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 
 import { InvalidSymbolMappingError } from "./errors.js";
@@ -320,7 +321,14 @@ function validateRepresentation(
 export function validateTraceRootRules(
   deviceTypes: readonly IrDeviceType[],
   mappings: readonly DeviceTypeSymbolMapping[],
-  rules: readonly TraceRootRule[] = TRACE_ROOT_RULES,
+  rules: readonly TraceRootRule[] = deviceTypes.flatMap((type) => {
+    const rule = traceRootRuleForType(
+      type.id,
+      type,
+      mappings.find((m) => m.typeId === type.id),
+    );
+    return rule ? [rule] : [];
+  }),
 ): void {
   const seen = new Set<string>();
   for (const rule of rules) {
@@ -341,8 +349,71 @@ export function validateTraceRootRules(
 
 export function traceRootRuleForType(
   typeId: string,
+  type?: IrDeviceType,
+  mapping?: DeviceTypeSymbolMapping,
 ): TraceRootRule | undefined {
-  return TRACE_ROOT_RULES.find((rule) => rule.typeId === typeId);
+  if (!type) return TRACE_ROOT_RULES.find((r) => r.typeId === typeId);
+  if (!mapping) return undefined;
+  const profile = symbolProfile(type);
+  const aggregate =
+    profile === "thermite:sensor-3wire"
+      ? mapping.aggregates.find((r) => r.symbolId === "ais:switch-sensor-pnp")
+      : undefined;
+  const contacts =
+    profile === "thermite:switch"
+      ? mapping.functions.filter((r) => r.symbolId === "ais:switch-no")
+      : [];
+  if (contacts.length > 1) return undefined;
+  const contact = contacts[0];
+  const actual = aggregate ?? contact;
+  if (!actual) return undefined;
+  const keys = aggregate ? aggregate.functionKeys : [contact!.functionKey];
+  const facts = keys
+    .map((key) => type.functions.find((f) => f.key === key)!)
+    .map((f) =>
+      f.kind === "contact"
+        ? {
+            key: f.key,
+            kind: f.kind,
+            normalState: f.normal_state,
+            terminalKeys: f.terminalKeys,
+          }
+        : f.kind === "channel"
+          ? {
+              key: f.key,
+              kind: f.kind,
+              direction: f.direction,
+              terminalKeys: f.terminalKeys,
+            }
+          : { key: f.key, kind: "load" as const, terminalKeys: f.terminalKeys },
+    );
+  return {
+    typeId,
+    representation: {
+      kind: aggregate ? "aggregate" : "function",
+      key: aggregate ? aggregate.key : contact!.functionKey,
+      symbolId: actual.symbolId,
+      classification: "permissive",
+      traversalRole: actual.traversalRole,
+      functions: facts,
+      ports: actual.bindings.map((b, i) => ({
+        portId: b.portId,
+        terminalKey: b.terminalKey,
+        memberFunctionKey: aggregate
+          ? aggregate.bindings[i]!.memberFunctionKey
+          : contact!.functionKey,
+        role: aggregate
+          ? b.portId === "signal"
+            ? "signal"
+            : b.portId === "supply"
+              ? "positive-supply"
+              : "return-supply"
+          : b.portId === "in"
+            ? "positive-supply"
+            : "signal",
+      })),
+    },
+  };
 }
 
 export function materializedTraceRootFunctions(

@@ -302,7 +302,7 @@ export const DIAGNOSTIC_CATALOG = {
     severity: "warning",
     producer: "code",
     meaning:
-      "A placed device uses an unknown/core-only profile or has functions or terminal roles without cataloged renderer support.",
+      "A placed device uses an unknown profile or has functions or terminal roles without cataloged renderer support.",
   },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
