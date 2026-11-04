@@ -280,6 +280,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "Connection review records deferred work or contradicts a requirement or connection.",
   },
+  W111: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "A placed device uses an unknown/core-only profile or has functions or terminal roles without cataloged renderer support.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_CATALOG;

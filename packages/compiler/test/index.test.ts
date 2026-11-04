@@ -14,6 +14,8 @@ describe("compiler public API", () => {
       "resolveShippedCoreLibrary",
       "compileLoadedProject",
       "compileProject",
+      "symbolFunctionMatchesShape",
+      "formatSymbolFunctionShape",
       "expandResolvedProject",
       "normalizeProjectGraph",
       "assembleElectricalIr",
@@ -41,6 +43,8 @@ describe("compiler public API", () => {
     expect(compiler.loadProject).toBeTypeOf("function");
     expect(compiler.compileLoadedProject).toBeTypeOf("function");
     expect(compiler.compileProject).toBeTypeOf("function");
+    expect(compiler.symbolFunctionMatchesShape).toBeTypeOf("function");
+    expect(compiler.formatSymbolFunctionShape).toBeTypeOf("function");
     expect(compiler.serializeIr).toBeTypeOf("function");
     expect(compiler.expandResolvedProject).toBeTypeOf("function");
     expect(compiler.normalizeProjectGraph).toBeTypeOf("function");

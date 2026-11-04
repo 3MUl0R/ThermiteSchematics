@@ -87,25 +87,72 @@ Geometry is owned by the renderer's original catalog; project requests cannot pr
 
 This distinguishes main protection poles from auxiliary contacts without guessing from function names or device descriptions. Function definitions and terminal arrays must still describe the actual source device. The compiler validates explicit mappings against declared functions; an NC symbol cannot override an authored normally open contact. Library changes require a fresh lock and validation.
 
-| Profile | Supported functions |
-| --- | --- |
-| `thermite:contactor`, `thermite:relay` | Two-terminal coils and contacts; relay power can be a separate load |
-| `thermite:breaker`, `thermite:overload`, `thermite:fuse` | Protection contacts; explicit function marks distinguish main and auxiliary functions; fuse also supports a two-terminal `other` function |
-| `thermite:motor-3ph`, `thermite:motor` | Three- or two-terminal motor loads, respectively |
-| `thermite:heater` | Two- or three-terminal resistive loads; no star/delta connection is inferred |
-| `thermite:transformer` | Two-terminal primary load and secondary source windings opposite a shared magnetic core |
-| `thermite:power-source`, `thermite:dc-supply` | Supply boundaries; DC supply input and output are separate functions |
-| `thermite:io-module` | One/two-terminal channels, supply functions, contacts and explicit generic interfaces |
-| `thermite:terminal-strip` | One-terminal buses with pass-through display ports |
-| `thermite:solenoid`, `thermite:lamp` | Two-terminal coil or lamp load |
-| `thermite:switch`, `thermite:pushbutton` | Two-terminal contacts using authored normal state |
-| `thermite:thermocouple` | Two-terminal `other` function representing the sensor interface |
-| `thermite:pressure-switch`, `thermite:level-switch` | Two-terminal contacts with pressure/float actuation and declared normal state |
-| `thermite:level-sensor` | Two/three-terminal `other` interfaces or one/two-terminal channels with their address and signal meaning |
-| `thermite:conductivity-probe` | Two–eight-terminal `other` interfaces; no internal commoning inferred |
-| `thermite:receptacle` | Two/three-terminal loads; protective earth can be a separate one-terminal bus |
+The source of truth is the data-only [`SYMBOL_PROFILES` catalog in
+`@thermite/schema`](../packages/schema/src/symbol-profiles.ts), exported from
+the package and included in its compiled runtime. Each entry lists reusable
+aliases, core-only compatibility aliases, supported renderer families/roles,
+function kinds, terminal counts, and any terminal-role or voltage constraints.
+It is JSON-serializable for runtime help and tooling. `CORE_SYMBOL_BINDINGS`
+records the fixed core type IDs and their reusable equivalents where available.
 
-Supported profiles also allow a one-terminal bus. An explicit protective-earth role selects the earth mark; no bonding wire is added. Existing POC core types have explicit compatibility mappings. Unrecognized profiles and incompatible function shapes fail instead of acquiring behavior from their names.
+For example, `thermite:pushbutton` supports two-terminal contacts in circuit
+views. `thermite:io-module` supports one/two-terminal channels in circuit views,
+but rooted control and loads bindings accept only one-terminal channels.
+Only `thermite:io-module`, `thermite:terminal-strip`, and `thermite:dc-supply`
+currently have reusable rooted bindings. A circuit-capable profile does not
+automatically work in rooted power, control, or loads views. The catalog also
+records existing signal-loop-only profiles so they are not mistaken for unknown
+circuit profiles. `thermite:pressure-transmitter`, `thermite:analog-actuator`,
+and `thermite:bulkhead-connector` have signal-loop roles only; they cannot replace
+a circuit or rooted-view symbol. Catalog `notes` explain profile semantics and
+layout observations. io-module `other` interfaces bind 1–32 terminals. Isolated
+left-to-right examples measured on 2026-11-04, against base `7a7c1fb` plus P1,
+fit 24 terminals on tabloid and 12 on A4; larger sampled interfaces failed.
+These are measured examples, not guaranteed paper limits. Larger interfaces may
+need top-to-bottom or larger paper; labels and selections affect printability.
+
+All circuit profiles allow a one-terminal bus. An explicit protective-earth
+role selects the earth mark; no bonding wire is added. Core `iec:*` symbols
+work through exact core type IDs, not reusable profile matching. Copying
+`core:plc-compact` under another ID therefore requires replacing `iec:plc` with
+`thermite:io-module`. The core proximity sensor has no reusable equivalent or
+circuit mapping yet.
+
+Validation emits **W111** at the library type's `symbol` when a placed type
+uses an unknown/core-only profile or has non-mechanism functions that fit no
+cataloged family. It names up to ten unfit functions and ten affected device
+designations, naturally sorted without locale dependence, then a remaining count.
+For unknown/core-only symbols it summarizes the number of functions instead of
+listing all their names.
+Explicit `circuitSymbols` marks count as circuit support before any profile
+lookup, including for unknown and core-only symbols. Terminal-only roles can
+support devices without drawable functions; they do not excuse an unsupported
+selected function.
+
+Replacement advice names the equivalent's families for the type's actual
+functions. Circuit-only equivalents direct local types to a circuit view while
+rooted views still require the original core type ID. When only some functions
+fit, the first remedy is an explicit compatible `circuitSymbols` mark for the
+unfit functions (checked by E206), or moving them to a separate device type.
+This preserves the profile used by the already supported functions.
+
+When nothing fits, the fallback profile list groups circuit, rooted, and
+signal-loop-only support, quoting at most ten profile IDs across all groups.
+Structured `allowed`, `allowedCount`, and `allowedLookup` fields follow the
+standard diagnostic bounds; the complete current profile ID list is available
+in W111's `allowed` field from `thermite validate <project> --json`. Shape
+requirements still apply to those profiles. `thermite guide symbols` will
+provide profile discovery in G3 and is not available yet.
+
+Signal-loop auxiliary capability on `thermite:terminal-strip` and
+`thermite:bulkhead-connector` is conservatively cataloged as `other/2` only.
+A two-terminal contact or bus must have its own supported circuit binding;
+the auxiliary role does not excuse it.
+
+Absent optional symbols and unplaced types do not trigger W111. The warning
+is advisory: electrical validity is preserved. Per-function shape support does
+not establish a connected path, a valid view root, or printable layout;
+renderers still reject unsupported selections.
 
 Explicit `circuitSymbols` marks include `contact-no`, `contact-nc`, `breaker`, `overload`, `fuse`, `coil`, `motor`, `heater`, `winding`, `source`, `load`, `terminal`, `earth`, `solenoid`, `lamp`, `switch-no`, `switch-nc`, `pushbutton-no`, `pushbutton-nc`, `thermocouple`, `interface`, `pressure-no`, `pressure-nc`, `level-no`, `level-nc`, `level-sensor`, `conductivity-probe`, `receptacle`, `ac-input`, and `dc-output`. Mark choice is presentation metadata; it never changes physical net derivation or rooted-view traversal.
 
