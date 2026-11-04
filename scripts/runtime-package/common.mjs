@@ -123,6 +123,7 @@ export function verifyEntries(entries) {
     "third-party/sources.json",
     "third-party/ELK-SOURCE.md",
     "node_modules/@thermite/cli/assets/fonts/OFL.txt",
+    "node_modules/@thermite/cli/assets/fonts/NotoSansMono-Regular.ttf",
     "node_modules/@thermite/core-library/LICENSE",
     "node_modules/@thermite/core-library/NOTICE",
   ]) {

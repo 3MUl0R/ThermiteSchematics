@@ -1,9 +1,12 @@
-import { openSync } from "fontkit";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
 import SVGtoPDF from "svg-to-pdfkit";
-import type { RenderedPacket } from "@thermite/render";
+import {
+  describeCodePoint,
+  supportsGlyph,
+  type RenderedPacket,
+} from "@thermite/render";
 
 const decodeText = (value: string) =>
   value.replace(
@@ -113,44 +116,86 @@ function withPdfLabelClips(svg: string, sheet: number): string {
 }
 
 /** Font-only spans preserve the text chunk's shared anchor, baseline and position. */
-function withPdfFontFallback(
-  svg: string,
-  sheet: number,
-  primary: ReadonlySet<number>,
-  math: ReadonlySet<number>,
-): string {
-  return svg.replace(
-    /(<text\b[^>]*>)([\s\S]*?)(<\/text>)/gu,
-    (_, open: string, body: string, close: string) => {
-      const converted = body
-        .split(/(<[^>]*>)/u)
-        .map((part) => {
-          if (part.startsWith("<")) return part;
-          const runs: { fallback: boolean; value: string }[] = [];
-          for (const char of decodeText(part)) {
-            const fallback =
-              !/\s/u.test(char) && !primary.has(char.codePointAt(0)!);
-            if (fallback && !math.has(char.codePointAt(0)!))
-              throw new Error(
-                `PDF font does not support ${JSON.stringify(char)} on sheet ${sheet}. Use SVG/HTML or a supported label.`,
-              );
-            if (runs.at(-1)?.fallback === fallback) runs.at(-1)!.value += char;
-            else runs.push({ fallback, value: char });
-          }
-          // Leave existing typography and converter input untouched without fallback.
-          if (!runs.some((run) => run.fallback)) return part;
-          return runs
-            .map((run) =>
-              run.fallback
-                ? `<tspan font-family="ThermiteMath">${encodeText(run.value)}</tspan>`
-                : encodeText(run.value),
-            )
-            .join("");
-        })
-        .join("");
-      return open + converted + close;
-    },
-  );
+function withPdfFontFallback(svg: string, sheet: number): string {
+  type Context = {
+    family: string;
+    bold: boolean;
+    inText: boolean;
+    row?: string | undefined;
+    column?: string | undefined;
+  };
+  const stack: Context[] = [
+    { family: "sans-serif", bold: false, inText: false },
+  ];
+  return svg.replace(/<(?:[^>"']|"[^"]*"|'[^']*')*>|[^<]+/gu, (part) => {
+    if (part.startsWith("<?") || part.startsWith("<!")) return part;
+    if (part.startsWith("</")) {
+      stack.pop();
+      return part;
+    }
+    const parent = stack.at(-1)!;
+    if (part.startsWith("<")) {
+      const family =
+          /\bfont-family\s*=\s*(["'])(.*?)\1/u.exec(part)?.[2] ?? parent.family,
+        weight = /\bfont-weight\s*=\s*(["'])(.*?)\1/u.exec(part)?.[2],
+        row = /\sdata-row-designation\s*=\s*(["'])(.*?)\1/u.exec(part)?.[2],
+        column = /\sdata-report-column\s*=\s*(["'])(.*?)\1/u.exec(part)?.[2],
+        columnName = /\sdata-column-name\s*=\s*(["'])(.*?)\1/u.exec(part)?.[2];
+      const context = {
+        family,
+        bold: weight ? weight === "bold" || Number(weight) >= 600 : parent.bold,
+        inText: parent.inText || /^<text\b/u.test(part),
+        row: row === undefined ? parent.row : decodeText(row),
+        column:
+          column === undefined
+            ? parent.column
+            : `${column}${columnName === undefined ? "" : ` ${JSON.stringify(decodeText(columnName))}`}`,
+      };
+      if (!/\/\s*>$/u.test(part)) stack.push(context);
+      return part;
+    }
+    if (!parent.inText) return part;
+    const face =
+      parent.family === "ThermiteMath"
+        ? "math"
+        : /(?:^|[,\s])monospace(?:$|[,\s])/u.test(parent.family)
+          ? "mono"
+          : parent.bold
+            ? "bold"
+            : "sans";
+    const decoded = decodeText(part),
+      // Default ignorables have neither advance nor ink. The embedded Latin/
+      // math faces have no supported joiner sequences; their visible characters
+      // are still checked below. Keep residual combining marks explicit.
+      normalized = decoded
+        .normalize("NFC")
+        .replace(/\p{Default_Ignorable_Code_Point}/gu, "");
+    const unsupported = (char: string) =>
+      new Error(
+        `PDF font does not support ${describeCodePoint(char)} on sheet ${sheet}${parent.row === undefined ? "" : `, row ${JSON.stringify(parent.row)}`}${parent.column === undefined ? "" : `, column ${parent.column}`}. Use SVG/HTML or a supported label.`,
+      );
+    const runs: { fallback: boolean; value: string }[] = [];
+    for (const char of normalized) {
+      // The converter skips zero-advance glyphs and does not apply mark GPOS.
+      // NFC handles precomposed accents; a remaining real mark cannot vanish.
+      if (/\p{Mark}/u.test(char)) throw unsupported(char);
+      const fallback =
+        !/\s/u.test(char) && !supportsGlyph(face, char.codePointAt(0)!);
+      if (fallback && !supportsGlyph("math", char.codePointAt(0)!))
+        throw unsupported(char);
+      if (runs.at(-1)?.fallback === fallback) runs.at(-1)!.value += char;
+      else runs.push({ fallback, value: char });
+    }
+    if (!runs.some((run) => run.fallback))
+      return normalized === decoded ? part : encodeText(normalized);
+    return runs
+      .map((run) =>
+        run.fallback
+          ? `<tspan font-family="ThermiteMath">${encodeText(run.value)}</tspan>`
+          : encodeText(run.value),
+      )
+      .join("");
+  });
 }
 
 /** Convert only an internally generated packet; never import arbitrary SVG documents. */
@@ -167,24 +212,13 @@ export async function packetPdf(
   const math = fileURLToPath(
     new URL("../assets/fonts/NotoSansMath-Regular.ttf", import.meta.url),
   );
-  const coverage = (path: string) => {
-    const font = openSync(path);
-    if (!("characterSet" in font))
-      throw new Error("Expected the bundled TrueType font.");
-    return new Set(font.characterSet);
-  };
-  const regularCoverage = coverage(regular),
-    boldCoverage = coverage(bold),
-    mathCoverage = coverage(math);
-  const primary = new Set(
-    [...regularCoverage].filter((code) => boldCoverage.has(code)),
+  const mono = fileURLToPath(
+    new URL("../assets/fonts/NotoSansMono-Regular.ttf", import.meta.url),
   );
   const svgs = packet.sheets.map((sheet) =>
     withPdfFontFallback(
       withPdfLabelClips(sheet.svg, sheet.number),
       sheet.number,
-      primary,
-      mathCoverage,
     ),
   );
   const doc = new PDFDocument({
@@ -231,6 +265,7 @@ export async function packetPdf(
     doc.registerFont("ThermiteRegular", regular);
     doc.registerFont("ThermiteBold", bold);
     doc.registerFont("ThermiteMath", math);
+    doc.registerFont("ThermiteMono", mono);
     const width = (packet.page.widthMm * 72) / 25.4,
       height = (packet.page.heightMm * 72) / 25.4;
     for (const [index, sheet] of packet.sheets.entries()) {
@@ -244,6 +279,10 @@ export async function packetPdf(
           if (family === "ThermiteMath") {
             options.fauxBold = isBold;
             return "ThermiteMath";
+          }
+          if (/(?:^|[,\s])monospace(?:$|[,\s])/u.test(family)) {
+            options.fauxBold = isBold;
+            return "ThermiteMono";
           }
           return isBold ? "ThermiteBold" : "ThermiteRegular";
         },

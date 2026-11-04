@@ -27,7 +27,8 @@ describe("printable connector I/O schedules", () => {
         const doc = parseHTML(svg).document;
         const printed = [...doc.querySelectorAll("text")]
           .map((n) => n.textContent)
-          .join(" ");
+          .join(" ")
+          .replace(/\s+/gu, " ");
         for (const label of [
           "X1",
           "X2",

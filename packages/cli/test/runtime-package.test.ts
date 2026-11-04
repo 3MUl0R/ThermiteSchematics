@@ -57,6 +57,8 @@ See node_modules/@thermite/cli/assets/fonts/OFL.txt and THIRD_PARTY_NOTICES.md.
     "third-party/sources.json": "{}",
     "third-party/ELK-SOURCE.md": "Source fixture",
     "node_modules/@thermite/cli/assets/fonts/OFL.txt": "OFL fixture",
+    "node_modules/@thermite/cli/assets/fonts/NotoSansMono-Regular.ttf":
+      "Monospace font fixture",
     "node_modules/@thermite/core-library/LICENSE": "Apache fixture",
     "node_modules/@thermite/core-library/NOTICE": "Notice fixture",
     "node_modules/@thermite/cli/package.json": json({
@@ -170,6 +172,17 @@ describe("public runtime package boundary", () => {
     value.manifest.target = "unknown-target";
     expect(() => verifyEntries(value.seal())).toThrow(
       /Invalid runtime manifest/,
+    );
+  });
+  it("requires the monospace font even when removed from the manifest", () => {
+    const value = fixture(),
+      path = "node_modules/@thermite/cli/assets/fonts/NotoSansMono-Regular.ttf";
+    value.entries.splice(
+      value.entries.findIndex((entry) => entry.path === path),
+      1,
+    );
+    expect(() => verifyEntries(value.seal())).toThrow(
+      `Missing runtime resource: ${path}`,
     );
   });
   it("accepts a complete inventory and rejects tampered or unlisted bytes", () => {

@@ -1,3 +1,4 @@
+import { measureText, wrapText } from "./text-metrics.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import { createQueryEngine } from "@thermite/query";
@@ -54,40 +55,9 @@ const text = (
   anchor = "start",
   bold = false,
 ) =>
-  `<text x="${n(x)}" y="${n(y)}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value)}</text>`;
-const width = (s: string) =>
-  [...s].reduce(
-    (sum, c) =>
-      sum +
-      (/[MW@%]/u.test(c)
-        ? 1
-        : /[ilI1 .,:;'|!]/u.test(c)
-          ? 0.4
-          : c.codePointAt(0)! > 127
-            ? 1.2
-            : 0.75) *
-        2.7,
-    0,
-  );
-function wrap(value: string, max: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of value.split(/\s+/u)) {
-    if (line && width(`${line} ${word}`) > max) {
-      lines.push(line);
-      line = "";
-    }
-    for (const char of (line ? " " : "") + word) {
-      if (width(line + char) > max) {
-        lines.push(line);
-        line = "";
-      }
-      line += char;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
+  `<text x="${n(x)}" y="${n(y)}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
+const width = (value: string) => measureText(value, 2.7).width;
+const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
 const record = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const selector = (v: unknown) =>
@@ -982,7 +952,16 @@ export async function prepareSignalLoopDrawing(
           ? (type.terminals.find((t) => t.key === p.terminal)?.description ??
             "Auxiliary feed")
           : "unused";
-        const lines = wrap(label, vertical ? 12 : node.width! - 12);
+        // Use the actual space between adjacent terminal lanes. A short word
+        // such as "unused" stays whole; only genuinely overlong tokens split.
+        const laneWidth =
+          Math.min(
+            ...list
+              .filter((q) => !q.assembly && q.x !== p.x)
+              .map((q) => Math.abs(q.x - p.x)),
+            2 * Math.min(p.x, node.width! - p.x),
+          ) - 2;
+        const lines = wrap(label, vertical ? laneWidth : node.width! - 12);
         if (lines.length > (vertical ? 6 : 2))
           throw new Error("Auxiliary feed legend is too long.");
         lines.forEach((line, i) =>

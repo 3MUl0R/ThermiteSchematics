@@ -76,3 +76,5 @@ export type {
   TopologyAppearance,
   PortIdentity,
 } from "./topology-coverage.js";
+
+export { describeCodePoint, supportsGlyph } from "./text-metrics.js";

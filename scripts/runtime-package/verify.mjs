@@ -47,6 +47,29 @@ export async function verifyRuntimeArchive(
   );
   const entries = await readSafeZipArchive(bytes);
   const manifest = verifyEntries(entries);
+  const metrics = entries.filter((entry) =>
+    /(?:^|\/)text-metrics-data\./u.test(entry.path),
+  );
+  assert.deepEqual(
+    metrics.map((entry) => entry.path).sort(),
+    [
+      "node_modules/@thermite/render/dist/text-metrics-data.d.ts",
+      "node_modules/@thermite/render/dist/text-metrics-data.js",
+    ],
+    "Ship compact generated data without duplicate source or maps",
+  );
+  assert(
+    metrics.reduce((bytes, entry) => bytes + entry.bytes.length, 0) <= 100000,
+    "Generated runtime metric data exceeds 100 KB",
+  );
+  assert(
+    !entries.some((entry) =>
+      /node_modules\/(?:dejavu-fonts-ttf|pdfjs-dist|playwright-core|@napi-rs\/canvas)\//u.test(
+        entry.path,
+      ),
+    ),
+    "Generator/raster dependencies must remain development-only",
+  );
   verifyArchiveIdentity(manifest, basename(archivePath), { allowPreview });
   assert.equal(
     manifest.target,
@@ -166,6 +189,11 @@ export async function verifyRuntimeArchive(
       const first = await readFile(output);
       if (extension === "pdf") {
         assert.equal(first.subarray(0, 5).toString(), "%PDF-");
+        assert.match(
+          first.toString("latin1"),
+          /NotoSansMono-Regular/,
+          "Embedded monospace for rooted view text",
+        );
         assert.match(
           first.toString("latin1"),
           /\/FontFile2\s+\d+\s+0\s+R/,

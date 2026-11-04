@@ -8,6 +8,8 @@ applicable license texts with distributions.
 
 `packages/cli/assets/fonts/` contains unmodified Noto Sans Regular, Noto Sans
 Bold, and Noto Sans Math Regular, Copyright 2018 The Noto Project Authors.
+Noto Sans Mono Regular (Copyright 2015 Google LLC) is also bundled, unmodified,
+from the pinned upstream [Noto Sans Mono path](https://github.com/notofonts/noto-fonts/blob/v20201206-phase3/hinted/ttf/NotoSansMono/NotoSansMono-Regular.ttf).
 They are distributed under the **SIL Open Font License 1.1**. The full copyright
 notice and license are in [OFL.txt](packages/cli/assets/fonts/OFL.txt); upstream
 URLs and SHA-256 hashes are in the [font README](packages/cli/assets/fonts/README.md).
