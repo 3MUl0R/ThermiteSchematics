@@ -1,3 +1,4 @@
+import { machineAssessmentDiagnostics } from "./validation-gate-expectations.mjs";
 // Reviewed example warning inventory. Do not refresh from engine output.
 // W903 = authored required connection omitted; W904 = declared partial model;
 // W905 = authored deferred work. Any addition, removal or changed message fails.
@@ -201,9 +202,18 @@ export const exampleDiagnostics = {
     ],
   },
   "machine-demo": {
-    classification: "clean",
-    rationale: "No diagnostics expected.",
-    diagnostics: [],
+    classification: "unassessed-rated-net",
+    rationale:
+      "I304 truthfully names the connected PLC commons without a potential; no new warning or skipped check.",
+    diagnostics: machineAssessmentDiagnostics.map(
+      ({ code, severity, file, jsonPointer, message }) => ({
+        code,
+        severity,
+        file,
+        jsonPointer,
+        message,
+      }),
+    ),
   },
   "motor-starter": {
     classification: "clean",

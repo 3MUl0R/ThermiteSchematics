@@ -347,7 +347,9 @@ describe("Machine documentation pilot", () => {
       "-o",
       csv,
     ]);
-    expect(JSON.parse(out.stderr).diagnostics).toEqual([]);
+    expect(JSON.parse(out.stderr).diagnostics).toMatchObject([
+      { code: "I304", severity: "info" },
+    ]);
     expect(await readFile(csv, "utf8")).toContain("I0.0");
     await exec(process.execPath, [
       cli,

@@ -112,7 +112,7 @@ an unconnected point as unused merely to clear the report.
 | W903 | Required connection missing or only a single-ended cable core attached. |
 | W904 | Component connection model is explicitly partial. |
 | W905 | Deferred work, or an unused review contradicts a requirement or connection. |
-| I001 | Unconnected or dangling point without a declared requirement or unused disposition. |
+| I001 | Unconnected or dangling point without a declared requirement or unused disposition. A terminal used only by channels explicitly marked spare in `io` already has a disposition; a common also used by a channel that is in use or not marked spare does not. |
 | I002 | Intentionally unused point, with its reason preserved. |
 | I003 | Component connection coverage has not been declared. |
 
@@ -139,3 +139,6 @@ Coverage declarations and review notes make those limits visible in the source.
 The executable [completeness fixture](../packages/cli/fixtures/completeness/source.json)
 demonstrates required, dangling, unused and deferred cases, including a port-only
 HMI. Its deliberately unfinished connections are diagnostic examples.
+
+See [validation coverage](validation.md) for the distinction between terminal
+ratings and net potentials, and for checks that could not run.

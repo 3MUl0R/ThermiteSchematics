@@ -1,7 +1,7 @@
 export type DiagnosticProducer = "code" | "parser" | "schema";
 
 export interface DiagnosticCatalogEntry {
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "info";
   producer: DiagnosticProducer;
   meaning: string;
 }
@@ -246,6 +246,24 @@ export const DIAGNOSTIC_CATALOG = {
     producer: "code",
     meaning:
       "A conflict-free net's positive nominal voltage differs from a connected terminal's positive nominal-voltage rating.",
+  },
+  W303: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "Connected terminals have conflicting comparable declared ratings on a net without potential voltage facts; no voltage is inferred.",
+  },
+  I304: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "Connected voltage-rated terminals lack voltage facts in potentials, leaving net voltage compatibility unassessed.",
+  },
+  I208: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "Validation could not be completed; the diagnostic names blocked or incomplete checks and affected nets or objects.",
   },
   W801: {
     severity: "warning",

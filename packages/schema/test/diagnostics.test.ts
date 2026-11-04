@@ -115,6 +115,9 @@ describe("diagnostic catalog", () => {
       "E300",
       "E301",
       "E302",
+      "W303",
+      "I304",
+      "I208",
       "W801",
       "W901",
       "W902",
@@ -129,7 +132,7 @@ describe("diagnostic catalog", () => {
       DIAGNOSTIC_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CODES.length - 7);
+    ).toHaveLength(DIAGNOSTIC_CODES.length - 10);
   });
 
   it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, and W801", async () => {
@@ -215,8 +218,9 @@ describe("diagnostic catalog", () => {
       const expected = JSON.parse(
         await readFile(join(packageRoot, relativeFixture), "utf8"),
       ) as Diagnostic[];
-      expect(expected, code).toHaveLength(1);
-      const diagnostic = expected[0]!;
+      const electrical = expected.filter((d) => d.code !== "I208");
+      expect(electrical, code).toHaveLength(1);
+      const diagnostic = electrical[0]!;
       expect(diagnostic.code, code).toBe(code);
       expect(diagnostic.severity, code).toBe(DIAGNOSTIC_CATALOG[code].severity);
       expect(typeof diagnostic.message, code).toBe("string");

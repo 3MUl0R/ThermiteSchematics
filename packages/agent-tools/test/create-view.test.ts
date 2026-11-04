@@ -1,3 +1,4 @@
+import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -269,6 +270,7 @@ describe("D2/D8 orchestration and purity", () => {
           column: 108,
           jsonPointer: "/libraries/0/name",
         },
+        gates.unavailable,
         {
           code: "E032",
           severity: "error",

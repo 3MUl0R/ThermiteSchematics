@@ -1,3 +1,4 @@
+import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import {
   cp,
@@ -16,7 +17,13 @@ import { fileURLToPath } from "node:url";
 import type { Diagnostic } from "@thermite/schema";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { runCli, runCompile, runLock, runValidate } from "../src/index.js";
+import {
+  formatHumanDiagnostics,
+  runCli,
+  runCompile,
+  runLock,
+  runValidate,
+} from "../src/index.js";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -183,6 +190,7 @@ describe("thermite validate loader", () => {
         column: 1,
         jsonPointer: "",
       },
+      { code: "I208" },
     ]);
   });
 
@@ -194,7 +202,7 @@ describe("thermite validate loader", () => {
     const result = await runValidate(fixture(name));
 
     expect(result.exitCode).toBe(2);
-    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics).toHaveLength(2);
     expect(result.diagnostics[0]).toMatchObject({
       code: "E001",
       line: 1,
@@ -232,9 +240,9 @@ describe("thermite validate loader", () => {
       result.diagnostics.filter((diagnostic) => diagnostic.code === code);
 
     expect(result.exitCode).toBe(1);
-    expect(result.diagnostics.map(diagnosticShape)).toEqual(
-      await expectedDiagnostics("library issues"),
-    );
+    expect(
+      result.diagnostics.filter((d) => d.code !== "I208").map(diagnosticShape),
+    ).toEqual(await expectedDiagnostics("library issues"));
     expect(byCode("E027")).toHaveLength(2);
     expect(byCode("E027")[0]).toMatchObject({
       file: "../problem libraries/mismatched/types/01-first.json",
@@ -338,16 +346,16 @@ describe("thermite validate loader", () => {
 
     expect(result.output).toContain("\n\nsystem.json:");
     expect(result.output).not.toContain("\\");
-    expect(nonemptyLines.every((line) => /:\d+:\d+ E\d{3} /u.test(line))).toBe(
-      true,
-    );
+    expect(
+      nonemptyLines.every((line) => /:\d+:\d+ [EI]\d{3} /u.test(line)),
+    ).toBe(true);
     expect(
       result.diagnostics.every((diagnostic) => !diagnostic.file.includes("\\")),
     ).toBe(true);
   });
 
   it("renders the exact E032 rows through human and JSON CLI modes", async () => {
-    const diagnostics = [
+    const diagnostics = withSkippedChecks("project loading/structural", [
       {
         code: "E032",
         severity: "error",
@@ -367,16 +375,14 @@ describe("thermite validate loader", () => {
         column: 162,
         jsonPointer: "/libraries/1/version",
       },
-    ];
+    ]);
     const [human, json] = await Promise.all([
       runDirectCli(["validate", unavailableShippedLibraryRoot]),
       runDirectCli(["validate", unavailableShippedLibraryRoot, "--json"]),
     ]);
     expect(human).toEqual({
       exitCode: 1,
-      stdout:
-        'system.json:1:108 E032 Shipped library "unknown" at version "9.9.9" is unavailable.\n' +
-        'system.json:1:162 E032 Shipped library "core" does not provide version "9.9.9"; available version is "0.1.0".\n',
+      stdout: formatHumanDiagnostics(diagnostics) + "\n",
       stderr: "",
     });
     expect(json).toEqual({
@@ -472,7 +478,10 @@ describe("thermite lock", () => {
 
     expect(validation).toMatchObject({
       exitCode: 1,
-      diagnostics: [{ code: "E105", jsonPointer: "/libraries" }],
+      diagnostics: [
+        { code: "E105", jsonPointer: "/libraries" },
+        { code: "I208" },
+      ],
     });
     expect(missing).toMatchObject({
       exitCode: 1,
@@ -613,7 +622,10 @@ describe("thermite compile", () => {
       expect(exitCode).toBe(1);
       expect(stdout).toBe("");
       if (json) {
-        expect(JSON.parse(stderr)).toMatchObject([{ code: "E105" }]);
+        expect(JSON.parse(stderr)).toMatchObject([
+          { code: "E105" },
+          { code: "I208" },
+        ]);
       } else {
         expect(stderr).toContain("E105");
         expect(stderr).toContain("system.json:");
@@ -635,7 +647,10 @@ describe("thermite compile", () => {
 
     expect(replace).toMatchObject({ exitCode: 1, stdout: "", written: false });
     expect(create).toMatchObject({ exitCode: 1, stdout: "", written: false });
-    expect(JSON.parse(create.stderr)).toMatchObject([{ code: "E105" }]);
+    expect(JSON.parse(create.stderr)).toMatchObject([
+      { code: "E105" },
+      { code: "I208" },
+    ]);
     expect(await readFile(existing, "utf8")).toBe("preserve me\n");
     await expect(readFile(absent)).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -722,7 +737,7 @@ describe("full-pipeline thermite validate", () => {
     const json = await runValidate(project, { json: true });
     expect(human).toMatchObject({
       exitCode: 1,
-      diagnostics: [{ code: "E103" }],
+      diagnostics: [{ code: "E103" }, { code: "I208" }],
     });
     expect(human.output).toContain("E103");
     expect(JSON.parse(json.output)).toEqual(json.diagnostics);
@@ -746,11 +761,11 @@ describe("M3 rule-aware CLI integration", () => {
         runDirectCli(["validate", project, "--json"]),
       ]);
 
-      expect(expected).toHaveLength(1);
+      expect(expected.filter((d) => d.severity === "error")).toHaveLength(1);
       expect(expected[0]).toMatchObject({ code, severity: "error" });
       expect(human).toEqual({
         exitCode: 1,
-        stdout: `${expected[0]!.file}:${expected[0]!.line}:${expected[0]!.column} ${code} ${expected[0]!.message}\n`,
+        stdout: formatHumanDiagnostics(expected) + "\n",
         stderr: "",
       });
       expect(json.exitCode).toBe(1);

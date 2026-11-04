@@ -4,7 +4,7 @@ import { join, basename } from "node:path";
 import { compileLoadedProject, loadProject, engineRoot } from "./engine.mjs";
 import { corpus, probe, temporary, readJson } from "./support.mjs";
 import { synthetic } from "./generate.mjs";
-import { mutate } from "./validation.mjs";
+import { mutate, assertBaselineDiagnostics } from "./validation.mjs";
 import { exampleDiagnostics } from "./example-diagnostics.mjs";
 import { assertLocations } from "./diagnostic-policy.mjs";
 
@@ -232,7 +232,7 @@ export async function oracle() {
         temporary(async (project) => {
           await mutate(project, baseline);
           const result = await compareProject(project);
-          assert.deepEqual(result.diagnostics, []);
+          assertBaselineDiagnostics(baseline.id, result.diagnostics);
           return result;
         }),
       ),

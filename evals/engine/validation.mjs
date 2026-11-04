@@ -1,3 +1,8 @@
+import {
+  mutationGateDiagnostics,
+  baselineAssessmentDiagnostics,
+  ratingAssessmentDiagnostics,
+} from "./validation-gate-expectations.mjs";
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,7 +12,19 @@ import { assertLocations } from "./diagnostic-policy.mjs";
 import { corpus, readJson, temporary, json, probe } from "./support.mjs";
 
 export async function mutationCases() {
-  return (await readJson(join(corpus, "mutations.json"))).cases;
+  const cases = (await readJson(join(corpus, "mutations.json"))).cases;
+  for (const id of Object.keys(mutationGateDiagnostics))
+    assert(
+      cases.some((c) => c.id === id),
+      `Unknown pinned gate case ${id}`,
+    );
+  return cases.map((scenario) => ({
+    ...scenario,
+    expected: [
+      ...scenario.expected,
+      ...(mutationGateDiagnostics[scenario.id] ?? []),
+    ],
+  }));
 }
 function at(value, pointer) {
   return pointer
@@ -54,7 +71,21 @@ export async function mutate(project, scenario) {
   }
 }
 
+export function assertBaselineDiagnostics(id, diagnostics) {
+  assertLocations(diagnostics);
+  assert.deepEqual(
+    diagnostics,
+    baselineAssessmentDiagnostics[id] ?? [],
+    "Unexpected baseline diagnostic",
+  );
+}
+
 export function assertDiagnostics(diagnostics, scenario) {
+  assert.deepEqual(
+    diagnostics.filter((d) => d.code === "I208"),
+    mutationGateDiagnostics[scenario.id] ?? [],
+    `Wrong gate report for ${scenario.id}`,
+  );
   assert(
     diagnostics.every((d) =>
       scenario.expected.some((e) =>
@@ -120,17 +151,13 @@ export function evaluateRatingAssessment(id, result, evidence) {
     [],
     "No potential may cover the conflicting net",
   );
-  assert(
-    result.diagnostics.every((d) =>
-      /rating|voltage|unassessed/i.test(d.message),
-    ),
-    "Unrelated diagnostic in assessment-gap fixture",
-  );
-  return assess(
-    id,
-    { ...evidence, netId: net.id, ratingConflict },
-    result.diagnostics.length > 0,
-  );
+  assert.deepEqual(result.diagnostics, ratingAssessmentDiagnostics);
+  const warning = result.diagnostics.find((d) => d.code === "W303");
+  assert.equal(warning.severity, "warning");
+  for (const terminal of ["N1.a", "N1.b"])
+    assert(warning.message.includes(terminal), `W303 must name ${terminal}`);
+  assert(warning.message.includes(net.id), "W303 must name the assessed net");
+  return assess(id, { ...evidence, netId: net.id, ratingConflict }, true);
 }
 
 export async function validation() {
@@ -144,12 +171,8 @@ export async function validation() {
           await mutate(project, baseline);
           const result = await compileProject(project);
           assert(result.ok);
-          assert.deepEqual(
-            result.diagnostics,
-            [],
-            "Unexpected baseline diagnostic",
-          );
-          return { diagnostics: [] };
+          assertBaselineDiagnostics(baseline.id, result.diagnostics);
+          return { diagnostics: result.diagnostics };
         }),
       ),
     );

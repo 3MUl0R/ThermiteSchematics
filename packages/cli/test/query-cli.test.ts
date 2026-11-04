@@ -153,6 +153,11 @@ async function expectCompilerStopsQuery(
   diagnostics: readonly Diagnostic[],
   exitCode: 1 | 2,
 ): Promise<void> {
+  const compiled = await compileProject(project);
+  expect(compiled.diagnostics.filter((d) => d.code !== "I208")).toEqual(
+    diagnostics.filter((d) => d.code !== "I208"),
+  );
+  diagnostics = compiled.diagnostics;
   const [human, json] = await Promise.all([
     invoke(["inspect", "__QUERY_MUST_NOT_EXECUTE__", "--project", project]),
     invoke([

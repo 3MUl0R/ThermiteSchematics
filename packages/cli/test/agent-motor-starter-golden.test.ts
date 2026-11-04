@@ -1,3 +1,4 @@
+import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
@@ -730,7 +731,7 @@ async function runWorkflow(
   expect(typeOnlyReport).toEqual({
     format: "agent-tool-report/0.1",
     tool: "apply-source-patch",
-    diagnostics: [
+    diagnostics: withSkippedChecks("resolution", [
       {
         code: "E102",
         severity: "error",
@@ -773,7 +774,7 @@ async function runWorkflow(
         allowed: ["1", "3", "4"],
         allowedCount: 3,
       },
-    ],
+    ]),
     error: null,
   });
   expectGolden("type-only-patch", typeOnlyPatch, 1);

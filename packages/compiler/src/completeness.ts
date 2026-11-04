@@ -248,6 +248,13 @@ export function analyzeCompleteness(
       });
     }
     for (const entry of entries) {
+      const channels =
+        entry.kind === "terminal"
+          ? type.functions.filter(
+              (fn) =>
+                fn.kind === "channel" && fn.terminalKeys.includes(entry.key),
+            )
+          : [];
       const name = `${device.designation}.${entry.key}`,
         review = entry.review;
       if (entry.required && entry.connection !== "connected")
@@ -271,7 +278,20 @@ export function analyzeCompleteness(
             `${name} is intentionally unused: ${review.reason}`,
             entry,
           );
-      } else if (!entry.required && entry.connection !== "connected")
+      } else if (
+        !entry.required &&
+        entry.connection !== "connected" &&
+        !(
+          // An unused disposition applies only when every channel using the
+          // terminal is explicitly spare; required connections and explicit
+          // reviews retain their findings. A spare may have an unfinished core;
+          // its dangling state remains in the inventory, not a false claim that
+          // the author supplied no unused disposition.
+          entry.kind === "terminal" &&
+          channels.length > 0 &&
+          channels.every((fn) => device.io?.channels[fn.key]?.usage === "spare")
+        )
+      )
         add(
           "I001",
           `${name} ${entry.connection === "dangling" ? "has an unfinished cable core" : "has no connection"}; no requirement or unused disposition is declared.`,

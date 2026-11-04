@@ -2212,7 +2212,7 @@ describe("M5 Task 8 subprocess boundaries", () => {
       expect(compilerFailure.exitCode).toBe(1);
       expect(compilerFailure.stdout).toBe("");
       expect(JSON.parse(compilerFailure.stderr)).toMatchObject({
-        diagnostics: [{ code: "E200" }],
+        diagnostics: [{ code: "E200" }, { code: "I208" }],
         error: null,
       });
       expect(endOfOptions.exitCode).toBe(1);

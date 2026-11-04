@@ -10,7 +10,7 @@ export interface RelatedDiagnosticLocation {
 
 export interface Diagnostic {
   code: DiagnosticCode;
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "info";
   message: string;
   file: string;
   line: number;

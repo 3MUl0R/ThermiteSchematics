@@ -25,7 +25,7 @@ Dirty runs are previews. Scoring still requires a pinned commit and green check.
 | Evaluation    | Assertions and scope                                                                                                                                                                                                                                                                                         | Scorecard                          | Run location                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------- |
 | oracle        | Independent authored-document union-find versus compiler terminal partitions and potential attachment. All 13 examples, valid fixed fixture, generated 300/1,500 graph and all 12 clean baseline variants. Unknown object kinds fail loudly. Example diagnostics must match a reviewed classification table. | 4 Validation                       | `check` and checkpoint runner |
-| P-validation  | 56 mutations across 29 classes with exact code, severity, file and pointer, including declared secondary diagnostics. Twelve baselines require zero diagnostics. No guessed future code for an unassessed rating obligation.                                                                                 | 4 Validation                       | Checkpoint runner             |
+| P-validation  | 56 mutations across 29 classes with exact code, severity, file and pointer, including declared secondary diagnostics. Eleven baselines require zero diagnostics; without-potentials pins one I304 and its nets. Rating-only mutation requires W303 naming both declared-rated terminals.                     | 4 Validation                       | Checkpoint runner             |
 | P-diag        | 57 scenarios, each with an explicit actionability predicate and provenance. Hard location, stream, exit, code, pointer, loading and relock assertions precede gap assessment. Reports actionable/total and percentage.                                                                                       | 2 Tool contract; 1/9 recovery      | Checkpoint runner             |
 | P-contract    | Six-tool success/authored-error/infrastructure-error matrix; serial guards, no-op/dry-run/stale/presentation; staged rejection; rollback outside sentinel; held/abandoned reservations and owner state; separate-process conflicts. All WS-C probes are required ordinary passes.                            | 2 Tool contract; 7 defect evidence | Checkpoint runner             |
 | P-determinism | Two sets of eight fresh processes: authored error diagnostics and machine-demo compile plus authored 12-view packet. Compares exact diagnostic/IR/packet hashes across 2 cwds × 2 TZs × 2 effective JS locales.                                                                                              | 4 G4.5 and determinism anchors     | Checkpoint runner             |
@@ -52,14 +52,16 @@ observed signature matches the registry: diagnostic code, severity, file,
 pointer, exact old message shape and exit, or the pinned absent-diagnostic state.
 Changed locations, extra diagnostics, failed `loaded.ok`, dry-run preconditions,
 relocking, malformed streams and infrastructure errors never become `xfail`.
-The V1 entry (formerly T3) pins `ok: true`, exit 0 and zero diagnostics **while**
-N1.a (24 VDC) and N1.b (48 VAC) share one derived net with no covering potential.
-Hard fixture checks precede assessment, and evidence records the net ID, its
-terminals, their declared ratings and potential UIDs; the marker also requires
-that exact conflict. Removing the conflict fails the fixture. A future warning
-on the intact fixture becomes xpass and forces marker retirement; no future
-code or pointer is prescribed by the marker. P1 is merged: unsupported profiles must now emit
-W111 at `library/types/node.json` `/types/0/symbol` as an ordinary required pass.
+V1 is integrated: the intact rating-only fixture must emit W303 naming N1.a
+(24 VDC), N1.b (48 VAC), and their shared derived net without any potential.
+Hard fixture checks and exact diagnostic assertions precede the positive
+assessment. The owner-V1 absence marker is retired. Location policies accept
+`info`; `validation-gate-expectations.mjs` pins complete I208 reports for each of
+51 specific mutation cases, including gate, rules, objects and locations.
+Unlisted cases admit no I208. The `without-potentials` baseline pins one I304
+with its exact net membership and ID; all other baselines remain diagnostic-free.
+Machine-demo's example inventory likewise accepts its reviewed I304. P1's
+unsupported-profile probe still requires W111 at its original exact site.
 
 A repaired predicate with an existing marker is `xpass`: **strict checkpoints
 exit 1 and say `stale expectation: retire marker`**. Unexpected failures and
@@ -71,8 +73,7 @@ not a way to make a scored checkpoint pass.
 
 Initial and dated WS-C/T2/P1 integration results are in
 [engine/BASELINE.md](engine/BASELINE.md). WS-C, T2 and P1 have landed: their probes
-have **no open gap markers**. Only the V1 ratings-without-potential absence
-signature remains.
+have **no open gap markers**. V1 now also has no open marker.
 
 E103 alternatives are checked against the true catalog of the authored instance's
 kind. At 50 or fewer IDs, structured `allowed` must be the complete set and

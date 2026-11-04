@@ -1,3 +1,8 @@
+import {
+  mutationGateDiagnostics,
+  baselineAssessmentDiagnostics,
+} from "./validation-gate-expectations.mjs";
+import { assertLocations } from "./diagnostic-policy.mjs";
 import { describe, expect, it } from "vitest";
 import {
   authoredPartition,
@@ -16,6 +21,8 @@ import {
   mutationCases,
   mutate,
   evaluateRatingAssessment,
+  assertDiagnostics,
+  assertBaselineDiagnostics,
 } from "./validation.mjs";
 import { evaluateDiagnostic } from "./diagnostics.mjs";
 import { assess, exitCode } from "./assessment.mjs";
@@ -59,6 +66,63 @@ async function typeFixture(id, action) {
 }
 
 describe("fixed evaluation corpus v1", () => {
+  it("pins every intended gate per case and rejects omissions, changed gates and injected info", async () => {
+    const cases = await mutationCases();
+    expect(Object.keys(mutationGateDiagnostics)).toHaveLength(51);
+    for (const scenario of cases) {
+      expect(
+        () => assertDiagnostics(scenario.expected, scenario),
+        scenario.id,
+      ).not.toThrow();
+      const gates = mutationGateDiagnostics[scenario.id];
+      if (!gates) continue;
+      expect(() =>
+        assertDiagnostics(
+          scenario.expected.filter((d) => d.code !== "I208"),
+          scenario,
+        ),
+      ).toThrow();
+      expect(() =>
+        assertDiagnostics(
+          scenario.expected.map((d) =>
+            d.code === "I208"
+              ? { ...d, message: d.message.replace("gate", "invented gate") }
+              : d,
+          ),
+          scenario,
+        ),
+      ).toThrow();
+      expect(() =>
+        assertDiagnostics([...scenario.expected, ...gates], scenario),
+      ).toThrow();
+    }
+    const unlisted = cases.find((c) => !mutationGateDiagnostics[c.id]);
+    expect(() =>
+      assertDiagnostics(
+        [...unlisted.expected, mutationGateDiagnostics.exclusive[0]],
+        unlisted,
+      ),
+    ).toThrow();
+  });
+  it("accepts info locations and exactly the reviewed unassessed baseline nets", () => {
+    const ds = baselineAssessmentDiagnostics["without-potentials"];
+    expect(() => assertLocations(ds)).not.toThrow();
+    expect(() =>
+      assertBaselineDiagnostics("without-potentials", ds),
+    ).not.toThrow();
+    expect(() => assertBaselineDiagnostics("authored-topology", ds)).toThrow();
+    expect(() => assertBaselineDiagnostics("without-potentials", [])).toThrow();
+    expect(() =>
+      assertBaselineDiagnostics(
+        "without-potentials",
+        ds.map((d) => ({ ...d, message: "A different net is unassessed." })),
+      ),
+    ).toThrow();
+    expect(() =>
+      assertLocations(ds.map((d) => ({ ...d, severity: "notice" }))),
+    ).toThrow();
+  });
+
   it("hard-fails changed rating fixtures before the V1 assessment boundary", async () => {
     const id = "mutation/ratings-without-potential";
     const evaluate = (result) =>
@@ -72,19 +136,27 @@ describe("fixed evaluation corpus v1", () => {
     await temporary(async (project) => {
       const result = await compileProject(project);
       const row = await evaluate(result);
-      expect(row.status).toBe("xfail");
+      expect(row.status).toBe("pass");
       expect(row.evidence.ratingConflict.net).toEqual(["N1.a", "N1.b"]);
       expect(row.evidence.netId).toBe(
         result.ir.nets.find((n) => n.terminalIds.length === 2).id,
       );
-      const warning = {
-        code: "W303",
-        severity: "warning",
-        message: "Conflicting declared ratings without a potential",
-      };
-      const repaired = await evaluate({ ...result, diagnostics: [warning] });
-      expect(repaired.status).toBe("xpass");
-      expect(exitCode({ validation: [repaired] })).toBe(1);
+      for (const brokenDiagnostics of [
+        result.diagnostics.filter((d) => d.code !== "W303"),
+        result.diagnostics.map((d) =>
+          d.code === "W303"
+            ? { ...d, message: "Ratings disagree on an unnamed net." }
+            : d,
+        ),
+        result.diagnostics.map((d) =>
+          d.code === "W303" ? { ...d, severity: "info" } : d,
+        ),
+      ])
+        expect(
+          (await evaluate({ ...result, diagnostics: brokenDiagnostics }))
+            .status,
+        ).toBe("fail");
+      expect(exitCode({ validation: [row] })).toBe(0);
       // Cross-check the IR's potential view as well as net.potentialUids.
       const inconsistent = structuredClone(result);
       inconsistent.ir.potentials.push({
@@ -157,56 +229,23 @@ describe("fixed evaluation corpus v1", () => {
     ])
       expect(() => assertSyntheticDiagnostics(diagnostics)).toThrow();
   });
-  it("pins V1 silence to the conflicting unassessed net and flags its future warning as stale", async () => {
+  it("retires the V1 marker without weakening the required positive outcome", () => {
     const id = "mutation/ratings-without-potential";
-    const evidence = {
-      ok: true,
-      exit: 0,
-      diagnostics: [],
-      ratingConflict: {
-        net: ["N1.a", "N1.b"],
-        ratings: {
-          "N1.a": { nominal_voltage: 24, voltage_type: "DC" },
-          "N1.b": { nominal_voltage: 48, voltage_type: "AC" },
-        },
-        potentialUids: [],
-      },
-    };
-    expect(assess(id, evidence, false).status).toBe("xfail");
-    for (const change of [
-      (e) => delete e.ratingConflict,
-      (e) => {
-        e.ratingConflict.net = ["N1.a"];
-      },
-      (e) => {
-        e.ratingConflict.ratings["N1.b"] = e.ratingConflict.ratings["N1.a"];
-      },
-      (e) => {
-        e.ratingConflict.potentialUids = ["a-declared-potential"];
-      },
-    ]) {
-      const broken = structuredClone(evidence);
-      change(broken);
-      const row = assess(id, broken, false);
-      expect(row.status).toBe("fail");
-      expect(exitCode({ validation: [row] })).toBe(1);
-    }
+    expect(expectations).not.toHaveProperty(id);
+    expect(
+      assess(id, { ok: true, exit: 0, diagnostics: [] }, false).status,
+    ).toBe("fail");
     const repaired = assess(
       id,
       {
-        ...evidence,
-        diagnostics: [
-          {
-            code: "W303",
-            severity: "warning",
-            message: "Conflicting declared ratings without a potential",
-          },
-        ],
+        ok: true,
+        exit: 0,
+        diagnostics: [{ code: "W303", severity: "warning" }],
       },
       true,
     );
-    expect(repaired.status).toBe("xpass");
-    expect(exitCode({ validation: [repaired] })).toBe(1);
+    expect(repaired.status).toBe("pass");
+    expect(exitCode({ validation: [repaired] })).toBe(0);
   });
   it("fails unrelated breakage under a registered gap and rejects stale expectations", async () => {
     const scenario = (await mutationCases()).find((s) => s.id === "terminal-0");
@@ -224,7 +263,12 @@ describe("fixed evaluation corpus v1", () => {
       probe("diag/terminal-0", () =>
         evaluateDiagnostic(
           "diag/terminal-0",
-          { diagnostics: [d] },
+          {
+            diagnostics: [
+              d,
+              ...scenario.expected.filter((e) => e.code === "I208"),
+            ],
+          },
           scenario,
           undefined,
           1,

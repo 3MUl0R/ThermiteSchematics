@@ -896,7 +896,11 @@ describe("project loader", () => {
     );
     const result = await compileProject(root);
 
-    expect(result).toEqual({
+    expect(result.diagnostics.filter((d) => d.code === "I208")).toHaveLength(1);
+    expect({
+      ...result,
+      diagnostics: result.diagnostics.filter((d) => d.code !== "I208"),
+    }).toEqual({
       ok: false,
       diagnostics: [
         {

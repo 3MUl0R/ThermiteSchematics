@@ -105,6 +105,9 @@ async function loadSchemas() {
   const expectedFileNames = [
     ...roots.map(({ schema }) => schema),
     "common.schema.json",
+    "diagnostic.schema.json",
+    "agent-tool-result.schema.json",
+    "agent-tool-report.schema.json",
   ].sort();
 
   if (JSON.stringify(fileNames) !== JSON.stringify(expectedFileNames)) {
