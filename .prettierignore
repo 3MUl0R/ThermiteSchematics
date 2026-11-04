@@ -18,6 +18,7 @@ packages/cli/test/goldens/
 
 # Independently versioned machine projects
 /projects/
+/evals/out/
 
 # Local release verification scratch
 .verification-work/

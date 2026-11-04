@@ -316,6 +316,9 @@ describe("public runtime package boundary", () => {
     for (const path of [
       ".env",
       "projects/customer.json",
+      "evals/README.md",
+      "evals/corpus/topology/system.json",
+      "evals/out/checkpoint/summary.json",
       "node_modules/@thermite/cli/dist/.tsbuildinfo",
       "node_modules/@thermite/cli/dist/tsconfig.tsbuildinfo",
       "node_modules/sample/.env.local",

@@ -59,3 +59,6 @@ docs/planning/
 # it must stay out of this repository. Tracked here rather than in
 # .git/info/exclude so the rule survives a fresh clone.
 /projects/
+
+# Evaluation transcripts, timings and checkpoint artifacts are local evidence.
+/evals/out/
