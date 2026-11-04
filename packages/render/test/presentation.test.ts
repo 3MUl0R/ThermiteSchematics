@@ -166,6 +166,21 @@ function symbol(
 }
 
 describe("presentation transform", () => {
+  it("reserves space for a printed fact longer than its aggregate key", () => {
+    const fixture = pnpAggregateFixture(coreIr),
+      mappings = mutableCoreMappings();
+    const mapping = mappings.find((m) => m.typeId === "core:prox-pnp-3wire")!;
+    mapping.aggregates![0]!.key = "p";
+    const { graph } = presentation(fixture.ir, fixture.selected, mappings);
+    const node = graph.nodes.find(
+      (n) => n.kind === "symbol" && n.symbolId === "ais:switch-sensor-pnp",
+    )!;
+    if (node.kind !== "symbol") throw new Error("PNP symbol missing");
+    const caption = node.labels.find((l) => l.role === "aggregate")!;
+    expect(caption.printableText).toBe("PNP");
+    expect(caption.width).toBeGreaterThanOrEqual(6 + 3 * 6.2);
+    validatePresentationGraph(fixture.ir, fixture.selected, graph, mappings);
+  });
   it("presents all four cable lanes with exact canonical text provenance", () => {
     const selected = intentSelection(coreIr, {
       format: "schematic-view-request/0.2",

@@ -772,7 +772,14 @@ async function drawingDraftsCandidate(
       "unprintable-layout",
       "This view cannot be split without cutting a device or label at readable print size. Use a larger page, change flow, or select a narrower view.",
     );
-  const emitted = emitSchematicSvg(graph, layout, title, undefined, true);
+  const emitted = emitSchematicSvg(
+    graph,
+    layout,
+    title,
+    undefined,
+    true,
+    scale,
+  );
   if (!emitted.ok) return emitted;
   const inner = emitted.value
     .replace(/^<\?xml[^>]*>\s*/, "")

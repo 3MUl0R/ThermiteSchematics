@@ -1,3 +1,4 @@
+import { sourceEnclosure } from "./printable-policy.js";
 import { validateSymbolCatalog } from "./validate.js";
 import type {
   SymbolDefinition,
@@ -133,7 +134,11 @@ const CATALOG_DEFINITIONS = [
       port("PE", "east", 7 / 8, 3),
     ],
     [
-      line(8, 12, 8, 84, "body"),
+      ...sourceEnclosure(
+        { x: 2, y: 1, width: 28, height: 94 },
+        [12, 36, 60, 84].map((at) => ({ side: "east", at })),
+        3,
+      ),
       line(8, 12, 11, 12, "body"),
       circle(14, 12, 3, "operator"),
       line(17, 12, 36, 12, "body"),
@@ -154,7 +159,11 @@ const CATALOG_DEFINITIONS = [
     64,
     [port("positive", "east", 1 / 8, 0), port("return", "east", 7 / 8, 1)],
     [
-      line(8, 4, 8, 60, "body"),
+      ...sourceEnclosure(
+        { x: 2, y: 1, width: 28, height: 62 },
+        [8, 56].map((at) => ({ side: "east", at })),
+        3,
+      ),
       line(8, 8, 36, 8, "body"),
       line(8, 56, 36, 56, "body"),
       line(13, 8, 21, 8, "annotation"),

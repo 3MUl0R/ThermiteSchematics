@@ -296,7 +296,7 @@ describe("D3 original symbol catalog", () => {
     ]);
   });
 
-  it("freezes every B1 DC source/load primitive at the exact 64-high anchors", () => {
+  it("keeps B1 DC anchors with detached source enclosure strokes", () => {
     expect(
       SYMBOL_CATALOG.filter(
         ({ id }) => id === "ais:power-source-dc" || id === "ais:dc-load",
@@ -313,9 +313,39 @@ describe("D3 original symbol catalog", () => {
         primitives: [
           {
             kind: "line",
-            from: { x: 8, y: 4 },
-            to: { x: 8, y: 60 },
-            style: "body",
+            from: { x: 2, y: 1 },
+            to: { x: 2, y: 63 },
+            style: "enclosure",
+          },
+          {
+            kind: "line",
+            from: { x: 30, y: 1 },
+            to: { x: 30, y: 5 },
+            style: "enclosure",
+          },
+          {
+            kind: "line",
+            from: { x: 30, y: 11 },
+            to: { x: 30, y: 53 },
+            style: "enclosure",
+          },
+          {
+            kind: "line",
+            from: { x: 30, y: 59 },
+            to: { x: 30, y: 63 },
+            style: "enclosure",
+          },
+          {
+            kind: "line",
+            from: { x: 2, y: 1 },
+            to: { x: 30, y: 1 },
+            style: "enclosure",
+          },
+          {
+            kind: "line",
+            from: { x: 2, y: 63 },
+            to: { x: 30, y: 63 },
+            style: "enclosure",
           },
           {
             kind: "line",

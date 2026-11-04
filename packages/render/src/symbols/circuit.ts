@@ -1,4 +1,9 @@
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
+import {
+  PRINTABLE_SYMBOL_POLICY,
+  sourceEnclosure,
+  sourceEnclosureInk,
+} from "./printable-policy.js";
 import { escapeXmlText as xml } from "../svg/escape.js";
 
 /** Closed, original circuit marks. Profiles never grant electrical continuity. */
@@ -477,7 +482,7 @@ const n = (v: number) => String(Number(v.toFixed(3)));
 
 /** Fixed 12 mm catalog mark; labels and terminals are composed separately. */
 export function emitCircuitMark(mark: CircuitMark, vertical = false): string {
-  return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width=".4" fill="none"${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${MARKS[
+  return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${MARKS[
     mark
   ]
     .map((p) => {
@@ -497,8 +502,48 @@ export function emitCircuitMark(mark: CircuitMark, vertical = false): string {
     .join("")}</g>`;
 }
 
-export function circuitBlock(width: number, height: number): string {
-  return `<rect width="${n(width)}" height="${n(height)}" fill="white" stroke="#17212b" stroke-width=".4"/>`;
+export type CircuitSide = "WEST" | "EAST" | "NORTH" | "SOUTH";
+const SYMBOL_SIDE = {
+  WEST: "west",
+  EAST: "east",
+  NORTH: "north",
+  SOUTH: "south",
+} as const;
+
+export function circuitBlock(
+  width: number,
+  height: number,
+  sourcePins?: readonly { x: number; y: number; side: CircuitSide }[],
+  onlySources = true,
+): string {
+  if (sourcePins?.length) {
+    const ink = sourceEnclosureInk();
+    const outline = sourceEnclosure(
+      { x: 0, y: 0, width, height },
+      sourcePins.map((p) => ({
+        side: SYMBOL_SIDE[p.side],
+        at: p.side === "WEST" || p.side === "EAST" ? p.y : p.x,
+      })),
+      1.5,
+    );
+    const lines = outline
+      .map((p) => {
+        const side =
+          p.from.x === p.to.x
+            ? p.from.x === 0
+              ? "WEST"
+              : "EAST"
+            : p.from.y === 0
+              ? "NORTH"
+              : "SOUTH";
+        const isolated =
+          onlySources || sourcePins.some((pin) => pin.side === side);
+        return `<line x1="${n(p.from.x)}" y1="${n(p.from.y)}" x2="${n(p.to.x)}" y2="${n(p.to.y)}" stroke="${ink.color}" stroke-width="${n(isolated ? ink.strokeWidth : PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}"${isolated ? ` stroke-dasharray="${ink.dash}"` : ""}/>`;
+      })
+      .join("");
+    return `<g data-source-enclosure="true" fill="none"><rect width="${n(width)}" height="${n(height)}" fill="white" stroke="none"/>${lines}</g>`;
+  }
+  return `<rect width="${n(width)}" height="${n(height)}" fill="white" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}"/>`;
 }
 
 export function circuitTerminal(
@@ -519,7 +564,7 @@ export function circuitMotor(
   const cx = width / 2,
     cy = top + span / 2,
     r = Math.min(width / 2 - 2, Math.max(5, span / 2 - 2));
-  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width=".4" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portYs
+  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portYs
     .map((y) => {
       const dy = Math.max(-r, Math.min(r, y - cy)),
         x = cx - Math.sqrt(r * r - dy * dy);
@@ -537,7 +582,7 @@ export function circuitMotorVertical(
   portXs: readonly number[],
 ): string {
   const r = Math.max(5, span / 2 - 2);
-  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width=".4" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portXs
+  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portXs
     .map((x) => {
       const dx = Math.max(-r, Math.min(r, x - cx)),
         y = cy - Math.sqrt(r * r - dx * dx);
@@ -570,7 +615,7 @@ export function circuitWinding(
     [x, y2],
     [terminalXs?.[1] ?? edge, y2],
   ];
-  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width=".4" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
+  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
 }
 
 export function circuitWindingVertical(
@@ -595,7 +640,7 @@ export function circuitWindingVertical(
     [x2, y],
     [x2, terminalYs?.[1] ?? edge],
   ];
-  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width=".4" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
+  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
 }
 
 /** Local catalog attachment for a function terminal, including a reused physical common. */
@@ -669,13 +714,14 @@ export function circuitTransformerCore(
   return `<g data-magnetic-association="shared-core" data-presentation-only="true" stroke="#17212b" stroke-width=".35">${lines}</g>`;
 }
 
-/** Each interface lead ends separately on its function enclosure; no common node is drawn. */
+/** Interface leads land on their enclosure; isolated source stubs stop clear of the mark. */
 export function circuitInterfaceMark(
   mark: CircuitMark,
   cx: number,
   cy: number,
   pins: readonly { x: number; y: number; side: string }[],
   vertical: boolean,
+  source = false,
 ): string {
   const coordinates = pins.map((p) => (vertical ? p.x : p.y));
   const low = Math.min(...coordinates) - 2,
@@ -683,12 +729,13 @@ export function circuitInterfaceMark(
   const outline = vertical
     ? `<rect x="${n(low)}" y="${n(cy - 5)}" width="${n(high - low)}" height="10"/>`
     : `<rect x="${n(cx - 5)}" y="${n(low)}" width="10" height="${n(high - low)}"/>`;
+  const leadEnd = source ? 6 : 5;
   const leads = pins
     .map((p) =>
       vertical
-        ? `<line x1="${n(p.x)}" x2="${n(p.x)}" y1="${n(p.y)}" y2="${n(cy + (p.side === "NORTH" ? -5 : 5))}"/>`
-        : `<line y1="${n(p.y)}" y2="${n(p.y)}" x1="${n(p.x)}" x2="${n(cx + (p.side === "WEST" ? -5 : 5))}"/>`,
+        ? `<line${source ? ' data-source-stub="true"' : ""} x1="${n(p.x)}" x2="${n(p.x)}" y1="${n(p.y)}" y2="${n(cy + (p.side === "NORTH" ? -leadEnd : leadEnd))}"/>`
+        : `<line${source ? ' data-source-stub="true"' : ""} y1="${n(p.y)}" y2="${n(p.y)}" x1="${n(p.x)}" x2="${n(cx + (p.side === "WEST" ? -leadEnd : leadEnd))}"/>`,
     )
     .join("");
-  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${outline}${leads}</g><g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`;
+  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source ? "" : outline}${leads}</g><g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`;
 }
