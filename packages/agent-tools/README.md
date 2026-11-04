@@ -17,7 +17,7 @@ Every request is a closed object extending
 | Method             | Request-specific field                                         | Success value                      | Expected failure type                                       |
 | ------------------ | -------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- |
 | `resolve`          | `target`: exact `uid`/`designation`, or search `type`/`text`   | `ResolveObjectsValue`              | `QueryError \| AgentToolError`                              |
-| `inspect`          | `selector`: exact UID or designation                           | query-owned `InspectResult`        | `QueryError \| AgentToolError`                              |
+| `inspect`          | `selector`: exact UID or designation                           | `InspectResult`                    | `QueryError \| AgentToolError`                              |
 | `query`            | `query`: `neighbors`, `trace`, `net`, or `cable` plus selector | `GraphQueryValue`                  | `QueryError \| AgentToolError`                              |
 | `validate`         | no additional field                                            | `{ valid: true }`                  | `AgentToolError` or compiler diagnostics with `error: null` |
 | `createView`       | `spec`: public renderer `SchematicViewRequest`                 | renderer-owned `RenderedSchematic` | `QueryError \| RenderError \| AgentToolError`               |
@@ -92,6 +92,111 @@ outcome with diagnostics and `error: null`, never `valid: false`.
 detached `project-presentation/0.1` context to the renderer, so the SVG receives the
 authored/default canvas and title identity. Agent tools add no view syntax, intent
 inference, selection rule, geometry, or renderer error.
+
+## Opt-in source locations
+
+`inspect` and `resolve` accept `include: ["source"]`. Omit it to retain the
+existing result bytes. The non-empty array accepts only `"source"`; unsupported
+members produce A001 at `/include/<index>` with `allowed: ["source"]`.
+Repeated members produce A001 `duplicate-member` at their repeated index.
+
+```json
+{
+  "format": "agent-tool-request/0.1",
+  "project": "examples/motor-starter",
+  "selector": { "by": "designation", "value": "LS1" },
+  "include": ["source"]
+}
+```
+
+For `resolve`, use `target` instead of `selector`; exact hits and every search
+match carry metadata. Each returned project object (including one-hop project
+objects) gains `source: {file, pointer, uid, integrity, patchEligible, origin}`.
+`file` uses the loader's project-relative forward-slash path, `pointer` is its
+RFC 6901 object pointer, and `integrity` is `sha256-` plus base64 SHA-256 of the
+raw loaded bytes. `uid` is the owning project object's UUID. The result's
+`sourceFiles: [{file, integrity}]` includes every patchable project source and
+referenced presentation file admitted by the loader, including empty source
+files, plus referenced library files. Entries are unique and sorted by file in
+code-unit order. To add the first wire to an empty source, use that file's guard
+from `sourceFiles` without hashing it manually.
+
+Pointers name positions before the patch. JSON Patch executes operations in
+order; an earlier insertion, deletion or reorder may change what an array index
+names. Start each object's group of edits with a `test` of `<pointer>/uid` against
+`source.uid`, immediately before those edits. Use one `files[]` entry per file;
+append field segments after escaping `~` as `~0` and `/` as `~1`.
+
+Use these values for a guarded edit:
+
+```ts
+const inspected = await tools.inspect({
+  ...base,
+  selector: { by: "designation", value: "LS1" },
+  include: ["source"],
+});
+if (!inspected.ok) throw new Error("Inspect failed; consume its diagnostics.");
+const source = inspected.value.object.source!;
+if (!source.patchEligible) throw new Error(source.reason);
+const dryRun = await tools.applySourcePatch({
+  ...base,
+  patchFormat: "json-patch/0.1",
+  dryRun: true,
+  files: [
+    {
+      path: source.file,
+      expectedIntegrity: source.integrity,
+      operations: [
+        { op: "test", path: `${source.pointer}/uid`, value: source.uid! },
+        {
+          op: "replace",
+          path: `${source.pointer}/description`,
+          value: "Field limit switch permissive",
+        },
+      ],
+    },
+  ],
+});
+```
+
+Review the dry-run result and diagnostics before applying the same request with
+`dryRun: false`. Both pointers and hashes come from the single `loadProject`
+snapshot passed to `compileLoadedProject`. The patch tool also uses `loadProject`
+for its guards, and compiles its staged proposals with `compileProject`.
+Metadata projection never rereads files. If a sibling is inserted or another
+edit changes the bytes, the old guard fails A004; re-inspect
+and rebuild the complete patch. No patch is inferred or applied by a read tool.
+
+Inherited terminals, functions, connection coverage, ports and connector pins
+carry library source metadata. Inspected device views and related devices one
+hop away also gain `deviceType: {id, source}`; resolve results do not include it.
+Cable inspection annotates its existing `cableType`.
+Library sources have `patchEligible: false`, `origin: {kind: "library", name,
+resolutionKind}`, and a `reason`. All library-origin sources omit `uid`, including
+terminals and functions; their view identifiers retain the instance identity.
+Local library paths are relative to the project root and may start with `../`;
+shipped paths use the logical
+`@thermite/core-library/` locator, never an installation path. Derived net and
+ganged/internal-relation summaries have no single authored object pointer.
+Arbitrary authored metadata remains intact. Presentation objects are not returned
+by the current inspection projection, but their admitted file guard is in
+`sourceFiles`. `patchEligible` describes the document class, not guaranteed patch
+success: A002/A003/A004/A005 checks still apply, including A003 `reparse-point`
+when a link exists anywhere in the project. Inspect adds no filesystem scan.
+Compilation failures retain their existing diagnostics and failure classification.
+
+Files outside the admitted snapshot are not reread or listed, and they are not
+patchable (A003). When the project fails to compile, inspect and resolve return
+no guards; only then, to patch the repair, calculate the guard explicitly from
+the file's raw bytes (adjust the path):
+
+```sh
+bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' path/to/file.json
+```
+
+That fallback does not make new or unreferenced files patch eligible; admit them
+through the project manifest and re-inspect before patching. Generate new object
+UUIDs with `bun -e 'console.log(crypto.randomUUID())'`.
 
 ## Integrity-guarded source patches
 
