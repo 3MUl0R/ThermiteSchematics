@@ -113,7 +113,10 @@ export interface DeviceType {
     };
   };
   connectionCoverage?: {
-    status: "complete" | "partial";
+    /**
+     * complete: every connection of an exact part is modeled; partial: the model omits connections; generic: the abstract interface was reviewed, without exact-part catalog facts.
+     */
+    status: "complete" | "partial" | "generic";
     notes: string;
   };
   connectorPorts?: {

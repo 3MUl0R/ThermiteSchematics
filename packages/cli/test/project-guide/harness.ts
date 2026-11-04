@@ -145,7 +145,7 @@ export async function thermite(
   return run;
 }
 export const describeRun = (args: readonly string[], run: Run) =>
-  `thermite ${args.join(" ")} exited ${run.code}\nstdout: ${run.stdout.slice(0, 600)}\nstderr: ${run.stderr.slice(0, 1200)}`;
+  `thermite ${args.join(" ")} exited ${run.code}\nstdout: ${run.stdout.slice(0, 600)}\nstderr: ${run.stderr}`;
 /** Runs and requires exit 0. */
 export async function ok(args: readonly string[], cwd: string, input?: string) {
   const run = await thermite(args, cwd, input);

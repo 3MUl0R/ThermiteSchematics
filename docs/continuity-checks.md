@@ -72,7 +72,7 @@ sources, loads and `feeds_internal`/mechanical associations are excluded.
 
 **A missing modeled path is not proof of a physical wiring defect.** A library
 may omit fixed internal commoning; represent an established common with the
-existing explicit project jumper workflow when justified by evidence. Partial
+existing explicit project jumper workflow when justified by evidence. Generic, partial
 and unreviewed endpoint model coverage is retained, but does not make a known
 modeled path disappear. This check cannot discover hardware terminals omitted
 from a model.

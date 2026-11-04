@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   SHIPPED_CORE_FILE_INVENTORY,
+  SHIPPED_CORE_VERSIONS,
   compileProject,
   lockProject,
   resolveShippedCoreLibrary,
@@ -614,19 +615,20 @@ describe("E103 lookups name files that exist", () => {
   });
 
   it("maps every shipped display path to existing runtime and source files", async () => {
-    for (const file of SHIPPED_CORE_FILE_INVENTORY) {
-      const display = `@thermite/core-library/${file.slice("library/".length)}`;
-      const location = openableLibraryFile("shipped", display);
-      expect(location).toEqual({
-        runtime: `node_modules/@thermite/core-library/${file}`,
-        source: `packages/core-library/${file}`,
-      });
-      for (const path of [location.runtime!, location.source!]) {
-        await expect(
-          readFile(join(repositoryRoot, path)),
-        ).resolves.toBeDefined();
+    for (const entry of Object.values(SHIPPED_CORE_VERSIONS))
+      for (const file of entry.fileInventory) {
+        const display = `${entry.displayRoot}/${file.slice(entry.directory.length + 1)}`;
+        const location = openableLibraryFile("shipped", display);
+        expect(location).toEqual({
+          runtime: `node_modules/@thermite/core-library/${file}`,
+          source: `packages/core-library/${file}`,
+        });
+        for (const path of [location.runtime!, location.source!]) {
+          await expect(
+            readFile(join(repositoryRoot, path)),
+          ).resolves.toBeDefined();
+        }
       }
-    }
     expect(openableLibraryFile("local", "../shared lib/types.json")).toEqual({
       project: "../shared lib/types.json",
     });

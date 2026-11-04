@@ -92,12 +92,12 @@ A project dependency is either local or shipped:
 The first entry is local and the second is shipped. Any explicit portable relative
 `path` selects a local user-authored library. Its
 root contains `library.json` and the type files declared by that manifest. Omitting
-`path` requests an exact shipped library; the closed shipped set is currently
-`core@0.1.0`.
+`path` requests an exact shipped library; the shipped set is
+`core@0.1.0` and `core@0.2.0`.
 
 The lock and IR record `resolutionKind: "local" | "shipped"`. Local provenance
 retains the authored path. Shipped core uses internal locator
-`ais-shipped:core@0.1.0` and stable display paths rooted at
+`ais-shipped:core@<version>` and stable display paths rooted at
 `@thermite/core-library`. That locator is not authored source or a registry URL.
 
 A reusable device type defines terminals, functions, internal relations, ratings,

@@ -17,7 +17,8 @@
   "properties": {
     "code": {
       "type": "string",
-      "pattern": "^[EIW][0-9]{3}$"
+      "pattern": "^[EIW][0-9]{3}$",
+      "description": "Stable diagnostic identifier; I005 identifies reviewed generic connection interfaces in completeness inventories."
     },
     "severity": {
       "type": "string",

@@ -5,6 +5,8 @@ import * as compiler from "../src/index.js";
 describe("compiler public API", () => {
   it("exports the compiler, serializer, stage, loader, and lock APIs", () => {
     expect(Object.keys(compiler)).toEqual([
+      "SHIPPED_CORE_VERSIONS",
+      "resolveShippedCoreLibraryVersion",
       "SHIPPED_CORE_DISPLAY_ROOT",
       "SHIPPED_CORE_FILE_INVENTORY",
       "SHIPPED_CORE_LIBRARY_LOCATOR",

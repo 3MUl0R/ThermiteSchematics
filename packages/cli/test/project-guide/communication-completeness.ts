@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import {
   copyProject,
+  ctx,
   describeRun,
   editJson,
   lockAndValidate,
@@ -663,7 +664,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Give new device types `connectionCoverage: {status: "complete"|"partial", notes: "..."}` after reviewing every physical connection, including power, return, bonding, shield and optional connectors.',
+        'Give new device types `connectionCoverage: {status: "complete"|"partial"|"generic", notes: "..."}` with nonblank notes.',
       async check() {
         const coverage = (await schema("device-type")).properties
           .connectionCoverage;
@@ -671,6 +672,7 @@ const module: FactModule = {
         expect(coverage.properties.status.enum).toEqual([
           "complete",
           "partial",
+          "generic",
         ]);
         expect(coverage.properties.notes.pattern).toBe("\\S");
         const { report } = await auditReport();
@@ -688,16 +690,89 @@ const module: FactModule = {
             types: (t) => (t.types[0].connectionCoverage.status = "probably"),
           }),
           "E014",
-          'Value is not one of the allowed values: ["complete", "partial"]',
+          'Value is not one of the allowed values: ["complete", "partial", "generic"]',
         );
         // Missing notes are rejected as well, on the engine's fixture.
         const { claimed, METADATA_FAULTS } = await engine();
         await claimed(METADATA_FAULTS, { "coverage-notes": "E010" });
+        await rejected(
+          ["lock", "."],
+          await auditCopy({
+            types: (t) => {
+              t.types[0].connectionCoverage = {
+                status: "generic",
+                notes: "  ",
+              };
+            },
+          }),
+          "E013",
+        );
       },
     },
     {
       claim:
-        "Missing coverage is unreviewed; a partial model states its omissions.",
+        "Complete reviews all an exact part's physical connections; generic reviews an abstract interface without exact-part catalog facts (E014 otherwise).",
+      async check() {
+        const types = await schema("device-type");
+        expect(types.properties.catalog.required).toEqual([
+          "manufacturer",
+          "orderNumber",
+          "document",
+        ]);
+        expect(
+          types.dependentSchemas.catalog.properties.connectionCoverage
+            .properties.status.enum,
+        ).toEqual(["complete", "partial"]);
+        await rejected(
+          ["lock", "."],
+          await auditCopy({
+            types: (t) => {
+              t.types[0].connectionCoverage.status = "generic";
+              t.types[0].catalog = {
+                manufacturer: "Synthetic",
+                orderNumber: "TEST-ONLY",
+                document: {
+                  url: "https://example.invalid/test",
+                  title: "Synthetic",
+                  revision: "A",
+                  pages: "1",
+                },
+              };
+            },
+          }),
+          "E014",
+          'cannot be combined with exact-part catalog facts in "catalog" (manufacturer, order number)',
+        );
+      },
+    },
+    {
+      claim: "I005 reports generic limits and notes once per device.",
+      async check() {
+        const { report } = await diagnostics(ctx.pristine.starter);
+        expect(
+          report.findings.filter(
+            (f: any) => f.code === "I003" || f.code === "W904",
+          ),
+        ).toEqual([]);
+        const generic = report.findings.filter((f: any) => f.code === "I005");
+        expect(generic.map((f: any) => [f.designation, f.severity])).toEqual([
+          ["PLC1", "info"],
+          ["PS1", "info"],
+        ]);
+        for (const device of report.devices) {
+          expect(device.coverage.status).toBe("generic");
+          expect(
+            generic.find((f: any) => f.designation === device.designation)
+              .message,
+          ).toBe(
+            `Generic connection interface: terminals of an actual part beyond this abstract interface cannot be checked. ${device.coverage.notes}`,
+          );
+        }
+      },
+    },
+    {
+      claim:
+        "Missing coverage is unreviewed; a model omitting its own interface's connections stays partial.",
       async check() {
         const { report } = await auditReport();
         // PS1's type declares no coverage at all.
@@ -1041,7 +1116,7 @@ const module: FactModule = {
   ],
   unexecuted: new Map([
     [
-      "Never invent pins to make a model appear complete.",
+      "Never invent pins for completeness.",
       "Authoring advice: the engine can only check declared terminals and ports.",
     ],
     [

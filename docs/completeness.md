@@ -24,7 +24,12 @@ Exit 0 means the audit ran successfully, including warnings. Invalid source or
 selection returns 1; usage or infrastructure failures return 2. Existing
 `validate --strict` can make compiler warnings fail a check. The six guarded
 agent commands retain their existing request and result contracts; an agent can
-also invoke `diagnostics --json` to answer completeness questions.
+also invoke `diagnostics --json` to answer completeness questions. Core 0.2.0
+uses reviewed generic interfaces: a fresh starter has no I003 or W904, but its
+required PS1.L/N feed is deliberately deferred (W903 and W905), so strict
+validation exits 1 until the feed is designed and its review is completed. The
+fresh cabinets template exits 0 under strict validation. Connected required points
+and reviewed generic coverage do not by themselves prove a safe design.
 
 ## Library requirements
 
@@ -48,17 +53,33 @@ nor a label such as `24V` silently makes a terminal required.
 ```
 
 This is a fragment of a device type. `connectionCoverage` is optional for older
-libraries, but new library contributions should declare it. `complete` means the
-author has reviewed and modeled every physical terminal and communication port
-for the exact part, including power, returns, protective earth, shields,
-connectors and optional interfaces. It does not mean every pin must be used.
-`partial` must explain what is missing. Both statuses require nonblank `notes`.
-Absence is reported as **unreviewed**, never silently treated as complete.
+libraries, but new contributions should declare it. All three statuses require
+nonblank `notes`:
 
-For example, a port-only HMI model must be partial until its power connector and
-bonding are modeled from evidence. The diagnostic cannot discover pins omitted
-from the library. A generic or proposed interface is not an exact manufacturer
-pinout; keep that distinction in its coverage notes and modeling documentation.
+- `complete`: every physical terminal and communication port of the exact part
+  was reviewed and modeled, including power, returns, protective earth, shields,
+  connectors and optional interfaces. It does not mean every pin must be used.
+- `generic`: the type models an abstract interface and its terminals were
+  reviewed for that interface. It is not an exact part. I005 discloses once per
+  device that actual-part terminals beyond the interface cannot be checked,
+  including the authored notes. This is information in the completeness audit,
+  like I003, and does not introduce a compiler warning.
+- `partial`: the model omits connections of its intended interface or exact
+  part; notes must explain what is missing. W904 remains a compiler warning.
+  A generic type modeling only part of its own interface must stay partial;
+  relabeling it generic does not complete that review.
+
+Absence remains **unreviewed** (I003), never silently complete. Generic coverage
+cannot coexist with exact-part `catalog` facts: that object requires
+`manufacturer`, `orderNumber` and `document`. The published schema rejects
+`generic` on a cataloged type with E014 at `connectionCoverage/status`, listing
+`complete` and `partial` as its allowed alternatives. Select the honest status;
+never remove manufacturer facts to conceal an incomplete exact-part review.
+
+For example, a port-only HMI intended to include power and bonding must stay
+partial until those connections are modeled from evidence. A generic or proposed
+interface is not a manufacturer pinout; its scope and actual-part limitations
+belong in its notes. The diagnostic cannot discover omitted pins.
 
 After a library edit, intentionally regenerate its project lock and validate.
 Visible libraries already copied into a project do not update automatically.
@@ -115,6 +136,7 @@ an unconnected point as unused merely to clear the report.
 | I001 | Unconnected or dangling point without a declared requirement or unused disposition. A terminal used only by channels explicitly marked spare in `io` already has a disposition; a common also used by a channel that is in use or not marked spare does not. |
 | I002 | Intentionally unused point, with its reason preserved. |
 | I003 | Component connection coverage has not been declared. |
+| I005 | Reviewed generic interface: actual-part terminals beyond that interface cannot be checked; includes the notes, once per device. |
 
 W903–W905 also appear during compilation and agent validation. Compiler warnings
 aggregate each device/code while preserving the individual definition references;

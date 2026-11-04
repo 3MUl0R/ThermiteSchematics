@@ -304,6 +304,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "A placed device uses an unknown profile or has functions or terminal roles without cataloged renderer support.",
   },
+  I005: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "A reviewed generic connection interface cannot check actual-part terminals beyond the modeled abstract interface; completeness findings include its review notes.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCode = keyof typeof DIAGNOSTIC_CATALOG;

@@ -37,11 +37,9 @@ import {
   type SourceFile,
 } from "@thermite/schema";
 import {
-  SHIPPED_CORE_DISPLAY_ROOT,
-  SHIPPED_CORE_LIBRARY_LOCATOR,
+  SHIPPED_CORE_VERSIONS,
   SHIPPED_CORE_LIBRARY_NAME,
-  SHIPPED_CORE_LIBRARY_VERSION,
-  resolveShippedCoreLibrary,
+  resolveShippedCoreLibraryVersion,
   type ShippedCoreLibraryResolution,
 } from "@thermite/core-library";
 import fastGlob from "fast-glob";
@@ -118,7 +116,10 @@ export type LoadedLibraryLock =
     };
 
 export interface LoadProjectOptions {
-  readonly resolveShippedCoreLibrary?: () => ShippedCoreLibraryResolution;
+  /** Override exact supported-version resolution; never called for local/unknown dependencies. */
+  readonly resolveShippedCoreLibrary?: (
+    version: string,
+  ) => ShippedCoreLibraryResolution<string>;
 }
 
 export interface LoadedProject {
@@ -898,7 +899,11 @@ function unavailableShippedLibraryDiagnostic(
   return {
     code: "E032",
     severity: DIAGNOSTIC_CATALOG.E032.severity,
-    message: `Shipped library ${JSON.stringify(name)} does not provide version ${JSON.stringify(version)}; available version is ${JSON.stringify(SHIPPED_CORE_LIBRARY_VERSION)}.`,
+    message: `Shipped library ${JSON.stringify(name)} does not provide version ${JSON.stringify(version)}; available versions are ${Object.keys(
+      SHIPPED_CORE_VERSIONS,
+    )
+      .map((v) => JSON.stringify(v))
+      .join(", ")}.`,
     file: normalizeDiagnosticFile(manifest.file),
     ...positionAt(manifest.nodes, versionPointer),
     jsonPointer: versionPointer,
@@ -910,7 +915,9 @@ function resolveLibraryRoot(
   dependencyIndex: number,
   manifest: ParsedDocument,
   manifestDirectory: string,
-  shippedCoreResolver: () => ShippedCoreLibraryResolution,
+  shippedCoreResolver: (
+    version: string,
+  ) => ShippedCoreLibraryResolution<string>,
 ): LibraryRootResolution | Diagnostic {
   const name = dependency.name;
   const version = dependency.version;
@@ -932,7 +939,7 @@ function resolveLibraryRoot(
 
   if (
     name !== SHIPPED_CORE_LIBRARY_NAME ||
-    version !== SHIPPED_CORE_LIBRARY_VERSION
+    !Object.hasOwn(SHIPPED_CORE_VERSIONS, version)
   ) {
     return unavailableShippedLibraryDiagnostic(
       manifest,
@@ -942,10 +949,11 @@ function resolveLibraryRoot(
     );
   }
 
-  const shipped = shippedCoreResolver();
+  const shipped = shippedCoreResolver(version);
+  const expected = SHIPPED_CORE_VERSIONS[version]!;
   if (
-    shipped.displayRoot !== SHIPPED_CORE_DISPLAY_ROOT ||
-    shipped.locator !== SHIPPED_CORE_LIBRARY_LOCATOR
+    shipped.displayRoot !== expected.displayRoot ||
+    shipped.locator !== expected.locator
   ) {
     throw new Error("Shipped core resolver identity mismatch.");
   }
@@ -1167,7 +1175,9 @@ async function loadLibraryDocuments(
   manifest: ParsedDocument,
   manifestDirectory: string,
   state: LoadState,
-  shippedCoreResolver: () => ShippedCoreLibraryResolution,
+  shippedCoreResolver: (
+    version: string,
+  ) => ShippedCoreLibraryResolution<string>,
 ): Promise<void> {
   if (
     !isJsonObject(manifest.value) ||
@@ -1523,7 +1533,10 @@ export async function loadProject(
             manifest,
             resolution.manifestDirectory,
             state,
-            options.resolveShippedCoreLibrary ?? resolveShippedCoreLibrary,
+            (version) =>
+              options.resolveShippedCoreLibrary
+                ? options.resolveShippedCoreLibrary(version)
+                : resolveShippedCoreLibraryVersion(version)!,
           );
           state.crossDiagnostics.push(...validateUniqueUids(state.documents));
         }

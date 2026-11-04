@@ -749,6 +749,8 @@ const module: FactModule = {
             'E206 core:overload-3p-1nc circuitSymbols mark "coil" is incompatible with function "pole2" (contact, 2 terminals, normally closed).',
             'E206 core:motor-3ph circuitSymbols mark "lamp" is incompatible with function "motor_load" (load, 3 terminals).',
             'E206 core:overload-3p-1nc circuitSymbols mark "contact-no" is incompatible with function "aux95" (contact, 2 terminals, normally closed).',
+            "W903 PLC1: Required terminal PLC1.L+ has no connection. Required terminal PLC1.M has no connection.",
+            "W903 OL1: Required terminal OL1.95 has no connection. Required terminal OL1.96 has no connection.",
           ].sort(),
         );
       },

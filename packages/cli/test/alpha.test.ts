@@ -101,7 +101,8 @@ describe("Thermite alpha physical cable semantics", () => {
       "--json",
     ]);
     expect(JSON.parse(stdout)).toEqual(schedule);
-    expect(JSON.parse(stderr).diagnostics).toEqual([]);
+    expect(result.diagnostics).toEqual([]);
+    expect(JSON.parse(stderr).diagnostics).toEqual(result.diagnostics);
     await expect(initializeAlphaProject(path)).rejects.toThrow(
       "already exists",
     );

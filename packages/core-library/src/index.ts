@@ -24,11 +24,15 @@ export const SHIPPED_CORE_FILE_INVENTORY = Object.freeze([
   "library/types/terminal-block-8.json",
 ] as const);
 
-export interface ShippedCoreLibraryResolution {
+export interface ShippedCoreLibraryResolution<
+  Version extends string = typeof SHIPPED_CORE_LIBRARY_VERSION,
+> {
   readonly packageRootPath: string;
   readonly libraryRootPath: string;
-  readonly displayRoot: typeof SHIPPED_CORE_DISPLAY_ROOT;
-  readonly locator: typeof SHIPPED_CORE_LIBRARY_LOCATOR;
+  readonly displayRoot: Version extends "0.1.0"
+    ? typeof SHIPPED_CORE_DISPLAY_ROOT
+    : string;
+  readonly locator: `ais-shipped:core@${Version}`;
 }
 
 export function resolveShippedCoreLibrary(
@@ -40,5 +44,49 @@ export function resolveShippedCoreLibrary(
     libraryRootPath: join(packageRootPath, "library"),
     displayRoot: SHIPPED_CORE_DISPLAY_ROOT,
     locator: SHIPPED_CORE_LIBRARY_LOCATOR,
+  });
+}
+
+export interface ShippedCoreVersion {
+  readonly directory: string;
+  readonly displayRoot: string;
+  readonly locator: `ais-shipped:core@${string}`;
+  readonly fileInventory: readonly string[];
+}
+
+/** Exact shipped versions. The original constants/default resolver stay 0.1.0. */
+export const SHIPPED_CORE_VERSIONS: Readonly<
+  Record<string, ShippedCoreVersion>
+> = Object.freeze({
+  "0.1.0": Object.freeze({
+    directory: "library",
+    displayRoot: SHIPPED_CORE_DISPLAY_ROOT,
+    locator: SHIPPED_CORE_LIBRARY_LOCATOR,
+    fileInventory: SHIPPED_CORE_FILE_INVENTORY,
+  }),
+  "0.2.0": Object.freeze({
+    directory: "versions/0.2.0",
+    displayRoot: `${SHIPPED_CORE_DISPLAY_ROOT}/versions/0.2.0`,
+    locator: "ais-shipped:core@0.2.0",
+    fileInventory: Object.freeze(
+      SHIPPED_CORE_FILE_INVENTORY.map((path) =>
+        path.replace(/^library\//u, "versions/0.2.0/"),
+      ),
+    ),
+  }),
+});
+
+export function resolveShippedCoreLibraryVersion(
+  version: string,
+  moduleUrl: string = import.meta.url,
+): ShippedCoreLibraryResolution<string> | undefined {
+  if (!Object.hasOwn(SHIPPED_CORE_VERSIONS, version)) return undefined;
+  const entry = SHIPPED_CORE_VERSIONS[version]!;
+  const { packageRootPath } = resolveShippedCoreLibrary(moduleUrl);
+  return Object.freeze({
+    packageRootPath,
+    libraryRootPath: join(packageRootPath, entry.directory),
+    displayRoot: entry.displayRoot,
+    locator: entry.locator,
   });
 }

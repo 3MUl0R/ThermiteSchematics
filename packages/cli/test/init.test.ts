@@ -1,15 +1,27 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
-  SHIPPED_CORE_FILE_INVENTORY,
+  SHIPPED_CORE_VERSIONS,
+  compileProject,
+  lockProject,
+  analyzeCompleteness,
   resolveShippedCoreLibrary,
 } from "@thermite/compiler";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -38,6 +50,9 @@ import {
   type StarterAssetBytes,
   type StarterTemplatePath,
 } from "../src/index.js";
+
+const STARTER_CORE = SHIPPED_CORE_VERSIONS["0.2.0"]!;
+const SHIPPED_CORE_FILE_INVENTORY = STARTER_CORE.fileInventory;
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -494,14 +509,15 @@ describe("thermite init product", () => {
 
     const compiled = await invoke(["compile", "."], root);
     expect(compiled.exitCode).toBe(0);
-    expect(compiled.stderr).toBe("");
+    expect(compiled.stderr.match(/ W\d{3} /gu)).toEqual([" W903 ", " W905 "]);
+    expect(compiled.stderr).toContain("Starter AC feed is not designed");
     expect(JSON.parse(compiled.stdout)).toMatchObject({
       format: "electrical-ir/0.1",
       project: { name: DEFAULT_STARTER_PROJECT_NAME },
     });
     const rendered = await invoke(["view", "PS1", "--loads"], root);
     expect(rendered.exitCode).toBe(0);
-    expect(rendered.stderr).toBe("");
+    expect(rendered.stderr.match(/ W\d{3} /gu)).toEqual([" W903 ", " W905 "]);
     expect(rendered.stdout).toContain("<svg");
     expect(rendered.stdout.endsWith("\n")).toBe(true);
   });
@@ -1541,4 +1557,90 @@ describe("thermite init --name (alpha CLI)", () => {
     ).rejects.toMatchObject({ code: expect.any(Number) });
     expect(await readdir(root)).toEqual([]);
   });
+});
+
+describe("reviewed core starter", () => {
+  it.each(["starter", "cabinets"] as const)(
+    "alpha init %s locks reviewed 0.2.0",
+    async (template) => {
+      const { initializeAlphaProject } = await import("../src/alpha-init.js");
+      const root = await mkdtemp(join(tmpdir(), "thermite-reviewed-init-"));
+      temporaryRoots.push(root);
+      const project = join(root, "project");
+      await initializeAlphaProject(project, { template });
+      const lock = JSON.parse(
+        await readFile(join(project, "electrical-system.lock.json"), "utf8"),
+      );
+      expect(lock.libraries.core).toMatchObject({
+        version: "0.2.0",
+        path: "libraries/core",
+        resolutionKind: "local",
+      });
+      const result = await compileProject(project);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+      const report = analyzeCompleteness(result.ir);
+      expect(report.counts.unreviewedModels).toBe(0);
+      expect(
+        report.findings.filter((f) => f.code === "I003" || f.code === "W904"),
+      ).toEqual([]);
+      expect(report.findings.filter((f) => f.code === "I005")).toHaveLength(2);
+      const strict = spawnSync(
+        process.execPath,
+        [join(repositoryRoot, "thermite.mjs"), "validate", project, "--strict"],
+        { encoding: "utf8" },
+      );
+      expect(strict.status, strict.stderr).toBe(template === "starter" ? 1 : 0);
+      expect(strict.stdout).not.toContain("W904");
+      if (template === "starter") {
+        expect(strict.stdout).toContain("W903");
+        expect(strict.stdout).toContain("W905");
+      } else expect(strict.stderr).toBe("");
+
+      if (template === "starter") {
+        const psu = report.devices.find((d) => d.designation === "PS1")!;
+        for (const key of ["L", "N"]) {
+          expect(psu.connections.find((c) => c.key === key)).toMatchObject({
+            required: true,
+            connection: "unconnected",
+            review: { status: "deferred" },
+          });
+          expect(
+            report.findings
+              .filter((f) => f.designation === "PS1" && f.key === key)
+              .map((f) => f.code),
+          ).toEqual(["W903", "W905"]);
+        }
+      }
+    },
+  );
+});
+
+it("strict validates a 0.2.0 core project with every required point connected", async () => {
+  const root = await mkdtemp(join(tmpdir(), "thermite-core02-strict-"));
+  temporaryRoots.push(root);
+  await cp(join(repositoryRoot, "examples/motor-starter"), root, {
+    recursive: true,
+  });
+  const manifest = JSON.parse(
+    await readFile(join(root, "system.json"), "utf8"),
+  );
+  manifest.libraries[0].version = "0.2.0";
+  await writeFile(join(root, "system.json"), JSON.stringify(manifest));
+  expect((await lockProject(root)).ok).toBe(true);
+  const compiled = await compileProject(root);
+  expect(compiled.ok, JSON.stringify(compiled.diagnostics)).toBe(true);
+  if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+  const report = analyzeCompleteness(compiled.ir);
+  expect(report.counts.requiredMissing).toBe(0);
+  expect(report.counts.warnings).toBe(0);
+  expect(report.findings.filter((f) => f.code === "I005")).toHaveLength(11);
+  expect(compiled.diagnostics).toEqual([]);
+  const strict = spawnSync(
+    process.execPath,
+    [join(repositoryRoot, "thermite.mjs"), "validate", root, "--strict"],
+    { encoding: "utf8" },
+  );
+  expect(strict.status, strict.stderr).toBe(0);
+  expect(strict.stderr).toBe("");
 });

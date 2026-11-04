@@ -32,7 +32,7 @@ The repository has seven private workspaces:
 
 - `@thermite/schema`: canonical schemas, generated source types, strict parsing,
   schema registry, and diagnostic locations;
-- `@thermite/core-library`: shipped `core@0.1.0` bytes and deterministic
+- `@thermite/core-library`: shipped `core@0.1.0` and `core@0.2.0` bytes and deterministic
   resolver metadata;
 - `@thermite/compiler`: loading, lock verification, type/reference resolution,
   IR construction, net derivation, and engineering rules;
@@ -76,7 +76,7 @@ libraries/core/types/*.json
     "potentials/**/*.json"
   ],
   "presentation": "presentation.json",
-  "libraries": [{ "name": "core", "version": "0.1.0", "path": "libraries/core" }]
+  "libraries": [{ "name": "core", "version": "0.2.0", "path": "libraries/core" }]
 }
 ```
 
@@ -96,10 +96,10 @@ landscape with a 10 mm margin. See [formats and compatibility](formats-and-compa
 
 A dependency with an explicit `path` always uses the local path loader. Omitting
 `path` selects only a library shipped by exact name/version; the shipped set is
-`core@0.1.0` in `@thermite/core-library`. There is no npm, network,
+`core@0.1.0` and `core@0.2.0` in `@thermite/core-library`. There is no npm, network,
 `NODE_PATH`, environment, cwd-ancestor, or user-cache fallback.
 
-The internal shipped locator `ais-shipped:core@0.1.0` is lock/IR provenance, never
+The internal shipped locator `ais-shipped:core@<version>` is lock/IR provenance, never
 an authored resolution signal. Stable shipped source paths begin
 `@thermite/core-library/`, independent of the installation prefix.
 

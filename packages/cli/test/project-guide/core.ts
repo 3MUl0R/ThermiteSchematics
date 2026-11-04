@@ -94,7 +94,7 @@ const netPlcX20 = () =>
   );
 
 // View roots. A `site` library clones core types under new type IDs with the
-// same `symbol` and functions; projects using it are locked and strictly valid.
+// same `symbol` and functions; projects using it are locked, with missing-required/deferred warnings retained.
 const SITE = { name: "site", version: "0.1.0", path: "site" };
 /** [core device, its clone, core type]: one pair per root the sentences name. */
 const ROOT_CLONES = [
@@ -131,7 +131,7 @@ async function addSiteTypes(project: string, types: readonly object[]) {
  * switch symbol (LS3), and the limit switch's NO contact under the pushbutton
  * symbol (LS4).
  */
-const viewRoots = () =>
+export const viewRoots = () =>
   sharedProject("core:view-roots", async (project) => {
     await cp(ctx.pristine.starter, project, { recursive: true });
     const core = await coreDeviceTypes();
@@ -172,8 +172,22 @@ const viewRoots = () =>
         if (!present.has(type.id)) add(`X${(n += 1)}`, type.id);
     });
     await ok(["lock", "."], project);
-    await ok(["validate", ".", "--strict"], project);
+    await ok(["validate", "."], project);
+    await assertCloneWarnings(project);
   });
+/** The clone fixtures deliberately retain required/deferred work. */
+export async function assertCloneWarnings(project: string) {
+  const args = ["validate", ".", "--strict", "--json"];
+  const run = await thermite(args, project);
+  expect(run.code, describeRun(args, run)).toBe(1);
+  expect(run.stderr).toBe("");
+  const diagnostics = JSON.parse(run.stdout) as { code: string }[];
+  expect([...new Set(diagnostics.map((d) => d.code))].sort()).toEqual([
+    "W903",
+    "W905",
+  ]);
+  return run;
+}
 /** The starter with PS1 and PLC1 retyped to site clones of their core types. */
 const clonedStarter = () =>
   sharedProject("core:cloned-starter", async (project) => {
@@ -192,7 +206,8 @@ const clonedStarter = () =>
           object.type = object.type.replace(/^core:/, "site:");
     });
     await ok(["lock", "."], project);
-    await ok(["validate", ".", "--strict"], project);
+    await ok(["validate", "."], project);
+    await assertCloneWarnings(project);
   });
 /** The request `thermite view <root> <mode>` renders, as a one-view packet. */
 function viewPacket(root: string, mode: string) {
@@ -925,7 +940,7 @@ const module: FactModule = {
         const supply = { device: "PS1", terminal: "+" };
         expect(
           await attempt(supply, { device: "PLC1", terminal: "X2.0" }),
-        ).toEqual([]);
+        ).toEqual(["W903", "W905"]);
         expect(
           await attempt(supply, { device: plc.uid, terminal: "X2.0" }),
         ).toContain("E101");
@@ -1007,6 +1022,35 @@ const module: FactModule = {
             ).value,
           ),
         );
+        await editJson(join(project, "devices/equipment.json"), (file) => {
+          delete file.objects.find((o: any) => o.designation === "PS1")
+            .connectionReview;
+          file.objects.push({
+            uid: randomUUID(),
+            kind: "device",
+            designation: "TB",
+            type: "core:terminal-block-8",
+          });
+        });
+        await editJson(join(project, WIRES), (file) =>
+          file.objects.push(
+            wire(
+              { device: "SRC1", terminal: "L1" },
+              { device: "PS1", terminal: "L" },
+              "W-FEED-L",
+            ).value,
+            wire(
+              { device: "SRC1", terminal: "L2" },
+              { device: "PS1", terminal: "N" },
+              "W-FEED-N",
+            ).value,
+            wire(
+              { device: "SRC1", terminal: "PE" },
+              { device: "TB", terminal: "1" },
+              "W-FEED-PE",
+            ).value,
+          ),
+        );
         // Valid, with the warning naming both declared ratings, and the net
         // listed as unassessed; the warning fails `--strict`.
         const warned = JSON.parse(
@@ -1020,7 +1064,7 @@ const module: FactModule = {
           /these declared ratings disagree: PLC1\.X1\.0 rating \{"nominal_voltage":24,"voltage_type":"DC"\} .*; SRC1\.L1 rating \{"nominal_voltage":480,"voltage_type":"AC"\} .*No potential declares voltage facts on this net/,
         );
         expect(warned[1].message).toContain(
-          '(1 net: ["PLC1.X1.0, SRC1.L1 [net:',
+          '(1 net: ["PLC1.X1.0, PS1.L, SRC1.L1 [net:',
         );
         await rejected(["validate", ".", "--strict"], project, "W303");
         await editJson(join(project, "potentials/potentials.json"), (file) =>
@@ -1108,7 +1152,12 @@ const module: FactModule = {
           expect(run.code, name).toBe(2);
           expect(run.stderr).toContain("unknown option '--project'");
         }
-        await ok(["validate", ".", "--strict"], ctx.pristine.starter);
+        await rejected(
+          ["validate", ".", "--strict"],
+          ctx.pristine.starter,
+          "W903",
+        );
+        await ok(["validate", ".", "--strict"], ctx.pristine.cabinets);
       },
     },
     {

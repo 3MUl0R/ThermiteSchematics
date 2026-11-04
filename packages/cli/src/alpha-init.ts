@@ -14,8 +14,8 @@ import {
   compileProject,
   PROJECT_WRITE_LOCK_FILE_NAME,
   lockProject,
-  resolveShippedCoreLibrary,
-  SHIPPED_CORE_FILE_INVENTORY,
+  resolveShippedCoreLibraryVersion,
+  SHIPPED_CORE_VERSIONS,
 } from "@thermite/compiler";
 import { isValidInitText, runInit } from "./init.js";
 import { assertOrdinaryPath } from "./alpha-output.js";
@@ -51,9 +51,10 @@ export async function initializeAlphaProject(
   try {
     const initialized = await runInit(name, revision, { cwd: stage });
     if (initialized.exitCode !== 0) throw new Error(initialized.stderr.trim());
-    const core = resolveShippedCoreLibrary();
-    for (const file of SHIPPED_CORE_FILE_INVENTORY) {
-      const relative = file.replace(/^library\//, "");
+    const core = resolveShippedCoreLibraryVersion("0.2.0")!;
+    const version = SHIPPED_CORE_VERSIONS["0.2.0"]!;
+    for (const file of version.fileInventory) {
+      const relative = file.slice(version.directory.length + 1);
       const output = join(stage, "libraries/core", relative);
       await mkdir(dirname(output), { recursive: true });
       await writeFile(
@@ -73,7 +74,7 @@ export async function initializeAlphaProject(
       await readFile(join(stage, "system.json"), "utf8"),
     );
     manifest.libraries = [
-      { name: "core", version: "0.1.0", path: "libraries/core" },
+      { name: "core", version: "0.2.0", path: "libraries/core" },
     ];
     const presentation = JSON.parse(
       await readFile(join(stage, "presentation.json"), "utf8"),

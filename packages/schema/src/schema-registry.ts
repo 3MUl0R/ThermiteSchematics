@@ -512,6 +512,33 @@ export class SchemaRegistry {
     const schemaDiagnostics = validateJsonValue(validate, value, context);
 
     if (schemaDiagnostics.length > 0) {
+      if (
+        entity === "device-type" &&
+        isJsonObject(value) &&
+        isJsonObject(value.connectionCoverage) &&
+        value.connectionCoverage.status === "generic" &&
+        Object.hasOwn(value, "catalog")
+      ) {
+        const catalog = context.nodes.get("/catalog")?.value;
+        return schemaDiagnostics.map((diagnostic) =>
+          diagnostic.code === "E014" &&
+          diagnostic.jsonPointer === "/connectionCoverage/status"
+            ? {
+                ...diagnostic,
+                message:
+                  'Connection coverage "generic" at "connectionCoverage/status" cannot be combined with exact-part catalog facts in "catalog" (manufacturer, order number). Choose "complete" or "partial" for the reviewed exact part.',
+                related: [
+                  {
+                    file: normalizeDiagnosticFile(context.file),
+                    line: catalog?.line ?? 1,
+                    column: catalog?.column ?? 1,
+                    note: 'Exact-part "catalog" facts (manufacturer, order number) conflict with "generic" coverage.',
+                  },
+                ],
+              }
+            : diagnostic,
+        );
+      }
       return schemaDiagnostics;
     }
 
