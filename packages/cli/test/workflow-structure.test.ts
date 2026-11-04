@@ -220,7 +220,7 @@ describe("frozen release workflow topology", () => {
     expect(workflow.equals(authority)).toBe(true);
     const text = workflow.toString("utf8");
     expect(text).toContain("pull_request:");
-    expect(text).toContain("runs-on: macos-14");
+    expect(text).toContain("runs-on: macos-15");
     expect(text).toContain('node-version: "24"');
     expect(text).toContain("cache: npm");
     expect(text).toContain("run: npm ci");

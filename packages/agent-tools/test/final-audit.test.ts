@@ -184,7 +184,7 @@ describe("M7 Task 9 final inventories", () => {
       await readFile(join(repositoryRoot, "package.json"), "utf8"),
     ) as { scripts: Record<string, string> };
 
-    expect(workflow).toContain("runs-on: macos-14");
+    expect(workflow).toContain("runs-on: macos-15");
     expect(workflow).toContain("- run: npm run check");
     expect(rootPackage.scripts.check).toContain("npm run test");
     expect(rootPackage.scripts.test).toBe("node scripts/test.mjs");
