@@ -9,6 +9,14 @@ export {
   type MappedAjvKeyword,
 } from "./ajv-validation.js";
 export {
+  DIAGNOSTIC_ALLOWED_LIMIT,
+  DIAGNOSTIC_MESSAGE_ALLOWED_LIMIT,
+  boundedAlternatives,
+  formatAllowedValues,
+  type DiagnosticAllowedValue,
+  type DiagnosticAlternatives,
+} from "./diagnostic-alternatives.js";
+export {
   DIAGNOSTIC_CATALOG,
   DIAGNOSTIC_CODES,
   isDiagnosticCode,

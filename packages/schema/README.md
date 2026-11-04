@@ -126,3 +126,31 @@ The parsing layer uses `jsonc-parser` 3.3.1 in strict JSON mode. It rejects dupl
 members, invalid tokens, unexpected EOF, and raw control characters while preserving
 the syntax-tree offsets needed for deterministic line, column, pointer, and related
 locations. CRLF counts as one newline and tabs as one column.
+
+## Valid alternatives in diagnostics
+
+Some diagnostics carry additive repair-discovery fields. Codes, pointers,
+severities, and the other fields do not change. `allowed` lists at most 50 valid
+alternatives and `allowedCount` gives the size of the complete set. If `allowed` is
+truncated, `allowedLookup` names the exact place to read the whole set. Messages
+quote at most 10 values and then say `and N more`. No guess is ranked or applied.
+
+| Code   | `allowed`                                            | Order           |
+| ------ | ---------------------------------------------------- | --------------- |
+| `E014` | The schema `enum` (or `const`) values                | Schema order    |
+| `E016` | Valid source object kinds or library type kinds      | Declared order  |
+| `E017` | Supported project manifest formats                   | Declared order  |
+| `E102` | Terminal keys of the resolved device type            | Code-unit order |
+| `E103` | Device or cable type IDs from the resolved libraries | Code-unit order |
+
+`E103` always sets `allowedLookup`, because no command lists types while a project
+fails to resolve. It names the `types` entries of the expected kind in the
+`sources` files of each resolved library manifest. `E102` names the type's
+`terminals` the same way when it truncates. Each lookup names a file you can
+open, not the logical `file` used for display. A local library path is relative to
+the project manifest directory. The shipped core library is named twice:
+`node_modules/@thermite/core-library/library/...` below the runtime package root,
+and `packages/core-library/library/...` in a source checkout. `E013`
+pattern failures also carry `pattern`, the raw ECMAScript regular expression, and
+their message describes it in words. A pattern without a description is quoted as
+`/regex/`.

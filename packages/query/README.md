@@ -80,16 +80,22 @@ deduplication; the first invalid start wins, and an empty list succeeds with `[]
 `QueryError` always contains `code`, `message`, and the canonical `input`. It contains
 no source location because query misses are not compiler diagnostics.
 
-| Code   | Meaning                                                                         | Optional fields                     |
-| ------ | ------------------------------------------------------------------------------- | ----------------------------------- |
-| `Q001` | Exact UID or canonical designation was not found.                               | None.                               |
-| `Q002` | The object exists but the operation requires a device or cable.                 | `expectedKind`, `actualKind`.       |
-| `Q003` | A display terminal selector has no non-empty compiled-device prefix and suffix. | None.                               |
-| `Q004` | The selected device has no exact materialized terminal key.                     | `deviceDesignation`, `terminalKey`. |
+| Code   | Meaning                                                                         | Optional fields                                                                 |
+| ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Q001` | Exact UID or canonical designation was not found.                               | None.                                                                           |
+| `Q002` | The object exists but the operation requires a device or cable.                 | `expectedKind`, `actualKind`.                                                   |
+| `Q003` | A display terminal selector has no non-empty compiled-device prefix and suffix. | None.                                                                           |
+| `Q004` | The selected device has no exact materialized terminal key.                     | `deviceDesignation`, `terminalKey`, `allowed`, `allowedCount`, `allowedLookup`. |
 
 `input` is the unmodified object selector string, the selected terminal key for
 `Q004`, or compact structural JSON for `id` and `parts` selectors where required.
 Optional fields are omitted when they do not apply.
+
+`Q004` lists the device's materialized terminal keys in code-unit order: `allowed`
+holds at most 50 and `allowedCount` the total. When more than 50 exist,
+`allowedLookup` points at the `terminals` of the device's `inspect` result. The
+message quotes at most 10 keys. Devices have no selectable function keys, so none
+are listed.
 
 ## Structural identity and shared views
 

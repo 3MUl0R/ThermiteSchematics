@@ -1,3 +1,4 @@
+import type { DiagnosticAllowedValue } from "./diagnostic-alternatives.js";
 import type { DiagnosticCode } from "./diagnostic-catalog.js";
 
 export interface RelatedDiagnosticLocation {
@@ -17,6 +18,14 @@ export interface Diagnostic {
   jsonPointer: string;
   uid?: string;
   related?: RelatedDiagnosticLocation[];
+  /** Valid alternatives for the rejected value: at most 50, in a stable order. */
+  allowed?: DiagnosticAllowedValue[];
+  /** Size of the complete valid set whenever `allowed` is present. */
+  allowedCount?: number;
+  /** Exact place to read the complete valid set when `allowed` is incomplete. */
+  allowedLookup?: string;
+  /** Raw ECMAScript regular expression the rejected string must match. */
+  pattern?: string;
 }
 
 function compareText(left: string, right: string): number {

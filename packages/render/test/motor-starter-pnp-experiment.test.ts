@@ -640,7 +640,7 @@ describe("M6 Task 7 staged source-only PNP experiment", () => {
           code: "E102",
           severity: "error",
           message:
-            'Device "LS1" of type "core:prox-pnp-3wire" has no terminal "13".',
+            'Device "LS1" of type "core:prox-pnp-3wire" has no terminal "13". Declared terminal keys: ["1", "3", "4"].',
           file: "connections/field-terminations.json",
           line: 24,
           column: 40,
@@ -654,12 +654,14 @@ describe("M6 Task 7 staged source-only PNP experiment", () => {
               note: 'Resolved device type "core:prox-pnp-3wire" is declared here.',
             },
           ],
+          allowed: ["1", "3", "4"],
+          allowedCount: 3,
         },
         {
           code: "E102",
           severity: "error",
           message:
-            'Device "LS1" of type "core:prox-pnp-3wire" has no terminal "14".',
+            'Device "LS1" of type "core:prox-pnp-3wire" has no terminal "14". Declared terminal keys: ["1", "3", "4"].',
           file: "connections/field-terminations.json",
           line: 37,
           column: 40,
@@ -673,6 +675,8 @@ describe("M6 Task 7 staged source-only PNP experiment", () => {
               note: 'Resolved device type "core:prox-pnp-3wire" is declared here.',
             },
           ],
+          allowed: ["1", "3", "4"],
+          allowedCount: 3,
         },
       ],
       toolFailure: false,

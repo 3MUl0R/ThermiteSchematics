@@ -323,9 +323,11 @@ describe("D5/D11 inspect failures", () => {
       error: {
         code: "A001",
         message:
-          'A001 Invalid inspect request at "/selector/by": unsupported value.',
+          'A001 Invalid inspect request at "/selector/by": unsupported value; allowed values: ["uid", "designation"].',
         field: "/selector/by",
         reason: "unsupported-value",
+        allowed: ["uid", "designation"],
+        allowedCount: 2,
       },
       failureClass: "expected",
     });

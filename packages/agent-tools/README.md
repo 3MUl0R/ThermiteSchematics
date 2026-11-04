@@ -205,6 +205,22 @@ is A005. W801 warns of reservation release failure after a successful patch. Que
 Q001-Q004. Renderer failures remain R001-R005, including `render/0.3` title-text
 preflight. Authored compiler diagnostics retain normalized logical paths.
 
+When a field accepts a closed set of literals, its A001 with reason
+`unsupported-value` also carries `allowed`, that set in contract order, and
+`allowedCount`. Its message quotes the same set. Other A001 errors, including
+`unsupported-value` for a non-JSON input value, have no `allowed`. Q004 and compiler
+diagnostics (E014, E016, E017, E102, E103) list valid alternatives the same way, and
+E013 pattern failures carry `pattern`; see the schema and query READMEs. These fields are additive: codes, fields, reasons, and
+pointers are unchanged.
+
+When the CLI cannot read `--input`, the E001 message names the request: a relative
+path as given, an absolute path below the working directory relative to it, or only
+the file name for any other absolute path. Native path rules apply, so on POSIX a
+backslash stays part of the file name. A shown path or file name with any
+component that is absolute under another platform's rules (such as
+`C:\Users\x.json` or `\\server\share` on POSIX) is withheld. `file` stays
+`<request>`, and absolute host directories never appear.
+
 `failureClass: "expected"` identifies authored compiler, A-, Q-, or R-failures;
 `"tool"` identifies I/O, compiler tool, staging, write/rollback, invariant, and
 unexpected failures. It is absent from serialized envelopes.

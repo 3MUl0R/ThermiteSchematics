@@ -471,11 +471,13 @@ describe("D8/D11 request validation", () => {
       "outer version",
       { ...validTrace, format: "agent-tool-request/9.9" },
       "/format",
+      ["agent-tool-request/0.1"],
     ],
     [
       "ViewSpec version",
       { ...validTrace, spec: { ...validTrace.spec, format: "wrong" } },
       "/spec/format",
+      ["schematic-view-request/0.1", "schematic-view-request/0.2"],
     ],
     [
       "legacy family",
@@ -488,6 +490,7 @@ describe("D8/D11 request validation", () => {
         },
       },
       "/spec/family",
+      ["control", "power"],
     ],
     [
       "legacy root selector",
@@ -500,6 +503,7 @@ describe("D8/D11 request validation", () => {
         },
       },
       "/spec/root/by",
+      ["uid", "designation"],
     ],
     [
       "legacy flow",
@@ -513,6 +517,7 @@ describe("D8/D11 request validation", () => {
         },
       },
       "/spec/flow",
+      ["left-to-right", "top-to-bottom"],
     ],
     [
       "intent root selector",
@@ -524,6 +529,7 @@ describe("D8/D11 request validation", () => {
         },
       },
       "/spec/root/by",
+      ["uid", "designation"],
     ],
     [
       "intent discriminator",
@@ -532,6 +538,7 @@ describe("D8/D11 request validation", () => {
         spec: { ...validTrace.spec, intent: { kind: "path" } },
       },
       "/spec/intent/kind",
+      ["trace", "conductors", "loads"],
     ],
     [
       "trace target selector",
@@ -546,15 +553,17 @@ describe("D8/D11 request validation", () => {
         },
       },
       "/spec/intent/to/by",
+      ["uid", "designation"],
     ],
     [
       "intent flow",
       { ...validTrace, spec: { ...validTrace.spec, flow: "automatic" } },
       "/spec/flow",
+      ["left-to-right", "top-to-bottom"],
     ],
   ] as const)(
-    "routes a wrong %s literal to exact A001",
-    async (_name, candidate, field) => {
+    "routes a wrong %s literal to exact A001 with its allowed values",
+    async (_name, candidate, field, allowed) => {
       const injected = injectedTools();
       const outcome = await injected.tools.createView(
         candidate as unknown as CreateViewRequest,
@@ -567,9 +576,13 @@ describe("D8/D11 request validation", () => {
           message:
             "A001 Invalid create-view request at " +
             JSON.stringify(field) +
-            ": unsupported value.",
+            ": unsupported value; allowed values: [" +
+            allowed.map((value) => JSON.stringify(value)).join(", ") +
+            "].",
           field,
           reason: "unsupported-value",
+          allowed,
+          allowedCount: allowed.length,
         },
         failureClass: "expected",
       });
