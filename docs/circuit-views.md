@@ -90,19 +90,26 @@ This distinguishes main protection poles from auxiliary contacts without guessin
 The source of truth is the data-only [`SYMBOL_PROFILES` catalog in
 `@thermite/schema`](../packages/schema/src/symbol-profiles.ts), exported from
 the package and included in its compiled runtime. Each entry lists reusable
-aliases, core-only compatibility aliases, supported renderer families/roles,
+aliases, original core IEC aliases, supported renderer families/roles,
 function kinds, terminal counts, and any terminal-role or voltage constraints.
 It is JSON-serializable for runtime help and tooling. `CORE_SYMBOL_BINDINGS`
-records the fixed core type IDs and their reusable equivalents where available.
+records the original core type IDs and their reusable equivalents; those IDs do not gate rendering.
 
 For example, `thermite:pushbutton` supports two-terminal contacts in circuit
 views. `thermite:io-module` supports one/two-terminal channels in circuit views,
-but rooted control and loads bindings accept only one-terminal channels.
-Only `thermite:io-module`, `thermite:terminal-strip`, and `thermite:dc-supply`
-currently have reusable rooted bindings. A circuit-capable profile does not
+but rooted control bindings accept only one-terminal channels; loads support
+covers its declared load/source context instead of standalone channels.
+Rooted profiles also cover contactor/relay coils and contacts, pushbuttons,
+switches, breakers, fuses, overloads, motors, lamps, power sources and three-wire
+sensors. Main contactor and overload poles require ordered `power_input` /
+`power_output` roles; their control auxiliaries require two `aux` roles. A circuit-capable profile does not
 automatically work in rooted power, control, or loads views. The catalog also
 records existing signal-loop-only profiles so they are not mistaken for unknown
-circuit profiles. `thermite:pressure-transmitter`, `thermite:analog-actuator`,
+circuit profiles. Loads selection admits declared load functions and their physical
+terminal/source context; it does not traverse contacts or coils. Contactors,
+overloads, switches and pushbuttons therefore retain power/control support
+without claiming loads support. Relay loads support is its DC load/2; I/O loads
+support covers buses, DC load/2 and declared DC sources, not standalone channels. `thermite:pressure-transmitter`, `thermite:analog-actuator`,
 and `thermite:bulkhead-connector` have signal-loop roles only; they cannot replace
 a circuit or rooted-view symbol. Catalog `notes` explain profile semantics and
 layout observations. io-module `other` interfaces bind 1–32 terminals. Isolated
@@ -112,26 +119,50 @@ These are measured examples, not guaranteed paper limits. Larger interfaces may
 need top-to-bottom or larger paper; labels and selections affect printability.
 
 All circuit profiles allow a one-terminal bus. An explicit protective-earth
-role selects the earth mark; no bonding wire is added. Core `iec:*` symbols
-work through exact core type IDs, not reusable profile matching. Copying
-`core:plc-compact` under another ID therefore requires replacing `iec:plc` with
-`thermite:io-module`. The core proximity sensor has no reusable equivalent or
-circuit mapping yet.
+role selects the earth mark; no bonding wire is added. The catalog's original
+core `iec:*` symbols resolve to their declared `thermite:*` equivalents for any
+type ID, subject to the same function shapes. A byte-identical core type clone
+therefore keeps its rendering support with either spelling. Core 0.1.0 library
+bytes are unchanged.
+
+`thermite:sensor-3wire` supports a two-terminal supply load and a one-terminal
+output channel in circuit views. Supply terminals use authored `supply_positive`
+and `supply_return` roles whenever either supply terminal carries any role.
+In that case exactly one positive and one return are required; partial, duplicate
+or unknown supply roles receive W111 advice before drawing and fail with R001
+for a sensor trace root or an explained R006 for a circuit view. Only when
+neither supply terminal has any role does authored function order mean positive,
+return. Other role spellings, including `0v`, `return` and `dc_negative`, require
+correction to the exact profile roles before polarity can be drawn.
+Function/terminal names and pin numbers never assign those roles. Circuit terminal captions show `+`, `-` and `OUT`.
+Rooted control/loads and existing trace selection combine exactly one such
+supply and output on three distinct terminals. Multiple ambiguous candidates
+are not combined. The core proximity sensor has this circuit mapping too.
+PNP/NPN text accepts standalone positive type descriptions such as
+`Three-wire PNP proximity sensor` or `NPN output sensor` (with an optional final
+period). Free prose and negation are not interpreted as electrical facts. The
+profile, names, pinout and wiring do not establish output type.
+No function or symbol joins physical terminals.
+
+A `thermite:dc-supply` input load with ordered `ac_line_input` /
+`ac_input_return` terminal roles can root a power view when the authored feed
+reaches a power source. Its DC output remains a separate control source. This
+adds no traversal through the conversion function or through device relations.
 
 Validation emits **W111** at the library type's `symbol` when a placed type
-uses an unknown/core-only profile or has non-mechanism functions that fit no
-cataloged family. It names up to ten unfit functions and ten affected device
+uses an unknown profile, has non-mechanism functions that fit no
+cataloged family, or declares contradictory/partial sensor supply roles. It names up to ten unfit functions and ten affected device
 designations, naturally sorted without locale dependence, then a remaining count.
-For unknown/core-only symbols it summarizes the number of functions instead of
+For unknown symbols it summarizes the number of functions instead of
 listing all their names.
 Explicit `circuitSymbols` marks count as circuit support before any profile
-lookup, including for unknown and core-only symbols. Terminal-only roles can
+lookup, including for unknown symbols. Terminal-only roles can
 support devices without drawable functions; they do not excuse an unsupported
 selected function.
 
 Replacement advice names the equivalent's families for the type's actual
-functions. Circuit-only equivalents direct local types to a circuit view while
-rooted views still require the original core type ID. When only some functions
+functions. Circuit-only profiles still require a circuit view; a matching
+profile does not broaden rooted traversal or guarantee a connected root. When only some functions
 fit, the first remedy is an explicit compatible `circuitSymbols` mark for the
 unfit functions (checked by E206), or moving them to a separate device type.
 This preserves the profile used by the already supported functions.

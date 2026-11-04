@@ -1,5 +1,7 @@
 import {
   CORE_SYMBOL_BINDINGS,
+  symbolProfile,
+  resolveSensorSupply,
   SYMBOL_PROFILES,
   appendJsonPointer,
   boundedAlternatives,
@@ -92,7 +94,7 @@ function supportedReplacements(): string {
     // across the complete message rather than printing ten for every family.
     const reserved = groups
       .slice(i + 1)
-      .reduce((n, g) => n + Math.min(3, g.profiles.length), 0);
+      .reduce((n, g) => n + Math.min(2, g.profiles.length), 0);
     const shown = Math.min(
       group.profiles.length,
       Math.max(0, budget - reserved),
@@ -118,7 +120,50 @@ function functionFamilies(
   // Render resolves explicit marks before consulting any profile. E206 separately
   // validates each mark against the declared electrical facts.
   if (Object.hasOwn(type.circuitSymbols ?? {}, key)) families.add("circuit");
+  if (
+    profile?.id === "thermite:sensor-3wire" &&
+    type.functions[key]!.kind === "channel" &&
+    type.functions[key]!.direction !== "output"
+  )
+    return FAMILIES.filter((f) => families.has(f));
+  const fn = type.functions[key]!;
+  if (
+    profile?.id === "thermite:sensor-3wire" &&
+    fn.kind === "load" &&
+    fn.terminals.length === 2 &&
+    !resolveSensorSupply(
+      fn.terminals.map((key) => ({ key, role: type.terminals[key]?.role })),
+    ).ok
+  )
+    return FAMILIES.filter((f) => families.has(f));
+  const sensorFunctions = Object.values(type.functions);
+  const sensorSupplies = sensorFunctions.filter(
+    (f) => f.kind === "load" && f.terminals.length === 2,
+  );
+  const sensorOutputs = sensorFunctions.filter(
+    (f) =>
+      f.kind === "channel" &&
+      f.direction === "output" &&
+      f.terminals.length === 1,
+  );
+  const completeSensor =
+    sensorSupplies.length === 1 &&
+    sensorOutputs.length === 1 &&
+    resolveSensorSupply(
+      sensorSupplies[0]!.terminals.map((key) => ({
+        key,
+        role: type.terminals[key]?.role,
+      })),
+    ).ok &&
+    new Set([...sensorSupplies[0]!.terminals, ...sensorOutputs[0]!.terminals])
+      .size === 3;
   for (const support of profile?.support ?? []) {
+    if (
+      profile?.id === "thermite:sensor-3wire" &&
+      ROOTED.includes(support.family as (typeof ROOTED)[number]) &&
+      !completeSensor
+    )
+      continue;
     if (
       support.functions.some((shape) =>
         symbolFunctionMatchesShape(type, type.functions[key]!, shape),
@@ -189,22 +234,15 @@ function replacementAdvice(
     FAMILIES.filter((f) => families.has(f)).join(", ") ||
     "none for the declared functions";
   const parts = repair ? [repair] : [];
-  parts.push(
-    `Use ${JSON.stringify(equivalent.id)}; its functions then fit: ${fits}.`,
-  );
-  if (!ROOTED.some((f) => supports(equivalent, f))) {
-    parts.push(
-      `Rooted power/control/loads still bind ${JSON.stringify(binding.typeId)} by ID; use a circuit view for the local type until profile binding lands.`,
-    );
-  } else if (!ROOTED.some((f) => families.has(f))) {
+  parts.push(`Declared functions fit: ${fits}.`);
+  if (!ROOTED.some((f) => families.has(f)))
     parts.push(
       "No rooted power/control/loads function binding fits the declared functions; use a circuit view for supported functions.",
     );
-  }
   const remaining = unfitFunctions(type, equivalent);
   if (remaining.length)
     parts.push(
-      `With it, ${remaining.length} functions still need explicit circuitSymbols marks or a separate type.`,
+      `${remaining.length} function${remaining.length === 1 ? " still needs an explicit circuitSymbols mark" : "s still need explicit circuitSymbols marks"} or a separate type.`,
     );
   return parts.join(" ");
 }
@@ -256,17 +294,32 @@ export function symbolProfileDiagnostics(
     const { typeEntry } = entries[0]!;
     const type = typeEntry.type;
     if (type.kind !== "device_type" || type.symbol === undefined) continue;
-    if (CORE_SYMBOL_BINDINGS.some((b) => b.typeId === type.id)) continue;
     const coreAlias = CORE_SYMBOL_BINDINGS.find(
       (b) => b.symbol === type.symbol,
     );
-    const profile = SYMBOL_PROFILES.find(
-      (p) => p.id === type.symbol || p.aliases.includes(type.symbol!),
-    );
+    const profile = SYMBOL_PROFILES.find((p) => p.id === symbolProfile(type));
+    const roleProblems =
+      profile?.id === "thermite:sensor-3wire"
+        ? Object.entries(type.functions)
+            .sort(([a], [b]) => compareDesignations(a, b))
+            .flatMap(([key, fn]) => {
+              if (fn.kind !== "load" || fn.terminals.length !== 2) return [];
+              const roles = resolveSensorSupply(
+                fn.terminals.map((key) => ({
+                  key,
+                  role: type.terminals[key]?.role,
+                })),
+              );
+              return roles.ok
+                ? []
+                : [`${JSON.stringify(key)}: ${roles.reason}`];
+            })
+        : [];
     const functions = drawableFunctions(type);
     const unfit = unfitFunctions(type, profile);
     if (
       unfit.length === 0 &&
+      roleProblems.length === 0 &&
       (functions.length > 0 || terminalFamilies(type, profile).length > 0)
     )
       continue;
@@ -289,15 +342,14 @@ export function symbolProfileDiagnostics(
     const subject = `${devices.length === 1 ? "Device" : "Devices"} ${names}${extra}`;
     const context = `${subject} type ${JSON.stringify(type.id)} symbol ${JSON.stringify(type.symbol)}`;
     const parts: string[] = [];
-    if (coreAlias || !profile) {
-      const reason = coreAlias
-        ? `core-only alias bound to ${JSON.stringify(coreAlias.typeId)} by ID`
-        : "unknown profile";
-      parts.push(`${context}: ${reason}.`);
+    if (!profile) {
+      parts.push(`${context}: unknown profile.`);
       if (functions.length > 0)
         parts.push(
           unfit.length === functions.length
-            ? `None of ${functions.length} functions has cataloged family support.`
+            ? functions.length === 1
+              ? "The declared function has no cataloged family support."
+              : `None of ${functions.length} functions has cataloged family support.`
             : `${unfit.length} of ${functions.length} functions lack cataloged family support; explicit marks support the others.`,
         );
     } else {
@@ -307,6 +359,10 @@ export function symbolProfileDiagnostics(
           `Functions with no cataloged family: ${describeFunctions(unfit)}.`,
         );
     }
+    if (roleProblems.length)
+      parts.push(
+        `Invalid sensor supply roles: ${roleProblems.slice(0, MAX_FUNCTION_NAMES).join(" ")}${roleProblems.length > MAX_FUNCTION_NAMES ? ` and ${roleProblems.length - MAX_FUNCTION_NAMES} more invalid ${roleProblems.length - MAX_FUNCTION_NAMES === 1 ? "supply" : "supplies"}.` : ""}`,
+      );
     if (functions.length === 0) {
       const requirements = profile?.support
         .filter((s) => s.terminalOnly)
@@ -320,7 +376,11 @@ export function symbolProfileDiagnostics(
       );
     }
     parts.push(
-      replacementAdvice(type, coreAlias, unfit.length < functions.length),
+      replacementAdvice(
+        type,
+        coreAlias,
+        unfit.length > 0 && unfit.length < functions.length,
+      ),
     );
 
     const jsonPointer = appendJsonPointer(

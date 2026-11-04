@@ -14,6 +14,7 @@ export type FunctionWord =
   | "AI"
   | "AO"
   | "PNP"
+  | "NPN"
   | "coil"
   | "motor"
   | "source"
@@ -48,7 +49,11 @@ export function sourceEnclosureInk(mmPerUnit = 1) {
 
 export type PrintableCaption =
   | { readonly kind: "internal-key" }
-  | { readonly kind: "aggregate"; readonly mark: SymbolDefinition["id"] }
+  | {
+      readonly kind: "aggregate";
+      readonly mark: SymbolDefinition["id"];
+      readonly type?: IrDeviceType;
+    }
   | {
       readonly kind: "function";
       readonly fn: IrFunction;
@@ -85,6 +90,19 @@ function functionWord(
   return roles.includes("analog_output") ? "AO" : "DO";
 }
 
+/** Recognize standalone positive declarations, including the unchanged core
+ * description. Free prose, negation, names, ratings and pinouts establish no
+ * output type. Keep this deliberately narrower than natural-language inference. */
+export function declaredSensorOutput(
+  type: Pick<IrDeviceType, "description">,
+): "PNP" | "NPN" | undefined {
+  return type.description
+    ?.trim()
+    .match(
+      /^(?:Three-wire )?(PNP|NPN) (?:proximity sensor|output sensor)\.?$/u,
+    )?.[1] as "PNP" | "NPN" | undefined;
+}
+
 /** Keys identify source objects; printable captions carry authored or derived facts. */
 export function printableCaption(
   caption: PrintableCaption,
@@ -95,18 +113,25 @@ export function printableCaption(
       return "";
     case "aggregate": {
       const word =
-        caption.mark === "ais:motor-3ph"
+        caption.mark === "ais:motor-3ph" ||
+        caption.mark === "ais:motor-3ph-unbonded"
           ? "motor"
           : caption.mark === "ais:switch-sensor-pnp"
-            ? "PNP"
+            ? caption.type
+              ? declaredSensorOutput(caption.type)
+              : "PNP"
             : caption.mark === "ais:power-source-3ph" ||
-                caption.mark === "ais:power-source-dc"
+                caption.mark === "ais:power-source-dc" ||
+                caption.mark === "ais:power-source-3wire"
               ? "source"
               : undefined;
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "function": {
-      const word = functionWord(caption.fn, caption.type);
+      const word =
+        caption.mark === "ais:motor"
+          ? "motor"
+          : functionWord(caption.fn, caption.type);
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "channel":

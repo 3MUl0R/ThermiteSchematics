@@ -1,3 +1,4 @@
+import { symbolProfile } from "./profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 import {
   PRINTABLE_SYMBOL_POLICY,
@@ -37,22 +38,11 @@ export type CircuitMark =
   | "conductivity-probe"
   | "receptacle"
   | "ac-input"
-  | "dc-output";
+  | "dc-output"
+  | "sensor-3wire";
 
-const CORE_PROFILES: Readonly<Record<string, string>> = Object.freeze({
-  "core:supply-480v-3ph": "thermite:power-source",
-  "core:breaker-3p": "thermite:breaker",
-  "core:contactor-3p-1no": "thermite:contactor",
-  "core:overload-3p-1nc": "thermite:overload",
-  "core:motor-3ph": "thermite:motor-3ph",
-  "core:pushbutton-nc": "thermite:pushbutton",
-  "core:limit-switch-2wire": "thermite:switch",
-  "core:plc-compact": "thermite:io-module",
-  "core:psu-24vdc": "thermite:dc-supply",
-  "core:terminal-block-8": "thermite:terminal-strip",
-  "core:junction-box-8": "thermite:terminal-strip",
-});
 export const CIRCUIT_PROFILES = Object.freeze([
+  "thermite:sensor-3wire",
   "thermite:contactor",
   "thermite:relay",
   "thermite:breaker",
@@ -79,9 +69,7 @@ export const CIRCUIT_PROFILES = Object.freeze([
 ] as const);
 
 export function circuitProfile(type: IrDeviceType): string {
-  const profile = Object.hasOwn(CORE_PROFILES, type.id)
-    ? CORE_PROFILES[type.id]
-    : type.symbol;
+  const profile = symbolProfile(type);
   if (
     !profile ||
     !CIRCUIT_PROFILES.includes(profile as (typeof CIRCUIT_PROFILES)[number])
@@ -93,11 +81,7 @@ export function circuitProfile(type: IrDeviceType): string {
 }
 
 export function isCircuitTerminalStrip(type: IrDeviceType): boolean {
-  return (
-    (Object.hasOwn(CORE_PROFILES, type.id)
-      ? CORE_PROFILES[type.id]
-      : type.symbol) === "thermite:terminal-strip"
-  );
+  return symbolProfile(type) === "thermite:terminal-strip";
 }
 
 export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
@@ -190,6 +174,12 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
       return "coil";
     if (profile === "thermite:solenoid") return "solenoid";
   }
+  if (
+    profile === "thermite:sensor-3wire" &&
+    ((f.kind === "load" && count === 2) ||
+      (f.kind === "channel" && f.direction === "output" && count === 1))
+  )
+    return "sensor-3wire";
   if (f.kind === "load") {
     if (profile === "thermite:motor-3ph" && count === 3) return "motor";
     if (profile === "thermite:motor" && count === 2) return "motor";
@@ -470,6 +460,7 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
         ],
       },
     ],
+    "sensor-3wire": [rect(1, 1, 10, 10), circle(6, 6, 2), line(8, 6, 12, 6)],
     "dc-output": [
       rect(1, 1, 10, 10),
       line(3, 4, 9, 4),
@@ -729,7 +720,8 @@ export function circuitInterfaceMark(
   const outline = vertical
     ? `<rect x="${n(low)}" y="${n(cy - 5)}" width="${n(high - low)}" height="10"/>`
     : `<rect x="${n(cx - 5)}" y="${n(low)}" width="10" height="${n(high - low)}"/>`;
-  const leadEnd = source ? 6 : 5;
+  const sensorOutput = mark === "sensor-3wire" && pins.length === 1;
+  const leadEnd = source ? 6 : sensorOutput ? 10 / 3 : 5;
   const leads = pins
     .map((p) =>
       vertical
@@ -737,5 +729,5 @@ export function circuitInterfaceMark(
         : `<line${source ? ' data-source-stub="true"' : ""} y1="${n(p.y)}" y2="${n(p.y)}" x1="${n(p.x)}" x2="${n(cx + (p.side === "WEST" ? -leadEnd : leadEnd))}"/>`,
     )
     .join("");
-  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source ? "" : outline}${leads}</g><g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`;
+  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput ? "" : outline}${leads}</g><g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`;
 }

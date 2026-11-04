@@ -1,3 +1,5 @@
+import { resolveSensorSupply } from "@thermite/schema";
+import { symbolProfile } from "./symbols/profiles.js";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type {
   ElectricalIr,
@@ -11,7 +13,10 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
-import { printableCaption } from "./symbols/printable-policy.js";
+import {
+  declaredSensorOutput,
+  printableCaption,
+} from "./symbols/printable-policy.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import {
   circuitAttachment,
@@ -532,13 +537,36 @@ function makeNodes(
           ...functions.filter((f) => circuitMark(type, f) === "winding"),
           ...functions.filter((f) => circuitMark(type, f) !== "winding"),
         ]
-      : functions;
+      : symbolProfile(type) === "thermite:sensor-3wire"
+        ? functions.map((f) => {
+            if (f.kind !== "load" || f.terminals.length !== 2) return f;
+            if (circuitMark(type, f) !== "sensor-3wire") return f;
+            const supplied = resolveSensorSupply(
+              f.terminals.map((t) => ({
+                key: t.terminalKey,
+                role: type.terminals.find((p) => p.key === t.terminalKey)?.role,
+              })),
+            );
+            if (!supplied.ok)
+              throw new Error(
+                `Invalid sensor supply ${type.id}/${f.id.functionKey}: ${supplied.reason}`,
+              );
+            return {
+              ...f,
+              terminals: [
+                f.terminals.find((t) => t.terminalKey === supplied.positive)!,
+                f.terminals.find((t) => t.terminalKey === supplied.return)!,
+              ],
+            };
+          })
+        : functions;
     for (const f of drawingFunctions) {
       const mark = circuitMark(type, f);
       const oneSided = oneSidedFunction(f, mark);
       const channelLines =
         f.kind === "channel" ? channelLabelLines(device, f, type) : undefined;
       const slots = Math.max(
+        mark === "sensor-3wire" && f.kind === "load" ? 3 : 1,
         oneSided ? f.terminals.length : 1,
         channelLines
           ? Math.ceil(
@@ -547,10 +575,11 @@ function makeNodes(
                     ...channelLines.map((line) =>
                       measure(line, TERMINAL_TEXT_SIZE),
                     ),
-                  ) + 4
+                  ) + (mark === "sensor-3wire" ? 16 : 4)
                 : channelLines.length * 3.1 +
                   0.8 +
-                  (mark === "level-sensor" ? 9 : 0)) / PITCH,
+                  (["level-sensor", "sensor-3wire"].includes(mark) ? 9 : 0)) /
+                PITCH,
             )
           : 1,
       );
@@ -604,7 +633,10 @@ function makeNodes(
             ? center + (i - (f.terminals.length - 1) / 2) * PITCH
             : center,
           side,
-          label: terminal.terminalKey,
+          label:
+            mark === "sensor-3wire"
+              ? `${terminal.terminalKey} (${f.kind === "channel" ? "OUT" : i === 0 ? "+" : "-"})`
+              : terminal.terminalKey,
           outside,
         });
         if (f.kind === "bus" && f.terminals.length === 1 && mark !== "earth")
@@ -985,9 +1017,21 @@ function emitNode(
     );
     if (f.kind === "channel") {
       const lines = row.channelLines!;
-      const specialized = mark === "level-sensor";
+      const specialized = mark === "level-sensor" || mark === "sensor-3wire";
       const annotationTop = cy - (9 + lines.length * 3.1) / 2;
-      if (specialized)
+      if (mark === "sensor-3wire")
+        out.push(
+          circuitInterfaceMark(
+            mark,
+            cx,
+            annotationTop + 4,
+            f.terminals.map((t) =>
+              node.pins.find((p) => key(p.terminal) === key(t))!,
+            ),
+            vertical,
+          ),
+        );
+      else if (specialized)
         out.push(
           `<g transform="translate(${n(cx - 4)} ${n(annotationTop)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`,
         );
@@ -996,7 +1040,7 @@ function emitNode(
         const line = printableLines[i]!;
         if (!line) continue;
         out.push(
-          `<g data-channel-line="${i === 0 ? "address" : "signal"}">${text(cx, specialized ? annotationTop + 11.5 + i * 3.1 : cy + 0.8 + (i - (lines.length - 1) / 2) * 3.1, line, TERMINAL_TEXT_SIZE, "middle")}</g>`,
+          `<g data-channel-line="${i === 0 ? "address" : "signal"}">${text(vertical && mark === "sensor-3wire" ? cx - 6 : cx, specialized ? annotationTop + 11.5 + i * 3.1 : cy + 0.8 + (i - (lines.length - 1) / 2) * 3.1, line, TERMINAL_TEXT_SIZE, "middle")}</g>`,
         );
       }
     } else {
@@ -1055,6 +1099,7 @@ function emitNode(
           "ac-input",
           "dc-output",
           "source",
+          "sensor-3wire",
         ].includes(mark)
       ) {
         out.push(
@@ -1078,6 +1123,22 @@ function emitNode(
           `<g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`,
         );
       }
+      if (mark === "sensor-3wire" && declaredSensorOutput(node.type))
+        out.push(
+          text(
+            cx,
+            vertical
+              ? cy + 8
+              : Math.max(
+                  ...f.terminals.map(
+                    (t) => node.pins.find((p) => key(p.terminal) === key(t))!.y,
+                  ),
+                ) + 5,
+            declaredSensorOutput(node.type)!,
+            2.5,
+            "middle",
+          ),
+        );
       if (!oneSidedFunction(f, mark) || f.kind === "bus") {
         for (const [i, terminal] of [
           f.terminals[0]!,

@@ -578,7 +578,7 @@ function pnpTraceFirstSignalEdgeId(
     (node): node is SymbolPresentationNode =>
       node.kind === "symbol" &&
       node.deviceUid === rootDeviceUid &&
-      node.typeId === "core:prox-pnp-3wire",
+      node.symbolId === "ais:switch-sensor-pnp",
   );
   if (root === undefined) return undefined;
   if (selected !== undefined) {

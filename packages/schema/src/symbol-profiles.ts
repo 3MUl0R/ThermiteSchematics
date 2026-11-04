@@ -30,90 +30,90 @@ export interface SymbolFamilySupport {
 export interface CoreSymbolBinding {
   readonly typeId: string;
   readonly symbol: string;
-  readonly binding: "core-type-id";
+  readonly binding: "symbol-alias";
   readonly equivalent?: string;
 }
 
-/** IEC names are compatibility metadata for these exact IDs, never reusable aliases.
- * Equivalents follow symbols/circuit.ts; prox has no reusable equivalent yet.
- */
+/** Original core metadata and reusable IEC aliases. Binding always requires the
+ * equivalent profile's authored function shapes, regardless of the type ID. */
 export const CORE_SYMBOL_BINDINGS: readonly CoreSymbolBinding[] = [
   {
     typeId: "core:supply-480v-3ph",
     symbol: "iec:three-phase-supply",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:power-source",
   },
   {
     typeId: "core:breaker-3p",
     symbol: "iec:circuit-breaker",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:breaker",
   },
   {
     typeId: "core:contactor-3p-1no",
     symbol: "iec:contactor",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:contactor",
   },
   {
     typeId: "core:overload-3p-1nc",
     symbol: "iec:overload-relay",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:overload",
   },
   {
     typeId: "core:motor-3ph",
     symbol: "iec:three-phase-motor",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:motor-3ph",
   },
   {
     typeId: "core:pushbutton-nc",
     symbol: "iec:pushbutton-nc",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:pushbutton",
   },
   {
     typeId: "core:limit-switch-2wire",
     symbol: "iec:limit-switch-no",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:switch",
   },
   {
     typeId: "core:plc-compact",
     symbol: "iec:plc",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:io-module",
   },
   {
     typeId: "core:psu-24vdc",
     symbol: "iec:dc-power-supply",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:dc-supply",
   },
   {
     typeId: "core:terminal-block-8",
     symbol: "iec:terminal-block",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:terminal-strip",
   },
   {
     typeId: "core:junction-box-8",
     symbol: "iec:junction-box",
-    binding: "core-type-id",
+    binding: "symbol-alias",
     equivalent: "thermite:terminal-strip",
   },
   {
     typeId: "core:prox-pnp-3wire",
     symbol: "iec:proximity-sensor",
-    binding: "core-type-id",
+    binding: "symbol-alias",
+    equivalent: "thermite:sensor-3wire",
   },
 ];
 
 export interface SymbolProfile {
   readonly id: string;
-  /** Reusable aliases only; core-only IEC aliases are in coreAliases. */
+  /** Additional aliases; original core IEC aliases are recorded in coreAliases. */
   readonly aliases: readonly string[];
   readonly coreAliases: readonly CoreSymbolBinding[];
   readonly support: readonly SymbolFamilySupport[];
@@ -173,11 +173,109 @@ const LOOP_AUXILIARY: SymbolFamilySupport = {
     "Declared other/2 auxiliary pairs may begin/end at an intermediate stage, on separate nets. This catalog deliberately limits auxiliary shape support; contact/2 and bus/2 need their own supported circuit binding.",
 };
 
+const POWER_CONTACT = {
+  ...CONTACT,
+  terminalRoles: ["power_input", "power_output"],
+} as const;
+const AUX_CONTACT = { ...CONTACT, terminalRoles: ["aux", "aux"] } as const;
+const EARTH = { ...BUS, terminalRoles: ["protective_earth"] } as const;
+const LOAD3 = { kind: "load", minTerminals: 3, maxTerminals: 3 } as const;
+const PHASE_SOURCE = {
+  kind: "source",
+  minTerminals: 3,
+  maxTerminals: 3,
+  terminalRoles: ["phase_1_source", "phase_2_source", "phase_3_source"],
+} as const;
+const AC_INPUT = {
+  ...LOAD2,
+  terminalRoles: ["ac_line_input", "ac_input_return"],
+} as const;
+function rooted(
+  power: readonly SymbolFunctionShape[],
+  control: readonly SymbolFunctionShape[],
+  loads: readonly SymbolFunctionShape[] = control,
+): SymbolFamilySupport[] {
+  return [
+    ...(power.length
+      ? [
+          {
+            family: "power" as const,
+            role: "function" as const,
+            functions: power,
+          },
+        ]
+      : []),
+    ...(control.length
+      ? [
+          {
+            family: "control" as const,
+            role: "function" as const,
+            functions: control,
+          },
+        ]
+      : []),
+    ...(loads.length
+      ? [
+          {
+            family: "loads" as const,
+            role: "function" as const,
+            functions: loads,
+            notes:
+              "Loads selection admits load functions and their explicit terminal/source context; it does not traverse contacts or coils.",
+          },
+        ]
+      : []),
+  ];
+}
+
 /** The supported reusable profiles. Circuit accepts a one-terminal bus on each.
  * Circuit/rooted mechanisms are metadata, not drawable functions. Support does not imply
  * full device coverage, connectivity, a valid root, or printable layout.
  */
 export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
+  {
+    id: "thermite:sensor-3wire",
+    notes:
+      "Two-terminal supply load in authored positive/return order and one-terminal output channel. Supply roles are authoritative: require one supply_positive and one supply_return when either supply terminal has any role; use authored order only when neither terminal has a role. Names and pin numbers never identify polarity. Rooted control/loads combine one supply and one output without electrical continuity. PNP/NPN text recognizes standalone positive type descriptions: Three-wire PNP proximity sensor or NPN output sensor (PNP/NPN and proximity/output variants, optional final period). Free prose is not interpreted; the profile alone declares neither.",
+    aliases: [],
+    coreAliases: CORE_SYMBOL_BINDINGS.filter(
+      (b) => b.equivalent === "thermite:sensor-3wire",
+    ),
+    support: [
+      ...rooted(
+        [],
+        [
+          {
+            ...LOAD2,
+            notes:
+              "Rooted binding requires one output channel/1 companion on three distinct terminals.",
+          },
+          {
+            kind: "channel",
+            minTerminals: 1,
+            maxTerminals: 1,
+            notes:
+              "Output direction required; rooted binding requires one load/2 supply companion on distinct terminals.",
+          },
+        ],
+      ),
+      {
+        family: "circuit",
+        role: "function",
+        functions: [
+          BUS,
+          LOAD2,
+          {
+            kind: "channel",
+            minTerminals: 1,
+            maxTerminals: 1,
+            notes:
+              "Output direction required; rooted binding requires one load/2 supply companion on distinct terminals.",
+          },
+        ],
+      },
+    ],
+  },
   {
     id: "thermite:contactor",
     notes:
@@ -187,6 +285,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:contactor",
     ),
     support: [
+      ...rooted([POWER_CONTACT], [COIL, AUX_CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT, COIL] },
     ],
   },
@@ -197,6 +296,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     aliases: [],
     coreAliases: [],
     support: [
+      ...rooted([], [CONTACT, COIL, DC_LOAD], [DC_LOAD]),
       {
         family: "circuit",
         role: "function",
@@ -213,6 +313,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:breaker",
     ),
     support: [
+      ...rooted([CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
     ],
   },
@@ -225,6 +326,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:overload",
     ),
     support: [
+      ...rooted([POWER_CONTACT], [AUX_CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
     ],
   },
@@ -235,6 +337,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     aliases: [],
     coreAliases: [],
     support: [
+      ...rooted([CONTACT, OTHER2], []),
       {
         family: "circuit",
         role: "function",
@@ -251,6 +354,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:motor-3ph",
     ),
     support: [
+      ...rooted([LOAD3, EARTH], []),
       {
         family: "circuit",
         role: "function",
@@ -263,7 +367,10 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     notes: "Two-terminal motor load.",
     aliases: [],
     coreAliases: [],
-    support: [{ family: "circuit", role: "function", functions: [BUS, LOAD2] }],
+    support: [
+      ...rooted([LOAD2], []),
+      { family: "circuit", role: "function", functions: [BUS, LOAD2] },
+    ],
   },
   {
     id: "thermite:heater",
@@ -293,6 +400,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:power-source",
     ),
     support: [
+      ...rooted([PHASE_SOURCE, EARTH], [DC_SOURCE]),
       { family: "circuit", role: "function", functions: [BUS, SOURCE] },
     ],
   },
@@ -305,28 +413,28 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:dc-supply",
     ),
     support: [
-      ...ROOTED_SUPPORT,
+      ...rooted([BUS, AC_INPUT], ROOTED_CONTROL_SHAPES),
       { family: "circuit", role: "function", functions: [BUS, LOAD23, SOURCE] },
     ],
   },
   {
     id: "thermite:io-module",
     notes:
-      "One/two-terminal circuit channels, supply functions, contacts and generic interfaces. Rooted control/loads bind only one-terminal channels. Authored I/O address and signal meaning identify channels.",
+      "One/two-terminal circuit channels, supply functions, contacts and generic interfaces. Rooted control binds one-terminal channels; loads support covers buses and declared DC load/source context rather than standalone channels. Authored I/O address and signal meaning identify channels.",
     aliases: [],
     coreAliases: CORE_SYMBOL_BINDINGS.filter(
       (b) => b.equivalent === "thermite:io-module",
     ),
     support: [
       { family: "power", role: "function", functions: [BUS] },
-      ...(["control", "loads"] as const).map((family) => ({
-        family,
-        role: "function" as const,
-        functions: [
+      ...rooted(
+        [],
+        [
           ...ROOTED_CONTROL_SHAPES,
-          { kind: "channel" as const, minTerminals: 1, maxTerminals: 1 },
+          { kind: "channel", minTerminals: 1, maxTerminals: 1 },
         ],
-      })),
+        ROOTED_CONTROL_SHAPES,
+      ),
       {
         family: "circuit",
         role: "function",
@@ -382,7 +490,10 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     notes: "Two-terminal lamp load.",
     aliases: [],
     coreAliases: [],
-    support: [{ family: "circuit", role: "function", functions: [BUS, LOAD2] }],
+    support: [
+      ...rooted([], [LOAD2]),
+      { family: "circuit", role: "function", functions: [BUS, LOAD2] },
+    ],
   },
   {
     id: "thermite:switch",
@@ -392,6 +503,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:switch",
     ),
     support: [
+      ...rooted([], [CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
     ],
   },
@@ -404,6 +516,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
       (b) => b.equivalent === "thermite:pushbutton",
     ),
     support: [
+      ...rooted([], [CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
     ],
   },
@@ -519,3 +632,49 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     support: [LOOP_INTERMEDIATE, LOOP_AUXILIARY],
   },
 ];
+
+/** Resolve declared profile aliases without consulting type identity. */
+export function symbolProfile(type: {
+  readonly symbol?: string | undefined;
+}): string | undefined {
+  const equivalent =
+    CORE_SYMBOL_BINDINGS.find((b) => b.symbol === type.symbol)?.equivalent ??
+    type.symbol;
+  return (
+    SYMBOL_PROFILES.find(
+      (p) => p.id === equivalent || p.aliases.includes(equivalent ?? ""),
+    )?.id ?? equivalent
+  );
+}
+
+export type SensorSupplyResolution =
+  | { readonly ok: true; readonly positive: string; readonly return: string }
+  | { readonly ok: false; readonly reason: string };
+
+/** Supply roles are authoritative. Authored order is a fallback only when
+ * neither supply terminal has any role. This helper neither assigns roles nor joins nets. */
+export function resolveSensorSupply(
+  terminals: readonly {
+    readonly key: string;
+    readonly role?: string | undefined;
+  }[],
+): SensorSupplyResolution {
+  const declared = terminals
+    .map((t) => `${JSON.stringify(t.key)} (${t.role ?? "no role"})`)
+    .join(", ");
+  if (terminals.length !== 2 || terminals[0]!.key === terminals[1]!.key)
+    return {
+      ok: false,
+      reason: `Sensor supply requires two distinct terminals; declared ${declared}.`,
+    };
+  if (!terminals.some((t) => t.role !== undefined))
+    return { ok: true, positive: terminals[0]!.key, return: terminals[1]!.key };
+  const positive = terminals.filter((t) => t.role === "supply_positive"),
+    ret = terminals.filter((t) => t.role === "supply_return");
+  if (positive.length !== 1 || ret.length !== 1)
+    return {
+      ok: false,
+      reason: `Sensor supply roles require exactly one supply_positive and one supply_return; declared ${declared}. Review the authored roles; polarity cannot be inferred.`,
+    };
+  return { ok: true, positive: positive[0]!.key, return: ret[0]!.key };
+}

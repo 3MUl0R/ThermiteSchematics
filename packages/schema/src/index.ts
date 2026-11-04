@@ -26,6 +26,9 @@ export {
 } from "./diagnostic-catalog.js";
 export {
   CORE_SYMBOL_BINDINGS,
+  symbolProfile,
+  resolveSensorSupply,
+  type SensorSupplyResolution,
   SYMBOL_PROFILES,
   type CoreSymbolBinding,
   type SymbolProfile,

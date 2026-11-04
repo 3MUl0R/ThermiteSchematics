@@ -62,6 +62,7 @@
       "version": "0.2.0",
       "dependencies": {
         "@thermite/compiler": "0.2.0",
+        "@thermite/schema": "0.2.0",
       },
     },
     "packages/render": {

@@ -136,6 +136,10 @@ describe("validate-time symbol profile warnings", () => {
     const result = await compileProject(root);
     expect(result.ok).toBe(true);
     const warnings = result.diagnostics.filter((d) => d.code === "W111");
+    if (scenario.startsWith("CO") || scenario.startsWith("PU")) {
+      expect(warnings).toEqual([]);
+      return;
+    }
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({
       severity: "warning",
@@ -158,10 +162,6 @@ describe("validate-time symbol profile warnings", () => {
       line: line + 1,
       column: lines[line]!.indexOf(JSON.stringify(type.symbol)) + 1,
     });
-    if (scenario.startsWith("CO"))
-      expect(warnings[0]!.message).toBe(
-        'Device "PLC1" type "site:plc-clone" symbol "iec:plc": core-only alias bound to "core:plc-compact" by ID. None of 5 functions has cataloged family support. Use "thermite:io-module"; its functions then fit: control, loads, circuit.',
-      );
     if (scenario === "wrong function shape")
       expect(warnings[0]!.message).toContain(
         'Functions with no cataloged family: "di0" (channel/1), "di1" (channel/1), "do0" (channel/1), "do1" (channel/1), "supply" (load/2).',
@@ -171,7 +171,7 @@ describe("validate-time symbol profile warnings", () => {
     );
   });
 
-  it.each(["iec:pushbutton-no", "iec:proximity-sensor"])(
+  it.each(["iec:pushbutton-no", "site:unknown"])(
     "points %s to the supported catalog without inventing an equivalent",
     async (symbol) => {
       const type = await plc();
@@ -183,7 +183,7 @@ describe("validate-time symbol profile warnings", () => {
         [
           {
             message: expect.stringContaining(
-              'circuit: ["thermite:contactor", "thermite:relay",',
+              'circuit: ["thermite:sensor-3wire", "thermite:contactor"]',
             ),
           },
         ],
@@ -193,6 +193,7 @@ describe("validate-time symbol profile warnings", () => {
 
   it("groups all placed designations deterministically at one type symbol pointer", async () => {
     const type = await plc();
+    type.symbol = "site:unknown";
     type.id = "site:clone";
     const root = await project(type);
     const objects = ["Z1", "A1"].map((designation) => ({
@@ -235,6 +236,7 @@ describe("validate-time symbol profile warnings", () => {
 
   it("returns W111 from the validate CLI with successful exit status", async () => {
     const type = await plc();
+    type.symbol = "site:unknown";
     type.id = "site:cli-clone";
     const root = await project(type);
     const { stdout, stderr } = await promisify(execFile)(
@@ -247,7 +249,7 @@ describe("validate-time symbol profile warnings", () => {
       {
         code: "W111",
         severity: "warning",
-        message: expect.stringContaining("thermite:io-module"),
+        message: expect.stringContaining("Supported profiles by family"),
       },
     ]);
   });
@@ -300,10 +302,23 @@ function assertClean(result: CompileResult, label: string) {
 }
 
 describe("review round 2", () => {
-  it("pins W111 to a complete source-backed invalid-metadata fixture", async () => {
+  it("accepts the complete source-backed PLC alias regression fixture", async () => {
     const root = join(
       repo,
       "packages/compiler/fixtures/rules/symbol-profile-clone",
+    );
+    const result = await compileProject(root);
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual(
+      JSON.parse(await readFile(join(root, "expected.json"), "utf8")),
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("pins W111 to the source-backed incompatible IEC alias fixture", async () => {
+    const root = join(
+      repo,
+      "packages/compiler/fixtures/rules/symbol-profile-incompatible",
     );
     const result = await compileProject(root);
     expect(result.ok).toBe(true);
@@ -343,7 +358,7 @@ describe("review round 2", () => {
         (d) => d.code === "W111",
       )!.message;
       expect(message).toContain(
-        symbol === "thermite:pushbutton"
+        symbol !== "site:custom-relay"
           ? 'Functions with no cataloged family: "bad" (other/3).'
           : "1 of 2 functions lack cataloged family support",
       );
@@ -401,6 +416,7 @@ describe("review round 2", () => {
   it("caps naturally sorted device names independent of input order", async () => {
     const type = await plc();
     type.id = "site:many";
+    type.symbol = "site:unknown";
     const root = await project(type);
     const objects = Array.from({ length: 15 }, (_, i) => ({
       kind: "device",
@@ -421,7 +437,7 @@ describe("review round 2", () => {
     expect(warnings[0]!.message).not.toContain('"X11"');
   });
 
-  it("scopes a core motor replacement to circuit views", async () => {
+  it("accepts a cloned motor through its IEC profile alias", async () => {
     const type: ValidatedDeviceType = JSON.parse(
       await readFile(
         join(repo, "packages/core-library/library/types/motor-3ph.json"),
@@ -430,28 +446,23 @@ describe("review round 2", () => {
     ).types[0];
     type.id = "site:motor";
     const result = await compileProject(await project(type));
-    const warning = result.diagnostics.find((d) => d.code === "W111")!;
-    expect(warning.message).toContain(
-      'Use "thermite:motor-3ph"; its functions then fit: circuit.',
-    );
-    expect(warning.message).toContain('"core:motor-3ph" by ID');
-    expect(warning.message).toContain("use a circuit view for the local type");
+    expect(result.diagnostics.filter((d) => d.code === "W111")).toEqual([]);
   });
 
   it("groups circuit/rooted replacements apart from signal-loop-only profiles", async () => {
     const type = await plc();
     type.id = "site:bogus";
-    type.symbol = "iec:proximity-sensor";
+    type.symbol = "site:unknown";
     const result = await compileProject(await project(type));
     const warning = result.diagnostics.find((d) => d.code === "W111")!;
     expect(warning.message).toContain(
-      'circuit: ["thermite:contactor", "thermite:relay",',
+      'circuit: ["thermite:sensor-3wire", "thermite:contactor"]',
     );
     expect(warning.message).toContain(
-      'rooted power/control/loads: ["thermite:dc-supply", "thermite:io-module", "thermite:terminal-strip"]',
+      'rooted power: ["thermite:contactor", "thermite:breaker"]',
     );
     expect(warning.message).toContain(
-      'signal-loop only (not circuit or rooted): ["thermite:pressure-transmitter", "thermite:analog-actuator", "thermite:bulkhead-connector"]',
+      'signal-loop only (not circuit or rooted): ["thermite:pressure-transmitter", "thermite:analog-actuator"] and 1 more',
     );
   });
 });
@@ -476,18 +487,19 @@ describe("review round 3", () => {
     const result = await compileProject(await project(type));
     const warning = result.diagnostics.find((d) => d.code === "W111")!;
     expect(warning.allowed).toEqual(SYMBOL_PROFILES.map((p) => p.id));
-    expect(warning.allowedCount).toBe(26);
+    expect(warning.allowedCount).toBe(27);
     expect(warning.allowedLookup).toContain(
       "thermite validate <project> --json",
     );
     const prose = warning.message.split("Supported profiles by family:")[1]!;
     expect([...prose.matchAll(/"thermite:[^"]+"/gu)]).toHaveLength(10);
-    expect(prose).toContain("and 19 more");
+    expect(prose).toContain("and 22 more");
   });
 
-  it("retains a single structured equivalent for a core-only alias", async () => {
+  it("retains a single structured equivalent for an incompatible IEC alias", async () => {
     const type = await plc();
     type.id = "site:equivalent";
+    type.functions.bad = { kind: "bus", terminals: ["L+", "M"] };
     const result = await compileProject(await project(type));
     expect(result.diagnostics.find((d) => d.code === "W111")).toMatchObject({
       allowed: ["thermite:io-module"],
@@ -610,6 +622,10 @@ describe("review round 3", () => {
         };
       }
       const result = await compileProject(await project(type));
+      if (symbol === "iec:plc") {
+        expect(result.diagnostics.filter((d) => d.code === "W111")).toEqual([]);
+        return;
+      }
       const warning = result.diagnostics.find((d) => d.code === "W111")!;
       expect(warning.message).toContain("None of 35 functions");
       expect(warning.message).not.toContain('"di0"');
@@ -752,5 +768,115 @@ describe("zero new diagnostics across repository authoring inputs", () => {
         );
       }
     }
+  });
+});
+
+describe("P4 review warning truth", () => {
+  it.each([
+    "prox-one-role",
+    "prox-two-positive",
+    "prox-0v-first",
+    "prox-return-first",
+    "prox-dc_negative-first",
+  ])(
+    "warns before drawing %s without suggesting a no-op alias",
+    async (name) => {
+      const type = JSON.parse(
+        await readFile(
+          join(
+            repo,
+            "packages/render/test/fixtures/profile-binding",
+            `${name}.json`,
+          ),
+          "utf8",
+        ),
+      ).types[0];
+      const result = await compileProject(await project(type));
+      expect(result.ok).toBe(true);
+      const warning = result.diagnostics.find((d) => d.code === "W111")!;
+      expect(warning).toBeDefined();
+      expect(warning.message).toContain("supply");
+      for (const key of type.functions.supply.terminals)
+        expect(warning.message).toContain(type.terminals[key].role);
+      expect(warning.message).not.toContain('Use "thermite:sensor-3wire"');
+    },
+  );
+  it("quotes only actual circuit support for an incomplete sensor", async () => {
+    const type: ValidatedDeviceType = {
+      kind: "device_type",
+      id: "local:incomplete-sensor",
+      symbol: "iec:proximity-sensor",
+      terminals: { p: {}, r: {}, q: {}, z: {} },
+      functions: {
+        supply: { kind: "load", terminals: ["p", "r"] },
+        input: { kind: "channel", direction: "input", terminals: ["q"] },
+        bad: { kind: "bus", terminals: ["q", "z"] },
+      },
+    };
+    const result = await compileProject(await project(type));
+    const warning = result.diagnostics.find((d) => d.code === "W111")!;
+    expect(warning.message).toContain("circuit");
+    expect(warning.message).toContain(
+      "No rooted power/control/loads function binding fits",
+    );
+    expect(warning.message).not.toContain('Use "thermite:sensor-3wire"');
+  });
+  it("bounds and naturally sorts invalid sensor supply role advice", async () => {
+    const type = JSON.parse(
+      await readFile(
+        join(
+          repo,
+          "packages/render/test/fixtures/profile-binding/prox-one-role.json",
+        ),
+        "utf8",
+      ),
+    ).types[0];
+    const load = type.functions.supply;
+    delete type.functions.supply;
+    type.internal_relations = [];
+    for (let i = 12; i >= 1; i--) type.functions[`supply${i}`] = load;
+    const first = await compileProject(await project(type));
+    const message = first.diagnostics.find((d) => d.code === "W111")!.message;
+    expect(message).toContain("2 more invalid supplies");
+    expect(message).not.toContain('"supply11"');
+    type.functions = Object.fromEntries(
+      Object.entries(type.functions).reverse(),
+    );
+    const second = await compileProject(await project(type));
+    expect(second.diagnostics.find((d) => d.code === "W111")!.message).toBe(
+      message,
+    );
+  });
+  it("explains the unfit IEC PLC function and pluralizes a single function", async () => {
+    const type = await plc();
+    type.id = "local:bad-plc";
+    type.functions.bad = { kind: "bus", terminals: ["L+", "M"] };
+    const result = await compileProject(await project(type));
+    const message = result.diagnostics.find((d) => d.code === "W111")!.message;
+    expect(message).toContain('"bad" (bus/2)');
+    expect(message).not.toContain('Use "thermite:io-module"');
+    expect(message).not.toContain("1 functions");
+  });
+  it("uses singular wording for an unknown profile with one function", async () => {
+    const type: ValidatedDeviceType = {
+      kind: "device_type",
+      id: "site:unknown-switch",
+      symbol: "site:unknown-switch",
+      terminals: { "1": {}, "2": {} },
+      functions: {
+        contact: {
+          kind: "contact",
+          normal_state: "open",
+          terminals: ["1", "2"],
+        },
+      },
+    };
+    const result = await compileProject(await project(type));
+    expect(result.ok).toBe(true);
+    const message = result.diagnostics.find((d) => d.code === "W111")!.message;
+    expect(message).toContain(
+      "The declared function has no cataloged family support.",
+    );
+    expect(message).not.toContain("1 functions");
   });
 });
