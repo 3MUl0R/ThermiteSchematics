@@ -22,6 +22,96 @@ const decodeText = (value: string) =>
 const encodeText = (value: string) =>
   value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
+/**
+ * Keep the emitter's rectangular label clips, using native PDF clipping.
+ * svg-to-pdfkit implements clipPath with a luminosity soft mask. Apple
+ * PDFKit/Quartz (Preview, Quick Look) truncates these masks at the untransformed
+ * page bounds, losing labels whose local coordinates lie outside those bounds
+ * in a scaled/folded view.
+ * An identity viewport produces a real PDF clip in the current coordinate
+ * system instead. This handles only the internal emitter's rectangular clips;
+ * the original SVG and its font-overhang protection remain unchanged.
+ */
+function withPdfLabelClips(svg: string, sheet: number): string {
+  const attributePattern = /\s+([\w:-]+)\s*=\s*(["'])([\s\S]*?)\2/gu;
+  const unsupported = (feature: string) =>
+    new Error(
+      `Unsupported PDF ${feature} on sheet ${sheet}. Use SVG/HTML or a supported rectangular label clip.`,
+    );
+  const attributes = (source: string, allowed: readonly string[]) => {
+    const values = new Map<string, string>();
+    let valid = true;
+    const remainder = source.replace(
+      attributePattern,
+      (_, name: string, _quote: string, value: string) => {
+        if (!allowed.includes(name) || values.has(name)) valid = false;
+        values.set(name, value);
+        return "";
+      },
+    );
+    return valid && !remainder.trim() ? values : undefined;
+  };
+  const clips = new Map<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >();
+  for (const match of svg.matchAll(
+    /<clipPath\b([^>]*)>([\s\S]*?)<\/clipPath>/gu,
+  )) {
+    const clip = attributes(match[1]!, ["id", "clipPathUnits"]),
+      rect = /^\s*<rect\b([^>]*?)(?:\/>|>\s*<\/rect>)\s*$/u.exec(match[2]!);
+    if (
+      !clip?.get("id") ||
+      clip.get("clipPathUnits") !== "userSpaceOnUse" ||
+      !rect
+    )
+      continue;
+    const geometry = attributes(rect[1]!, ["x", "y", "width", "height"]),
+      [x, y, width, height] = ["x", "y", "width", "height"].map((name) => {
+        const value = geometry?.get(name)?.trim() ?? "";
+        return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/iu.test(value)
+          ? Number(value)
+          : NaN;
+      });
+    if (
+      ![x, y, width, height].every(Number.isFinite) ||
+      width! < 0 ||
+      height! < 0
+    )
+      continue;
+    clips.set(clip.get("id")!, {
+      x: x!,
+      y: y!,
+      width: width!,
+      height: height!,
+    });
+  }
+  const normalized = svg.replace(
+    /<text\b([^>]*)>([\s\S]*?)<\/text>/gu,
+    (text, attrs: string, body: string) => {
+      const reference = [...attrs.matchAll(attributePattern)].find(
+        (attribute) => attribute[1] === "clip-path",
+      );
+      if (!reference) return text;
+      const id = /^url\(#([^)]+)\)$/u.exec(reference[3]!);
+      const clip = id && clips.get(id[1]!);
+      if (!clip) throw unsupported("label clip");
+      const { x, y, width, height } = clip;
+      if (width === 0 || height === 0) return "";
+      return `<svg x="${x}" y="${y}" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}" overflow="hidden"><text${attrs.replace(reference[0], "")}>${body}</text></svg>`;
+    },
+  );
+  // Inspect real attributes, not escaped label text or words in other values.
+  // Any future group clips/masks must also avoid the converter's soft-mask path.
+  for (const tag of normalized.matchAll(/<[A-Za-z][^>]*>/gu)) {
+    for (const attribute of tag[0].matchAll(attributePattern)) {
+      if (attribute[1] === "clip-path" || attribute[1] === "mask")
+        throw unsupported(`${attribute[1]} attribute`);
+    }
+  }
+  return normalized;
+}
+
 /** Font-only spans preserve the text chunk's shared anchor, baseline and position. */
 function withPdfFontFallback(
   svg: string,
@@ -90,7 +180,12 @@ export async function packetPdf(
     [...regularCoverage].filter((code) => boldCoverage.has(code)),
   );
   const svgs = packet.sheets.map((sheet) =>
-    withPdfFontFallback(sheet.svg, sheet.number, primary, mathCoverage),
+    withPdfFontFallback(
+      withPdfLabelClips(sheet.svg, sheet.number),
+      sheet.number,
+      primary,
+      mathCoverage,
+    ),
   );
   const doc = new PDFDocument({
     autoFirstPage: false,
