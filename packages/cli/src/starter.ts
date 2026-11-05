@@ -334,10 +334,7 @@ function assertCoreManifestInventory(manifest: LibraryManifest): void {
       path.endsWith(".json"),
   );
   const expected = SHIPPED_CORE_FILE_INVENTORY.slice(1);
-  if (
-    expanded.length !== 13 ||
-    JSON.stringify(expanded) !== JSON.stringify(expected)
-  ) {
+  if (JSON.stringify(expanded) !== JSON.stringify(expected)) {
     throw new Error(
       "The shipped core manifest does not expand to the static inventory.",
     );

@@ -1222,6 +1222,7 @@ const module: FactModule = {
         expect(traced.flat().sort()).toEqual([
           "core:limit-switch-2wire",
           "core:prox-pnp-3wire",
+          "core:selector-2pos",
           "site:limit-switch-2wire",
           "site:prox-pnp-3wire",
         ]);

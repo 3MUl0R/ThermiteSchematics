@@ -403,7 +403,7 @@ it("includes both core versions in the public release-package file boundary", as
   );
   expect(Object.keys(SHIPPED_CORE_VERSIONS)).toEqual(["0.1.0", "0.2.0"]);
   for (const [version, entry] of Object.entries(SHIPPED_CORE_VERSIONS)) {
-    expect(entry.fileInventory).toHaveLength(14);
+    expect(entry.fileInventory).toHaveLength(version === "0.1.0" ? 14 : 27);
     for (const file of entry.fileInventory)
       expect(inventory.has(file), file).toBe(true);
     expect(
