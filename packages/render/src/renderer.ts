@@ -1,4 +1,5 @@
 import { renderErrorContext } from "./render-error-context.js";
+import { compareText, functionIdKey } from "./ordering.js";
 import {
   preflightRootedProfiles,
   hasFunctionBinding,
@@ -37,6 +38,7 @@ import type {
   SchematicViewRequest,
 } from "./types.js";
 import { normalizeSchematicView } from "./view-spec.js";
+import { traceRootRuleForType } from "./intent-rules.js";
 
 export interface SchematicRendererDependencies {
   readonly mappings?: readonly DeviceTypeSymbolMapping[];
@@ -106,12 +108,19 @@ export async function prepareSchematicDrawing(
   const diagnose = (error: RenderFailure): RenderFailure => {
     if (error.code !== "R002" && error.code !== "R003")
       return renderErrorContext(ir, error);
+    const unrepresented =
+      error.code === "R003" &&
+      error.details?.reason === "unrepresented-terminal";
     const profile = preflightRootedProfiles(
       ir,
       normalized.value.view,
       mappings,
     );
     if (!profile) return renderErrorContext(ir, error);
+    // An unselected terminal is not evidence that its device's profile is bad.
+    // Keep independent limitations elsewhere on the path as secondary context.
+    if (unrepresented && error.deviceUid === profile.deviceUid)
+      return renderErrorContext(ir, error);
     const device = ir.devices.find((d) => d.uid === profile.deviceUid)!;
     const f = ir.functions.find(
       (f) =>
@@ -147,10 +156,18 @@ export async function prepareSchematicDrawing(
       error.code === "R003" &&
       stops.length === 0 &&
       error.deviceUid === device.uid;
-    if (!traceConnectivity && (allStopsUnsupported || directBinding))
+    if (
+      !unrepresented &&
+      !traceConnectivity &&
+      (allStopsUnsupported || directBinding)
+    )
       return unsupportedProfileError(ir, contextual, device, f, profile.family);
     return {
       ...contextual,
+      message:
+        error.code === "R002" || unrepresented
+          ? `${contextual.message} Additional profile limitation: device ${JSON.stringify(profile.unsupported!.designation)} ${profile.unsupported!.profile === "<missing>" ? "has no rendering profile for this view." : `uses profile ${JSON.stringify(profile.unsupported!.profile)}, which is unsupported for this view.`}`
+          : contextual.message,
       unsupported: profile.unsupported!,
       details: { ...contextual.details, profileNote: profile.message },
     };
@@ -218,7 +235,51 @@ export async function prepareSchematicDrawing(
       ? {}
       : { engine: dependencies.layoutEngine }),
   });
-  if (!laidOut.ok) return failed(renderErrorContext(ir, laidOut.error));
+  if (!laidOut.ok) {
+    let error = laidOut.error;
+    if (
+      laidOut.failureKind !== "contract-violation" &&
+      normalized.value.view.format === "schematic-view/0.2" &&
+      normalized.value.view.intent === "loads"
+    ) {
+      const selectedIds = new Set(
+        selected.value.functionIds.map(functionIdKey),
+      );
+      const loadFunctions = ir.functions.filter(
+        (f) => f.kind === "load" && selectedIds.has(functionIdKey(f.id)),
+      );
+      const loads = ir.devices
+        .filter((device) =>
+          loadFunctions.some((f) => f.id.deviceUid === device.uid),
+        )
+        .map((device) => ({
+          deviceUid: device.uid,
+          designation: device.designation,
+          functionIds: loadFunctions
+            .filter((f) => f.id.deviceUid === device.uid)
+            .map((f) => f.id),
+        }))
+        .sort((a, b) => compareText(a.designation, b.designation));
+      if (loads.length >= 2) {
+        const traceRoots = loads.filter((load) => {
+          const device = ir.devices.find((d) => d.uid === load.deviceUid)!;
+          return (
+            traceRootRuleForType(
+              device.typeId,
+              ir.deviceTypes.find((t) => t.id === device.typeId),
+              mappings.find((m) => m.typeId === device.typeId),
+            ) !== undefined
+          );
+        });
+        error = {
+          ...error,
+          message: `${error.message} Selected loads: ${loads.map((load) => load.designation).join(", ")}. Draw these loads in a circuit view built from details.loads with thermite packet --input.${traceRoots.map((load) => ` A trace can also start at ${load.designation}; choose its connected input target with --to and add --include-power.`).join("")}`,
+          details: { ...error.details, loads },
+        };
+      }
+    }
+    return failed(renderErrorContext(ir, error));
+  }
 
   return {
     ok: true,

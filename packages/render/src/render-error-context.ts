@@ -20,7 +20,13 @@ export function renderErrorContext<E extends RenderFailure>(
   const e = error as Extract<RenderError, { code: "R002" | "R003" }>;
   const deviceUid = "deviceUid" in e ? e.deviceUid : undefined;
   const device = ir.devices.find((d) => d.uid === deviceUid);
-  if (classifyProfile && e.code === "R003" && !e.reason && device) {
+  if (
+    classifyProfile &&
+    e.code === "R003" &&
+    !e.reason &&
+    device &&
+    e.details?.reason !== "unrepresented-terminal"
+  ) {
     const mapping = projectDeviceTypeSymbolMappings(ir).find(
       (m) => m.typeId === device.typeId,
     );
@@ -68,7 +74,9 @@ export function renderErrorContext<E extends RenderFailure>(
       .map((f) => f.id.functionKey),
   }));
   let message = e.message;
+  const unrepresented = e.details?.reason === "unrepresented-terminal";
   if (
+    !unrepresented &&
     device &&
     !message.includes(`device ${JSON.stringify(device.designation)}`)
   ) {
@@ -78,9 +86,9 @@ export function renderErrorContext<E extends RenderFailure>(
     "targetDeviceUid" in e
       ? ir.devices.find((d) => d.uid === e.targetDeviceUid)
       : undefined;
-  if (target)
+  if (target && !unrepresented)
     message += ` Target device ${JSON.stringify(target.designation)}.`;
-  if (stops.length)
+  if (stops.length && !unrepresented)
     message += ` Path stopped at ${stops.map((t) => `${t.designation}.${t.terminalKey}${t.functionKeys.length ? ` (function ${t.functionKeys.join(", ")})` : ""}`).join(", ")}.`;
   return {
     ...error,

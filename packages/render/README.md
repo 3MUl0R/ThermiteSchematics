@@ -513,6 +513,35 @@ ELK graph sizes `2171 x 501`/`732.6 x 1742` for PNP trace and
 label, and route coordinate returned by ELK is normalized and emitted verbatim; there
 is no authored coordinate, UID patch, post-layout repair, or collision exemption.
 
+Two directly fed loads use source/target designations and terminal keys for path
+rank, junction order and unnamed-net ordering. At a two-arm source fork, an
+external load gets the straight port before a load inside the source's location;
+reverse designation order (then reverse terminal-key order) breaks ties. The
+pair predicate is computed once from selection and carried on the presentation
+graph for ordering and recovery. The turned branch uses the outside of its catalog source
+port (positive above, return below in right flow). If ELK still returns a crossing
+or overlap, the two source forks admit at most 16 deterministic straight/turned
+port-side combinations. Every attempt runs the complete geometry and topology
+validator. Exhaustion returns the original R004 with load advice; conductors are never clipped,
+merged or removed. Recovery uses the validator's structured failure kind,
+independently of message wording. Other load topologies retain the existing
+ordering. When a multi-load view's routing fails R004, including after pair-search
+exhaustion, the message keeps its original prefix and names all selected loads.
+Build a circuit view from the source function, `details.loads[].functionIds` and
+the authored conductors connecting those devices, place it in a
+`schematic-packet-request/0.1` file's `views` array and run
+`thermite packet --input <file>`. Trace advice names only loads whose catalog
+mapping accepts a trace root, such as B1; choose its connected input target with
+`--to` and add `--include-power`. PLC/RIO supply loads receive only circuit advice. Routing
+three or more loads and looped supplies is follow-up #60.
+
+The test-only direct-pair SVG byte snapshots in `test/snapshots/render-robustness/`
+cover external and same-location PLC2 in
+both flows. Review their byte diffs after intentionally updating with
+`VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update`.
+The closed historical golden migration manifest does not admit these fixtures.
+The same command updates exact R004 diagnostic snapshots for #60's four cases.
+
 Target-sensitive options are attached to their legal effective target. Port-label
 placement targets the leaf, while horizontal/vertical port-label spacing `4` targets
 the effective device/root parent. Function/aggregate/rail label placement targets its
@@ -629,6 +658,29 @@ when inapplicable.
 | R003 / `UnsupportedSymbolMappingError` | Selected type/function/aggregate has no valid binding.                 | `family`, `deviceUid`, `typeId`, and optional `functionKey`; never emits a generic box.                                      |
 | R004 / `InvalidLayoutError`            | Returned geometry violates the layout/SVG contract.                    | `family` and optional implicated `netId`; no SVG.                                                                            |
 | R005 / `InvalidRenderTextError`        | Project/title/graph text violates the fixed renderability contract.    | `family`, closed `ownerKind`, safe `ownerId`, closed `field`, and one of five closed reasons; never echoes rejected text.    |
+
+Control, power, trace and loads selection check intermediate conductor terminals
+for a selected function, mapped terminal-display symbol or selected boundary.
+Invalid profiles retain their existing binding diagnostic. Otherwise, a supported
+function terminal without a selected owner returns R003 with
+`details.reason: "unrepresented-terminal"`, the real device/terminal and incident
+conductor identities. For example, a K1 coil return through PLC1.M cannot display
+the PLC supply function as an individual M terminal. A circuit view selecting
+K1's coil and the same conductors can show those real terminal boundaries.
+`details.alternative` contains that source-selected `circuit-view-request/0.1`:
+put it in the `views` array of a `schematic-packet-request/0.1` file and run
+`thermite packet --input <file>`; passing the circuit view alone is not a packet.
+Its functions and conductors are drawn from the actual selection. Cable
+conductor views retain their existing endpoint-binding rules. Selection does
+not change wiring or declare an electrical repair. Presentation's missing-owner
+throw remains an invariant for selection/mapping programming errors.
+An independent unsupported profile on another path device remains in
+`unsupported`, `details.profileNote` and an "Additional profile limitation"
+sentence alongside the terminal diagnosis.
+
+When R002 retains an incomplete-path explanation alongside an unsupported profile
+note, its message appends a sentence naming that device and profile. The existing
+message remains a prefix and the structured fields stay the same.
 
 Catalog corruption, impossible-after-validation presentation state, a thrown ELK
 error, or an emitter programming failure rejects the promise as an unexpected tool

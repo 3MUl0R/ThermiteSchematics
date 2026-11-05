@@ -92,6 +92,7 @@ export type BuildPresentationGraphResult =
   | { readonly ok: false; readonly error: UnsupportedSymbolMappingError };
 
 interface PresentationContext {
+  readonly directLoadPair: boolean;
   readonly ir: Readonly<ElectricalIr>;
   readonly selected: Readonly<SelectedSubgraph>;
   readonly mappings: readonly DeviceTypeSymbolMapping[];
@@ -342,6 +343,7 @@ function createContext(
     value: {
       ir: request.ir,
       selected: request.selected,
+      directLoadPair: hasDirectLoadPairPaths(request.selected),
       mappings,
       catalog,
       deviceByUid,
@@ -609,6 +611,18 @@ function orderedSelectedPaths(
   context: PresentationContext,
 ): readonly SelectedPath[] {
   return [...context.selected.paths].sort((left, right) => {
+    if (context.directLoadPair) {
+      return (
+        compareTerminalId(left.start.terminal, right.start.terminal, (uid) =>
+          designationFor(context, uid),
+        ) ||
+        compareTerminalId(left.end.terminal, right.end.terminal, (uid) =>
+          designationFor(context, uid),
+        ) ||
+        compareStructuralSteps(left, right) ||
+        compareText(left.id, right.id)
+      );
+    }
     if (context.selected.view.family === "power") {
       return (
         (POWER_LANE_RANK[left.lane] ?? Number.MAX_SAFE_INTEGER) -
@@ -633,6 +647,50 @@ function orderedSelectedPaths(
       compareText(left.id, right.id)
     );
   });
+}
+
+function hasDirectLoadPairPaths(selected: Readonly<SelectedSubgraph>): boolean {
+  const view = selected.view;
+  return (
+    "intent" in view &&
+    view.intent === "loads" &&
+    selected.paths.length === 4 &&
+    new Set(selected.paths.map((path) => path.end.terminal.deviceUid)).size ===
+      2 &&
+    selected.paths.every(
+      (path) => path.steps.length === 1 && path.steps[0]?.kind === "conductor",
+    )
+  );
+}
+
+/** Keep an external load straight ahead of the source's location group. The
+ * local branch must turn outwards before ELK routes it back into that group. */
+function compareDirectLoadsUses(
+  context: PresentationContext,
+  left: EndpointUse,
+  right: EndpointUse,
+): number {
+  const target = (use: EndpointUse) =>
+    required(
+      use.edge.endpoints.find((t) => !sameTerminal(t, use.terminal)),
+      "Direct load target",
+    );
+  const leftTarget = target(left),
+    rightTarget = target(right);
+  const sourceLocation = locationIdentity(
+    context.deviceByUid.get(left.terminal.deviceUid)!,
+  );
+  const sameLocation = (t: TerminalId) =>
+    compareLocationIdentity(
+      sourceLocation,
+      locationIdentity(context.deviceByUid.get(t.deviceUid)!),
+    ) === 0;
+  return (
+    Number(sameLocation(leftTarget)) - Number(sameLocation(rightTarget)) ||
+    -compareTerminalId(leftTarget, rightTarget, (uid) =>
+      designationFor(context, uid),
+    )
+  );
 }
 
 function representationBindings(
@@ -3100,7 +3158,9 @@ function insertSemanticJunctions(
     const uses = twoArmLoadsSource
       ? [...defaultOrderedUses].sort(
           (left, right) =>
-            comparePresentationEdge(context, left.edge, right.edge) ||
+            (context.directLoadPair
+              ? compareDirectLoadsUses(context, left, right)
+              : comparePresentationEdge(context, left.edge, right.edge)) ||
             compareText(left.end, right.end),
         )
       : twoLanePnpTraceSignal
@@ -3250,7 +3310,12 @@ function insertSemanticJunctions(
         netId,
         side:
           (twoArmLoadsSource || twoLanePnpTraceSignal) && index === 1
-            ? counterClockwiseSide(primarySide(context, "outgoing"))
+            ? twoArmLoadsSource &&
+              context.directLoadPair &&
+              attachmentPort(terminalAttachments[0]!, portById).symbolPortId ===
+                "return"
+              ? counterClockwiseSide(primarySide(context, "incoming"))
+              : counterClockwiseSide(primarySide(context, "outgoing"))
             : primarySide(
                 context,
                 use.end === "target" ? "incoming" : "outgoing",
@@ -3618,6 +3683,7 @@ export function buildPresentationGraph(
   attachNetLabels(context, mutableEdges);
   const graph: PresentationGraph = {
     format: "schematic-presentation/0.1",
+    directLoadPair: context.directLoadPair,
     view: cloneView(context.selected),
     locationGroups: [...visible.value.groups.locationGroups],
     deviceGroups: [...visible.value.groups.deviceGroups],

@@ -279,6 +279,7 @@ function tier1Fixture(
 
   const graph = {
     format: "schematic-presentation/0.1",
+    directLoadPair: false,
     view: {
       format: "schematic-view/0.2",
       family: "control",
