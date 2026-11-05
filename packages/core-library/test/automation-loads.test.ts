@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { DOMParser } from "linkedom";
 import { compileProject } from "@thermite/compiler";
 import { coreTypes, machineProbe } from "./machine-fixtures.js";
 import { renderSchematic } from "../../render/src/renderer.js";
@@ -43,7 +44,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 );
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "pins RM3's combined-load layout gap and each supply binding in %s",
+  "renders RM3's combined loads and each supply binding in %s",
   async (flow) => {
     const compiled = await compileProject(
       "packages/core-library/test/fixtures/rm3",
@@ -55,21 +56,34 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       intent: { kind: "loads" },
       flow,
     });
-    expect(result).toMatchObject({
-      ok: false,
-      error: {
-        code: "R004",
-        details: {
-          conductors: [{ designation: "W1012" }, { designation: "W1014" }],
-          loads: [
-            { designation: "B1" },
-            { designation: "HMI1" },
-            { designation: "PLC1" },
-          ],
-        },
-      },
-    });
-    // The combined-view routing defect is independent of these supply bindings.
+    expect(result.ok, JSON.stringify(result.ok ? {} : result)).toBe(true);
+    if (!result.ok) throw Error(result.error.message);
+    for (const name of ["B1", "HMI1", "PLC1"]) {
+      const device = compiled.ir.devices.find((d) => d.designation === name)!;
+      expect(result.value.summary.deviceUids).toContain(device.uid);
+      expect(result.value.svg).toContain(`data-designation="${name}"`);
+    }
+    const svg = new DOMParser().parseFromString(
+      result.value.svg,
+      "image/svg+xml",
+    );
+    for (const name of ["W1012", "W1014"]) {
+      const wire = compiled.ir.wires.find((w) => w.designation === name)!;
+      expect(result.value.summary.conductiveElementIds).toContainEqual({
+        kind: "wire",
+        uid: wire.uid,
+      });
+      const paths = svg.querySelectorAll(`path[data-wire-uid="${wire.uid}"]`);
+      expect(paths).toHaveLength(1);
+      const endpoints = ["source", "target"].map((end) => ({
+        deviceUid: paths[0]!.getAttribute(`data-${end}-device-uid`),
+        terminalKey: paths[0]!.getAttribute(`data-${end}-terminal-key`),
+      }));
+      expect(endpoints).toEqual(
+        expect.arrayContaining(wire.endpoints.map((e) => e.terminal)),
+      );
+    }
+    // Retain the separate probes of each supply binding as well.
     // Probe each exact RM3 type alone without changing the committed topology.
     const types = await coreTypes();
     for (const name of ["HMI1", "PLC1"]) {

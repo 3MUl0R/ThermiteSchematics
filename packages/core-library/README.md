@@ -216,3 +216,10 @@ NO switches, without disconnector identity. The transmitter's existing
 profile supports direct transmitter-to-AI signal-loop wiring only; a normal
 series loop through its power supply fails R006, with or without an auxiliary
 supply pair. Circuit/rooted requests report the pinned unsupported-profile gaps. `thermite guide symbols` shows current family support.
+
+| Fixture deliverable    | Result in both flows     |
+| ---------------------- | ------------------------ |
+| RM3 `view PS1 --loads` | Draws B1, HMI1 and PLC1. |
+
+The combined RM3 loads view uses bounded junction routing; the former W1012/W1014
+collinear R004 is resolved without omitting a supply or return conductor.

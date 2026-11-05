@@ -1018,16 +1018,49 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
     { timeout: 120_000 },
     async ({ skip }) => {
       const cases = [
-        ["right-deep", "left-to-right", "right-deep-right", 175, 2380],
-        ["right-deep", "top-to-bottom", "right-deep-down", 178, 2386],
-        ["bridge", "left-to-right", "bridge-right", 169, 2368],
-        ["bridge", "top-to-bottom", "bridge-down", 169, 2368],
+        [
+          "right-deep",
+          "left-to-right",
+          "right-deep-right",
+          175,
+          2380,
+          "injected",
+        ],
+        [
+          "right-deep",
+          "top-to-bottom",
+          "right-deep-down",
+          178,
+          2386,
+          "injected",
+        ],
+        ["bridge", "left-to-right", "bridge-right", 169, 2368, "injected"],
+        ["bridge", "top-to-bottom", "bridge-down", 169, 2368, "injected"],
+        [
+          "right-deep",
+          "left-to-right",
+          "right-deep-semantic-right",
+          175,
+          1318,
+          "live",
+        ],
+        [
+          "right-deep",
+          "top-to-bottom",
+          "right-deep-semantic-down",
+          175,
+          1318,
+          "live",
+        ],
+        ["bridge", "left-to-right", "bridge-right", 169, 2368, "live"],
+        ["bridge", "top-to-bottom", "bridge-down", 169, 2368, "live"],
       ] as const satisfies readonly (readonly [
         Tier2FixtureName,
         "left-to-right" | "top-to-bottom",
         string,
         number,
         number,
+        "injected" | "live",
       ])[];
       const projects = {} as Record<Tier2FixtureName, string>;
       for (const fixture of ["right-deep", "bridge"] as const) {
@@ -1045,7 +1078,14 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
         projects[fixture] = project;
       }
 
-      for (const [fixture, flow, goldenName, humanBytes, jsonBytes] of cases) {
+      for (const [
+        fixture,
+        flow,
+        goldenName,
+        humanBytes,
+        jsonBytes,
+        mode,
+      ] of cases) {
         const project = projects[fixture];
         const outputRoot = await temporaryRoot();
         // Fixtures follow repository formatting; product bytes retain JSON.stringify's exact layout.
@@ -1053,7 +1093,15 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
           JSON.stringify(
             JSON.parse(
               await readFile(
-                join(tier2GoldenRoot, `${goldenName}.r004.json`),
+                join(
+                  goldenName.includes("semantic")
+                    ? join(
+                        repositoryRoot,
+                        "packages/render/test/snapshots/semantic-ordering",
+                      )
+                    : tier2GoldenRoot,
+                  `${goldenName}.r004.json`,
+                ),
                 "utf8",
               ),
             ),
@@ -1065,6 +1113,21 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
           error: RenderFailure;
         };
         const humanGolden = `R004 ${parsed.error.message}\n`;
+        // The historical controls execute the built CLI in a fresh process,
+        // with only the renderer's failure injected. Compilation, formatting,
+        // stderr/stdout, exit status and artifact handling are production code.
+        const invokeCase =
+          mode === "live"
+            ? invokeCliSubprocess
+            : (args: readonly string[]) =>
+                invokeEvalSubprocess(`
+          import { runCli } from ${JSON.stringify(cliModuleUrl)};
+          process.exitCode = await runCli(${JSON.stringify(["node", "thermite", ...args])}, {
+            renderCreateRenderer: () => ({
+              render: async () => ({ ok: false, error: ${JSON.stringify(parsed.error)} })
+            })
+          });
+        `);
         let first:
           { readonly human: Invocation; readonly json: Invocation } | undefined;
         for (const repeat of [1, 2] as const) {
@@ -1080,7 +1143,7 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
           let json: Invocation;
           try {
             [human, json] = await Promise.all([
-              invokeCliSubprocess([
+              invokeCase([
                 "view",
                 "LS1",
                 "--to",
@@ -1092,7 +1155,7 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
                 "--output",
                 humanOutput,
               ]),
-              invokeCliSubprocess([
+              invokeCase([
                 "view",
                 "LS1",
                 "--to",

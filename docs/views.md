@@ -15,7 +15,9 @@ semantic-selection rules. `thermite` means the launcher from the project guide.
 
 Bindings use the [profile catalog](circuit-views.md#library-symbols) and authored
 function shapes. A function never joins nets. A profile alone cannot make an
-invalid or disconnected root acceptable. Trace and loads traverse conductors;
+invalid or disconnected root acceptable. Loads views support multiple direct loads
+and looped supplies; placement and routing use a bounded, validated ELK search.
+Trace and loads traverse conductors;
 control/power may select supported function steps for presentation only.
 
 `schematic-view-request/0.1` uses `root`, `family` (`power` or `control`) and
@@ -110,7 +112,7 @@ without a selected display owner and its incident conductors. Its
 `details.alternative` is a source-selected circuit view: place it in the `views`
 array of a `schematic-packet-request/0.1` file and run
 `thermite packet --input <file>`. R004 identifies conductors and endpoints;
-failed multi-load routing, including exhausted pair searches, names the loads
+failed multi-load routing, including exhausted bounded searches, names the loads
 in `details.loads`. Build a circuit view from their `functionIds`, the source
 function and authored connecting conductors, and wrap it in a packet as above.
 Trace advice names only loads accepted as trace roots (such as B1), with a

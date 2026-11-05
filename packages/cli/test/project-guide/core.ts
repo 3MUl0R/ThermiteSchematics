@@ -1097,8 +1097,28 @@ const module: FactModule = {
     },
     {
       claim:
-        "Each view needs a matching root, else R001: `--power` a load with mapped load terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil, `--loads` a source with a source/return pair (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` only a switch with one NO contact or a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
+        "Each view needs a matching root, else R001: `--power` a load with mapped load terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil, `--loads` a source with source/return terminals (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` only a switch with one NO contact or a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
       async check() {
+        const { robustnessFixture } =
+          await import("../../../render/test/render-robustness-fixture.js");
+        const supplies = await robustnessFixture();
+        try {
+          for (const variant of ["plc3", "daisy"] as const) {
+            await supplies.compile(variant, 0);
+            const args = ["view", "PS1", "--loads", "--json"];
+            const run = await thermite(args, supplies.root);
+            expect(run.code, describeRun(args, run)).toBe(0);
+            const svg = JSON.parse(run.stdout)
+              .sheets.map((sheet: { svg: string }) => sheet.svg)
+              .join("\n");
+            for (const name of variant === "plc3"
+              ? ["PLC1", "PLC2", "PLC3"]
+              : ["PLC1", "PLC2"])
+              expect(svg).toContain(name);
+          }
+        } finally {
+          await supplies.close();
+        }
         const project = await viewRoots();
         // [root, mode, accepted]: each mode takes its root and refuses PLC1.
         const cases = [

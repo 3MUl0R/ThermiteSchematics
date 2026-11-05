@@ -6,7 +6,9 @@ import { join } from "node:path";
 
 import { evaluateRules, type ElectricalIr } from "@thermite/compiler";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import * as validation from "../src/layout/validate-output.js";
+import { createSchematicRendererWithDependencies } from "../src/renderer.js";
 
 import {
   buildElkAdapterGraph,
@@ -50,7 +52,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "left-to-right",
     netId:
       "net:sha256:1fcf84453b5d3f3e8329a721d27507407fe5d2459f887ee0eb251aca0370d0c9",
-    rawSize: [1516.8, 639],
+    rawSize: [1425.1999999999998, 734],
     boundaryTerminal: "6",
     wireUid: "f0000000-0000-4000-8000-000000000410",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
@@ -63,7 +65,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "top-to-bottom",
     netId:
       "net:sha256:1fcf84453b5d3f3e8329a721d27507407fe5d2459f887ee0eb251aca0370d0c9",
-    rawSize: [1042.4, 1202],
+    rawSize: [1000, 1222],
     boundaryTerminal: "7",
     wireUid: "e84a9629-373c-4946-8b48-184b7464d474",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
@@ -76,7 +78,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "left-to-right",
     netId:
       "net:sha256:c55a63c4fc47d3f27ef4b2b375c57112c9256428728f69ebf96505ce12560308",
-    rawSize: [1514.4, 831],
+    rawSize: [1514.4, 789],
     boundaryTerminal: "6",
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",
@@ -89,7 +91,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "top-to-bottom",
     netId:
       "net:sha256:c55a63c4fc47d3f27ef4b2b375c57112c9256428728f69ebf96505ce12560308",
-    rawSize: [1282.2, 1214],
+    rawSize: [1347.2, 1224],
     boundaryTerminal: "6",
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",
@@ -104,6 +106,21 @@ function tuple(tag: string, ...parts: readonly string[]): string {
 }
 
 function expectedError(testCase: Tier2Case): InvalidLayoutError {
+  if (testCase.name === "right-deep") {
+    const label = tuple(
+      "label",
+      "edge",
+      tuple("wire", "00000000-0000-4000-8000-000000000416"),
+      "conductor",
+    );
+    return {
+      code: "R004",
+      message: `Invalid layout: label ${label} overlaps edge ${tuple("wire", "00000000-0000-4000-8000-000000000417")}.`,
+      family: "control",
+      netId: testCase.netId,
+      root: "LS1",
+    };
+  }
   const terminal = testCase.boundaryTerminal;
   const junctionId = tuple(
     "junction",
@@ -150,14 +167,14 @@ function expectedRows(
   return fixture === "right-deep"
     ? {
         "LS1.4": [
-          ["EQ-1:east", "W-FLD-003:north", "attachment:west", "link:south"],
-          ["R3:east", "R2:south", "link:north"],
+          ["EQ-1:east", "R2:north", "attachment:west", "link:south"],
+          ["R3:east", "W-FLD-003:south", "link:north"],
         ],
         "JB1.X1.5": null,
-        "JB1.X1.6": [["R3:west", "R2:south", "A:east", "attachment:north"]],
-        "JB1.X1.7": [["L1-B:south", "A:west", "B:east", "attachment:north"]],
+        "JB1.X1.6": [["R2:west", "R3:south", "A:east", "attachment:north"]],
+        "JB1.X1.7": [["A:west", "L1-B:south", "B:east", "attachment:north"]],
         "TB1.3": [
-          ["L0-C:south", "B:west", "W-FLD-001:north", "attachment:east"],
+          ["B:west", "L0-C:south", "W-FLD-001:north", "attachment:east"],
         ],
         "TB1.6": null,
         "TB1.8": null,
@@ -165,10 +182,10 @@ function expectedRows(
       }
     : {
         "LS1.4": [
-          ["EQ-1:east", "W-FLD-003:north", "L2-A:south", "attachment:west"],
+          ["EQ-1:east", "L2-A:north", "W-FLD-003:south", "attachment:west"],
         ],
         "TB1.7": [
-          ["EQ-1:south", "W-FLD-003:west", "M1-S:north", "attachment:east"],
+          ["EQ-1:west", "W-FLD-003:south", "M1-S:north", "attachment:east"],
         ],
         "JB1.X1.5": null,
         "TB1.6": null,
@@ -179,8 +196,8 @@ function expectedRows(
         "TB1.8": null,
         "TB1.3": [
           [
-            "BLOCK-B:west",
             "BLOCK-A:south",
+            "BLOCK-B:west",
             "W-FLD-001:north",
             "attachment:east",
           ],
@@ -424,6 +441,52 @@ describe("Amendment B4 v20 Tier 2 deterministic failures", () => {
   });
 
   for (const testCase of CASES) {
+    it(`${testCase.name} ${testCase.flow} preserves historical serialization under an injected refusal`, async () => {
+      const flowName = testCase.flow === "left-to-right" ? "right" : "down";
+      const payload = JSON.parse(
+        readFileSync(
+          new URL(
+            `./goldens/tier2/${testCase.name}-${flowName}.r004.json`,
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ) as { diagnostics: []; error: InvalidLayoutError };
+      const golden = `${JSON.stringify(payload, undefined, 2)}\n`;
+      const spy = vi
+        .spyOn(validation, "normalizeAndValidateLayout")
+        .mockReturnValue({
+          ok: false,
+          failureKind: "contract-violation",
+          error: payload.error,
+        });
+      const engine = createElkEngine();
+      engine.layout = async (graph) => graph;
+      try {
+        const outcome = await createSchematicRendererWithDependencies({
+          layoutEngine: engine,
+        }).render(fixtureIr[testCase.name]!, {
+          format: "schematic-view-request/0.2",
+          root: { by: "designation", value: "LS1" },
+          intent: {
+            kind: "trace",
+            to: { by: "designation", value: "PLC1" },
+            includePower: false,
+          },
+          flow: testCase.flow,
+        });
+        expect(spy).toHaveBeenCalledOnce();
+        expect(outcome).toEqual({ ok: false, error: payload.error });
+        if (outcome.ok) throw new Error("Expected injected refusal");
+        const human = `R004 ${outcome.error.message}\n`;
+        const json = `${JSON.stringify({ diagnostics: [], error: outcome.error }, undefined, 2)}\n`;
+        expect(Buffer.byteLength(human)).toBe(testCase.humanBytes);
+        expect(Buffer.byteLength(json)).toBe(testCase.jsonBytes);
+        expect(Buffer.from(json)).toEqual(Buffer.from(golden));
+      } finally {
+        spy.mockRestore();
+      }
+    });
     it(`${testCase.name} ${testCase.flow} locks live ELK, R004, and product bytes`, async () => {
       expect(fixtureDiagnostics[testCase.name]).toEqual([]);
       const ir = fixtureIr[testCase.name]!;
@@ -459,15 +522,21 @@ describe("Amendment B4 v20 Tier 2 deterministic failures", () => {
 
       const human = `R004 ${error.message}\n`;
       const json = `${JSON.stringify({ diagnostics: [], error }, undefined, 2)}\n`;
-      expect(Buffer.byteLength(human, "utf8")).toBe(testCase.humanBytes);
-      expect(Buffer.byteLength(json, "utf8")).toBe(testCase.jsonBytes);
+      expect(Buffer.byteLength(human, "utf8")).toBe(
+        testCase.name === "right-deep" ? 175 : testCase.humanBytes,
+      );
+      expect(Buffer.byteLength(json, "utf8")).toBe(
+        testCase.name === "right-deep" ? 1318 : testCase.jsonBytes,
+      );
       const flowName = testCase.flow === "left-to-right" ? "right" : "down";
       const golden =
         JSON.stringify(
           JSON.parse(
             readFileSync(
               new URL(
-                `./goldens/tier2/${testCase.name}-${flowName}.r004.json`,
+                testCase.name === "right-deep"
+                  ? `./snapshots/semantic-ordering/right-deep-semantic-${flowName}.r004.json`
+                  : `./goldens/tier2/${testCase.name}-${flowName}.r004.json`,
                 import.meta.url,
               ),
               "utf8",

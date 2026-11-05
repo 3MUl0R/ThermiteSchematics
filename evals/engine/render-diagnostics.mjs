@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import { compileProject, publicPackage, engineRoot } from "./engine.mjs";
+import {
+  compileProject,
+  publicPackage,
+  engineRoot,
+  renderFaultEngine,
+} from "./engine.mjs";
 import {
   corpus,
   readJson,
@@ -139,7 +144,26 @@ export async function renderDiagnostics() {
             join(engineRoot, "examples/machine-demo"),
           );
           assert(machine.ok);
-          result = await renderSchematic(machine.ir, loads);
+          // #60 makes the old machine-demo refusal drawable. Exercise the
+          // actual validator with a moved conductor anchor instead of depending
+          // on an incidental routing failure. Keep the authored R004 predicate.
+          const { createElkEngine, createSchematicRendererWithDependencies } =
+            await renderFaultEngine();
+          const missing = machine.ir.wires.find(
+            (w) => w.designation === "W-RIO2-L+",
+          );
+          const engine = createElkEngine(),
+            layout = engine.layout.bind(engine);
+          engine.layout = async (...args) => {
+            const output = await layout(...args);
+            output.edges.find(
+              (e) => e.id === JSON.stringify(["wire", missing.uid]),
+            ).sections[0].startPoint.x += 1;
+            return output;
+          };
+          result = await createSchematicRendererWithDependencies({
+            layoutEngine: engine,
+          }).render(machine.ir, loads);
           passed =
             result.error?.message.includes("W-RIO2-L+") &&
             result.error.message.includes("RIO2.L+") &&

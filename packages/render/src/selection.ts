@@ -1,3 +1,4 @@
+import { irSemanticOrder, type SemanticOrder } from "./semantic-order.js";
 import {
   compareConductiveElementId,
   type ConductiveElementId,
@@ -140,6 +141,7 @@ interface SymbolMappingContext {
 }
 
 interface SelectionContext extends SymbolMappingContext {
+  readonly order: SemanticOrder;
   readonly view: NormalizedDeviceSchematicView;
   readonly engine: QueryEngine;
   readonly terminalByKey: ReadonlyMap<
@@ -659,6 +661,7 @@ function createSelectionContext(
     ok: true,
     value: {
       ir: request.ir,
+      order: irSemanticOrder(request.ir),
       view: request.view,
       engine: request.engine,
       mappings,
@@ -1072,8 +1075,14 @@ function compareBoundaryCandidate(
       designationFor(context, rightTerminal.deviceUid),
     ) ||
     compareText(leftTerminal.terminalKey, rightTerminal.terminalKey) ||
-    compareText(leftTerminal.deviceUid, rightTerminal.deviceUid) ||
-    compareText(left.potentialUid ?? "", right.potentialUid ?? "")
+    // W902 permits exact duplicate declarations at one anchor. Their authored
+    // source positions break this final tie; instance identity never does.
+    (left.potentialUid === right.potentialUid
+      ? 0
+      : context.order.compare(
+          left.potentialUid ?? "",
+          right.potentialUid ?? "",
+        ))
   );
 }
 

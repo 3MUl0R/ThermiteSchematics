@@ -238,7 +238,7 @@ export async function prepareSchematicDrawing(
   if (!laidOut.ok) {
     let error = laidOut.error;
     if (
-      laidOut.failureKind !== "contract-violation" &&
+      error.code === "R004" &&
       normalized.value.view.format === "schematic-view/0.2" &&
       normalized.value.view.intent === "loads"
     ) {

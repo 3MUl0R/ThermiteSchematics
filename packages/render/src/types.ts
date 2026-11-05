@@ -327,6 +327,8 @@ export type PresentationNode =
   SymbolPresentationNode | RailPresentationNode | JunctionPresentationNode;
 
 export interface PresentationEdge {
+  /** Authored source tie-break for an unnamed physical element. */
+  readonly authoredOrderKey?: string;
   readonly id: string;
   readonly parentId: "root";
   readonly kind: "conductor" | "boundary-segment";

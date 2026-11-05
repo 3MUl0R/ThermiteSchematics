@@ -64,3 +64,25 @@ export function patchEngine() {
   })();
   return patchModule;
 }
+
+let renderFaultModule;
+export function renderFaultEngine() {
+  // Validator fault injection is internal, like the guarded patch barriers above.
+  // Resolve both seams from the selected engine checkout, not the eval kit.
+  renderFaultModule ??= (async () => {
+    const internal = (path) =>
+      import(
+        pathToFileURL(join(engineRoot, "packages/render/dist", path)).href
+      );
+    const [renderer, runtime] = await Promise.all([
+      internal("renderer.js"),
+      internal("layout/elk-runtime.js"),
+    ]);
+    return {
+      createSchematicRendererWithDependencies:
+        renderer.createSchematicRendererWithDependencies,
+      createElkEngine: runtime.createElkEngine,
+    };
+  })();
+  return renderFaultModule;
+}

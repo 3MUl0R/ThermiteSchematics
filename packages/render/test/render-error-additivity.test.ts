@@ -1,6 +1,8 @@
-import { beforeAll, expect, it } from "vitest";
+import * as validation from "../src/layout/validate-output.js";
+import { createElkEngine } from "../src/layout/elk-runtime.js";
+import { beforeAll, expect, it, vi } from "vitest";
 import { errorContractCases } from "./render-contract-fixture.js";
-import { renderSchematic } from "../src/renderer.js";
+import { createSchematicRendererWithDependencies } from "../src/renderer.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import type { SchematicViewRequest } from "../src/types.js";
 import type { SchematicPacketRequest } from "../src/sheets.js";
@@ -84,10 +86,28 @@ it.each(["R001", "R002", "R003", "R004", "R005", "R006"] as const)(
   "preserves every existing dev field for %s",
   async (code) => {
     const c = cases.find((c) => c.code === code)!;
+    // Machine-demo now draws. Retain this field contract under an injected
+    // validator refusal, alongside the real geometric negative cases.
+    const refusal =
+      code === "R004"
+        ? vi.spyOn(validation, "normalizeAndValidateLayout").mockReturnValue({
+            ok: false,
+            failureKind: "contract-violation",
+            error: {
+              ...devFields.R004,
+              message: "Invalid layout: forced contract refusal.",
+            },
+          })
+        : undefined;
+    const engine = createElkEngine();
+    if (refusal) engine.layout = async (graph) => graph;
     const result =
       "packet" in c
         ? await renderSchematicPacket(c.ir, c.packet as SchematicPacketRequest)
-        : await renderSchematic(c.ir, c.view as SchematicViewRequest);
+        : await createSchematicRendererWithDependencies(
+            refusal ? { layoutEngine: engine } : {},
+          ).render(c.ir, c.view as SchematicViewRequest);
+    refusal?.mockRestore();
     expect(result).toMatchObject({ ok: false, error: devFields[code] });
     if (result.ok) return;
     if (code === "R001")

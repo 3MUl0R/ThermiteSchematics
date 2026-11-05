@@ -28,6 +28,11 @@ export async function robustnessFixture() {
         | "minimal"
         | "plant"
         | "actuation"
+        | "two_psu"
+        | "tb_loads"
+        | "coil_fork"
+        | "parallel"
+        | "unnamed_jumpers"
         | "plc3"
         | "plc4"
         | "daisy"
@@ -41,6 +46,7 @@ export async function robustnessFixture() {
         plc2Designation?: string;
         plc2Location?: string;
         noPotentials?: boolean;
+        duplicatePotentials?: boolean;
         reverseAuthoredOrder?: boolean;
       } = {},
     ) {
@@ -131,6 +137,69 @@ export async function robustnessFixture() {
           W("PS1.-", `${name}.M`);
         };
         switch (variant) {
+          case "unnamed_jumpers":
+            D("PLC2", "plc-compact");
+            for (const [i, a, b] of [
+              [0, "PS1.+", "PLC2.L+"],
+              [1, "PS1.+", "PLC2.L+"],
+              [2, "PS1.-", "PLC2.M"],
+            ] as const) {
+              const jumper = wire(`JP-${i}`, a, b);
+              w.objects.push({
+                uid: jumper.uid,
+                kind: "jumper",
+                endpoints: jumper.endpoints,
+              });
+            }
+            break;
+          case "parallel":
+            D("B1", "prox-pnp-3wire");
+            D("TB1", "terminal-block-8");
+            W("B1.4", "TB1.1");
+            W("B1.4", "TB1.1");
+            W("TB1.1", "PLC1.X1.0");
+            W("PS1.+", "B1.1");
+            W("PS1.-", "B1.3");
+            break;
+          case "two_psu":
+            D("PLC2", "plc-compact");
+            feed("PLC2");
+            D("PS2", "psu-24vdc");
+            for (const name of ["PLC3", "PLC4"]) {
+              D(name, "plc-compact");
+              W("PS2.+", `${name}.L+`);
+              W("PS2.-", `${name}.M`);
+            }
+            break;
+          case "tb_loads":
+            D("PLC2", "plc-compact");
+            D("TB1", "terminal-block-8");
+            W("PS1.+", "TB1.1");
+            W("TB1.1", "PLC2.L+");
+            W("PS1.-", "TB1.2");
+            W("TB1.2", "PLC2.M");
+            break;
+          case "coil_fork":
+            for (const [name, type] of [
+              ["S1", "pushbutton-nc"],
+              ["LS1", "limit-switch-2wire"],
+              ["TB1", "terminal-block-8"],
+              ["K1", "contactor-3p-1no"],
+              ["K2", "contactor-3p-1no"],
+            ])
+              D(name!, type!);
+            for (const [a, b] of [
+              ["PS1.+", "TB1.1"],
+              ["TB1.1", "S1.11"],
+              ["TB1.1", "LS1.13"],
+              ["S1.12", "K1.A1"],
+              ["LS1.14", "K2.A1"],
+              ["K1.A2", "TB1.2"],
+              ["K2.A2", "TB1.2"],
+              ["TB1.2", "PS1.-"],
+            ])
+              W(a!, b!);
+            break;
           case "plc3":
           case "plc4":
             for (const name of variant === "plc3"
@@ -242,6 +311,14 @@ export async function robustnessFixture() {
         }
       }
       if (options.noPotentials) p.objects = [];
+      if (options.duplicatePotentials)
+        p.objects.push(
+          ...p.objects.map((o: { uid: string }, i: number) => ({
+            ...o,
+            uid: uuid(`duplicate-${o.uid}`),
+            designation: `P-DUP-${i}`,
+          })),
+        );
       if (options.reverseAuthoredOrder)
         for (const source of [eq, w, p]) source.objects.reverse();
       if (seed !== undefined)
