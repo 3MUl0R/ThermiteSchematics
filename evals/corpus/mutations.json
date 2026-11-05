@@ -1225,6 +1225,12 @@
           "jsonPointer": "/objects/2",
           "code": "E302",
           "severity": "error"
+        },
+        {
+          "file": "objects.json",
+          "jsonPointer": "/objects/1/endpoints/0",
+          "code": "W303",
+          "severity": "warning"
         }
       ],
       "predicate": "potential-rating",
@@ -1263,6 +1269,187 @@
       ],
       "predicate": "potential-rating",
       "fixture": "ratings-pair"
+    },
+    {
+      "id": "partial-potential-missing-voltage_type",
+      "family": "partial-potential",
+      "provenance": [
+        "V2 #37; Helm V2 decision 1; synthetic declared ratings only"
+      ],
+      "changes": [
+        {
+          "file": "library/types/node.json",
+          "pointer": "/types/0/terminals/b/rating",
+          "op": "set",
+          "value": {
+            "nominal_voltage": 24,
+            "voltage_type": "AC"
+          }
+        },
+        {
+          "file": "objects.json",
+          "pointer": "/objects/-",
+          "op": "set",
+          "value": {
+            "uid": "00000000-0000-5000-8000-000000000003",
+            "kind": "potential",
+            "name": "PARTIAL",
+            "at": {
+              "device": "N1",
+              "terminal": "a"
+            },
+            "electrical": {
+              "nominal_voltage": 24
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "file": "objects.json",
+          "jsonPointer": "/objects/1/endpoints/0",
+          "code": "W303",
+          "severity": "warning"
+        }
+      ],
+      "predicate": "partial-potential",
+      "fixture": "ratings-pair",
+      "relock": true,
+      "missingField": "voltage_type"
+    },
+    {
+      "id": "partial-potential-missing-nominal_voltage",
+      "family": "partial-potential",
+      "provenance": [
+        "V2 #37; Helm V2 decision 1; synthetic declared ratings only"
+      ],
+      "changes": [
+        {
+          "file": "library/types/node.json",
+          "pointer": "/types/0/terminals/b/rating",
+          "op": "set",
+          "value": {
+            "nominal_voltage": 5,
+            "voltage_type": "DC"
+          }
+        },
+        {
+          "file": "objects.json",
+          "pointer": "/objects/-",
+          "op": "set",
+          "value": {
+            "uid": "00000000-0000-5000-8000-000000000003",
+            "kind": "potential",
+            "name": "PARTIAL",
+            "at": {
+              "device": "N1",
+              "terminal": "a"
+            },
+            "electrical": {
+              "voltage_type": "DC"
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "file": "objects.json",
+          "jsonPointer": "/objects/1/endpoints/0",
+          "code": "W303",
+          "severity": "warning"
+        }
+      ],
+      "predicate": "partial-potential",
+      "fixture": "ratings-pair",
+      "relock": true,
+      "missingField": "nominal_voltage"
+    },
+    {
+      "id": "deferred-required-unconnected",
+      "family": "deferred-connection",
+      "provenance": [
+        "V2 #78; Helm V2 decision 3; synthetic required connection and authored deferral"
+      ],
+      "changes": [
+        {
+          "file": "library/types/node.json",
+          "pointer": "/types/0/terminals/f/required",
+          "op": "set",
+          "value": true
+        },
+        {
+          "file": "devices/equipment.json",
+          "pointer": "/objects/3/connectionReview",
+          "op": "set",
+          "value": {
+            "terminals": {
+              "f": {
+                "status": "deferred",
+                "reason": "Synthetic feed design is pending."
+              }
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "file": "devices/equipment.json",
+          "jsonPointer": "/objects/3",
+          "code": "W905",
+          "severity": "warning",
+          "message": "N1: Required terminal N1.f is unconnected (has no connection). Deferred work: Synthetic feed design is pending."
+        }
+      ],
+      "predicate": "deferred-connection",
+      "relock": true
+    },
+    {
+      "id": "deferred-required-dangling",
+      "family": "deferred-connection",
+      "provenance": [
+        "V2 #78; Helm V2 decision 3; synthetic required connection and authored deferral"
+      ],
+      "changes": [
+        {
+          "file": "library/types/node.json",
+          "pointer": "/types/0/terminals/f/required",
+          "op": "set",
+          "value": true
+        },
+        {
+          "file": "devices/equipment.json",
+          "pointer": "/objects/3/connectionReview",
+          "op": "set",
+          "value": {
+            "terminals": {
+              "f": {
+                "status": "deferred",
+                "reason": "Synthetic feed design is pending."
+              }
+            }
+          }
+        },
+        {
+          "file": "cables/cables.json",
+          "pointer": "/objects/0/conductors/3/endpoints/0",
+          "op": "set",
+          "value": {
+            "device": "N1",
+            "terminal": "f"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "file": "devices/equipment.json",
+          "jsonPointer": "/objects/3",
+          "code": "W905",
+          "severity": "warning",
+          "message": "N1: Required terminal N1.f is dangling (has only a cable core with an unfinished far end). Deferred work: Synthetic feed design is pending."
+        }
+      ],
+      "predicate": "deferred-connection",
+      "relock": true
     },
     {
       "id": "ratings-without-potential",

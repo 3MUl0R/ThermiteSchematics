@@ -399,3 +399,160 @@ describe("round 3 assessment controls", () => {
     ]);
   });
 });
+
+describe("partial potential assessment (#37)", () => {
+  it.each([
+    [
+      "voltage_type",
+      { nominal_voltage: 24 },
+      { ...dc, voltage_type: "AC" },
+      dc,
+    ],
+    [
+      "nominal_voltage",
+      { voltage_type: "DC" },
+      dc,
+      { ...dc, nominal_voltage: 5 },
+    ],
+  ])(
+    "compares the undeclared %s with rating sources",
+    async (field, electrical, a, b) => {
+      const r = await pair({ rating: a }, { rating: b }, [
+        potential(3, end("PWR1", "a"), electrical),
+      ]);
+      expect(r.ok).toBe(true);
+      expect(r.diagnostics.map((d) => d.code)).toEqual(["W303"]);
+      const warning = r.diagnostics[0]!;
+      expect(warning.message).toContain(`does not declare ${field}`);
+      if (r.ok) {
+        expect(warning.message).toContain(r.ir.nets[0]!.id);
+        expect(r.ir.potentials[0]!.electrical).toEqual(electrical);
+        for (const t of r.ir.terminals) {
+          expect(warning.message).toContain(`PWR1.${t.id.terminalKey}`);
+          expect(warning.message).toContain(
+            `${t.source.file}:${t.source.line}:${t.source.column} ${t.source.jsonPointer}`,
+          );
+        }
+      }
+      expect(warning.related).toHaveLength(2);
+      expect(warning.related?.map((x) => x.file)).toEqual([
+        "library/types.json",
+        "library/types.json",
+      ]);
+    },
+  );
+  it("keeps a fully declared potential's diagnostics byte-identical", async () => {
+    const r = await pair({ rating: ac }, { rating: dc }, [
+      potential(3, end("PWR1", "a"), ac),
+    ]);
+    // Pinned before the fix, including message and related declaration sites.
+    expect(r.diagnostics).toEqual([
+      {
+        code: "E301",
+        severity: "error",
+        file: "objects.json",
+        line: 24,
+        column: 5,
+        jsonPointer: "/objects/2",
+        uid: "7f000000-0000-4000-8000-000000000003",
+        message:
+          'Effective voltage type "AC" is incompatible with terminal ratings at "PWR1.b".',
+        related: [
+          {
+            file: "library/types.json",
+            line: 13,
+            column: 14,
+            note: 'Terminal "PWR1.b" is rated for voltage type "DC" here.',
+          },
+        ],
+      },
+      {
+        code: "I208",
+        severity: "info",
+        file: "system.json",
+        line: 3,
+        column: 14,
+        jsonPointer: "/project",
+        message:
+          'Checks not completed: E301 voltage-type gate: skipped E302 on 1 terminal: ["PWR1.b"].',
+      },
+    ]);
+  });
+  it.each([
+    [{ voltage_type: "AC" }, ac, dc, "E301"],
+    [{ nominal_voltage: 24 }, dc, { ...dc, nominal_voltage: 5 }, "E302"],
+  ])(
+    "leaves declared-field compatibility to the existing rule (%j)",
+    async (electrical, a, b, code) => {
+      const r = await pair({ rating: a }, { rating: b }, [
+        potential(3, end("PWR1", "a"), electrical),
+      ]);
+      expect(r.diagnostics.map((d) => d.code)).toEqual(
+        code === "E301" ? ["E301", "I208"] : [code],
+      );
+    },
+  );
+  it("combines compatible partial declarations without W303", async () => {
+    const r = await pair(
+      { rating: dc },
+      { rating: { ...dc, nominal_voltage: 5 } },
+      [
+        potential(3, end("PWR1", "a"), { voltage_type: "DC" }, "P"),
+        potential(4, end("PWR1", "b"), { nominal_voltage: 24 }, "P"),
+      ],
+    );
+    expect(r.diagnostics.map((d) => d.code)).toEqual(["E302"]);
+  });
+  it.each([
+    "neutral",
+    "protective_earth",
+    "0 V",
+    "common",
+    "return",
+    "multi_rated",
+    "AC/DC",
+  ])("keeps the %s exclusion with either partial potential", async (role) => {
+    for (const [electrical, a, b] of [
+      [{ nominal_voltage: 24 }, { ...dc, voltage_type: "AC" }, dc],
+      [{ voltage_type: "DC" }, dc, { ...dc, nominal_voltage: 5 }],
+    ]) {
+      const r = await pair({ rating: a }, { role, rating: b }, [
+        potential(3, end("PWR1", "a"), electrical),
+      ]);
+      expect(r.diagnostics).toEqual([]);
+    }
+  });
+  it("keeps zero-reference and line-to-line/line-to-neutral exclusions", async () => {
+    for (const [electrical, a, b] of [
+      [{ voltage_type: "DC" }, dc, { ...dc, nominal_voltage: 0 }],
+      [{ voltage_type: "AC" }, ac, { ...ac, nominal_voltage: 277 }],
+    ]) {
+      expect(
+        (
+          await pair({ rating: a }, { rating: b }, [
+            potential(3, end("PWR1", "a"), electrical),
+          ])
+        ).diagnostics,
+      ).toEqual([]);
+    }
+  });
+  it.each(["N", "PE", "0V", "COM"])(
+    "keeps the reference-key %s exclusion with a partial potential",
+    async (key) => {
+      const root = await project(
+        [
+          device(1, "N1"),
+          wire(2, end("N1", "a"), end("N1", key)),
+          potential(3, end("N1", "a"), { voltage_type: "DC" }),
+        ],
+        [
+          node({
+            a: { rating: dc },
+            [key]: { rating: { ...dc, nominal_voltage: 5 } },
+          }),
+        ],
+      );
+      expect((await compileProject(root)).diagnostics).toEqual([]);
+    },
+  );
+});

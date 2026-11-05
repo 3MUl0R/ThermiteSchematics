@@ -1261,12 +1261,12 @@ const module: FactModule = {
     },
     {
       claim:
-        "Starter PS1.L/N are required but deferred: strict fails W903/W905; cabinets passes.",
+        "Starter PS1.L/N are required but deferred: strict fails W905; cabinets passes.",
       async check() {
         const strict = await rejected(
           ["validate", ".", "--strict"],
           ctx.pristine.starter,
-          "W903",
+          "W905",
         );
         expect(strict.stdout).toContain("W905");
         expect(strict.stdout).not.toContain("W904");
@@ -1286,7 +1286,7 @@ const module: FactModule = {
             report.findings
               .filter((f: any) => f.designation === "PS1" && f.key === key)
               .map((f: any) => f.code),
-          ).toEqual(["W903", "W905"]);
+          ).toEqual(["W905"]);
         }
         const cabinets = await ok(
           ["validate", ".", "--strict"],

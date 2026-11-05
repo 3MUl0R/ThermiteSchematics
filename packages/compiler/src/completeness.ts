@@ -262,14 +262,23 @@ export function analyzeCompleteness(
           : [];
       const name = `${device.designation}.${entry.key}`,
         review = entry.review;
-      if (entry.required && entry.connection !== "connected")
+      const requiredGap = entry.required && entry.connection !== "connected";
+      // Deferral is the authored explanation for this gap. Keep one finding,
+      // retaining the requirement and connection state in the more specific code.
+      if (requiredGap && review?.status !== "deferred")
         add(
           "W903",
           `Required ${entry.kind} ${name} ${entry.connection === "dangling" ? "has only a cable core with an unfinished far end" : "has no connection"}.${review ? ` Review: ${review.status}: ${review.reason}` : ""}`,
           entry,
         );
       if (review?.status === "deferred")
-        add("W905", `${name} has deferred work: ${review.reason}`, entry);
+        add(
+          "W905",
+          requiredGap
+            ? `Required ${entry.kind} ${name} is ${entry.connection} (${entry.connection === "dangling" ? "has only a cable core with an unfinished far end" : "has no connection"}). Deferred work: ${review.reason}`
+            : `${name} has deferred work: ${review.reason}`,
+          entry,
+        );
       else if (review?.status === "intentionally-unused") {
         if (entry.required || entry.connection !== "unconnected")
           add(

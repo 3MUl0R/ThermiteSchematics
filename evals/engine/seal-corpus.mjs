@@ -28,7 +28,7 @@ export async function sealCorpus(destination = corpus) {
         {
           path: "mutations.json",
           source:
-            "engine/seed-mutations.mjs; EA F7, PU/CO authoring mistakes, GI retrieval failures",
+            "engine/seed-mutations.mjs; EA F7, PU/CO authoring mistakes, GI retrieval failures; V2 #37/#78 synthetic follow-ups",
           purpose:
             "Fixed code/pointer mutations and actionable diagnostic predicates; markers are checker-side only",
         },

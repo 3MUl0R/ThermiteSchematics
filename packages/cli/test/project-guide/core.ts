@@ -178,16 +178,16 @@ export const viewRoots = () =>
     await assertCloneWarnings(project);
   });
 /** The clone fixtures deliberately retain required/deferred work. */
-export async function assertCloneWarnings(project: string) {
+export async function assertCloneWarnings(
+  project: string,
+  codes = ["W903", "W905"],
+) {
   const args = ["validate", ".", "--strict", "--json"];
   const run = await thermite(args, project);
   expect(run.code, describeRun(args, run)).toBe(1);
   expect(run.stderr).toBe("");
   const diagnostics = JSON.parse(run.stdout) as { code: string }[];
-  expect([...new Set(diagnostics.map((d) => d.code))].sort()).toEqual([
-    "W903",
-    "W905",
-  ]);
+  expect([...new Set(diagnostics.map((d) => d.code))].sort()).toEqual(codes);
   return run;
 }
 /** The starter with PS1 and PLC1 retyped to site clones of their core types. */
@@ -209,7 +209,7 @@ const clonedStarter = () =>
     });
     await ok(["lock", "."], project);
     await ok(["validate", "."], project);
-    await assertCloneWarnings(project);
+    await assertCloneWarnings(project, ["W905"]);
   });
 /** The request `thermite view <root> <mode>` renders, as a one-view packet. */
 function viewPacket(root: string, mode: string) {
@@ -873,7 +873,7 @@ const module: FactModule = {
         const supply = { device: "PS1", terminal: "+" };
         expect(
           await attempt(supply, { device: "PLC1", terminal: "X2.0" }),
-        ).toEqual(["W903", "W905"]);
+        ).toEqual(["W905"]);
         expect(
           await attempt(supply, { device: plc.uid, terminal: "X2.0" }),
         ).toContain("E101");
@@ -936,7 +936,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Terminal ratings never create one, even on a source: 480 VAC wired to a 24 VDC input only warns W303 (ratings disagree) until that net has a potential.",
+        "Terminal ratings never create one, even on a source: 480 VAC wired to a 24 VDC input warns W303 (ratings disagree) until potentials declare voltage_type.",
       async check() {
         const project = await freshProject("starter");
         await editJson(join(project, "devices/equipment.json"), (file) =>
@@ -1006,9 +1006,28 @@ const module: FactModule = {
             kind: "potential",
             name: "480VAC",
             at: { device: "SRC1", terminal: "L1" },
-            electrical: { nominal_voltage: 480, voltage_type: "AC" },
+            electrical: { nominal_voltage: 480 },
           }),
         );
+        // A nominal-only potential leaves the AC/DC disagreement unassessed.
+        // Its declared nominal field still belongs to E302, so both findings stay.
+        const partial = JSON.parse(
+          (await rejected(["validate", ".", "--json"], project, "W303")).stdout,
+        );
+        expect(partial.map((d: any) => d.code).sort()).toEqual([
+          "E302",
+          "W303",
+        ]);
+        const partialWarning = partial.find((d: any) => d.code === "W303");
+        expect(partialWarning.message).toContain(
+          "does not declare voltage_type",
+        );
+        expect(partialWarning.related).toEqual(warned[0].related);
+        await editJson(join(project, "potentials/potentials.json"), (file) => {
+          file.objects.find(
+            (p: any) => p.name === "480VAC",
+          ).electrical.voltage_type = "AC";
+        });
         // With a potential the net is checked: E301, whose gate skips E302 on
         // that terminal (I208); neither advisory remains.
         const checked = JSON.parse(
@@ -1090,7 +1109,7 @@ const module: FactModule = {
         await rejected(
           ["validate", ".", "--strict"],
           ctx.pristine.starter,
-          "W903",
+          "W905",
         );
         await ok(["validate", ".", "--strict"], ctx.pristine.cabinets);
       },

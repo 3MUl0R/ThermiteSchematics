@@ -2,7 +2,12 @@ import { renderDiagnostics } from "./render-diagnostics.mjs";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { loadProject, engineRoot } from "./engine.mjs";
-import { mutationCases, mutate, assertDiagnostics } from "./validation.mjs";
+import {
+  mutationCases,
+  mutate,
+  assertDiagnostics,
+  partialPotentialMessageMatches,
+} from "./validation.mjs";
 import {
   temporary,
   probe,
@@ -85,6 +90,14 @@ export async function actionable(report, scenario, project) {
       /Potential declaration "OTHER" conflicts with earlier declarations.*field "name"/.test(
         text,
       ) && d.related?.length > 0,
+    "partial-potential": () =>
+      partialPotentialMessageMatches(report.diagnostics, scenario),
+    "deferred-connection": () =>
+      selected.length === 1 &&
+      d.code === "W905" &&
+      /Required terminal N1.f is (?:unconnected|dangling)/.test(text) &&
+      text.includes("Deferred work: Synthetic feed design is pending.") &&
+      d.related?.length > 0,
     "required-connection": () =>
       text.includes("Required terminal N1.f has no connection") &&
       d.related?.length > 0,

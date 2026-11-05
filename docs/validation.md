@@ -9,7 +9,7 @@ The compiler reports these assessment limits:
 
 | Code | Severity | Meaning |
 | --- | --- | --- |
-| W303 | Warning | Terminals on a net without voltage facts in potentials have conflicting comparable declared ratings. The message names the net, terminals, rating facts and declaration locations. |
+| W303 | Warning | Terminals have conflicting comparable declared ratings in a voltage field left undeclared by the net's potentials. The message names the net, terminals, rating facts and declaration locations. |
 | I304 | Info | One project summary lists connected nets with at least two terminal ratings declaring `voltage_type` or `nominal_voltage`, and no potential declaring either voltage fact. Voltage compatibility remains unassessed, even when the ratings agree. |
 | I208 | Info | One project summary names checks blocked by failed prerequisites and their affected nets, terminals or source locations. |
 
@@ -20,8 +20,8 @@ Errors still prevent compilation from returning IR. No diagnostic repairs source
 or invents an electrical fact.
 
 W303 uses the same explicit AC/DC inequality and unequal positive nominal-value
-comparisons as E301/E302, with additional conservative exclusions because there
-are no authored potential voltage facts:
+comparisons as E301/E302, with additional conservative exclusions because a voltage field
+is left undeclared by the net's potentials:
 
 - Explicit reference/return roles, including negative/neg/minus role tokens,
   and terminals with nonpositive nominal ratings do not establish a conflict.
@@ -42,9 +42,13 @@ are no authored potential voltage facts:
   the schema does not declare that reference. W303 therefore compares positive
   nominal values only when both terminals explicitly declare DC. An explicit
   AC/DC disagreement remains comparable regardless of AC nominal reference.
-- At least one potential on the net must declare `voltage_type` or
-  `nominal_voltage` to cover its voltage assessment. Empty, polarity-only and
-  current-only potentials do not silence W303/I304. Current/power/frequency-only
+- A partial potential assesses only the voltage fields it declares. W303 compares
+  the undeclared fields and names them in its message; compatible partial
+  declarations collectively assess the fields they declare. Fully declared
+  potentials retain their existing diagnostics. I304 membership is unchanged:
+  any potential declaring `voltage_type` or `nominal_voltage` keeps the net out
+  of that summary. Empty, polarity-only and current-only potentials do not
+  silence W303/I304. Current/power/frequency-only
   terminal ratings do not create a voltage-compatibility obligation. Existing
   E300/E301/E302/W902 still analyze authored potential facts, including compatible
   partial declarations; no potential is removed, inferred or repaired.

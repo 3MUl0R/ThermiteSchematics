@@ -265,7 +265,7 @@ Init selects 0.2.0; alpha init copies it into `libraries/core`. Existing copies
 and locks never update automatically. See the [core version and migration guide](../core-library/README.md).
 Core 0.2.0's reviewed generic interfaces produce info I005 in `diagnostics`,
 with no I003 or W904. The starter's required, deferred PS1.L/N feed still produces
-W903/W905, so `validate --strict` exits 1 until that work is completed. Fresh
+W905, so `validate --strict` exits 1 until that work is completed. Fresh
 cabinets strict validation exits 0. To author a local library,
 use an explicit portable relative `path` in `system.json`, put its manifest in
 `library.json`, put its declared type sources below that directory, and run

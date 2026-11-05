@@ -252,7 +252,7 @@ export const DIAGNOSTIC_CATALOG = {
     severity: "warning",
     producer: "code",
     meaning:
-      "Connected terminals have conflicting comparable declared ratings on a net without potential voltage facts; no voltage is inferred.",
+      "Connected terminals have conflicting comparable declared ratings in a voltage field left undeclared by the net's potentials; no voltage is inferred.",
   },
   I304: {
     severity: "info",
@@ -286,7 +286,8 @@ export const DIAGNOSTIC_CATALOG = {
   W903: {
     severity: "warning",
     producer: "code",
-    meaning: "A required terminal or port has no completed connection.",
+    meaning:
+      "A non-deferred required terminal or port has no completed connection.",
   },
   W904: {
     severity: "warning",

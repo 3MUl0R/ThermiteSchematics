@@ -48,6 +48,8 @@ export function mutationRecipe() {
       "potential-rating": "potential-rating",
       "potential-conflict": "potential-conflict",
       "required-connection": "required-connection",
+      "deferred-connection": "deferred-connection",
+      "partial-potential": "partial-potential",
       "multi-fault": "multi-fault",
       "json-syntax": "json-syntax",
       "json-duplicate": "json-duplicate",
@@ -344,8 +346,93 @@ export function mutationRecipe() {
           electrical,
         }),
       ],
-      [diagnostic("objects.json", "/objects/2", code)],
+      [
+        diagnostic("objects.json", "/objects/2", code),
+        ...(id === "ratings-voltage"
+          ? [
+              diagnostic(
+                "objects.json",
+                "/objects/1/endpoints/0",
+                "W303",
+                "warning",
+              ),
+            ]
+          : []),
+      ],
       { fixture: "ratings-pair" },
+    );
+  // V2 #37: each potential leaves precisely the conflicting field undeclared.
+  for (const [field, rating, electrical] of [
+    [
+      "voltage_type",
+      { nominal_voltage: 24, voltage_type: "AC" },
+      { nominal_voltage: 24 },
+    ],
+    [
+      "nominal_voltage",
+      { nominal_voltage: 5, voltage_type: "DC" },
+      { voltage_type: "DC" },
+    ],
+  ])
+    add(
+      `partial-potential-missing-${field}`,
+      "partial-potential",
+      [
+        change(type, "/types/0/terminals/b/rating", rating),
+        change("objects.json", "/objects/-", {
+          uid: "00000000-0000-5000-8000-000000000003",
+          kind: "potential",
+          name: "PARTIAL",
+          at: { device: "N1", terminal: "a" },
+          electrical,
+        }),
+      ],
+      [diagnostic("objects.json", "/objects/1/endpoints/0", "W303", "warning")],
+      {
+        fixture: "ratings-pair",
+        relock: true,
+        missingField: field,
+        provenance: [
+          "V2 #37; Helm V2 decision 1; synthetic declared ratings only",
+        ],
+      },
+    );
+  // V2 #78: unconnected and single-ended required gaps have one W905 each.
+  for (const state of ["unconnected", "dangling"])
+    add(
+      `deferred-required-${state}`,
+      "deferred-connection",
+      [
+        change(type, "/types/0/terminals/f/required", true),
+        change(devices, "/objects/3/connectionReview", {
+          terminals: {
+            f: {
+              status: "deferred",
+              reason: "Synthetic feed design is pending.",
+            },
+          },
+        }),
+        ...(state === "dangling"
+          ? [
+              change(cables, "/objects/0/conductors/3/endpoints/0", {
+                device: "N1",
+                terminal: "f",
+              }),
+            ]
+          : []),
+      ],
+      [
+        {
+          ...diagnostic(devices, "/objects/3", "W905", "warning"),
+          message: `N1: Required terminal N1.f is ${state} (${state === "dangling" ? "has only a cable core with an unfinished far end" : "has no connection"}). Deferred work: Synthetic feed design is pending.`,
+        },
+      ],
+      {
+        relock: true,
+        provenance: [
+          "V2 #78; Helm V2 decision 3; synthetic required connection and authored deferral",
+        ],
+      },
     );
   add("ratings-without-potential", "ratings-only", [], [], {
     fixture: "ratings-pair",
