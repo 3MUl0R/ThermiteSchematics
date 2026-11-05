@@ -332,7 +332,7 @@ export async function verifyRuntimeArchive(
     );
     for (const version of ["0.1.0", "0.2.0"]) {
       const entry = core.SHIPPED_CORE_VERSIONS[version];
-      assert.equal(entry.fileInventory.length, version === "0.1.0" ? 14 : 27);
+      assert.equal(entry.fileInventory.length, version === "0.1.0" ? 14 : 34);
       for (const file of entry.fileInventory) {
         assert(
           entries.some(
@@ -370,7 +370,7 @@ export async function verifyRuntimeArchive(
       assert.equal(lock.libraries.core.resolutionKind, "shipped");
       assert.equal(
         Object.keys(lock.libraries.core.files).length,
-        version === "0.1.0" ? 14 : 27,
+        version === "0.1.0" ? 14 : 34,
       );
     }
     check(

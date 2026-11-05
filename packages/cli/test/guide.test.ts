@@ -159,6 +159,16 @@ it("build assets are fresh and the manifest has unique, non-reserved IDs", async
   expect(check.code, check.stderr).toBe(0);
 });
 
+it("makes the core terminal scheme and cable caveats discoverable offline", async () => {
+  const path = "node_modules/@thermite/core-library/README.md";
+  const output = await guideOutput("libraries");
+  expect(output.stdout).toContain(path);
+  expect(output.stdout).toContain("empty colors mean unknown");
+  const readme = await readFile(join(repositoryRoot, path), "utf8");
+  expect(readme).toContain("## L2 interface conventions and limits");
+  expect(readme).toContain("shield/drain");
+});
+
 it("init points users to the offline guide", async () => {
   const result = await ok(
     ["init", join(await scratch("guide-init"), "project")],

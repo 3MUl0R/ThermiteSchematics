@@ -19,6 +19,8 @@ root contains `library.json` and the type files declared by that manifest. Omitt
 `path` requests an exact shipped library; the shipped set is
 `core@0.1.0` and `core@0.2.0`.
 
+Read `node_modules/@thermite/core-library/README.md` under the engine/runtime root, section “L2 interface conventions and limits”, for the terminal scheme and generic power/cordset/pair cable caveats: empty colors mean unknown; shield, size, construction and ratings are unspecified; review both ends and spares.
+
 The lock and IR record `resolutionKind: "local" | "shipped"`. Local provenance
 retains the authored path. Shipped core uses internal locator
 `ais-shipped:core@<version>` and stable display paths rooted at
