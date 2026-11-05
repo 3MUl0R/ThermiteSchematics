@@ -35,11 +35,6 @@ function ratedNets(context: RuleContext): Net[] {
     .filter(
       (net) =>
         !context.topologicallyAffectedNetIds.has(net.id) &&
-        // Non-voltage ratings cannot enable E301/E302, and a polarity/current-
-        // only potential cannot assess voltage. Do not synthesize missing facts.
-        !context
-          .potentialsForNet(net)
-          .some((p) => hasVoltageFacts(p.electrical)) &&
         net.conductiveElementIds.length > 0 &&
         context.terminalsForNet(net).filter((t) => hasVoltageFacts(t.rating))
           .length >= 2,
@@ -101,17 +96,23 @@ function comparable(terminal: Terminal): boolean {
   );
 }
 
-function disagree(a: Terminal, b: Terminal): boolean {
+function disagree(
+  a: Terminal,
+  b: Terminal,
+  undeclared: ReadonlySet<keyof VoltageFacts>,
+): boolean {
   if (!comparable(a) || !comparable(b)) return false;
   const x = a.rating!,
     y = b.rating!;
-  if (declaredVoltageTypeMismatch(x, y)) return true;
+  if (undeclared.has("voltage_type") && declaredVoltageTypeMismatch(x, y))
+    return true;
   // The scalar schema has no voltage-reference or alternative-rating set.
   // Unequal AC nominal values may be line-to-line versus line-to-neutral;
   // unknown/multi-rated classes cannot establish a nominal conflict either.
   // Only explicit DC/DC positive nominal classes are comparable here. Missing
-  // AC/DC fields (including multi-rated terminals) remain unassessed by I304.
+  // AC/DC fields (including multi-rated terminals) cannot establish that conflict.
   return (
+    undeclared.has("nominal_voltage") &&
     x.voltage_type === "DC" &&
     y.voltage_type === "DC" &&
     positiveNominalVoltageMismatch(x, y)
@@ -122,9 +123,21 @@ export const declaredRatingConflictRule: ElectricalRule = {
   id: "W303",
   evaluate(context): Diagnostic[] {
     return ratedNets(context).flatMap((net) => {
+      const potentials = context.potentialsForNet(net);
+      // Compatible partial declarations assess their union of authored fields.
+      // A field declared anywhere remains owned by E300/E301/E302; compare only
+      // the omitted fields using the same conservative rating comparisons.
+      const undeclared = new Set(
+        (["voltage_type", "nominal_voltage"] as const).filter(
+          (field) => !potentials.some((p) => p.electrical[field] !== undefined),
+        ),
+      );
+      if (!undeclared.size) return [];
       const terminals = context.terminalsForNet(net);
       const conflicting = terminals
-        .filter((a) => terminals.some((b) => a !== b && disagree(a, b)))
+        .filter((a) =>
+          terminals.some((b) => a !== b && disagree(a, b, undeclared)),
+        )
         .sort((a, b) =>
           compareNatural(
             context.displayTerminal(a.id),
@@ -146,12 +159,15 @@ export const declaredRatingConflictRule: ElectricalRule = {
             ),
         )
         .sort(compareSourceRef)[0]!;
+      const assessment = potentials.some((p) => hasVoltageFacts(p.electrical))
+        ? `Potential intent on this net does not declare ${[...undeclared].join(" and ")}; voltage compatibility for this field is unassessed.`
+        : "No potential declares voltage facts on this net; voltage compatibility is unassessed.";
       return [
         {
           ...source,
           code: "W303",
           severity: "warning",
-          message: `Net ${JSON.stringify(net.id)}: these declared ratings disagree: ${declarations.join("; ")}. No potential declares voltage facts on this net; voltage compatibility is unassessed.`,
+          message: `Net ${JSON.stringify(net.id)}: these declared ratings disagree: ${declarations.join("; ")}. ${assessment}`,
           related: conflicting.map((t) => ({
             file: t.source.file,
             line: t.source.line,
@@ -167,7 +183,14 @@ export const declaredRatingConflictRule: ElectricalRule = {
 export const unassessedRatedNetsRule: ElectricalRule = {
   id: "I304",
   evaluate(context): Diagnostic[] {
-    const nets = ratedNets(context);
+    // I304 membership is intentionally unchanged: any authored voltage fact
+    // keeps the net out of this summary, even if another field is unassessed.
+    const nets = ratedNets(context).filter(
+      (net) =>
+        !context
+          .potentialsForNet(net)
+          .some((p) => hasVoltageFacts(p.electrical)),
+    );
     if (!nets.length) return [];
     return [
       {

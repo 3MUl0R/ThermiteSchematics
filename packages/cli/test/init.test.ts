@@ -509,7 +509,7 @@ describe("thermite init product", () => {
 
     const compiled = await invoke(["compile", "."], root);
     expect(compiled.exitCode).toBe(0);
-    expect(compiled.stderr.match(/ W\d{3} /gu)).toEqual([" W903 ", " W905 "]);
+    expect(compiled.stderr.match(/ W\d{3} /gu)).toEqual([" W905 "]);
     expect(compiled.stderr).toContain("Starter AC feed is not designed");
     expect(JSON.parse(compiled.stdout)).toMatchObject({
       format: "electrical-ir/0.1",
@@ -517,7 +517,7 @@ describe("thermite init product", () => {
     });
     const rendered = await invoke(["view", "PS1", "--loads"], root);
     expect(rendered.exitCode).toBe(0);
-    expect(rendered.stderr.match(/ W\d{3} /gu)).toEqual([" W903 ", " W905 "]);
+    expect(rendered.stderr.match(/ W\d{3} /gu)).toEqual([" W905 "]);
     expect(rendered.stdout).toContain("<svg");
     expect(rendered.stdout.endsWith("\n")).toBe(true);
   });
@@ -1593,7 +1593,7 @@ describe("reviewed core starter", () => {
       expect(strict.status, strict.stderr).toBe(template === "starter" ? 1 : 0);
       expect(strict.stdout).not.toContain("W904");
       if (template === "starter") {
-        expect(strict.stdout).toContain("W903");
+        expect(strict.stdout).not.toContain("W903");
         expect(strict.stdout).toContain("W905");
       } else expect(strict.stderr).toBe("");
 
@@ -1609,7 +1609,7 @@ describe("reviewed core starter", () => {
             report.findings
               .filter((f) => f.designation === "PS1" && f.key === key)
               .map((f) => f.code),
-          ).toEqual(["W903", "W905"]);
+          ).toEqual(["W905"]);
         }
       }
     },

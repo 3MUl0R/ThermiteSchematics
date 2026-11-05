@@ -745,7 +745,7 @@ describe("generated project guide", () => {
           words.join(" ") === "validate . --strict"
         ) {
           expect(run.code, describeRun(words, run)).toBe(1);
-          expect(run.stdout.match(/ W\d{3} /g)).toEqual([" W903 ", " W905 "]);
+          expect(run.stdout.match(/ W\d{3} /g)).toEqual([" W905 "]);
           expect(run.stderr).toBe("");
         } else {
           expect(run.code, describeRun(words, run)).toBe(0);

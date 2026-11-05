@@ -110,8 +110,8 @@ coverage, deferred work or project-specific requirements. Optional points still
 need application review; promote used pairs/channels with `connectionReview`.
 
 The starter deliberately leaves PS1.L/N unfed, with existing `deferred` reviews
-and reasons. W903 retains the missing universal requirement; W905 discloses the
-deferral. A fresh starter has zero I003 and zero W904, but `validate --strict`
+and reasons. W905 retains the missing universal requirement and connection state
+and discloses the deferral. A fresh starter has zero I003 and zero W904, but `validate --strict`
 exits 1 until the feed is designed and its review completed. The fresh cabinets
 template exits 0 under strict validation. Reviewed generic models with all required
 points connected do not incur W904. Zero I003 means reviewed coverage, not

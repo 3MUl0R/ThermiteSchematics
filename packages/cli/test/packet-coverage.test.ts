@@ -192,7 +192,7 @@ it("packet warnings exit 0 normally and 1 with --strict, with separate diagnosti
       expect(error.stdout).toBe("");
       expect(
         JSON.parse(error.stderr).diagnostics.map((d: any) => d.code),
-      ).toEqual(["W903", "W905"]);
+      ).toEqual(["W905"]);
       return true;
     });
   } finally {

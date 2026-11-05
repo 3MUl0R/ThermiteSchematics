@@ -110,7 +110,7 @@ core `plc-compact` function `do0` is terminal `X2.0`. Take UIDs and keys from
 Voltage checks (E300-E302) run only on nets that carry a `potential`
 (`{uid, kind: "potential", name, at, electrical: {nominal_voltage, voltage_type}}`).
 Terminal ratings never create one, even on a source: 480 VAC wired to a 24 VDC
-input only warns W303 (ratings disagree) until that net has a potential. Info
+input warns W303 (ratings disagree) until potentials declare voltage_type. Info
 I304 lists rated nets left unassessed and I208 checks that errors skipped; info
 alone exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at the sources you add.
@@ -176,7 +176,7 @@ Print at 100% on matching paper and disable browser headers/footers.
 Init copies `core@0.2.0` to `libraries/core`; 0.1.0 locks persist.
 system.json selects path/version; electrical-system.lock.json pins bytes.
 After edits run `thermite lock .`, then validate (E107/E108 otherwise).
-Starter PS1.L/N are required but deferred: strict fails W903/W905; cabinets passes.
+Starter PS1.L/N are required but deferred: strict fails W905; cabinets passes.
 Invent no pins/ratings; keep manufacturer document/revision and review notes.
 See `thermite guide libraries` for optional-library limits.
 
@@ -301,7 +301,7 @@ declared keys to `{status: "required"|"intentionally-unused"|"deferred", reason:
 connections. Deferred work remains visible even on connected terminals, and
 unused notes cannot waive a library requirement. Unknown keys fail E205.
 
-W903 flags required points without a complete connection, W904 partial models,
+W903 flags non-deferred required points not fully connected, W904 partial models,
 and W905 deferred or contradictory reviews; preserve them. Optional unconnected
 points, spares and unreviewed models stay visible as information. A single-ended
 cable core does not satisfy a required connection. Connected does not prove an

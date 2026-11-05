@@ -80,6 +80,18 @@ export function assertBaselineDiagnostics(id, diagnostics) {
   );
 }
 
+export function partialPotentialMessageMatches(diagnostics, scenario) {
+  return (
+    ["voltage_type", "nominal_voltage"].includes(scenario.missingField) &&
+    diagnostics.some(
+      (d) =>
+        d.code === "W303" &&
+        typeof d.message === "string" &&
+        d.message.includes(`does not declare ${scenario.missingField};`),
+    )
+  );
+}
+
 export function assertDiagnostics(diagnostics, scenario) {
   assert.deepEqual(
     diagnostics.filter((d) => d.code === "I208"),
@@ -102,6 +114,11 @@ export function assertDiagnostics(diagnostics, scenario) {
       `Missing ${JSON.stringify(expected)}; actual ${JSON.stringify(diagnostics)}`,
     );
   }
+  if (scenario.predicate === "partial-potential")
+    assert(
+      partialPotentialMessageMatches(diagnostics, scenario),
+      `W303 must name the missing field ${scenario.missingField} for ${scenario.id}`,
+    );
 }
 
 export function evaluateRatingAssessment(id, result, evidence) {

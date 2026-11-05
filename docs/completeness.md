@@ -28,7 +28,7 @@ selection returns 1; usage or infrastructure failures return 2. Existing
 agent commands retain their existing request and result contracts; an agent can
 also invoke `diagnostics --json` to answer completeness questions. Core 0.2.0
 uses reviewed generic interfaces: a fresh starter has no I003 or W904, but its
-required PS1.L/N feed is deliberately deferred (W903 and W905), so strict
+required PS1.L/N feed is deliberately deferred (W905), so strict
 validation exits 1 until the feed is designed and its review is completed. The
 fresh cabinets template exits 0 under strict validation. Connected required points
 and reviewed generic coverage do not by themselves prove a safe design.
@@ -132,13 +132,17 @@ an unconnected point as unused merely to clear the report.
 | Code | Meaning |
 | --- | --- |
 | E205 | Device review names an undeclared terminal or port; source error. |
-| W903 | Required connection missing or only a single-ended cable core attached. |
+| W903 | Non-deferred required connection missing or only a single-ended cable core attached. |
 | W904 | Component connection model is explicitly partial. |
 | W905 | Deferred work, or an unused review contradicts a requirement or connection. |
 | I001 | Unconnected or dangling point without a declared requirement or unused disposition. A terminal used only by channels explicitly marked spare in `io` already has a disposition; a common also used by a channel that is in use or not marked spare does not. |
 | I002 | Intentionally unused point, with its reason preserved. |
 | I003 | Component connection coverage has not been declared. |
 | I005 | Reviewed generic interface: actual-part terminals beyond that interface cannot be checked; includes the notes, once per device. |
+
+A deferred required point without a complete connection emits W905 only; its
+message preserves the requirement, connection state and review reason. Required
+points marked `intentionally-unused` still emit both W903 and W905.
 
 W903–W905 also appear during compilation and agent validation. Compiler warnings
 aggregate each device/code while preserving the individual definition references;

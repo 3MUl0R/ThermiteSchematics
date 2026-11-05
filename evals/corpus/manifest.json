@@ -14,7 +14,7 @@
     },
     {
       "path": "mutations.json",
-      "source": "engine/seed-mutations.mjs; EA F7, PU/CO authoring mistakes, GI retrieval failures",
+      "source": "engine/seed-mutations.mjs; EA F7, PU/CO authoring mistakes, GI retrieval failures; V2 #37/#78 synthetic follow-ups",
       "purpose": "Fixed code/pointer mutations and actionable diagnostic predicates; markers are checker-side only"
     },
     {
@@ -40,7 +40,7 @@
     },
     {
       "path": "mutations.json",
-      "sha256": "a806518512750366ab10f0916df761e68c352495a67d1583597813081c7f5b1d"
+      "sha256": "d5b4a9f842bd4b36c72430c9295595188a97fc45d49507aae3bc8343f5abe1f1"
     },
     {
       "path": "ratings-pair/electrical-system.lock.json",

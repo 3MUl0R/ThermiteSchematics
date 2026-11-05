@@ -908,7 +908,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "W903 flags required points without a complete connection, W904 partial models, and W905 deferred or contradictory reviews; preserve them.",
+        "W903 flags non-deferred required points not fully connected, W904 partial models, and W905 deferred or contradictory reviews; preserve them.",
       async check() {
         const [validated, moved] = await Promise.all([
           auditValidate(),

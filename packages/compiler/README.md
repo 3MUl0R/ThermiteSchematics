@@ -124,7 +124,7 @@ finding retains notes and actual-part limitations, like I003's audit information
 it is not a compiler warning. Partial coverage still emits W904. Schema validation
 rejects generic types with exact-part catalog facts (E014). Core 0.2.0 uses generic
 coverage, so a fully connected project can pass strict validation; the starter's
-required, deferred PSU feed retains W903/W905 and fails strict, while cabinets
+required, deferred PSU feed retains W905 and fails strict, while cabinets
 passes. See [connection completeness](../../docs/completeness.md).
 
 ## Canonical outputs and downstream consumers

@@ -70,8 +70,18 @@ describe("fixed evaluation corpus v1", () => {
     const cases = await mutationCases();
     expect(Object.keys(mutationGateDiagnostics)).toHaveLength(51);
     for (const scenario of cases) {
+      // These descriptor-only controls need a message when the scenario pins
+      // the field omitted by a partial potential; real outputs are tested below.
+      const diagnostics = scenario.expected.map((d) =>
+        scenario.predicate === "partial-potential" && d.code === "W303"
+          ? {
+              ...d,
+              message: `Potential intent on this net does not declare ${scenario.missingField}; voltage compatibility for this field is unassessed.`,
+            }
+          : d,
+      );
       expect(
-        () => assertDiagnostics(scenario.expected, scenario),
+        () => assertDiagnostics(diagnostics, scenario),
         scenario.id,
       ).not.toThrow();
       const gates = mutationGateDiagnostics[scenario.id];
@@ -104,6 +114,46 @@ describe("fixed evaluation corpus v1", () => {
       ),
     ).toThrow();
   });
+  it.each(["voltage_type", "nominal_voltage"])(
+    "requires the partial-potential corpus message to name missing %s",
+    async (field) => {
+      const scenario = (await mutationCases()).find(
+        (s) => s.id === `partial-potential-missing-${field}`,
+      );
+      expect(scenario.predicate).toBe("partial-potential");
+      expect(scenario.missingField).toBe(field);
+      await temporary(async (project) => {
+        await mutate(project, scenario);
+        const result = await compileProject(project);
+        expect(result.ok).toBe(true);
+        expect(() =>
+          assertDiagnostics(result.diagnostics, scenario),
+        ).not.toThrow();
+        const wrongField =
+          field === "voltage_type" ? "nominal_voltage" : "voltage_type";
+        for (const message of [
+          "No potential declares voltage facts on this net; voltage compatibility is unassessed.",
+          `Potential intent on this net does not declare ${wrongField}; voltage compatibility for this field is unassessed.`,
+          "Potential intent on this net omits a voltage field.",
+        ]) {
+          const broken = result.diagnostics.map((d) =>
+            d.code === "W303" ? { ...d, message } : d,
+          );
+          expect(() => assertDiagnostics(broken, scenario)).toThrow(
+            /missing field/,
+          );
+        }
+        const row = await evaluateDiagnostic(
+          `diag/${scenario.id}`,
+          { diagnostics: result.diagnostics },
+          scenario,
+          project,
+          0,
+        );
+        expect(row.status).toBe("pass");
+      }, scenario.fixture);
+    },
+  );
   it("accepts info locations and exactly the reviewed unassessed baseline nets", () => {
     const ds = baselineAssessmentDiagnostics["without-potentials"];
     expect(() => assertLocations(ds)).not.toThrow();
