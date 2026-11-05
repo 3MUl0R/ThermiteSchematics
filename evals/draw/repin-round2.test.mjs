@@ -110,6 +110,10 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
   const reportSha256 = hash(json(report));
   const entries = ids.slice(0, both ? 2 : 1).map((i, n) => ({
     reviewed: true,
+    signOff: {
+      kind: "agent",
+      by: "Synthetic reviewer fixture (not an approval)",
+    },
     action: "envelope-drift",
     markerId: markerId(i),
     metric: "advanceRatio",
@@ -363,6 +367,10 @@ function d1Fixture() {
   const entries = [];
   const common = {
     reviewed: true,
+    signOff: {
+      kind: "agent",
+      by: "Synthetic reviewer fixture (not an approval)",
+    },
     causeClass: "D1-reviewed-cause",
     note: "Synthetic D1 handoff fit; no electrical source",
     classification: "drawing",
@@ -444,6 +452,14 @@ function d1Fixture() {
     coverage: "full",
   });
   const registrySha256 = hash(serializeRegistry(registry));
+  for (const e of entries.filter((e) => e.action === "rename")) {
+    const p = e.pairs.find((p) => p.sourceLocator);
+    if (p)
+      e.columnMap = {
+        from: p.sourceLocator.from.split("/").slice(2).join("/"),
+        to: p.sourceLocator.to.split("/").slice(2).join("/"),
+      };
+  }
   return {
     registry,
     registrySha256,
@@ -478,6 +494,7 @@ it("expresses all D1 item classes without booking any of five changed-text moves
     result = prepareRepin(c);
   expect(result.expected.exitCode).toBe(0);
   expect(result.expected.outcomes).toEqual({
+    notMove: 0,
     fixes: 1,
     moves: 5,
     additions: 1,

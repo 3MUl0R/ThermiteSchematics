@@ -149,7 +149,7 @@ export function sourceRow(locator, column) {
   }
   return { kind: locator.split("/")[0], row: locator };
 }
-export function proveMove(a, b, map, specs) {
+export function proveMove(a, b, map, specs, columnMap) {
   const x = a.facts,
     y = b.facts;
   for (const field of ["case", "medium", "kind", "dq", "check", "flow"])
@@ -194,12 +194,18 @@ export function proveMove(a, b, map, specs) {
     ar && br && ar.kind === br.kind && ar.row === br.row,
     moveError("source row or locator kind changed"),
   );
+  assert(
+    ar.column === br.column ||
+      (columnMap?.from === ar.column && columnMap?.to === br.column),
+    moveError("column changed without a literal columnMap"),
+  );
   return {
     case: x.case,
     flow: x.flow,
     medium: x.medium,
     locatorKind: ar.kind,
     sourceRow: ar.row,
+    column: br.column,
     viewKind: viewKind(x.view),
     sheetRename:
       a.scope.sheet !== b.scope.sheet || a.physicalSheet !== b.physicalSheet,

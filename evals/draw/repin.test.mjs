@@ -210,6 +210,10 @@ function fixture() {
   const entries = [
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "retire",
       markerId: markerId(b),
       scope: scope(),
@@ -220,6 +224,10 @@ function fixture() {
     },
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "rename",
       from: { markerId: markerId(a), scope: scope() },
       to: { markerId: markerId(moved), scope: scope(newView) },
@@ -232,6 +240,10 @@ function fixture() {
     },
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "new-defect",
       to: { markerId: markerId(fresh), scope: scope(newView) },
       instances: freshTokens,
@@ -242,6 +254,10 @@ function fixture() {
     },
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "envelope-drift",
       markerId: markerId(d),
       metric: "advanceRatio",
@@ -255,6 +271,10 @@ function fixture() {
     },
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "envelope-drift",
       markerId: markerId(d),
       metric: "occurrences",
@@ -268,6 +288,10 @@ function fixture() {
     },
     {
       reviewed: true,
+      signOff: {
+        kind: "agent",
+        by: "Synthetic reviewer fixture (not an approval)",
+      },
       action: "envelope-drift",
       markerId: markerId(policy),
       metric: "occurrences",
@@ -691,6 +715,7 @@ it("requires literal source-locator mappings for renamed report columns", () => 
       r.evidence?.findings?.some((f) => f.text === "K1"),
     ).evidence.findings[0].sourceLocator = "cell/io/K1/Manufacturer";
   resign(c);
+  c.decisions[0].entries[1].columnMap = { from: "Manufacturer", to: "Mfr." };
   expect(() => prepareRepin(c)).toThrow(/sourceLocator/);
   c.decisions[0].entries[1].pairs[0].sourceLocator = {
     from: "cell/io/K1/Manufacturer",
@@ -885,6 +910,10 @@ it("explicitly accounts leftover old aggregate instances without pretending a re
   ];
   c.decisions[0].entries.push({
     reviewed: true,
+    signOff: {
+      kind: "agent",
+      by: "Synthetic reviewer fixture (not an approval)",
+    },
     action: "retire",
     markerId: c.ids.a,
     scope: scope(),
@@ -898,6 +927,10 @@ it("explicitly accounts leftover old aggregate instances without pretending a re
   });
   c.decisions[0].entries.push({
     reviewed: true,
+    signOff: {
+      kind: "agent",
+      by: "Synthetic reviewer fixture (not an approval)",
+    },
     action: "envelope-drift",
     markerId: c.ids.a,
     metric: "occurrences",
@@ -1051,6 +1084,10 @@ it("checks exact exported envelope values for metrics derived by subtraction", (
   resign(c);
   c.decisions[0].entries.push({
     reviewed: true,
+    signOff: {
+      kind: "agent",
+      by: "Synthetic reviewer fixture (not an approval)",
+    },
     action: "envelope-drift",
     markerId: c.ids.d,
     metric: "strokeExcessMm",
@@ -1218,4 +1255,287 @@ it("binds comments and added/deleted modules recursively with portable paths", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("runtime move proof refuses a different source even with a literal mapping", () => {
+  const c = fixture(),
+    e = c.decisions[0].entries[1];
+  c.report.results.find((r) =>
+    r.id.endsWith("/item-0"),
+  ).evidence.findings[0].sourceLocator = "device/K9/text";
+  e.pairs[0].sourceLocator = { from: "device/K1/text", to: "device/K9/text" };
+  resign(c);
+  expect(() => prepareRepin(c)).toThrow(/source row or locator kind/);
+});
+it("removed cannot retire an unmeasured scope", () => {
+  const c = fixture();
+  c.report.results = c.report.results.filter(
+    (r) => r.dq !== "DQ-05" || r.evidence.findings.length,
+  );
+  // Preserve DQ coverage on the moved view, but the old scope is unmeasured
+  // when the only move declaration is removed (replace it with an addition).
+  const e = c.decisions[0].entries[1];
+  c.decisions[0].entries[1] = {
+    ...c.decisions[0].entries[2],
+    action: "scope-added",
+    to: e.to,
+    instances: e.pairs.map((p) => p.to),
+    crop: undefined,
+  };
+  c.decisions[0].entries[0].cause = "removed";
+  resign(c);
+  c.decisions[0].entries[1].instances = c.after.instances
+    .filter((x) => x.markerId === c.ids.a)
+    .map((x) => x.token);
+  c.decisions[0].entries.push({
+    ...c.decisions[0].entries[0],
+    markerId: c.ids.a,
+    cause: "not-measured",
+  });
+  expect(() => prepareRepin(c)).toThrow(/measurement availability/);
+});
+function disguisedFixture() {
+  const c = fixture(),
+    e = c.decisions[0].entries[1],
+    f = c.decisions[0].entries[2];
+  const crop = {
+    path: "evals/out/draw-samples/review/disguised.png",
+    sha256: hash("disguised-crop"),
+  };
+  c.cropHashes.set(crop.path, crop.sha256);
+  c.decisions[0].sheetRenames = [
+    { case: cid, medium: "svg", from: oldView, to: newView },
+  ];
+  c.decisions[0].entries.splice(1, 1, {
+    ...e,
+    action: "retire",
+    markerId: e.from.markerId,
+    scope: e.from.scope,
+    cause: "fixed",
+  });
+  const r = c.decisions[0].entries[1];
+  delete r.from;
+  delete r.to;
+  delete r.pairs;
+  c.decisions[0].entries.push({
+    ...f,
+    to: e.to,
+    instances: e.pairs.map((p) => p.to),
+    crop,
+  });
+  const b = c.baselines.values().next().value;
+  b.results.find((r) =>
+    r.id.endsWith("/item-1"),
+  ).evidence.findings[0].sourceLocator = "device/K2/text";
+  const target = c.report.results.find((r) => r.id.endsWith("/item-0")).evidence
+    .findings[0];
+  target.identities[0].locator = "device/K1/renamed-text";
+  const id = markerId(target.identities[0]);
+  resign(c);
+  const fresh = c.decisions[0].entries.at(-1);
+  fresh.to.markerId = id;
+  fresh.instances = c.after.instances
+    .filter((t) => t.markerId === id)
+    .map((t) => t.token);
+  c.disguisedId = id;
+  return c;
+}
+it.each(["fixed", "removed"])(
+  "refuses %s plus new-defect when a move is possible",
+  (cause) => {
+    const c = disguisedFixture();
+    c.decisions[0].entries[1].cause = cause;
+    expect(() => prepareRepin(c)).toThrow(/Retirement could be a move.*DQ-05/s);
+  },
+);
+it("notMove is per pair, needs two distinct crops, and is reviewer judgment", () => {
+  const c = disguisedFixture(),
+    old = c.before.instances.find((x) => x.markerId === c.ids.a),
+    now = c.after.instances.find((x) => x.markerId === c.disguisedId);
+  const crops = [1, 2].map((i) => ({
+    path: `evals/out/draw-samples/review/notmove-${i}.png`,
+    sha256: hash("notmove" + i),
+  }));
+  for (const p of crops) c.cropHashes.set(p.path, p.sha256);
+  c.decisions[0].notMove = [
+    {
+      from: old.token,
+      to: now.token,
+      reason: "Independent replacement, not the old label",
+      crops,
+    },
+  ];
+  const r = prepareRepin(c);
+  expect(r.expected.reviewerJudged.notMove).toHaveLength(1);
+  expect(r.expected.outcomes.notMove).toBe(1);
+  expect(r.expected.outcomes.fixes).toBe(2);
+  expect(
+    r.receipts
+      .filter((r) => r.action === "retire")
+      .every((r) => r.toolProved.derivedBounds === undefined),
+  ).toBe(true);
+  c.decisions[0].notMove[0].crops = [crops[0], crops[0]];
+  expect(() => prepareRepin(c)).toThrow(/distinct crop/);
+  c.decisions[0].notMove[0].crops = crops;
+  c.decisions[0].notMove[0].reason = "";
+  expect(() => prepareRepin(c)).toThrow(/one-line reason/);
+  c.decisions[0].notMove[0].reason = "Reviewed";
+  c.decisions[0].notMove.push(c.decisions[0].notMove[0]);
+  expect(() => prepareRepin(c)).toThrow(/Unused, duplicate/);
+});
+it("checker source symlinks are refused even if they point to a non-module", async () => {
+  const root = await mkdtemp(join(tmpdir(), "draw-symlink-"));
+  try {
+    await writeFile(join(root, "source.txt"), "// source");
+    await symlink(join(root, "source.txt"), join(root, "link.mjs"));
+    await expect(readCheckers(root)).rejects.toThrow(/source symlinks/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("runtime refuses a column crossing without its literal column map", () => {
+  const c = fixture(),
+    e = c.decisions[0].entries[1],
+    b = c.baselines.values().next().value;
+  b.results.find((r) =>
+    r.id.endsWith("/item-0"),
+  ).evidence.findings[0].sourceLocator = 'cell/io/["PLC1","ai0"]/Signal';
+  c.report.results.find((r) =>
+    r.id.endsWith("/item-0"),
+  ).evidence.findings[0].sourceLocator = 'cell/io/["PLC1","ai0"]/Device';
+  e.pairs[0].sourceLocator = {
+    from: 'cell/io/["PLC1","ai0"]/Signal',
+    to: 'cell/io/["PLC1","ai0"]/Device',
+  };
+  resign(c);
+  expect(() => prepareRepin(c)).toThrow(/column changed/);
+  e.columnMap = { from: "Signal", to: "Device" };
+  expect(prepareRepin(c).expected.exitCode).toBe(0);
+});
+it("unlisted drift refusal identifies the marker and metric", () => {
+  const c = fixture();
+  c.decisions[0].entries = c.decisions[0].entries.filter(
+    (e) => !(e.markerId === c.ids.d && e.metric === "occurrences"),
+  );
+  try {
+    prepareRepin(c);
+    throw Error("Expected drift refusal");
+  } catch (e) {
+    expect(e.message).toContain(c.ids.d);
+    expect(e.message).toContain("occurrences");
+  }
+});
+
+it.each([1, 3])("notMove needs exactly two crops, not %i", (n) => {
+  const c = disguisedFixture(),
+    old = c.before.instances.find((x) => x.markerId === c.ids.a),
+    now = c.after.instances.find((x) => x.markerId === c.disguisedId);
+  const crops = Array.from({ length: n }, (_, i) => ({
+    path: `evals/out/draw-samples/review/count-${i}.png`,
+    sha256: hash(`count-${i}`),
+  }));
+  for (const p of crops) c.cropHashes.set(p.path, p.sha256);
+  c.decisions[0].notMove = [
+    {
+      from: old.token,
+      to: now.token,
+      reason: "Independent replacement control",
+      crops,
+    },
+  ];
+  expect(() => prepareRepin(c)).toThrow("notMove requires two distinct crops");
+});
+it("blank crop paths get the crop error even with a valid hash", async () => {
+  await expect(
+    reviewedCrop("/nonexistent/root", { path: "   ", sha256: hash("valid") }),
+  ).rejects.toThrow("Crop required: supply a non-empty file path and SHA-256");
+});
+function addedScopeDisguise(cause = "fixed") {
+  const c = fixture(),
+    e = c.decisions[0].entries[1];
+  c.baselines
+    .values()
+    .next()
+    .value.results.find((r) =>
+      r.id.endsWith("/item-1"),
+    ).evidence.findings[0].sourceLocator = "device/K2/text";
+  c.decisions[0].sheetRenames = [
+    { case: cid, medium: "svg", from: oldView, to: newView },
+  ];
+  c.decisions[0].entries.splice(
+    1,
+    1,
+    {
+      ...c.decisions[0].entries[0],
+      markerId: e.from.markerId,
+      scope: e.from.scope,
+      cause,
+    },
+    {
+      ...c.decisions[0].entries[0],
+      action: "scope-added",
+      to: e.to,
+      instances: e.pairs.map((p) => p.to),
+    },
+  );
+  const add = c.decisions[0].entries[2];
+  delete add.markerId;
+  delete add.scope;
+  delete add.cause;
+  resign(c);
+  add.instances = c.after.instances
+    .filter((x) => x.markerId === c.ids.a)
+    .map((x) => x.token);
+  return c;
+}
+it.each(["fixed", "removed"])(
+  "refuses %s plus added scope for a same-identity move",
+  (cause) => {
+    const c = addedScopeDisguise(cause);
+    expect(() => prepareRepin(c)).toThrow(/Retirement could be a move.*DQ-05/s);
+  },
+);
+it.each([
+  undefined,
+  { by: "Reviewer" },
+  { kind: "unknown", by: "Reviewer" },
+  { kind: "agent", by: " " },
+])("refuses missing or invalid signOff provenance: %j", (value) => {
+  const c = fixture();
+  c.decisions[0].entries[0].signOff = value;
+  expect(() => prepareRepin(c)).toThrow(/signOff/);
+});
+it("labels agent review and permits a person countersignature without changing the decision", () => {
+  const c = fixture(),
+    e = c.decisions[0].entries[0],
+    initial = structuredClone(e);
+  const agent = prepareRepin(c);
+  expect(
+    agent.receipts
+      .flatMap((r) => r.reviewerJudged.signOffs)
+      .every((s) => s.kind === "agent" && s.label === "agent review"),
+  ).toBe(true);
+  e.counterSignOffs = [{ kind: "person", by: "Fixture person countersigner" }];
+  const person = prepareRepin(c),
+    r = person.receipts.find(
+      (r) => r.action === "retire" && r.markerId === e.markerId,
+    );
+  expect(r.reviewerJudged.signOffs.map((s) => s.kind)).toEqual([
+    "agent",
+    "person",
+  ]);
+  const { counterSignOffs, ...unchanged } = e;
+  expect(unchanged).toEqual(initial);
+  expect(person.registry).toEqual(agent.registry);
+  expect(agent.expected.outcomes.notMove).toBe(0);
+});
+
+it.each([
+  { kind: "agent", by: "Other agent" },
+  { kind: "person", by: "" },
+  { kind: "unknown", by: "Name" },
+])("refuses an invalid person countersignature: %j", (sign) => {
+  const c = fixture();
+  c.decisions[0].entries[0].counterSignOffs = [sign];
+  expect(() => prepareRepin(c)).toThrow(/signOff|Countersignatures/);
 });

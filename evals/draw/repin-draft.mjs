@@ -14,6 +14,7 @@ const group = (xs) => {
 };
 const common = (kind) => ({
   reviewed: false,
+  signOff: { kind: "", by: "" },
   causeClass: "",
   note: "",
   classification: kind === "iso-cap-height-policy" ? "policy-gap" : "drawing",
@@ -170,6 +171,17 @@ export function draftDecisions(inventory, { pr, baselineSha256 } = {}) {
       });
     }
   }
+  for (const pair of inventory.fontPairs ?? [])
+    if (pair.changed)
+      entries.push({
+        ...common("pdf-svg-advance-difference"),
+        action: "font-pair-drift",
+        fontPair: pair.fontPair,
+        from: pair.from,
+        to: pair.to,
+        observed: pair.observed,
+        coverage: "full",
+      });
   entries.sort((a, b) => (json(a) < json(b) ? -1 : json(a) > json(b) ? 1 : 0));
   return {
     format: "thermite-draw-decisions/1.0",
