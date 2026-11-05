@@ -115,12 +115,12 @@ it("auth rejects instruction data and concurrent write-back changes", () => {
     rmSync(w.root, { recursive: true, force: true });
   }
 });
-it("pre-flight exercises both recipes with no model command and never retains secret streams", () => {
+it("pre-flight exercises both recipes with no model command and never retains secret streams", async () => {
   const w = fixture();
   try {
     const code = `const fs=require('fs'),p=require('path');if(process.argv.includes('--with-api-key')){fs.writeFileSync(p.join(process.env.CODEX_HOME,'auth.json'),JSON.stringify({OPENAI_API_KEY:fs.readFileSync(0,'utf8')}));console.log('secret '+process.env.CODEX_API_KEY);}else if(process.argv.includes('auth'))console.log(JSON.stringify({loggedIn:!!process.env.CLAUDE_CODE_OAUTH_TOKEN,token:process.env.CLAUDE_CODE_OAUTH_TOKEN}));else{console.error('key '+process.env.CODEX_API_KEY);process.exitCode=fs.existsSync(p.join(process.env.CODEX_HOME,'auth.json'))?0:1;}`;
     const options = { binary: process.execPath, prefix: ["-e", code, "--"] };
-    expect(preflightAuth("codex", w.env, options)).toEqual({
+    expect(await preflightAuth("codex", w.env, options)).toEqual({
       ok: true,
       agent: "codex",
       billing: "api",
@@ -128,7 +128,7 @@ it("pre-flight exercises both recipes with no model command and never retains se
     });
     expect(existsSync(join(w.env.CODEX_HOME, "auth.json"))).toBe(true);
     w.env.CLAUDE_CODE_OAUTH_TOKEN = secret;
-    const status = preflightAuth("claude", w.env, options);
+    const status = await preflightAuth("claude", w.env, options);
     expect(status.ok).toBe(true);
     expect(status.billing).toBe("subscription-oauth");
     expect(JSON.stringify(status)).not.toContain(secret);

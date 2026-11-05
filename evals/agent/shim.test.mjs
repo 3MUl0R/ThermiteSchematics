@@ -33,19 +33,21 @@ it("shim preserves binary streams, stdin, exit, and catches child writes at all 
       new URL("./snapshot.mjs", import.meta.url),
       join(runtime, "eval-snapshot.mjs"),
     );
+    cpSync(
+      new URL("./process.mjs", import.meta.url),
+      join(runtime, "eval-process.mjs"),
+    );
     writeFileSync(
       join(runtime, "eval-audit.mjs"),
-      readFileSync(new URL("./audit.mjs", import.meta.url), "utf8").replaceAll(
-        '"./snapshot.mjs"',
-        '"./eval-snapshot.mjs"',
-      ),
+      readFileSync(new URL("./audit.mjs", import.meta.url), "utf8")
+        .replaceAll('"./snapshot.mjs"', '"./eval-snapshot.mjs"')
+        .replaceAll('"./process.mjs"', '"./eval-process.mjs"'),
     );
     writeFileSync(
       join(runtime, "eval-auth.mjs"),
-      readFileSync(new URL("./auth.mjs", import.meta.url), "utf8").replaceAll(
-        '"./snapshot.mjs"',
-        '"./eval-snapshot.mjs"',
-      ),
+      readFileSync(new URL("./auth.mjs", import.meta.url), "utf8")
+        .replaceAll('"./snapshot.mjs"', '"./eval-snapshot.mjs"')
+        .replaceAll('"./process.mjs"', '"./eval-process.mjs"'),
     );
     writeFileSync(
       join(project, "system.json"),

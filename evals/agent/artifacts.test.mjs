@@ -8,7 +8,8 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
   regeneratePacket,
@@ -20,9 +21,7 @@ import {
 import { documents, objects, read, write } from "./task-support.mjs";
 import { snapshot } from "./snapshot.mjs";
 import { check } from "./tasks.mjs";
-const thermite = resolve(
-  new URL("../../thermite.mjs", import.meta.url).pathname,
-);
+const thermite = fileURLToPath(new URL("../../thermite.mjs", import.meta.url));
 function fixture(template) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "eval-artifact-unit-"))),
     project = join(root, "project"),

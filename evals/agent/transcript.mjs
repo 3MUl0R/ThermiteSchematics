@@ -1,6 +1,14 @@
-import { infrastructureSignal } from "./event-errors.mjs";
+import {
+  infrastructureSignal,
+  retryTimestamp,
+  knownAgentError,
+} from "./event-errors.mjs";
+import { terminalProtocol } from "./cli-protocol.mjs";
 // Normalize both CLI streams. Truncated/noisy runs retain lower-bound usage.
-export function normalizeTranscript(input) {
+export function normalizeTranscript(
+  input,
+  { now = Date.now(), agent, cliVersion } = {},
+) {
   const parseWarnings = [];
   const rows =
     typeof input === "string"
@@ -30,13 +38,61 @@ export function normalizeTranscript(input) {
   let position = 0,
     lastSuccess = -1,
     successfulCompletion = false,
+    infrastructureKind = null,
+    retryAt = null,
+    recoveredThrough = -1,
+    needsAdjudication = false,
+    terminalTemplate = null;
+  const clearCause = () => {
+    infrastructureError = null;
     infrastructureKind = null;
-  const classifyError = (error) => {
-    const signal = infrastructureSignal(error);
+    retryAt = null;
+    agentError = false;
+    needsAdjudication = false;
+    terminalTemplate = null;
+  };
+  const progress = () => {
+    if (terminalError) {
+      terminalError = false;
+      hasCompletion = false;
+    }
+    recoveredThrough = position;
+    clearCause();
+  };
+  const classifyError = (error, { replace = false, protocol = null } = {}) => {
+    const signal =
+      infrastructureSignal(error) ??
+      (protocol && protocol.kind !== "agent" ? protocol : null);
+    const isAgent =
+      protocol?.kind === "agent" || (!signal && knownAgentError(error));
+    if (replace || isAgent) clearCause();
+    const nextReset = retryTimestamp(error, now);
+    retryAt =
+      retryAt && nextReset
+        ? Math.max(retryAt, nextReset)
+        : (retryAt ?? nextReset);
+    const strength = (kind) =>
+      ({ billing: 4, quota: 3, "rate-limit": 2 })[kind] ?? 1;
     if (signal) {
-      infrastructureError = signal.code;
-      infrastructureKind = signal.kind;
-    } else agentError = true;
+      const kind =
+        signal.kind === "rate-limit" && retryAt - now > 15 * 60000
+          ? "quota"
+          : signal.kind;
+      if (
+        !infrastructureError ||
+        strength(kind) >= strength(infrastructureKind)
+      ) {
+        infrastructureError = signal.code;
+        infrastructureKind = kind;
+      }
+      agentError = false;
+      needsAdjudication = false;
+    } else if (!infrastructureError) {
+      agentError = isAgent;
+      needsAdjudication = !isAgent;
+    }
+    if (protocol)
+      terminalTemplate = { id: protocol.id, version: protocol.version };
     issues.push({
       position,
       type: "retry",
@@ -47,22 +103,44 @@ export function normalizeTranscript(input) {
   for (const row of rows) {
     position++;
     if (row.type === "turn.started") {
+      progress();
       hasCompletion = false;
       successfulCompletion = false;
       terminalError = false;
     }
+    const limitInfo = row.rate_limit_info ?? row.rateLimitInfo ?? {};
+    const usingOverage =
+      limitInfo.isUsingOverage === true ||
+      limitInfo.overageInUse === true ||
+      (limitInfo.isUsingOverage == null &&
+        limitInfo.overageInUse == null &&
+        ["allowed", "allowed_warning"].includes(limitInfo.overageStatus));
     if (
       ["rate_limit", "rate_limit_event"].includes(row.type) &&
-      !["allowed", "allowed_warning"].includes(
-        row.rate_limit_info?.status ?? row.rateLimitInfo?.status,
-      )
+      usingOverage &&
+      ["quota", "rate-limit"].includes(infrastructureKind)
     )
-      classifyError({ type: "rate_limit" });
+      progress();
+    if (
+      ["rate_limit", "rate_limit_event"].includes(row.type) &&
+      !["allowed", "allowed_warning"].includes(limitInfo.status) &&
+      !usingOverage
+    )
+      classifyError({
+        ...row,
+        type:
+          limitInfo.status === "rejected"
+            ? "usage_limit_exceeded"
+            : "rate_limit",
+      });
     if (row.type === "assistant") {
+      if (!row.error && row.message?.content?.length) progress();
       if (row.error)
-        classifyError(
-          typeof row.error === "string" ? { type: row.error } : row.error,
-        );
+        classifyError({
+          ...row,
+          error:
+            typeof row.error === "string" ? { type: row.error } : row.error,
+        });
       const id = row.message?.id ?? row.uuid ?? `message-${messages.size}`,
         u = row.message?.usage;
       if (u) {
@@ -98,6 +176,11 @@ export function normalizeTranscript(input) {
       }
       if (text.length) finalMessage = text.join("\n");
     }
+    if (
+      row.type === "user" &&
+      row.message?.content?.some((b) => b.type === "tool_result")
+    )
+      progress();
     if (row.type === "user")
       for (const block of row.message?.content ?? [])
         if (block.type === "tool_result")
@@ -107,6 +190,46 @@ export function normalizeTranscript(input) {
             output: block.content,
           });
     if (row.type === "result") {
+      const typed = (value) => {
+        if (typeof value === "string") {
+          try {
+            return typed(JSON.parse(value));
+          } catch {
+            return false;
+          }
+        }
+        if (Array.isArray(value)) return value.some(typed);
+        return (
+          !!value &&
+          typeof value === "object" &&
+          (value.code ||
+            value.type ||
+            value.codex_error_info ||
+            value.codexErrorInfo ||
+            typed(value.error))
+        );
+      };
+      const pending =
+        (infrastructureError || needsAdjudication || agentError) &&
+        ["success", "error_during_execution"].includes(row.subtype) &&
+        !typed(row.error ?? row.errors)
+          ? {
+              infrastructureError,
+              infrastructureKind,
+              retryAt,
+              needsAdjudication,
+              agentError,
+            }
+          : null;
+      const terminal = {
+        ...row,
+        error: row.errors?.length
+          ? row.errors
+          : (row.error ?? { type: row.subtype }),
+      };
+      // Another infra row stays in the same no-progress window. A specific
+      // agent/unknown terminal identity still replaces the pending cause.
+      if (!pending && !infrastructureSignal(terminal)) clearCause();
       hasCompletion = true;
       finalMessage = row.result ?? finalMessage;
       resultUsage = row.usage ?? null;
@@ -115,13 +238,19 @@ export function normalizeTranscript(input) {
       if (row.is_error || (row.subtype && row.subtype !== "success")) {
         terminalError = true;
         successfulCompletion = false;
-        classifyError(
-          row.errors?.length ? row.errors : (row.error ?? row.subtype),
-        );
+        classifyError(terminal);
+        if (!infrastructureError && pending) {
+          infrastructureError = pending.infrastructureError;
+          infrastructureKind = pending.infrastructureKind;
+          retryAt = pending.retryAt;
+          needsAdjudication = pending.needsAdjudication;
+          agentError = pending.agentError;
+        }
       } else {
         terminalError = false;
         successfulCompletion = true;
         lastSuccess = position;
+        progress();
       }
     }
     if (["error", "turn.failed"].includes(row.type)) {
@@ -130,10 +259,18 @@ export function normalizeTranscript(input) {
         successfulCompletion = false;
         hasCompletion = false;
       }
-      classifyError(row.error ?? row.message);
+      const protocol = terminalProtocol(row, { agent, cliVersion });
+      classifyError(row, {
+        // A novel terminal sentence needs its own adjudication; an earlier
+        // structured retry notice cannot classify an unrecognized ending.
+        replace:
+          row.type === "turn.failed" && !protocol && !infrastructureSignal(row),
+        protocol,
+      });
     }
     if (["item.started", "item.completed"].includes(row.type)) {
       const item = row.item;
+      if (item && item.type !== "error") progress();
       if (
         [
           "command_execution",
@@ -179,6 +316,7 @@ export function normalizeTranscript(input) {
       }
     }
     if (row.type === "turn.completed") {
+      progress();
       hasCompletion = true;
       terminalError = false;
       successfulCompletion = true;
@@ -225,12 +363,18 @@ export function normalizeTranscript(input) {
     totalToolCalls: events.filter((e) => e.type === "tool").length,
     successfulCompletion,
     terminalError,
-    retryCount: issues.filter((e) => e.position < lastSuccess).length,
+    retryCount: issues.filter(
+      (e) => e.position < Math.max(lastSuccess, recoveredThrough),
+    ).length,
     retryEvents: issues
-      .filter((e) => e.position < lastSuccess)
+      .filter((e) => e.position < Math.max(lastSuccess, recoveredThrough))
       .map(({ position, ...event }) => event),
     agentError: successfulCompletion ? false : agentError,
     infrastructureError: successfulCompletion ? null : infrastructureError,
     infrastructureKind: successfulCompletion ? null : infrastructureKind,
+    retryAt: successfulCompletion ? null : retryAt,
+    needsAdjudication:
+      !successfulCompletion && terminalError && needsAdjudication,
+    terminalTemplate,
   };
 }

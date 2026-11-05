@@ -24,12 +24,12 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 - **P-PLC (must)**: “a compact PLC”. Roles/gap: plc.
 - **P-TERMINALS (must)**: “a terminal strip in the cabinet”. Roles/gap: terminal.
 - **P-CABLE (must)**: “through a multi-core field cable (with at least one explicit spare core)”. Roles/gap: cable; gap: `{"library":"core","capability":"pressure-transmitter"}`.
-- **P-START (must)**: “a start pushbutton”. Roles/gap: start-button.
+- **P-START (must)**: “a start pushbutton”. Roles/gap: start-button; gap: `{"library":"core","capability":"start-button"}`.
 - **P-STOP (must)**: “a stop (NC) pushbutton”. Roles/gap: stop-button.
 - **P-COIL (must)**: “the PLC output drives the contactor coil”. Roles/gap: plc, contactor.
 - **P-TRANSMITTER (must)**: “a 4-20 mA two-wire pressure transmitter”. Roles/gap: pressure-transmitter; gap: `{"library":"core","capability":"pressure-transmitter"}`.
 - **P-ANALOG (must)**: “into a PLC analog input”. Roles/gap: analog-input; gap: `{"library":"core","capability":"analog-input"}`.
-- **P-LEVEL (must)**: “a level switch”. Roles/gap: level-switch.
+- **P-LEVEL (must)**: “a level switch”. Roles/gap: level-switch; gap: `{"library":"core","capability":"level-switch"}`.
 - **P-NETWORK (must)**: “an Ethernet link from the PLC to an HMI”. Roles/gap: plc, hmi; gap: `{"library":"core","capability":"hmi"}`.
 - **P-OUTPUTS (must)**: “a validated project with zero errors; a power view of the motor; a control/actuation view of the contactor; a packet (HTML and PDF) with an index, I/O report, BOM, cable schedule, network report; the connection-completeness diagnostics.”. Roles/gap: deliverable observation.
 - **P-CHANGE (must)**: “Make one guarded patch change with dry-run then apply, plus snapshot/review.”. Roles/gap: deliverable observation.

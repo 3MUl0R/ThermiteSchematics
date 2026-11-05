@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
-import { spawn, spawnSync, execFileSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { cp as copyAsync } from "node:fs/promises";
 import {
   cpSync,
   existsSync,
@@ -17,7 +18,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { fileState, auditErrors } from "./audit.mjs";
+import { evalVersion, harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
+import { readRun } from "./records.mjs";
+import { fileState, fileStateAsync, auditErrors } from "./audit.mjs";
+import { captureProcess } from "./process.mjs";
+import { pinnedCliVersion } from "./cli-protocol.mjs";
 import {
   preflightAuth,
   seedCodexAuth,
@@ -31,6 +36,9 @@ import {
   isComplete,
   planAttempt,
   automaticInfra,
+  automaticFailures,
+  haltingInfra,
+  batchHaltReason,
   runKey,
   runDirectoryName,
 } from "./attempts.mjs";
@@ -47,7 +55,7 @@ import {
   freshEnvironment,
   assertIsolation,
 } from "./launch.mjs";
-import { cli, ok, read, write, documents, uid } from "./task-support.mjs";
+import { cli, read, write, documents, uid } from "./task-support.mjs";
 const here = dirname(fileURLToPath(import.meta.url)),
   root = resolve(here, "../..");
 const git = (cwd, ...args) =>
@@ -121,20 +129,56 @@ export function installShim(runtime) {
   cpSync(join(here, "shim/thermite.mjs"), join(runtime, "thermite.mjs"));
   cpSync(join(here, "shim/observe.mjs"), join(runtime, "eval-observe.mjs"));
   cpSync(join(here, "snapshot.mjs"), join(runtime, "eval-snapshot.mjs"));
+  cpSync(join(here, "process.mjs"), join(runtime, "eval-process.mjs"));
   for (const [from, to] of [
     ["audit.mjs", "eval-audit.mjs"],
     ["auth.mjs", "eval-auth.mjs"],
   ])
     writeFileSync(
       join(runtime, to),
-      readFileSync(join(here, from), "utf8").replaceAll(
-        '"./snapshot.mjs"',
-        '"./eval-snapshot.mjs"',
-      ),
+      readFileSync(join(here, from), "utf8")
+        .replaceAll('"./snapshot.mjs"', '"./eval-snapshot.mjs"')
+        .replaceAll('"./process.mjs"', '"./eval-process.mjs"'),
     );
 }
 const children = new Set();
 let stoppingSignal = null;
+function captureSetup(binary, args, options = {}) {
+  return captureProcess(binary, args, {
+    timeout: 120000,
+    ...options,
+    detached: process.platform !== "win32",
+    onChild(child) {
+      children.add(child);
+      child.once("close", () => children.delete(child));
+    },
+  });
+}
+async function setupCommand(binary, args, options) {
+  const r = await captureSetup(binary, args, options);
+  if (r.error || r.status !== 0)
+    throw Object.assign(
+      new Error(
+        `${binary}: ${r.error?.code ?? r.signal ?? r.status}\n${r.stderr}`,
+      ),
+      { stage: "setup" },
+    );
+  return r.stdout;
+}
+const setupCLI = (ctx, ...args) =>
+  setupCommand(process.execPath, [ctx.thermite, ...args], {
+    cwd: ctx.project,
+    env: ctx.env,
+  });
+const setupGit = (cwd, ...args) =>
+  setupCommand("git", args, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+    },
+  });
 function killChild(child, signal = "SIGTERM") {
   try {
     if (process.platform === "win32") child.kill(signal);
@@ -258,6 +302,23 @@ export function judgePacket({
       .replaceAll(project, "<project>")
       .replaceAll(runtime ?? project, "<runtime>")
       .replace(/(\bmodel[\s:="\']+)o[134]\b/gi, "$1<identity>")
+      .replace(
+        /\b\d+(?:\.\d+){1,3}\s*\((?:Claude Code|codex-cli)\)/gi,
+        "<identity>",
+      )
+      .replace(
+        /\b(?:claude|codex)\s+--version\s+(?:printed|returned|is)\s+v?\d+(?:\.\d+){1,3}/gi,
+        "<identity>",
+      )
+      .replace(
+        /\b(?:(?:codex(?:-cli)?|claude(?:[ -]+code)?)\s+(?:cli\s+)?(?:version\s+)?v?\d+(?:\.\d+){1,3}(?:[-+][\w.-]+)?)\b/gi,
+        "<identity>",
+      )
+      .replace(/\bxhigh\b/gi, "<identity>")
+      .replace(
+        /\b(?:(thermite)\s+)?CLI\s+version\s+v?\d+(?:\.\d+){1,3}\b/gi,
+        (text, engine) => (engine ? text : "<identity>"),
+      )
       .replace(identity, "<identity>");
   const blind = (value) =>
     typeof value === "string"
@@ -326,8 +387,22 @@ export async function runOne({
   keep = false,
   forceRerun = false,
   automaticRetry = false,
+  reopenInfra = null,
+  reopenedHalt = false,
+  infraRetryDelayMs = 0,
+  batchControl,
+  checkpointOverride = null,
+  expectedIdentity,
+  tasksRoot,
   timeoutMs = 900000,
 }) {
+  const runIdentity = harnessIdentity({ tasksDir: tasksRoot });
+  if (expectedIdentity)
+    assert.deepEqual(
+      runIdentity,
+      expectedIdentity,
+      "Harness/checker changed during checkpoint invocation",
+    );
   const configuration = agentConfiguration({ agent, model, effort }),
     identity = {
       arm,
@@ -336,6 +411,11 @@ export async function runOne({
       agent,
       seed,
       ...configuration,
+      reopenInfra,
+      reopenedHalt,
+      infraRetryDelayMs,
+      checkpointOverride,
+      ...runIdentity,
     };
   identity.runKey = runKey(identity);
   mkdirSync(evidence, { recursive: true });
@@ -360,7 +440,10 @@ export async function runOne({
       JSON.parse(redactSecrets(JSON.stringify(value), secretList)),
     );
   try {
-    cpSync(prepared.path, runtime, { recursive: true, dereference: true });
+    await copyAsync(prepared.path, runtime, {
+      recursive: true,
+      dereference: true,
+    });
     installShim(runtime);
     task = read(join(taskDir, "task.json"));
     identity.task = task.id;
@@ -395,26 +478,40 @@ export async function runOne({
       evidence: live,
     };
     if (["starter", "cabinets"].includes(task.template))
-      ok(
+      await setupCLI(
         { ...ctx, project: work },
         "init",
         project,
         ...(task.template === "cabinets" ? ["--template", "cabinets"] : []),
       );
     else {
-      cpSync(join(prepared.examples, task.template), project, {
+      await copyAsync(join(prepared.examples, task.template), project, {
         recursive: true,
       });
       const starter = join(work, "starter");
-      ok(ctx, "init", starter);
-      cpSync(join(starter, "libraries"), join(project, "libraries"), {
+      await setupCLI(ctx, "init", starter);
+      await copyAsync(join(starter, "libraries"), join(project, "libraries"), {
         recursive: true,
       });
       cpSync(join(starter, "AGENTS.md"), join(project, "AGENTS.md"));
-      ok(ctx, "lock", project);
+      await setupCLI(ctx, "lock", project);
     }
     mkdirSync(join(project, "drawings"), { recursive: true });
-    if (task.setup) await (await loadModule(taskDir, task.setup))(ctx);
+    if (task.setup) {
+      // A scorer-supplied setup hook can itself use synchronous CLI helpers.
+      // Run it out of process so its work cannot block sibling exit handling.
+      const setupContext = join(work, "setup-context.json");
+      const { env: ignored, ...publicContext } = ctx;
+      write(setupContext, {
+        module: join(taskDir, task.setup),
+        context: publicContext,
+      });
+      await setupCommand(
+        process.execPath,
+        [join(here, "reference-worker.mjs"), setupContext],
+        { cwd: project, env },
+      );
+    }
     if (task.template === "cabinets") {
       const docs = documents(project),
         ids = new Map(
@@ -443,9 +540,9 @@ export async function runOne({
       assert(!existsSync(join(project, "CLAUDE.md")));
       writeFileSync(join(project, "CLAUDE.md"), "@AGENTS.md\n");
     }
-    git(project, "init", "--quiet");
-    git(project, "add", ".");
-    git(
+    await setupGit(project, "init", "--quiet");
+    await setupGit(project, "add", ".");
+    await setupGit(
       project,
       "-c",
       "user.name=Eval",
@@ -464,10 +561,16 @@ export async function runOne({
     const authentication =
       agent === "reference"
         ? { ok: true, agent, billing: "none" }
-        : preflightAuth(agent, env);
+        : await preflightAuth(agent, env, { capture: captureSetup });
     secretList = secretValues(env);
     save("auth-status.json", authentication);
-    initial = fileState(project, join(runtime, "thermite.real.mjs"), env);
+    initial = await fileStateAsync(
+      project,
+      join(runtime, "thermite.real.mjs"),
+      env,
+      undefined,
+      captureSetup,
+    );
     initial.sourceFiles = documents(project).map((doc) => doc.path);
     runtimeBefore = snapshot(runtime, { documents: false }).hash;
     save("initial.json", initial);
@@ -486,10 +589,12 @@ export async function runOne({
     const cliVersion =
       agent === "reference"
         ? null
-        : (spawnSync(agents[agent].binary, ["--version"], {
-            env,
-            encoding: "utf8",
-          }).stdout?.trim() ?? null);
+        : ((
+            await captureSetup(agents[agent].binary, ["--version"], {
+              env,
+              encoding: "utf8",
+            })
+          ).stdout?.trim() ?? null);
     if (printAgentCommand) {
       assert(command, "--print-agent-command requires an agent CLI");
       const environment = Object.fromEntries(
@@ -529,7 +634,15 @@ export async function runOne({
       });
     const started = Date.now();
     let execution = { exit: 0, stdout: "", stderr: "" };
-    if (agent === "reference") {
+    if (stoppingSignal || batchControl?.stopped) {
+      execution = {
+        exit: null,
+        signal: stoppingSignal,
+        stdout: "",
+        stderr: "",
+        notStarted: !stoppingSignal,
+      };
+    } else if (agent === "reference") {
       const workerContext = join(work, "reference-context.json");
       const { env: ignored, ...publicContext } = ctx;
       write(workerContext, {
@@ -547,10 +660,20 @@ export async function runOne({
     execution.stderr = redactSecrets(execution.stderr, secretList);
     writeFileSync(join(live, "transcript.jsonl"), execution.stdout);
     writeFileSync(join(live, "agent.stderr"), execution.stderr);
-    const normalized = normalizeTranscript(execution.stdout),
-      classification = classifyAgent(execution, normalized),
+    const normalized = normalizeTranscript(execution.stdout, {
+        agent,
+        cliVersion,
+      }),
+      classification = classifyAgent(
+        { ...execution, operatorSignal: stoppingSignal },
+        normalized,
+      ),
       ended = Date.now(),
       beforeFlush = snapshot(project);
+    if (batchControl && batchHaltReason(classification)) {
+      batchControl.stopped = true;
+      batchControl.reason = batchHaltReason(classification);
+    }
     env.THERMITE_EVAL_PHASE = "flush";
     const validation = cli(ctx, "validate", ".", "--json");
     writeFileSync(
@@ -602,8 +725,17 @@ export async function runOne({
       context,
       engineRoots,
     });
+    // Let queued operator signals run after synchronous CLI flush work.
+    await new Promise((resolve) => setImmediate(resolve));
     let outcome =
-      stoppingSignal || classification.status === "infrastructure-failure"
+      stoppingSignal ||
+      [
+        "infrastructure-failure",
+        "halted-infra",
+        "needs-adjudication",
+        "interrupted",
+        "not-started",
+      ].includes(classification.status)
         ? {
             pass: false,
             agentFailure: stoppingSignal
@@ -617,7 +749,15 @@ export async function runOne({
         ...outcome,
         pass: false,
         agentFailure: classification.reason,
+        warnings: classification.warnings ?? [],
+        exitAfterCompletion: classification.exitAfterCompletion ?? false,
+        retryAt: classification.retryAt ?? null,
       };
+    assert.equal(
+      harnessIdentity({ tasksDir: tasksRoot }).checkerHash,
+      runIdentity.checkerHash,
+      "Harness changed during run; result cannot be scored",
+    );
     const runtimeAfter = snapshot(runtime, { documents: false }).hash;
     const metrics = score({
       calls,
@@ -641,11 +781,20 @@ export async function runOne({
       wallTimeMs: ended - started,
     });
     if (execution.signal || execution.timedOut) metrics.usage.partial = true;
-    if (agent === "reference") metrics.usage.partial = false;
+    if (agent === "reference" && !execution.notStarted && !stoppingSignal)
+      metrics.usage.partial = false;
     const prices = read(join(here, "prices.json")),
       u = metrics.usage;
-    const status =
-      classification.status === "infrastructure-failure"
+    await new Promise((resolve) => setImmediate(resolve));
+    const status = stoppingSignal
+      ? "interrupted"
+      : [
+            "infrastructure-failure",
+            "halted-infra",
+            "needs-adjudication",
+            "interrupted",
+            "not-started",
+          ].includes(classification.status)
         ? classification.status
         : outcome.error?.kind === "checker-error"
           ? "checker-error"
@@ -655,7 +804,7 @@ export async function runOne({
     manifest = {
       ...identity,
       format: "thermite-agent-run/1.1",
-      evalVersion: "1.4.0",
+      evalVersion,
       commit: prepared.commit,
       arm,
       context,
@@ -689,12 +838,18 @@ export async function runOne({
       agentExit: execution.exit,
       agentSignal: execution.signal ?? null,
       agentFailure: classification.reason,
-      infrastructureKind:
-        status === "infrastructure-failure"
-          ? shimErrors.length
-            ? "shim"
-            : (classification.infrastructureKind ?? "harness")
-          : null,
+      warnings: classification.warnings ?? [],
+      exitAfterCompletion: classification.exitAfterCompletion ?? false,
+      retryAt: classification.retryAt ?? null,
+      haltBatch: classification.haltBatch ?? false,
+      terminalTemplate: normalized.terminalTemplate,
+      infrastructureKind: ["infrastructure-failure", "halted-infra"].includes(
+        status,
+      )
+        ? shimErrors.length
+          ? "shim"
+          : (classification.infrastructureKind ?? "harness")
+        : null,
       retryCount: normalized.retryCount,
       retryEvents: normalized.retryEvents,
       completion: { successful: normalized.successfulCompletion },
@@ -704,8 +859,7 @@ export async function runOne({
       judgement: task.rubric ? "pending-two-judges" : "not-required",
       taskHash: sha256(readFileSync(join(taskDir, "task.json"))),
       taskTreeHash: snapshot(taskDir, { documents: false }).hash,
-      harnessHash: snapshot(here, { documents: false }).hash,
-      checkerHarnessHash: snapshot(here, { documents: false }).hash,
+      ...runIdentity,
       checkerTaskTreeHash: snapshot(taskDir, { documents: false }).hash,
       initialProjectHash: initial.hash,
       logHash: sha256(readFileSync(env.THERMITE_EVAL_LOG)),
@@ -715,6 +869,7 @@ export async function runOne({
     if (status === "checker-error")
       save("recheck.json", {
         taskDir,
+        tasksRoot,
         project,
         runtime,
         initial,
@@ -750,7 +905,7 @@ export async function runOne({
     manifest = {
       ...identity,
       format: "thermite-agent-run/1.1",
-      evalVersion: "1.4.0",
+      evalVersion,
       commit: prepared.commit,
       arm,
       context,
@@ -758,7 +913,7 @@ export async function runOne({
       agent,
       seed,
       attempt,
-      status: "infrastructure-failure",
+      status: stoppingSignal ? "interrupted" : "infrastructure-failure",
       outcome: { pass: false },
       metrics: {
         violations: [],
@@ -891,6 +1046,7 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
           : "complete",
     checkerRechecks: revision,
     checkerHarnessHash: snapshot(here, { documents: false }).hash,
+    checkerHash: harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
     checkerTaskTreeHash,
     forceRecheck: forceRecheck || original.forceRecheck || false,
     checkerRecheckHistory: [
@@ -928,32 +1084,69 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
   write(join(evidence, "manifest.json"), result);
   return result;
 }
+async function retryWait(ms, control) {
+  const until = Date.now() + ms;
+  while (!control.stopped && !stoppingSignal && Date.now() < until)
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(1000, until - Date.now())),
+    );
+}
 export async function runAttempts({
   prior = [],
   runAttempt,
   control = { stopped: false },
   forceRerun = false,
-  retryDelayMs = 1000,
+  retryDelayMs = 5000,
+  reopenInfra = null,
+  now = Date.now,
+  wait = (ms) => retryWait(ms, control),
 }) {
   const history = [...prior];
+  let reopen = reopenInfra;
   for (;;) {
-    const action = planAttempt(history, forceRerun);
-    if (action.kind !== "run")
+    const action = planAttempt(history, forceRerun, { reopenInfra: reopen });
+    if (action.kind !== "run") {
+      if (action.run?.status === "needs-adjudication") {
+        control.stopped = true;
+        control.reason = "needs-adjudication";
+      }
       return {
         ...action.run,
+        replayed: true,
         ...(action.kind === "exhausted" ? { retryExhausted: true } : {}),
       };
+    }
     if (control.stopped || stoppingSignal) return history.at(-1);
-    const automaticRetry = automaticInfra(history.at(-1) ?? {});
-    if (automaticRetry && retryDelayMs)
-      await new Promise((r) => setTimeout(r, retryDelayMs));
+    let automaticRetry = !reopen && automaticInfra(history.at(-1) ?? {});
+    let delay = automaticRetry
+      ? Math.max(
+          retryDelayMs * 2 ** Math.max(0, automaticFailures(history) - 1),
+          (history.at(-1).retryAt ?? now()) - now(),
+        )
+      : 0;
+    // A historical quota-sized reset reopens instead of re-halting from disk.
+    if (delay > 15 * 60000) {
+      delay = 0;
+      automaticRetry = false;
+    }
+    if (delay > 0) await wait(delay);
     if (control.stopped || stoppingSignal) return history.at(-1);
     const result = await runAttempt({
       attempt: action.attempt,
       forceRerun: action.forceRerun,
       automaticRetry,
+      reopenInfra: action.reopenInfra,
+      reopenedHalt: action.reopenedHalt,
+      infraRetryDelayMs: delay,
     });
+    reopen = null;
     history.push(result);
+    if (batchHaltReason(result)) {
+      if (haltingInfra(result)) result.status = "halted-infra";
+      control.stopped = true;
+      control.reason = batchHaltReason(result);
+      return result;
+    }
     if (!automaticInfra(result)) return result;
   }
 }
@@ -968,13 +1161,18 @@ export async function runBatch(tasks, { runTask, concurrency = 1 } = {}) {
         const task = tasks[cursor++];
         try {
           const result = await runTask(task, control);
-          results.push(result);
-          if (result.infrastructureKind === "billing") {
+          if (!result) continue;
+          if (
+            result.status === "needs-adjudication" ||
+            (!result.replayed && haltingInfra(result))
+          ) {
+            if (haltingInfra(result)) result.status = "halted-infra";
             control.stopped = true;
-            control.reason = "billing";
-            for (const child of children) killChild(child);
+            control.reason = batchHaltReason(result);
           }
+          results.push(result);
         } catch (error) {
+          process.stderr.write(`${task}: checker-error: ${error.message}\n`);
           results.push({
             task,
             status: "checker-error",
@@ -1011,7 +1209,9 @@ async function authOnly(values) {
       }
     }
     assertIsolation(project, env, { codexAuth: !!seed });
-    const status = preflightAuth(values.agent, env);
+    const status = await preflightAuth(values.agent, env, {
+      capture: captureSetup,
+    });
     console.log(JSON.stringify(status));
     if (!status.ok) process.exitCode = 1;
   } finally {
@@ -1043,6 +1243,8 @@ async function main() {
       keep: { type: "boolean", default: false },
       "force-rerun": { type: "boolean", default: false },
       "force-recheck": { type: "boolean", default: false },
+      "reopen-infra": { type: "string" },
+      "allow-harness-mismatch": { type: "boolean", default: false },
       timeout: { type: "string", default: "900" },
     },
   });
@@ -1070,12 +1272,12 @@ async function main() {
   assert(Number.isSafeInteger(seed) && seed > 0);
   assert([1, 2].includes(concurrency));
   assert(Number.isFinite(timeoutMs) && timeoutMs > 0);
-  const tasksDir = resolve(values["tasks-dir"]),
-    tasks = values.all
-      ? readdirSync(tasksDir)
-          .filter((t) => existsSync(join(tasksDir, t, "task.json")))
-          .sort()
-      : [values.task];
+  const tasksDir = resolve(values["tasks-dir"]);
+  let tasks = values.all
+    ? readdirSync(tasksDir)
+        .filter((t) => existsSync(join(tasksDir, t, "task.json")))
+        .sort()
+    : [values.task];
   assert(
     tasks.length &&
       tasks.every(
@@ -1084,6 +1286,19 @@ async function main() {
       ),
     "Use a known task or --all",
   );
+  const selectedKey = (task) =>
+    runKey({
+      context: values.context,
+      task: read(join(tasksDir, task, "task.json")).id ?? task,
+      agent: values.agent,
+      seed,
+      ...configuration,
+    });
+  if (values["reopen-infra"] && values["reopen-infra"] !== "all")
+    assert(
+      tasks.some((task) => selectedKey(task) === values["reopen-infra"]),
+      "--reopen-infra must match a selected run key or all",
+    );
   const destination = join(root, "evals/out/agent", values.checkpoint);
   mkdirSync(destination, { recursive: true });
   const preparation = join(destination, "context"),
@@ -1093,14 +1308,26 @@ async function main() {
       "rev-parse",
       `${values.commit}^{commit}`,
     );
-  let prepared;
+  let prepared,
+    checkpointPin,
+    checkpointOverride = null;
+  const currentIdentity = harnessIdentity({ tasksDir });
   if (existsSync(contextFile)) {
     const prior = read(contextFile);
     assert(
       prior.commit === commit && prior.context === values.context,
       "Checkpoint context/commit mismatch",
     );
+    checkpointPin = pinCheckpoint(prior, currentIdentity, {
+      allowMismatch: values["allow-harness-mismatch"],
+    });
+    if (
+      checkpointPin.identityOverrides.length >
+      (prior.identityOverrides?.length ?? 0)
+    )
+      checkpointOverride = checkpointPin.identityOverrides.at(-1);
     prepared = prior.prepared;
+    write(contextFile, { ...prior, ...checkpointPin });
   } else {
     mkdirSync(preparation, { recursive: true });
     prepared = await prepareContext({
@@ -1119,7 +1346,76 @@ async function main() {
       join(preparation, "fixtures"),
     );
     prepared.examples = join(preparation, "fixtures/examples");
-    write(contextFile, { commit, context: values.context, prepared });
+    checkpointPin = pinCheckpoint(null, currentIdentity);
+    write(contextFile, {
+      commit,
+      context: values.context,
+      prepared,
+      ...checkpointPin,
+    });
+  }
+  let batchCliVersion = null;
+  const protocolWarnings = [];
+  if (values.agent !== "reference") {
+    const versionWork = ownTemp("thermite-cli-version-");
+    try {
+      const env = freshEnvironment(
+        join(versionWork, "isolated"),
+        { PATH: process.env.PATH },
+        { engineRoots: [root] },
+      );
+      batchCliVersion =
+        (
+          await captureSetup(agents[values.agent].binary, ["--version"], {
+            env,
+            cwd: versionWork,
+          })
+        ).stdout?.trim() ?? null;
+      if (!pinnedCliVersion(values.agent, batchCliVersion)) {
+        protocolWarnings.push({
+          code: "unpinned-cli-version",
+          agent: values.agent,
+          cliVersion: batchCliVersion,
+        });
+        process.stderr.write(
+          `Warning: unpinned ${values.agent} CLI version ${batchCliVersion ?? "unknown"}; unknown terminal errors halt for adjudication.\n`,
+        );
+      }
+    } finally {
+      rmSync(versionWork, { recursive: true, force: true });
+    }
+  }
+  // An unresolved record blocks every ordinary resume, including a different
+  // task selection. Explicit reopen can probe those keys only; it is not an
+  // adjudication and cannot authorize unrelated keys to spend more model time.
+  const unresolved = readdirSync(destination, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== "context")
+    .flatMap((d) =>
+      readdirSync(join(destination, d.name))
+        .filter((name) => /^attempt-\d+$/.test(name))
+        .map((name) => join(destination, d.name, name, "manifest.json"))
+        .filter(existsSync)
+        .map((path) => ({ path, run: readRun(path) })),
+    )
+    .filter(({ run }) => run.status === "needs-adjudication");
+  if (unresolved.length) {
+    process.stderr.write(
+      `Unresolved adjudication blocks this checkpoint: ${unresolved.map(({ path }) => path).join(", ")}\n`,
+    );
+    if (!values["reopen-infra"]) {
+      process.exitCode = 1;
+      return;
+    }
+    tasks = tasks.filter(
+      (task) =>
+        unresolved.some(({ run }) => runKey(run) === selectedKey(task)) &&
+        (values["reopen-infra"] === "all" ||
+          values["reopen-infra"] === selectedKey(task)),
+    );
+    assert(
+      tasks.length,
+      "--reopen-infra must target an unresolved key until adjudication",
+    );
   }
   const engineRoots = git(
     resolve(values.engine),
@@ -1147,21 +1443,24 @@ async function main() {
       const prior = readdirSync(base)
         .filter((d) => /^attempt-\d+$/.test(d))
         .flatMap((d) => {
-          try {
-            return [read(join(base, d, "manifest.json"))];
-          } catch {
-            return [];
-          }
+          const file = join(base, d, "manifest.json");
+          return existsSync(file) ? [readRun(file)] : [];
         })
         .sort((a, b) => (a.attempt ?? 1) - (b.attempt ?? 1));
-      const action = planAttempt(prior, values["force-rerun"]);
+      const requestedReopen = values["reopen-infra"];
+      const reopenInfra =
+        requestedReopen === "all" || requestedReopen === selectedKey(task)
+          ? requestedReopen
+          : null;
+      const action = planAttempt(prior, values["force-rerun"], { reopenInfra });
       const complete = action.run;
-      if (["skip", "stopped", "exhausted"].includes(action.kind)) {
+      if (["skip", "exhausted", "adjudicate"].includes(action.kind)) {
         process.stdout.write(
           `${task}: attempt ${complete.attempt}, ${action.kind}${action.reason ? " (" + action.reason + ")" : ""}\n`,
         );
         return {
           ...complete,
+          replayed: true,
           ...(action.kind === "exhausted" ? { retryExhausted: true } : {}),
         };
       }
@@ -1178,7 +1477,15 @@ async function main() {
       return runAttempts({
         prior,
         control,
-        runAttempt: ({ attempt, forceRerun, automaticRetry }) =>
+        reopenInfra,
+        runAttempt: ({
+          attempt,
+          forceRerun,
+          automaticRetry,
+          reopenInfra,
+          reopenedHalt,
+          infraRetryDelayMs,
+        }) =>
           runOne({
             taskDir: join(tasksDir, task),
             prepared,
@@ -1197,6 +1504,13 @@ async function main() {
             keep: values.keep,
             forceRerun,
             automaticRetry,
+            reopenInfra,
+            reopenedHalt,
+            infraRetryDelayMs,
+            batchControl: control,
+            checkpointOverride,
+            expectedIdentity: currentIdentity,
+            tasksRoot: tasksDir,
             timeoutMs,
           }),
         forceRerun: action.forceRerun,
@@ -1205,13 +1519,22 @@ async function main() {
   });
   write(join(destination, "checkpoint.json"), {
     format: "thermite-agent-checkpoint/1.1",
+    ...checkpointPin,
     commit,
     agent: values.agent,
     ...configuration,
+    batchCliVersion,
+    protocolWarnings,
     timings: { started, ended: Date.now(), wallTimeMs: Date.now() - started },
-    stopped: results.some((r) => r.infrastructureKind === "billing")
-      ? "billing"
-      : stoppingSignal,
+    reopenInfra: values["reopen-infra"] ?? null,
+    stopped:
+      batchHaltReason(
+        results.find(
+          (r) =>
+            r.status === "needs-adjudication" ||
+            (!r.replayed && haltingInfra(r)),
+        ),
+      ) ?? stoppingSignal,
     results: results.map((r) => ({
       runKey: r.runKey,
       model: r.model,
@@ -1225,6 +1548,10 @@ async function main() {
       infrastructureKind: r.infrastructureKind ?? null,
       retryCount: r.retryCount ?? 0,
       retryExhausted: r.retryExhausted ?? false,
+      reopenInfra: r.reopenInfra ?? null,
+      reopenedHalt: r.reopenedHalt ?? false,
+      warnings: r.warnings ?? [],
+      checkpointOverride: r.checkpointOverride ?? null,
       pass: r.outcome?.pass,
       violations: r.metrics?.violations.length,
     })),
@@ -1236,6 +1563,11 @@ async function main() {
         ? !r.authentication?.ok
         : !isComplete(r) || !r.outcome?.pass || r.metrics.violations.length,
     )
+  )
+    process.exitCode = 1;
+  if (
+    !stoppingSignal &&
+    unresolved.some(({ path }) => readRun(path).status === "needs-adjudication")
   )
     process.exitCode = 1;
 }

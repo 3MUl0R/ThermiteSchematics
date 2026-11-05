@@ -448,5 +448,175 @@
       }
     ],
     "expected": 1
+  },
+  {
+    "form": "gh GraphQL inline repository",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh GraphQL inline repository",
+          "type": "command_execution",
+          "command": "gh api graphql -f query='{repository(owner:\"3MUl0R\",name:\"ThermiteSchematics\"){url}}'",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 1
+  },
+  {
+    "form": "gh search repo qualifier",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh search repo qualifier",
+          "type": "command_execution",
+          "command": "gh search code dryRun repo:fork/ThermiteSchematics",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 1
+  },
+  {
+    "form": "gh search repo option",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh search repo option",
+          "type": "command_execution",
+          "command": "gh search code dryRun --repo fork/ThermiteSchematics",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 1
+  },
+  {
+    "form": "gh browse repo option",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh browse repo option",
+          "type": "command_execution",
+          "command": "gh browse -R fork/ThermiteSchematics docs",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 1
+  },
+  {
+    "form": "gh browse unrelated",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh browse unrelated",
+          "type": "command_execution",
+          "command": "gh browse -R fork/OtherSchematics docs",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 0
+  },
+  {
+    "form": "gh GraphQL unrelated",
+    "engineRoots": ["/engine"],
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh GraphQL unrelated",
+          "type": "command_execution",
+          "command": "gh api graphql -f query='{repository(owner:\"fork\",name:\"ThermiteSchematicsExtras\"){url}}'",
+          "aggregated_output": "",
+          "exit_code": 0
+        }
+      }
+    ],
+    "expected": 0
+  },
+  {
+    "form": "gh GraphQL variables",
+    "engineRoots": ["/engine"],
+    "expected": 1,
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh GraphQL variables",
+          "type": "command_execution",
+          "command": "gh api graphql -f query='query($name:String!){repository(owner:\"fork\",name:$name){url}}' -F name=ThermiteSchematics",
+          "exit_code": 0,
+          "aggregated_output": ""
+        }
+      }
+    ]
+  },
+  {
+    "form": "gh unscoped code search",
+    "engineRoots": ["/engine"],
+    "expected": 1,
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh unscoped code search",
+          "type": "command_execution",
+          "command": "gh search code ThermiteSchematics --limit 20",
+          "exit_code": 0,
+          "aggregated_output": ""
+        }
+      }
+    ]
+  },
+  {
+    "form": "gh scoped unrelated code search",
+    "engineRoots": ["/engine"],
+    "expected": 0,
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh scoped unrelated code search",
+          "type": "command_execution",
+          "command": "gh search code ThermiteSchematics --repo fork/OtherProject",
+          "exit_code": 0,
+          "aggregated_output": ""
+        }
+      }
+    ]
+  },
+  {
+    "form": "gh GraphQL unrelated variables",
+    "engineRoots": ["/engine"],
+    "expected": 0,
+    "events": [
+      {
+        "type": "item.completed",
+        "item": {
+          "id": "gh GraphQL unrelated variables",
+          "type": "command_execution",
+          "command": "gh api graphql -f query='query($name:String!){repository(owner:\"fork\",name:$name){url}}' -F name=OtherProject",
+          "exit_code": 0,
+          "aggregated_output": ""
+        }
+      }
+    ]
   }
 ]

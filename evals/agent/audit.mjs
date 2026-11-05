@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { snapshot, sha256 } from "./snapshot.mjs";
+import { captureProcess } from "./process.mjs";
 export function fileState(project, real, env = process.env, previous) {
   const state = snapshot(project);
   const patterns = state.documents["system.json"]?.sources ?? [];
@@ -50,6 +51,40 @@ export function fileState(project, real, env = process.env, previous) {
     maxBuffer: 32 << 20,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  return validatedState(state, r);
+}
+// The shim keeps synchronous boundary validation. The runner must await the
+// same validation during setup so a sibling's terminal event can be handled.
+export async function fileStateAsync(
+  project,
+  real,
+  env = process.env,
+  previous,
+  capture = captureProcess,
+) {
+  const state = fileState(
+    project,
+    real,
+    { ...env, THERMITE_EVAL_SCHEMA_VALIDATE: "0" },
+    previous,
+  );
+  if (
+    !existsSync(project + "/system.json") ||
+    env.THERMITE_EVAL_SCHEMA_VALIDATE === "0"
+  )
+    return state;
+  const result = await capture(
+    process.execPath,
+    [real, "validate", project, "--json"],
+    {
+      cwd: project,
+      env,
+      maxBuffer: 32 << 20,
+    },
+  );
+  return validatedState(state, result);
+}
+function validatedState(state, r) {
   let diagnostics = [];
   for (const text of [r.stdout, r.stderr])
     try {
