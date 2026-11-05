@@ -42,8 +42,8 @@ it("compares em size with primary/secondary minima, keeping ISO cap policy separ
     c.legibility(g([t({ fontSize: 2.2, capHeightMm: 1.32 })]))[0].kind,
   ).toBe("text-below-minimum-em");
   expect(
-    c.legibility(g([t({ capHeightMm: 0.9 })])).map((f) => f.kind),
-  ).toContain("cap-ratio-mismatch");
+    c.legibility(g([t({ capReferenceEmMm: 5 })])).map((f) => f.kind),
+  ).toContain("distorted-glyphs");
   expect(c.capPolicy([t()], "svg")[0].kind).toBe("iso-cap-height-policy");
 });
 it("treats every line of an inline wire block as belonging to its own route only", () => {
@@ -170,16 +170,14 @@ it("chooses the frame before a nested viewport when both are violated", () => {
     "text-outside-frame",
   ]);
 });
-it("detects cap distortion against the independent horizontal em reference", () => {
+it("detects em anisotropy against the horizontal em reference", () => {
   const x = t({
     fontSize: 3,
     capReferenceEmMm: 4,
     capHeightMm: 1.8,
     expectedCapRatio: 0.6,
   });
-  expect(c.legibility(g([x])).map((f) => f.kind)).toEqual([
-    "cap-ratio-mismatch",
-  ]);
+  expect(c.legibility(g([x])).map((f) => f.kind)).toEqual(["distorted-glyphs"]);
 });
 
 it("excludes clipped PDF duplicates before matching the visible text", () => {

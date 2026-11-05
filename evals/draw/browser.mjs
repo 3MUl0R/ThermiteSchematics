@@ -1,3 +1,4 @@
+import { classifyTextGeometry } from "./text-classification.mjs";
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -421,11 +422,31 @@ export function measureSheet(options = {}) {
           wireBlock: e.closest("[data-wire-label]")
             ? ids.get(e.closest("[data-wire-label]"))
             : undefined,
-          secondaryReference:
-            renderedString.trim() === "BOUNDARY" ||
-            (e.parentElement.hasAttribute("data-circuit-functions") &&
-              e.parentElement.getAttribute("data-related-functions") !== "[]" &&
-              Number(e.getAttribute("y")) > 3.4),
+          sheetText: e.parentElement === root,
+          continuation: !!e.closest('a[href^="#sheet-"]'),
+          circuitText: e.parentElement.hasAttribute("data-circuit-functions")
+            ? (() => {
+                const owner = e.parentElement;
+                const fn = [...owner.children].find((c) =>
+                  c.hasAttribute("data-function-key"),
+                );
+                const key = fn?.getAttribute("data-function-key");
+                const title = fn?.querySelector("title")?.textContent;
+                return {
+                  boundary:
+                    JSON.parse(owner.getAttribute("data-circuit-functions"))
+                      .length === 0,
+                  related:
+                    JSON.parse(
+                      owner.getAttribute("data-related-functions") ?? "[]",
+                    ).length > 0,
+                  primaryDesignation:
+                    key && title?.endsWith("/" + key)
+                      ? title.slice(0, -key.length - 1)
+                      : undefined,
+                };
+              })()
+            : undefined,
           expectedCapRatio:
             cap.actualBoundingBoxAscent / parseFloat(css.fontSize),
           fontMeasured: "Chromium resolved " + css.fontFamily,
@@ -449,11 +470,13 @@ export function measureSheet(options = {}) {
       getComputedStyle(e).stroke !== "none",
   );
   const frame = frameElement ? bounds(frameElement) : null;
-  const titleRule = [...root.children]
+  const horizontalRules = [...root.children]
     .filter((e) => e.tagName.toLowerCase() === "path")
     .map((e) => bounds(e))
     .filter((b) => b.h < 0.01 && frame && b.w > frame.w * 0.8)
-    .sort((a, b) => b.y - a.y)[0];
+    .sort((a, b) => a.y - b.y);
+  const headerRule = horizontalRules.length > 1 ? horizontalRules[0] : null,
+    titleRule = horizontalRules.length > 1 ? horizontalRules.at(-1) : null;
   const titleBlock =
     frame && titleRule
       ? {
@@ -463,16 +486,6 @@ export function measureSheet(options = {}) {
           h: frame.y + frame.h - titleRule.y,
         }
       : null;
-  for (const t of textCandidates)
-    t.furniture =
-      !t.nested &&
-      !t.deviceUid &&
-      !t.wire &&
-      !t.row &&
-      (t.anchor.y < 35 ||
-        (titleBlock && t.anchor.y >= titleBlock.y) ||
-        (/^[A-D1-6]$/.test(t.text) &&
-          (t.anchor.x < 28 || t.anchor.x > vb.width - 28)));
   const connectors = [...root.querySelectorAll('a[href^="#sheet-"]')].flatMap(
     (a) => {
       const line = a.querySelector("path,line"),
@@ -634,6 +647,7 @@ export function measureSheet(options = {}) {
     hiddenTexts,
     frame,
     titleBlock,
+    headerRule,
     connectors,
     terminals,
     shapes,
@@ -652,7 +666,7 @@ export async function openSheet(page, svg) {
     `<html><head><style>*{box-sizing:border-box}html,body{margin:0;background:white}body>svg{display:block;max-width:none}</style></head><body>${svg.replace(/^<\?xml[^>]*>/, "")}</body></html>`,
   );
   await page.evaluate(() => document.fonts.ready);
-  return page.evaluate(measureSheet);
+  return classifyTextGeometry(await page.evaluate(measureSheet));
 }
 export function cropBox(b, width, height, padding = 3) {
   const x = Math.max(0, b.x - padding),

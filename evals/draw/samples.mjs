@@ -1,3 +1,4 @@
+import { classifyTextGeometry } from "./text-classification.mjs";
 import { gunzipSync } from "node:zlib";
 // Explicit visual acceptance step; never invoked by check or ordinary runs.
 import assert from "node:assert/strict";
@@ -94,7 +95,9 @@ try {
         );
         await page.setContent(gunzipSync(bytes).toString("utf8"));
         selector = `#sheet-${row.sheet}>svg`;
-        g = await page.evaluate(measureSheet, { selector, textOnly: true });
+        g = classifyTextGeometry(
+          await page.evaluate(measureSheet, { selector, textOnly: true }),
+        );
       } else g = await openSheet(page, svg);
       let region = f.bbox,
         regionSource = "measured finding";

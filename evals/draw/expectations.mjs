@@ -315,8 +315,8 @@ const severityBands = {
 // prettier-ignore
 const groups = [
   {"dq":"DQ-02","family":"examples/conveyor-line","kind":"text-below-minimum-em","check":"sheet","coarse":false,"defects":[
-    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"303e5b40","bands":"e97e19ef","count":[2,8]},
-    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"bc030cb5","bands":"e97e19ef","count":[2,8]},
+    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"303e5b40","bands":"e97e19ef","count":[4,8]},
+    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"bc030cb5","bands":"e97e19ef","count":[4,8]},
   ]},
   {"dq":"DQ-02","family":"examples/functional-symbols","kind":"text-across-conductor","check":"sheet","coarse":false,"defects":[
     {"locator":"device/CP1/text.","scopes":"0c3a0f8b","bands":"44136fa3"},
@@ -328,12 +328,12 @@ const groups = [
     {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"fd7f6a33","bands":"bb48fbe7","count":[2,2]},
   ]},
   {"dq":"DQ-02","family":"examples/machine-demo","kind":"text-below-minimum-em","check":"sheet","coarse":false,"defects":[
-    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"8dc60506","bands":"e97e19ef","count":[1,8]},
-    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"014a8cb6","bands":"e97e19ef","count":[1,8]},
+    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"8dc60506","bands":"e97e19ef","count":[2,8]},
+    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"014a8cb6","bands":"e97e19ef","count":[2,8]},
   ]},
   {"dq":"DQ-02","family":"examples/motor-starter","kind":"text-below-minimum-em","check":"sheet","coarse":false,"defects":[
-    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"c4032b80","bands":"e97e19ef","count":[2,24]},
-    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"fef69da7","bands":"e97e19ef","count":[2,24]},
+    {"locator":"typography/Arial, Helvetica, sans-serif//text-below-minimum-em","scopes":"c4032b80","bands":"e97e19ef","count":[4,24]},
+    {"locator":"typography/NotoSans//text-below-minimum-em","scopes":"fef69da7","bands":"e97e19ef","count":[4,24]},
   ]},
   {"dq":"DQ-02","family":"font-policy","kind":"iso-cap-height-policy","check":"iso-cap-height-policy","coarse":false,"defects":[
     {"locator":"policy/iso-cap-height/Arial, Helvetica, sans-serif/html","scopes":"a401b0c7","bands":"ff3216fb","count":[20,1642]},

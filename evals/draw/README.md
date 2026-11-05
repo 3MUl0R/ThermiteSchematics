@@ -8,7 +8,7 @@ files run there. No engine source or electrical project is changed.
 ```sh
 bun install --frozen-lockfile
 bun run build
-bun evals/draw/run.mjs --checkpoint C1-base-r4
+bun evals/draw/run.mjs --checkpoint C1-e3fu
 bun evals/draw/run.mjs --checkpoint preview --quick
 VITEST_MAX_WORKERS=2 bun run test -- evals/draw
 ```
@@ -106,15 +106,20 @@ cannot turn green, and a missing PDF scope cannot borrow an SVG observation.
 
 Geometry compares the declared em size with 2.5 mm for primary electrical/report
 labels and the documented 2.3 mm for secondary circuit/boundary references, with
-cap-ratio and natural-advance checks for distortion. The ISO 3098 reading of
+one combined advance/em-axis-ratio finding for distortion. The ISO 3098 reading of
 2.5 mm as capital height is a separate `iso-cap-height-policy` gap, pinned once
 per (font, medium), pending renderer/user adoption (DECISIONS-FOR-USER item 12).
 
-Frame/zone/title furniture has no documented primary-label minimum and is
-identified by its measured position outside the drawing body; it is still checked
-for bounds, overlap, distortion and ISO policy. Secondary captions are identified
-from circuit reference/boundary context, not by accepting whatever font size was
-printed. Geometry counts exclude `classification: policy-gap`; `policySummary`
+Frame/zone/title furniture has no documented primary-label minimum. Header and
+title regions come from the measured frame and full-width divider rules; the top
+zone strip ends at the measured ink bottom of the complete 1–6 zone row. The A–D
+border column is recognized separately. There is no fixed 35 mm body cutoff.
+Owned drawing labels and off-page continuation links are never furniture; bounds,
+overlap, distortion and ISO policy still apply to furniture. Secondary captions
+come from direct circuit-node roles, exported related-function/boundary metadata
+and the primary designation from the IR (or a function's semantic title). Primary
+designations keep the primary minimum regardless of y; an unknown role does not
+silently receive the lower minimum. Geometry counts exclude `classification: policy-gap`; `policySummary`
 reports those observations separately. Full details remain in results and gallery.
 
 SVG/HTML em geometry uses computed CSS size and the actual CTM, independent of
@@ -122,11 +127,12 @@ platform font substitution. Capital ratios use the font Chromium resolves from
 the declared family, explicitly labelled `fontMeasured`; generic monospace's
 concrete platform face is not exported. PDF em sizes and named embedded fonts
 come from pdf.js; cap policy uses that font's PDF FontDescriptor CapHeight,
-not a macOS substitute. Missing PDF cap metadata is not-implemented. PDF geometry/policy discards clipped duplicate text extractions unless a visible source label matches within two ems; raw extraction remains available to the existing parity checks. Cap ratio
-compares vertical capital height with the natural font ratio and effective
-horizontal glyph-em (CTM/textLength); its allowed relative ratio is [0.90,1.10].
-The advance check independently compares actual SVG advance with canvas natural
-advance within [0.90,1.10]. They intentionally overlap for glyph aspect distortion.
+not a macOS substitute. Missing PDF cap metadata is not-implemented. PDF geometry/policy discards clipped duplicate text extractions unless a visible source label matches within two ems; raw extraction remains available to the existing parity checks. SVG/HTML advance and scaled font-cap ratios describe the same anisotropy; they
+are not independent rendered-cap measurements. One `distorted-glyphs` finding
+combines advance outside [0.90,1.10] and vertical/horizontal em-axis ratio outside
+[0.90,1.10], retaining both measured ratios and triggered predicates. PDF uses its
+physical em-axis ratio in that same finding. ISO policy still uses the declared
+font's natural capital metric; it does not claim pixel-measured capital ink.
 
 ## Ink geometry and calibration
 
@@ -147,10 +153,10 @@ by label role/report/frame class. Require at least 40 labels of each font class:
 
 ```sh
 INK_FONT=monospace INK_OUT=evals/out/mono-ink.json bun evals/draw/calibrate.mjs \
-  evals/out/draw/C1-base-r4 machine-demo-left-to-right/1 machine-demo-left-to-right/2 \
+  evals/out/draw/C1-e3fu machine-demo-left-to-right/1 machine-demo-left-to-right/2 \
   machine-demo-top-to-bottom/1 conveyor-line-top-to-bottom/1 motor-starter-left-to-right/1
 INK_FONT=Arial INK_OUT=evals/out/proportional-ink.json bun evals/draw/calibrate.mjs \
-  evals/out/draw/C1-base-r4 functional-symbols-top-to-bottom/1 \
+  evals/out/draw/C1-e3fu functional-symbols-top-to-bottom/1 \
   circuit-pagination-left-to-right/1 analog-output-left-to-right/1 \
   machine-demo-left-to-right/11 report-filtering-left-to-right/1
 ```
@@ -165,10 +171,18 @@ The 2.043 mm J1 distance is within noise, not a defect. PR.md records the comple
 before/after distributions, two whitespace outliers, and differing compressed/
 natural controls. `INK_TEXT` and `INK_MIN_COUNT=2` support those targeted controls.
 
-Wire-label blocks in a break of their own conductor are inline as a whole,
-including every line. Only that wire identity is exempt. Distances are from ink
+A wire-label line is inline only when its own measured ink fits inside a shared
+block plate that crosses its own conductor (0.170 mm containment uncertainty).
+Sharing the block alone grants no exemption: a displaced line is measured normally.
+Only the matching own-wire identity is exempt. Distances are from ink
 to stroke edge, accounting for half the measured conductor stroke. Foreign
-conductors remain checked. White device/background plates are tested against
+conductors remain checked. The DQ-16 distance threshold is **2.000 + 0.170 =
+2.170 mm**. The 32 rooted-label offset markers are distance-only threshold hits,
+not evidence of ambiguity: 2.147 mm passes and 2.195 mm fails, so a roughly
+0.05 mm glyph/font change can flip them as a group. Their calibrated bands and
+strict xpasses are intentional; review grouped flips rather than blindly re-pin.
+The historical `ambiguous-wire-label` kind covers both distance and nearer-wire
+predicates; evidence names the actual reason. White device/background plates are tested against
 foreign conductor ink and, in paint order, foreign text ink. Earlier plates
 under later text are not occlusions. Mechanical borders, white conductor halos,
 legitimate terminal entries and ordinary crossings have clean controls. Symbol
@@ -177,32 +191,32 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 
 ## Checklist coverage
 
-| DQ  | Automated measurement or explicit boundary                                                                                                                              |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 01  | SVG text-only raster regions versus pdf.js dark ink; ≥8 SVG pixels and <18% retained PDF ink fails. Optional PDFKit. Historical mask audit separate.                    |
-| 02  | Real ink bounds/overlap in SVG/HTML, plates, conductor interference, declared-em minima in SVG/HTML/matched PDF, cap ratio and advance. ISO policy separate.            |
-| 03  | Independent source-port electrical primitives and foreign route/body/port penetration. Circuit primitive electrical roles need an export; symbol meaning/legend manual. |
-| 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                        |
-| 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                   |
-| 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                       |
-| 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                             |
-| 08  | Reciprocal continuations and printed conductor/sheet.zone; destination from measured reciprocal anchor/grid. Ordered ports need an export.                              |
-| 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                    |
-| 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                     |
-| 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                        |
-| 12  | Packet median content envelope utilisation. Optimal repacking needs block/clearance exports.                                                                            |
-| 13  | Stroke hierarchy and filled terminal/junction dots with fewer than three rays.                                                                                          |
-| 14  | Distinct conductor endpoints sharing one final landing stroke. Missing physical endpoint identities are a gap.                                                          |
-| 15  | Straight-route jogs <3 mm and visible detour >2×Manhattan+20 mm. Curves need segment exports; routing intent still needs review.                                        |
-| 16  | Inline own-wire blocks; ink-to-own/competing-conductor distance with calibrated tolerance. Semantic wire identities recovered from emitted source keys.                 |
-| 17  | Duplicate/overlapping terminal text and terminal-marker collisions.                                                                                                     |
-| 18  | Production title fields and revision history.                                                                                                                           |
-| 19  | Report bounds, semantic null placeholders, wire schedule sheet.zone, complete index and public-query row inventory/multiplicity.                                        |
-| 20  | Computed font and actual symbol-catalog families per packet.                                                                                                            |
-| 21  | Matched PDF/SVG advances, max(0.15 mm,2%) predicate. Split/unmatched text needs an association export.                                                                  |
-| 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                 |
-| 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                           |
-| 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                      |
+| DQ  | Automated measurement or explicit boundary                                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01  | SVG text-only raster regions versus pdf.js dark ink; ≥8 SVG pixels and <18% retained PDF ink fails. Optional PDFKit. Historical mask audit separate.                       |
+| 02  | Real ink bounds/overlap in SVG/HTML, plates, conductor interference, declared-em minima in SVG/HTML/matched PDF, combined em-axis/advance distortion. ISO policy separate. |
+| 03  | Independent source-port electrical primitives and foreign route/body/port penetration. Circuit primitive electrical roles need an export; symbol meaning/legend manual.    |
+| 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                           |
+| 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                      |
+| 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                          |
+| 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                |
+| 08  | Reciprocal continuations and printed conductor/sheet.zone; destination from measured reciprocal anchor/grid. Ordered ports need an export.                                 |
+| 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                       |
+| 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                        |
+| 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                           |
+| 12  | Packet median content envelope utilisation. Optimal repacking needs block/clearance exports.                                                                               |
+| 13  | Stroke hierarchy and filled terminal/junction dots with fewer than three rays.                                                                                             |
+| 14  | Distinct conductor endpoints sharing one final landing stroke. Missing physical endpoint identities are a gap.                                                             |
+| 15  | Straight-route jogs <3 mm and visible detour >2×Manhattan+20 mm. Curves need segment exports; routing intent still needs review.                                           |
+| 16  | Inline own-wire blocks; ink-to-own/competing-conductor distance with calibrated tolerance. Semantic wire identities recovered from emitted source keys.                    |
+| 17  | Duplicate/overlapping terminal text and terminal-marker collisions.                                                                                                        |
+| 18  | Production title fields and revision history.                                                                                                                              |
+| 19  | Report bounds, semantic null placeholders, wire schedule sheet.zone, complete index and public-query row inventory/multiplicity.                                           |
+| 20  | Computed font and actual symbol-catalog families per packet.                                                                                                               |
+| 21  | Matched PDF/SVG advances, max(0.15 mm,2%) predicate. Split/unmatched text needs an association export.                                                                     |
+| 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                    |
+| 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                              |
+| 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                         |
 
 ## Marker identity, drift and updates
 
@@ -253,7 +267,7 @@ finding's source, geometry and both media. Before accepting a family, inspect te
 seeded random, kind-stratified 300 dpi samples, or all if fewer:
 
 ```sh
-bun evals/draw/samples.mjs evals/out/draw/C1-base-r4 review-r4
+bun evals/draw/samples.mjs evals/out/draw/C1-e3fu review-r4
 ```
 
 Seed defaults to 4242 (`DRAW_SAMPLE_SEED` overrides it). Red overlays show the
@@ -276,3 +290,20 @@ construct Quartz clips. pdf.js itself renders it correctly, so the audit never
 fabricates missing raster ink. PDFKit can corroborate it but is not required.
 `pdfwhite` separately proves actual ink loss with an intact extracted text layer.
 EA F3's old report overflow is fixed by R2; the current wide-label cell must fit.
+
+## Adding reviewed C1 findings
+
+For this checker follow-up, the strict discovery run records newly exposed M2
+labels. Existing view-scoped font markers already cover them, so this baseline
+has count drift rather than new marker keys/scopes. A previously uncovered view
+would fail. After inspecting the source labels and crops, create the proposal
+through the existing command:
+
+```sh
+bun evals/draw/pin.mjs evals/out/draw/C1-e3fu-discovery/summary.json evals/out/e3fu/proposal.mjs
+```
+
+Compare expanded identities/scopes and bands against the current registry. Accept
+only the reviewed delta; retain every unrelated marker and band. Copy the reviewed
+proposal to `evals/draw/expectations.mjs`, then run a fresh strict `C1-e3fu`.
+This is an explicitly reviewed C1 re-pin, not routine regeneration of failures.

@@ -1,3 +1,4 @@
+import { classifyTextGeometry } from "./text-classification.mjs";
 import * as checks from "./checks.mjs";
 const reasons = {
   "DQ-07":
@@ -35,6 +36,7 @@ export function evaluateSheet(
   tables = [],
   geometries = [],
 ) {
+  classifyTextGeometry(g, ir);
   const interference = checks.conductorInterference(g);
   const obs = (dq, issues, extra) => observation(c, s, dq, issues, extra),
     out = [];
