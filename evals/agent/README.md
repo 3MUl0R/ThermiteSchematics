@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.4.0)
+# Fresh-agent evaluator (E2 v1.6.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -106,7 +106,11 @@ The only initial CODEX_HOME file permitted is the chosen `auth.json`.
 `agents.json` pins Codex to `gpt-6.1-sol` with reasoning effort `xhigh` and
 Claude to `claude-opus-5-5`. Codex receives both `-m gpt-6.1-sol` and
 `-c model_reasoning_effort="xhigh"` explicitly, independent of user config.
-Claude receives `--model` only. Manifests record CLI versions. Claude's updater
+Claude receives `--model` only. Codex effort overrides are limited to the installed
+0.164.0 bundled gpt-6.1-sol catalog: low, medium, high, xhigh, max and ultra.
+The catalog advertises max/ultra explicitly; none/minimal are not advertised
+and are rejected. Claude 2.1.280 help lists low/medium/high/xhigh/max, but this
+model-only Claude protocol continues to reject effort overrides. Manifests record CLI versions. Claude's updater
 is disabled in the environment and Codex receives
 `-c check_for_update_on_startup=false`. Commands otherwise follow GI §7.
 `--print-agent-command` prints the exact argv and an empty-environment launch;
@@ -141,11 +145,13 @@ the same engine; the kit does not supply a compact guide or claim an A/B result.
 `task.json`, optional setup, checker and reference contract. H1/H2 are held by
 scorers and are absent here. `--concurrency 1|2` caps the batch at two.
 
-A checkpoint is resumable; commit and context must match. The **first complete attempt counts**, including task failures. Completed cases are skipped. Only rate-limit failures and nonzero unstructured CLI exits automatically create another attempt, at most two reruns per run key (three failed executions including the original), including across resume. The two categories share that cap. Billing stops dispatch, terminates in-flight owned processes, and is never retried. Other infrastructure failures require an explicit subsequent resume after fixing the cause. `--force-rerun` explicitly creates another completed attempt, recorded in the manifest and analyzer warnings; it cannot replace the first completed score.
+A checkpoint is resumable; commit, context, harness hash, checker hash and evalVersion must match. Creation stores hashes and version in context.json/checkpoint.json. checkerHash also includes the entire task catalog, including --tasks-dir outside the repo; checkerHarnessHash identifies the framework. A mid-run source/catalog change is unscored. A mismatch refuses before any run; --allow-harness-mismatch records the old/new identity and an explicit override, retained in context/checkpoint history and new run records. Overrides permit collection, but analysis rejects mixed selected identities. The **first complete attempt counts**, including task failures. Completed cases are skipped. Quotas/usage limits and billing errors halt dispatch while in-flight runs finish. Their `halted-infra` records are incomplete history, consume no automatic retry budget, and reopen automatically on the next invocation. A stored halt never re-stops a batch. This includes legacy billing records.
+
+Transient rate limits and nonzero unstructured CLI exits share a cap of two automatic reruns per key (three failures including the original), including across resume. Backoff starts at 5 seconds and doubles, honoring structured reset/retry-after hints. A reset over 15 minutes away is a quota. Other infrastructure failures require explicit resume after repair. To reset an exhausted counter without deleting evidence, pass `--reopen-infra all` or `--reopen-infra '<runKey>'` (copy runKey from the manifest). A key must match this invocation's selected configuration. The new record retains the request and previous failure count; analysis history retains the reset. Reopening never replaces a completed score. `--force-rerun` is separate: it creates another completed attempt, recorded in warnings, but cannot replace the first score.
 
 Evidence lives at `<checkpoint>/<task>-<agent>-<arm>-<seed>-<configuration-hash>/attempt-001/manifest.json` (reference directories omit the suffix). Keys include context, task, arm, agent, seed, effective model/effort, override provenance and attempt. Originals and adjudicated copies coexist. Analysis reports attempt counts and forced reruns, and blocks unresolved infrastructure/checker faults.
 
-An exception while evaluating agent output is a completed task failure with its reason. Missing or invalid deliverables never request a paid retry. A checker module may throw the exported `CheckerInfrastructureError` only for an infrastructure fault (for example a missing checker installation). This yields `checker-error`, keeps the original workspace, and saves recheck.json. Resume re-runs only that checker in the same attempt; no agent process launches and usage is unchanged. Checker revisions retain `checker-history-001.json` and record checkerHarnessHash. An unavailable kept workspace blocks rechecking; it never starts the agent. Rechecks refuse changes to the task directory unless `--force-recheck` is supplied; the new tree hash and forced revision are recorded. The original agent harness hash remains immutable, while checkerHarnessHash and checkerTaskTreeHash identify the actual checker. Analysis compares both agent and effective checker identities. Reference exceptions and agent-side error results/timeouts are task failures. Provider/auth/transport signals, CLI crashes and shim/harness failures are infrastructure; classification uses structured codes/status or embedded provider JSON, never domain words in agent prose. Exit 0 plus successful completion is judged solely by the checker; earlier retry/error rows become retryCount/retryEvents. A terminal error without completion remains a failure. Infra counts by kind are reported per arm, including resolved attempts.
+An exception while evaluating agent output is a completed task failure with its reason. Missing or invalid deliverables never request a paid retry. A checker module may throw the exported `CheckerInfrastructureError` only for an infrastructure fault (for example a missing checker installation). This yields `checker-error`, keeps the original workspace, and saves recheck.json. Resume re-runs only that checker in the same attempt; no agent process launches and usage is unchanged. Checker revisions retain `checker-history-001.json` and record checkerHarnessHash. An unavailable kept workspace blocks rechecking; it never starts the agent. Recheck refusals print the task and reason to stderr. Rechecks refuse changes to the task directory unless `--force-recheck` is supplied; the new tree hash and forced revision are recorded. The original agent harness hash remains immutable, while checkerHarnessHash and checkerTaskTreeHash identify the actual checker. Analysis compares both agent and effective checker identities. Reference exceptions and agent-side error results/timeouts are task failures. Provider/auth/transport signals, CLI crashes and shim/harness failures are infrastructure; classification uses structured codes/status or embedded provider JSON, never domain words in agent prose. Successful terminal completion is judged by the checker, including a nonzero shutdown exit (recorded in warnings and exitAfterCompletion). Recovered conditions clear on agent progress; a later specific terminal agent error such as error_max_turns decides the outcome. Earlier retry/error rows become retryCount/retryEvents. Generic execution-error wrappers preserve only an immediately pending, unrecovered typed provider cause. invalid_request_error alone is an agent outcome; only structured model/auth subtypes make it infra. Prompt/context-length errors remain agent outcomes. Known terminal agent errors remain failures. An unrecognized terminal error becomes needs-adjudication, never a scored failure. Infra counts by kind are reported per arm, including resolved attempts.
 
 One exception does not abort siblings. On SIGINT, owned model **and reference** process groups terminate and the runner returns 130. `--timeout <seconds>` defaults to 900; killed usage remains partial.
 
@@ -386,3 +392,75 @@ trivial Codex capture with gpt-6.1-sol/xhigh succeeded: thread.started →
 turn.started → item.completed (agent_message) → turn.completed with usage.
 It returned OK with no tools. Recovered retry sequences remain synthetic.
 Claude's isolated auth was unavailable and no Claude model call ran.
+
+## Follow-up protocol evidence
+
+Decision 17 quota/billing behavior and decision 18 terminal-cause behavior have
+synthetic regressions only; no model ran for this follow-up. Retry hints accept
+structured retry_after/retryAfter and millisecond variants, HTTP Retry-After
+headers (seconds or dates), reset timestamps (seconds, milliseconds or ISO), and
+request/token reset-duration headers. Missing hints use exponential backoff.
+Readiness checks do not establish model availability. Blinding removes xhigh and
+agent/CLI version strings while preserving PLC terminals and engineering values.
+V8 includes gh GraphQL repository queries, gh search code repo selectors and gh
+browse repo selectors; unrelated repositories remain negative controls.
+
+## Terminal errors and recorded adjudication
+
+See [captured protocol evidence](fixtures/cli/README.md). Codex 0.164.0 emits
+sentences in its terminal event; the captured full-field templates are protocol
+data for that exact version. Agent output and nonterminal prose are never
+matched. content_filter has a separate captured agent-outcome template and is
+not a network failure. Unknown terminal messages or an unpinned version enter
+`needs-adjudication`, are incomplete/unscored, and block final analysis even if a
+later rerun completes. Plain CLI crashes without a terminal error remain
+unstructured infra. No sentence templates apply to another version.
+
+The first `needs-adjudication` also **halts the batch**. An ordinary resume
+starts no agent while any checkpoint record remains unresolved, even if another
+task was selected. Adjudicate the record, then resume: infrastructure permits
+another attempt; an agent-failure decision keeps that failure and proceeds to
+the remaining keys. A batch warns at startup if its CLI version is not pinned.
+
+`--reopen-infra <key|all>` permits another attempt for an unresolved key, retaining
+the unknown original. Until adjudication, an explicit reopen is limited to those
+unresolved keys, leaves the checkpoint unscored and exits nonzero; it cannot
+authorize unrelated keys. It does not adjudicate or replace that original. To record
+an operator decision without changing the original manifest:
+
+```sh
+bun evals/agent/adjudicate.mjs --run <attempt-directory> --resolution infrastructure --reason "Reviewed the terminal event" --operator <reviewer>
+```
+
+The other resolution is `agent-failure`. The hash-bound, write-once
+infra-adjudication.json sidecar records who, why and when. Infrastructure remains
+incomplete and permits a later run; agent-failure becomes a completed failure
+and the first-complete rule applies. No decision can declare a pass. A sidecar
+with mismatched original bytes is refused. Analysis reads the sidecar for both
+original and rubric-adjudicated manifests, reports decisions/reopens/shutdown
+warnings, and blocks every unresolved record. Stored facts remain immutable.
+
+Operator SIGINT/SIGTERM produces `interrupted`, even after successful agent
+completion; resume reruns it. A task still in setup when another task halts the
+batch becomes `not-started` at the final spawn gate. Neither state consumes the
+transient retry budget or counts as a completed task.
+
+Setup subprocesses (init, lock, git, auth, boundary validation and CLI versions)
+are asynchronous. Task setup hooks run in a worker, including hooks that use
+synchronous helpers; their contract is filesystem setup through the supplied
+context, not mutation of the parent process's globals. This lets a sibling exit
+be classified during setup, before the spawn gate.
+
+Claude keeps the strongest cause within a no-progress window (billing > quota >
+rate limit), and the latest reset. Progress or accepted active overage resolves
+pending quota/rate conditions. A specific terminal agent cause still decides.
+Overage-use booleans take precedence over overageStatus; when absent, allowed /
+allowed_warning overage status indicates the accepted overage path. The five
+new enums and the actual local 529 envelope are covered by fixtures.
+
+Bare `success/is_error` and `error_during_execution` results are generic wrappers,
+not known agent causes. Without a typed cause they require adjudication; an
+earlier `invalid_request` or other typed cause survives either wrapper. Progress
+clears the pending cause. `terminal_reason` is not mapped. The two real Claude
+captures used API-key mode with a loopback ANTHROPIC_BASE_URL; the first-party
+OAuth error path remains unverified.

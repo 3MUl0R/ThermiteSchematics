@@ -9,6 +9,7 @@ import {
   runKey,
   configurationKey,
 } from "./attempts.mjs";
+import { readRun } from "./records.mjs";
 import { canonical } from "./source-files.mjs";
 const mean = (xs) =>
   xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
@@ -77,6 +78,32 @@ export function analyze(runs, { requireComplete = true } = {}) {
   const errors = [...attemptSelection.errors],
     pairs = [],
     maps = { A: new Map(), B: new Map() };
+  for (const field of [
+    "harnessHash",
+    "checkerHarnessHash",
+    "checkerHash",
+    "evalVersion",
+  ]) {
+    const values = new Set(
+      runs.map(
+        (r) =>
+          r[field] ??
+          (field === "checkerHarnessHash" || field === "checkerHash"
+            ? (r.checkerHarnessHash ?? r.harnessHash)
+            : null) ??
+          null,
+      ),
+    );
+    if (values.size > 1) errors.push(`Mixed ${field} across selected runs`);
+  }
+  for (const task of new Set(runs.map((r) => r.task))) {
+    const hashes = new Set(
+      runs
+        .filter((r) => r.task === task)
+        .map((r) => r.checkerTaskTreeHash ?? r.taskTreeHash ?? null),
+    );
+    if (hashes.size > 1) errors.push(`Mixed checker task tree for ${task}`);
+  }
   const key = runKey;
   for (const agent of ["claude", "codex", "reference"]) {
     const configurations = new Set(
@@ -297,12 +324,31 @@ export function analyze(runs, { requireComplete = true } = {}) {
     accepted: errors.length === 0 && rules.every((r) => r.pass),
     errors,
     attempts: attemptSelection.history,
-    warnings: attemptSelection.history
-      .filter((h) => h.multipleCompleteAttempts)
-      .map(
-        (h) =>
-          `Multiple complete attempts (first counts): ${h.key}; forced: ${h.forcedReruns.join(",") || "unmarked"}`,
+    warnings: attemptSelection.history.flatMap((h) => [
+      ...(h.multipleCompleteAttempts
+        ? [
+            `Multiple complete attempts (first counts): ${h.key}; forced: ${h.forcedReruns.join(",") || "unmarked"}`,
+          ]
+        : []),
+      ...h.infraReopens.map(
+        (r) =>
+          `Infra counter reopened ${h.key} attempt ${r.attempt}: ${r.request}`,
       ),
+      ...h.reopenedHalts.map(
+        (a) => `Halted key reopened ${h.key} attempt ${a}`,
+      ),
+      ...h.adjudications.map(
+        (r) =>
+          `Infra adjudication ${h.key} attempt ${r.attempt}: ${r.resolution} by ${r.operator}: ${r.reason}`,
+      ),
+      ...h.pendingAdjudications.map(
+        (a) => `Needs adjudication ${h.key} attempt ${a}; final scores blocked`,
+      ),
+      ...h.exitWarnings.map(
+        (r) =>
+          `Exit after completion ${h.key} attempt ${r.attempt}: exit=${r.exit ?? "unknown"} signal=${r.signal ?? "none"}`,
+      ),
+    ]),
     infraCounts: Object.fromEntries(
       ["A", "B"].map((arm) => {
         const attempts = attemptSelection.history
@@ -339,7 +385,7 @@ export function analyze(runs, { requireComplete = true } = {}) {
 function manifests(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     ["manifest.json", "manifest.adjudicated.json"].includes(entry.name)
-      ? [JSON.parse(readFileSync(join(dir, entry.name), "utf8"))]
+      ? [readRun(join(dir, entry.name))]
       : entry.isDirectory() &&
           ![
             "context",

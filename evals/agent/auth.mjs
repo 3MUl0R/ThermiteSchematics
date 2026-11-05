@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { captureProcess } from "./process.mjs";
 import {
   readFileSync,
   writeFileSync,
@@ -96,10 +96,10 @@ export function redactSecrets(text, values) {
   for (const value of values) out = out.replaceAll(value, "<credential>");
   return out;
 }
-export function preflightAuth(
+export async function preflightAuth(
   agent,
   env,
-  { binary = agent, prefix = [] } = {},
+  { binary = agent, prefix = [], capture = captureProcess } = {},
 ) {
   const key = env.CODEX_API_KEY ?? env.OPENAI_API_KEY;
   if (
@@ -108,12 +108,16 @@ export function preflightAuth(
     !existsSync(join(env.CODEX_HOME, "auth.json"))
   ) {
     // This is a local credential import, not a model request. Never retain its streams.
-    const login = spawnSync(binary, [...prefix, "login", "--with-api-key"], {
-      env,
-      input: key,
-      encoding: "utf8",
-      timeout: 20000,
-    });
+    const login = await capture(
+      binary,
+      [...prefix, "login", "--with-api-key"],
+      {
+        env,
+        input: key,
+        encoding: "utf8",
+        timeout: 20000,
+      },
+    );
     if (login.status !== 0)
       return {
         ok: false,
@@ -123,7 +127,7 @@ export function preflightAuth(
       };
   }
   const args = agent === "claude" ? ["auth", "status"] : ["login", "status"];
-  const result = spawnSync(binary, [...prefix, ...args], {
+  const result = await capture(binary, [...prefix, ...args], {
     env,
     encoding: "utf8",
     timeout: 20000,

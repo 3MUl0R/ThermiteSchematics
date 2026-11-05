@@ -1,5 +1,7 @@
 import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
   SYMBOL_PROFILES,
   symbolProfile,
@@ -311,13 +313,14 @@ it("catalog aliases and unspecified switch normal states are accepted", () => {
 });
 for (const directory of ["library", "versions/0.2.0"])
   it(`every D role uses installed core ${directory} and catalog aliases`, () => {
-    const dir = new URL(
-      `../../packages/core-library/${directory}/`,
-      import.meta.url,
-    ).pathname;
-    const manifest = JSON.parse(readFileSync(dir + "library.json", "utf8"));
+    const dir = fileURLToPath(
+      new URL(`../../packages/core-library/${directory}/`, import.meta.url),
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(dir, "library.json"), "utf8"),
+    );
     const types = listedFiles(dir, manifest.sources).flatMap(
-      (p) => JSON.parse(readFileSync(dir + p, "utf8")).types,
+      (p) => JSON.parse(readFileSync(join(dir, p), "utf8")).types,
     );
     for (const name of ["D-pump", "D-conveyor"]) {
       const task = fixture(name).task;
@@ -454,3 +457,24 @@ for (const item of [
     if (item === "counts") delete x.counts.localTypes;
     expect(assessDogfood(x).pass).toBe(false);
   });
+
+it("published gap objects exactly match task metadata in both appendices", () => {
+  for (const name of ["D-pump", "D-conveyor"]) {
+    const dir = new URL(`./tasks/${name}/`, import.meta.url);
+    const task = JSON.parse(readFileSync(new URL("task.json", dir), "utf8"));
+    const prompt = readFileSync(new URL("prompt.md", dir), "utf8");
+    const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
+    expect(task.prompt).toBe(prompt);
+    expect(prompt.endsWith(format)).toBe(true);
+    for (const row of task.deliverables.requirements.filter(
+      (r) => r.allowedGap,
+    )) {
+      const line = format
+        .split("\n")
+        .find((line) => line.includes(`**${row.id} (`));
+      expect(line).toContain(JSON.stringify(row.allowedGap));
+    }
+    if (name === "D-conveyor")
+      expect(format).not.toMatch(/LS1|pressure transmitter/);
+  }
+});

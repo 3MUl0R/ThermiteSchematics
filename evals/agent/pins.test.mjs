@@ -146,3 +146,18 @@ it("new pins with unquoted prices remain explicit partial estimates", () => {
     });
   }
 });
+
+it("effort overrides stay within the installed pinned-model catalog", () => {
+  for (const effort of ["low", "medium", "high", "xhigh", "max", "ultra"])
+    expect(launch.agentConfiguration({ agent: "codex", effort }).effort).toBe(
+      effort,
+    );
+  for (const effort of ["none", "minimal", "automatic", "extreme"])
+    expect(() => launch.agentConfiguration({ agent: "codex", effort })).toThrow(
+      /effort/,
+    );
+  for (const effort of ["low", "medium", "high", "xhigh", "max"])
+    expect(() =>
+      launch.agentConfiguration({ agent: "claude", effort }),
+    ).toThrow(/Codex/);
+});

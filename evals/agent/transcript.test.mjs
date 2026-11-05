@@ -63,7 +63,7 @@ for (const [name, kind] of [
       ),
     );
     expect(classifyAgent({ exit: 1 }, n)).toMatchObject({
-      status: "infrastructure-failure",
+      status: kind === "billing" ? "halted-infra" : "infrastructure-failure",
       infrastructureKind: kind,
     });
     expect(n.retryCount).toBe(0);

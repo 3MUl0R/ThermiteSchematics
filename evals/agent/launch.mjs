@@ -30,16 +30,8 @@ export function agentConfiguration({ agent, model, effort }) {
   );
   assert(
     effort === undefined ||
-      [
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra",
-      ].includes(effort),
+      // codex-cli 0.164.0's bundled gpt-6.1-sol advertised efforts.
+      ["low", "medium", "high", "xhigh", "max", "ultra"].includes(effort),
     "Unknown Codex effort",
   );
   return {

@@ -68,9 +68,10 @@ it("domain error text never becomes an infrastructure signal", () => {
     },
   ]);
   expect(classifyAgent({ exit: 1 }, n)).toMatchObject({
-    status: "complete",
-    taskFailure: true,
+    status: "needs-adjudication",
+    taskFailure: false,
   });
+  expect(n.infrastructureError).toBeNull();
 });
 it("completion after a transient row is decided by the checker", () => {
   for (const rows of [
@@ -157,8 +158,9 @@ it("billing never retries and stops dispatching the batch", async () => {
   expect(calls).toBe(1);
   expect(result).toHaveLength(1);
   expect(planAttempt(result)).toMatchObject({
-    kind: "stopped",
-    reason: "billing",
+    kind: "run",
+    attempt: 2,
+    reopenedHalt: true,
   });
 });
 it("billing stops a sibling from making its pending automatic retry", async () => {
@@ -248,4 +250,18 @@ it("HTTP rate-limit status overrides a generic API wrapper while billing takes p
       ]),
     ).infrastructureKind,
   ).toBe("billing");
+});
+
+it("operator interruption takes precedence over an already completed deliverable", () => {
+  const n = normalizeTranscript([{ type: "turn.completed" }]);
+  expect(classifyAgent({ exit: 0, operatorSignal: "SIGINT" }, n)).toMatchObject(
+    { status: "interrupted", taskFailure: false },
+  );
+  expect(planAttempt([{ attempt: 1, status: "interrupted" }])).toMatchObject({
+    kind: "run",
+    attempt: 2,
+  });
+  expect(classifyAgent({ exit: null, notStarted: true }, n).status).toBe(
+    "not-started",
+  );
 });

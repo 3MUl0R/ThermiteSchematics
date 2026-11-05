@@ -13,7 +13,7 @@ Write requirement-matrix.json as an array with each ID exactly once, case-insens
 }
 ```
 
-Satisfied/substituted names must resolve in manifest-listed validated sources and appear on a non-report drawing. Start/stop require the pushbutton profile with NO/NC sense respectively; level requires a level-family profile; indicator requires a lamp profile. Different roles need distinct designations; the same role may be shared by rows such as PLC and coil drive. Explain substitutions. A deferred must row needs its own non-empty designations and a substantive summary, plus either a final diagnostic on its own appropriate device or the listed evidence.libraryGap verified against installed core. A generic limit-switch LS1 can only defer the absent level capability, not satisfy it. A proposed component absent from source may be named only for its specific verified capability gap, with evidence.unmodeled:true; this never claims it is modeled or drawn. Existing unrelated objects cannot stand in for a missing component (PS1 is not a missing pressure transmitter). A deferred may row needs a reason. Draw all modeled non-terminal devices and any designed PSU feed; defer the undesigned feed on the PSU's own diagnostic. Judges assess adequacy, not electrical approval.
+Satisfied/substituted names must resolve in manifest-listed validated sources and appear on a non-report drawing. Start/stop require the pushbutton profile with NO/NC sense respectively; level requires a level-family profile; indicator requires a lamp profile. Different roles need distinct designations; the same role may be shared by rows such as PLC and coil drive. Explain substitutions. A deferred must row needs its own non-empty designations and a substantive summary, plus either a final diagnostic on its own appropriate device or the listed evidence.libraryGap verified against installed core. A proposed component absent from source may be named only for its specific verified capability gap, with evidence.unmodeled:true; this never claims it is modeled or drawn. Existing unrelated objects cannot stand in for a missing component. A deferred may row needs a reason. Draw all modeled non-terminal devices and any designed PSU feed; defer the undesigned feed on the PSU's own diagnostic. Judges assess adequacy, not electrical approval.
 
 - **C-SUPPLY (must)**: “480 VAC 3-phase supply”. Roles/gap: supply.
 - **C-BREAKER (must)**: “main 3-pole breaker”. Roles/gap: breaker.
@@ -23,7 +23,7 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 - **C-PLC (must)**: “a compact PLC”. Roles/gap: plc.
 - **C-TERMINALS (must)**: “a terminal block in the main panel”. Roles/gap: terminal.
 - **C-CABLE (must)**: “via a multi-core field cable”. Roles/gap: cable.
-- **C-START (must)**: “start pushbutton (NO)”. Roles/gap: start-button; normal state: open.
+- **C-START (must)**: “start pushbutton (NO)”. Roles/gap: start-button; normal state: open; gap: `{"library":"core","capability":"start-button"}`.
 - **C-STOP (must)**: “stop pushbutton (NC) as PLC inputs”. Roles/gap: stop-button; gap: `{"library":"core","capability":"digital-input-count","minimum":3}`.
 - **C-COIL (must)**: “the PLC output drives the K1 coil through the OL1 aux contact”. Roles/gap: plc, contactor.
 - **C-SENSOR (must)**: “a PNP 3-wire photo/prox sensor at the conveyor discharge”. Roles/gap: pnp-sensor.

@@ -8,10 +8,12 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { judgePacket } from "./run.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
-const root = resolve(new URL("../../", import.meta.url).pathname);
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const moduleURL = (path) => pathToFileURL(join(root, path)).href;
 it("pins both GI launch commands and rejects ancestor instructions and memory", () => {
   const work = realpathSync(mkdtempSync(join(tmpdir(), "eval-isolation-")));
   try {
@@ -64,7 +66,7 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     mkdirSync(taskDir);
     writeFileSync(
       join(prepared, "thermite.mjs"),
-      `const{runThermite}=await import(${JSON.stringify(join(root, "packages/cli/dist/alpha.js"))});process.exitCode=await runThermite();`,
+      `const{runThermite}=await import(${JSON.stringify(moduleURL("packages/cli/dist/alpha.js"))});process.exitCode=await runThermite();`,
     );
     writeFileSync(
       join(taskDir, "task.json"),
@@ -72,15 +74,15 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     );
     writeFileSync(
       join(taskDir, "setup.mjs"),
-      `import{setup}from${JSON.stringify(join(root, "evals/agent/tasks.mjs"))};export default ctx=>setup("T01",ctx);`,
+      `import{setup}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};export default ctx=>setup("T01",ctx);`,
     );
     writeFileSync(
       join(taskDir, "reference.mjs"),
-      `import{reference}from${JSON.stringify(join(root, "evals/agent/tasks.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=ctx.project+"/reference-count";writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));return reference("T01",ctx);}`,
+      `import{reference}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=ctx.project+"/reference-count";writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));process.exitCode=1;return reference("T01",ctx);}`,
     );
     writeFileSync(
       join(taskDir, "check.mjs"),
-      `import{check}from${JSON.stringify(join(root, "evals/agent/tasks.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(join(root, "evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("renderer unavailable");return check("T01",ctx);}`,
+      `import{check}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(moduleURL("evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("renderer unavailable");return check("T01",ctx);}`,
     );
     const { runOne, recheckRun } = await import("./run.mjs");
     const original = await runOne({
@@ -89,6 +91,11 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       evidence,
     });
     kept = original.workspace;
+    expect(original.exitAfterCompletion).toBe(true);
+    expect(original.warnings).toContainEqual({
+      code: "exit-after-completion",
+      exit: 1,
+    });
     expect(original).toMatchObject({
       model: null,
       effort: null,
@@ -163,7 +170,7 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
       project: work,
       runtime: "/runtime",
       finalMessage:
-        "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox",
+        "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox, xhigh, Codex CLI 0.164.0, Claude Code v2.1.280, 2.1.280 (Claude Code), claude --version printed 2.1.280, CLI version 0.164.0, thermite CLI 0.2.0, thermite CLI version 0.2.0",
       sourceDiff: "/runtime/example",
       task: { rubric: ["Preserve unknown facts"] },
     });
@@ -178,11 +185,15 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
     expect(packet.outputs["requirement-matrix.json"]).toBeTruthy();
     expect(packet.finalMessage).toContain("PLC output O1 and O2.1");
+    expect(packet.finalMessage).not.toContain("0.164.0");
+    expect(packet.finalMessage).toContain("thermite CLI version 0.2.0");
     expect(packet.finalMessage).toContain("sandbox");
     expect(packet.finalMessage).not.toContain("<identity> 4.5");
     expect(packet.finalMessage).not.toContain("-high");
     expect(packet.finalMessage).toContain("voltage 4.5");
     expect(packet.finalMessage).not.toContain("model o1");
+    expect(packet.finalMessage).not.toMatch(/xhigh|0\.164\.0|2\.1\.280/);
+    expect(packet.finalMessage).toContain("thermite CLI 0.2.0");
     expect(packet).not.toHaveProperty("agent");
     expect(packet.rubric).toHaveLength(1);
     expect(packet.outputs["drawings/provider.pdf"]).toBe(

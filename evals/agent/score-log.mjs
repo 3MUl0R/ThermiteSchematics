@@ -297,7 +297,23 @@ export function score({
       ) ||
       /\bgh\s+(?:repo\s+(?:clone|view)|api)\b[^\n]*\b[^/\s]+\/thermiteschematics(?:\.git)?(?=[/\s'";)]|$)/i.test(
         input,
-      );
+      ) ||
+      (/\bgh\s+search\s+code\b/i.test(input) &&
+        !/(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))/.test(input)) ||
+      (/\bgh\s+(?:search\s+code|browse)\b/i.test(input) &&
+        /(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))[^/\s'";]+\/thermiteschematics(?=[/\s'";)]|$)/i.test(
+          input,
+        )) ||
+      (/\bgh\s+api\s+graphql\b/i.test(input) &&
+        (/(?:^|\s)(?:-F|--field)(?:=|\s+)[\w-]+=["']?thermiteschematics(?=[\s"';)]|$)/i.test(
+          input,
+        ) ||
+          /repository\s*\([^)]*\bname\s*:\s*\\?["']thermiteschematics\\?["']/i.test(
+            input,
+          ) ||
+          /(?:\brepo:|\brepository\s*[:=]\s*)[^/\s'";]+\/thermiteschematics(?=[\s'";)]|$)/i.test(
+            input,
+          )));
     if (!readsSource)
       for (const token of input.match(/(?:[a-zA-Z]:[\\/]|\/)[^\s'";&)]+/g) ??
         [])

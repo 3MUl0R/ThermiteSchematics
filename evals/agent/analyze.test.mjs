@@ -253,3 +253,55 @@ it("forced reruns are reported and cannot replace the first completed failure", 
   ).toBe(0);
   expect(r.warnings.join(" ")).toMatch(/first counts.*forced: 2/);
 });
+
+it("selected cohorts cannot mix harnesses, effective checkers, task checkers or eval versions", () => {
+  for (const field of [
+    "harnessHash",
+    "checkerHarnessHash",
+    "checkerHash",
+    "evalVersion",
+    "checkerTaskTreeHash",
+  ]) {
+    const rows = fixture();
+    for (const r of rows) r[field] = "one";
+    for (const r of rows.filter((r) => r.task === "T02")) r[field] = "two";
+    // Per-task trees normally differ, so mix one task's contexts/seeds instead.
+    if (field === "checkerTaskTreeHash")
+      rows.find((r) => r.task === "T02")[field] = "three";
+    const result = analyze(rows);
+    expect(result.accepted).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/Mixed/);
+  }
+});
+it("analysis warnings summarize every reopen, pending/recorded decision and shutdown exit", () => {
+  const rows = fixture(),
+    first = rows[0];
+  const pending = {
+    ...structuredClone(first),
+    attempt: 1,
+    status: "needs-adjudication",
+  };
+  first.attempt = 2;
+  first.reopenedHalt = true;
+  first.reopenInfra = { request: "all", previousAutomaticFailures: 3 };
+  first.exitAfterCompletion = true;
+  first.agentExit = 1;
+  let result = analyze([...rows, pending]);
+  expect(result.accepted).toBe(false);
+  expect(result.warnings.join(" ")).toMatch(/Needs adjudication/);
+  pending.status = "infrastructure-failure";
+  pending.infraAdjudication = {
+    resolution: "infrastructure",
+    operator: "reviewer",
+    reason: "Inspected terminal event",
+  };
+  result = analyze([...rows, pending]);
+  expect(result.accepted).toBe(true);
+  for (const text of [
+    "Infra counter reopened",
+    "Halted key reopened",
+    "Infra adjudication",
+    "Exit after completion",
+  ])
+    expect(result.warnings.join(" ")).toContain(text);
+});
