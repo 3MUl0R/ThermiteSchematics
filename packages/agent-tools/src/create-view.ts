@@ -1,10 +1,6 @@
 import { AGENT_REQUEST_VOCABULARY } from "./request-vocabulary.js";
 import type { ObjectSelector } from "@thermite/query";
-import type {
-  RenderedSchematic,
-  SchematicFlow,
-  SchematicViewRequest,
-} from "@thermite/render";
+import type { SchematicFlow, SchematicViewRequest } from "@thermite/render";
 
 import type { AgentToolRequestBase, JsonValue } from "./common/contracts.js";
 import { detachAndFreezePlainJson } from "./common/plain-json.js";

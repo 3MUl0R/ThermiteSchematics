@@ -18,10 +18,8 @@ import {
   recordValue,
   requiredArray,
   requiredBoolean,
-  requiredRecord,
   requiredString,
   requiredValue,
-  type JsonRecord,
 } from "./common/request-validation.js";
 
 export type SourcePatchOperation =

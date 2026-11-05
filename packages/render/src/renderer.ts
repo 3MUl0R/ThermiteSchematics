@@ -12,6 +12,7 @@ import type {
 import type { ELK as ElkApi } from "elkjs/lib/elk-api.js";
 import type { QueryEngine } from "@thermite/query";
 
+import { deepFreeze } from "./internal.js";
 import { layoutPresentationGraph } from "./layout/elk-adapter.js";
 import { buildPresentationGraph } from "./presentation.js";
 import {
@@ -46,15 +47,6 @@ export interface SchematicRendererDependencies {
   readonly queryEngineFactory?: (ir: Readonly<ElectricalIr>) => QueryEngine;
   readonly layoutEngine?: ElkApi;
   readonly spacingProfile?: "compact" | "dense";
-}
-
-function deepFreeze<Value>(value: Value, seen = new Set<object>()): Value {
-  if (typeof value !== "object" || value === null || seen.has(value)) {
-    return value;
-  }
-  seen.add(value);
-  for (const member of Object.values(value)) deepFreeze(member, seen);
-  return Object.freeze(value);
 }
 
 function detachedFrozen<Value>(value: Value): Value {

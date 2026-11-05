@@ -40,7 +40,6 @@ import {
   validateTraceRootRules,
 } from "./intent-rules.js";
 import {
-  CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   projectDeviceTypeSymbolMappings,
   type DeviceTypeSymbolMapping,
 } from "./symbols/mappings.js";
