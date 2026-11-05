@@ -393,6 +393,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           symbolCatalogVersion: "ais-symbols/0.3",
           layoutConfigVersion: "elk-layered/0.4+elkjs-0.12.0",
           agentToolsRuntimeExports: [
+            "AGENT_REQUEST_VOCABULARY",
             "AGENT_TOOLS_VERSION",
             "createAgentTools",
             "serializeAgentToolReport",

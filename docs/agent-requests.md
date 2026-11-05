@@ -165,6 +165,10 @@ Generate UUIDs for new objects with `bun -e 'console.log(crypto.randomUUID())'`.
 
 ### Query
 
+Unlike `resolve.target` and `inspect.selector`, operation and selector are nested
+under `query`. The flat form is not accepted (A001 at `/query`); keep the envelope
+shown below. `thermite agent query --help` prints the complete executable shape.
+
 Save as `query.request.json`:
 
 ```json
@@ -306,10 +310,40 @@ review pointers and UUIDs before rebuilding the request.
 
 ## Request and query errors
 
-The E/W/I catalog behind `thermite guide diagnostics` does not catalog A/Q
-codes. Agent A001 describes request shape/usage, A002 patch-operation failure,
+`thermite guide diagnostics <code>` explains every CLI and agent code (case
+insensitive). A001 describes request shape/usage, A002 patch-operation failure,
 A003 a disallowed target, A004 a stale byte guard and A005 a writer reservation.
 Read the exact error's reason and locations; never infer an electrical repair.
-Query Q errors describe selector resolution, object kind and terminal lookup;
-resolve the actual identity and terminal keys before retrying. Renderer R codes
-and CLI T001 usage/output failures are covered in [views](views.md).
+
+During apply, A004 can also name a changed project manifest, lock or library
+file that was not a request target; its `expectedIntegrity` comes from the loaded
+project and can be `"missing"`. Reload the project and retry with refreshed
+guards, pointers and UUID tests.
+
+- Q001: an agent query/lookup found no object with the selected UID or
+  designation. The CLI also uses it for a `diagnostics --device/--location` scope
+  with no matches, or an invalid/unreadable `continuity` request. Read the message for the
+  failed lookup or request requirement.
+- Q002: the object exists but has the wrong kind. Neighbors, trace and terminal
+  lookup require a device; cable lookup requires a cable. A `conductors` view
+  uses cable lookup, so a non-cable root also returns Q002. Other rooted view
+  mode/mapping mismatches use R001; this existing distinction is preserved.
+- Q003: a display terminal reference cannot be parsed into designation and key.
+  Use a `parts` or `id` selector to state them explicitly.
+- Q004: the device exists but does not declare that terminal key. Read its
+  bounded declared-key list and full-list lookup, if supplied.
+
+Renderer R codes and CLI T001 exceptions are covered in [views](views.md).
+
+## Offline request vocabulary
+
+Every `thermite agent <tool> --help` includes a complete request for a freshly
+initialized default starter and a minimal request when optional fields differ.
+Copy a JSON block unchanged into a request file and run it from that starter.
+The patch example is a guarded, test-only dry run; on an existing project obtain
+fresh source metadata and rebuild the UUID test and integrity guard.
+
+Help prints accepted literals as JSON, keyed by field path; a suffix names the
+operation or request version. Selector shapes are above and in complete help
+requests. Source object shapes are available through `thermite guide schema`
+and [modeling](data-model.md).

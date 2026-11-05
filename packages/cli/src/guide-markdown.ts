@@ -2,12 +2,8 @@ import { posix } from "node:path";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import type { Nodes, Definition } from "mdast";
 
-export interface GuideTopic {
-  id: string;
-  file: string;
-  title: string;
-  readBefore: string[];
-}
+import type { GuideTopic } from "./alpha-guide.js";
+
 interface Edit {
   start: number;
   end: number;

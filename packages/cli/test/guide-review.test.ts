@@ -48,11 +48,6 @@ async function provenanceFixture(installed: boolean) {
     join(cli, "node_modules/@thermite/schema"),
     "junction",
   );
-  await symlink(
-    join(repositoryRoot, "node_modules/mdast-util-from-markdown"),
-    join(cli, "node_modules/mdast-util-from-markdown"),
-    "junction",
-  );
   await writeFile(join(cli, "package.json"), '{"type":"module"}');
   await writeFile(
     join(cli, "assets/guide/source.json"),
@@ -66,11 +61,14 @@ async function provenanceFixture(installed: boolean) {
   return { root, checkout, cli, probe };
 }
 it.each([
+  JSON.stringify({ commit: "d".repeat(40) }),
+  JSON.stringify({ format: "wrong", commit: "d".repeat(40) }),
   '{"format":"thermite-runtime-release/0.1","commit":"' + "d".repeat(40) + '"}',
   "not json",
 ])("ignores a stray source-parent manifest: %s", async (manifest) => {
   const f = await provenanceFixture(false);
   await writeFile(join(f.root, "runtime-manifest.json"), manifest);
+  await writeFile(join(f.checkout, "runtime-manifest.json"), manifest);
   const result = await exec([f.probe], f.checkout);
   expect(result.code, result.stderr).toBe(0);
   expect(result.stdout.trim()).toBe("a".repeat(40));
@@ -81,12 +79,19 @@ it("requires the installed runtime manifest format", async () => {
     join(f.checkout, "runtime-manifest.json"),
     JSON.stringify({
       format: "thermite-runtime-release/0.1",
-      commit: "b".repeat(40),
+      commit: "a".repeat(40),
     }),
   );
   const valid = await exec([f.probe], f.checkout);
   expect(valid.code, valid.stderr).toBe(0);
-  expect(valid.stdout.trim()).toBe("b".repeat(40));
+  expect(valid.stdout.trim()).toBe("a".repeat(40));
+  await writeFile(
+    join(f.cli, "assets/guide/source.json"),
+    JSON.stringify({ commit: "b".repeat(40) }),
+  );
+  const mismatch = await exec([f.probe], f.checkout);
+  expect(mismatch.code).toBe(1);
+  expect(mismatch.stderr).toContain("commit mismatch");
   await writeFile(
     join(f.checkout, "runtime-manifest.json"),
     JSON.stringify({ format: "wrong", commit: "b".repeat(40) }),
@@ -95,21 +100,18 @@ it("requires the installed runtime manifest format", async () => {
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("runtime");
 });
-it.each([
-  ["R001", "views"],
-  ["R006", "views"],
-  ["Q001", "agent-requests"],
-  ["A004", "agent-requests"],
-  ["T001", "views"],
-])("routes %s to %s without claiming it is invalid", async (code, topic) => {
-  const result = await thermite(
-    ["guide", "diagnostics", code!],
-    repositoryRoot,
-  );
-  expect(result.code).toBe(2);
-  expect(result.stderr).toContain("E/W/I");
-  expect(result.stderr).toContain(`thermite guide ${topic}`);
-});
+it.each(["R001", "R006", "Q001", "A004", "T001"])(
+  "serves %s offline",
+  async (code) => {
+    const result = await thermite(
+      ["guide", "diagnostics", code!],
+      repositoryRoot,
+    );
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(code);
+    expect(result.stderr).toBe("");
+  },
+);
 it("rewrites titled, nested and reference links while preserving code", () => {
   const topic = {
     id: "modeling",

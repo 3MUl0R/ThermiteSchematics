@@ -3,6 +3,10 @@ import {
   consumerExecution,
   currentTarget,
 } from "./platform.mjs";
+import {
+  assertGuideLinksResolved,
+  rewriteGuideLinks,
+} from "../../packages/cli/src/guide-markdown.ts";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -16,8 +20,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import {
   extractSafeZipArchive,
@@ -38,6 +42,20 @@ export async function verifyRuntimeArchive(
 ) {
   assertRuntimePlatform();
   const execution = consumerExecution();
+  // Consumer CLI processes cannot consult this checkout or the isolated source
+  // build used for parity. The verifier itself may read build-only references.
+  if (process.platform === "darwin") {
+    const denied = [
+      fileURLToPath(new URL("../../", import.meta.url)),
+      ...(sourceCli ? [dirname(sourceCli)] : []),
+    ];
+    execution.prefix[1] += denied
+      .map(
+        (path) =>
+          `(deny file-read* (subpath ${JSON.stringify(resolve(path))}))`,
+      )
+      .join("");
+  }
   const bytes = await readFile(archivePath);
   const digest = sha256(bytes);
   assert.equal(
@@ -47,6 +65,19 @@ export async function verifyRuntimeArchive(
   );
   const entries = await readSafeZipArchive(bytes);
   const manifest = verifyEntries(entries);
+  const buildCommit = JSON.parse(
+    entries
+      .find(
+        (entry) =>
+          entry.path === "node_modules/@thermite/cli/assets/guide/source.json",
+      )
+      .bytes.toString("utf8"),
+  ).commit;
+  assert.equal(
+    buildCommit,
+    manifest.commit,
+    "Packaging must bind guide build and runtime manifest to the same commit",
+  );
   const metrics = entries.filter((entry) =>
     /(?:^|\/)text-metrics-data\./u.test(entry.path),
   );
@@ -90,15 +121,13 @@ export async function verifyRuntimeArchive(
     await extractSafeZipArchive(bytes, extracted);
     runtime = join(temporary, "relocated runtime with spaces");
     await rename(extracted, runtime);
-    // Deliberately disagree with runtime-manifest.json. Equal commits cannot
-    // prove which provenance source the installed guide actually consulted.
+    // A mismatched build commit must be refused, then the original bytes restored.
     const guideProvenance = join(
       runtime,
       "node_modules/@thermite/cli/assets/guide/source.json",
     );
     const wrongCommit =
       manifest.commit === "a".repeat(40) ? "b".repeat(40) : "a".repeat(40);
-    await writeFile(guideProvenance, json({ commit: wrongCommit }));
     const before = await fileInventory(runtime);
     const tools = join(temporary, "restricted-bin");
     const home = join(temporary, "home");
@@ -138,12 +167,12 @@ export async function verifyRuntimeArchive(
       LANG: "en_US.UTF-8",
     };
     const cli = join(runtime, "thermite.mjs");
-    const invoke = (args, input, expected = 0) => {
+    const invoke = (args, input, expected = 0, cwd = temporary) => {
       const result = spawnSync(
         execution.command,
         [...execution.prefix, cli, ...args],
         {
-          cwd: temporary,
+          cwd,
           env,
           input,
           encoding: "utf8",
@@ -159,6 +188,21 @@ export async function verifyRuntimeArchive(
       );
       return result;
     };
+    const originalProvenance = await readFile(guideProvenance);
+    await writeFile(guideProvenance, json({ commit: wrongCommit }));
+    for (const args of [
+      ["guide", "modeling"],
+      ["guide", "--json"],
+    ]) {
+      const refusal = invoke(args, undefined, 2);
+      assert.equal(refusal.stdout, "");
+      assert.match(refusal.stderr, /commit mismatch/);
+    }
+    await writeFile(guideProvenance, originalProvenance);
+    assert.deepEqual(await fileInventory(runtime), before);
+    check(
+      "mismatched guide/build commit refused; original provenance restored",
+    );
     // Read-only files prove the CLI does not update its installation or libraries.
     for (const file of await listFiles(runtime))
       await chmod(join(runtime, file), 0o444);
@@ -176,7 +220,7 @@ export async function verifyRuntimeArchive(
     const topicIndex = JSON.parse(invoke(["guide", "--json"]).stdout);
     assert.deepEqual(
       topicIndex.map((topic) => topic.id),
-      [...topics.map((topic) => topic.id), "symbols", "diagnostics"],
+      [...topics.map((topic) => topic.id), "symbols", "diagnostics", "schema"],
     );
     const indexText = invoke(["guide"]).stdout;
     const guidePath = invoke(["guide", "--path"]).stdout.trim();
@@ -184,11 +228,20 @@ export async function verifyRuntimeArchive(
       guidePath.replace(/[\\/]$/, ""),
       join(runtime, guidePrefix).replace(/[\\/]$/, ""),
     );
-    const { assertGuideLinksResolved } = await import(
-      pathToFileURL(
-        join(runtime, "node_modules/@thermite/cli/dist/guide-markdown.js"),
-      ).href
+    assert(!entries.some((entry) => /[/\\]guide-markdown\./.test(entry.path)));
+    assert(
+      !entries.some((entry) =>
+        entry.path.endsWith("/assets/guide-source.json"),
+      ),
     );
+    const originals = sourceCli
+      ? JSON.parse(
+          await readFile(
+            join(dirname(sourceCli), "packages/cli/assets/guide-source.json"),
+            "utf8",
+          ),
+        )
+      : undefined;
     for (const topic of topics) {
       assert(
         entries.some((entry) => entry.path === `${guidePrefix}${topic.id}.md`),
@@ -196,6 +249,17 @@ export async function verifyRuntimeArchive(
       assert(indexText.includes(topic.id) && indexText.includes(topic.title));
       const output = invoke(["guide", topic.id]);
       assert.equal(output.stderr, "");
+      if (originals)
+        assert.equal(
+          output.stdout,
+          rewriteGuideLinks(
+            originals[topic.id],
+            topic,
+            topics,
+            manifest.commit,
+          ),
+          "Prebuilt output must equal G3 runtime rewriting",
+        );
       assert(output.stdout.startsWith("#"), `Empty topic: ${topic.id}`);
       assertGuideLinksResolved(output.stdout);
       const shipped = await readFile(join(guidePath, `${topic.id}.md`), "utf8");
@@ -230,10 +294,36 @@ export async function verifyRuntimeArchive(
       ).SYMBOL_PROFILES,
     );
     assert(invoke(["guide", "diagnostics", "W903"]).stdout.includes("W903"));
+    assert(invoke(["guide", "diagnostics", "R006"]).stdout.includes("R006"));
+    const schemaList = JSON.parse(invoke(["guide", "schema", "--json"]).stdout);
+    const schemaEntries = entries.filter((entry) =>
+      /^node_modules\/@thermite\/schema\/schemas\/[^/]+\.schema\.json$/.test(
+        entry.path,
+      ),
+    );
+    assert.equal(schemaList.length, schemaEntries.length);
+    for (const schema of schemaList) {
+      const entry = schemaEntries.find((entry) =>
+        entry.path.endsWith(`/${schema.name}.schema.json`),
+      );
+      assert(entry);
+      assert.equal(
+        invoke(["guide", "schema", schema.name]).stdout,
+        entry.bytes.toString("utf8"),
+      );
+      assert.equal(schema.$id, JSON.parse(entry.bytes.toString("utf8")).$id);
+      assert.equal(schema.path, join(runtime, entry.path));
+    }
+    assert(
+      !manifest.dependencies.some(
+        (dependency) => dependency.name === "mdast-util-from-markdown",
+      ),
+      "Markdown parsing must remain build-only",
+    );
     invoke(["guide", "unknown-topic"], undefined, 2);
     invoke(["guide", "diagnostics", "UNKNOWN"], undefined, 2);
     check(
-      "all offline guide topics, catalogs, resolved --path copies and manifest-pinned links despite contrasting build provenance; restricted PATH and network guard",
+      "all offline guide topics, catalogs, resolved --path copies and manifest-pinned links; exact offline schemas and full diagnostics; no runtime parser assets; restricted PATH, repository reads and network",
     );
     const core = await import(
       pathToFileURL(
@@ -287,6 +377,29 @@ export async function verifyRuntimeArchive(
     invoke(["init", project, "--name", "Package acceptance"]);
     invoke(["init", project], undefined, 2);
     invoke(["validate", project]);
+    for (const tool of ["inspect", "apply-source-patch"]) {
+      const help = invoke(
+        ["agent", tool, "--help"],
+        undefined,
+        0,
+        project,
+      ).stdout;
+      const requests = [...help.matchAll(/```json\n([\s\S]*?)\n```/g)];
+      assert(requests.length > 0);
+      for (const [, request] of requests) {
+        const result = invoke(
+          ["agent", tool, "--input", "-"],
+          request,
+          0,
+          project,
+        );
+        assert.equal(JSON.parse(result.stdout).tool, tool);
+        assert.equal(JSON.parse(result.stderr).error, null);
+      }
+    }
+    check(
+      "printed help requests execute unchanged offline in a starter; repository reads denied on macOS",
+    );
     assert.match(
       await readFile(join(project, "AGENTS.md"), "utf8"),
       /runtime package/,
@@ -334,10 +447,13 @@ export async function verifyRuntimeArchive(
       );
       if (sourceCli) {
         const sourceOutput = join(project, `source.${extension}`);
+        // The reference build needs source access; consumer invocations above
+        // keep the stricter repository-read denial throughout acceptance.
+        const sourceExecution = consumerExecution();
         execFileSync(
-          execution.command,
+          sourceExecution.command,
           [
-            ...execution.prefix,
+            ...sourceExecution.prefix,
             sourceCli,
             "view",
             "PS1",

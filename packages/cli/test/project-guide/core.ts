@@ -2038,8 +2038,8 @@ const module: FactModule = {
       "Contribution policy; no runtime behavior.",
     ],
     [
-      "`thermite guide` lists topics.",
-      "The guide.test.ts index test executes this command; G1 also executes named topic pointers.",
+      "`thermite guide` lists topics, schemas and diagnostic codes.",
+      "g4-review.test.ts checks the index pointer; guide.test.ts executes the index and every topic.",
     ],
     [
       "Electrical JSON is authoritative.",

@@ -1,4 +1,5 @@
 export { AGENT_TOOLS_VERSION } from "./version.js";
+export { AGENT_REQUEST_VOCABULARY } from "./request-vocabulary.js";
 export {
   serializeAgentToolReport,
   serializeAgentToolResult,

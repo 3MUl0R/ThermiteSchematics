@@ -1,11 +1,19 @@
 import { readFile } from "node:fs/promises";
 
 import { fileURLToPath } from "node:url";
-import { DIAGNOSTIC_CATALOG, SYMBOL_PROFILES } from "@thermite/schema";
+import {
+  DIAGNOSTIC_CATALOG,
+  SYMBOL_PROFILES,
+  loadCanonicalSchemas,
+} from "@thermite/schema";
 import type { Command } from "commander";
 
-import type { GuideTopic } from "./guide-markdown.js";
-export type { GuideTopic } from "./guide-markdown.js";
+export interface GuideTopic {
+  id: string;
+  file: string;
+  title: string;
+  readBefore: string[];
+}
 
 export const guideDirectory = fileURLToPath(
   new URL("../assets/guide", import.meta.url),
@@ -18,8 +26,16 @@ export async function guideTopics(): Promise<GuideTopic[]> {
     ),
   );
 }
-/** Runtime provenance wins over build metadata; guide never shells out or fetches. */
+/** Installed manifests must match the prebuilt guide; source checkouts ignore parent manifests. */
 export async function guideCommit(): Promise<string> {
+  const source = JSON.parse(
+    await readFile(
+      new URL("../assets/guide/source.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  if (!/^[a-f0-9]{40}$/.test(source.commit))
+    throw new Error("Invalid guide build provenance.");
   const modulePath = fileURLToPath(import.meta.url).replaceAll("\\", "/");
   if (modulePath.endsWith("/node_modules/@thermite/cli/dist/alpha-guide.js")) {
     const manifest = JSON.parse(
@@ -33,31 +49,19 @@ export async function guideCommit(): Promise<string> {
       !/^[a-f0-9]{40}$/.test(manifest.commit)
     )
       throw new Error("Invalid runtime guide provenance.");
-    return manifest.commit;
+    if (manifest.commit !== source.commit)
+      throw new Error(
+        "Runtime guide commit mismatch; reinstall a verified runtime package.",
+      );
   }
-  const source = JSON.parse(
-    await readFile(
-      new URL("../assets/guide/source.json", import.meta.url),
-      "utf8",
-    ),
-  );
-  if (!/^[a-f0-9]{40}$/.test(source.commit))
-    throw new Error("Invalid guide build provenance.");
   return source.commit;
 }
-async function topicMarkdown(
-  topic: GuideTopic,
-  topics: GuideTopic[],
-  commit: string,
-) {
-  const sources = JSON.parse(
-    await readFile(
-      new URL("../assets/guide-source.json", import.meta.url),
-      "utf8",
-    ),
+// pack builds these bytes with the commit enforced by guideCommit().
+async function topicMarkdown(topic: GuideTopic) {
+  return readFile(
+    new URL(`../assets/guide/${topic.id}.md`, import.meta.url),
+    "utf8",
   );
-  const { rewriteGuideLinks } = await import("./guide-markdown.js");
-  return rewriteGuideLinks(sources[topic.id], topic, topics, commit);
 }
 const symbolText = () =>
   [
@@ -77,13 +81,23 @@ const diagnosticText = (code?: string) =>
         `${key} (${entry.severity}; ${entry.producer}) — ${entry.meaning}\n`,
     )
     .join("");
-/** Routing only; these codes are intentionally outside the E/W/I catalog. */
-export const diagnosticTopics: Readonly<Record<string, string>> = {
-  R: "views",
-  Q: "agent-requests",
-  A: "agent-requests",
-  T: "views",
-};
+async function schemaEntries() {
+  const directory = new URL(
+    "../schemas/",
+    import.meta.resolve("@thermite/schema"),
+  );
+  return (await loadCanonicalSchemas(fileURLToPath(directory))).map(
+    ({ fileName, id, schema }) => ({
+      name: fileName.replace(/\.schema\.json$/, ""),
+      $id: id,
+      $schema: (schema as { $schema: string }).$schema,
+      path: fileURLToPath(new URL(fileName, directory)),
+    }),
+  );
+}
+const schemaText = (schemas: Awaited<ReturnType<typeof schemaEntries>>) =>
+  schemas.map((s) => `${s.name} — ${s.$id}\n  ${s.path}\n`).join("") +
+  "Use guide schema <name> for the exact schema bytes, or --json for identifiers and paths.\nValidate project source offline with thermite validate <project>.\n";
 const tokenEstimate = (text: string) =>
   Math.ceil(Buffer.byteLength(text, "utf8") / 4);
 
@@ -108,6 +122,7 @@ export function registerGuideCommand(command: Command): void {
         if (flags.path) {
           if (id || flags.json)
             throw new Error("Use guide --path without a topic or --json.");
+          await guideCommit();
           process.stdout.write(`${guideDirectory}\n`);
           return;
         }
@@ -116,26 +131,23 @@ export function registerGuideCommand(command: Command): void {
           const topic = topics.find((t) => t.id === id);
           if (!topic)
             throw new Error(
-              `Unknown guide topic ${JSON.stringify(id)}. Valid ids: ${topics.map((t) => t.id).join(", ")}. Also: symbols, diagnostics.`,
+              `Unknown guide topic ${JSON.stringify(id)}. Valid ids: ${topics.map((t) => t.id).join(", ")}. Also: symbols, diagnostics, schema.`,
             );
           if (flags.json)
             throw new Error(
               "Topic output is Markdown; --json is for the index and catalogs.",
             );
-          process.stdout.write(
-            await topicMarkdown(topic, topics, await guideCommit()),
-          );
+          await guideCommit();
+          process.stdout.write(await topicMarkdown(topic));
           return;
         }
-        const commit = await guideCommit();
+        await guideCommit();
         const index = await Promise.all(
           topics.map(async (topic) => ({
             id: topic.id,
             title: topic.title,
             readBefore: topic.readBefore,
-            approximateTokens: tokenEstimate(
-              await topicMarkdown(topic, topics, commit),
-            ),
+            approximateTokens: tokenEstimate(await topicMarkdown(topic)),
           })),
         );
         index.push({
@@ -147,9 +159,15 @@ export function registerGuideCommand(command: Command): void {
         });
         index.push({
           id: "diagnostics",
-          title: "Compiler and validation diagnostics (E/W/I codes)",
-          readBefore: ["before interpreting an E/W/I diagnostic"],
+          title: "All CLI and agent diagnostic codes (E/W/I/R/Q/A/T/INIT)",
+          readBefore: ["before interpreting a diagnostic"],
           approximateTokens: tokenEstimate(diagnosticText()),
+        });
+        index.push({
+          id: "schema",
+          title: "Shipped JSON Schemas, identifiers and installed paths",
+          readBefore: ["before validating source shapes offline"],
+          approximateTokens: tokenEstimate(schemaText(await schemaEntries())),
         });
         if (flags.json)
           printJson(
@@ -172,7 +190,7 @@ export function registerGuideCommand(command: Command): void {
   guide
     .command("symbols")
     .description(
-      "list SYMBOL_PROFILES: aliases, function shapes and per-family support",
+      "list symbol profile aliases, function shapes and per-family support",
     )
     .option("--json", "print the catalog as JSON")
     .action((_flags, cmd: Command) => {
@@ -181,20 +199,13 @@ export function registerGuideCommand(command: Command): void {
     });
   guide
     .command("diagnostics [code]")
-    .description(
-      "list compiler and validation diagnostics (E/W/I codes), or explain one",
-    )
+    .description("list all CLI and agent diagnostic codes, or explain one")
     .option("--json", "print the catalog or entry as JSON")
     .action((code: string | undefined, _flags, cmd: Command) => {
       code = code?.toUpperCase();
       if (code !== undefined && !Object.hasOwn(DIAGNOSTIC_CATALOG, code)) {
-        const topic = diagnosticTopics[code[0] ?? ""];
-        if (topic && /^[RAQT]\d{3}$/.test(code))
-          throw new Error(
-            `The diagnostic catalog covers E/W/I codes only. ${code} is outside that catalog; read thermite guide ${topic}.`,
-          );
         throw new Error(
-          `Unknown E/W/I diagnostic code ${JSON.stringify(code)}. Valid E/W/I codes: ${Object.keys(DIAGNOSTIC_CATALOG).join(", ")}. For R/T codes read thermite guide views; for A/Q codes read thermite guide agent-requests.`,
+          `Unknown diagnostic code ${JSON.stringify(code)}. Valid codes: ${Object.keys(DIAGNOSTIC_CATALOG).join(", ")}.`,
         );
       }
       const entries = Object.entries(DIAGNOSTIC_CATALOG).filter(
@@ -202,5 +213,28 @@ export function registerGuideCommand(command: Command): void {
       );
       if (cmd.optsWithGlobals().json) printJson(Object.fromEntries(entries));
       else process.stdout.write(diagnosticText(code));
+    });
+  guide
+    .command("schema [name]")
+    .description(
+      "list shipped JSON Schemas or serve one byte-for-byte; identifiers stay unchanged",
+    )
+    .option("--json", "list schema names, $id, $schema and local paths as JSON")
+    .action(async (name: string | undefined, _flags, cmd: Command) => {
+      const schemas = await schemaEntries();
+      const selected = schemas.filter(
+        (s) =>
+          name === undefined ||
+          s.name === name ||
+          `${s.name}.schema.json` === name ||
+          s.$id === name,
+      );
+      if (!selected.length)
+        throw new Error(
+          `Unknown schema ${JSON.stringify(name)}. Valid names: ${schemas.map((s) => s.name).join(", ")}.`,
+        );
+      if (cmd.optsWithGlobals().json) printJson(selected);
+      else if (name) process.stdout.write(await readFile(selected[0]!.path));
+      else process.stdout.write(schemaText(selected));
     });
 }

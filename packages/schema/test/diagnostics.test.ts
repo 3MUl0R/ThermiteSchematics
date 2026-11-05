@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import {
   DIAGNOSTIC_CATALOG,
   DIAGNOSTIC_CODES,
+  DIAGNOSTIC_CATALOG_CODES,
+  isDiagnosticCode,
+  isDiagnosticCatalogCode,
 } from "../src/diagnostic-catalog.js";
 import { normalizeDiagnostics, type Diagnostic } from "../src/diagnostics.js";
 import {
@@ -68,7 +71,7 @@ async function findExpectedSidecars(root: string): Promise<string[]> {
 
 describe("diagnostic catalog", () => {
   it("contains the original diagnostic codes and alpha documentation extensions", () => {
-    expect(DIAGNOSTIC_CODES).toEqual([
+    expect(DIAGNOSTIC_CATALOG_CODES).toEqual([
       "E001",
       "E002",
       "E003",
@@ -127,14 +130,56 @@ describe("diagnostic catalog", () => {
       "W906",
       "W111",
       "I005",
+      "I001",
+      "I002",
+      "I003",
+      "R001",
+      "R002",
+      "R003",
+      "R004",
+      "R005",
+      "R006",
+      "Q001",
+      "Q002",
+      "Q003",
+      "Q004",
+      "A001",
+      "A002",
+      "A003",
+      "A004",
+      "A005",
+      "T001",
+      "INIT000",
+      "INIT001",
+      "INIT002",
+      "INIT003",
+      "INIT004",
+      "INIT005",
+      "INIT006",
+      "INIT007",
+      "INIT008",
+      "INIT009",
+      "INIT010",
+      "INIT011",
+      "INIT012",
     ]);
     expect(DIAGNOSTIC_CATALOG.W901.severity).toBe("warning");
     expect(DIAGNOSTIC_CATALOG.W902.severity).toBe("warning");
     expect(
-      DIAGNOSTIC_CODES.filter(
+      DIAGNOSTIC_CATALOG_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CODES.length - 12);
+    ).toHaveLength(DIAGNOSTIC_CATALOG_CODES.length - 15);
+  });
+
+  it("keeps compiler diagnostics separate from the full lookup catalog", () => {
+    expect(DIAGNOSTIC_CODES.every((code) => /^[EWI]\d{3}$/.test(code))).toBe(
+      true,
+    );
+    for (const code of ["R001", "Q001", "A004", "T001", "INIT012"]) {
+      expect(isDiagnosticCode(code)).toBe(false);
+      expect(isDiagnosticCatalogCode(code)).toBe(true);
+    }
   });
 
   it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, W801 and packet W906", async () => {
@@ -160,6 +205,8 @@ describe("diagnostic catalog", () => {
     expect([...coveredCodes].sort()).toEqual(
       DIAGNOSTIC_CODES.filter(
         (code) =>
+          /^[EWI]/.test(code) &&
+          !["I001", "I002", "I003"].includes(code) &&
           code !== "E001" &&
           code !== "E032" &&
           code !== "W801" &&

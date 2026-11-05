@@ -13,7 +13,7 @@
     "file": "docs/data-model.md",
     "title": "Objects, I/O, cables and potentials",
     "readBefore": [
-      "before adding devices, wires, cables, io or potentials"
+      "before adding devices, wires, cables, io or potentials; use guide schema for exact shapes"
     ]
   },
   {

@@ -141,10 +141,12 @@ describe("M7 Task 9 final inventories", () => {
       "@thermite/schema": "0.2.0",
       commander: "^15.0.0",
       micromatch: "^4.0.8",
-      "mdast-util-from-markdown": "^2.1.0",
       fontkit: "^2.0.4",
       pdfkit: "^0.17.2",
       "svg-to-pdfkit": "^0.1.8",
+    });
+    expect(JSON.parse(cliPackageText).devDependencies).toEqual({
+      "mdast-util-from-markdown": "^2.1.0",
     });
     expect(compilerPackage.dependencies).toEqual({
       "@thermite/core-library": "0.2.0",

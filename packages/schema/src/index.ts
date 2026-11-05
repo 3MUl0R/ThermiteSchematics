@@ -19,6 +19,9 @@ export {
 export {
   DIAGNOSTIC_CATALOG,
   DIAGNOSTIC_CODES,
+  DIAGNOSTIC_CATALOG_CODES,
+  isDiagnosticCatalogCode,
+  type DiagnosticCatalogCode,
   isDiagnosticCode,
   type DiagnosticCatalogEntry,
   type DiagnosticCode,
