@@ -117,8 +117,8 @@ const SEPARATELY_EXECUTED_SECTIONS = new Map([
     "agent-schema-repair.test.ts",
   ],
 ]);
-async function referenceRequestGuide(): Promise<string> {
-  const sections = (await readFile(requestGuide, "utf8")).split(/(?=^### )/mu);
+function excludeSeparatelyExecutedSections(guide: string): string {
+  const sections = guide.split(/(?=^#{1,6} )/mu);
   for (const heading of SEPARATELY_EXECUTED_SECTIONS.keys())
     expect(
       sections.filter((section) => section.split("\n")[0] === heading),
@@ -129,6 +129,21 @@ async function referenceRequestGuide(): Promise<string> {
     )
     .join("");
 }
+async function referenceRequestGuide(): Promise<string> {
+  return excludeSeparatelyExecutedSections(
+    await readFile(requestGuide, "utf8"),
+  );
+}
+
+it.each([1, 2, 3, 4, 5, 6])(
+  "excluded examples stop at a level-%s heading",
+  (level) => {
+    const guide = `# Guide\n\n### Repair schema errors through the guarded loop\nEXCLUDED\n\n${"#".repeat(level)} Following section\nKEEP\n`;
+    const filtered = excludeSeparatelyExecutedSections(guide);
+    expect(filtered).not.toContain("EXCLUDED");
+    expect(filtered).toContain(`${"#".repeat(level)} Following section\nKEEP`);
+  },
+);
 
 afterEach(async () => {
   await Promise.all(

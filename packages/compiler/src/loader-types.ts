@@ -125,5 +125,7 @@ export type SourcePatchProject = Omit<
 export type SourcePatchLoadResult =
   | Extract<LoadResult, { ok: true }>
   | (Extract<LoadResult, { ok: false }> & {
+      /** The dedicated loader evaluated admission, even if no snapshot was safe. */
+      sourcePatchCapable?: true;
       sourcePatchProject?: SourcePatchProject;
     });

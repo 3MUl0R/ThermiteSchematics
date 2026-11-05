@@ -1463,10 +1463,11 @@ export async function loadProject(
 }
 
 /** Dedicated loader for guarded patch planning and precommit filesystem snapshots. */
-export function loadProjectForSourcePatch(
+export async function loadProjectForSourcePatch(
   inputPath?: string,
   cwd = process.cwd(),
   options: LoadProjectOptions = {},
 ): Promise<SourcePatchLoadResult> {
-  return loadProjectInternal(inputPath, cwd, options, true);
+  const result = await loadProjectInternal(inputPath, cwd, options, true);
+  return result.ok ? result : { ...result, sourcePatchCapable: true };
 }

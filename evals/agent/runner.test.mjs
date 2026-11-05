@@ -61,7 +61,8 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     const prepared = join(work, "prepared"),
       taskDir = join(work, "task"),
       evidence = join(work, "evidence"),
-      ready = join(work, "ready");
+      ready = join(work, "ready"),
+      referenceCount = join(work, "reference-count");
     mkdirSync(prepared);
     mkdirSync(taskDir);
     writeFileSync(
@@ -70,19 +71,21 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     );
     writeFileSync(
       join(taskDir, "task.json"),
-      readFileSync(join(root, "evals/agent/tasks/T01/task.json")),
-    );
-    writeFileSync(
-      join(taskDir, "setup.mjs"),
-      `import{setup}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};export default ctx=>setup("T01",ctx);`,
+      JSON.stringify({
+        id: "pipeline",
+        template: "starter",
+        prompt: 'Change PS1 description to "Pipeline checked".',
+        expectedWarnings: [],
+        reference: "reference.mjs",
+      }),
     );
     writeFileSync(
       join(taskDir, "reference.mjs"),
-      `import{reference}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=ctx.project+"/reference-count";writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));process.exitCode=1;return reference("T01",ctx);}`,
+      `import{replaceObject}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=${JSON.stringify(referenceCount)};writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));replaceObject(ctx,"PS1","description","Pipeline checked");process.exitCode=1;return "Reference complete";}`,
     );
     writeFileSync(
       join(taskDir, "check.mjs"),
-      `import{check}from${JSON.stringify(moduleURL("evals/agent/tasks.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(moduleURL("evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("renderer unavailable");return check("T01",ctx);}`,
+      `import{locate,ok}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(moduleURL("evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("checker unavailable");ok(ctx,"validate",".");return {pass:locate(ctx.project,"PS1").object.description==="Pipeline checked"};}`,
     );
     const { runOne, recheckRun } = await import("./run.mjs");
     const original = await runOne({
@@ -102,16 +105,14 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       modelPin: null,
       modelOverrides: { model: null, effort: null },
     });
-    expect(original.runKey).toContain("T01/reference/1/");
+    expect(original.runKey).toContain("pipeline/reference/1/");
     expect(original.status, JSON.stringify(original)).toBe("checker-error");
     const { sha256 } = await import("./snapshot.mjs");
     const task = JSON.parse(readFileSync(join(taskDir, "task.json"), "utf8"));
     expect(original.promptHash).toBe(
       sha256(`Thermite is at {{THERMITE}}.\n\n${task.prompt}`),
     );
-    expect(readFileSync(join(kept, "project/reference-count"), "utf8")).toBe(
-      "1",
-    );
+    expect(readFileSync(referenceCount, "utf8")).toBe("1");
     writeFileSync(ready, "ready");
     writeFileSync(join(taskDir, "changed-context.md"), "Changed checker input");
     const checkFile = join(taskDir, "check.mjs");
@@ -119,10 +120,7 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       checkFile,
       readFileSync(checkFile, "utf8")
         .replace("export default ctx=>", "export default async ctx=>")
-        .replace(
-          'return check("T01",ctx);',
-          'const result=await check("T01",ctx);return {...result,forcedCode:true};',
-        ),
+        .replace("return {pass:", "return {forcedCode:true,pass:"),
     );
 
     await expect(recheckRun({ evidence })).rejects.toThrow(
@@ -143,9 +141,7 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     expect(result.checkerTaskTreeHash).not.toBe(original.taskTreeHash);
     expect(result.checkerRecheckHistory[0].forced).toBe(true);
     expect(result.harnessHash).toBe(original.harnessHash);
-    expect(
-      readFileSync(join(evidence, "project/reference-count"), "utf8"),
-    ).toBe("1");
+    expect(readFileSync(referenceCount, "utf8")).toBe("1");
     expect(
       JSON.parse(readFileSync(join(evidence, "checker-history-001.json")))
         .status,
@@ -154,7 +150,9 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     if (kept) rmSync(kept, { recursive: true, force: true });
     rmSync(work, { recursive: true, force: true });
   }
-}, 25000);
+  // This exercises real guarded CLI writes and both checker passes. Rendering has
+  // its own artifact tests; duplicating PDF generation here obscured recovery.
+}, 30000);
 
 it("judge packet removes run identities and includes rubric deliverables", () => {
   const work = realpathSync(mkdtempSync(join(tmpdir(), "eval-judge-")));

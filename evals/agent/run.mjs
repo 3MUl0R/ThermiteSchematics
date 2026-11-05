@@ -179,6 +179,12 @@ const setupGit = (cwd, ...args) =>
       GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
     },
   });
+async function agentVersion(binary, options) {
+  const result = await captureSetup(binary, ["--version"], options);
+  return !result.error && result.status === 0
+    ? result.stdout.trim() || null
+    : null;
+}
 function killChild(child, signal = "SIGTERM") {
   try {
     if (process.platform === "win32") child.kill(signal);
@@ -589,12 +595,10 @@ export async function runOne({
     const cliVersion =
       agent === "reference"
         ? null
-        : ((
-            await captureSetup(agents[agent].binary, ["--version"], {
-              env,
-              encoding: "utf8",
-            })
-          ).stdout?.trim() ?? null);
+        : await agentVersion(agents[agent].binary, {
+            env,
+            encoding: "utf8",
+          });
     if (printAgentCommand) {
       assert(command, "--print-agent-command requires an agent CLI");
       const environment = Object.fromEntries(
@@ -1364,13 +1368,10 @@ async function main() {
         { PATH: process.env.PATH },
         { engineRoots: [root] },
       );
-      batchCliVersion =
-        (
-          await captureSetup(agents[values.agent].binary, ["--version"], {
-            env,
-            cwd: versionWork,
-          })
-        ).stdout?.trim() ?? null;
+      batchCliVersion = await agentVersion(agents[values.agent].binary, {
+        env,
+        cwd: versionWork,
+      });
       if (!pinnedCliVersion(values.agent, batchCliVersion)) {
         protocolWarnings.push({
           code: "unpinned-cli-version",

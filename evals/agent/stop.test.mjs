@@ -77,7 +77,7 @@ function fixture(scenario) {
       common +
       `
     const args=process.argv.slice(2);
-    if(args.includes('--version')){console.log(plan.version);process.exit(0);}
+    if(args.includes('--version')){console.log(plan.version);process.exit(plan.versionExit??0);}
     if(args[0]==='login')process.exit(0);
     const task=JSON.parse(fs.readFileSync('system.json')).project.name;event('agent-'+task);
     if(task==='A'&&plan.behavior!=='ok'){
@@ -95,7 +95,15 @@ function fixture(scenario) {
       template: id === "B" ? "cabinets" : "starter",
       prompt: "Synthetic dispatch probe",
       expectedWarnings: [],
+      ...(scenario === "hook-error" && id === "A"
+        ? { setup: "setup.mjs" }
+        : {}),
     });
+    if (scenario === "hook-error" && id === "A")
+      writeFileSync(
+        join(tasks, id, "setup.mjs"),
+        'export default()=>{throw Error("hook failure: W-CTL-001 not found")};',
+      );
     writeFileSync(
       join(tasks, id, "check.mjs"),
       "export default()=>({pass:true});",
@@ -154,6 +162,53 @@ function fixture(scenario) {
   };
 }
 // These probes need a real POSIX executable shebang; no model CLI is invoked.
+it.skipIf(process.platform === "win32")(
+  "setup worker errors reach the infrastructure diagnostic",
+  async () => {
+    const w = fixture("hook-error");
+    try {
+      const r = await w.invoke("--task", "A");
+      expect(r.status, r.stderr).toBe(1);
+      expect(w.records()[0].run).toMatchObject({
+        status: "infrastructure-failure",
+        stage: "setup",
+      });
+      expect(w.records()[0].run.infrastructureError).toContain(
+        "hook failure: W-CTL-001 not found",
+      );
+      expect(w.events().filter((e) => e.stage.startsWith("agent-"))).toEqual(
+        [],
+      );
+    } finally {
+      w.cleanup();
+    }
+  },
+  25000,
+);
+it.skipIf(process.platform === "win32").each([
+  ["", 0],
+  ["codex-cli 0.164.0", 1],
+])(
+  "unknown CLI version is null (stdout=%j, exit=%s)",
+  async (version, versionExit) => {
+    const w = fixture("version");
+    try {
+      Object.assign(w.plan, { version, versionExit, behavior: "ok" });
+      w.update();
+      const r = await w.invoke("--task", "A");
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stderr).toContain("unpinned codex CLI version unknown;");
+      expect(w.records()[0].run.cliVersions.agent).toBeNull();
+      expect(read(join(w.destination, "checkpoint.json"))).toMatchObject({
+        batchCliVersion: null,
+        protocolWarnings: [{ cliVersion: null }],
+      });
+    } finally {
+      w.cleanup();
+    }
+  },
+  25000,
+);
 it.skipIf(process.platform === "win32")(
   "main dispatch handles a sibling quota exit during setup-free init",
   async () => {

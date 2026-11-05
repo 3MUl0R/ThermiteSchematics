@@ -560,19 +560,22 @@ async function loadPatchProject(
   input: string | undefined,
   cwd: string,
   dependencies: ApplySourcePatchDependencies,
+  targetFiles: readonly string[] = [],
 ): Promise<SourcePatchLoadResult> {
   const result = await dependencies.loadProject(input, cwd);
   if (
     result.ok ||
     result.toolFailure ||
     result.sourcePatchProject !== undefined ||
-    dependencies.loadProject === loadProjectForSourcePatch
+    result.sourcePatchCapable === true
   )
     return result;
   return {
     ...result,
     diagnostics: result.diagnostics.map((d) =>
-      d.severity === "error" && /^E01[0-6]$/.test(d.code)
+      d.severity === "error" &&
+      /^E(?:01[0-6]|020)$/.test(d.code) &&
+      targetFiles.includes(d.file)
         ? {
             ...d,
             message: `${d.message} This injected loadProject does not provide guarded schema-repair snapshots; delegate to loadProjectForSourcePatch to support repairs.`,
@@ -882,7 +885,12 @@ async function runValidatedPatch(
 ): Promise<PatchOutcome> {
   let loaded: SourcePatchLoadResult;
   try {
-    loaded = await loadPatchProject(request.project, cwd, dependencies);
+    loaded = await loadPatchProject(
+      request.project,
+      cwd,
+      dependencies,
+      request.files.map((file) => file.path),
+    );
   } catch (error) {
     return exceptionOutcome("project-load", error);
   }
