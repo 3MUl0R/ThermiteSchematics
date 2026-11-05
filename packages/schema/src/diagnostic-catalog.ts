@@ -425,6 +425,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "The project's write reservation is held or abandoned. Owner metadata, age and process state describe contention; age alone does not establish abandonment.",
   },
+  A006: {
+    severity: "error",
+    producer: "code",
+    meaning:
+      "A guarded source patch cannot apply because a document has JSON syntax errors or duplicate keys; the error names the file and parser line/column. Regenerate a corrupt library lock with thermite lock .; repair source, presentation, manifest or library JSON with an ordinary edit, then validate (thermite guide agent-requests).",
+  },
   T001: {
     severity: "error",
     producer: "code",

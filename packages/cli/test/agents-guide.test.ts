@@ -110,6 +110,26 @@ function extractSourceGuardExample(guide: string): unknown {
   return JSON.parse(examples[0]![1]!);
 }
 
+// Each excluded section names the test that executes its examples.
+const SEPARATELY_EXECUTED_SECTIONS = new Map([
+  [
+    "### Repair schema errors through the guarded loop",
+    "agent-schema-repair.test.ts",
+  ],
+]);
+async function referenceRequestGuide(): Promise<string> {
+  const sections = (await readFile(requestGuide, "utf8")).split(/(?=^### )/mu);
+  for (const heading of SEPARATELY_EXECUTED_SECTIONS.keys())
+    expect(
+      sections.filter((section) => section.split("\n")[0] === heading),
+    ).toHaveLength(1);
+  return sections
+    .filter(
+      (section) => !SEPARATELY_EXECUTED_SECTIONS.has(section.split("\n")[0]!),
+    )
+    .join("");
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryRoots
@@ -211,7 +231,7 @@ describe("frozen legacy AGENTS guide", () => {
   it.each(["legacy", "alpha"])(
     "executes every request example and its stream/exit claims on the %s starter",
     async (starter) => {
-      const guide = await readFile(requestGuide, "utf8");
+      const guide = await referenceRequestGuide();
       const examples = extractLegacyJsonExamples(guide);
       const fences = parseFences(guide).filter(
         (f) => f.lang === "json" || f.lang === "sh",

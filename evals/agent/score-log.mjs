@@ -99,9 +99,7 @@ export function score({
       if (edit.path === "electrical-system.lock.json")
         add("V2", { boundary, ...edit });
       if (protectedFiles.has(edit.path) && edit.change !== "created") {
-        const invalid =
-          before?.documents?.[edit.path]?.$invalidJSON ||
-          before?.schemaInvalidFiles?.includes(edit.path);
+        const invalid = before?.invalidJsonFiles?.includes(edit.path);
         if (!invalid) add("V1", { boundary, ...edit });
       }
     }

@@ -206,15 +206,14 @@ try {
     Object.keys(before.files)
       .filter((p) => p.endsWith(".json"))
       .every((p) => p in after.files)
-  )
+  ) {
     after.schemaInvalidFiles = before.schemaInvalidFiles;
-  else
-    after.schemaInvalidFiles = fileState(
-      project,
-      real,
-      process.env,
-      before,
-    ).schemaInvalidFiles;
+    after.invalidJsonFiles = before.invalidJsonFiles;
+  } else {
+    const validated = fileState(project, real, process.env, before);
+    after.schemaInvalidFiles = validated.schemaInvalidFiles;
+    after.invalidJsonFiles = validated.invalidJsonFiles;
+  }
   let patchFiles = null;
   try {
     patchFiles = JSON.parse(rawOut)?.value?.files ?? null;

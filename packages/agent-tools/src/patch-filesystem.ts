@@ -18,7 +18,7 @@ import {
   LIBRARY_LOCK_FILE_NAME,
   PROJECT_WRITE_LOCK_FILE_NAME,
   type LoadedDocument,
-  type LoadedProject,
+  type SourcePatchProject,
 } from "@thermite/compiler";
 
 import { createA004Error, type A004Error } from "./common/errors.js";
@@ -524,7 +524,7 @@ export async function copyOrdinaryProjectTree(
 }
 
 function presentationSnapshotFile(
-  project: LoadedProject,
+  project: SourcePatchProject,
   document: LoadedDocument<unknown>,
 ): string {
   const file = safeSnapshotFile(project.logicalRootPath, document.logicalPath);
@@ -537,7 +537,7 @@ function presentationSnapshotFile(
 }
 
 function snapshotDocuments(
-  project: LoadedProject,
+  project: SourcePatchProject,
 ): readonly SnapshotDocument[] {
   const documents: SnapshotDocument[] = [
     {
@@ -594,7 +594,7 @@ function snapshotDocuments(
   );
 }
 
-function snapshotItems(project: LoadedProject): readonly SnapshotItem[] {
+function snapshotItems(project: SourcePatchProject): readonly SnapshotItem[] {
   const items: SnapshotItem[] = [
     ...snapshotDocuments(project),
     {
@@ -619,7 +619,7 @@ export interface ProjectControlledSnapshotPlanEntry {
 }
 
 export function projectControlledSnapshotPlan(
-  project: LoadedProject,
+  project: SourcePatchProject,
 ): readonly ProjectControlledSnapshotPlanEntry[] {
   return Object.freeze(
     snapshotItems(project).map(({ role, dependencyIndex, file }) => ({
@@ -637,7 +637,7 @@ export function projectControlledSnapshotPlan(
 }
 
 export async function captureProjectControlledSnapshot(
-  project: LoadedProject,
+  project: SourcePatchProject,
   dependencies: PatchFilesystemDependencies = defaultPatchFilesystemDependencies,
 ): Promise<ProjectControlledSnapshotResult> {
   const entries: ProjectControlledSnapshotEntry[] = [];
@@ -811,7 +811,7 @@ async function ordinaryStatus(
 }
 
 export async function validateProjectSourceChain(
-  project: LoadedProject,
+  project: SourcePatchProject,
   document: LoadedDocument<unknown>,
   dependencies: PatchFilesystemDependencies = defaultPatchFilesystemDependencies,
   propagateIoErrors = false,

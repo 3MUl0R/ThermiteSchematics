@@ -89,9 +89,9 @@ Patch only `patchEligible: true` sources. Pointers are pre-patch positions:
 immediately before each object's edits add
 `{"op":"test","path":"<source.pointer>/uid","value":"<source.uid>"}`; escape
 appended segments (`~`→`~0`, `/`→`~1`). After A004, re-inspect and rebuild.
-Only when sources load and pass schema checks but fail to compile (no guards
-returned) hash the file to patch the repair; fix JSON or schema errors with an
-ordinary edit, then validate. Make UUIDs with the second line:
+When compilation fails (no guards returned), hash the raw source bytes and guard
+a schema or semantic repair with UID tests; see `thermite guide agent-requests`.
+Invalid JSON needs an ordinary edit, then validation. Make UUIDs with the second line:
 
 ```sh
 bun -e "const b=require('fs').readFileSync(process.argv[1]);console.log('sha256-'+require('crypto').createHash('sha256').update(b).digest('base64'))" devices/equipment.json

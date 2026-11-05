@@ -301,8 +301,10 @@ it(
         calls.map((c) => c.before.schemaInvalidFiles.includes("repair.json")),
       ).toEqual([true, true, true, false]);
       expect(
-        score({ initial, final: snapshot(w.project), calls }).violations,
-      ).toEqual([]);
+        score({ initial, final: snapshot(w.project), calls }).violations.map(
+          (v) => v.rule,
+        ),
+      ).toEqual(["V1", "V1"]);
       expect(
         auditErrors(
           calls,

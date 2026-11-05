@@ -26,6 +26,7 @@ export type {
   A003Reason,
   A004Error,
   A005Error,
+  A006Error,
   ProjectWriteOwner,
   ProjectWriteOwnerState,
   AgentToolError,

@@ -42,6 +42,7 @@ const AGENT_CODES = new Set([
   "A003",
   "A004",
   "A005",
+  "A006",
   "E001",
   "E002",
   "E003",

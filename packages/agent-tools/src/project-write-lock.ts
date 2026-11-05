@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import {
   PROJECT_WRITE_LOCK_FILE_NAME,
-  type LoadedProject,
+  type SourcePatchProject,
 } from "@thermite/compiler";
 import {
   createA005Error,
@@ -149,7 +149,7 @@ export type ProjectWriteReservation =
 
 /** Exclusive creation arbitrates processes; existing reservations are never stolen. */
 export function reserveProjectWrite(
-  project: LoadedProject,
+  project: SourcePatchProject,
   operations: LockOperations = defaultProjectWriteLockOperations,
 ): ProjectWriteReservation {
   const root = project.canonicalRootPath;
