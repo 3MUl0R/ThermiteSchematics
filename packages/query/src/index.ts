@@ -4,6 +4,7 @@ export {
   type CableSchedule,
   type CableScheduleCore,
   type CableScheduleEndpoint,
+  type EndpointSheetZones,
 } from "./cable-schedule.js";
 export { InvalidElectricalIrError } from "./errors.js";
 export { serializeQueryResult } from "./serializer.js";
@@ -47,7 +48,9 @@ export {
   REPORT_KINDS,
   type DocumentationRequest,
   type DocumentationTable,
+  type DocumentationOptions,
   type DocumentationSelection,
+  type ScheduleReferences,
   type ReportKind,
 } from "./documentation.js";
 export {

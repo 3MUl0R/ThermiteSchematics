@@ -63,6 +63,7 @@
     "file": "docs/report-filtering.md",
     "title": "Schedule filters and reference indexes",
     "readBefore": [
+      "before reading, authoring or exporting a BOM or other report",
       "before filtering reports or packet references"
     ]
   },

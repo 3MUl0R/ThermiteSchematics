@@ -15,4 +15,6 @@ bun thermite.mjs report bom --project examples/report-filtering --filter example
 
 Preserve the CLI's stderr JSON to audit filtered CSV selection. Filtered BOM quantities count selected device instances, while retained cables remain whole. The entirely loose cable stays visible because no device endpoint can classify it. Unknown selectors fail, and an intentional empty selection does not expand to the full project.
 
+DOC1 explicitly authors `nonProcurement.reason` because it represents a documentary network boundary outside purchasing scope. An unfiltered BOM retains its row and marks it `Not purchased`; the Main filter excludes documentary types independently of that flag. No type or designation implies purchasing scope.
+
 These are generic original models, not installed-device specifications. JSON and the byte-locked local library are authoritative; SVG, HTML, PDF and CSV are generated output. See [selection rules and metadata](../../docs/report-filtering.md).

@@ -577,7 +577,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
           exitCode = c.toolFailure ? 2 : 1;
           return;
         }
-        const table = buildDocumentation(c.ir, request);
+        const table = buildDocumentation(c.ir, request, undefined, {
+          output: "csv",
+        });
         await writeAlphaOutput(
           flags.project,
           flags.output,

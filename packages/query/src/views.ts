@@ -60,6 +60,9 @@ export function buildDeviceView(device: IrDevice): DeviceView {
     kind: "device",
     designation: device.designation,
     typeId: device.typeId,
+    ...(device.nonProcurement === undefined
+      ? {}
+      : { nonProcurement: structuredClone(device.nonProcurement) }),
     ...(device.connectionReview === undefined
       ? {}
       : { connectionReview: structuredClone(device.connectionReview) }),
