@@ -447,8 +447,6 @@ export function measureSheet(options = {}) {
                 };
               })()
             : undefined,
-          expectedCapRatio:
-            cap.actualBoundingBoxAscent / parseFloat(css.fontSize),
           fontMeasured: "Chromium resolved " + css.fontFamily,
           clip,
           role,

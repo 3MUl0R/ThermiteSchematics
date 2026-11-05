@@ -4,7 +4,13 @@ export function measurements(f) {
   const values = {};
   if (f.fontSizeMm !== undefined) values.fontSizeMm = f.fontSizeMm;
   if (f.capHeightMm !== undefined) values.capHeightMm = f.capHeightMm;
-  if (f.ratio !== undefined) values.distortionRatio = f.ratio;
+  if (f.kind === "distorted-glyphs") {
+    if (!Number.isFinite(f.anisotropy))
+      throw Error(
+        "Missing anisotropy measurement; rerun with the current checker",
+      );
+    values.anisotropy = f.anisotropy;
+  }
   if (f.overflowMm !== undefined) values.overflowMm = f.overflowMm;
   if (
     f.kind === "text-text-overlap" ||
@@ -21,7 +27,8 @@ export function measurements(f) {
         ),
       );
     }
-  if (f.advanceRatio !== undefined) values.advanceRatio = f.advanceRatio;
+  if (f.advanceRatio !== undefined && f.kind !== "distorted-glyphs")
+    values.advanceRatio = f.advanceRatio;
   else if (f.deltaMm !== undefined) values.advanceDeltaMm = f.deltaMm;
   if (f.outlineMm !== undefined)
     values.strokeExcessMm = f.outlineMm - f.conductorMm;
@@ -42,7 +49,7 @@ export function tolerance(metric, findings) {
     advanceRatio: 0.05,
     capHeightMm: 0.03,
     fontSizeMm: 0.03,
-    distortionRatio: 0.03,
+    anisotropy: 0.03,
     overlapMm: 0.34,
     strokeExcessMm: 0.01,
     incidentRays: 0,

@@ -177,5 +177,5 @@ it("uses one distortion finding for PDF em anisotropy too", () => {
     ],
   });
   expect(f.map((f) => f.kind)).toEqual(["distorted-glyphs"]);
-  expect(f[0].measurements).toEqual(["em-axis-ratio"]);
+  expect(f[0].measurements).toEqual(["anisotropy"]);
 });

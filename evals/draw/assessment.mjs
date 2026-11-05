@@ -50,7 +50,11 @@ export function observations(rows) {
   );
 }
 function rangeDifferent(a, b) {
-  return Math.abs(a[0] - b[0]) > 0.001 || Math.abs(a[1] - b[1]) > 0.001;
+  // Compare on the exported 0.001 lattice, including when reassessing a saved
+  // report. Binary subtraction must not turn one reporting quantum into drift.
+  return [0, 1].some(
+    (i) => Math.abs(Math.round(a[i] * 1000) - Math.round(b[i] * 1000)) > 1,
+  );
 }
 export function assess(rows, registry, selectedCases, context = {}) {
   assert.equal(

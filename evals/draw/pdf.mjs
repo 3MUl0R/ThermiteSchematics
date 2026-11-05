@@ -77,7 +77,6 @@ export async function pdfText(page, families = [], fontCaps = {}) {
         fontSize: size,
         capReferenceEmMm: Math.hypot(t[0], t[1]),
         capHeightMm: capRatio === undefined ? undefined : capRatio * size,
-        expectedCapRatio: capRatio,
         fontFace: face,
         fontMeasured: face
           ? "PDF FontDescriptor /CapHeight for " + face

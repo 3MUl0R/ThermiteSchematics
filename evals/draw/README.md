@@ -127,11 +127,17 @@ platform font substitution. Capital ratios use the font Chromium resolves from
 the declared family, explicitly labelled `fontMeasured`; generic monospace's
 concrete platform face is not exported. PDF em sizes and named embedded fonts
 come from pdf.js; cap policy uses that font's PDF FontDescriptor CapHeight,
-not a macOS substitute. Missing PDF cap metadata is not-implemented. PDF geometry/policy discards clipped duplicate text extractions unless a visible source label matches within two ems; raw extraction remains available to the existing parity checks. SVG/HTML advance and scaled font-cap ratios describe the same anisotropy; they
-are not independent rendered-cap measurements. One `distorted-glyphs` finding
-combines advance outside [0.90,1.10] and vertical/horizontal em-axis ratio outside
-[0.90,1.10], retaining both measured ratios and triggered predicates. PDF uses its
-physical em-axis ratio in that same finding. ISO policy still uses the declared
+not a macOS substitute. Missing PDF cap metadata is not-implemented. PDF geometry/policy discards clipped duplicate text extractions unless a visible source label matches within two ems; raw extraction remains available to the existing parity checks. SVG/HTML advance and scaled font-cap ratios are not independent rendered-cap
+measurements. All three media use one predicate: **max(s, 1/s) > 1.10 + ε**,
+with **ε = 1e-9**, a dimensionless floating-point allowance. Here s is horizontal
+glyph scale (`advanceRatio`, or PDF horizontal em / vertical em). When both are
+available, the worse anisotropy decides. Exactly 1/1.10 and 1.10 pass; 0.907 and
+1.105 fail, including PDF. The predicate uses unrounded measurements; report
+coordinates/scalars retain their normal 0.001 rounding. One `distorted-glyphs`
+finding retains all scales and pins **anisotropy**, rather than compression and
+stretch in opposite directions under raw s. Its severity envelope allows ±0.030
+dimensionless drift; that envelope never changes the 1.10 predicate or turns a
+disappeared finding into an xfail. ISO policy still uses the declared
 font's natural capital metric; it does not claim pixel-measured capital ink.
 
 ## Ink geometry and calibration
@@ -241,7 +247,10 @@ identity. Bounds/distance tolerance is 0.170 mm, overlap 0.340 mm, stroke 0.010 
 angle 0.5°, jog noise 0.050 mm and em noise 0.030 mm. ISO cap policy stays in its
 failing interval (<2.470 mm), with per-font counts/ranges. An out-of-band value
 fails with its delta; in-band envelope/count changes appear in drift. Partial
-scope envelopes are labelled and are not full-run temporal comparisons.
+scope envelopes are labelled and are not full-run temporal comparisons. Drift comparison uses the exported
+0.001 lattice: a difference of one exported quantum is noise; two or more
+quanta are drift. Live and saved values are rounded before this comparison, so
+reassessing a saved report cannot invent a binary-subtraction drift. Derived envelope values use that same precision.
 
 A fixed scope is an xpass, including a D1 blank-cell fix. After reviewing a full
 strict report containing only expected defects and xpasses, update the registry
@@ -291,19 +300,147 @@ fabricates missing raster ink. PDFKit can corroborate it but is not required.
 `pdfwhite` separately proves actual ink loss with an intact extracted text layer.
 EA F3's old report overflow is fixed by R2; the current wide-label cell must fit.
 
-## Adding reviewed C1 findings
+## Guarded mixed re-pins and consolidated C1
 
-For this checker follow-up, the strict discovery run records newly exposed M2
-labels. Existing view-scoped font markers already cover them, so this baseline
-has count drift rather than new marker keys/scopes. A previously uncovered view
-would fail. After inspecting the source labels and crops, create the proposal
-through the existing command:
+`repin.mjs` applies reviewed deltas to the **existing** registry. It never calls
+`seed()`, and never infers approvals from a whole fail row or a cause label.
+Unlisted marker fields remain unchanged. `pin.mjs` remains a read-only initial/
+legacy proposal generator; it is not the mixed-update path. The older retire-only
+command above is useful only when there are no new failures.
+
+After drawing PRs merge, make one full strict report on consolidated dev, then
+reconcile **one decisions file per merged PR** (decision 13). Use that same target
+report/registry/checker-bundle/seal/version binding in every file. Individual lane audits remain
+review evidence; old lane report hashes cannot be copied into the consolidated
+binding. Re-review their deltas against the consolidated report. No release or C1
+score follows a red report.
 
 ```sh
-bun evals/draw/pin.mjs evals/out/draw/C1-e3fu-discovery/summary.json evals/out/e3fu/proposal.mjs
+bun evals/draw/run.mjs --checkpoint C1-consolidated-before
+bun evals/draw/repin.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-previous/summary.json \
+  --inventory evals/out/repin-inventory.json
 ```
 
-Compare expanded identities/scopes and bands against the current registry. Accept
-only the reviewed delta; retain every unrelated marker and band. Copy the reviewed
-proposal to `evals/draw/expectations.mjs`, then run a fresh strict `C1-e3fu`.
-This is an explicitly reviewed C1 re-pin, not routine regeneration of failures.
+Inventory writes binding values, current instance tokens/facts, stale scopes and
+full envelope drift, full measured envelope proposals and baseline instances. It writes no approval decisions.
+Tokens address a marker/scope, report row, finding and instance within a hash-bound
+report. They are not geometry-derived marker identities. Rename facts compare
+kind, source locator, view, medium, case and **exact recorded text**. Changed
+text/source locators/views require literal `{from,to}` mappings per pair; no regex or
+wildcard matching. Each old/new token can be consumed once. Compact aggregates
+without exported instances cannot be proved as renames.
+
+A decisions file has these top-level fields. File hashes cover raw bytes; the
+checker hash covers the canonical sorted module manifest described below:
+
+```json
+{
+  "format": "thermite-draw-decisions/1.0",
+  "pr": "#56",
+  "summarySha256": "<from inventory>",
+  "registrySha256": "<from inventory>",
+  "checkerSha256": "<from inventory>",
+  "corpusSha256": "<from inventory>",
+  "evalsVersion": "4.2",
+  "baselineSha256": "<hash of supplied previous summary>",
+  "entries": []
+}
+```
+
+The checker binding hashes a stable sorted list of every drawing-kit `.mjs` and
+`.swift` file, including the registry. The target manifest must match the local
+files exactly. A changed, removed or added module invalidates the target and its
+decisions; run a fresh full 4.2 report. Apply rechecks the bundle inside its lock.
+Every supplied `baselineSha256` is validated even if that file has no rename.
+Historical full baselines may have older compatible checkers; their raw bytes,
+registry and full report are validated, including their own bundle when present.
+They are stored observations, not permission to run a stale target checker.
+
+Draft candidates with the shipped helper:
+
+```sh
+bun evals/draw/repin.mjs draft --inventory evals/out/repin-inventory.json \
+  --pr '#56' --output evals/out/D1-decisions.json
+```
+
+It proposes only unique exact-fact instance pairs (allowing a literal view move),
+leaves ambiguous and changed-text pairs for inspection, and calculates envelope
+proposals from measured ranges and the documented tolerances. It fills **no
+cause**: every entry has `reviewed: false`, empty `causeClass`/`note`, and an empty
+retirement `cause`. New defects have empty crop metadata too. Inspect each delta,
+complete the cause/rationale/mappings/crops and set `reviewed: true` individually.
+The tool refuses an unreviewed entry. With several baselines, select
+`--baseline-sha <raw-summary-hash>`. Draft creation is exclusive under `evals/out`.
+
+Every reviewed entry requires `reviewed: true`, `causeClass`, `note` (the review rationale) and
+`classification: "drawing"` or `"policy-gap"`. These align with D1's audit's
+`markerId`, `causeClass`, exact scope tuples and envelope observations. D1's
+`scopeDelta.absent`/`missing` and `renameLink` suggest decisions; they are not
+approvals or instance-match evidence. Convert them into explicit entries using
+both inventories. Retain `unexplainedItems` as a review checklist outside the
+strict decisions schema; an unresolved item must stop the re-pin.
+
+| Action           | Required decision data                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `retire`         | `markerId`, `scope: {case,sheet,medium}`, `cause: "fixed"` or `"not-measured"`. A measured compatible check is required for `fixed`; a missing view/render cannot be retired as a fix. Optional `instances` lists only the leftover baseline tokens of a partially paired old scope.                                                                                   |
+| `rename`         | `from` and `to` each contain `markerId` and `scope`; `pairs` is an array of `{from: oldToken, to: newToken, view?: {from,to}, sourceLocator?: {from,to}, text?: {from,to}}`. Kind/medium/case must match; any changed text/locator/view needs its literal mapping. Every old instance and every target instance must be accounted for across the listed decisions.     |
+| `scope-added`    | `to: {markerId,scope}` on an existing identity and all target tokens in `instances`. Keeps its definition; optional reviewed crop. Use this for an added sheet occurrence, with no repair credit.                                                                                                                                                                      |
+| `new-defect`     | `to: {markerId,scope}` on a genuinely new identity, every target token in `instances`, and `crop: {path,sha256}`. Crop must be a retained PNG under `evals/out/draw-samples/`, inside this workspace after symlink resolution. The recorded review accepts the entire explicit instance set; a representative crop is not an automatic blanket approval.               |
+| `envelope-drift` | `markerId`, `metric`, exact `from`, `to`, `observed`, and `coverage: "full"`. Counts use metric `occurrences` and `[min,max]`; scalar bands use `[allowedMin,referenceMin,referenceMax,allowedMax]`. The new reference must equal the full observed range; allowed bounds must equal the measured range plus the documented tolerance; an undrifted metric is refused. |
+
+For example, a count decision records `from: [2,8]`, `to: [4,8]`,
+`observed: [4,8]`. Drift is assessed from the bound report **after the listed
+scope changes**, using the complete resulting marker population. This matters
+when a header moves while old literal body cells disappear, or a sheet is added:
+the still-matched old-scope subset is not the full new reference. Every metric
+must actually drift at exported precision; an allowed-bound-only edit is refused.
+Scalar `to` must exactly equal `bands()` for that measured population, including
+the documented tolerance/policy ceiling. Arbitrary widening (such as max 99) and
+arbitrary narrowing are refused. Policy-gap count changes need `classification:
+"policy-gap"`; they never enter geometry scoring. Partial-scope drift cannot
+replace a full reference: quick/selected/report-only inputs are refused.
+
+A rename inherits the old definition; it does not silently refresh its bands or
+count. A genuinely new identity gets only its reviewed scopes and measured
+references with the existing documented tolerances. An existing identity's new
+scope keeps its old definition. List any resulting envelope change separately.
+Retained old scopes cannot be consumed as renames; if only part of an aggregate
+changes while its old scope stays measured, review the newly exposed defect and
+its exact count drift instead. Conflicting inherited definitions are refused.
+
+```sh
+bun evals/draw/repin.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-previous/summary.json \
+  --decisions evals/out/D1-decisions.json \
+  --decisions evals/out/R4-decisions.json \
+  --preview evals/out/consolidated-expectations.mjs
+# Review that exact file and the printed projected statuses, then repeat with:
+bun evals/draw/repin.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-previous/summary.json \
+  --decisions evals/out/D1-decisions.json \
+  --decisions evals/out/R4-decisions.json \
+  --preview evals/out/consolidated-expectations.mjs --apply
+bun evals/draw/run.mjs --checkpoint C1-consolidated
+```
+
+Preview uses exclusive creation under `evals/out/`. Apply requires that existing
+preview to be byte-identical to the freshly computed result, rechecks the current
+registry hash under an exclusive cooperative lock, then replaces the registry
+atomically. Concurrent command writers refuse the lock; external editors must
+not edit the registry or checker files during apply. Stale inputs, changed crops/previews, duplicate
+keys, malformed UTF-8, escaping paths, reused pairs, conflicting files, incomplete
+instance coverage and any unlisted failure/drift all stop before replacement.
+A process killed during apply may leave a lock; inspect it before removing it.
+
+The receipt gives expected post-apply status and separate `outcomes` counts for
+fixed retirements, moves, scope additions and new defects, plus `not-measured`
+retirements. A text-changing rename is a move. If literal body cells became blank,
+retire only those leftover instances as fixed; keep the header in its rename.
+Moves and scope additions never contribute repair credit; receipts are event
+counts, not category scores. Those do not establish passing observations or score
+credit. A missing view is not a font/layout repair. The acceptance test remains a
+**fresh full strict C1 with exit 0 and no drift**, not the projection alone.
