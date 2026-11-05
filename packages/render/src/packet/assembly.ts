@@ -1,3 +1,4 @@
+import { PacketDraftError, type PacketViewContext } from "./errors.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type {
   Draft,
@@ -5,7 +6,7 @@ import type {
   RenderedSheet,
   SchematicPacketRequest,
 } from "./types.js";
-import { frame, zone } from "./page.js";
+import { frame, zone, sheetLabel } from "./page.js";
 import { n } from "./svg.js";
 import {
   emitCircuitContinuationBlock,
@@ -19,7 +20,10 @@ export function appendViewDrafts(
   viewIndex: number,
   layout: SchematicPacketRequest["layout"],
   referenceNumber: number,
+  context?: PacketViewContext,
 ): number {
+  for (const draft of incoming)
+    draft.views = [context ?? { viewIndex, title: sheetLabel(draft.view) }];
   for (const draft of incoming) {
     const block = draft.communicationBlock;
     if (!block) continue;
@@ -55,6 +59,7 @@ export function appendViewDrafts(
         previous.drawingBounds!.h
     ) {
       const offset = previous.communicationHeight + 10;
+      previous.views = [...(previous.views ?? []), ...(draft.views ?? [])];
       previous.content += `<g transform="translate(0 ${n(offset)})">${draft.content}</g>`;
       previous.coverage = [
         ...(previous.coverage ?? []),
@@ -101,7 +106,16 @@ export function assembleSheets(
     number: index + 1,
     view: draft.view,
     references: draft.references ?? [],
-    svg: frame(draft, page, index + 1, drafts.length),
+    svg: (() => {
+      try {
+        return frame(draft, page, index + 1, drafts.length);
+      } catch (error) {
+        throw new PacketDraftError(
+          error instanceof Error ? error.message : "Sheet assembly failed.",
+          draft.views ?? [],
+        );
+      }
+    })(),
     ...(draft.circuitBlocks?.length
       ? {
           circuitContinuations: draft.circuitBlocks.flatMap((block) =>

@@ -1135,7 +1135,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'A packet request has `format: "schematic-packet-request/0.1"`, optional shared `page`, `layout: "compact"` and `index: true`, and `views`: `schematic-view-request/0.1` with `family: "power"|"control"`, or `0.2` with a loads, conductors or trace intent.',
+        'Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout: "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family: "power"|"control"`) or `0.2` (loads/conductors/trace).',
       async check() {
         const project = await plant();
         const one = (view: object) => ({ format: PACKET, views: [view] });

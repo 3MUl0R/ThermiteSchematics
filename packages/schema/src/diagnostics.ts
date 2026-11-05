@@ -26,6 +26,13 @@ export interface Diagnostic {
   allowedLookup?: string;
   /** Raw ECMAScript regular expression the rejected string must match. */
   pattern?: string;
+  /** Packet W906 inventory; schedules and indexes do not count as schematics. */
+  devices?: {
+    uid: string;
+    designation: string;
+    appearance: "reports-only" | "absent";
+    reportSheets: number[];
+  }[];
 }
 
 function compareText(left: string, right: string): number {

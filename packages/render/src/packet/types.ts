@@ -135,6 +135,7 @@ export interface Link {
   side: "left" | "right" | "top" | "bottom";
 }
 export interface Draft {
+  views?: import("./errors.js").PacketViewContext[];
   view: NormalizedSchematicView | NormalizedDocumentationView;
   references?: SheetReference[];
   drawingBounds?: DrawingBounds;

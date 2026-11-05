@@ -55,8 +55,8 @@ const CASES: readonly Tier2Case[] = [
     wireUid: "f0000000-0000-4000-8000-000000000410",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
     collision: "form an ambiguous intersection",
-    humanBytes: 351,
-    jsonBytes: 599,
+    humanBytes: 175,
+    jsonBytes: 2380,
   },
   {
     name: "right-deep",
@@ -68,8 +68,8 @@ const CASES: readonly Tier2Case[] = [
     wireUid: "e84a9629-373c-4946-8b48-184b7464d474",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
     collision: "form an ambiguous intersection",
-    humanBytes: 351,
-    jsonBytes: 599,
+    humanBytes: 178,
+    jsonBytes: 2386,
   },
   {
     name: "bridge",
@@ -81,8 +81,8 @@ const CASES: readonly Tier2Case[] = [
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",
     collision: "overlap collinearly",
-    humanBytes: 340,
-    jsonBytes: 588,
+    humanBytes: 169,
+    jsonBytes: 2368,
   },
   {
     name: "bridge",
@@ -94,8 +94,8 @@ const CASES: readonly Tier2Case[] = [
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",
     collision: "overlap collinearly",
-    humanBytes: 340,
-    jsonBytes: 588,
+    humanBytes: 169,
+    jsonBytes: 2368,
   },
 ];
 
@@ -431,14 +431,20 @@ describe("Amendment B4 v20 Tier 2 deterministic failures", () => {
 
       const first = await runTier2(ir, testCase);
       const second = await runTier2(ir, testCase);
-      const error = expectedError(testCase);
+      const legacy = expectedError(testCase);
+      const error = first.error;
+      expect({
+        ...error,
+        message: error.details?.originalMessage,
+        details: undefined,
+      }).toEqual({ ...legacy, details: undefined });
 
       expect(first.rawSize).toEqual(testCase.rawSize);
-      expect(first.error).toEqual(error);
       assertTier2Structure(testCase, ir, first.selected, first.graph);
       expect(Object.keys(first.error)).toEqual([
         "code",
         "message",
+        "details",
         "family",
         "netId",
         "root",
@@ -456,13 +462,20 @@ describe("Amendment B4 v20 Tier 2 deterministic failures", () => {
       expect(Buffer.byteLength(human, "utf8")).toBe(testCase.humanBytes);
       expect(Buffer.byteLength(json, "utf8")).toBe(testCase.jsonBytes);
       const flowName = testCase.flow === "left-to-right" ? "right" : "down";
-      const golden = readFileSync(
-        new URL(
-          `./goldens/tier2/${testCase.name}-${flowName}.r004.json`,
-          import.meta.url,
-        ),
-        "utf8",
-      );
+      const golden =
+        JSON.stringify(
+          JSON.parse(
+            readFileSync(
+              new URL(
+                `./goldens/tier2/${testCase.name}-${flowName}.r004.json`,
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          ),
+          undefined,
+          2,
+        ) + "\n";
       expect(golden).toBe(json);
     });
   }

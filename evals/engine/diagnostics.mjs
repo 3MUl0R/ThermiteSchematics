@@ -1,3 +1,4 @@
+import { renderDiagnostics } from "./render-diagnostics.mjs";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { loadProject, engineRoot } from "./engine.mjs";
@@ -299,6 +300,7 @@ export async function diagnostics() {
       }),
     ),
   );
+  rows.push(...(await renderDiagnostics()));
   assert(rows.length >= 40);
   return rows;
 }

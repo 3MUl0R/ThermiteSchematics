@@ -1,3 +1,5 @@
+import { unsupportedProfileError } from "./preflight.js";
+import { CircuitRenderError } from "./render-error-context.js";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
@@ -1234,6 +1236,31 @@ function emitNode(
 }
 
 async function layoutGroup(
+  ...args: Parameters<typeof layoutGroupUnchecked>
+): Promise<CircuitDrawing> {
+  try {
+    return await layoutGroupUnchecked(...args);
+  } catch (error) {
+    if (error instanceof CircuitRenderError) throw error;
+    const [ir, group, fs, cs] = args;
+    const functionKeys = fs.map(
+      (f) =>
+        `${ir.devices.find((d) => d.uid === f.id.deviceUid)!.designation}/${f.id.functionKey}`,
+    );
+    const conductorKeys = cs.map((c) => c.name);
+    const message =
+      error instanceof Error ? error.message : "Circuit layout failed.";
+    throw new CircuitRenderError({
+      code: "R006",
+      root: "packet",
+      reason: "unprintable-layout",
+      message: `${message} Selected keys: functions ${functionKeys.join(", ")}; conductors ${conductorKeys.join(", ") || "none"}.`,
+      details: { groupId: group.id, functionKeys, conductorKeys },
+    });
+  }
+}
+
+async function layoutGroupUnchecked(
   ir: Readonly<ElectricalIr>,
   group: CircuitGroupRequest,
   fs: IrFunction[],
@@ -1404,7 +1431,7 @@ async function layoutGroup(
             Math.min(a.x, b.x) < right)
         )
           throw new Error(
-            `Circuit ${group.id}: a route crosses a device body.`,
+            `Circuit ${group.id}: conductor ${c.name} (${c.id}) crosses device ${nodes.find((node) => node.id === d.id)!.device.designation}.`,
           );
       }
     }
@@ -1475,7 +1502,9 @@ async function layoutGroup(
           ) >
         1e-7;
       if ((v && overlap("y")) || (h && overlap("x")))
-        throw new Error(`Circuit ${group.id}: unrelated conductors overlap.`);
+        throw new Error(
+          `Circuit ${group.id}: unrelated conductors ${conductors[t.index]!.name} (${conductors[t.index]!.id}) and ${conductors[s.index]!.name} (${conductors[s.index]!.id}) overlap.`,
+        );
     }
   const dots = new Map<string, Point>();
   for (const r of routes)
@@ -1688,6 +1717,49 @@ export async function prepareCircuitView(
       fs: selectedFunctions(ir, g),
       cs: selectConductors(all, g),
     }));
+  // Validate every selected function before any ELK work. Explicit circuit marks
+  // remain authoritative; circuitMark checks them before looking at profiles.
+  for (const { fs } of selected)
+    for (const f of fs) {
+      const device = ir.devices.find((d) => d.uid === f.id.deviceUid)!;
+      const type = ir.deviceTypes.find((t) => t.id === device.typeId)!;
+      try {
+        const mark = circuitMark(type, f);
+        if (
+          symbolProfile(type) === "thermite:sensor-3wire" &&
+          mark === "sensor-3wire" &&
+          f.kind === "load" &&
+          f.terminals.length === 2
+        ) {
+          const supply = resolveSensorSupply(
+            f.terminals.map((t) => ({
+              key: t.terminalKey,
+              role: type.terminals.find((p) => p.key === t.terminalKey)?.role,
+            })),
+          );
+          if (!supply.ok)
+            throw Error(
+              `Invalid sensor supply roles for function ${JSON.stringify(f.id.functionKey)}: ${supply.reason}`,
+            );
+        }
+      } catch (error) {
+        throw new CircuitRenderError(
+          unsupportedProfileError(
+            ir,
+            {
+              code: "R006",
+              root: "packet",
+              reason: "unprintable-layout",
+              message: "Unsupported circuit mapping.",
+            },
+            device,
+            f,
+            "circuit",
+            error instanceof Error ? error.message : undefined,
+          ),
+        );
+      }
+    }
   const appearances =
     packetAppearances ?? circuitFunctionAppearances(ir, [request]);
   const groups: CircuitDrawing[] = [];

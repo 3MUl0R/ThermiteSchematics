@@ -1,3 +1,4 @@
+import { compileProject } from "@thermite/compiler";
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,11 +25,41 @@ it("keeps info-only outcomes successful across compiler, query, rendering and do
     const packet = join(scratch, "packet.json"),
       continuity = join(scratch, "continuity.json");
     const snapshot = join(scratch, "snapshot.json");
+    const compiled = await compileProject(project);
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const sources = [
+      ...compiled.ir.wires.map((w) => ({
+        designation: w.designation,
+        terminals: w.endpoints.map((e) => e.terminal),
+      })),
+      ...compiled.ir.cableConductors.map((c) => ({
+        designation: `${compiled.ir.cables.find((d) => d.uid === c.cableUid)!.designation}/${c.id.conductorId}`,
+        terminals: c.endpoints.map((e) => e.terminal),
+      })),
+    ];
+    const drawingConductors = [
+      ...new Set(
+        compiled.ir.devices.map(
+          (d) =>
+            sources.find((c) => c.terminals.some((t) => t.deviceUid === d.uid))
+              ?.designation,
+        ),
+      ),
+    ];
+    expect(drawingConductors).not.toContain(undefined);
+    // Keep this an info-only packet: each device has an actual wiring appearance.
     await writeFile(
       packet,
       JSON.stringify({
         format: "schematic-packet-request/0.1",
-        views: [{ format: "documentation-view-request/0.1", kind: "io" }],
+        views: [
+          { format: "documentation-view-request/0.1", kind: "io" },
+          ...drawingConductors.map((designation) => ({
+            format: "wiring-view-request/0.1",
+            title: `Wiring ${designation}`,
+            conductors: [designation],
+          })),
+        ],
       }),
     );
     await writeFile(
@@ -82,6 +113,7 @@ it("keeps info-only outcomes successful across compiler, query, rendering and do
       ["review", "--project", project, "--before", snapshot, "--json"],
       ["continuity", "--project", project, "--input", continuity, "--json"],
       ["packet", "--project", project, "--input", packet, "--json"],
+      ["packet", "--project", project, "--input", packet, "--json", "--strict"],
     ];
     for (const args of cases) {
       let output;

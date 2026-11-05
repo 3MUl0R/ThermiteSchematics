@@ -1144,6 +1144,32 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
         pattern: {
           type: "string",
         },
+        devices: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["uid", "designation", "appearance", "reportSheets"],
+            properties: {
+              uid: {
+                type: "string",
+              },
+              designation: {
+                type: "string",
+              },
+              appearance: {
+                enum: ["reports-only", "absent"],
+              },
+              reportSheets: {
+                type: "array",
+                items: {
+                  type: "integer",
+                  minimum: 1,
+                },
+              },
+            },
+          },
+        },
       },
     },
   },

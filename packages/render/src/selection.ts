@@ -118,7 +118,11 @@ interface SearchSuccess {
 }
 
 type SearchResult =
-  | { readonly ok: true; readonly value?: SearchSuccess }
+  | {
+      readonly ok: true;
+      readonly value?: SearchSuccess;
+      readonly stoppedAt?: readonly TerminalId[];
+    }
   | { readonly ok: false; readonly error: QueryError };
 
 interface IrConductor {
@@ -264,6 +268,19 @@ function cloneTerminal(id: TerminalId): TerminalId {
     deviceUid: id.deviceUid,
     terminalKey: id.terminalKey,
   });
+}
+
+/** Error context is detached and frozen, just like the original error envelope. */
+function withStoppedTerminals<
+  E extends IncompletePathError | UnsupportedSymbolMappingError,
+>(error: E, terminals: readonly TerminalId[]): E {
+  return Object.freeze({
+    ...error,
+    details: Object.freeze({
+      ...error.details,
+      terminalIds: Object.freeze(terminals.map(cloneTerminal)),
+    }),
+  }) as E;
 }
 
 function cloneFunction(id: FunctionId): FunctionId {
@@ -1237,7 +1254,11 @@ function searchPath(
     }
   }
   if (candidates.length === 0) {
-    return { ok: true };
+    const furthest = Math.max(...distances.values());
+    const ends = queue.filter(
+      (t) => distances.get(terminalIdKey(t)) === furthest,
+    );
+    return { ok: true, stoppedAt: ends.length ? ends : [start] };
   }
   candidates.sort((left, right) =>
     compareBoundaryCandidate(context, left, right),
@@ -1748,11 +1769,30 @@ function incompleteTraceSelectionError(
   targetDeviceUid: string,
   segment: IncompleteTraceSelectionError["segment"],
 ): IncompleteTraceSelectionError {
-  return incompleteTracePathError(
-    context.view.root.deviceUid,
-    targetDeviceUid,
-    segment,
-    context.view.root.designation,
+  const root = resolveTraceRoot(context, rootDevice(context));
+  const start = root?.terminalByRole.get(segment);
+  const reachable = start
+    ? context.engine.followConductive([start])
+    : undefined;
+  const terminals = reachable?.ok
+    ? reachable.value.flatMap((c) => c.visits.map((v) => v.terminal.id))
+    : [];
+  const ends = terminals.filter(
+    (t) =>
+      start &&
+      !sameTerminal(t, start) &&
+      (context.ir.indexes.conductiveElementIdsByTerminal.find((e) =>
+        sameTerminal(e.key, t),
+      )?.value.length ?? 0) <= 1,
+  );
+  return withStoppedTerminals(
+    incompleteTracePathError(
+      context.view.root.deviceUid,
+      targetDeviceUid,
+      segment,
+      context.view.root.designation,
+    ),
+    ends.length ? ends : start ? [start] : [],
   ) as IncompleteTraceSelectionError;
 }
 
@@ -2262,10 +2302,13 @@ function selectControlPaths(context: SelectionContext):
     if (result.value === undefined) {
       return {
         ok: false,
-        error: incompleteControlPathError(
-          device.uid,
-          search.spec.lane,
-          context.view.root.designation,
+        error: withStoppedTerminals(
+          incompleteControlPathError(
+            device.uid,
+            search.spec.lane,
+            context.view.root.designation,
+          ),
+          result.stoppedAt ?? [search.start],
         ),
       };
     }
@@ -2311,20 +2354,24 @@ function selectPowerPaths(context: SelectionContext):
     if (result.value === undefined) {
       return {
         ok: false,
-        error: incompletePowerPathError(
-          device.uid,
-          lane.lane,
-          context.view.root.designation,
-          lane.lane === "line" || lane.lane === "neutral"
-            ? {
-                terminalKey: lane.terminal.terminalKey,
-                unfed: !context.ir.indexes.conductiveElementIdsByTerminal.find(
-                  (e) =>
-                    e.key.deviceUid === lane.terminal.deviceUid &&
-                    e.key.terminalKey === lane.terminal.terminalKey,
-                )?.value.length,
-              }
-            : undefined,
+        error: withStoppedTerminals(
+          incompletePowerPathError(
+            device.uid,
+            lane.lane,
+            context.view.root.designation,
+            lane.lane === "line" || lane.lane === "neutral"
+              ? {
+                  terminalKey: lane.terminal.terminalKey,
+                  unfed:
+                    !context.ir.indexes.conductiveElementIdsByTerminal.find(
+                      (e) =>
+                        e.key.deviceUid === lane.terminal.deviceUid &&
+                        e.key.terminalKey === lane.terminal.terminalKey,
+                    )?.value.length,
+                }
+              : undefined,
+          ),
+          result.stoppedAt ?? [lane.terminal],
         ),
       };
     }
@@ -2453,15 +2500,25 @@ function unsupportedCableEndpoint(
   context: SymbolMappingContext,
   device: IrDevice,
   root: string,
+  terminal: TerminalId,
 ): { readonly ok: false; readonly error: UnsupportedSymbolMappingError } {
+  const functionKey = context.ir.functions.find(
+    (f) =>
+      f.id.deviceUid === device.uid &&
+      f.terminals.some((t) => sameTerminal(t, terminal)),
+  )?.id.functionKey;
   return Object.freeze({
     ok: false,
-    error: unsupportedSymbolMappingError({
-      family: "control",
-      deviceUid: device.uid,
-      typeId: device.typeId,
-      root,
-    }),
+    error: withStoppedTerminals(
+      unsupportedSymbolMappingError({
+        family: "control",
+        deviceUid: device.uid,
+        typeId: device.typeId,
+        ...(functionKey ? { functionKey } : {}),
+        root,
+      }),
+      [terminal],
+    ),
   });
 }
 
@@ -2556,7 +2613,12 @@ export function selectCableConductors(
         invalidCableMapping,
       );
       if (functionId === undefined) {
-        return unsupportedCableEndpoint(context, device, cable.designation);
+        return unsupportedCableEndpoint(
+          context,
+          device,
+          cable.designation,
+          terminal,
+        );
       }
       functionIds.set(functionIdKey(functionId), functionId);
     }

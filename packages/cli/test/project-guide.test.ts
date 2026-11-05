@@ -121,6 +121,12 @@ const FLAG_BINDINGS: readonly {
 }[] = [
   {
     sentence:
+      "W906: undrawn devices in drawing packets; warnings exit 0 or 1 with `--strict`.",
+    fragment: "--strict",
+    commands: () => ["packet"],
+  },
+  {
+    sentence:
       "These commands default to `--project .`; `validate` and `lock` take a path instead (`thermite validate . --strict`).",
     fragment: "--project .",
     commands: () => ctx.tree.alpha.filter((name) => name !== "init"),
@@ -577,6 +583,7 @@ async function runPacket(
   const run = await thermite(args, project);
   expect(run.code, describeRun(args, run)).toBe(0);
   if (!everyDevice) return;
+  expect(JSON.parse(run.stdout).coverage.diagnostics ?? []).toEqual([]);
   const drawn = new Set(
     JSON.parse(run.stdout)
       .sheets.filter((s: any) => /^schematic-view\//.test(s.view.format))

@@ -142,12 +142,13 @@ views. `--flow left-to-right|top-to-bottom`,
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
 single sheet only (R006 otherwise).
 
-A packet request has `format: "schematic-packet-request/0.1"`, optional shared
-`page`, `layout: "compact"` and `index: true`, and `views`:
-`schematic-view-request/0.1` with `family: "power"|"control"`, or `0.2` with a
-loads, conductors or trace intent. Page settings belong to the packet or
-presentation, never a view. This packet puts every starter device on a schematic
-sheet; for `cabinets`, use root `CBL1` and intent `conductors`.
+Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
+"compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:
+"power"|"control"`) or `0.2` (loads/conductors/trace).
+Page settings: packet/presentation, never views.
+W906: undrawn devices in drawing packets; warnings exit 0 or 1 with `--strict`.
+This packet puts every starter device on a schematic sheet; for `cabinets`, use
+root `CBL1` and intent `conductors`.
 
 ```json
 {

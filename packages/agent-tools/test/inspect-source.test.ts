@@ -643,7 +643,7 @@ async function cabinetsFixture() {
   }
 }
 
-describe("review round 2 source guards", () => {
+describe("admitted source guards", () => {
   it("rejects an in-request index shift at the object's uid test without writing", async () => {
     const fixture = await cabinetsFixture();
     try {
