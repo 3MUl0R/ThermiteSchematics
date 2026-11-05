@@ -1,5 +1,14 @@
 import { EVALS_VERSION } from "./version.mjs";
 import { checkerManifestHash } from "./checker-manifest.mjs";
+import {
+  sheetRenameMap,
+  renamedScope,
+  proveMove,
+  cropClaimTracker,
+  sourceRow,
+  moveError,
+  viewKind,
+} from "./repin-policy.mjs";
 // Guarded deltas only. This module never imports or calls seed().
 import assert from "node:assert/strict";
 import { isDeepStrictEqual as equal } from "node:util";
@@ -277,6 +286,23 @@ export function instanceInventory(report, reportSha256) {
           const multiplicity = f.instances ? 1 : (f.instanceCount ?? 1);
           const facts = {
             kind: f.kind,
+            dq: identity.dq,
+            check: identity.check,
+            flow:
+              row.flow ??
+              /(?:left-to-right|top-to-bottom)$/.exec(row.case)?.[0] ??
+              "flow-neutral",
+            ...(f.fontPair &&
+            identity.locator.startsWith(
+              `font-pair/${f.fontPair}/${viewKind(row.viewScope)}/`,
+            )
+              ? {
+                  column: identity.locator.slice(
+                    `font-pair/${f.fontPair}/${viewKind(row.viewScope)}/`
+                      .length,
+                  ),
+                }
+              : {}),
             text: String(
               i.text ?? i.designation ?? f.text ?? f.designation ?? "",
             ),
@@ -291,6 +317,7 @@ export function instanceInventory(report, reportSha256) {
             ...address,
             facts,
             multiplicity,
+            physicalSheet: row.sheet,
             classification:
               row.classification === "policy-gap" ? "policy-gap" : "drawing",
             bbox: i.bbox ?? f.bbox,
@@ -398,6 +425,7 @@ export function prepareRepin({
   );
   const inventory = instanceInventory(report, reportSha256),
     original = new Map(registry.markers.map((m) => [m.id, m]));
+  const population = [...inventory.groups.values()].flatMap((g) => g.findings);
   const next = copy(registry),
     markers = new Map(next.markers.map((m) => [m.id, m]));
   const stale = new Map(
@@ -412,6 +440,27 @@ export function prepareRepin({
     metricWork = new Map(),
     definitions = new Map(),
     receipts = [];
+  const recordReceipt = (entry, r) =>
+    receipts.push({
+      ...r,
+      toolProved: {
+        boundObservations: true,
+        completeInstanceAccounting: true,
+        derivedBounds: true,
+        ...(r.measuredScope ? { measuredScope: r.measuredScope } : {}),
+        ...(r.proof ? { move: r.proof } : {}),
+        ...(r.crop ? { cropSha256: r.crop.sha256 } : {}),
+      },
+      reviewerJudged: {
+        reviewed: entry.reviewed,
+        causeClass: entry.causeClass,
+        note: entry.note,
+        ...(entry.cause ? { cause: entry.cause } : {}),
+        ...(entry.crop ? { crop: entry.crop } : {}),
+      },
+    });
+  const sheetRenames = sheetRenameMap(decisions, specs);
+  const claimCrop = cropClaimTracker(cropHashes);
   assert(decisions.length, "Supply reviewed decisions");
   const claim = (map, key, description) => {
     assert(!map.has(key), `Conflicting/reused ${description}`);
@@ -450,6 +499,7 @@ export function prepareRepin({
         "evalsVersion",
         "baselineSha256",
         "entries",
+        "sheetRenames",
       ],
       "decisions file",
     );
@@ -505,7 +555,7 @@ export function prepareRepin({
           [
             ...common,
             ...(rename
-              ? ["from", "to", "pairs"]
+              ? ["from", "to", "pairs", "crop"]
               : ["markerId", "scope", "cause", "instances"]),
           ],
           "decision",
@@ -524,12 +574,16 @@ export function prepareRepin({
         classCheck(entry, old.kind);
         if (!rename) {
           assert(
-            ["fixed", "not-measured"].includes(entry.cause),
-            "Retirement cause must be fixed or not-measured",
+            ["fixed", "removed", "not-measured"].includes(entry.cause),
+            "Retirement cause must be fixed, removed or not-measured",
           );
-          const isMeasured = measured(checked.rows, old, from.scope);
+          const isMeasured = measured(
+            checked.rows,
+            old,
+            renamedScope(from.scope, sheetRenames),
+          );
           assert(
-            entry.cause === "fixed" ? isMeasured : !isMeasured,
+            entry.cause !== "not-measured" ? isMeasured : !isMeasured,
             "Retirement cause contradicts measurement availability",
           );
         }
@@ -545,11 +599,12 @@ export function prepareRepin({
         if (!rename && !entry.instances) {
           assert(!work.claims.size, "Conflicting retirement/rename decisions");
           work.whole = true;
-          receipts.push({
+          recordReceipt(entry, {
             pr: file.pr,
             action: "retire",
             ...from,
             cause: entry.cause,
+            measuredScope: renamedScope(from.scope, sheetRenames),
           });
           continue;
         }
@@ -567,12 +622,14 @@ export function prepareRepin({
           const target = ensureTarget(entry.to);
           assert(
             target.g.identity.kind === old.kind,
-            "Rename defect kind changed",
+            moveError("Rename defect kind changed"),
           );
           assert(
             Array.isArray(entry.pairs) && entry.pairs.length,
             "List individual rename pairs",
           );
+          let changedText = false,
+            changedHeader = false;
           for (const pair of entry.pairs) {
             keys(
               pair,
@@ -588,6 +645,11 @@ export function prepareRepin({
                 target.g.tokens.includes(pair.to),
               "Rename pair is not in its declared scopes",
             );
+            proveMove(a, b, sheetRenames, specs);
+            changedText ||= a.facts.text !== b.facts.text;
+            changedHeader ||=
+              a.facts.text !== b.facts.text &&
+              sourceRow(a.facts.sourceLocator)?.kind.startsWith("header/");
             assert(
               a.multiplicity === 1 && b.multiplicity === 1,
               "Compact aggregates need exported instances; cannot prove rename",
@@ -610,6 +672,12 @@ export function prepareRepin({
             work.claims.add(pair.from);
             target.claims.add(pair.to);
           }
+          if (changedText) claimCrop(entry.crop);
+          else
+            assert(
+              entry.crop === undefined,
+              "Unused crop on an unchanged-text move",
+            );
           const id = entry.to.markerId;
           if (!markers.has(id)) {
             const i = target.g.identity,
@@ -630,12 +698,17 @@ export function prepareRepin({
               same(m.count, old.count, "Conflicting renamed marker counts");
             }
           }
-          receipts.push({
+          recordReceipt(entry, {
             pr: file.pr,
             action: "rename",
             from,
             to: entry.to,
             pairs: entry.pairs.length,
+            changedText,
+            changedHeader,
+            ...(entry.crop ? { crop: entry.crop } : {}),
+            proof:
+              "Same case/flow/medium, source row, locator kind and view; sheet unchanged or explicitly renamed",
           });
         } else {
           assert(
@@ -647,12 +720,13 @@ export function prepareRepin({
             claim(sourceClaims, token, "retirement instance");
             work.claims.add(token);
           }
-          receipts.push({
+          recordReceipt(entry, {
             pr: file.pr,
             action: "retire",
             ...from,
             cause: entry.cause,
             instances: entry.instances.length,
+            measuredScope: renamedScope(from.scope, sheetRenames),
           });
         }
       } else if (["new-defect", "scope-added"].includes(entry.action)) {
@@ -669,18 +743,7 @@ export function prepareRepin({
         );
         classCheck(entry, target.g.identity.kind);
         if (!addition || entry.crop !== undefined) {
-          keys(entry.crop, ["path", "sha256"], "reviewed crop");
-          assert(
-            typeof entry.crop.path === "string" &&
-              entry.crop.path.startsWith("evals/out/draw-samples/") &&
-              !entry.crop.path.split("/").includes("..") &&
-              /^[a-f0-9]{64}$/.test(entry.crop.sha256 ?? ""),
-            "Record a retained crop path and SHA-256",
-          );
-          assert(
-            cropHashes.get(entry.crop.path) === entry.crop.sha256,
-            "Reviewed crop missing or hash mismatch",
-          );
+          claimCrop(entry.crop);
         }
         assert(
           Array.isArray(entry.instances) && entry.instances.length,
@@ -713,7 +776,7 @@ export function prepareRepin({
           next.markers.push(m);
           definitions.set(id, "new-defect");
         }
-        receipts.push({
+        recordReceipt(entry, {
           pr: file.pr,
           action: entry.action,
           to: entry.to,
@@ -756,7 +819,7 @@ export function prepareRepin({
             entry.to.every(Number.isInteger),
             "Count envelopes use integers",
           );
-        receipts.push({ pr: file.pr, ...entry });
+        recordReceipt(entry, { pr: file.pr, ...entry });
         metricWork.set(JSON.stringify([entry.markerId, entry.metric]), entry);
       } else assert.fail(`Unknown decision action: ${entry.action}`);
     }
@@ -792,7 +855,12 @@ export function prepareRepin({
             g.markerId === id &&
             units(m).some((u) => unitKey(u) === unitKey(g.scope)),
         );
-      m.bands = canonical(bands(groups.flatMap((g) => g.findings)));
+      m.bands = canonical(
+        bands(
+          groups.flatMap((g) => g.findings),
+          population,
+        ),
+      );
       const counts = groups.map((g) => g.occurrences);
       m.count = [Math.min(...counts), Math.max(...counts)];
     }
@@ -843,7 +911,9 @@ export function prepareRepin({
             units(m).some((u) => unitKey(u) === unitKey(g.scope)),
         )
         .flatMap((g) => g.findings);
-      const derived = canonical(bands(observedFindings)[entry.metric]);
+      const derived = canonical(
+        bands(observedFindings, population)[entry.metric],
+      );
       same(
         entry.to,
         derived,
@@ -886,6 +956,27 @@ export function prepareRepin({
         moves: receipts.filter((r) => r.action === "rename").length,
         additions: receipts.filter((r) => r.action === "scope-added").length,
         newDefects: receipts.filter((r) => r.action === "new-defect").length,
+        removals: receipts.filter(
+          (r) => r.action === "retire" && r.cause === "removed",
+        ).length,
+        notMeasured: receipts.filter(
+          (r) => r.action === "retire" && r.cause === "not-measured",
+        ).length,
+        changedHeaderMoves: receipts.filter(
+          (r) => r.action === "rename" && r.changedHeader,
+        ).length,
+      },
+      toolProved: {
+        fullInstanceAccounting: true,
+        derivedBounds: true,
+        distinctCropHashes: true,
+        moveStructure: true,
+      },
+      reviewerJudged: {
+        signOff:
+          "reviewed:true is a person's sign-off; the tool cannot verify it",
+        causesAndCrops: receipts.length,
+        scoreCredit: 0,
       },
     },
   };
@@ -909,6 +1000,7 @@ export function reviewInventory(context) {
     checkerSha256,
   );
   const current = instanceInventory(report, reportSha256);
+  const population = [...current.groups.values()].flatMap((g) => g.findings);
   return {
     format: "thermite-draw-repin-inventory/1.0",
     binding: {
@@ -932,7 +1024,12 @@ export function reviewInventory(context) {
         {
           markerId: id,
           count: [Math.min(...counts), Math.max(...counts)],
-          bands: canonical(bands(groups.flatMap((g) => g.findings))),
+          bands: canonical(
+            bands(
+              groups.flatMap((g) => g.findings),
+              population,
+            ),
+          ),
         },
       ];
     }),

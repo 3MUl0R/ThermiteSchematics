@@ -16,7 +16,7 @@ const t = (extra = {}) => ({
   font: "mono",
   fontSize: 2.5,
   capHeightMm: 1.5,
-  expectedCapRatio: 0.6,
+
   advanceRatio: 1,
   painted: true,
   ...extra,
@@ -157,7 +157,6 @@ it("checks the PDF medium actual em size while retaining source label roles", ()
     fontSize: 2.1,
     bbox: b(20, 20),
     capHeightMm: 1.4994,
-    expectedCapRatio: 0.714,
   };
   const texts = c.pdfGeometryTexts([source], [measured]);
   expect(texts[0].medium).toBe("pdf");
@@ -175,7 +174,6 @@ it("detects em anisotropy against the horizontal em reference", () => {
     fontSize: 3,
     capReferenceEmMm: 4,
     capHeightMm: 1.8,
-    expectedCapRatio: 0.6,
   });
   expect(c.legibility(g([x])).map((f) => f.kind)).toEqual(["distorted-glyphs"]);
 });

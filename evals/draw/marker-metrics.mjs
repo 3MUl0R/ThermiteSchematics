@@ -74,7 +74,7 @@ export function envelope(items) {
     }
   return out;
 }
-export function bands(findings) {
+export function bands(findings, population = findings) {
   const reference = envelope(findings.map(measurements)),
     result = {};
   for (const [metric, [low, high]] of Object.entries(reference)) {
@@ -90,6 +90,24 @@ export function bands(findings) {
       if (pad !== undefined)
         result[metric] = [Math.max(0, low - pad), low, high, high + pad];
     }
+  }
+  if (
+    result.advanceRatio &&
+    findings.every((f) => f.kind === "pdf-svg-advance-difference")
+  ) {
+    const pair = findings[0].fontPair;
+    const values = population
+      .filter(
+        (f) =>
+          f.kind === "pdf-svg-advance-difference" &&
+          f.fontPair === pair &&
+          Number.isFinite(f.advanceRatio),
+      )
+      .map((f) => f.advanceRatio);
+    if (!values.length)
+      throw Error("Missing complete DQ-21 font-pair population");
+    result.advanceRatio[0] = Math.max(0, Math.min(...values) - 0.05);
+    result.advanceRatio[3] = Math.max(...values) + 0.05;
   }
   return result;
 }
