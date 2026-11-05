@@ -774,7 +774,7 @@ const module: FactModule = {
       "Advice; the wiring view only points readers to the schedules.",
     ],
     [
-      "Follow the engine's `docs/circuit-symbols.md` and `docs/circuit-views.md`; never infer a mark from a tag or part-number substring.",
+      "Follow `thermite guide circuit-symbols` and `thermite guide circuit-views`; never infer a mark from a tag or part-number substring.",
       "Advice about which documents to follow and how to choose marks.",
     ],
   ]),

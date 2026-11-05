@@ -4,12 +4,14 @@
 terminals and communication ports, with required connections, review notes and
 component-model coverage. It reads the project without changing it.
 
+These commands run in the default initialized starter project:
+
 ```sh
-bun thermite.mjs diagnostics --project path/to/project
-bun thermite.mjs diagnostics --project path/to/project --device HMI1 --json
-bun thermite.mjs diagnostics --project path/to/project --location "HMI console"
-bun thermite.mjs diagnostics --project path/to/project -o audit.json
-bun thermite.mjs diagnostics --project path/to/project -o audit.csv
+thermite diagnostics --project .
+thermite diagnostics --project . --device PLC1 --json
+thermite diagnostics --project . --location "MAIN-PANEL"
+thermite diagnostics --project . -o audit.json
+thermite diagnostics --project . -o audit.csv
 ```
 
 Text groups warnings before information and includes source locations. JSON uses

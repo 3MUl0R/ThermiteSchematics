@@ -7,89 +7,7 @@ separate public registry packages.
 
 ## Paper and packets
 
-`project-presentation/0.2` adds an optional `page` object. The loader also accepts
-the original presentation format. Page settings are a backward-compatible
-extension; omitted settings resolve to Tabloid landscape with a 10 mm margin.
-
-```json
-{
-  "format": "project-presentation/0.2",
-  "revision": "A",
-  "backgroundColor": "#ffffff",
-  "page": { "size": "tabloid", "orientation": "landscape", "marginMm": 10 },
-  "titleBlock": { "lines": ["Machine 01"] }
-}
-```
-
-Sizes are `letter`, `tabloid`, `a4`, and `a3`; orientation is `landscape` or
-`portrait`; margins range from 5 to 25 mm. Physical SVG dimensions use mm.
-Printable output uses a white drawing sheet for print legibility. The continuous
-POC SVG renderer retains its presentation background behavior.
-
-`schematic-packet-request/0.1` contains `views` (1–40 existing schematic view
-requests or documentation requests) and optional shared `page`, `layout`
-(`standard` or `compact`), and boolean `index`. Individual views cannot change paper size.
-The renderer caps a packet at 100 sheets. The result `schematic-packet/0.1`
-contains normalized `page`, ordered `sheets`, and self-contained `html`.
-Each sheet includes its SVG, normalized view, number, and continuation records
-with the matching destination sheet, conductor label, and electrical net ID.
-
-Packet failures add `details.views` with the zero-based authored `viewIndex` and
-view title. A single-view failure also has `details.viewIndex` and
-`details.viewTitle`; a compact sheet shared by multiple views retains them all.
-Request-wide failures such as invalid shared page settings have no view index.
-R002/R003 identify devices and functions, and R004 identifies conductors and
-endpoints without requiring UUID lookup. Stable identity fields remain present.
-Unsupported rooted or circuit profile/function shapes retain the existing R001–R006
-classification and fields, with `details.reason: "unsupported-symbol-profile"`
-(and `error.reason` only when it has no existing value), plus
-profile, type, designation, family and function context in `unsupported`
-(and compatibility companions in `details`). This object always names one device;
-top-level identity fields retain their dev values. Mixed traversal stops keep the
-incomplete-path message and stopped-terminal text, with an encountered profile
-reported as `details.profileNote` rather than the sole cause. Trace connectivity
-failures likewise retain their path message because physical leaves cannot prove
-that a profile caused the disconnection. A real missing path still reports R002. Profile diagnosis runs only on actual failures.
-Wrong-family/role roots use R001 `root-not-accepted`, with accepted profiles/shapes
-and this device's root families. Choose another root or an offered family; when
-none is offered, choose a different root device. Profile metadata never changes
-connectivity.
-Absent symbol metadata is an R001 eligibility failure for roots (`root-not-accepted`)
-and input targets (`target-not-accepted`); choose another eligible device. A declared
-unknown symbol or a shape that mismatches its own profile is instead an unsupported
-profile. Missing bindings on a traversed path remain profile context for that path.
-`acceptedRoots` always contains `{profile, aliases, shapes}` records, for every family.
-R006 circuit failures name the involved source keys. A top-to-bottom R006
-suggests `--layout compact` only after a successful compact composition and
-sheet assembly on the same page.
-
-`coverage.diagnostics`, when present, contains W906 for placed devices that have
-no schematic appearance anywhere in a successful packet containing a drawing.
-Reports-only packets are exempt; there is no opt-out field. Circuit, rooted and
-other drawing families count, so topology-only drawings also establish scope.
-Its `devices` inventory names each UID and designation, distinguishes `reports-only` from `absent`, and
-lists report/index sheets. Every drawing family counts, including endpoint
-appearances; reports and indexes do not count as schematics. Existing conductor
-and function coverage retains its narrower scope. W906 is advisory and does not
-certify complete wiring or readability. The `packet` CLI emits it on stderr with
-compiler diagnostics and exits 0 for warnings, or 1 with `--strict`; info does not
-fail strict mode. Individual `view` commands intentionally select partial views
-and carry no W906 on stdout or stderr. `--strict` is a packet option: warning
-failures report diagnostics with `error: null` and write no output.
-
-
-Circuit sheets use ELK's validated diagram, preserving its geometry. Cuts avoid
-devices, rails, symbol/terminal labels, junctions, and routing bends. Circuit text
-never scales below 2.5 mm. Repeated SVG IDs are namespaced per sheet without
-changing electrical metadata. An unprintable arrangement returns R006 rather
-than clipping a device, overlapping a continuation label, or silently omitting
-content. Change flow, page size, or the selected view to resolve it.
-
-`renderSchematicSheets` and `renderSchematicPacket` are exported by the render
-package. `renderSchematic` and agent `create-view` retain continuous SVG for legacy
-sources. Annotated cables return the complete core sheet, including spare cores.
-An annotated cable that needs multiple sheets returns R006; use the Thermite
-view/packet commands to retain its complete inventory. HTML is an SVG container, not a rasterization.
+See [view requests, paper and packet contracts](views.md).
 
 ## Cable assignments
 
@@ -187,50 +105,11 @@ This spreadsheet protection does not mutate source values.
 
 ## Compact sheets and references
 
-Compact mode tries standard, compact and dense spacing, stopping when one sheet
-is achieved and selecting fewer sheets, then fewer continuations. All candidates
-pass existing routing validation. A proven one-sheet candidate can reclaim
-continuation gutters. Horizontal tiles may be cropped to their actual vertical
-content bounds and stacked on a sheet with a gap; this changes only composition,
-not routed geometry. If they cannot fit, retain separate pages. The selection
-never changes flow or reduces the minimum circuit text size.
-
-Each sheet includes references identifying the visible device/function and its
-A-D / 1-6 zone. Cable endpoints and schedule rows also contribute references.
-`index: true` appends an index of content sheets and a device/function reference
-section. Reference locations belong to that generated packet, and can change
-when the request, paper, source or renderer changes. Object UIDs persist; sheet
-numbers and continuation labels are not permanent identifiers. Manual placement,
-pinned page breaks and incremental layout stability are not implemented.
-
-The HTML viewer searches sheet labels/device designations. The sheet selector
-and conductor links reveal destinations even after filtering. Printing always
-includes every sheet. The viewer has no server and makes no network requests.
-`watch` polls declared inputs and the request every second, reloads library
-references and source globs, and rebuilds only when loading results or the
-request change. Failed rebuilds retain the last good file. Refresh the HTML to
-see the new packet; there is no automatic browser reload.
+See [view composition and references](views.md#compact-sheets-and-references).
 
 ## PDF and semantic review
 
-A `.pdf` output uses PDFKit and svg-to-pdfkit with bundled OFL Noto Sans fonts.
-It preserves physical page sizes and vector geometry, embeds fonts, and fixes
-metadata dates for repeatable bytes. Unsupported text glyphs and conversion
-warnings fail before replacing the destination. No arbitrary SVG import or
-external image/document loading is exposed. Viewer behavior and PDF pagination
-are independent. Local Safari rendering and physical printer behavior still
-need a user check.
-
-`snapshot` produces `thermite-snapshot/0.1`: a digest and stable, semantic IR
-entities. `review --before` produces `thermite-review/0.1`: added/removed/changed
-identities, changed field paths, before/after values and directly affected
-devices. Source locations and derived net IDs are excluded so formatting edits
-do not create electrical changes. Type changes are visible even when no current
-instance uses the type. Presentation settings and library-byte-only changes are
-outside semantic review; retain normal Git and lock-file review for those.
-Snapshots are change-review data, not backups or cryptographic approval records.
-Affected devices are directly referenced objects, not a functional impact or
-machine-safety analysis.
+See [snapshot, review, watch and PDF](review.md).
 
 ## Declared physical continuity review
 

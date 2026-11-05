@@ -40,7 +40,7 @@ export function parseFences(markdown: string): Fence[] {
     if (open === undefined) {
       if (/^(\s+```|\s*~~~|\s*````)/.test(text))
         throw new Error(`Unsupported fence style at line ${index + 1}.`);
-      const start = /^```(\S*)\s*$/.exec(text);
+      const start = /^```(\S*)(?:[ \t]+[^\n]*)?$/.exec(text);
       if (start) open = { lang: start[1]!, line: index + 1, body: [] };
     } else if (text === "```") {
       fences.push({

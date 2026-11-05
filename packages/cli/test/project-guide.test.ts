@@ -40,8 +40,6 @@ import {
   thermite,
   writeJson,
   type FactModule,
-  type HelpSpec,
-  type OptionSpec,
   type Template,
 } from "./project-guide/harness.js";
 import {
@@ -51,6 +49,13 @@ import {
   type Fence,
   type GuideModel,
 } from "./project-guide/guide-model.js";
+import {
+  checkCommand,
+  expandAlternatives,
+  expectedCode,
+  isPlaceholder,
+  splitWords,
+} from "./project-guide/commands.js";
 import communication from "./project-guide/communication-completeness.js";
 import core, { assertCloneWarnings, viewRoots } from "./project-guide/core.js";
 import general from "./project-guide/general.js";
@@ -65,16 +70,6 @@ const guideBytes = readFileSync(guidePath);
 const live = guideModel(guideBytes.toString("utf8"));
 /** The G1 budget; G6 compacts the guide further. */
 const GUIDE_BYTE_BUDGET = 19_500;
-/**
- * Source-checkout documents the guide may cite. These pointers are dead in a
- * runtime package (G3 replaces them); do not add more.
- */
-const DOCS_POINTERS = new Set([
-  "docs/circuit-symbols.md",
-  "docs/circuit-views.md",
-  "docs/report-filtering.md",
-  "docs/signal-loops.md",
-]);
 /** Concrete inline commands checked against the CLI tree but not executed. */
 const INLINE_NOT_RUN = new Map<string, string>([
   [
@@ -129,7 +124,8 @@ const FLAG_BINDINGS: readonly {
     sentence:
       "These commands default to `--project .`; `validate` and `lock` take a path instead (`thermite validate . --strict`).",
     fragment: "--project .",
-    commands: () => ctx.tree.alpha.filter((name) => name !== "init"),
+    commands: () =>
+      ctx.tree.alpha.filter((name) => !["init", "guide"].includes(name)),
   },
   {
     sentence:
@@ -148,131 +144,6 @@ const FLAG_BINDINGS: readonly {
 // ---------------------------------------------------------------------------
 // Command lines
 
-interface Words {
-  readonly words: string[];
-  readonly comment?: string;
-}
-/**
- * Splits a command line. Strict mode accepts only the subset this test can
- * execute: words, quotes without expansion, `<...>` placeholders and a trailing
- * comment. Lenient mode is for inline prose fragments such as `--flow a|b`.
- */
-function splitWords(line: string, strict: boolean): Words {
-  const words: string[] = [];
-  let word: string | undefined;
-  const push = () => {
-    if (word !== undefined) words.push(word);
-    word = undefined;
-  };
-  for (let i = 0; i < line.length;) {
-    const c = line[i]!;
-    if (c === "'" || c === '"') {
-      const end = line.indexOf(c, i + 1);
-      if (end < 0) throw new Error(`Unclosed quote in: ${line}`);
-      const inner = line.slice(i + 1, end);
-      if (strict && c === '"' && /[$`\\]/.test(inner))
-        throw new Error(`Shell expansion is not executable here: ${line}`);
-      word = (word ?? "") + inner;
-      i = end + 1;
-    } else if (/\s/.test(c)) {
-      push();
-      i += 1;
-    } else if (c === "#" && word === undefined) {
-      push();
-      return { words, comment: line.slice(i + 1).trim() };
-    } else if (c === "<") {
-      const end = line.indexOf(">", i);
-      if (end < 0) throw new Error(`Unclosed placeholder in: ${line}`);
-      word = (word ?? "") + line.slice(i, end + 1);
-      i = end + 1;
-    } else if (strict && /[|&;>$`\\()*?{}[\]!~]/.test(c)) {
-      throw new Error(`Unsupported shell syntax "${c}" in: ${line}`);
-    } else {
-      word = (word ?? "") + c;
-      i += 1;
-    }
-  }
-  push();
-  return { words };
-}
-const isPlaceholder = (word: string) => /<[^<>]*>/.test(word);
-/** Expands `<a|b>` alternative words; any other placeholder is unexecutable. */
-function expandAlternatives(words: readonly string[]): string[][] {
-  let lines: string[][] = [[]];
-  for (const word of words) {
-    const alternatives = /^<([^<>|]+(?:\|[^<>|]+)+)>$/.exec(word);
-    if (alternatives) {
-      const values = alternatives[1]!.split("|");
-      lines = lines.flatMap((line) => values.map((value) => [...line, value]));
-    } else if (isPlaceholder(word)) {
-      throw new Error(`No real value for placeholder ${word}.`);
-    } else lines = lines.map((line) => [...line, word]);
-  }
-  return lines;
-}
-const expectedCode = (comment: string | undefined) =>
-  /^([A-Z]+\d{3})\b/.exec(comment ?? "")?.[1];
-
-function checkValue(option: OptionSpec, value: string, where: string) {
-  if (isPlaceholder(value) || option.choices === undefined) return [];
-  const values = value.split("|");
-  if (values.length > 1)
-    return [...values].sort().join("|") === [...option.choices].sort().join("|")
-      ? []
-      : [`${where}: ${value} must list exactly ${option.choices.join("|")}`];
-  return option.choices.includes(value)
-    ? []
-    : [`${where}: ${value} is not one of ${option.choices.join("|")}`];
-}
-/** A prose fragment may name a value-taking flag without its value. */
-function checkOptions(
-  words: readonly string[],
-  spec: HelpSpec,
-  where: string,
-  fragment = false,
-) {
-  const problems: string[] = [];
-  for (let i = 0; i < words.length; i += 1) {
-    const word = words[i]!.replace(/^\[|\]$/g, "");
-    if (!word.startsWith("-") || word === "-") continue;
-    const option = spec.options.find((o) => o.flags.includes(word));
-    if (option === undefined) {
-      problems.push(`${where}: unknown option ${word}`);
-      continue;
-    }
-    if (!option.takesValue) continue;
-    const value = words[i + 1];
-    if (value === undefined || (fragment && value.startsWith("-"))) {
-      if (!fragment) problems.push(`${where}: ${word} needs a value`);
-      continue;
-    }
-    i += 1;
-    problems.push(...checkValue(option, value, `${where} ${word}`));
-  }
-  return problems;
-}
-/** Problems with a `thermite ...` word list against the real command tree. */
-function checkCommand(
-  words: readonly string[],
-  where: string,
-  fragment = false,
-): string[] {
-  const [name, ...rest] = words;
-  const command = name === undefined ? undefined : ctx.tree.commands.get(name);
-  if (command === undefined) return [`${where}: unknown command ${name}`];
-  if (name !== "agent") return checkOptions(rest, command, where, fragment);
-  const [tool, ...options] = rest;
-  // A bare `thermite agent` names the command group, not an invocation.
-  if (tool === undefined) return [];
-  if (tool === "<tool>")
-    return [...ctx.tree.tools].flatMap(([n, spec]) =>
-      checkOptions(options, spec, `${where} (${n})`, fragment),
-    );
-  const spec = ctx.tree.tools.get(tool);
-  return spec === undefined
-    ? [`${where}: unknown agent tool ${tool}`]
-    : checkOptions(options, spec, where, fragment);
-}
 const commandPrefix = (words: readonly string[]) =>
   words.slice(0, words[0] === "agent" ? 2 : 1);
 
@@ -776,12 +647,18 @@ afterAll(async () => {
 });
 
 describe("generated project guide", () => {
-  it("fits its budget, adds no source-only docs pointers and names the pinned runtime", async () => {
+  it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
     expect(live.bytes).toBeLessThanOrEqual(GUIDE_BYTE_BUDGET);
-    const pointers = [...new Set(live.text.match(/docs\/[\w./-]+\.md/g) ?? [])];
-    expect(pointers.filter((p) => !DOCS_POINTERS.has(p))).toEqual([]);
-    for (const pointer of pointers)
-      await expect(stat(join(repositoryRoot, pointer))).resolves.toBeTruthy();
+    expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);
+    const pointers = [
+      ...new Set(
+        [...live.text.matchAll(/`thermite guide ([a-z-]+)`/g)].map(
+          (m) => m[1]!,
+        ),
+      ),
+    ];
+    expect(pointers.length).toBeGreaterThan(0);
+    for (const pointer of pointers) await ok(["guide", pointer], ctx.work);
     const pinned = (await readJson(join(repositoryRoot, "package.json")))
       .packageManager as string;
     expect(live.flat).toContain(`Bun ${pinned.replace(/^bun@/, "")}`);

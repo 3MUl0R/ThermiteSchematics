@@ -15,21 +15,19 @@ Add a `circuit-view-request/0.1` to a normal packet request:
   "views": [
     {
       "format": "circuit-view-request/0.1",
-      "title": "Motor control",
+      "title": "Starter control power",
       "flow": "left-to-right",
-      "columns": 2,
+      "columns": 1,
       "groups": [
         {
-          "id": "motor-command",
-          "label": "Contactor command and interlocks",
+          "id": "control-power",
+          "label": "PS1 output to PLC1 supply",
           "lineReference": "200",
           "functions": [
-            { "device": { "by": "designation", "value": "PLC1" }, "key": "do0" },
-            { "device": { "by": "designation", "value": "PB1" }, "key": "contact11" },
-            { "device": { "by": "designation", "value": "OL1" }, "key": "aux95" },
-            { "device": { "by": "designation", "value": "K1" }, "key": "coil" }
+            { "device": { "by": "designation", "value": "PS1" }, "key": "dc_output" },
+            { "device": { "by": "designation", "value": "PLC1" }, "key": "supply" }
           ],
-          "conductors": ["W-CTL-005", "W-CTL-006", "W-CTL-007", "W-CTL-008"]
+          "conductors": ["W-CTL-001", "W-CTL-002"]
         }
       ],
       "notes": ["Device functions are shown independently of energized state."]
@@ -39,10 +37,12 @@ Add a `circuit-view-request/0.1` to a normal packet request:
 }
 ```
 
-This example uses the portable `examples/motor-starter` source. Generate it with:
+This example runs in the default project created by `thermite init`. Save it as
+`circuit.request.json` and run from that project directory, using the launcher
+named in its AGENTS.md:
 
 ```sh
-bun thermite.mjs packet --project examples/motor-starter --input circuit.request.json -o output/circuit.html
+thermite packet --project . --input circuit.request.json -o drawings/circuit.html
 ```
 
 The same request can produce JSON or PDF through the packet command. It is a packet-view contract, not an extension of the six guarded agent commands or of `schematic-view-request/0.1` and `/0.2`.
@@ -174,8 +174,7 @@ signal-loop-only support, quoting at most ten profile IDs across all groups.
 Structured `allowed`, `allowedCount`, and `allowedLookup` fields follow the
 standard diagnostic bounds; the complete current profile ID list is available
 in W111's `allowed` field from `thermite validate <project> --json`. Shape
-requirements still apply to those profiles. `thermite guide symbols` will
-provide profile discovery in G3 and is not available yet.
+requirements still apply to those profiles. `thermite guide symbols` provides offline profile discovery from that catalog.
 
 Signal-loop auxiliary capability on `thermite:terminal-strip` and
 `thermite:bulkhead-connector` is conservatively cataloged as `other/2` only.

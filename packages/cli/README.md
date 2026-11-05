@@ -77,6 +77,33 @@ CLI is an additional workflow. For development verification use
 `bun run test -- <file>` and
 `bun run check`; full checks also require Python 3.12 or later.
 
+## Offline reference guide
+
+Use the same launcher in a source checkout or runtime package:
+
+```sh
+bun thermite.mjs guide
+bun thermite.mjs guide --json
+bun thermite.mjs guide agent-requests
+bun thermite.mjs guide modeling
+bun thermite.mjs guide symbols --json
+bun thermite.mjs guide diagnostics W903 --json
+bun thermite.mjs guide --path
+```
+
+The index lists topic IDs, titles, read-before triggers and approximate tokens
+(served UTF-8 bytes divided by four, rounded up; catalog estimates use text output). Topic output is Markdown on stdout.
+The symbol and E/W/I diagnostic catalogs come from the running schema package.
+R/T lookups point to `guide views`; A/Q lookups point to `guide agent-requests`.
+Unknown topics or codes exit 2. `--path` prints the directory of resolved, shipped Markdown copies. It matches
+`guide <id>` output.
+Topics need no repository, Git executable, network or writable installation.
+Links to other shipped topics become guide commands; other links point to the
+running runtime's source commit (or the source build's Git HEAD).
+Optional libraries and linked source fixtures remain separately acquired files;
+`guide libraries` explains those limits. Existing `$schema` identifiers are
+unchanged; offline schema discovery is a separate workstream.
+
 ## Historical private 0.2.0 runtime
 
 The remaining reference describes only the original private offline tarball and

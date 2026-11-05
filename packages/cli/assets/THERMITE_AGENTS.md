@@ -28,8 +28,8 @@ a downloaded runtime in place.
 From source, make focused engine fixes in the separate engine checkout and open a
 pull request following its AGENTS.md and CONTRIBUTING.md, keeping this project's
 private machine data and credentials out of issues and pull requests. The human
-contributor must accept any CLA; an agent must not sign it. Documentation and
-examples cited below live in that source repository.
+contributor must accept any CLA; an agent must not sign it.
+`thermite guide` lists topics.
 
 ## Authority and workflow
 
@@ -178,7 +178,7 @@ system.json selects path/version; electrical-system.lock.json pins bytes.
 After edits run `thermite lock .`, then validate (E107/E108 otherwise).
 Starter PS1.L/N are required but deferred: strict fails W903/W905; cabinets passes.
 Invent no pins/ratings; keep manufacturer document/revision and review notes.
-Source-only `siemens-pilot` has exact references/exclusions.
+See `thermite guide libraries` for optional-library limits.
 
 ## Multi-conductor cables
 
@@ -204,8 +204,8 @@ thermite report <bom|wires|cables|terminals|io|io-ports|network|assemblies> -o d
 peer details, cable inventories and endpoint-free records; CSV selection metadata
 is on stderr, packets expose `documentationSelections`. With `index: true`,
 `references: {"appearances": "drawings", "filter": {...}}` scopes only the
-reference index; `references: false` omits reference pages. See
-`docs/report-filtering.md` in the source checkout. PLC addresses and spare usage
+reference index; `references: false` omits reference pages.
+See `thermite guide report-filtering`. PLC addresses and spare usage
 live in the device's `io` object; never infer spare from a missing connection.
 E202 checks channel keys and duplicate addresses (case-insensitive), not PLC
 byte/word overlap or programming validity.
@@ -250,8 +250,7 @@ A packet can include `signal-loop-view-request/0.1` with
 "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter,
 authored cordset, continuous bulkhead contacts, optional feed-through terminals
 and the input channel. The opt-in `field-interfaces` library supplies proposed
-generic M12 profiles. See the engine's `docs/signal-loops.md` for limits and
-fixtures.
+generic M12 profiles. See `thermite guide signal-loops` for limits and fixtures.
 
 Both paths must be complete and unbranched, with every traversed cable core
 represented; extra cores must be explicitly spare and terminated at both ends.
@@ -346,9 +345,10 @@ use a larger sheet; never change topology to obtain a drawing.
 
 Library `circuitSymbols` maps real function keys to explicit closed-catalog marks,
 for example different marks for a device's main and auxiliary contacts. E206
-checks function existence, kind, terminal count and contact state. Follow the
-engine's `docs/circuit-symbols.md` and `docs/circuit-views.md`; never infer a mark
-from a tag or part-number substring. Marks do not create continuity or bonds.
+checks function existence, kind, terminal count and contact state.
+Follow `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
+infer a mark from a tag or part-number substring. Marks do not create continuity
+or bonds.
 
 Reconstructing a drawing: record page/line provenance, separate aliases from
 verified pins, preserve conflicting labels as review issues, and assert critical

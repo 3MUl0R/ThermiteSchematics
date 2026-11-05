@@ -62,3 +62,8 @@ docs/planning/
 
 # Evaluation transcripts, timings and checkpoint artifacts are local evidence.
 /evals/out/
+
+# Built from docs/topics.json by scripts/build-guide.mjs
+/packages/cli/assets/guide/
+
+/packages/cli/assets/guide-source.json

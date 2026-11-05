@@ -6,8 +6,8 @@ Thermite Schematics stores project and presentation facts in version-controlled 
 `electrical-system/0.1` is the project format. Its manifest supports an optional
 `presentation` reference and local or name/version-only shipped library references.
 Electrical topology remains `electrical-ir/0.1`; presentation is compiled separately.
-The [format reference](formats-and-compatibility.md) describes compatible paper,
-packet and cable extensions.
+[Views and packets](views.md) describe printable requests; the
+[format reference](formats-and-compatibility.md#cable-assignments) describes cable extensions.
 
 Source describes physical and functional engineering facts. Locks bind library bytes.
 Derived nets, reverse indexes, normalized views, layout, SVG, reports, and serialized
@@ -48,7 +48,7 @@ Revision is 1-128 Unicode code points. The background is lowercase `#rrggbb`. Th
 optional title block has zero to four ordered single-line strings of 1-160 code
 points. Presentation changes drawing identity and canvas only; it does not change
 electrical IR or semantic view selection. `project-presentation/0.2` also supports
-printable page settings; see [paper and packets](formats-and-compatibility.md#paper-and-packets).
+printable page settings; see [paper and packets](views.md#paper-and-packets).
 
 ## Identity and designation
 
@@ -76,57 +76,7 @@ electrical meaning from naming conventions.
 
 ## Library references and types
 
-A project dependency is either local or shipped:
-
-```json
-[
-  {
-    "name": "plant-library",
-    "version": "1.0.0",
-    "path": "libraries/plant"
-  },
-  { "name": "core", "version": "0.1.0" }
-]
-```
-
-The first entry is local and the second is shipped. Any explicit portable relative
-`path` selects a local user-authored library. Its
-root contains `library.json` and the type files declared by that manifest. Omitting
-`path` requests an exact shipped library; the shipped set is
-`core@0.1.0` and `core@0.2.0`.
-
-The lock and IR record `resolutionKind: "local" | "shipped"`. Local provenance
-retains the authored path. Shipped core uses internal locator
-`ais-shipped:core@<version>` and stable display paths rooted at
-`@thermite/core-library`. That locator is not authored source or a registry URL.
-
-A reusable device type defines terminals, functions, internal relations, ratings,
-and symbol mapping:
-
-```json
-{
-  "kind": "device_type",
-  "id": "core:contactor-3p-1no",
-  "terminals": {
-    "A1": {
-      "role": "coil",
-      "connection_policy": "exclusive",
-      "rating": {
-        "nominal_voltage": 24,
-        "voltage_type": "DC"
-      }
-    },
-    "A2": { "role": "coil_return" }
-  },
-  "functions": {
-    "coil": { "kind": "coil", "terminals": ["A1", "A2"] }
-  }
-}
-```
-
-The compiler materializes type facts on instances. Instance overrides are constrained;
-project source cannot casually redefine immutable type terminals or manufacturer
-facts.
+See [libraries and type shapes](libraries.md).
 
 ## Devices and terminal references
 
@@ -167,13 +117,28 @@ A wire owns exactly two endpoints:
   "designation": "W104",
   "endpoints": [
     { "device": "K1", "terminal": "A1" },
-    { "device": "PLC1", "terminal": "X2.14" }
+    { "device": "PLC1", "terminal": "X2.0" }
   ],
   "properties": {
     "label": "104",
     "size": "18AWG",
     "color": "blue"
   }
+}
+```
+
+The synthetic coil example composes with the starter by adding its separate
+return wire, following the [motor-starter control source](../examples/motor-starter/connections/control-chain.json):
+
+```json
+{
+  "uid": "0195f2cc-2235-7123-8123-123456789abc",
+  "kind": "wire",
+  "designation": "W105",
+  "endpoints": [
+    { "device": "K1", "terminal": "A2" },
+    { "device": "PS1", "terminal": "-" }
+  ]
 }
 ```
 
@@ -191,10 +156,10 @@ two endpoints:
   "type": "core:cable-2pair-shielded",
   "conductors": [
     {
-      "id": "1",
+      "id": "1+",
       "endpoints": [
-        { "device": "JB1", "terminal": "X1.1" },
-        { "device": "LS1", "terminal": "1" }
+        { "device": "TB1", "terminal": "1" },
+        { "device": "TB2", "terminal": "1" }
       ]
     }
   ]
@@ -206,6 +171,36 @@ becomes independently addressable in IR. Annotated cables can preserve end A/B
 ordering and explicitly spare, partially terminated cores; see
 [cable assignments](formats-and-compatibility.md#cable-assignments). Missing
 assignments never imply spare status.
+
+## I/O assignments and connection review
+
+Instances assign addresses to declared channel function keys, not terminal keys.
+The starter PLC's `di0` function uses terminal `X1.0`; its `do0` uses `X2.0`, and `do1` uses `X2.1`.
+From the documentation metadata and completeness contracts:
+
+```json
+{
+  "io": {
+    "addressSpace": "iec",
+    "channels": {
+      "di0": { "address": "%I0.0", "signal": "Start request", "usage": "in-use" },
+      "do1": { "address": "%Q0.1", "usage": "spare" }
+    }
+  },
+  "connectionReview": {
+    "terminals": {
+      "X2.1": { "status": "intentionally-unused", "reason": "Reserved output in this synthetic example." }
+    }
+  }
+}
+```
+
+This fragment applies to a device instance. Channels accept `address`, `signal`
+and `usage`; they do not accept `description`. E202 rejects unknown channel keys
+and duplicate addresses in one address space. Address overlap and PLC online
+configuration are not assessed. An unassigned channel is never implicitly spare.
+Review reasons and statuses must reflect authored intent; see
+[connection completeness](completeness.md) for required/deferred/unused rules.
 
 ## Functional relations
 
