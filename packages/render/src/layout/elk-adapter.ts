@@ -12,6 +12,7 @@ import type {
   LayoutOptions,
 } from "elkjs/lib/elk-api.js";
 
+import { canonicalSerializable } from "../internal.js";
 import {
   compareLocationIdentity,
   comparePresentationLabel,
@@ -264,7 +265,6 @@ function hasLabeledZeroIncidencePort(
 }
 
 function adapterPort(
-  graph: PresentationGraph,
   node: SymbolPresentationNode | RailPresentationNode,
   port: PresentationPort,
   index: number,
@@ -331,7 +331,7 @@ function leafNode(
       .sort(comparePresentationLabel)
       .map((label) => leafHeaderLabel(node, label, assignments)),
     ports: ports.map((port, index) =>
-      adapterPort(graph, node, port, index, assignments),
+      adapterPort(node, port, index, assignments),
     ),
   };
 }
@@ -864,18 +864,6 @@ export async function validateElkRuntimeOptions(
   return validateOptionAssignmentsAgainstMetadata(
     await engine.knownLayoutOptions(),
     build.optionAssignments,
-  );
-}
-
-function canonicalSerializable(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalSerializable);
-  if (typeof value !== "object" || value === null) return value;
-  const record = value as Readonly<Record<string, unknown>>;
-  return Object.fromEntries(
-    Object.keys(record)
-      .filter((key) => record[key] !== undefined)
-      .sort(compareText)
-      .map((key) => [key, canonicalSerializable(record[key])]),
   );
 }
 

@@ -2,6 +2,7 @@ import { CORE_SYMBOL_BINDINGS, SYMBOL_PROFILES } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 
+import { deepFreeze } from "./internal.js";
 import { InvalidSymbolMappingError } from "./errors.js";
 import type {
   DeviceTypeSymbolMapping,
@@ -126,15 +127,6 @@ const RULES = [
     },
   },
 ] satisfies readonly TraceRootRule[];
-
-function deepFreeze<Value>(value: Value, seen = new Set<object>()): Value {
-  if (typeof value !== "object" || value === null || seen.has(value)) {
-    return value;
-  }
-  seen.add(value);
-  for (const member of Object.values(value)) deepFreeze(member, seen);
-  return Object.freeze(value);
-}
 
 export const TRACE_ROOT_RULES: readonly TraceRootRule[] = deepFreeze(RULES);
 

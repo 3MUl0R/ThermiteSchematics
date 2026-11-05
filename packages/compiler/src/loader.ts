@@ -26,7 +26,6 @@ import {
   type JsonPointerNodeMap,
   type JsonValue,
   type LibraryManifest,
-  type LibraryType,
   type ParsedDocument,
   type ProjectManifest,
   type SchemaRegistry,
