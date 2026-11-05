@@ -122,6 +122,9 @@ export async function loadRepinInputs({
   for (const path of decisionPaths) {
     const file = await strictJsonFile(path);
     decisions.push(file.value);
+    for (const d of file.value.notMove ?? [])
+      for (const crop of d.crops ?? [])
+        cropHashes.set(crop.path, await reviewedCrop(root, crop));
     for (const e of file.value.entries ?? [])
       if (
         e.action === "new-defect" ||

@@ -1,4 +1,5 @@
 import { it, expect } from "vitest";
+import { checkColumnMap } from "./repin-reconcile.mjs";
 import { seed } from "./marker-authoring.mjs";
 import { bands } from "./marker-metrics.mjs";
 import {
@@ -110,24 +111,34 @@ it("keeps a semantic cell row including slash-bearing IDs and column labels", ()
   );
   const a = item(),
     b = item('cell/io/["PLC1","di0"]/Device', { text: "Device" });
-  expect(proveMove(a, b, new Map(), specs).sourceRow).toBe(
-    'cell/io/["PLC1","di0"]',
-  );
+  expect(
+    proveMove(a, b, new Map(), specs, { from: "Module", to: "Device" })
+      .sourceRow,
+  ).toBe('cell/io/["PLC1","di0"]');
 });
 it.each([
-  ['cell/io/["PLC1","di1"]/Device', {}],
-  ["header/io/Device", {}],
-  ['cell/cables/["PLC1","di0"]/Device', {}],
-  ["device/K2/text", {}],
-  ['cell/io/["PLC1","di0"]/Device', { medium: "pdf" }],
-  ['cell/io/["PLC1","di0"]/Device', { flow: "top-to-bottom" }],
-  ['cell/io/["PLC1","di0"]/Device', { view: "view:bom/BOM" }],
+  ['cell/io/["PLC1","di1"]/Device', {}, "source row or locator kind changed"],
+  ["header/io/Device", {}, "source row or locator kind changed"],
+  [
+    'cell/cables/["PLC1","di0"]/Device',
+    {},
+    "source row or locator kind changed",
+  ],
+  ["device/K2/text", {}, "source row or locator kind changed"],
+  ['cell/io/["PLC1","di0"]/Device', { medium: "pdf" }, "medium changed"],
+  ['cell/io/["PLC1","di0"]/Device', { flow: "top-to-bottom" }, "flow changed"],
+  ['cell/io/["PLC1","di0"]/Device', { dq: "DQ-02" }, "dq changed"],
+  ['cell/io/["PLC1","di0"]/Device', { check: "other" }, "check changed"],
+  ['cell/io/["PLC1","di0"]/Device', { view: "view:bom/BOM" }, "view changed"],
 ])(
   "refuses an unrelated pair or fix/new defect disguised as a move: %s",
-  (loc, extra) => {
-    expect(() => proveMove(item(), item(loc, extra), new Map(), specs)).toThrow(
-      /fixed retirement plus a crop-backed new defect/,
-    );
+  (loc, extra, reason) => {
+    expect(() =>
+      proveMove(item(), item(loc, extra), new Map(), specs, {
+        from: "Module",
+        to: "Device",
+      }),
+    ).toThrow(reason);
   },
 );
 it("requires a declared physical sheet rename and rejects contradictory maps", () => {
@@ -196,3 +207,41 @@ it.each(["class/text.unclassified", "font-pair/Arial/drawing/labels"])(
     ).not.toThrow();
   },
 );
+
+it("column maps are consistent and reject a still-observed old column", () => {
+  const a = item(),
+    b = item('cell/io/["PLC1","di0"]/Device'),
+    entry = {
+      columnMap: { from: "Module", to: "Device" },
+      pairs: [{ from: "a", to: "b" }],
+    };
+  const before = { byToken: new Map([["a", a]]) },
+    current = { byToken: new Map([["b", b]]), instances: [b] };
+  expect(() => checkColumnMap(entry, before, current)).not.toThrow();
+  current.instances.push(a);
+  expect(() => checkColumnMap(entry, before, current)).toThrow(
+    /old column still exists/,
+  );
+  current.instances = [b];
+  entry.columnMap.from = "Direction";
+  expect(() => checkColumnMap(entry, before, current)).toThrow(
+    /inconsistent columnMap/,
+  );
+});
+
+it("sheet scope proof is independent of view and physical-sheet proof", () => {
+  const a = item(),
+    b = item();
+  b.scope = { ...b.scope, sheet: "sheet:4" };
+  expect(() => proveMove(a, b, new Map(), specs)).toThrow(
+    "sheet scope has no declared rename",
+  );
+});
+it("view kind proof rejects even a supplied cross-kind map", () => {
+  const a = item(),
+    b = item(undefined, { view: "view:bom/BOM" });
+  const map = new Map([
+    [JSON.stringify([cid, "svg", a.facts.view]), b.facts.view],
+  ]);
+  expect(() => proveMove(a, b, map, specs)).toThrow("view changed");
+});

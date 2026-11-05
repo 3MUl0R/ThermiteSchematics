@@ -1,3 +1,13 @@
+import { signOffs } from "./repin-signoff.mjs";
+import {
+  fontPairs,
+  pairDrift,
+  applyPairDecision,
+  assertPairBounds,
+  checkColumnMap,
+  moveCandidates,
+  checkNotMoves,
+} from "./repin-reconcile.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { checkerManifestHash } from "./checker-manifest.mjs";
 import {
@@ -439,24 +449,35 @@ export function prepareRepin({
     targetWork = new Map(),
     metricWork = new Map(),
     definitions = new Map(),
-    receipts = [];
+    receipts = [],
+    retired = [],
+    pairWork = new Map();
+  const fresh = decisions.flatMap((f) =>
+    (f.entries ?? [])
+      .filter((e) => ["new-defect", "scope-added"].includes(e.action))
+      .flatMap((e) =>
+        (e.instances ?? [])
+          .map((t) => inventory.byToken.get(t))
+          .filter(Boolean),
+      ),
+  );
   const recordReceipt = (entry, r) =>
     receipts.push({
       ...r,
       toolProved: {
-        boundObservations: true,
-        completeInstanceAccounting: true,
-        derivedBounds: true,
         ...(r.measuredScope ? { measuredScope: r.measuredScope } : {}),
-        ...(r.proof ? { move: r.proof } : {}),
+        ...(r.moveProofs ? { move: r.moveProofs } : {}),
+        ...(r.derived ? { derivedBounds: r.derived } : {}),
         ...(r.crop ? { cropSha256: r.crop.sha256 } : {}),
       },
       reviewerJudged: {
         reviewed: entry.reviewed,
+        signOffs: signOffs(entry),
         causeClass: entry.causeClass,
         note: entry.note,
         ...(entry.cause ? { cause: entry.cause } : {}),
         ...(entry.crop ? { crop: entry.crop } : {}),
+        ...(entry.columnMap ? { columnMap: entry.columnMap } : {}),
       },
     });
   const sheetRenames = sheetRenameMap(decisions, specs);
@@ -500,6 +521,7 @@ export function prepareRepin({
         "baselineSha256",
         "entries",
         "sheetRenames",
+        "notMove",
       ],
       "decisions file",
     );
@@ -536,6 +558,8 @@ export function prepareRepin({
         "note",
         "classification",
         "reviewed",
+        "signOff",
+        "counterSignOffs",
       ];
       assert(
         entry.reviewed === true,
@@ -548,6 +572,7 @@ export function prepareRepin({
           entry.note.trim(),
         "Record cause class and review rationale",
       );
+      signOffs(entry);
       if (entry.action === "retire" || entry.action === "rename") {
         const rename = entry.action === "rename";
         keys(
@@ -555,7 +580,7 @@ export function prepareRepin({
           [
             ...common,
             ...(rename
-              ? ["from", "to", "pairs", "crop"]
+              ? ["from", "to", "pairs", "crop", "columnMap"]
               : ["markerId", "scope", "cause", "instances"]),
           ],
           "decision",
@@ -585,6 +610,27 @@ export function prepareRepin({
           assert(
             entry.cause !== "not-measured" ? isMeasured : !isMeasured,
             "Retirement cause contradicts measurement availability",
+          );
+        }
+        if (
+          !rename &&
+          entry.cause !== "not-measured" &&
+          fresh.some(
+            (b) =>
+              b.scope.case === from.scope.case &&
+              b.scope.medium === from.scope.medium &&
+              b.facts.kind === old.kind,
+          )
+        ) {
+          const before = getOld(),
+            g = before.groups.get(key);
+          assert(g, "Baseline has no retirement instances");
+          retired.push(
+            ...(entry.instances ?? g.tokens).map((t) => {
+              const a = before.byToken.get(t);
+              assert(a && g.tokens.includes(t), "Unknown retirement instance");
+              return a;
+            }),
           );
         }
         if (!staleWork.has(key))
@@ -628,6 +674,8 @@ export function prepareRepin({
             Array.isArray(entry.pairs) && entry.pairs.length,
             "List individual rename pairs",
           );
+          checkColumnMap(entry, before, inventory);
+          const moveProofs = [];
           let changedText = false,
             changedHeader = false;
           for (const pair of entry.pairs) {
@@ -645,7 +693,9 @@ export function prepareRepin({
                 target.g.tokens.includes(pair.to),
               "Rename pair is not in its declared scopes",
             );
-            proveMove(a, b, sheetRenames, specs);
+            moveProofs.push(
+              proveMove(a, b, sheetRenames, specs, entry.columnMap),
+            );
             changedText ||= a.facts.text !== b.facts.text;
             changedHeader ||=
               a.facts.text !== b.facts.text &&
@@ -707,8 +757,8 @@ export function prepareRepin({
             changedText,
             changedHeader,
             ...(entry.crop ? { crop: entry.crop } : {}),
-            proof:
-              "Same case/flow/medium, source row, locator kind and view; sheet unchanged or explicitly renamed",
+            ...(entry.columnMap ? { columnMap: entry.columnMap } : {}),
+            moveProofs,
           });
         } else {
           assert(
@@ -783,6 +833,18 @@ export function prepareRepin({
           instances: entry.instances.length,
           crop: entry.crop,
         });
+      } else if (entry.action === "font-pair-drift") {
+        keys(
+          entry,
+          [...common, "fontPair", "from", "to", "observed", "coverage"],
+          "pair decision",
+        );
+        assert(
+          entry.coverage === "full" && entry.classification === "drawing",
+          "Full drawing pair decision required",
+        );
+        claim(pairWork, entry.fontPair, "font-pair decision");
+        pairWork.set(entry.fontPair, { entry, pr: file.pr });
       } else if (entry.action === "envelope-drift") {
         keys(
           entry,
@@ -824,6 +886,12 @@ export function prepareRepin({
       } else assert.fail(`Unknown decision action: ${entry.action}`);
     }
   }
+  const candidates = moveCandidates(retired, fresh, sheetRenames, specs);
+  const notMoves = checkNotMoves(
+    candidates,
+    decisions.flatMap((f) => f.notMove ?? []),
+    claimCrop,
+  );
   for (const [key, work] of staleWork) {
     if (!work.whole)
       same(
@@ -866,7 +934,32 @@ export function prepareRepin({
     }
   // Reconcile the explicitly listed scopes before comparing complete envelopes.
   // A moved header can retain its defect while literal body cells disappear.
-  const resolvedDrift = reassess(report, next, specs).drift;
+  const beforePairBands = new Map(
+    next.markers.map((m) => [m.id, copy(m.bands)]),
+  );
+  const resolvedDrift = [
+    ...reassess(report, next, specs).drift,
+    ...pairDrift(next, inventory),
+  ];
+  for (const { entry, pr } of pairWork.values()) {
+    const pairEvidence = resolvedDrift.filter(
+      (d) => d.pairDerived && d.fontPair === entry.fontPair,
+    );
+    assert(pairEvidence.length, `No pair drift evidence: ${entry.fontPair}`);
+    const touched = applyPairDecision(next, inventory, entry, registry);
+    same(
+      pairEvidence.map((d) => d.marker).sort(),
+      touched,
+      "Pair drift must cover every touched marker",
+    );
+    recordReceipt(entry, {
+      pr,
+      action: "font-pair-drift",
+      fontPair: entry.fontPair,
+      touched,
+      derived: { allowed: entry.to, observed: entry.observed },
+    });
+  }
   for (const entry of metricWork.values()) {
     assert(
       resolvedDrift.some(
@@ -874,7 +967,7 @@ export function prepareRepin({
           d.marker === entry.markerId &&
           d.changes.some((c) => c.metric === entry.metric),
       ),
-      "No drift for this marker/metric in the bound report after listed scope changes",
+      `No drift for this marker/metric in the bound report after listed scope changes: ${entry.markerId}/${entry.metric}`,
     );
     const m = markers.get(entry.markerId);
     assert(
@@ -883,7 +976,9 @@ export function prepareRepin({
     );
     classCheck(entry, m.kind);
     const prior =
-      entry.metric === "occurrences" ? m.count : m.bands[entry.metric];
+      entry.metric === "occurrences"
+        ? m.count
+        : beforePairBands.get(m.id)[entry.metric];
     same(entry.from, prior, "Envelope old value mismatch");
     const observed = referenceFor(
       next,
@@ -922,6 +1017,13 @@ export function prepareRepin({
       m.bands = { ...m.bands, [entry.metric]: copy(entry.to) };
     }
   }
+  assertPairBounds(next, inventory);
+  for (const r of receipts.filter((r) => r.action === "envelope-drift"))
+    r.toolProved.derivedBounds = {
+      metric: r.metric,
+      allowed: r.to,
+      observed: r.observed,
+    };
   next.markers.sort((a, b) => a.id.localeCompare(b.id));
   const projected = reassess(report, next, specs);
   assert(
@@ -933,7 +1035,7 @@ export function prepareRepin({
   );
   assert(
     !projected.drift.length,
-    "Unlisted or incompletely reconciled envelope drift remains",
+    `Unlisted or incompletely reconciled envelope drift remains: ${projected.drift.map((d) => `${d.marker}: ${d.changes.map((c) => c.metric).join(", ")}`).join("; ")}`,
   );
   receipts.sort((a, b) => (json(a) < json(b) ? -1 : json(a) > json(b) ? 1 : 0));
   return {
@@ -950,6 +1052,7 @@ export function prepareRepin({
         (r) => r.action === "retire" && r.cause === "not-measured",
       ).length,
       outcomes: {
+        notMove: notMoves.length,
         fixes: receipts.filter(
           (r) => r.action === "retire" && r.cause === "fixed",
         ).length,
@@ -967,15 +1070,18 @@ export function prepareRepin({
         ).length,
       },
       toolProved: {
-        fullInstanceAccounting: true,
-        derivedBounds: true,
-        distinctCropHashes: true,
-        moveStructure: true,
+        reportSha256,
+        registrySha256,
+        checkerSha256,
+        sourceInstances: sourceClaims.size,
+        targetInstances: targetClaims.size,
+        fontPairs: fontPairs(next, inventory),
       },
       reviewerJudged: {
         signOff:
-          "reviewed:true is a person's sign-off; the tool cannot verify it",
+          "reviewed:true signs off crops and causes; each recorded sign-off kind identifies agent review or person review; identity and independence are not tool-proved",
         causesAndCrops: receipts.length,
+        notMove: notMoves,
         scoreCredit: 0,
       },
     },
@@ -1045,7 +1151,8 @@ export function reviewInventory(context) {
         ),
         reason: r.reason,
       })),
-    drift: checked.drift,
+    drift: [...checked.drift, ...pairDrift(registry, current)],
+    fontPairs: fontPairs(registry, current),
     baselines: [...baselines].map(([sha, r]) => {
       validateReport(r, registry, registrySha256, specs);
       return { sha256: sha, instances: instanceInventory(r, sha).instances };

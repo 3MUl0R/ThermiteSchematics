@@ -299,7 +299,10 @@ Unlisted marker fields remain unchanged. `pin.mjs` remains a read-only initial/
 legacy proposal generator; it is not the mixed-update path. `update-markers.mjs` is deprecated: it lacks checker-bundle bindings and reviewed
 receipts. Use re-pin for current checkpoints, including retire-only updates.
 
-After drawing PRs merge, make one full strict report on consolidated dev, then
+For the current handoff, land E3 first, then re-pin D1 on a fresh dev C1.
+R4 replays afterwards and audits its delta against that re-pinned registry
+(decision 34); do not combine its new population with the reviewed D1 draft.
+For each re-pin, make one full strict report on dev, then
 reconcile **one decisions file per merged PR** (decision 13). Use that same target
 report/registry/checker-bundle/seal/version binding in every file. Individual lane audits remain
 review evidence; old lane report hashes cannot be copied into the consolidated
@@ -360,15 +363,23 @@ It proposes only unique exact-fact instance pairs (allowing a literal view move)
 leaves ambiguous and changed-text pairs for inspection, and calculates envelope
 proposals from measured ranges and the documented tolerances. It fills **no
 cause**: every entry has `reviewed: false`, empty `causeClass`/`note`, and an empty
-retirement `cause`. New defects have empty crop metadata too. Inspect each delta,
-complete the cause/rationale/mappings/crops. **`reviewed: true` is a person's
-sign-off on those crops and causes.** The tool cannot verify the person's identity,
-attention or engineering judgement. A script flipping flags does not constitute
-review. Automated fixtures mock sign-off solely to test the protocol.
+retirement `cause`. The draft also leaves `signOff.kind` and `signOff.by` empty;
+review records the applicable kind and reviewer. New defects have empty crop metadata too. Inspect each delta,
+complete the cause/rationale/mappings/crops. **`reviewed: true` signs off those
+crops and causes with provenance:** every entry requires
+`signOff: {kind: "person" | "agent", by: "<name or agent and review round>"}`.
+An agent sign-off must come from a reviewer independent of the change's author
+(cross-model). Receipts label it **agent review**, never person's review. The tool
+validates the kind and non-empty name, but cannot verify identity, independence,
+attention or engineering judgment. A script flipping flags is not review;
+automated fixtures mock sign-off solely to test the protocol.
+A person may add `counterSignOffs: [{kind:"person",by:"<name>"}]` later, keeping
+the original sign-off and all other decision fields unchanged. Receipts retain
+both provenances. Unknown/missing kinds and empty names are refused.
 The tool refuses an unreviewed entry. With several baselines, select
 `--baseline-sha <raw-summary-hash>`. Draft creation is exclusive under `evals/out`.
 
-Every reviewed entry requires `reviewed: true`, `causeClass`, `note` (the review rationale) and
+Every reviewed entry requires `reviewed: true`, `signOff`, `causeClass`, `note` (the review rationale) and
 `classification: "drawing"` or `"policy-gap"`. These align with D1's audit's
 `markerId`, `causeClass`, exact scope tuples and envelope observations. D1's
 `scopeDelta.absent`/`missing` and `renameLink` suggest decisions; they are not
@@ -399,6 +410,36 @@ arbitrary narrowing are refused. Policy-gap count changes need `classification:
 "policy-gap"`; they never enter geometry scoring. Partial-scope drift cannot
 replace a full reference: quick/selected/report-only inputs are refused.
 
+A `font-pair-drift` decision records `fontPair`, `from` (the sorted unique
+old `[allowedMin,allowedMax]` ranges), `to: [allowedMin,allowedMax]`,
+`observed: [min,max]`, `coverage: "full"`, and the usual review fields.
+The inventory lists `advanceRatioBounds` drift for **every** member of a changed
+pair, and the draft proposes one pair-level decision. It expands copy-on-write
+to all surviving members, including new identities; its receipt lists every
+marker touched. Local reference/count decisions remain separate. A result with
+mixed or non-derived pair bounds is refused. This re-pin derivation uses the
+whole target population after scope reconciliation; C1's historical measured
+statuses and temporal-reference drift are not rewritten by the proposal layer.
+
+A text/source column change also needs an entry-level literal
+`columnMap: {from: "Manufacturer", to: "Mfr."}`. Every pair in the entry must
+follow that same map. If the old column still has observations in the target
+view, the move is refused. Lack of such observations does not prove the column
+was removed; the declared column rename remains reviewer judgment.
+
+A `fixed` or `removed` retirement with a structurally compatible `new-defect`
+or `scope-added` counterpart is refused, naming both marker IDs and exact instance tokens.
+Supply a hash-bound baseline for these retirements, including whole-scope
+retirements, so their old instances can be reconciled.
+Potential column renames are included conservatively, even before the reviewer
+chooses a column map. Book the change as a move, or add an explicit top-level
+`notMove` array. Each item is `{from: oldToken, to: newToken, reason, crops}`:
+a one-line reason and **two distinct retained PNG crops**, each `{path,sha256}`.
+Every candidate pair needs its own declaration; unknown, duplicate and unused
+declarations fail. Crops are hash-checked through the same real IO as other
+review evidence and cannot be reused elsewhere. The receipt lists these
+exceptions under `reviewerJudged.notMove`, never as a tool-proved distinction.
+
 A rename inherits the old definition; it does not silently refresh its bands or
 count. A genuinely new identity gets only its reviewed scopes and measured
 references with the existing documented tolerances. An existing identity's new
@@ -412,14 +453,12 @@ bun evals/draw/repin.mjs \
   --report evals/out/draw/C1-consolidated-before/summary.json \
   --baseline evals/out/draw/C1-previous/summary.json \
   --decisions evals/out/D1-decisions.json \
-  --decisions evals/out/R4-decisions.json \
   --preview evals/out/consolidated-expectations.mjs
 # Review that exact file and the printed projected statuses, then repeat with:
 bun evals/draw/repin.mjs \
   --report evals/out/draw/C1-consolidated-before/summary.json \
   --baseline evals/out/draw/C1-previous/summary.json \
   --decisions evals/out/D1-decisions.json \
-  --decisions evals/out/R4-decisions.json \
   --preview evals/out/consolidated-expectations.mjs --apply
 bun evals/draw/run.mjs --checkpoint C1-consolidated
 ```
@@ -447,7 +486,8 @@ unchanged literal text may still follow an explicitly declared sheet rename.
 Receipts separate `toolProved` structural/measurement/hash checks from
 `reviewerJudged` causes, crop sign-offs and rationale. `outcomes` counts fixed
 retirements, intentional removals, not-measured retirements, moves (including
-changed headers), scope additions and new defects separately. These are event
+changed headers), scope additions, new defects and the explicit `notMove` count
+separately. A nonzero `notMove` count makes the reviewer's exceptions visible. These are event
 counts, not independently established repairs or category scores. The tool proves
 structural correspondence, not intent. Moves, additions and intentional removals
 receive no repair credit.
@@ -458,4 +498,4 @@ finding that disappears only because its text was intentionally blanked is
 removed causes are measured on the destination rather than called not-measured.
 Keep a changed header in its rename; retire only the removed body instances.
 The acceptance requirement remains a **fresh full strict C1 with exit 0 and no
-drift**, after actual person review of the applicable decisions.
+drift**, after review of the applicable decisions, with each sign-off's kind recorded.
