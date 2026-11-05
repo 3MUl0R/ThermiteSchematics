@@ -20,6 +20,10 @@ import type {
 import { INIT_SUCCESS_MESSAGE, runCli } from "../src/index.js";
 import { initializeAlphaProject } from "../src/alpha-init.js";
 
+import { exec as execGuide } from "./project-guide/harness.js";
+import { parseFences } from "./project-guide/guide-model.js";
+import { splitWords } from "./project-guide/commands.js";
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
 const rootGuide = join(repositoryRoot, "AGENTS.md");
@@ -209,6 +213,11 @@ describe("frozen legacy AGENTS guide", () => {
     async (starter) => {
       const guide = await readFile(requestGuide, "utf8");
       const examples = extractLegacyJsonExamples(guide);
+      const fences = parseFences(guide).filter(
+        (f) => f.lang === "json" || f.lang === "sh",
+      );
+      expect(fences.filter((f) => f.lang === "json")).toHaveLength(7);
+      expect(fences.filter((f) => f.lang === "sh")).toHaveLength(9);
       expect(examples).toHaveLength(6);
       for (const request of examples) {
         expect(request).toMatchObject({
@@ -331,6 +340,15 @@ describe("frozen legacy AGENTS guide", () => {
       // The frozen sample guard belongs to the old starter. A stale guard must
       // still fail; only a fresh inspection can authorize the current bytes.
       const beforeStale = await readFile(join(root, exampleFile.path));
+      const recipe = parseFences(guide).find(
+        (f) => f.lang === "sh" && f.body.startsWith("bun -e "),
+      )!;
+      const recipeRun = await execGuide(
+        splitWords(recipe.body, false).words.slice(1),
+        root,
+      );
+      expect(recipeRun.code, recipeRun.stderr).toBe(0);
+      expect(recipeRun.stdout.trim()).toBe(source.integrity);
       const stale = await invoke(root, [
         "agent",
         "apply-source-patch",

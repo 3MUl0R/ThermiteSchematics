@@ -51,11 +51,11 @@ const temporary = await mkdtemp(
 const source = join(temporary, "source");
 const production = join(temporary, "production");
 const runtime = join(temporary, "runtime");
-const run = (args, cwd) =>
+const run = (args, cwd, extraEnv = {}) =>
   execFileSync(process.execPath, args, {
     cwd,
     stdio: "inherit",
-    env: { ...process.env, COPYFILE_DISABLE: "1" },
+    env: { ...process.env, COPYFILE_DISABLE: "1", ...extraEnv },
   });
 try {
   if (preview) {
@@ -94,7 +94,7 @@ try {
     ["install", "--frozen-lockfile", "--ignore-scripts", "--backend=copyfile"],
     source,
   );
-  run(["run", "build"], source);
+  run(["run", "build"], source, { THERMITE_SOURCE_COMMIT: commit });
   const { THERMITE_VERSION: version } = await import(
     pathToFileURL(join(source, "packages/cli/dist/alpha.js")).href
   );

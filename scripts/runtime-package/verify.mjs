@@ -90,6 +90,15 @@ export async function verifyRuntimeArchive(
     await extractSafeZipArchive(bytes, extracted);
     runtime = join(temporary, "relocated runtime with spaces");
     await rename(extracted, runtime);
+    // Deliberately disagree with runtime-manifest.json. Equal commits cannot
+    // prove which provenance source the installed guide actually consulted.
+    const guideProvenance = join(
+      runtime,
+      "node_modules/@thermite/cli/assets/guide/source.json",
+    );
+    const wrongCommit =
+      manifest.commit === "a".repeat(40) ? "b".repeat(40) : "a".repeat(40);
+    await writeFile(guideProvenance, json({ commit: wrongCommit }));
     const before = await fileInventory(runtime);
     const tools = join(temporary, "restricted-bin");
     const home = join(temporary, "home");
@@ -157,6 +166,74 @@ export async function verifyRuntimeArchive(
     assert.match(invoke(["--help"]).stdout, /Thermite/);
     check(
       `relocated, read-only package; Bun only; network isolation: ${execution.networkIsolation}; version and help`,
+    );
+    const guidePrefix = "node_modules/@thermite/cli/assets/guide/";
+    const topicsEntry = entries.find(
+      (entry) => entry.path === `${guidePrefix}topics.json`,
+    );
+    assert(topicsEntry, "Missing shipped topic manifest");
+    const topics = JSON.parse(topicsEntry.bytes.toString("utf8"));
+    const topicIndex = JSON.parse(invoke(["guide", "--json"]).stdout);
+    assert.deepEqual(
+      topicIndex.map((topic) => topic.id),
+      [...topics.map((topic) => topic.id), "symbols", "diagnostics"],
+    );
+    const indexText = invoke(["guide"]).stdout;
+    const guidePath = invoke(["guide", "--path"]).stdout.trim();
+    assert.equal(
+      guidePath.replace(/[\\/]$/, ""),
+      join(runtime, guidePrefix).replace(/[\\/]$/, ""),
+    );
+    const { assertGuideLinksResolved } = await import(
+      pathToFileURL(
+        join(runtime, "node_modules/@thermite/cli/dist/guide-markdown.js"),
+      ).href
+    );
+    for (const topic of topics) {
+      assert(
+        entries.some((entry) => entry.path === `${guidePrefix}${topic.id}.md`),
+      );
+      assert(indexText.includes(topic.id) && indexText.includes(topic.title));
+      const output = invoke(["guide", topic.id]);
+      assert.equal(output.stderr, "");
+      assert(output.stdout.startsWith("#"), `Empty topic: ${topic.id}`);
+      assertGuideLinksResolved(output.stdout);
+      const shipped = await readFile(join(guidePath, `${topic.id}.md`), "utf8");
+      assertGuideLinksResolved(shipped);
+      assert.equal(
+        shipped,
+        output.stdout,
+        "--path must expose the resolved topic copies",
+      );
+      assert(
+        !output.stdout.includes(temporary),
+        "Topic must not expose source or installation paths",
+      );
+      for (const match of output.stdout.matchAll(
+        /https:\/\/github\.com\/BlackettApplied\/ThermiteSchematics\/blob\/([^/]+)\//gu,
+      ))
+        assert.equal(
+          match[1],
+          manifest.commit,
+          "Runtime links must use the runtime manifest commit",
+        );
+    }
+    assert(invoke(["guide", "symbols"]).stdout.includes("thermite:io-module"));
+    assert.deepEqual(
+      JSON.parse(invoke(["guide", "symbols", "--json"]).stdout),
+      (
+        await import(
+          pathToFileURL(
+            join(runtime, "node_modules/@thermite/schema/dist/index.js"),
+          ).href
+        )
+      ).SYMBOL_PROFILES,
+    );
+    assert(invoke(["guide", "diagnostics", "W903"]).stdout.includes("W903"));
+    invoke(["guide", "unknown-topic"], undefined, 2);
+    invoke(["guide", "diagnostics", "UNKNOWN"], undefined, 2);
+    check(
+      "all offline guide topics, catalogs, resolved --path copies and manifest-pinned links despite contrasting build provenance; restricted PATH and network guard",
     );
     const core = await import(
       pathToFileURL(

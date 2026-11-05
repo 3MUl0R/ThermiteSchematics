@@ -390,7 +390,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "See the engine's `docs/signal-loops.md` for limits and fixtures.",
+      claim: "See `thermite guide signal-loops` for limits and fixtures.",
       async check() {
         const doc = flatten(
           await readFile(join(repositoryRoot, "docs/signal-loops.md"), "utf8"),

@@ -99,7 +99,7 @@ describe("M7 Task 9 final inventories", () => {
     );
   });
 
-  it("audits the package graph and licenses, including alpha PDF dependencies", async () => {
+  it("audits the package graph and licenses, including alpha PDF and guide dependencies", async () => {
     const [agentPackageText, cliPackageText, compilerPackageText, lock] =
       await Promise.all([
         readFile(join(packageRoot, "package.json"), "utf8"),
@@ -141,6 +141,7 @@ describe("M7 Task 9 final inventories", () => {
       "@thermite/schema": "0.2.0",
       commander: "^15.0.0",
       micromatch: "^4.0.8",
+      "mdast-util-from-markdown": "^2.1.0",
       fontkit: "^2.0.4",
       pdfkit: "^0.17.2",
       "svg-to-pdfkit": "^0.1.8",
@@ -163,6 +164,7 @@ describe("M7 Task 9 final inventories", () => {
       "elkjs",
       "fast-glob",
       "jsonc-parser",
+      "mdast-util-from-markdown",
     ]) {
       const manifest = JSON.parse(
         await readFile(
@@ -182,6 +184,7 @@ describe("M7 Task 9 final inventories", () => {
       elkjs: "EPL-2.0 OR GPL-3.0-or-later",
       "fast-glob": "MIT",
       "jsonc-parser": "MIT",
+      "mdast-util-from-markdown": "MIT",
     });
   });
 

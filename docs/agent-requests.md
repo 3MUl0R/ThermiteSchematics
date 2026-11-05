@@ -1,31 +1,25 @@
-# Agent request examples (source alpha)
+# Agent request examples
 
 These six stateless JSON agent tools retain their existing request/result
 contracts in the Bun alpha. The examples below are executed by
 [`agents-guide.test.ts`](../packages/cli/test/agents-guide.test.ts); their JSON
 reference requests remain identical to the frozen legacy examples; refresh their
-byte guard from current inspection before execution. The additional
+byte guard from current inspection before execution. `thermite guide` lists the
+offline reference topics. Use the same runtime that initialized the project. The additional
 source-guard step is tested separately.
 
-Build the source checkout before trusting CLI output. From the checkout root:
+Runtime users: run `bun <runtime>/thermite.mjs init <new-directory>`, then enter
+that project. In the commands below, set `thermite_entry` to the absolute path
+to that runtime's `thermite.mjs`. Source users follow the
+[source setup](../packages/cli/README.md#source-alpha-initialize-and-inspect),
+then use their built checkout's launcher. Use a new destination directory and
+read the generated project guide before editing.
 
-```sh
-bun install --frozen-lockfile
-bun run build
-bun thermite.mjs init ../electrical-project
-```
+For POSIX shells, copy this line and replace the absolute runtime path:
 
-Use a new destination directory. Init writes the alpha project guide and a
-visible `libraries/core` library. Read that generated guide before editing.
-Then enter the initialized project and set the absolute path to your built
-checkout's entry point (substitute your actual path):
+`thermite_entry=/absolute/path/to/runtime/thermite.mjs`
 
-```sh
-cd ../electrical-project
-thermite_entry=/absolute/path/to/ThermiteSchematics/thermite.mjs
-```
-
-PowerShell: set `$thermite_entry = 'C:/path/to/ThermiteSchematics/thermite.mjs'`; replace the POSIX `< resolve.request.json` input redirection with `Get-Content -Raw resolve.request.json | bun $thermite_entry agent resolve --input -`.
+PowerShell: set `$thermite_entry = 'C:/path/to/runtime/thermite.mjs'`; replace the POSIX `< resolve.request.json` input redirection with `Get-Content -Raw resolve.request.json | bun $thermite_entry agent resolve --input -`.
 
 JSON project source is authoritative; SVG is generated output. Resolve objects
 and topology before editing. Use this loop for each change:
@@ -164,7 +158,7 @@ guards; only then, to patch the repair, hash that file's raw bytes explicitly
 (adjust the path):
 
 ```sh
-bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' path/to/file.json
+bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' devices/equipment.json
 ```
 
 Generate UUIDs for new objects with `bun -e 'console.log(crypto.randomUUID())'`.
@@ -293,3 +287,29 @@ The one referenced project presentation document, `presentation.json`, is patch-
 Name/version-only library references are reserved for libraries shipped with Thermite Schematics. Author a local library with an explicit relative `path` in `system.json`; put its manifest in `library.json`, put its declared type sources below that directory, and run `bun "$thermite_entry" lock` after changing its bytes. The patch tool does not create or modify library files.
 
 This contract does not provide MCP, natural-language tool inputs, persistent sessions, automatic engineering repairs, or library-file creation through `apply-source-patch`.
+
+## Selector vocabulary and integrity
+
+`resolve.target.by` is `uid`, `designation`, `type` or `text`.
+`inspect.selector.by` is `uid` or `designation`. Query operations are
+`neighbors`, `trace`, `net` and `cable`; object queries use `uid` or
+`designation`. Net selectors use `id` (`value: {deviceUid, terminalKey}`),
+`parts` (`deviceDesignation`, `terminalKey`) or `display` (`value`, such as
+`PS1.+`). Query `trace` follows the selected device's connected physical
+component; it has no `to` field. See the
+[query contract](../packages/agent-tools/README.md).
+
+`expectedIntegrity` is exactly `sha256-` followed by base64 SHA-256 of the file's
+raw current bytes. Do not hash parsed or reformatted JSON. Fresh inspection with
+`include: ["source"]` supplies this value; after a stale guard, re-inspect and
+review pointers and UUIDs before rebuilding the request.
+
+## Request and query errors
+
+The E/W/I catalog behind `thermite guide diagnostics` does not catalog A/Q
+codes. Agent A001 describes request shape/usage, A002 patch-operation failure,
+A003 a disallowed target, A004 a stale byte guard and A005 a writer reservation.
+Read the exact error's reason and locations; never infer an electrical repair.
+Query Q errors describe selector resolution, object kind and terminal lookup;
+resolve the actual identity and terminal keys before retrying. Renderer R codes
+and CLI T001 usage/output failures are covered in [views](views.md).

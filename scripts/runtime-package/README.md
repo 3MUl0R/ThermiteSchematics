@@ -19,6 +19,11 @@ bun thermite.mjs view PS1 --loads --project ../electrical-project -o ../electric
 Use a new project directory; initialization refuses to overwrite an existing one.
 Open the generated HTML in your browser, or use a `.pdf` output filename for PDF.
 Read the generated project's `AGENTS.md` with your agent before editing its model.
+`bun thermite.mjs guide` lists offline reference topics and read-before triggers;
+`guide <id>` reads a topic, `guide symbols` lists profiles, and
+`guide diagnostics [CODE]` covers E/W/I codes. `guide --path` prints the directory
+of resolved, shipped Markdown copies. Token estimates are served UTF-8 bytes
+divided by four, rounded up; catalog estimates describe text output.
 From elsewhere, use `bun /absolute/path/to/this-folder/thermite.mjs <command>`.
 Keep compiler diagnostics visible. Generated drawings require qualified
 engineering review; validation does not certify electrical safety.

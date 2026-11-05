@@ -24,6 +24,7 @@ import {
 } from "@thermite/render";
 import { parseJson } from "@thermite/schema";
 import { Command, CommanderError, Option } from "commander";
+import { registerGuideCommand } from "./alpha-guide.js";
 import { runCli } from "./index.js";
 import { initializeAlphaProject } from "./alpha-init.js";
 import { watchAlphaProject } from "./alpha-watch.js";
@@ -181,6 +182,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
     )
     .version(THERMITE_VERSION)
     .exitOverride();
+  registerGuideCommand(command);
   command
     .command("init <directory>")
     .description("create a project with visible, editable core library files")
@@ -208,7 +210,8 @@ export async function runThermite(argv = process.argv): Promise<number> {
           ...(init.getOptionValueSource("name") === "cli" ? { name } : {}),
         });
         process.stdout.write(
-          `Initialized ${resolve(directory)} with a local core library.\n`,
+          `Initialized ${resolve(directory)} with a local core library. Read AGENTS.md; ` +
+            "`thermite guide` lists reference topics.\n",
         );
       },
     );

@@ -1138,7 +1138,9 @@ const module: FactModule = {
       claim:
         "These commands default to `--project .`; `validate` and `lock` take a path instead (`thermite validate . --strict`).",
       async check() {
-        for (const name of ctx.tree.alpha.filter((n) => n !== "init")) {
+        for (const name of ctx.tree.alpha.filter(
+          (n) => !["init", "guide"].includes(n),
+        )) {
           const option = ctx.tree.commands
             .get(name)!
             .options.find((o) => o.flags.includes("--project"));
@@ -2036,8 +2038,8 @@ const module: FactModule = {
       "Contribution policy; no runtime behavior.",
     ],
     [
-      "Documentation and examples cited below live in that source repository.",
-      "The docs-pointer test checks every cited document exists in this checkout.",
+      "`thermite guide` lists topics.",
+      "The guide.test.ts index test executes this command; G1 also executes named topic pointers.",
     ],
     [
       "Electrical JSON is authoritative.",

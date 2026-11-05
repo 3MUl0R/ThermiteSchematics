@@ -1327,8 +1327,19 @@ const module: FactModule = {
     },
     {
       claim:
-        "Invent no pins/ratings; keep manufacturer document/revision and review notes. Source-only `siemens-pilot` has exact references/exclusions.",
+        "Invent no pins/ratings; keep manufacturer document/revision and review notes. See `thermite guide libraries` for optional-library limits.",
       async check() {
+        const topic = (await ok(["guide", "libraries"], ctx.work)).stdout;
+        for (const name of await readdir(join(repositoryRoot, "libraries"))) {
+          if (
+            !(await readJson(
+              join(repositoryRoot, "libraries", name, "library.json"),
+            ).catch(() => null))
+          )
+            continue;
+          expect(topic).toContain(`| \`${name}\` | No |`);
+        }
+        expect(topic).toContain("None of the repository's optional");
         const library = join(repositoryRoot, "libraries/siemens-pilot");
         const manifest = await readJson(join(library, "library.json"));
         noteJson(manifest);
@@ -1955,8 +1966,8 @@ const module: FactModule = {
       "Advice to callers; the stream split itself is checked with the previous sentence.",
     ],
     [
-      "See `docs/report-filtering.md` in the source checkout.",
-      "Pointer to source-checkout documentation.",
+      "See `thermite guide report-filtering`.",
+      "Offline topic pointer; the pointer test executes it.",
     ],
   ]),
 };
