@@ -1,0 +1,28 @@
+{
+  "$schema": "https://thermiteschematics.com/schemas/0.1/library-file.schema.json",
+  "types": [
+    {
+      "kind": "cable_type",
+      "id": "core:cable-power-4core",
+      "description": "Provisional generic power cable with three phase conductors L1/L2/L3 and PE. Reviewed four-core inventory; every used core requires two explicit ends and unused cores need project spare review. Unmodeled: neutral, shield/drain, connectors and bonding beyond explicit PE terminations. Size, color, materials, voltage rating and suitability are unspecified; the author must select cable and add them. Core IDs are logical phase/PE conventions, not a manufacturer pinout. Cable schema has no symbol, connectionCoverage or required fields.",
+      "conductors": [
+        {
+          "id": "L1",
+          "color": ""
+        },
+        {
+          "id": "L2",
+          "color": ""
+        },
+        {
+          "id": "L3",
+          "color": ""
+        },
+        {
+          "id": "PE",
+          "color": ""
+        }
+      ]
+    }
+  ]
+}

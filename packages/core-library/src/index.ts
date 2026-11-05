@@ -69,9 +69,24 @@ export const SHIPPED_CORE_VERSIONS: Readonly<
     displayRoot: `${SHIPPED_CORE_DISPLAY_ROOT}/versions/0.2.0`,
     locator: "ais-shipped:core@0.2.0",
     fileInventory: Object.freeze(
-      SHIPPED_CORE_FILE_INVENTORY.map((path) =>
-        path.replace(/^library\//u, "versions/0.2.0/"),
-      ),
+      [
+        ...SHIPPED_CORE_FILE_INVENTORY.map((path) =>
+          path.replace(/^library\//u, "versions/0.2.0/"),
+        ),
+        "versions/0.2.0/types/pushbutton-no.json",
+        "versions/0.2.0/types/estop-nc.json",
+        "versions/0.2.0/types/selector-2pos.json",
+        "versions/0.2.0/types/pilot-light.json",
+        "versions/0.2.0/types/relay-1co.json",
+        "versions/0.2.0/types/fuse-1p.json",
+        "versions/0.2.0/types/fuse-2p.json",
+        "versions/0.2.0/types/fuse-3p.json",
+        "versions/0.2.0/types/breaker-1p.json",
+        "versions/0.2.0/types/breaker-2p.json",
+        "versions/0.2.0/types/control-transformer.json",
+        "versions/0.2.0/types/terminal-pe.json",
+        "versions/0.2.0/types/cable-power-4core.json",
+      ].sort(),
     ),
   }),
 });

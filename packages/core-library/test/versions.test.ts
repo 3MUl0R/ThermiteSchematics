@@ -65,7 +65,7 @@ it("pins every original 0.1.0 byte", async () => {
   }
 });
 
-it("reviews every 0.2.0 model without unrelated electrical field changes", async () => {
+it("retains the L0 electrical fields in every original 0.2.0 model", async () => {
   const required: Record<string, string[]> = {
     "breaker-3p": [],
     "cable-2pair-shielded": [],
@@ -85,7 +85,9 @@ it("reviews every 0.2.0 model without unrelated electrical field changes", async
     await import("@thermite/schema");
   const readme = await readFile(resolve(root, "README.md"), "utf8");
   const oldFiles = core.SHIPPED_CORE_FILE_INVENTORY.slice(1);
-  const nextFiles = core.SHIPPED_CORE_VERSIONS["0.2.0"]!.fileInventory.slice(1);
+  const nextFiles = oldFiles.map((file) =>
+    file.replace(/^library\//u, "versions/0.2.0/"),
+  );
   expect(nextFiles).toHaveLength(13);
   for (const [index, file] of nextFiles.entries()) {
     const old = JSON.parse(

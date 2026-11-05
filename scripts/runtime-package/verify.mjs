@@ -332,7 +332,7 @@ export async function verifyRuntimeArchive(
     );
     for (const version of ["0.1.0", "0.2.0"]) {
       const entry = core.SHIPPED_CORE_VERSIONS[version];
-      assert.equal(entry.fileInventory.length, 14);
+      assert.equal(entry.fileInventory.length, version === "0.1.0" ? 14 : 27);
       for (const file of entry.fileInventory) {
         assert(
           entries.some(
@@ -368,7 +368,10 @@ export async function verifyRuntimeArchive(
       assert.equal(lock.libraries.core.version, version);
       assert.equal(lock.libraries.core.path, `ais-shipped:core@${version}`);
       assert.equal(lock.libraries.core.resolutionKind, "shipped");
-      assert.equal(Object.keys(lock.libraries.core.files).length, 14);
+      assert.equal(
+        Object.keys(lock.libraries.core.files).length,
+        version === "0.1.0" ? 14 : 27,
+      );
     }
     check(
       "both shipped core inventories resolve and validate from the relocated release package",
