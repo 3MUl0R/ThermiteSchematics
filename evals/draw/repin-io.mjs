@@ -66,6 +66,13 @@ async function within(path, base, { existing = false } = {}) {
 }
 export async function reviewedCrop(root, crop) {
   assert(
+    crop &&
+      typeof crop.path === "string" &&
+      crop.path.trim() &&
+      /^[a-f0-9]{64}$/.test(crop.sha256 ?? ""),
+    "Crop required: supply a non-empty file path and SHA-256",
+  );
+  assert(
     crop && typeof crop.path === "string" && !isAbsolute(crop.path),
     "Crop path must be relative to the workspace",
   );
@@ -78,6 +85,7 @@ export async function reviewedCrop(root, crop) {
     { existing: true },
   );
   const bytes = await readFile(path);
+  assert(bytes.length > 0, "Crop required: the supplied file is empty");
   assert(
     bytes.length > 8 &&
       bytes
@@ -115,7 +123,12 @@ export async function loadRepinInputs({
     const file = await strictJsonFile(path);
     decisions.push(file.value);
     for (const e of file.value.entries ?? [])
-      if (e.action === "new-defect" || (e.action === "scope-added" && e.crop))
+      if (
+        e.action === "new-defect" ||
+        (e.action === "scope-added" && e.crop) ||
+        (e.action === "rename" &&
+          ((e.pairs ?? []).some((p) => p.text) || e.crop))
+      )
         cropHashes.set(e.crop?.path, await reviewedCrop(root, e.crop));
   }
   return {

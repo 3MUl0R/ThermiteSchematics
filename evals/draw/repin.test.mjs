@@ -1,5 +1,6 @@
 import { it, expect } from "vitest";
 import { checkerManifestHash } from "./checker-manifest.mjs";
+import { readCheckers } from "./checker-manifest.mjs";
 import {
   mkdtemp,
   mkdir,
@@ -683,10 +684,16 @@ it("requires literal source-locator mappings for renamed report columns", () => 
     ),
   );
   row.evidence.findings[0].sourceLocator = "cell/io/K1/Mfr.";
+  c.baselines
+    .values()
+    .next()
+    .value.results.find((r) =>
+      r.evidence?.findings?.some((f) => f.text === "K1"),
+    ).evidence.findings[0].sourceLocator = "cell/io/K1/Manufacturer";
   resign(c);
   expect(() => prepareRepin(c)).toThrow(/sourceLocator/);
   c.decisions[0].entries[1].pairs[0].sourceLocator = {
-    from: "device/K1/text",
+    from: "cell/io/K1/Manufacturer",
     to: "cell/io/K1/Mfr.",
   };
   expect(prepareRepin(c).expected.exitCode).toBe(0);
@@ -756,15 +763,17 @@ it("refuses a new unexpected finding mixed with an expected finding in one row",
 function copyFinding(f) {
   return structuredClone(f);
 }
-it("separates removed-view retirement from a measured fix", () => {
+it("measures intentional removal through the declared view rename", () => {
   const c = fixture();
   for (const r of c.report.results)
     if (!r.expectation && r.dq === "DQ-05") r.viewScope = newView;
   resign(c);
-  expect(() => prepareRepin(c)).toThrow(/measurement availability/);
   c.decisions[0].entries[0].cause = "not-measured";
+  expect(() => prepareRepin(c)).toThrow(/measurement availability/);
+  c.decisions[0].entries[0].cause = "removed";
   const result = prepareRepin(c);
-  expect(result.expected.notMeasuredRetirements).toBe(1);
+  expect(result.expected.outcomes.removals).toBe(1);
+  expect(result.expected.outcomes.fixes).toBe(0);
 });
 it("refuses rename of a compact aggregate without full instance evidence", () => {
   const c = fixture();
@@ -828,7 +837,7 @@ it("rejects empty crop metadata even with no supplied crop hashes", () => {
   const c = fixture();
   c.decisions[0].entries[2].crop = {};
   c.cropHashes.clear();
-  expect(() => prepareRepin(c)).toThrow(/crop path/);
+  expect(() => prepareRepin(c)).toThrow(/Crop required/);
 });
 it("refuses historical target checker versions while allowing a bound older baseline", () => {
   const c = fixture();
@@ -864,7 +873,7 @@ it("explicitly accounts leftover old aggregate instances without pretending a re
   for (const row of c.report.results)
     if (!row.expectation && row.dq === "DQ-05") row.viewScope = newView;
   resign(c);
-  c.decisions[0].entries[0].cause = "not-measured";
+  c.decisions[0].entries[0].cause = "fixed";
   c.decisions[0].entries[1].pairs = [
     {
       from: c.before.instances.find(
@@ -882,10 +891,10 @@ it("explicitly accounts leftover old aggregate instances without pretending a re
     instances: [
       c.before.instances.find((t) => t.facts.text === "obsolete").token,
     ],
-    cause: "not-measured",
+    cause: "removed",
     classification: "drawing",
     causeClass: "removed-view-residual",
-    note: "Old view removed; not claiming a measured repair",
+    note: "Intentional text removal measured through the declared view rename",
   });
   c.decisions[0].entries.push({
     reviewed: true,
@@ -901,7 +910,7 @@ it("explicitly accounts leftover old aggregate instances without pretending a re
     note: "Only the retained old text moves",
   });
   expect(prepareRepin(c).expected.exitCode).toBe(0);
-  c.decisions[0].entries.at(-2).cause = "fixed";
+  c.decisions[0].entries.at(-2).cause = "not-measured";
   expect(() => prepareRepin(c)).toThrow(/availability/);
 });
 it("refuses a registry symlink outside this workspace on apply", async () => {
@@ -1007,7 +1016,7 @@ it("refuses rename to a different defect kind or medium", () => {
   d.decisions[0].entries[1].pairs[0].to = d.after.instances.find(
     (t) => t.markerId === d.ids.a,
   ).token;
-  expect(() => prepareRepin(d)).toThrow(/kind\/text\/medium/);
+  expect(() => prepareRepin(d)).toThrow(/case or medium|Cannot prove move/);
 });
 it("does not alter policy/geometry summaries or scoring status to hide policy changes", () => {
   const c = fixture(),
@@ -1115,6 +1124,97 @@ it("refuses a checker mutation inside the apply lock and releases the lock", asy
     ).rejects.toThrow(/Checker bundle changed/);
     expect(await readFile(target)).toEqual(prior);
     await expect(readFile(target + ".repin.lock")).rejects.toThrow(/ENOENT/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("refuses reused crop bytes across a new defect and a text-changing move", () => {
+  const c = fixture();
+  const f = c.report.results.find((r) =>
+    r.evidence?.findings?.some((f) => f.text === "K1"),
+  ).evidence.findings[0];
+  f.text = "K1 caption";
+  resign(c);
+  const e = c.decisions[0].entries[1];
+  e.pairs[0].text = { from: "K1", to: "K1 caption" };
+  e.crop = c.decisions[0].entries[2].crop;
+  expect(() => prepareRepin(c)).toThrow(/distinct crop hash/);
+  const fresh = { ...e.crop, path: "evals/out/draw-samples/another-name.png" };
+  e.crop = fresh;
+  c.cropHashes.set(fresh.path, fresh.sha256);
+  expect(() => prepareRepin(c)).toThrow(/distinct crop hash/);
+});
+it("reports empty crop metadata and empty files accurately", async () => {
+  const { root } = await ioFixture();
+  try {
+    await expect(reviewedCrop(root, { path: "", sha256: "" })).rejects.toThrow(
+      /Crop required/,
+    );
+    const path = "evals/out/draw-samples/review/empty.png";
+    await writeFile(join(root, path), "");
+    await expect(
+      reviewedCrop(root, { path, sha256: hash("") }),
+    ).rejects.toThrow(/file is empty/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("refuses identical real crop bytes even when supplied under different filenames", async () => {
+  const { root, c, target, preview } = await ioFixture();
+  try {
+    c.report.results.find((r) =>
+      r.evidence?.findings?.some((f) => f.text === "K1"),
+    ).evidence.findings[0].text = "K1 caption";
+    resign(c);
+    const e = c.decisions[0].entries[1],
+      crop = c.decisions[0].entries[2].crop;
+    e.pairs[0].text = { from: "K1", to: "K1 caption" };
+    e.crop = {
+      ...crop,
+      path: "evals/out/draw-samples/review/renamed-copy.png",
+    };
+    await writeFile(
+      join(root, e.crop.path),
+      await readFile(join(root, crop.path)),
+    );
+    const reportPath = join(root, "evals/out/report.json"),
+      decision = join(root, "evals/out/decisions.json"),
+      baselinePath = join(root, "evals/out/baseline.json");
+    await writeFile(reportPath, json(c.report));
+    await writeFile(decision, json(c.decisions[0]));
+    await writeFile(baselinePath, json(c.baselines.values().next().value));
+    const inputs = await loadRepinInputs({
+      root,
+      reportPath,
+      decisionPaths: [decision],
+      baselinePaths: [baselinePath],
+      registryPath: target,
+      registry: c.registry,
+      specs,
+    });
+    await expect(
+      executeRepin({ root, inputs, previewPath: preview }),
+    ).rejects.toThrow(/distinct crop hash/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("binds comments and added/deleted modules recursively with portable paths", async () => {
+  const { root } = await ioFixture();
+  try {
+    const draw = join(root, "evals/draw");
+    await mkdir(join(draw, "nested/deeper"), { recursive: true });
+    const path = join(draw, "nested/deeper/check.mjs");
+    await writeFile(path, "// checker\n");
+    const a = await readCheckers(draw);
+    expect(a["nested/deeper/check.mjs"]).toBe(hash("// checker\n"));
+    await writeFile(path, "// changed checker comment\n");
+    const b = await readCheckers(draw);
+    expect(checkerManifestHash(a)).not.toBe(checkerManifestHash(b));
+    await rm(path);
+    expect(checkerManifestHash(await readCheckers(draw))).not.toBe(
+      checkerManifestHash(b),
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

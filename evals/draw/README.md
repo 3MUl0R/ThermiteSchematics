@@ -252,20 +252,11 @@ scope envelopes are labelled and are not full-run temporal comparisons. Drift co
 quanta are drift. Live and saved values are rounded before this comparison, so
 reassessing a saved report cannot invent a binary-subtraction drift. Derived envelope values use that same precision.
 
-A fixed scope is an xpass, including a D1 blank-cell fix. After reviewing a full
-strict report containing only expected defects and xpasses, update the registry
-with one command:
-
-```sh
-bun evals/draw/update-markers.mjs evals/out/draw/after-D1/summary.json --retire-xpasses --apply
-```
-
-It verifies the current registry hash, rejects new failures/infrastructure and
-retires only the exact xpassed scopes. It preserves other IDs/bands. For a
-reviewable proposal, replace `--apply` with `--output evals/out/retirement.mjs`.
-Run a fresh strict checkpoint afterwards. Never regenerate an established
-registry blindly. `pin.mjs <full-strict-summary> <ignored-proposal.mjs>` is for
-initial proposals only; new defects require source/crop review before pinning.
+An absent pinned scope is an xpass; review whether it was fixed, intentionally
+removed, or not measured. Use the guarded `repin.mjs` workflow below.
+`update-markers.mjs` is **deprecated legacy tooling**: it binds only the registry,
+has no reviewed-cause receipt and must not be used for current checkpoints or the
+consolidated re-pin. `pin.mjs` remains an initial-proposal tool, never an updater.
 
 ## Cases, samples and historical acceptance
 
@@ -305,8 +296,8 @@ EA F3's old report overflow is fixed by R2; the current wide-label cell must fit
 `repin.mjs` applies reviewed deltas to the **existing** registry. It never calls
 `seed()`, and never infers approvals from a whole fail row or a cause label.
 Unlisted marker fields remain unchanged. `pin.mjs` remains a read-only initial/
-legacy proposal generator; it is not the mixed-update path. The older retire-only
-command above is useful only when there are no new failures.
+legacy proposal generator; it is not the mixed-update path. `update-markers.mjs` is deprecated: it lacks checker-bundle bindings and reviewed
+receipts. Use re-pin for current checkpoints, including retire-only updates.
 
 After drawing PRs merge, make one full strict report on consolidated dev, then
 reconcile **one decisions file per merged PR** (decision 13). Use that same target
@@ -349,8 +340,8 @@ checker hash covers the canonical sorted module manifest described below:
 }
 ```
 
-The checker binding hashes a stable sorted list of every drawing-kit `.mjs` and
-`.swift` file, including the registry. The target manifest must match the local
+The checker binding hashes a stable sorted list of every drawing-kit `.mjs`, `.js`, `.cjs`, `.ts` and
+`.swift` file recursively, including subdirectories such as `corpus/`, including the registry. The target manifest must match the local
 files exactly. A changed, removed or added module invalidates the target and its
 decisions; run a fresh full 4.2 report. Apply rechecks the bundle inside its lock.
 Every supplied `baselineSha256` is validated even if that file has no rename.
@@ -370,7 +361,10 @@ leaves ambiguous and changed-text pairs for inspection, and calculates envelope
 proposals from measured ranges and the documented tolerances. It fills **no
 cause**: every entry has `reviewed: false`, empty `causeClass`/`note`, and an empty
 retirement `cause`. New defects have empty crop metadata too. Inspect each delta,
-complete the cause/rationale/mappings/crops and set `reviewed: true` individually.
+complete the cause/rationale/mappings/crops. **`reviewed: true` is a person's
+sign-off on those crops and causes.** The tool cannot verify the person's identity,
+attention or engineering judgement. A script flipping flags does not constitute
+review. Automated fixtures mock sign-off solely to test the protocol.
 The tool refuses an unreviewed entry. With several baselines, select
 `--baseline-sha <raw-summary-hash>`. Draft creation is exclusive under `evals/out`.
 
@@ -382,13 +376,13 @@ approvals or instance-match evidence. Convert them into explicit entries using
 both inventories. Retain `unexplainedItems` as a review checklist outside the
 strict decisions schema; an unresolved item must stop the re-pin.
 
-| Action           | Required decision data                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `retire`         | `markerId`, `scope: {case,sheet,medium}`, `cause: "fixed"` or `"not-measured"`. A measured compatible check is required for `fixed`; a missing view/render cannot be retired as a fix. Optional `instances` lists only the leftover baseline tokens of a partially paired old scope.                                                                                   |
-| `rename`         | `from` and `to` each contain `markerId` and `scope`; `pairs` is an array of `{from: oldToken, to: newToken, view?: {from,to}, sourceLocator?: {from,to}, text?: {from,to}}`. Kind/medium/case must match; any changed text/locator/view needs its literal mapping. Every old instance and every target instance must be accounted for across the listed decisions.     |
-| `scope-added`    | `to: {markerId,scope}` on an existing identity and all target tokens in `instances`. Keeps its definition; optional reviewed crop. Use this for an added sheet occurrence, with no repair credit.                                                                                                                                                                      |
-| `new-defect`     | `to: {markerId,scope}` on a genuinely new identity, every target token in `instances`, and `crop: {path,sha256}`. Crop must be a retained PNG under `evals/out/draw-samples/`, inside this workspace after symlink resolution. The recorded review accepts the entire explicit instance set; a representative crop is not an automatic blanket approval.               |
-| `envelope-drift` | `markerId`, `metric`, exact `from`, `to`, `observed`, and `coverage: "full"`. Counts use metric `occurrences` and `[min,max]`; scalar bands use `[allowedMin,referenceMin,referenceMax,allowedMax]`. The new reference must equal the full observed range; allowed bounds must equal the measured range plus the documented tolerance; an undrifted metric is refused. |
+| Action           | Required decision data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `retire`         | `markerId`, `scope: {case,sheet,medium}`, `cause: "fixed"`, `"removed"` (intentional content removal), or `"not-measured"`. A compatible check must be measured for fixed/removed, following a declared sheet rename when present. Intentional removal earns no repair credit; a missing observation cannot be booked as fixed/removed. Optional `instances` lists only the leftover baseline tokens of a partially paired old scope.                                                                                 |
+| `rename`         | `from` and `to` each contain `markerId` and `scope`; `pairs` is an array of `{from: oldToken, to: newToken, view?: {from,to}, sourceLocator?: {from,to}, text?: {from,to}}`. Case/flow/medium, defect and locator kind, source row and logical view must match. Changed text or column label needs its literal mapping. A changed physical sheet needs a declared rename. Text-changing moves require their own crop. Every old instance and every target instance must be accounted for across the listed decisions. |
+| `scope-added`    | `to: {markerId,scope}` on an existing identity and all target tokens in `instances`. Keeps its definition; optional reviewed crop. Use this for an added sheet occurrence, with no repair credit.                                                                                                                                                                                                                                                                                                                     |
+| `new-defect`     | `to: {markerId,scope}` on a genuinely new identity, every target token in `instances`, and `crop: {path,sha256}`. Crop must be a retained PNG under `evals/out/draw-samples/`, inside this workspace after symlink resolution. The recorded review accepts the entire explicit instance set; every new-defect entry and every text-changing move must use a distinct non-empty crop file/hash; copying one PNG to different names is refused.                                                                         |
+| `envelope-drift` | `markerId`, `metric`, exact `from`, `to`, `observed`, and `coverage: "full"`. Counts use metric `occurrences` and `[min,max]`; scalar bands use `[allowedMin,referenceMin,referenceMax,allowedMax]`. The new reference must equal the full observed range; allowed bounds must equal the measured range plus the documented tolerance; an undrifted metric is refused.                                                                                                                                                |
 
 For example, a count decision records `from: [2,8]`, `to: [4,8]`,
 `observed: [4,8]`. Drift is assessed from the bound report **after the listed
@@ -397,7 +391,10 @@ when a header moves while old literal body cells disappear, or a sheet is added:
 the still-matched old-scope subset is not the full new reference. Every metric
 must actually drift at exported precision; an allowed-bound-only edit is refused.
 Scalar `to` must exactly equal `bands()` for that measured population, including
-the documented tolerance/policy ceiling. Arbitrary widening (such as max 99) and
+the documented tolerance/policy ceiling. DQ-21 `advanceRatio` keeps the marker's
+own reference range but takes its **allowed bounds from the whole font pair's
+range across the bound report, ±0.05**, exactly as `seed()` does. New identities
+use the same function. A per-marker ±0.05 window is refused. Arbitrary widening (such as max 99) and
 arbitrary narrowing are refused. Policy-gap count changes need `classification:
 "policy-gap"`; they never enter geometry scoring. Partial-scope drift cannot
 replace a full reference: quick/selected/report-only inputs are refused.
@@ -436,11 +433,29 @@ keys, malformed UTF-8, escaping paths, reused pairs, conflicting files, incomple
 instance coverage and any unlisted failure/drift all stop before replacement.
 A process killed during apply may leave a lock; inspect it before removing it.
 
-The receipt gives expected post-apply status and separate `outcomes` counts for
-fixed retirements, moves, scope additions and new defects, plus `not-measured`
-retirements. A text-changing rename is a move. If literal body cells became blank,
-retire only those leftover instances as fixed; keep the header in its rename.
-Moves and scope additions never contribute repair credit; receipts are event
-counts, not category scores. Those do not establish passing observations or score
-credit. A missing view is not a font/layout repair. The acceptance test remains a
-**fresh full strict C1 with exit 0 and no drift**, not the projection alone.
+`sheetRenames` optionally declares exact `{case,medium,from,to}` mappings. For
+example, `{case:"machine-demo-left-to-right",medium:"svg",from:"sheet:14",to:"sheet:15"}`
+records a physical page shift. Literal `pairs[].view` mappings also declare view
+scope renames, allowing an old I/O title to resolve to the measured new title.
+Conflicting maps and a change of logical view kind are refused. Moves keep their
+semantic row (cell row keys are parsed independently of the column label), not
+merely an arbitrary pair of texts. An unprovable move must be a fixed retirement
+plus a crop-backed new defect, rather than a fabricated locator mapping.
+Class-only or aggregate font-pair locators cannot prove a text-changing move;
+unchanged literal text may still follow an explicitly declared sheet rename.
+
+Receipts separate `toolProved` structural/measurement/hash checks from
+`reviewerJudged` causes, crop sign-offs and rationale. `outcomes` counts fixed
+retirements, intentional removals, not-measured retirements, moves (including
+changed headers), scope additions and new defects separately. These are event
+counts, not independently established repairs or category scores. The tool proves
+structural correspondence, not intent. Moves, additions and intentional removals
+receive no repair credit.
+
+If D1 blanks a bad DQ-19 placeholder, that predicate may be fixed. A DQ-21 advance
+finding that disappears only because its text was intentionally blanked is
+`removed`, not a typography fix. Under a declared sheet/view rename, fixed and
+removed causes are measured on the destination rather than called not-measured.
+Keep a changed header in its rename; retire only the removed body instances.
+The acceptance requirement remains a **fresh full strict C1 with exit 0 and no
+drift**, after actual person review of the applicable decisions.

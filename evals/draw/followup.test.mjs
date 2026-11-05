@@ -58,7 +58,6 @@ it("reports one SVG glyph squeeze, while retaining the measured ratios as eviden
         bbox: { x: 10, y: 40, w: 1, h: 2 },
         capHeightMm: 1.5,
         capReferenceEmMm: 1.25,
-        expectedCapRatio: 0.6,
         advanceRatio: 0.5,
       },
     ],

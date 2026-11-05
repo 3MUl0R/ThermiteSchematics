@@ -6,20 +6,9 @@ import { compressScopes } from "./marker-scopes.mjs";
 import { bands } from "./marker-metrics.mjs";
 export const EXPECTATION_BUDGET = 512 * 1024;
 export function seed(rows, specs) {
-  const groups = new Map(),
-    pairBounds = new Map();
+  const groups = new Map();
   const observed = observations(rows);
-  for (const o of observed)
-    for (const f of o.findings)
-      if (
-        f.kind === "pdf-svg-advance-difference" &&
-        Number.isFinite(f.advanceRatio)
-      ) {
-        const range = pairBounds.get(f.fontPair) ?? [Infinity, -Infinity];
-        range[0] = Math.min(range[0], f.advanceRatio);
-        range[1] = Math.max(range[1], f.advanceRatio);
-        pairBounds.set(f.fontPair, range);
-      }
+  const population = observed.flatMap((o) => o.findings);
   for (const observation of observed) {
     if (!groups.has(observation.key)) groups.set(observation.key, []);
     groups.get(observation.key).push(observation);
@@ -30,12 +19,10 @@ export function seed(rows, specs) {
       .map((list) => {
         const first = list[0].identity,
           counts = list.map((o) => o.occurrences ?? o.findings.length);
-        const scalarBands = bands(list.flatMap((o) => o.findings));
-        if (first.dq === "DQ-21" && scalarBands.advanceRatio) {
-          const range = pairBounds.get(list[0].findings[0].fontPair);
-          scalarBands.advanceRatio[0] = Math.max(0, range[0] - 0.05);
-          scalarBands.advanceRatio[3] = range[1] + 0.05;
-        }
+        const scalarBands = bands(
+          list.flatMap((o) => o.findings),
+          population,
+        );
         return {
           id: markerId(first),
           dq: first.dq,

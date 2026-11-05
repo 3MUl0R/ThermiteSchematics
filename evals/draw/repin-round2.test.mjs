@@ -78,7 +78,10 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
           {
             kind: i.kind,
             text: "K1",
-            sourceLocator: i.locator,
+            sourceLocator: i.locator.replace(
+              "font-pair/report/header/",
+              "header/",
+            ),
             advanceRatio: [a, b][n],
             identities: [i],
           },
@@ -111,7 +114,12 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
     markerId: markerId(i),
     metric: "advanceRatio",
     from: [1, 1.05, 1.05, 1.1],
-    to: [1.03, [a, b][n], [a, b][n], 1.13],
+    to: [
+      Math.round((Math.min(a, b) - 0.05) * 1000) / 1000,
+      [a, b][n],
+      [a, b][n],
+      Math.round((Math.max(a, b) + 0.05) * 1000) / 1000,
+    ],
     observed: [[a, b][n], [a, b][n]],
     coverage: "full",
     classification: "drawing",
@@ -306,7 +314,7 @@ function d1Fixture() {
   const f = (i, text, more = {}) => ({
     kind: i.kind,
     text,
-    sourceLocator: i.locator,
+    sourceLocator: i.locator.replace("font-pair/report/header/", "header/"),
     identities: [i],
     ...(i.kind === "pdf-svg-advance-difference" ? { advanceRatio: 1.05 } : {}),
     ...more,
@@ -320,7 +328,10 @@ function d1Fixture() {
             instances: [
               {
                 text: links[n][0],
-                sourceLocator: i.locator,
+                sourceLocator: i.locator.replace(
+                  "font-pair/report/header/",
+                  "header/",
+                ),
                 advanceRatio: 1.05,
               },
               {
@@ -365,6 +376,10 @@ function d1Fixture() {
     entries.push({
       ...common,
       action: "rename",
+      crop: {
+        path: `evals/out/draw-samples/fixture/header-${n}.png`,
+        sha256: hash(`crop-${n}`),
+      },
       from: target(a),
       to: target(b),
       pairs: [
@@ -387,7 +402,7 @@ function d1Fixture() {
         ...common,
         action: "retire",
         ...target(a),
-        cause: "fixed",
+        cause: "removed",
         instances: [blank.token],
       });
       entries.push({
@@ -424,7 +439,7 @@ function d1Fixture() {
     markerId: markerId(drift),
     metric: "advanceRatio",
     from: [1, 1.05, 1.05, 1.1],
-    to: [1.03, 1.08, 1.08, 1.13],
+    to: [1, 1.08, 1.08, 1.13],
     observed: [1.08, 1.08],
     coverage: "full",
   });
@@ -436,6 +451,12 @@ function d1Fixture() {
     reportSha256,
     checkerSha256: report.checkerSha256,
     specs,
+    cropHashes: new Map(
+      links.map((_, n) => [
+        `evals/out/draw-samples/fixture/header-${n}.png`,
+        hash(`crop-${n}`),
+      ]),
+    ),
     baselines: new Map([[baselineSha256, baseline]]),
     decisions: [
       {
@@ -457,10 +478,13 @@ it("expresses all D1 item classes without booking any of five changed-text moves
     result = prepareRepin(c);
   expect(result.expected.exitCode).toBe(0);
   expect(result.expected.outcomes).toEqual({
-    fixes: 2,
+    fixes: 1,
     moves: 5,
     additions: 1,
     newDefects: 0,
+    removals: 1,
+    notMeasured: 0,
+    changedHeaderMoves: 5,
   });
   expect(
     result.receipts
@@ -518,4 +542,10 @@ it("drafts exact same-text moves but leaves ambiguous facts for inspection", () 
       (e) => e.action === "rename",
     ),
   ).toBe(false);
+});
+
+it("refuses per-marker DQ-21 narrowing against the complete font-pair population", () => {
+  const c = sharedFixture();
+  c.decisions[0].entries[0].to = [1.03, 1.08, 1.08, 1.13];
+  expect(() => prepareRepin(c)).toThrow(/documented tolerance/);
 });
