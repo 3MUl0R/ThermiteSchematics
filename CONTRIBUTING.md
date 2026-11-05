@@ -155,3 +155,99 @@ instructions live in the compact [root guide](AGENTS.md).
 Keep historical private release controls intact. Do not publish a package, change repository
 visibility, select a license, or upload machine-project data as part of a routine
 fix. Every release should identify the exact commit and supported runtime.
+
+`bun scripts/check-worktree.mjs` reproduces the linked-worktree CI step locally.
+It installs and checks committed `HEAD`; it does not copy uncommitted edits.
+
+### Focused tests and timings
+
+Build after source edits: several suites execute `dist/`. Use Vitest through the
+wrapper, with `VITEST_MAX_WORKERS=2` on shared machines. `bun run test:catalog`
+lists files by package, typical file wall times and coverage, including the named
+catalog and research suites. Set `THERMITE_TEST_TIMINGS=1` on `bun run test` or
+`bun run check` to write Vitest's per-file start/end intervals and assertion
+results to `coverage/test-timings.json` (ignored, overwritten on each run).
+Intervals overlap across workers; they are not additive check wall time. Delete
+that report after taking measurements.
+
+| Package / suite           | Focused command (prefix with `VITEST_MAX_WORKERS=2`)                                                     | Covers                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| schema                    | `bun run test -- packages/schema/test`                                                                   | Strict JSON/UTF-8, schemas, diagnostics, generated type consumers                        |
+| compiler                  | `bun run test -- packages/compiler/test`                                                                 | Loading, locks, resolution, expansion, nets, engineering rules                           |
+| core-library              | `bun run test -- packages/core-library/test`                                                             | Shipped generic type versions and package inventory                                      |
+| query                     | `bun run test -- packages/query/test`                                                                    | Read-only traversal, continuity, reports, ordering                                       |
+| render                    | `bun run test -- packages/render/test`                                                                   | ELK, symbols, layout validation, conservation, print bounds, determinism                 |
+| agent-tools               | `bun run test -- packages/agent-tools/test`                                                              | Requests, guarded patches, filesystem safety, recovery                                   |
+| cli                       | `bun run test -- packages/cli/test`                                                                      | CLI streams/exits, init, guides, PDF, packaging, catalog/research                        |
+| Catalog acceptance        | `bun run test -- packages/cli/test/promoted-component-libraries.test.ts`                                 | Accepted component bytes, net partitions, rendered coverage                              |
+| Research tools            | `bun run test -- packages/cli/test/library-batch-tools.test.ts packages/cli/test/research-tools.test.ts` | Local fake workers, queues, limits, interruption, reviewed promotion                     |
+| Engine eval checker tests | `bun run test -- evals/engine`                                                                           | Oracle, provenance, negative cases, contracts, checker unit tests                        |
+| Agent eval tests          | `bun run test -- evals/agent`                                                                            | Fake-agent runners, A/B gates, dogfoods, artifacts and shim safety                       |
+| Drawing eval tests        | `bun run test -- evals/draw`                                                                             | Drawing corpus, physical checks and expected-defect gates (when present on the checkout) |
+
+A single file can replace any directory in these commands. The frozen
+`release-package.test.ts` suite stays excluded unless explicitly selected via
+`npm run test:legacy-package` on its historical source revision and toolchain.
+
+### Golden and generated-fixture map
+
+Rebuild first. Update only the set you own, inspect every diff, and check it
+again. Other sets have no automatic updater; never regenerate unrelated goldens
+to silence a failure. Rendering changes also need print-size review in both flows.
+
+| Set / location                                                                                                        | Covers                                                                                                 | Intentional update                                                                | Read-only check                                                                                |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Shipped-core: motor-starter lock, compiler IR, agent type-only patch report                                           | Core byte locks, deterministic IR and failed-patch diagnostics                                         | `bun scripts/update-shipped-core-goldens.mjs --write`                             | `bun scripts/update-shipped-core-goldens.mjs --check`                                          |
+| Task4: CLI/renderer motor-starter and PNP, agent workflow, `m8-r005`                                                  | Frozen continuous SVG and split-stream/exit contracts; inventory in `scripts/m8-golden-migration.json` | `bun scripts/update-task4-goldens.mjs --write`                                    | `bun scripts/update-task4-goldens.mjs --check`                                                 |
+| Starter fixtures: `packages/cli/templates/starter-default`                                                            | JSON and locks for both init paths                                                                     | `bun scripts/update-starter-fixtures.mjs --write`                                 | `bun scripts/update-starter-fixtures.mjs --check`                                              |
+| Motor-starter manifest/presentation                                                                                   | Authored manifest and presentation fixture                                                             | `bun scripts/update-motor-starter-presentation.mjs --write`                       | `bun scripts/update-motor-starter-presentation.mjs --check`                                    |
+| RB render snapshots: `packages/render/test/snapshots/`                                                                | Direct-pair SVG and expanded loads R004 bytes in both flows                                            | `bun run test -- packages/render/test/render-robustness.test.ts --update`         | Same command without `--update`                                                                |
+| Tier2 R004: `packages/render/test/goldens/tier2/`                                                                     | Rejected bridge/right-deep layouts and diagnostic bytes                                                | No updater; review and edit expected JSON only for an intentional contract change | `bun run test -- packages/render/test/tier2-r004.test.ts packages/cli/test/render-cli.test.ts` |
+| Render ordering: `packages/render/test/elk-options.golden.json` and `snapshots/semantic-ordering/layout-metrics.json` | ELK adapter option assignments, layouts, trace controls and side-branch ordering evidence              | `bun scripts/update-render-ordering-goldens.mjs --write`                          | `bun scripts/update-render-ordering-goldens.mjs --check`                                       |
+| Schema/compiler `fixtures/**/expected.json`                                                                           | Exact invalid-input and engineering-rule diagnostic expectations                                       | No updater; edit the synthetic fixture and its expectation together               | `bun run test -- packages/schema/test/fixtures.test.ts packages/compiler/test/rules.test.ts`   |
+| Engine eval corpus: `evals/corpus/`                                                                                   | Seeded oracle cases, mutations, provenance manifest                                                    | `bun evals/engine/reseed.mjs` (changes corpus intentionally)                      | `bun evals/engine/reseed.mjs --verify`                                                         |
+| Text metrics generated source                                                                                         | Font-derived glyph widths used for physical text bounds                                                | `bun scripts/update-text-metrics.mjs --write`                                     | `bun scripts/update-text-metrics.mjs --check`                                                  |
+| Schema generated types                                                                                                | TypeScript declarations derived from JSON Schemas                                                      | `bun run generate:types`                                                          | `bun run generate:types:check`                                                                 |
+
+### Health budgets
+
+`bun run check:health` runs the same deterministic AST ratchet as `bun run check`.
+The committed `scripts/health-budget.json` caps only files over 850 lines and
+functions over 70 lines: existing outliers cannot grow, and newly crossing an
+outlier threshold fails; sizes at or below the thresholds need no entries.
+Non-null assertions and test suppressions default to zero per file, with only
+nonzero entries stored. Duplicates count at 50 or more normalized body tokens;
+existing groups cannot grow, and new meaningful groups fail. Source coverage is
+`packages/*/src` and `scripts` (including frozen scripts, without editing them).
+Only git-tracked files are scanned; run from the checkout root. Add a new file to
+the index (`git add -N <file>` is enough) before checking it. Untracked/ignored
+scratch cannot fail the ratchet; untracked in-scope files are listed in a warning.
+Generator-owned sources are excluded only at
+`packages/schema/src/generated/` and `packages/render/src/text-metrics-data.ts`;
+their generators' own check commands still guard them.
+Shell/Python/PowerShell scripts have line budgets; TypeScript/JavaScript also
+have AST metrics. Tests are excluded from size/assertion/duplicate metrics.
+Tracked tests anywhere in the checkout are scanned for `.skip`, `.todo`, `.skipIf`,
+`.runIf`, `.only`, Node skip/todo options (including shorthand), runtime
+`ctx.skip()` and destructured `skip()` calls. Conditional forms count too.
+Counts are declarations, not expanded parameterized test cases. Fixtures and
+build outputs are excluded. CRLF/LF checkouts give identical measurements.
+
+| Action                          | Command / rule                                                                                                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Check current values            | `bun run check:health`                                                                                                                                                                                                                |
+| Keep an improvement permanently | `bun run health:lower`, then inspect the budget diff; it rejects every increase, removes sizes at/below their thresholds and zero counters, and writes only on success                                                                |
+| Accept reviewed growth          | `bun run health:accept` raises only current regressions to measured values, prints each old -> new, and leaves every other entry alone. The PR must list every raise with a one-line reason; prefer a cheap extraction when practical |
+| Understand a failure            | The message names the file or lexical function, metric, old budget and new value (or the threshold for a newly crossing size); assertion/skip defaults are zero and duplicate groups default to one body                              |
+
+Named functions use lexical names. Anonymous callbacks also use their order of
+occurrence: an earlier callback can shift `map callback~2` to `map callback~3`.
+For an intentional rename/move or position shift, re-key the existing allowance
+(e.g. replace `"file.ts#outer/map callback~2": 171` with
+`"file.ts#outer/map callback~3": 171`), then run
+`bun run health:lower` to remove stale allowances. Review the new identity before
+accepting it. An identical edit to every member of a duplicate group changes its
+hash and appears as a new group; it needs review too. Duplicate normalization drops trivia but preserves identifier,
+string, template and regex contents. The ratchet caps growth; it does not certify
+code quality or replace review. `bun run test -- packages/cli/test/health-ratchet.test.ts`
+checks mutations, explicit acceptance and downward-only updates.

@@ -19,7 +19,7 @@
     "format": "bun --bun prettier --write .",
     "format:check": "bun --bun prettier --check .",
     "check:committed-json": "bun scripts/assert-prettier-stable-json.mjs",
-    "check": "bun run generate:types:check && bun run build && bun run check:text-metrics && bun run test && bun run format:check && bun run check:committed-json",
+    "check": "bun run generate:types:check && bun run build && bun run check:text-metrics && bun run check:health && bun run test && bun run format:check && bun run check:committed-json",
     "generate:types": "bun run --cwd packages/schema generate:types",
     "generate:types:check": "bun run --cwd packages/schema generate:types:check",
     "test:release-evidence": "node scripts/run-vitest-and-audit.mjs && node packages/cli/dist/bin.js validate \"packages/cli/fixtures/valid project\" --json",
@@ -32,7 +32,11 @@
     "package:pack": "bun scripts/runtime-package/pack.mjs",
     "package:verify": "bun scripts/runtime-package/verify.mjs",
     "check:linux": "bun scripts/platform/check-linux.mjs",
-    "check:text-metrics": "bun scripts/update-text-metrics.mjs --check"
+    "check:text-metrics": "bun scripts/update-text-metrics.mjs --check",
+    "check:health": "bun scripts/health-ratchet.mjs",
+    "health:lower": "bun scripts/health-ratchet.mjs --lower",
+    "test:catalog": "bun scripts/test-catalog.mjs",
+    "health:accept": "bun scripts/health-ratchet.mjs --accept"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.1.0",

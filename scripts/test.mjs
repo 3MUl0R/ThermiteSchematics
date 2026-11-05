@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 const temporary = realpathSync(tmpdir());
 const sidecars = mkdtempSync(join(temporary, "thermite-test-sidecars-"));
 const selected = process.argv.slice(2);
+// Opt in for focused runs or the full check. coverage/ is already ignored.
+const timings = process.env.THERMITE_TEST_TIMINGS === "1";
+if (timings) mkdirSync("coverage", { recursive: true });
 // This suite builds the frozen private 0.2.0 tarball against its historical
 // byte inventory. The public alpha has separate source and runtime archive acceptance.
 const selection = selected.some((argument) =>
@@ -39,6 +42,13 @@ try {
       // copied tests are not tests of the active checkout.
       "--exclude=alpha-out/**",
       "--exclude=release-out/**",
+      ...(timings
+        ? [
+            "--reporter=default",
+            "--reporter=json",
+            "--outputFile.json=coverage/test-timings.json",
+          ]
+        : []),
       ...selection,
     ],
     {
