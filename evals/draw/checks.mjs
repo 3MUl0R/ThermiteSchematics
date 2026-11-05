@@ -724,6 +724,7 @@ export function wirePlacement(g) {
     const inline = block.some(
       (q) =>
         q.plate &&
+        inside(t.bbox, q.plate.bbox) &&
         own.some((w) =>
           w.points
             .slice(1)
@@ -733,10 +734,17 @@ export function wirePlacement(g) {
     const inkDistance = (s) => Math.max(0, dist(s) - (s.stroke ?? 0) / 2);
     const d = inline ? 0 : Math.min(...own.map(inkDistance)),
       other = Math.min(...others.map(inkDistance));
+    // Rooted-label offsets near 2.17 mm are threshold-sensitive: 2.147 passes,
+    // 2.195 fails. These distance-only hits do not establish visual ambiguity.
+    // See README; keep the calibrated uncertainty rather than moving the limit.
     if (d > 2 + INK_ACCURACY_MM || other + INK_ACCURACY_MM < d)
       out.push(
         issue("ambiguous-wire-label", t, {
           ownDistanceMm: d,
+          reason:
+            other + INK_ACCURACY_MM < d
+              ? "nearer-foreign-wire"
+              : "own-wire-distance",
           nearestOtherMm: Number.isFinite(other) ? other : null,
           wire: t.wire,
           text: t.text,
@@ -890,38 +898,29 @@ export function legibility(g) {
           font: t.font,
         }),
       );
-    if (
-      t.expectedCapRatio !== undefined &&
-      t.fontSize > 0 &&
-      Math.abs(
-        t.capHeightMm /
-          (t.capReferenceEmMm ?? t.fontSize) /
-          t.expectedCapRatio -
-          1,
-      ) > 0.1
-    )
-      out.push(
-        issue("cap-ratio-mismatch", t, {
-          text: t.text,
-          ratio:
-            t.capHeightMm /
-            (t.capReferenceEmMm ?? t.fontSize) /
-            t.expectedCapRatio,
-          expectedRatio: 1,
-          naturalCapRatio: t.expectedCapRatio,
-          font: t.font,
-          role: t.role,
-        }),
-      );
-    if (
+    // SVG advance and font-cap scaling describe the same anisotropy, not two
+    // independent ink measurements. PDF exposes the physical em-axis ratio.
+    const aspectRatio =
+      t.capReferenceEmMm > 0 && t.fontSize > 0
+        ? t.fontSize / t.capReferenceEmMm
+        : undefined;
+    const badAdvance =
       t.advanceRatio !== undefined &&
-      (t.advanceRatio < 0.9 || t.advanceRatio > 1.1)
-    )
+      (t.advanceRatio < 0.9 || t.advanceRatio > 1.1);
+    const badAspect =
+      aspectRatio !== undefined && Math.abs(aspectRatio - 1) > 0.1;
+    if (badAdvance || badAspect)
       out.push(
         issue("distorted-glyphs", t, {
           text: t.text,
-          ratio: t.advanceRatio,
+          ratio: t.advanceRatio ?? 1 / aspectRatio,
+          advanceRatio: t.advanceRatio,
+          emAspectRatio: aspectRatio,
           naturalAdvanceMm: t.naturalAdvanceMm,
+          measurements: [
+            ...(badAdvance ? ["advance"] : []),
+            ...(badAspect ? ["em-axis-ratio"] : []),
+          ],
           font: t.font,
           role: t.role,
         }),

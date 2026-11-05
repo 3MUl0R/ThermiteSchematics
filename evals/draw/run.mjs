@@ -1,3 +1,4 @@
+import { classifyTextGeometry } from "./text-classification.mjs";
 import { retainLostText } from "./lost-text.mjs";
 import { outputCost } from "./output.mjs";
 import { gzipSync } from "node:zlib";
@@ -188,7 +189,7 @@ try {
   }
   metadata = {
     format: "thermite-draw-eval/1.0",
-    evalsVersion: "4.0",
+    evalsVersion: "4.1",
     evals: {
       commit: await git(root, "rev-parse", "HEAD"),
       dirty:
@@ -369,6 +370,7 @@ try {
             measure({ selector: `#sheet-${i + 1}>svg`, textOnly: true }),
         );
       }, measureSheet.toString());
+      for (const g of htmlGeometry) classifyTextGeometry(g, ir);
       // Collect all tiled copies before deciding whether a semantic label was lost.
       for (const sheet of packet.sheets)
         geometries.push(await openSheet(page, sheet.svg));
