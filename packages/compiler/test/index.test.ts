@@ -27,6 +27,7 @@ describe("compiler public API", () => {
       "deriveProjectNets",
       "evaluateRules",
       "loadProject",
+      "loadProjectForSourcePatch",
       "writeFileAtomically",
       "LIBRARY_LOCK_FILE_NAME",
       "LIBRARY_LOCK_SCHEMA_ID",

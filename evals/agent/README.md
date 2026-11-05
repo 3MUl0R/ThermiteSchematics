@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.6.0)
+# Fresh-agent evaluator (E2 v1.7.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -175,27 +175,33 @@ Project snapshots exclude `.git`; runtime hashes include all directories,
 including newly created empty `.git` directories. The runtime baseline is after
 shim installation. Initial, per-call and final snapshots close the before-first,
 after-last and child-process-write holes. A quiet real-CLI `validate --json`
-labels each boundary's JSON/schema-invalid files; an unchanged invalid file
-keeps that state. Permissions never depend on the immediately preceding command.
+labels each boundary's invalid JSON separately from schema-invalid files; an
+unchanged invalid file keeps that state. Only E002/E003 (including duplicate
+keys rejected by the strict parser) grant ordinary JSON repair. The independent
+`invalidJsonFiles` metadata prevents an authored `$invalidJSON` property from
+granting permission. A schema-invalid or JSON-valid non-object root receives no
+ordinary-edit exemption; a non-object root cannot be replaced through JSON Patch,
+so report it for explicit correction rather than bypassing the guarded loop. Permissions never depend on the immediately preceding command.
 Human `validate`, `--help` and other calls cannot revoke a valid repair exception.
 
 The current generated guide is normative. Updating its edit permissions requires
 a reviewed scorer change and eval-version bump.
 
-| File/change                                         | Direct edit permission                                       | Guide provenance                                                                                                                                                                                                                          |
-| --------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Existing referenced source/presentation             | Guarded dry-run then apply                                   | “To change existing source or presentation files:” followed by the guarded workflow.                                                                                                                                                      |
-| New source files and `system.json` source listing   | Ordinary edits; later edits to admitted files become guarded | “New files, `system.json` and libraries are ordinary file edits; list new source files in `system.json` `sources`, then validate.”                                                                                                        |
-| Libraries, including visible core                   | Ordinary edits, then CLI lock                                | Same sentence; “After an intentional library change run `thermite lock .`, then validate”.                                                                                                                                                |
-| JSON/schema-invalid existing source                 | Ordinary repair while its before-state remains invalid       | Guide lines 93–94: “fix JSON or schema errors with an ordinary edit, then validate.” The full sentence starts “Only when sources load and pass schema checks but fail to compile (no guards returned) hash the file to patch the repair”. |
-| Schema-valid source with a compile error, e.g. E102 | Guarded repair; explicit byte hash permitted                 | Same full sentence; a compile error does not authorize a direct edit.                                                                                                                                                                     |
-| Library lock                                        | Successful CLI `lock` writes only                            | “referenced by system.json and pinned by electrical-system.lock.json”; “run `thermite lock .`”.                                                                                                                                           |
-| Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                       | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                                                                                                                               |
-| Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                 | “Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never hand-author schematic geometry”.                                                                                                                        |
+| File/change                                         | Direct edit permission                                       | Guide provenance                                                                                                                   |
+| --------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Existing referenced source/presentation             | Guarded dry-run then apply                                   | “To change existing source or presentation files:” followed by the guarded workflow.                                               |
+| New source files and `system.json` source listing   | Ordinary edits; later edits to admitted files become guarded | “New files, `system.json` and libraries are ordinary file edits; list new source files in `system.json` `sources`, then validate.” |
+| Libraries, including visible core                   | Ordinary edits, then CLI lock                                | Same sentence; “After an intentional library change run `thermite lock .`, then validate”.                                         |
+| JSON-invalid existing source/presentation           | Ordinary repair while its before-state has E002/E003 (A006)  | “Invalid JSON needs an ordinary edit, then validation”; `thermite guide agent-requests` includes duplicate keys.                   |
+| Schema-invalid existing source/presentation         | Guarded repair; explicit raw-byte hash permitted             | “When compilation fails (no guards returned), hash the raw source bytes and guard a schema or semantic repair with UID tests”.     |
+| Schema-valid source with a compile error, e.g. E102 | Guarded repair; explicit byte hash permitted                 | Same current guide sentence; a compile error does not authorize a direct edit.                                                     |
+| Library lock                                        | Successful CLI `lock` writes only                            | “referenced by system.json and pinned by electrical-system.lock.json”; “run `thermite lock .`”.                                    |
+| Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                       | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                        |
+| Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                 | “Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never hand-author schematic geometry”.                 |
 
 | Rule | Meaning                                                                                                                                                                                                                                   |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except a before-state JSON/schema repair. Includes run boundaries, deletions and child writes.                                                         |
+| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except an E002/E003 before-state JSON repair. Includes run boundaries, deletions and child writes.                                                     |
 | V2   | Library lock edited except by successful CLI `lock`.                                                                                                                                                                                      |
 | V3   | Project instructions/import wrapper changed after the baseline. Successful `init` may create instructions for a new project.                                                                                                              |
 | V4   | Apply has no identical successful earlier dry run. Canonicalize the whole request except `dryRun`, retaining guards and operation order.                                                                                                  |
@@ -379,8 +385,10 @@ timings and the final harness hash are recorded in the worktree's `PR.md`.
 
 ## G3 replay and event provenance
 
-On f0bfabd the guide permissions quoted above are unchanged, including schema
-repair on lines 93–94. Required retrieval IDs now use `agent-requests` (formerly
+At f0bfabd the then-current guide still permitted ordinary schema repair.
+T3 changes that permission: eval 1.7.0 requires guarded schema repair and preserves
+ordinary edits only for E002/E003 before-states. No model baseline existed at this
+version change; the complete local references are rerun before comparing scores. Required retrieval IDs now use `agent-requests` (formerly
 requests) and `report-filtering` (formerly reports), matching G3's topic index.
 The D briefs remain byte-for-byte frozen; appendices reflect decision 12's
 profile and deferral requirements.

@@ -4,7 +4,8 @@ import { boundedAlternatives, formatAllowedValues } from "@thermite/schema";
 
 import type { AgentToolName } from "./contracts.js";
 
-export type AgentToolErrorCode = "A001" | "A002" | "A003" | "A004" | "A005";
+export type AgentToolErrorCode =
+  "A001" | "A002" | "A003" | "A004" | "A005" | "A006";
 
 export type A001Reason =
   | "invalid-json"
@@ -85,7 +86,33 @@ export interface A005Error {
 }
 
 export type AgentToolError =
-  A001Error | A002Error | A003Error | A004Error | A005Error;
+  A001Error | A002Error | A003Error | A004Error | A005Error | A006Error;
+
+export interface A006Error {
+  readonly code: "A006";
+  readonly message: string;
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+}
+
+export function createA006Error(
+  file: string,
+  line: number,
+  column: number,
+): A006Error {
+  const remedy =
+    file === "electrical-system.lock.json"
+      ? "run thermite lock . to regenerate the lock, then validate"
+      : "repair JSON syntax or duplicate keys with an ordinary edit, then validate and resume the guarded loop";
+  return Object.freeze({
+    code: "A006",
+    message: `A006 Cannot apply a guarded patch to ${JSON.stringify(file)} at line ${line}, column ${column}: ${remedy} (thermite guide agent-requests).`,
+    file,
+    line,
+    column,
+  });
+}
 
 export type AgentToolFailure = AgentToolError | QueryError | RenderError;
 

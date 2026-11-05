@@ -4,16 +4,15 @@ import {
   compileProject,
   computeFileIntegrity,
   PROJECT_WRITE_LOCK_FILE_NAME,
-  loadProject,
+  loadProjectForSourcePatch,
   writeFileAtomically,
   type AtomicWriteOptions,
   type CompileResult,
   type LoadedDocument,
-  type LoadedProject,
-  type LoadedProjectSourceFile,
-  type LoadResult,
+  type SourcePatchProject,
+  type SourcePatchLoadResult,
 } from "@thermite/compiler";
-import type { Diagnostic, ProjectPresentationFile } from "@thermite/schema";
+import type { Diagnostic } from "@thermite/schema";
 
 import type {
   AgentToolOutcome,
@@ -23,6 +22,7 @@ import type {
 import {
   createA003Error,
   createA004Error,
+  createA006Error,
   type AgentToolError,
 } from "./common/errors.js";
 import { detachedFrozenCopy } from "./common/immutable.js";
@@ -84,7 +84,7 @@ export interface ApplySourcePatchDependencies {
   readonly loadProject: (
     inputPath: string | undefined,
     cwd: string,
-  ) => Promise<LoadResult>;
+  ) => Promise<SourcePatchLoadResult>;
   readonly writeFileAtomically: (
     destinationPath: string,
     data: Uint8Array,
@@ -93,7 +93,7 @@ export interface ApplySourcePatchDependencies {
   readonly filesystem: PatchFilesystemDependencies;
   readonly reserveProjectWrite?: typeof reserveProjectWrite;
   readonly captureSnapshot?: (
-    project: LoadedProject,
+    project: SourcePatchProject,
   ) => Promise<ProjectControlledSnapshotResult>;
   readonly copyProjectTree?: (
     sourceRoot: string,
@@ -101,7 +101,7 @@ export interface ApplySourcePatchDependencies {
   ) => Promise<void>;
   readonly scanProjectTree?: (root: string) => Promise<string | undefined>;
   readonly validateSourceChain?: (
-    project: LoadedProject,
+    project: SourcePatchProject,
     document: LoadedDocument<unknown>,
   ) => Promise<boolean>;
 }
@@ -115,16 +115,14 @@ export interface InternalApplySourcePatchTool {
 export const defaultApplySourcePatchDependencies: ApplySourcePatchDependencies =
   Object.freeze({
     compileProject,
-    loadProject,
+    loadProject: loadProjectForSourcePatch,
     writeFileAtomically,
     filesystem: defaultPatchFilesystemDependencies,
   });
 
 type PatchOutcome = AgentToolOutcome<ApplySourcePatchValue, AgentToolError>;
 type PatchFailureOutcome = Extract<PatchOutcome, { readonly ok: false }>;
-type ProjectSourceDocument =
-  | LoadedDocument<LoadedProjectSourceFile>
-  | LoadedDocument<ProjectPresentationFile>;
+type ProjectSourceDocument = LoadedDocument<unknown>;
 
 function failureOutcome(
   diagnostics: readonly DeepReadonly<Diagnostic>[],
@@ -162,7 +160,10 @@ function finish(outcome: PatchOutcome): PatchOutcome {
 }
 
 function returnedCallFailure(
-  result: Extract<LoadResult | CompileResult, { readonly ok: false }>,
+  result: Extract<
+    SourcePatchLoadResult | CompileResult,
+    { readonly ok: false }
+  >,
   stage: "project-load" | "stage-compile" | "precommit-load",
 ): PatchFailureOutcome {
   const diagnostics = result.toolFailure
@@ -174,12 +175,23 @@ function returnedCallFailure(
     : result.diagnostics;
   return failureOutcome(
     diagnostics,
-    null,
+    !result.toolFailure ? unpatchableJsonError(diagnostics) : null,
     result.toolFailure ? "tool" : "expected",
   );
 }
 
-function manifestRelativePath(project: LoadedProject): string | undefined {
+function unpatchableJsonError(
+  diagnostics: readonly Diagnostic[],
+): AgentToolError | null {
+  const parserError = diagnostics.find(
+    ({ code }) => code === "E002" || code === "E003",
+  );
+  return parserError === undefined
+    ? null
+    : createA006Error(parserError.file, parserError.line, parserError.column);
+}
+
+function manifestRelativePath(project: SourcePatchProject): string | undefined {
   const value = relative(project.logicalRootPath, project.manifest.logicalPath);
   return value !== "" &&
     value !== ".." &&
@@ -190,7 +202,7 @@ function manifestRelativePath(project: LoadedProject): string | undefined {
 }
 
 function patchableProjectDocuments(
-  project: LoadedProject,
+  project: SourcePatchProject,
 ): readonly ProjectSourceDocument[] {
   const documents: ProjectSourceDocument[] = [
     ...project.sources,
@@ -205,7 +217,7 @@ function patchableProjectDocuments(
 }
 
 function projectTargets(
-  project: LoadedProject,
+  project: SourcePatchProject,
 ): ReadonlyMap<string, SourcePatchTargetSnapshot> {
   return new Map(
     patchableProjectDocuments(project).map((document) => [
@@ -219,7 +231,7 @@ function projectTargets(
 }
 
 function projectDocuments(
-  project: LoadedProject,
+  project: SourcePatchProject,
 ): ReadonlyMap<string, ProjectSourceDocument> {
   return new Map(
     patchableProjectDocuments(project).map((document) => [
@@ -255,7 +267,7 @@ async function copyProject(
 }
 
 async function snapshotProject(
-  project: LoadedProject,
+  project: SourcePatchProject,
   dependencies: ApplySourcePatchDependencies,
 ): Promise<ProjectControlledSnapshotResult> {
   return dependencies.captureSnapshot === undefined
@@ -264,7 +276,7 @@ async function snapshotProject(
 }
 
 async function sourceChainIsValid(
-  project: LoadedProject,
+  project: SourcePatchProject,
   document: ProjectSourceDocument,
   dependencies: ApplySourcePatchDependencies,
 ): Promise<boolean> {
@@ -303,7 +315,7 @@ function sameIdentity(a: FileStatus, b: FileStatus): boolean {
 }
 
 async function captureSourceIdentity(
-  project: LoadedProject,
+  project: SourcePatchProject,
   document: ProjectSourceDocument,
   dependencies: ApplySourcePatchDependencies,
 ): Promise<SourceIdentity> {
@@ -331,7 +343,7 @@ class SourceWriteGuardError extends Error {
 }
 
 async function requireWriteGuard(
-  project: LoadedProject,
+  project: SourcePatchProject,
   document: ProjectSourceDocument,
   identity: SourceIdentity,
   expectedIntegrity: string,
@@ -366,7 +378,7 @@ async function requireWriteGuard(
 }
 
 async function rollbackFiles(
-  project: LoadedProject,
+  project: SourcePatchProject,
   committed: readonly SourceByteProposal[],
   documents: ReadonlyMap<string, ProjectSourceDocument>,
   identities: ReadonlyMap<string, SourceIdentity>,
@@ -444,7 +456,7 @@ type CommitResult =
   | { readonly ok: false; readonly outcome: PatchFailureOutcome };
 
 async function commitProposals(
-  project: LoadedProject,
+  project: SourcePatchProject,
   proposals: readonly SourceByteProposal[],
   documents: ReadonlyMap<string, ProjectSourceDocument>,
   identities: ReadonlyMap<string, SourceIdentity>,
@@ -544,10 +556,88 @@ async function commitProposals(
   };
 }
 
+async function loadPatchProject(
+  input: string | undefined,
+  cwd: string,
+  dependencies: ApplySourcePatchDependencies,
+): Promise<SourcePatchLoadResult> {
+  const result = await dependencies.loadProject(input, cwd);
+  if (
+    result.ok ||
+    result.toolFailure ||
+    result.sourcePatchProject !== undefined ||
+    dependencies.loadProject === loadProjectForSourcePatch
+  )
+    return result;
+  return {
+    ...result,
+    diagnostics: result.diagnostics.map((d) =>
+      d.severity === "error" && /^E01[0-6]$/.test(d.code)
+        ? {
+            ...d,
+            message: `${d.message} This injected loadProject does not provide guarded schema-repair snapshots; delegate to loadProjectForSourcePatch to support repairs.`,
+          }
+        : d,
+    ),
+  };
+}
+
+async function precommitFailure(
+  project: SourcePatchProject,
+  cwd: string,
+  initialSnapshot: ProjectControlledSnapshot,
+  dependencies: ApplySourcePatchDependencies,
+): Promise<PatchFailureOutcome | undefined> {
+  let reloadedProject: SourcePatchProject;
+  try {
+    const loaded = await loadPatchProject(
+      project.manifest.logicalPath,
+      cwd,
+      dependencies,
+    );
+    const snapshot = loaded.ok ? loaded.project : loaded.sourcePatchProject;
+    if (!loaded.ok && snapshot === undefined)
+      return returnedCallFailure(loaded, "precommit-load");
+    reloadedProject = snapshot!;
+  } catch (error) {
+    return exceptionOutcome("precommit-load", error, project.manifest.file);
+  }
+  try {
+    const captured = await snapshotProject(reloadedProject, dependencies);
+    if (!captured.ok) return failureOutcome([], captured.error, "expected");
+    const mismatch = compareProjectControlledSnapshots(
+      initialSnapshot,
+      captured.snapshot,
+    );
+    if (mismatch !== undefined) return failureOutcome([], mismatch, "expected");
+  } catch (error) {
+    return exceptionOutcome(
+      "precommit-read",
+      error,
+      reloadedProject.manifest.file,
+    );
+  }
+  try {
+    const reparseFile = await scanProject(
+      project.logicalRootPath,
+      dependencies,
+    );
+    if (reparseFile !== undefined)
+      return failureOutcome(
+        [],
+        createA003Error(reparseFile, "reparse-point"),
+        "expected",
+      );
+  } catch (error) {
+    return exceptionOutcome("reparse-scan", error, project.manifest.file);
+  }
+  return undefined;
+}
+
 async function runStagedPatch(
   request: ApplySourcePatchRequest,
   cwd: string,
-  project: LoadedProject,
+  project: SourcePatchProject,
   resolvedManifestRelativePath: string,
   initialSnapshot: ProjectControlledSnapshot,
   proposals: readonly SourceByteProposal[],
@@ -688,74 +778,12 @@ async function runStagedPatch(
     }
 
     if (terminal === undefined && !request.dryRun) {
-      let reloadedProject: LoadedProject | undefined;
-      try {
-        const reloaded = await dependencies.loadProject(
-          project.manifest.logicalPath,
-          cwd,
-        );
-        if (reloaded.ok) {
-          reloadedProject = reloaded.project;
-        } else {
-          terminal = returnedCallFailure(reloaded, "precommit-load");
-        }
-      } catch (error) {
-        terminal = exceptionOutcome(
-          "precommit-load",
-          error,
-          project.manifest.file,
-        );
-      }
-
-      let precommitSnapshot: ProjectControlledSnapshot | undefined;
-      if (terminal === undefined && reloadedProject !== undefined) {
-        try {
-          const captured = await snapshotProject(reloadedProject, dependencies);
-          if (captured.ok) {
-            precommitSnapshot = captured.snapshot;
-          } else {
-            terminal = failureOutcome([], captured.error, "expected");
-          }
-        } catch (error) {
-          terminal = exceptionOutcome(
-            "precommit-read",
-            error,
-            reloadedProject.manifest.file,
-          );
-        }
-      }
-
-      if (terminal === undefined && precommitSnapshot !== undefined) {
-        const mismatch = compareProjectControlledSnapshots(
-          initialSnapshot,
-          precommitSnapshot,
-        );
-        if (mismatch !== undefined) {
-          terminal = failureOutcome([], mismatch, "expected");
-        }
-      }
-
-      if (terminal === undefined) {
-        try {
-          const reparseFile = await scanProject(
-            project.logicalRootPath,
-            dependencies,
-          );
-          if (reparseFile !== undefined) {
-            terminal = failureOutcome(
-              [],
-              createA003Error(reparseFile, "reparse-point"),
-              "expected",
-            );
-          }
-        } catch (error) {
-          terminal = exceptionOutcome(
-            "reparse-scan",
-            error,
-            project.manifest.file,
-          );
-        }
-      }
+      terminal = await precommitFailure(
+        project,
+        cwd,
+        initialSnapshot,
+        dependencies,
+      );
 
       if (terminal === undefined) {
         const committed = await commitProposals(
@@ -852,17 +880,17 @@ async function runValidatedPatch(
   cwd: string,
   dependencies: ApplySourcePatchDependencies,
 ): Promise<PatchOutcome> {
-  let loaded: LoadResult;
+  let loaded: SourcePatchLoadResult;
   try {
-    loaded = await dependencies.loadProject(request.project, cwd);
+    loaded = await loadPatchProject(request.project, cwd, dependencies);
   } catch (error) {
     return exceptionOutcome("project-load", error);
   }
-  if (!loaded.ok) {
+  if (!loaded.ok && loaded.sourcePatchProject === undefined) {
     return returnedCallFailure(loaded, "project-load");
   }
 
-  const project = loaded.project;
+  const project = loaded.ok ? loaded.project : loaded.sourcePatchProject!;
   const resolvedManifestRelativePath = manifestRelativePath(project);
   if (resolvedManifestRelativePath === undefined) {
     return exceptionOutcome(

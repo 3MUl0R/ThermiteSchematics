@@ -38,6 +38,14 @@ export function fileState(project, real, env = process.env, previous) {
   state.schemaInvalidFiles = (previous?.schemaInvalidFiles ?? []).filter(
     (path) => state.files[path] === previous.files[path],
   );
+  state.invalidJsonFiles = [
+    ...new Set([
+      ...state.invalidJsonFiles,
+      ...(previous?.invalidJsonFiles ?? []).filter(
+        (path) => state.files[path] === previous.files[path],
+      ),
+    ]),
+  ];
   if (
     !existsSync(project) ||
     !existsSync(project + "/system.json") ||
@@ -98,6 +106,15 @@ function validatedState(state, r) {
       new Error("Boundary validation could not establish file state"),
       { code: r.error?.code ?? "STATE_VALIDATION_FAILED" },
     );
+  state.invalidJsonFiles = [
+    ...new Set([
+      ...state.invalidJsonFiles,
+      ...diagnostics
+        .filter((d) => d.code === "E002" || d.code === "E003")
+        .map((d) => d.file)
+        .filter(Boolean),
+    ]),
+  ];
   state.schemaInvalidFiles = [
     ...new Set([
       ...state.schemaInvalidFiles,

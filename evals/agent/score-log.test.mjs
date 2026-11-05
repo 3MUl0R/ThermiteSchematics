@@ -197,6 +197,7 @@ describe("seeded violations", () => {
     const initial = base(),
       final = copy(initial);
     initial.documents["devices/a.json"] = { $invalidJSON: true };
+    initial.invalidJsonFiles = ["devices/a.json"];
     final.files["devices/a.json"] = "repair";
     expect(rules({ initial, final })).toEqual([]);
     final.files["electrical-system.lock.json"] = "l2";

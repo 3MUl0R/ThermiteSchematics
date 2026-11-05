@@ -75,6 +75,7 @@ export {
 export { evaluateRules, type M3RuleId } from "./rules/index.js";
 export {
   loadProject,
+  loadProjectForSourcePatch,
   type LoadedDocument,
   type LoadedDocumentKind,
   type LoadedDocumentOwner,
@@ -86,6 +87,8 @@ export {
   type LibraryResolutionKind,
   type LoadProjectOptions,
   type LoadResult,
+  type SourcePatchProject,
+  type SourcePatchLoadResult,
   type NormalizedLibraryLock,
   type NormalizedLibraryLockEntry,
   type ProjectLibraryDependency,

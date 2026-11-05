@@ -241,6 +241,83 @@ bun "$thermite_entry" agent validate --input validate.request.json
 
 Expected response: both calls exit `0`; the patch result reports `dryRun: false`, and the second validation reports `valid: true`.
 
+### Repair schema errors through the guarded loop
+
+When validation reports E012 (an unexpected property), E013 (such as an uppercase
+UUID), or a repairable source schema error, inspect and resolve cannot return guards.
+Read the named source file as raw JSON and review the diagnostic pointers and
+intended values. Hash its current bytes with the recipe above, test the existing
+UID, and dry-run a patch that fixes all errors together. The patch operates on
+the parsed JSON even when its current shape fails schema validation. Only
+manifest-admitted project sources and the referenced presentation are eligible.
+
+The top level must be an object. A JSON-valid `null`, number, string or array
+cannot be repaired through this tool because root replacement is forbidden
+(A002); report that authoring error for explicit correction rather than bypassing
+the guarded loop. An object such as `{"objects": 5}` can be repaired at a subpath.
+
+For example, suppose the first device in `devices/equipment.json` has an
+accidentally uppercase UUID and an unwanted `unexpected` property. Save this as
+`repair-schema.mjs` and run it from the project directory. This example restores
+that UUID's lowercase spelling; it does not create a new identity.
+
+```js repair-schema.mjs
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+const file = "devices/equipment.json";
+const bytes = readFileSync(file);
+const source = JSON.parse(bytes.toString("utf8"));
+const uid = source.objects[0].uid;
+const request = {
+  format: "agent-tool-request/0.1",
+  project: ".",
+  patchFormat: "json-patch/0.1",
+  dryRun: true,
+  files: [{
+    path: file,
+    expectedIntegrity: "sha256-" + createHash("sha256").update(bytes).digest("base64"),
+    operations: [
+      { op: "test", path: "/objects/0/uid", value: uid },
+      { op: "remove", path: "/objects/0/unexpected" },
+      { op: "replace", path: "/objects/0/uid", value: uid.toLowerCase() },
+    ],
+  }],
+};
+writeFileSync("repair-schema.request.json", JSON.stringify(request, null, 2) + "\n");
+```
+
+```sh
+bun repair-schema.mjs
+bun "$thermite_entry" agent apply-source-patch --input repair-schema.request.json
+```
+
+Expected: exit `0`, `dryRun: true`, `applied: false`, with unchanged project
+bytes. Review the result, then copy the request to `repair-schema-apply.request.json`
+changing only `dryRun` to `false`:
+
+```sh
+bun "$thermite_entry" agent apply-source-patch --input repair-schema-apply.request.json
+bun "$thermite_entry" agent validate --input validate.request.json
+```
+
+Both calls exit `0`; only the target source changes. A candidate is accepted only
+if the **whole staged project compiles successfully**, including schema, lock,
+reference and engineering checks. Warnings and information do not prevent a
+patch. A partial schema repair or a remaining error elsewhere is refused with
+the remaining diagnostics and no source writes. Use multiple operations/files in
+one request when errors must be fixed together. Byte guards, operation tests,
+snapshot revalidation and writer reservations still apply.
+
+JSON syntax errors and duplicate keys cannot be patched: A006 names the file and
+the parser's line and column, alongside the original E002/E003 diagnostics. Make
+an ordinary edit to source, presentation, manifest or library JSON, then validate
+again and resume the guarded loop where eligible. For a corrupt
+`electrical-system.lock.json`, run `thermite lock .` to regenerate the lock instead
+of hand-editing it, then validate. The patch tool still cannot
+edit the manifest, lock or library files; use their documented authoring workflow.
+The example above is executed by
+[`agent-schema-repair.test.ts`](../packages/cli/test/agent-schema-repair.test.ts).
+
 ### Create a view
 
 Save as `create-view.request.json`:
@@ -266,7 +343,13 @@ Expected response: exit `0`; stdout contains a result whose value includes the d
 
 ## Split streams
 
-After a tool dispatches successfully, stderr always carries the `agent-tool-report/0.1` report. On success only, stdout carries the `agent-tool-result/0.1` result. A failure has empty stdout and its report on stderr. Do not merge the streams before parsing them.
+After a tool dispatches successfully, stderr always carries the `agent-tool-report/0.1` report. On success only, stdout carries the `agent-tool-result/0.1` result. A failure has empty stdout and its report on stderr. Every non-zero outcome of
+these six dispatched tools has a non-null `error` or an error-severity diagnostic
+naming its cause. Diagnostic-only compiler failures retain `error: null`. Do not
+merge the streams before parsing them. CLI usage errors before dispatch (such as
+missing `--input`) use plain-text stderr and exit 2; they are outside this JSON
+outcome invariant. `packet --strict` warnings-only failures are also outside it;
+see [views](views.md).
 
 ## Exit classification
 
@@ -313,6 +396,7 @@ review pointers and UUIDs before rebuilding the request.
 `thermite guide diagnostics <code>` explains every CLI and agent code (case
 insensitive). A001 describes request shape/usage, A002 patch-operation failure,
 A003 a disallowed target, A004 a stale byte guard and A005 a writer reservation.
+A006 means the source JSON must be repaired before a guarded patch can apply.
 Read the exact error's reason and locations; never infer an electrical repair.
 
 During apply, A004 can also name a changed project manifest, lock or library

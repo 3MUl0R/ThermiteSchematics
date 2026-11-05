@@ -152,7 +152,9 @@ certify complete wiring or readability. The `packet` CLI emits it on stderr with
 compiler diagnostics and exits 0 for warnings, or 1 with `--strict`; info does not
 fail strict mode. Individual `view` commands intentionally select partial views
 and carry no W906 on stdout or stderr. `--strict` is a packet option: warning
-failures report diagnostics with `error: null` and write no output.
+failures report diagnostics with `error: null` and write no output. Such
+warnings-only strict failures are outside the six agent tools' non-zero-explanation
+invariant; pre-dispatch CLI usage errors with plain-text stderr are outside it too.
 
 
 Circuit sheets use ELK's validated diagram, preserving its geometry. Cuts avoid

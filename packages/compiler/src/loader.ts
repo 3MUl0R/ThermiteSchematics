@@ -25,16 +25,11 @@ import {
   type Diagnostic,
   type JsonPointerNodeMap,
   type JsonValue,
-  type LibraryFile,
-  type LibraryLock,
   type LibraryManifest,
   type LibraryType,
   type ParsedDocument,
   type ProjectManifest,
-  type ProjectObject,
-  type ProjectPresentationFile,
   type SchemaRegistry,
-  type SourceFile,
 } from "@thermite/schema";
 import {
   SHIPPED_CORE_VERSIONS,
@@ -46,105 +41,23 @@ import fastGlob from "fast-glob";
 
 import { PROJECT_WRITE_LOCK_FILE_NAME } from "./filesystem-names.js";
 
-export type LoadedProjectSourceFile = Omit<SourceFile, "objects"> & {
-  objects: ProjectObject[];
-};
-
-export type LoadedLibrarySourceFile = Omit<LibraryFile, "types"> & {
-  types: LibraryType[];
-};
-
-export type LoadedDocumentOwner =
-  | { kind: "project" }
-  | { kind: "library"; name: string; dependencyIndex: number };
-
-export type LoadedDocumentKind =
-  | "project_manifest"
-  | "project_presentation"
-  | "project_source"
-  | "library_manifest"
-  | "library_source";
-
-export interface LoadedDocument<T> {
-  file: string;
-  logicalPath: string;
-  canonicalPath: string;
-  rawBytes: Uint8Array;
-  value: T;
-  nodes: JsonPointerNodeMap;
-  owner: LoadedDocumentOwner;
-  kind: LoadedDocumentKind;
-}
-
-export type ProjectLibraryDependency = NonNullable<
-  ProjectManifest["libraries"]
->[number];
-
-export type LibraryResolutionKind = "local" | "shipped";
-
-export interface LoadedLibrary {
-  dependencyIndex: number;
-  dependency: ProjectLibraryDependency;
-  resolutionKind: LibraryResolutionKind;
-  logicalRootPath: string;
-  canonicalRootPath: string;
-  manifest: LoadedDocument<LibraryManifest>;
-  sources: LoadedDocument<LoadedLibrarySourceFile>[];
-}
-
-export type NormalizedLibraryLockEntry = Omit<
-  LibraryLock["libraries"][string],
-  "resolutionKind"
-> & {
-  resolutionKind: LibraryResolutionKind;
-};
-
-export type NormalizedLibraryLock = Omit<LibraryLock, "libraries"> & {
-  libraries: Record<string, NormalizedLibraryLockEntry>;
-};
-
-export type LoadedLibraryLock =
-  | { state: "missing" }
-  | { state: "error"; detail: string }
-  | { state: "invalid"; diagnostics: Diagnostic[] }
-  | {
-      state: "valid";
-      rawBytes: Uint8Array;
-      value: NormalizedLibraryLock;
-      parsedValue: LibraryLock;
-      nodes: JsonPointerNodeMap;
-    };
-
-export interface LoadProjectOptions {
-  /** Override exact supported-version resolution; never called for local/unknown dependencies. */
-  readonly resolveShippedCoreLibrary?: (
-    version: string,
-  ) => ShippedCoreLibraryResolution<string>;
-}
-
-export interface LoadedProject {
-  logicalRootPath: string;
-  canonicalRootPath: string;
-  manifest: LoadedDocument<ProjectManifest>;
-  presentation?: LoadedDocument<ProjectPresentationFile>;
-  sources: LoadedDocument<LoadedProjectSourceFile>[];
-  libraries: LoadedLibrary[];
-  /** Frozen during structural loading, but trusted only by the lock stage. */
-  libraryLock: LoadedLibraryLock;
-  structuralDiagnostics: Diagnostic[];
-}
-
-export type LoadResult =
-  | {
-      ok: true;
-      diagnostics: Diagnostic[];
-      project: LoadedProject;
-    }
-  | {
-      ok: false;
-      diagnostics: Diagnostic[];
-      toolFailure: boolean;
-    };
+export type * from "./loader-types.js";
+import type {
+  LoadedDocument,
+  LoadedDocumentOwner,
+  LoadedDocumentKind,
+  ProjectLibraryDependency,
+  LibraryResolutionKind,
+  LoadedProject,
+  LoadProjectOptions,
+  LoadResult,
+  SourcePatchLoadResult,
+  SourcePatchProject,
+  LoadedLibrarySourceFile,
+} from "./loader-types.js";
+import { loadLibraryLockSnapshot } from "./loader-lock.js";
+import { errorCode, errorDetail } from "./loader-errors.js";
+import { sourcePatchFailureSnapshot } from "./loader-source-patch.js";
 
 interface LoadedValidationDiagnostics {
   diagnostics: Diagnostic[];
@@ -248,19 +161,6 @@ function ioDiagnostic(file: string, message: string): Diagnostic {
   };
 }
 
-function errorDetail(error: unknown): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof error.code === "string"
-  ) {
-    return error.code;
-  }
-
-  return error instanceof Error ? error.message : "unknown failure";
-}
-
 async function resolveManifest(
   inputPath: string | undefined,
   cwd: string,
@@ -359,15 +259,6 @@ function pathEscapesRoot(root: string, candidate: string): boolean {
     relativePath.startsWith(`..${sep}`) ||
     isAbsolute(relativePath)
   );
-}
-
-function errorCode(error: unknown): string | undefined {
-  return typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof error.code === "string"
-    ? error.code
-    : undefined;
 }
 
 async function rootInspectionDiagnostic(
@@ -1360,7 +1251,9 @@ function createLoadedProject(
   manifest: UnvalidatedLoadedDocument,
   manifestDirectory: string,
   state: LoadState,
-): Omit<LoadedProject, "libraryLock" | "structuralDiagnostics"> | undefined {
+):
+  | Omit<SourcePatchProject, "libraryLock" | "structuralDiagnostics">
+  | undefined {
   if (state.projectCanonicalRootPath === undefined) {
     return undefined;
   }
@@ -1372,13 +1265,9 @@ function createLoadedProject(
     ...(state.projectPresentation === undefined
       ? {}
       : {
-          presentation: typedDocument<ProjectPresentationFile>(
-            state.projectPresentation,
-          ),
+          presentation: state.projectPresentation,
         }),
-    sources: state.projectSources.map((document) =>
-      typedDocument<LoadedProjectSourceFile>(document),
-    ),
+    sources: state.projectSources,
     libraries: state.libraries.map((library) => ({
       dependencyIndex: library.dependencyIndex,
       dependency: library.dependency,
@@ -1393,68 +1282,12 @@ function createLoadedProject(
   };
 }
 
-async function loadLibraryLockSnapshot(
-  projectRoot: string,
-  registry: SchemaRegistry,
-): Promise<LoadedLibraryLock> {
-  const file = "electrical-system.lock.json";
-  let rawBytes: Buffer;
-
-  try {
-    rawBytes = await readFile(join(projectRoot, file));
-  } catch (error) {
-    return errorCode(error) === "ENOENT"
-      ? { state: "missing" }
-      : { state: "error", detail: errorDetail(error) };
-  }
-
-  const parsed = parseJson(rawBytes.toString("utf8"), file);
-
-  if (parsed.value === undefined || parsed.diagnostics.length > 0) {
-    return {
-      state: "invalid",
-      diagnostics: normalizeDiagnostics(parsed.diagnostics),
-    };
-  }
-
-  const diagnostics = registry.validateEntity("library-lock", parsed.value, {
-    file,
-    nodes: parsed.nodes,
-  });
-
-  if (diagnostics.length > 0) {
-    return {
-      state: "invalid",
-      diagnostics: normalizeDiagnostics(diagnostics),
-    };
-  }
-
-  const parsedValue = parsed.value as unknown as LibraryLock;
-  const normalizedValue = structuredClone(parsedValue);
-  const libraries = Object.fromEntries(
-    Object.entries(normalizedValue.libraries).map(([name, library]) => [
-      name,
-      {
-        ...library,
-        resolutionKind: library.resolutionKind ?? "local",
-      },
-    ]),
-  ) as Record<string, NormalizedLibraryLockEntry>;
-
-  return {
-    state: "valid",
-    rawBytes,
-    value: { ...normalizedValue, libraries },
-    parsedValue,
-    nodes: parsed.nodes,
-  };
-}
-
-export async function loadProject(
-  inputPath?: string,
-  cwd = process.cwd(),
-  options: LoadProjectOptions = {},
-): Promise<LoadResult> {
+async function loadProjectInternal(
+  inputPath: string | undefined,
+  cwd: string,
+  options: LoadProjectOptions,
+  captureSourcePatchSnapshot = false,
+): Promise<SourcePatchLoadResult> {
   const resolution = await resolveManifest(inputPath, cwd);
   const state: LoadState = {
     documentDiagnostics: [],
@@ -1559,17 +1392,6 @@ export async function loadProject(
     ...state.documentDiagnostics,
   ]);
 
-  if (
-    state.toolFailure ||
-    diagnostics.some((diagnostic) => diagnostic.severity === "error")
-  ) {
-    return {
-      ok: false,
-      diagnostics,
-      toolFailure: state.toolFailure,
-    };
-  }
-
   const project =
     loadedManifest === undefined
       ? undefined
@@ -1578,6 +1400,22 @@ export async function loadProject(
           resolution.manifestDirectory,
           state,
         );
+
+  if (state.toolFailure || diagnostics.some((d) => d.severity === "error")) {
+    return {
+      ok: false,
+      diagnostics,
+      toolFailure: state.toolFailure,
+      ...(captureSourcePatchSnapshot
+        ? await sourcePatchFailureSnapshot(
+            project,
+            diagnostics,
+            state.toolFailure,
+            loadedRegistry,
+          )
+        : {}),
+    };
+  }
 
   if (project === undefined) {
     return {
@@ -1601,6 +1439,35 @@ export async function loadProject(
   return {
     ok: true,
     diagnostics,
-    project: { ...project, libraryLock, structuralDiagnostics: diagnostics },
+    project: {
+      ...project,
+      libraryLock,
+      structuralDiagnostics: diagnostics,
+    } as unknown as LoadedProject,
   };
+}
+
+/** Strict public loader: failures never expose a raw patch snapshot. */
+export async function loadProject(
+  inputPath?: string,
+  cwd = process.cwd(),
+  options: LoadProjectOptions = {},
+): Promise<LoadResult> {
+  const result = await loadProjectInternal(inputPath, cwd, options);
+  return result.ok
+    ? result
+    : {
+        ok: false,
+        diagnostics: result.diagnostics,
+        toolFailure: result.toolFailure,
+      };
+}
+
+/** Dedicated loader for guarded patch planning and precommit filesystem snapshots. */
+export function loadProjectForSourcePatch(
+  inputPath?: string,
+  cwd = process.cwd(),
+  options: LoadProjectOptions = {},
+): Promise<SourcePatchLoadResult> {
+  return loadProjectInternal(inputPath, cwd, options, true);
 }

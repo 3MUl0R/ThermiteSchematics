@@ -15,7 +15,8 @@ export function snapshot(
   { documents = true, includeGit = !documents } = {},
 ) {
   const files = {},
-    docs = {};
+    docs = {},
+    invalidJsonFiles = [];
   const walk = (dir, prefix = "") => {
     for (const name of readdirSync(dir).sort()) {
       if (name === ".git" && !includeGit) continue;
@@ -35,13 +36,19 @@ export function snapshot(
             docs[key] = JSON.parse(bytes);
           } catch {
             docs[key] = { $invalidJSON: true };
+            invalidJsonFiles.push(key);
           }
         }
       } else files[key] = "special:" + stat.mode;
     }
   };
   if (root && existsSync(root)) walk(root);
-  return { files, documents: docs, hash: sha256(JSON.stringify(files)) };
+  return {
+    files,
+    documents: docs,
+    invalidJsonFiles,
+    hash: sha256(JSON.stringify(files)),
+  };
 }
 export function diff(before, after) {
   const a = before?.files ?? {},

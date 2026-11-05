@@ -8,7 +8,7 @@ const state = (hash, invalid = []) => ({
   },
   schemaInvalidFiles: invalid,
 });
-it("schema-repair permission survives plain validate and unrelated help", () => {
+it("schema-only errors require guarded repairs after validate and help", () => {
   const invalid = state("invalid", ["source.json"]),
     fixed = state("fixed");
   const c = (argv) => ({
@@ -24,8 +24,8 @@ it("schema-repair permission survives plain validate and unrelated help", () => 
       initial: invalid,
       final: fixed,
       calls: [c(["validate", "."]), c(["--help"])],
-    }).violations,
-  ).toEqual([]);
+    }).violations.map((v) => v.rule),
+  ).toEqual(["V1"]);
 });
 for (const [name, input] of [
   ["Grep", { path: "/engine" }],
@@ -160,3 +160,32 @@ it("required retrieval topics match G3's public topic index", async () => {
     for (const r of t.requiredTopics ?? []) expect(ids).toContain(r.topic);
   }
 });
+
+it.each(["before-first", "during-call", "after-last"])(
+  "only invalid JSON permits ordinary repair at %s",
+  (boundary) => {
+    for (const jsonInvalid of [false, true]) {
+      const initial = state("invalid", ["source.json"]),
+        fixed = state("fixed");
+      initial.invalidJsonFiles = jsonInvalid ? ["source.json"] : [];
+      // A user-authored marker in otherwise parseable JSON never grants permission.
+      initial.documents["source.json"].$invalidJSON = true;
+      const c = (before, after) => ({
+        argv: ["--help"],
+        exit: 0,
+        before,
+        after,
+      });
+      const calls =
+        boundary === "before-first"
+          ? [c(fixed, fixed)]
+          : boundary === "during-call"
+            ? [c(initial, fixed)]
+            : [c(initial, initial)];
+      const violations = score({ initial, final: fixed, calls }).violations;
+      expect(violations.filter((v) => v.rule === "V1")).toHaveLength(
+        jsonInvalid ? 0 : 1,
+      );
+    }
+  },
+);

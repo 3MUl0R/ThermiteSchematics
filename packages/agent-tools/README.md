@@ -304,9 +304,19 @@ OS write/rename operation.
 
 ## Diagnostics and serialization
 
+Guarded patches can repair parsed project source or presentation JSON that fails
+schema validation. The same byte guards and operation tests apply to its raw
+parsed value. Acceptance still requires the whole staged project to compile
+successfully; remaining errors refuse the patch without source writes. Warnings
+and information are accepted. See the executed
+[schema repair recipe](../../docs/agent-requests.md#repair-schema-errors-through-the-guarded-loop).
+
 Malformed requests are A001. Invalid patch operations are A002, unsafe or ineligible
 targets are A003, guarded integrity drift is A004, and write reservation contention
-is A005. W801 warns of reservation release failure after a successful patch. Query failures remain
+is A005. A006 reports document JSON syntax errors or duplicate keys with the file
+and parser coordinates: regenerate a corrupt lock with `thermite lock .`; repair
+source, presentation, manifest or library JSON with an ordinary edit, then
+validate. W801 warns of reservation release failure after a successful patch. Query failures remain
 Q001-Q004. Renderer failures remain R001-R005, including `render/0.3` title-text
 preflight. Authored compiler diagnostics retain normalized logical paths.
 
@@ -348,3 +358,18 @@ protocol, cache, or long-lived project session.
 Source-patch serialization rejects nesting deeper than 4,096 levels before
 allocating formatted output or staging files. This resource limit makes the
 sanitized serialization failure deterministic across JavaScript runtimes.
+
+The dedicated compiler `loadProjectForSourcePatch` entry point supplies raw
+snapshots only for patch planning/revalidation. Public `loadProject` and
+`compileProject` never return them. Internal custom `loadProject` dependencies
+must delegate to `loadProjectForSourcePatch` to retain schema-repair support.
+A strict custom loader refuses repairs with its schema diagnostics and an explicit
+message naming the missing snapshot support and the required delegate; it does
+not silently reread through a different loader.
+
+Every failed outcome of the six agent tools has a typed error or an error-severity
+diagnostic naming its cause; diagnostics-only compiler failures keep `error: null`.
+CLI usage errors before dispatch and `packet --strict` warnings-only failures are
+outside this agent outcome invariant. A concurrent edit that turns a previously
+valid source schema-invalid is rejected as A004 during snapshot revalidation;
+concurrent syntax corruption is reported as A006 with the parser diagnostics.

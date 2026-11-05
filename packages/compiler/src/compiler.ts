@@ -201,11 +201,12 @@ export async function compileProjectWithStages(
 
   if (!loaded.ok) {
     return {
-      ...loaded,
+      ok: false,
       diagnostics: withSkippedChecks(
         "project loading/structural",
         loaded.diagnostics,
       ),
+      toolFailure: loaded.toolFailure,
     };
   }
 
