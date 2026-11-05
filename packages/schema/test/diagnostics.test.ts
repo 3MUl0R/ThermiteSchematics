@@ -124,6 +124,7 @@ describe("diagnostic catalog", () => {
       "W903",
       "W904",
       "W905",
+      "W906",
       "W111",
       "I005",
     ]);
@@ -133,10 +134,10 @@ describe("diagnostic catalog", () => {
       DIAGNOSTIC_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CODES.length - 11);
+    ).toHaveLength(DIAGNOSTIC_CODES.length - 12);
   });
 
-  it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, and W801", async () => {
+  it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, W801 and packet W906", async () => {
     const sidecars = (
       await Promise.all([
         findExpectedSidecars(join(packageRoot, "fixtures/invalid")),
@@ -158,7 +159,11 @@ describe("diagnostic catalog", () => {
 
     expect([...coveredCodes].sort()).toEqual(
       DIAGNOSTIC_CODES.filter(
-        (code) => code !== "E001" && code !== "E032" && code !== "W801",
+        (code) =>
+          code !== "E001" &&
+          code !== "E032" &&
+          code !== "W801" &&
+          code !== "W906",
       ).sort(),
     );
     expect(DIAGNOSTIC_CATALOG.E032).toEqual({

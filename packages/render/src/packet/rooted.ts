@@ -1,3 +1,4 @@
+import { assembleSheets } from "./assembly.js";
 import { drawingContinuations } from "./continuations.js";
 import { foldDrawingDrafts } from "./folding.js";
 
@@ -223,7 +224,39 @@ export async function drawingDrafts(
   mode: "standard" | "compact" = "standard",
 ): Promise<RenderOutcome<Draft[]>> {
   let best = await drawingDraftsCandidate(ir, request, presentation, page);
-  if (mode === "standard" || (best.ok && best.value.length === 1)) return best;
+  if (mode === "standard") {
+    if (
+      !best.ok &&
+      best.error.code === "R006" &&
+      request.flow === "top-to-bottom"
+    ) {
+      const compact = await drawingDrafts(
+        ir,
+        request,
+        presentation,
+        page,
+        "compact",
+      );
+      let printable = compact.ok;
+      if (compact.ok)
+        try {
+          assembleSheets(ir, compact.value, page);
+        } catch {
+          printable = false;
+        }
+      if (printable)
+        return {
+          ok: false,
+          error: {
+            ...best.error,
+            message: `${best.error.message} Try --layout compact; it produces a printable version of this view on this page.`,
+            details: { ...best.error.details, compactLayoutAvailable: true },
+          },
+        };
+    }
+    return best;
+  }
+  if (best.ok && best.value.length === 1) return best;
   if (!best.ok && best.error.code !== "R006") return best;
   for (const profile of ["compact", "dense"] as const) {
     const candidate = await drawingDraftsCandidate(

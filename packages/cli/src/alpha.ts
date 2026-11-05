@@ -36,6 +36,7 @@ interface Flags {
   project: string;
   output?: string;
   json?: boolean;
+  strict?: boolean;
   paper?: PageSettings["size"];
   orientation?: PageSettings["orientation"];
   margin?: string;
@@ -423,17 +424,23 @@ export async function runThermite(argv = process.argv): Promise<number> {
             }),
       } as SchematicPacketRequest;
     }
-    const result = await renderSchematicPacket(
-      compiled.ir,
-      packet ?? {
-        format: "schematic-packet-request/0.1",
-        views: [view!],
-        ...(page ? { page } : {}),
-        ...(flags.layout ? { layout: flags.layout } : {}),
-        ...(flags.index ? { index: true } : {}),
-      },
-      compiled.presentation,
-    );
+    const result =
+      packet === undefined
+        ? await renderSchematicSheets(
+            compiled.ir,
+            view!,
+            compiled.presentation,
+            page,
+            {
+              ...(flags.layout ? { layout: flags.layout } : {}),
+              ...(flags.index ? { index: true } : {}),
+            },
+          )
+        : await renderSchematicPacket(
+            compiled.ir,
+            packet,
+            compiled.presentation,
+          );
     if (!result.ok) {
       process.stderr.write(
         JSON.stringify({
@@ -441,6 +448,17 @@ export async function runThermite(argv = process.argv): Promise<number> {
           error: result.error,
         }) + "\n",
       );
+      exitCode = 1;
+      return;
+    }
+    const diagnostics = [
+      ...compiled.diagnostics,
+      ...(packet === undefined
+        ? []
+        : (result.value.coverage.diagnostics ?? [])),
+    ];
+    if (flags.strict && diagnostics.some((d) => d.severity === "warning")) {
+      process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
       exitCode = 1;
       return;
     }
@@ -484,9 +502,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         `Wrote ${result.value.sheets.length} sheet(s) to ${resolve(flags.output)}\n`,
       );
     } else process.stdout.write(content);
-    process.stderr.write(
-      JSON.stringify({ diagnostics: compiled.diagnostics, error: null }) + "\n",
-    );
+    process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
   }
   printingOptions(
     command
@@ -512,6 +528,10 @@ export async function runThermite(argv = process.argv): Promise<number> {
       .command("packet")
       .description("combine views into consistently numbered printable sheets"),
   )
+    .option(
+      "--strict",
+      "reject packet output when validation or coverage has warnings",
+    )
     .requiredOption(
       "--input <file>",
       "schematic-packet-request/0.1 JSON file, or - for stdin",

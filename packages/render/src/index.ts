@@ -25,6 +25,7 @@ export type {
   IncompletePathError,
   RenderError,
   RenderErrorBase,
+  UnsupportedSymbolProfile,
   RenderErrorCode,
   RenderTextField,
   RenderTextOwnerKind,

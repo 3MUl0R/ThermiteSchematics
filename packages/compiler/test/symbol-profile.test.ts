@@ -301,7 +301,7 @@ function assertClean(result: CompileResult, label: string) {
   ).toEqual([]);
 }
 
-describe("review round 2", () => {
+describe("profile clone conformance", () => {
   it("accepts the complete source-backed PLC alias regression fixture", async () => {
     const root = join(
       repo,
@@ -479,7 +479,7 @@ async function projectsBelow(relative: string) {
     .map((p) => join(repo, relative, p));
 }
 
-describe("review round 3", () => {
+describe("profile alternatives and message bounds", () => {
   it("uses T2 fields for complete alternatives and quotes only ten profile IDs", async () => {
     const type = await plc();
     type.id = "site:alternatives";
@@ -787,7 +787,7 @@ describe("zero new diagnostics across repository authoring inputs", () => {
   });
 });
 
-describe("P4 review warning truth", () => {
+describe("sensor role warning truth", () => {
   it.each([
     "prox-one-role",
     "prox-two-positive",
@@ -812,6 +812,10 @@ describe("P4 review warning truth", () => {
       const warning = result.diagnostics.find((d) => d.code === "W111")!;
       expect(warning).toBeDefined();
       expect(warning.message).toContain("supply");
+      expect(warning.message).toContain("supply_positive");
+      expect(warning.message).toContain("supply_return");
+      expect(warning.message).not.toContain("circuitSymbols");
+      expect(warning.message).not.toContain("Declared functions fit");
       for (const key of type.functions.supply.terminals)
         expect(warning.message).toContain(type.terminals[key].role);
       expect(warning.message).not.toContain('Use "thermite:sensor-3wire"');

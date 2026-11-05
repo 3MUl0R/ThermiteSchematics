@@ -5,6 +5,7 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { format, resolveConfig } from "prettier";
 import { corpus, temporary, json } from "./support.mjs";
+import { renderDiagnosticRecipe } from "./seed-render-diagnostics.mjs";
 import { seedCorpus } from "./seed-corpus.mjs";
 import { mutationRecipe } from "./seed-mutations.mjs";
 import { corpusInventory } from "./provenance.mjs";
@@ -13,6 +14,10 @@ import { lockProject } from "./engine.mjs";
 async function reseed(destination) {
   await mkdir(destination, { recursive: true });
   await seedCorpus(destination);
+  await writeFile(
+    join(destination, "render-diagnostics.json"),
+    json(renderDiagnosticRecipe()),
+  );
   if (destination !== corpus)
     await cp(
       join(corpus, "baselines.json"),

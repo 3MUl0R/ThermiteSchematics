@@ -287,7 +287,11 @@ function r004Message(
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error("Expected layout validation to fail.");
   expect(result.error.code).toBe("R004");
-  return result.error.message;
+  // Geometry assertions retain the exact source identities that caused the
+  // refusal; the public message now uses device and conductor names.
+  return typeof result.error.details?.originalMessage === "string"
+    ? result.error.details.originalMessage
+    : result.error.message;
 }
 
 function expectGeometryContract(layout: NormalizedSchematicLayout): void {

@@ -124,9 +124,57 @@ function invalidLayoutError(
   graph: Readonly<PresentationGraph>,
   violation: LayoutContractViolation,
 ): InvalidLayoutError {
+  const names = new Map(
+    graph.deviceGroups.map((d) => [d.deviceUid, d.designation]),
+  );
+  const terminal = (t: import("@thermite/compiler").TerminalId) => ({
+    ...t,
+    designation: names.get(t.deviceUid) ?? t.deviceUid,
+    functionKeys: [
+      ...new Set(
+        graph.nodes.flatMap((node) =>
+          "deviceUid" in node && node.deviceUid === t.deviceUid
+            ? node.ports
+                .filter((p) => p.terminal.terminalKey === t.terminalKey)
+                .flatMap((p) =>
+                  p.memberFunctionId
+                    ? [p.memberFunctionId.functionKey]
+                    : node.functionIds.map((f) => f.functionKey),
+                )
+            : [],
+        ),
+      ),
+    ],
+  });
+  const edges = graph.edges
+    .filter((e) => violation.message.includes(e.id))
+    .map((e) => ({
+      id: e.id,
+      designation: e.conductor
+        ? e.conductor.kind === "cable-conductor"
+          ? `${e.conductor.cableDesignation}/${e.conductor.conductorId}`
+          : e.conductor.designation
+        : "boundary segment",
+      terminals: e.endpoints.map(terminal),
+    }));
+  let message = violation.message;
+  for (const edge of edges)
+    message = message.replaceAll(
+      edge.id,
+      `${edge.designation} (${edge.terminals.map((t) => `${t.designation}.${t.terminalKey}${t.functionKeys.length ? ` / ${[...new Set(t.functionKeys)].join(", ")}` : ""}`).join(" → ")})`,
+    );
+  for (const [uid, name] of names) message = message.replaceAll(uid, name);
   return Object.freeze({
     code: "R004",
-    message: `Invalid layout: ${violation.message}.`,
+    message: `Invalid layout: ${message}.`,
+    ...(message === violation.message
+      ? {}
+      : {
+          details: {
+            originalMessage: `Invalid layout: ${violation.message}.`,
+            conductors: edges,
+          },
+        }),
     family: graph.view.family,
     ...(violation.netId === undefined ? {} : { netId: violation.netId }),
     root: graph.view.root.designation,

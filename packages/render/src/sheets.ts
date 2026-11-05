@@ -7,7 +7,10 @@ import {
   type CircuitViewRequest,
 } from "./circuit.js";
 
-import { buildPacketCoverage } from "./coverage.js";
+import {
+  buildPacketCoverage,
+  packetDeviceCoverageDiagnostics,
+} from "./coverage.js";
 
 import type {
   CompiledProjectPresentation,
@@ -39,7 +42,13 @@ export type {
   RenderedPacket,
   ReferenceSelection,
 } from "./packet/types.js";
-import { failure, record } from "./packet/errors.js";
+import {
+  failure,
+  record,
+  packetViewContext,
+  withPacketViews,
+  PacketDraftError,
+} from "./packet/errors.js";
 import { normalizePaperPage, sheetLabel } from "./packet/page.js";
 export { normalizePaperPage, sheetLabel } from "./packet/page.js";
 import { printPacketHtml } from "./packet/html.js";
@@ -47,11 +56,14 @@ export { printPacketHtml } from "./packet/html.js";
 
 import { tableDrafts } from "./packet/reports.js";
 
-export async function renderSchematicPacket(
+async function renderPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
-  presentation?: Readonly<CompiledProjectPresentation>,
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
+  explicitPacket: boolean,
 ): Promise<RenderOutcome<RenderedPacket>> {
+  const contextError: typeof withPacketViews = (error, views) =>
+    explicitPacket ? withPacketViews(error, views) : error;
   if (
     !record(request) ||
     request.format !== "schematic-packet-request/0.1" ||
@@ -109,30 +121,56 @@ export async function renderSchematicPacket(
   );
   if (!paper.ok) return paper;
   const drafts: Draft[] = [];
+  const composedFailure = (message: string) => {
+    const result = failure("unprintable-layout", message);
+    return !result.ok
+      ? {
+          ok: false as const,
+          error: contextError(
+            result.error,
+            drafts.flatMap((d) => d.views ?? []),
+          ),
+        }
+      : result;
+  };
   const documentationSelections: (DocumentationSelection & { view: number })[] =
     [];
   let referenceSelection: ReferenceSelection | undefined;
   let referenceNumber = 0;
-  let circuitAppearances: Map<string, string[]>;
-  try {
-    circuitAppearances = circuitFunctionAppearances(
-      ir,
-      request.views.filter(
-        (view) => record(view) && view.format === "circuit-view-request/0.1",
-      ) as CircuitViewRequest[],
-    );
-  } catch (error) {
-    return failure(
-      "invalid-packet",
-      error instanceof Error ? error.message : "Invalid circuit view.",
-    );
+  const circuitAppearances = new Map<string, string[]>();
+  for (const [viewIndex, view] of request.views.entries()) {
+    if (!record(view) || view.format !== "circuit-view-request/0.1") continue;
+    try {
+      for (const [key, labels] of circuitFunctionAppearances(ir, [
+        view as unknown as CircuitViewRequest,
+      ]))
+        circuitAppearances.set(key, [
+          ...new Set([...(circuitAppearances.get(key) ?? []), ...labels]),
+        ]);
+    } catch (error) {
+      const failed = failure(
+        "invalid-packet",
+        error instanceof Error ? error.message : "Invalid circuit view.",
+      );
+      if (!failed.ok)
+        return {
+          ok: false,
+          error: contextError(failed.error, [
+            packetViewContext(view, viewIndex, ir),
+          ]),
+        };
+    }
   }
   for (const [viewIndex, view] of request.views.entries()) {
-    if (record(view) && Object.hasOwn(view, "page"))
-      return failure(
+    const context = packetViewContext(view, viewIndex, ir);
+    if (record(view) && Object.hasOwn(view, "page")) {
+      const failed = failure(
         "invalid-packet",
         "Individual views cannot override the packet's shared page settings.",
       );
+      if (!failed.ok)
+        return { ok: false, error: contextError(failed.error, [context]) };
+    }
     const result = await viewDrafts(
       ir,
       view,
@@ -141,7 +179,8 @@ export async function renderSchematicPacket(
       request.layout,
       circuitAppearances,
     );
-    if (!result.ok) return result;
+    if (!result.ok)
+      return { ok: false, error: contextError(result.error, [context]) };
     const reportSelection = result.value[0]?.documentationSelection;
     if (reportSelection)
       documentationSelections.push({ ...reportSelection, view: viewIndex + 1 });
@@ -151,10 +190,10 @@ export async function renderSchematicPacket(
       viewIndex,
       request.layout,
       referenceNumber,
+      context,
     );
     if (drafts.length > 100)
-      return failure(
-        "unprintable-layout",
+      return composedFailure(
         "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
       );
   }
@@ -163,17 +202,33 @@ export async function renderSchematicPacket(
     referenceSelection = indexes.referenceSelection;
     for (const table of indexes.tables) {
       const extra = tableDrafts(ir, table, presentation, paper.value);
-      if (!extra.ok) return extra;
+      if (!extra.ok)
+        return {
+          ok: false,
+          error: contextError(
+            extra.error,
+            drafts.flatMap((d) => d.views ?? []),
+          ),
+        };
       drafts.push(...extra.value);
     }
   }
   if (drafts.length > 100)
-    return failure(
-      "unprintable-layout",
+    return composedFailure(
       "Packet exceeds the 100-sheet limit including indexes.",
     );
   try {
     const sheets = assembleSheets(ir, drafts, paper.value);
+    const diagnostics = explicitPacket
+      ? packetDeviceCoverageDiagnostics(
+          ir,
+          sheets.map((sheet, i) => ({
+            number: sheet.number,
+            schematic: !drafts[i]!.documentationTable,
+            references: sheet.references,
+          })),
+        )
+      : [];
     return {
       ok: true,
       value: {
@@ -181,41 +236,65 @@ export async function renderSchematicPacket(
         page: paper.value,
         sheets,
         html: printPacketHtml(sheets, paper.value, ir.project.name),
-        coverage: buildPacketCoverage(
-          ir,
-          drafts.map((draft, i) => ({
-            sheet: i + 1,
-            view: sheetLabel(draft.view),
-            drawings: draft.coverage ?? [],
-            topologyDrawings: draft.topologyCoverage ?? [],
-          })),
-        ),
+        coverage: {
+          ...buildPacketCoverage(
+            ir,
+            drafts.map((draft, i) => ({
+              sheet: i + 1,
+              view: sheetLabel(draft.view),
+              drawings: draft.coverage ?? [],
+              topologyDrawings: draft.topologyCoverage ?? [],
+            })),
+          ),
+          ...(diagnostics.length ? { diagnostics } : {}),
+        },
         ...(documentationSelections.length ? { documentationSelections } : {}),
         ...(referenceSelection ? { referenceSelection } : {}),
       },
     };
   } catch (error) {
-    return failure(
+    const failed = failure(
       "unprintable-layout",
       error instanceof Error
         ? error.message
         : "Unable to produce the sheet title block.",
     );
+    return !failed.ok
+      ? {
+          ok: false,
+          error: contextError(
+            failed.error,
+            error instanceof PacketDraftError
+              ? error.views
+              : drafts.flatMap((d) => d.views ?? []),
+          ),
+        }
+      : failed;
   }
+}
+export function renderSchematicPacket(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicPacketRequest,
+  presentation?: Readonly<CompiledProjectPresentation>,
+): Promise<RenderOutcome<RenderedPacket>> {
+  return renderPacket(ir, request, presentation, true);
 }
 export function renderSchematicSheets(
   ir: Readonly<ElectricalIr>,
-  view: SchematicViewRequest,
+  view: SchematicViewRequest | import("@thermite/query").DocumentationRequest,
   presentation?: Readonly<CompiledProjectPresentation>,
   page?: PageSettings,
+  options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return renderSchematicPacket(
+  return renderPacket(
     ir,
     {
+      ...options,
       format: "schematic-packet-request/0.1",
       ...(page === undefined ? {} : { page }),
       views: [view],
     },
     presentation,
+    false,
   );
 }

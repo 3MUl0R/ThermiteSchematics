@@ -63,6 +63,10 @@
       "sha256": "abdea6df380d04545aedee00f19cf51ceb81ab214866205754a7ce5fa60c0a21"
     },
     {
+      "path": "render-diagnostics.json",
+      "sha256": "a48b3cd71e68c6073e9b038263f755c56040435fd8a89df7c4b286047f413d5b"
+    },
+    {
       "path": "topology/cables/cables.json",
       "sha256": "42cc2aadbc7f8570a2e1e77e6235c54f59dc45e9fa85a4e936541032dbcc2ac1"
     },

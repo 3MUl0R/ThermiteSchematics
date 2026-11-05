@@ -1,3 +1,4 @@
+import type { Diagnostic } from "@thermite/schema";
 import {
   buildTopologyCoverage,
   type TopologyCoverage,
@@ -23,6 +24,8 @@ export interface CoverageEntry {
   }[];
 }
 export interface PacketCoverage {
+  /** Absent when every placed device has a schematic appearance. */
+  readonly diagnostics?: readonly Diagnostic[];
   readonly format: "schematic-coverage/0.1";
   readonly scope: "circuit-and-wiring";
   readonly counts: {
@@ -147,4 +150,61 @@ export function buildPacketCoverage(
       "Coverage preserves source identity and endpoints; it does not certify printed readability, upstream supply, energized state or electrical design.",
     ],
   };
+}
+
+/** Every drawing family uses sheet references; report/index references are kept
+ * separate. This audits device presence, independently of the narrower conductor
+ * and function coverage above. */
+export function packetDeviceCoverageDiagnostics(
+  ir: Readonly<ElectricalIr>,
+  sheets: readonly {
+    number: number;
+    schematic: boolean;
+    references: readonly { deviceUid: string }[];
+  }[],
+): Diagnostic[] {
+  // Reports make no schematic coverage claim. Every actual drawing family counts.
+  if (!sheets.some((s) => s.schematic)) return [];
+  const drawn = new Set(
+    sheets
+      .filter((s) => s.schematic)
+      .flatMap((s) => s.references.map((r) => r.deviceUid)),
+  );
+  const missing = ir.devices
+    .filter((d) => !drawn.has(d.uid))
+    .sort(
+      (a, b) => compare(a.designation, b.designation) || compare(a.uid, b.uid),
+    );
+  if (!missing.length) return [];
+  const devices = missing.map((d) => {
+    const reportSheets = sheets
+      .filter(
+        (s) => !s.schematic && s.references.some((r) => r.deviceUid === d.uid),
+      )
+      .map((s) => s.number);
+    return {
+      uid: d.uid,
+      designation: d.designation,
+      appearance: reportSheets.length
+        ? ("reports-only" as const)
+        : ("absent" as const),
+      reportSheets,
+    };
+  });
+  const first = missing[0]!;
+  return [
+    {
+      code: "W906",
+      severity: "warning",
+      message: `Packet coverage: ${devices.map((d) => `${d.designation} (${d.appearance === "reports-only" ? "reports/indexes only" : "nowhere in packet"})`).join(", ")} appear on no schematic sheet. Add source-selected schematic views for these devices; schedules and indexes do not depict their wiring.`,
+      ...first.source,
+      devices,
+      related: missing.map((d) => ({
+        file: d.source.file,
+        line: d.source.line,
+        column: d.source.column,
+        note: `${d.designation} has no schematic appearance.`,
+      })),
+    },
+  ];
 }

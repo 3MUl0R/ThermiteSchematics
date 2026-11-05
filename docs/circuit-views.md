@@ -130,7 +130,9 @@ output channel in circuit views. Supply terminals use authored `supply_positive`
 and `supply_return` roles whenever either supply terminal carries any role.
 In that case exactly one positive and one return are required; partial, duplicate
 or unknown supply roles receive W111 advice before drawing and fail with R001
-for a sensor trace root or an explained R006 for a circuit view. Only when
+for a sensor trace root or R006 for a circuit view, with
+`reason: "unsupported-symbol-profile"`. W111 names the actual supply-role problem;
+explicit circuit marks do not establish sensor polarity. Only when
 neither supply terminal has any role does authored function order mean positive,
 return. Other role spellings, including `0v`, `return` and `dc_negative`, require
 correction to the exact profile roles before polarity can be drawn.

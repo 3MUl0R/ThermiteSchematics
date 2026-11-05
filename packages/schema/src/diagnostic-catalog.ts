@@ -298,6 +298,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "Connection review records deferred work or contradicts a requirement or connection.",
   },
+  W906: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "Packet coverage: devices appear on no schematic sheet, only in reports or nowhere in the packet.",
+  },
   W111: {
     severity: "warning",
     producer: "code",

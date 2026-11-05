@@ -375,13 +375,18 @@ export function symbolProfileDiagnostics(
         `No drawable functions or supported terminal role (${Object.keys(type.terminals).length} type terminals${requirements ? `; ${requirements}` : ""}).`,
       );
     }
-    parts.push(
-      replacementAdvice(
-        type,
-        coreAlias,
-        unfit.length > 0 && unfit.length < functions.length,
-      ),
-    );
+    if (roleProblems.length)
+      parts.push(
+        "Author exactly one supply_positive and one supply_return role on the supply function terminals, or remove both roles to use authored terminal order. Circuit marks cannot establish sensor polarity.",
+      );
+    else
+      parts.push(
+        replacementAdvice(
+          type,
+          coreAlias,
+          unfit.length > 0 && unfit.length < functions.length,
+        ),
+      );
 
     const jsonPointer = appendJsonPointer(
       typeEntry.source.jsonPointer,

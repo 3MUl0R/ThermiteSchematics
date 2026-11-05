@@ -1018,10 +1018,10 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
     { timeout: 120_000 },
     async ({ skip }) => {
       const cases = [
-        ["right-deep", "left-to-right", "right-deep-right", 351, 599],
-        ["right-deep", "top-to-bottom", "right-deep-down", 351, 599],
-        ["bridge", "left-to-right", "bridge-right", 340, 588],
-        ["bridge", "top-to-bottom", "bridge-down", 340, 588],
+        ["right-deep", "left-to-right", "right-deep-right", 175, 2380],
+        ["right-deep", "top-to-bottom", "right-deep-down", 178, 2386],
+        ["bridge", "left-to-right", "bridge-right", 169, 2368],
+        ["bridge", "top-to-bottom", "bridge-down", 169, 2368],
       ] as const satisfies readonly (readonly [
         Tier2FixtureName,
         "left-to-right" | "top-to-bottom",
@@ -1048,10 +1048,18 @@ describe("M5 Task 8 render warnings, expected failures, and tool boundaries", ()
       for (const [fixture, flow, goldenName, humanBytes, jsonBytes] of cases) {
         const project = projects[fixture];
         const outputRoot = await temporaryRoot();
-        const golden = await readFile(
-          join(tier2GoldenRoot, `${goldenName}.r004.json`),
-          "utf8",
-        );
+        // Fixtures follow repository formatting; product bytes retain JSON.stringify's exact layout.
+        const golden =
+          JSON.stringify(
+            JSON.parse(
+              await readFile(
+                join(tier2GoldenRoot, `${goldenName}.r004.json`),
+                "utf8",
+              ),
+            ),
+            undefined,
+            2,
+          ) + "\n";
         const parsed = JSON.parse(golden) as {
           diagnostics: [];
           error: RenderFailure;

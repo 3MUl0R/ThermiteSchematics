@@ -458,6 +458,14 @@ export function selectSignalLoop(
   };
 }
 
+export function signalLoopTitle(
+  selected: ReturnType<typeof selectSignalLoop>,
+): string {
+  return selected.output
+    ? `${selected.to.device.designation} - analog output`
+    : `${selected.from.device.designation} - signal loop`;
+}
+
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
@@ -1002,9 +1010,7 @@ export async function prepareSignalLoopDrawing(
     });
   }
   return {
-    title: selected.output
-      ? `${selected.to.device.designation} - analog output`
-      : `${selected.from.device.designation} - signal loop`,
+    title: signalLoopTitle(selected),
     content: `<g transform="translate(${n(-enclosure.minX)} ${n(-enclosure.minY)})">${out.join("\n")}</g>`,
     width: enclosure.width,
     height: enclosure.height,

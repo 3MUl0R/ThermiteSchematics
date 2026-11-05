@@ -1,3 +1,4 @@
+import { CircuitRenderError } from "../render-error-context.js";
 import {
   circuitTextLines,
   prepareCircuitView,
@@ -205,9 +206,31 @@ export async function circuitDrafts(
     resolveCircuitContinuations(drafts);
     return { ok: true, value: drafts };
   } catch (error) {
+    if (error instanceof CircuitRenderError) {
+      const circuitGroups = request.groups.map((g) => ({
+        groupId: g.id,
+        functionKeys: g.functions.map((f) => `${f.device.value}/${f.key}`),
+        conductorKeys: g.conductors,
+      }));
+      return {
+        ok: false,
+        error: {
+          ...error.error,
+          message: `${error.error.message} Selected circuit keys: ${circuitGroups.map((g) => `${g.groupId}: functions ${g.functionKeys.join(", ")}; conductors ${g.conductorKeys.join(", ") || "none"}`).join("; ")}.`,
+          details: { ...error.error.details, circuitGroups },
+        },
+      };
+    }
     return failure(
       "unprintable-layout",
-      error instanceof Error ? error.message : "Circuit view failed.",
+      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${f.device.value}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
+      {
+        circuitGroups: request.groups.map((g) => ({
+          groupId: g.id,
+          functionKeys: g.functions.map((f) => `${f.device.value}/${f.key}`),
+          conductorKeys: g.conductors,
+        })),
+      },
     );
   }
 }

@@ -1,3 +1,4 @@
+import { CORE_SYMBOL_BINDINGS, SYMBOL_PROFILES } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 
@@ -347,6 +348,39 @@ export function validateTraceRootRules(
   }
 }
 
+/** Catalog names and actual rule facts drive both admission and R001 advice. */
+export function acceptedTraceRoots() {
+  return TRACE_ROOT_RULES.map((rule) => {
+    const alias = CORE_SYMBOL_BINDINGS.find(
+      (binding) => binding.typeId === rule.typeId,
+    )!;
+    const profile = SYMBOL_PROFILES.find((p) => p.id === alias.equivalent)!;
+    return {
+      profile: profile.id,
+      aliases: [
+        ...profile.aliases,
+        ...profile.coreAliases.map((b) => b.symbol),
+      ],
+      representation: rule.representation.kind,
+      symbolId: rule.representation.symbolId,
+      functions: rule.representation.functions.map((f) => ({
+        kind: f.kind,
+        terminalCount: f.terminalKeys.length,
+        ...(f.kind === "contact" ? { normalState: f.normalState } : {}),
+        ...(f.kind === "channel" ? { direction: f.direction } : {}),
+      })),
+    };
+  });
+}
+export function acceptedTraceRootDescription(): string {
+  return acceptedTraceRoots()
+    .map(
+      (r) =>
+        `${r.profile} (aliases: ${r.aliases.join(", ") || "none"}): exactly one ${r.functions.map((f) => `${f.kind}/${f.terminalCount}${"normalState" in f ? `, normal state ${f.normalState}` : ""}${"direction" in f ? `, direction ${f.direction}` : ""}`).join(" plus one ")}${r.representation === "aggregate" ? ", with distinct terminals and valid authored supply roles" : ""}`,
+    )
+    .join("; ");
+}
+
 export function traceRootRuleForType(
   typeId: string,
   type?: IrDeviceType,
@@ -355,13 +389,15 @@ export function traceRootRuleForType(
   if (!type) return TRACE_ROOT_RULES.find((r) => r.typeId === typeId);
   if (!mapping) return undefined;
   const profile = symbolProfile(type);
+  const contract = acceptedTraceRoots().find((r) => r.profile === profile);
+  if (!contract) return undefined;
   const aggregate =
-    profile === "thermite:sensor-3wire"
-      ? mapping.aggregates.find((r) => r.symbolId === "ais:switch-sensor-pnp")
+    contract.representation === "aggregate"
+      ? mapping.aggregates.find((r) => r.symbolId === contract.symbolId)
       : undefined;
   const contacts =
-    profile === "thermite:switch"
-      ? mapping.functions.filter((r) => r.symbolId === "ais:switch-no")
+    contract.representation === "function"
+      ? mapping.functions.filter((r) => r.symbolId === contract.symbolId)
       : [];
   if (contacts.length > 1) return undefined;
   const contact = contacts[0];

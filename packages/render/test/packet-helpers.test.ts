@@ -389,7 +389,16 @@ describe("packet report composition", () => {
       views: [view],
     });
     expect(direct.ok).toBe(false);
-    expect(direct).toEqual(packet);
+    expect(packet).toMatchObject({
+      ok: false,
+      error: {
+        code: "R006",
+        details: { viewIndex: 0, viewTitle: table.title },
+        message: expect.stringContaining(
+          !direct.ok ? direct.error.message : "",
+        ),
+      },
+    });
     if (direct.ok) throw Error("Expected an impossible row");
     expect(direct.error).toMatchObject({
       code: "R006",

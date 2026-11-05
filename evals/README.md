@@ -195,6 +195,15 @@ Reserved slot: **T1 source metadata used verbatim in a successful guarded
 dry-run**. T1 is merged on base 629a563; the E1 probe remains deferred, with
 its acceptance and negative cases described in `PR.md` under Follow-ups. E2 owns agent runs;
 E3 owns visual/PDF checks; K1 owns source statistics, check-time budgets and the
-10× flake audit. Full obligation/suppression reporting, help-request execution,
-R-code designation coverage and the release OS conflict matrix remain separate
-anchors; this kit does not award them automatically.
+10× flake audit. Full obligation/suppression reporting, help-request execution
+and the release OS conflict matrix remain separate anchors; this kit does not
+award them automatically.
+
+P2 render diagnostic scenarios are authored in
+`engine/seed-render-diagnostics.mjs`, sealed as `corpus/render-diagnostics.json`
+by `bun evals/engine/reseed.mjs`, and checked by `engine/render-diagnostics.mjs`
+in P-diag. They cover unsupported profiles and shapes, disconnected control,
+accepted trace roots, named layout conductors/endpoints, packet view context,
+circuit source keys, verified compact hints and W906 device coverage. Each R
+scenario must be actionable; no P2 expected-failure markers are admitted. Use
+`bun evals/engine/reseed.mjs --verify` to verify byte-exact reproduction.

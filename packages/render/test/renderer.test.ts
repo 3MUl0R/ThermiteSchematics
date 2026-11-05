@@ -398,11 +398,14 @@ describe("integrated renderer", () => {
           [1082.6, 377],
           [1082.6, 377],
         ]);
-        expect(first).toEqual({
+        expect(first).toMatchObject({
           ok: false,
           error: {
             code: "R004",
-            message: `Invalid layout: edges ${boundaryId} and ${wireId} form an ambiguous intersection.`,
+            details: {
+              originalMessage: `Invalid layout: edges ${boundaryId} and ${wireId} form an ambiguous intersection.`,
+            },
+            message: expect.stringContaining("W-FLD-001 (TB1.3"),
             family: "control",
             netId,
             root: "LS1",
@@ -516,12 +519,13 @@ describe("integrated renderer", () => {
       mappings,
       layoutEngine: spy.engine,
     }).render(coreIr, conductorsRequest);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: {
         code: "R003",
-        message:
-          'Unsupported symbol mapping: type "core:junction-box-8" has no valid control binding.',
+        message: expect.stringContaining(
+          'Unsupported symbol mapping: function "terminal1" on type "core:junction-box-8" has no valid control binding. Device "JB1", function "terminal1".',
+        ),
         family: "control",
         deviceUid: jb1.uid,
         typeId: "core:junction-box-8",
@@ -608,7 +612,13 @@ describe("integrated renderer", () => {
       const result = await createSchematicRendererWithDependencies({
         layoutEngine: spy.engine,
       }).render(ir, testCase.request);
-      expect(result).toEqual({ ok: false, error: expected });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          ...expected,
+          message: expect.stringContaining(expected.message),
+        },
+      });
       if (!result.ok) expect(Object.isFrozen(result.error)).toBe(true);
       expect(spy.knownLayoutOptions).not.toHaveBeenCalled();
       expect(spy.layout).not.toHaveBeenCalled();
