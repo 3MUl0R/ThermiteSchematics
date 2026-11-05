@@ -23,6 +23,12 @@ export interface Device {
    */
   type: string;
   description?: string;
+  /**
+   * Explicit authored exclusion from purchasing. The device remains in the BOM with this reason; never inferred from its type or profile.
+   */
+  nonProcurement?: {
+    reason: string;
+  };
   aliases?: Aliases;
   location?: string;
   io?: {

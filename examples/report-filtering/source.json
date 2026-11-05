@@ -65,6 +65,9 @@
       "uid": "79000000-0000-4000-8000-000000000005",
       "designation": "DOC1",
       "type": "filter-fixture:documentary",
+      "nonProcurement": {
+        "reason": "Documentary network boundary; outside purchasing scope"
+      },
       "location": "Main"
     },
     {

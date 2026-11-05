@@ -104,7 +104,7 @@ export function tableDrafts(
     context,
     split,
     geometry,
-  } = reportCells(ir, table, b.w);
+  } = reportCells(ir, table, b.w, page);
   let header: string[][];
   try {
     header = split(table.columns, "header");
@@ -121,7 +121,7 @@ export function tableDrafts(
     );
     return failure(
       "unprintable-layout",
-      `${context("header", column)}: header needs ${n(headerH)} mm but the report area has only ${n(bottom - b.y - 9)} mm available at ${cellSize} mm text (minimum 2.5 mm). Use larger paper or a wider report column.`,
+      `${context("header", column)}: header needs ${n(headerH)} mm but the report area has only ${n(bottom - b.y - 9)} mm available at ${cellSize} mm text (minimum 2.5 mm). ${page.orientation === "landscape" ? "Use larger paper or shorter authored text." : "Use larger paper, landscape, or shorter authored text."}`,
     );
   }
   let content: string[] = [],
@@ -184,7 +184,7 @@ export function tableDrafts(
       );
       return failure(
         "unprintable-layout",
-        `${context(rowName(i), column)}: ${cells[column]!.length} lines need ${n(height)} mm; only ${n(bottom - b.y - headerH - 9)} mm is available on a fresh sheet at the fixed ${cellSize} mm text size (minimum 2.5 mm).${unknownReason(source.cells[column]!)} Use larger paper or a wider report column.`,
+        `${context(rowName(i), column)}: ${cells[column]!.length} lines need ${n(height)} mm; only ${n(bottom - b.y - headerH - 9)} mm is available on a fresh sheet at the fixed ${cellSize} mm text size (minimum 2.5 mm).${unknownReason(source.cells[column]!)} ${page.orientation === "landscape" ? "Use larger paper or shorter authored text." : "Use larger paper, landscape, or shorter authored text."}`,
       );
     }
     if (y + height > bottom) {

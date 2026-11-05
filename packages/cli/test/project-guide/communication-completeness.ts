@@ -1067,7 +1067,7 @@ const module: FactModule = {
         expect(await readCsv(cables)).toEqual([
           [
             "Cable",
-            "Type",
+            "Description / type",
             "End A location",
             "End B location",
             "Cores",

@@ -1401,7 +1401,7 @@ const module: FactModule = {
           ).toEqual([cable.fromLocation, cable.toLocation]);
         expect(csv).toContain('"End A location","End B location"');
         expect(csv).toContain(
-          '"CBL1","core:cable-2pair-shielded","CONTROL CABINET","FIELD CABINET"',
+          '"CBL1","Shielded two-pair instrumentation cable","CONTROL CABINET","FIELD CABINET"',
         );
       },
     },
@@ -1648,7 +1648,7 @@ const module: FactModule = {
         // Retained cables keep every core and their whole inventory.
         expect(wiresReport.csv).toContain('"CBL1/2-","Unterminated"');
         expect(cablesReport.csv).toContain(
-          '"CBL1","core:cable-2pair-shielded","CONTROL CABINET","FIELD CABINET","4","3","1","1"',
+          '"CBL1","Shielded two-pair instrumentation cable","CONTROL CABINET","FIELD CABINET","4","3","1","1"',
         );
         // CBL3 has no endpoint at all, so no filter can scope it.
         expect(cablesReport.csv).toContain('"CBL3"');
@@ -1721,11 +1721,11 @@ const module: FactModule = {
           '"PLC1","di0","input","PLC1","%I0.0","Start","PLC1.X1.0","LS1.14","in-use; terminated"',
         );
         expect(csv).toContain(
-          '"PLC1","di1","input","PLC1","Unassigned","Unspecified","PLC1.X1.1","None","spare; unconnected"',
+          '"PLC1","di1","input","PLC1","","","PLC1.X1.1","None","spare; unconnected"',
         );
         // do1 has no io entry and no connection: unspecified, not spare.
         expect(csv).toContain(
-          '"PLC1","do1","output","PLC1","Unassigned","Unspecified","PLC1.X2.1","None","Unspecified; unconnected"',
+          '"PLC1","do1","output","PLC1","","","PLC1.X2.1","None","Unspecified; unconnected"',
         );
         expect(csv.match(/spare/g)).toHaveLength(1);
       },

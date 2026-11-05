@@ -63,6 +63,19 @@ exports the same tables as CSV or printable packets. `--json` / `.json` returns
 packet data, including SVGs; the query package's `buildDocumentation` API returns
 structured rows and columns without drawing geometry.
 
+Devices accept optional `nonProcurement: { "reason": "Existing site utility" }`.
+The object is closed and its required string reason must contain non-whitespace
+text. This is an additive source extension under the existing
+`electrical-system/0.1`, device schema ID and `electrical-ir/0.1` identities:
+existing files are unchanged and continue to validate. Older strict runtimes
+reject the new property with E012; use a runtime supporting this extension before
+authoring it. The field does not change library versions, locks, connectivity,
+UUIDs or net IDs. Generated device types include it. It is never inferred from
+profile, type, tag or kind. The exported `IrDevice` type and serialized
+`electrical-ir/0.1` carry the same optional metadata. Omission preserves existing
+IR fields and serialized bytes; this additive metadata retains the IR format
+identity and does not change electrical topology or required fields.
+
 Device types may declare `category`, `terminalOrder`, and `catalog` with
 manufacturer, exact `orderNumber`, `document` (HTTPS URL, title, revision, pages),
 and optional `modelingNotes`. E203 requires terminalOrder to include every key
@@ -96,12 +109,8 @@ points, two-terminal DC loads, and two-terminal DC sources with explicit
 positive/return roles. Other shapes remain explicit omissions. Neither a part
 name nor a symbol profile creates electrical continuity.
 
-Reports list physical facts. Terminal rows group immediate connections by known
-location; missing locations stay unspecified. I/O rows list every declared
-channel, external members of its physical net, and authored assignments. The BOM
-counts instances by type/location and does not estimate accessories or cable
-lengths. CSV quotes fields and prefixes formula-like cells with an apostrophe.
-This spreadsheet protection does not mutate source values.
+Report-column semantics and reserved endpoint references are described in the
+[report topic](report-filtering.md#report-columns-and-authored-meaning).
 
 ## Compact sheets and references
 

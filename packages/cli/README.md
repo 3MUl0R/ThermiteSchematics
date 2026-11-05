@@ -176,7 +176,7 @@ and default to the current directory:
 
 Read-only query commands are:
 
-- `thermite inspect <designation> [--project <path>] [--json]`;
+- `thermite inspect <designation> [--type-description] [--project <path>] [--json]`;
 - `thermite neighbors <designation> [--project <path>] [--json]`;
 - `thermite trace <designation> [--project <path>] [--json]`;
 - `thermite net [reference] [--device <designation> --terminal <key>]

@@ -26,8 +26,8 @@ device without `connectorIo` produces an empty connector I/O plan.
 Each port assignment optionally accepts `direction` (`input`, `output` or
 `bidirectional`), `signal`, `usage` (`in-use` or `spare`) and `address`.
 Direction is relative to the module and authored explicitly. Omit unknown facts;
-missing assignments, directions and addresses remain visible as unspecified or
-unassigned. An unoccupied socket or a protective cap does not imply spare usage.
+missing directions and addresses print as blanks; missing usage remains
+explicitly unspecified. An unoccupied socket or a protective cap does not imply spare usage.
 Use `connectionReview.connectorPorts` for an explicit disposition and reason.
 
 Optional `connectorIo.addressSpace` is required when any port has an address.

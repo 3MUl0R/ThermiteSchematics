@@ -895,6 +895,19 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
         description: {
           type: "string",
         },
+        nonProcurement: {
+          description:
+            "Explicit authored exclusion from purchasing. The device remains in the BOM with this reason; never inferred from its type or profile.",
+          type: "object",
+          additionalProperties: false,
+          required: ["reason"],
+          properties: {
+            reason: {
+              type: "string",
+              pattern: "\\S",
+            },
+          },
+        },
         aliases: {
           $ref: "https://thermiteschematics.com/schemas/0.1/common.schema.json#/$defs/aliases",
         },

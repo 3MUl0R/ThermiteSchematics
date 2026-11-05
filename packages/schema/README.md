@@ -71,6 +71,14 @@ Presentation paths are project-contained and additionally reject empty, `.`, and
 
 ## Source conventions
 
+Device instances may declare `nonProcurement: { "reason": "Existing site utility" }`.
+The optional closed object requires a string reason containing non-whitespace.
+The BOM keeps the device and authored quantity, marked `Not purchased` with the
+reason; no profile or type implies this flag. The schema and project format IDs
+stay unchanged as an additive extension; existing files remain valid, while
+older strict runtimes reject the new property. See
+[formats and compatibility](../../docs/formats-and-compatibility.md#documentation-and-library-metadata).
+
 Quantities are bare JSON numbers in these canonical units:
 
 | Property          | Canonical unit                                        |

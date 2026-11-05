@@ -121,6 +121,17 @@ terminal structurally:
 Dotted `K1.A1` is display/CLI syntax only. It is not source syntax. The compiler
 resolves structured references to stable UID-based identity.
 
+An instance may explicitly declare that it is outside purchasing scope with
+`nonProcurement: { "reason": "Existing site utility; outside purchasing scope" }`.
+
+This optional device field requires a reason containing non-whitespace text.
+The BOM retains the instance and its quantity and marks it `Not purchased` with
+that reason. The flag never follows from a type, profile, designation or device
+function: a source might also be purchased equipment. Omission makes no claim
+that an item has been ordered, selected or approved. See
+[report semantics](report-filtering.md#report-columns-and-authored-meaning) and
+[compatibility](formats-and-compatibility.md#documentation-and-library-metadata).
+
 `connection_policy: "exclusive"` permits at most one direct conductor landing;
 `"shared"` explicitly permits several. Absence makes no exclusivity assertion.
 

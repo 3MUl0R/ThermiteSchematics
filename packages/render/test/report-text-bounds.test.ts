@@ -61,8 +61,9 @@ async function checked(input: ElectricalIr) {
         w = Number(cell.getAttribute("data-cell-width")),
         h = Number(cell.getAttribute("data-cell-height"));
       for (const t of cell.querySelectorAll("text")) {
-        const value = t.textContent!,
-          size = Number(t.getAttribute("font-size")),
+        const value = t.textContent!;
+        expect(value).toBe(value.trim());
+        const size = Number(t.getAttribute("font-size")),
           tx = Number(t.getAttribute("x")),
           ty = Number(t.getAttribute("y")),
           metric = measureText(value, size);
@@ -108,17 +109,20 @@ async function checked(input: ElectricalIr) {
       const key = row.getAttribute("data-report-row")!;
       expect(seen.has(key)).toBe(false);
       seen.add(key);
-      const cells = [...row.querySelectorAll("[data-report-column]")].map(
-        (cell) =>
-          [...cell.querySelectorAll("text")].map((t) => t.textContent).join(""),
-      );
-      expect(cells).toEqual(
-        expected
-          .get(key)!
-          .map((s) =>
-            s.normalize("NFC").replace(/\r\n|[\n\r\u2028\u2029]/gu, ""),
-          ),
-      );
+      const cells = [...row.querySelectorAll("[data-report-column]")];
+      for (const [i, cell] of cells.entries()) {
+        const source = expected.get(key)![i]!.normalize("NFC");
+        let cursor = 0;
+        // Only whitespace at an emitted line boundary may disappear. Interior
+        // authored spaces, including doubled spaces, must match byte for byte.
+        for (const t of cell.querySelectorAll("text")) {
+          while (/\s/u.test(source[cursor] ?? "")) cursor++;
+          const line = t.textContent!;
+          expect(source.slice(cursor, cursor + line.length)).toBe(line);
+          cursor += line.length;
+        }
+        expect(source.slice(cursor).trim()).toBe("");
+      }
       // Flatten paint order, including descendants of cell groups (m2b).
       let paintedText = false;
       for (const element of row.querySelectorAll("*")) {
@@ -192,6 +196,10 @@ describe("report text bounds and information conservation", () => {
     expect(r.error.message).toContain('column 1 "Conductor / label"');
     expect(r.error.message).toContain("lines need");
     expect(r.error.message).toContain("minimum 2.5 mm");
+    expect(r.error.message).toContain(
+      "Use larger paper or shorter authored text.",
+    );
+    expect(r.error.message).not.toContain("wider report column");
   });
   it("measures unknown glyphs conservatively and refuses an unfit grapheme explicitly", () => {
     const measured = measureText("🚀", 2.6);

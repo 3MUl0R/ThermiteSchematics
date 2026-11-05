@@ -105,6 +105,7 @@ export interface IrCableType {
 }
 
 export interface IrDevice {
+  nonProcurement?: Device["nonProcurement"];
   connectionReview?: Device["connectionReview"];
   io?: Device["io"];
   connectorIo?: Device["connectorIo"];
@@ -507,6 +508,9 @@ function materializeDevice(
     uid: instance.uid,
     designation: instance.designation,
     typeId: type.id,
+    ...(instance.nonProcurement === undefined
+      ? {}
+      : { nonProcurement: structuredClone(instance.nonProcurement) }),
     ...(instance.connectionReview === undefined
       ? {}
       : { connectionReview: structuredClone(instance.connectionReview) }),

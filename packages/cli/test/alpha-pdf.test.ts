@@ -655,6 +655,43 @@ it("paints NFC accents against an independently authored precomposed reference",
   expect(pixelDifference(stripped, reference)).toBeGreaterThan(200);
 });
 
+function reportTextBoundsIssues() {
+  return [
+    ...document.querySelectorAll<SVGTextElement>("[data-report-column] text"),
+  ].flatMap((text) => {
+    // Blank cells paint no glyphs; their SVG text can have a zero box at the origin.
+    if (!(text.textContent ?? "").trim()) return [];
+    const cell = text.closest("[data-report-column]")!,
+      b = text.getBBox(),
+      x = Number(cell.getAttribute("data-cell-x")),
+      w = Number(cell.getAttribute("data-cell-width"));
+    return b.x < x || b.x + b.width > x + w ? [text.textContent] : [];
+  });
+}
+
+it.skipIf(!rasterBrowser.browserPath)(
+  "excludes only blank report text and rejects a non-empty zero box at the origin",
+  async () => {
+    const browser = await rasterBrowser.launchBrowser(),
+      page = await browser.newPage();
+    try {
+      await page.setContent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">
+        <g data-report-column="0" data-cell-x="10" data-cell-width="40">
+          <text></text><text> &#9;&#10; </text>
+          <text id="origin">X</text><text x="12" y="15" font-size="3">inside</text>
+        </g></svg>`);
+      await page.evaluate(() => {
+        document.querySelector<SVGTextElement>("#origin")!.getBBox = () =>
+          new DOMRect(0, 0, 0, 0);
+      });
+      expect(await page.evaluate(reportTextBoundsIssues)).toEqual(["X"]);
+    } finally {
+      await page.close();
+      await browser.close();
+    }
+  },
+);
+
 it.skipIf(!rasterBrowser.browserPath)(
   "bounds 60 plus signs under pinned DejaVu Sans in the browser",
   async () => {
@@ -680,17 +717,7 @@ it.skipIf(!rasterBrowser.browserPath)(
         `<style>@font-face{font-family:Arial;src:url(data:font/ttf;base64,${font})}</style>${result.value.sheets[0]!.svg}`,
       );
       await page.evaluate(() => document.fonts.ready);
-      const issues = await page.evaluate(() =>
-        [...document.querySelectorAll("[data-report-column] text")].flatMap(
-          (text) => {
-            const cell = text.closest("[data-report-column]")!,
-              b = text.getBBox(),
-              x = Number(cell.getAttribute("data-cell-x")),
-              w = Number(cell.getAttribute("data-cell-width"));
-            return b.x < x || b.x + b.width > x + w ? [text.textContent] : [];
-          },
-        ),
-      );
+      const issues = await page.evaluate(reportTextBoundsIssues);
       expect(issues).toEqual([]);
       const text = [
         ...parseHTML(result.value.sheets[0]!.svg).document.querySelectorAll(

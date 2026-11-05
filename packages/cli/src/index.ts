@@ -159,6 +159,7 @@ export type QueryCompileProject = (
 ) => Promise<CompileResult>;
 
 export interface RunQueryOptions {
+  typeDescription?: boolean;
   project?: string;
   json?: boolean;
   color?: boolean;
@@ -245,6 +246,7 @@ export interface RunCliOptions {
 }
 
 interface QueryFlags {
+  typeDescription?: boolean;
   project?: string;
   json?: boolean;
 }
@@ -568,6 +570,18 @@ export async function runQuery(
     };
   }
 
+  const inspected =
+    outcome.value.command === "inspect" ? outcome.value.object : undefined;
+  const typeDescription = !options.typeDescription
+    ? undefined
+    : inspected?.kind === "device"
+      ? compiled.ir.deviceTypes.find((t) => t.id === inspected.typeId)
+          ?.description
+      : inspected?.kind === "cable"
+        ? compiled.ir.cableTypes.find((t) => t.id === inspected.typeId)
+            ?.description
+        : undefined;
+
   return {
     diagnostics,
     error: null,
@@ -575,7 +589,7 @@ export async function runQuery(
     stdout:
       options.json === true
         ? serializeQueryResult(outcome.value)
-        : renderHumanQueryResult(outcome.value),
+        : renderHumanQueryResult(outcome.value, typeDescription),
     stderr:
       options.json === true
         ? serializeQueryReport(diagnostics, null)
@@ -944,6 +958,7 @@ export async function runCli(
     const result = await runQuery(request, {
       ...(flags.project === undefined ? {} : { project: flags.project }),
       json: flags.json === true,
+      ...(flags.typeDescription ? { typeDescription: true } : {}),
       color: flags.json !== true && stderr.isTTY === true,
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       ...(options.queryCompileProject === undefined
@@ -1196,6 +1211,10 @@ export async function runCli(
   const inspectCommand = program
     .command("inspect")
     .description("inspect a designated project object")
+    .option(
+      "--type-description",
+      "show the full authored type description in human output",
+    )
     .argument("<designation>", "canonical project object designation")
     .option("--project <path>", "project directory or direct manifest path")
     .option("--json", "emit the query result and report as JSON");

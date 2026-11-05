@@ -30,7 +30,7 @@ describe("connector I/O schedules", () => {
       expect(sensor!.cells[5]).toContain("S1.M12");
       expect(sensor!.cells[6]).toContain("unresolved");
       expect(cap!.cells[5]).toContain("CAP1.P");
-      expect(cap!.cells[4]).toBe("Unspecified\nUsage: Unspecified");
+      expect(cap!.cells[4]).toBe("Usage: Unspecified");
       expect(cap!.cells[6]).toContain("not-applicable");
       expect(empty!.cells[5]).toBe("Unoccupied");
       expect(empty!.cells[4]).toContain("Usage: spare");
@@ -110,11 +110,7 @@ describe("connector I/O schedules", () => {
         "W1 (direct; documented)\nS1.M12",
       );
       expect(
-        table.rows.every(
-          (r) =>
-            r.cells[2] === "Unspecified" &&
-            r.cells[3] === "Unspecified\nUnassigned",
-        ),
+        table.rows.every((r) => r.cells[2] === "" && r.cells[3] === ""),
       ).toBe(true);
     } finally {
       await f.dispose();
@@ -146,9 +142,9 @@ describe("connector I/O schedules", () => {
       });
       for (const key of inherited) {
         const row = ports.rows.find((r) => r.cells[1].split("\n")[0] === key)!;
-        expect(row.cells[2]).toBe("Unspecified");
-        expect(row.cells[3]).toBe("PLC1\nUnassigned");
-        expect(row.cells[4]).toBe("Unspecified\nUsage: Unspecified");
+        expect(row.cells[2]).toBe("");
+        expect(row.cells[3]).toBe("PLC1");
+        expect(row.cells[4]).toBe("Usage: Unspecified");
         expect(row.cells[7]).toBe("Unspecified");
       }
       const channels = buildDocumentation(f.result.ir, {
@@ -157,11 +153,7 @@ describe("connector I/O schedules", () => {
       });
       for (const key of inherited) {
         const row = channels.rows.find((r) => r.cells[1] === key)!;
-        expect(row.cells.slice(3, 6)).toEqual([
-          "PLC1",
-          "Unassigned",
-          "Unspecified",
-        ]);
+        expect(row.cells.slice(3, 6)).toEqual(["PLC1", "", ""]);
         expect(row.cells[8]).toMatch(/^Unspecified; /u);
       }
     } finally {
