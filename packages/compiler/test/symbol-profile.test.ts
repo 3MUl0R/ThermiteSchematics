@@ -642,8 +642,15 @@ describe("zero new diagnostics across repository authoring inputs", () => {
     const pilots = await projectsBelow("libraries");
     expect(examples.length).toBeGreaterThan(0);
     expect(pilots.length).toBeGreaterThan(0);
-    for (const path of [...examples, ...pilots])
-      assertClean(await compileProject(path), path);
+    // These are read-only, independent projects. Overlap filesystem work in
+    // pairs while retaining every compile and every diagnostic assertion.
+    const paths = [...examples, ...pilots];
+    for (let index = 0; index < paths.length; index += 2)
+      await Promise.all(
+        paths
+          .slice(index, index + 2)
+          .map(async (path) => assertClean(await compileProject(path), path)),
+      );
   });
 
   it.each(["starter", "cabinets"])(

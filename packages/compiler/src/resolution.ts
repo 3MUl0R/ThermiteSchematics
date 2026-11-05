@@ -1,9 +1,9 @@
+import { sourceRef } from "./source-ref.js";
 import {
   DIAGNOSTIC_CATALOG,
   appendJsonPointer,
   boundedAlternatives,
   formatAllowedValues,
-  normalizeDiagnosticFile,
   normalizeDiagnostics,
   type DiagnosticAlternatives,
   type Cable,
@@ -113,19 +113,6 @@ interface AuthoredDeviceReference {
 
 interface AuthoredTerminalReference extends AuthoredDeviceReference {
   terminal: string;
-}
-
-function sourceRef(
-  document: LoadedDocument<unknown>,
-  jsonPointer: string,
-): SourceRef {
-  const location = document.nodes.get(jsonPointer)?.value;
-  return {
-    file: normalizeDiagnosticFile(document.file),
-    line: location?.line ?? 1,
-    column: location?.column ?? 1,
-    jsonPointer,
-  };
 }
 
 function projectObjectPointer(index: number): string {
