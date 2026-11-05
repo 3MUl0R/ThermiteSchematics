@@ -24,18 +24,17 @@ import type {
   DeviceGroup,
   JunctionPresentationNode,
   LocationGroup,
-  NormalizedSchematicLayout,
   PresentationEdge,
   PresentationGraph,
   PresentationLabel,
   PresentationNode,
   PresentationPort,
   RailPresentationNode,
-  RenderOutcome,
   SelectedSubgraph,
   SymbolPresentationNode,
 } from "../types.js";
 import { createElkEngine } from "./elk-runtime.js";
+import { directLoadRouteAlternatives } from "./direct-load-routes.js";
 import {
   DEVICE_LABEL_PADDING,
   DEVICE_PADDING,
@@ -53,7 +52,10 @@ import {
   sortOptionAssignments,
   validateOptionAssignmentsAgainstMetadata,
 } from "./options.js";
-import { normalizeAndValidateLayout } from "./validate-output.js";
+import {
+  normalizeAndValidateLayout,
+  type LayoutValidationOutcome,
+} from "./validate-output.js";
 
 export interface ElkAdapterBuild {
   readonly graph: ElkNode;
@@ -150,6 +152,27 @@ function designationLookup(graph: PresentationGraph): (uid: string) => string {
     if (node.kind !== "junction") values.set(node.deviceUid, node.designation);
   }
   return (uid) => values.get(uid) ?? uid;
+}
+
+function compareAdapterNodes(
+  graph: PresentationGraph,
+  left: PresentationNode,
+  right: PresentationNode,
+): number {
+  if (
+    graph.directLoadPair &&
+    left.kind === "junction" &&
+    right.kind === "junction"
+  ) {
+    return (
+      compareTerminalId(
+        left.terminal,
+        right.terminal,
+        designationLookup(graph),
+      ) || comparePresentationNode(left, right)
+    );
+  }
+  return comparePresentationNode(left, right);
 }
 
 function sortedPorts(
@@ -432,7 +455,7 @@ function deviceNode(
 ): ElkNode {
   const children = graph.nodes
     .filter(({ parentId }) => parentId === group.id)
-    .sort(comparePresentationNode);
+    .sort((left, right) => compareAdapterNodes(graph, left, right));
   const containsPortBearingLeaves = children.some(
     (node) => node.kind === "symbol" && node.ports.length > 0,
   );
@@ -463,7 +486,7 @@ function locationNode(
       (node): node is JunctionPresentationNode =>
         node.kind === "junction" && node.parentId === group.id,
     )
-    .sort(comparePresentationNode)
+    .sort((left, right) => compareAdapterNodes(graph, left, right))
     .map((node) => junctionNode(graph, node, assignments));
   return {
     id: group.id,
@@ -497,17 +520,35 @@ function compareElementLists(
 function sortedEdges(graph: PresentationGraph): readonly PresentationEdge[] {
   const designationFor = designationLookup(graph);
   const netDisplay = new Map<string, string>();
+  const semanticNets = new Map<string, Set<string>>();
+  const direct = graph.directLoadPair;
   for (const edge of graph.edges) {
     if (edge.netLabel !== undefined)
       netDisplay.set(edge.netId, edge.netLabel.text);
+    if (direct) {
+      const terminals = semanticNets.get(edge.netId) ?? new Set<string>();
+      edge.endpoints.forEach((t) =>
+        terminals.add(
+          JSON.stringify([designationFor(t.deviceUid), t.terminalKey]),
+        ),
+      );
+      semanticNets.set(edge.netId, terminals);
+    }
   }
+  const netKeys = new Map(
+    [...semanticNets].map(([id, terminals]) => [
+      id,
+      JSON.stringify([...terminals].sort(compareText)),
+    ]),
+  );
+  const netKey = (id: string) => netKeys.get(id) ?? id;
   return [...graph.edges].sort(
     (left, right) =>
       compareText(
-        netDisplay.get(left.netId) ?? left.netId,
-        netDisplay.get(right.netId) ?? right.netId,
+        netDisplay.get(left.netId) ?? netKey(left.netId),
+        netDisplay.get(right.netId) ?? netKey(right.netId),
       ) ||
-      compareText(left.netId, right.netId) ||
+      compareText(netKey(left.netId), netKey(right.netId)) ||
       left.pathRank - right.pathRank ||
       compareElementLists(left, right) ||
       compareTerminalId(
@@ -748,7 +789,7 @@ export function buildElkAdapterGraph(
     .map((group) => locationNode(graph, group, assignments));
   const rootLeafChildren = graph.nodes
     .filter(({ parentId }) => parentId === "root")
-    .sort(comparePresentationNode)
+    .sort((left, right) => compareAdapterNodes(graph, left, right))
     .map((node) => nodeAdapter(graph, node, assignments));
   const hasRootPortLabels = graph.nodes.some(
     (node) =>
@@ -858,28 +899,43 @@ export function serializeElkAdapterForTest(
 export async function layoutPresentationGraph(
   graph: Readonly<PresentationGraph>,
   options: Readonly<ElkLayoutRequestOptions> = {},
-): Promise<RenderOutcome<NormalizedSchematicLayout>> {
+): Promise<LayoutValidationOutcome> {
   const catalog = options.catalog ?? SYMBOL_CATALOG;
   const engine = options.engine ?? createElkEngine();
-  const build = buildElkAdapterGraph(graph, options.selected);
-  await validateElkRuntimeOptions(build, engine);
-  const input = structuredClone(build.graph);
-  if (options.spacingProfile) {
-    const dense = options.spacingProfile === "dense";
-    const compact = (node: ElkNode): void => {
-      if (node.children?.length) {
-        node.layoutOptions = {
-          ...node.layoutOptions,
-          [ELK_OPTIONS.nodeNodeSpacing]: dense ? "12" : "18",
-          [ELK_OPTIONS.nodeNodeBetweenLayersSpacing]: dense ? "20" : "40",
-          [ELK_OPTIONS.edgeNodeSpacing]: dense ? "10" : "12",
-          [ELK_OPTIONS.componentComponentSpacing]: dense ? "16" : "24",
-        };
-        node.children.forEach(compact);
-      }
-    };
-    compact(input);
+  const run = async (candidate: Readonly<PresentationGraph>) => {
+    const build = buildElkAdapterGraph(candidate, options.selected);
+    await validateElkRuntimeOptions(build, engine);
+    const input = structuredClone(build.graph);
+    if (options.spacingProfile) {
+      const dense = options.spacingProfile === "dense";
+      const compact = (node: ElkNode): void => {
+        if (node.children?.length) {
+          node.layoutOptions = {
+            ...node.layoutOptions,
+            [ELK_OPTIONS.nodeNodeSpacing]: dense ? "12" : "18",
+            [ELK_OPTIONS.nodeNodeBetweenLayersSpacing]: dense ? "20" : "40",
+            [ELK_OPTIONS.edgeNodeSpacing]: dense ? "10" : "12",
+            [ELK_OPTIONS.componentComponentSpacing]: dense ? "16" : "24",
+          };
+          node.children.forEach(compact);
+        }
+      };
+      compact(input);
+    }
+    const output = await engine.layout(input);
+    return normalizeAndValidateLayout(candidate, build.graph, output, catalog);
+  };
+  const first = await run(graph);
+  if (
+    first.ok ||
+    (first.failureKind !== "ambiguous-intersection" &&
+      first.failureKind !== "collinear-overlap")
+  )
+    return first;
+  for (const candidate of directLoadRouteAlternatives(graph)) {
+    const result = await run(candidate);
+    // Every alternative passes the complete geometry and topology checks.
+    if (result.ok) return result;
   }
-  const output = await engine.layout(input);
-  return normalizeAndValidateLayout(graph, build.graph, output, catalog);
+  return first;
 }

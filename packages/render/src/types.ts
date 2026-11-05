@@ -359,6 +359,8 @@ export interface PresentationEdge {
 
 export interface PresentationGraph {
   readonly format: "schematic-presentation/0.1";
+  /** Computed once from the selected paths; shared by ordering and recovery. */
+  readonly directLoadPair: boolean;
   readonly view: NormalizedSchematicView;
   readonly locationGroups: readonly LocationGroup[];
   readonly deviceGroups: readonly DeviceGroup[];

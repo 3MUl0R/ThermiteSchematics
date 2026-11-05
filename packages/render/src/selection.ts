@@ -1800,6 +1800,7 @@ function terminalDisplayFunctionId(
   context: SymbolMappingContext,
   terminal: TerminalId,
   invalidMapping: (detail: string) => never = invalidTraceMapping,
+  family: "control" | "power" = "control",
 ): FunctionId | undefined {
   const device = context.deviceByUid.get(terminal.deviceUid);
   const mapping =
@@ -1809,7 +1810,7 @@ function terminalDisplayFunctionId(
   if (device === undefined || mapping === undefined) return undefined;
   const rules = mapping.functions.filter(
     (rule) =>
-      rule.families.includes("control") &&
+      rule.families.includes(family) &&
       rule.traversalRole === "terminal-display" &&
       rule.bindings.some(
         ({ terminalKey }) => terminalKey === terminal.terminalKey,
@@ -1845,19 +1846,34 @@ function pathTerminalDisplayFunctionIds(
   context: SelectionContext,
   selections: readonly SearchSuccess[],
   invalidMapping: (detail: string) => never,
+  rootFunctionIds: readonly FunctionId[] = [],
 ):
   | { readonly ok: true; readonly value: readonly FunctionId[] }
   | { readonly ok: false; readonly error: UnsupportedSymbolMappingError } {
   const endpoints = new Set<string>();
   const touched = new Map<string, TerminalId>();
+  const selectedFunctions = new Map(
+    rootFunctionIds.map((id) => [functionIdKey(id), id]),
+  );
   for (const { path } of selections) {
     endpoints.add(terminalIdKey(path.start.terminal));
     endpoints.add(terminalIdKey(path.end.terminal));
     for (const step of path.steps) {
+      if (step.kind === "function")
+        selectedFunctions.set(functionIdKey(step.functionId), step.functionId);
       touched.set(terminalIdKey(step.from), step.from);
       touched.set(terminalIdKey(step.to), step.to);
     }
   }
+  for (const selection of selections)
+    for (const id of selection.candidate.functionIds)
+      selectedFunctions.set(functionIdKey(id), id);
+  // Function steps already own their terminals. Only physical pass-throughs
+  // without a selected owner need an implicit terminal-display mapping.
+  for (const id of selectedFunctions.values())
+    for (const terminal of context.functionByKey.get(functionIdKey(id))!
+      .terminals)
+      endpoints.add(terminalIdKey(terminal));
   const ids: FunctionId[] = [];
   for (const terminal of [...touched.values()].sort((left, right) =>
     compareCompleteTerminal(context, left, right),
@@ -1867,6 +1883,7 @@ function pathTerminalDisplayFunctionIds(
       context,
       terminal,
       invalidMapping,
+      context.view.family,
     );
     if (functionId === undefined) {
       const device = context.deviceByUid.get(terminal.deviceUid);
@@ -1875,11 +1892,117 @@ function pathTerminalDisplayFunctionIds(
           "Selected path terminal device is absent from ElectricalIr.",
         );
       }
-      return unsupportedRoot(context, device);
+      // Keep the existing profile/binding diagnostic for a type with no rooted
+      // representation of this terminal in any family. The new refusal is for
+      // a supported function that is unselected in this particular view.
+      const mapping = context.mappingByTypeId.get(device.typeId);
+      if (
+        ![...(mapping?.functions ?? []), ...(mapping?.aggregates ?? [])].some(
+          (rule) =>
+            rule.bindings.some(
+              (binding) => binding.terminalKey === terminal.terminalKey,
+            ),
+        )
+      )
+        return unsupportedRoot(context, device);
+      return {
+        ok: false,
+        error: unrepresentedTerminalError(
+          context,
+          terminal,
+          selections,
+          rootFunctionIds,
+        ),
+      };
     }
     ids.push(functionId);
   }
   return { ok: true, value: Object.freeze(ids) };
+}
+
+function unrepresentedTerminalError(
+  context: SelectionContext,
+  terminal: TerminalId,
+  selections: readonly SearchSuccess[],
+  rootFunctionIds: readonly FunctionId[],
+): UnsupportedSymbolMappingError {
+  const device = context.deviceByUid.get(terminal.deviceUid)!;
+  const steps = new Map(
+    selections.flatMap(({ path }) =>
+      path.steps.flatMap((step) =>
+        step.kind === "conductor"
+          ? [[conductorKey(step.elementId), step] as const]
+          : [],
+      ),
+    ),
+  );
+  const metadata = (id: ConductiveElementId) => {
+    if (id.kind === "cable_conductor")
+      return {
+        kind: "cable-conductor" as const,
+        cableUid: id.cableUid,
+        cableDesignation: context.ir.cables.find((c) => c.uid === id.cableUid)!
+          .designation,
+        conductorId: id.conductorId,
+      };
+    const object = (
+      id.kind === "wire" ? context.ir.wires : context.ir.jumpers
+    ).find((c) => c.uid === id.uid)!;
+    return {
+      kind: id.kind,
+      uid: id.uid,
+      designation: object.designation ?? object.uid,
+    };
+  };
+  const name = (id: ConductiveElementId) => {
+    const c = metadata(id);
+    return c.kind === "cable-conductor"
+      ? `${c.cableDesignation}/${c.conductorId}`
+      : c.designation;
+  };
+  const incident = [...steps.values()].filter(
+    (step) =>
+      sameTerminal(step.from, terminal) || sameTerminal(step.to, terminal),
+  );
+  const conductors = incident
+    .sort((a, b) => compareConductiveElementId(a.elementId, b.elementId))
+    .map((step) => metadata(step.elementId));
+  const names = incident.map((step) => name(step.elementId)).sort(compareText);
+  const functions = rootFunctionIds
+    .filter((id) => id.deviceUid === context.view.root.deviceUid)
+    .map((id) => ({
+      device: { by: "designation", value: context.view.root.designation },
+      key: id.functionKey,
+    }));
+  return {
+    ...unsupportedSymbolMappingError({
+      family: context.view.family,
+      root: context.view.root.designation,
+      deviceUid: device.uid,
+      typeId: device.typeId,
+    }),
+    message: `Unsupported terminal representation: ${device.designation}.${terminal.terminalKey} on ${JSON.stringify(device.typeId)} is incident to selected conductors ${names.join(", ")} but has no selected function, mapped terminal-display symbol, or boundary representation in this rooted view. Use a circuit view to draw these conductors with their real endpoint terminals. Put details.alternative in the views array of a schematic-packet-request/0.1 file and run thermite packet --input <file>. The alternative selects ${functions.map((f) => `${f.device.value}.${f.key}`).join(", ")}.`,
+    details: {
+      reason: "unrepresented-terminal",
+      designation: device.designation,
+      terminalIds: [cloneTerminal(terminal)],
+      conductors,
+      alternative: {
+        format: "circuit-view-request/0.1",
+        title: `${context.view.root.designation} selected conductors`,
+        flow: context.view.flow,
+        groups: [
+          {
+            id: "selected-path",
+            functions,
+            conductors: [...steps.values()]
+              .map((step) => name(step.elementId))
+              .sort(compareText),
+          },
+        ],
+      },
+    },
+  };
 }
 
 interface LoadSourceOutput {
@@ -2796,6 +2919,7 @@ export function selectTraceSubgraph(
     context,
     selections,
     invalidTraceMapping,
+    traceRoot.functionIds,
   );
   if (!displayFunctions.ok) return displayFunctions;
   return Object.freeze({
@@ -3059,6 +3183,10 @@ export function selectLoadsSubgraph(
     context,
     selections,
     invalidLoadsMapping,
+    [
+      resolvedSource.value.functionId,
+      ...selectedLoads.flatMap(({ functionIds }) => functionIds),
+    ],
   );
   if (!displayFunctions.ok) return displayFunctions;
   return Object.freeze({
@@ -3087,6 +3215,19 @@ export function selectSemanticSubgraph(
       ? selectControlPaths(context)
       : selectPowerPaths(context);
   if (!selected.ok) return selected;
+  const displayFunctions = pathTerminalDisplayFunctionIds(
+    context,
+    selected.paths,
+    (detail) => {
+      throw new InvalidSymbolMappingError(
+        `Invalid ${context.view.family} mapping: ${detail}`,
+      );
+    },
+    selected.rootFunctionIds,
+  );
+  if (!displayFunctions.ok) return displayFunctions;
+  // Validate ownership without changing the successful selection DTO. Legacy
+  // views already materialize terminal displays implicitly in presentation.
   return Object.freeze({
     ok: true,
     value: buildSelectedSubgraph(

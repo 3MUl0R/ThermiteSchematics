@@ -29,7 +29,6 @@ import type {
   PresentationLabel,
   PresentationNode,
   PresentationPort,
-  RenderOutcome,
 } from "../types.js";
 import { MAX_SVG_MAGNITUDE } from "../svg/numbers.js";
 import {
@@ -45,7 +44,11 @@ export { MAX_SVG_MAGNITUDE } from "../svg/numbers.js";
 class LayoutContractViolation extends Error {
   readonly netId: string | undefined;
 
-  constructor(message: string, netId?: string) {
+  constructor(
+    message: string,
+    netId?: string,
+    readonly failureKind: LayoutFailureKind = "contract-violation",
+  ) {
     super(message);
     this.name = "LayoutContractViolation";
     this.netId = netId;
@@ -116,8 +119,22 @@ function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Layout input invariant: ${message}`);
 }
 
-function reject(message: string, netId?: string): never {
-  throw new LayoutContractViolation(message, netId);
+export type LayoutFailureKind =
+  "contract-violation" | "ambiguous-intersection" | "collinear-overlap";
+export type LayoutValidationOutcome =
+  | { readonly ok: true; readonly value: NormalizedSchematicLayout }
+  | {
+      readonly ok: false;
+      readonly error: InvalidLayoutError;
+      readonly failureKind: LayoutFailureKind;
+    };
+
+function reject(
+  message: string,
+  netId?: string,
+  failureKind?: LayoutFailureKind,
+): never {
+  throw new LayoutContractViolation(message, netId, failureKind);
 }
 
 function invalidLayoutError(
@@ -1376,6 +1393,7 @@ function validateRouteInteractions(
         reject(
           `edges ${left.edge.id} and ${right.edge.id} overlap collinearly`,
           left.edge.netId,
+          "collinear-overlap",
         );
       const pointValue = intersection.point;
       const leftEdgeEndpoint = edgeEndpoint(left.edge, pointValue);
@@ -1412,6 +1430,7 @@ function validateRouteInteractions(
       reject(
         `edges ${left.edge.id} and ${right.edge.id} form an ambiguous intersection`,
         left.edge.netId,
+        "ambiguous-intersection",
       );
     }
   }
@@ -1556,7 +1575,7 @@ export function normalizeAndValidateLayout(
   adapterInput: Readonly<ElkNode>,
   elkOutput: Readonly<ElkNode>,
   catalog: readonly SymbolDefinition[],
-): RenderOutcome<NormalizedSchematicLayout> {
+): LayoutValidationOutcome {
   const input = inputIndex(adapterInput);
   const presentation = presentationIndex(graph);
   invariant(
@@ -1621,7 +1640,11 @@ export function normalizeAndValidateLayout(
     };
   } catch (error) {
     if (error instanceof LayoutContractViolation) {
-      return { ok: false, error: invalidLayoutError(graph, error) };
+      return {
+        ok: false,
+        error: invalidLayoutError(graph, error),
+        failureKind: error.failureKind,
+      };
     }
     throw error;
   }

@@ -103,8 +103,20 @@ Packet failures add `details.views` with the zero-based authored `viewIndex` and
 view title. A single-view failure also has `details.viewIndex` and
 `details.viewTitle`; a compact sheet shared by multiple views retains them all.
 Request-wide failures such as invalid shared page settings have no view index.
-R002/R003 identify devices and functions, and R004 identifies conductors and
-endpoints without requiring UUID lookup. Stable identity fields remain present.
+R002/R003 identify devices and functions. In rooted control, power, trace and
+loads views, R003 `unrepresented-terminal` identifies an otherwise supported
+intermediate terminal
+without a selected display owner and its incident conductors. Its
+`details.alternative` is a source-selected circuit view: place it in the `views`
+array of a `schematic-packet-request/0.1` file and run
+`thermite packet --input <file>`. R004 identifies conductors and endpoints;
+failed multi-load routing, including exhausted pair searches, names the loads
+in `details.loads`. Build a circuit view from their `functionIds`, the source
+function and authored connecting conductors, and wrap it in a packet as above.
+Trace advice names only loads accepted as trace roots (such as B1), with a
+connected input target supplied through `--to` and `--include-power`; PLC/RIO
+supply loads receive only circuit advice. Stable
+identity fields remain present; no connection change is implied.
 Unsupported rooted or circuit profile/function shapes retain the existing R001–R006
 classification and fields, with `details.reason: "unsupported-symbol-profile"`
 (and `error.reason` only when it has no existing value), plus

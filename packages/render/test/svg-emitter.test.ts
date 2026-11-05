@@ -655,6 +655,7 @@ describe("canonical semantic SVG emitter", () => {
     ];
     const crossingGraph: PresentationGraph = {
       format: "schematic-presentation/0.1",
+      directLoadPair: false,
       view: graph.view,
       locationGroups: [],
       deviceGroups: [],

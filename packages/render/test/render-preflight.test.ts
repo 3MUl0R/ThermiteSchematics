@@ -48,6 +48,67 @@ const devSideBranchSignatures: Record<string, string> = {
     "2db4cff5242d4aae16ad01d498cb5bc74c22f1c6a3bdff2f684bdcc9948d823f",
 };
 describe("render profile preflight", () => {
+  it("names a missing CB1 profile without printing the sentinel in the appended sentence", async () => {
+    const copy = structuredClone(ir);
+    delete copy.deviceTypes.find((t) => t.id === "core:breaker-3p")!.symbol;
+    for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+      const r = await renderSchematic(copy, {
+        format: "schematic-view-request/0.1",
+        family: "power",
+        root: { by: "designation", value: "M1" },
+        flow,
+      });
+      expect(r).toMatchObject({
+        ok: false,
+        error: {
+          code: "R002",
+          unsupported: { designation: "CB1", profile: "<missing>" },
+        },
+      });
+      if (!r.ok) {
+        expect(r.error.message).toBe(
+          'Incomplete power view: lane "U" does not reach a required boundary. Device "M1", function "motor_load". Path stopped at PS1.L (function ac_input). Additional profile limitation: device "CB1" has no rendering profile for this view.',
+        );
+        expect(r.error.message).not.toContain("<missing>");
+      }
+    }
+  });
+  it.each(["iec:indicator-light", "thermite:lamp"])(
+    "adds the unsupported CB1 profile to the incomplete power message: %s",
+    async (profile) => {
+      const copy = structuredClone(ir);
+      copy.deviceTypes.find((t) => t.id === "core:breaker-3p")!.symbol =
+        profile;
+      const r = await renderSchematic(copy, {
+        format: "schematic-view-request/0.1",
+        family: "power",
+        root: { by: "designation", value: "M1" },
+      });
+      expect(r).toMatchObject({
+        ok: false,
+        error: {
+          code: "R002",
+          lane: "U",
+          root: "M1",
+          unsupported: { designation: "CB1", profile },
+          details: {
+            profileNote: expect.stringContaining(profile),
+            stoppedAt: [{ designation: "PS1", terminalKey: "L" }],
+          },
+        },
+      });
+      if (!r.ok) {
+        const prefix =
+          'Incomplete power view: lane "U" does not reach a required boundary. Device "M1", function "motor_load". Path stopped at PS1.L (function ac_input).';
+        expect(r.error.message).toBe(
+          `${prefix} Additional profile limitation: device "CB1" uses profile "${profile}", which is unsupported for this view.`,
+        );
+        expect(r.error).not.toHaveProperty("reason");
+        expect(r.error).not.toHaveProperty("typeId");
+        expect(r.error).not.toHaveProperty("functionKey");
+      }
+    },
+  );
   it.each([
     "thermite:pressure-transmitter",
     "iec:indicator-light",
@@ -280,6 +341,9 @@ describe("render profile preflight", () => {
         "Incomplete control view: no input path reaches a required boundary.",
       );
       expect(r.error.message).toContain("Path stopped at");
+      expect(r.error.message).toContain(
+        'device "X1" uses profile "iec:indicator-light"',
+      );
       expect(r.error).not.toHaveProperty("typeId");
       expect(r.error).not.toHaveProperty("functionKey");
     }
@@ -317,6 +381,9 @@ describe("render profile preflight", () => {
           "Incomplete trace view: no signal path connects the requested devices.",
         );
         expect(r.error.message).toContain("Path stopped at");
+        expect(r.error.message).toContain(
+          'device "PE1" has no rendering profile for this view.',
+        );
       }
     },
   );
