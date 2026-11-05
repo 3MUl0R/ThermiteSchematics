@@ -376,6 +376,7 @@ automated fixtures mock sign-off solely to test the protocol.
 A person may add `counterSignOffs: [{kind:"person",by:"<name>"}]` later, keeping
 the original sign-off and all other decision fields unchanged. Receipts retain
 both provenances. Unknown/missing kinds and empty names are refused.
+After apply, a later countersign is retained only in the decisions file; the original receipt cannot be revalidated because its registry binding is stale.
 The tool refuses an unreviewed entry. With several baselines, select
 `--baseline-sha <raw-summary-hash>`. Draft creation is exclusive under `evals/out`.
 
