@@ -1,6 +1,7 @@
 import { straightPath } from "./path.mjs";
 // Browser-free predicates. Inputs are measured DOM geometry, PDF text/raster
 // observations, and unchanged compiled IR. No renderer layout estimator is used.
+export const ANISOTROPY_EPSILON = 1e-9; // numerical comparison only, dimensionless
 export const INK_ACCURACY_MM = 0.17; // two pixels at 300 dpi, rounded outwards
 export const inside = (a, b, t = INK_ACCURACY_MM) =>
   a.x >= b.x - t &&
@@ -898,29 +899,31 @@ export function legibility(g) {
           font: t.font,
         }),
       );
-    // SVG advance and font-cap scaling describe the same anisotropy, not two
-    // independent ink measurements. PDF exposes the physical em-axis ratio.
-    const aspectRatio =
+    // One symmetric physical glyph-scale rule for SVG, HTML and PDF.
+    const scales = [
+      t.advanceRatio,
       t.capReferenceEmMm > 0 && t.fontSize > 0
-        ? t.fontSize / t.capReferenceEmMm
-        : undefined;
-    const badAdvance =
-      t.advanceRatio !== undefined &&
-      (t.advanceRatio < 0.9 || t.advanceRatio > 1.1);
-    const badAspect =
-      aspectRatio !== undefined && Math.abs(aspectRatio - 1) > 0.1;
-    if (badAdvance || badAspect)
+        ? t.capReferenceEmMm / t.fontSize
+        : undefined,
+    ].filter((s) => s !== undefined);
+    if (scales.some((s) => !Number.isFinite(s) || s <= 0))
+      throw Error(
+        `Drawing measurement infrastructure: invalid glyph scale [${scales.map(String).join(", ")}] for ${t.element ?? "unknown element"}, text ${JSON.stringify(t.text ?? "")}, medium ${t.medium ?? "unknown"}; expected finite positive horizontal scales.`,
+      );
+    const anisotropy = Math.max(1, ...scales.map((s) => Math.max(s, 1 / s)));
+    if (anisotropy > 1.1 + ANISOTROPY_EPSILON)
       out.push(
         issue("distorted-glyphs", t, {
           text: t.text,
-          ratio: t.advanceRatio ?? 1 / aspectRatio,
+          anisotropy,
+          horizontalScales: scales,
           advanceRatio: t.advanceRatio,
-          emAspectRatio: aspectRatio,
+          emAspectRatio:
+            t.capReferenceEmMm > 0
+              ? t.fontSize / t.capReferenceEmMm
+              : undefined,
           naturalAdvanceMm: t.naturalAdvanceMm,
-          measurements: [
-            ...(badAdvance ? ["advance"] : []),
-            ...(badAspect ? ["em-axis-ratio"] : []),
-          ],
+          measurements: ["anisotropy"],
           font: t.font,
           role: t.role,
         }),

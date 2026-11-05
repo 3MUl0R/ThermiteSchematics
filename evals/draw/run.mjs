@@ -1,3 +1,5 @@
+import { EVALS_VERSION } from "./version.mjs";
+import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { retainLostText } from "./lost-text.mjs";
 import { outputCost } from "./output.mjs";
@@ -189,7 +191,7 @@ try {
   }
   metadata = {
     format: "thermite-draw-eval/1.0",
-    evalsVersion: "4.1",
+    evalsVersion: EVALS_VERSION,
     evals: {
       commit: await git(root, "rev-parse", "HEAD"),
       dirty:
@@ -234,15 +236,9 @@ try {
     criteria,
     sweepCells: values.quick || values.case ? 0 : 36,
     deferred: ["D packets: E2 outputs pending; not scored"],
-    checkers: Object.fromEntries(
-      await Promise.all(
-        (await readdir(kit))
-          .filter((p) => p.endsWith(".mjs") || p.endsWith(".swift"))
-          .sort()
-          .map(async (p) => [p, hash(await readFile(join(kit, p)))]),
-      ),
-    ),
+    checkers: await readCheckers(kit),
   };
+  metadata.checkerSha256 = checkerManifestHash(metadata.checkers);
   const cli = (args) =>
     command(engine, process.execPath, [join(engine, "thermite.mjs"), ...args]);
   const rendered = await pool(specs, async (c, index) => {

@@ -1,5 +1,5 @@
-// Initial seed only. Updating a checkpoint requires an explicit reviewed delta;
-// this command refuses to replace an established identity registry.
+// Build an initial/reviewed proposal under evals/out; never edits the registry.
+// For established mixed deltas use repin.mjs, which preserves unlisted data.
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

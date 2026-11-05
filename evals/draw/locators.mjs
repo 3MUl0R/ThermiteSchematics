@@ -264,13 +264,7 @@ export function identities(
     locator = `font-pair/${finding.fontPair}/${column ? view.kind : "drawing"}/${column ?? "labels"}`;
     source = true;
   }
-  if (
-    [
-      "text-below-minimum-em",
-      "distorted-glyphs",
-      "cap-ratio-mismatch",
-    ].includes(finding.kind)
-  ) {
+  if (["text-below-minimum-em", "distorted-glyphs"].includes(finding.kind)) {
     finding.sourceLocator = locator;
     locator = `typography/${finding.font}/${meta?.column ?? finding.role ?? "frame"}/${finding.kind}`;
     source = true;

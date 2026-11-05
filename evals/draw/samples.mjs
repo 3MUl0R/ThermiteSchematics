@@ -87,6 +87,7 @@ try {
         ),
         "utf8",
       );
+      const ir = await readJson(join(checkpoint, row.case, "ir.json"));
       let selector = "body>svg",
         g;
       if (row.medium === "html" || f.medium === "html") {
@@ -97,8 +98,9 @@ try {
         selector = `#sheet-${row.sheet}>svg`;
         g = classifyTextGeometry(
           await page.evaluate(measureSheet, { selector, textOnly: true }),
+          ir,
         );
-      } else g = await openSheet(page, svg);
+      } else g = classifyTextGeometry(await openSheet(page, svg), ir);
       let region = f.bbox,
         regionSource = "measured finding";
       if (dq === "DQ-16" && region) {
