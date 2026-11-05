@@ -132,7 +132,7 @@ thermite view PS1 --power # R002: AC input PS1.L is unfed
 
 Each view needs a matching root, else R001: `--power` a load with mapped load
 terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil,
-`--loads` a source with a source/return pair (PS1), `--conductors` a cable (else
+`--loads` a source with source/return terminals (PS1), `--conductors` a cable (else
 Q002), and `--to <device> [--include-power]` only a switch with one NO contact or
 a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`). Roots
 bind by `symbol` and function shape, not type ID, so a cloned core type keeps its

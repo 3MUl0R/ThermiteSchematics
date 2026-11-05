@@ -1,3 +1,4 @@
+import { graphSemanticOrder } from "../semantic-order.js";
 import type { ConductiveElementId, TerminalId } from "@thermite/compiler";
 
 import { comparePresentationLabel, compareText } from "../ordering.js";
@@ -615,6 +616,7 @@ function canonicalLabels(
   graph: Readonly<PresentationGraph>,
   layout: Readonly<NormalizedSchematicLayout>,
 ): readonly LayoutLabel[] {
+  const order = graphSemanticOrder(graph);
   const semantic = indexById(
     [
       ...graph.locationGroups.map(({ label }) => label),
@@ -639,6 +641,7 @@ function canonicalLabels(
         semantic.get(right.id),
         `Layout label ${right.id} has no presentation label.`,
       ),
+      order.key,
     ),
   );
 }

@@ -1,7 +1,11 @@
+import { createElkEngine } from "../src/layout/elk-runtime.js";
 import { signalLoopFixture } from "./render-contract-fixture.js";
 import { beforeAll, describe, it, expect } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
-import { renderSchematic } from "../src/renderer.js";
+import {
+  renderSchematic,
+  createSchematicRendererWithDependencies,
+} from "../src/renderer.js";
 import { renderSchematicPacket, renderSchematicSheets } from "../src/sheets.js";
 import { acceptedTraceRoots } from "../src/intent-rules.js";
 import { appendViewDrafts, assembleSheets } from "../src/packet/assembly.js";
@@ -147,7 +151,19 @@ describe("render error details", () => {
   it("names R004 conductors, endpoint devices, terminals and functions", async () => {
     const c = await compileProject("examples/machine-demo");
     if (!c.ok) throw Error("compile");
-    const r = await renderSchematic(c.ir, {
+    const missing = c.ir.wires.find((w) => w.designation === "W-RIO2-L+")!;
+    const engine = createElkEngine(),
+      layout = engine.layout.bind(engine);
+    engine.layout = async (...args) => {
+      const output = await layout(...args);
+      output.edges!.find(
+        (e) => e.id === JSON.stringify(["wire", missing.uid]),
+      )!.sections![0]!.startPoint.x += 1;
+      return output;
+    };
+    const r = await createSchematicRendererWithDependencies({
+      layoutEngine: engine,
+    }).render(c.ir, {
       format: "schematic-view-request/0.2",
       root: { by: "designation", value: "PS1" },
       intent: { kind: "loads" },

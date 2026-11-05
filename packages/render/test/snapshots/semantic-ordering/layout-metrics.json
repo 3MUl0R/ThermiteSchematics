@@ -1,0 +1,134 @@
+{
+  "sizes": {
+    "baseline:m1:left-to-right": [1838.8, 396],
+    "baseline:m1:top-to-bottom": [615.8, 1508],
+    "baseline:k1:left-to-right": [1222.4, 419],
+    "baseline:k1:top-to-bottom": [638.8, 986],
+    "baseline:conductors:left-to-right": [831.5, 453],
+    "baseline:conductors:top-to-bottom": [844.2, 606],
+    "baseline:trace:left-to-right": [1810.2, 554],
+    "baseline:trace:top-to-bottom": [872.4, 1422],
+    "baseline:loads:left-to-right": [670, 277],
+    "baseline:loads:top-to-bottom": [417, 549],
+    "baseline:signal-only-trace:left-to-right": [1486.8, 235],
+    "baseline:signal-only-trace:top-to-bottom": [324.2, 1158],
+    "pnp:m1:left-to-right": [1838.8, 396],
+    "pnp:m1:top-to-bottom": [615.8, 1508],
+    "pnp:k1:left-to-right": [1222.4, 419],
+    "pnp:k1:top-to-bottom": [638.8, 986],
+    "pnp:conductors:left-to-right": [831.5, 453],
+    "pnp:conductors:top-to-bottom": [844.2, 606],
+    "pnp:trace:left-to-right": [2171, 501],
+    "pnp:trace:top-to-bottom": [732.6, 1742],
+    "pnp:loads:left-to-right": [1704.6, 493],
+    "pnp:loads:top-to-bottom": [716.2, 1440],
+    "pnp:signal-only-trace:left-to-right": [1480.6, 251],
+    "pnp:signal-only-trace:top-to-bottom": [324.2, 1166]
+  },
+  "trace": {
+    "left-to-right": {
+      "routes": {
+        "W-FLD-003": [
+          { "x": 1660.8, "y": 229 },
+          { "x": 1702.8, "y": 229 },
+          { "x": 1702.8, "y": 311 },
+          { "x": 1888.8, "y": 311 },
+          { "x": 1888.8, "y": 368 },
+          { "x": 2024.2, "y": 368 }
+        ],
+        "CBL1.1-": [
+          { "x": 2044.2, "y": 368 },
+          { "x": 2155, "y": 368 },
+          { "x": 2155, "y": 465 },
+          { "x": 16, "y": 465 },
+          { "x": 16, "y": 405 },
+          { "x": 590.5, "y": 405 }
+        ]
+      },
+      "node": { "x": 1594.8, "y": 187 },
+      "port": { "x": 1660.8, "y": 229 },
+      "label": { "x": 1664.8, "y": 233 }
+    },
+    "top-to-bottom": {
+      "routes": {
+        "W-FLD-003": [
+          { "x": 547.6, "y": 1366 },
+          { "x": 547.6, "y": 1408 },
+          { "x": 348, "y": 1408 },
+          { "x": 348, "y": 1478 },
+          { "x": 218.4, "y": 1478 },
+          { "x": 218.4, "y": 1612 }
+        ],
+        "CBL1.1-": [
+          { "x": 218.4, "y": 1632 },
+          { "x": 218.4, "y": 1726 },
+          { "x": 715.6, "y": 1726 },
+          { "x": 715.6, "y": 16 },
+          { "x": 521, "y": 16 },
+          { "x": 521, "y": 477 }
+        ]
+      },
+      "node": { "x": 443.6, "y": 1296 },
+      "port": { "x": 547.6, "y": 1366 },
+      "label": { "x": 551.6, "y": 1370 }
+    }
+  },
+  "controls": {
+    "left-to-right": {
+      "size": [2151, 507],
+      "routes": {
+        "W-FLD-003": [
+          { "x": 2051, "y": 308 },
+          { "x": 2093, "y": 308 },
+          { "x": 2093, "y": 81 },
+          { "x": 1520.2, "y": 81 },
+          { "x": 1520.2, "y": 189 },
+          { "x": 1619.6, "y": 189 }
+        ],
+        "CBL1.1-": [
+          { "x": 1639.6, "y": 189 },
+          { "x": 2135, "y": 189 },
+          { "x": 2135, "y": 471 },
+          { "x": 16, "y": 471 },
+          { "x": 16, "y": 411 },
+          { "x": 590.5, "y": 411 }
+        ]
+      },
+      "intersection": { "x": 2093, "y": 189 }
+    },
+    "top-to-bottom": {
+      "size": [948.4, 1722],
+      "routes": {
+        "W-FLD-003": [
+          { "x": 523, "y": 1622 },
+          { "x": 523, "y": 1664 },
+          { "x": 214, "y": 1664 },
+          { "x": 214, "y": 1210 },
+          { "x": 366.4, "y": 1210 },
+          { "x": 366.4, "y": 1308 }
+        ],
+        "CBL1.1-": [
+          { "x": 366.4, "y": 1328 },
+          { "x": 366.4, "y": 1370 },
+          { "x": 353.4, "y": 1370 },
+          { "x": 353.4, "y": 1706 },
+          { "x": 931.4, "y": 1706 },
+          { "x": 931.4, "y": 16 },
+          { "x": 772.6, "y": 16 },
+          { "x": 772.6, "y": 477 }
+        ]
+      },
+      "intersection": { "x": 353.4, "y": 1664 }
+    }
+  },
+  "sideBranches": {
+    "M1|left-to-right|false": "0b0aa31f661ab4bc716fe68489a20a0030ba1e5a7ac4f834d81eca7acf072eb7",
+    "M1|top-to-bottom|false": "8673ee101f656cb004d06b9ee3eec8000365e9bb1c85471150097995327f0474",
+    "SRC1|left-to-right|false": "0b0aa31f661ab4bc716fe68489a20a0030ba1e5a7ac4f834d81eca7acf072eb7",
+    "SRC1|top-to-bottom|false": "8673ee101f656cb004d06b9ee3eec8000365e9bb1c85471150097995327f0474",
+    "TB1|left-to-right|false": "04a89e2a357d841b6361dbb52c6d7b82f0aece740669df6dab54fc8aac1b9425",
+    "TB1|left-to-right|true": "412729e36792f6b07ebc30a06c349eb1c48a0486817d095fc17148b19071a33d",
+    "TB1|top-to-bottom|false": "15540cb194939e709dcac0779a9687f41060c3ef51956363040927d491a753c3",
+    "TB1|top-to-bottom|true": "0451994eff4cc47dd18c5c30e78cc29ed62e786954dd4818c20464cbd0a2a8e9"
+  }
+}

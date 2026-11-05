@@ -1,3 +1,4 @@
+import { graphSemanticOrder } from "../semantic-order.js";
 import type {
   ElkExtendedEdge,
   ElkLabel,
@@ -172,7 +173,15 @@ function invalidLayoutError(
           ? `${e.conductor.cableDesignation}/${e.conductor.conductorId}`
           : e.conductor.designation
         : "boundary segment",
-      terminals: e.endpoints.map(terminal),
+      // Diagnostic companions keep their historical structural terminal tuple.
+      // This ordering never reaches the adapter or drawing.
+      terminals: [...e.endpoints]
+        .sort(
+          (a, b) =>
+            compareText(a.deviceUid, b.deviceUid) ||
+            compareText(a.terminalKey, b.terminalKey),
+        )
+        .map(terminal),
     }));
   let message = violation.message;
   for (const edge of edges)
@@ -1617,8 +1626,9 @@ export function normalizeAndValidateLayout(
     validateNodeAndLabelCollisions(graph, geometry, catalog, segments);
     const crossings = validateRouteInteractions(graph, geometry, segments);
     validateFinalBounds(graph, geometry, rootWidth, rootHeight, catalog);
+    const order = graphSemanticOrder(graph);
     const labels = [...presentation.labels.values()]
-      .sort(comparePresentationLabel)
+      .sort((a, b) => comparePresentationLabel(a, b, order.key))
       .map((label) => geometry.labels.get(label.id)!);
     return {
       ok: true,

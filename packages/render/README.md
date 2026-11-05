@@ -513,34 +513,59 @@ ELK graph sizes `2171 x 501`/`732.6 x 1742` for PNP trace and
 label, and route coordinate returned by ELK is normalized and emitted verbatim; there
 is no authored coordinate, UID patch, post-layout repair, or collision exemption.
 
-Two directly fed loads use source/target designations and terminal keys for path
-rank, junction order and unnamed-net ordering. At a two-arm source fork, an
-external load gets the straight port before a load inside the source's location;
-reverse designation order (then reverse terminal-key order) breaks ties. The
-pair predicate is computed once from selection and carried on the presentation
-graph for ordering and recovery. The turned branch uses the outside of its catalog source
-port (positive above, return below in right flow). If ELK still returns a crossing
-or overlap, the two source forks admit at most 16 deterministic straight/turned
-port-side combinations. Every attempt runs the complete geometry and topology
-validator. Exhaustion returns the original R004 with load advice; conductors are never clipped,
-merged or removed. Recovery uses the validator's structured failure kind,
-independently of message wording. Other load topologies retain the existing
-ordering. When a multi-load view's routing fails R004, including after pair-search
-exhaustion, the message keeps its original prefix and names all selected loads.
-Build a circuit view from the source function, `details.loads[].functionIds` and
-the authored conductors connecting those devices, place it in a
-`schematic-packet-request/0.1` file's `views` array and run
-`thermite packet --input <file>`. Trace advice names only loads whose catalog
-mapping accepts a trace root, such as B1; choose its connected input target with
-`--to` and add `--include-power`. PLC/RIO supply loads receive only circuit advice. Routing
-three or more loads and looped supplies is follow-up #60.
+All rooted views compare authored device designations, terminal/function keys and
+semantic net membership. Nested presentation IDs remain identity; their comparison
+keys recursively substitute authored names. Equal-distance selected steps use a
+semantic order before path ranking, junction arms, and the first PNP signal edge
+reach ELK. SVG labels and endpoint tuples use the same order. Unnamed jumpers use
+their endpoint tuple and authored source file/JSON pointer to break ties.
 
-The test-only direct-pair SVG byte snapshots in `test/snapshots/render-robustness/`
-cover external and same-location PLC2 in
-both flows. Review their byte diffs after intentionally updating with
-`VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update`.
-The closed historical golden migration manifest does not admit these fixtures.
-The same command updates exact R004 diagnostic snapshots for #60's four cases.
+At a two-arm source fork, an external load gets the straight port before a load
+inside the source's location; reverse designation order (then reverse terminal-key
+order) breaks ties. The turned branch uses the outside of its catalog source port
+(positive above, return below in right flow). The reviewed pair geometry is kept;
+its SVG label/metadata order is now semantic too. Pair recovery retains its limit
+of 16 straight/turned port-side combinations.
+
+Larger loads forks use distinct sides on a four-way junction. Higher degrees use
+a chain of junctions at that exact compiler terminal, linked by presentation-only
+segments with no physical element IDs. Looped supplies keep each incoming and
+outgoing conductor and give the continuing branch an outward arm. Recovery first
+tries six coordinated side permutations on each of at most two supply nets (36
+layouts including the original), then at most 255 independent component choices.
+Repeated side assignments are skipped; with one junction per net the second stage
+is identical and omitted (36 layouts total). The general cap remains 291 layouts,
+independent of load count. Existing PNP shared
+trace forks also admit at most 279 validated side choices so migration of branch
+order preserves their drawable topology. Every attempt runs the
+complete geometry and topology validator. No conductor is clipped, merged or
+removed. Recovery reads the validator's structured failure kind, independently of
+message wording. Every R004 in a loads view triggers the bounded recovery,
+including label collisions; an exhausted search retains the load advice and
+`details.loads`. In other views, invalid ELK contracts do not trigger recovery.
+
+The plc3, plc4, daisy, PNP mixed-load and machine-demo loads drawings render in both
+flows as continuous SVGs. Sheet composition still enforces the existing print-size
+rules and may return R006. Exhaustion returns the original R004 and unchanged load
+advice: build a circuit view from the source function, `details.loads[].functionIds`
+and the authored conductors connecting those devices, put it in the `views` array
+of a `schematic-packet-request/0.1` file, and run `thermite packet --input <file>`.
+Trace advice names only loads whose catalog mapping accepts a trace root, such as
+B1; choose its connected input target with `--to` and add `--include-power`.
+
+Test-only SVG snapshots cover external/same-location pairs and N=3/looped supplies
+in both flows. RB's exact diagnostic snapshots remain forced-exhaustion controls.
+Update and inspect diffs with:
+
+```sh
+VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update
+VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/load-layout.test.ts --update
+bun scripts/update-render-ordering-goldens.mjs --write
+```
+
+The final script requires a build and owns only the existing adapter hash golden
+and `test/snapshots/semantic-ordering/layout-metrics.json`. Use `--check` to verify
+those bytes. The closed historical golden inventory is unchanged.
 
 Target-sensitive options are attached to their legal effective target. Port-label
 placement targets the leaf, while horizontal/vertical port-label spacing `4` targets
@@ -650,6 +675,14 @@ literal tab/CR, and exactly one final LF.
 All R-errors include `code`, `message`, and string `root`. Optional fields are omitted
 when inapplicable.
 
+Observed-geometry witness values such as `details.originalMessage` and
+`details.conductors` follow the actual layout; code, family, root, net identity,
+field names/types and serialization remain contractual, and every other existing
+field keeps its dev value with additive diagnostics, including byte-identical
+`message` text for unchanged geometry. Historical Tier 2 payloads
+remain exact serialization controls under injected refusals, while separately
+named snapshots pin the live semantic-layout witnesses.
+
 | Code / public type                     | Expected failure                                                       | Additional fields and policy                                                                                                 |
 | -------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Q001/Q002 / `QueryError`               | A well-formed selector is unknown, or a conductor root is not a cable. | Returned unchanged from query; no partial result.                                                                            |
@@ -706,6 +739,10 @@ receives a fresh deep DTO; results and summaries do not alias later renders. No
 mutable singleton, layout array order, path, clock, Git state, locale, timezone,
 process ID, random value, environment value, or output filename enters SVG. ELK is
 0.12.0, seed is `1`, both merge options are false, and no cache exists.
+Semantic IR keys are rebuilt for each render, outside selection comparators;
+editing an IR in place gives the same result as rendering its fresh clone.
+Ordered paths and graph comparison keys belong to that render's objects;
+no module-level memo table retains them.
 
 The checked-in K1 control, M1 power, LS1-to-PLC1 trace, CBL1 conductors, and PS1 loads
 SVGs are reviewed byte goldens from the same unchanged motor-starter IR.

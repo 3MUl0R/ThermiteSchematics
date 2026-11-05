@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { format as formatJson } from "prettier";
@@ -273,45 +273,84 @@ it.each(["loads_via_k2", "trace_via_k2", "power_via_k2"] as const)(
   },
 );
 
+// Keep RB's exact refusal payloads as compatibility controls even though these
+// topologies now draw. A forced routing exhaustion must append the same advice.
+async function forcedLoadRefusal(
+  ir: ElectricalIr,
+  variant: string,
+  flow: (typeof flows)[number],
+) {
+  const old = JSON.parse(
+    await readFile(
+      new URL(
+        `snapshots/render-robustness/${variant}-${flow}.r004.json`,
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  old.message = old.message.slice(0, old.message.indexOf(" Selected loads:"));
+  delete old.details.loads;
+  const spy = vi
+    .spyOn(layoutValidation, "normalizeAndValidateLayout")
+    .mockReturnValue({
+      ok: false,
+      error: old,
+      failureKind: "collinear-overlap",
+    });
+  const engine = createElkEngine();
+  engine.layout = async (graph) => graph;
+  try {
+    return await createSchematicRendererWithDependencies({
+      layoutEngine: engine,
+    }).render(ir, { ...loads, flow });
+  } finally {
+    spy.mockRestore();
+  }
+}
+
 it.each([
   ["plc3", ["PLC1", "PLC2", "PLC3"]],
   ["plc4", ["PLC1", "PLC2", "PLC3", "PLC4"]],
   ["daisy", ["PLC1", "PLC2"]],
   ["pnp", ["B1", "PLC1", "PLC2"]],
-] as const)("keeps %s as an actionable R004 (#60)", async (variant, names) => {
-  const { ir } = await fixture.compile(variant, 0);
-  for (const flow of flows) {
-    const r = await renderSchematic(ir, { ...loads, flow });
-    expect(r).toMatchObject({
-      ok: false,
-      error: {
-        code: "R004",
-        family: "control",
-        root: "PS1",
-        netId: expect.stringMatching(/^net:sha256:/u),
-        details: {
-          loads: names.map((designation) => ({ designation })),
-          originalMessage: expect.any(String),
-          conductors: expect.any(Array),
+] as const)(
+  "keeps exhausted %s routing as an actionable R004 (#60)",
+  async (variant, names) => {
+    const { ir } = await fixture.compile(variant, 0);
+    for (const flow of flows) {
+      const r = await forcedLoadRefusal(ir, variant, flow);
+      expect(r).toMatchObject({
+        ok: false,
+        error: {
+          code: "R004",
+          family: "control",
+          root: "PS1",
+          netId: expect.stringMatching(/^net:sha256:/u),
+          details: {
+            loads: names.map((designation) => ({ designation })),
+            originalMessage: expect.any(String),
+            conductors: expect.any(Array),
+          },
         },
-      },
-    });
-    if (!r.ok) {
-      const suffix = ` Selected loads: ${names.join(", ")}. Draw these loads in a circuit view built from details.loads with thermite packet --input.${variant === "pnp" ? " A trace can also start at B1; choose its connected input target with --to and add --include-power." : ""}`;
-      expect(r.error.message.endsWith(suffix)).toBe(true);
-      await expect(
-        await formatJson(JSON.stringify(r.error), { parser: "json" }),
-      ).toMatchFileSnapshot(
-        fileURLToPath(
-          new URL(
-            `snapshots/render-robustness/${variant}-${flow}.r004.json`,
-            import.meta.url,
+      });
+      if (!r.ok) {
+        const suffix = ` Selected loads: ${names.join(", ")}. Draw these loads in a circuit view built from details.loads with thermite packet --input.${variant === "pnp" ? " A trace can also start at B1; choose its connected input target with --to and add --include-power." : ""}`;
+        expect(r.error.message.endsWith(suffix)).toBe(true);
+        await expect(
+          await formatJson(JSON.stringify(r.error), { parser: "json" }),
+        ).toMatchFileSnapshot(
+          fileURLToPath(
+            new URL(
+              `snapshots/render-robustness/${variant}-${flow}.r004.json`,
+              import.meta.url,
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
-  }
-});
+  },
+);
 
 it("keeps an independent PS1 profile limitation beside the K2 terminal diagnosis", async () => {
   const { ir: original } = await fixture.compile("trace_via_k2", 0);
@@ -363,7 +402,7 @@ it.each(["plc3", "pnp"] as const)(
   async (variant) => {
     const { ir } = await fixture.compile(variant, 0);
     for (const flow of flows) {
-      const failure = await renderSchematic(ir, { ...loads, flow });
+      const failure = await forcedLoadRefusal(ir, variant, flow);
       if (failure.ok) throw Error("Expected routing refusal");
       const selectedLoads = failure.error.details!.loads as {
         designation: string;
@@ -506,7 +545,9 @@ it.each([false, true])(
       layoutEngine: engine,
     }).render(ir, loads);
     expect(r).toMatchObject({ ok: false, error: { code: "R004" } });
-    expect(calls).toBe(retry ? 16 : 1);
+    // Loads retry every R004, including malformed-output contract failures.
+    // Full validation must still reject every candidate missing a conductor.
+    expect(calls).toBe(16);
   },
 );
 

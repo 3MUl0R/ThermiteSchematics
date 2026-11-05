@@ -1,3 +1,4 @@
+import { orderingMetrics } from "./layout-metrics.js";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -307,6 +308,7 @@ function withDuplicateReturnPotential(ir: ElectricalIr): ElectricalIr {
   duplicate.potentials.push({
     ...structuredClone(original),
     uid: duplicateUid,
+    source: { ...original.source, jsonPointer: "/objects/4" },
   });
   required(
     duplicate.nets.find(({ id }) => id === original.netId),
@@ -443,7 +445,7 @@ describe("D8 end-to-end determinism", () => {
     },
   );
 
-  it("keeps the duplicate-potential UID tie deterministic under the full shuffle", async () => {
+  it("keeps the authored duplicate-potential tie deterministic under the full shuffle", async () => {
     const duplicate = withDuplicateReturnPotential(coreIr);
     const request = viewRequest("k1", "left-to-right");
     const baseline = await pipelineSnapshot(duplicate, request);
@@ -466,7 +468,9 @@ describe("D8 end-to-end determinism", () => {
         terminal: { deviceUid: ps1Uid, terminalKey: "-" },
         boundary: {
           terminal: { deviceUid: ps1Uid, terminalKey: "-" },
-          potentialUid: "00000000-0000-4000-8000-000000000001",
+          potentialUid: required(
+            coreIr.potentials.find((p) => p.name === "0VDC"),
+          ).uid,
         },
         constraint: "LAST",
       },
@@ -513,42 +517,11 @@ describe("D8 end-to-end determinism", () => {
   });
 
   it("reasserts the exact B1/B2 matrix dimensions and semantic option predicates", () => {
-    const shared = {
-      "m1:left-to-right": [1838.8, 396],
-      "k1:left-to-right": [1222.4, 419],
-      "conductors:left-to-right": [831.5, 453],
-      "m1:top-to-bottom": [615.8, 1508],
-      "k1:top-to-bottom": [638.8, 986],
-      "conductors:top-to-bottom": [844.2, 606],
-    } as const;
-    const stateSpecific = {
-      baseline: {
-        "trace:left-to-right": [1855.4, 554],
-        "loads:left-to-right": [670, 277],
-        "signal-only-trace:left-to-right": [1486.8, 235],
-        "trace:top-to-bottom": [883.8, 1438],
-        "loads:top-to-bottom": [417, 549],
-        "signal-only-trace:top-to-bottom": [324.2, 1158],
-      },
-      pnp: {
-        "trace:left-to-right": [2171, 501],
-        "loads:left-to-right": [1704.6, 493],
-        "signal-only-trace:left-to-right": [1480.6, 251],
-        "trace:top-to-bottom": [732.6, 1742],
-        "loads:top-to-bottom": [716.2, 1440],
-        "signal-only-trace:top-to-bottom": [324.2, 1166],
-      },
-    } as const;
-
     for (const state of ["baseline", "pnp"] as const) {
       for (const matrixCase of matrixCases) {
         const snapshot = canonicalSnapshot(state, matrixCase);
         const viewKey = `${matrixCase.name}:${matrixCase.flow}`;
-        const expected =
-          shared[viewKey as keyof typeof shared] ??
-          stateSpecific[state][
-            viewKey as keyof (typeof stateSpecific)[typeof state]
-          ];
+        const expected = orderingMetrics.sizes[`${state}:${viewKey}`];
         expect(
           [snapshot.layout.width, snapshot.layout.height],
           matrixKey(state, matrixCase),

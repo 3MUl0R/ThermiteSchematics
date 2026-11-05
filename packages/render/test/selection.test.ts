@@ -1845,11 +1845,15 @@ describe("selection determinism", () => {
     expect(loadsSelected(shuffled, reversedMappings)).toEqual(baselineLoads);
   });
 
-  it("chooses potential UID lexically last after all other duplicate ties", () => {
+  it("uses authored declaration position as the final potential tie-break", () => {
     const ir = structuredClone(coreIr);
     const original = potential(ir, "0VDC");
     const duplicateUid = "00000000-0000-4000-8000-000000000001";
-    ir.potentials.push({ ...structuredClone(original), uid: duplicateUid });
+    ir.potentials.push({
+      ...structuredClone(original),
+      uid: duplicateUid,
+      source: { ...original.source, jsonPointer: "/objects/4" },
+    });
     required(
       ir.nets.find(({ id }) => id === original.netId),
     ).potentialUids.push(duplicateUid);
@@ -1860,7 +1864,7 @@ describe("selection determinism", () => {
     const first = selected(ir, "K1", "control");
     const firstBoundary = first.paths.find(({ lane }) => lane === "return")!.end
       .boundary!;
-    expect(firstBoundary.potentialUid).toBe(duplicateUid);
+    expect(firstBoundary.potentialUid).toBe(original.uid);
 
     ir.potentials.reverse();
     for (const net of ir.nets) net.potentialUids.reverse();

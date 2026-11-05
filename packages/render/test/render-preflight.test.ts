@@ -1,3 +1,4 @@
+import { orderingMetrics } from "./layout-metrics.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ElectricalIr } from "@thermite/compiler";
 import { compileProject } from "@thermite/compiler";
@@ -28,25 +29,8 @@ function plc(profile: string) {
   type.symbol = profile;
   return copy;
 }
-// SHA-256 of complete successful values from clean dev 38720de.
-const devSideBranchSignatures: Record<string, string> = {
-  "M1|left-to-right|false":
-    "db6d9a8188e75896b084bddc12ec376b8eb3c4f1ab78fa225843f7a1cfc11363",
-  "M1|top-to-bottom|false":
-    "6c0b19a732aba1ceed1a6b348d83e3641f042bafe113a98b05b06c8ef2835bc5",
-  "SRC1|left-to-right|false":
-    "db6d9a8188e75896b084bddc12ec376b8eb3c4f1ab78fa225843f7a1cfc11363",
-  "SRC1|top-to-bottom|false":
-    "6c0b19a732aba1ceed1a6b348d83e3641f042bafe113a98b05b06c8ef2835bc5",
-  "TB1|left-to-right|false":
-    "d3e74a58564f1cd3dc56e94176bbd750daf347259de7f633a98b7a5f7a25b0d5",
-  "TB1|left-to-right|true":
-    "c01edb73388d25ee5b99a35b745f5c42449f7275d418a1592a65f40aa20e01ed",
-  "TB1|top-to-bottom|false":
-    "1f4c073775e601e8445f4ccd92a78c5da6d275992de078dc198344a12b7b6ae6",
-  "TB1|top-to-bottom|true":
-    "2db4cff5242d4aae16ad01d498cb5bc74c22f1c6a3bdff2f684bdcc9948d823f",
-};
+// Full successful-value fingerprints after semantic ordering.
+const semanticSideBranchSignatures = orderingMetrics.sideBranches;
 describe("render profile preflight", () => {
   it("names a missing CB1 profile without printing the sentinel in the appended sentence", async () => {
     const copy = structuredClone(ir);
@@ -281,7 +265,7 @@ describe("render profile preflight", () => {
                 .update(JSON.stringify(rendered.value))
                 .digest("hex"),
             ).toBe(
-              devSideBranchSignatures[
+              semanticSideBranchSignatures[
                 [
                   device,
                   flow,

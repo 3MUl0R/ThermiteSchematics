@@ -39,7 +39,6 @@ unassessed rated net. Completeness has zero missing required points and I003;
 generic and optional/spare connection information remains visible.
 
 PLC/HMI supplies declare DC class without a voltage magnitude. Each supply has
-a loads binding. The complete PS1 loads view reaches an existing R004 layout
-failure where the PLC/HMI return wires overlap; it is pinned separately from
-the successful individual-supply probes. The larger PLC's AI pairs are separate;
+a loads binding. The complete PS1 loads view draws B1, HMI1 and PLC1 in both
+flows, alongside the individual-supply probes. The larger PLC's AI pairs are separate;
 isolation and shared returns unspecified.
