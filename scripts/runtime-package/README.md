@@ -21,7 +21,10 @@ Open the generated HTML in your browser, or use a `.pdf` output filename for PDF
 Read the generated project's `AGENTS.md` with your agent before editing its model.
 `bun thermite.mjs guide` lists offline reference topics and read-before triggers;
 `guide <id>` reads a topic, `guide symbols` lists profiles, and
-`guide diagnostics [CODE]` covers E/W/I codes. `guide --path` prints the directory
+`guide diagnostics [CODE]` covers E/W/I/R/Q/A/T/INIT codes.
+`guide schema [name]` lists shipped schemas or serves their exact bytes; `--json`
+lists identifiers and installed paths. `agent <tool> --help` prints executable
+starter requests and validator-owned accepted literals. `guide --path` prints the directory
 of resolved, shipped Markdown copies. Token estimates are served UTF-8 bytes
 divided by four, rounded up; catalog estimates describe text output.
 From elsewhere, use `bun /absolute/path/to/this-folder/thermite.mjs <command>`.

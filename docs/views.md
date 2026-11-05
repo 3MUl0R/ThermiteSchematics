@@ -190,11 +190,25 @@ The HTML viewer searches sheet labels/device designations. The sheet selector
 and conductor links reveal destinations even after filtering. Printing always
 includes every sheet. The viewer has no server and makes no network requests.
 
-## Diagnostic lookup scope
+## Diagnostic lookup
 
-`thermite guide diagnostics` catalogs compiler and validation E/W/I codes only.
-Renderer R codes (including R001/R006) and CLI usage/output T001 are explained
-here and by the failing command's message and help. A/Q request, patch and query
-errors are explained in [agent requests](agent-requests.md). Cataloging R/Q/A/T
-codes is a separate follow-up; their absence from E/W/I lookup does not mean
-those codes are invalid.
+`thermite guide diagnostics <code>` serves the full E/W/I/R/Q/A/T/INIT catalog offline,
+including lowercase input. The failing command's message gives instance details.
+A/Q request and query errors are explained in [agent requests](agent-requests.md).
+
+`R005` means render text failed preflight. Its owner, field and reason identify
+an unpaired surrogate, an XML-illegal code point, a character forbidden in a
+single-line field, or an empty or over-160-code-point project name. Correct the
+identified authored text; do not bypass the check or edit generated SVG.
+
+`T001` reports a caught CLI exception on stderr, normally with exit 2. In
+`watch`, regeneration or polling failures report T001 and keep watching; the
+message may embed E-code diagnostics. Commander usage failures can instead
+print plain error/help text with exit 2. Expected renderer failures retain
+R codes and exit 1. Initialization messages may include INIT000–INIT012
+prefixes, also available through `thermite guide diagnostics <code>`.
+
+The existing conductor-root distinction is intentional: `thermite view PS1
+--conductors` returns Q002 because cable lookup found a device. Other rooted
+mode/mapping mismatches use R001. Resolve an actual cable before selecting its
+conductors.

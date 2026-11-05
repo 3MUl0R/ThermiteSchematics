@@ -1,3 +1,4 @@
+import { AGENT_REQUEST_VOCABULARY } from "./request-vocabulary.js";
 import {
   computeFileIntegrity,
   type ElectricalIr,
@@ -65,7 +66,9 @@ export type SourceMetadataResult<Value> = SourceAnnotated<Value> & {
   readonly sourceFiles?: readonly SourceFileIntegrity[];
 };
 
-const INCLUDES = new Set(["source"]);
+const INCLUDES = new Set<string>(
+  AGENT_REQUEST_VOCABULARY["inspect"]["/include/*"],
+);
 
 export function validateSourceInclude(
   tool: AgentToolName,

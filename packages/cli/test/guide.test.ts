@@ -100,6 +100,7 @@ it("resolves the runtime documentation index offline", async () => {
     ...topics.map((t) => t.id),
     "symbols",
     "diagnostics",
+    "schema",
   ]);
   const text = (await ok(["guide"], ctx.work)).stdout;
   for (const topic of index) {

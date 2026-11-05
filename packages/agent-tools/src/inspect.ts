@@ -1,3 +1,4 @@
+import { AGENT_REQUEST_VOCABULARY } from "./request-vocabulary.js";
 import {
   serializeQueryResult,
   type InspectResult as QueryInspectResult,
@@ -30,8 +31,12 @@ export interface InspectObjectRequest
 
 const REQUEST_FIELDS = new Set(["format", "project", "selector", "include"]);
 const SELECTOR_FIELDS = new Set(["by", "value"]);
-const REQUEST_FORMATS = new Set(["agent-tool-request/0.1"]);
-const SELECTOR_KINDS = new Set(["uid", "designation"]);
+const REQUEST_FORMATS = new Set<string>(
+  AGENT_REQUEST_VOCABULARY["inspect"]["/format"],
+);
+const SELECTOR_KINDS = new Set<string>(
+  AGENT_REQUEST_VOCABULARY["inspect"]["/selector/by"],
+);
 
 export function inspectCompiledProject(
   engine: QueryEngine,

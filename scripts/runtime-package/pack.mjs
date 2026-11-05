@@ -161,6 +161,12 @@ try {
         recursive: true,
         filter: (path) =>
           !path.endsWith(".tsbuildinfo") &&
+          // Guide parsing and original Markdown are build-only inputs.
+          (manifest.name !== "@thermite/cli" ||
+            (!/[/\\]guide-markdown\.(?:ts|js|js\.map|d\.ts|d\.ts\.map)$/u.test(
+              path,
+            ) &&
+              path !== join(directory, "assets/guide-source.json"))) &&
           // Generated data is consumed only as compact JS; source/maps duplicate it.
           !/[/\\]text-metrics-data\.(?:ts|js\.map|d\.ts\.map)$/u.test(path),
       });

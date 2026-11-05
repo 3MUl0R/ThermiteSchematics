@@ -20,9 +20,10 @@ import {
 } from "../src/common/serializer.js";
 
 describe("complete public contract", () => {
-  it("exports only the frozen Task 6 runtime surface", () => {
+  it("exports the legacy runtime surface plus request vocabulary", () => {
     expect(agentToolsPackage.AGENT_TOOLS_VERSION).toBe("agent-tools/0.1");
     expect(Object.keys(agentToolsPackage).sort()).toEqual([
+      "AGENT_REQUEST_VOCABULARY",
       "AGENT_TOOLS_VERSION",
       "createAgentTools",
       "serializeAgentToolReport",

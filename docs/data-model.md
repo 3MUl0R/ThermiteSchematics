@@ -1,5 +1,23 @@
 # Data Model
 
+## Offline schemas and validation
+
+`thermite guide schema` lists every shipped JSON Schema; `thermite guide schema
+--json` returns each name, `$id`, `$schema` dialect and absolute installed path.
+`thermite guide schema device` serves the original bytes (the filename or `$id`
+URL also works); choose
+`source-file` for a source document envelope or `device-type` for a library type.
+Device I/O, ports and connection reviews are defined within these schemas.
+
+The identifiers remain unchanged. They identify schemas and do not require an
+HTTP fetch. To validate a project offline, run `thermite validate <project>`;
+the runtime registers all shipped schemas locally, resolves their `$ref` links
+by `$id`, and runs the compiler's additional structural and engineering checks.
+For an editor or another JSON Schema 2020-12 validator, register every listed
+local file under its `$id` and select the matching schema for the document.
+Use its built-in dialect support; disable remote retrieval. Validating just an
+individual object does not check project references, locks or connectivity.
+
 ## Authority and versions
 
 Thermite Schematics stores project and presentation facts in version-controlled JSON.

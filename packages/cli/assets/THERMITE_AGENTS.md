@@ -29,7 +29,7 @@ From source, make focused engine fixes in the separate engine checkout and open 
 pull request following its AGENTS.md and CONTRIBUTING.md, keeping this project's
 private machine data and credentials out of issues and pull requests. The human
 contributor must accept any CLA; an agent must not sign it.
-`thermite guide` lists topics.
+`thermite guide` lists topics, schemas and diagnostic codes.
 
 ## Authority and workflow
 

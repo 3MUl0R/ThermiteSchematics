@@ -1,3 +1,4 @@
+import { agentHelp } from "./agent-help.js";
 import { resolve } from "node:path";
 
 import {
@@ -983,7 +984,8 @@ export async function runCli(
     const command = agentCommand
       .command(tool)
       .description(description)
-      .requiredOption("--input <file|->", "request JSON file or '-' for stdin");
+      .requiredOption("--input <file|->", "request JSON file or '-' for stdin")
+      .addHelpText("after", () => agentHelp(tool));
 
     command.action(async () => {
       const flags = command.opts<AgentFlags>();
