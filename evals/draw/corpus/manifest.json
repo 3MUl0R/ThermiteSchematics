@@ -1,5 +1,5 @@
 {
-  "base": "654014080b469afed79618e80bcfea004cabdbe8",
+  "base": "d7f10b3439540b88a4546b1f754c44b763029b44",
   "casesSha256": "ffebb699a4ff45ded6f8eced9b83b7ce3a178dfcd75b14833c0ab96a8445c040",
   "deferred": ["D1/D2 agent-produced packets: E2 checkpoint outputs pending"],
   "files": {
@@ -141,7 +141,7 @@
     "packages/cli/fixtures/signal-loop/source.json": "5cb8c8ea63795ec6cada1ba2edbc82307e9197679a9cff31889672f6f052a721",
     "packages/cli/templates/starter-default/connections/control-power.json": "53d3eaa5a6f4ffb279bed715e67a2247f250ed6d9a9eb49cd95be52bf72fbb0a",
     "packages/cli/templates/starter-default/devices/equipment.json": "04bbff595ae13480378bf642a2fd038fede4643dfa0a5271d7840f81f319264a",
-    "packages/cli/templates/starter-default/electrical-system.lock.json": "54b54cba268703c536f41acc7df577bba3f52f91ab9518d70d5a9b567a402eb4",
+    "packages/cli/templates/starter-default/electrical-system.lock.json": "09e0cce1748dd03a72b622f5186d333218160bcb227224918e1b82bdc76038d7",
     "packages/cli/templates/starter-default/potentials/potentials.json": "07c5dd70f97d42677f6ff4100e3c9603e71d04cf56750136c240b843d2ed12ae",
     "packages/cli/templates/starter-default/presentation.json": "b090a6dfbe99358c303e720a72d184d94cda8215e6a45d0785584f208b6f6b19",
     "packages/cli/templates/starter-default/system.json": "f377481e2be240dfe9e05cda521156de5cbc6538ff08c9affa5e952ef7c40460",
@@ -164,18 +164,24 @@
     "packages/core-library/versions/0.2.0/types/breaker-2p.json": "08f0252cdb6eabfb9e005fee7dab08327badf16ed9ae9cb21d5ed9962fcacd76",
     "packages/core-library/versions/0.2.0/types/breaker-3p.json": "fda267fe54938a34060d284ba4d265dc247f36c2a00864190e90d0492565a914",
     "packages/core-library/versions/0.2.0/types/cable-2pair-shielded.json": "d3b5b9561afd3301c0ad8082339897759aafafa156813b9baab92ff4a35087e9",
-    "packages/core-library/versions/0.2.0/types/cable-power-4core.json": "14c0f272f0eb665e9795561ce698362e8c6d1a56e07a68149156ad60914e39db",
+    "packages/core-library/versions/0.2.0/types/cable-instrumentation-1pair.json": "73c0cbb792c766e2c1c0e269b504c0fe7a3299345e977097ba97df479e5f5b97",
+    "packages/core-library/versions/0.2.0/types/cable-power-4core.json": "8609b19bdc8e0200e3d2a82cb95195fef150725c598d2a4bf09591264312abb4",
     "packages/core-library/versions/0.2.0/types/contactor-3p-1no.json": "2a0abcf4d6d5838973938029ed652d0403e2f91cb5216b9e727483ac625f5908",
     "packages/core-library/versions/0.2.0/types/control-transformer.json": "19052cb070ffdf17bde24dd370cfb488791f8bbf4d5b7719a08d0e09177e3c4b",
+    "packages/core-library/versions/0.2.0/types/cordset-sensor-4core.json": "10c76169d135e021a15c6355c585890d08fc978743660ed595be21cf94ed47f2",
+    "packages/core-library/versions/0.2.0/types/disconnect-3p.json": "98091fab7c97eee417b8da008bb15266d2c84eec12985637925a545ea02edccd",
     "packages/core-library/versions/0.2.0/types/estop-nc.json": "5f5defa1b1efeef54b184eb3f8a780a8ed3d8c7911fd54ef4bd2f3f258cec1a9",
     "packages/core-library/versions/0.2.0/types/fuse-1p.json": "3b32c818e8e5f5084ca9026d7fac6fd4acf74a4ec0d2aba7e2ab4fc257204df5",
     "packages/core-library/versions/0.2.0/types/fuse-2p.json": "0dfd78d5fbcb171841a36cc583bffdf14b1152bc42166995b00c71b299c75384",
     "packages/core-library/versions/0.2.0/types/fuse-3p.json": "9f54c4197d281f66a2ee6c2909cb7cd431fe37a9c3ba172154e100f485e9eb7a",
+    "packages/core-library/versions/0.2.0/types/hmi.json": "7aa7a7aa3d8d709c5a192e082aaab46ed0d006afe46add68cefc290ac566d78e",
     "packages/core-library/versions/0.2.0/types/junction-box-8.json": "13c39b5c2129dc6ef6fd122bca24b8b60748abd5de6aa15ce436593e28af397f",
+    "packages/core-library/versions/0.2.0/types/level-switch-no.json": "6fa2a3052a16acf82136262f814c957d72c3f2b6e145b3087007e960038d9966",
     "packages/core-library/versions/0.2.0/types/limit-switch-2wire.json": "d7959457809f61f05dc6a04c9963e7518e004aa9a6091fc6db2ef0e26c83394c",
     "packages/core-library/versions/0.2.0/types/motor-3ph.json": "e8c4ea912257127ba9d0fa259e49605719c7ccb9c83264678dc2903efdfefa2d",
     "packages/core-library/versions/0.2.0/types/overload-3p-1nc.json": "1d224e3c36472b50e8187e0bc4af650e104a3a9ab8f11fd30217c2da761b52d8",
     "packages/core-library/versions/0.2.0/types/pilot-light.json": "7a7f66562521dc1cb7420e7e2a6fac086bf1f5a25678fdb7380b7882f633e522",
+    "packages/core-library/versions/0.2.0/types/plc-8di-8do-2ai.json": "41eab2c50f7791032f8d93951710a3a6e78a2a055d15676a4b751a4a52c7fd7e",
     "packages/core-library/versions/0.2.0/types/plc-compact.json": "da43cfd29fcc84ea6de5167202293c50986e2283781e2870090d85acbda55ae9",
     "packages/core-library/versions/0.2.0/types/prox-pnp-3wire.json": "3d61bd06329779621f22259483d193136f7d70e70589813988e1e449344b8909",
     "packages/core-library/versions/0.2.0/types/psu-24vdc.json": "0aa882b6411e8ac106ea8059c8cebef0e76c148dfba2c681c6835e8c3f78088d",
@@ -185,7 +191,8 @@
     "packages/core-library/versions/0.2.0/types/selector-2pos.json": "5ac21d7521acdc6f772c14e4ef91a579958bcc2864a2257a5d3f78105b5eb6da",
     "packages/core-library/versions/0.2.0/types/supply-480v-3ph.json": "6850cd23107c9f63849d0510c6d379bc9215eaa22770bee9879ee7a71a438c7e",
     "packages/core-library/versions/0.2.0/types/terminal-block-8.json": "33bee95135c09cc9a51ea3ee35c7dd863466342b4e5d89a75bcf26f2f35f4248",
-    "packages/core-library/versions/0.2.0/types/terminal-pe.json": "ce82bc4fcc0557ca85bb0ca520457bfb0db050d143d9891dfb9154a70f14e4a1"
+    "packages/core-library/versions/0.2.0/types/terminal-pe.json": "ce82bc4fcc0557ca85bb0ca520457bfb0db050d143d9891dfb9154a70f14e4a1",
+    "packages/core-library/versions/0.2.0/types/transmitter-2wire-4-20ma.json": "c0d866d4026c2a838a94f18cce7bc88c03dadbb851f74410152215b2bbe060b9"
   },
   "format": "thermite-draw-corpus/2.0"
 }

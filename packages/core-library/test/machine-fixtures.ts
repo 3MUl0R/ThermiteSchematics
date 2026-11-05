@@ -82,6 +82,10 @@ export async function machineProbe(type: any, family: Family, key: string) {
         ...(pairs[i] ? {} : { usage: "spare" }),
       })),
     });
+    // A pair cable carries only two lanes; complete the other physical lanes
+    // with wires so cable rendering is tested independently of a missing phase.
+    for (const pair of pairs.slice(type.conductors.length))
+      wire(pair[0], pair[1]);
     if (family === "loads") loads();
   } else if (family === "power") {
     wire("SRC.L2", "M1.V");
@@ -137,6 +141,17 @@ export async function machineProbe(type: any, family: Family, key: string) {
     wire("PS1.-", `DUT.${b}`);
     if (family === "loads") loads();
     else request.root.value = "DUT";
+  } else if (
+    f.kind === "channel" &&
+    f.direction === "output" &&
+    f.terminals.length === 1 &&
+    type.symbol === "thermite:io-module"
+  ) {
+    wire("PS1.+", "DUT.L+");
+    wire("PS1.-", "DUT.M");
+    wire(`DUT.${a}`, "K1.A1");
+    wire("PS1.-", "K1.A2");
+    if (family === "loads") loads();
   } else if (f.kind === "channel" && type.symbol === "thermite:sensor-3wire") {
     wire("PS1.+", "DUT.1");
     wire("PS1.-", "DUT.3");
