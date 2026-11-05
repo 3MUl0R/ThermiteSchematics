@@ -309,6 +309,8 @@ export function assessDogfood({
       bindings,
     };
   });
+  // Only a PLC and its onboard analog-input role may share identities.
+  // Check every role pair: another shared role must not hide a mismatch.
   for (let i = 0; i < decisions.length; i++)
     for (let j = i + 1; j < decisions.length; j++) {
       const a = decisions[i],
@@ -318,7 +320,15 @@ export function assessDogfood({
         if (
           roles.length &&
           other?.length &&
-          !roles.some((role) => other.includes(role))
+          roles.some((role) =>
+            other.some(
+              (otherRole) =>
+                role !== otherRole &&
+                ![role, otherRole].every((r) =>
+                  ["plc", "analog-input"].includes(r),
+                ),
+            ),
+          )
         ) {
           a.pass = false;
           b.pass = false;
@@ -433,6 +443,23 @@ export function assessDogfood({
       )
     )
       expectedNames.add(object.designation);
+  const controllerTags = new Set(
+    decisions.flatMap((d) =>
+      [...d.bindings]
+        .filter(([, roles]) => roles.includes("plc"))
+        .map(([tag]) => tag),
+    ),
+  );
+  const separateAnalogTags = new Set(
+    decisions.flatMap((d) =>
+      [...d.bindings]
+        .filter(
+          ([tag, roles]) =>
+            roles.includes("analog-input") && !controllerTags.has(tag),
+        )
+        .map(([tag]) => tag),
+    ),
+  );
   return {
     pass:
       Object.entries(checks)
@@ -440,10 +467,15 @@ export function assessDogfood({
         .every(([, v]) => v === true) && checks.pdfV1V5 !== false,
     checks,
     requirements: decisions.map(({ row, bindings, ...d }) => d),
-    pending:
-      checks.pdfV1V5 === null
+    pending: [
+      ...(checks.pdfV1V5 === null
         ? ["PDF V1/V5 requires E3 or blinded visual judgement"]
-        : [],
+        : []),
+      ...[...separateAnalogTags].map(
+        (tag) =>
+          `Separate analog input ${tag}: its link to the controlling PLC is not verified by this checker. Judge the authored integration; no backplane or expansion relation is inferred.`,
+      ),
+    ],
     counts,
     rubricPending: true,
     expectedWarnings: [...expectedNames]
@@ -630,41 +662,87 @@ export function referenceDogfood(ctx) {
     wire("W-START-FEED", ep("PS1", "+"), ep("START1", "13")),
     wire("W-START-INPUT", ep("START1", "14"), ep("PLC1", "X1.1")),
   );
-  const noButton = structuredClone(
-    libraryTypes(ctx.project).find((t) => t.id === "core:limit-switch-2wire"),
-  );
-  delete noButton.library;
-  noButton.id = "eval:start-button-no";
-  noButton.symbol = "thermite:pushbutton";
-  noButton.description =
-    "Generic NO start pushbutton function using shipped generic contact terminal keys; selected-part physical pinout and actuator remain unverified.";
-  added.find((o) => o.designation === "START1").type = noButton.id;
-  added.find((o) => o.designation === "START1").description =
-    noButton.description;
-  write(join(ctx.project, "libraries/eval/library.json"), {
-    name: "eval",
-    version: "0.1.0",
-    sources: ["types.json"],
-  });
-  write(join(ctx.project, "libraries/eval/types.json"), { types: [noButton] });
-  const localManifest = read(join(ctx.project, "system.json"));
-  localManifest.libraries.push({
-    name: "eval",
-    version: "0.1.0",
-    path: "libraries/eval",
-  });
-  write(join(ctx.project, "system.json"), localManifest);
-  ok(ctx, "lock", ".");
-  if (pump)
-    added.find((o) => o.designation === "LS1").connectionReview = {
-      terminals: {
-        13: {
-          status: "deferred",
-          reason:
-            "LS1 is a generic limit contact. Level actuation and selected-part suitability are not established; core has no level-family model.",
+  if (!pump) {
+    const noButton = structuredClone(
+      libraryTypes(ctx.project).find((t) => t.id === "core:limit-switch-2wire"),
+    );
+    delete noButton.library;
+    noButton.id = "eval:start-button-no";
+    noButton.symbol = "thermite:pushbutton";
+    noButton.description =
+      "Generic NO start pushbutton function using shipped generic contact terminal keys; selected-part physical pinout and actuator remain unverified.";
+    added.find((o) => o.designation === "START1").type = noButton.id;
+    added.find((o) => o.designation === "START1").description =
+      noButton.description;
+    write(join(ctx.project, "libraries/eval/library.json"), {
+      name: "eval",
+      version: "0.1.0",
+      sources: ["types.json"],
+    });
+    write(join(ctx.project, "libraries/eval/types.json"), {
+      types: [noButton],
+    });
+    const localManifest = read(join(ctx.project, "system.json"));
+    localManifest.libraries.push({
+      name: "eval",
+      version: "0.1.0",
+      path: "libraries/eval",
+    });
+    write(join(ctx.project, "system.json"), localManifest);
+    ok(ctx, "lock", ".");
+  } else {
+    added.find((o) => o.designation === "START1").type = "core:pushbutton-no";
+    added.find((o) => o.designation === "START1").description =
+      "Generic NO start pushbutton; selected hardware and ratings remain unverified.";
+    const level = added.find((o) => o.designation === "LS1");
+    level.type = "core:level-switch-no";
+    level.description =
+      "Generic NO level contact; actuation level, process meaning and selected hardware remain unspecified.";
+    const cable = added.find((o) => o.designation === "CBL1");
+    cable.description =
+      "Pressure transmitter interface cable; both second-pair cores are explicit terminated spares.";
+    for (const core of cable.conductors)
+      core.usage = core.id.startsWith("2") ? "spare" : "in-use";
+    // Preserve two separate passive signal nets, following core's unpowered RM3
+    // interface example. Do not invent AI mode, current shunts or loop power.
+    const feed = added.find((o) => o.designation === "W-FLD-001");
+    feed.endpoints = [ep("TB1", "3"), ep("PLC1", "AI0-")];
+    feed.properties.label = "PRESSURE-AI0-";
+    const positive = added.find((o) => o.designation === "W-FLD-002");
+    positive.endpoints = [ep("JB1", "X1.1"), ep("PT1", "+")];
+    positive.properties.label = "PRESSURE-LOOP+";
+    const negative = added.find((o) => o.designation === "W-FLD-003");
+    negative.endpoints = [ep("PT1", "-"), ep("JB1", "X1.2")];
+    negative.properties.label = "PRESSURE-LOOP-";
+    const remove = new Set(["JP1", "W-CTL-003", "W-CTL-004"]);
+    for (let i = added.length - 1; i >= 0; i--)
+      if (remove.has(added[i].designation)) added.splice(i, 1);
+    for (const object of added)
+      for (const endpoint of object.endpoints ?? [])
+        if (endpoint?.device === "PLC1")
+          endpoint.terminal =
+            { "X1.0": "DI0", "X1.1": "DI1", "X2.0": "DO0" }[
+              endpoint.terminal
+            ] ?? endpoint.terminal;
+    added.push(
+      device("PT1", "core:transmitter-2wire-4-20ma", {
+        description:
+          "Brief's pressure measurement role, using the generic two-wire 4-20 mA interface; range, supply and compatibility not selected.",
+        connectionReview: {
+          terminals: {
+            "+": {
+              status: "deferred",
+              reason:
+                "Unpowered generic loop interface: select loop power, PLC AI mode and hardware compatibility before service; no electrical performance is asserted.",
+            },
+          },
         },
-      },
-    };
+      }),
+      wire("W-FLD-AI+", ep("TB1", "2"), ep("PLC1", "AI0+")),
+      wire("W-LEVEL-FEED", ep("PS1", "+"), ep("LS1", "13")),
+      wire("W-LEVEL-INPUT", ep("LS1", "14"), ep("PLC1", "DI0")),
+    );
+  }
   const stop = added.find((o) => o.designation === "PB1");
   if (!pump)
     stop.connectionReview = {
@@ -678,58 +756,11 @@ export function referenceDogfood(ctx) {
     };
   addSource(ctx, "reference-machine.json", added);
   if (pump) {
-    const core = libraryTypes(ctx.project).find(
-        (t) => t.id === locate(ctx.project, "PLC1").object.type,
-      ),
-      plc = structuredClone(core);
-    delete plc.library;
-    plc.id = "eval:plc-ethernet";
-    plc.symbol = "thermite:io-module";
-    plc.ports = {
-      ...(plc.ports ?? {}),
-      ETH: {
-        medium: "ethernet",
-        connector: "Unselected generic Ethernet interface",
-      },
-    };
-    plc.connectionCoverage = {
-      status: "partial",
-      notes:
-        "Logical Ethernet interface added to the generic PLC. Physical connector and hardware selection remain for review; analog input is not asserted.",
-    };
-    const hmi = {
-      kind: "device_type",
-      id: "eval:hmi",
-      description: "Generic logical Ethernet HMI; no physical pinout asserted",
-      terminals: {},
-      functions: {},
-      ports: {
-        ETH: {
-          medium: "ethernet",
-          connector: "Unselected generic Ethernet interface",
-        },
-      },
-      connectionCoverage: {
-        status: "partial",
-        notes:
-          "Physical power, bonding and connector pinout require selected-part documentation.",
-      },
-    };
-    write(join(ctx.project, "libraries/eval/library.json"), {
-      name: "eval",
-      version: "0.1.0",
-      sources: ["types.json"],
-    });
-    write(join(ctx.project, "libraries/eval/types.json"), {
-      types: [noButton, plc, hmi],
-    });
-    const manifest = read(join(ctx.project, "system.json"));
-
-    write(join(ctx.project, "system.json"), manifest);
-    ok(ctx, "lock", ".");
-    replaceObject(ctx, "PLC1", "type", plc.id);
+    replaceObject(ctx, "PLC1", "type", "core:plc-8di-8do-2ai");
     addSource(ctx, "hmi-network.json", [
-      device("HMI1", hmi.id),
+      device("HMI1", "core:hmi"),
+      wire("W-HMI-SUPPLY", ep("PS1", "+"), ep("HMI1", "L+")),
+      wire("W-HMI-RETURN", ep("PS1", "-"), ep("HMI1", "M")),
       {
         uid: "5abc7db2-853a-46e8-9ae8-9eab691b16ab",
         kind: "relation",
@@ -771,7 +802,30 @@ export function referenceDogfood(ctx) {
     const views = [
       view("M1", "power"),
       view("K1", "control"),
-      view("PS1", "loads"),
+      pump
+        ? {
+            format: "circuit-view-request/0.1",
+            title: "PS1 DC distribution",
+            groups: [
+              ["PLC1", ["W-CTL-001", "W-CTL-002"]],
+              ["HMI1", ["W-HMI-SUPPLY", "W-HMI-RETURN"]],
+            ].map(([designation, conductors]) => ({
+              id: designation.toLowerCase(),
+              label: `Generic supply to ${designation}; verify selected hardware ratings`,
+              functions: [
+                {
+                  device: { by: "designation", value: "PS1" },
+                  key: "dc_output",
+                },
+                {
+                  device: { by: "designation", value: designation },
+                  key: "supply",
+                },
+              ],
+              conductors,
+            })),
+          }
+        : view("PS1", "loads"),
       view("CBL1", "conductors"),
       {
         format: "wiring-view-request/0.1",
@@ -784,7 +838,22 @@ export function referenceDogfood(ctx) {
         conductors: ["W-START-FEED", "W-START-INPUT"],
       },
       ...(pump
-        ? [{ format: "communication-view-request/0.1", medium: "ethernet" }]
+        ? [
+            {
+              format: "wiring-view-request/0.1",
+              title: "Level contact to PLC input",
+              conductors: ["W-LEVEL-FEED", "W-LEVEL-INPUT"],
+            },
+            {
+              format: "signal-loop-view-request/0.1",
+              from: { device: "PT1", function: "signal" },
+              to: { device: "PLC1", function: "ai0" },
+              notes: [
+                "Unpowered generic interface; select loop power, AI mode and compatible hardware before service.",
+              ],
+            },
+            { format: "communication-view-request/0.1", medium: "ethernet" },
+          ]
         : []),
       ...ctx.task.deliverables.reports.map(docView),
     ];
@@ -849,6 +918,8 @@ export function referenceDogfood(ctx) {
     STOP: ["PB1"],
     COIL: ["PLC1", "K1"],
     LEVEL: ["LS1"],
+    TRANSMITTER: ["PT1"],
+    ANALOG: ["PLC1"],
     NETWORK: ["PLC1", "HMI1"],
     SENSOR: ["PX1"],
     JUNCTION: ["JB1"],
@@ -857,34 +928,6 @@ export function referenceDogfood(ctx) {
   const matrix = ctx.task.deliverables.requirements.map((requirement) => {
     const key = requirement.id.slice(2),
       names = mapping[key] ?? [];
-    if (pump && ["TRANSMITTER", "ANALOG", "CABLE"].includes(key))
-      return {
-        id: requirement.id,
-        status: "deferred",
-        designations:
-          key === "ANALOG" ? ["AI1"] : key === "TRANSMITTER" ? ["PT1"] : names,
-        evidence: {
-          summary:
-            key === "ANALOG"
-              ? "The installed core library has no reviewed analog-input model. No analog pin or current-loop correctness is invented; provide the optional library and reviewed input hardware."
-              : "The installed core library has no pressure-transmitter model. The existing multicore cable is drawn with an explicit spare for the level contact, but the pressure-transmitter hookup is not asserted. Supply the optional library and reviewed loop parts.",
-          libraryGap: requirement.allowedGap,
-          ...(["TRANSMITTER", "ANALOG"].includes(key)
-            ? { unmodeled: true }
-            : {}),
-        },
-      };
-    if (key === "LEVEL")
-      return {
-        id: requirement.id,
-        status: "deferred",
-        designations: names,
-        evidence: {
-          summary:
-            "LS1 uses the shipped generic limit-switch contact; core has no level-family type. Level actuation and selected-part suitability remain unresolved, not fulfilled by a generic contact.",
-          libraryGap: requirement.allowedGap,
-        },
-      };
     if (key === "PSU")
       return {
         id: requirement.id,
@@ -914,7 +957,7 @@ export function referenceDogfood(ctx) {
         designations: [],
         evidence: {
           summary:
-            "The conditional indicator is omitted: the installed core library has no lamp/stack-light type. No unsupported profile or unsourced physical pinout is invented.",
+            "The brief makes the indicator conditional. It is omitted from this reference; no selected lamp or stack-light hardware and ratings are asserted.",
         },
       };
     return {
@@ -923,18 +966,22 @@ export function referenceDogfood(ctx) {
       designations: names,
       evidence: {
         summary:
-          key === "START"
-            ? "The local generic NO pushbutton uses the required catalog profile and the shipped generic contact shape. Manufacturer selection and physical pinout remain unverified; no selected-part certification is asserted."
-            : ["FRICTION", "VISUAL", "GUIDE"].includes(key)
-              ? "See friction.md for observed output-generation results and the explicit pending visual inspection. This is not a visual-quality pass."
-              : `Validated source and regenerated packet show ${names.join(", ") || "the requested deliverables"}. See drawings/ and the guarded snapshot/review requests; no manufacturer certification is asserted.`,
+          pump && key === "ANALOG"
+            ? "PT1 is wired through the field cable and terminal strip to PLC1.AI0+/AI0-. The same PLC provides the digital control and HMI link. Loop power, input mode, ratings and hardware compatibility remain unselected."
+            : pump && key === "START"
+              ? "START1 uses the shipped generic NO pushbutton; no selected-part certification is asserted."
+              : key === "START"
+                ? "The local generic NO pushbutton uses the required catalog profile and the shipped generic contact shape. Manufacturer selection and physical pinout remain unverified; no selected-part certification is asserted."
+                : ["FRICTION", "VISUAL", "GUIDE"].includes(key)
+                  ? "See friction.md for observed output-generation results and the explicit pending visual inspection. This is not a visual-quality pass."
+                  : `Validated source and regenerated packet show ${names.join(", ") || "the requested deliverables"}. See drawings/ and the guarded snapshot/review requests; no manufacturer certification is asserted.`,
       },
     };
   });
   write(join(ctx.project, "requirement-matrix.json"), matrix);
   write(
     join(ctx.project, "friction.md"),
-    `Reference uses shipped generic models, not manufacturer-verified equipment. Wire gauge/color claims from the synthetic base were removed. ${pump ? "Pressure transmitter and analog-input definitions are absent from installed core; their hookup is explicitly deferred with reproducible inventory gaps. HMI power/pinout remain partial warnings." : "PNP wiring follows the shipped generic 1/3/4 model through JB1, CBL1 and TB1; physical selected-part review remains. The third PLC input for stop monitoring is deferred with W905. Conditional indicator is unavailable in installed core."} The generic NO pushbutton local type copies the shipped contact shape and declares the required profile; physical part selection is unverified. Pump LS1 is a specifically deferred level capability, not claimed fulfilled by its generic contact. All generated outputs succeeded without recovery calls. Tool-call and failure counts are in the run score. PS1 input is intentionally unwired: the starter feed is not designed, its input rating and branch protection are unverified (W905). Visual inspection of at least two outputs and PDF V1/V5 remain pending independent judgement.\n`,
+    `Reference uses shipped generic models, not manufacturer-verified equipment. Wire gauge/color claims from the synthetic base were removed. ${pump ? "Core 0.2.0 supplies the transmitter, analog-input PLC, level switch, NO start button and HMI. PT1 is drawn through JB1, CBL1 and TB1 into PLC1.AI0+/AI0-. PLC1 also drives the contactor and links to the HMI; there is no separate analog controller or invented backplane. The two-wire interface is unpowered, following the shipped RM3 interface example: loop power, AI mode, compatibility, range and physical hardware still require engineering selection. PLC1 and HMI1 DC supply magnitudes and interface ratings remain unspecified by their generic types; no compatibility certification is asserted. Level reference condition and actuation meaning are unspecified." : "PNP wiring follows the shipped generic 1/3/4 model through JB1, CBL1 and TB1; physical selected-part review remains. The third PLC input for stop monitoring is deferred with W905. Conditional indicator is omitted, rather than claimed unavailable in core."} ${pump ? "The pump uses shipped core types without authoring local types." : "The generic NO pushbutton local type copies the shipped contact shape and declares the required profile; physical part selection is unverified."} All generated outputs succeeded without recovery calls. Tool-call and failure counts are in the run score. PS1 input is intentionally unwired: the starter feed is not designed, its input rating and branch protection are unverified (W905). Visual inspection of at least two outputs and PDF V1/V5 remain pending independent judgement.\n`,
   );
   if (pump) {
     const bytes = readFileSync(join(ctx.project, "AGENTS.md")).length;

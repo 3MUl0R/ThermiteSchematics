@@ -18,6 +18,7 @@ try {
     }),
   );
 } catch (error) {
+  console.error(error.stack ?? error.message);
   console.log(
     JSON.stringify({
       type: "result",

@@ -277,10 +277,98 @@ it("start, stop and level cannot be replaced by power contacts or share a pushbu
     if (["P-START", "P-LEVEL"].includes(r.id)) r.designations = ["S2"];
   expect(assessDogfood(shared).pass).toBe(false);
 });
+it("the PLC's own analog input shares its designation across PLC, coil and network rows", () => {
+  const x = fixture("D-pump"),
+    plc = x.sourceObjects.find((o) => o.designation === "PLC1"),
+    type = x.types.find((t) => t.id === plc.type);
+  type.functions.analog = {
+    kind: "channel",
+    direction: "input",
+    terminals: ["AI0+", "AI0-"],
+  };
+  x.matrix.find((r) => r.id === "P-ANALOG").designations = ["PLC1"];
+  const result = assessDogfood(x);
+  expect(result.pass, JSON.stringify(result.requirements)).toBe(true);
+  for (const id of ["P-PLC", "P-COIL", "P-ANALOG", "P-NETWORK"])
+    expect(result.requirements.find((r) => r.id === id).pass, id).toBe(true);
+});
+it("a separate analog device gets a non-failing integration note", () => {
+  const result = assessDogfood(fixture("D-pump"));
+  expect(result.pass).toBe(true);
+  expect(result.pending).toContainEqual(
+    expect.stringContaining("Separate analog input AI1"),
+  );
+});
+it("an unrelated role pair still cannot share even a multifunction device", () => {
+  const x = fixture("D-pump"),
+    k = x.sourceObjects.find((o) => o.designation === "K1"),
+    type = x.types.find((t) => t.id === k.type);
+  type.functions.di = {
+    kind: "channel",
+    direction: "input",
+    terminals: ["DI"],
+  };
+  type.functions.do = {
+    kind: "channel",
+    direction: "output",
+    terminals: ["DO"],
+  };
+  x.matrix.find((r) => r.id === "P-PLC").designations = ["K1"];
+  expect(fitsRole(k, type, "plc")).toBe(true);
+  expect(fitsRole(k, type, "contactor")).toBe(true);
+  const result = assessDogfood(x);
+  expect(result.pass).toBe(false);
+  expect(result.requirements.find((r) => r.id === "P-PLC").pass).toBe(false);
+});
+it("overlapping roles cannot hide K1's PLC and contactor conflict", () => {
+  const x = fixture("D-pump"),
+    k = x.sourceObjects.find((o) => o.designation === "K1"),
+    type = x.types.find((t) => t.id === k.type);
+  type.terminals.DI = { role: "digital_input" };
+  type.terminals.DO = { role: "digital_output" };
+  type.functions.di = {
+    kind: "channel",
+    direction: "input",
+    terminals: ["DI"],
+  };
+  type.functions.do = {
+    kind: "channel",
+    direction: "output",
+    terminals: ["DO"],
+  };
+  x.matrix.find((r) => r.id === "P-COIL").designations = ["K1"];
+  expect(fitsRole(k, type, "plc")).toBe(true);
+  expect(fitsRole(k, type, "contactor")).toBe(true);
+  const result = assessDogfood(x);
+  expect(result.pass).toBe(false);
+  for (const id of ["P-COIL", "P-STARTER"])
+    expect(result.requirements.find((r) => r.id === id).pass, id).toBe(false);
+});
+it.each(["satisfied", "deferred"])(
+  "PS1 cannot stand in for a transmitter (%s)",
+  (status) => {
+    const x = fixture("D-pump"),
+      row = x.matrix.find((r) => r.id === "P-TRANSMITTER");
+    Object.assign(row, {
+      status,
+      designations: ["PS1"],
+      evidence: {
+        summary: "Pressure interface claimed on the power supply",
+        diagnostic: { code: "W905", designation: "PS1" },
+      },
+    });
+    x.diagnostics = [{ code: "W905", designation: "PS1", severity: "warning" }];
+    expect(
+      assessDogfood(x).requirements.find((r) => r.id === row.id).pass,
+    ).toBe(false);
+  },
+);
 it("a library-gap row names its own component, not an unrelated supply", () => {
   const x = fixture("D-pump"),
     row = x.matrix.find((r) => r.id === "P-TRANSMITTER"),
     req = x.task.deliverables.requirements.find((r) => r.id === row.id);
+  // External task catalogs can still declare a genuine capability gap.
+  req.allowedGap = { library: "core", capability: "pressure-transmitter" };
   row.status = "deferred";
   row.designations = ["PS1"];
   row.evidence = {
@@ -322,6 +410,7 @@ for (const directory of ["library", "versions/0.2.0"])
     const types = listedFiles(dir, manifest.sources).flatMap(
       (p) => JSON.parse(readFileSync(join(dir, p), "utf8")).types,
     );
+    const absent = new Set();
     for (const name of ["D-pump", "D-conveyor"]) {
       const task = fixture(name).task;
       for (const req of task.deliverables.requirements)
@@ -334,10 +423,11 @@ for (const directory of ["library", "versions/0.2.0"])
             fitsRole({ kind: "device" }, t, role),
           );
           if (!candidates.length) {
+            absent.add(role);
             expect(
-              req.obligation === "may" || req.allowedGap?.capability === role,
-              `${name} ${role}: missing capability must have an explicit gap`,
-            ).toBe(true);
+              directory,
+              `${name} ${role}: current core must supply every D capability`,
+            ).toBe("library");
             continue;
           }
           for (const type of candidates) {
@@ -357,6 +447,32 @@ for (const directory of ["library", "versions/0.2.0"])
           }
         }
     }
+    expect([...absent].sort()).toEqual(
+      directory === "library"
+        ? [
+            "analog-input",
+            "hmi",
+            "indicator",
+            "level-switch",
+            "pressure-transmitter",
+            "start-button",
+          ]
+        : [],
+    );
+    if (directory === "versions/0.2.0")
+      expect(
+        Math.max(
+          ...types.map(
+            (t) =>
+              Object.values(t.functions ?? {}).filter(
+                (f) =>
+                  f.kind === "channel" &&
+                  f.direction === "input" &&
+                  f.terminals?.length === 1,
+              ).length,
+          ),
+        ),
+      ).toBeGreaterThanOrEqual(3);
   });
 for (const [oldTag, newTag] of [
   ["TB1", "XT1"],
@@ -466,6 +582,15 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
+    expect(task.version).toBe("1.4.0");
+    expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
+      [],
+    );
+    expect(format).not.toContain("absent level capability");
+    expect(format).not.toContain("; gap:");
+    expect(format).toContain(
+      "plc and analog-input roles may share a designation",
+    );
     for (const row of task.deliverables.requirements.filter(
       (r) => r.allowedGap,
     )) {

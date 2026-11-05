@@ -19,9 +19,9 @@ import { snapshot, sha256 } from "./snapshot.mjs";
 import { auditErrors } from "./audit.mjs";
 import { score } from "./score-log.mjs";
 const engine = fileURLToPath(new URL("../../thermite.mjs", import.meta.url));
-// Review measured 8.8 s at load 45–47. Allow >2x that observed time for the
+// Review measured 12.09 s at load 46–51. Allow >2x that observed time for the
 // three real-CLI integrations, including direct Vitest's 5 s default case.
-const engineTestTimeout = 20000;
+const engineTestTimeout = 30000;
 let starter;
 afterAll(() => {
   if (starter) rmSync(starter.root, { recursive: true, force: true });
@@ -65,6 +65,48 @@ const lines = (path) =>
   existsSync(path)
     ? readFileSync(path, "utf8").split("\n").filter(Boolean).map(JSON.parse)
     : [];
+// The synthetic CLI prints the native error on one line. Bun's own unhandled
+// stack varies with its write path, so the fixture owns that presentation.
+// Canonicalize only this errno line; all other stderr bytes remain exact.
+function normalizePipeErrno(stderr) {
+  return stderr.replace(
+    /^pipe errno: (?:EPIPE|ENOTCONN) [+-]?\d+(?=\r?$)/gm,
+    "pipe errno: <closed>",
+  );
+}
+it.each([
+  "EPIPE -32",
+  "ENOTCONN -57",
+  "ENOTCONN -107",
+  "EPIPE -4047",
+  "EPIPE -99",
+  "EPIPE +32",
+  "ENOTCONN 0",
+])("closed-pipe errno is independent of the OS: %s", (errno) => {
+  expect(normalizePipeErrno(`prefix\npipe errno: ${errno}\nsuffix\n`)).toBe(
+    "prefix\npipe errno: <closed>\nsuffix\n",
+  );
+});
+it("pipe comparison preserves every byte outside the known errno line", () => {
+  const pipe = "prefix\npipe errno: <closed>\nsuffix\n";
+  const socket = pipe.replace("<closed>", "ENOTCONN -107");
+  expect(normalizePipeErrno(socket)).toBe(pipe);
+  const reset = socket.replace("ENOTCONN", "ECONNRESET");
+  expect(normalizePipeErrno(reset)).toBe(reset);
+  for (const changed of [
+    socket + "EPIPE: shim stack\n at eval-snapshot.mjs:1\n",
+    "extra\n" + socket,
+    socket.replace("pipe errno:", "another errno:"),
+    socket.replace("-107", "unknown"),
+    socket + "pipe errno: EPIPE -4047\n",
+  ])
+    expect(normalizePipeErrno(changed)).not.toBe(pipe);
+});
+it("errno normalization preserves CRLF bytes", () => {
+  expect(
+    normalizePipeErrno("prefix\r\npipe errno: ENOTCONN -107\r\nsuffix\r\n"),
+  ).toBe("prefix\r\npipe errno: <closed>\r\nsuffix\r\n");
+});
 it("unwritable audit paths never alter the real CLI streams or status", () => {
   const w = world(
     "process.stdout.write(Buffer.from([255,0,10]));process.stderr.write(Buffer.from([254,0,13]));process.exitCode=17;",
@@ -96,7 +138,7 @@ it("unwritable audit paths never alter the real CLI streams or status", () => {
 });
 it("closed downstream stdout preserves child stderr without a shim EPIPE stack", async () => {
   const w = world(
-    'process.stdout.write(Buffer.alloc(8*1024*1024,97));process.stderr.write("real-stderr\\n");',
+    'process.stdout.on("error",e=>{process.stderr.write("pipe errno: "+e.code+" "+e.errno+"\\n");process.exitCode=1;});process.stderr.write("real-stderr\\n");process.stdout.write(Buffer.alloc(8*1024*1024,97));',
   );
   w.env.THERMITE_EVAL_SCHEMA_VALIDATE = "0";
   const closeEarly = (entry) =>
@@ -122,7 +164,13 @@ it("closed downstream stdout preserves child stderr without a shim EPIPE stack",
       shim = await closeEarly(w.entry);
     expect(shim.prefix).toEqual(direct.prefix);
     expect(shim.status).toBe(direct.status);
-    expect(shim.error).toBe(direct.error);
+    expect(shim.status).toBe(1);
+    expect(normalizePipeErrno(direct.error)).toBe(
+      "real-stderr\npipe errno: <closed>\n",
+    );
+    expect(normalizePipeErrno(shim.error)).toBe(
+      normalizePipeErrno(direct.error),
+    );
     expect(shim.error).not.toContain("eval-snapshot");
   } finally {
     rmSync(w.root, { recursive: true, force: true });

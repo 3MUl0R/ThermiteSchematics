@@ -1,5 +1,6 @@
 import type { QueryError } from "@thermite/query";
 import type { RenderError } from "@thermite/render";
+import { LIBRARY_LOCK_FILE_NAME } from "@thermite/compiler";
 import { boundedAlternatives, formatAllowedValues } from "@thermite/schema";
 
 import type { AgentToolName } from "./contracts.js";
@@ -102,7 +103,7 @@ export function createA006Error(
   column: number,
 ): A006Error {
   const remedy =
-    file === "electrical-system.lock.json"
+    file === LIBRARY_LOCK_FILE_NAME
       ? "run thermite lock . to regenerate the lock, then validate"
       : "repair JSON syntax or duplicate keys with an ordinary edit, then validate and resume the guarded loop";
   return Object.freeze({

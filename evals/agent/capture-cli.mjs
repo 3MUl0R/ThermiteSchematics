@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { tmpdir } from "node:os";
 import { freshEnvironment, assertIsolation } from "./launch.mjs";
+import { normalizeUsageToday } from "./capture-normalization.mjs";
 const { values } = parseArgs({
   options: {
     agent: { type: "string", default: "codex" },
@@ -262,13 +263,7 @@ for (const name of cases) {
       if (key === "cwd") return "<work>";
       if (key === "messaging_socket_path") return "<socket>";
       if (typeof v === "string") {
-        const text =
-          name === "usage-today"
-            ? v.replace(
-                /(try again at )(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+(?:st|nd|rd|th), \d{4} )?(?:[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)(\.)/g,
-                (_, prefix, suffix) => prefix + "12:00 PM" + suffix,
-              )
-            : v;
+        const text = name === "usage-today" ? normalizeUsageToday(v) : v;
         return text
           .replaceAll(work, "<work>")
           .replaceAll(String(port), "<port>")

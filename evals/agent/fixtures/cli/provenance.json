@@ -197,5 +197,5 @@
   ],
   "claudeAuthMode": "API-key mode: dummy ANTHROPIC_API_KEY and loopback ANTHROPIC_BASE_URL",
   "claudeOAuthVerified": false,
-  "codexCaptureNormalization": "UTC; identifiers fixture-<field>; relative reset date/time canonicalized to 12:00 PM"
+  "codexCaptureNormalization": "UTC; identifiers fixture-<field>; relative reset time canonicalized to 12:00 PM, retaining a date prefix when the CLI emitted one"
 }

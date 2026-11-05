@@ -134,6 +134,14 @@ it("frozen dogfood briefs retain their bytes and are separated from the format a
         ),
       );
     expect(sha256(brief)).toBe(task.briefSha256);
+    expect(task.briefSha256).toBe(
+      {
+        "D-pump":
+          "585e1e565b5760b6f1f0aac64064ce81c4fd76a9772c5bab7fa0be213ecc9739",
+        "D-conveyor":
+          "6e44fca01f08fd24e9779c5ce0127db6fc8d2e8ed90ef6bc86f854f6d8b4e02b",
+      }[name],
+    );
     expect(task.prompt).toContain(brief);
     expect(task.prompt.indexOf("## Deliverable format")).toBeGreaterThan(
       task.prompt.indexOf(brief),

@@ -195,3 +195,87 @@ it.each([false, true])(
     }
   },
 );
+
+it.each(["default", "delegating", "strict"])(
+  "unrepairable manifests retain the loader diagnostic (loader=%s)",
+  async (loader) => {
+    const fixture = await validFixture();
+    try {
+      const input = await request(fixture);
+      const path = join(fixture.projectRoot, "system.json");
+      await writeFile(
+        path,
+        JSON.stringify({
+          ...JSON.parse(await readFile(path, "utf8")),
+          unexpected: true,
+        }),
+      );
+      const tool = createInternalApplySourcePatchTool(
+        {},
+        {
+          ...defaults,
+          ...(loader !== "default"
+            ? {
+                loadProject: (project: string | undefined, cwd: string) =>
+                  (loader === "delegating"
+                    ? loadProjectForSourcePatch
+                    : loadProject)(project, cwd),
+              }
+            : {}),
+        },
+      );
+      const result = await tool.applySourcePatch(input);
+      expect(result.ok).toBe(false);
+      expect(
+        result.diagnostics.some(
+          (d) => d.code === "E012" && d.file === "system.json",
+        ),
+      ).toBe(true);
+      expect(
+        result.diagnostics.some((d) =>
+          d.message.includes("injected loadProject"),
+        ),
+      ).toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  },
+);
+
+it.each([false, true])(
+  "duplicate uid repair explains strict loaders and accepts delegating loaders (capable=%s)",
+  async (capable) => {
+    const fixture = await validFixture();
+    try {
+      const path = join(fixture.projectRoot, sourceFile),
+        doc = JSON.parse(await readFile(path, "utf8"));
+      doc.objects.push({ ...doc.objects[0], designation: "DUPLICATE" });
+      await writeFile(path, JSON.stringify(doc));
+      const input = await request(fixture);
+      input.files[0]!.operations.push({
+        op: "remove",
+        path: `/objects/${doc.objects.length - 1}`,
+      });
+      const tool = createInternalApplySourcePatchTool(
+        {},
+        {
+          ...defaults,
+          loadProject: (project, cwd) =>
+            (capable ? loadProjectForSourcePatch : loadProject)(project, cwd),
+        },
+      );
+      const result = await tool.applySourcePatch(input);
+      expect(result.ok).toBe(capable);
+      if (!capable)
+        expect(
+          result.diagnostics.some(
+            (d) =>
+              d.code === "E020" &&
+              d.message.includes("delegate to loadProjectForSourcePatch"),
+          ),
+        ).toBe(true);
+    } finally {
+      await fixture.cleanup();
+    }
+  },
+);

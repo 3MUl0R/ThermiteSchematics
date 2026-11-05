@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.7.0)
+# Fresh-agent evaluator (E2 v1.8.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -244,13 +244,12 @@ headed **Deliverable format** appendix. The task prompt embeds the frozen bytes
 verbatim. Historical paths in the quoted brief are provenance; the appendix
 instructs the agent to use the supplied launcher in the already-initialized
 project. Every matrix ID quotes only the relevant verbatim clause, declares must/may and lists
-its roles. Roles use the engine SYMBOL_PROFILES catalog, alias resolver and library function metadata, tested against both installed core versions; start/stop use the pushbutton profile and NO/NC sense, level uses a level-family profile, and indicator uses the lamp profile. Notes never establish a role. Different roles require distinct designations. A generic limit-switch can only defer a specifically absent level capability, naming itself. Rows have `id`, `status`, `designations`, `evidence`; fixed statuses
+its roles. Roles use the engine SYMBOL_PROFILES catalog, alias resolver and library function metadata, tested against both installed core versions; start/stop use the pushbutton profile and NO/NC sense, level uses a level-family profile, and indicator uses the lamp profile. Notes never establish a role. Only the plc/analog-input pair may share a designation, when the PLC has that onboard function. Every other pair of different roles requires distinct designations. Core 0.2.0 supplies a level-family model; a generic limit-switch cannot stand in for it or claim that capability is absent. Rows have `id`, `status`, `designations`, `evidence`; fixed statuses
 are `satisfied`, `substituted`, `deferred`. Display wording/capitalization does
 not affect scoring.
 
 Satisfied/substituted rows must resolve to validated source and actual drawing
-appearances. A deferred must row needs non-empty source designations and either a final compiler diagnostic on its own named device fitting the requirement role, or
-the specified, independently checked library gap on its own subject. A proposed unmodeled component may be named for its own absent capability with evidence.unmodeled:true; an existing unrelated object cannot represent it. Optional conditional items
+appearances. A deferred must row needs non-empty source designations and a final compiler diagnostic on its own named device fitting the requirement role. D-task version 1.4.0 declares no library gaps: current core 0.2.0 supplies all eight previously listed capabilities, including a NO start button and a PLC with at least three DI. External task catalogs may still declare specific inventory-verified gaps; an existing unrelated object cannot represent a missing component. Optional conditional items
 may be deferred with a reason. Blanket `deferred: n/a` fails. Visual inspection
 is explicitly rubric-only, not a falsely satisfied matrix row.
 
@@ -262,10 +261,15 @@ regenerated from source; an agent-written `packet.json` is never authority.
 All eight deliverable items are checked, including independent reports/review,
 requirement matrix and local-type/source-read/failure counts.
 
+A separate analog device is not automatically a PLC expansion module. The checker's existing non-failing `pending` channel flags its integration for judge review; it does not verify a modeled link to the controlling PLC or infer a backplane. This is a known automation limit, not an additional must.
+
 The D references now model the generic starter, real field/start wiring,
-indexed packets, reports and guarded review. Pump pressure/analog hookup uses
-specific, reproducible installed-library gaps rather than invented pins.
-Conveyor stop monitoring retains W905 for the stock PLC input-capacity gap;
+indexed packets, reports and guarded review. The pump uses core 0.2.0's generic
+two-wire transmitter, analog-input PLC, level switch, NO pushbutton and HMI.
+PT1's passive two-wire interface runs through the field cable and terminal strip
+to PLC1.AI0+/AI0-, with explicit spare cores and a signal-loop drawing. The same PLC drives the contactor and connects to the HMI, following the shipped RM3 topology; the extra AI1 controller is removed. Loop power, AI mode, compatibility and
+selected hardware remain engineering selections; no operational loop is claimed.
+Conveyor stop monitoring retains W905 for the selected two-DI compact PLC's unfinished third input; core also supplies an eight-DI alternative.
 the conditional indicator is deferred with a reason. Both references leave PS1 AC input unwired and cite its own W905: no input rating or branch protection is invented. They exercise produce → guarded rendered-label change → regenerate, so final outputs match final sources. These are explicit gaps,
 not blanket fulfillment claims. Judges assess their adequacy and substitutions.
 
@@ -367,6 +371,10 @@ preserving continuous goldens. They are not runnable tasks here; H1/H2 remain
 scorer-owned. Any task/checker change bumps the eval version and requires
 previous-checkpoint replay before comparing scores.
 
+Eval 1.8.0 is the single bump over dev 1.7.0 for this PR: D tasks become 1.4.0, the PLC/onboard-AI sharing false negative is corrected, all eight obsolete gap entries are removed, and the reference uses L2's current core types. T3's guarded JSON-repair policy is unchanged; frozen briefs and briefSha256 remain identical. Re-run
+the full reference sweep on the selected engine commit before comparing results;
+the checkpoint identity gate prevents silently reusing 1.7.0 results.
+
 ## Verification
 
 ```sh
@@ -382,6 +390,11 @@ an unwritable audit path. Normal tests use synthetic transcripts, fake auth CLIs
 policy negatives and one reference pipeline smoke with checker-only recovery. Full reference,
 auth-readiness and sandbox probes stay outside the normal check. Verification
 timings and the final harness hash are recorded in the worktree's `PR.md`.
+The synthetic closed-pipe fixture prints the kernel code and errno on one line,
+because Bun's unhandled write stack can vary. Every exact errno
+line naming `EPIPE` or `ENOTCONN`, with any signed integer, is canonicalized to
+`pipe errno: <closed>` independently of the OS; every other stderr byte stays exact. The
+separate real-CLI pipe test retains the CLI's own error handling and exit code.
 
 ## G3 replay and event provenance
 
@@ -390,8 +403,7 @@ T3 changes that permission: eval 1.7.0 requires guarded schema repair and preser
 ordinary edits only for E002/E003 before-states. No model baseline existed at this
 version change; the complete local references are rerun before comparing scores. Required retrieval IDs now use `agent-requests` (formerly
 requests) and `report-filtering` (formerly reports), matching G3's topic index.
-The D briefs remain byte-for-byte frozen; appendices reflect decision 12's
-profile and deferral requirements.
+The D briefs remain byte-for-byte frozen; appendices reflect the profile requirements and decisions 26–27's onboard-AI sharing and current-core gap inventory.
 
 See [event provenance](fixtures/events/README.md) for verified versus inferred
 CLI shapes. The earlier gpt-5.4 capture was rejected for ChatGPT login
