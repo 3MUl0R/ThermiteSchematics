@@ -1,0 +1,668 @@
+{
+  "format": "operator-console-label-baseline/1.0",
+  "base": "d7f10b3439540b88a4546b1f754c44b763029b44",
+  "source": "Claude round-3 delta review, ownwire-all.json; independent original dev ink distances in mm",
+  "sourceSha256": "4ba02b3d60b95d513e960e5fa67ecc84dbae15306351cb065ae61a9da160f46a",
+  "rows": [
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "W-C01",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "W-C04",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "W-C05",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "W-C02",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "W-C03",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-001.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "W-C07",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "W-C08",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "W-C06",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "16 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "W-C09",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "W-C10",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-002.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-003.svg",
+      "text": "W-C12",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-003.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-003.svg",
+      "text": "W-C11",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-003.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "W-PE03",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "W-PE01",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "W-PE02",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "W-K2M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "W-K1A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "W-K2A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "W-K1M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-005.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "W-K4A",
+      "dev": 3.8923
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "W-K3A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "W-K4M",
+      "dev": 3.8923
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "W-K3M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-006.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "W-S2L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "24 AWG / Orange",
+      "dev": 7.358
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "W-S1P",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "W-S1L",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "24 AWG / Red",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "W-S2P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-007.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-S3P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-SLM",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "24 AWG / Yellow",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-S4P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-S4L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "24 AWG / Purple",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-S3L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "24 AWG / Green",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "W-SLP",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-left-to-right/sheet-008.svg",
+      "text": "24 AWG / Gray",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "W-C01",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "W-C04",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "W-C05",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "W-C02",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "16 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "W-C03",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-001.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "W-C07",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "16 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "W-C08",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "W-C06",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "16 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "W-C09",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "W-C10",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-002.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-003.svg",
+      "text": "W-C12",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-003.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-003.svg",
+      "text": "W-C11",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-003.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "W-PE03",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "W-PE01",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "W-PE02",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-004.svg",
+      "text": "14 AWG / Green/yellow",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "W-K2M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "W-K1A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "W-K2A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "W-K1M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-005.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "W-K4A",
+      "dev": 3.8923
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "W-K3A",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "W-K4M",
+      "dev": 3.8923
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "W-K3M",
+      "dev": 3.8844
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-006.svg",
+      "text": "18 AWG / Blue/white",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "W-S2L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "24 AWG / Orange",
+      "dev": 7.358
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "W-S1P",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "18 AWG / Blue",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "W-S1L",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "24 AWG / Red",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "W-S2P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-007.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-S3P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-SLM",
+      "dev": 7.792
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "24 AWG / Yellow",
+      "dev": 4.292
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-S4P",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "18 AWG / Blue",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-S4L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "24 AWG / Purple",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-S3L",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "24 AWG / Green",
+      "dev": 7.3593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "W-SLP",
+      "dev": 3.8593
+    },
+    {
+      "file": "operator-console-top-to-bottom/sheet-008.svg",
+      "text": "24 AWG / Gray",
+      "dev": 7.3593
+    }
+  ]
+}

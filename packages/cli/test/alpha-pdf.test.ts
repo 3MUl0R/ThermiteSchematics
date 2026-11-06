@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { inflateSync } from "node:zlib";
 import { readFile } from "node:fs/promises";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
-import { renderSchematicPacket } from "@thermite/render";
+import { renderSchematicPacket, unshapedPrintableFont } from "@thermite/render";
 import { packetPdf } from "../src/alpha-pdf.js";
 
 let ir: ElectricalIr;
@@ -433,7 +433,10 @@ describe("PDF painted typography parity", () => {
         kept.includes(t) ? t : "",
       ),
       reference =
-        sheet.svg.match(/<svg\b[^>]*>/u)![0] + kept.join("") + "</svg>",
+        sheet.svg.match(/<svg\b[^>]*>/u)![0] +
+        (sheet.svg.match(/<style>[\s\S]*?<\/style>/gu) ?? []).join("") +
+        kept.join("") +
+        "</svg>",
       x = Math.min(...kept.map((t) => Number(/ x="([^"]+)"/u.exec(t)![1]))),
       ys = kept.map((t) => Number(/ y="([^"]+)"/u.exec(t)![1])),
       // Generous enough for the complete line, including a pre-fix overflow.
@@ -746,7 +749,7 @@ it.skipIf(!rasterBrowser.browserPath)(
       page = await browser.newPage();
     try {
       await page.setContent(
-        `<style>@font-face{font-family:Arial;src:url(data:font/ttf;base64,${font})}</style>${result.value.sheets[0]!.svg}`,
+        `${result.value.sheets[0]!.svg}<style>@font-face{font-family:MetricProbe;src:url(data:font/ttf;base64,${font})}svg text{font-family:MetricProbe!important}</style>`,
       );
       await page.evaluate(() => document.fonts.ready);
       const issues = await page.evaluate(reportTextBoundsIssues);
@@ -896,8 +899,8 @@ it.skipIf(!rasterBrowser.browserPath).each(formatCases.slice(0, 3))(
   "matches browser visibility for default-ignorable text: %s",
   async (label, visible) => {
     const { readFile } = await import("node:fs/promises");
-    const font = (
-      await readFile("packages/cli/assets/fonts/NotoSans-Regular.ttf")
+    const font = unshapedPrintableFont(
+      await readFile("packages/render/assets/fonts/NotoSans-Regular.ttf"),
     ).toString("base64");
     const source = await packet("Browser formats"),
       sheet = source.sheets[0]!;

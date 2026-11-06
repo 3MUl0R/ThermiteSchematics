@@ -446,6 +446,36 @@ electrical connectivity. Two conductors plus one semantic attachment create an
 explicit junction; an isolated perpendicular crossing has neither a dot nor shared
 connectivity.
 
+Printable rooted and circuit families use the shared vocabulary in
+`symbols/printable-policy.ts`: rectangular coils, breaker blades with a cross,
+stepped thermal overload elements, and distinct NO/NC contact marks (NC has a
+stroke). Overload power elements resolve from authored power-input/output roles;
+auxiliary contacts resolve from their own contact state. Protection marks never
+inherit NC/NO captions. Coil AC/DC text comes only from its terminal ratings;
+motors carry M and carry 3~ only for a three-phase profile/function shape.
+`thermite:estop` and `thermite:selector` retain their parent pushbutton/switch
+support and add mushroom/latch and rotary/detent operator marks. Identity is
+never inferred from names, descriptions or designations. Rooted gang ink uses
+only authored same-device breaker associations, with aligned poles and a clear
+corridor; unaligned or obstructed associations are omitted. This changes no
+symbol bounds, port positions, ELK placement, nets or conductor accounting.
+
+All printable families use `Thermite Sans, Thermite Math, sans-serif`. The render
+package bundles the original Noto faces for exact advances and ink bounds. Labels
+print at natural width; compression is limited to 9%, and wider text widens its
+reservation. Conductor-facing ink stays inside its existing reserved clip, including the padding when needed after semantic reordering;
+text moves inside the existing clip, without moving a route or port. Serializable render/agent results contain family references only.
+CLI SVG file exports embed a deterministic document subset; HTML embeds one
+shared subset block in the head. Fontkit 2.0.4 selects glyphs and composite
+closure. OpenType layout tables (GPOS, GSUB, GDEF and legacy/AAT variants) are
+removed because the shared glyph model does not model those features. Exact
+metrics, browser delivery and PDFKit use the same feature-free faces; outlines,
+advances and hinting stay original. Pako 0.2.9 performs platform-independent JS
+compression. Each standalone SVG has a 61,440-byte font-block limit, checked at
+file delivery, across shipped examples and independently by E3. PDFKit embeds
+subsets of the feature-free source faces. The font parity test pins subset bytes and compares browser
+and PDF ink. No host font installation or network is required for file exports.
+
 No IEC 60617 artwork is copied, embedded, redistributed, or claimed. Existing
 `iec:*` library strings are semantic hints only, and this package makes no standards
 conformance claim.
@@ -589,9 +619,10 @@ edge-label coordinates are already global under `json.edgeCoords=ROOT`, so no ow
 offset is added. Missing, non-finite, out-of-range, non-orthogonal, disconnected,
 ambiguous, overlapping, T-intersecting, or colliding geometry returns R004 before SVG.
 
-Text boxes are computed without platform font measurement. Every text element carries
-deterministic `textLength` and the `spacingAndGlyphs` `lengthAdjust` to reserve inline
-advance and a stable per-label `clipPath` whose rectangle hard-bounds ink. SVG bytes,
+Text boxes are computed without platform font measurement. Rooted labels print
+at natural advance; only text that needs bounded compression gets `textLength`
+and `spacingAndGlyphs`. A stable per-label clip retains the reservation, while
+its opaque plate and validation use the same exact ink bounds. SVG bytes,
 not platform-identical glyph rasterization, are guaranteed.
 
 ## Text preflight and semantic IDs
@@ -731,8 +762,8 @@ The source and IR contracts remain `electrical-system/0.1` and
 For equivalent IR semantics, compiled presentation, normalized view, supported
 Bun/ELK runtime, and exported versions, the SVG string is byte-identical. Title
 content uses only project name, declared/default revision, normalized view identity,
-authored lines, and fixed product/renderer versions. Title measurement uses fixed
-code-point arithmetic; no platform font API participates.
+authored lines, and fixed product/renderer versions. Title measurement uses shared deterministic metrics within its existing
+code-point reservation; no platform font API participates.
 
 All consumed collections cross semantic boundaries as freshly sorted arrays. ELK
 receives a fresh deep DTO; results and summaries do not alias later renders. No

@@ -1,5 +1,6 @@
 import { spawn, execFile as execCallback } from "node:child_process";
 import { promisify } from "node:util";
+import { readFileSync } from "node:fs";
 import { mkdtemp, cp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -466,14 +467,21 @@ describe("Machine documentation pilot", () => {
         original = await readFile(source, "utf8");
       await writeFile(source, "{");
       await waitFor(() => log.includes('"E002"'));
-      expect(await readFile(output)).toEqual(first);
+      expect(Buffer.compare(await readFile(output), first)).toBe(0);
       const data = JSON.parse(original);
       data.objects.find(
         (o: any) => o.designation === "PLC1",
       ).io.channels.di0.signal = "Updated watch signal";
       await writeFile(source, JSON.stringify(data));
-      await waitFor(() => (log.match(/Wrote/g) ?? []).length >= 2);
-      expect(await readFile(output, "utf8")).toContain("Updated watch signal");
+      // Watch can report another successful render before observing this edit.
+      // Wait for the actual edited content, not an incidental write count.
+      await waitFor(() =>
+        readFileSync(output, "utf8").includes("Updated watch signal"),
+      );
+      expect(
+        (await readFile(output, "utf8")).includes("Updated watch signal"),
+        log,
+      ).toBe(true);
     } finally {
       await stop();
     }

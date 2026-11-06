@@ -155,6 +155,8 @@ export async function circuitDrafts(
         offset = spanning ? Math.max(...cursors) : cursors[column]!;
       }
       const draft = drafts.at(-1)!;
+      if (group.diagnostics?.length)
+        (draft.diagnostics ??= []).push(...group.diagnostics);
       draft.coverage!.push({
         kind: "circuit",
         group: group.id,

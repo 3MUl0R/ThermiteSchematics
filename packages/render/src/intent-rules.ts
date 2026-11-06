@@ -342,7 +342,7 @@ export function validateTraceRootRules(
 
 /** Catalog names and actual rule facts drive both admission and R001 advice. */
 export function acceptedTraceRoots() {
-  return TRACE_ROOT_RULES.map((rule) => {
+  const roots = TRACE_ROOT_RULES.map((rule) => {
     const alias = CORE_SYMBOL_BINDINGS.find(
       (binding) => binding.typeId === rule.typeId,
     )!;
@@ -363,6 +363,16 @@ export function acceptedTraceRoots() {
       })),
     };
   });
+  const parent = roots.find((r) => r.profile === "thermite:switch")!;
+  return [
+    ...roots,
+    {
+      ...parent,
+      profile: "thermite:selector",
+      aliases: [],
+      symbolId: "ais:selector-no" as const,
+    },
+  ];
 }
 export function acceptedTraceRootDescription(): string {
   return acceptedTraceRoots()

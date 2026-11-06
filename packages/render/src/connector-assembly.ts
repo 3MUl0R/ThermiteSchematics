@@ -51,7 +51,7 @@ const width = (s: string) =>
     0,
   );
 const text = (x: number, y: number, s: string, bold = false) =>
-  `<text x="${n(x)}" y="${n(y)}" font-family="Arial, Helvetica, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
+  `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
 function wrap(value: string, max = 48): string[] {
   const lines: string[] = [];
   let line = "";

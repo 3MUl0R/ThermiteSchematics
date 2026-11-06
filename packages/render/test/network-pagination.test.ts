@@ -12,7 +12,7 @@ import {
 import { renderSchematicPacket, type RenderedPacket } from "../src/sheets.js";
 let ir: ElectricalIr;
 const font = openSync(
-  resolve("packages/cli/assets/fonts/NotoSans-Regular.ttf"),
+  resolve("packages/render/assets/fonts/NotoSans-Regular.ttf"),
 );
 if (!("unitsPerEm" in font)) throw new Error("Expected a single font.");
 beforeAll(async () => {

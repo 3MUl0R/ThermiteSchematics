@@ -1,4 +1,4 @@
-import { sourceEnclosure } from "./printable-policy.js";
+import { sharedMarkPrimitives, sourceEnclosure } from "./printable-policy.js";
 import { validateSymbolCatalog } from "./validate.js";
 import type {
   SymbolDefinition,
@@ -83,27 +83,6 @@ function circle(
   style: SymbolStyle,
 ): SymbolPrimitive {
   return { kind: "circle", center: point(x, y), radius, style };
-}
-
-function arc(
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-  radiusX: number,
-  radiusY: number,
-  clockwise: boolean,
-  style: SymbolStyle,
-): SymbolPrimitive {
-  return {
-    kind: "arc",
-    from: point(fromX, fromY),
-    to: point(toX, toY),
-    radiusX,
-    radiusY,
-    clockwise,
-    style,
-  };
 }
 
 function symbol(
@@ -202,119 +181,49 @@ const CATALOG_DEFINITIONS = [
     40,
     20,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 10, 9, 10, "body"),
-      circle(12, 10, 3, "terminal"),
-      line(15, 9, 25, 5, "operator"),
-      circle(28, 10, 3, "terminal"),
-      line(31, 10, 40, 10, "body"),
-      polyline(
-        [
-          [19, 3],
-          [22, 1],
-          [25, 3],
-        ],
-        "actuator",
-      ),
-    ],
+    sharedMarkPrimitives("breaker"),
   ),
   symbol(
     "ais:contact-no",
     40,
     20,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 10, 10, 10, "body"),
-      circle(13, 10, 3, "terminal"),
-      line(16, 9, 24, 5, "operator"),
-      circle(27, 10, 3, "terminal"),
-      line(30, 10, 40, 10, "body"),
-    ],
+    sharedMarkPrimitives("contact-no"),
   ),
   symbol(
     "ais:contact-nc",
     40,
     20,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 10, 10, 10, "body"),
-      circle(13, 10, 3, "terminal"),
-      line(16, 9, 24, 10, "operator"),
-      circle(27, 10, 3, "terminal"),
-      line(30, 10, 40, 10, "body"),
-    ],
+    sharedMarkPrimitives("contact-nc"),
   ),
   symbol(
     "ais:pushbutton-no",
     40,
     28,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 14, 10, 14, "body"),
-      circle(13, 14, 3, "terminal"),
-      line(16, 13, 24, 9, "operator"),
-      circle(27, 14, 3, "terminal"),
-      line(30, 14, 40, 14, "body"),
-      line(20, 2, 20, 8, "actuator"),
-      line(15, 8, 25, 8, "actuator"),
-    ],
+    sharedMarkPrimitives("pushbutton-no"),
   ),
   symbol(
     "ais:pushbutton-nc",
     40,
     28,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 14, 10, 14, "body"),
-      circle(13, 14, 3, "terminal"),
-      line(16, 13, 24, 14, "operator"),
-      circle(27, 14, 3, "terminal"),
-      line(30, 14, 40, 14, "body"),
-      line(20, 2, 20, 8, "actuator"),
-      line(15, 8, 25, 8, "actuator"),
-    ],
+    sharedMarkPrimitives("pushbutton-nc"),
   ),
   symbol(
     "ais:switch-no",
     40,
     24,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 12, 10, 12, "body"),
-      circle(13, 12, 3, "terminal"),
-      line(16, 11, 24, 7, "operator"),
-      circle(27, 12, 3, "terminal"),
-      line(30, 12, 40, 12, "body"),
-      polyline(
-        [
-          [18, 3],
-          [21, 6],
-          [24, 3],
-        ],
-        "actuator",
-      ),
-    ],
+    sharedMarkPrimitives("switch-no"),
   ),
   symbol(
     "ais:switch-nc",
     40,
     24,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 12, 10, 12, "body"),
-      circle(13, 12, 3, "terminal"),
-      line(16, 11, 24, 12, "operator"),
-      circle(27, 12, 3, "terminal"),
-      line(30, 12, 40, 12, "body"),
-      polyline(
-        [
-          [18, 3],
-          [21, 6],
-          [24, 3],
-        ],
-        "actuator",
-      ),
-    ],
+    sharedMarkPrimitives("switch-nc"),
   ),
   symbol(
     "ais:switch-sensor-pnp",
@@ -346,56 +255,29 @@ const CATALOG_DEFINITIONS = [
     40,
     24,
     [port("A1", "west", 1 / 2, 0), port("A2", "east", 1 / 2, 1)],
-    [
-      line(0, 12, 8, 12, "body"),
-      rect(8, 4, 24, 16, "body", 8),
-      arc(12, 12, 20, 12, 4, 6, true, "operator"),
-      arc(20, 12, 28, 12, 4, 6, false, "operator"),
-      line(32, 12, 40, 12, "body"),
-    ],
+    sharedMarkPrimitives("coil"),
   ),
   symbol(
     "ais:overload-pole",
     40,
     20,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 10, 8, 10, "body"),
-      polyline(
-        [
-          [8, 10],
-          [13, 5],
-          [18, 15],
-          [23, 5],
-          [28, 15],
-          [32, 10],
-        ],
-        "operator",
-      ),
-      line(32, 10, 40, 10, "body"),
-    ],
+    sharedMarkPrimitives("overload"),
   ),
   symbol(
     "ais:overload-contact-nc",
     40,
     24,
     [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
-    [
-      line(0, 12, 10, 12, "body"),
-      circle(13, 12, 3, "terminal"),
-      line(16, 11, 24, 12, "operator"),
-      circle(27, 12, 3, "terminal"),
-      line(30, 12, 40, 12, "body"),
-      polyline(
-        [
-          [18, 3],
-          [20, 7],
-          [22, 3],
-          [24, 7],
-        ],
-        "actuator",
-      ),
-    ],
+    sharedMarkPrimitives("contact-nc").map((p) =>
+      p.kind === "line"
+        ? {
+            ...p,
+            from: { ...p.from, y: p.from.y + 2 },
+            to: { ...p.to, y: p.to.y + 2 },
+          }
+        : p,
+    ),
   ),
   symbol(
     "ais:motor-3ph",
@@ -432,9 +314,6 @@ const CATALOG_DEFINITIONS = [
       ),
       line(0, 84, 18, 84, "body"),
       circle(28, 48, 18, "body"),
-      arc(18, 43, 38, 43, 10, 6, true, "operator"),
-      line(18, 48, 38, 48, "operator"),
-      arc(18, 53, 38, 53, 10, 6, false, "operator"),
       line(18, 80, 18, 88, "annotation"),
       line(13, 88, 23, 88, "annotation"),
       line(15, 91, 21, 91, "annotation"),
@@ -519,6 +398,16 @@ validateSymbolCatalog(CATALOG_DEFINITIONS);
 // Additional shapes have their own port inventories; no absent PE or return pin
 // is synthesized to reuse a larger symbol.
 const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
+  ...(["estop-no", "estop-nc", "selector-no", "selector-nc"] as const).map(
+    (mark) =>
+      symbol(
+        `ais:${mark}`,
+        40,
+        mark.startsWith("estop") ? 28 : 24,
+        [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
+        sharedMarkPrimitives(mark),
+      ),
+  ),
   ...(
     [
       ["ais:motor-3ph", "ais:motor-3ph-unbonded"],
@@ -532,7 +421,7 @@ const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
       ports: base.ports.filter((p) => p.id !== "PE"),
       primitives:
         from === "ais:motor-3ph"
-          ? base.primitives.filter((_, i) => i !== 3 && i < 8)
+          ? base.primitives.filter((_, i) => i !== 3 && i < 5)
           : [
               ...sourceEnclosure(
                 { x: 2, y: 1, width: 28, height: 94 },

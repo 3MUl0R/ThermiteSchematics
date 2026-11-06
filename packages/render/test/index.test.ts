@@ -17,6 +17,7 @@ describe("render public API", () => {
       "renderSchematicPacket",
       "renderSchematicSheets",
       "supportsGlyph",
+      "unshapedPrintableFont",
     ]);
     expect(render.RENDERER_VERSION).toBe("render/0.3");
     expect(render.SYMBOL_CATALOG_VERSION).toBe("ais-symbols/0.3");

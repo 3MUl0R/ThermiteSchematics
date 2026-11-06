@@ -10,7 +10,7 @@ export function text(
   anchor = "start",
   weight = 400,
 ): string {
-  return `<text x="${n(x)}" y="${n(y)}" font-family="Arial, Helvetica, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b">${xml(value)}</text>`;
+  return `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b">${xml(value)}</text>`;
 }
 export function line(
   x1: number,

@@ -124,6 +124,7 @@ async function drawingDraftsCandidate(
     undefined,
     true,
     scale,
+    ir,
   );
   if (!emitted.ok) return emitted;
   const inner = emitted.value

@@ -83,3 +83,39 @@ a claim of compliance with a particular symbol standard. The
 marks, separate PE, an explicit primary jumper, and a twelve-pin interface in
 both flows. The maximum generic interface size is 32 pins; readable paper fit is
 still checked and can return R006.
+
+## Shared printable vocabulary
+
+Rooted and circuit views use independently authored, IEC-informed marks from the
+printable policy. A coil is a rectangle; AC/DC appears only from its authored
+coil-terminal voltage class. A breaker uses a blade and cross without inferred
+trip technology. Aligned authored breaker gangs get a nonconductive mechanical
+link where the corridor is clear. Overload power poles use a stepped thermal
+element; their auxiliary contact uses its own authored normal state. Protection
+elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
+
+Motor marks carry M, with 3~ only for a three-phase profile or a function with
+explicit U/V/W phase-input roles. A three-terminal L/N/PE function does not
+establish three phases.
+Core 0.2.0's `estop-nc` uses `thermite:estop` (mushroom head and latch), and
+`selector-2pos` uses `thermite:selector` (rotary handle and maintained detents).
+They inherit the function/family support of `thermite:pushbutton` and
+`thermite:switch`. Custom types opt in by profile; tags and descriptions do not
+select operator identity. Core 0.1.0 source bytes stay frozen.
+
+Both families use bundled Noto Sans Regular/Bold, plus Noto Sans Math for missing
+mathematical glyphs. R2's shared model bounds individual glyphs; it models no
+OpenType positioning or substitution features. GPOS, GSUB, GDEF and legacy/AAT
+layout tables are removed from the faces used for exact metrics, SVG/HTML WOFF
+subsets and PDFKit. Glyph outlines, advances and hinting are unchanged; PDFKit
+embeds its own subsets of those feature-free faces. Unicode fallback positioning
+and NFC normalization remain; no OpenType shaping feature is delivered.
+Rooted labels use natural advance or compression down to 0.91. Necessary caption
+reservations and containing node widths widen; the complete slot list is recorded
+in the R4 handoff. Symbol bounds and electrical ports stay fixed. The opaque
+plate uses the same exact ink box as validation. No artwork is copied and no
+standards compliance or safety performance is claimed.
+
+Breaker auxiliary captions are placed beside their owning contact and checked
+against nearby ink. If no clear position fits, the renderer omits the redundant
+NO/NC caption and reports `W907`; the contact mark still shows the authored state.

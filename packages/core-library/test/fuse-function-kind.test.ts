@@ -61,7 +61,7 @@ for (const poles of [1, 2, 3])
           expect(actual.ok).toBe(true);
           if (!original.ok || !actual.ok)
             throw Error(JSON.stringify([original, actual]));
-          expect(original.value.svg.match(/>NC<\/text>/g)).toHaveLength(1);
+          expect(original.value.svg).not.toContain(">NC</text>");
           expect(actual.value.svg).not.toContain(">NC</text>");
           expect(fuseGlyphs(actual.value.svg)).toHaveLength(1);
           expect(fuseGlyphs(actual.value.svg)).toEqual(

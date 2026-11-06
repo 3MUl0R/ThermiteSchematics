@@ -266,7 +266,7 @@
   },
   {
     "type": "estop-nc",
-    "profile": "thermite:pushbutton",
+    "profile": "thermite:estop",
     "bindings": {
       "circuit": ["contact11"],
       "power": [],
@@ -907,7 +907,7 @@
   },
   {
     "type": "selector-2pos",
-    "profile": "thermite:switch",
+    "profile": "thermite:selector",
     "bindings": {
       "circuit": ["contact13"],
       "power": [],

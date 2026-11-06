@@ -432,8 +432,8 @@ export async function verifyRuntimeArchive(
         assert.equal(first.subarray(0, 5).toString(), "%PDF-");
         assert.match(
           first.toString("latin1"),
-          /NotoSansMono-Regular/,
-          "Embedded monospace for rooted view text",
+          /\/BaseFont\s+\/[A-Z]{6}\+NotoSans-Regular\b/,
+          "Embedded Noto Sans primary face for rooted view text",
         );
         assert.match(
           first.toString("latin1"),

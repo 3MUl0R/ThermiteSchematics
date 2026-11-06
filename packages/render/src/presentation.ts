@@ -4,6 +4,7 @@ import {
   graphSemanticOrder,
   type SemanticOrder,
 } from "./semantic-order.js";
+import { printableSlotWidth } from "./symbols/printable-font.js";
 import { symbolProfile } from "./symbols/profiles.js";
 import { printableCaption } from "./symbols/printable-policy.js";
 import {
@@ -241,7 +242,10 @@ function orientedSymbolSize(
 }
 
 function labelWidth(text: string): number {
-  return Math.max(12, Number((6 + 6.2 * [...text].length).toFixed(3)));
+  return printableSlotWidth(
+    text,
+    Math.max(12, Number((6 + 6.2 * [...text].length).toFixed(3))),
+  );
 }
 
 function textSource(

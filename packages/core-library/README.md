@@ -141,10 +141,12 @@ phase or polarity; a DC circuit can therefore use 1/L1–2/T1. Relay
 H1/H2/X1/X2 are generic terminal conventions. PE and cable L1/L2/L3/PE are
 logical protective-earth/phase labels. None is a manufacturer's pinout, a color
 assignment or a rating. The changeover shares common 11 between two contact
-functions; relationships never join nets. Maintained operator behavior is stated
-in prose because the schema does not model state retention or safety performance.
-E-stop and selector glyphs are identical to the ordinary NC pushbutton and NO
-switch glyphs; mushroom/latching and maintained-selector identity are not drawn.
+functions; relationships never join nets. Maintained behavior is descriptive; the schema does not simulate state retention
+or safety performance. Core 0.2.0 uses `thermite:estop` for a mushroom-head
+operator with a latch mark and `thermite:selector` for a maintained rotary
+selector with detents. Both retain their parent pushbutton/switch function and
+family support. Custom types opt in through `symbol`; names and descriptions
+do not select operator identity. Core 0.1.0 bytes remain frozen.
 
 Every device except the two-wire transmitter can be drawn in circuit views and
 schematic packets. The transmitter currently has signal-loop support only. Rooted support

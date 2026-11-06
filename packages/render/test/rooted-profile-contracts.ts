@@ -135,8 +135,8 @@ export const ROOTED_CONTRACTS: Readonly<
       c(
         "contact-closed",
         shape("contact", 2),
-        "ais:breaker-pole",
-        "breaker-pole",
+        "ais:contact-nc",
+        "power-contact",
         [],
         true,
       ),
@@ -268,6 +268,34 @@ export const ROOTED_CONTRACTS: Readonly<
         shape("contact", 2),
         "ais:pushbutton-no",
         "command-contact",
+        [],
+        true,
+      ),
+    ],
+    loads: [],
+  },
+  "thermite:estop": {
+    power: [],
+    control: [
+      c(
+        "contact-open",
+        shape("contact", 2),
+        "ais:estop-no",
+        "command-contact",
+        [],
+        true,
+      ),
+    ],
+    loads: [],
+  },
+  "thermite:selector": {
+    power: [],
+    control: [
+      c(
+        "contact-open",
+        shape("contact", 2),
+        "ais:selector-no",
+        "permissive-contact",
         [],
         true,
       ),

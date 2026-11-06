@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { orderingMetrics } from "./layout-metrics.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ElectricalIr } from "@thermite/compiler";
@@ -9,7 +10,6 @@ import { renderSchematicPacket } from "../src/sheets.js";
 import { sideBranch } from "./profile-side-branch-fixture.js";
 import { preflightRootedProfiles } from "../src/preflight.js";
 import { projectDeviceTypeSymbolMappings } from "../src/symbols/mappings.js";
-import { createHash } from "node:crypto";
 let ir: ElectricalIr;
 beforeAll(async () => {
   ir = await compileCoreFixture();
@@ -273,6 +273,14 @@ describe("render profile preflight", () => {
                 ].join("|")
               ],
             );
+          const profiled = structuredClone(copy);
+          const unused = profiled.deviceTypes.find(
+            (t) => t.id === "local:pe-bar",
+          )!;
+          unused.symbol = "thermite:terminal-strip";
+          const reference = await renderSchematic(profiled, view);
+          expect(reference.ok, JSON.stringify(reference)).toBe(true);
+          expect(rendered).toEqual(reference);
         }
       }
     },

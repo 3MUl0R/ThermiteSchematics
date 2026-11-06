@@ -1,3 +1,4 @@
+import { embedPrintableFont } from "../src/printable-font.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -656,7 +657,7 @@ describe("M6 Task 6 thin view request mapping", () => {
 });
 
 describe("M5 Task 8 atomic render output", () => {
-  it("writes exact renderer bytes, replaces successfully, and leaves no temp file", async () => {
+  it("writes renderer bytes with one delivery font subset, replaces successfully, and leaves no temp file", async () => {
     const root = await temporaryRoot();
     const output = join(root, "diagram.svg");
     const expected = await readFile(
@@ -676,7 +677,9 @@ describe("M5 Task 8 atomic render output", () => {
     ]);
 
     expect(result).toEqual({ exitCode: 0, stdout: "", stderr: motorHuman });
-    expect(await readFile(output)).toEqual(expected);
+    expect(await readFile(output, "utf8")).toEqual(
+      embedPrintableFont(expected.toString("utf8")),
+    );
     expect(await readdir(root)).toEqual(["diagram.svg"]);
   });
 
@@ -771,13 +774,20 @@ describe("M5 Task 8 atomic render output", () => {
     expect(parsed.artifact).not.toHaveProperty("svg");
     expect(result.stderr).toBe(report(motorDiagnostics, null));
     expect(await readFile(join(root, outputOption))).toEqual(
-      await readFile(join(rendererGoldenRoot, "k1-control-left-to-right.svg")),
+      Buffer.from(
+        embedPrintableFont(
+          await readFile(
+            join(rendererGoldenRoot, "k1-control-left-to-right.svg"),
+            "utf8",
+          ),
+        ),
+      ),
     );
   });
 });
 
 describe("M6 Task 6 atomic view output", () => {
-  it("writes exact renderer bytes and emits view file JSON", async () => {
+  it("writes renderer bytes with a delivery font subset and emits view file JSON", async () => {
     const root = await temporaryRoot();
     const outputOption = "ps1 loads.svg";
     const result = await invoke(
@@ -807,7 +817,14 @@ describe("M6 Task 6 atomic view output", () => {
     expect(result.stdout).not.toContain("<svg");
     expect(result.stderr).toBe(report(motorDiagnostics, null));
     expect(await readFile(join(root, outputOption))).toEqual(
-      await readFile(join(rendererGoldenRoot, "ps1-loads-left-to-right.svg")),
+      Buffer.from(
+        embedPrintableFont(
+          await readFile(
+            join(rendererGoldenRoot, "ps1-loads-left-to-right.svg"),
+            "utf8",
+          ),
+        ),
+      ),
     );
     expect(await readdir(root)).toEqual([outputOption]);
   });
@@ -2027,7 +2044,7 @@ describe("M6 Task 6 view subprocess stream and exit matrix", () => {
         stderr: motorHuman,
       });
       expect(await readFile(rawOutput, "utf8")).toBe(
-        '<svg data-subprocess-view="true"></svg>\n',
+        embedPrintableFont('<svg data-subprocess-view="true"></svg>\n'),
       );
       expect(results.jsonInline!.exitCode).toBe(0);
       expect(JSON.parse(results.jsonInline!.stdout)).toMatchObject({
@@ -2053,7 +2070,7 @@ describe("M6 Task 6 view subprocess stream and exit matrix", () => {
       });
       expect(results.jsonFile!.stderr).toBe(report(motorDiagnostics, null));
       expect(await readFile(jsonOutput, "utf8")).toBe(
-        '<svg data-subprocess-view="true"></svg>\n',
+        embedPrintableFont('<svg data-subprocess-view="true"></svg>\n'),
       );
       expect(results.compilerDiagnostic).toEqual({
         exitCode: 1,

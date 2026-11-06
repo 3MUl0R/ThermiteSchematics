@@ -697,7 +697,7 @@ const module: FactModule = {
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({
-          pole1: "contact-nc",
+          pole1: "overload",
           aux95: "contact-nc",
         });
         expect(marks(sheet(after, "Overload").svg)).toMatchObject({

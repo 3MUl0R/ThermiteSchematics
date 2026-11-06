@@ -521,6 +521,28 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     ],
   },
   {
+    id: "thermite:estop",
+    notes:
+      "Latching mushroom-head emergency-stop operator with authored contact state. The profile declares operator identity, not safety performance or simulated retention.",
+    aliases: [],
+    coreAliases: [],
+    support: [
+      ...rooted([], [CONTACT], []),
+      { family: "circuit", role: "function", functions: [BUS, CONTACT] },
+    ],
+  },
+  {
+    id: "thermite:selector",
+    notes:
+      "Maintained rotary selector; authored contact state, without simulated retention.",
+    aliases: [],
+    coreAliases: [],
+    support: [
+      ...rooted([], [CONTACT], []),
+      { family: "circuit", role: "function", functions: [BUS, CONTACT] },
+    ],
+  },
+  {
     id: "thermite:thermocouple",
     notes: "Two-terminal other function representing the sensor interface.",
     aliases: [],

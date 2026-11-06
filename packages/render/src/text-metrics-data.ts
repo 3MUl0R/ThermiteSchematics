@@ -2,15 +2,15 @@
 // Deflated unsigned varints: delta code point, envelope, ascent, descent (1/10000 em), drawable embedded-face mask.
 export const metricSources: readonly { source: string; sha256: string }[] = [
   {
-    source: "packages/cli/assets/fonts/NotoSans-Regular.ttf",
+    source: "packages/render/assets/fonts/NotoSans-Regular.ttf",
     sha256: "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
   },
   {
-    source: "packages/cli/assets/fonts/NotoSans-Bold.ttf",
+    source: "packages/render/assets/fonts/NotoSans-Bold.ttf",
     sha256: "c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a",
   },
   {
-    source: "packages/cli/assets/fonts/NotoSansMath-Regular.ttf",
+    source: "packages/render/assets/fonts/NotoSansMath-Regular.ttf",
     sha256: "80b61fd613d3519197e64fff6f7e71fdc7f3e6526440ea4115b554ef7fd59af7",
   },
   {

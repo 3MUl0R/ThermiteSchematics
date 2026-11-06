@@ -28,10 +28,11 @@
     "@thermite/render": "0.2.0",
     "@thermite/schema": "0.2.0",
     "commander": "^15.0.0",
-    "fontkit": "^2.0.4",
+    "fontkit": "2.0.4",
     "micromatch": "^4.0.8",
     "pdfkit": "^0.17.2",
-    "svg-to-pdfkit": "^0.1.8"
+    "svg-to-pdfkit": "^0.1.8",
+    "pako": "0.2.9"
   },
   "devDependencies": {
     "mdast-util-from-markdown": "^2.1.0"

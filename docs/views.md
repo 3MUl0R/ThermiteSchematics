@@ -218,3 +218,9 @@ The existing conductor-root distinction is intentional: `thermite view PS1
 --conductors` returns Q002 because cable lookup found a device. Other rooted
 mode/mapping mismatches use R001. Resolve an actual cable before selecting its
 conductors.
+
+A standalone SVG whose embedded font subset exceeds 60 KiB returns `R007`
+(exit 1), including the required and allowed bytes; export `.html` or `.pdf`
+instead. Packet HTML whose font block exceeds 500 KiB returns `R007`; export
+`.pdf` instead. The CLI writes no file on either refusal. JSON and agent results
+remain font-free.

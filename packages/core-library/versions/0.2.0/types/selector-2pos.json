@@ -23,7 +23,7 @@
         }
       },
       "internal_relations": [],
-      "symbol": "thermite:switch",
+      "symbol": "thermite:selector",
       "connectionCoverage": {
         "status": "generic",
         "notes": "Reviewed generic interface: Single pair 13/14 is required; position 0 is the declared normal state (open), position 1 closes the maintained contact. Position retention is descriptive, not simulated. Optional: none in this interface. Unmodeled: extra poles/positions, illumination and bonding. Select hardware and add applicable ratings; markings are a generic convention, not a manufacturer pinout."

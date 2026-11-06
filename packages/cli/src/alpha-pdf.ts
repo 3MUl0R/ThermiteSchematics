@@ -1,3 +1,6 @@
+import { bundledFontUrl } from "./font-assets.js";
+import { readFileSync } from "node:fs";
+import { unshapedPrintableFont } from "@thermite/render";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit";
@@ -203,18 +206,10 @@ export async function packetPdf(
   packet: RenderedPacket,
   title: string,
 ): Promise<Buffer> {
-  const regular = fileURLToPath(
-    new URL("../assets/fonts/NotoSans-Regular.ttf", import.meta.url),
-  );
-  const bold = fileURLToPath(
-    new URL("../assets/fonts/NotoSans-Bold.ttf", import.meta.url),
-  );
-  const math = fileURLToPath(
-    new URL("../assets/fonts/NotoSansMath-Regular.ttf", import.meta.url),
-  );
-  const mono = fileURLToPath(
-    new URL("../assets/fonts/NotoSansMono-Regular.ttf", import.meta.url),
-  );
+  const regular = fileURLToPath(bundledFontUrl("NotoSans-Regular"));
+  const bold = fileURLToPath(bundledFontUrl("NotoSans-Bold"));
+  const math = fileURLToPath(bundledFontUrl("NotoSansMath-Regular"));
+  const mono = fileURLToPath(bundledFontUrl("NotoSansMono-Regular"));
   const svgs = packet.sheets.map((sheet) =>
     withPdfFontFallback(
       withPdfLabelClips(sheet.svg, sheet.number),
@@ -262,10 +257,13 @@ export async function packetPdf(
   });
   const warnings: string[] = [];
   try {
-    doc.registerFont("ThermiteRegular", regular);
-    doc.registerFont("ThermiteBold", bold);
-    doc.registerFont("ThermiteMath", math);
-    doc.registerFont("ThermiteMono", mono);
+    doc.registerFont(
+      "ThermiteRegular",
+      unshapedPrintableFont(readFileSync(regular)),
+    );
+    doc.registerFont("ThermiteBold", unshapedPrintableFont(readFileSync(bold)));
+    doc.registerFont("ThermiteMath", unshapedPrintableFont(readFileSync(math)));
+    doc.registerFont("ThermiteMono", unshapedPrintableFont(readFileSync(mono)));
     const width = (packet.page.widthMm * 72) / 25.4,
       height = (packet.page.heightMm * 72) / 25.4;
     for (const [index, sheet] of packet.sheets.entries()) {

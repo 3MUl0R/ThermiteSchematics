@@ -1,3 +1,4 @@
+import { symbolProfile } from "./profiles.js";
 import type { IrFunction, IrDeviceType } from "@thermite/compiler";
 import type {
   SymbolDefinition,
@@ -23,7 +24,21 @@ export type PrintableMark = SymbolDefinition["id"] | `circuit:${string}`;
 export type GlyphWords = Readonly<
   Partial<Record<PrintableMark, readonly FunctionWord[]>>
 >;
-const GLYPH_WORDS: GlyphWords = Object.freeze({});
+const GLYPH_WORDS: GlyphWords = Object.freeze({
+  "ais:motor": ["motor"] as const,
+  "ais:motor-3ph": ["motor"] as const,
+  "ais:motor-3ph-unbonded": ["motor"] as const,
+});
+// Legacy electrical models use contact/2 for protection poles. Their printable
+// marks represent protection elements, not NO/NC contact state.
+const PROTECTION_MARKS = new Set<PrintableMark>([
+  "ais:breaker-pole",
+  "ais:overload-pole",
+  "ais:fuse",
+  "circuit:breaker",
+  "circuit:overload",
+  "circuit:fuse",
+]);
 
 /** Physical ink dimensions; rooted drawing units are converted at composition time. */
 export const PRINTABLE_SYMBOL_POLICY = Object.freeze({
@@ -128,10 +143,9 @@ export function printableCaption(
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "function": {
-      const word =
-        caption.mark === "ais:motor"
-          ? "motor"
-          : functionWord(caption.fn, caption.type);
+      if (PROTECTION_MARKS.has(caption.mark)) return "";
+      if (caption.mark === "ais:motor") return "";
+      const word = functionWord(caption.fn, caption.type);
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "channel":
@@ -231,4 +245,177 @@ export function sourceEnclosure(
     }
     return lines;
   });
+}
+
+/** Independently authored, IEC-informed marks. Coordinates are rooted units;
+ * circuit marks scale the same primitives, never reinterpret their meaning. */
+export type SharedMark =
+  | "coil"
+  | "breaker"
+  | "overload"
+  | "contact-no"
+  | "contact-nc"
+  | "pushbutton-no"
+  | "pushbutton-nc"
+  | "switch-no"
+  | "switch-nc"
+  | "estop-no"
+  | "estop-nc"
+  | "selector-no"
+  | "selector-nc";
+export function sharedMarkHeight(mark: SharedMark): number {
+  return mark.startsWith("pushbutton") || mark.startsWith("estop")
+    ? 28
+    : mark === "coil" ||
+        mark.startsWith("switch") ||
+        mark.startsWith("selector")
+      ? 24
+      : 20;
+}
+export function sharedMarkPrimitives(
+  mark: SharedMark,
+): readonly SymbolPrimitive[] {
+  const h = sharedMarkHeight(mark),
+    y = h / 2;
+  const line = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    style: "body" | "operator" | "actuator" = "body",
+  ): SymbolPrimitive => ({
+    kind: "line",
+    from: { x: x1, y: y1 },
+    to: { x: x2, y: y2 },
+    style,
+  });
+  const poly = (
+    points: readonly (readonly [number, number])[],
+    style: "operator" | "actuator" = "operator",
+  ): SymbolPrimitive => ({
+    kind: "polyline",
+    points: points.map(([x, y]) => ({ x, y })),
+    style,
+  });
+  const rect = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): SymbolPrimitive => ({ kind: "rect", x, y, width, height, style: "body" });
+  if (mark === "coil")
+    return [line(0, y, 8, y), rect(8, 1, 24, 22), line(32, y, 40, y)];
+  // The cross identifies a breaker, without asserting a thermal/magnetic trip class.
+  if (mark === "breaker")
+    return [
+      line(0, y, 10, y),
+      line(10, y, 27, 3, "operator"),
+      line(30, y, 40, y),
+      line(26, 7, 32, 13, "operator"),
+      line(26, 13, 32, 7, "operator"),
+    ];
+  // Stepped thermal element, distinct from a resistive zigzag or auxiliary contact.
+  if (mark === "overload")
+    return [
+      line(0, y, 10, y),
+      rect(10, 3, 20, 14),
+      poly([
+        [10, y],
+        [16, y],
+        [16, 6],
+        [24, 6],
+        [24, y],
+        [30, y],
+      ]),
+      line(30, y, 40, y),
+    ];
+  const contact = [
+    line(0, y, 14, y),
+    line(26, y, 40, y),
+    line(14, y - 5, 14, y + 5, "operator"),
+    line(26, y - 5, 26, y + 5, "operator"),
+  ];
+  if (mark.endsWith("-nc"))
+    contact.push(line(11, y + 7, 29, y - 7, "operator"));
+  if (mark.startsWith("pushbutton"))
+    contact.push(
+      line(20, 2, 20, y - 6, "actuator"),
+      line(14, 2, 26, 2, "actuator"),
+    );
+  if (mark.startsWith("switch"))
+    contact.push(
+      line(20, 2, 20, y - 6, "actuator"),
+      line(20, 2, 28, 2, "actuator"),
+    );
+  if (mark.startsWith("estop"))
+    contact.push(
+      // Mushroom head and retaining latch; no safety-performance assertion.
+      line(20, 5, 20, y - 6, "actuator"),
+      poly(
+        [
+          [10, 5],
+          [10, 3],
+          [14, 1],
+          [26, 1],
+          [30, 3],
+          [30, 5],
+          [10, 5],
+        ],
+        "actuator",
+      ),
+      poly(
+        [
+          [22, 6],
+          [26, 6],
+          [26, 9],
+        ],
+        "actuator",
+      ),
+    );
+  if (mark.startsWith("selector"))
+    contact.push(
+      // Maintained rotary handle with two detents.
+      line(17, 6, 23, 1, "actuator"),
+      line(13, 1, 13, 3, "actuator"),
+      line(27, 1, 27, 3, "actuator"),
+      line(20, 4, 20, y - 6, "actuator"),
+    );
+  return contact;
+}
+
+/** Only terminal ratings belonging to this coil can qualify it. Conflicts and
+ * unspecified classes stay unqualified; tags, descriptions and IDs are ignored. */
+export function coilQualifier(
+  type: IrDeviceType,
+  fn: IrFunction,
+): "AC" | "DC" | undefined {
+  if (fn.kind !== "coil") return undefined;
+  const classes = new Set(
+    fn.terminals.flatMap((t) => {
+      const value = type.terminals.find((p) => p.key === t.terminalKey)?.rating
+        ?.voltage_type;
+      return value ? [value] : [];
+    }),
+  );
+  return classes.size === 1 ? [...classes][0] : undefined;
+}
+
+export function motorLegend(threePhase: boolean): readonly string[] {
+  return threePhase ? ["M", "3~"] : ["M"];
+}
+
+/** Three terminals alone may be L/N/PE. A phase qualifier requires the authored
+ * three-phase profile or the explicit U/V/W phase-input function shape. */
+export function motorIsThreePhase(type: IrDeviceType, fn: IrFunction): boolean {
+  if (fn.kind !== "load") return false;
+  if (symbolProfile(type) === "thermite:motor-3ph") return true;
+  if (fn.terminals.length !== 3) return false;
+  const roles = new Set(
+    fn.terminals.map(
+      (t) => type.terminals.find((p) => p.key === t.terminalKey)?.role,
+    ),
+  );
+  return ["phase_u_input", "phase_v_input", "phase_w_input"].every((role) =>
+    roles.has(role),
+  );
 }

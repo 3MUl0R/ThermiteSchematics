@@ -601,12 +601,12 @@ function expectViewSemantics(
   expect(rendered.summary.netIds).toHaveLength(state === "baseline" ? 2 : 3);
 
   const svg = Buffer.from(rendered.svg, "utf8");
-  expect(svg.byteLength).toBe(state === "baseline" ? 67_593 : 92_275);
-  expect(hash(svg)).toBe(
+  const expected =
     state === "baseline"
-      ? "f4d6813fb3cf181b06de621077b4ad982b4f83746a5c757b2d9741c3858570e8"
-      : "caee85eb3e4f47604a1bb5400842f94ff6da89ee1ea91128bb74818732749a31",
-  );
+      ? artifacts.baselineRendererSvg
+      : artifacts.pnpRendererSvg;
+  expect(svg.byteLength).toBe(expected.byteLength);
+  expect(hash(svg)).toBe(hash(expected));
   return svg;
 }
 

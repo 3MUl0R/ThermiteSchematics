@@ -54,7 +54,7 @@
 - [@thermite/query](../packages/query/README.md)
 - [@thermite/render](../packages/render/README.md)
 - [@thermite/schema](../packages/schema/README.md)
-- [PDF fonts](../packages/cli/assets/fonts/README.md)
+- [Printable fonts](../packages/cli/assets/fonts/README.md)
 - [Semantic selection boundary](../packages/render/src/selection/README.md)
 - [Thermite Schematics project guide](../packages/cli/assets/THERMITE_AGENTS.md)
 

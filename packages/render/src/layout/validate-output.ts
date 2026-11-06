@@ -1,4 +1,5 @@
 import { graphSemanticOrder } from "../semantic-order.js";
+import { printableLabelGeometry } from "../symbols/printable-label.js";
 import type {
   ElkExtendedEdge,
   ElkLabel,
@@ -1236,8 +1237,33 @@ function validateNodeAndLabelCollisions(
     }
   }
   const labels = [...geometry.labels.values()];
+  const captions = new Map(
+    [
+      ...graph.locationGroups.map((g) => g.label),
+      ...graph.deviceGroups.map((g) => g.label),
+      ...graph.nodes.flatMap((n) => (n.kind === "junction" ? [] : n.labels)),
+      ...graph.edges.flatMap((e) =>
+        [e.label, e.netLabel].filter(
+          (l): l is PresentationLabel => l !== undefined,
+        ),
+      ),
+    ].map((l) => [l.id, l]),
+  );
+  const inkBounds = (label: LayoutLabel): Bounds => {
+    const caption = captions.get(label.id);
+    if (!caption) reject(`label ${label.id} has no presentation caption`);
+    const text = caption.printableText ?? caption.text;
+    return printableLabelGeometry(
+      label,
+      text,
+      caption.textLength,
+      label.ownerKind === "edge"
+        ? [geometry.edges.get(label.ownerId)?.points ?? []]
+        : undefined,
+    ).ink;
+  };
   for (const label of labels) {
-    const labelBounds = boundsOf(label);
+    const labelBounds = inkBounds(label);
     for (const [nodeId, boundsList] of primitiveBounds) {
       if (
         boundsList.some((bounds) =>
@@ -1263,7 +1289,7 @@ function validateNodeAndLabelCollisions(
     ) {
       const left = labels[leftIndex]!;
       const right = labels[rightIndex]!;
-      if (positiveAreaIntersection(boundsOf(left), boundsOf(right)))
+      if (positiveAreaIntersection(inkBounds(left), inkBounds(right)))
         reject(`labels ${left.id} and ${right.id} overlap`);
     }
   }
