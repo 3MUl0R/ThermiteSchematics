@@ -1875,16 +1875,37 @@ const module: FactModule = {
         child.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
         const closed = new Promise((done) => child.on("close", done));
         const builds = () => (stdout.match(/^Wrote /gm) ?? []).length;
-        const until = async (done: () => boolean, ms: number) => {
-          const start = Date.now();
-          while (!done() && Date.now() - start < ms) await sleep(50);
-          return done();
-        };
+        // The deterministic alpha-watch test separately pins both 1000 ms
+        // schedules. Keep the original 2500 ms bound on macOS, the guide's
+        // scoped platform. Windows exceeded it in run 42038869517; Ubuntu
+        // exceeded it in run 42072555353 (7552 ms whole fact, one Wrote).
+        // Their poll-plus-render work gets machine-demo's existing 15 s bound.
+        const changeCeiling = process.platform === "darwin" ? 2500 : 15000;
+        const until = (done: () => boolean, ceiling = 4000): Promise<void> =>
+          new Promise((resolve, reject) => {
+            const finish = (error?: Error) => {
+              clearTimeout(timer);
+              child.stdout.off("data", check);
+              child.stderr.off("data", check);
+              child.off("close", ended);
+              if (error) reject(error);
+              else resolve();
+            };
+            const check = () => {
+              if (done()) finish();
+            };
+            const ended = () => finish(new Error(stdout + stderr));
+            const timer = setTimeout(ended, ceiling);
+            child.stdout.on("data", check);
+            child.stderr.on("data", check);
+            child.once("close", ended);
+            if (child.exitCode !== null || child.signalCode !== null) ended();
+            else check();
+          });
         const html = join(project, "drawings/packet.html");
         try {
-          expect(await until(() => builds() === 1, 4000), stdout + stderr).toBe(
-            true,
-          );
+          await until(() => builds() === 1);
+          expect(builds()).toBe(1);
           expect(stderr).toContain(
             "Checking declared source, libraries and the request every second",
           );
@@ -1895,14 +1916,13 @@ const module: FactModule = {
           await editJson(join(project, EQUIPMENT), (file) => {
             file.objects[0].description = "Edited supply";
           });
-          expect(await until(() => builds() === 2, 2500), stdout).toBe(true);
+          await until(() => builds() === 2, changeCeiling);
+          expect(builds()).toBe(2);
           const kept = integrity(await readFile(html));
           // A broken request fails the build and keeps the last packet.
           await writeJson(join(project, "packet.json"), { ...bom, views: [] });
-          expect(
-            await until(() => stderr.includes('"R006"'), 2500),
-            stderr,
-          ).toBe(true);
+          await until(() => stderr.includes('"R006"'), changeCeiling);
+          expect(stderr).toContain('"R006"');
           expect(builds()).toBe(2);
           expect(integrity(await readFile(html))).toBe(kept);
         } finally {
