@@ -1091,7 +1091,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "These commands default to `--project .`; `validate` and `lock` take a path instead (`thermite validate . --strict`).",
+        "Commands default to `--project .`; `validate`/`lock` also take a path, never both (`thermite validate . --strict`).",
       async check() {
         for (const name of ctx.tree.alpha.filter(
           (n) => !["init", "guide"].includes(n),
@@ -1102,12 +1102,26 @@ const module: FactModule = {
           expect(option?.description, name).toContain('(default: ".")');
         }
         for (const name of ["validate", "lock"]) {
-          const run = await thermite(
-            [name, "--project", "."],
+          const flags = name === "lock" ? ["--check"] : [];
+          const positional = await ok(
+            [name, ".", ...flags],
             ctx.pristine.starter,
           );
-          expect(run.code, name).toBe(2);
-          expect(run.stderr).toContain("unknown option '--project'");
+          const alias = await ok(
+            [name, "--project", ".", ...flags],
+            ctx.pristine.starter,
+          );
+          expect(alias.stdout, name).toBe(positional.stdout);
+          expect(alias.stderr, name).toBe(positional.stderr);
+          const conflict = await thermite(
+            [name, ".", "--project", "."],
+            ctx.pristine.starter,
+          );
+          expect(conflict.code, name).toBe(2);
+          expect(conflict.stdout).toBe("");
+          expect(conflict.stderr).toBe(
+            "error: specify either [path] or --project <path>, not both\n",
+          );
         }
         await rejected(
           ["validate", ".", "--strict"],

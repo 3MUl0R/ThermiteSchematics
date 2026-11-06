@@ -9,7 +9,11 @@ import {
   lockProject,
   resolveShippedCoreLibrary,
 } from "@thermite/compiler";
-import { buildCableSchedule, createQueryEngine } from "@thermite/query";
+import {
+  buildCableSchedule,
+  createQueryEngine,
+  REPORT_KINDS,
+} from "@thermite/query";
 import {
   normalizePaperPage,
   renderSchematicPacket,
@@ -55,6 +59,80 @@ async function editCable(path: string, edit: (value: any) => void) {
   edit(value.objects.find((object: any) => object.kind === "cable"));
   await writeFile(file, JSON.stringify(value));
 }
+
+describe("alpha reference help", () => {
+  it("lists report kinds, CSV output and report-packet JSON with clean help streams", async () => {
+    const { stdout, stderr } = await execFile(process.execPath, [
+      cli,
+      "report",
+      "--help",
+    ]);
+    expect(stderr).toBe("");
+    const help = stdout.replace(/\s+/g, " ");
+    expect(help).toContain(`kinds: ${REPORT_KINDS.join(", ")}`);
+    expect(help).toContain(
+      "write .csv, .html, .pdf, single-sheet .svg, or .json",
+    );
+    expect(help).toContain(
+      "return the report packet (SVG sheets and metadata) as JSON",
+    );
+    await expect(
+      execFile(process.execPath, [cli, "report", "invalid"]),
+    ).rejects.toMatchObject({
+      code: 2,
+      stdout: "",
+      stderr:
+        JSON.stringify({
+          error: {
+            code: "T001",
+            message: `Report kind must be ${REPORT_KINDS.join(", ")}.`,
+          },
+        }) + "\n",
+    });
+  });
+  it.each(REPORT_KINDS)("writes the advertised %s CSV", async (kind) => {
+    const path = await project();
+    const output = join(path, `${kind}.csv`);
+    const { stdout, stderr } = await execFile(process.execPath, [
+      cli,
+      "report",
+      kind,
+      "--project",
+      path,
+      "-o",
+      output,
+    ]);
+    expect(stdout).toBe(`Wrote ${output}\n`);
+    expect(JSON.parse(stderr).error).toBeNull();
+    expect((await readFile(output, "utf8")).trim()).not.toBe("");
+  });
+  it("returns the advertised report packet as JSON", async () => {
+    const path = await project();
+    const { stdout, stderr } = await execFile(process.execPath, [
+      cli,
+      "report",
+      "bom",
+      "--project",
+      path,
+      "--json",
+    ]);
+    expect(JSON.parse(stdout).sheets[0].svg).toContain("<svg");
+    expect(JSON.parse(stderr).error).toBeNull();
+  });
+  it("describes portable watch polling without changing other output help", async () => {
+    const { stdout, stderr } = await execFile(process.execPath, [
+      cli,
+      "watch",
+      "--help",
+    ]);
+    expect(stderr).toBe("");
+    expect(stdout.replace(/\s+/g, " ")).toContain(
+      "regenerate a packet by polling declared inputs and the request",
+    );
+    expect(stdout).not.toContain("(macOS)");
+    expect(stdout).not.toContain(".csv");
+  });
+});
 describe("Thermite alpha physical cable semantics", () => {
   it("initializes visible pinned libraries and reports every core through query and CLI", async () => {
     const path = await project(),

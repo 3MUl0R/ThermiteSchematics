@@ -36,11 +36,12 @@ review again against the saved snapshot and inspect the generated drawing at
 
 ## Watch
 
-`watch` polls declared inputs and the request every second, reloads library
-references and source globs, and rebuilds only when loading results or the
+`watch` waits one second after the previous load/rebuild finishes before polling
+declared inputs and the request again. Work adds to that interval. It reloads
+library references and source globs, and rebuilds only when loading results or the
 request change. Failed rebuilds retain the last good file. Refresh the HTML to
 see the new packet; there is no automatic browser reload.
 
 `thermite watch --input packet.json -o drawings/packet.html` watches a saved
-packet request. The CLI help currently labels watch “(macOS)”. It runs until
+packet request. It uses polling without a platform gate and runs until
 interrupted; [view requests](views.md) gives a starter packet to save.

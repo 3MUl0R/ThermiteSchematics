@@ -38,6 +38,7 @@ async function fixture() {
   put(root, "scripts/docs-policy.json", JSON.stringify(policy));
   put(root, policy.legacy.frozenFile, frozen);
   put(root, "docs/topics.json", "[]\n");
+  put(root, "packages/schema/schemas/project.schema.json", "{}\n");
   put(root, "README.md", "# Example\n\n[index](docs/README.md)\n");
   await docsIndex(root, { write: true });
   expect(await checkDocs(root)).toEqual([]);

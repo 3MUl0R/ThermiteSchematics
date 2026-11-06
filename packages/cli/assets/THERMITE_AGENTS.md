@@ -120,8 +120,8 @@ HTML document.
 
 ## Printable drawings
 
-These commands default to `--project .`; `validate` and `lock` take a path
-instead (`thermite validate . --strict`).
+Commands default to `--project .`; `validate`/`lock` also take a path, never both
+(`thermite validate . --strict`).
 
 ```sh
 thermite view PS1 --loads -o drawings/ps1-loads.pdf
@@ -226,8 +226,8 @@ Snapshot before a change; review after the guarded workflow, then regenerate the
 packet. Semantic review does not replace source/lock/presentation review or
 engineering judgment. UIDs identify devices; page numbers may change.
 
-`thermite watch --input packet.json -o drawings/packet.html` (macOS) checks
-declared inputs once per second and preserves the previous packet on failure.
+`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs
+one second after work finishes; failures preserve the previous packet.
 `.pdf` is direct vector PDF with physical paper dimensions and fonts.
 Unsupported PDF glyphs fail explicitly; use supported labels or SVG/HTML.
 

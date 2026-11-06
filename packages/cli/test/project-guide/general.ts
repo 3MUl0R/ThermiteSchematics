@@ -1845,7 +1845,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`thermite watch --input packet.json -o drawings/packet.html` (macOS) checks declared inputs once per second and preserves the previous packet on failure.",
+        "`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs one second after work finishes; failures preserve the previous packet.",
       async check() {
         const project = await freshProject("starter");
         const bom = {
@@ -1919,7 +1919,7 @@ const module: FactModule = {
           await until(() => builds() === 1);
           expect(builds()).toBe(1);
           expect(stderr).toContain(
-            "Checking declared source, libraries and the request every second",
+            "Polling declared source, libraries and the request one second after each run finishes",
           );
           // An undeclared file is not an input.
           await writeJson(join(project, "notes.json"), {});

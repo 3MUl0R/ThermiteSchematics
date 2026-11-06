@@ -6,6 +6,7 @@ This private package contains the canonical JSON Schemas, schema-derived TypeScr
 source types, strict JSON parser, schema registry, and source-location-aware
 diagnostic infrastructure used by Thermite Schematics 0.2.0. It is bundled inside the
 private CLI artifact and is not published to a public registry.
+The current public Bun runtime and source checkout also use this schema package.
 
 The canonical definitions are the ordinary files in the
 [schemas directory](./schemas/).
