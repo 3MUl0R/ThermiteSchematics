@@ -131,14 +131,19 @@ function viewRequest(root: string, flags: Flags): SchematicViewRequest {
         : { kind: flags.loads ? "loads" : "conductors" },
   };
 }
-function printingOptions(command: Command): Command {
+function printingOptions(command: Command, report = false): Command {
   return command
     .option("--project <directory>", "electrical project directory", ".")
     .option(
       "-o, --output <file>",
-      "write .html, .pdf, single-sheet .svg, or .json",
+      `write ${report ? ".csv, " : ""}.html, .pdf, single-sheet .svg, or .json`,
     )
-    .option("--json", "return all SVG sheets and metadata as JSON")
+    .option(
+      "--json",
+      report
+        ? "return the report packet (SVG sheets and metadata) as JSON"
+        : "return all SVG sheets and metadata as JSON",
+    )
     .addOption(
       new Option("--paper <size>", "override project paper size").choices([
         "tabloid",
@@ -554,9 +559,8 @@ export async function runThermite(argv = process.argv): Promise<number> {
   printingOptions(
     command
       .command("report <kind>")
-      .description(
-        "generate BOM, wire/cable/network schedules, terminal and channel/connector I/O plans",
-      ),
+      .description(`generate a report; kinds: ${REPORT_KINDS.join(", ")}`),
+    true,
   )
     .option(
       "--device <designation>",
@@ -670,7 +674,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
   printingOptions(
     command
       .command("watch")
-      .description("regenerate a packet after local JSON changes (macOS)"),
+      .description(
+        "regenerate a packet by polling declared inputs and the request",
+      ),
   )
     .requiredOption("--input <file>", "packet request file")
     .action(async (flags: Flags) => {

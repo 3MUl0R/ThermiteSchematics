@@ -415,7 +415,7 @@ not claim that each terminal belongs to every member.
 `breaker-pole`, `overload-pole`, `terminal-display`, and `non-traversable`. Visual
 class never grants path adjacency.
 
-The core mapping surface is:
+The core 0.1.0 mapping surface is:
 
 | Core type                                      | Rendered function or aggregate                           | Family behavior                                                                                  |
 | ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -433,8 +433,10 @@ The core mapping surface is:
 
 Omission reasons are exactly `metadata-only-mechanism`, `boundary-metadata-only`,
 `outside-family`, and `unsupported-v0.1`. The cable type is not a device mapping; a
-selected cable conductor is an edge. `ais:fuse` is catalog vocabulary, but no current
-core fuse type exists. An unknown selected type/function returns R003; no generic
+selected cable conductor is an edge. `ais:fuse` is catalog vocabulary; core 0.2.0
+ships `core:fuse-1p`, `core:fuse-2p` and `core:fuse-3p`, each declaring
+`thermite:fuse`. See the [core inventory](../core-library/README.md) for their
+generic-model scope. An unknown selected type/function returns R003; no generic
 symbol is guessed.
 
 Selected devices group under the exact authored location tuple or the separately
@@ -702,6 +704,9 @@ fixed element/layer/attribute order, two-space indentation, structural LF only, 
 literal tab/CR, and exactly one final LF.
 
 ## Expected errors
+
+See the complete [diagnostic catalog](../schema/src/diagnostic-catalog.ts),
+including R006 and R007, for current printable errors.
 
 All R-errors include `code`, `message`, and string `root`. Optional fields are omitted
 when inapplicable.

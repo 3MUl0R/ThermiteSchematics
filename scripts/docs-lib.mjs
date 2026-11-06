@@ -257,6 +257,8 @@ export function generateIndex({ policy, topics, documents }) {
     "",
     "[Repository README](../README.md). Every source document is linked below.",
     "",
+    "[Project JSON Schema](../packages/schema/schemas/project.schema.json).",
+    "",
   ];
   const remaining = new Map(
     [...documents].filter(([file]) => file !== "docs/README.md"),

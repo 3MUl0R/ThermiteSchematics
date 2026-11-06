@@ -102,7 +102,8 @@ replace source/lock/presentation review or engineering judgment. Persistent UIDs
 identify devices; page numbers may change as the drawing grows.
 
 `thermite watch --project . --input packet.request.json -o drawings/packet.html`
-checks declared inputs once per second and preserves the previous packet on
-failure. Keep diagnostics visible and refresh the HTML after successful builds.
+polls declared inputs one second after work finishes and preserves the previous
+packet on failure. Keep diagnostics visible and refresh the HTML after successful
+builds.
 Use `.pdf` for direct vector PDF output with physical paper dimensions and fonts.
 Unsupported PDF glyphs fail explicitly; use supported labels or SVG/HTML.

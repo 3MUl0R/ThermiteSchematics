@@ -4,6 +4,8 @@
 
 [Repository README](../README.md). Every source document is linked below.
 
+[Project JSON Schema](../packages/schema/schemas/project.schema.json).
+
 ## Start and contribute
 
 - [Contributing to Thermite](../CONTRIBUTING.md)

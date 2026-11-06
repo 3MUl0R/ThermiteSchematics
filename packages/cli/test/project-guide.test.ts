@@ -122,10 +122,13 @@ const FLAG_BINDINGS: readonly {
   },
   {
     sentence:
-      "These commands default to `--project .`; `validate` and `lock` take a path instead (`thermite validate . --strict`).",
+      "Commands default to `--project .`; `validate`/`lock` also take a path, never both (`thermite validate . --strict`).",
     fragment: "--project .",
-    commands: () =>
-      ctx.tree.alpha.filter((name) => !["init", "guide"].includes(name)),
+    commands: () => [
+      ...ctx.tree.alpha.filter((name) => !["init", "guide"].includes(name)),
+      "validate",
+      "lock",
+    ],
   },
   {
     sentence:

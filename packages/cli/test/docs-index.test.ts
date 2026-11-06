@@ -65,6 +65,7 @@ async function fixture(parent = tmpdir()) {
   put(root, "README.md", "# Example\n\n[Documentation](docs/README.md)\n");
   put(root, "docs/one.md", "# First reference\n\n## Heading\n");
   put(root, "docs/two.md", "# Second reference\n");
+  put(root, "packages/schema/schemas/project.schema.json", "{}\n");
   put(
     root,
     "docs/topics.json",
@@ -91,6 +92,21 @@ async function restored(root: string, file: string, text: string) {
   put(root, file, text);
   expect(await checkDocs(root)).toEqual([]);
 }
+
+it("links an actual project schema directly from the first index level", () => {
+  const index = get(repository, "docs/README.md");
+  expect(parseDocument(index.split("\n## ")[0]!).links).toContainEqual(
+    expect.objectContaining({
+      target: "../packages/schema/schemas/project.schema.json",
+    }),
+  );
+  const schema = JSON.parse(
+    get(repository, "packages/schema/schemas/project.schema.json"),
+  );
+  expect(schema.$id).toBe(
+    "https://thermiteschematics.com/schemas/0.1/project.schema.json",
+  );
+});
 
 describe("documentation targets and GitHub fragments", () => {
   it.each([

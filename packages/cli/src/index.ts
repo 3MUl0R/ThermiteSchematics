@@ -1,5 +1,6 @@
 import { embedPrintableFont, fontBudgetFailure } from "./printable-font.js";
 import { agentHelp } from "./agent-help.js";
+import { projectCommand, projectPath } from "./project-command.js";
 import { resolve } from "node:path";
 
 import {
@@ -1039,16 +1040,13 @@ export async function runCli(
     });
   }
 
-  const validateCommand = program
-    .command("validate")
-    .description("validate an electrical-system project")
-    .argument("[path]", "project directory or direct manifest path")
+  const validateCommand = projectCommand(program, "validate")
     .option("--json", "emit diagnostics as JSON")
     .option("--strict", "treat warnings as validation failures");
 
   validateCommand.action(async (inputPath: string | undefined) => {
     const flags = validateCommand.opts<{ json?: boolean; strict?: boolean }>();
-    const result = await runValidate(inputPath, {
+    const result = await runValidate(projectPath(validateCommand, inputPath), {
       json: flags.json === true,
       strict: flags.strict === true,
       color: flags.json !== true && stdout.isTTY === true,
@@ -1062,16 +1060,13 @@ export async function runCli(
     exitCode = result.exitCode;
   });
 
-  const lockCommand = program
-    .command("lock")
-    .description("create or verify the local-library lock")
-    .argument("[path]", "project directory or direct manifest path")
+  const lockCommand = projectCommand(program, "lock")
     .option("--check", "verify the lock without writing")
     .option("--json", "emit diagnostics as JSON");
 
   lockCommand.action(async (inputPath: string | undefined) => {
     const flags = lockCommand.opts<{ check?: boolean; json?: boolean }>();
-    const result = await runLock(inputPath, {
+    const result = await runLock(projectPath(lockCommand, inputPath), {
       check: flags.check === true,
       json: flags.json === true,
       color: flags.json !== true && stdout.isTTY === true,

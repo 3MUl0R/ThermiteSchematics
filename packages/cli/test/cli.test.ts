@@ -6,6 +6,7 @@ import {
   lstat,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   symlink,
   unlink,
@@ -16,7 +17,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Diagnostic } from "@thermite/schema";
-import { afterEach, describe, expect, it } from "vitest";
+import * as compiler from "@thermite/compiler";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   formatHumanDiagnostics,
@@ -120,16 +122,218 @@ async function expectedRuleDiagnostics(name: string): Promise<Diagnostic[]> {
   ) as Diagnostic[];
 }
 
-async function runDirectCli(args: readonly string[]): Promise<CliInvocation> {
+async function runDirectCli(
+  args: readonly string[],
+  cwd?: string,
+): Promise<CliInvocation> {
   let stdout = "";
   let stderr = "";
   const exitCode = await runCli(["node", "thermite", ...args], {
     stdout: { write: (text) => (stdout += text) },
     stderr: { write: (text) => (stderr += text) },
+    ...(cwd === undefined ? {} : { cwd }),
   });
 
   return { exitCode, stdout, stderr };
 }
+
+async function projectBytes(root: string): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      for (const [file, bytes] of Object.entries(await projectBytes(path)))
+        files[`${entry.name}/${file}`] = bytes;
+    } else files[entry.name] = (await readFile(path)).toString("base64");
+  }
+  return files;
+}
+
+describe.each(["validate", "lock"])("%s project path aliases", (name) => {
+  const flags = name === "lock" ? ["--check", "--json"] : ["--json"];
+  it("accepts directory/manifest, absolute/relative and spaced paths with identical streams", async () => {
+    const project = await copyValidCompileFixture();
+    if (name === "lock") expect((await runLock(project)).exitCode).toBe(0);
+    const before = await projectBytes(dirname(project));
+    for (const path of [
+      project,
+      join(project, "system.json"),
+      "valid project",
+      "valid project/system.json",
+    ]) {
+      for (const selected of [
+        flags,
+        flags.filter((flag) => flag !== "--json"),
+      ]) {
+        const positional = await runDirectCli(
+          [name, path, ...selected],
+          dirname(project),
+        );
+        const alias = await runDirectCli(
+          [name, "--project", path, ...selected],
+          dirname(project),
+        );
+        expect(positional.exitCode).toBe(0);
+        expect(alias).toEqual(positional);
+        expect(alias.stderr).toBe("");
+        if (selected.includes("--json"))
+          expect(Array.isArray(JSON.parse(alias.stdout))).toBe(true);
+      }
+    }
+    const defaulted = await runDirectCli([name, ...flags], project);
+    expect(defaulted).toEqual(
+      await runDirectCli([name, "--project", ".", ...flags], project),
+    );
+    expect(defaulted.exitCode).toBe(0);
+    expect(await projectBytes(dirname(project))).toEqual(before);
+  });
+
+  it("rejects both forms before loading or writing, even when equal and in either order", async () => {
+    const first = await copyValidLockFixture();
+    const second = await copyValidLockFixture();
+    const cwd = await copyValidLockFixture();
+    const roots = [first, second, cwd].map(dirname);
+    const before = await Promise.all(roots.map(projectBytes));
+    const loading = vi.spyOn(
+      compiler,
+      name === "validate" ? "compileProject" : "lockProject",
+    );
+    try {
+      for (const other of [first, second, join(first, "system.json")]) {
+        for (const paths of [
+          [first, "--project", other],
+          ["--project", other, first],
+        ]) {
+          const result = await runDirectCli([name, ...paths, "--json"], cwd);
+          expect(loading).not.toHaveBeenCalled();
+          expect(await Promise.all(roots.map(projectBytes))).toEqual(before);
+          expect(result).toEqual({
+            exitCode: 2,
+            stdout: "",
+            stderr:
+              "error: specify either [path] or --project <path>, not both\n",
+          });
+        }
+      }
+      const missing = join(cwd, "missing");
+      expect(
+        await runDirectCli([name, missing, "--project", missing], cwd),
+      ).toEqual({
+        exitCode: 2,
+        stdout: "",
+        stderr: "error: specify either [path] or --project <path>, not both\n",
+      });
+      expect(loading).not.toHaveBeenCalled();
+    } finally {
+      loading.mockRestore();
+    }
+  });
+
+  it("pins alias/default help and keeps help/version and usage streams", async () => {
+    const help = await runDirectCli([name, "--help"]);
+    expect(help.exitCode).toBe(0);
+    expect(help.stderr).toBe("");
+    const text = help.stdout.replace(/\s+/g, " ");
+    expect(text).toContain("--project <path>");
+    expect(text).toContain(
+      "alias for [path]: project directory or direct manifest path; use only one form",
+    );
+    expect(text).toContain(
+      "Defaults to the current directory. Supply [path] or --project <path>, not both.",
+    );
+    for (const args of [
+      [name, "--project"],
+      [name, "--unknown"],
+    ]) {
+      const result = await runDirectCli(args);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toMatch(/^error:/);
+    }
+    const version = await runDirectCli(["--version"]);
+    expect(version.exitCode).toBe(0);
+    expect(version.stdout.trim()).not.toBe("");
+    expect(version.stderr).toBe("");
+  });
+
+  it("preserves human/JSON authored and tool failure exits", async () => {
+    for (const [project, exit] of [
+      [fixture("missing manifest"), 2],
+      [fixture("duplicate uid cross scopes"), 1],
+    ] as const) {
+      for (const extra of [[], ["--json"]]) {
+        const check = name === "lock" ? ["--check"] : [];
+        const positional = await runDirectCli([
+          name,
+          project,
+          ...check,
+          ...extra,
+        ]);
+        expect(positional.exitCode).toBe(exit);
+        expect(
+          await runDirectCli([name, "--project", project, ...check, ...extra]),
+        ).toEqual(positional);
+      }
+    }
+  });
+});
+
+it("keeps compile positional-only", async () => {
+  const result = await runDirectCli(["compile", "--project", "."]);
+  expect(result).toEqual({
+    exitCode: 2,
+    stdout: "",
+    stderr: "error: unknown option '--project'\n",
+  });
+});
+
+it("lock --project writes only the selected project and --check stays read-only", async () => {
+  const project = await copyValidLockFixture();
+  const cwd = await copyValidLockFixture();
+  const before = await projectBytes(dirname(cwd));
+  const selected = await projectBytes(dirname(project));
+  const checked = await runDirectCli(
+    ["lock", "--project", project, "--check", "--json"],
+    cwd,
+  );
+  expect(checked.exitCode).toBe(1);
+  expect(await projectBytes(dirname(project))).toEqual(selected);
+  expect(checked.stderr).toBe("");
+  const written = await runDirectCli(
+    ["lock", "--project", project, "--json"],
+    cwd,
+  );
+  expect(written).toEqual({ exitCode: 0, stdout: "[]\n", stderr: "" });
+  expect(
+    await readFile(join(project, "electrical-system.lock.json"), "utf8"),
+  ).toContain('"lockfile_version": 1');
+  expect(await projectBytes(dirname(cwd))).toEqual(before);
+});
+
+it("validate --project preserves strict warning severity and human/JSON streams", async () => {
+  const project = fixture("unmatched glob");
+  for (const extra of [[], ["--json"]]) {
+    const normal = await runDirectCli(["validate", project, ...extra]);
+    const strict = await runDirectCli([
+      "validate",
+      project,
+      "--strict",
+      ...extra,
+    ]);
+    expect(normal.exitCode).toBe(0);
+    expect(strict.exitCode).toBe(1);
+    expect(strict.stdout).toBe(normal.stdout);
+    expect(
+      await runDirectCli([
+        "validate",
+        "--project",
+        project,
+        "--strict",
+        ...extra,
+      ]),
+    ).toEqual(strict);
+  }
+});
 
 async function runCliSubprocess(
   args: readonly string[],

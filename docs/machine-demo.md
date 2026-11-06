@@ -82,10 +82,11 @@ bun thermite.mjs report io --device RIO1 --project examples/machine-demo -o alph
 bun thermite.mjs watch --project examples/machine-demo --input examples/machine-demo/packet.request.json -o alpha-out/machine-demo.html
 ```
 
-Watch checks declared source, library references and the packet request every
-second. It keeps the last good drawing when validation fails. Refresh the HTML
-after a successful rebuild. A rendering error remains explicit; a retained old
-packet should not be mistaken for a successful build of invalid source.
+Watch polls declared source, library references and the packet request one second
+after the previous work finishes. It keeps the last good drawing when validation
+fails. Refresh the HTML after a successful rebuild. A rendering error remains
+explicit; a retained old packet should not be mistaken for a successful build of
+invalid source.
 
 Use `--layout standard` to compare conventional tiling with compact mode. Compact
 mode preserves circuit text at 2.5 mm or larger. It may still need multiple sheets;

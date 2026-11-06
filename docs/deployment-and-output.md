@@ -7,9 +7,11 @@ using shipped library identities continue to work. The `cabinets` template
 provides two cabinets, two used cores, and two loose spare cores.
 
 Generated output cannot overwrite project inputs, requests, libraries, or agent
-configuration. Symlinked/hard-linked output paths are rejected. Output must use
-SVG, HTML, JSON, PDF, or CSV extensions; a file matching an authored source glob is also
-rejected. The CLI uses atomic file replacement for ordinary generated outputs.
+configuration. Symlinked/hard-linked output paths are rejected. Views and packets
+write SVG, HTML, JSON or PDF; reports also write CSV. [Continuity](continuity-checks.md)
+writes text (`.txt`) or JSON; diagnostics write text (`.txt`), JSON or CSV.
+A file matching an authored source glob is rejected. The CLI uses atomic file
+replacement for ordinary generated outputs.
 
 Runtime and source workflows use Bun 1.4.2 on the systems listed in
 [platform checks](platforms.md). Keep the runtime or source checkout separate
