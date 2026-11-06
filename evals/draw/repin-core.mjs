@@ -1,4 +1,5 @@
 import { signOffs } from "./repin-signoff.mjs";
+import { supersededSuccessor } from "./repin-superseded.mjs";
 import {
   fontPairs,
   pairDrift,
@@ -468,7 +469,15 @@ export function prepareRepin({
         ...(r.measuredScope ? { measuredScope: r.measuredScope } : {}),
         ...(r.moveProofs ? { move: r.moveProofs } : {}),
         ...(r.derived ? { derivedBounds: r.derived } : {}),
-        ...(r.crop ? { cropSha256: r.crop.sha256 } : {}),
+        ...(r.crop
+          ? {
+              cropSha256: r.crop.sha256,
+              ...(entry.drawingSha256
+                ? { drawingSha256: entry.drawingSha256 }
+                : {}),
+            }
+          : {}),
+        ...(r.successor ? { successor: r.successor } : {}),
       },
       reviewerJudged: {
         reviewed: entry.reviewed,
@@ -476,8 +485,18 @@ export function prepareRepin({
         causeClass: entry.causeClass,
         note: entry.note,
         ...(entry.cause ? { cause: entry.cause } : {}),
-        ...(entry.crop ? { crop: entry.crop } : {}),
+        ...(entry.crop
+          ? {
+              crop: entry.crop,
+              ...(entry.drawingSha256
+                ? { drawingSha256: entry.drawingSha256 }
+                : {}),
+            }
+          : {}),
         ...(entry.columnMap ? { columnMap: entry.columnMap } : {}),
+        ...(entry.sharedSuccessorReason
+          ? { sharedSuccessorReason: entry.sharedSuccessorReason }
+          : {}),
       },
     });
   const sheetRenames = sheetRenameMap(decisions, specs);
@@ -560,6 +579,7 @@ export function prepareRepin({
         "reviewed",
         "signOff",
         "counterSignOffs",
+        ...(entry.crop ? ["drawingSha256"] : []),
       ];
       assert(
         entry.reviewed === true,
@@ -573,8 +593,10 @@ export function prepareRepin({
         "Record cause class and review rationale",
       );
       signOffs(entry);
-      if (entry.action === "retire" || entry.action === "rename") {
-        const rename = entry.action === "rename";
+      if (["retire", "rename", "superseded"].includes(entry.action)) {
+        const rename = entry.action === "rename",
+          superseded = entry.action === "superseded";
+        let successor;
         keys(
           entry,
           [
@@ -582,6 +604,9 @@ export function prepareRepin({
             ...(rename
               ? ["from", "to", "pairs", "crop", "columnMap"]
               : ["markerId", "scope", "cause", "instances"]),
+            ...(superseded
+              ? ["successor", "survivor", "sharedSuccessorReason"]
+              : []),
           ],
           "decision",
         );
@@ -597,7 +622,7 @@ export function prepareRepin({
           "Retirement/rename source must be a stale measured scope",
         );
         classCheck(entry, old.kind);
-        if (!rename) {
+        if (!rename && !superseded) {
           assert(
             ["fixed", "removed", "not-measured"].includes(entry.cause),
             "Retirement cause must be fixed, removed or not-measured",
@@ -612,9 +637,34 @@ export function prepareRepin({
             "Retirement cause contradicts measurement availability",
           );
         }
+        if (superseded) {
+          assert(
+            measured(checked.rows, old, renamedScope(from.scope, sheetRenames)),
+            "Superseded source must be measured; book an unmeasured scope as not-measured",
+          );
+          const before = getOld(),
+            group = before.groups.get(key);
+          assert(group, "Baseline has no superseded source instances");
+          const source = (entry.instances ?? group.tokens).map((token) => {
+            assert(
+              group.tokens.includes(token),
+              "Unknown superseded source instance",
+            );
+            return before.byToken.get(token);
+          });
+          successor = supersededSuccessor(
+            file,
+            entry,
+            source,
+            inventory,
+            sheetRenames,
+            specs,
+            original,
+          );
+        }
         if (
           !rename &&
-          entry.cause !== "not-measured" &&
+          (superseded || entry.cause !== "not-measured") &&
           fresh.some(
             (b) =>
               b.scope.case === from.scope.case &&
@@ -647,10 +697,12 @@ export function prepareRepin({
           work.whole = true;
           recordReceipt(entry, {
             pr: file.pr,
-            action: "retire",
+            action: entry.action,
             ...from,
             cause: entry.cause,
-            measuredScope: renamedScope(from.scope, sheetRenames),
+            ...(superseded
+              ? { successor }
+              : { measuredScope: renamedScope(from.scope, sheetRenames) }),
           });
           continue;
         }
@@ -772,11 +824,13 @@ export function prepareRepin({
           }
           recordReceipt(entry, {
             pr: file.pr,
-            action: "retire",
+            action: entry.action,
             ...from,
             cause: entry.cause,
             instances: entry.instances.length,
-            measuredScope: renamedScope(from.scope, sheetRenames),
+            ...(superseded
+              ? { successor }
+              : { measuredScope: renamedScope(from.scope, sheetRenames) }),
           });
         }
       } else if (["new-defect", "scope-added"].includes(entry.action)) {
@@ -1052,6 +1106,10 @@ export function prepareRepin({
         (r) => r.action === "retire" && r.cause === "not-measured",
       ).length,
       outcomes: {
+        superseded: receipts.filter((r) => r.action === "superseded").length,
+        supersededSurvivors: receipts.filter(
+          (r) => r.action === "superseded" && r.successor?.form === "survivor",
+        ).length,
         notMove: notMoves.length,
         fixes: receipts.filter(
           (r) => r.action === "retire" && r.cause === "fixed",

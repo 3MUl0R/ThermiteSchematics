@@ -359,13 +359,45 @@ bun evals/draw/repin.mjs draft --inventory evals/out/repin-inventory.json \
   --pr '#56' --output evals/out/D1-decisions.json
 ```
 
+`superseded` is never inferred. After inspecting the default draft, a reviewer may
+choose `--superseded <retirement-index>:<successor-index>` (repeatable) on a new
+draft command. Indices are zero-based in the default draft's sorted entries.
+This changes only the chosen action and successor reference; its cause, rationale
+and sign-off remain empty. The reviewer must complete and sign them.
+For a link to an observed existing identity, use repeatable
+`--survivor <retirement-index>:<current-instance-token>` instead. The token comes
+from `inventory.current`; the draft resolves its marker and scope, checks that
+the identity already exists, and keeps the default entry order. A retirement
+cannot be chosen twice or use both flags. Survivor causes and sign-offs stay empty.
+
 It proposes only unique exact-fact instance pairs (allowing a literal view move),
 leaves ambiguous and changed-text pairs for inspection, and calculates envelope
 proposals from measured ranges and the documented tolerances. It fills **no
 cause**: every entry has `reviewed: false`, empty `causeClass`/`note`, and an empty
 retirement `cause`. The draft also leaves `signOff.kind` and `signOff.by` empty;
-review records the applicable kind and reviewer. New defects have empty crop metadata too. Inspect each delta,
-complete the cause/rationale/mappings/crops. **`reviewed: true` signs off those
+review records the applicable kind and reviewer. New defects have empty crop metadata and drawing hashes too. Inspect each delta,
+complete the cause/rationale/mappings/crops. Each crop-bearing draft entry starts
+with an empty root `drawingSha256`. After preparing the crops/index and review
+rationale, compute pixel facts **before** the independent reviewer signs:
+
+```sh
+bun evals/draw/repin-bind-crops.mjs \
+  --decisions evals/out/review/decisions.unsigned.json \
+  --crop-index evals/out/review/crop-index.json \
+  --output evals/out/review/decisions.bound-unsigned.json
+```
+
+The tool reads and validates every PNG, computes its drawing hash, and writes the
+entry's root `drawingSha256` plus `crop.headerPixels` from the index (0 by default,
+86 only for validated stamps). It also binds each `notMove.crops[]` object with
+its own `drawingSha256`/`headerPixels`. Typed drawing-hash claims are overwritten
+from pixels. Inputs are unchanged; output is exclusive under `evals/out`. It
+refuses any already-reviewed entry, non-empty sign-off or countersign. All review
+flags, causes and notes remain unchanged. The reviewer inspects the computed
+hashes and crops, then signs the bound file; the tool does not approve them.
+Preview re-reads the PNGs and checks those signed values. The writer independently
+recomputes them again. Replacing a crop requires a new unsigned preparation and
+review, never editing a signed file in place. **`reviewed: true` signs off those
 crops and causes with provenance:** every entry requires
 `signOff: {kind: "person" | "agent", by: "<name or agent and review round>"}`.
 An agent sign-off must come from a reviewer independent of the change's author
@@ -376,10 +408,14 @@ automated fixtures mock sign-off solely to test the protocol.
 A person may add `counterSignOffs: [{kind:"person",by:"<name>"}]` later, keeping
 the original sign-off and all other decision fields unchanged. Receipts retain
 both provenances. Unknown/missing kinds and empty names are refused.
-After apply, a later countersign is retained only in the decisions file; the original receipt cannot be revalidated because its registry binding is stale.
+After apply, every re-pin commits a durable record under `repins/<pr>/` as described
+below; person countersigns extend that tracked record without changing the signed
+content, historical receipt or registry.
 The tool refuses an unreviewed entry. With several baselines, select
 `--baseline-sha <raw-summary-hash>`. Draft creation is exclusive under `evals/out`.
 
+Every entry with a crop also requires its tool-bound root `drawingSha256`;
+`notMove` crop objects carry the same fact on the object.
 Every reviewed entry requires `reviewed: true`, `signOff`, `causeClass`, `note` (the review rationale) and
 `classification: "drawing"` or `"policy-gap"`. These align with D1's audit's
 `markerId`, `causeClass`, exact scope tuples and envelope observations. D1's
@@ -388,13 +424,14 @@ approvals or instance-match evidence. Convert them into explicit entries using
 both inventories. Retain `unexplainedItems` as a review checklist outside the
 strict decisions schema; an unresolved item must stop the re-pin.
 
-| Action           | Required decision data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `retire`         | `markerId`, `scope: {case,sheet,medium}`, `cause: "fixed"`, `"removed"` (intentional content removal), or `"not-measured"`. A compatible check must be measured for fixed/removed, following a declared sheet rename when present. Intentional removal earns no repair credit; a missing observation cannot be booked as fixed/removed. Optional `instances` lists only the leftover baseline tokens of a partially paired old scope.                                                                                 |
-| `rename`         | `from` and `to` each contain `markerId` and `scope`; `pairs` is an array of `{from: oldToken, to: newToken, view?: {from,to}, sourceLocator?: {from,to}, text?: {from,to}}`. Case/flow/medium, defect and locator kind, source row and logical view must match. Changed text or column label needs its literal mapping. A changed physical sheet needs a declared rename. Text-changing moves require their own crop. Every old instance and every target instance must be accounted for across the listed decisions. |
-| `scope-added`    | `to: {markerId,scope}` on an existing identity and all target tokens in `instances`. Keeps its definition; optional reviewed crop. Use this for an added sheet occurrence, with no repair credit.                                                                                                                                                                                                                                                                                                                     |
-| `new-defect`     | `to: {markerId,scope}` on a genuinely new identity, every target token in `instances`, and `crop: {path,sha256}`. Crop must be a retained PNG under `evals/out/draw-samples/`, inside this workspace after symlink resolution. The recorded review accepts the entire explicit instance set; every new-defect entry and every text-changing move must use a distinct non-empty crop file/hash; copying one PNG to different names is refused.                                                                         |
-| `envelope-drift` | `markerId`, `metric`, exact `from`, `to`, `observed`, and `coverage: "full"`. Counts use metric `occurrences` and `[min,max]`; scalar bands use `[allowedMin,referenceMin,referenceMax,allowedMax]`. The new reference must equal the full observed range; allowed bounds must equal the measured range plus the documented tolerance; an undrifted metric is refused.                                                                                                                                                |
+| Action           | Required decision data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `retire`         | `markerId`, `scope: {case,sheet,medium}`, `cause: "fixed"`, `"removed"` (intentional content removal), or `"not-measured"`. A compatible check must be measured for fixed/removed, following a declared sheet rename when present. Intentional removal earns no repair credit; a missing observation cannot be booked as fixed/removed. Optional `instances` lists only the leftover baseline tokens of a partially paired old scope.                                                                                                                                                                                                                                                                                     |
+| `superseded`     | `markerId`, `scope`, optional source `instances`, a non-empty explanatory `cause`, and exactly one of `successor` or `survivor`. `successor` is the zero-based index of a new-defect/scope-added entry in this file. `survivor: {markerId,scope}` names an existing registry marker observed at that scope; it cannot be retired, moved or superseded in this file. Requires the hash-bound baseline, a measured source and all review fields. Every source instance needs a target with the same case, medium, kind and DQ. No repair credit. Shared links require `sharedSuccessorReason` on every source, including mixed successor/survivor forms resolving to the same marker and scope; unused reasons are refused. |
+| `rename`         | `from` and `to` each contain `markerId` and `scope`; `pairs` is an array of `{from: oldToken, to: newToken, view?: {from,to}, sourceLocator?: {from,to}, text?: {from,to}}`. Case/flow/medium, defect and locator kind, source row and logical view must match. Changed text or column label needs its literal mapping. A changed physical sheet needs a declared rename. Text-changing moves require their own crop. Every old instance and every target instance must be accounted for across the listed decisions.                                                                                                                                                                                                     |
+| `scope-added`    | `to: {markerId,scope}` on an existing identity and all target tokens in `instances`. Keeps its definition; optional reviewed crop. Use this for an added sheet occurrence, with no repair credit.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `new-defect`     | `to: {markerId,scope}` on a genuinely new identity, every target token in `instances`, and `crop: {path,sha256}`. Crop must be a retained PNG under `evals/out/draw-samples/`, inside this workspace after symlink resolution. The recorded review accepts the entire explicit instance set; every new-defect entry and every text-changing move must use a distinct non-empty crop file/hash; copying one PNG to different names is refused.                                                                                                                                                                                                                                                                             |
+| `envelope-drift` | `markerId`, `metric`, exact `from`, `to`, `observed`, and `coverage: "full"`. Counts use metric `occurrences` and `[min,max]`; scalar bands use `[allowedMin,referenceMin,referenceMax,allowedMax]`. The new reference must equal the full observed range; allowed bounds must equal the measured range plus the documented tolerance; an undrifted metric is refused.                                                                                                                                                                                                                                                                                                                                                    |
 
 For example, a count decision records `from: [2,8]`, `to: [4,8]`,
 `observed: [4,8]`. Drift is assessed from the bound report **after the listed
@@ -428,8 +465,9 @@ follow that same map. If the old column still has observations in the target
 view, the move is refused. Lack of such observations does not prove the column
 was removed; the declared column rename remains reviewer judgment.
 
-A `fixed` or `removed` retirement with a structurally compatible `new-defect`
-or `scope-added` counterpart is refused, naming both marker IDs and exact instance tokens.
+Fixed, removed and superseded sources are checked against **all** fresh
+new-defect and scope-added instances across every merged decisions file. A
+structurally compatible pair is refused, naming both marker IDs and tokens.
 Supply a hash-bound baseline for these retirements, including whole-scope
 retirements, so their old instances can be reconciled.
 Potential column renames are included conservatively, even before the reviewer
@@ -479,19 +517,181 @@ records a physical page shift. Literal `pairs[].view` mappings also declare view
 scope renames, allowing an old I/O title to resolve to the measured new title.
 Conflicting maps and a change of logical view kind are refused. Moves keep their
 semantic row (cell row keys are parsed independently of the column label), not
-merely an arbitrary pair of texts. An unprovable move must be a fixed retirement
-plus a crop-backed new defect, rather than a fabricated locator mapping.
+merely an arbitrary pair of texts. An unprovable identity change uses a no-credit
+`superseded` retirement naming its observed successor or survivor. Its source
+must be measured (following declared renames); an unmeasured source must use
+`retire` with `cause: "not-measured"`. Free-text superseded causes never bypass
+the global move guard. Literal `"fixed"` is refused without a broader wording regex.
 Class-only or aggregate font-pair locators cannot prove a text-changing move;
 unchanged literal text may still follow an explicitly declared sheet rename.
 
 Receipts separate `toolProved` structural/measurement/hash checks from
 `reviewerJudged` causes, crop sign-offs and rationale. `outcomes` counts fixed
-retirements, intentional removals, not-measured retirements, moves (including
+retirements, intentional removals, superseded retirements, not-measured retirements, moves (including
 changed headers), scope additions, new defects and the explicit `notMove` count
 separately. A nonzero `notMove` count makes the reviewer's exceptions visible. These are event
 counts, not independently established repairs or category scores. The tool proves
 structural correspondence, not intent. Moves, additions and intentional removals
 receive no repair credit.
+
+Superseded retirements have their own `outcomes.superseded` count, separate from
+fixes and removals. `outcomes.supersededSurvivors` lists the survivor-form subset
+separately. Each receipt, including partial-instance retirements, preserves
+`action: "superseded"`, the link and source-instance count. The named successor or
+survivor move check is unwaivable. Other all-fresh candidates may use explicit
+reviewed `notMove` declarations with two crops. Link observations are tool-proved;
+the causal link and sharing reason remain reviewer judgments.
+
+### Durable applied records and countersigning
+
+Every applied re-pin commits `evals/draw/repins/<pr>/`: original signed decisions,
+a gzip of the exact receipt, the crop index, one PNG per distinct drawing group and `record.json`.
+The key is the issue or re-pin number: D1 uses **92**, although it merged as PR 104. `record.json` binds the base commit, original uncompressed signed/receipt/index
+hashes, registry before/after and each original payload file's hash. It excludes
+itself. `pathMap` resolves original crop paths without rewriting signed bytes.
+
+`repins/pins.json` pins each record's `record.json` hash and base commit, in
+chronological order. Every directory needs a row and every row a directory.
+Existing rows never change: a diff changing or removing one blocks review. The
+first D1 row's metadata hash and base have literal anchors in the suite.
+Verification checks predecessor registry continuity and requires the newest
+record to end at the current `expectations.mjs` hash. Signed summary, registry and
+checker hashes also match the receipt; entry causes, notes and primary sign-offs
+match its reviewer judgments as a multiset. This prevents metadata rehashing from
+silently relabelling agent review as person review. The chain proves that a
+record claims the current registry, not that it produced it, because the C1
+report is not retained; independent review covers that limit. An empty record
+cannot claim a registry transition.
+
+Citations form a bijection at each step: every signed entry/`notMove` crop has
+an index row, every row maps to a retained PNG, and every retained PNG has at
+least one row. The writer decodes every original crop and groups by the SHA-256
+of RGBA pixels below its declared header, followed by the original
+`<width>x<height>` dimensions (R4's drawing-ink definition). `headerPixels` in an
+input crop-index row is either **0** (default, no header) or **86** (R4's provenance
+header). An 86 px band must be non-blank, with opaque grey ink only and white rows 80–85;
+this catches mistaken declarations, not forgery. Plain grey drawing ink can still
+resemble a header. The header declaration must describe the actual crop.
+The writer never trusts a supplied
+drawing hash. Output index version 2 has each original `sha256`, derived
+`drawingSha256`, `headerPixels` and `retained` file. The first crop in input-index
+order is retained per group; signed decisions and crop hashes are unchanged.
+The verifier decodes each retained PNG, recomputes its drawing hash and checks
+all referring rows, including one original-file hash matching that PNG.
+**A non-retained crop cannot be re-hashed from the record alone. Its drawing
+hash is signed, so it cannot be regrouped without changing signed bytes; the
+original signed hash or pinned record then fails.** Every grouped index row must
+match the crop entry's signed `drawingSha256` and the retained PNG's recomputed
+hash. This also covers `notMove` citations. A C1 run at `baseCommit` regenerates
+the source crop and drawing if rendering is deterministic; rebuilding the
+original stamped PNG additionally needs the stamping script, header text and same
+fonts. Header provenance and crop/source correspondence remain reviewer judgments.
+Only `thermite-draw-crop-index/2.0` and the legacy
+`thermite-d1-real-crops/1.0` index formats are accepted. D1's original index/layout
+continues to verify as the one-crop-per-file case without new fields: every
+original PNG is retained and re-hashed. New grouped archives require signed
+drawing hashes; a missing value is refused.
+
+The dependency-free decoder supports the tool's eight-bit RGB/RGBA PNGs, filters
+0–4 and adjacent IDAT chunks, without interlace. CRC, framing, full zlib-stream consumption and dimensions are
+checked. Palette, grayscale, other bit depths, transparency/color-profile chunks
+that require interpretation (including `gAMA`, `cHRM` and `eXIf`), and unsupported chunks are refused. It does not
+guess pixels for unsupported input. Unknown manifest files (not just PNGs),
+including `.DS_Store`, fail closed. Only signed text, receipt, index and retained
+PNGs belong in the original manifest. No entry schema has a generic `crops` field.
+
+Signed text or crop indexes **over 256 KiB** are stored gzipped, with their
+uncompressed hashes bound separately. A gzipped signed file always uses sidecar
+countersigns. The default record cap is **3,000,000 bytes**, including metadata and
+countersigns. A larger cap requires a per-PR pin row with `maxBytes` and a non-empty
+review reason. D1's byte-immutable record is grandfathered unchanged, including
+its uncompressed signed file. Raw signed JSON uses `.signed` to prevent formatter
+rewrites.
+
+The fixed-header writer is reproducible on the pinned Bun/zlib build.
+**Verification checks gzip metadata and the uncompressed hash; it never
+recompresses.** Existing signed/receipt gzip inputs preserve their compressed bytes, as does
+D1's frozen index. New crop indexes are rebuilt with derived drawing-group fields
+before compression; their input gzip bytes are not retained. This permits
+byte-exact D1 reproduction on other zlib builds without requiring recompression.
+
+#### Writing and pinning an applied record
+
+`recordFor()` and `writeRecord()` in `repin-record-write.mjs` build and validate an
+archive, refuse an existing destination and clean up failed new writes. After
+review/apply, supply the unchanged signed file, captured receipt, reviewed crop
+index and precisely its indexed buffers. Set `headerPixels: 86` on the index
+rows of R4-style header crops **before** calling the writer; plain crops use 0.
+Original input hashes must match every on-disk file, including non-retained ones. For example, fill in the actual issue
+number, pre-apply base and evidence paths:
+
+```js
+import { readFile } from "node:fs/promises";
+import { recordFor, writeRecord } from "./evals/draw/repin-record-write.mjs";
+import { hash } from "./evals/draw/support.mjs";
+
+const pr = 123;
+const baseCommit = "<40-hex pre-apply commit>";
+const cropIndex = await readFile("evals/out/review/crop-index.json");
+const index = JSON.parse(cropIndex);
+const result = recordFor({
+  pr,
+  baseCommit,
+  signed: await readFile("evals/out/review/decisions.signed"),
+  receipt: await readFile("evals/out/review/apply-receipt.json"),
+  cropIndex,
+  crops: new Map(
+    await Promise.all(
+      index.crops.map(async (c) => [c.path, await readFile(c.path)]),
+    ),
+  ),
+});
+await writeRecord(`evals/draw/repins/${pr}`, result);
+console.log({
+  pr,
+  baseCommit,
+  recordSha256: hash(result.files.get("record.json")),
+});
+```
+
+Append the printed row to `pins.json` in chain order, then run the record suite.
+For an approved larger record, pass its `{pr,maxBytes,reason}` pin exception to
+`recordFor` and retain those fields on the pin row. Retain existing payload names
+with `signedName`, `receiptName` and `indexName` when reproducing an older record;
+this reproduces D1's `record.json` exactly from its tracked inputs. The helpers do
+not invent review fields or change the registry. The writer accepts raw or
+already-gzipped signed/receipt/index buffers.
+
+If the original signed bytes equal the tool's `json()` serialization,
+`countersignMode: "canonical"` permits only adding person `counterSignOffs` to
+entries in that tracked file. Save with `json()`. Verification strips only those
+arrays, reserializes, and requires the original signed hash; all signed fields
+remain immutable. Each added signature must have exactly `kind: "person"` and a
+non-empty `by`, with no duplicates.
+
+For non-canonical or gzipped signed bytes, `countersignMode: "sidecar"` keeps the signed file
+byte-immutable. Add a sibling `countersignatures.json` instead, and change nothing
+else in the record:
+
+```json
+{
+  "format": "thermite-draw-countersignatures/1.0",
+  "signedDecisionsSha256": "<original signed file hash from record.json>",
+  "entries": [{ "entryIndex": 0, "kind": "person", "by": "Reviewer name" }]
+}
+```
+
+`entryIndex` addresses the original decisions entry. Append person signatures;
+agent countersigns, unknown entries, empty names and duplicate signatures are
+refused, including repetition of the original person signer. This optional sidecar is an additive extension, not an original file in
+the immutable manifest. Verification still checks the original signed content
+and receipt; a changed registry binding does not require replaying apply.
+
+The [D1 record](repins/92/record.json) is **non-canonical**: its signed SHA is
+`b56690d4…`, while `json(JSON.parse(bytes))` yields `8ebd7e2c…`. It therefore uses
+the sidecar rule. Its historical receipt remains `fa243c1a…` after decompression.
+Run the browser-free record suites and `readRecordChain()` to verify every
+tracked record, its pinned metadata and the current-registry chain.
 
 If D1 blanks a bad DQ-19 placeholder, that predicate may be fixed. A DQ-21 advance
 finding that disappears only because its text was intentionally blanked is

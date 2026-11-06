@@ -1,0 +1,10 @@
+{
+  "format": "thermite-draw-repin-pins/1.0",
+  "records": [
+    {
+      "pr": 92,
+      "recordSha256": "c01537abb5a0e2091b5126b53ede2e723068fd7bf5906e11f02c775d266e1ae5",
+      "baseCommit": "b1e4038895d0a40bc308cf9c4a8c646e2da4c2e8"
+    }
+  ]
+}

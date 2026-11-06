@@ -1,7 +1,7 @@
 // Structural move proofs; these cannot establish the reviewer's intent.
 import assert from "node:assert/strict";
 export const moveError = (detail) =>
-  `Cannot prove move (${detail}); book it as a fixed retirement plus a crop-backed new defect.`;
+  `Cannot prove move (${detail}); review a no-credit superseded retirement with an observed successor or survivor.`;
 export function cropClaimTracker(cropHashes) {
   const used = new Set();
   return (crop) => {
@@ -10,7 +10,9 @@ export function cropClaimTracker(cropHashes) {
       "Crop required: supply a non-empty file path and SHA-256",
     );
     assert(
-      Object.keys(crop).every((k) => ["path", "sha256"].includes(k)) &&
+      Object.keys(crop).every((k) =>
+        ["path", "sha256", "headerPixels", "drawingSha256"].includes(k),
+      ) &&
         crop.path.startsWith("evals/out/draw-samples/") &&
         !crop.path.split("/").includes("..") &&
         /^[a-f0-9]{64}$/.test(crop.sha256 ?? ""),

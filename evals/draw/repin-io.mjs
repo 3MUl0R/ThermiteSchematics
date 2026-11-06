@@ -15,6 +15,11 @@ import { serializeRegistry } from "./marker-authoring.mjs";
 import { prepareRepin, reviewInventory } from "./repin-core.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
 import { draftDecisions } from "./repin-draft.mjs";
+import {
+  drawingReferences,
+  checkCropDrawing,
+} from "./repin-drawing-bindings.mjs";
+import { legacyRecord } from "./repin-record-policy.mjs";
 export function strictJsonBytes(bytes) {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     value = JSON.parse(text),
@@ -49,7 +54,7 @@ export async function strictJsonFile(path) {
   return { value: strictJsonBytes(bytes), sha256: hash(bytes) };
 }
 
-async function within(path, base, { existing = false } = {}) {
+export async function within(path, base, { existing = false } = {}) {
   const root = await realpath(base),
     target = existing
       ? await realpath(path)
@@ -64,7 +69,7 @@ async function within(path, base, { existing = false } = {}) {
   );
   return target;
 }
-export async function reviewedCrop(root, crop) {
+export async function readReviewedCrop(root, crop) {
   assert(
     crop &&
       typeof crop.path === "string" &&
@@ -94,7 +99,18 @@ export async function reviewedCrop(root, crop) {
     "Reviewed crop must be a retained PNG",
   );
   assert(hash(bytes) === crop.sha256, "Reviewed crop hash mismatch");
-  return hash(bytes);
+  return bytes;
+}
+export async function reviewedCrop(root, crop) {
+  return hash(await readReviewedCrop(root, crop));
+}
+async function loadCrops(root, file, cropHashes) {
+  const legacy = file.value.pr === "#92" && legacyRecord(92, file.sha256);
+  for (const { entry, crop } of drawingReferences(file.value)) {
+    const bytes = await readReviewedCrop(root, crop);
+    if (!legacy) checkCropDrawing(entry, crop, bytes);
+    cropHashes.set(crop.path, hash(bytes));
+  }
 }
 export async function loadRepinInputs({
   root,
@@ -122,17 +138,7 @@ export async function loadRepinInputs({
   for (const path of decisionPaths) {
     const file = await strictJsonFile(path);
     decisions.push(file.value);
-    for (const d of file.value.notMove ?? [])
-      for (const crop of d.crops ?? [])
-        cropHashes.set(crop.path, await reviewedCrop(root, crop));
-    for (const e of file.value.entries ?? [])
-      if (
-        e.action === "new-defect" ||
-        (e.action === "scope-added" && e.crop) ||
-        (e.action === "rename" &&
-          ((e.pairs ?? []).some((p) => p.text) || e.crop))
-      )
-        cropHashes.set(e.crop?.path, await reviewedCrop(root, e.crop));
+    await loadCrops(root, file, cropHashes);
   }
   return {
     report: report.value,
@@ -240,11 +246,18 @@ export async function writeDraft({
   path,
   pr,
   baselineSha256,
+  superseded,
+  survivors,
 }) {
   const { value: inventory } = await strictJsonFile(inventoryPath);
   await within(resolve(root, "evals/out"), root, { existing: true });
   const output = await within(resolve(path), resolve(root, "evals/out"));
-  const draft = draftDecisions(inventory, { pr, baselineSha256 });
+  const draft = draftDecisions(inventory, {
+    pr,
+    baselineSha256,
+    superseded,
+    survivors,
+  });
   await writeFile(output, json(draft), { flag: "wx" });
   return draft;
 }

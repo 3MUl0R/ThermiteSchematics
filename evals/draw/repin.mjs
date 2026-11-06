@@ -24,6 +24,8 @@ const { values } = parseArgs({
     output: { type: "string" },
     pr: { type: "string" },
     "baseline-sha": { type: "string" },
+    survivor: { type: "string", multiple: true },
+    superseded: { type: "string", multiple: true },
   },
 });
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -44,6 +46,22 @@ if (drafting) {
     path: values.output,
     pr: values.pr,
     baselineSha256: values["baseline-sha"],
+    survivors: (values.survivor ?? []).map((choice) => {
+      assert(
+        /^\d+:[a-f0-9]{64}$/.test(choice),
+        "Use --survivor <retirement-index>:<current-instance-token>",
+      );
+      const [entryIndex, token] = choice.split(":");
+      return { entryIndex: Number(entryIndex), token };
+    }),
+    superseded: (values.superseded ?? []).map((choice) => {
+      assert(
+        /^\d+:\d+$/.test(choice),
+        "Use --superseded <retirement-index>:<successor-index>",
+      );
+      const [entryIndex, successor] = choice.split(":").map(Number);
+      return { entryIndex, successor };
+    }),
   });
   process.stdout.write(
     `Wrote ${draft.entries.length} unreviewed entries; no causes approved.\n`,
@@ -51,7 +69,11 @@ if (drafting) {
 } else {
   assert(values.report, "Supply --report <full-strict-summary.json>");
   assert(
-    !values.output && !values.pr && !values["baseline-sha"],
+    !values.output &&
+      !values.pr &&
+      !values["baseline-sha"] &&
+      !values.superseded &&
+      !values.survivor,
     "Draft-only flags require draft",
   );
   const inputs = await loadRepinInputs({
