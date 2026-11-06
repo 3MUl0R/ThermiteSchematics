@@ -494,6 +494,8 @@ it("expresses all D1 item classes without booking any of five changed-text moves
     result = prepareRepin(c);
   expect(result.expected.exitCode).toBe(0);
   expect(result.expected.outcomes).toEqual({
+    superseded: 0,
+    supersededSurvivors: 0,
     notMove: 0,
     fixes: 1,
     moves: 5,

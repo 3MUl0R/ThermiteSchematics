@@ -31,6 +31,8 @@ import {
   writeDraft,
 } from "./repin-io.mjs";
 
+import { drawingHash } from "./png-ink.mjs";
+import { pngFixture } from "./png-fixture.mjs";
 const specs = [{ id: "fixture-left-to-right", flow: "left-to-right" }];
 const cid = specs[0].id,
   oldView = "view:io/PLC I/O schedule",
@@ -490,12 +492,10 @@ async function ioFixture() {
   await mkdir(join(root, "evals/draw"), { recursive: true });
   await mkdir(join(root, "evals/out/draw-samples/review"), { recursive: true });
   const c = fixture(),
-    png = Buffer.concat([
-      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-      Buffer.from("test-image"),
-    ]);
+    png = pngFixture();
   const crop = c.decisions[0].entries[2].crop;
   crop.sha256 = hash(png);
+  c.decisions[0].entries[2].drawingSha256 = drawingHash(png);
   c.cropHashes = new Map([[crop.path, crop.sha256]]);
   await writeFile(join(root, crop.path), png);
   const target = join(root, "evals/draw/expectations.mjs");
@@ -1206,6 +1206,7 @@ it("refuses identical real crop bytes even when supplied under different filenam
     const e = c.decisions[0].entries[1],
       crop = c.decisions[0].entries[2].crop;
     e.pairs[0].text = { from: "K1", to: "K1 caption" };
+    e.drawingSha256 = c.decisions[0].entries[2].drawingSha256;
     e.crop = {
       ...crop,
       path: "evals/out/draw-samples/review/renamed-copy.png",
