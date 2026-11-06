@@ -7,7 +7,7 @@ import type {
   SymbolPresentationNode,
 } from "../types.js";
 
-/** Mechanical ink is permitted only for authored gangs of aligned breaker poles.
+/** Mechanical ink is permitted only for authored gangs of aligned breaker or disconnector poles.
  * It never participates in ELK routing, ports, nets or conductor accounting. */
 export function rootedGangSegments(
   ir: Readonly<ElectricalIr>,
@@ -23,7 +23,9 @@ export function rootedGangSegments(
   const vertical = graph.view.flow === "left-to-right";
   const poles = graph.nodes.filter(
     (node): node is SymbolPresentationNode =>
-      node.kind === "symbol" && node.symbolId === "ais:breaker-pole",
+      node.kind === "symbol" &&
+      (node.symbolId === "ais:breaker-pole" ||
+        node.symbolId === "ais:disconnector"),
   );
   const labelText = new Map(
     [

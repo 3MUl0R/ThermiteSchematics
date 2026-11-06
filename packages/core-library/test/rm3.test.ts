@@ -2,6 +2,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, expect, it } from "vitest";
+import { parseHTML } from "linkedom";
 import {
   analyzeCompleteness,
   compileProject,
@@ -221,3 +222,89 @@ it("keeps a missing PLC supply visible and relations non-conductive", async () =
     await rm(scratch, { recursive: true, force: true });
   }
 });
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "renders a connected RM3 disconnector extension without changing the inventory specimen in %s",
+  async (flow) => {
+    const scratch = await mkdtemp(join(tmpdir(), "thermite-rm3-disconnector-"));
+    try {
+      await cp(root, scratch, { recursive: true });
+      const path = join(scratch, "starter.json");
+      const source = JSON.parse(await readFile(path, "utf8"));
+      for (let phase = 1; phase <= 3; phase++) {
+        const wire = source.objects.find(
+          (o: any) =>
+            o.kind === "wire" &&
+            o.endpoints.some(
+              (e: any) => e.device === "SRC1" && e.terminal === `L${phase}`,
+            ) &&
+            o.endpoints.some((e: any) => e.device === "Q1"),
+        );
+        expect(wire, `phase ${phase}`).toBeDefined();
+        wire.endpoints = [
+          { device: "DS1", terminal: `${phase * 2}/T${phase}` },
+          wire.endpoints.find((e: any) => e.device === "Q1"),
+        ];
+        source.objects.push({
+          kind: "wire",
+          uid: `75000000-0000-4000-8000-00000000000${phase}`,
+          designation: `WDS${phase}`,
+          endpoints: [
+            { device: "SRC1", terminal: `L${phase}` },
+            { device: "DS1", terminal: `${phase * 2 - 1}/L${phase}` },
+          ],
+        });
+      }
+      await writeFile(path, JSON.stringify(source));
+      const compiled = await compileProject(scratch);
+      if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+      const before = JSON.stringify(compiled.ir);
+      const request = JSON.parse(
+        await readFile(join(root, "disconnector-power.request.json"), "utf8"),
+      );
+      const result = await renderSchematic(compiled.ir, { ...request, flow });
+      expect(result.ok, JSON.stringify(result.ok ? {} : result)).toBe(true);
+      if (!result.ok) throw Error(result.error.message);
+      expect(
+        result.value.svg.match(/data-symbol-id="ais:disconnector"/g),
+      ).toHaveLength(3);
+      if (flow === "left-to-right") {
+        const segments = [
+          ...parseHTML(result.value.svg).document.querySelectorAll(
+            'line[data-mechanical-association="ganged"]',
+          ),
+        ];
+        expect(segments).toHaveLength(4);
+        for (const designation of ["DS1", "Q1"]) {
+          const uid = compiled.ir.devices.find(
+            (d) => d.designation === designation,
+          )!.uid;
+          expect(
+            segments.filter((s) =>
+              s.getAttribute("data-ganged-functions")!.includes(uid),
+            ),
+          ).toHaveLength(2);
+        }
+        for (const segment of segments) {
+          const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((a) =>
+            Number(segment.getAttribute(a)),
+          );
+          expect(Math.hypot(x2! - x1!, y2! - y1!)).toBeGreaterThan(0);
+        }
+      }
+      expect(compiled.ir.wires).toHaveLength(ir.wires.length + 3);
+      expect(JSON.stringify(compiled.ir)).toBe(before);
+      expect(
+        ir.wires.some((w) =>
+          w.endpoints.some(
+            (e) =>
+              e.deviceUid ===
+              ir.devices.find((d) => d.designation === "DS1")!.uid,
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  },
+);

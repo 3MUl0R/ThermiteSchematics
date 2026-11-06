@@ -9,7 +9,9 @@ type ShapeType =
   Pick<ValidatedDeviceType, "terminals"> | Pick<IrDeviceType, "terminals">;
 type ShapeFunction =
   | ValidatedDeviceType["functions"][string]
-  | Pick<IrDeviceTypeFunction, "kind" | "terminalKeys">;
+  | (Pick<IrDeviceTypeFunction, "kind" | "terminalKeys"> & {
+      readonly normal_state?: "open" | "closed";
+    });
 
 /** Match source or IR facts in the function's authored terminal order, never the
  * type's terminal display order. Shared by validation and render conformance.
@@ -31,6 +33,8 @@ export function symbolFunctionMatchesShape(
     fn.kind === shape.kind &&
     keys.length >= shape.minTerminals &&
     keys.length <= shape.maxTerminals &&
+    (shape.normalState === undefined ||
+      ("normal_state" in fn && fn.normal_state === shape.normalState)) &&
     (shape.firstTerminalVoltageType === undefined ||
       terminalAt(0)?.rating?.voltage_type === shape.firstTerminalVoltageType) &&
     (shape.terminalRoles === undefined ||
@@ -45,6 +49,7 @@ export function formatSymbolFunctionShape(shape: SymbolFunctionShape): string {
       ? String(shape.minTerminals)
       : `${shape.minTerminals}-${shape.maxTerminals}`;
   const constraints: string[] = [];
+  if (shape.normalState) constraints.push(`${shape.normalState} normal state`);
   if (shape.firstTerminalVoltageType)
     constraints.push(`${shape.firstTerminalVoltageType} first terminal`);
   if (shape.terminalRoles) constraints.push(shape.terminalRoles.join(", "));

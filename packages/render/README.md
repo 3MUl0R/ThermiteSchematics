@@ -457,8 +457,12 @@ inherit NC/NO captions. Coil AC/DC text comes only from its terminal ratings;
 motors carry M and carry 3~ only for a three-phase profile/function shape.
 `thermite:estop` and `thermite:selector` retain their parent pushbutton/switch
 support and add mushroom/latch and rotary/detent operator marks. Identity is
-never inferred from names, descriptions or designations. Rooted gang ink uses
-only authored same-device breaker associations, with aligned poles and a clear
+never inferred from names, descriptions or designations. `thermite:disconnector`
+uses an open blade, gap and fixed-contact bar, without an operator linkage or
+trip element. It has power contact traversal and switch-parity control traversal;
+closed states, loads and signal loops are unsupported. See the
+[identity and suitability limits](../../docs/circuit-symbols.md#shared-printable-vocabulary).
+Rooted gang ink uses only authored same-device breaker or disconnector associations, with aligned poles and a clear
 corridor; unaligned or obstructed associations are omitted. This changes no
 symbol bounds, port positions, ELK placement, nets or conductor accounting.
 

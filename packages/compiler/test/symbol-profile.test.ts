@@ -95,6 +95,36 @@ async function project(type: ValidatedDeviceType, bytes?: string) {
 }
 
 describe("validate-time symbol profile warnings", () => {
+  it("matches the disconnector's authored open state in source and IR shapes", () => {
+    const shape = SYMBOL_PROFILES.find(
+      (p) => p.id === "thermite:disconnector",
+    )!.support.find((s) => s.family === "control")!.functions[0]!;
+    const type = { terminals: { a: {}, b: {} } };
+    for (const normal_state of ["open", "closed", undefined] as const) {
+      expect(
+        symbolFunctionMatchesShape(
+          type,
+          {
+            kind: "contact",
+            terminals: ["a", "b"],
+            normal_state,
+          },
+          shape,
+        ),
+      ).toBe(normal_state === "open");
+      expect(
+        symbolFunctionMatchesShape(
+          type,
+          {
+            kind: "contact",
+            terminalKeys: ["a", "b"],
+            normal_state,
+          },
+          shape,
+        ),
+      ).toBe(normal_state === "open");
+    }
+  });
   it.each([
     "CO byte-identical clone",
     "PU analog PLC",
@@ -482,13 +512,13 @@ describe("profile alternatives and message bounds", () => {
     const result = await compileProject(await project(type));
     const warning = result.diagnostics.find((d) => d.code === "W111")!;
     expect(warning.allowed).toEqual(SYMBOL_PROFILES.map((p) => p.id));
-    expect(warning.allowedCount).toBe(29);
+    expect(warning.allowedCount).toBe(30);
     expect(warning.allowedLookup).toContain(
       "thermite validate <project> --json",
     );
     const prose = warning.message.split("Supported profiles by family:")[1]!;
     expect([...prose.matchAll(/"thermite:[^"]+"/gu)]).toHaveLength(10);
-    expect(prose).toContain("and 24 more");
+    expect(prose).toContain("and 25 more");
   });
 
   it("retains a single structured equivalent for an incompatible IEC alias", async () => {

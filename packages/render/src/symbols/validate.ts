@@ -477,6 +477,7 @@ function validateFunctionSymbolFacts(
       expectFunctionFacts(definition, "contact", context);
       return;
     case "ais:contact-no":
+    case "ais:disconnector":
     case "ais:estop-no":
     case "ais:selector-no":
     case "ais:pushbutton-no":

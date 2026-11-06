@@ -13,6 +13,7 @@ import { escapeXmlText as xml } from "../svg/escape.js";
 
 /** Closed, original circuit marks. Profiles never grant electrical continuity. */
 export type CircuitMark =
+  | "disconnector"
   | "estop-no"
   | "estop-nc"
   | "selector-no"
@@ -67,6 +68,7 @@ export const CIRCUIT_PROFILES = Object.freeze([
   "thermite:solenoid",
   "thermite:lamp",
   "thermite:switch",
+  "thermite:disconnector",
   "thermite:pushbutton",
   "thermite:estop",
   "thermite:selector",
@@ -187,6 +189,8 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
           ? "contact-no"
           : "contact-nc";
     if (profile === "thermite:fuse") return "fuse";
+    if (profile === "thermite:disconnector" && f.normal_state === "open")
+      return "disconnector";
     if (profile === "thermite:switch")
       return f.normal_state === "open" ? "switch-no" : "switch-nc";
     if (profile === "thermite:pressure-switch")
@@ -387,6 +391,7 @@ function sharedCircuitPrimitives(mark: SharedMark): Primitive[] {
 }
 const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
   Object.freeze({
+    disconnector: sharedCircuitPrimitives("disconnector"),
     "estop-no": sharedCircuitPrimitives("estop-no"),
     "estop-nc": sharedCircuitPrimitives("estop-nc"),
     "selector-no": sharedCircuitPrimitives("selector-no"),

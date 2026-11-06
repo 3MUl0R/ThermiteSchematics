@@ -43,7 +43,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 );
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "pins the disconnect's plain NO circuit marks and missing power binding in %s",
+  "renders the disconnect identity in circuit and power views in %s",
   async (flow) => {
     const root = await mkdtemp(join(tmpdir(), "thermite-disconnect-gap-"));
     try {
@@ -61,27 +61,14 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
             (m) => m[1],
           ),
         ),
-      ).toEqual(["switch-no", "switch-no", "switch-no"]);
+      ).toEqual(["disconnector", "disconnector", "disconnector"]);
       const power = await renderSchematic(compiled.ir, {
         format: "schematic-view-request/0.1",
         root: { by: "designation", value: "M1" },
         family: "power",
         flow,
       });
-      expect(power).toMatchObject({
-        ok: false,
-        error: {
-          code: "R002",
-          reason: "unsupported-symbol-profile",
-          unsupported: {
-            designation: "DS1",
-            typeId: "core:disconnect-3p",
-            profile: "thermite:switch",
-            functionKey: "pole1",
-            family: "power",
-          },
-        },
-      });
+      expect(power.ok, JSON.stringify(power)).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
