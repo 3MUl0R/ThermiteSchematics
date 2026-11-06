@@ -379,6 +379,7 @@ function expectPlantDiagnostics(diagnostics: readonly any[]) {
   expect(diagnostics.map((d) => [d.code, d.severity, d.jsonPointer])).toEqual([
     ["W903", "warning", "/objects/6"],
     ["I304", "info", "/project"],
+    ["I305", "info", "/project"],
   ]);
   expect(diagnostics[0].message).toBe(
     "PLC2: Required terminal PLC2.L+ has no connection. Required terminal PLC2.M has no connection.",
@@ -1081,7 +1082,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Info I304 lists rated nets left unassessed and I208 checks that errors skipped; info alone exits 0, even with `--strict`.",
+        "I304/I305 list unassessed multi-/single-rated nets; I208 lists skipped checks. Info exits 0, even with `--strict`.",
       async check() {
         const [valid, semantic, project] = await Promise.all([
           plantValidate(),
@@ -1116,7 +1117,18 @@ const module: FactModule = {
         expect(info.stderr).toBe("");
         expect(
           JSON.parse(info.stdout).map((d: any) => [d.code, d.severity]),
-        ).toEqual([["I304", "info"]]);
+        ).toEqual([
+          ["I304", "info"],
+          ["I305", "info"],
+        ]);
+        const cableInfo = await ok(["validate", ".", "--json"], await cables());
+        const cableDiagnostics = JSON.parse(cableInfo.stdout);
+        expect(cableDiagnostics.map((d: any) => [d.code, d.severity])).toEqual([
+          ["W903", "warning"],
+          ["I305", "info"],
+        ]);
+        expect(cableDiagnostics[1].message).toContain("PLC1.X1.0 rating");
+        expect(valid.report.diagnostics[2].message).toContain("5 nets:");
         // The second name on +24VDC (E300) skips E301 and E302 on that net,
         // and E301 at PLC1.X1.0 skips E302 there; nothing else is skipped.
         expect(
@@ -1981,6 +1993,14 @@ const module: FactModule = {
     },
   ],
   unexecuted: new Map([
+    [
+      "Rooted views are bounded: unequal parallel paths and authored conductors at drawn terminals can be omitted without markers.",
+      "Disclosure of a known bounded-selection limit (#84), not an executed guide claim. A separate test-only DOL witness records the current reproduction omissions for #84b to update.",
+    ],
+    [
+      "Audit with circuit/wiring views and packet coverage.",
+      "Review advice; packet coverage tests pin the explicit circuit/wiring scope.",
+    ],
     [
       "Keep streams separate.",
       "Advice to callers; the stream split itself is checked with the previous sentence.",

@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import {
   cp,
@@ -2241,7 +2242,7 @@ describe("D7 shipped-package violation phase matrix", () => {
         );
         expect(outcome).toEqual({
           ok: true,
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           value: {
             dryRun: false,
             applied: true,

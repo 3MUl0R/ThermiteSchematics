@@ -97,6 +97,7 @@ it("validates all six real info-only agent results and reports against published
       expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
       expect(outcome.diagnostics.map((d) => [d.code, d.severity])).toEqual([
         ["I304", "info"],
+        ["I305", "info"],
       ]);
       if (!outcome.ok) throw Error(tool);
       let stdout = "",

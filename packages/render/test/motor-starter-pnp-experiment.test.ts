@@ -1,3 +1,7 @@
+import {
+  motorDiagnostics,
+  pnpMotorDiagnostics,
+} from "../../cli/test/motor-starter-diagnostics.js";
 import { orderingMetrics } from "./layout-metrics.js";
 import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { readFile, readdir } from "node:fs/promises";
@@ -631,7 +635,7 @@ function expectLayoutFailure(
 describe("M6 Task 7 staged source-only PNP experiment", () => {
   it("copies only ordinary files, validates untouched, and freezes the type-only E102 state", () => {
     const created = required(experiment);
-    expect(baselineCompile.diagnostics).toEqual([]);
+    expect(baselineCompile.diagnostics).toEqual(motorDiagnostics);
     expect(untouchedFiles.project).toEqual(created.baselineProjectFiles);
     expect(untouchedFiles.library).toEqual(created.baselineLibraryFiles);
 
@@ -723,7 +727,7 @@ describe("M6 Task 7 staged source-only PNP experiment", () => {
 
   it("applies only the completed D10 edits and preserves manifest, library, and lock bytes", () => {
     const created = required(experiment);
-    expect(pnpCompile.diagnostics).toEqual([]);
+    expect(pnpCompile.diagnostics).toEqual(pnpMotorDiagnostics);
     expect(pnpFiles.library).toEqual(created.baselineLibraryFiles);
     expect(pnpFiles.project.get("system.json")).toEqual(
       created.baselineProjectFiles.get("system.json"),

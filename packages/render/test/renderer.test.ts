@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import {
   evaluateRules,
   type CompiledProjectPresentation,
@@ -234,7 +235,7 @@ describe("integrated renderer", () => {
 
   it("attempts layout for the compiler-valid equal-shortest PNP regression deterministically", async () => {
     const ir = pnpParallelTraceFixture(coreIr);
-    expect(evaluateRules(ir)).toEqual([]);
+    expect(evaluateRules(ir)).toEqual(motorDiagnostics);
     const reordered = structuredClone(ir);
     for (const collection of [
       reordered.devices,
@@ -278,7 +279,7 @@ describe("integrated renderer", () => {
 
   it("locks the v23 compiled-context N=2 RIGHT failure and DOWN success across two production runs", async () => {
     const ir = b4CompiledContextN2Fixture(coreIr);
-    expect(evaluateRules(ir)).toEqual([]);
+    expect(evaluateRules(ir)).toEqual(motorDiagnostics);
 
     const plcInput = b4Terminal(ir, "PLC1", "X1.0");
     expect(

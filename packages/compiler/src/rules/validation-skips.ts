@@ -22,7 +22,7 @@ export function skippedNetChecks(
       ),
     ].sort();
     parts.push(
-      `${causes.join("/")} topology gate: skipped E300, E301, E302, W902, W303, I304 on ${summarizeAffected(nets(context.topologicallyAffectedNetIds), "net")}`,
+      `${causes.join("/")} topology gate: skipped E300, E301, E302, W902, W303, I304, I305 on ${summarizeAffected(nets(context.topologicallyAffectedNetIds), "net")}`,
     );
   }
   if (context.conflictingPotentialNetIds.size)

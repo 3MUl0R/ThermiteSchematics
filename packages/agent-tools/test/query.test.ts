@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -177,7 +178,7 @@ describe("D6 closed graph-query dispatcher", () => {
       }).query(request(query));
       expect(outcome).toEqual({
         ok: true,
-        diagnostics: [],
+        diagnostics: motorDiagnostics,
         value: directResult.value,
       });
       if (!outcome.ok) throw new Error("Expected graph-query success.");
@@ -363,7 +364,7 @@ describe("D6 query error parity", () => {
       }).query(request(query));
       expect(outcome).toEqual({
         ok: false,
-        diagnostics: [],
+        diagnostics: motorDiagnostics,
         error: expected,
         failureClass: "expected",
       });

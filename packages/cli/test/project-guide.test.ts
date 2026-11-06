@@ -134,8 +134,7 @@ const FLAG_BINDINGS: readonly {
     commands: () => ["view", "packet", "report"],
   },
   {
-    sentence:
-      "Info I304 lists rated nets left unassessed and I208 checks that errors skipped; info alone exits 0, even with `--strict`.",
+    sentence: "Info exits 0, even with `--strict`.",
     fragment: "--strict",
     commands: () => ["validate"],
   },
@@ -662,7 +661,7 @@ describe("generated project guide", () => {
     const pinned = (await readJson(join(repositoryRoot, "package.json")))
       .packageManager as string;
     expect(live.flat).toContain(`Bun ${pinned.replace(/^bun@/, "")}`);
-    expect(live.flat).toContain("`bun <thermite>/thermite.mjs <command>`");
+    expect(live.flat).toContain("`bun <thermite>/thermite.mjs`");
     await expect(stat(entry)).resolves.toBeTruthy();
   });
 

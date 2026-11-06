@@ -88,6 +88,7 @@ const fixtureNames = [
   "compatible-partial-later-voltage-origin",
   "declared-ratings-conflict",
   "unassessed-rated-nets",
+  "unassessed-single-rated-net",
 ] as const;
 
 const e200FixtureNames = [
@@ -113,6 +114,7 @@ const exactFixtureByRule = {
   W905: "deferred-connection",
   W303: "declared-ratings-conflict",
   I304: "unassessed-rated-nets",
+  I305: "unassessed-single-rated-net",
 } as const satisfies Record<M3RuleId, FixtureName>;
 
 const pipelineRuleErrorFixtures = [
@@ -1113,6 +1115,7 @@ describe("M3 IR-only rule engine through E302 and W902", () => {
       "W905",
       "W303",
       "I304",
+      "I305",
     ]);
     expect(new Set(ids).size).toBe(ids.length);
     expect(Object.keys(exactFixtureByRule)).toEqual(ids);
@@ -1152,7 +1155,11 @@ describe("M3 IR-only rule engine through E302 and W902", () => {
   it("keeps every broken fixture message and related note specific and reviewable", () => {
     for (const name of fixtureNames) {
       for (const diagnostic of fixtureExpected(name)) {
-        if (diagnostic.code === "I208" || diagnostic.code === "I304") {
+        if (
+          diagnostic.code === "I208" ||
+          diagnostic.code === "I304" ||
+          diagnostic.code === "I305"
+        ) {
           expect(diagnostic.severity).toBe("info");
           continue;
         }

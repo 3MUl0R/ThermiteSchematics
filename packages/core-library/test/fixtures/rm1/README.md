@@ -16,5 +16,9 @@ bun thermite.mjs view K1 --actuation --project packages/core-library/test/fixtur
 bun thermite.mjs view PS1 --loads --project packages/core-library/test/fixtures/rm1 --json
 ```
 
+Validation reports I305/info for four connected nets with one comparable
+voltage-rated terminal and no potential voltage facts (SRC1.L1/L2/L3 and
+K1.A1). It identifies no supply path; author intent only from known design facts.
+
 All three view requests render in both flows. The DC class fixes the earlier
 PLC1.supply R003 without inventing a voltage magnitude.

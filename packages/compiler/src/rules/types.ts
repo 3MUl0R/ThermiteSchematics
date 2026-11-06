@@ -19,6 +19,7 @@ export type M3RuleId =
   | "E302"
   | "W303"
   | "I304"
+  | "I305"
   | "W902";
 
 /** Internal rule contract. The diagnostic code is the stable rule identity. */

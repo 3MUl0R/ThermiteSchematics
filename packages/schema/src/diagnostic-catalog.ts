@@ -509,6 +509,12 @@ export const DIAGNOSTIC_CATALOG = {
     producer: "code",
     meaning: "Initialization failed: created entry identity capture failed.",
   },
+  I305: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "Voltage compatibility is unassessed on connected nets with one comparable voltage-rated terminal and no voltage facts in potentials ({summary}). Ratings describe equipment capability; potentials declare net intent. No supply path was assessed.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCatalogCode = keyof typeof DIAGNOSTIC_CATALOG;

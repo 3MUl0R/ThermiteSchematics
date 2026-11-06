@@ -1635,7 +1635,9 @@ it("strict validates a 0.2.0 core project with every required point connected", 
   expect(report.counts.requiredMissing).toBe(0);
   expect(report.counts.warnings).toBe(0);
   expect(report.findings.filter((f) => f.code === "I005")).toHaveLength(11);
-  expect(compiled.diagnostics).toEqual([]);
+  expect(compiled.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+    ["I305", "info"],
+  ]);
   const strict = spawnSync(
     process.execPath,
     [join(repositoryRoot, "thermite.mjs"), "validate", root, "--strict"],

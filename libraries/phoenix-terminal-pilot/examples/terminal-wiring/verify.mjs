@@ -25,9 +25,15 @@ assert.deepEqual(
     },
   ],
 );
-assert.equal(compiled.diagnostics.length, 5);
+assert.equal(compiled.diagnostics.length, 6);
+const singleRated = compiled.diagnostics.filter((d) => d.code === "I305");
+assert.equal(singleRated.length, 1);
+assert.equal(singleRated[0].severity, "info");
+assert(singleRated[0].message.includes("(1 net:"));
 assert.deepEqual(
-  compiled.diagnostics.filter((d) => d.code !== "I304").map((d) => d.code),
+  compiled.diagnostics
+    .filter((d) => d.code !== "I304" && d.code !== "I305")
+    .map((d) => d.code),
   ["W904", "W904", "W904", "W904"],
 );
 const device = (ir, tag) => ir.devices.find((d) => d.designation === tag);

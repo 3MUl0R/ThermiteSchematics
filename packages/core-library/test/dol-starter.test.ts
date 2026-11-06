@@ -115,7 +115,9 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 it("validates a DOL starter entirely from core 0.2.0 with zero errors, warnings or I003", async () => {
   const compiled = await compileProject(starter);
   expect(compiled.ok, JSON.stringify(compiled.diagnostics)).toBe(true);
-  expect(compiled.diagnostics).toEqual([]);
+  expect(compiled.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+    ["I305", "info"],
+  ]);
   if (!compiled.ok) throw Error("starter did not compile");
   const report = analyzeCompleteness(compiled.ir);
   expect(

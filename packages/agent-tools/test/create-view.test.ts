@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import { validationGateExpectations as gates } from "../../compiler/test/validation-gate-expectations.js";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
@@ -209,10 +210,14 @@ describe("D8 direct-render parity", () => {
       }).createView(request(testCase.spec));
       expect(outcome, testCase.name).toEqual(
         direct.ok
-          ? { ok: true, diagnostics: [], value: direct.value }
+          ? {
+              ok: true,
+              diagnostics: motorDiagnostics,
+              value: direct.value,
+            }
           : {
               ok: false,
-              diagnostics: [],
+              diagnostics: motorDiagnostics,
               error: direct.error,
               failureClass: "expected",
             },

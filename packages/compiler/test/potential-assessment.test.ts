@@ -351,10 +351,12 @@ describe("round 3 assessment controls", () => {
     [{ power: 5 }, { frequency: 60 }],
     [dc, { current: 10 }],
   ])(
-    "does not assess a net with fewer than two voltage-rated terminals",
+    "distinguishes single-rated nets from nets without voltage ratings",
     async (a, b) => {
       const r = await pair({ rating: a }, { rating: b });
-      expect(r.diagnostics).toEqual([]);
+      expect(r.diagnostics.map((d) => d.code)).toEqual(
+        a === dc ? ["I305"] : [],
+      );
     },
   );
   it.each([

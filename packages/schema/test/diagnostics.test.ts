@@ -112,6 +112,7 @@ const EXPECTED_CATALOG_CODES = [
   "INIT010",
   "INIT011",
   "INIT012",
+  "I305",
 ];
 
 const exactE1xxFixtureByCode = {
@@ -172,7 +173,7 @@ describe("diagnostic catalog", () => {
       DIAGNOSTIC_CATALOG_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CATALOG_CODES.length - 15);
+    ).toHaveLength(DIAGNOSTIC_CATALOG_CODES.length - 16);
   });
 
   it("keeps compiler diagnostics separate from the full lookup catalog", () => {

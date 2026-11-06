@@ -1,12 +1,11 @@
 # Thermite Schematics project guide
 
-This project uses the TypeScript + ELK alpha. Run one Thermite runtime package
-or source checkout as `bun <thermite>/thermite.mjs <command>` (`<thermite>` is
-its absolute path; ask the user if unknown), written `thermite` below; there is
-no `thermite` command on PATH. Use Bun 1.4.2 and the same folder every time. Do
-not install dependencies or build inside a downloaded runtime package. A source
-checkout needs `bun install --frozen-lockfile && bun run build` before use and
-after engine changes. Keep either separate from this project.
+This TypeScript + ELK alpha uses Bun 1.4.2. Here `thermite` means
+`bun <thermite>/thermite.mjs`; use one runtime/source folder's absolute path
+(ask if unknown), separate from this project. No `thermite` is on PATH.
+Never install/build in a downloaded runtime. Source checkouts need
+`bun install --frozen-lockfile && bun run build` before use and
+after engine changes.
 
 ```sh
 thermite init ../conveyor --name "Conveyor 1"
@@ -110,9 +109,9 @@ core `plc-compact` function `do0` is terminal `X2.0`. Take UIDs and keys from
 Voltage checks (E300-E302) run only on nets that carry a `potential`
 (`{uid, kind: "potential", name, at, electrical: {nominal_voltage, voltage_type}}`).
 Terminal ratings never create one, even on a source: 480 VAC wired to a 24 VDC
-input warns W303 (ratings disagree) until potentials declare voltage_type. Info
-I304 lists rated nets left unassessed and I208 checks that errors skipped; info
-alone exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
+input warns W303 (ratings disagree) until potentials declare voltage_type.
+I304/I305 list unassessed multi-/single-rated nets; I208 lists skipped checks.
+Info exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at the sources you add.
 
 Write large outputs to files: `create-view` returns tens of KB and
@@ -141,6 +140,10 @@ views. `--flow left-to-right|top-to-bottom`,
 `--margin <mm>` (5-25), `--layout compact` and `--index` override project page
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
 single sheet only (R006 otherwise).
+
+Rooted views are bounded: unequal parallel paths and authored conductors at drawn
+terminals can be omitted without markers. Audit with circuit/wiring views and
+packet coverage.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

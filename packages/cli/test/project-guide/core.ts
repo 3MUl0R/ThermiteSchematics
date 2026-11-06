@@ -303,7 +303,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Run one Thermite runtime package or source checkout as `bun <thermite>/thermite.mjs <command>` (`<thermite>` is its absolute path; ask the user if unknown), written `thermite` below; there is no `thermite` command on PATH.",
+        "Here `thermite` means `bun <thermite>/thermite.mjs`; use one runtime/source folder's absolute path (ask if unknown), separate from this project. No `thermite` is on PATH.",
       async check() {
         // Every run in this suite is `bun <checkout>/thermite.mjs <command>`;
         // the setup parsed this tree from the root `--help`.
@@ -312,7 +312,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Use Bun 1.4.2 and the same folder every time.",
+      claim: "This TypeScript + ELK alpha uses Bun 1.4.2.",
       async check() {
         const pinned = (await readJson(join(repositoryRoot, "package.json")))
           .packageManager;
@@ -992,6 +992,7 @@ const module: FactModule = {
         expect(warned.map((d: any) => [d.code, d.severity])).toEqual([
           ["W303", "warning"],
           ["I304", "info"],
+          ["I305", "info"],
         ]);
         expect(warned[0].message).toMatch(
           /these declared ratings disagree: PLC1\.X1\.0 rating \{"nominal_voltage":24,"voltage_type":"DC"\} .*; SRC1\.L1 rating \{"nominal_voltage":480,"voltage_type":"AC"\} .*No potential declares voltage facts on this net/,
@@ -1016,6 +1017,7 @@ const module: FactModule = {
         );
         expect(partial.map((d: any) => d.code).sort()).toEqual([
           "E302",
+          "I305",
           "W303",
         ]);
         const partialWarning = partial.find((d: any) => d.code === "W303");
@@ -1042,6 +1044,7 @@ const module: FactModule = {
             "I208",
             'Checks not completed: E301 voltage-type gate: skipped E302 on 1 terminal: ["PLC1.X1.0"].',
           ],
+          ["I305", expect.stringContaining("SRC1.L2 rating")],
         ]);
       },
     },
@@ -1439,20 +1442,12 @@ const module: FactModule = {
   ],
   unexecuted: new Map([
     [
-      "This project uses the TypeScript + ELK alpha.",
-      "Identifies the engine generation; no runtime behavior.",
-    ],
-    [
-      "Do not install dependencies or build inside a downloaded runtime package.",
+      "Never install/build in a downloaded runtime.",
       "Instruction about runtime packages, which this source-checkout suite does not use.",
     ],
     [
-      "A source checkout needs `bun install --frozen-lockfile && bun run build` before use and after engine changes.",
+      "Source checkouts need `bun install --frozen-lockfile && bun run build` before use and after engine changes.",
       "Setup instruction; this suite itself runs from a built checkout.",
-    ],
-    [
-      "Keep either separate from this project.",
-      "Workspace advice; no runtime behavior.",
     ],
     [
       "When using a runtime package, report bugs, missing capabilities, and unclear documentation at https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing issues.",

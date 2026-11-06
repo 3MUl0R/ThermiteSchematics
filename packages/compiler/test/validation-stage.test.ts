@@ -330,7 +330,7 @@ it.each(["libraryLock", "sources"] as const)(
         code: "I208",
         severity: "info",
         message:
-          'Checks not completed: compilation tool failure gate (E001); no complete results available for library-lock verification, reference resolution (E1xx), W111 and rules E200, E201, E300, E301, E302, W902, E202, E203, E204, E207, E205, E206, W903, W904, W905, W303, I304 for the whole project. Blocking objects/locations (1 item: ["system.json:1:1"]); the failed stage supplied no trustworthy validation result.',
+          'Checks not completed: compilation tool failure gate (E001); no complete results available for library-lock verification, reference resolution (E1xx), W111 and rules E200, E201, E300, E301, E302, W902, E202, E203, E204, E207, E205, E206, W903, W904, W905, W303, I304, I305 for the whole project. Blocking objects/locations (1 item: ["system.json:1:1"]); the failed stage supplied no trustworthy validation result.',
       },
     ]);
   },

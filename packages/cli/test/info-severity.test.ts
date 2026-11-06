@@ -132,7 +132,10 @@ it("keeps info-only outcomes successful across compiler, query, rendering and do
         expect(stderr).toBe("");
         if (args.includes("--json")) {
           const ds = JSON.parse(stdout);
-          expect(ds.map((d: { code: string }) => d.code)).toEqual(["I304"]);
+          expect(ds.map((d: { code: string }) => d.code)).toEqual([
+            "I304",
+            "I305",
+          ]);
           expect(ds.every(diagnostic)).toBe(true);
           expect(formatHumanDiagnostics(ds)).toContain(
             "I304 Voltage compatibility is unassessed",
@@ -147,6 +150,7 @@ it("keeps info-only outcomes successful across compiler, query, rendering and do
           ds = Array.isArray(report) ? report : report.diagnostics;
         expect(ds.map((d: { code: string }) => [d.code, d.severity])).toEqual([
           ["I304", "info"],
+          ["I305", "info"],
         ]);
         expect(ds.every(diagnostic)).toBe(true);
       }

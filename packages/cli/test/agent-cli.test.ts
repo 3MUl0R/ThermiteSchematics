@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "./motor-starter-diagnostics.js";
 import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -643,7 +644,8 @@ describe("M7 Task 7 thermite agent command namespace", () => {
       expect(JSON.parse(invocation.stderr)).toEqual({
         format: "agent-tool-report/0.1",
         tool: entry.tool,
-        diagnostics: [],
+        diagnostics:
+          entry.tool === "apply-source-patch" ? [] : motorDiagnostics,
         error: null,
       });
       expect(invocation.stdout.endsWith("\n")).toBe(true);
