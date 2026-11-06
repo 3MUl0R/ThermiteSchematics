@@ -236,6 +236,8 @@ includes terminal-free mechanisms in its function inventory. It proves neither
 printed readability nor an upstream supply path; use visual review and electrical
 checks separately. Unknown selectors still fail before any packet is returned.
 
+Rooted views can omit parallel branches at drawn terminals without markers. Packet coverage audits explicit circuit/wiring selections; rooted sheets remain unaudited. outsideAuditedViews proves neither absence from every sheet nor a complete supply path.
+
 Packets also include a separate [`coverage.topology` inventory](topology-coverage.md)
 for connector assemblies, communication links and individually drawn ports.
 Its counts and unaudited sheets are independent of this circuit/wiring scope.

@@ -23,6 +23,7 @@ beforeAll(async () => {
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   expect(compiled.diagnostics.map((d) => [d.code, d.severity])).toEqual([
     ["I304", "info"],
+    ["I305", "info"],
   ]);
   ir = compiled.ir;
 });

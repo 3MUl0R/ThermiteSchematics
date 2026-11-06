@@ -1,3 +1,5 @@
+import { formatHumanDiagnostics } from "../../cli/src/index.js";
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -534,7 +536,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           },
         });
         expect(JSON.parse(queryCli.stderr)).toEqual({
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           error: null,
         });
 
@@ -555,7 +557,10 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
             ],
             consumerDirectory,
           );
-          expect(rawRender).toEqual({ stdout: expected.svg, stderr: "" });
+          expect(rawRender).toEqual({
+            stdout: expected.svg,
+            stderr: `${formatHumanDiagnostics(motorDiagnostics)}\n`,
+          });
         }
 
         const jsonRender = await run(
@@ -583,7 +588,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           },
         });
         expect(JSON.parse(jsonRender.stderr)).toEqual({
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           error: null,
         });
 
@@ -616,7 +621,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           },
         });
         expect(JSON.parse(fileRender.stderr)).toEqual({
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           error: null,
         });
         expect(await readFile(join(consumerDirectory, output), "utf8")).toBe(
@@ -642,7 +647,10 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
             [installedCli, "view", ...args, "--project", motorProject],
             consumerDirectory,
           );
-          expect(rawView).toEqual({ stdout: expected.svg, stderr: "" });
+          expect(rawView).toEqual({
+            stdout: expected.svg,
+            stderr: `${formatHumanDiagnostics(motorDiagnostics)}\n`,
+          });
         }
 
         const jsonView = await run(
@@ -671,7 +679,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           },
         });
         expect(JSON.parse(jsonView.stderr)).toEqual({
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           error: null,
         });
 
@@ -703,7 +711,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           },
         });
         expect(JSON.parse(fileView.stderr)).toEqual({
-          diagnostics: [],
+          diagnostics: motorDiagnostics,
           error: null,
         });
         expect(
@@ -804,7 +812,8 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           expect(JSON.parse(invocation.stderr)).toEqual({
             format: "agent-tool-report/0.1",
             tool: entry.tool,
-            diagnostics: [],
+            diagnostics:
+              entry.tool === "apply-source-patch" ? [] : motorDiagnostics,
             error: null,
           });
           expect(invocation.stdout + invocation.stderr).not.toContain(

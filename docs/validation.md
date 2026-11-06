@@ -11,9 +11,10 @@ The compiler reports these assessment limits:
 | --- | --- | --- |
 | W303 | Warning | Terminals have conflicting comparable declared ratings in a voltage field left undeclared by the net's potentials. The message names the net, terminals, rating facts and declaration locations. |
 | I304 | Info | One project summary lists connected nets with at least two terminal ratings declaring `voltage_type` or `nominal_voltage`, and no potential declaring either voltage fact. Voltage compatibility remains unassessed, even when the ratings agree. |
+| I305 | Info | One project summary lists connected nets with exactly one voltage-rated terminal that passes the comparison exclusions, and no potential declaring either voltage fact. It identifies no supply. |
 | I208 | Info | One project summary names checks blocked by failed prerequisites and their affected nets, terminals or source locations. |
 
-I304 and I208 list at most ten affected entries per group, naturally sorted,
+I304, I305 and I208 list at most ten affected entries per group, naturally sorted,
 followed by the omitted count. Info diagnostics do not change exit status,
 including `validate --strict`; warnings retain the existing strict-mode policy.
 Errors still prevent compilation from returning IR. No diagnostic repairs source
@@ -52,6 +53,8 @@ is left undeclared by the net's potentials:
   terminal ratings do not create a voltage-compatibility obligation. Existing
   E300/E301/E302/W902 still analyze authored potential facts, including compatible
   partial declarations; no potential is removed, inferred or repaired.
+
+I305 reports the single-rated connected-net assessment gap, not a conflict or identified supply. Author potential intent only from known design facts. Reference/return, mixed-rating and zero/negative nominal exclusions apply. Like I304, I305 excludes nets with either potential voltage field; partial declarations assess only their authored fields.
 
 I208 preserves the compiler's gates. Structural, loading, library-lock and
 resolution failures prevent trustworthy IR construction; net rules do not run

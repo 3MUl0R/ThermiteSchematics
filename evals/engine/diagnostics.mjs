@@ -1,5 +1,6 @@
 import { renderDiagnostics } from "./render-diagnostics.mjs";
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import { loadProject, engineRoot } from "./engine.mjs";
 import {
@@ -34,7 +35,7 @@ export async function actionable(report, scenario, project) {
     .filter((e) => e.code !== "I208")
     .map((e) =>
       report.diagnostics.find((d) =>
-        Object.entries(e).every(([k, v]) => d[k] === v),
+        Object.entries(e).every(([k, v]) => isDeepStrictEqual(d[k], v)),
       ),
     );
   assert(selected.every(Boolean), "Every seeded diagnostic must be present");

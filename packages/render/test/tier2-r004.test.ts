@@ -488,9 +488,16 @@ describe("Amendment B4 v20 Tier 2 deterministic failures", () => {
       }
     });
     it(`${testCase.name} ${testCase.flow} locks live ELK, R004, and product bytes`, async () => {
-      expect(fixtureDiagnostics[testCase.name]).toEqual([]);
+      expect(fixtureDiagnostics[testCase.name]).toEqual([
+        expect.objectContaining({
+          code: "I305",
+          severity: "info",
+          jsonPointer: "/project",
+          message: expect.stringContaining("5 nets:"),
+        }),
+      ]);
       const ir = fixtureIr[testCase.name]!;
-      expect(evaluateRules(ir)).toEqual([]);
+      expect(evaluateRules(ir)).toEqual(fixtureDiagnostics[testCase.name]);
 
       const first = await runTier2(ir, testCase);
       const second = await runTier2(ir, testCase);

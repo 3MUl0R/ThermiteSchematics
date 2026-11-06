@@ -1,5 +1,6 @@
 import {
   mutationGateDiagnostics,
+  mutationAssessmentDiagnostics,
   baselineAssessmentDiagnostics,
 } from "./validation-gate-expectations.mjs";
 import { assertLocations } from "./diagnostic-policy.mjs";
@@ -113,6 +114,34 @@ describe("fixed evaluation corpus v1", () => {
         unlisted,
       ),
     ).toThrow();
+  });
+  it("pins the exclusive I305 and rejects a missing, changed or duplicated summary", async () => {
+    expect(Object.keys(mutationAssessmentDiagnostics)).toEqual(["exclusive"]);
+    const scenario = (await mutationCases()).find((s) => s.id === "exclusive");
+    await temporary(async (project) => {
+      await mutate(project, scenario);
+      const r = await compileProject(project);
+      expect(() => assertDiagnostics(r.diagnostics, scenario)).not.toThrow();
+      expect(
+        (
+          await evaluateDiagnostic(
+            "diag/exclusive",
+            { diagnostics: r.diagnostics },
+            scenario,
+            project,
+            1,
+          )
+        ).status,
+      ).toBe("pass");
+      for (const diagnostics of [
+        r.diagnostics.filter((d) => d.code !== "I305"),
+        r.diagnostics.map((d) =>
+          d.code === "I305" ? { ...d, message: "Supply inferred." } : d,
+        ),
+        [...r.diagnostics, ...mutationAssessmentDiagnostics.exclusive],
+      ])
+        expect(() => assertDiagnostics(diagnostics, scenario)).toThrow();
+    });
   });
   it.each(["voltage_type", "nominal_voltage"])(
     "requires the partial-potential corpus message to name missing %s",

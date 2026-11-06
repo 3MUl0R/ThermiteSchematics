@@ -60,7 +60,7 @@ function injectedTools(
 
 describe("D7 exact compiler validation", () => {
   it.each([
-    ["clean success", motorProject, true, []],
+    ["info-only success", motorProject, true, ["I305"]],
     ["warning success", warningProject, true, ["W902"]],
     ["authored error", errorProject, false, ["E201", "I208"]],
   ])(

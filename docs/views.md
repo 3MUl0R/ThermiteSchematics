@@ -20,6 +20,8 @@ and looped supplies; placement and routing use a bounded, validated ELK search.
 Trace and loads traverse conductors;
 control/power may select supported function steps for presentation only.
 
+Rooted views use bounded selection: unequal parallel paths and authored conductors at drawn terminals can be omitted without markers. Use explicit circuit/wiring selections and packet coverage within its documented scope. Success proves neither complete rung coverage nor operation.
+
 `schematic-view-request/0.1` uses `root`, `family` (`power` or `control`) and
 `flow`. On the motor-starter fixture:
 

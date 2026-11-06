@@ -1,3 +1,7 @@
+import {
+  motorDiagnostics,
+  pnpMotorDiagnostics,
+} from "./motor-starter-diagnostics.js";
 import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -284,15 +288,30 @@ function expectPortableStream(
   ].flatMap((path) => [path, path.replaceAll("\\", "/")])) {
     expect(text).not.toContain(path);
   }
-  expect(text).not.toMatch(
-    /(?:^|[^A-Za-z])[A-Za-z]:[\\/]|\\\\[^\\]|\/(?:home|tmp|Users)\//u,
-  );
+  // Inspect decoded JSON strings: nested rating quotes are serialization
+  // escapes, while real Windows drive/UNC and POSIX paths still fail.
+  const checkPaths = (value: unknown): void => {
+    if (typeof value === "string")
+      expect(value).not.toMatch(
+        /(?:^|[^A-Za-z])[A-Za-z]:[\\/]|\\\\[^\\]|\/(?:home|tmp|Users)\//u,
+      );
+    else if (value && typeof value === "object")
+      Object.values(value).forEach(checkPaths);
+  };
+  let decoded: unknown = text;
+  try {
+    decoded = JSON.parse(text);
+  } catch {
+    /* Raw SVG/text is already decoded. */
+  }
+  checkPaths(decoded);
 }
 
 function expectSuccess(
   invocation: Invocation,
   tool: AgentTool,
   experiment: MotorStarterPnpExperiment,
+  diagnostics = motorDiagnostics,
 ): unknown {
   expect(invocation.exitCode).toBe(0);
   const result = parseJson<JsonResultEnvelope>(invocation.stdout);
@@ -306,7 +325,7 @@ function expectSuccess(
   expect(report).toEqual({
     format: "agent-tool-report/0.1",
     tool,
-    diagnostics: [],
+    diagnostics,
     error: null,
   });
   expectPortableStream(invocation.stdout, false, experiment);
@@ -793,7 +812,12 @@ async function runWorkflow(
     REQUESTS.completePatch,
   );
   expect(
-    expectSuccess(completePatch, "apply-source-patch", experiment),
+    expectSuccess(
+      completePatch,
+      "apply-source-patch",
+      experiment,
+      pnpMotorDiagnostics,
+    ),
   ).toEqual({
     dryRun: false,
     applied: true,
@@ -822,7 +846,9 @@ async function runWorkflow(
     "validate",
     REQUESTS.validate,
   );
-  expect(expectSuccess(finalValidate, "validate", experiment)).toEqual({
+  expect(
+    expectSuccess(finalValidate, "validate", experiment, pnpMotorDiagnostics),
+  ).toEqual({
     valid: true,
   });
   expectGolden("final-validate", finalValidate, 0);
@@ -832,7 +858,9 @@ async function runWorkflow(
     "inspect",
     REQUESTS.inspect,
   );
-  expectPnpInspect(expectSuccess(pnpInspect, "inspect", experiment));
+  expectPnpInspect(
+    expectSuccess(pnpInspect, "inspect", experiment, pnpMotorDiagnostics),
+  );
   expectGolden("pnp-inspect", pnpInspect, 0);
 
   const pnpView = await invokeAgent(
@@ -841,7 +869,7 @@ async function runWorkflow(
     REQUESTS.view,
   );
   const pnpSvg = expectViewSemantics(
-    expectSuccess(pnpView, "create-view", experiment),
+    expectSuccess(pnpView, "create-view", experiment, pnpMotorDiagnostics),
     "pnp",
   );
   expectGolden("pnp-view", pnpView, 0);

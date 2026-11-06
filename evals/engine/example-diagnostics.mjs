@@ -1,4 +1,7 @@
-import { machineAssessmentDiagnostics } from "./validation-gate-expectations.mjs";
+import {
+  machineAssessmentDiagnostics,
+  singleRatedExampleDiagnostics,
+} from "./validation-gate-expectations.mjs";
 // Reviewed example warning inventory. Do not refresh from engine output.
 // W903 = authored required connection omitted; W904 = declared partial model;
 // W905 = authored deferred work. Any addition, removal or changed message fails.
@@ -110,9 +113,18 @@ export const exampleDiagnostics = {
     ],
   },
   "conveyor-line": {
-    classification: "clean",
-    rationale: "No diagnostics expected.",
-    diagnostics: [],
+    classification: "unassessed-single-rated-nets",
+    rationale:
+      "I305 reports six single-rated physical nets without potential voltage facts, with no supply inference or new warning.",
+    diagnostics: singleRatedExampleDiagnostics["conveyor-line"].map(
+      ({ code, severity, file, jsonPointer, message }) => ({
+        code,
+        severity,
+        file,
+        jsonPointer,
+        message,
+      }),
+    ),
   },
   "functional-symbols": {
     classification: "authored-model-obligations",
@@ -204,8 +216,23 @@ export const exampleDiagnostics = {
   "machine-demo": {
     classification: "unassessed-rated-net",
     rationale:
-      "I304 truthfully names the connected PLC commons without a potential; no new warning or skipped check.",
-    diagnostics: machineAssessmentDiagnostics.map(
+      "I304 retains the connected PLC commons; I305 adds nine single-rated nets without potential voltage facts. No new warning or skipped check.",
+    diagnostics: [
+      ...machineAssessmentDiagnostics,
+      ...singleRatedExampleDiagnostics["machine-demo"],
+    ].map(({ code, severity, file, jsonPointer, message }) => ({
+      code,
+      severity,
+      file,
+      jsonPointer,
+      message,
+    })),
+  },
+  "motor-starter": {
+    classification: "unassessed-single-rated-nets",
+    rationale:
+      "I305 reports five single-rated physical nets without potential voltage facts, with no supply inference or new warning.",
+    diagnostics: singleRatedExampleDiagnostics["motor-starter"].map(
       ({ code, severity, file, jsonPointer, message }) => ({
         code,
         severity,
@@ -214,11 +241,6 @@ export const exampleDiagnostics = {
         message,
       }),
     ),
-  },
-  "motor-starter": {
-    classification: "clean",
-    rationale: "No diagnostics expected.",
-    diagnostics: [],
   },
   "network-pagination": {
     classification: "authored-model-obligations",

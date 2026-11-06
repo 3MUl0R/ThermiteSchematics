@@ -96,6 +96,19 @@ function comparable(terminal: Terminal): boolean {
   );
 }
 
+function ratingSource(
+  context: RuleContext,
+  t: Terminal,
+  rating = JSON.stringify(t.rating),
+) {
+  return {
+    file: t.source.file,
+    line: t.source.line,
+    column: t.source.column,
+    note: `Terminal ${JSON.stringify(context.displayTerminal(t.id))} declares rating ${rating} here.`,
+  };
+}
+
 function disagree(
   a: Terminal,
   b: Terminal,
@@ -168,12 +181,7 @@ export const declaredRatingConflictRule: ElectricalRule = {
           code: "W303",
           severity: "warning",
           message: `Net ${JSON.stringify(net.id)}: these declared ratings disagree: ${declarations.join("; ")}. ${assessment}`,
-          related: conflicting.map((t) => ({
-            file: t.source.file,
-            line: t.source.line,
-            column: t.source.column,
-            note: `Terminal ${JSON.stringify(context.displayTerminal(t.id))} declares rating ${JSON.stringify(t.rating)} here.`,
-          })),
+          related: conflicting.map((t) => ratingSource(context, t)),
         },
       ];
     });
@@ -201,6 +209,61 @@ export const unassessedRatedNetsRule: ElectricalRule = {
           nets.map((net) => displayNet(context, net)),
           "net",
         )}). Ratings describe equipment capability; potentials declare net intent.`,
+      },
+    ];
+  },
+};
+
+/** A single equipment rating cannot establish the voltage intent of its net. */
+export const unassessedSingleRatedNetsRule: ElectricalRule = {
+  id: "I305",
+  evaluate(context): Diagnostic[] {
+    const entries = context.ir.nets
+      .flatMap((net) => {
+        if (
+          context.topologicallyAffectedNetIds.has(net.id) ||
+          net.conductiveElementIds.length === 0 ||
+          context
+            .potentialsForNet(net)
+            .some((p) => hasVoltageFacts(p.electrical))
+        )
+          return [];
+        // Count all voltage-rated terminals before applying exclusions. I304's
+        // multi-rated membership remains unchanged, including reference ratings.
+        const rated = context
+          .terminalsForNet(net)
+          .filter((t) => hasVoltageFacts(t.rating));
+        const [terminal] = rated;
+        if (rated.length !== 1 || !terminal || !comparable(terminal)) return [];
+        // Hydrated IR can reorder object keys without changing authored facts.
+        const rating = JSON.stringify(
+          terminal.rating,
+          Object.keys(terminal.rating ?? {}).sort(),
+        );
+        return [
+          {
+            terminal,
+            rating,
+            summary: `${context.displayTerminal(terminal.id)} rating ${rating} [${net.id}]`,
+          },
+        ];
+      })
+      .sort((a, b) => compareNatural(a.summary, b.summary));
+    if (!entries.length) return [];
+    return [
+      {
+        ...context.ir.project.source,
+        code: "I305",
+        severity: "info",
+        message: `Voltage compatibility is unassessed on connected nets with one comparable voltage-rated terminal and no voltage facts in potentials (${summarizeAffected(
+          entries.map((e) => e.summary),
+          "net",
+        )}). Ratings describe equipment capability; potentials declare net intent. No supply path was assessed.`,
+        related: entries
+          .slice(0, 10)
+          .map(({ terminal, rating }) =>
+            ratingSource(context, terminal, rating),
+          ),
       },
     ];
   },

@@ -1,9 +1,11 @@
 import {
   mutationGateDiagnostics,
+  mutationAssessmentDiagnostics,
   baselineAssessmentDiagnostics,
   ratingAssessmentDiagnostics,
 } from "./validation-gate-expectations.mjs";
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compileProject, lockProject } from "./engine.mjs";
@@ -23,6 +25,7 @@ export async function mutationCases() {
     expected: [
       ...scenario.expected,
       ...(mutationGateDiagnostics[scenario.id] ?? []),
+      ...(mutationAssessmentDiagnostics[scenario.id] ?? []),
     ],
   }));
 }
@@ -94,6 +97,11 @@ export function partialPotentialMessageMatches(diagnostics, scenario) {
 
 export function assertDiagnostics(diagnostics, scenario) {
   assert.deepEqual(
+    diagnostics.filter((d) => d.code === "I305"),
+    mutationAssessmentDiagnostics[scenario.id] ?? [],
+    `Wrong single-rated assessment for ${scenario.id}`,
+  );
+  assert.deepEqual(
     diagnostics.filter((d) => d.code === "I208"),
     mutationGateDiagnostics[scenario.id] ?? [],
     `Wrong gate report for ${scenario.id}`,
@@ -101,7 +109,9 @@ export function assertDiagnostics(diagnostics, scenario) {
   assert(
     diagnostics.every((d) =>
       scenario.expected.some((e) =>
-        Object.entries(e).every(([field, value]) => d[field] === value),
+        Object.entries(e).every(([field, value]) =>
+          isDeepStrictEqual(d[field], value),
+        ),
       ),
     ),
     `Unexpected diagnostic: ${JSON.stringify(diagnostics)}`,
@@ -109,7 +119,9 @@ export function assertDiagnostics(diagnostics, scenario) {
   for (const expected of scenario.expected) {
     assert(
       diagnostics.some((d) =>
-        Object.entries(expected).every(([field, value]) => d[field] === value),
+        Object.entries(expected).every(([field, value]) =>
+          isDeepStrictEqual(d[field], value),
+        ),
       ),
       `Missing ${JSON.stringify(expected)}; actual ${JSON.stringify(diagnostics)}`,
     );

@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { evaluateRules, type ElectricalIr } from "@thermite/compiler";
@@ -1474,8 +1475,8 @@ describe("Amendment B4 v23 Tier 1 evidence matrix", () => {
     it(`round-9 M3 ${flow} stays on the full compiled production pipeline and reproduces the frozen table`, async () => {
       const ir = b4Round9Fixture(coreIr);
       const reorderedIr = reorderedRound9Ir(ir);
-      expect(evaluateRules(ir)).toEqual([]);
-      expect(evaluateRules(reorderedIr)).toEqual([]);
+      expect(evaluateRules(ir)).toEqual(motorDiagnostics);
+      expect(evaluateRules(reorderedIr)).toEqual(evaluateRules(ir));
       const selected = selectB4Trace(ir, flow);
       const reorderedSelected = selectB4Trace(reorderedIr, flow);
       expect(reorderedSelected).toEqual(selected);

@@ -1,3 +1,4 @@
+import { motorDiagnostics } from "./motor-starter-diagnostics.js";
 import { withSkippedChecks } from "../../compiler/src/validation-skips.js";
 import { spawn } from "node:child_process";
 import {
@@ -394,7 +395,7 @@ describe("thermite validate loader", () => {
 });
 
 describe("Stage D engineering content", () => {
-  it("keeps motor-starter clean in normal, strict, and compile flows", async () => {
+  it("reports motor-starter assessment info without failing normal, strict, or compile flows", async () => {
     const [normal, strict, compiled] = await Promise.all([
       runValidate(motorStarterRoot),
       runValidate(motorStarterRoot, { strict: true }),
@@ -402,20 +403,36 @@ describe("Stage D engineering content", () => {
     ]);
 
     expect(normal).toMatchObject({
-      diagnostics: [],
+      diagnostics: motorDiagnostics,
       exitCode: 0,
-      output: "",
+      output: formatHumanDiagnostics(motorDiagnostics),
     });
     expect(strict).toMatchObject({
-      diagnostics: [],
+      diagnostics: motorDiagnostics,
       exitCode: 0,
-      output: "",
+      output: formatHumanDiagnostics(motorDiagnostics),
     });
     expect(compiled).toMatchObject({
-      diagnostics: [],
+      diagnostics: motorDiagnostics,
       exitCode: 0,
-      stderr: "",
+      stderr: formatHumanDiagnostics(motorDiagnostics),
       written: false,
+    });
+    // API fields omit the line ending; the CLI adds it at the stream boundary.
+    const human = `${formatHumanDiagnostics(motorDiagnostics)}\n`;
+    for (const flags of [[], ["--strict"]]) {
+      expect(
+        await runDirectCli(["validate", motorStarterRoot, ...flags]),
+      ).toEqual({
+        exitCode: 0,
+        stdout: human,
+        stderr: "",
+      });
+    }
+    expect(await runDirectCli(["compile", motorStarterRoot])).toEqual({
+      exitCode: 0,
+      stdout: compiled.stdout,
+      stderr: human,
     });
     expect(JSON.parse(compiled.stdout)).toMatchObject({
       format: "electrical-ir/0.1",
@@ -435,7 +452,9 @@ describe("Stage D engineering content", () => {
       name: "core",
       version: "0.1.0",
     });
-    expect(result.diagnostics).toEqual([]);
+    expect(result.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+      ["I305", "info"],
+    ]);
     expect(result.exitCode).toBe(0);
   });
 });
