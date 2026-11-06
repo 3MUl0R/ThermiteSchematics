@@ -185,9 +185,12 @@ The transmitter's +/− are logical loop markings; 4–20 mA identifies its clas
 not a process range or a voltage rating. The NO level switch follows core's
 13/14 convention and authors normal state explicitly; the project must identify
 its reference level and actuation meaning. The additional three-pole disconnect
-supplies RM3's separate manual switching interface. It follows core's line/load
-labels, with three normally open, mechanically ganged poles; it makes no
-isolation, protection, switching-duty or safety-suitability claim.
+supplies RM3's separate switching interface. It follows core's line/load labels,
+with three normally open, mechanically ganged poles and the canonical
+`thermite:disconnector` profile. Opting in asserts author-selected
+disconnector-function identity. Isolation suitability (impulse withstand, contact
+gap, position indication, lockability), load-break and ratings are not asserted.
+Operation means, protective trip and safety performance are unspecified.
 
 The power cable's short description retains the same four-core interface. Every
 used core needs two explicit ends, and unused cores need project spare review.
@@ -212,9 +215,12 @@ Rooted automation supply/loads bindings accept the authored DC class on these
 PLC/HMI supplies, without a voltage magnitude. PLC DI/DO
 channels have control bindings; paired AI channels have circuit and signal-loop
 endpoint support, but no rooted control binding. The level switch has circuit
-support only. The disconnect has circuit/control contact bindings, with no power
-binding; a power path through it stops with R002. Its three poles draw as plain
-NO switches, without disconnector identity. The transmitter's existing
+support only. The disconnect has open-state circuit, power and control contact
+bindings, with a shared blade, gap and fixed-contact disconnector bar. Only
+authored `ganged_with` relations permit mechanical gang ink; no manual-operator
+linkage is drawn. Control retains switch traversal, with no loads or signal-loop
+binding. Closed-state profile defaults refuse rendering; no closed mark or new
+override value is provided. The transmitter's existing
 profile supports direct transmitter-to-AI signal-loop wiring only; a normal
 series loop through its power supply fails R006, with or without an auxiliary
 supply pair. Circuit/rooted requests report the pinned unsupported-profile gaps. `thermite guide symbols` shows current family support.

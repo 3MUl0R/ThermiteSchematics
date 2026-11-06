@@ -961,7 +961,9 @@ function mechanicalGangs(
         )
       )
         continue;
-      const breaker = first.mark === "breaker" && last.mark === "breaker";
+      const blade =
+        ["breaker", "disconnector"].includes(first.mark) &&
+        first.mark === last.mark;
       const functions = [first.f.id, last.f.id];
       if (vertical)
         result.push({
@@ -969,27 +971,27 @@ function mechanicalGangs(
             x:
               (node.bodyHeight - first.center) * node.verticalScaleX +
               node.verticalOffsetX +
-              (breaker ? 0.7 : 0),
-            y: diagramCenterY - (breaker ? 0.3 : 0),
+              (blade ? 0.7 : 0),
+            y: diagramCenterY - (blade ? 0.3 : 0),
           },
           to: {
             x:
               (node.bodyHeight - last.center) * node.verticalScaleX +
               node.verticalOffsetX +
-              (breaker ? 0.7 : 0),
-            y: diagramCenterY - (breaker ? 0.3 : 0),
+              (blade ? 0.7 : 0),
+            y: diagramCenterY - (blade ? 0.3 : 0),
           },
           functions,
         });
       else
         result.push({
           from: {
-            x: node.width / 2 - (breaker ? 0.3 : 0),
-            y: first.center - (breaker ? 0.7 : 0),
+            x: node.width / 2 - (blade ? 0.3 : 0),
+            y: first.center - (blade ? 0.7 : 0),
           },
           to: {
-            x: node.width / 2 - (breaker ? 0.3 : 0),
-            y: last.center - (breaker ? 0.7 : 0),
+            x: node.width / 2 - (blade ? 0.3 : 0),
+            y: last.center - (blade ? 0.7 : 0),
           },
           functions,
         });

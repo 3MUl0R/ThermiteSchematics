@@ -7,6 +7,7 @@ import {
   classifyRuntimeInput,
   normalizeSchematicView,
 } from "../src/view-spec.js";
+import { projectDeviceTypeSymbolMappings } from "../src/symbols/mappings.js";
 import { compileCoreFixture } from "./fixtures.js";
 
 let coreIr: ElectricalIr;
@@ -503,13 +504,15 @@ describe("descriptor-only hostile request inspection", () => {
       [rootTarget.by, "by"],
       [rootTarget.value, "value"],
     ]);
+    // Keep catalog shape matching outside the request-classification spy.
+    const mappings = projectDeviceTypeSymbolMappings(coreIr);
     const original = Array.isArray;
     Array.isArray = ((value: unknown) => {
       events.push(`classify:${labels.get(value) ?? "unknown"}`);
       return original(value);
     }) as typeof Array.isArray;
     try {
-      const result = normalizeSchematicView(coreIr, request);
+      const result = normalizeSchematicView(coreIr, request, { mappings });
       expect(result.ok).toBe(true);
     } finally {
       Array.isArray = original;

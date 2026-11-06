@@ -231,7 +231,7 @@
   },
   {
     "type": "disconnect-3p",
-    "profile": "thermite:switch",
+    "profile": "thermite:disconnector",
     "functionShapes": {
       "pole1": "contact/2",
       "pole2": "contact/2",
@@ -239,17 +239,14 @@
     },
     "bindings": {
       "circuit": ["pole1", "pole2", "pole3"],
-      "power": [],
+      "power": ["pole1", "pole2", "pole3"],
       "control": ["pole1", "pole2", "pole3"],
       "loads": []
     },
     "probes": {
       "power": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "control": {
         "key": "pole1",

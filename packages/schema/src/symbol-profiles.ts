@@ -13,6 +13,8 @@ export interface SymbolFunctionShape {
   /** Constraints on terminals in authored function order. */
   readonly terminalRoles?: readonly string[];
   readonly firstTerminalVoltageType?: "DC";
+  /** Existing authored contact state; this is an internal catalog constraint. */
+  readonly normalState?: "open";
   readonly notes?: string;
 }
 
@@ -505,6 +507,25 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     support: [
       ...rooted([], [CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
+    ],
+  },
+  {
+    id: "thermite:disconnector",
+    notes:
+      "Open contact only. Opting in asserts author-selected disconnector-function identity. Isolation suitability (impulse withstand, contact gap, position indication, lockability), load-break and ratings are not asserted.",
+    aliases: [],
+    coreAliases: [],
+    support: [
+      ...rooted(
+        [{ ...POWER_CONTACT, normalState: "open" }],
+        [{ ...CONTACT, normalState: "open" }],
+        [],
+      ),
+      {
+        family: "circuit",
+        role: "function",
+        functions: [BUS, { ...CONTACT, normalState: "open" }],
+      },
     ],
   },
   {

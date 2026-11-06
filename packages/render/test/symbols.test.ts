@@ -291,7 +291,19 @@ describe("D3 original symbol catalog", () => {
       DEVICE_GROUP_SIDE_PADDING: 8,
       OUTER_SVG_PADDING: 20,
     });
-    expect(SYMBOL_CATALOG).toHaveLength(EXPECTED_SYMBOLS.length + 5);
+    expect(SYMBOL_CATALOG).toHaveLength(31);
+    expect(
+      SYMBOL_CATALOG.filter(
+        (s) => !EXPECTED_SYMBOLS.some((e) => e.id === s.id),
+      ).map((s) => s.id),
+    ).toEqual([
+      "ais:disconnector",
+      "ais:motor-3ph-unbonded",
+      "ais:power-source-3wire",
+      "ais:ac-load",
+      "ais:motor",
+      "ais:lamp",
+    ]);
     expect(
       SYMBOL_CATALOG.filter((s) =>
         EXPECTED_SYMBOLS.some((e) => e.id === s.id),

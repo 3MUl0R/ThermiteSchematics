@@ -184,6 +184,13 @@ const CATALOG_DEFINITIONS = [
     sharedMarkPrimitives("breaker"),
   ),
   symbol(
+    "ais:disconnector",
+    40,
+    20,
+    [port("in", "west", 1 / 2, 0), port("out", "east", 1 / 2, 1)],
+    sharedMarkPrimitives("disconnector"),
+  ),
+  symbol(
     "ais:contact-no",
     40,
     20,

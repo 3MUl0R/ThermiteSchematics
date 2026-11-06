@@ -1,9 +1,8 @@
+import { SYMBOL_PROFILES, resolveSensorSupply } from "@thermite/schema";
 import {
-  SYMBOL_PROFILES,
-  resolveSensorSupply,
-  type SymbolFunctionShape,
-} from "@thermite/schema";
-import type { IrDeviceType } from "@thermite/compiler";
+  symbolFunctionMatchesShape,
+  type IrDeviceType,
+} from "@thermite/compiler";
 import { symbolProfile } from "./profiles.js";
 import type { PresentationClass } from "../ordering.js";
 import type { SchematicViewFamily } from "../types.js";
@@ -781,24 +780,6 @@ function orderedFunctions(type: IrDeviceType): IrDeviceType["functions"] {
   );
 }
 
-function matchesRootedShape(
-  type: IrDeviceType,
-  fn: IrDeviceType["functions"][number],
-  shape: SymbolFunctionShape,
-): boolean {
-  const terminalAt = (i: number) =>
-    type.terminals.find((t) => t.key === fn.terminalKeys[i]);
-  return (
-    fn.kind === shape.kind &&
-    fn.terminalKeys.length >= shape.minTerminals &&
-    fn.terminalKeys.length <= shape.maxTerminals &&
-    (shape.firstTerminalVoltageType === undefined ||
-      terminalAt(0)?.rating?.voltage_type === shape.firstTerminalVoltageType) &&
-    (shape.terminalRoles === undefined ||
-      shape.terminalRoles.every((role, i) => terminalAt(i)?.role === role))
-  );
-}
-
 /** Bind authored functions, terminal order and roles through a single profile path.
  * The exported core table above remains a compatibility reference for callers
  * supplying explicit mappings; production never selects it by type ID.
@@ -956,7 +937,9 @@ export function projectDeviceTypeSymbolMappings(
           .filter(
             (s) =>
               (s.family === "power" || s.family === "control") &&
-              s.functions.some((shape) => matchesRootedShape(type, f, shape)),
+              s.functions.some((shape) =>
+                symbolFunctionMatchesShape(type, f, shape),
+              ),
           )
           .map((s) => s.family as "power" | "control");
         const families = BOTH_FAMILIES.filter((family) =>
@@ -992,7 +975,18 @@ export function projectDeviceTypeSymbolMappings(
             rule = make("ais:coil", ["A1", "A2"], "coil", "coil-root");
           else if (f.kind === "contact") {
             const open = f.normal_state === "open";
-            if (profile === "thermite:breaker") {
+            if (profile === "thermite:disconnector") {
+              for (const family of families)
+                functions.push({
+                  ...make(
+                    "ais:disconnector",
+                    ["in", "out"],
+                    family === "power" ? "power-contact" : "permissive",
+                    family === "power" ? "power-contact" : "permissive-contact",
+                  ),
+                  families: [family],
+                });
+            } else if (profile === "thermite:breaker") {
               const explicit = type.circuitSymbols?.[f.key];
               const power = terminals.map((key) => role(key));
               const pole =

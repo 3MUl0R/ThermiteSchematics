@@ -89,10 +89,26 @@ still checked and can return R006.
 Rooted and circuit views use independently authored, IEC-informed marks from the
 printable policy. A coil is a rectangle; AC/DC appears only from its authored
 coil-terminal voltage class. A breaker uses a blade and cross without inferred
-trip technology. Aligned authored breaker gangs get a nonconductive mechanical
+trip technology. Aligned authored breaker and disconnector gangs get a nonconductive mechanical
 link where the corridor is clear. Overload power poles use a stepped thermal
 element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
+
+`thermite:disconnector` is a canonical profile with no alias. It draws an open
+blade, gap and fixed-contact disconnector bar in power, control and circuit
+views. Opting in asserts author-selected disconnector-function identity. Isolation
+suitability (impulse withstand, contact gap, position indication, lockability),
+load-break and ratings are not asserted. No manual-operator linkage or trip
+element is drawn. Gang ink requires authored `ganged_with` relations and a clear,
+aligned corridor; unaligned poles retain their device tags and terminal pairs.
+Power requires `power_input`/`power_output` roles in authored function order;
+control retains switch traversal. Loads and signal-loop bindings are absent.
+Only `normal_state: "open"` is supported: closed rooted requests return the
+existing R002 unsupported-profile diagnostic, and circuit defaults refuse them.
+There is no new `circuitSymbols` override value. Core 0.2.0's `disconnect-3p`
+opts in; project-local switch types require an explicit profile change. On older
+engines the unknown profile can validate with a renderability warning, but rooted
+rendering refuses with R002. A profile change never changes physical nets.
 
 Motor marks carry M, with 3~ only for a three-phase profile or a function with
 explicit U/V/W phase-input roles. A three-terminal L/N/PE function does not

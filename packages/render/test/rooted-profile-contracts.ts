@@ -274,6 +274,32 @@ export const ROOTED_CONTRACTS: Readonly<
     ],
     loads: [],
   },
+  "thermite:disconnector": {
+    power: [
+      c(
+        "power-open",
+        {
+          ...shape("contact", 2, ["power_input", "power_output"]),
+          normalState: "open",
+        },
+        "ais:disconnector",
+        "power-contact",
+        [],
+        true,
+      ),
+    ],
+    control: [
+      c(
+        "contact-open",
+        { ...shape("contact", 2), normalState: "open" },
+        "ais:disconnector",
+        "permissive-contact",
+        [],
+        true,
+      ),
+    ],
+    loads: [],
+  },
   "thermite:estop": {
     power: [],
     control: [

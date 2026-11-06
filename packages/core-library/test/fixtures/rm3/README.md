@@ -23,14 +23,18 @@ for a complete machine loop. Select and review actual loop hardware before servi
 
 `specimens.json` contains the remaining 1P/2P breakers, 2P/3P fuses and a separate
 three-pole disconnect. These optional-pole inventory specimens are unconnected;
-no pole is selected for service. DS1 is unwired because the existing switch
-profile has no power binding: inserting it before Q1 makes the motor power view
-fail R002. Its poles draw as plain NO switches, without disconnector identity.
-Their ganging and function shapes are retained.
+no pole is selected for service. The original DS1 remains unwired. A separate
+test extension inserts its three poles between SRC1 and Q1 in a scratch copy,
+adding three wires and retaining the separate PE connection. It exercises
+[`disconnector-power.request.json`](disconnector-power.request.json) in both
+flows. The request selects M1's power path; the test materializes the connected
+source variant before rendering it. Its open poles use the disconnector mark,
+with authored ganging and terminal identity. This asserts function identity;
+isolation suitability, load-break, ratings and operation means remain unassessed.
 RM3 tests draw every circuit-supported device function, the transmitter signal
-loop, all cable cores and the Ethernet link in both flows. L1's matrix separately
-pins every catalog family and the rooted successes/gaps, including this new
-switch's missing power binding. The packet audit covers circuit/wiring drawings;
+loop, all cable cores and the Ethernet link in both flows. The matrix separately
+pins every catalog family and the rooted successes/gaps, including the
+disconnector's power binding and control parity. The packet audit covers circuit/wiring drawings;
 it does not yet count signal-loop or conductor-inventory sheets. Tests check
 the actual SVG records for those views separately.
 

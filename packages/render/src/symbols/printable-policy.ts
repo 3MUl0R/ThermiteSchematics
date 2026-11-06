@@ -25,6 +25,7 @@ export type GlyphWords = Readonly<
   Partial<Record<PrintableMark, readonly FunctionWord[]>>
 >;
 const GLYPH_WORDS: GlyphWords = Object.freeze({
+  "ais:disconnector": ["NO"] as const,
   "ais:motor": ["motor"] as const,
   "ais:motor-3ph": ["motor"] as const,
   "ais:motor-3ph-unbonded": ["motor"] as const,
@@ -250,6 +251,7 @@ export function sourceEnclosure(
 /** Independently authored, IEC-informed marks. Coordinates are rooted units;
  * circuit marks scale the same primitives, never reinterpret their meaning. */
 export type SharedMark =
+  | "disconnector"
   | "coil"
   | "breaker"
   | "overload"
@@ -305,6 +307,14 @@ export function sharedMarkPrimitives(
   ): SymbolPrimitive => ({ kind: "rect", x, y, width, height, style: "body" });
   if (mark === "coil")
     return [line(0, y, 8, y), rect(8, 1, 24, 22), line(32, y, 40, y)];
+  // Open blade and fixed-contact bar assert function identity, no operator means.
+  if (mark === "disconnector")
+    return [
+      line(0, y, 10, y),
+      line(10, y, 27, 3),
+      line(30, y, 40, y),
+      line(30, y - 4, 30, y + 4),
+    ];
   // The cross identifies a breaker, without asserting a thermal/magnetic trip class.
   if (mark === "breaker")
     return [

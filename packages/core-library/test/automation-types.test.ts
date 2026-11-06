@@ -11,7 +11,7 @@ const interfaces: Record<string, { profile: string; required: string[] }> = {
     required: ["+", "-"],
   },
   "level-switch-no": { profile: "level-switch", required: ["13", "14"] },
-  "disconnect-3p": { profile: "switch", required: [] },
+  "disconnect-3p": { profile: "disconnector", required: [] },
 };
 
 it("ships reviewed automation interfaces without rating magnitudes with exact required points", async () => {
