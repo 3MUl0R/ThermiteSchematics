@@ -320,8 +320,9 @@ is A005. A006 reports document JSON syntax errors or duplicate keys with the fil
 and parser coordinates: regenerate a corrupt lock with `thermite lock .`; repair
 source, presentation, manifest or library JSON with an ordinary edit, then
 validate. W801 warns of reservation release failure after a successful patch. Query failures remain
-Q001-Q004. Renderer failures remain R001-R005, including `render/0.3` title-text
-preflight. Authored compiler diagnostics retain normalized logical paths.
+Q001-Q004. Renderer failures use the R-code catalog (`thermite guide diagnostics <code>`), including
+R005 for render-text preflight (project, title and graph text) and R006 for
+invalid page or packet requests and unprintable layouts. Authored compiler diagnostics retain normalized logical paths.
 
 When a field accepts a closed set of literals, its A001 with reason
 `unsupported-value` also carries `allowed`, that set in contract order, and
