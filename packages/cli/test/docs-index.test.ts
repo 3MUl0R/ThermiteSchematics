@@ -943,7 +943,7 @@ it("keeps the real repository index fresh and exhaustive without rewriting", asy
   expect(await checkDocs(repository)).toEqual([]);
   expect(get(repository, "docs/README.md")).toBe(before);
   const corpus = await loadCorpus(repository);
-  expect(corpus.policy.legacy.baseline).toHaveLength(6);
+  expect(corpus.policy.legacy.baseline).toHaveLength(0);
   expect(corpus.documents.has("packages/cli/assets/AGENTS.md")).toBe(true);
   expect(before).toContain("<summary>Libraries and research</summary>");
 });

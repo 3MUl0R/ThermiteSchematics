@@ -261,12 +261,8 @@ branch/fork workflow, engineering review expectations, commit sign-off, and
 reviews and accepts the CLA; an agent cannot accept it on their behalf. Keep
 customer drawings, credentials, and machine-specific data out of contributions.
 
-The normal check covers the source alpha. Historical private 0.2.0 packaging and
-release-evidence checks are separate; their legacy Node/npm commands and
-`package-lock.json` apply only in their original release context. They are not
-prerequisites for using or contributing to the public alpha. The former root
-guide's private-release sections are preserved in the
-[legacy agent guide](docs/legacy/private-release-agent-guide.md).
+Historical source and release context is preserved in the
+[source development archive](docs/legacy/source-development-context.md).
 Build and verify runtime downloads with `bun run package:pack`; see the
 [runtime packaging guide](docs/runtime-package.md).
 

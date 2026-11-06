@@ -75,8 +75,25 @@ function legacyScanLine(file, line, number, document) {
     }
   });
   return archivePointer
-    ? line.replace(/Historical private 0\.2\.0 runtime/gi, "archive")
+    ? line.replace(
+        /Historical private 0\.2\.0 (?:runtime|packaging)/gi,
+        "archive",
+      )
     : line;
+}
+function legacyLines(text) {
+  const lines = text.split("\n");
+  const result = [];
+  for (let index = 0; index < lines.length; index++) {
+    const number = index + 1;
+    let line = lines[index];
+    // Check continued shell commands together without losing the first line
+    // used by diagnostics. Code fences remain part of the scanned raw text.
+    while (/\\[ \t]*$/.test(line) && index + 1 < lines.length)
+      line = line.replace(/\\[ \t]*$/, " ") + lines[++index];
+    result.push({ number, line });
+  }
+  return result;
 }
 function legacyFindings({ policy, documents }) {
   const findings = [];
@@ -92,9 +109,8 @@ function legacyFindings({ policy, documents }) {
       continue;
     }
     if (file.startsWith("docs/legacy/")) continue;
-    for (const [index, line] of document.text.split("\n").entries()) {
-      if (!pattern.test(legacyScanLine(file, line, index + 1, document)))
-        continue;
+    for (const { number, line } of legacyLines(document.text)) {
+      if (!pattern.test(legacyScanLine(file, line, number, document))) continue;
       const known = remaining.findIndex(
         (entry) => entry.file === file && entry.text === line,
       );
@@ -103,7 +119,7 @@ function legacyFindings({ policy, documents }) {
         findings.push(
           finding(
             file,
-            index + 1,
+            number,
             line.trim(),
             "legacy instruction outside archive (new or changed baseline match)",
           ),
