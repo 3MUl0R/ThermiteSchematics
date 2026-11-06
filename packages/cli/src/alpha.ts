@@ -1,3 +1,4 @@
+import { embedPrintableFont, fontBudgetFailure } from "./printable-font.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { analyzeCompleteness, compileProject } from "@thermite/compiler";
@@ -472,28 +473,38 @@ export async function runThermite(argv = process.argv): Promise<number> {
         : extname(flags.output).toLowerCase();
     if (flags.json && extension !== undefined && extension !== ".json")
       throw new Error("--json output must use a .json filename.");
-    if (flags.json || extension === ".json")
-      content = JSON.stringify(result.value, null, 2) + "\n";
-    else if (extension === ".svg") {
-      if (result.value.sheets.length !== 1) {
-        process.stderr.write(
-          JSON.stringify({
-            diagnostics: compiled.diagnostics,
-            error: {
-              code: "R006",
-              message: `This view requires ${result.value.sheets.length} sheets. Use .html, .pdf or .json to retain the complete drawing.`,
-            },
-          }) + "\n",
-        );
-        exitCode = 1;
-        return;
-      }
-      content = result.value.sheets[0]!.svg;
-    } else if (extension === ".pdf")
-      content = await packetPdf(result.value, compiled.ir.project.name);
-    else if (extension === ".csv")
-      throw new Error("Use thermite report <kind> to export a CSV schedule.");
-    else content = result.value.html;
+    try {
+      if (flags.json || extension === ".json")
+        content = JSON.stringify(result.value, null, 2) + "\n";
+      else if (extension === ".svg") {
+        if (result.value.sheets.length !== 1) {
+          process.stderr.write(
+            JSON.stringify({
+              diagnostics: compiled.diagnostics,
+              error: {
+                code: "R006",
+                message: `This view requires ${result.value.sheets.length} sheets. Use .html, .pdf or .json to retain the complete drawing.`,
+              },
+            }) + "\n",
+          );
+          exitCode = 1;
+          return;
+        }
+        content = embedPrintableFont(result.value.sheets[0]!.svg);
+      } else if (extension === ".pdf")
+        content = await packetPdf(result.value, compiled.ir.project.name);
+      else if (extension === ".csv")
+        throw new Error("Use thermite report <kind> to export a CSV schedule.");
+      else content = embedPrintableFont(result.value.html);
+    } catch (error) {
+      const failure = fontBudgetFailure(error);
+      if (!failure) throw error;
+      process.stderr.write(
+        JSON.stringify({ diagnostics, error: failure }) + "\n",
+      );
+      exitCode = 1;
+      return;
+    }
     if (flags.output) {
       await writeAlphaOutput(
         flags.project,

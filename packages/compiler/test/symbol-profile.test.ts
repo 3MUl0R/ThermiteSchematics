@@ -482,13 +482,13 @@ describe("profile alternatives and message bounds", () => {
     const result = await compileProject(await project(type));
     const warning = result.diagnostics.find((d) => d.code === "W111")!;
     expect(warning.allowed).toEqual(SYMBOL_PROFILES.map((p) => p.id));
-    expect(warning.allowedCount).toBe(27);
+    expect(warning.allowedCount).toBe(29);
     expect(warning.allowedLookup).toContain(
       "thermite validate <project> --json",
     );
     const prose = warning.message.split("Supported profiles by family:")[1]!;
     expect([...prose.matchAll(/"thermite:[^"]+"/gu)]).toHaveLength(10);
-    expect(prose).toContain("and 22 more");
+    expect(prose).toContain("and 24 more");
   });
 
   it("retains a single structured equivalent for an incompatible IEC alias", async () => {

@@ -473,18 +473,22 @@ function validateFunctionSymbolFacts(
       expectFunctionFacts(definition, "load", context);
       return;
     case "ais:breaker-pole":
-      expectFunctionFacts(definition, "contact", context, "closed");
+    case "ais:overload-pole":
+      expectFunctionFacts(definition, "contact", context);
       return;
     case "ais:contact-no":
+    case "ais:estop-no":
+    case "ais:selector-no":
     case "ais:pushbutton-no":
     case "ais:switch-no":
       expectFunctionFacts(definition, "contact", context, "open");
       return;
     case "ais:contact-nc":
+    case "ais:estop-nc":
+    case "ais:selector-nc":
     case "ais:pushbutton-nc":
     case "ais:switch-nc":
     case "ais:overload-contact-nc":
-    case "ais:overload-pole":
       expectFunctionFacts(definition, "contact", context, "closed");
       return;
     case "ais:coil":

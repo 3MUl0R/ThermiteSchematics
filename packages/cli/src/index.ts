@@ -1,3 +1,4 @@
+import { embedPrintableFont, fontBudgetFailure } from "./printable-font.js";
 import { agentHelp } from "./agent-help.js";
 import { resolve } from "node:path";
 
@@ -799,10 +800,24 @@ async function runSchematicCommand(
     try {
       await writeFileAtomically(
         resolve(cwd, options.output),
-        outcome.value.svg,
+        embedPrintableFont(outcome.value.svg),
         options.atomicWrite,
       );
     } catch (error) {
+      const failure = fontBudgetFailure(
+        error,
+        outcome.value.view.root.designation,
+      );
+      if (failure) {
+        return {
+          diagnostics,
+          error: failure,
+          exitCode: 1,
+          stdout: "",
+          stderr: renderCommandStderr(diagnostics, failure, json, color),
+          written: false,
+        };
+      }
       diagnostics = normalizeDiagnostics([
         ...diagnostics,
         renderOutputWriteDiagnostic(options.output, error),

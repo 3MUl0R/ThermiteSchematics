@@ -173,20 +173,47 @@ describe("schema/render symbol profile conformance", () => {
       expect(gates.has(path), path).toBe(true);
   });
 
-  it("includes every shipped 0.2.0 device in profile conformance", async () => {
-    for (const binding of CORE_SYMBOL_BINDINGS) {
-      const source = JSON.parse(
-        await readFile(
-          `packages/core-library/versions/0.2.0/types/${binding.typeId.slice(5)}.json`,
-          "utf8",
-        ),
-      ).types[0];
-      expect(source.symbol).toBe(binding.equivalent);
-      const type = structuredClone(
-        core.deviceTypes.find((t) => t.id === binding.typeId)!,
-      );
-      type.symbol = source.symbol;
-      const profile = SYMBOL_PROFILES.find((p) => p.id === source.symbol)!;
+  it("audits every shipped 0.2.0 device and its advertised circuit support", async () => {
+    const compiled = await compileProject(
+      "packages/core-library/test/fixtures/dol-starter",
+    );
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const inventory = JSON.parse(
+      await readFile(
+        "packages/core-library/versions/0.2.0/library.json",
+        "utf8",
+      ),
+    );
+    expect(inventory.version).toBe("0.2.0");
+    const directory = "packages/core-library/versions/0.2.0/types";
+    const sources = (
+      await Promise.all(
+        (await readdir(directory))
+          .filter((p) => p.endsWith(".json"))
+          .map(
+            async (p) =>
+              JSON.parse(await readFile(`${directory}/${p}`, "utf8")).types,
+          ),
+      )
+    ).flat();
+    const devices = sources.filter((t) => t.kind === "device_type");
+    expect(devices.length).toBeGreaterThan(CORE_SYMBOL_BINDINGS.length);
+    for (const source of devices) {
+      const type = compiled.ir.deviceTypes.find((t) => t.id === source.id)!;
+      expect(type, source.id).toBeDefined();
+      const profile = SYMBOL_PROFILES.find(
+        (p) =>
+          p.id === source.symbol || p.aliases.some((a) => a === source.symbol),
+      )!;
+      expect(profile, source.id).toBeDefined();
+      // L2 includes signal-loop-only profiles; inventory coverage must not invent
+      // circuit bindings for a profile that does not advertise them.
+      if (!profile.support.some((s) => s.family === "circuit")) {
+        expect(() => circuitProfile(type)).toThrow(
+          "Unsupported circuit symbol profile",
+        );
+        continue;
+      }
       expect(circuitProfile(type)).toBe(profile.id);
       for (const [key, fn] of Object.entries(source.functions) as [
         string,

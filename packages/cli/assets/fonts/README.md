@@ -1,13 +1,16 @@
-# PDF fonts
+# Printable fonts
 
-Unmodified Noto Sans Regular and Bold TrueType fonts are bundled solely for
-repeatable PDF text rendering. They do not embed electrical component libraries.
-The accompanying OFL.txt is the upstream SIL Open Font License 1.1.
+Unmodified Noto Sans Regular, Bold and Math TrueType fonts live once in
+`packages/render/assets/fonts/` for exact metrics and CLI SVG/HTML/PDF export.
+CLI resolves them relative to the existing `@thermite/render` package export;
+the current runtime closure already includes its assets. Mono remains in this
+CLI directory. Each package retains OFL.txt, the upstream SIL Open Font License
+1.1. These fonts do not embed electrical component libraries.
 
 Noto Sans Math Regular supplies missing mathematical and arrow glyphs, including
 U+2212 MINUS SIGN and U+2192 RIGHTWARDS ARROW. PDF export uses font-only spans for
 those glyph runs; ordinary text keeps Noto Sans Regular/Bold. Source strings,
-SVG/HTML artifacts, anchors and coordinates are unchanged. Characters absent
+SVG/HTML use the same bundled mathematical fallback; anchors and coordinates are unchanged. Characters absent
 from both bundled families are still rejected. All fonts are loaded offline.
 
 Retrieved September 6, 2026 from the archived upstream notofonts/noto-fonts repo:
@@ -121,3 +124,42 @@ U+25AA–U+25AC, U+25B2, U+25BA, U+25BC, U+25C4, U+25CA–U+25CB, U+25CF,
 U+25D8–U+25D9, U+25E6, U+263A–U+263C, U+2640, U+2642, U+2660, U+2663,
 U+2665–U+2666, U+266A–U+266C, U+F001–U+F002, U+F005, U+FB01–U+FB02, U+FFFF
 ```
+
+The render package supplies the shared Regular, Bold and Math sources for exact printable metrics.
+R2's shared model bounds individual glyphs and has no OpenType feature model.
+GPOS, GSUB, GDEF and legacy/AAT layout tables are removed consistently before
+Fontkit exact metrics, browser subsetting and PDFKit font registration. No
+kerning, ligature or contextual/mark OpenType feature is delivered. NFC and
+Unicode fallback positioning remain; exact metrics use the same feature-free
+face. Full feature-free TTF faces retain original glyph IDs, outlines, advances and
+hinting; SVG/HTML delivery additionally removes hinting.
+
+CLI SVG file delivery embeds a deterministic per-document WOFF subset; packet
+HTML has one shared font block in its head. Fontkit 2.0.4 supplies glyph selection
+and compound closure; pure-JS pako 0.2.9 avoids native/platform compression
+variation. Raw render/agent JSON and goldens contain family names only. PDFKit
+embeds its own subsets from the same feature-free TTF faces. The full multi-face
+block is hash-pinned, and each standalone SVG is limited to 61,440 font bytes.
+The shipped-example test and E3 independently check that limit. Original OFL
+notices apply. Original source faces remain byte-identical for sourcing and the
+R2 conservative-metric generator.
+
+SVG/HTML subsets omit TrueType hint programs (global and glyph instructions),
+grid-fitting tables and all OpenType shaping tables. Original selected advances
+and outlines remain unchanged. The pinned JavaScript encoder and compressor
+produce deterministic bytes without platform font APIs. PDFKit continues to
+subset the full feature-free bundled faces itself; this SVG hint removal does
+not change that PDF path. Font-budget overflow returns `R007`, exit 1; export
+`.html` or `.pdf` for SVG overflow; use `.pdf` for HTML overflow.
+
+Thermite Math is subset only from the document's NFC characters that Regular
+lacks; ASCII and other primary-face text are not duplicated into the fallback.
+The 61,440-byte limit is a byte budget, not a fixed character count: the boundary
+depends on glyph complexity, weights and the fallback repertoire.
+
+With the measured distinct supported Latin/Greek/Cyrillic and reviewer mixed-script
+specimens, Regular plus one bold title first refuses at 458–502 characters,
+including the one-Math-glyph cases; Regular-only first refuses at 931–949 in
+codepoint order. The mixed-script Regular-only specimen still fits through
+890 characters (891 including Math). These are specimen boundaries, not a
+universal character limit; Math is never populated with primary-face text.

@@ -5,14 +5,18 @@ import { deflateRawSync } from "node:zlib";
 import { openSync } from "fontkit";
 import { format } from "prettier";
 
-// Only this development-time generator parses fonts. Browser-only faces never ship.
+// Generate the conservative per-glyph envelope. Exact printable metrics separately
+// parse the bundled, feature-free faces; browser-only faces never ship.
 const inputs = [
   ...[
     "NotoSans-Regular",
     "NotoSans-Bold",
     "NotoSansMath-Regular",
     "NotoSansMono-Regular",
-  ].map((name) => [`packages/cli/assets/fonts/${name}.ttf`, true]),
+  ].map((name) => [
+    `packages/${name === "NotoSansMono-Regular" ? "cli" : "render"}/assets/fonts/${name}.ttf`,
+    true,
+  ]),
   ...["Regular", "Bold"].map((weight) => [
     `node_modules/pdfjs-dist/standard_fonts/LiberationSans-${weight}.ttf`,
     false,

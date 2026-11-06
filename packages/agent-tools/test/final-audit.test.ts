@@ -142,7 +142,8 @@ describe("M7 Task 9 final inventories", () => {
       "@thermite/schema": "0.2.0",
       commander: "^15.0.0",
       micromatch: "^4.0.8",
-      fontkit: "^2.0.4",
+      fontkit: "2.0.4",
+      pako: "0.2.9",
       pdfkit: "^0.17.2",
       "svg-to-pdfkit": "^0.1.8",
     });

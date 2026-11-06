@@ -992,17 +992,34 @@ export function projectDeviceTypeSymbolMappings(
             rule = make("ais:coil", ["A1", "A2"], "coil", "coil-root");
           else if (f.kind === "contact") {
             const open = f.normal_state === "open";
-            if (profile === "thermite:breaker")
+            if (profile === "thermite:breaker") {
+              const explicit = type.circuitSymbols?.[f.key];
+              const power = terminals.map((key) => role(key));
+              const pole =
+                explicit === "breaker" ||
+                (!explicit &&
+                  power.includes("power_input") &&
+                  power.includes("power_output"));
+              const symbol =
+                explicit === "contact-no"
+                  ? "ais:contact-no"
+                  : explicit === "contact-nc"
+                    ? "ais:contact-nc"
+                    : pole
+                      ? "ais:breaker-pole"
+                      : open
+                        ? "ais:contact-no"
+                        : "ais:contact-nc";
               rule = make(
-                open ? "ais:contact-no" : "ais:breaker-pole",
+                symbol,
                 ["in", "out"],
-                "protection",
-                "breaker-pole",
+                pole ? "protection" : "power-contact",
+                pole ? "breaker-pole" : "power-contact",
               );
-            else if (profile === "thermite:overload")
+            } else if (profile === "thermite:overload")
               rule = families.includes("power")
                 ? make(
-                    open ? "ais:contact-no" : "ais:overload-pole",
+                    "ais:overload-pole",
                     ["in", "out"],
                     "overload",
                     "overload-pole",
@@ -1019,6 +1036,18 @@ export function projectDeviceTypeSymbolMappings(
                 ["in", "out"],
                 "protection",
                 "breaker-pole",
+              );
+            else if (
+              profile === "thermite:estop" ||
+              profile === "thermite:selector"
+            )
+              rule = make(
+                `ais:${profile === "thermite:estop" ? "estop" : "selector"}-${open ? "no" : "nc"}`,
+                ["in", "out"],
+                profile === "thermite:estop" ? "command" : "permissive",
+                profile === "thermite:estop"
+                  ? "command-contact"
+                  : "permissive-contact",
               );
             else if (profile === "thermite:pushbutton")
               rule = make(

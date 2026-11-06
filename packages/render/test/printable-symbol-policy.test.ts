@@ -76,7 +76,7 @@ describe("printable symbol policy", () => {
   it("audits all aggregate meanings and every sourcing/sinking-specific catalog mark", () => {
     const expected = new Map([
       ["ais:power-source-3ph", "source"],
-      ["ais:motor-3ph", "motor"],
+      ["ais:motor-3ph", ""],
       ["ais:switch-sensor-pnp", "PNP"],
     ]);
     const marks = new Set(

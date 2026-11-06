@@ -390,6 +390,10 @@ async function pipelineSnapshot(
     presentationGraph,
     laidOut.value,
     titleContext.value,
+    undefined,
+    false,
+    undefined,
+    ir,
   );
   if (!emitted.ok) throw new Error(JSON.stringify(emitted.error));
   const rendered: RenderedSchematic = {
@@ -668,7 +672,7 @@ describe("D8 end-to-end determinism", () => {
         "  if (!layout.ok) throw new Error(JSON.stringify(layout.error));",
         "  const titleContext = prepareSchematicTitleContext(ir.project.name, presented.value.graph.view, projectPresentation);",
         "  if (!titleContext.ok) throw new Error(JSON.stringify(titleContext.error));",
-        "  const emitted = emitSchematicSvg(presented.value.graph, layout.value, titleContext.value);",
+        "  const emitted = emitSchematicSvg(presented.value.graph, layout.value, titleContext.value, undefined, false, undefined, ir);",
         "  if (!emitted.ok) throw new Error(JSON.stringify(emitted.error));",
         "  const rendered = { view: prepared.view, summary: presented.value.summary, svg: emitted.value };",
         "  return { view: JSON.stringify(prepared.view), selected: selected.value, presentation: JSON.stringify(presented.value.graph), adapter: serializeElkAdapterForTest(adapter), layout: layout.value, summary: presented.value.summary, json: JSON.stringify(rendered) + String.fromCharCode(10), svg: emitted.value };",

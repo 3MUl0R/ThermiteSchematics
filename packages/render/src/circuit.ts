@@ -1,5 +1,12 @@
+import {
+  emitCircuitContactCaption,
+  type CaptionBox,
+} from "./symbols/circuit-caption.js";
+import { printableTextMetrics } from "./symbols/printable-font.js";
+import { printableLabelGeometry } from "./symbols/printable-label.js";
 import { unsupportedProfileError } from "./preflight.js";
 import { CircuitRenderError } from "./render-error-context.js";
+import type { Diagnostic } from "@thermite/schema";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
@@ -18,10 +25,14 @@ import {
 import {
   declaredSensorOutput,
   printableCaption,
+  coilQualifier,
+  motorIsThreePhase,
 } from "./symbols/printable-policy.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import {
   circuitAttachment,
+  circuitAttachmentPoints,
+  circuitMarkSegments,
   circuitTransformerCore,
   circuitInterfaceMark,
   circuitBlock,
@@ -64,6 +75,7 @@ export interface CircuitReference {
   y: number;
 }
 export interface CircuitDrawing {
+  diagnostics?: Diagnostic[];
   id: string;
   label: string;
   lineReference?: string;
@@ -193,7 +205,7 @@ const text = (
   anchor = "start",
   bold = false,
 ) =>
-  `<text x="${n(x)}" y="${n(y)}" text-anchor="${anchor}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
+  `<text x="${n(x)}" y="${n(y)}" text-anchor="${anchor}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
 const record = (x: unknown): x is Record<string, unknown> =>
   !!x &&
   typeof x === "object" &&
@@ -925,12 +937,74 @@ function makeNodes(
   return result;
 }
 
+function mechanicalGangs(
+  node: DeviceNode,
+  vertical: boolean,
+  diagramCenterY: number,
+) {
+  const result: {
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+    functions: IrFunction["id"][];
+  }[] = [];
+  for (const gang of node.gangs) {
+    const members = node.rows.filter((r) => gang.includes(r.f.id.functionKey));
+    for (let i = 1; i < members.length; i++) {
+      const first = members[i - 1]!,
+        last = members[i]!;
+      if (
+        node.rows.some(
+          (r) =>
+            r.center > first.center &&
+            r.center < last.center &&
+            !gang.includes(r.f.id.functionKey),
+        )
+      )
+        continue;
+      const breaker = first.mark === "breaker" && last.mark === "breaker";
+      const functions = [first.f.id, last.f.id];
+      if (vertical)
+        result.push({
+          from: {
+            x:
+              (node.bodyHeight - first.center) * node.verticalScaleX +
+              node.verticalOffsetX +
+              (breaker ? 0.7 : 0),
+            y: diagramCenterY - (breaker ? 0.3 : 0),
+          },
+          to: {
+            x:
+              (node.bodyHeight - last.center) * node.verticalScaleX +
+              node.verticalOffsetX +
+              (breaker ? 0.7 : 0),
+            y: diagramCenterY - (breaker ? 0.3 : 0),
+          },
+          functions,
+        });
+      else
+        result.push({
+          from: {
+            x: node.width / 2 - (breaker ? 0.3 : 0),
+            y: first.center - (breaker ? 0.7 : 0),
+          },
+          to: {
+            x: node.width / 2 - (breaker ? 0.3 : 0),
+            y: last.center - (breaker ? 0.7 : 0),
+          },
+          functions,
+        });
+    }
+  }
+  return result;
+}
+
 function emitNode(
   node: DeviceNode,
   x: number,
   y: number,
   vertical: boolean,
   conductors: PhysicalConductor[],
+  diagnostics: Diagnostic[],
 ): string {
   const out = [
     `<g data-device-uid="${attr(node.device.uid)}" data-circuit-functions="${attr(JSON.stringify(node.functions.map((f) => f.id)))}" data-related-functions="${attr(JSON.stringify(node.relations))}" data-layout-width="${n(node.width)}" data-layout-height="${n(node.height)}" transform="translate(${n(x)} ${n(y)})"><title>${xml([node.device.description, node.type.catalog?.orderNumber, node.type.description].filter(Boolean).join(" | "))}</title>`,
@@ -1007,6 +1081,144 @@ function emitNode(
       ),
     );
   }
+  const captionCenters = node.rows.map((row) => {
+    const x = vertical
+        ? (node.bodyHeight - row.center) * node.verticalScaleX +
+          node.verticalOffsetX
+        : node.width / 2,
+      y = vertical ? diagramCenterY : row.center;
+    const segments = circuitMarkSegments(row.mark, x, y, vertical),
+      points = segments.flatMap((s) => [s[0], s[1]]);
+    return {
+      key: row.f.id.functionKey,
+      x,
+      y,
+      bounds: {
+        left: Math.min(...points.map((p) => p.x)),
+        right: Math.max(...points.map((p) => p.x)),
+        top: Math.min(...points.map((p) => p.y)),
+        bottom: Math.max(...points.map((p) => p.y)),
+      },
+    };
+  });
+  const captionSegments = captionCenters.flatMap((c, i) =>
+    circuitMarkSegments(node.rows[i]!.mark, c.x, c.y, vertical),
+  );
+  for (const [i, row] of node.rows.entries())
+    for (const [j, terminal] of row.f.terminals.entries()) {
+      if (j !== 0 && j !== row.f.terminals.length - 1) continue;
+      const side = vertical
+        ? j === 0
+          ? "NORTH"
+          : "SOUTH"
+        : j === 0
+          ? "WEST"
+          : "EAST";
+      const pin =
+        node.pins.find(
+          (p) => key(p.terminal) === key(terminal) && p.side === side,
+        ) ?? node.pins.find((p) => key(p.terminal) === key(terminal));
+      if (!pin) continue;
+      const c = captionCenters[i]!,
+        target = vertical
+          ? { x: c.x, y: c.y + (j === 0 ? -4 : 4) }
+          : { x: c.x + (j === 0 ? -4 : 4), y: c.y };
+      const ps = circuitAttachmentPoints(
+        pin,
+        target,
+        side,
+        node.width,
+        node.height,
+      );
+      for (let k = 1; k < ps.length; k++)
+        captionSegments.push([
+          { x: ps[k - 1]![0], y: ps[k - 1]![1] },
+          { x: ps[k]![0], y: ps[k]![1] },
+        ]);
+    }
+  const box = (
+    value: string,
+    x: number,
+    y: number,
+    size: number,
+    anchor = "start",
+    bold = false,
+  ): CaptionBox => {
+    const m = printableTextMetrics(value, size, bold),
+      start =
+        x -
+        (anchor === "middle"
+          ? m.advance / 2
+          : anchor === "end"
+            ? m.advance
+            : 0);
+    return {
+      left: start + m.left,
+      right: start + m.right,
+      top: y - m.top,
+      bottom: y - m.bottom,
+    };
+  };
+  const captionBoxes: CaptionBox[] = [
+    box(
+      node.device.designation,
+      designationX,
+      3.3,
+      2.7,
+      vertical && node.relationLabels.length && coilRow ? "start" : "middle",
+      true,
+    ),
+    ...node.pins.map((p) =>
+      box(
+        pinLabel(p),
+        p.side === "WEST"
+          ? 1.5
+          : p.side === "EAST"
+            ? node.width - 1.5
+            : p.x + 1,
+        p.side === "WEST" || p.side === "EAST"
+          ? p.y - 1.5
+          : p.side === "NORTH"
+            ? 6
+            : node.height - 1.5,
+        TERMINAL_TEXT_SIZE,
+        p.side === "EAST" ? "end" : "start",
+      ),
+    ),
+  ];
+  for (const gang of mechanicalGangs(node, vertical, diagramCenterY))
+    captionSegments.push([gang.from, gang.to]);
+  captionBoxes.push(
+    ...node.pins.map((p) => ({
+      left: p.x - 0.75,
+      right: p.x + 0.75,
+      top: p.y - 0.75,
+      bottom: p.y + 0.75,
+    })),
+  );
+  if (node.boundary)
+    captionBoxes.push(
+      box(
+        "BOUNDARY",
+        node.width / 2,
+        node.height - (vertical ? 7 : 1),
+        2.3,
+        "middle",
+      ),
+    );
+  node.relationLabels.forEach((value, i) =>
+    captionBoxes.push(
+      box(
+        value,
+        node.width / 2,
+        node.height -
+          (vertical ? 7 : 1) -
+          (node.relationLabels.length - 1 - i) * 3.1,
+        2.3,
+        "middle",
+      ),
+    ),
+  );
   for (const row of node.rows) {
     const { f, mark } = row;
     const cx = vertical
@@ -1056,6 +1268,7 @@ function emitNode(
                 f.terminals.map(
                   (t) => node.pins.find((p) => key(p.terminal) === key(t))!.x,
                 ),
+                motorIsThreePhase(node.type, f),
               )
             : circuitMotor(
                 node.width,
@@ -1064,6 +1277,7 @@ function emitNode(
                 f.terminals.map(
                   (t) => node.pins.find((p) => key(p.terminal) === key(t))!.y,
                 ),
+                motorIsThreePhase(node.type, f),
               ),
         );
       else if (mark === "winding") {
@@ -1125,6 +1339,27 @@ function emitNode(
           `<g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical)}</g>`,
         );
       }
+      out.push(
+        emitCircuitContactCaption({
+          type: node.type,
+          fn: f,
+          mark,
+          device: node.device,
+          x: cx,
+          y: cy,
+          centers: captionCenters,
+          segments: captionSegments,
+          occupied: captionBoxes,
+          width: node.width,
+          height: node.height,
+          diagnostics,
+          text,
+        }),
+      );
+      if (mark === "coil" && coilQualifier(node.type, f))
+        out.push(
+          text(cx, cy + 0.8, coilQualifier(node.type, f)!, 2.5, "middle"),
+        );
       if (mark === "sensor-3wire" && declaredSensorOutput(node.type))
         out.push(
           text(
@@ -1168,32 +1403,11 @@ function emitNode(
     }
     out.push("</g>");
   }
-  // Ganging is an explicitly non-conductive function association.
-  for (const gang of node.gangs) {
-    const members = node.rows.filter((r) => gang.includes(r.f.id.functionKey));
-    for (let i = 1; i < members.length; i++) {
-      const first = members[i - 1]!,
-        last = members[i]!;
-      if (
-        node.rows.some(
-          (r) =>
-            r.center > first.center &&
-            r.center < last.center &&
-            !gang.includes(r.f.id.functionKey),
-        )
-      )
-        continue;
-      const data = `data-mechanical-association="ganged" data-ganged-functions="${attr(JSON.stringify([first.f.id, last.f.id]))}"`;
-      if (vertical)
-        out.push(
-          `<line ${data} x1="${n((node.bodyHeight - first.center) * node.verticalScaleX + node.verticalOffsetX)}" x2="${n((node.bodyHeight - last.center) * node.verticalScaleX + node.verticalOffsetX)}" y1="${n(diagramCenterY)}" y2="${n(diagramCenterY)}" stroke="#17212b" stroke-width=".25" stroke-dasharray="1.5 1"/>`,
-        );
-      else
-        out.push(
-          `<line ${data} x1="${n(node.width / 2)}" x2="${n(node.width / 2)}" y1="${n(first.center)}" y2="${n(last.center)}" stroke="#17212b" stroke-width=".25" stroke-dasharray="1.5 1"/>`,
-        );
-    }
-  }
+  // Ganging is authored mechanical ink, shared with caption collision checks.
+  for (const g of mechanicalGangs(node, vertical, diagramCenterY))
+    out.push(
+      `<line data-mechanical-association="ganged" data-ganged-functions="${attr(JSON.stringify(g.functions))}" x1="${n(g.from.x)}" x2="${n(g.to.x)}" y1="${n(g.from.y)}" y2="${n(g.to.y)}" stroke="#17212b" stroke-width=".25" stroke-dasharray="1.5 1"/>`,
+    );
   for (const p of node.pins) {
     const connected = conductors.some((c) =>
       c.ends.some((t) => key(t) === key(p.terminal)),
@@ -1630,6 +1844,7 @@ async function layoutGroupUnchecked(
         `Circuit ${group.id}: a wire label overlaps other drawing content.`,
       );
   }
+  const diagnostics: Diagnostic[] = [];
   const contents = [
     ...wireSvg,
     ...[...dots.values()].map(
@@ -1640,18 +1855,31 @@ async function layoutGroupUnchecked(
       (l) =>
         `<g data-wire-label="${attr(conductors[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
           .split("\n")
-          .map((line, i) => text(l.x + 0.75, l.y + 2.8 + i * 3.1, line))
+          .map((line, i) => {
+            const p = printableLabelGeometry(
+              { x: l.x, y: l.y + i * 3.1, width: l.width, height: 3.8 },
+              line,
+              l.width - 1.5,
+              segments
+                .filter((s) => s.index === l.index)
+                .map((s) => [s.a, s.b]),
+              2.5,
+              false,
+            );
+            return text(p.x, p.baseline, line);
+          })
           .join("")}</g>`,
     ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
-      return emitNode(d, l.x!, l.y!, vertical, conductors);
+      return emitNode(d, l.x!, l.y!, vertical, conductors, diagnostics);
     }),
   ].join("");
   const label = group.label ?? group.id;
   return {
     id: group.id,
     label,
+    ...(diagnostics.length ? { diagnostics } : {}),
     ...(group.lineReference ? { lineReference: group.lineReference } : {}),
     width: graph.width!,
     height: graph.height!,

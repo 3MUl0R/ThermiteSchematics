@@ -229,6 +229,7 @@ async function renderPacket(
           })),
         )
       : [];
+    diagnostics.push(...drafts.flatMap((d) => d.diagnostics ?? []));
     return {
       ok: true,
       value: {

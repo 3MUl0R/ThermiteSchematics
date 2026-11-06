@@ -6,15 +6,19 @@ applicable license texts with distributions.
 
 ## Bundled fonts
 
-`packages/cli/assets/fonts/` contains unmodified Noto Sans Regular, Noto Sans
-Bold, and Noto Sans Math Regular, Copyright 2018 The Noto Project Authors.
-Noto Sans Mono Regular (Copyright 2015 Google LLC) is also bundled, unmodified,
-from the pinned upstream [Noto Sans Mono path](https://github.com/notofonts/noto-fonts/blob/v20201206-phase3/hinted/ttf/NotoSansMono/NotoSansMono-Regular.ttf).
+`packages/render/assets/fonts/` contains unmodified Noto Sans Regular and Bold
+(Copyright 2015–2021 Google LLC), and Noto Sans Math Regular (Copyright 2018
+Google LLC). The accompanying OFL notice credits The Noto Project Authors.
+Noto Sans Mono Regular (Copyright 2015 Google LLC) is bundled, unmodified, in
+`packages/cli/assets/fonts/`, from the pinned upstream [Noto Sans Mono path](https://github.com/notofonts/noto-fonts/blob/v20201206-phase3/hinted/ttf/NotoSansMono/NotoSansMono-Regular.ttf).
 They are distributed under the **SIL Open Font License 1.1**. The full copyright
 notice and license are in [OFL.txt](packages/cli/assets/fonts/OFL.txt); upstream
 URLs and SHA-256 hashes are in the [font README](packages/cli/assets/fonts/README.md).
-These fonts are embedded by the PDF renderer. Embedding them does not change
-the license of the generated document
+Regular, Bold and Math share one source in the render package for exact metrics
+and CLI SVG/HTML/PDF export. Each package retains its OFL notice. CLI SVG/HTML
+delivery embeds per-document subsets; PDFKit also embeds subsets of the source faces. OpenType layout
+features are removed consistently for metrics, browser and PDF delivery.
+Embedding does not change the license of the generated document
 ([OFL FAQ](https://openfontlicense.org/ofl-faq/), section 1.13).
 Retain their license when copying or redistributing the font files.
 

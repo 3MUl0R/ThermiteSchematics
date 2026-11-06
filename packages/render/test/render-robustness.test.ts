@@ -467,7 +467,7 @@ it.each(["plc3", "pnp"] as const)(
           request,
           "--json",
         ],
-        { encoding: "utf8" },
+        { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
       );
       expect(circuit.status, circuit.stderr).toBe(0);
       const packet = JSON.parse(circuit.stdout);
@@ -495,7 +495,7 @@ it.each(["plc3", "pnp"] as const)(
             fixture.root,
             "--json",
           ],
-          { encoding: "utf8" },
+          { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
         );
         expect(trace.status, trace.stderr).toBe(0);
         expect(JSON.parse(trace.stdout).sheets).toHaveLength(1);
@@ -717,7 +717,7 @@ it("executes the #50 message's literal packet instructions", async () => {
   const run = spawnSync(
     process.execPath,
     [resolve("thermite.mjs"), ...command, request, "--json"],
-    { cwd: fixture.root, encoding: "utf8" },
+    { cwd: fixture.root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
   );
   expect(run.status, run.stderr).toBe(0);
   const packet = JSON.parse(run.stdout);

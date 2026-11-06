@@ -186,6 +186,10 @@ try {
   )
     .replaceAll("packages/cli/assets/", "node_modules/@thermite/cli/assets/")
     .replaceAll(
+      "packages/render/assets/",
+      "node_modules/@thermite/render/assets/",
+    )
+    .replaceAll(
       "[CONTRIBUTING.md](CONTRIBUTING.md)",
       "[contribution guide](https://github.com/BlackettApplied/ThermiteSchematics/blob/dev/CONTRIBUTING.md)",
     );

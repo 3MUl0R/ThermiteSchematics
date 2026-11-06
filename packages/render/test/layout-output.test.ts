@@ -1238,16 +1238,23 @@ describe("post-layout rejection", () => {
     const symbolCollision = structuredClone(output);
     const primitive = required(
       baseline.value.nodes.find(
-        ({ kind, primitiveOrigin }) =>
-          kind === "symbol" && primitiveOrigin !== undefined,
+        (node) =>
+          node.kind === "symbol" &&
+          node.primitiveOrigin !== undefined &&
+          graph.nodes.some(
+            (n) =>
+              n.id === node.id &&
+              n.kind === "symbol" &&
+              n.symbolId === "ais:breaker-pole",
+          ),
       )?.primitiveOrigin,
     );
     const symbolLabel = required(
       symbolCollision.edges?.find(({ id }) => id === edgeWithLabel.id)
         ?.labels?.[0],
     );
-    symbolLabel.x = primitive.x;
-    symbolLabel.y = primitive.y;
+    symbolLabel.x = primitive.x + 7;
+    symbolLabel.y = primitive.y + 5;
     expectR004(graph, input, symbolCollision);
 
     const ownEdgeCollision = structuredClone(output);

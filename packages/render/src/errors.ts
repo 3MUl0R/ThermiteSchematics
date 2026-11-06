@@ -9,7 +9,7 @@ export class InvalidSymbolMappingError extends Error {
 }
 
 export type RenderErrorCode =
-  "R001" | "R002" | "R003" | "R004" | "R005" | "R006";
+  "R001" | "R002" | "R003" | "R004" | "R005" | "R006" | "R007";
 
 export type RuntimeInputType =
   | "null"
@@ -240,7 +240,9 @@ export type RenderError =
   | UnsupportedSymbolMappingError
   | InvalidLayoutError
   | InvalidRenderTextError
-  | InvalidSheetError;
+  | InvalidSheetError
+  // CLI font delivery can refuse an otherwise valid render without changing it.
+  | (RenderErrorBase & { readonly code: "R007" });
 
 export interface InvalidSheetError extends RenderErrorBase {
   readonly code: "R006";

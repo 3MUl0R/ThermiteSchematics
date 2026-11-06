@@ -1,5 +1,6 @@
 import { EVALS_VERSION } from "./version.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
+import { checkSvgFontBudget } from "./font-budget.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { retainLostText } from "./lost-text.mjs";
 import { outputCost } from "./output.mjs";
@@ -55,6 +56,7 @@ import {
   sweepResults,
   observation,
 } from "./evaluate.mjs";
+import { attachSheetIdentities } from "./sheet-identities.mjs";
 import { svgLocators, attachIdentities, viewKey } from "./locators.mjs";
 import { criteria } from "./criteria.mjs";
 import { requireReportCells } from "./checks.mjs";
@@ -167,6 +169,17 @@ try {
   const query = await import(
     pathToFileURL(join(engine, "packages/query/dist/index.js")).href
   );
+  // JSON intentionally carries family references only. Measure standalone SVGs
+  // after the built CLI's deterministic font delivery step, just like file export.
+  let deliverSvg = (svg) => svg;
+  try {
+    const delivery = join(engine, "packages/cli/dist/printable-font.js");
+    await access(delivery);
+    deliverSvg = (await import(pathToFileURL(delivery).href))
+      .embedPrintableFont;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   const specs = cases(values.quick).filter(
     (c) => !values.case || c.id === values.case,
   );
@@ -313,6 +326,10 @@ try {
         };
       }
       const packet = await readJson(packetPath);
+      for (const sheet of packet.sheets) {
+        sheet.svg = deliverSvg(sheet.svg);
+        checkSvgFontBudget(sheet.svg, `${c.id}/sheet-${sheet.number}`);
+      }
       const compiled = await cli([
         "compile",
         project,
@@ -366,7 +383,17 @@ try {
             measure({ selector: `#sheet-${i + 1}>svg`, textOnly: true }),
         );
       }, measureSheet.toString());
+      const htmlSvgs = await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll("section>svg"),
+          (svg) => svg.outerHTML,
+        ),
+      );
       for (const g of htmlGeometry) classifyTextGeometry(g, ir);
+      retainLostText(
+        htmlGeometry,
+        packet.sheets.map((s) => viewKey(s.view)),
+      );
       // Collect all tiled copies before deciding whether a semantic label was lost.
       for (const sheet of packet.sheets)
         geometries.push(await openSheet(page, sheet.svg));
@@ -382,14 +409,15 @@ try {
         const g = geometries[s.number - 1];
         requireReportCells(g);
         requireReportCells(htmlGeometry[s.number - 1]);
-        const locatorIndex = svgLocators(s.svg, ir, s.view, tables);
+        const locatorIndexes = {
+          svg: svgLocators(s.svg, ir, s.view, tables),
+          html: svgLocators(htmlSvgs[s.number - 1], ir, s.view, tables),
+        };
         assert.equal(
-          htmlGeometry[s.number - 1].texts.length,
+          htmlGeometry[s.number - 1].texts.filter((t) => t.painted !== false)
+            .length,
           g.texts.filter((t) => t.painted !== false).length,
           "HTML/SVG visible label inventory differs",
-        );
-        htmlGeometry[s.number - 1].texts.push(
-          ...g.texts.filter((t) => t.painted === false),
         );
         const htmlIssues = textGeometryIssues(htmlGeometry[s.number - 1]);
         g.htmlTexts = htmlGeometry[s.number - 1].texts;
@@ -492,7 +520,7 @@ try {
             "Real CLI HTML document in Chromium, independently measured from standalone SVG.",
         });
         measured.push(htmlRow);
-        attachIdentities(measured, locatorIndex, s.view, ir, c.project);
+        attachSheetIdentities(measured, locatorIndexes, s.view, ir, c.project);
         // One representative 300 dpi crop per failed check/sheet. Every exact
         // finding remains in JSON; this bounds raster work without hiding counts.
         for (const row of measured.filter((r) => r.status === "fail")) {
@@ -576,9 +604,17 @@ try {
       const packetRows = evaluatePacket(c, packet, geometries, tables);
       for (const row of packetRows) {
         const sheet = packet.sheets.find((s) => s.number === row.sheet);
-        attachIdentities(
+        attachSheetIdentities(
           [row],
-          svgLocators(sheet.svg, ir, sheet.view, tables),
+          {
+            svg: svgLocators(sheet.svg, ir, sheet.view, tables),
+            html: svgLocators(
+              htmlSvgs[sheet.number - 1],
+              ir,
+              sheet.view,
+              tables,
+            ),
+          },
           sheet.view,
           ir,
           c.project,

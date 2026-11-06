@@ -817,3 +817,10 @@ it.each(documents.filter(({ topic }) => topic.id !== "agent-requests"))(
   },
   120000,
 );
+
+it("explains R007 remedies for SVG and packet HTML in the offline guide", async () => {
+  const r = await ok(["guide", "diagnostics", "R007"], ctx.work);
+  expect(r.stdout).toContain("For SVG, export .html or .pdf instead");
+  expect(r.stdout).toContain("for packet HTML, export .pdf instead");
+  expect(r.stdout).toContain("without writing the requested file");
+});

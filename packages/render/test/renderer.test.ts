@@ -1023,7 +1023,9 @@ describe("M8 opaque canvas and deterministic title block", () => {
       )) {
         expect(attribute(titleLine, "fill")).toBe("#101828");
         expect(attribute(titleLine, "dominant-baseline")).toBe("hanging");
-        expect(attribute(titleLine, "lengthAdjust")).toBe("spacingAndGlyphs");
+        if (titleLine.includes("textLength="))
+          expect(attribute(titleLine, "lengthAdjust")).toBe("spacingAndGlyphs");
+        else expect(titleLine).not.toContain("lengthAdjust=");
         expect(titleLine).not.toMatch(/opacity|filter|mask/u);
       }
       expect(contrast("#101828", "#ffffff")).toBeGreaterThanOrEqual(4.5);

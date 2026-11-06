@@ -515,6 +515,18 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "Voltage compatibility is unassessed on connected nets with one comparable voltage-rated terminal and no voltage facts in potentials ({summary}). Ratings describe equipment capability; potentials declare net intent. No supply path was assessed.",
   },
+  R007: {
+    severity: "error",
+    producer: "code",
+    meaning:
+      "Printable font subset exceeds the export byte budget. For SVG, export .html or .pdf instead; for packet HTML, export .pdf instead. The CLI exits 1 without writing the requested file.",
+  },
+  W907: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "A redundant contact-state caption has no clear owner-nearest position and was omitted. The contact mark still depicts the authored normal state; the view remains printable.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCatalogCode = keyof typeof DIAGNOSTIC_CATALOG;

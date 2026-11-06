@@ -52,7 +52,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "left-to-right",
     netId:
       "net:sha256:1fcf84453b5d3f3e8329a721d27507407fe5d2459f887ee0eb251aca0370d0c9",
-    rawSize: [1425.1999999999998, 734],
+    rawSize: [1425.4999999999998, 734],
     boundaryTerminal: "6",
     wireUid: "f0000000-0000-4000-8000-000000000410",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",

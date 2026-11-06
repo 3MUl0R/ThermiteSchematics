@@ -386,6 +386,9 @@ export function createSchematicRendererWithDependencies(
         layout,
         titleContext,
         dependencies.catalog ?? SYMBOL_CATALOG,
+        false,
+        undefined,
+        ir,
       );
       if (!emitted.ok) return failed(emitted.error);
       return succeeded({ view, summary, svg: emitted.value });

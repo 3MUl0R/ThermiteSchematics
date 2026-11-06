@@ -47,8 +47,22 @@ then gzipped as `packet.html.gz`; decompress to inspect it. Duplicate SVG/HTML
 strings are omitted from packet metadata. Only failing observations with real
 on-sheet regions receive 300 dpi crops. Sheet-level or wholly off-sheet findings
 have no invented crop. `--artifacts` opts into full-sheet PNGs and uncompressed
-HTML, waiving the 100 MB budget. Explicit acceptance samples live separately under
-`evals/out/draw-samples/`. Delete old raw checkpoints after archiving summaries.
+HTML, waiving the aggregate budget.
+
+Every SVG has a separate 61,440-byte embedded-font guard, enforced at CLI delivery
+and independently for every sheet in this runner; tests cover all shipped
+examples. No shaping features unmodelled by the shared cmap/hmtx metrics, or
+TrueType hinting programs, are delivered in SVG subsets. A runner violation names
+the export and byte count and fails as infrastructure; CLI overflow returns
+`R007` (exit 1). For SVG overflow export `.html` or `.pdf`; for HTML overflow
+export `.pdf`. Neither guard raises its limit automatically. Packet HTML permits
+at most 500 KiB font growth. Math fallback is subset only from characters the
+Regular face lacks.
+
+The aggregate ceiling is a regression signal independent of the per-export font
+budgets. Explicit acceptance samples live separately under
+`evals/out/draw-samples/`. Delete raw checkpoints after retaining summaries and
+cited review crops.
 
 ## Corpus, content seal and sweep
 
@@ -585,7 +599,12 @@ match the crop entry's signed `drawingSha256` and the retained PNG's recomputed
 hash. This also covers `notMove` citations. A C1 run at `baseCommit` regenerates
 the source crop and drawing if rendering is deterministic; rebuilding the
 original stamped PNG additionally needs the stamping script, header text and same
-fonts. Header provenance and crop/source correspondence remain reviewer judgments.
+fonts. Header provenance and crop/source correspondence remain reviewer judgments. R4 stamps use
+[`scripts/stamp-drawing-crop.mjs`](../../scripts/stamp-drawing-crop.mjs), the bundled
+Noto Sans face and four literal ASCII `headerLines` in each index row. Rebuild a
+non-retained original from its representative PNG with `--strip-header` and the
+row's header-lines JSON; omit that flag when starting with a raw C1 crop. The
+writer still derives drawing hashes independently from pixels.
 Only `thermite-draw-crop-index/2.0` and the legacy
 `thermite-d1-real-crops/1.0` index formats are accepted. D1's original index/layout
 continues to verify as the one-crop-per-file case without new fields: every

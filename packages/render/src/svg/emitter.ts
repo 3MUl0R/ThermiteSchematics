@@ -1,5 +1,16 @@
 import { graphSemanticOrder } from "../semantic-order.js";
-import type { ConductiveElementId, TerminalId } from "@thermite/compiler";
+import { printableLabelGeometry } from "../symbols/printable-label.js";
+import { rootedGangSegments } from "../symbols/rooted-gangs.js";
+import {
+  boundedPrintableAdvance,
+  printableSlotWidth,
+  printableFitAttributes,
+} from "../symbols/printable-font.js";
+import type {
+  ElectricalIr,
+  ConductiveElementId,
+  TerminalId,
+} from "@thermite/compiler";
 
 import { comparePresentationLabel, compareText } from "../ordering.js";
 import {
@@ -15,6 +26,8 @@ import type {
 import {
   PRINTABLE_SYMBOL_POLICY,
   sourceEnclosureInk,
+  coilQualifier,
+  motorLegend,
 } from "../symbols/printable-policy.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type {
@@ -151,6 +164,8 @@ const FIXED_ATTRIBUTE_ORDER = Object.freeze([
 ] as const satisfies readonly Exclude<SvgAttributeName, `data-${string}`>[]);
 
 const FIXED_DATA_ATTRIBUTE_ORDER = Object.freeze([
+  "data-mechanical-association",
+  "data-ganged-functions",
   "data-location",
   "data-virtual-location",
   "data-boundary-kind",
@@ -649,7 +664,11 @@ function canonicalLabels(
 function emitDefinitions(
   writer: SvgWriter,
   labels: readonly LayoutLabel[],
+  mmPerUnit: number,
 ): void {
+  // Allow one antialias fringe pixel plus one clear 300 dpi pixel.
+  // Clip padding does not participate in placement or validated ink.
+  const padding = (2 * 25.4) / 300 / mmPerUnit + 0.001;
   writer.open(1, "defs");
   for (const label of labels) {
     writer.open(2, "clipPath", {
@@ -657,10 +676,10 @@ function emitDefinitions(
       clipPathUnits: "userSpaceOnUse",
     });
     writer.element(3, "rect", {
-      x: global(label.x),
-      y: global(label.y),
-      width: label.width,
-      height: label.height,
+      x: global(label.x - padding),
+      y: global(label.y - padding),
+      width: label.width + 2 * padding,
+      height: label.height + 2 * padding,
     });
     writer.close(2, "clipPath");
   }
@@ -965,6 +984,7 @@ function emitSymbols(
   catalog: readonly SymbolDefinition[],
   registry: RenderSourceRegistry,
   mmPerUnit: number,
+  ir?: Readonly<ElectricalIr>,
 ): void {
   const symbols = new Map(
     catalog.map((definition) => [definition.id, definition]),
@@ -989,6 +1009,50 @@ function emitSymbols(
     writer.open(1, "g", symbolGroupAttributes(node, origin, registry));
     for (const primitive of definition.primitives)
       emitPrimitive(writer, primitive, 2, mmPerUnit);
+    const type = ir?.deviceTypes.find((t) => t.id === node.typeId);
+    const fn = ir?.functions.find((f) =>
+      node.functionIds.some(
+        (id) =>
+          id.deviceUid === f.id.deviceUid &&
+          id.functionKey === f.id.functionKey,
+      ),
+    );
+    const legends =
+      node.symbolId === "ais:motor-3ph" ||
+      node.symbolId === "ais:motor-3ph-unbonded"
+        ? motorLegend(true)
+        : node.symbolId === "ais:motor"
+          ? motorLegend(false)
+          : node.symbolId === "ais:coil" &&
+              type &&
+              fn &&
+              coilQualifier(type, fn)
+            ? [coilQualifier(type, fn)!]
+            : [];
+    const center = node.symbolId.startsWith("ais:motor-3ph")
+      ? { x: 28, y: 48 }
+      : node.symbolId === "ais:motor"
+        ? { x: 24, y: 32 }
+        : { x: 20, y: 12 };
+    const anchor =
+      node.orientation === "top-to-bottom"
+        ? { x: node.symbolSize.width - center.y, y: center.x }
+        : center;
+    for (const [i, word] of legends.entries())
+      writer.element(
+        2,
+        "text",
+        {
+          x: anchor.x,
+          y: anchor.y + (legends.length > 1 ? (i === 0 ? -2 : 10) : 3),
+          "font-family": "Thermite Sans, Thermite Math, sans-serif",
+          "font-size": word === "M" ? 12 : 10,
+          "text-anchor": "middle",
+          fill: "#17212b",
+          stroke: "none",
+        },
+        word,
+      );
     for (const port of node.ports) {
       const portLayout = required(
         portLayouts.get(port.id),
@@ -1029,6 +1093,7 @@ function emitLabels(
   graph: Readonly<PresentationGraph>,
   labels: readonly LayoutLabel[],
   registry: RenderSourceRegistry,
+  edges: readonly LayoutEdge[],
 ): void {
   const semantic = presentationLabelIndex(graph);
   for (const label of labels) {
@@ -1064,12 +1129,20 @@ function emitLabels(
       );
       continue;
     }
+    const position = printableLabelGeometry(
+      label,
+      printed,
+      presentation.textLength,
+      label.ownerKind === "edge"
+        ? [edges.find((e) => e.id === label.ownerId)?.points ?? []]
+        : undefined,
+    );
     writer.element(1, "rect", {
       class: `label-background label-${label.role}`,
-      x: global(label.x),
-      y: global(label.y),
-      width: label.width,
-      height: label.height,
+      x: global(position.ink.left),
+      y: global(position.ink.top),
+      width: position.ink.right - position.ink.left,
+      height: position.ink.bottom - position.ink.top,
     });
     writer.element(
       1,
@@ -1077,17 +1150,13 @@ function emitLabels(
       {
         class: `label-text label-${label.role}`,
         "clip-path": `url(#${svgSemanticId("clip", [label.id])})`,
-        x: global(label.x + 3),
-        y: global(label.y + label.height / 2),
-        "font-family": "monospace",
+        x: global(position.x),
+        y: global(position.baseline),
+        "font-family": "Thermite Sans, Thermite Math, sans-serif",
         "font-size": 10,
         "text-anchor": "start",
-        "dominant-baseline": "middle",
-        textLength:
-          presentation.printableText === undefined
-            ? presentation.textLength
-            : titleTextLength(printed),
-        lengthAdjust: "spacingAndGlyphs",
+        "dominant-baseline": "alphabetic",
+        ...printableFitAttributes(printed, 10, presentation.textLength),
       },
       printed,
     );
@@ -1110,7 +1179,11 @@ function assertMatchingInputs(
 }
 
 function titleTextLength(value: string): number {
-  return Number((6.2 * [...value].length).toFixed(3));
+  return boundedPrintableAdvance(
+    value,
+    10,
+    printableSlotWidth(value, 6 + 6.2 * [...value].length) - 6,
+  );
 }
 
 function emitTitleBlock(
@@ -1140,12 +1213,15 @@ function emitTitleBlock(
         x: blockX + 8,
         y: blockY + 8 + 14 * index,
         fill: "#101828",
-        "font-family": "monospace",
+        "font-family": "Thermite Sans, Thermite Math, sans-serif",
         "font-size": 10,
         "text-anchor": "start",
         "dominant-baseline": "hanging",
-        textLength: titleTextLength(line.value),
-        lengthAdjust: "spacingAndGlyphs",
+        ...printableFitAttributes(
+          line.value,
+          10,
+          printableSlotWidth(line.value, 6 + 6.2 * [...line.value].length) - 6,
+        ),
       },
       line.value,
     );
@@ -1160,6 +1236,7 @@ export function emitSchematicSvg(
   catalog: readonly SymbolDefinition[] = SYMBOL_CATALOG,
   diagramOnly = false,
   mmPerUnit: number = PRINTABLE_SYMBOL_POLICY.rootedMmPerUnit,
+  ir?: Readonly<ElectricalIr>,
 ): RenderOutcome<string> {
   const titlePreflight = preflightTitleRenderText(
     graph.view,
@@ -1248,7 +1325,7 @@ export function emitSchematicSvg(
     `Deterministic ${graph.view.flow} ${graph.view.family} electrical schematic.`,
   );
   writer.element(1, "style", {}, BUILT_IN_STYLE);
-  emitDefinitions(writer, labels);
+  emitDefinitions(writer, labels, mmPerUnit);
   writer.element(1, "rect", {
     class: "canvas-background",
     x: 0,
@@ -1260,6 +1337,20 @@ export function emitSchematicSvg(
   emitFrames(writer, graph, nodeLayouts, registry);
   emitEdges(writer, graph, edgeLayouts, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
+  if (ir)
+    for (const segment of rootedGangSegments(ir, graph, layout))
+      writer.element(1, "line", {
+        class: "mechanical-gang",
+        "data-mechanical-association": "ganged",
+        "data-ganged-functions": JSON.stringify(segment.functions),
+        x1: global(segment.from.x),
+        y1: global(segment.from.y),
+        x2: global(segment.to.x),
+        y2: global(segment.to.y),
+        stroke: "#17212b",
+        "stroke-width": 0.25 / mmPerUnit,
+        "stroke-dasharray": `${1.5 / mmPerUnit} ${1 / mmPerUnit}`,
+      });
   emitSymbols(
     writer,
     graph,
@@ -1268,8 +1359,9 @@ export function emitSchematicSvg(
     catalog,
     registry,
     mmPerUnit,
+    ir,
   );
-  emitLabels(writer, graph, labels, registry);
+  emitLabels(writer, graph, labels, registry, layout.edges);
   if (!diagramOnly)
     emitTitleBlock(
       writer,

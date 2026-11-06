@@ -1,5 +1,6 @@
 import { formatHumanDiagnostics } from "../../cli/src/index.js";
 import { motorDiagnostics } from "../../cli/test/motor-starter-diagnostics.js";
+import { embedPrintableFont } from "../../cli/src/printable-font.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -390,6 +391,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
             "renderSchematicPacket",
             "renderSchematicSheets",
             "supportsGlyph",
+            "unshapedPrintableFont",
           ],
           rendererVersion: "render/0.3",
           symbolCatalogVersion: "ais-symbols/0.3",
@@ -625,7 +627,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
           error: null,
         });
         expect(await readFile(join(consumerDirectory, output), "utf8")).toBe(
-          apiResult.power.svg,
+          embedPrintableFont(apiResult.power.svg),
         );
 
         const installedViewCases = [
@@ -716,7 +718,7 @@ describe("packed schema, core-library, compiler, query, render, agent-tools, and
         });
         expect(
           await readFile(join(consumerDirectory, viewOutput), "utf8"),
-        ).toBe(apiResult.loads.svg);
+        ).toBe(embedPrintableFont(apiResult.loads.svg));
 
         const appliedPatchFile = apiResult.agentRuntime.apply.files[0] as
           { afterIntegrity: string } | undefined;

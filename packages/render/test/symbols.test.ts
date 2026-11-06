@@ -115,6 +115,42 @@ const EXPECTED_SYMBOLS: readonly ExpectedSymbol[] = [
     ],
   },
   {
+    id: "ais:estop-no",
+    width: 40,
+    height: 28,
+    ports: [
+      ["in", "west", 1 / 2, 0],
+      ["out", "east", 1 / 2, 1],
+    ],
+  },
+  {
+    id: "ais:estop-nc",
+    width: 40,
+    height: 28,
+    ports: [
+      ["in", "west", 1 / 2, 0],
+      ["out", "east", 1 / 2, 1],
+    ],
+  },
+  {
+    id: "ais:selector-no",
+    width: 40,
+    height: 24,
+    ports: [
+      ["in", "west", 1 / 2, 0],
+      ["out", "east", 1 / 2, 1],
+    ],
+  },
+  {
+    id: "ais:selector-nc",
+    width: 40,
+    height: 24,
+    ports: [
+      ["in", "west", 1 / 2, 0],
+      ["out", "east", 1 / 2, 1],
+    ],
+  },
+  {
     id: "ais:switch-no",
     width: 40,
     height: 24,
@@ -257,7 +293,9 @@ describe("D3 original symbol catalog", () => {
     });
     expect(SYMBOL_CATALOG).toHaveLength(EXPECTED_SYMBOLS.length + 5);
     expect(
-      SYMBOL_CATALOG.slice(0, EXPECTED_SYMBOLS.length).map((definition) => ({
+      SYMBOL_CATALOG.filter((s) =>
+        EXPECTED_SYMBOLS.some((e) => e.id === s.id),
+      ).map((definition) => ({
         id: definition.id,
         width: definition.size.width,
         height: definition.size.height,
@@ -268,11 +306,17 @@ describe("D3 original symbol catalog", () => {
           order,
         ]),
       })),
-    ).toEqual(EXPECTED_SYMBOLS);
+    ).toEqual(
+      [...EXPECTED_SYMBOLS].sort(
+        (a, b) =>
+          SYMBOL_CATALOG.findIndex((s) => s.id === a.id) -
+          SYMBOL_CATALOG.findIndex((s) => s.id === b.id),
+      ),
+    );
     expect(validateSymbolCatalog(SYMBOL_CATALOG)).toBe(SYMBOL_CATALOG);
   });
 
-  it("uses all five typed primitives with finite integer in-bounds geometry", () => {
+  it("uses finite integer in-bounds geometry with finite integer in-bounds geometry", () => {
     const kinds = new Set<string>();
     for (const definition of SYMBOL_CATALOG) {
       expect(definition.format).toBe("ais-symbol/0.1");
@@ -287,13 +331,7 @@ describe("D3 original symbol catalog", () => {
         expect(values.every(Number.isFinite)).toBe(true);
       }
     }
-    expect([...kinds].sort()).toEqual([
-      "arc",
-      "circle",
-      "line",
-      "polyline",
-      "rect",
-    ]);
+    expect([...kinds].sort()).toEqual(["circle", "line", "polyline", "rect"]);
   });
 
   it("keeps B1 DC anchors with detached source enclosure strokes", () => {
@@ -512,7 +550,22 @@ describe("D3 original symbol catalog", () => {
 
   it("rotates points and asymmetric arc radii exactly clockwise", () => {
     const coil = SYMBOL_CATALOG.find(({ id }) => id === "ais:coil")!;
-    const vertical = orientSymbolDefinition(coil, "top-to-bottom");
+    const synthetic = {
+      ...coil,
+      primitives: [
+        ...coil.primitives,
+        {
+          kind: "arc" as const,
+          from: { x: 12, y: 12 },
+          to: { x: 20, y: 12 },
+          radiusX: 4,
+          radiusY: 6,
+          clockwise: true,
+          style: "operator" as const,
+        },
+      ],
+    };
+    const vertical = orientSymbolDefinition(synthetic, "top-to-bottom");
     const firstArc = vertical.primitives.find(({ kind }) => kind === "arc");
     expect(firstArc).toEqual({
       kind: "arc",
@@ -587,14 +640,22 @@ describe("D3 original symbol catalog", () => {
       (catalog: SymbolDefinition[]) =>
         (catalog
           .find(({ id }) => id === "ais:coil")!
-          .primitives.find(({ kind }) => kind === "rect")!.radius = 9),
+          .primitives.find(({ kind }) => kind === "rect")!.radius = 13),
     ],
     [
       "invalid arc radii",
       (catalog: SymbolDefinition[]) =>
-        (catalog
-          .find(({ id }) => id === "ais:coil")!
-          .primitives.find(({ kind }) => kind === "arc")!.radiusX = 0),
+        catalog
+          .find((s) => s.id === "ais:coil")!
+          .primitives.push({
+            kind: "arc",
+            from: { x: 12, y: 12 },
+            to: { x: 20, y: 12 },
+            radiusX: 0,
+            radiusY: 6,
+            clockwise: true,
+            style: "operator",
+          }),
     ],
     [
       "illegal offsets",
@@ -604,7 +665,7 @@ describe("D3 original symbol catalog", () => {
       "insufficient polyline points",
       (catalog: SymbolDefinition[]) =>
         (catalog
-          .find(({ id }) => id === "ais:breaker-pole")!
+          .find(({ id }) => id === "ais:motor-3ph")!
           .primitives.find(({ kind }) => kind === "polyline")!.points = [
           { x: 1, y: 1 },
         ]),
