@@ -159,6 +159,39 @@ fix. Every release should identify the exact commit and supported runtime.
 `bun scripts/check-worktree.mjs` reproduces the linked-worktree CI step locally.
 It installs and checks committed `HEAD`; it does not copy uncommitted edits.
 
+### Documentation index and checks
+
+`bun run check:docs` checks the generated [documentation index](docs/README.md),
+local links and fragments, guide topics, source-document navigation and legacy
+instructions. It runs after `check:health` in `bun run check` and makes no edits.
+After adding, removing or renaming a Markdown source, changing its H1, or editing
+`docs/topics.json`, run `bun scripts/docs-index.mjs --write` and inspect the diff.
+The default `bun scripts/docs-index.mjs` (or `--check`) only checks freshness.
+After any Markdown change, run `bun scripts/docs-index.mjs --check` and regenerate
+if stale. Rebased branches follow the same check, including changes to an H1.
+
+The inventory includes unstaged source Markdown and works without Git in source
+archives. `scripts/docs-policy.json` defines groups and narrow exclusions for
+build output and process artifacts; it is not a document allowlist. Library,
+research, evaluation, tooling, fixture and archive links are inside expandable
+groups. Every source document must have an inbound link and be within two links
+of the root README. Planning links cannot satisfy either rule. Code and unused
+reference definitions are not navigation; external URLs are not fetched.
+Non-Markdown assets need an existing local target.
+Links into excluded paths fail even when the target exists. When Git is available,
+Git-ignored targets also fail; tracked documents hidden by policy are findings.
+`file://` URLs fail because they do not identify portable repository paths.
+Findings are sorted as `file:line target reason`; exits are 0 (clean), 1
+(findings), and 2 (tool failure). Both scripts accept `--root <directory>` for
+checking a separate source tree.
+
+`scripts/docs-policy.json` pins existing legacy matches by exact line text and
+count; delete an entry when its text moves to `docs/legacy/`. New or changed
+matches fail, including in code blocks.
+Only that archive and the SHA-protected frozen CLI `assets/AGENTS.md` are exempt
+from legacy prose checks; both remain in the inventory and link checks. Live
+factual archive pointers and electrical uses of “legacy” remain valid.
+
 ### Focused tests and timings
 
 Build after source edits: several suites execute `dist/`. Use Vitest through the

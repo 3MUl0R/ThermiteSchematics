@@ -1,0 +1,108 @@
+{
+  "exclude": {
+    "directoryNames": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "coverage",
+      ".npm-cache",
+      ".codex-reviews",
+      ".claude",
+      ".codex",
+      ".vscode",
+      ".idea"
+    ],
+    "prefixes": [
+      "docs/planning",
+      "evals/out",
+      "packages/cli/assets/guide",
+      "target",
+      "native-out",
+      "alpha-out",
+      "output",
+      "tmp",
+      ".verification-work",
+      "release-out",
+      "projects",
+      "examples/legacy-cad-examples"
+    ],
+    "files": ["PR.md"],
+    "patterns": ["^examples/[^/]+/out(?:/|$)"]
+  },
+  "groups": [
+    {
+      "title": "Start and contribute",
+      "pattern": "^[^/]+\\.md$"
+    },
+    {
+      "title": "Guide topics",
+      "topics": true
+    },
+    {
+      "title": "Other references",
+      "pattern": "^(?!.*(?:^|/)fixtures/)docs/(?!legacy/)"
+    },
+    {
+      "title": "Packages",
+      "pattern": "^(?!packages/cli/assets/AGENTS\\.md$)(?!.*(?:^|/)fixtures/)packages/"
+    },
+    {
+      "title": "Examples",
+      "pattern": "^(?!.*(?:^|/)fixtures/)examples/"
+    },
+    {
+      "title": "Libraries and research",
+      "pattern": "^(?!.*(?:^|/)fixtures/)libraries/",
+      "collapsible": true,
+      "byLibrary": true
+    },
+    {
+      "title": "Evaluations, tooling and fixtures",
+      "pattern": "^(?!docs/legacy/)(?!packages/cli/assets/AGENTS\\.md$)",
+      "collapsible": true
+    },
+    {
+      "title": "Archive",
+      "pattern": "^(?:docs/legacy/|packages/cli/assets/AGENTS\\.md$)",
+      "collapsible": true
+    }
+  ],
+  "legacy": {
+    "frozenFile": "packages/cli/assets/AGENTS.md",
+    "frozenSha256": "5e1ec3a4d465ba2eb85d2bbe9ac802f17212f77711763a547cfe403f5a499a49",
+    "patterns": [
+      "Historical private 0\\.2\\.0 runtime",
+      "npm\\s+(?:install|i)\\b[^\\n]*(?:--global\\b|(?<!\\S)-g\\b)",
+      "thermite-cli-0\\.2\\.0\\.tgz",
+      "\\^22\\.12\\.0",
+      "thermite init.*My First Electrical Project"
+    ],
+    "baseline": [
+      {
+        "file": "packages/cli/README.md",
+        "text": "## Historical private 0.2.0 runtime"
+      },
+      {
+        "file": "packages/cli/README.md",
+        "text": "requires Node.js `^22.12.0 || >=24` (excluding Node 23)."
+      },
+      {
+        "file": "packages/cli/README.md",
+        "text": "`thermite-cli-0.2.0.tgz` and"
+      },
+      {
+        "file": "packages/cli/README.md",
+        "text": "`thermite-cli-0.2.0.tgz.sha256`. Verify the downloaded tarball against the"
+      },
+      {
+        "file": "packages/cli/README.md",
+        "text": "npm install --global --prefix <isolated-prefix> --offline --ignore-scripts --no-audit --no-fund --package-lock=false --install-links=false --omit=dev --workspaces=false --userconfig <empty-user-npmrc> --globalconfig <empty-global-npmrc> --cache <empty-cache> <absolute-downloaded-thermite-cli-0.2.0.tgz>"
+      },
+      {
+        "file": "packages/cli/README.md",
+        "text": "thermite init --name \"My First Electrical Project\" --revision \"A\""
+      }
+    ]
+  }
+}

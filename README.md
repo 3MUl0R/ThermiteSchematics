@@ -12,6 +12,9 @@ You can ask your agent what a sensor is connected to, which conductors are unuse
 the part of the system you need to understand. Explore your project through
 questions and focused views without first assembling a fixed drawing set.
 
+See the [documentation index](docs/README.md) for all source references, guide topics,
+libraries and research.
+
 ## How to use
 
 You can choose a **runtime package** to start designing, or a **source checkout** to
@@ -186,11 +189,14 @@ occupies its terminal. Omitted assignments are **unassigned**; legacy assignment
 with no usage field are **unspecified**. Shield construction does not imply a
 shield termination or a ground connection.
 
-Component libraries live in [`libraries/`](libraries/): a generic core plus
-manufacturer libraries, each with its own README, source research, documented
-connection limits and a reproducible [wiring example](libraries/COMPONENT_EXAMPLES.md).
-`init` writes a generic `libraries/core` into the new project, referenced by
-relative path from `system.json`. The lock file pins the library's actual bytes,
+The repository's optional component libraries live in [`libraries/`](libraries/),
+with READMEs, source research, documented connection limits and reproducible
+[wiring examples](libraries/COMPONENT_EXAMPLES.md). The shipped generic core
+versions live in [`packages/core-library/library`](packages/core-library/library/)
+(core 0.1.0) and [`packages/core-library/versions/0.2.0`](packages/core-library/versions/0.2.0/)
+(core 0.2.0); see the [core version guide](packages/core-library/README.md).
+`init` copies core 0.2.0 into the electrical project's `libraries/core`,
+referenced by relative path from its `system.json`. The lock file pins the library's actual bytes,
 so after an intentional library change run `thermite lock <project>` and validate
 again. Partial connection models keep their compiler warnings, and a catalog
 identity is not an installed-machine selection. [CONTRIBUTING.md](CONTRIBUTING.md)
