@@ -30,16 +30,19 @@
 - [Architecture](architecture.md)
 - [Assembly and communication coverage](topology-coverage.md)
 - [Build and verify a runtime package](runtime-package.md)
+- [Cable assignments](cable-assignments.md)
 - [Communication ports and drawings](communication-ports.md)
 - [Connector I/O schedules](connector-io.md)
 - [Connector and cable assemblies](connector-assemblies.md)
 - [Declared physical continuity checks](continuity-checks.md)
+- [Deployment and generated output](deployment-and-output.md)
 - [Electrical drawing comparison protocol](reference-parity.md)
 - [Formats and compatibility](formats-and-compatibility.md)
 - [Founding Vision](founding-vision.md)
 - [Machine demonstration and first-project pilot](machine-demo.md)
 - [Platform checks](platforms.md)
 - [Ratings, potentials and validation coverage](validation.md)
+- [Source metadata and documentation](source-metadata.md)
 - [Terminal wiring views](terminal-wiring.md)
 
 ## Packages
@@ -390,7 +393,9 @@
 <summary>Archive</summary>
 
 - [Private 0.2.0 agent guide](legacy/private-release-agent-guide.md)
+- [Private runtime command reference](legacy/cli-private-runtime.md)
 - [Private v0.2.0 Release Checklist](legacy/private-release.md)
+- [Source development and release context](legacy/source-development-context.md)
 - [Thermite Schematics Agent Guide](../packages/cli/assets/AGENTS.md)
 
 </details>

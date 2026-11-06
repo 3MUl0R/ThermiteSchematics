@@ -130,15 +130,14 @@ current inventory and the limits of each model.
 
 ## Checks and releases
 
-The normal check is the cross-platform source-alpha development check. It
-excludes the frozen private 0.2.0 tarball inventory suite, which remains available
-as `npm run test:legacy-package` on its historical source revision with its
-original Node/npm toolchain. Source
-archives are verified separately by extracting, installing, building, and running
-the alpha CLI. Some historical
-private-release consumer tests intentionally skip without a downloaded release
-candidate; the test output reports those skips. Protected release-evidence audits
-remain separate and are not asserted by the source-alpha check.
+The normal check is the cross-platform source-alpha development check.
+Source engine instructions live in the compact [root guide](AGENTS.md).
+Keep historical private release controls intact. The normal check excludes the
+frozen `release-package.test.ts` inventory suite and does not assert protected
+release-evidence audits.
+Source archives are verified separately by extracting, installing, building, and
+running the alpha CLI. Historical checks and former guide context are preserved
+in the [source development archive](docs/legacy/source-development-context.md).
 
 Run `bun run package:pack` from a clean committed tree to build and verify the
 public runtime ZIP, or add `--preview` for an uncommitted local test build.
@@ -148,11 +147,7 @@ targets. Workspace packages
 remain `private: true` to prevent accidental npm publication; that flag does not
 restrict the source license.
 
-The former root guide's private-runtime contract is preserved in the
-[legacy agent guide](docs/legacy/private-release-agent-guide.md); source engine
-instructions live in the compact [root guide](AGENTS.md).
-
-Keep historical private release controls intact. Do not publish a package, change repository
+Do not publish a package, change repository
 visibility, select a license, or upload machine-project data as part of a routine
 fix. Every release should identify the exact commit and supported runtime.
 
@@ -185,11 +180,12 @@ Findings are sorted as `file:line target reason`; exits are 0 (clean), 1
 (findings), and 2 (tool failure). Both scripts accept `--root <directory>` for
 checking a separate source tree.
 
-`scripts/docs-policy.json` pins existing legacy matches by exact line text and
-count; delete an entry when its text moves to `docs/legacy/`. New or changed
-matches fail, including in code blocks.
-Only that archive and the SHA-protected frozen CLI `assets/AGENTS.md` are exempt
-from legacy prose checks; both remain in the inventory and link checks. Live
+Historical runtime and installation instructions belong in `docs/legacy/`.
+The scan checks configured old-runtime phrases in live prose and code, joining
+shell continuations before checking. `scripts/docs-policy.json` has an empty
+legacy baseline. Only that archive and the SHA-protected frozen CLI
+`assets/AGENTS.md` are exempt from legacy prose checks; both remain in the
+inventory and link checks. Live
 factual archive pointers and electrical uses of “legacy” remain valid.
 
 ### Focused tests and timings
@@ -218,9 +214,7 @@ that report after taking measurements.
 | Agent eval tests          | `bun run test -- evals/agent`                                                                            | Fake-agent runners, A/B gates, dogfoods, artifacts and shim safety                       |
 | Drawing eval tests        | `bun run test -- evals/draw`                                                                             | Drawing corpus, physical checks and expected-defect gates (when present on the checkout) |
 
-A single file can replace any directory in these commands. The frozen
-`release-package.test.ts` suite stays excluded unless explicitly selected via
-`npm run test:legacy-package` on its historical source revision and toolchain.
+A single file can replace any directory in these commands.
 
 ### Golden and generated-fixture map
 

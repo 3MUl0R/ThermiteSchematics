@@ -76,33 +76,22 @@
       "npm\\s+(?:install|i)\\b[^\\n]*(?:--global\\b|(?<!\\S)-g\\b)",
       "thermite-cli-0\\.2\\.0\\.tgz",
       "\\^22\\.12\\.0",
-      "thermite init.*My First Electrical Project"
+      "thermite init.*My First Electrical Project",
+      "\\brequires?[ \\t]+Node(?:\\.js)?[ \\t]+(?:>=[ \\t]*)?[`^~v]*22\\.12(?:\\.0)?\\b",
+      "\\bpnpm\\s+(?:add|install)\\b[^\\n]*(?:--global\\b|(?<!\\S)-g\\b)",
+      "\\bnpm\\s+run\\s+test:legacy-package\\b",
+      "Historical private 0\\.2\\.0 packaging",
+      "thermite init`?\\s+(?:always targets|targeted)\\s+the\\s+current\\s+(?:existing|empty)\\b",
+      "\\bhas no path operand\\b",
+      "^#{1,6}[ \\t]+Private offline install[ \\t]*$",
+      "\\bObtain the authorized private Release assets\\b",
+      "\\b(?:isolated-prefix|empty-user-npmrc|empty-global-npmrc|Create a new isolated prefix)\\b",
+      "\\bInvoke only the `?thermite`? shim installed under that prefix\\b",
+      "\\bThe version output is `0\\.2\\.0`",
+      "\\bname `Thermite Schematics Starter Project` and revision `0\\.1\\.0`",
+      "\\bbun\\s+add\\b[^\\n]*(?:--global\\b|(?<!\\S)-g\\b)",
+      "\\byarn\\s+global\\s+add\\b"
     ],
-    "baseline": [
-      {
-        "file": "packages/cli/README.md",
-        "text": "## Historical private 0.2.0 runtime"
-      },
-      {
-        "file": "packages/cli/README.md",
-        "text": "requires Node.js `^22.12.0 || >=24` (excluding Node 23)."
-      },
-      {
-        "file": "packages/cli/README.md",
-        "text": "`thermite-cli-0.2.0.tgz` and"
-      },
-      {
-        "file": "packages/cli/README.md",
-        "text": "`thermite-cli-0.2.0.tgz.sha256`. Verify the downloaded tarball against the"
-      },
-      {
-        "file": "packages/cli/README.md",
-        "text": "npm install --global --prefix <isolated-prefix> --offline --ignore-scripts --no-audit --no-fund --package-lock=false --install-links=false --omit=dev --workspaces=false --userconfig <empty-user-npmrc> --globalconfig <empty-global-npmrc> --cache <empty-cache> <absolute-downloaded-thermite-cli-0.2.0.tgz>"
-      },
-      {
-        "file": "packages/cli/README.md",
-        "text": "thermite init --name \"My First Electrical Project\" --revision \"A\""
-      }
-    ]
+    "baseline": []
   }
 }
