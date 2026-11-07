@@ -1893,6 +1893,10 @@ const module: FactModule = {
         // exceeded it in run 42072555353 (7552 ms whole fact, one Wrote).
         // Their poll-plus-render work gets machine-demo's existing 15 s bound.
         const changeCeiling = process.platform === "darwin" ? 2500 : 15000;
+        // No claim bounds the first build. Ubuntu exceeded 4000 ms in run
+        // 42314825831's linked-worktree check, with the same fact passing in
+        // that job's first check.
+        const firstBuildCeiling = Math.max(4000, changeCeiling);
         const until = (done: () => boolean, ceiling = 4000): Promise<void> =>
           new Promise((resolve, reject) => {
             const finish = (error?: Error) => {
@@ -1916,7 +1920,7 @@ const module: FactModule = {
           });
         const html = join(project, "drawings/packet.html");
         try {
-          await until(() => builds() === 1);
+          await until(() => builds() === 1, firstBuildCeiling);
           expect(builds()).toBe(1);
           expect(stderr).toContain(
             "Polling declared source, libraries and the request one second after each run finishes",
