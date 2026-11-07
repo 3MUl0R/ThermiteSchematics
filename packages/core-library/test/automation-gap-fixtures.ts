@@ -57,13 +57,16 @@ function gapObjects(kind: Gap) {
   return objects;
 }
 
-export const signalPacket = (auxiliary = false) => ({
+export const signalPacket = (auxiliary = false, loopPower = false) => ({
   format: "schematic-packet-request/0.1" as const,
   views: [
     {
       format: "signal-loop-view-request/0.1" as const,
       from: { device: "TX1", function: "signal" },
       to: { device: "PLC1", function: "ai0" },
+      ...(loopPower
+        ? { loopPower: { device: "PS1", function: "dc_output" } }
+        : {}),
       ...(auxiliary
         ? {
             auxiliary: [

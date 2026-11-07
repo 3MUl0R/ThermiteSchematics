@@ -706,8 +706,11 @@ describe("schema/render symbol profile conformance", () => {
           (d) => ir.deviceTypes.find((t) => t.id === d.typeId)!.symbol,
         ),
       );
+      // Explicit series power is selected and refused at the drawing gate in its own suite.
       for (const profile of SYMBOL_PROFILES.filter((p) =>
-        p.support.some((s) => s.family === "signal-loop"),
+        p.support.some(
+          (s) => s.family === "signal-loop" && s.role !== "series-power",
+        ),
       )) {
         if (
           profile.id !==
