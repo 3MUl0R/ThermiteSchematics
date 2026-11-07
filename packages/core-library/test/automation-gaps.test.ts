@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../../render/src/sheets.js";
 import { renderSchematic } from "../../render/src/renderer.js";
 import { prepareCircuitView } from "../../render/src/circuit.js";
+import { selectSignalLoop } from "../../render/src/signal-loop.js";
 import {
   disconnectCircuit,
   signalPacket,
@@ -36,6 +37,38 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           },
         });
       }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "selects the series-powered reproduction but refuses drawing in %s",
+  async (flow) => {
+    const root = await mkdtemp(join(tmpdir(), "thermite-series-gap-"));
+    try {
+      const compiled = await writeGapProject(root, "loop");
+      const request = signalPacket(false, true);
+      const view = { ...request.views[0]!, flow };
+      const selected = selectSignalLoop(compiled.ir, view);
+      expect(selected.series?.supplyBranches).toHaveLength(2);
+      expect(
+        new Set(selected.series?.legs.map((p) => p.edges[0]?.net)).size,
+      ).toBe(3);
+      const result = await renderSchematicPacket(compiled.ir, {
+        ...request,
+        views: [view],
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "R006",
+          reason: "unprintable-layout",
+          message:
+            'Packet view[0] "TX1 - signal loop": Series loop drawing is not available in this increment; use an explicit circuit view.',
+        },
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -21,7 +21,13 @@ export interface SymbolFunctionShape {
 export interface SymbolFamilySupport {
   readonly family: SymbolRendererFamily;
   readonly role:
-    "function" | "boundary" | "from" | "to" | "intermediate" | "auxiliary";
+    | "function"
+    | "boundary"
+    | "from"
+    | "to"
+    | "intermediate"
+    | "auxiliary"
+    | "series-power";
   /** Alternative shapes. Explicit circuitSymbols are checked separately. */
   readonly functions: readonly SymbolFunctionShape[];
   /** Terminal-only roles do not require a declared function. */
@@ -417,6 +423,13 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
     support: [
       ...rooted([BUS, AC_INPUT], ROOTED_CONTROL_SHAPES),
       { family: "circuit", role: "function", functions: [BUS, LOAD23, SOURCE] },
+      {
+        family: "signal-loop",
+        role: "series-power",
+        functions: [DC_SOURCE],
+        notes:
+          "Selection and polarity are checked; series loop drawing is not available yet.",
+      },
     ],
   },
   {

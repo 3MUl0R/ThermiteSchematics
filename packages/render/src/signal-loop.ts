@@ -8,12 +8,17 @@ import {
 } from "./svg/escape.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
+import {
+  validateSignalLoopRequest,
+  selectSeriesLoop,
+} from "./signal-loop/series-selection.js";
 import { drawEnclosures } from "./signal-loop-enclosures.js";
 
 export interface SignalLoopViewRequest {
   readonly format: "signal-loop-view-request/0.1";
   readonly from: { readonly device: string; readonly function: string };
   readonly to: { readonly device: string; readonly function: string };
+  readonly loopPower?: { readonly device: string; readonly function: string };
   readonly flow?: "left-to-right" | "top-to-bottom";
   readonly notes?: readonly string[];
   /** Explicit extra pairs (for example actuator power) within the same chain. */
@@ -32,7 +37,7 @@ export interface SignalLoopViewRequest {
     readonly wallDevice?: string;
   }[];
 }
-interface Conductor {
+export interface Conductor {
   id: string;
   ends: readonly [TerminalId, TerminalId];
   label: string[];
@@ -58,46 +63,6 @@ const text = (
   `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
 const width = (value: string) => measureText(value, 2.7).width;
 const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
-const record = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const selector = (v: unknown) =>
-  record(v) &&
-  Object.keys(v).length === 2 &&
-  ["device", "function"].every(
-    (k) => typeof v[k] === "string" && (v[k] as string).trim(),
-  );
-const shortString = (v: unknown, max: number) =>
-  typeof v === "string" && v.trim().length > 0 && v.length <= max;
-const assembliesValid = (v: unknown) =>
-  v === undefined ||
-  (Array.isArray(v) &&
-    v.length <= 7 &&
-    v.every(
-      (a) =>
-        record(a) &&
-        Object.keys(a).length === 3 &&
-        shortString(a.cable, 100) &&
-        shortString(a.connector, 8) &&
-        shortString(a.description, 120),
-    ));
-const enclosuresValid = (v: unknown) =>
-  v === undefined ||
-  (Array.isArray(v) &&
-    v.length <= 4 &&
-    v.every(
-      (e) =>
-        record(e) &&
-        Object.keys(e).every((k) =>
-          ["label", "devices", "wallDevice"].includes(k),
-        ) &&
-        shortString(e.label, 80) &&
-        Array.isArray(e.devices) &&
-        e.devices.length > 0 &&
-        e.devices.length <= 8 &&
-        e.devices.every((d) => shortString(d, 100)) &&
-        (e.wallDevice === undefined || shortString(e.wallDevice, 100)),
-    ));
-
 // Check ELK's placed labels as well as its routes: a white label background
 // must never erase another conductor or a device body.
 function checkLabels(graph: ElkNode) {
@@ -174,48 +139,7 @@ export function selectSignalLoop(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
 ) {
-  if (
-    !record(request) ||
-    request.format !== "signal-loop-view-request/0.1" ||
-    Object.keys(request).some(
-      (k) =>
-        ![
-          "format",
-          "from",
-          "to",
-          "flow",
-          "notes",
-          "auxiliary",
-          "cableAssemblies",
-          "enclosures",
-        ].includes(k),
-    ) ||
-    !selector(request.from) ||
-    !selector(request.to) ||
-    (request.auxiliary !== undefined &&
-      (!Array.isArray(request.auxiliary) ||
-        request.auxiliary.length > 2 ||
-        request.auxiliary.some(
-          (a) =>
-            !record(a) ||
-            Object.keys(a).length !== 2 ||
-            !selector(a.from) ||
-            !selector(a.to),
-        ))) ||
-    !assembliesValid(request.cableAssemblies) ||
-    !enclosuresValid(request.enclosures) ||
-    (request.flow !== undefined &&
-      !["left-to-right", "top-to-bottom"].includes(request.flow)) ||
-    (request.notes !== undefined &&
-      (!Array.isArray(request.notes) ||
-        request.notes.length > 6 ||
-        request.notes.some(
-          (s) => typeof s !== "string" || !s.trim() || s.length > 240,
-        )))
-  )
-    throw new Error(
-      "Invalid signal loop request; check selectors, flow, notes, cable assemblies and enclosures.",
-    );
+  validateSignalLoopRequest(request);
 
   // Validate the public IR contract before following physical connectivity.
   createQueryEngine(ir);
@@ -251,7 +175,7 @@ export function selectSignalLoop(
     ) &&
     to.function.kind === "channel" &&
     to.function.direction === "input";
-  if (!input && !output)
+  if (!input && !output && !request.loopPower)
     throw new Error(
       "Signal loop views require a two-wire transmitter to an input channel, or an output channel to an analog-actuator profile.",
     );
@@ -286,6 +210,20 @@ export function selectSignalLoop(
     });
   }
   conductors.sort((a, b) => compare(a.id, b.id));
+  if (request.loopPower) {
+    const series = selectSeriesLoop(ir, request, from, to, input, conductors);
+    return {
+      from,
+      to,
+      output: false,
+      auxiliary: [],
+      stages: series.stages,
+      devices,
+      types,
+      conductors: series.conductors,
+      series,
+    };
+  }
   const adjacent = new Map<string, Conductor[]>();
   for (const c of conductors)
     for (const t of c.ends) {
@@ -466,11 +404,23 @@ export function signalLoopTitle(
     : `${selected.from.device.designation} - signal loop`;
 }
 
+function selectDrawableSignalLoop(
+  ir: Readonly<ElectricalIr>,
+  request: SignalLoopViewRequest,
+) {
+  const selected = selectSignalLoop(ir, request);
+  if (selected.series)
+    throw new Error(
+      "Series loop drawing is not available in this increment; use an explicit circuit view.",
+    );
+  return selected;
+}
+
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
 ) {
-  const selected = selectSignalLoop(ir, request),
+  const selected = selectDrawableSignalLoop(ir, request),
     { stages, devices, types } = selected;
   const vertical = request.flow === "top-to-bottom";
   const physicalEdges = selected.conductors.map((c) =>
