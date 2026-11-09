@@ -1,5 +1,5 @@
 {
-  "base": "aad2020959de721d115ff4b784244c4443a9ca1a",
+  "base": "3e96896bb40415c95ff0dd00b182d105cc6b76bc",
   "casesSha256": "ffebb699a4ff45ded6f8eced9b83b7ce3a178dfcd75b14833c0ab96a8445c040",
   "deferred": ["D1/D2 agent-produced packets: E2 checkpoint outputs pending"],
   "files": {
@@ -141,7 +141,7 @@
     "packages/cli/fixtures/signal-loop/source.json": "5cb8c8ea63795ec6cada1ba2edbc82307e9197679a9cff31889672f6f052a721",
     "packages/cli/templates/starter-default/connections/control-power.json": "53d3eaa5a6f4ffb279bed715e67a2247f250ed6d9a9eb49cd95be52bf72fbb0a",
     "packages/cli/templates/starter-default/devices/equipment.json": "04bbff595ae13480378bf642a2fd038fede4643dfa0a5271d7840f81f319264a",
-    "packages/cli/templates/starter-default/electrical-system.lock.json": "b012959ff93bee0c1463fd05fdfedd907250132f12d100f9f9f0a1f7ee410e4e",
+    "packages/cli/templates/starter-default/electrical-system.lock.json": "3c038ee761d1a143998510c401cf3049928d2b54f0afd30d409944a79aa74c2e",
     "packages/cli/templates/starter-default/potentials/potentials.json": "07c5dd70f97d42677f6ff4100e3c9603e71d04cf56750136c240b843d2ed12ae",
     "packages/cli/templates/starter-default/presentation.json": "b090a6dfbe99358c303e720a72d184d94cda8215e6a45d0785584f208b6f6b19",
     "packages/cli/templates/starter-default/system.json": "f377481e2be240dfe9e05cda521156de5cbc6538ff08c9affa5e952ef7c40460",
@@ -169,7 +169,7 @@
     "packages/core-library/versions/0.2.0/types/contactor-3p-1no.json": "2a0abcf4d6d5838973938029ed652d0403e2f91cb5216b9e727483ac625f5908",
     "packages/core-library/versions/0.2.0/types/control-transformer.json": "19052cb070ffdf17bde24dd370cfb488791f8bbf4d5b7719a08d0e09177e3c4b",
     "packages/core-library/versions/0.2.0/types/cordset-sensor-4core.json": "10c76169d135e021a15c6355c585890d08fc978743660ed595be21cf94ed47f2",
-    "packages/core-library/versions/0.2.0/types/disconnect-3p.json": "98091fab7c97eee417b8da008bb15266d2c84eec12985637925a545ea02edccd",
+    "packages/core-library/versions/0.2.0/types/disconnect-3p.json": "14ecd53e7b5e06ddc586660e1b56f7d538624119b1e535feaed938267c717dd6",
     "packages/core-library/versions/0.2.0/types/estop-nc.json": "c28dd77750cf9cbc3cedc769d163c2b305529eb798bb073cbe0c8525fe883304",
     "packages/core-library/versions/0.2.0/types/fuse-1p.json": "3b32c818e8e5f5084ca9026d7fac6fd4acf74a4ec0d2aba7e2ab4fc257204df5",
     "packages/core-library/versions/0.2.0/types/fuse-2p.json": "0dfd78d5fbcb171841a36cc583bffdf14b1152bc42166995b00c71b299c75384",

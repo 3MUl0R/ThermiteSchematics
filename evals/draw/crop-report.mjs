@@ -5,6 +5,7 @@ import { instanceInventory } from "./repin-core.mjs";
 import { canonical, json } from "./support.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
+import { renameTextChanged } from "./repin-mappings.mjs";
 const same = (a, b, message) => assert(json(a) === json(b), message);
 const ascii = (s) =>
   String(s).replace(
@@ -31,21 +32,55 @@ export function reportInstances(reports) {
     [...reports].map(([sha, r]) => [sha, instanceInventory(r, sha)]),
   );
 }
-export function renameCropPairs(entry) {
-  const pairs = entry.pairs ?? [],
-    changed = pairs.filter((p) => p.text && p.text.from !== p.text.to);
-  return changed.length ? changed : pairs;
+export function renameCropEligibility(file, inventories) {
+  const eligible = new Map(),
+    from = new Set(),
+    to = new Set();
+  for (const entry of file.entries.filter((e) => e.action === "rename")) {
+    const before = inventories.get(file.baselineSha256),
+      after = inventories.get(file.summarySha256);
+    assert(
+      before && after,
+      "Rename crops require the exact baseline and current report",
+    );
+    assert(
+      Array.isArray(entry.pairs) && entry.pairs.length,
+      "List individual rename pairs",
+    );
+    const changed = [];
+    for (const pair of entry.pairs) {
+      const a = before.byToken.get(pair.from),
+        b = after.byToken.get(pair.to);
+      assert(
+        a && b,
+        "Rename pair needs known baseline/current report instance tokens",
+      );
+      assert(
+        !from.has(pair.from) && !to.has(pair.to),
+        "Rename instance token reused",
+      );
+      from.add(pair.from);
+      to.add(pair.to);
+      if (renameTextChanged(pair, a, b)) changed.push(pair);
+    }
+    assert(
+      changed.length || !entry.crop,
+      "Unused crop on an unchanged-text move",
+    );
+    eligible.set(entry, changed);
+  }
+  return eligible;
 }
-export function entryTokens(file, entry, crop) {
+export function entryTokens(file, entry, crop, eligible) {
   if (entry !== crop)
     return entry.action === "rename"
-      ? renameCropPairs(entry).map((p) => p.to)
+      ? eligible.get(entry).map((p) => p.to)
       : (entry.instances ?? []);
   const d = (file.notMove ?? []).find((d) => d.crops?.includes(crop));
   assert(d, "Crop has no decision reference");
   return [d.crops.indexOf(crop) === 0 ? d.from : d.to];
 }
-function checkTarget(file, entry, crop, t) {
+function checkTarget(file, entry, crop, t, eligible) {
   const ref = entry.to;
   if (ref) {
     assert(
@@ -59,16 +94,22 @@ function checkTarget(file, entry, crop, t) {
     );
   }
   assert(
-    entryTokens(file, entry, crop).includes(t.token),
+    entryTokens(file, entry, crop, eligible).includes(t.token),
     "Crop token is not one of the entry's instances eligible for this crop; text-changing renames must cite a changed-text pair",
   );
 }
-export function checkIndexedEntries(file, index, reports) {
+export function checkIndexedEntries(
+  file,
+  index,
+  reports,
+  contexts = new Map(),
+) {
   assert(
     reports.has(file.summarySha256),
     "Bind requires the exact --report named by summarySha256",
   );
   const inventories = reportInstances(reports),
+    eligible = renameCropEligibility(file, inventories),
     rows = new Map(index.crops.map((c) => [c.path, c]));
   const errors = [];
   for (const { entry, crop } of drawingReferences(file)) {
@@ -80,7 +121,7 @@ export function checkIndexedEntries(file, index, reports) {
         t,
         "Crop token/report hash is not in the supplied report or baseline",
       );
-      checkTarget(file, entry, crop, t);
+      checkTarget(file, entry, crop, t, eligible);
       same(
         c.scope,
         t.scope,
@@ -98,7 +139,11 @@ export function checkIndexedEntries(file, index, reports) {
       );
       assert(c.text === t.facts.text, "Crop text differs from report instance");
       sourcePath(t); // PDF has no source-verification path.
-      const ref = pinnedSource(reports.get(c.reportSha256), t),
+      const ref = pinnedSource(
+          reports.get(c.reportSha256),
+          t,
+          contexts.get(c.reportSha256),
+        ),
         expected = ref.path,
         r = c.sourceRender;
       assert(
@@ -123,12 +168,13 @@ export function checkIndexedEntries(file, index, reports) {
   assert(!errors.length, "Crop/report refusals:\n" + errors.join("\n"));
 }
 export function checkReportedSources(file, reports) {
-  const inventories = reportInstances(reports);
+  const inventories = reportInstances(reports),
+    eligible = renameCropEligibility(file, inventories);
   for (const { entry, crop } of drawingReferences(file)) {
     const v = entry.sourceVerification;
     const t = inventories.get(v?.reportSha256)?.byToken.get(v?.token);
     assert(t, "Source attestation token/report is not in the bound report");
-    checkTarget(file, entry, crop, t);
+    checkTarget(file, entry, crop, t, eligible);
     same(v.scope, t.scope, "Source attestation scope differs from report");
     assert(
       v.markerId === t.markerId && v.row === t.row,

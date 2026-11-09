@@ -6,6 +6,10 @@ import { cropHeader, sourcePath } from "./crop-report.mjs";
 export function mixedCropFixture({ reverse = false, changedBox = true } = {}) {
   const c = assemble({
     registryItems: [],
+    baselineItems: [
+      it0("shared", { text: "W-C11", src: "wire/unchanged" }),
+      it0("shared", { text: "OLD", src: "wire/changed" }),
+    ],
     currentItems: [
       it0("shared", {
         text: "W-C11",
@@ -44,8 +48,15 @@ export function mixedCropFixture({ reverse = false, changedBox = true } = {}) {
     a = inv.instances.find((t) => t.facts.text === "W-C11"),
     b = inv.instances.find((t) => t.facts.text === "CHANGED");
   const pairs = [
-    { from: "old-a", to: a.token },
-    { from: "old-b", to: b.token, text: { from: "OLD", to: "CHANGED" } },
+    {
+      from: c.before.instances.find((t) => t.facts.text === "W-C11").token,
+      to: a.token,
+    },
+    {
+      from: c.before.instances.find((t) => t.facts.text === "OLD").token,
+      to: b.token,
+      text: { from: "OLD", to: "CHANGED" },
+    },
   ];
   if (reverse) pairs.reverse();
   const crop = {
@@ -58,8 +69,12 @@ export function mixedCropFixture({ reverse = false, changedBox = true } = {}) {
       to: { markerId: a.markerId, scope: a.scope },
       crop,
     };
-  const file = { summarySha256: sha, entries: [entry] },
-    reports = new Map([[sha, report]]);
+  const file = {
+      summarySha256: sha,
+      baselineSha256: c.decisions[0].baselineSha256,
+      entries: [entry],
+    },
+    reports = new Map([...c.baselines, [sha, report]]);
   function indexFor(t) {
     const box = t.bbox;
     return {
