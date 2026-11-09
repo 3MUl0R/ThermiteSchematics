@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { assertCropContainsInstance } from "./crop-geometry.mjs";
+import { PDF_INK_FORMAT } from "./pdf-ink-policy.mjs";
 import { checkAttempts } from "./crop-attempts.mjs";
 
 export const SOURCE_FORMAT = "thermite-draw-source-crop/2.0";
@@ -10,10 +11,13 @@ const historical = new Map([
 ]);
 export const predatesSourceVerification = (file, sha) =>
   historical.has(file.pr) && historical.get(file.pr) === sha;
-export function checkSourceVerification(entry) {
+export function checkSourceVerification(entry, archivePdf2 = false) {
   const v = entry.sourceVerification;
   assert(
-    v?.format === SOURCE_FORMAT &&
+    (v?.medium === "pdf"
+      ? v.format === PDF_INK_FORMAT ||
+        (archivePdf2 && v.format === SOURCE_FORMAT)
+      : v?.format === SOURCE_FORMAT) &&
       v.dpi === 300 &&
       /^[a-f0-9]{64}$/.test(v.sourceSha256 ?? "") &&
       ["svg", "html", "pdf"].includes(v.medium) &&
@@ -22,13 +26,24 @@ export function checkSourceVerification(entry) {
     "Bind crop against its source with Chromium (SVG/HTML) or pdf.js (PDF) before sign-off",
   );
   assertCropContainsInstance({ bbox: v.instanceBbox }, v.sourceBbox);
-  checkAttempts(v);
+  checkAttempts(v, archivePdf2);
 }
-export function checkSourceReferences(file, refs, signedSha) {
+export function checkSourceReferences(
+  file,
+  refs,
+  signedSha,
+  archivePdf2 = false,
+) {
   if (predatesSourceVerification(file, signedSha))
     return "historical signed hash";
-  for (const { entry } of refs) checkSourceVerification(entry);
-  return "source-crop/2.0";
+  for (const { entry } of refs) checkSourceVerification(entry, archivePdf2);
+  return refs.some(
+    ({ entry }) =>
+      entry.sourceVerification.medium === "pdf" &&
+      entry.sourceVerification.format === PDF_INK_FORMAT,
+  )
+    ? "source-crop/3.0"
+    : "source-crop/2.0";
 }
 export function assertNoCroplessFacts(file) {
   assert(
@@ -41,10 +56,17 @@ export function assertNoCroplessFacts(file) {
   );
 }
 
-export function checkIndexCapture(rows) {
-  for (const row of rows)
+export function checkIndexCapture(rows, archivePdf2 = false) {
+  for (const row of rows) {
+    assert(
+      row.scope?.medium !== "pdf" ||
+        row.cropShape?.kind === "pdf-em-ink/1.0" ||
+        (archivePdf2 && row.cropShape === undefined),
+      "New PDF index requires em+ink cropShape",
+    );
     assert(
       row.capture === "fresh-source",
       `New crop index row ${JSON.stringify(row.path)} requires capture: "fresh-source"`,
     );
+  }
 }

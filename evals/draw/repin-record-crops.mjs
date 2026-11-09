@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { basename } from "node:path";
 import { hash, json } from "./support.mjs";
 import { citedCrops } from "./repin-record-crosscheck.mjs";
-import { checkSignedDrawings } from "./repin-drawing-bindings.mjs";
+import {
+  checkSignedDrawings,
+  drawingReferences,
+} from "./repin-drawing-bindings.mjs";
 import { drawingHash } from "./png-ink.mjs";
 import { verifyRecordedAttempts } from "./repin-record-verification.mjs";
 import {
@@ -37,19 +40,34 @@ export function groupCrops(rows, crops, legacy = false) {
   });
   return { rows: grouped, files, pathMap, groups: files.size };
 }
-export function verifyCrops(record, files, signed, index) {
+export function verifyCrops(record, files, signed, index, archivePdf2 = false) {
   if (!predatesSourceVerification(signed, record.signedDecisionsSha256))
-    checkIndexCapture(index.crops);
+    checkIndexCapture(index.crops, archivePdf2);
   const seen = new Map(),
     retained = new Set(),
     ink = new Map();
   assert(
-    ["thermite-draw-crop-index/2.0", "thermite-d1-real-crops/1.0"].includes(
-      index.format,
-    ),
+    [
+      "thermite-draw-crop-index/3.0",
+      "thermite-draw-crop-index/2.0",
+      "thermite-d1-real-crops/1.0",
+    ].includes(index.format),
     "Unknown crop index format",
   );
-  const grouped = index.format === "thermite-draw-crop-index/2.0";
+  const grouped = index.format !== "thermite-d1-real-crops/1.0";
+  assert(
+    !index.crops.some((c) => c.scope?.medium === "pdf") ||
+      index.format === "thermite-draw-crop-index/3.0" ||
+      (archivePdf2 &&
+        drawingReferences(signed)
+          .filter(({ entry }) => entry.sourceVerification?.medium === "pdf")
+          .every(
+            ({ entry }) =>
+              entry.sourceVerification.format ===
+              "thermite-draw-source-crop/2.0",
+          )),
+    "New PDF archive requires index 3.0",
+  );
   for (const c of index.crops) {
     const path = record.pathMap[c.path],
       bytes = files.get(path);
@@ -108,7 +126,7 @@ export function verifyCrops(record, files, signed, index) {
     ...retained,
     ...(predatesSourceVerification(signed, record.signedDecisionsSha256)
       ? []
-      : verifyRecordedAttempts(record, files, signed, index)),
+      : verifyRecordedAttempts(record, files, signed, index, archivePdf2)),
   ]);
   assert(
     Object.keys(record.files).every((p) => allowed.has(p)),

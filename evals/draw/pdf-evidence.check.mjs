@@ -1,12 +1,16 @@
 // Opt-in PDF calibration, not a C1 or signed evidence migration.
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { writeFile, mkdir } from "node:fs/promises";
+import { resolve, join } from "node:path";
 import { parseArgs } from "node:util";
 import { pdfCalibration } from "./pdf-calibration.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import { readCropSource } from "./crop-source.mjs";
-import { capturePdfCrop, pdfCaptureEnvironment } from "./pdf-source.mjs";
+import {
+  capturePdfCrop,
+  preparePdfCrop,
+  pdfCaptureEnvironment,
+} from "./pdf-source.mjs";
 import { instanceCropRow } from "./crop-index.mjs";
 import {
   cropHeader,
@@ -16,12 +20,17 @@ import {
 import { captureAttempts } from "./crop-attempts.mjs";
 import { hash } from "./support.mjs";
 const { values: v } = parseArgs({
-  options: { report: { type: "string" }, output: { type: "string" } },
+  options: {
+    report: { type: "string" },
+    output: { type: "string" },
+    samples: { type: "string" },
+  },
 });
 assert(
   v.report && v.output,
   "Use --report <retained-summary.json> --output <pdf-audit.json>",
 );
+if (v.samples) await mkdir(resolve(v.samples));
 const c = await pdfCalibration(v.report),
   results = [];
 for (const [i, t] of c.samples.entries()) {
@@ -29,6 +38,7 @@ for (const [i, t] of c.samples.entries()) {
     row = {
       scope: t.scope,
       physicalSheet: t.physicalSheet,
+      text: t.facts.text,
       instanceBbox: t.bbox,
       sourceBbox: t.bbox,
       sourceRender: {
@@ -41,20 +51,24 @@ for (const [i, t] of c.samples.entries()) {
       },
     },
     source = await readCropSource(c.root, row);
-  const png = await capturePdfCrop(source.bytes, row),
+  const prepared = await preparePdfCrop(source.bytes, row),
+    png = await capturePdfCrop(source.bytes, prepared),
     indexed = instanceCropRow(
       {
         t,
         reportSha256: c.calibrationSha256,
         sourceRef: ref,
         headerLines: cropHeader(t),
+        cropShape: prepared.cropShape,
       },
       `evals/out/draw-samples/pdf-calibration/${i}.png`,
       png,
-      t.bbox,
+      prepared.sourceBbox,
       source.bytes,
     );
   indexed.headerPixels = 0;
+  if (v.samples)
+    await writeFile(join(resolve(v.samples), `${i}.png`), png, { flag: "wx" });
   const file = {
     summarySha256: c.calibrationSha256,
     entries: [
@@ -68,7 +82,7 @@ for (const [i, t] of c.samples.entries()) {
   };
   checkIndexedEntries(
     file,
-    { crops: [indexed] },
+    { format: "thermite-draw-crop-index/3.0", crops: [indexed] },
     new Map([[c.calibrationSha256, c.report]]),
   );
   const trials = [];

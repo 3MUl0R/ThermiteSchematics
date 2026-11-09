@@ -47,6 +47,13 @@ try {
       attempts = [],
       references = new Map();
     try {
+      if (medium === "pdf")
+        Object.assign(
+          row,
+          await (
+            await import("./pdf-source.mjs")
+          ).preparePdfCrop(source.bytes, row),
+        );
       // This uses the builder's fresh capture operation, without inventing instance geometry.
       const capture =
         medium === "pdf"

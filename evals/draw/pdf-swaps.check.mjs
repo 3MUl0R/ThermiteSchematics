@@ -1,18 +1,24 @@
 // Real CLI PDF producer, pdf.js renderer, exported instance boxes; no Apple PDFKit raster.
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { join, resolve, dirname, basename } from "node:path";
 import { parseArgs } from "node:util";
 import { packetPdf } from "../../packages/cli/dist/alpha-pdf.js";
 import { pdfCalibration } from "./pdf-calibration.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
-import { capturePdfCrop, pdfCaptureEnvironment } from "./pdf-source.mjs";
+import {
+  capturePdfCrop,
+  preparePdfCrop,
+  pdfCaptureEnvironment,
+} from "./pdf-source.mjs";
 import { launch, openSheet, drawingContextOptions } from "./browser.mjs";
 import {
   compareSourcePixels,
   sourcePixelStats,
   pixelRefusal,
 } from "./crop-source-pixels.mjs";
+import { loadPdfBytes, pdfText, renderPdf } from "./pdf.mjs";
+import { canonical } from "./support.mjs";
 import { hash } from "./support.mjs";
 const { values: v } = parseArgs({
   options: { report: { type: "string" }, output: { type: "string" } },
@@ -53,6 +59,18 @@ const common = sorted.find((t) => {
   );
 });
 assert(common, "Missing common 2.2 mm Regular mid-string control");
+const tailPairs = [
+  ["O", "Q"],
+  ["Q", "O"],
+  ["n", "g"],
+  ["g", "n"],
+  ["i", "j"],
+  ["j", "i"],
+  ["r", "f"],
+  ["f", "r"],
+  ["v", "y"],
+  ["y", "v"],
+];
 const targets = [
   { size: "smallest", t: sorted[0], at: 0, pairs },
   { size: "largest", t: sorted.at(-1), at: 0, pairs },
@@ -60,10 +78,42 @@ const targets = [
     size: "smallest-middle",
     t: sorted[0],
     at: 1,
-    pairs: [...pairs, ["O", "Q"]],
+    pairs: [...pairs, ...tailPairs],
   },
-  { size: "common-middle", t: common, at: 9, pairs: [...pairs, ["O", "Q"]] },
+  { size: "common-middle", t: common, at: 9, pairs: [...pairs, ...tailPairs] },
+  {
+    size: "largest-middle",
+    t: sorted.at(-1),
+    at: 9,
+    pairs: [...pairs, ...tailPairs],
+  },
+  ...[
+    ["smallest", sorted[0]],
+    ["common", common],
+    ["largest", sorted.at(-1)],
+  ].flatMap(([size, t]) => [
+    {
+      size: size + "-left-edge",
+      t,
+      at: 0,
+      pairs: [
+        ["i", "j"],
+        ["j", "i"],
+      ],
+    },
+    {
+      size: size + "-right-edge",
+      t,
+      at: "last",
+      pairs: [
+        ["r", "f"],
+        ["f", "r"],
+      ],
+    },
+  ]),
 ];
+const images = join(dirname(resolve(v.output)), basename(v.output) + ".images");
+await mkdir(images, { recursive: true });
 const browser = await launch();
 try {
   const context = await browser.newContext(drawingContextOptions),
@@ -125,7 +175,8 @@ try {
       { text: t.facts.text, box: t.bbox },
     );
     assert(node, "No SVG text matching the actual PDF page/box association");
-    const row = {
+    let row = {
+      text: t.facts.text,
       scope: t.scope,
       physicalSheet: t.physicalSheet,
       instanceBbox: t.bbox,
@@ -139,6 +190,7 @@ try {
         page: ref.page,
       },
     };
+    row = await preparePdfCrop(await readFile(join(c.root, ref.path)), row);
     const delivered = await capturePdfCrop(
         await readFile(join(c.root, ref.path)),
         row,
@@ -157,37 +209,81 @@ try {
     });
     async function variant(char) {
       await openSheet(page, originalSvg);
-      sheet.svg = await page.evaluate(
+      const changed = await page.evaluate(
         ({ i, char, at }) => {
           const svg = document.querySelector("body>svg"),
             t = svg.querySelectorAll("text")[i],
             text = t.textContent,
-            position = text.search(/\S/) + at;
+            position =
+              at === "last"
+                ? text.trimEnd().length - 1
+                : text.search(/\S/) + at;
           if (position < 0 || position >= text.trimEnd().length)
             throw Error("Character control position is outside the text");
           t.textContent =
             text.slice(0, position) + char + text.slice(position + 1);
-          return svg.outerHTML;
+          return {
+            svg: svg.outerHTML,
+            text: t.textContent.trim().replace(/\s+/g, " "),
+          };
         },
         { i: node.i, char, at },
       );
-      return packetPdf(packet, "PDF character calibration");
+      sheet.svg = changed.svg;
+      return {
+        bytes: await packetPdf(packet, "PDF character calibration"),
+        text: changed.text,
+      };
     }
     for (const [a, b] of pairs) {
-      const A = await variant(a),
-        B = await variant(b),
-        wrong = await capturePdfCrop(A, {
+      const va = await variant(a),
+        vb = await variant(b),
+        A = va.bytes,
+        B = vb.bytes;
+      const referenceDoc = await loadPdfBytes(B);
+      let referenceRow;
+      try {
+        const referencePage = await referenceDoc.getPage(t.physicalSheet),
+          items = await pdfText(
+            referencePage,
+            referenceDoc.fontFamilies,
+            referenceDoc.fontCaps,
+          ),
+          matches = items.filter((x) => x.text === vb.text);
+        assert(
+          matches.length === 1,
+          `Swap reference needs one exact generated text: ${size} ${a}→${b} ${JSON.stringify(vb.text)}`,
+        );
+        referenceRow = await preparePdfCrop(B, {
           ...row,
-          sourceRender: { ...row.sourceRender, pdfSha256: hash(A) },
-        }),
-        comparisons = [];
+          text: vb.text,
+          instanceBbox: canonical(matches[0].bbox),
+          sourceRender: { ...row.sourceRender, pdfSha256: hash(B) },
+        });
+      } finally {
+        await referenceDoc.loadingTask.destroy();
+      }
+      // Wrong source is deliberately rendered at the correct reference's shape:
+      // dimension or text-identity refusal must not masquerade as pixel signal.
+      const wrongDoc = await loadPdfBytes(A);
+      let wrong;
+      try {
+        wrong = (
+          await renderPdf(
+            await wrongDoc.getPage(t.physicalSheet),
+            300,
+            referenceRow.sourceBbox,
+          )
+        ).toBuffer("image/png");
+        wrongDoc.assertNoExternalResources();
+      } finally {
+        await wrongDoc.loadingTask.destroy();
+      }
+      const comparisons = [];
       // Calibration trials, not a bind attempt chain: measure all three fresh
       // loads even after an accepted comparison, so clipping remains visible.
       for (let reference = 1; reference <= 3; reference++) {
-        const png = await capturePdfCrop(B, {
-            ...row,
-            sourceRender: { ...row.sourceRender, pdfSha256: hash(B) },
-          }),
+        const png = await capturePdfCrop(B, referenceRow),
           stats = sourcePixelStats(wrong, png),
           reason = pixelRefusal(stats);
         comparisons.push({
@@ -198,25 +294,40 @@ try {
           reason,
         });
       }
-      const refused = comparisons.every((a) => a.verdict === "refused"),
-        knownGap =
-          !refused && a === "O" && b === "Q"
-            ? "Exported em box clips the distinguishing Q tail; inspect the pinned page."
-            : null;
+      const refused = comparisons.every((a) => a.verdict === "refused");
+      if (tailPairs.some(([from, to]) => from === a && to === b)) {
+        const name = `${size}-${a}-${b}`;
+        await writeFile(join(images, name + "-wrong.png"), wrong, {
+          flag: "wx",
+        });
+        await writeFile(join(images, name + "-wrong.pdf"), A, { flag: "wx" });
+        await writeFile(join(images, name + "-reference.pdf"), B, {
+          flag: "wx",
+        });
+        await writeFile(
+          join(images, name + "-reference.png"),
+          await capturePdfCrop(B, referenceRow),
+          { flag: "wx" },
+        );
+      }
       results.push({
         size,
         position: at,
         row: t.row,
         physicalSheet: t.physicalSheet,
-        box: t.bbox,
+        box: referenceRow.sourceBbox,
+        instanceBbox: referenceRow.instanceBbox,
+        cropShape: referenceRow.cropShape,
         classification: t.classification,
         font: c.associated.get(t.row),
         swap: `${a}→${b}`,
+        artifacts: tailPairs.some(([from, to]) => from === a && to === b)
+          ? `${basename(v.output)}.images/${size}-${a}-${b}`
+          : null,
         frozenSha256: hash(wrong),
         wrongPdfSha256: hash(A),
         referencePdfSha256: hash(B),
         refused,
-        knownGap,
         comparisons,
       });
     }
@@ -237,7 +348,6 @@ const data = {
   acceptedComparisons: results
     .flatMap((r) => r.comparisons)
     .filter((a) => a.verdict === "pass").length,
-  knownGaps: results.filter((r) => r.knownGap).length,
   minMaximum: Math.min(
     ...results.flatMap((r) => r.comparisons.map((a) => a.stats.maximum)),
   ),
@@ -251,8 +361,8 @@ console.log(
   JSON.stringify({ ...data, baseline: undefined, results: undefined }),
 );
 assert(
-  data.controls === 62 &&
-    data.comparisons === 186 &&
-    results.every((r) => r.refused || r.knownGap),
-  "PDF swap calibration must record all trials; only the known O/Q clipping gap may pass",
+  data.controls === 117 &&
+    data.comparisons === 351 &&
+    results.every((r) => r.refused),
+  "PDF swap calibration must record all trials; all distinct-ink controls must refuse, including O/Q",
 );

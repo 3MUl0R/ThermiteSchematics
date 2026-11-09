@@ -5,20 +5,25 @@ import { join } from "node:path";
 import { pdfDocumentFixture } from "./pdf-document-fixture.mjs";
 import { loadPdfBytes, pdfText, renderPdf, PDFJS_VERSION } from "./pdf.mjs";
 import { pdfPageMetadata } from "./pdf-source-policy.mjs";
-import { capturePdfCrop, pdfCaptureEnvironment } from "./pdf-source.mjs";
+import {
+  capturePdfCrop,
+  preparePdfCrop,
+  pdfCaptureEnvironment,
+} from "./pdf-source.mjs";
 import { readCropSource, verifyCropSources } from "./crop-source.mjs";
 import { sourcePixelStats } from "./crop-source-pixels.mjs";
 import { decodePng } from "./png-ink.mjs";
 import { hash, canonical } from "./support.mjs";
-async function fixture(rotation = 0) {
-  const bytes = await pdfDocumentFixture("LABEL", rotation),
+async function fixture(rotation = 0, fontSize = 12, text = "LABEL") {
+  const bytes = await pdfDocumentFixture(text, rotation, true, fontSize),
     doc = await loadPdfBytes(bytes);
   try {
     const page = await doc.getPage(1),
       meta = pdfPageMetadata(page),
       texts = await pdfText(page, doc.fontFamilies, doc.fontCaps),
-      box = rotation ? { x: 1, y: 1, w: 10, h: 3 } : canonical(texts[0].bbox);
-    const row = {
+      box = canonical(texts[0].bbox);
+    let row = {
+      text,
       path: "crop.png",
       scope: { case: "example", medium: "pdf" },
       physicalSheet: 1,
@@ -34,7 +39,10 @@ async function fixture(rotation = 0) {
         page: meta,
       },
     };
-    const expected = (await renderPdf(page, 300, box)).toBuffer("image/png");
+    row = await preparePdfCrop(bytes, row);
+    const expected = (await renderPdf(page, 300, row.sourceBbox)).toBuffer(
+      "image/png",
+    );
     return { bytes, row, expected };
   } finally {
     await doc.loadingTask.destroy();
@@ -232,12 +240,72 @@ it("PDF cache cannot reuse a raster for different pinned page metadata", async (
   }
 });
 
-it("renders the canonical exported box at a raster rounding boundary", async () => {
-  const c = await fixture(),
-    raw = { x: 10.00049, y: 10.00049, w: 8.46651, h: 8.46651 };
-  c.row.instanceBbox = canonical(raw);
-  c.row.sourceBbox = raw;
+it("canonicalizes the verified shape before the existing raster transform", async () => {
+  const first = await fixture();
+  const c = await fixture(0, (12 * 14.223) / first.row.instanceBbox.w);
+  c.row.sourceBbox = { ...c.row.sourceBbox, w: c.row.sourceBbox.w + 0.00049 };
   const png = decodePng(await capturePdfCrop(c.bytes, c.row));
-  expect(png.width).toBe(101);
-  expect(png.height).toBe(101);
+  expect(png.width).toBe(
+    Math.ceil((canonical(c.row.sourceBbox).w * 300) / 25.4),
+  );
 });
+
+it.each([
+  "omitted shape",
+  "forged outline association",
+  "forged font program",
+  "wrong text",
+])("capture refuses %s before rendering", async (mode) => {
+  const c = await fixture();
+  if (mode === "omitted shape") delete c.row.cropShape;
+  if (mode === "forged outline association") c.row.cropShape.operators[0] += 1;
+  if (mode === "forged font program")
+    c.row.cropShape.fontPrograms = [hash("forged")];
+  if (mode === "wrong text") c.row.text = "OTHER";
+  await expect(capturePdfCrop(c.bytes, c.row)).rejects.toThrow(
+    mode === "omitted shape"
+      ? /requires em\+ink/
+      : /association|independently derived/,
+  );
+});
+
+it("PDF cache cannot bypass a changed glyph association on an otherwise identical crop", async () => {
+  const c = await fixture(),
+    root = await mkdtemp(join(tmpdir(), "pdf-ink-cache-"));
+  try {
+    await mkdir(join(root, "example"));
+    await writeFile(join(root, "example/packet.pdf"), c.bytes);
+    const other = structuredClone(c.row);
+    other.path = "forged.png";
+    other.cropShape.operators[0] += 1;
+    await expect(
+      verifyCropSources(
+        root,
+        { crops: [c.row, other] },
+        new Map([
+          [c.row.path, c.expected],
+          [other.path, c.expected],
+        ]),
+      ),
+    ).rejects.toThrow(/independently derived/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each(["Q", "g", "j", "f"])(
+  "includes actual embedded %s ink outside the exported em box",
+  async (text) => {
+    const c = await fixture(0, 12, text),
+      e = c.row.instanceBbox,
+      i = c.row.cropShape.inkBbox;
+    if (text === "j") expect(i.x).toBeLessThan(e.x);
+    if (text === "f") expect(i.x + i.w).toBeGreaterThan(e.x + e.w);
+    if (text === "Q" || text === "g")
+      expect(i.y + i.h).toBeGreaterThan(e.y + e.h);
+    expect(
+      sourcePixelStats(c.expected, await capturePdfCrop(c.bytes, c.row))
+        .maximum,
+    ).toBe(0);
+  },
+);

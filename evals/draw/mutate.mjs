@@ -56,6 +56,10 @@ const all = [
   "evals/draw/pdf-source.test.mjs",
   "evals/draw/pdf-load.test.mjs",
   "evals/draw/pdf-bind.test.mjs",
+  "evals/draw/pdf-ink-operators.test.mjs",
+  "evals/draw/pdf-ink-policy.test.mjs",
+  "evals/draw/pdf-ink.test.mjs",
+  "evals/draw/pdf-ink-archive.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -100,7 +104,13 @@ function calls(file, name) {
   return out;
 }
 for (const [name, tests] of [
-  ["crop-source-policy", ["evals/draw/crop-source-policy.test.mjs"]],
+  [
+    "crop-source-policy",
+    [
+      "evals/draw/crop-source-policy.test.mjs",
+      "evals/draw/pdf-source-policy.test.mjs",
+    ],
+  ],
   ["crop-source-pixels", ["evals/draw/crop-source-pixels.test.mjs"]],
   ["crop-source", ["evals/draw/crop-source.test.mjs"]],
   [
@@ -110,6 +120,7 @@ for (const [name, tests] of [
       "evals/draw/crop-review.test.mjs",
       "evals/draw/crop-rename.test.mjs",
       "evals/draw/pdf-source-policy.test.mjs",
+      "evals/draw/pdf-ink-archive.test.mjs",
     ],
   ],
   ["crop-index", ["evals/draw/crop-index.test.mjs"]],
@@ -118,11 +129,21 @@ for (const [name, tests] of [
     [
       "evals/draw/source-hashes.test.mjs",
       "evals/draw/pdf-source-policy.test.mjs",
+      "evals/draw/pdf-ink-archive.test.mjs",
     ],
   ],
   ["pdf-source-policy", ["evals/draw/pdf-source-policy.test.mjs"]],
   ["pdf-source", ["evals/draw/pdf-source.test.mjs"]],
-  ["crop-attempts", ["evals/draw/crop-attempts.test.mjs"]],
+  ["pdf-ink", ["evals/draw/pdf-ink.test.mjs"]],
+  ["pdf-ink-operators", ["evals/draw/pdf-ink-operators.test.mjs"]],
+  ["pdf-ink-policy", ["evals/draw/pdf-ink-policy.test.mjs"]],
+  [
+    "crop-attempts",
+    [
+      "evals/draw/crop-attempts.test.mjs",
+      "evals/draw/pdf-ink-archive.test.mjs",
+    ],
+  ],
   ["repin-record-verification", ["evals/draw/repin-verification.test.mjs"]],
   ["verification-io", ["evals/draw/verification-io.test.mjs"]],
 ]) {
@@ -276,7 +297,11 @@ await edit(
 const policy = "evals/draw/crop-source-policy.mjs";
 for (const [id, from, to] of [
   ["known-pr", "historical.has(file.pr) &&", ""],
-  ["loop", "for (const { entry } of refs) checkSourceVerification(entry);", ""],
+  [
+    "loop",
+    "for (const { entry } of refs) checkSourceVerification(entry, archivePdf2);",
+    "",
+  ],
   [
     "contains",
     "assertCropContainsInstance({ bbox: v.instanceBbox }, v.sourceBbox);",
@@ -519,7 +544,7 @@ for (const [id, file, call, tests] of [
   [
     "v2-policy-attempts",
     "evals/draw/crop-source-policy.mjs",
-    "checkAttempts(v)",
+    "checkAttempts(v, archivePdf2)",
     ["evals/draw/crop-attempts.test.mjs"],
   ],
   [
@@ -531,7 +556,7 @@ for (const [id, file, call, tests] of [
   [
     "v2-recompute-attempts",
     "evals/draw/crop-attempts.mjs",
-    "checkAttempts(v)",
+    "checkAttempts(v, archivePdf2)",
     ["evals/draw/crop-attempts.test.mjs"],
   ],
   [
@@ -614,7 +639,10 @@ await edit(
   "evals/draw/crop-source.mjs",
   `row.sourceRender.page,
                 row.sourceRender.backend,
-                row.sourceRender.pdfjsVersion,`,
+                row.sourceRender.pdfjsVersion,
+                row.cropShape,
+                row.text,
+                row.instanceBbox,`,
   "undefined,",
   ["evals/draw/pdf-source.test.mjs"],
 );
@@ -660,8 +688,8 @@ await edit(
 await edit(
   "pdf-exact-instance-region",
   "evals/draw/crop-index.mjs",
-  't.scope.medium === "pdf"\n            ? canonical(t.bbox)',
-  "false ? canonical(t.bbox)",
+  't.scope.medium === "pdf"\n            ? null',
+  "false ? null",
   ["evals/draw/pdf-source-policy.test.mjs"],
 );
 await edit(
@@ -718,6 +746,82 @@ await edit(
   "crops: error.audit ?? [],",
   "crops: [],",
   ["evals/draw/bind-exhaustion.test.mjs"],
+);
+await edit(
+  "pdf-ink-cache-shape",
+  "evals/draw/crop-source.mjs",
+  "row.cropShape,",
+  "undefined,",
+  ["evals/draw/pdf-source.test.mjs"],
+);
+await edit(
+  "pdf-ink-independent-derivation",
+  "evals/draw/pdf-source.mjs",
+  "const expected = await derivePdfInk(page, document, row);",
+  "const expected = row;",
+  ["evals/draw/pdf-source.test.mjs"],
+);
+await edit(
+  "pdf-builder-ink-shape",
+  "evals/draw/repin-crop-index.mjs",
+  "plan.cropShape = row.cropShape;",
+  "plan.cropShape = undefined;",
+  ["evals/draw/pdf-bind.test.mjs"],
+);
+await edit(
+  "pdf-v2-archive-pin",
+  "evals/draw/repin-record.mjs",
+  'pin.recordSha256 === hash(files.get("record.json"))',
+  "true",
+  ["evals/draw/pdf-ink-archive.test.mjs"],
+);
+for (const [side, call] of [
+  ["left", "Math.floor(x * 1000)"],
+  ["top", "Math.floor(y * 1000)"],
+  ["right", "Math.ceil(right * 1000)"],
+  ["bottom", "Math.ceil(bottom * 1000)"],
+])
+  await edit(
+    "pdf-ink-outward-" + side,
+    "evals/draw/pdf-ink-policy.mjs",
+    call,
+    call.replace(/floor|ceil/, "round"),
+    ["evals/draw/pdf-ink-policy.test.mjs"],
+  );
+await edit(
+  "pdf-v2-manifest-binding",
+  "evals/draw/repin-record.mjs",
+  'json(record) === json(strictJsonBytes(files.get("record.json")))',
+  "true",
+  ["evals/draw/pdf-ink-archive.test.mjs"],
+);
+for (const [id, file, message] of [
+  [
+    "pdf-writer-index-version",
+    "repin-record-write",
+    "New PDF writer requires index 3.0",
+  ],
+  [
+    "pdf-archive-index-version",
+    "repin-record-crops",
+    "New PDF archive requires index 3.0",
+  ],
+]) {
+  const path = `evals/draw/${file}.mjs`;
+  await source(path);
+  const call = calls(path, "assert").find((a) => a.message?.includes(message));
+  add(id, path, call.text, `assert(true, ${call.message})`, [
+    "evals/draw/pdf-ink-archive.test.mjs",
+  ]);
+}
+await edit(
+  "pdf-archive-medium-dispatch",
+  "evals/draw/repin-record-verification.mjs",
+  `entry.sourceVerification.medium === "pdf" ||
+      row?.scope?.medium === "pdf" ||
+      row?.sourceRender?.medium === "pdf"`,
+  'entry.sourceVerification.medium === "pdf"',
+  ["evals/draw/pdf-ink-archive.test.mjs"],
 );
 // Deliberately harmless mutation must survive; it proves survivors are observable.
 await edit(

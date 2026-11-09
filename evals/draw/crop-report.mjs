@@ -7,6 +7,7 @@ import { pinnedSource } from "./source-hashes.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import { renameTextChanged } from "./repin-mappings.mjs";
 import { checkPdfRegion, pdfFacts } from "./pdf-source-policy.mjs";
+import { PDF_INK_FORMAT } from "./pdf-ink-policy.mjs";
 import { SOURCE_FORMAT, checkIndexCapture } from "./crop-source-policy.mjs";
 const same = (a, b, message) => assert(json(a) === json(b), message);
 const ascii = (s) =>
@@ -15,7 +16,7 @@ const ascii = (s) =>
     (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
   );
 export const cropHeader = (t) => [
-  `${t.markerId} | ${t.scope.medium.toUpperCase()} | 300 dpi`,
+  `${t.markerId} | ${t.scope.medium === "pdf" ? "PDF em+ink" : t.scope.medium.toUpperCase()} | 300 dpi`,
   `${t.scope.case} | ${ascii(t.scope.sheet)} | physical page ${t.physicalSheet}`,
   `Report instance ${t.token}`,
   `Text ${ascii(t.facts.text)}`,
@@ -113,6 +114,11 @@ export function checkIndexedEntries(
     "Bind requires the exact --report named by summarySha256",
   );
   checkIndexCapture(index.crops);
+  assert(
+    !index.crops.some((c) => c.scope.medium === "pdf") ||
+      index.format === "thermite-draw-crop-index/3.0",
+    "New PDF index requires format 3.0",
+  );
   const inventories = reportInstances(reports),
     eligible = renameCropEligibility(file, inventories),
     rows = new Map(index.crops.map((c) => [c.path, c]));
@@ -171,7 +177,7 @@ export function checkIndexedEntries(
           t.classification,
           "PDF classification differs from report instance",
         );
-        checkPdfRegion(ref.page, c.instanceBbox, c.sourceBbox);
+        checkPdfRegion(ref.page, c.instanceBbox, c.sourceBbox, c.cropShape);
       }
       if (c.headerPixels === 86)
         same(
@@ -233,7 +239,7 @@ export function checkReportedSources(file, reports) {
 
 export function verificationFact(row, sourceSha256) {
   return {
-    format: SOURCE_FORMAT,
+    format: row.scope.medium === "pdf" ? PDF_INK_FORMAT : SOURCE_FORMAT,
     sourceSha256,
     medium: row.scope.medium,
     sheet: row.physicalSheet,
@@ -248,7 +254,11 @@ export function verificationFact(row, sourceSha256) {
     row: row.row,
     sourcePath: row.sourceRender[row.scope.medium],
     ...(row.scope.medium === "pdf"
-      ? { pdf: pdfFacts(row.sourceRender), classification: row.classification }
+      ? {
+          pdf: pdfFacts(row.sourceRender),
+          classification: row.classification,
+          cropShape: row.cropShape,
+        }
       : {}),
   };
 }

@@ -139,7 +139,7 @@ export function cropPlans(file, reports, contexts = new Map()) {
         sourceRef,
         sourceBbox:
           t.scope.medium === "pdf"
-            ? canonical(t.bbox)
+            ? null
             : reuse
               ? canonical(row.evidence.cropBbox)
               : null,
@@ -178,7 +178,9 @@ export function instanceCropRow(plan, path, bytes, box, source) {
     text: t.facts.text,
     sourceBbox: canonical(box),
     capture: "fresh-source",
-    ...(medium === "pdf" ? { classification: t.classification } : {}),
+    ...(medium === "pdf"
+      ? { classification: t.classification, cropShape: plan.cropShape }
+      : {}),
     sourceRender: {
       medium,
       ...(medium === "pdf"
