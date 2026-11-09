@@ -127,7 +127,7 @@ describe("alpha reference help", () => {
     ]);
     expect(stderr).toBe("");
     expect(stdout.replace(/\s+/g, " ")).toContain(
-      "regenerate a packet by polling declared inputs and the request",
+      "poll declared inputs and the request to regenerate a packet (macOS, Linux, Windows)",
     );
     expect(stdout).not.toContain("(macOS)");
     expect(stdout).not.toContain(".csv");

@@ -1113,14 +1113,22 @@ const module: FactModule = {
           );
           expect(alias.stdout, name).toBe(positional.stdout);
           expect(alias.stderr, name).toBe(positional.stderr);
+          // The guide advises one form ("never both"); a matching pair is also
+          // accepted, and a conflicting pair still fails (#44).
+          const equal = await ok(
+            [name, ".", "--project", ".", ...flags],
+            ctx.pristine.starter,
+          );
+          expect(equal.stdout, name).toBe(positional.stdout);
+          expect(equal.stderr, name).toBe(positional.stderr);
           const conflict = await thermite(
-            [name, ".", "--project", "."],
+            [name, ".", "--project", "missing"],
             ctx.pristine.starter,
           );
           expect(conflict.code, name).toBe(2);
           expect(conflict.stdout).toBe("");
           expect(conflict.stderr).toBe(
-            "error: specify either [path] or --project <path>, not both\n",
+            "error: [path] and --project refer to different paths\n",
           );
         }
         await rejected(

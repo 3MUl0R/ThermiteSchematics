@@ -675,7 +675,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
     command
       .command("watch")
       .description(
-        "regenerate a packet by polling declared inputs and the request",
+        "poll declared inputs and the request to regenerate a packet (macOS, Linux, Windows)",
       ),
   )
     .requiredOption("--input <file>", "packet request file")
