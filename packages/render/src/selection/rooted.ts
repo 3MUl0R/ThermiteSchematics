@@ -10,6 +10,7 @@ import type {
   SelectSemanticSubgraphResult,
 } from "./contracts.js";
 import { selectPowerPaths } from "./power.js";
+import type { SelectedTerminalOwner } from "../types.js";
 
 export function selectSemanticSubgraph(
   request: SelectSemanticSubgraphRequest,
@@ -22,6 +23,7 @@ export function selectSemanticSubgraph(
       ? selectControlPaths(context)
       : selectPowerPaths(context);
   if (!selected.ok) return selected;
+  const terminalOwners: SelectedTerminalOwner[] = [];
   const displayFunctions = pathTerminalDisplayFunctionIds(
     context,
     selected.paths,
@@ -31,16 +33,22 @@ export function selectSemanticSubgraph(
       );
     },
     selected.rootFunctionIds,
+    terminalOwners,
   );
   if (!displayFunctions.ok) return displayFunctions;
-  // Validate ownership without changing the successful selection DTO. Legacy
-  // views already materialize terminal displays implicitly in presentation.
+  // Keep mapped terminal displays implicit; only projected coil terminals carry
+  // separate ownership context, without selecting their owner functions.
   return Object.freeze({
     ok: true,
-    value: buildSelectedSubgraph(
-      context,
-      selected.paths,
-      selected.rootFunctionIds,
-    ),
+    value: Object.freeze({
+      ...buildSelectedSubgraph(
+        context,
+        selected.paths,
+        selected.rootFunctionIds,
+      ),
+      ...(terminalOwners.length
+        ? { terminalOwners: Object.freeze(terminalOwners) }
+        : {}),
+    }),
   });
 }

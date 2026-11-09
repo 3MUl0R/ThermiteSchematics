@@ -88,8 +88,6 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         flow,
       });
       const expected = structuredClone(rootedPins[root]);
-      if ("alternative" in expected.error.details)
-        expected.error.details.alternative.flow = flow;
       expect(rooted).toEqual(expected);
     }
     const power = await renderSchematic(ir, {
@@ -100,6 +98,23 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     });
     expect(power.ok, JSON.stringify(power.ok ? {} : power)).toBe(true);
     expect(JSON.stringify(ir)).toBe(before);
+  },
+);
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "pins rm3 K1's terminal-context branch refusal in %s",
+  async (flow) => {
+    const compiled = await compileProject(
+      "packages/core-library/test/fixtures/rm3",
+    );
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const result = await renderSchematic(compiled.ir, {
+      format: "schematic-view-request/0.1",
+      root: { by: "designation", value: "K1" },
+      family: "control",
+      flow,
+    });
+    expect(result).toEqual(rm3K1Pin);
   },
 );
 
@@ -212,132 +227,60 @@ it("joins only two-ended power cable cores; a spare PE end cannot complete the m
   }
 });
 
-// Exact live refusal output after control protection bindings; no layout repair here.
+// Exact live refusals after terminal-only projection; branch layout remains refused.
 const rootedPins = {
   K1: {
     ok: false,
     error: {
-      code: "R003",
+      code: "R004",
       message:
-        'Unsupported terminal representation: R1.A1 on "core:relay-1co" is incident to selected conductors W36, W37, W38 but has no selected function, mapped terminal-display symbol, or boundary representation in this rooted view. Use a circuit view to draw these conductors with their real endpoint terminals. Put details.alternative in the views array of a schematic-packet-request/0.1 file and run thermite packet --input <file>. The alternative selects K1.coil.',
-      family: "control",
-      deviceUid: "10000000-0000-4000-8000-000000000012",
-      typeId: "core:relay-1co",
-      root: "K1",
+        "Invalid layout: edges boundary segment (R1.A1 \u2192 R1.A1) and W38 (K1.A1 / coil \u2192 R1.A1) overlap collinearly.",
       details: {
-        reason: "unrepresented-terminal",
-        designation: "R1",
-        terminalIds: [
-          {
-            deviceUid: "10000000-0000-4000-8000-000000000012",
-            terminalKey: "A1",
-          },
-        ],
+        originalMessage:
+          'Invalid layout: edges ["boundary-segment","[\\"junction\\",\\"net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"] and ["wire","10000000-0000-4000-8000-000000000038"] overlap collinearly.',
         conductors: [
           {
-            kind: "wire",
-            uid: "10000000-0000-4000-8000-000000000036",
-            designation: "W36",
-          },
-          {
-            kind: "wire",
-            uid: "10000000-0000-4000-8000-000000000037",
-            designation: "W37",
-          },
-          {
-            kind: "wire",
-            uid: "10000000-0000-4000-8000-000000000038",
+            id: '["wire","10000000-0000-4000-8000-000000000038"]',
             designation: "W38",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000003",
+                terminalKey: "A1",
+                designation: "K1",
+                functionKeys: ["coil"],
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "A1",
+                designation: "R1",
+                functionKeys: [],
+              },
+            ],
           },
-        ],
-        alternative: {
-          format: "circuit-view-request/0.1",
-          title: "K1 selected conductors",
-          flow: "left-to-right",
-          groups: [
-            {
-              id: "selected-path",
-              functions: [
-                {
-                  device: {
-                    by: "designation",
-                    value: "K1",
-                  },
-                  key: "coil",
-                },
-              ],
-              conductors: [
-                "W30",
-                "W31",
-                "W32",
-                "W33",
-                "W34",
-                "W35",
-                "W36",
-                "W37",
-                "W38",
-                "W41",
-              ],
-            },
-          ],
-        },
-        typeId: "core:relay-1co",
-        functions: [
           {
-            functionKey: "coil",
+            id: '["boundary-segment","[\\"junction\\",\\"net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"]',
+            designation: "boundary segment",
             terminals: [
               {
                 deviceUid: "10000000-0000-4000-8000-000000000012",
                 terminalKey: "A1",
                 designation: "R1",
+                functionKeys: [],
               },
               {
                 deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "A2",
+                terminalKey: "A1",
                 designation: "R1",
+                functionKeys: [],
               },
             ],
-          },
-          {
-            functionKey: "contact12",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "11",
-                designation: "R1",
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "12",
-                designation: "R1",
-              },
-            ],
-          },
-          {
-            functionKey: "contact14",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "11",
-                designation: "R1",
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "14",
-                designation: "R1",
-              },
-            ],
-          },
-        ],
-        stoppedAt: [
-          {
-            deviceUid: "10000000-0000-4000-8000-000000000012",
-            terminalKey: "A1",
-            designation: "R1",
-            functionKeys: ["coil"],
           },
         ],
       },
+      family: "control",
+      netId:
+        "net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2",
+      root: "K1",
     },
   },
   R1: {
@@ -395,3 +338,59 @@ const rootedPins = {
     },
   },
 };
+
+// rm3 has the same selected geometry but its own compiler net identity.
+const rm3K1Pin = {
+  ok: false,
+  error: {
+    code: "R004",
+    message:
+      "Invalid layout: edges boundary segment (R1.A1 \u2192 R1.A1) and W38 (K1.A1 / coil \u2192 R1.A1) overlap collinearly.",
+    details: {
+      originalMessage:
+        'Invalid layout: edges ["boundary-segment","[\\"junction\\",\\"net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"] and ["wire","10000000-0000-4000-8000-000000000038"] overlap collinearly.',
+      conductors: [
+        {
+          id: '["wire","10000000-0000-4000-8000-000000000038"]',
+          designation: "W38",
+          terminals: [
+            {
+              deviceUid: "10000000-0000-4000-8000-000000000003",
+              terminalKey: "A1",
+              designation: "K1",
+              functionKeys: ["coil"],
+            },
+            {
+              deviceUid: "10000000-0000-4000-8000-000000000012",
+              terminalKey: "A1",
+              designation: "R1",
+              functionKeys: [],
+            },
+          ],
+        },
+        {
+          id: '["boundary-segment","[\\"junction\\",\\"net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"]',
+          designation: "boundary segment",
+          terminals: [
+            {
+              deviceUid: "10000000-0000-4000-8000-000000000012",
+              terminalKey: "A1",
+              designation: "R1",
+              functionKeys: [],
+            },
+            {
+              deviceUid: "10000000-0000-4000-8000-000000000012",
+              terminalKey: "A1",
+              designation: "R1",
+              functionKeys: [],
+            },
+          ],
+        },
+      ],
+    },
+    family: "control",
+    netId:
+      "net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0",
+    root: "K1",
+  },
+} as const;

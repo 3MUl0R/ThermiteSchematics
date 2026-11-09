@@ -160,7 +160,7 @@ export function packetDeviceCoverageDiagnostics(
   sheets: readonly {
     number: number;
     schematic: boolean;
-    references: readonly { deviceUid: string }[];
+    references: readonly { deviceUid: string; representation?: "terminal" }[];
   }[],
 ): Diagnostic[] {
   // Reports make no schematic coverage claim. Every actual drawing family counts.
@@ -168,7 +168,11 @@ export function packetDeviceCoverageDiagnostics(
   const drawn = new Set(
     sheets
       .filter((s) => s.schematic)
-      .flatMap((s) => s.references.map((r) => r.deviceUid)),
+      .flatMap((s) =>
+        s.references
+          .filter((r) => r.representation !== "terminal")
+          .map((r) => r.deviceUid),
+      ),
   );
   const missing = ir.devices
     .filter((d) => !drawn.has(d.uid))
@@ -176,6 +180,15 @@ export function packetDeviceCoverageDiagnostics(
       (a, b) => compare(a.designation, b.designation) || compare(a.uid, b.uid),
     );
   if (!missing.length) return [];
+  const terminalContexts = new Set(
+    sheets
+      .filter((s) => s.schematic)
+      .flatMap((s) =>
+        s.references
+          .filter((r) => r.representation === "terminal")
+          .map((r) => r.deviceUid),
+      ),
+  );
   const devices = missing.map((d) => {
     const reportSheets = sheets
       .filter(
@@ -196,14 +209,16 @@ export function packetDeviceCoverageDiagnostics(
     {
       code: "W906",
       severity: "warning",
-      message: `Packet coverage: ${devices.map((d) => `${d.designation} (${d.appearance === "reports-only" ? "reports/indexes only" : "nowhere in packet"})`).join(", ")} appear on no schematic sheet. Add source-selected schematic views for these devices; schedules and indexes do not depict their wiring.`,
+      message: `Packet coverage: ${devices.map((d) => `${d.designation} (${terminalContexts.has(d.uid) ? "terminal context only" : d.appearance === "reports-only" ? "reports/indexes only" : "nowhere in packet"})`).join(", ")} ${devices.some((d) => terminalContexts.has(d.uid)) ? "lack a device-function or device-symbol appearance on schematic sheets. Add source-selected schematic views for these devices; terminal contexts, schedules and indexes do not provide device coverage." : "appear on no schematic sheet. Add source-selected schematic views for these devices; schedules and indexes do not depict their wiring."}`,
       ...first.source,
       devices,
       related: missing.map((d) => ({
         file: d.source.file,
         line: d.source.line,
         column: d.source.column,
-        note: `${d.designation} has no schematic appearance.`,
+        note: terminalContexts.has(d.uid)
+          ? `${d.designation} has terminal context only, without a device-function or device-symbol appearance.`
+          : `${d.designation} has no schematic appearance.`,
       })),
     },
   ];

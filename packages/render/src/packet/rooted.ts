@@ -15,6 +15,8 @@ import {
   LAYOUT_CONFIG_VERSION,
   type RenderOutcome,
   type SchematicViewRequest,
+  type SymbolPresentationNode,
+  type RailPresentationNode,
 } from "../types.js";
 
 import type { Draft, PaperPage } from "./types.js";
@@ -53,6 +55,16 @@ export function cuts(
   }
   result.push(length);
   return result;
+}
+function nodeReference(node: SymbolPresentationNode | RailPresentationNode) {
+  return {
+    deviceUid: node.deviceUid,
+    designation: node.designation,
+    functions: node.functionIds.map((f) => f.functionKey),
+    ...(node.kind === "symbol" && node.representation === "terminal"
+      ? { representation: "terminal" as const }
+      : {}),
+  };
 }
 async function drawingDraftsCandidate(
   ir: Readonly<ElectricalIr>,
@@ -184,9 +196,7 @@ async function drawingDraftsCandidate(
             return [];
           return [
             {
-              deviceUid: node.deviceUid,
-              designation: node.designation,
-              functions: node.functionIds.map((f) => f.functionKey),
+              ...nodeReference(node),
               xMm: b.x + (cx - xs[col]!) * scale,
               yMm: b.y + (cy - ys[row]!) * scale,
               zone: zone(
