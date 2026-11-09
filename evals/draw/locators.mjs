@@ -250,6 +250,12 @@ export function identities(
     locator = `null-policy/${view.kind}/${meta?.column ?? finding.columnIndex}/literal-placeholder`;
     source = true;
   }
+  if (
+    ["identifier-line-break", "identifier-text-mismatch"].includes(finding.kind)
+  ) {
+    locator = `cell/${view.kind}/${sourceKey(finding.reportRow, names)}/${finding.columnName}/identifier-${finding.identifierIndex}`;
+    source = true;
+  }
   if (finding.kind === "iso-cap-height-policy") {
     locator = `policy/iso-cap-height/${finding.font}/${finding.medium}`;
     source = true;

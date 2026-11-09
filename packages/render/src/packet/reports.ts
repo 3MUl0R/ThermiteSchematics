@@ -45,20 +45,7 @@ export function tableDrafts(
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
 ): RenderOutcome<Draft[]> {
-  const allText = [
-    ir.project.name,
-    presentation?.revision ?? "UNSPECIFIED",
-    ...(presentation?.titleBlockLines ?? []),
-    table.title,
-    ...table.columns,
-    ...table.notes,
-    ...table.rows.flatMap((r) => r.cells),
-  ];
-  if (
-    allText.some((t) =>
-      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/u.test(t),
-    )
-  )
+  if (unprintableReportText(ir, table, presentation))
     return failure(
       "unprintable-layout",
       "Report text contains characters that cannot be represented in XML.",
@@ -95,6 +82,12 @@ export function tableDrafts(
       "unprintable-layout",
       "Insufficient report area. Shorten title lines or select a larger sheet.",
     );
+  let measured: ReturnType<typeof reportCells>;
+  try {
+    measured = reportCells(ir, table, b.w, page);
+  } catch (error) {
+    return failure("unprintable-layout", (error as Error).message);
+  }
   const {
     widths,
     cellSize,
@@ -104,7 +97,7 @@ export function tableDrafts(
     context,
     split,
     geometry,
-  } = reportCells(ir, table, b.w, page);
+  } = measured;
   let header: string[][];
   try {
     header = split(table.columns, "header");
@@ -171,7 +164,7 @@ export function tableDrafts(
     const source = table.rows[i]!;
     let cells: string[][];
     try {
-      cells = split(source.cells, rowName(i));
+      cells = split(source.cells, rowName(i), source.key);
     } catch (error) {
       return failure("unprintable-layout", (error as Error).message);
     }
@@ -217,4 +210,23 @@ export function tableDrafts(
     content.push(text(b.x + 2, y + 7, "No matching records", 3));
   finish(table.rows.length);
   return { ok: true, value: drafts };
+}
+
+function unprintableReportText(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  presentation?: CompiledProjectPresentation,
+) {
+  const allText = [
+    ir.project.name,
+    presentation?.revision ?? "UNSPECIFIED",
+    ...(presentation?.titleBlockLines ?? []),
+    table.title,
+    ...table.columns,
+    ...table.notes,
+    ...table.rows.flatMap((r) => r.cells),
+  ];
+  return allText.some((t) =>
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/u.test(t),
+  );
 }

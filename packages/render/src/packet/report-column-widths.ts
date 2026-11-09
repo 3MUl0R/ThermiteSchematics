@@ -1,5 +1,6 @@
 import type { DocumentationTable } from "@thermite/query";
 import { measureText } from "../text-metrics.js";
+import type { ReportIdentifiers } from "./report-identifiers.js";
 
 export interface ReportName {
   value: string;
@@ -125,6 +126,8 @@ export function reportColumns(
   width: number,
   size: number,
   projectNames: readonly (ReportName | string)[],
+  identifiers: ReportIdentifiers = new Map(),
+  wholeHeaders: readonly number[] = [],
 ) {
   const names = projectNames
     .map((name) =>
@@ -133,8 +136,11 @@ export function reportColumns(
         : { ...name, value: name.value.normalize("NFC") },
     )
     .filter((name) => name.value);
-  const headers = table.columns.map((header) =>
-    (header.match(/\S+/gu) ?? []).map((token) => ({
+  const headers = table.columns.map((header, column) =>
+    (wholeHeaders.includes(column)
+      ? [header]
+      : (header.match(/\S+/gu) ?? [])
+    ).map((token) => ({
       token,
       kind: "header" as const,
       authoredName: token,
@@ -154,7 +160,7 @@ export function reportColumns(
         starts.fill(m.index, m.index, m.index + m[0].length);
         ends.fill(m.index + m[0].length, m.index, m.index + m[0].length);
       }
-      return reportTokens(value, names).map((hit) => {
+      const protectedNames = reportTokens(value, names).map((hit) => {
         const start = starts[hit.start]!,
           end = ends[hit.end - 1]!;
         const onlyEdges =
@@ -176,6 +182,16 @@ export function reportColumns(
           width: measureText(token, size).width,
         };
       });
+      return [
+        ...protectedNames,
+        ...(identifiers.get(row.key)?.[i] ?? []).map((token) => ({
+          token,
+          kind: "identifier" as const,
+          authoredName: token,
+          width: measureText(token, size).width,
+          rowKey: row.key,
+        })),
+      ];
     }),
   );
   const largest = <T extends { width: number }>(values: T[], fallback: T): T =>
@@ -243,11 +259,23 @@ export function reportColumns(
   };
   if (total > width)
     return { ...common, widths: minimum, error: true as const };
+  return {
+    ...common,
+    widths: distributeReportWidths(minimum, table.widths, width),
+    error: false as const,
+  };
+}
+
+function distributeReportWidths(
+  minimum: number[],
+  weights: readonly number[],
+  width: number,
+) {
   const widths = [...minimum],
     fixed = new Set<number>();
   let available = width;
   while (fixed.size < widths.length) {
-    const weight = table.widths.reduce(
+    const weight = weights.reduce(
       (sum, w, i) => sum + (fixed.has(i) ? 0 : w),
       0,
     );
@@ -255,12 +283,11 @@ export function reportColumns(
       .map((_, i) => i)
       .filter(
         (i) =>
-          !fixed.has(i) &&
-          (available * table.widths[i]!) / weight < minimum[i]!,
+          !fixed.has(i) && (available * weights[i]!) / weight < minimum[i]!,
       );
     if (!constrained.length) {
       for (let i = 0; i < widths.length; i++)
-        if (!fixed.has(i)) widths[i] = (available * table.widths[i]!) / weight;
+        if (!fixed.has(i)) widths[i] = (available * weights[i]!) / weight;
       break;
     }
     for (const i of constrained) {
@@ -268,5 +295,5 @@ export function reportColumns(
       available -= minimum[i]!;
     }
   }
-  return { ...common, widths, error: false as const };
+  return widths;
 }

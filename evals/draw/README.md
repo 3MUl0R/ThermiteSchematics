@@ -211,32 +211,54 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 
 ## Checklist coverage
 
-| DQ  | Automated measurement or explicit boundary                                                                                                                                 |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 01  | SVG text-only raster regions versus pdf.js dark ink; ≥8 SVG pixels and <18% retained PDF ink fails. Optional PDFKit. Historical mask audit separate.                       |
-| 02  | Real ink bounds/overlap in SVG/HTML, plates, conductor interference, declared-em minima in SVG/HTML/matched PDF, combined em-axis/advance distortion. ISO policy separate. |
-| 03  | Independent source-port electrical primitives and foreign route/body/port penetration. Circuit primitive electrical roles need an export; symbol meaning/legend manual.    |
-| 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                           |
-| 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                      |
-| 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                          |
-| 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                |
-| 08  | Reciprocal continuations and printed conductor/sheet.zone; destination from measured reciprocal anchor/grid. Ordered ports need an export.                                 |
-| 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                       |
-| 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                        |
-| 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                           |
-| 12  | Packet median content envelope utilisation. Optimal repacking needs block/clearance exports.                                                                               |
-| 13  | Stroke hierarchy and filled terminal/junction dots with fewer than three rays.                                                                                             |
-| 14  | Distinct conductor endpoints sharing one final landing stroke. Missing physical endpoint identities are a gap.                                                             |
-| 15  | Straight-route jogs <3 mm and visible detour >2×Manhattan+20 mm. Curves need segment exports; routing intent still needs review.                                           |
-| 16  | Inline own-wire blocks; ink-to-own/competing-conductor distance with calibrated tolerance. Semantic wire identities recovered from emitted source keys.                    |
-| 17  | Duplicate/overlapping terminal text and terminal-marker collisions.                                                                                                        |
-| 18  | Production title fields and revision history.                                                                                                                              |
-| 19  | Report bounds, semantic null placeholders, wire schedule sheet.zone, complete index and public-query row inventory/multiplicity.                                           |
-| 20  | Computed font and actual symbol-catalog families per packet.                                                                                                               |
-| 21  | Matched PDF/SVG advances, max(0.15 mm,2%) predicate. Split/unmatched text needs an association export.                                                                     |
-| 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                    |
-| 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                              |
-| 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                         |
+| DQ  | Automated measurement or explicit boundary                                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01  | SVG text-only raster regions versus pdf.js dark ink; ≥8 SVG pixels and <18% retained PDF ink fails. Optional PDFKit. Historical mask audit separate.                            |
+| 02  | Real ink bounds/overlap in SVG/HTML, plates, conductor interference, declared-em minima in SVG/HTML/matched PDF, combined em-axis/advance distortion. ISO policy separate.      |
+| 03  | Independent source-port electrical primitives and foreign route/body/port penetration. Circuit primitive electrical roles need an export; symbol meaning/legend manual.         |
+| 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                                |
+| 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                           |
+| 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                               |
+| 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                     |
+| 08  | Reciprocal continuations and printed conductor/sheet.zone; destination from measured reciprocal anchor/grid. Ordered ports need an export.                                      |
+| 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                            |
+| 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                             |
+| 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                                |
+| 12  | Packet median content envelope utilisation. Optimal repacking needs block/clearance exports.                                                                                    |
+| 13  | Stroke hierarchy and filled terminal/junction dots with fewer than three rays.                                                                                                  |
+| 14  | Distinct conductor endpoints sharing one final landing stroke. Missing physical endpoint identities are a gap.                                                                  |
+| 15  | Straight-route jogs <3 mm and visible detour >2×Manhattan+20 mm. Curves need segment exports; routing intent still needs review.                                                |
+| 16  | Inline own-wire blocks; ink-to-own/competing-conductor distance with calibrated tolerance. Semantic wire identities recovered from emitted source keys.                         |
+| 17  | Duplicate/overlapping terminal text and terminal-marker collisions.                                                                                                             |
+| 18  | Production title fields and revision history.                                                                                                                                   |
+| 19  | Report bounds, semantic null placeholders, wire schedule sheet.zone, complete index, public-query row inventory/multiplicity, and single-line identifier units in SVG/HTML/PDF. |
+| 20  | Computed font and actual symbol-catalog families per packet.                                                                                                                    |
+| 21  | Matched PDF/SVG advances, max(0.15 mm,2%) predicate. Split/unmatched text needs an association export.                                                                          |
+| 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                         |
+| 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                                   |
+| 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                              |
+
+DQ-19 also enforces the explicit source identifier fields in
+[`identifier-policy.mjs`](identifier-policy.mjs). SVG and actual CLI HTML use
+independently measured cell rectangles and character baselines, including
+positioned `tspan` runs. Direct PDF uses raw pdf.js text positions, including
+whitespace, rather than requiring a match to an SVG line. Fragments on one
+baseline count as one line within the existing 0.170 mm geometry uncertainty;
+separate complete list members can occupy separate lines. A single source
+identifier spanning lines produces `identifier-line-break`. Lost, changed or
+elided characters produce `identifier-text-mismatch`; missing cell geometry or
+unmeasurable identity is an infrastructure error. Each medium is assessed
+separately. DQ-21's font comparison remains independent.
+Both registries' header positions are tested against the public query output and
+packet-only wire reference columns. Terminal-plan connection columns protect
+complete peer endpoint units from authored wires, jumpers and cable cores;
+printed arrows and semicolons never determine their unit boundaries.
+
+These checker and test additions change the complete checker bundle hash.
+Existing C1 targets and draft decisions need a fresh full target before a re-pin;
+an eligible historical report can still serve as the baseline. Renderer and
+checker lanes must finish before the shared target is captured. Do not re-pin
+the new identifier predicate as an accepted defect.
 
 ## Marker identity, drift and updates
 

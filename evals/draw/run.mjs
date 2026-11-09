@@ -64,6 +64,9 @@ import { attachSheetIdentities } from "./sheet-identities.mjs";
 import { svgLocators, attachIdentities, viewKey } from "./locators.mjs";
 import { criteria } from "./criteria.mjs";
 import { requireReportCells } from "./checks.mjs";
+import { identifierFindings } from "./identifier-checks.mjs";
+import { identifierTable } from "./identifier-tables.mjs";
+import { pdfIdentifierRuns } from "./identifier-pdf.mjs";
 import { gallery } from "./gallery.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   kit = join(root, "evals/draw");
@@ -533,6 +536,33 @@ try {
             "Real CLI HTML document in Chromium, independently measured from standalone SVG.",
         });
         measured.push(htmlRow);
+        const identifierSource = identifierTable(s, packet, g, ir, tables);
+        if (identifierSource) {
+          const identifierPdf = await pdfIdentifierRuns(pdfPage);
+          for (const medium of ["html", "pdf"]) {
+            const geometry = medium === "html" ? htmlGeometry[s.number - 1] : g;
+            measured.push(
+              observation(
+                c,
+                s,
+                "DQ-19",
+                identifierFindings(
+                  geometry,
+                  identifierSource,
+                  ir,
+                  medium,
+                  identifierPdf,
+                ),
+                {
+                  id: `${c.id}/DQ-19/${medium}-${s.number}`,
+                  medium,
+                  scope:
+                    "Complete source identifier units on one independently measured physical line.",
+                },
+              ),
+            );
+          }
+        }
         attachSheetIdentities(measured, locatorIndexes, s.view, ir, c.project);
         // One representative 300 dpi crop per failed check/sheet. Every exact
         // finding remains in JSON; this bounds raster work without hiding counts.

@@ -5,31 +5,66 @@ import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { n, text } from "./svg.js";
 import {
   reportColumns,
-  reportTokens,
-  reportTextSegments,
   reportHeaderParts,
   type ReportName,
 } from "./report-column-widths.js";
 import type { PaperPage } from "./types.js";
 
-const REPORT_CELL_SIZE = 2.6;
+import {
+  reportIdentifiers,
+  type ReportIdentifiers,
+} from "./report-identifiers.js";
+import { wrapReportCell } from "./report-wrapping.js";
 
-/** The fixed-size measured cell policy, including contextual row/column diagnostics. */
+const REPORT_CELL_SIZES = [2.6, 2.5] as const;
+
+/** Measured identifier minima, then the allowed smaller em, then a refusal. */
 export function reportCells(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   width: number,
   page?: PaperPage,
 ) {
-  const cellSize = REPORT_CELL_SIZE;
-  const designations = new Map(
-    [...ir.devices, ...ir.wires, ...ir.jumpers, ...ir.cables].map((entity) => [
-      entity.uid,
-      entity.designation,
-    ]),
+  const identifiers = reportIdentifiers(ir, table);
+  const names = reportNames(ir);
+  let cellSize: number = REPORT_CELL_SIZES[0];
+  let allocation = reportColumns(table, width, cellSize, names, identifiers);
+  if (allocation.error) {
+    cellSize = REPORT_CELL_SIZES[1];
+    allocation = reportColumns(table, width, cellSize, names, identifiers);
+  }
+  const standard = measuredCells(
+    ir,
+    table,
+    width,
+    page,
+    cellSize,
+    names,
+    identifiers,
+    allocation,
   );
-  const names: ReportName[] = [
-    ...[...designations.values(), ...ir.relations.map((r) => r.designation)]
+  return preferredHeader(
+    ir,
+    table,
+    width,
+    page,
+    cellSize,
+    names,
+    identifiers,
+    allocation,
+    standard,
+  );
+}
+
+function reportNames(ir: Readonly<ElectricalIr>): ReportName[] {
+  const designations = [
+    ...ir.devices,
+    ...ir.wires,
+    ...ir.jumpers,
+    ...ir.cables,
+  ].map((e) => e.designation);
+  return [
+    ...[...designations, ...ir.relations.map((r) => r.designation)]
       .filter((v): v is string => !!v)
       .map((value) => ({
         value: value.normalize("NFC"),
@@ -38,145 +73,192 @@ export function reportCells(
     ...[
       ...ir.devices.map((d) => d.location),
       ...ir.cables.flatMap((c) => [c.fromLocation, c.toLocation]),
-    ].flatMap((location) =>
-      location
-        ? [{ value: location.normalize("NFC"), kind: "location" as const }]
+    ].flatMap((value) =>
+      value
+        ? [{ value: value.normalize("NFC"), kind: "location" as const }]
         : [],
     ),
   ];
-  const allocation = reportColumns(table, width, cellSize, names);
-  const { widths, padding } = allocation;
-  const maxMargin = (minimum: number) => {
-    if (!page) return undefined;
-    // Bounds reserve 18 mm at each side in addition to the page margin.
-    return Math.floor((page.widthMm - 36 - minimum) * 500) / 1000;
-  };
-  const headerMargin = maxMargin(allocation.wholeWidth);
-  const headerNote = allocation.hyphenate
-    ? headerMargin !== undefined && headerMargin >= 5
-      ? `Hyphenated headers; whole words at margins ≤ ${headerMargin} mm.`
-      : page?.orientation === "landscape"
-        ? "Hyphenated headers; use larger paper for whole words."
-        : "Hyphenated headers; use larger paper or landscape for whole words."
-    : undefined;
-  const fits = (s: string, w: number) =>
-    measureText(s.trim(), cellSize).width <= w;
-  const wrapHeader = (value: string, w: number, column: number) => {
-    const lines: string[] = [];
-    let line = "";
-    for (const word of value.match(/\S+/gu) ?? []) {
-      if (fits(line ? line + " " + word : word, w)) {
-        line += (line ? " " : "") + word;
-        continue;
-      }
-      if (line) {
-        lines.push(line);
-        line = "";
-      }
-      const parts = allocation.hyphenatedColumns[column]
-        ? reportHeaderParts(word, w, cellSize)
-        : fits(word, w)
-          ? [word]
-          : undefined;
-      if (!parts)
-        throw Error("A header word cannot fit with readable hyphen fragments.");
-      lines.push(...parts.slice(0, -1));
-      line = parts.at(-1)!;
+}
+
+/** Cosmetic preference cannot change body capacity or increase header height. */
+function preferredHeader(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  width: number,
+  page: PaperPage | undefined,
+  size: number,
+  names: ReportName[],
+  identifiers: ReportIdentifiers,
+  allocation: ReturnType<typeof reportColumns>,
+  standard: ReturnType<typeof measuredCells>,
+) {
+  if (
+    allocation.error ||
+    table.kind !== "bom" ||
+    table.columns[4] !== "Order number"
+  )
+    return standard;
+  const preferred = reportColumns(table, width, size, names, identifiers, [4]);
+  if (preferred.wholeWidth > width) return standard;
+  try {
+    const candidate = measuredCells(
+      ir,
+      table,
+      width,
+      page,
+      size,
+      names,
+      identifiers,
+      preferred,
+    );
+    if (
+      candidate.geometry(candidate.split(table.columns, "header"), true)
+        .height >
+      standard.geometry(standard.split(table.columns, "header"), true).height
+    )
+      return standard;
+    for (const row of table.rows) {
+      const before = standard.split(row.cells, "probe", row.key);
+      if (
+        candidate
+          .split(row.cells, "probe", row.key)
+          .some((lines, i) => lines.length > before[i]!.length)
+      )
+        return standard;
     }
-    return [...lines, line];
+    return candidate;
+  } catch {
+    // A cosmetic probe may encounter an indivisible prose cluster that fits
+    // only the mandatory allocation. Its failure must not refuse that view.
+    return standard;
+  }
+}
+
+function measuredCells(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  width: number,
+  page: PaperPage | undefined,
+  cellSize: number,
+  names: ReportName[],
+  identifiers: ReportIdentifiers,
+  allocation: ReturnType<typeof reportColumns>,
+) {
+  const { widths, padding } = allocation;
+  const headerNote = reportHeaderNote(allocation, page);
+  const wrapHeader: HeaderWrapper = (value, w, column) =>
+    wrapReportHeader(value, w, column, cellSize, allocation.hyphenatedColumns);
+  const wrapCell: CellWrapper = (value, w, column, key) =>
+    wrapReportCell(
+      value,
+      w,
+      cellSize,
+      names,
+      identifiers.get(key ?? "")?.[column],
+    );
+  const insets = reportInsets(
+    table,
+    widths,
+    padding,
+    allocation.hyphenatedColumns,
+    cellSize,
+    wrapHeader,
+    wrapCell,
+  );
+  const diagnostics = reportDiagnostics(ir, table, cellSize);
+  const policy = {
+    table,
+    width,
+    page,
+    cellSize,
+    allocation,
+    widths,
+    insets,
+    wrapHeader,
+    wrapCell,
+    ...diagnostics,
   };
-  const wrapCell = (value: string, w: number): string[] =>
-    value
-      .normalize("NFC")
-      .split(/\r\n|[\n\r\u2028\u2029]/u)
-      .flatMap((paragraph) => {
-        // Tokenize/protect once. Each line visits only its own clusters, rather
-        // than searching or measuring the entire remaining name-dense string.
-        const spans = reportTokens(paragraph, names);
-        const blocked = new Uint8Array(paragraph.length + 1);
-        const aspect = new Set<number>();
-        for (const hit of spans) {
-          blocked.fill(1, hit.start + 1, hit.end);
-          if (hit.kind === "designation" && /^[=+-]/u.test(hit.value))
-            aspect.add(hit.start);
-        }
-        const safe = (i: number) =>
-          !blocked[i] &&
-          (!/[-/.:_]/u.test(paragraph[i] ?? "") || aspect.has(i));
-        const units: { value: string; start: number }[] = [];
-        let cursor = 0;
-        for (const m of paragraph.matchAll(/\s+/gu)) {
-          if (blocked[m.index]) continue;
-          if (m.index > cursor)
-            units.push({
-              value: paragraph.slice(cursor, m.index),
-              start: cursor,
-            });
-          units.push({ value: m[0], start: m.index });
-          cursor = m.index + m[0].length;
-        }
-        if (cursor < paragraph.length)
-          units.push({ value: paragraph.slice(cursor), start: cursor });
-        const lines: string[] = [];
-        let line = "";
-        for (const { value: unit, start } of units) {
-          if (/^\s+$/u.test(unit)) {
-            if (line) line += unit;
-            continue;
-          }
-          if (fits(line + unit, w)) {
-            line += unit;
-            continue;
-          }
-          if (line.trim()) {
-            lines.push(line.trim());
-            line = "";
-          }
-          const clusters = [...reportTextSegments(unit)];
-          let first = 0;
-          while (first < clusters.length) {
-            const begin = clusters[first]!.index;
-            let last = first,
-              fallback = -1,
-              separator = -1,
-              edge = -1;
-            for (; last < clusters.length; last++) {
-              const part = clusters[last]!,
-                end = part.index + part.segment.length;
-              if (!fits(unit.slice(begin, end), w)) break;
-              const absolute = start + end;
-              if (!safe(absolute)) continue;
-              fallback = last + 1;
-              if (/[-/.:_]$/u.test(part.segment)) separator = last + 1;
-              if (aspect.has(absolute)) edge = last + 1;
-            }
-            if (last === clusters.length) {
-              line = unit.slice(begin);
-              break;
-            }
-            const next =
-              separator >= 0 ? separator : edge >= 0 ? edge : fallback;
-            if (next < 0)
-              throw Error(
-                "An authored designation or location cannot fit without splitting.",
-              );
-            const end =
-              next < clusters.length ? clusters[next]!.index : unit.length;
-            lines.push(unit.slice(begin, end).trim());
-            first = next;
-          }
-        }
-        return [...lines, line.trim()];
-      });
-  // Restore each 2 mm inset only if every cell keeps its line count. Thus the
-  // compact allocation retains exactly its row/sheet capacity, column by column.
-  const insets = widths.map((w, i) => {
+  const split = (cells: readonly string[], row: string, key?: string) =>
+    splitCells(policy, cells, row, key);
+  const geometry = (cells: string[][], heading = false) =>
+    reportGeometry(cells, heading, cellSize, padding, insets, headerNote);
+  return { widths, cellSize, ...diagnostics, split, geometry };
+}
+
+type HeaderWrapper = (value: string, width: number, column: number) => string[];
+type CellWrapper = (
+  value: string,
+  width: number,
+  column: number,
+  key?: string,
+) => string[];
+
+function reportHeaderNote(
+  allocation: ReturnType<typeof reportColumns>,
+  page?: PaperPage,
+) {
+  const margin = page
+    ? Math.floor((page.widthMm - 36 - allocation.wholeWidth) * 500) / 1000
+    : undefined;
+  if (!allocation.hyphenate) return undefined;
+  return margin !== undefined && margin >= 5
+    ? `Hyphenated headers; whole words at margins ≤ ${margin} mm.`
+    : page?.orientation === "landscape"
+      ? "Hyphenated headers; use larger paper for whole words."
+      : "Hyphenated headers; use larger paper or landscape for whole words.";
+}
+
+export function wrapReportHeader(
+  value: string,
+  w: number,
+  column: number,
+  cellSize: number,
+  hyphenatedColumns: readonly boolean[],
+) {
+  const fits = (s: string, width: number) =>
+    measureText(s.trim(), cellSize).width <= width;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of value.match(/\S+/gu) ?? []) {
+    if (fits(line ? line + " " + word : word, w)) {
+      line += (line ? " " : "") + word;
+      continue;
+    }
+    if (line) {
+      lines.push(line);
+      line = "";
+    }
+    const parts = hyphenatedColumns[column]
+      ? reportHeaderParts(word, w, cellSize)
+      : fits(word, w)
+        ? [word]
+        : undefined;
+    if (!parts)
+      throw Error("A header word cannot fit with readable hyphen fragments.");
+    lines.push(...parts.slice(0, -1));
+    line = parts.at(-1)!;
+  }
+  return [...lines, line];
+}
+
+function reportInsets(
+  table: DocumentationTable,
+  widths: number[],
+  padding: number,
+  hyphenatedColumns: readonly boolean[],
+  size: number,
+  wrapHeader: HeaderWrapper,
+  wrapCell: CellWrapper,
+) {
+  const fits = (s: string, w: number) => measureText(s.trim(), size).width <= w;
+  return widths.map((w, i) => {
     if (padding === 2) return 2;
     const compact = w - 2.01,
       normal = w - 4.01;
     if (normal <= 0) return 1;
     if (
-      !allocation.hyphenatedColumns[i] &&
+      !hyphenatedColumns[i] &&
       (table.columns[i]!.match(/\S+/gu) ?? []).some(
         (word) => !fits(word, normal),
       )
@@ -191,8 +273,8 @@ export function reportCells(
       if (
         table.rows.some(
           (row) =>
-            wrapCell(row.cells[i]!, normal).length >
-            wrapCell(row.cells[i]!, compact).length,
+            wrapCell(row.cells[i]!, normal, i, row.key).length >
+            wrapCell(row.cells[i]!, compact, i, row.key).length,
         )
       )
         return 1;
@@ -201,6 +283,19 @@ export function reportCells(
       return 1;
     }
   });
+}
+
+function reportDiagnostics(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  cellSize: number,
+) {
+  const designations = new Map(
+    [...ir.devices, ...ir.wires, ...ir.jumpers, ...ir.cables].map((entity) => [
+      entity.uid,
+      entity.designation,
+    ]),
+  );
   const rowDesignation = (index: number) => {
     const source = table.rows[index]!;
     let name = designations.get(source.key);
@@ -234,64 +329,108 @@ export function reportCells(
   };
   const context = (row: string, column: number) =>
     `Report ${JSON.stringify(table.title)} (${table.kind}), row ${row}, column ${column + 1} ${JSON.stringify(table.columns[column])}`;
-  const split = (cells: readonly string[], row: string): string[][] => {
-    // Allocation failures describe the actual driver, outside the per-cell catch.
-    if (allocation.error) {
-      const driver = allocation.driver!;
-      const shorter =
-        driver.kind === "designation" ? ", or a shorter designation" : "";
-      // Width alone cannot prove that a smaller margin also fits the rows.
-      const advice =
-        page?.orientation === "landscape"
-          ? "Use larger paper or shorter authored text."
-          : `Use larger paper, landscape${shorter}.`;
+  return { rowDesignation, rowName, unknownReason, context };
+}
+
+type CellPolicy = ReturnType<typeof reportDiagnostics> & {
+  table: DocumentationTable;
+  width: number;
+  page: PaperPage | undefined;
+  cellSize: number;
+  allocation: ReturnType<typeof reportColumns>;
+  widths: number[];
+  insets: number[];
+  wrapHeader: HeaderWrapper;
+  wrapCell: CellWrapper;
+};
+function allocationMessage({
+  table,
+  width,
+  page,
+  allocation,
+  rowName,
+}: CellPolicy) {
+  const driver = allocation.driver!;
+  const kind =
+    driver.kind === "identifier" && table.kind === "bom" && driver.column === 1
+      ? "designation"
+      : driver.kind;
+  const shorter =
+    driver.kind === "designation" ? ", or a shorter designation" : "";
+  // Width alone cannot prove that a smaller margin also fits the rows.
+  const advice =
+    page?.orientation === "landscape"
+      ? "Use larger paper or shorter authored text."
+      : `Use larger paper, landscape${shorter}.`;
+  const source =
+    "rowKey" in driver
+      ? `, row ${rowName(table.rows.findIndex((r) => r.key === driver.rowKey))}`
+      : "";
+  return `Report ${JSON.stringify(table.title)} (${table.kind})${source}, column ${driver.column + 1} ${JSON.stringify(table.columns[driver.column])}: ${kind} ${JSON.stringify(driver.authoredName)} drives a minimum table width of ${allocation.minimumWidth.toFixed(3)} mm; only ${width.toFixed(3)} mm is available at the minimum 2.5 mm em after trying 2.6 mm. ${driver.kind === "identifier" ? (page?.orientation === "landscape" ? "Use larger paper." : "Use larger paper or landscape.") : advice}`;
+}
+function splitCells(
+  policy: CellPolicy,
+  cells: readonly string[],
+  row: string,
+  key?: string,
+) {
+  const {
+    table,
+    allocation,
+    widths,
+    insets,
+    wrapHeader,
+    wrapCell,
+    context,
+    unknownReason,
+    page,
+    cellSize,
+  } = policy;
+  if (allocation.error) throw Error(allocationMessage(policy));
+  if (row !== "header" && key === undefined)
+    throw Error(
+      `Report ${JSON.stringify(table.title)} (${table.kind}), row ${row}: body layout requires an explicit source row key.`,
+    );
+  return cells.map((value, i) => {
+    try {
+      return row === "header"
+        ? wrapHeader(value, widths[i]! - 2 * insets[i]! - 0.01, i)
+        : wrapCell(value, widths[i]! - 2 * insets[i]! - 0.01, i, key);
+    } catch (error) {
       throw Error(
-        `Report ${JSON.stringify(table.title)} (${table.kind}), column ${driver.column + 1} ${JSON.stringify(table.columns[driver.column])}: ${driver.kind} ${JSON.stringify(driver.authoredName)} drives a minimum table width of ${allocation.minimumWidth.toFixed(3)} mm; only ${width.toFixed(3)} mm is available. ${advice}`,
+        `${context(row, i)}: ${error instanceof Error ? error.message : "Text cannot fit."}${unknownReason(value)} ${page?.orientation === "landscape" ? "Use larger paper or shorter authored text" : "Use larger paper, landscape, or shorter authored text"}; selected text is ${cellSize} mm em (minimum 2.5 mm).`,
       );
     }
-    return cells.map((value, i) => {
-      try {
-        return row === "header"
-          ? wrapHeader(value, widths[i]! - 2 * insets[i]! - 0.01, i)
-          : wrapCell(value, widths[i]! - 2 * insets[i]! - 0.01);
-      } catch (error) {
-        throw Error(
-          `${context(row, i)}: ${error instanceof Error ? error.message : "Text cannot fit."}${unknownReason(value)} ${page?.orientation === "landscape" ? "Use larger paper or shorter authored text" : "Use larger paper, landscape, or shorter authored text"}; text is never shrunk below the fixed ${cellSize} mm size (minimum 2.5 mm).`,
-        );
-      }
-    });
-  };
-  const geometry = (cells: string[][], heading = false) => {
-    const metrics = cells.flat().map((value) => measureText(value, cellSize)),
-      ascent = Math.max(0, ...metrics.map((m) => m.ascent)),
-      descent = Math.max(0, ...metrics.map((m) => m.descent)),
-      lineHeight = Math.max(3.6, ascent + descent + 0.6),
-      baseline = Math.max(4, ascent + 1),
-      count = Math.max(...cells.map((c) => c.length));
-    return {
-      padding,
-      insets,
-      headerNote: heading ? headerNote : undefined,
-      noteHeight: heading && headerNote ? 4 : 0,
-      baseline,
-      lineHeight,
-      height:
-        (heading && headerNote ? 4 : 0) +
-        Math.max(
-          count * 3.6 + (heading ? 5 : 4),
-          baseline + (count - 1) * lineHeight + descent + 1,
-        ),
-    };
-  };
+  });
+}
+function reportGeometry(
+  cells: string[][],
+  heading: boolean,
+  cellSize: number,
+  padding: number,
+  insets: number[],
+  headerNote?: string,
+) {
+  const metrics = cells.flat().map((value) => measureText(value, cellSize)),
+    ascent = Math.max(0, ...metrics.map((m) => m.ascent)),
+    descent = Math.max(0, ...metrics.map((m) => m.descent)),
+    lineHeight = Math.max(3.6, ascent + descent + 0.6),
+    baseline = Math.max(4, ascent + 1),
+    count = Math.max(...cells.map((c) => c.length));
   return {
-    widths,
     cellSize,
-    rowDesignation,
-    rowName,
-    unknownReason,
-    context,
-    split,
-    geometry,
+    padding,
+    insets,
+    headerNote: heading ? headerNote : undefined,
+    noteHeight: heading && headerNote ? 4 : 0,
+    baseline,
+    lineHeight,
+    height:
+      (heading && headerNote ? 4 : 0) +
+      Math.max(
+        count * 3.6 + (heading ? 5 : 4),
+        baseline + (count - 1) * lineHeight + descent + 1,
+      ),
   };
 }
 
@@ -305,12 +444,9 @@ export function emitReportRow(
   geometry: ReturnType<typeof reportCells>["geometry"],
   heading = false,
 ): string[] {
-  const content: string[] = [],
-    cellSize = REPORT_CELL_SIZE;
-  const { baseline, lineHeight, insets, noteHeight, headerNote } = geometry(
-    cells,
-    heading,
-  );
+  const content: string[] = [];
+  const { cellSize, baseline, lineHeight, insets, noteHeight, headerNote } =
+    geometry(cells, heading);
   let x = left;
   // Paint the entire row before any text, so no later background can erase it.
   cells.forEach((_, i) => {

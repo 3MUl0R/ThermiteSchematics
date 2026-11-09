@@ -5,6 +5,8 @@ import { renderSchematicPacket, type RenderedPacket } from "@thermite/render";
 import { buildDocumentation } from "@thermite/query";
 import { documentationFixture } from "../../query/test/documentation-fixture.js";
 import { browserPath, launchBrowser } from "./helpers/pdf-raster.js";
+import { openSheet } from "../../../evals/draw/browser.mjs";
+import { identifierFindings } from "../../../evals/draw/identifier-checks.mjs";
 
 // Run in Chromium. Compare identical SVG shaping with/without forced lengths,
 // rather than counting hanging, unpainted authored whitespace as glyph advance.
@@ -103,6 +105,24 @@ async function checked(packet: RenderedPacket) {
 describe.skipIf(!browserPath)(
   "report glyph-scale bound in SVG and HTML",
   () => {
+    it("measures a positioned tspan break rather than counting parent text nodes", async () => {
+      const g = await openSheet(
+        page,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="100mm" viewBox="0 0 200 100"><g data-report-row="row"><rect x="10" y="10" width="100" height="30" stroke="#9ba6b4"/><g data-report-column="1"><text x="12" y="16" font-size="2.6"><tspan>CR-MOTOR-</tspan><tspan x="12" dy="3.6">START-101</tspan></text></g></g></svg>`,
+      );
+      expect(g.texts).toHaveLength(1);
+      expect(
+        g.texts[0].reportRuns.map((r: { text: string }) => r.text),
+      ).toEqual(["CR-MOTOR-", "START-101"]);
+      const table = {
+        kind: "cables",
+        columns: ["Cable"],
+        rows: [{ key: "row", cells: ["CR-MOTOR-START-101"], deviceUids: [] }],
+      };
+      expect(identifierFindings(g, table, {})).toMatchObject([
+        { kind: "identifier-line-break", lineCount: 2 },
+      ]);
+    });
     it("rejects an empty selector and detects forced scale on report titles and notes", async () => {
       await page.setContent(
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Not a report</text></svg>',

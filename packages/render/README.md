@@ -490,6 +490,24 @@ file delivery, across shipped examples and independently by E3. PDFKit embeds
 subsets of the feature-free source faces. The font parity test pins subset bytes and compares browser
 and PDF ink. No host font installation or network is required for file exports.
 
+Report identifier values, including BOM order numbers, occupy one physical line.
+The explicit [report column policy](src/packet/report-identifiers.ts) identifies
+scalar fields and individual members of lists; punctuation never selects a field
+or creates a break inside its identifier. Columns first reserve the longest
+identifier at 2.6 mm em. If the required widths cannot fit, the entire report
+retries at the allowed 2.5 mm em, then refuses with R006 naming the row, column,
+identifier and required/available width. Select larger paper or landscape when
+needed; identifiers are never shortened, elided or compressed. An authored line
+separator inside a scalar identifier also refuses. CSV values are unchanged.
+The whole “Order number” header is preferred only when no body cell gains a line
+and the header does not become taller; narrow layouts can retain its word wrap.
+Terminal-report connection lists protect each complete peer endpoint from the
+authored wires, jumpers and cable cores, including its terminal key and punctuation.
+Lists can wrap between endpoints. Printed arrows and semicolons do not determine
+identifier boundaries. Registry headers are pinned against the real query tables,
+including packet-only wire reference columns. Body layout uses explicit source
+row keys, so copying a row's cells retains its identifier protection.
+
 No IEC 60617 artwork is copied, embedded, redistributed, or claimed. Existing
 `iec:*` library strings are semantic hints only, and this package makes no standards
 conformance claim.
