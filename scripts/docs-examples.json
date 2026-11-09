@@ -1,0 +1,649 @@
+{
+  "version": 1,
+  "bindings": {
+    "topic-circuit-symbols": {
+      "file": "docs/circuit-symbols.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'circuit-symbols'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "c6a62354e8c7c07e2e3e42d9e3a9d7c5727ef2f30aa015c92bee6f7b076e2b94"
+      ]
+    },
+    "topic-circuit-views": {
+      "file": "docs/circuit-views.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'circuit-views'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "e6e39668067c723f28b5bf239ad8d42c0fa9076600f4b09c6e70ac995ac2c71b",
+        "44116775927065c381addfdd729b4881afea480b3a04fbbabd991a0a56000b4d",
+        "a367cc42c24199c19b076b1b9d3937a476e7613d6c1fb773c105634592ee253f"
+      ]
+    },
+    "topic-completeness": {
+      "file": "docs/completeness.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'completeness'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "fc74a75bbaf971dcad5cb5b4da8031993429b0b0e72c24629f0739662b755c1b",
+        "5439aafd418cd153cbc6fa2d3fd1cf9f1133b9e1a62cbe71e9bf4af9c818828d",
+        "847090804730054d19331a7961a80c278c02f485db1f10344178564e064f7280"
+      ]
+    },
+    "topic-modeling": {
+      "file": "docs/data-model.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'modeling'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "9a851fde5d66bdd643023eaf98e3e7253c2294d49215e44910211bd2597e99f1",
+        "9112980ee28867bf9e4ab0add400f218369b897b920414f6f447c96d35fb983a",
+        "ce11358eb8872b3bc05983f027b2a8b24064ee78bafd7fb28bc62be29b00a3a4",
+        "5fa5a2beb74f7b5d38d29ceba01b25f44fd4c8c3d09d6d929a523d1b9d79c7dc",
+        "244cc983eb64b805512f94178b9bdf3d4fb0c5df63aef358209127994312441d",
+        "5a0f729b720ab513c5b8129933f57b6a3036eeb36cf1650a9f8032fba292af21",
+        "5568f7112af348e6b7145bf04c69c2c1d3d8a6f5c8b77ceaae45749f9f92b1c8",
+        "615df203c9f450ab01b5468e29ac6e37deddf4b26c6ceb44949a99f2ead10d58",
+        "eca2b75762715213af5e5c7daa7e349fbe67dda7ea76516ab398754bea1d96a5",
+        "c5c7e0d35797266841732dc74d7f3e9e2ca0916c3565862213fc16da82d04ca6"
+      ]
+    },
+    "topic-libraries": {
+      "file": "docs/libraries.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'libraries'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "73aac4a32ba7a2adee8a27cdddc295292f901b8f1a5e9c64f6bdbe1665475563",
+        "b85ccd30c72d2d99dcf8c203f39c63b83e400cd65fc50341091efbc0e8c030a6",
+        "e635e5dad0d2cfee3a137bc88bb0ce260e00fe03cced5a3fdb68801570b76ae9"
+      ]
+    },
+    "topic-report-filtering": {
+      "file": "docs/report-filtering.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'report-filtering'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "31ffe79fe892c16c125a375416522d990268f80bb62e6d0ae3f7210dedc6721a",
+        "0f67c6e9349a96176424413e00094b6b0a0f2704f44615fe661bad0930bd505a",
+        "b7cd6f55534082fa68488aa699550fc51c9b95c28c6bd08b28ea10c4940fe0e1",
+        "3456b7570892ae809deb5ae493bae17ee5049b876b8da396060be5807c82f75b"
+      ]
+    },
+    "topic-review": {
+      "file": "docs/review.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'review'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "5f456f5940d272c3a3bab614092dc3afe0d6ebcab91c6dcf783522c8d856de73"
+      ]
+    },
+    "topic-signal-loops": {
+      "file": "docs/signal-loops.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'signal-loops'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "b2b3d1b82aa1456fef73ad8e838fcacac8af6cbcaa2baec9dde1fe65ead8d476",
+        "0eacea81184fdaad19fe84bfcebb5526182e0e46c3f3d9ef91e93d3a1a2703ff",
+        "2b835085eefac43b6fa1c7b6660b5ee8f1599c152c5a55268520fa61623949ea",
+        "386fa2464850f9ddfd084a852c96b5a190f54361bd33b19139f0c4c4efc8da65"
+      ]
+    },
+    "topic-views": {
+      "file": "docs/views.md",
+      "testFile": "packages/cli/test/guide.test.ts",
+      "testName": "executes every json/sh fence in 'views'",
+      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "consumedHashes": [
+        "e07a4a200aa591311550195895677746eb622360fc723b8ae0da91854c87dd63",
+        "33d7163fb82854b11e9d1802b453d3bafdc592d9c9560b694a818c963485ec8a",
+        "a9b8ee675b87c0a9ba3386f949c6d071f9a50efc25511279a5e312b7526e318d",
+        "bdfbb417e7be3a191ef1b8d55560c4ac09543b55931a2a3f0b1d04d663ec8210"
+      ]
+    }
+  },
+  "entries": [
+    {
+      "file": "README.md",
+      "hash": "4946835f19fa321a750c8e06833d5da1ca221f43889a2f59a193dc81264d1778",
+      "kind": "illustrative",
+      "reason": "Natural-language agent prompt, not a shell program."
+    },
+    {
+      "file": "README.md",
+      "hash": "fd88d61afb3af66214be006e24090b20129fdf6a2cec9e87427efc021d1c1f64",
+      "kind": "illustrative",
+      "reason": "Natural-language agent prompt, not a shell program."
+    },
+    {
+      "file": "README.md",
+      "hash": "e7960f2662a7cd5ecb97135bd408d2b418aa0f66673a0279659652932bf6b250",
+      "kind": "platform-only",
+      "setup": "Networked fresh source checkout with Git and Bun",
+      "reason": "Clones upstream, installs dependencies and builds the engine before creating an electrical project; not nested inside the ordinary test suite."
+    },
+    {
+      "file": "README.md",
+      "hash": "c6889029b4a015cd2269baa000b56a5753c41d5034a20645e9262948db27751d",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "README.md",
+      "hash": "c72c967c649d1085b9a36b0db9d9dada5eca22349ce17f4a60b5fe350c8ead3e",
+      "kind": "executed",
+      "recipe": "cabinets-shell"
+    },
+    {
+      "file": "README.md",
+      "hash": "0c54bb6537c2f88d5e97dbd70a6e1da9537565a2636162500f29ceaccab27a3b",
+      "kind": "platform-only",
+      "setup": "Complete contributor checkout with Bun and Python",
+      "reason": "Runs the full source test suite and check; recursive execution from that same suite is not appropriate."
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "b665c6518e548dcbef4a3b7ad86145da8c488ea2d44de619c7774bb1bcd92565",
+      "kind": "illustrative",
+      "reason": "File-tree, workflow or resolved-value notation, not executable input."
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "60c272f2f94aedfbb10741600b8e7887caff367a7f55162b252d4f96fc3c6b0f",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "3b93ce448fbfe63dad3687fdddda80311476d7204b37d941861a3dc1636393dc",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "9ef34eb3d09666d0a13bfdc2596a519a55c01f43d8631eb811f93f72f16c3890",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "7da0d27b486d0350a3b17985053197d89b147b17534786bbd97abc5e7db2a6e5",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "2aebabd7ed3a35fedc8b7cf4eaf7f03e767acc5bc0338f21dcba28116611dd11",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "dc70d9790ed71754c8f28297486b3e12e3d12066cbd7f529d0ee8490bffb8e98",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "91034101818ac2a29554ef3686685bfaac0c28ac0713f52fa3c091299929ef6e",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "70e66fd0931300269f857c7ec4617ae6e8f641498c1719704d76d4c5225e5dbf",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "393d932c9b5fcdece480cd10138c5d1068898aeafaff494536123a107284dbe2",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "7064b1da6cf7ec4d5cb8603bb0b7a22023fac8f31ba4b87a7050561375e1302a",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "a2e300f148fa6142fe2db77b1d7ae853e37d7d7ad42a5c490ea0663528a88963",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "23d40caa7e40ee07de8d1963b5f2ab079ee70ab63fb3009a02f4b3d1ffba49a9",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "4d291e7fc0276babb1dff1d04d13e604d505e455bcb547a5f0bc472d380e33b7",
+      "kind": "illustrative",
+      "reason": "Reference patch contains an example byte digest; prose requires replacing it with the current inspection guard. The executable workflow tests that replacement separately."
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "03f07e1a50ffa059559651a94dfcaa1e03576fe2c42efb869bd312ad00a83089",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "f79f65b452f744173ba428361d4c885a57cc5bcfad54266764f1a34a1b759cbf",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "6deb0a3f481b8c69d4926fa5047993c1b755c46f8b75d01e4157b1b7fef9ba94",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "fa61da03c65984b02666efac2b2daf4321580bd35a474df4d498a319d302a3d2",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "fb66c83d839eddca2396ce9c60d4aef59eee3b15c7b11e7a25d94a0a1cab4076",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "d6af3e39bd12635acaae779db373230fcbc585908992cc3260bfea8c731e677b",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/agent-requests.md",
+      "hash": "ab37f9c6c57164b7e2381a222b8e6cc1d5445771c95f4208164bd497ca43999e",
+      "kind": "executed",
+      "recipe": "agent-workflow"
+    },
+    {
+      "file": "docs/architecture.md",
+      "hash": "4fb5ba7c503eaac8a7953bda853e3647a5b6ffac6cb6173994f404584f04ec2e",
+      "kind": "illustrative",
+      "reason": "Architecture diagram, not program input."
+    },
+    {
+      "file": "docs/architecture.md",
+      "hash": "f68a2e815d504b25d7ec2c53e99c26852baf7f37ecdb1994883ed675ef131f36",
+      "kind": "illustrative",
+      "reason": "File-tree, workflow or resolved-value notation, not executable input."
+    },
+    {
+      "file": "docs/architecture.md",
+      "hash": "09959bc01ffcaa97a5a80e91bbe0e3bacb8dc6b48b7c54d13b51fc2c78eb2665",
+      "kind": "executed",
+      "recipe": "json-project"
+    },
+    {
+      "file": "docs/circuit-symbols.md",
+      "hash": "c6a62354e8c7c07e2e3e42d9e3a9d7c5727ef2f30aa015c92bee6f7b076e2b94",
+      "kind": "executed",
+      "recipe": "topic-circuit-symbols"
+    },
+    {
+      "file": "docs/circuit-views.md",
+      "hash": "e6e39668067c723f28b5bf239ad8d42c0fa9076600f4b09c6e70ac995ac2c71b",
+      "kind": "executed",
+      "recipe": "topic-circuit-views"
+    },
+    {
+      "file": "docs/circuit-views.md",
+      "hash": "44116775927065c381addfdd729b4881afea480b3a04fbbabd991a0a56000b4d",
+      "kind": "executed",
+      "recipe": "topic-circuit-views"
+    },
+    {
+      "file": "docs/circuit-views.md",
+      "hash": "a367cc42c24199c19b076b1b9d3937a476e7613d6c1fb773c105634592ee253f",
+      "kind": "executed",
+      "recipe": "topic-circuit-views"
+    },
+    {
+      "file": "docs/communication-ports.md",
+      "hash": "b43a9075e76fddc3d2d74b7cce23cf0893d8bec54399f85f61fc924b15d292cd",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/communication-ports.md",
+      "hash": "9084d55bf75b619339a8ab226284aa174db9ccc831a4cc9c4f6a6692b23b6336",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/communication-ports.md",
+      "hash": "306a5525d5d12fb6ec59c239ee4b303c27c6ff41207c1bced08e02e65a039cad",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/completeness.md",
+      "hash": "fc74a75bbaf971dcad5cb5b4da8031993429b0b0e72c24629f0739662b755c1b",
+      "kind": "executed",
+      "recipe": "topic-completeness"
+    },
+    {
+      "file": "docs/completeness.md",
+      "hash": "5439aafd418cd153cbc6fa2d3fd1cf9f1133b9e1a62cbe71e9bf4af9c818828d",
+      "kind": "executed",
+      "recipe": "topic-completeness"
+    },
+    {
+      "file": "docs/completeness.md",
+      "hash": "847090804730054d19331a7961a80c278c02f485db1f10344178564e064f7280",
+      "kind": "executed",
+      "recipe": "topic-completeness"
+    },
+    {
+      "file": "docs/connector-assemblies.md",
+      "hash": "6a313fc5d3702c76f4e0f4b90d3c2924cead37ca67561f9dda75ef95fe5ec428",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/connector-assemblies.md",
+      "hash": "6438bb6dfc687a3736dc1a98952ac65fdee8ee27441f9653e7dde2032fa17ad0",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/connector-assemblies.md",
+      "hash": "89a9dd0ac8c11348acaefe228d2ea0ff19ce8e90fc3bd1922529a1c6ca4227d1",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/connector-io.md",
+      "hash": "ce859fd1fede60cbfb8babdf5898e76e6471f15f5f1dc73f4ecb35615a96c639",
+      "kind": "executed",
+      "recipe": "json-source"
+    },
+    {
+      "file": "docs/connector-io.md",
+      "hash": "473d4e6def1fbe8f20c1c7f3598c416efd02897304fdbf0a0ce5ccdcdfe89fda",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/continuity-checks.md",
+      "hash": "b655c77bba16f8e27a4e0dfe29bf891c2269396bcabf4f4ba9cd9a0cc999ac3a",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/continuity-checks.md",
+      "hash": "e5573c25d00d8cb751e786ed6fe3128ec1ecbd8acab7935f8080843234a5cbb8",
+      "kind": "executed",
+      "recipe": "json-packet"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "f68a2e815d504b25d7ec2c53e99c26852baf7f37ecdb1994883ed675ef131f36",
+      "kind": "illustrative",
+      "reason": "File-tree, workflow or resolved-value notation, not executable input."
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "615df203c9f450ab01b5468e29ac6e37deddf4b26c6ceb44949a99f2ead10d58",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "9a851fde5d66bdd643023eaf98e3e7253c2294d49215e44910211bd2597e99f1",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "9112980ee28867bf9e4ab0add400f218369b897b920414f6f447c96d35fb983a",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "5fa5a2beb74f7b5d38d29ceba01b25f44fd4c8c3d09d6d929a523d1b9d79c7dc",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "ce11358eb8872b3bc05983f027b2a8b24064ee78bafd7fb28bc62be29b00a3a4",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "244cc983eb64b805512f94178b9bdf3d4fb0c5df63aef358209127994312441d",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "eca2b75762715213af5e5c7daa7e349fbe67dda7ea76516ab398754bea1d96a5",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "5a0f729b720ab513c5b8129933f57b6a3036eeb36cf1650a9f8032fba292af21",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "c5c7e0d35797266841732dc74d7f3e9e2ca0916c3565862213fc16da82d04ca6",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "5568f7112af348e6b7145bf04c69c2c1d3d8a6f5c8b77ceaae45749f9f92b1c8",
+      "kind": "executed",
+      "recipe": "topic-modeling"
+    },
+    {
+      "file": "docs/data-model.md",
+      "hash": "06b27fea9886a40d08183a422d7ee8519b7b74265d0664becbec8594673b5a3a",
+      "kind": "illustrative",
+      "reason": "File-tree, workflow or resolved-value notation, not executable input."
+    },
+    {
+      "file": "docs/libraries.md",
+      "hash": "73aac4a32ba7a2adee8a27cdddc295292f901b8f1a5e9c64f6bdbe1665475563",
+      "kind": "executed",
+      "recipe": "topic-libraries"
+    },
+    {
+      "file": "docs/libraries.md",
+      "hash": "b85ccd30c72d2d99dcf8c203f39c63b83e400cd65fc50341091efbc0e8c030a6",
+      "kind": "executed",
+      "recipe": "topic-libraries"
+    },
+    {
+      "file": "docs/libraries.md",
+      "hash": "e635e5dad0d2cfee3a137bc88bb0ce260e00fe03cced5a3fdb68801570b76ae9",
+      "kind": "executed",
+      "recipe": "topic-libraries"
+    },
+    {
+      "file": "docs/machine-demo.md",
+      "hash": "f8ed7467d0e6bff4f561fbb55d98fa06acbb683b92d8b0b1823661b55a885789",
+      "kind": "platform-only",
+      "setup": "Fresh contributor checkout with installed Bun dependencies",
+      "reason": "Installs and builds the entire engine before running the demonstration; requires a separate source setup rather than an electrical-project fixture."
+    },
+    {
+      "file": "docs/machine-demo.md",
+      "hash": "cc25371af4ccb4a0be6ffe66f3bdacc9e4c3a0dc073732445d870e974b71f30c",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/machine-demo.md",
+      "hash": "2f66e4e23c813360c22701a1674f30ae436b94193b4033a6de07ab14dd7644bb",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/machine-demo.md",
+      "hash": "c48f515b838114c196e48650312b16ad2f45143b1a69ee6f16ad25b388e52978",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/platforms.md",
+      "hash": "a3f632ffbcf2a515ef4dfdc17b7478479c4506f584d6972c41fb2003978a1798",
+      "kind": "platform-only",
+      "setup": "Native release-verification host with Bun, Python and package acceptance prerequisites",
+      "reason": "Builds and verifies the entire source/runtime, including networked dependency installation; the Linux commands require Docker and target-architecture support."
+    },
+    {
+      "file": "docs/platforms.md",
+      "hash": "c17ce0d22a346713fc01fc5846512261fe328070823e97820961935d4dfb07d6",
+      "kind": "platform-only",
+      "setup": "Docker Engine with matching Linux architecture",
+      "reason": "Builds and verifies the entire source/runtime, including networked dependency installation; the Linux commands require Docker and target-architecture support."
+    },
+    {
+      "file": "docs/platforms.md",
+      "hash": "3509bcfdc566f276fb62e3f025e1ffeb057161a1b7a39b33a53d8af77dfc42f5",
+      "kind": "platform-only",
+      "setup": "Docker Engine with matching Linux architecture",
+      "reason": "Builds and verifies the entire source/runtime, including networked dependency installation; the Linux commands require Docker and target-architecture support."
+    },
+    {
+      "file": "docs/report-filtering.md",
+      "hash": "31ffe79fe892c16c125a375416522d990268f80bb62e6d0ae3f7210dedc6721a",
+      "kind": "executed",
+      "recipe": "topic-report-filtering"
+    },
+    {
+      "file": "docs/report-filtering.md",
+      "hash": "0f67c6e9349a96176424413e00094b6b0a0f2704f44615fe661bad0930bd505a",
+      "kind": "executed",
+      "recipe": "topic-report-filtering"
+    },
+    {
+      "file": "docs/report-filtering.md",
+      "hash": "b7cd6f55534082fa68488aa699550fc51c9b95c28c6bd08b28ea10c4940fe0e1",
+      "kind": "executed",
+      "recipe": "topic-report-filtering"
+    },
+    {
+      "file": "docs/report-filtering.md",
+      "hash": "3456b7570892ae809deb5ae493bae17ee5049b876b8da396060be5807c82f75b",
+      "kind": "executed",
+      "recipe": "topic-report-filtering"
+    },
+    {
+      "file": "docs/review.md",
+      "hash": "5f456f5940d272c3a3bab614092dc3afe0d6ebcab91c6dcf783522c8d856de73",
+      "kind": "executed",
+      "recipe": "topic-review"
+    },
+    {
+      "file": "docs/runtime-package.md",
+      "hash": "95df1d078479de83d382182ead45a7571b7d9a9c1dbf81b9ef4a6c10db1a4cb3",
+      "kind": "platform-only",
+      "setup": "Runtime-package verification host with Bun, Python, archive tools and platform acceptance prerequisites",
+      "reason": "Builds and accepts a complete source/runtime archive; run explicitly rather than recursively in every source test."
+    },
+    {
+      "file": "docs/runtime-package.md",
+      "hash": "280782afcb23871d1aad3639e33fe245731b49c0f8b46b69eb9655b758feafad",
+      "kind": "platform-only",
+      "setup": "Runtime-package verification host with Bun, Python, archive tools and platform acceptance prerequisites",
+      "reason": "Builds and accepts a complete source/runtime archive; run explicitly rather than recursively in every source test."
+    },
+    {
+      "file": "docs/runtime-package.md",
+      "hash": "8c74110e7dc0d5b00675e07f80f4d328f1862980ae4967e83ef08379298b8dc2",
+      "kind": "platform-only",
+      "setup": "Runtime-package verification host with Bun, Python, archive tools and platform acceptance prerequisites",
+      "reason": "Full packaging/acceptance job, not an electrical-project example; verification also requires replacing the explicitly shown archive path."
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "b2b3d1b82aa1456fef73ad8e838fcacac8af6cbcaa2baec9dde1fe65ead8d476",
+      "kind": "executed",
+      "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "0eacea81184fdaad19fe84bfcebb5526182e0e46c3f3d9ef91e93d3a1a2703ff",
+      "kind": "executed",
+      "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "2b835085eefac43b6fa1c7b6660b5ee8f1599c152c5a55268520fa61623949ea",
+      "kind": "executed",
+      "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "386fa2464850f9ddfd084a852c96b5a190f54361bd33b19139f0c4c4efc8da65",
+      "kind": "executed",
+      "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/terminal-wiring.md",
+      "hash": "6d3593578413198c555255723bef30ac7783e2a14c8a1af08c6ab76792ba616d",
+      "kind": "executed",
+      "recipe": "json-packet"
+    },
+    {
+      "file": "docs/terminal-wiring.md",
+      "hash": "b9dc81aa8c6e7061d91dbca82d3baa527aa59199403d0f974538bd5bac351794",
+      "kind": "illustrative",
+      "reason": "Named cable property fragment, deliberately missing the enclosing relation object; not a complete JSON document."
+    },
+    {
+      "file": "docs/topology-coverage.md",
+      "hash": "4fafd9e3f234d5ef86a6711446156b4bffced7e0d5e53a05a4e7907939797e6e",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "docs/views.md",
+      "hash": "e07a4a200aa591311550195895677746eb622360fc723b8ae0da91854c87dd63",
+      "kind": "executed",
+      "recipe": "topic-views"
+    },
+    {
+      "file": "docs/views.md",
+      "hash": "33d7163fb82854b11e9d1802b453d3bafdc592d9c9560b694a818c963485ec8a",
+      "kind": "executed",
+      "recipe": "topic-views"
+    },
+    {
+      "file": "docs/views.md",
+      "hash": "a9b8ee675b87c0a9ba3386f949c6d071f9a50efc25511279a5e312b7526e318d",
+      "kind": "executed",
+      "recipe": "topic-views"
+    },
+    {
+      "file": "docs/views.md",
+      "hash": "bdfbb417e7be3a191ef1b8d55560c4ac09543b55931a2a3f0b1d04d663ec8210",
+      "kind": "executed",
+      "recipe": "topic-views"
+    }
+  ]
+}

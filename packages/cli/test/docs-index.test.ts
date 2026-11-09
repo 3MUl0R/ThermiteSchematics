@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { docsIndex } from "../../../scripts/docs-index.mjs";
 import { checkDocs } from "../../../scripts/check-docs.mjs";
 import { loadCorpus, parseDocument } from "../../../scripts/docs-lib.mjs";
+import { exampleFences } from "../../../scripts/docs-examples-lib.mjs";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 const policySource = JSON.parse(
@@ -105,6 +106,17 @@ it("links an actual project schema directly from the first index level", () => {
   );
   expect(schema.$id).toBe(
     "https://thermiteschematics.com/schemas/0.1/project.schema.json",
+  );
+});
+
+it("includes runnable-example freshness in the documentation check", async () => {
+  const root = await fixture();
+  append(root, "README.md", "\n```sh\nbun -e 'console.log(123)'\n```\n");
+  expect(await checkDocs(root)).toContainEqual(
+    expect.objectContaining({
+      file: "README.md",
+      reason: expect.stringContaining("unclassified or changed example"),
+    }),
   );
 });
 
@@ -569,9 +581,29 @@ describe("narrow documentation exclusions and legacy baseline", () => {
         "",
       ].join("\n"),
     );
+    put(
+      root,
+      "scripts/docs-examples.json",
+      JSON.stringify({
+        version: 1,
+        entries: exampleFences(await loadCorpus(root)).map(
+          ({ file, hash }) => ({
+            file,
+            hash,
+            kind: "illustrative",
+            reason: "Markdown link-parsing sample, not an executable program.",
+          }),
+        ),
+      }),
+    );
     expect(await checkDocs(root)).toEqual([]);
     append(root, "README.md", "\n[code](missing.md)\n");
     expect(command(root).status).toBe(1);
+    put(
+      root,
+      "scripts/docs-examples.json",
+      JSON.stringify({ version: 1, entries: [] }),
+    );
     await restored(root, "README.md", original);
   });
 

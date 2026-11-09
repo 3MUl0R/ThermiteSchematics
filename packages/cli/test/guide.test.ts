@@ -43,6 +43,8 @@ import {
 } from "./project-guide/harness.js";
 import { checkCommand, splitWords } from "./project-guide/commands.js";
 import { guideModel } from "./project-guide/guide-model.js";
+import { topicExecution } from "../../../scripts/docs-example-evidence.mjs";
+import { executeModelingExamples } from "./docs-example-modeling.js";
 
 const topics: GuideTopic[] = JSON.parse(
   readFileSync(join(repositoryRoot, "docs/topics.json"), "utf8"),
@@ -507,8 +509,14 @@ async function executeJson(id: string, value: any): Promise<void> {
     return;
   }
   if (id === "completeness") {
+    if (!value.terminals && !value.connectionReview)
+      throw new Error(
+        `Unexecutable completeness JSON: ${JSON.stringify(value)}`,
+      );
     const project = await freshProject("starter");
-    const fragment = jsonBlocks("completeness").find((v) => v.terminals);
+    const fragment = value.terminals
+      ? value
+      : jsonBlocks("completeness").find((v) => v.terminals);
     await writeJson(join(project, "libraries/core/types/guide-review.json"), {
       types: [
         {
@@ -611,93 +619,6 @@ async function executeJson(id: string, value: any): Promise<void> {
   }
   throw new Error(`Unexecutable ${id} JSON: ${JSON.stringify(value)}`);
 }
-async function executeModelingExamples() {
-  const values = jsonBlocks("modeling");
-  const project = await freshProject("starter");
-  const deviceExamples = values.filter((v) => v.kind === "device");
-  await addObject(project, deviceExamples[0]);
-  // The second device block is the same occurrence, with a location added.
-  await writeJson(join(project, "guide-object.json"), {
-    objects: [deviceExamples[1]],
-  });
-  await validate(project);
-  const wire = values.find((v) => v.kind === "wire");
-  const endpoint = values.find((v) => v.device);
-  expect(wire.endpoints).toContainEqual(endpoint);
-  for (const wireExample of values.filter((v) => v.kind === "wire"))
-    await addObject(project, wireExample);
-  const assignment = values.find((v) => v.io);
-  await editJson(join(project, "devices/equipment.json"), (file) =>
-    Object.assign(
-      file.objects.find((o: any) => o.designation === "PLC1"),
-      assignment,
-    ),
-  );
-  const potential = values.find((v) => v.kind === "potential");
-  await editJson(join(project, "potentials/potentials.json"), (file) => {
-    file.objects = file.objects.filter((o: any) => o.name !== potential.name);
-    file.objects.push(potential);
-  });
-  await writeJson(
-    join(project, "presentation.json"),
-    values.find((v) => v.format),
-  );
-  const covered = new Set([
-    ...deviceExamples,
-    ...values.filter((v) => v.kind === "wire"),
-    endpoint,
-    assignment,
-    potential,
-    values.find((v) => v.format),
-    values.find((v) => v.kind === "cable"),
-    values.find((v) => v.kind === "relation"),
-  ]);
-  expect(
-    values.filter((value) => !covered.has(value)),
-    "unexecuted modeling blocks",
-  ).toEqual([]);
-  const result = await validate(project);
-  // Starter feed deferrals remain honest. The added coil/output net has no
-  // authored potential, so I304 discloses that assessment limit.
-  expect(
-    result.diagnostics
-      .filter((d) => d.code !== "I304")
-      .map((d) => [d.code, d.uid]),
-  ).toEqual(
-    (await validate(ctx.pristine.starter)).diagnostics
-      .filter((d) => d.code !== "I304")
-      .map((d) => [d.code, d.uid]),
-  );
-  expect(
-    result.diagnostics.filter((d) => d.code === "I304").length,
-  ).toBeLessThanOrEqual(1);
-  // Negative control reproduces the old contradictory spare/unused assignment.
-  const old = structuredClone(assignment);
-  old.io.channels.do0 = old.io.channels.do1;
-  delete old.io.channels.do1;
-  old.connectionReview.terminals["X2.0"] =
-    old.connectionReview.terminals["X2.1"];
-  delete old.connectionReview.terminals["X2.1"];
-  await editJson(join(project, "devices/equipment.json"), (file) =>
-    Object.assign(
-      file.objects.find((o: any) => o.designation === "PLC1"),
-      old,
-    ),
-  );
-  expect(
-    (await validate(project)).diagnostics.some(
-      (d) => d.code === "W905" && d.message.includes("PLC1.X2.0"),
-    ),
-  ).toBe(true);
-  await executeJson(
-    "modeling",
-    values.find((v) => v.kind === "cable"),
-  );
-  await executeJson(
-    "modeling",
-    values.find((v) => v.kind === "relation"),
-  );
-}
 
 async function addObjectWithoutValidation(project: string, value: unknown) {
   await editJson(join(project, "system.json"), (m) =>
@@ -780,40 +701,58 @@ it.each(documents.filter(({ topic }) => topic.id !== "agent-requests"))(
   async ({ topic, model }) => {
     const fences = model.fences.filter((f) => ["json", "sh"].includes(f.lang));
     expect(fences.length).toBeGreaterThan(0);
-    if (topic.id === "modeling") return executeModelingExamples();
-    for (const fence of fences) {
-      if (fence.lang === "json")
-        await executeJson(topic.id, JSON.parse(fence.body));
-      else {
-        const project =
-          topic.id === "signal-loops"
-            ? await loopProject(false)
-            : topic.id === "report-filtering"
-              ? await filterProject()
-              : await freshProject("starter");
-        if (["views", "circuit-views", "signal-loops"].includes(topic.id)) {
-          const request = jsonBlocks(topic.id).find(
-            (v) => v.format === "schematic-packet-request/0.1",
-          );
-          const name =
-            topic.id === "views"
-              ? "packet.json"
-              : topic.id === "circuit-views"
-                ? "circuit.request.json"
-                : "loop.request.json";
-          await writeJson(join(project, name), request);
-        }
-        if (topic.id === "report-filtering")
-          await writeJson(
-            join(project, "main.filter.json"),
-            jsonBlocks(topic.id)[0],
-          );
-        await mkdir(join(project, "drawings"), { recursive: true });
-        await mkdir(join(project, "output"), { recursive: true });
-        for (const line of fence.body.split("\n").filter((line) => line.trim()))
-          await shellLine(line, project, topic.id);
-      }
+    const execution = topicExecution(
+      topic.file,
+      model.text,
+      topic.id === "modeling" ? ["json"] : ["json", "sh"],
+    );
+    execution.checkLanguages(fences);
+    if (topic.id === "modeling") {
+      await executeModelingExamples(fences, execution, {
+        addObject,
+        validate,
+        executeJson,
+      });
+      execution.finish(fences);
+      return;
     }
+    for (const fence of fences)
+      await execution.run(fence, async () => {
+        if (fence.lang === "json")
+          await executeJson(topic.id, JSON.parse(fence.body));
+        else {
+          const project =
+            topic.id === "signal-loops"
+              ? await loopProject(false)
+              : topic.id === "report-filtering"
+                ? await filterProject()
+                : await freshProject("starter");
+          if (["views", "circuit-views", "signal-loops"].includes(topic.id)) {
+            const request = jsonBlocks(topic.id).find(
+              (v) => v.format === "schematic-packet-request/0.1",
+            );
+            const name =
+              topic.id === "views"
+                ? "packet.json"
+                : topic.id === "circuit-views"
+                  ? "circuit.request.json"
+                  : "loop.request.json";
+            await writeJson(join(project, name), request);
+          }
+          if (topic.id === "report-filtering")
+            await writeJson(
+              join(project, "main.filter.json"),
+              jsonBlocks(topic.id)[0],
+            );
+          await mkdir(join(project, "drawings"), { recursive: true });
+          await mkdir(join(project, "output"), { recursive: true });
+          for (const line of fence.body
+            .split("\n")
+            .filter((line) => line.trim()))
+            await shellLine(line, project, topic.id);
+        }
+      });
+    execution.finish(fences);
   },
   120000,
 );
