@@ -3,6 +3,7 @@ import {
   signalLoopTitle,
   type SignalLoopViewRequest,
 } from "../signal-loop.js";
+import { DirectLoopPolarityError } from "../signal-loop/direct-polarity.js";
 import { buildDocumentation, type DocumentationRequest } from "@thermite/query";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { InvalidSheetError } from "../errors.js";
@@ -40,6 +41,24 @@ export interface PacketViewContext {
   readonly viewIndex: number;
   readonly title: string;
 }
+function signalLoopContext(
+  view: Record<string, unknown>,
+  viewIndex: number,
+  ir: Readonly<ElectricalIr>,
+): PacketViewContext | undefined {
+  try {
+    return {
+      viewIndex,
+      title: signalLoopTitle(
+        selectSignalLoop(ir, view as unknown as SignalLoopViewRequest),
+      ),
+    };
+  } catch (error) {
+    if (error instanceof DirectLoopPolarityError)
+      return { viewIndex, title: error.title };
+    /* The view renderer reports the selection failure. */
+  }
+}
 export function packetViewContext(
   view: unknown,
   viewIndex: number,
@@ -69,16 +88,8 @@ export function packetViewContext(
   if (record(view) && view.format === "connector-assembly-view-request/0.1")
     return { viewIndex, title: "Connector and cable assemblies" };
   if (record(view) && view.format === "signal-loop-view-request/0.1" && ir) {
-    try {
-      return {
-        viewIndex,
-        title: signalLoopTitle(
-          selectSignalLoop(ir, view as unknown as SignalLoopViewRequest),
-        ),
-      };
-    } catch {
-      /* The view renderer reports the selection failure. */
-    }
+    const context = signalLoopContext(view, viewIndex, ir);
+    if (context) return context;
   }
   if (record(view) && record(view.root)) {
     const value =

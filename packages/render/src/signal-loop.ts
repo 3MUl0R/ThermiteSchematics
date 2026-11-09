@@ -13,6 +13,10 @@ import {
   selectSeriesLoop,
 } from "./signal-loop/series-selection.js";
 import { prepareSeriesLoopDrawing } from "./signal-loop/series-layout.js";
+import {
+  directLoopPolarity,
+  finishDirectLoopDrawing,
+} from "./signal-loop/direct-polarity.js";
 import { drawEnclosures } from "./signal-loop-enclosures.js";
 
 export interface SignalLoopViewRequest {
@@ -394,6 +398,7 @@ export function selectSignalLoop(
     devices,
     types,
     conductors: shown,
+    unverifiedEndpoints: input ? directLoopPolarity(ir, from, to, paths) : [],
   };
 }
 
@@ -948,17 +953,16 @@ export async function prepareSignalLoopDrawing(
       y: node.y! + node.height! / 2 - enclosure.minY,
     });
   }
-  return {
-    title: signalLoopTitle(selected),
-    content: `<g transform="translate(${n(-enclosure.minX)} ${n(-enclosure.minY)})">${out.join("\n")}</g>`,
-    width: enclosure.width,
-    height: enclosure.height,
-    references,
-    note: [
-      assemblies.length
-        ? `Heavy line = cable assembly, not a shared electrical net. Pin maps run ${selected.output ? "from output toward actuator" : "from transmitter toward input"}; core details remain in the conductor view.`
-        : `${selected.auxiliary.length ? "Separate command and auxiliary nets." : "Two separate signal nets."} Dashed cores are explicitly spare; connector contact numbers are not a mating-face view.`,
-      ...(request.notes ?? []),
-    ].join("\n"),
-  };
+  return finishDirectLoopDrawing(
+    {
+      title: signalLoopTitle(selected),
+      content: `<g transform="translate(${n(-enclosure.minX)} ${n(-enclosure.minY)})">${out.join("\n")}</g>`,
+      width: enclosure.width,
+      height: enclosure.height,
+      references,
+    },
+    selected,
+    request,
+    assemblies.length > 0,
+  );
 }
