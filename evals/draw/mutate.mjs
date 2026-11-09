@@ -45,6 +45,8 @@ const all = [
   "evals/draw/repin-succession.test.mjs",
   "scripts/stamp-drawing-crop.test.mjs",
   "evals/draw/crop-review.test.mjs",
+  "evals/draw/crop-rename.test.mjs",
+  "evals/draw/crop-baseline.test.mjs",
   "evals/draw/source-hashes.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
@@ -95,7 +97,11 @@ for (const [name, tests] of [
   ["crop-source", ["evals/draw/crop-source.test.mjs"]],
   [
     "crop-report",
-    ["evals/draw/crop-report.test.mjs", "evals/draw/crop-review.test.mjs"],
+    [
+      "evals/draw/crop-report.test.mjs",
+      "evals/draw/crop-review.test.mjs",
+      "evals/draw/crop-rename.test.mjs",
+    ],
   ],
   ["crop-index", ["evals/draw/crop-index.test.mjs"]],
   ["source-hashes", ["evals/draw/source-hashes.test.mjs"]],
@@ -337,7 +343,7 @@ await edit(
 await edit(
   "bind-report-callsite",
   "evals/draw/repin-bind-crops.mjs",
-  "checkIndexedEntries(file.value, index.value, reports);",
+  "checkIndexedEntries(file.value, index.value, reports, contexts);",
   "undefined;",
   ["evals/draw/repin-drawing-bindings.test.mjs"],
 );
@@ -370,8 +376,8 @@ await edit(
 await edit(
   "mixed-rename-changed-text-only",
   "evals/draw/crop-report.mjs",
-  "return changed.length ? changed : pairs;",
-  "return pairs;",
+  "if (renameTextChanged(pair, a, b)) changed.push(pair);",
+  "changed.push(pair);",
   ["evals/draw/crop-review.test.mjs"],
 );
 await edit(
@@ -405,8 +411,29 @@ await edit(
 await edit(
   "header-fitting",
   "scripts/stamp-drawing-crop.mjs",
-  "if (width > available)",
-  "if (false)",
+  "(HEADER_FONT_PIXELS * available) / width,",
+  "HEADER_FONT_PIXELS,",
+  ["scripts/stamp-drawing-crop.test.mjs"],
+);
+await edit(
+  "rename-literal-map",
+  "evals/draw/repin-mappings.mjs",
+  "equal(pair[field], { from: a, to: b })",
+  "true",
+  ["evals/draw/crop-rename.test.mjs"],
+);
+await edit(
+  "rename-unused-map",
+  "evals/draw/repin-mappings.mjs",
+  "pair[field] === undefined",
+  "true",
+  ["evals/draw/crop-rename.test.mjs"],
+);
+await edit(
+  "header-floor",
+  "scripts/stamp-drawing-crop.mjs",
+  "pixels >= MIN_HEADER_FONT_PIXELS",
+  "true",
   ["scripts/stamp-drawing-crop.test.mjs"],
 );
 // Deliberately harmless mutation must survive; it proves survivors are observable.
@@ -525,3 +552,15 @@ const data = {
 await writeFile(out, JSON.stringify(data, null, 2) + "\n", { flag: "wx" });
 console.log(JSON.stringify({ ...data, results: undefined }));
 assert(!data.invalid, "Invalid mutation runs are not kills");
+assert(
+  results.find((r) => r.id === "benign-comment-control")?.status === "survived",
+  "The harmless comment control must survive",
+);
+assert(
+  results.every(
+    (r) =>
+      r.status === "killed" ||
+      ["unmodified-control", "benign-comment-control"].includes(r.id),
+  ),
+  "Every behavioral mutant must be caught",
+);

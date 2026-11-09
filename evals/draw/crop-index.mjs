@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import { instanceInventory } from "./repin-core.mjs";
 import { canonical, hash } from "./support.mjs";
 import { assertCropContainsInstance } from "./crop-geometry.mjs";
-import { cropHeader, sourcePath, entryTokens } from "./crop-report.mjs";
+import {
+  cropHeader,
+  sourcePath,
+  entryTokens,
+  reportInstances,
+  renameCropEligibility,
+} from "./crop-report.mjs";
+import { pinnedSource } from "./source-hashes.mjs";
 export const contains = (bbox, box) => {
   try {
     assertCropContainsInstance({ bbox }, box);
@@ -35,7 +42,8 @@ export function pipelineCrops(report, reportSha256) {
       };
     });
 }
-export function cropPlans(file, reports) {
+export function cropPlans(file, reports, contexts = new Map()) {
+  const eligible = renameCropEligibility(file, reportInstances(reports));
   const targets = new Map();
   for (const [sha, r] of reports)
     for (const t of instanceInventory(r, sha).instances)
@@ -45,7 +53,7 @@ export function cropPlans(file, reports) {
     if (
       entry.action === "new-defect" ||
       entry.crop ||
-      (entry.action === "rename" && entry.pairs?.some((p) => p.text))
+      eligible.get(entry)?.length
     ) {
       entry.crop ??= {};
       requests.push({
@@ -71,8 +79,8 @@ export function cropPlans(file, reports) {
   for (const ref of requests) {
     let selected;
     try {
-      const candidates = entryTokens(file, ref.entry, ref.crop).map((token) =>
-        targets.get(token),
+      const candidates = entryTokens(file, ref.entry, ref.crop, eligible).map(
+        (token) => targets.get(token),
       );
       assert(
         candidates.length && candidates.every(Boolean),
@@ -88,12 +96,14 @@ export function cropPlans(file, reports) {
       const { t, sha, report } = selected;
       sourcePath(t); // Reject PDF before creating misleading evidence.
       assert(t.bbox, "Instance has no exported bbox; no crop can be invented");
+      const sourceRef = pinnedSource(report, t, contexts.get(sha));
       const row = report.results.find((r) => r.id === t.row),
         reuse = row?.evidence?.crop && contains(t.bbox, row.evidence.cropBbox);
       plans.push({
         ...ref,
         t,
         reportSha256: sha,
+        sourceRef,
         sourceBbox: reuse ? canonical(row.evidence.cropBbox) : null,
         pipelineCrop: reuse ? row.evidence.crop : undefined,
         headerLines: cropHeader(t),

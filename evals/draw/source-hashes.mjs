@@ -21,11 +21,13 @@ export async function captureSources(directory, caseId, sheets, htmlFile) {
     }),
   );
 }
-export function pinnedSource(report, t) {
+export function pinnedSource(report, t, context) {
   const pins = report.sourceHashes;
   assert(
     pins?.format === SOURCE_HASH_FORMAT && Array.isArray(pins.sheets),
-    "Run a fresh C1: report has no pinned source hashes; older reports cannot verify crop sources",
+    context
+      ? `Run a fresh C1: ${context.role} ${JSON.stringify(context.path)} (SHA-256 ${context.sha256}) has no pinned source hashes; regenerate this ${context.role} at its original source revision. A fresh target cannot supply baseline pins.`
+      : "Run a fresh C1: report has no pinned source hashes; older reports cannot verify crop sources",
   );
   const sheets = pins.sheets.filter(
       (s) => s.case === t.scope.case && s.sheet === t.physicalSheet,

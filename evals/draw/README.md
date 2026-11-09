@@ -363,6 +363,9 @@ Every supplied `baselineSha256` is validated even if that file has no rename.
 Historical full baselines may have older compatible checkers; their raw bytes,
 registry and full report are validated, including their own bundle when present.
 They are stored observations, not permission to run a stale target checker.
+After this hardening change merges, the checker bundle hash matches no existing
+C1, so a re-pin needs a fresh C1 target. Existing C1s can still be compatible
+baselines, but a baseline without source pins cannot supply `notMove` crops.
 
 Draft candidates with the shipped helper:
 
@@ -417,8 +420,10 @@ Binding cropped entries is a **browser-required source check**, separate from th
 portable unit suite. Chromium is discovered exactly as for a checkpoint. Missing
 Chromium or missing source files refuses the bind with an infrastructure message;
 no cropped entry is silently skipped and no bound output is written. Crop-free
-files do not need Chromium. There is no bypass flag. Source paths resolve from the
-report's directory (and each baseline's directory); `--source-root` overrides the
+files do not need Chromium. There is no bypass flag.
+Bind and the crop-index builder require `--report` and the hash-bound baseline
+inventories for every file containing a rename, even if it contains no crops.
+Source paths resolve from the report's directory (and each baseline's directory); `--source-root` overrides the
 current report's directory when its sources are stored separately.
 
 The builder writes index version 2 with the exact report SHA, token, marker,
@@ -432,6 +437,10 @@ report inventory; preview checks the recorded source facts against that inventor
 again, without Chromium. A text-changing rename may cite only `pairs[].to` tokens
 whose literal text mapping changes; an unchanged-text pair is ineligible even if
 its row already has a crop. At least one eligible changed instance must export a box.
+The builder, bind and preview compare the baseline and current report's exact
+`facts.text`, requiring literal `{from,to}` mappings only for changed text.
+Missing, incorrect or unused mappings and reused pair tokens are refused before
+crop creation or binding; a supplied map cannot make an unchanged pair eligible.
 The stamped header pixels must match those report facts.
 
 Each new C1 also records `sourceHashes` (`thermite-draw-sources/1.0`): exact
@@ -441,6 +450,11 @@ index hashes against the report, then actual source bytes against the index.
 Preview checks the signed source hash against the report without a browser.
 A report without these pins cannot bind cropped entries: run a fresh C1. Changing
 `--source-root` changes only the folder, never the trusted hashes.
+A `notMove` crop may reference a baseline. If that baseline predates source pins,
+the builder and bind name its role, supplied path and SHA-256 in the refusal.
+A fresh target does not supply baseline pins: obtain a trustworthy pinned capture
+at the baseline's original source revision or keep the evidence refused.
+Diagnostic paths are not written into signed evidence.
 **PDF crop source verification is not implemented**: PDF-scope crops cannot use an
 SVG/HTML index row instead. A PDF new defect or changed-text move remains blocked.
 **Sheet-level new defects without an exported instance box are also unsupported.**
@@ -831,8 +845,11 @@ this catches mistaken declarations, not forgery. Plain grey drawing ink can stil
 resemble a header. The header declaration must describe the actual crop.
 New provenance stamps fit each literal header line within the fixed width by
 reducing its font size from 14 px when needed. Line 2 keeps the physical page
-visible; the band remains 86 px with the same reserved white rows. Re-stamping
-with the same script, font and header lines is byte-exact. Historical records
+visible; the band remains 86 px with the same reserved white rows. Stamping
+never shrinks below 10 px: an overflowing line is refused with its line number,
+report-instance token, a quoted shortened preview of the offending line, required
+width and available width; the stamped text is never truncated.
+Re-stamping with the same script, font and header lines is byte-exact. Historical records
 remain byte-immutable and use their original script when reconstructing stamps.
 The writer never trusts a supplied
 drawing hash. Output index version 2 has each original `sha256`, derived

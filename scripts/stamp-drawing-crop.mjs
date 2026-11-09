@@ -20,6 +20,32 @@ assert(
   "Could not register bundled crop-header font",
 );
 export const HEADER_PIXELS = 86;
+export const HEADER_FONT_PIXELS = 14;
+export const MIN_HEADER_FONT_PIXELS = 10;
+export function headerFontPixels(width, available, label) {
+  const pixels = Math.min(
+    HEADER_FONT_PIXELS,
+    (HEADER_FONT_PIXELS * available) / width,
+  );
+  assert(
+    pixels >= MIN_HEADER_FONT_PIXELS,
+    `${label}: header needs ${Math.ceil((width * MIN_HEADER_FONT_PIXELS) / HEADER_FONT_PIXELS + 16)} px width at ${MIN_HEADER_FONT_PIXELS} px minimum; available ${available + 16} px`,
+  );
+  return pixels;
+}
+function stampHeader(ctx, width, headerLines) {
+  ctx.fillStyle = "#111";
+  headerLines.forEach((line, i) => {
+    ctx.font = `${HEADER_FONT_PIXELS}px "Thermite Crop Header"`;
+    const pixels = headerFontPixels(
+      ctx.measureText(line).width,
+      width - 16,
+      `Header line ${i + 1} ${JSON.stringify(line.length > 80 ? line.slice(0, 77) + "..." : line)} (${headerLines[2]})`,
+    );
+    ctx.font = `${pixels}px "Thermite Crop Header"`;
+    ctx.fillText(line, 8, 17 + i * 19);
+  });
+}
 import { assertCropContainsInstance } from "../evals/draw/crop-geometry.mjs";
 export { assertCropContainsInstance };
 export async function stampInstanceDrawingCrop(
@@ -60,15 +86,7 @@ export async function stampDrawingCrop(
     ctx = canvas.getContext("2d");
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#111";
-  headerLines.forEach((line, i) => {
-    ctx.font = '14px "Thermite Crop Header"';
-    const available = canvas.width - 16,
-      width = ctx.measureText(line).width;
-    if (width > available)
-      ctx.font = `${(14 * available) / width}px "Thermite Crop Header"`;
-    ctx.fillText(line, 8, 17 + i * 19);
-  });
+  stampHeader(ctx, canvas.width, headerLines);
   ctx.drawImage(
     image,
     0,

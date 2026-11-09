@@ -6,6 +6,7 @@ import {
   assertCropContainsInstance,
   stampInstanceDrawingCrop,
   stampDrawingCrop,
+  headerFontPixels,
 } from "./stamp-drawing-crop.mjs";
 const geometry = {
   instance: { bbox: { x: 1, y: 1, w: 1, h: 1 } },
@@ -160,7 +161,7 @@ it("bind refuses header pixels that contradict report-owned literal header lines
 it("keeps the physical page visible on an overflowing case/view line", async () => {
   const line =
     "case-with-a-long-prefix | " +
-    "a detailed view title ".repeat(7) +
+    "a detailed view title ".repeat(4) +
     " | physical page ";
   const a = ["marker", line + "1", "token", "Text W-C11"],
     b = ["marker", line + "9", "token", "Text W-C11"];
@@ -169,4 +170,45 @@ it("keeps the physical page visible on an overflowing case/view line", async () 
   expect(A.equals(B)).toBe(false);
   expect(drawingHash(A, 86)).toBe(drawingHash(B, 86));
   expect((await stampDrawingCrop(A, a, true, geometry)).equals(A)).toBe(true);
+});
+it("uses 14 px by default, permits exactly 10 px and refuses below the floor", () => {
+  expect(headerFontPixels(90, 100, "line 1")).toBe(14);
+  expect(headerFontPixels(140, 100, "line 1")).toBe(10);
+  expect(() => headerFontPixels(140.001, 100, "line 2 token abc")).toThrow(
+    /line 2 token abc: header needs 117 px width at 10 px minimum; available 116 px/,
+  );
+});
+it.each(["W".repeat(500), "\\u1234".repeat(100)])(
+  "refuses an overflowing literal header without truncation: %s",
+  async (line) => {
+    await expect(
+      stampDrawingCrop(
+        pngFixture(),
+        ["marker", line, "Report instance token-abc", "Text W-C11"],
+        false,
+        geometry,
+      ),
+    ).rejects.toThrow(
+      /Header line 2 ".*" \(Report instance token-abc\).*width at 10 px minimum; available 760 px/,
+    );
+  },
+);
+it("quotes a shortened preview of the overflowing line rather than the token line", async () => {
+  const line = 'Text "offending" ' + "W".repeat(500);
+  let error;
+  try {
+    await stampDrawingCrop(
+      pngFixture(),
+      ["marker", "scope", "Report instance token-abc", line],
+      false,
+      geometry,
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(error?.message).toContain(
+    `Header line 4 ${JSON.stringify(line.slice(0, 77) + "...")} (Report instance token-abc)`,
+  );
+  expect(error.message).not.toContain(line);
+  expect(error.message).toContain("width at 10 px minimum; available 760 px");
 });

@@ -31,17 +31,26 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const file = await strictJsonFile(resolve(values.decisions)),
   index = await strictJsonFile(resolve(values["crop-index"]));
 const reports = new Map(),
+  contexts = new Map(),
   roots = new Map();
-if (drawingReferences(file.value).length) {
+if (
+  drawingReferences(file.value).length ||
+  file.value.entries.some((e) => e.action === "rename")
+) {
   assert(values.report, "Cropped bindings require --report <summary.json>");
   for (const path of [values.report, ...(values.baseline ?? [])]) {
     const r = await strictJsonFile(resolve(path));
     reports.set(r.sha256, r.value);
     roots.set(r.sha256, dirname(resolve(path)));
+    contexts.set(r.sha256, {
+      role: path === values.report ? "report" : "baseline",
+      path,
+      sha256: r.sha256,
+    });
   }
   if (values["source-root"])
     roots.set(file.value.summarySha256, resolve(values["source-root"]));
-  checkIndexedEntries(file.value, index.value, reports);
+  checkIndexedEntries(file.value, index.value, reports, contexts);
 }
 const crops = new Map();
 for (const c of index.value.crops)

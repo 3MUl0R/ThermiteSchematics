@@ -1,4 +1,5 @@
 import { signOffs } from "./repin-signoff.mjs";
+import { mapped, renameTextChanged } from "./repin-mappings.mjs";
 import { supersededSuccessor } from "./repin-superseded.mjs";
 import {
   fontPairs,
@@ -381,17 +382,6 @@ function classCheck(entry, kind) {
     "Explicit policy-gap/drawing classification required",
   );
 }
-function mapped(pair, field, a, b) {
-  if (a === b) {
-    assert(pair[field] === undefined, `Unused rename mapping: ${field}`);
-    return;
-  }
-  same(
-    pair[field],
-    { from: a, to: b },
-    `Literal ${field} rename mapping required`,
-  );
-}
 function referenceFor(registry, inventory, id, metric) {
   const marker = registry.markers.find((m) => m.id === id);
   assert(marker, "Unknown envelope marker");
@@ -754,7 +744,6 @@ export function prepareRepin({
             moveProofs.push(
               proveMove(a, b, sheetRenames, specs, entry.columnMap),
             );
-            changedText ||= a.facts.text !== b.facts.text;
             changedHeader ||=
               a.facts.text !== b.facts.text &&
               sourceRow(a.facts.sourceLocator)?.kind.startsWith("header/");
@@ -767,7 +756,7 @@ export function prepareRepin({
               [b.facts.kind, b.facts.medium, b.facts.case],
               "Rename kind/text/medium/case mismatch",
             );
-            mapped(pair, "text", a.facts.text, b.facts.text);
+            changedText = renameTextChanged(pair, a, b) || changedText;
             mapped(
               pair,
               "sourceLocator",

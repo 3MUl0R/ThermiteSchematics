@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { strictJsonFile, within } from "./repin-io.mjs";
 import { json, canonical, hash } from "./support.mjs";
 import { pipelineCrops, cropPlans, instanceCropRow } from "./crop-index.mjs";
-import { pinnedSource, assertSourceBytes } from "./source-hashes.mjs";
+import { assertSourceBytes } from "./source-hashes.mjs";
 const { values: v } = parseArgs({
   options: {
     report: { type: "string" },
@@ -25,11 +25,17 @@ assert(
 );
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   reports = new Map(),
+  contexts = new Map(),
   roots = new Map();
 for (const path of [v.report, ...(v.baseline ?? [])]) {
   const r = await strictJsonFile(resolve(path));
   reports.set(r.sha256, r.value);
   roots.set(r.sha256, dirname(resolve(path)));
+  contexts.set(r.sha256, {
+    role: path === v.report ? "report" : "baseline",
+    path,
+    sha256: r.sha256,
+  });
 }
 const current = await strictJsonFile(resolve(v.report));
 if (v["source-root"]) roots.set(current.sha256, resolve(v["source-root"]));
@@ -65,7 +71,7 @@ if (!v.decisions) {
     "Build crops before sign-off",
   );
   const draft = structuredClone(file.value),
-    plans = cropPlans(draft, reports),
+    plans = cropPlans(draft, reports, contexts),
     rows = [];
   await mkdir(join(root, "evals/out/draw-samples"), { recursive: true });
   const samples = resolve(v.samples);
@@ -80,7 +86,7 @@ if (!v.decisions) {
     for (const plan of plans) {
       const medium = plan.t.scope.medium,
         sourceRoot = roots.get(plan.reportSha256),
-        sourceRef = pinnedSource(reports.get(plan.reportSha256), plan.t),
+        sourceRef = plan.sourceRef,
         source = await readFile(
           await within(join(sourceRoot, sourceRef.path), sourceRoot, {
             existing: true,
