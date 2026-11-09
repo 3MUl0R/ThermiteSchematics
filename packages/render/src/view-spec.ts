@@ -965,7 +965,7 @@ function acceptedRootContracts(kind: "power" | "control" | "loads" | "trace") {
           `${f.kind}/${f.terminalCount}${"normalState" in f ? `, normal state ${f.normalState}` : ""}${"direction" in f ? `, direction ${f.direction}` : ""}`,
       ),
     }));
-  const family = kind === "loads" ? "control" : kind;
+  const family = kind;
   const fnKind =
     kind === "power" ? "load" : kind === "control" ? "coil" : "source";
   // These kinds receive load-boundary, coil-root and source-boundary roles in

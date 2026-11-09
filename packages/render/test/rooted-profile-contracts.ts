@@ -125,6 +125,24 @@ export const ROOTED_CONTRACTS: Readonly<
     control: [coil, aux],
     loads: [],
   },
+  "thermite:transformer": {
+    power: [],
+    control: [
+      c(
+        "winding",
+        shape("source", 2, ["secondary", "secondary"]),
+        "ais:source-winding",
+        "source-boundary",
+        [
+          "control-source",
+          "control-return",
+          "control-source",
+          "control-return",
+        ],
+      ),
+    ],
+    loads: [],
+  },
   "thermite:relay": {
     power: [],
     control: [coil, contact, dcLoad],
@@ -371,7 +389,10 @@ export function contractType(
     keys.forEach(
       (key, i) => (terminals[key] = roles ? { role: roles[i]! } : {}),
     );
-  if (mode === "terminal" || mode === "earth") {
+  if (mode === "winding") {
+    add(["X1", "X2"], ["secondary", "secondary"]);
+    functions = { f: fn("source", ["X1", "X2"]) };
+  } else if (mode === "terminal" || mode === "earth") {
     add(["T"], mode === "earth" ? ["protective_earth"] : undefined);
     functions = { f: fn("bus", ["T"]) };
   } else if (mode === "source3" || mode === "motor3") {
@@ -472,7 +493,7 @@ export async function contractProject(
       project: { name: "Rooted profile contract" },
       sources: ["source.json"],
       libraries: [
-        { name: "core", version: "0.1.0" },
+        { name: "core", version: mode === "winding" ? "0.2.0" : "0.1.0" },
         { name: "local", version: "0.1.0", path: "local" },
       ],
     }),
@@ -569,6 +590,18 @@ export async function contractProject(
               to: { by: "designation", value: "PLC1" },
               includePower: true,
             },
+    };
+  } else if (mode === "winding") {
+    device("R1", "core:relay-1co");
+    device("H1", "core:pilot-light");
+    wire("DUT.X1", "R1.A1");
+    wire("DUT.X2", "R1.A2");
+    wire("DUT.X1", "H1.X1");
+    wire("DUT.X2", "H1.X2");
+    view = {
+      format: "schematic-view-request/0.1",
+      root: { by: "designation", value: "R1" },
+      family: "control",
     };
   } else if (mode === "dc-source") {
     device("K1", "core:contactor-3p-1no");

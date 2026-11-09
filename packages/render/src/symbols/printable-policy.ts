@@ -144,6 +144,8 @@ export function printableCaption(
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "function": {
+      if (caption.mark === "ais:source-winding")
+        return caption.fn.id.functionKey;
       if (PROTECTION_MARKS.has(caption.mark)) return "";
       if (caption.mark === "ais:motor") return "";
       const word = functionWord(caption.fn, caption.type);
@@ -428,4 +430,26 @@ export function motorIsThreePhase(type: IrDeviceType, fn: IrFunction): boolean {
   return ["phase_u_input", "phase_v_input", "phase_w_input"].every((role) =>
     roles.has(role),
   );
+}
+
+/** Shared winding points in (cross-axis, along-axis) coordinates. No net effect. */
+export function windingPolyline(
+  cross: number,
+  first: number,
+  last: number,
+  edge: number,
+  amplitude: number,
+  terminalCross?: readonly [number, number],
+): readonly (readonly [number, number])[] {
+  const span = last - first;
+  return [
+    [terminalCross?.[0] ?? edge, first],
+    [cross, first],
+    ...[1, 2, 3, 4, 5, 6, 7].map((i): readonly [number, number] => [
+      cross + (i % 2 ? amplitude : 0),
+      first + (span * i) / 8,
+    ]),
+    [cross, last],
+    [terminalCross?.[1] ?? edge, last],
+  ];
 }

@@ -1,10 +1,6 @@
+import { diagnoseRooted } from "./rooted-diagnostics.js";
 import { renderErrorContext } from "./render-error-context.js";
 import { compareText, functionIdKey } from "./ordering.js";
-import {
-  preflightRootedProfiles,
-  hasFunctionBinding,
-  unsupportedProfileError,
-} from "./preflight.js";
 import type {
   CompiledProjectPresentation,
   ElectricalIr,
@@ -21,6 +17,7 @@ import {
   selectSemanticSubgraph,
   selectTraceSubgraph,
 } from "./selection.js";
+import { orientSourceWindingMappings } from "./symbols/source-winding.js";
 import { SYMBOL_CATALOG } from "./symbols/catalog.js";
 import {
   CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
@@ -97,73 +94,8 @@ export async function prepareSchematicDrawing(
 
   // Diagnose only actual failures: profile metadata cannot turn a successful
   // traversal or layout into an error (including unsupported side branches).
-  const diagnose = (error: RenderFailure): RenderFailure => {
-    if (error.code !== "R002" && error.code !== "R003")
-      return renderErrorContext(ir, error);
-    const unrepresented =
-      error.code === "R003" &&
-      error.details?.reason === "unrepresented-terminal";
-    const profile = preflightRootedProfiles(
-      ir,
-      normalized.value.view,
-      mappings,
-    );
-    if (!profile) return renderErrorContext(ir, error);
-    // An unselected terminal is not evidence that its device's profile is bad.
-    // Keep independent limitations elsewhere on the path as secondary context.
-    if (unrepresented && error.deviceUid === profile.deviceUid)
-      return renderErrorContext(ir, error);
-    const device = ir.devices.find((d) => d.uid === profile.deviceUid)!;
-    const f = ir.functions.find(
-      (f) =>
-        f.id.deviceUid === device.uid &&
-        f.id.functionKey === profile.functionKey,
-    );
-    const contextual = renderErrorContext(ir, error, false);
-    const stops = (error.details?.terminalIds ??
-      []) as readonly import("@thermite/compiler").TerminalId[];
-    const allStopsUnsupported =
-      stops.length > 0 &&
-      stops.every((t) => {
-        const stoppedDevice = ir.devices.find((d) => d.uid === t.deviceUid)!;
-        const mapping = mappings.find((m) => m.typeId === stoppedDevice.typeId);
-        const functions = ir.functions.filter(
-          (f) =>
-            f.id.deviceUid === t.deviceUid &&
-            f.kind !== "mechanism" &&
-            f.terminals.some((p) => p.terminalKey === t.terminalKey),
-        );
-        return (
-          functions.length > 0 &&
-          functions.every(
-            (f) => !hasFunctionBinding(mapping, f, profile.family),
-          )
-        );
-      });
-    // Trace leaves describe physical dead ends, not proof that a profile blocked
-    // the signal. Preserve the connectivity refusal and report the candidate only.
-    const traceConnectivity =
-      error.code === "R002" && "intent" in error && error.intent === "trace";
-    const directBinding =
-      error.code === "R003" &&
-      stops.length === 0 &&
-      error.deviceUid === device.uid;
-    if (
-      !unrepresented &&
-      !traceConnectivity &&
-      (allStopsUnsupported || directBinding)
-    )
-      return unsupportedProfileError(ir, contextual, device, f, profile.family);
-    return {
-      ...contextual,
-      message:
-        error.code === "R002" || unrepresented
-          ? `${contextual.message} Additional profile limitation: device ${JSON.stringify(profile.unsupported!.designation)} ${profile.unsupported!.profile === "<missing>" ? "has no rendering profile for this view." : `uses profile ${JSON.stringify(profile.unsupported!.profile)}, which is unsupported for this view.`}`
-          : contextual.message,
-      unsupported: profile.unsupported!,
-      details: { ...contextual.details, profileNote: profile.message },
-    };
-  };
+  const diagnose = (error: RenderFailure): RenderFailure =>
+    diagnoseRooted(ir, normalized.value.view, mappings, error);
 
   const selected =
     normalized.value.view.format === "schematic-view/0.1"
@@ -209,7 +141,7 @@ export async function prepareSchematicDrawing(
   const presented = buildPresentationGraph({
     ir,
     selected: selected.value,
-    mappings,
+    mappings: orientSourceWindingMappings(ir, selected.value, mappings),
     catalog,
   });
   if (!presented.ok) return failed(diagnose(presented.error));

@@ -152,6 +152,10 @@ const DC_SOURCE = {
   ...SOURCE2,
   terminalRoles: ["dc_positive_output", "dc_return_output"],
 } as const;
+const SECONDARY_SOURCE = {
+  ...SOURCE2,
+  terminalRoles: ["secondary", "secondary"],
+} as const;
 const ROOTED_CONTROL_SHAPES = [BUS, DC_LOAD, DC_SOURCE];
 const ROOTED_SUPPORT: readonly SymbolFamilySupport[] = [
   { family: "power", role: "function", functions: [BUS] },
@@ -393,10 +397,11 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:transformer",
     notes:
-      "Two-terminal primary load and secondary source windings face opposite sides of a shared magnetic core. The core is a presentation association, not a conductive connection.",
+      "Two-terminal primary load and secondary source windings face opposite sides of a shared magnetic core. The core is a presentation association, not a conductive connection. Control uses wiring-selected feed and return with authored terminal labels.",
     aliases: [],
     coreAliases: [],
     support: [
+      ...rooted([], [SECONDARY_SOURCE], []),
       { family: "circuit", role: "function", functions: [BUS, LOAD2, SOURCE2] },
     ],
   },
