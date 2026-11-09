@@ -332,7 +332,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:overload",
     notes:
-      "Protection contacts; explicit circuitSymbols marks distinguish main protection poles from auxiliary contacts.",
+      "Power contacts retain supported explicit circuitSymbols marks per function; unmarked ordered power pairs keep the overload pole. Pressure and level marks refuse in rooted power. Control keeps its auxiliary contact defaults; explicit circuit marks retain authored identity. No other/2 binding.",
     aliases: [],
     coreAliases: CORE_SYMBOL_BINDINGS.filter(
       (b) => b.equivalent === "thermite:overload",

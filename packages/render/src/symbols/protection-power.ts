@@ -35,10 +35,14 @@ export function protectionPowerRefusal(
   fn: { kind: string; normal_state?: "open" | "closed" },
 ): string | undefined {
   if (
-    !["thermite:fuse", "thermite:breaker"].includes(profile ?? "") ||
+    !["thermite:fuse", "thermite:breaker", "thermite:overload"].includes(
+      profile ?? "",
+    ) ||
     !["contact", "other"].includes(fn.kind) ||
     mark === undefined ||
-    (Object.hasOwn(MARKS, mark) && (fn.kind === "contact" || mark === "fuse"))
+    (Object.hasOwn(MARKS, mark) &&
+      (fn.kind === "contact" ||
+        mark === (profile === "thermite:overload" ? "overload" : "fuse")))
   )
     return;
   return `Unsupported power protection identity: normal_state=${fn.kind === "contact" ? JSON.stringify(fn.normal_state) : "not applicable"}, circuitSymbols=${JSON.stringify(mark)}. No rooted power primitive for this authored mark. Use a circuit view to retain the authored identity.`;

@@ -36,6 +36,12 @@ export function protectionFamilyRules(
   fn: IrDeviceTypeFunction,
   rule: FunctionSymbolRule,
 ): FunctionSymbolRule[] {
+  if (profile === "thermite:overload") {
+    const projected = rule.families.includes("power")
+      ? protectionPowerRule(profile, type, fn, rule)
+      : rule;
+    return projected ? [projected] : [];
+  }
   if (profile !== "thermite:fuse" && profile !== "thermite:breaker")
     return [rule];
   const refusal = protectionControlRefusal(
