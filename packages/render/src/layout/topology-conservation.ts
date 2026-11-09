@@ -1,5 +1,5 @@
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
-import type { ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr, IrFunction, TerminalId } from "@thermite/compiler";
 import type {
   SelectedSubgraph,
   SymbolPresentationNode,
@@ -7,6 +7,7 @@ import type {
   PresentationPort,
   PresentationNode,
   SemanticAttachmentKind,
+  PresentationEdge,
 } from "../types.js";
 import type { DeviceTypeSymbolMapping } from "../symbols/mappings.js";
 import { functionIdKey, terminalIdKey } from "../ordering.js";
@@ -387,4 +388,86 @@ export function assertSemanticAttachments(
       `${node.id} complete attachment incidence`,
     );
   }
+}
+
+type ControlJunctionRole = "P" | "Q" | "R" | "S";
+interface ControlUse {
+  readonly end: "source" | "target";
+  readonly edge: Pick<PresentationEdge, "endpoints">;
+}
+/** The physical conductor order is stable; a same-device sibling is a separate arm. */
+export function controlInputRoles(
+  selected: Pick<SelectedSubgraph, "view" | "functionIds">,
+  functions: ReadonlyMap<string, IrFunction>,
+  uses: readonly ControlUse[],
+  terminal: TerminalId,
+):
+  | {
+      kind: "root" | "merge";
+      conductors: readonly ControlJunctionRole[];
+      attachment: ControlJunctionRole;
+    }
+  | undefined {
+  const view = selected.view;
+  if (view.format !== "schematic-view/0.1" || view.family !== "control")
+    return undefined;
+  const incoming = uses.filter((u) => u.end === "target"),
+    outgoing = uses.filter((u) => u.end === "source");
+  if (!(
+    (incoming.length === 0 && outgoing.length === 2) ||
+    (incoming.length === 2 && outgoing.length <= 1)
+  ))
+    return undefined;
+  // The owner group may also contain an upstream contact. Keep that branch
+  // opposite its owner attachment; do not confuse it with the straight route.
+  const sibling = selected.functionIds.some(
+    (id) =>
+      id.deviceUid === terminal.deviceUid &&
+      functions
+        .get(functionIdKey(id))
+        ?.terminals.every((t) => !sameTerminal(t, terminal)) === true,
+  );
+  const straight =
+    (!sibling &&
+      incoming.find((u) =>
+        u.edge.endpoints.some(
+          (t) =>
+            t.deviceUid === view.root.deviceUid && !sameTerminal(t, terminal),
+        ),
+      )) ||
+    incoming[0];
+  return {
+    kind: incoming.length === 0 ? "root" : "merge",
+    conductors: uses.map((use) =>
+      use.end === "source"
+        ? outgoing.indexOf(use) === 0
+          ? "P"
+          : "Q"
+        : use === straight
+          ? "R"
+          : sibling
+            ? "S"
+            : "Q",
+    ),
+    attachment:
+      incoming.length === 0
+        ? "R"
+        : outgoing.length === 0
+          ? "P"
+          : sibling
+            ? "Q"
+            : "S",
+  };
+}
+
+/** Rails may be the only visible representation of a device; diagnostics name it too. */
+export function presentationDeviceNames(
+  graph: Readonly<PresentationGraph>,
+): ReadonlyMap<string, string> {
+  return new Map([
+    ...graph.deviceGroups.map((d) => [d.deviceUid, d.designation] as const),
+    ...graph.nodes.flatMap((n) =>
+      n.kind === "rail" ? [[n.deviceUid, n.designation] as const] : [],
+    ),
+  ]);
 }

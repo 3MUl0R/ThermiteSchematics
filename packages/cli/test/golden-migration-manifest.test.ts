@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { updateShippedCoreGoldens } from "../../../scripts/update-shipped-core-goldens.mjs";
 import { updateTask4Goldens } from "../../../scripts/update-task4-goldens.mjs";
 import { updateSeriesLoopGoldens } from "../../../scripts/update-series-loop-goldens.mjs";
+import { updateDolControlGoldens } from "../../../scripts/update-dol-control-goldens.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -41,12 +42,16 @@ function files(root: string): string[] {
   });
 }
 
-// This migration is closed; opt-in series sheets have their own generating owner.
+// This migration is closed; later control and series sheets have their own owners.
 const seriesGoldenPrefix = "packages/render/test/goldens/series-loop/";
+const dolGoldenPrefix = "packages/render/test/goldens/dol-control/";
 function legacyRenderGoldenPaths(): string[] {
   return files(
     join(repositoryRoot, "packages", "render", "test", "goldens"),
-  ).filter((path) => !path.startsWith(seriesGoldenPrefix));
+  ).filter(
+    (path) =>
+      !path.startsWith(seriesGoldenPrefix) && !path.startsWith(dolGoldenPrefix),
+  );
 }
 
 function currentGoldenPaths(): string[] {
@@ -151,6 +156,25 @@ describe("M8 Task 4 closed golden migration manifest", () => {
         "low-top-to-bottom",
       ].map((name) => seriesGoldenPrefix + name + ".svg"),
     );
+    expect(
+      files(
+        join(
+          repositoryRoot,
+          "packages",
+          "render",
+          "test",
+          "goldens",
+          "dol-control",
+        ),
+      ).sort(compareText),
+    ).toEqual(
+      [
+        "k1-left-to-right",
+        "k1-top-to-bottom",
+        "r1-left-to-right",
+        "r1-top-to-bottom",
+      ].map((name) => dolGoldenPrefix + name + ".svg"),
+    );
     expect(cliPaths).toHaveLength(84);
     expect(renderPaths).toHaveLength(13);
 
@@ -211,9 +235,10 @@ describe("M8 Task 4 closed golden migration manifest", () => {
     );
   });
 
-  it("runs the historical and series generating owners in non-writing check mode", async () => {
+  it("runs the historical, series and DOL generating owners in non-writing check mode", async () => {
     await updateShippedCoreGoldens("--check");
     await updateTask4Goldens("--check");
     await updateSeriesLoopGoldens("--check");
+    await updateDolControlGoldens("--check");
   });
 });

@@ -2,7 +2,11 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { analyzeCompleteness, compileProject } from "@thermite/compiler";
+import {
+  analyzeCompleteness,
+  compileProject,
+  type ElectricalIr,
+} from "@thermite/compiler";
 import {
   prepareCircuitView,
   type CircuitViewRequest,
@@ -12,7 +16,7 @@ import { renderSchematicPacket } from "../../render/src/sheets.js";
 const starter = "packages/core-library/test/fixtures/dol-starter";
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "draws the whole DOL control circuit in %s while pinning the rooted control gap",
+  "draws the whole DOL control circuit in %s and both rooted control views",
   async (flow) => {
     const compiled = await compileProject(starter);
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
@@ -87,8 +91,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         family: "control",
         flow,
       });
-      const expected = structuredClone(rootedPins[root]);
-      expect(rooted).toEqual(expected);
+      assertControlRoot(ir, rooted, root);
     }
     const power = await renderSchematic(ir, {
       format: "schematic-view-request/0.1",
@@ -102,19 +105,23 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 );
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "pins rm3 K1's terminal-context branch refusal in %s",
+  "draws rm3 K1 and R1 with exact selected inventories in %s",
   async (flow) => {
     const compiled = await compileProject(
       "packages/core-library/test/fixtures/rm3",
     );
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
-    const result = await renderSchematic(compiled.ir, {
-      format: "schematic-view-request/0.1",
-      root: { by: "designation", value: "K1" },
-      family: "control",
-      flow,
-    });
-    expect(result).toEqual(rm3K1Pin);
+    const before = JSON.stringify(compiled.ir);
+    for (const root of ["K1", "R1"] as const) {
+      const result = await renderSchematic(compiled.ir, {
+        format: "schematic-view-request/0.1",
+        root: { by: "designation", value: root },
+        family: "control",
+        flow,
+      });
+      assertControlRoot(compiled.ir, result, root);
+    }
+    expect(JSON.stringify(compiled.ir)).toBe(before);
   },
 );
 
@@ -227,170 +234,43 @@ it("joins only two-ended power cable cores; a spare PE end cannot complete the m
   }
 });
 
-// Exact live refusals after terminal-only projection; branch layout remains refused.
-const rootedPins = {
-  K1: {
-    ok: false,
-    error: {
-      code: "R004",
-      message:
-        "Invalid layout: edges boundary segment (R1.A1 \u2192 R1.A1) and W38 (K1.A1 / coil \u2192 R1.A1) overlap collinearly.",
-      details: {
-        originalMessage:
-          'Invalid layout: edges ["boundary-segment","[\\"junction\\",\\"net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"] and ["wire","10000000-0000-4000-8000-000000000038"] overlap collinearly.',
-        conductors: [
-          {
-            id: '["wire","10000000-0000-4000-8000-000000000038"]',
-            designation: "W38",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000003",
-                terminalKey: "A1",
-                designation: "K1",
-                functionKeys: ["coil"],
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "A1",
-                designation: "R1",
-                functionKeys: [],
-              },
-            ],
-          },
-          {
-            id: '["boundary-segment","[\\"junction\\",\\"net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"]',
-            designation: "boundary segment",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "A1",
-                designation: "R1",
-                functionKeys: [],
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "A1",
-                designation: "R1",
-                functionKeys: [],
-              },
-            ],
-          },
-        ],
-      },
-      family: "control",
-      netId:
-        "net:sha256:8601e5d40a2072cea4725f9772ce88ba51ea3eafb57a05c8ae4f0191dd2354b2",
-      root: "K1",
-    },
-  },
-  R1: {
-    ok: false,
-    error: {
-      code: "R004",
-      message:
-        "Invalid layout: edges W34 (OL1.96 / aux95 → S2.13 / contact13) and W35 (OL1.96 / aux95 → R1.11 / contact14) overlap collinearly.",
-      details: {
-        originalMessage:
-          'Invalid layout: edges ["wire","10000000-0000-4000-8000-000000000034"] and ["wire","10000000-0000-4000-8000-000000000035"] overlap collinearly.',
-        conductors: [
-          {
-            id: '["wire","10000000-0000-4000-8000-000000000034"]',
-            designation: "W34",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000004",
-                terminalKey: "96",
-                designation: "OL1",
-                functionKeys: ["aux95"],
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000011",
-                terminalKey: "13",
-                designation: "S2",
-                functionKeys: ["contact13"],
-              },
-            ],
-          },
-          {
-            id: '["wire","10000000-0000-4000-8000-000000000035"]',
-            designation: "W35",
-            terminals: [
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000004",
-                terminalKey: "96",
-                designation: "OL1",
-                functionKeys: ["aux95"],
-              },
-              {
-                deviceUid: "10000000-0000-4000-8000-000000000012",
-                terminalKey: "11",
-                designation: "R1",
-                functionKeys: ["contact14"],
-              },
-            ],
-          },
-        ],
-      },
-      family: "control",
-      netId:
-        "net:sha256:5f735b4a219185b3b4f0ee45f4d391f7671404b731f6d0955a316a43accd0fb8",
-      root: "R1",
-    },
-  },
-};
-
-// rm3 has the same selected geometry but its own compiler net identity.
-const rm3K1Pin = {
-  ok: false,
-  error: {
-    code: "R004",
-    message:
-      "Invalid layout: edges boundary segment (R1.A1 \u2192 R1.A1) and W38 (K1.A1 / coil \u2192 R1.A1) overlap collinearly.",
-    details: {
-      originalMessage:
-        'Invalid layout: edges ["boundary-segment","[\\"junction\\",\\"net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"] and ["wire","10000000-0000-4000-8000-000000000038"] overlap collinearly.',
-      conductors: [
-        {
-          id: '["wire","10000000-0000-4000-8000-000000000038"]',
-          designation: "W38",
-          terminals: [
-            {
-              deviceUid: "10000000-0000-4000-8000-000000000003",
-              terminalKey: "A1",
-              designation: "K1",
-              functionKeys: ["coil"],
-            },
-            {
-              deviceUid: "10000000-0000-4000-8000-000000000012",
-              terminalKey: "A1",
-              designation: "R1",
-              functionKeys: [],
-            },
-          ],
-        },
-        {
-          id: '["boundary-segment","[\\"junction\\",\\"net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]","[\\"terminal\\",\\"10000000-0000-4000-8000-000000000012\\",\\"A1\\"]"]',
-          designation: "boundary segment",
-          terminals: [
-            {
-              deviceUid: "10000000-0000-4000-8000-000000000012",
-              terminalKey: "A1",
-              designation: "R1",
-              functionKeys: [],
-            },
-            {
-              deviceUid: "10000000-0000-4000-8000-000000000012",
-              terminalKey: "A1",
-              designation: "R1",
-              functionKeys: [],
-            },
-          ],
-        },
-      ],
-    },
-    family: "control",
-    netId:
-      "net:sha256:43277223ce670fe393f502d868c9affea3137b55ee96f9609187c13b85a181e0",
-    root: "K1",
-  },
-} as const;
+function assertControlRoot(
+  ir: ElectricalIr,
+  result: Awaited<ReturnType<typeof renderSchematic>>,
+  root: "K1" | "R1",
+) {
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (!result.ok) throw Error(result.error.message);
+  const names = new Map(ir.devices.map((d) => [d.uid, d.designation]));
+  expect(
+    result.value.summary.conductiveElementIds
+      .map((id) => ir.wires.find((w) => w.uid === id.uid)!.designation)
+      .sort(),
+  ).toEqual([
+    "W30",
+    "W31",
+    "W32",
+    "W33",
+    "W34",
+    "W35",
+    "W36",
+    "W37",
+    ...(root === "K1" ? ["W38", "W41"] : ["W40"]),
+  ]);
+  expect(
+    result.value.summary.functionIds
+      .map((f) => `${names.get(f.deviceUid)}.${f.functionKey}`)
+      .sort(),
+  ).toEqual(
+    [
+      "F1.pole1",
+      `${root}.coil`,
+      "OL1.aux95",
+      "PS1.dc_output",
+      "R1.contact14",
+      "S0.contact11",
+      "S1.contact11",
+      "S2.contact13",
+    ].sort(),
+  );
+}

@@ -81,14 +81,14 @@ it("preserves the unnamed-jumper designation in an injected R004", async () => {
   );
 });
 
-// Exact dev messages from the review's three unchanged-geometry injections.
-const devMessages = [
+// Exact messages for unchanged-geometry injections, including visible rail names.
+const expectedMessages = [
   'Invalid layout: label ["label","edge","[\\"wire\\",\\"70dc52cc-2b19-4f80-aa32-ef9a1dd61f07\\"]","conductor"] overlaps edge W-CTL-007 (OL1.96 / aux95 → K1.A1 / coil).',
   'Invalid layout: label ["label","edge","[\\"wire\\",\\"71881aaf-f3a4-41fd-8d3d-1afe88f122ce\\"]","conductor"] overlaps symbol ["function","PB1","contact11"].',
-  'Invalid layout: label ["label","edge","[\\"wire\\",\\"74280b71-4394-4895-b34b-6c159bb9748d\\"]","conductor"] overlaps edge W-CTL-008 (33a15867-296b-40e4-a56b-15282f131b4c.- → K1.A2 / coil).',
+  'Invalid layout: label ["label","edge","[\\"wire\\",\\"74280b71-4394-4895-b34b-6c159bb9748d\\"]","conductor"] overlaps edge W-CTL-008 (PS1.- → K1.A2 / coil).',
 ];
 it.each([0, 1, 2])(
-  "keeps the dev label-collision message for injected target %s",
+  "pins the label-collision message for injected target %s",
   async (target) => {
     const compiled = await compileCoreProjectFixture();
     const engine = createElkEngine(),
@@ -124,7 +124,7 @@ it.each([0, 1, 2])(
     expect(result.ok).toBe(false);
     if (result.ok) throw Error("Expected injected label collision");
     expect(result.error.code).toBe("R004");
-    expect(result.error.message).toBe(devMessages[target]);
+    expect(result.error.message).toBe(expectedMessages[target]);
     expect(calls).toBe(1);
   },
 );

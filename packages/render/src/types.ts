@@ -216,7 +216,8 @@ export type PresentationLabelRole =
   | "rail"
   | "terminal"
   | "conductor"
-  | "net";
+  | "net"
+  | "reference";
 
 export type PresentationLabelOwnerKind =
   "location" | "device" | "symbol" | "rail" | "port" | "edge";

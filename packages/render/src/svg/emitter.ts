@@ -1,3 +1,9 @@
+import { orthogonalPathData } from "./edge-path.js";
+export { orthogonalPathData } from "./edge-path.js";
+import {
+  terminalContextAttachment,
+  contextReferenceLeader,
+} from "../terminal-context-reference.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { printableLabelGeometry } from "../symbols/printable-label.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
@@ -317,56 +323,6 @@ function sourceValue(
 
 function global(value: number): number {
   return value + OUTER_SVG_PADDING;
-}
-
-function samePoint(left: LayoutPoint, right: LayoutPoint): boolean {
-  return left.x === right.x && left.y === right.y;
-}
-
-function simplifiedPoints(
-  points: readonly LayoutPoint[],
-): readonly LayoutPoint[] {
-  const unique: LayoutPoint[] = [];
-  for (const point of points) {
-    if (unique.length === 0 || !samePoint(unique[unique.length - 1]!, point)) {
-      unique.push(point);
-    }
-  }
-  const simplified: LayoutPoint[] = [];
-  for (const point of unique) {
-    while (simplified.length >= 2) {
-      const first = simplified[simplified.length - 2]!;
-      const second = simplified[simplified.length - 1]!;
-      if (!(
-        (first.x === second.x && second.x === point.x) ||
-        (first.y === second.y && second.y === point.y)
-      ))
-        break;
-      simplified.pop();
-    }
-    simplified.push(point);
-  }
-  return simplified;
-}
-
-export function orthogonalPathData(points: readonly LayoutPoint[]): string {
-  const values = simplifiedPoints(points);
-  if (values.length < 2)
-    throw new Error("An SVG edge path requires two points.");
-  const first = values[0]!;
-  const commands = [
-    `M ${formatSvgNumber(global(first.x))} ${formatSvgNumber(global(first.y))}`,
-  ];
-  for (let index = 1; index < values.length; index++) {
-    const previous = values[index - 1]!;
-    const point = values[index]!;
-    if (point.y === previous.y)
-      commands.push(`H ${formatSvgNumber(global(point.x))}`);
-    else if (point.x === previous.x)
-      commands.push(`V ${formatSvgNumber(global(point.y))}`);
-    else throw new Error("SVG emitter received a diagonal edge segment.");
-  }
-  return commands.join(" ");
 }
 
 function primitiveClass(style: SymbolStyle): string {
@@ -807,10 +763,28 @@ function emitEdges(
         edgeLayouts.get(edge.id),
         `Edge ${edge.id} has no layout.`,
       );
-      writer.element(2, "path", {
-        ...edgeAttributes(edge, registry),
-        d: orthogonalPathData(layout.points),
-      });
+      const context = terminalContextAttachment(graph, edge);
+      if (context) {
+        writer.open(2, "g", {
+          ...edgeAttributes(edge, registry),
+          class: "context-attachment",
+        });
+        for (const source of [true, false])
+          writer.element(3, "path", {
+            class: "context-reference-leader",
+            fill: "none",
+            stroke: "#475467",
+            "stroke-width": 0.5,
+            d: orthogonalPathData(
+              contextReferenceLeader(layout.points, source),
+            ),
+          });
+        writer.close(2, "g");
+      } else
+        writer.element(2, "path", {
+          ...edgeAttributes(edge, registry),
+          d: orthogonalPathData(layout.points),
+        });
     }
     writer.close(1, "g");
   }

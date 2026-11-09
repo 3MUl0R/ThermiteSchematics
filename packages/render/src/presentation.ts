@@ -1,3 +1,4 @@
+import { labelTerminalContextReferences } from "./terminal-context-reference.js";
 import {
   irSemanticOrder,
   compareSemanticElementIds,
@@ -8,6 +9,7 @@ import { printableSlotWidth } from "./symbols/printable-font.js";
 import {
   assertSymbolTruth,
   assertSemanticAttachments,
+  controlInputRoles,
 } from "./layout/topology-conservation.js";
 import { symbolProfile } from "./symbols/profiles.js";
 import { printableCaption } from "./symbols/printable-policy.js";
@@ -3371,6 +3373,58 @@ function loadSourceIncidence(
   return { orderedUses, template };
 }
 
+/** Distinct arms at an authored control-input split or merge; no extra selection. */
+function actuationIncidence(
+  context: PresentationContext,
+  uses: readonly EndpointUse[],
+  attachments: readonly SemanticAttachment[],
+): ClosedTraceIncidence | undefined {
+  const view = context.selected.view;
+  if (
+    view.format !== "schematic-view/0.1" ||
+    view.family !== "control" ||
+    attachments.length !== 1
+  )
+    return undefined;
+  const inputs = new Set(
+    context.selected.paths
+      .filter((p) => p.lane === "input")
+      .flatMap((p) =>
+        p.steps
+          .filter((s) => s.kind === "conductor")
+          .map((s) => edgeIdFor(s.elementId)),
+      ),
+  );
+  if (!uses.every((u) => inputs.has(u.edge.id))) return undefined;
+  const roles = controlInputRoles(
+    context.selected,
+    context.functionByKey,
+    uses,
+    required(attachments[0], "Missing actuation terminal owner").terminal,
+  );
+  if (roles === undefined) return undefined;
+  const assignments = uses.map((use, order) =>
+    closedAssignment(
+      view.flow,
+      { kind: "edge", edgeId: use.edge.id },
+      required(roles.conductors[order], "Missing actuation arm"),
+      order,
+    ),
+  );
+  assignments.push(
+    closedAssignment(
+      view.flow,
+      { kind: "attachment" },
+      roles.attachment,
+      uses.length,
+    ),
+  );
+  return {
+    orderedUses: uses,
+    template: { kind: roles.kind, components: [{ index: 0, assignments }] },
+  };
+}
+
 function insertSemanticJunctions(
   context: PresentationContext,
   visibleNodes: readonly (SymbolPresentationNode | RailPresentationNode)[],
@@ -3498,6 +3552,7 @@ function insertSemanticJunctions(
       continue;
     }
     const closed =
+      actuationIncidence(context, defaultOrderedUses, terminalAttachments) ??
       loadSourceIncidence(
         context,
         defaultOrderedUses,
@@ -3539,8 +3594,7 @@ function insertSemanticJunctions(
         `Selected conductor endpoint ${key} has no visible owner.`,
       );
     }
-    const needsJunction = fansOut || semanticDegree >= 3;
-    if (!needsJunction) {
+    if (!fansOut && semanticDegree < 3) {
       for (const [index, use] of uses.entries()) {
         const portId = assignments[index]!.id;
         if (use.end === "source") use.edge.sourcePortId = portId;
@@ -3961,7 +4015,7 @@ export function buildPresentationGraph(
   );
   const mutableEdges = [...conductors.edges, ...inserted.boundaryEdges];
   attachNetLabels(context, mutableEdges);
-  const graph: PresentationGraph = {
+  const graph: PresentationGraph = labelTerminalContextReferences({
     format: "schematic-presentation/0.1",
     directLoadPair: context.directLoadPair,
     view: cloneView(context.selected),
@@ -3978,7 +4032,7 @@ export function buildPresentationGraph(
       visible.value.nodes,
       mutableEdges,
     ),
-  };
+  });
   validatePresentationGraph(
     request.ir,
     request.selected,

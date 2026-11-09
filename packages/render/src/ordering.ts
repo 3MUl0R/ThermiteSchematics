@@ -185,6 +185,7 @@ const PRESENTATION_LABEL_ROLE_RANK: Readonly<
   terminal: 3,
   conductor: 4,
   net: 5,
+  reference: 6,
 });
 
 export function comparePresentationLabel(
