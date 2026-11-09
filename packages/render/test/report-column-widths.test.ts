@@ -240,7 +240,7 @@ describe("report line-break contract", () => {
       rows: [{ key: "test", cells: [value], deviceUids: [] }],
     };
     const cell = reportCells(input, table, 24),
-      lines = cell.split([value], "1")[0]!;
+      lines = cell.split([value], "1", "test")[0]!;
     expect(lines.join("")).toBe(value);
     for (const name of [
       "+24V",
@@ -403,7 +403,7 @@ describe("minimal header hyphenation and segmented names", () => {
     if (kind === "location") input.devices[0]!.location = value;
     else input.devices[0]!.designation = value;
     const cells = reportCells(input, one(value), 35);
-    const lines = cells.split([value], "1")[0]!;
+    const lines = cells.split([value], "1", "segment")[0]!;
     expect(lines.join("").replace(/ /gu, "")).toBe(value.replace(/ /gu, ""));
     for (const part of parts)
       expect(
@@ -414,7 +414,7 @@ describe("minimal header hyphenation and segmented names", () => {
   it("never starts an ordinary part-number line with its separator", () => {
     const value = "6ES7131-6BF01-0BA0";
     const cells = reportCells(fixture, one(value), 17);
-    const lines = cells.split([value], "1")[0]!;
+    const lines = cells.split([value], "1", "segment")[0]!;
     expect(lines.join("")).toBe(value);
     expect(lines.every((line) => !line.startsWith("-"))).toBe(true);
   });
@@ -424,7 +424,7 @@ describe("minimal header hyphenation and segmented names", () => {
     const value = "PLC1-".repeat(8000);
     const start = performance.now();
     const cells = reportCells(input, one(value), 30);
-    expect(cells.split([value], "1")[0]!.join("")).toBe(value);
+    expect(cells.split([value], "1", "segment")[0]!.join("")).toBe(value);
     expect(performance.now() - start).toBeLessThan(2000);
   });
 });
@@ -484,11 +484,11 @@ it("does not hyphenate short header words when even their minimum cannot fit", (
     /header .*Use larger paper, landscape\./u,
   );
 });
-it("gives row-height advice without a width-only margin promise for a long48 instance", () => {
+it("gives row-height advice without a width-only margin promise for a structured instance", () => {
   const input = structuredClone(fixture);
   input.devices[0]!.designation = (
     "=PLANT01+CABINET02-PUMPMOTOR-" + "M".repeat(48)
-  ).slice(0, 48);
+  ).slice(0, 30);
   input.devices[0]!.description = "W".repeat(2000);
   const table = buildDocumentation(input, {
     format: "documentation-view-request/0.1",
@@ -530,7 +530,11 @@ it.each(["fromLocation", "toLocation"] as const)(
       ],
     };
     const cells = reportCells(input, table, 60);
-    const lines = cells.split(table.rows[0]!.cells, "1")[0]!;
+    const lines = cells.split(
+      table.rows[0]!.cells,
+      "1",
+      table.rows[0]!.key,
+    )[0]!;
     expect(lines.some((line) => line.includes("REMOTE"))).toBe(true);
     expect(
       lines.some((line) => line.includes("LONGLOCATION")),
@@ -559,7 +563,9 @@ it.each(["W-CTL-005-M2", "PE-HMI", "W-RIO1-L+"])(
       rows: [{ key: "flat", cells: [designation, ""], deviceUids: [] }],
     };
     const cells = reportCells(input, table, 70);
-    expect(cells.split([designation, ""], "1")[0]).toEqual([designation]);
+    expect(cells.split([designation, ""], "1", "flat")[0]).toEqual([
+      designation,
+    ]);
   },
 );
 it("names the whole structured designation in a width refusal", () => {

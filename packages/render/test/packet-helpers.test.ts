@@ -381,7 +381,7 @@ describe("packet report composition", () => {
   it("reserves report cell padding before wrapping printable text", () => {
     const cells = reportCells(ir, narrowTable, 20);
     // Six W glyphs fit in 18 mm but exceed the padded 16 mm text allocation.
-    const wrapped = cells.split(["WWWWWW"], "1")[0]!;
+    const wrapped = cells.split(["WWWWWW"], "1", "padding")[0]!;
     expect(wrapped).toHaveLength(2);
     expect(wrapped.join("")).toBe("WWWWWW");
     for (const line of wrapped)
@@ -419,7 +419,7 @@ describe("packet report composition", () => {
       ],
     };
     const cells = reportCells(ir, table, 100);
-    const wrapped = cells.split(table.rows[0]!.cells, "1");
+    const wrapped = cells.split(table.rows[0]!.cells, "1", table.rows[0]!.key);
     expect(wrapped.map((lines) => lines.join(""))).toEqual(
       table.rows[0]!.cells,
     );

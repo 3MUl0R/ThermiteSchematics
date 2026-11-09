@@ -1,5 +1,7 @@
 import { classifyTextGeometry } from "./text-classification.mjs";
 import * as checks from "./checks.mjs";
+import { identifierFindings } from "./identifier-checks.mjs";
+import { identifierTable } from "./identifier-tables.mjs";
 const reasons = {
   "DQ-07":
     "Needs exported printed contact-mirror identities, their sheet.zone destinations and coil associations; related-function metadata alone does not identify the printed mirror.",
@@ -220,8 +222,10 @@ export function evaluateSheet(
     ),
   );
   out.push(obs("DQ-18", checks.titleFields(g)));
+  const identifierSource = identifierTable(s, packet, g, ir, tables);
   out.push(
     obs("DQ-19", [
+      ...(identifierSource ? identifierFindings(g, identifierSource, ir) : []),
       ...checks
         .textBounds({ ...g, texts: g.texts.filter((t) => t.row) })
         .filter((x) => x.kind === "text-outside-cell"),

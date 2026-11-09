@@ -158,6 +158,39 @@ export function measureSheet(options = {}) {
       attr(e, "data-wiring-conductor"),
     net: attr(e, "data-net-id"),
   });
+  // Per-character SVG positions expose tspan/dy breaks even when one parent
+  // text node contains the entire identifier. These are measured line boxes.
+  function reportRuns(e, rendered, matrix) {
+    if (!e.closest("[data-report-row]")) return undefined;
+    const count = e.getNumberOfChars(),
+      points = Array.from(rendered);
+    const utf16 = count === rendered.length;
+    if (!utf16 && count !== points.length)
+      throw Error(
+        "Identifier measurement: SVG character inventory differs from rendered text",
+      );
+    const runs = [];
+    let offset = 0;
+    for (let index = 0; index < points.length; index++) {
+      const char = points[index],
+        position = utf16 ? offset : index;
+      const start = e.getStartPositionOfChar(position).matrixTransform(matrix);
+      const anchor = point(start.x, start.y),
+        bbox = bounds(e, e.getExtentOfChar(position));
+      const last = runs.at(-1);
+      if (last && Math.abs(last.anchor.y - anchor.y) <= 0.17) {
+        last.text += char;
+        const right = Math.max(last.bbox.x + last.bbox.w, bbox.x + bbox.w);
+        const bottom = Math.max(last.bbox.y + last.bbox.h, bbox.y + bbox.h);
+        last.bbox.x = Math.min(last.bbox.x, bbox.x);
+        last.bbox.y = Math.min(last.bbox.y, bbox.y);
+        last.bbox.w = right - last.bbox.x;
+        last.bbox.h = bottom - last.bbox.y;
+      } else runs.push({ text: char, anchor, bbox });
+      offset += char.length;
+    }
+    return runs;
+  }
   const terminals = Array.from(
     root.querySelectorAll(
       "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key]",
@@ -429,6 +462,7 @@ export function measureSheet(options = {}) {
           viewport: v.clip,
           cell,
           columnIndex,
+          reportRuns: reportRuns(e, renderedString, m),
           knockout,
           plate,
           wireBlock: e.closest("[data-wire-label]")
@@ -666,6 +700,24 @@ export function measureSheet(options = {}) {
       ...(root.querySelector("[data-symbol-id]") ? ["ais"] : []),
       ...(root.querySelector("[data-circuit-mark]") ? ["circuit"] : []),
     ],
+    reportCells: Array.from(
+      root.querySelectorAll("[data-report-row] [data-report-column]"),
+    ).map((column) => {
+      const columnIndex = Number(column.getAttribute("data-report-column")) - 1;
+      const rect = Array.from(column.parentElement.children).filter(
+        (e) =>
+          e.tagName.toLowerCase() === "rect" &&
+          e.getAttribute("stroke") === "#9ba6b4",
+      )[columnIndex];
+      if (!rect)
+        throw Error("Identifier measurement: report cell rectangle missing");
+      return {
+        row: attr(column, "data-report-row"),
+        columnIndex,
+        element: ids.get(column),
+        bbox: bounds(rect),
+      };
+    }),
     reportRows: Array.from(root.querySelectorAll("[data-report-row]")).map(
       (e) => e.getAttribute("data-report-row"),
     ),
