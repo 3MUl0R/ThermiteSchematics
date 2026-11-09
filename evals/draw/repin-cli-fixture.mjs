@@ -29,8 +29,17 @@ export async function cliFixture({ survivor = false } = {}) {
     join(kit, "corpus.mjs"),
     `export const cases=()=>[{id:${JSON.stringify(A)},flow:"left-to-right"}];export const verifyCorpus=async()=>({seal:"seal"});`,
   );
-  const old = it0("old"),
-    target = it0("target");
+  // Browser-free protocol test double. Real browser acceptance runs separately.
+  await writeFile(
+    join(kit, "crop-source.mjs"),
+    `import {verificationFact} from "./crop-report.mjs";export async function verifyCropSources(root,index){return new Map(index.crops.map(c=>[c.path,verificationFact(c,c.sourceRender[c.scope.medium+"Sha256"])]));}`,
+  );
+  await writeFile(
+    join(kit, "crop-stamp-check.mjs"),
+    "export async function verifyStampHeaders(){}",
+  );
+  const old = it0("old", { bbox: { x: 1, y: 1, w: 1, h: 1 } }),
+    target = it0("target", { bbox: { x: 1, y: 1, w: 1, h: 1 } });
   const c = assemble({
     registryItems: survivor ? [old, target] : [old],
     currentItems: [target],

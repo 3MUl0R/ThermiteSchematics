@@ -1,3 +1,11 @@
+// Shared print-capture environment: no page scripts, service workers or network.
+export const drawingContextOptions = Object.freeze({
+  deviceScaleFactor: 300 / 96,
+  viewport: { width: 1800, height: 1800 },
+  offline: true,
+  serviceWorkers: "block",
+  javaScriptEnabled: false,
+});
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -691,7 +699,7 @@ export async function screenshotCrop(page, b, path, selector = "body>svg") {
     },
     { b, selector },
   );
-  await page.screenshot({
+  return page.screenshot({
     path,
     clip,
     fullPage: true,

@@ -1,3 +1,4 @@
+import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { pngFixture } from "./png-fixture.mjs";
 import { it, expect } from "vitest";
 import { crossCheckReceipt } from "./repin-record-crosscheck.mjs";
@@ -249,6 +250,7 @@ function notMove() {
     cs = [1, 2].map((n) => ({
       path: `evals/out/draw-samples/exception${n}.png`,
       sha256: hash(pngFixture({ seed: n + 3 })),
+      sourceVerification: sourceVerificationFixture(),
     }));
   signed(
     c,
@@ -309,8 +311,12 @@ it("requires path map values to be one-to-one", () => {
       (s.notMove = [
         {
           crops: [
-            { path: "evals/out/draw-samples/fixture.png", sha256: crop.sha256 },
-            crop,
+            {
+              path: "evals/out/draw-samples/fixture.png",
+              sha256: crop.sha256,
+              sourceVerification: sourceVerificationFixture(),
+            },
+            { ...crop, sourceVerification: sourceVerificationFixture() },
           ],
         },
       ]),

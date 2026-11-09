@@ -11,7 +11,13 @@ export function cropClaimTracker(cropHashes) {
     );
     assert(
       Object.keys(crop).every((k) =>
-        ["path", "sha256", "headerPixels", "drawingSha256"].includes(k),
+        [
+          "path",
+          "sha256",
+          "headerPixels",
+          "drawingSha256",
+          "sourceVerification",
+        ].includes(k),
       ) &&
         crop.path.startsWith("evals/out/draw-samples/") &&
         !crop.path.split("/").includes("..") &&

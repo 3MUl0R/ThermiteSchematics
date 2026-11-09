@@ -1,3 +1,4 @@
+import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 // Synthetic provenance/PNG data only: no project or electrical facts.
 import { deflateSync } from "node:zlib";
 import { hash, json } from "./support.mjs";
@@ -71,6 +72,7 @@ export function largeRecordFixture() {
       ? {
           crop: { path: rows[n].path, sha256: rows[n].sha256 },
           drawingSha256: drawingHash(crops.get(rows[n].path)),
+          sourceVerification: sourceVerificationFixture(),
         }
       : {
           markerId: `synthetic/${n}`,
@@ -105,6 +107,7 @@ export function largeRecordFixture() {
           note: e.note,
           cause: e.cause,
           drawingSha256: e.drawingSha256,
+          sourceVerification: e.sourceVerification,
           signOffs: [{ ...e.signOff, label: "agent review" }],
         },
       })),

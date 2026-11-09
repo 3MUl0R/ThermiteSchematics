@@ -1,3 +1,8 @@
+import {
+  withSourceHashFixtures,
+  sourceVerificationFixture,
+  reportedSourceFixture,
+} from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import { checkerManifestHash } from "./checker-manifest.mjs";
 import { readCheckers } from "./checker-manifest.mjs";
@@ -112,6 +117,7 @@ function makeReport(registry, items, registrySha256) {
     checkers: { "expectations.mjs": registrySha256 },
     results: rows,
   };
+  withSourceHashFixtures(report);
   report.checkerSha256 = checkerManifestHash(report.checkers);
   const a = reassess(report, registry, specs);
   return {
@@ -496,6 +502,7 @@ async function ioFixture() {
   const crop = c.decisions[0].entries[2].crop;
   crop.sha256 = hash(png);
   c.decisions[0].entries[2].drawingSha256 = drawingHash(png);
+  c.decisions[0].entries[2].sourceVerification = sourceVerificationFixture();
   c.cropHashes = new Map([[crop.path, crop.sha256]]);
   await writeFile(join(root, crop.path), png);
   const target = join(root, "evals/draw/expectations.mjs");
@@ -623,6 +630,7 @@ it("loads raw hashes and rejects a tampered supplied baseline/decision JSON", as
       decision = join(root, "decision.json"),
       baseline = join(root, "baseline.json");
     await writeFile(report, json(c.report));
+    refreshSources(c);
     await writeFile(decision, json(c.decisions[0]));
     await writeFile(baseline, json(c.baselines.values().next().value));
     const loaded = await loadRepinInputs({
@@ -1207,6 +1215,7 @@ it("refuses identical real crop bytes even when supplied under different filenam
       crop = c.decisions[0].entries[2].crop;
     e.pairs[0].text = { from: "K1", to: "K1 caption" };
     e.drawingSha256 = c.decisions[0].entries[2].drawingSha256;
+    e.sourceVerification = sourceVerificationFixture();
     e.crop = {
       ...crop,
       path: "evals/out/draw-samples/review/renamed-copy.png",
@@ -1219,6 +1228,7 @@ it("refuses identical real crop bytes even when supplied under different filenam
       decision = join(root, "evals/out/decisions.json"),
       baselinePath = join(root, "evals/out/baseline.json");
     await writeFile(reportPath, json(c.report));
+    refreshSources(c);
     await writeFile(decision, json(c.decisions[0]));
     await writeFile(baselinePath, json(c.baselines.values().next().value));
     const inputs = await loadRepinInputs({
@@ -1539,4 +1549,40 @@ it.each([
   const c = fixture();
   c.decisions[0].entries[0].counterSignOffs = [sign];
   expect(() => prepareRepin(c)).toThrow(/signOff|Countersignatures/);
+});
+
+function refreshSources(c) {
+  for (const f of c.decisions)
+    for (const e of f.entries) {
+      if (!e.crop) continue;
+      const token = e.instances?.[0] ?? e.pairs?.[0]?.to;
+      const t = c.after.byToken.get(token);
+      if (t) e.sourceVerification = reportedSourceFixture(t, c.reportSha256);
+    }
+}
+it("production preview refuses an otherwise valid source fact for the wrong sheet", async () => {
+  const { root, c, target } = await ioFixture();
+  try {
+    refreshSources(c);
+    c.decisions[0].entries.find((e) => e.crop).sourceVerification.sheet = 999;
+    const report = join(root, "report.json"),
+      decision = join(root, "decision.json"),
+      baseline = join(root, "baseline.json");
+    await writeFile(report, json(c.report));
+    await writeFile(decision, json(c.decisions[0]));
+    await writeFile(baseline, json(c.baselines.values().next().value));
+    await expect(
+      loadRepinInputs({
+        root,
+        reportPath: report,
+        decisionPaths: [decision],
+        baselinePaths: [baseline],
+        registryPath: target,
+        registry: c.registry,
+        specs,
+      }),
+    ).rejects.toThrow(/medium\/physical sheet/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

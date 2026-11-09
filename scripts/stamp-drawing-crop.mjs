@@ -20,43 +20,22 @@ assert(
   "Could not register bundled crop-header font",
 );
 export const HEADER_PIXELS = 86;
-/** Refuse a row's representative crop when it does not show the cited instance. */
-export function assertCropContainsInstance(instance, cropBbox) {
-  const box = instance.bbox;
-  assert(
-    box &&
-      cropBbox &&
-      [
-        box.x,
-        box.y,
-        box.w,
-        box.h,
-        cropBbox.x,
-        cropBbox.y,
-        cropBbox.w,
-        cropBbox.h,
-      ].every(Number.isFinite) &&
-      box.x >= cropBbox.x - 0.001 &&
-      box.y >= cropBbox.y - 0.001 &&
-      box.x + box.w <= cropBbox.x + cropBbox.w + 0.001 &&
-      box.y + box.h <= cropBbox.y + cropBbox.h + 0.001,
-    "Cited instance is outside the source crop; render its own crop before stamping",
-  );
-}
+import { assertCropContainsInstance } from "../evals/draw/crop-geometry.mjs";
+export { assertCropContainsInstance };
 export async function stampInstanceDrawingCrop(
   bytes,
   headerLines,
   instance,
   cropBbox,
 ) {
-  assertCropContainsInstance(instance, cropBbox);
-  return stampDrawingCrop(bytes, headerLines);
+  return stampDrawingCrop(bytes, headerLines, false, { instance, cropBbox });
 }
 /** Lines are literal provenance, stored unchanged in the crop-index row. */
 export async function stampDrawingCrop(
   bytes,
   headerLines,
   stripHeader = false,
+  geometry,
 ) {
   assert(
     Array.isArray(headerLines) && headerLines.length === 4,
@@ -68,6 +47,7 @@ export async function stampDrawingCrop(
     ),
     "Header lines must be printable ASCII; use literal Unicode escapes",
   );
+  assertCropContainsInstance(geometry?.instance, geometry?.cropBbox);
   if (stripHeader) drawingHash(bytes, HEADER_PIXELS);
   const image = await loadImage(bytes),
     sourceTop = stripHeader ? HEADER_PIXELS : 0,
@@ -81,8 +61,14 @@ export async function stampDrawingCrop(
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#111";
-  ctx.font = '14px "Thermite Crop Header"';
-  headerLines.forEach((line, i) => ctx.fillText(line, 8, 17 + i * 19));
+  headerLines.forEach((line, i) => {
+    ctx.font = '14px "Thermite Crop Header"';
+    const available = canvas.width - 16,
+      width = ctx.measureText(line).width;
+    if (width > available)
+      ctx.font = `${(14 * available) / width}px "Thermite Crop Header"`;
+    ctx.fillText(line, 8, 17 + i * 19);
+  });
   ctx.drawImage(
     image,
     0,
@@ -106,16 +92,26 @@ if (
       "header-lines": { type: "string" },
       output: { type: "string" },
       "strip-header": { type: "boolean", default: false },
+      instance: { type: "string" },
+      "source-bbox": { type: "string" },
     },
   });
   assert(
-    values.drawing && values["header-lines"] && values.output,
-    "Use --drawing <png> --header-lines <four-lines.json> --output <png> [--strip-header]",
+    values.drawing &&
+      values["header-lines"] &&
+      values.output &&
+      values.instance &&
+      values["source-bbox"],
+    "Use --drawing <png> --header-lines <four-lines.json> --output <png> --instance <instance.json> --source-bbox <bbox.json> [--strip-header]",
   );
   const bytes = await stampDrawingCrop(
     await readFile(values.drawing),
     JSON.parse(await readFile(values["header-lines"], "utf8")),
     values["strip-header"],
+    {
+      instance: JSON.parse(await readFile(values.instance, "utf8")),
+      cropBbox: JSON.parse(await readFile(values["source-bbox"], "utf8")),
+    },
   );
   await writeFile(values.output, bytes, { flag: "wx" });
 }

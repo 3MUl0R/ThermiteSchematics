@@ -8,6 +8,7 @@ const judgment = (x) =>
     cause: x.cause,
     signOff: x.signOff,
     drawingSha256: x.drawingSha256,
+    sourceVerification: x.sourceVerification,
   });
 export function crossCheckReceipt(signed, receipt) {
   assert(

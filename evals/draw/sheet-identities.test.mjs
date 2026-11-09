@@ -48,3 +48,37 @@ it("keeps per-instance HTML/SVG locators equal across standalone font delivery",
   expect(locators[1]).toEqual(["device/K1/text.", "class/text.reference"]);
   expect(locators.flat()).not.toContain("unexported");
 });
+
+it("pins the runner's HTML-index argument on the delivered fixture", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const assert = (await import("node:assert/strict")).default;
+  const source = await readFile(new URL("./run.mjs", import.meta.url), "utf8");
+  // Execute the actual call-site block without importing the CLI or a browser.
+  const start = source.indexOf("const locatorIndexes = {"),
+    end = source.indexOf("        assert.equal(", start);
+  expect(start >= 0 && end > start).toBe(true);
+  const run = new Function(
+    "svgLocators",
+    "assert",
+    "s",
+    "htmlSvgs",
+    "ir",
+    "tables",
+    source.slice(start, end) + ";return locatorIndexes;",
+  );
+  const html = '<svg><text class="reference">C005 / 01</text></svg>';
+  const svg = html.replace(
+    "<svg>",
+    "<svg><style>@font-face{font-family:Thermite}</style>",
+  );
+  const result = run(
+    svgLocators,
+    assert,
+    { svg, number: 1, view: {} },
+    [html],
+    {},
+    [],
+  );
+  expect(result.html.has("text-0")).toBe(true);
+  expect(result.svg.has("text-1")).toBe(true);
+});

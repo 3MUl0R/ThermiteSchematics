@@ -1,3 +1,4 @@
+import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -31,6 +32,7 @@ function grouped() {
     ...s.entries[0],
     crop,
     drawingSha256: drawingHash(crops.get(crop.path), crop.headerPixels),
+    sourceVerification: sourceVerificationFixture(),
   }));
   r.decisions = s.entries.map((e) => ({
     ...e,
@@ -39,6 +41,7 @@ function grouped() {
       note: e.note,
       cause: e.cause,
       drawingSha256: e.drawingSha256,
+      sourceVerification: e.sourceVerification,
       signOffs: [e.signOff],
     },
   }));

@@ -1,3 +1,4 @@
+import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { hash, json } from "./support.mjs";
 import { deterministicReceipt } from "./repin-record.mjs";
 import { drawingHash } from "./png-ink.mjs";
@@ -22,6 +23,7 @@ export function recordFixture(canonical = false) {
         cause: "synthetic cause",
         crop,
         drawingSha256: drawingHash(pngFixture()),
+        sourceVerification: sourceVerificationFixture(),
       },
     ],
   };
@@ -42,6 +44,7 @@ export function recordFixture(canonical = false) {
           note: e.note,
           cause: e.cause,
           drawingSha256: e.drawingSha256,
+          sourceVerification: e.sourceVerification,
           signOffs: [{ ...e.signOff, label: "agent review" }],
         },
       })),

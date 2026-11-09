@@ -313,11 +313,9 @@ Unlisted marker fields remain unchanged. `pin.mjs` remains a read-only initial/
 legacy proposal generator; it is not the mixed-update path. `update-markers.mjs` is deprecated: it lacks checker-bundle bindings and reviewed
 receipts. Use re-pin for current checkpoints, including retire-only updates.
 
-For the current handoff, land E3 first, then re-pin D1 on a fresh dev C1.
-R4 replays afterwards and audits its delta against that re-pinned registry
-(decision 34); do not combine its new population with the reviewed D1 draft.
 For each re-pin, make one full strict report on dev, then
-reconcile **one decisions file per merged PR** (decision 13). Use that same target
+reconcile **one decisions file per merged PR**. Do not reuse another change's
+previously reviewed population after its registry or checker binding changes. Use that same target
 report/registry/checker-bundle/seal/version binding in every file. Individual lane audits remain
 review evidence; old lane report hashes cannot be copied into the consolidated
 binding. Re-review their deltas against the consolidated report. No release or C1
@@ -377,7 +375,8 @@ bun evals/draw/repin.mjs draft --inventory evals/out/repin-inventory.json \
 choose `--superseded <retirement-index>:<successor-index>` (repeatable) on a new
 draft command. Indices are zero-based in the default draft's sorted entries.
 This changes only the chosen action and successor reference; its cause, rationale
-and sign-off remain empty. The reviewer must complete and sign them.
+and sign-off remain empty. Sharing reasons are reviewer-authored rationale too;
+proposal text must be cleared before independent review. The reviewer must complete and sign them.
 For a link to an observed existing identity, use repeatable
 `--survivor <retirement-index>:<current-instance-token>` instead. The token comes
 from `inventory.current`; the draft resolves its marker and scope, checks that
@@ -391,15 +390,115 @@ cause**: every entry has `reviewed: false`, empty `causeClass`/`note`, and an em
 retirement `cause`. The draft also leaves `signOff.kind` and `signOff.by` empty;
 review records the applicable kind and reviewer. New defects have empty crop metadata and drawing hashes too. Inspect each delta,
 complete the cause/rationale/mappings/crops. Each crop-bearing draft entry starts
-with an empty root `drawingSha256`. After preparing the crops/index and review
-rationale, compute pixel facts **before** the independent reviewer signs:
+with an empty root `drawingSha256`. Build the evidence and index with the tracked
+helper before independent review. It uses the report's exact instance tokens,
+boxes and text to stamp each crop. It reuses a pipeline crop only if that crop
+contains the cited instance; otherwise it captures the instance's own region.
+It writes no causes or approvals. Paths below are repository-relative:
 
 ```sh
+mkdir -p evals/out/review
+bun evals/draw/repin-crop-index.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-previous/summary.json \
+  --decisions evals/out/D1-decisions.json \
+  --samples evals/out/draw-samples/review \
+  --index evals/out/review/crop-index.json \
+  --output evals/out/review/decisions.unsigned.json
 bun evals/draw/repin-bind-crops.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-previous/summary.json \
   --decisions evals/out/review/decisions.unsigned.json \
   --crop-index evals/out/review/crop-index.json \
   --output evals/out/review/decisions.bound-unsigned.json
 ```
+
+Binding cropped entries is a **browser-required source check**, separate from the
+portable unit suite. Chromium is discovered exactly as for a checkpoint. Missing
+Chromium or missing source files refuses the bind with an infrastructure message;
+no cropped entry is silently skipped and no bound output is written. Crop-free
+files do not need Chromium. There is no bypass flag. Source paths resolve from the
+report's directory (and each baseline's directory); `--source-root` overrides the
+current report's directory when its sources are stored separately.
+
+The builder writes index version 2 with the exact report SHA, token, marker,
+scope, row, text, physical sheet, `instanceBbox`, `sourceBbox` and header lines.
+`sourceRender` names `medium: "svg"` with `svg`/`svgSha256`, or `medium: "html"`
+with `html`/`htmlSha256`. The paths must match the report case and physical sheet,
+are relative to the source directory, and cannot traverse or escape through
+symlinks. HTML uses the actual `#sheet-N>svg` in the CLI packet, not a standalone
+substitute. Bind verifies the entry's marker/scope and token against the hash-bound
+report inventory; preview checks the recorded source facts against that inventory
+again, without Chromium. A text-changing rename may cite only `pairs[].to` tokens
+whose literal text mapping changes; an unchanged-text pair is ineligible even if
+its row already has a crop. At least one eligible changed instance must export a box.
+The stamped header pixels must match those report facts.
+
+Each new C1 also records `sourceHashes` (`thermite-draw-sources/1.0`): exact
+per-sheet SVG hashes and the raw or gzipped CLI HTML hash, with relative paths.
+The builder checks actual bytes against these pins before using them; bind checks
+index hashes against the report, then actual source bytes against the index.
+Preview checks the signed source hash against the report without a browser.
+A report without these pins cannot bind cropped entries: run a fresh C1. Changing
+`--source-root` changes only the folder, never the trusted hashes.
+**PDF crop source verification is not implemented**: PDF-scope crops cannot use an
+SVG/HTML index row instead. A PDF new defect or changed-text move remains blocked.
+**Sheet-level new defects without an exported instance box are also unsupported.**
+The review census found 5,818 of 8,471 marker-scope groups, from 178 markers, had
+no box; these are potential re-pin shapes, not additional C1 failures. This
+increment provides no whole-sheet substitute or invented box. Planning reports
+all unsupported entries by entry index, case, view, physical page and marker,
+then refuses the batch before writing crops. Existing scope-addition rules remain
+unchanged.
+
+The cited instance must fit inside `sourceBbox` on every edge, allowing only
+0.001 mm report rounding. Non-finite coordinates and invalid extents are refused.
+Capture and verification use the same offline Chromium context, print media,
+SVG/HTML loading, fonts-ready barrier and screenshot operation, at 300 dpi.
+Page scripts and service workers are disabled; offline mode also blocks beacon,
+prefetch and WebSocket requests. Raster dimensions and alpha must match; only a
+validated stamp may add white right padding. The comparison has no registration,
+translation, resizing or user-supplied tolerance. All per-crop refusals are listed
+before the bind exits; no bound file is written on failure.
+
+Across all 1,067 SVG/HTML pipeline crops, two independent re-renders per crop
+measured maxima of 60/255 RGB channel delta, 2.698% changed drawing pixels and
+0.487 total absolute RGB error per pixel. Repeat-vs-repeat maxima were 60,
+1.868% and 0.487. The fixed limits are **64/255**, **3%** and **1.0**, applied
+together: outward binary/integer-percent bounds and a whole-unit accumulated
+error ceiling. This preserves a channel separation from the tested single-character
+changes in the current dark text colours (`#17212b` and `#18212b`). A light-grey
+character swap can stay below the channel limit and be diluted below the fraction
+and mean limits in a large crop. These limits are not a guarantee for lighter
+text palettes; such a palette needs fresh calibration and review. The full audit must show zero false refusals; a failed comparison needs
+new evidence, not a caller-supplied limit. No image alignment is attempted.
+
+The runner captures the canonical 0.001 mm box it serializes. Rounding a previously
+captured full-precision box can cross a raster boundary. Such historical evidence
+needs a new unsigned crop, not a search for a nearby region.
+
+For a full audit of actual pipeline PNGs (without replacing them), and the browser
+protocol acceptance with an isolated synthetic registry:
+
+```sh
+bun evals/draw/crop-audit.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+  --output evals/out/crop-audit.json --passes 2
+bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+  --output evals/out/crop-swaps.json
+bun evals/draw/repin-pipeline.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+  --output evals/out/pipeline-acceptance.json
+bun evals/draw/repin-pipeline.check.mjs --capture \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --output evals/out/capture-acceptance.json
+bun evals/draw/browser-network.check.mjs
+bun evals/draw/mutate.mjs --output evals/out/crop-mutations.json
+```
+
+The protocol acceptance uses tracked tools from inventory through preview and an
+explicit mock review in a temporary synthetic registry. It never signs a real
+re-pin or applies a registry. The mutation command first requires its unmodified
+control to pass; an intentional harmless comment must survive. Load errors are
+reported separately, never counted as kills.
 
 The tool reads and validates every PNG, computes its drawing hash, and writes the
 entry's root `drawingSha256` plus `crop.headerPixels` from the index (0 by default,
@@ -409,6 +508,15 @@ from pixels. Inputs are unchanged; output is exclusive under `evals/out`. It
 refuses any already-reviewed entry, non-empty sign-off or countersign. All review
 flags, causes and notes remain unchanged. The reviewer inspects the computed
 hashes and crops, then signs the bound file; the tool does not approve them.
+It also writes tool-computed `sourceVerification` (source hash, medium, physical
+sheet, region, instance box, DPI and protocol version) on each crop-bearing entry
+and `notMove` citation. Typed source attestations are discarded before rendering.
+New signed files must retain that fact through preview, receipts and archive
+verification. Crop-less entries may carry neither drawing nor source facts.
+The exact original signed SHA-256 values for records 92 and 61 identify the two
+pre-source-verification records; a PR number, missing field or date alone grants
+no exception. Their original bytes stay immutable, and record inspection reports
+`historical signed hash` for that policy.
 Preview re-reads the PNGs and checks those signed values. The writer independently
 recomputes them again. Replacing a crop requires a new unsigned preparation and
 review, never editing a signed file in place. **`reviewed: true` signs off those
@@ -586,6 +694,11 @@ input crop-index row is either **0** (default, no header) or **86** (R4's proven
 header). An 86 px band must be non-blank, with opaque grey ink only and white rows 80–85;
 this catches mistaken declarations, not forgery. Plain grey drawing ink can still
 resemble a header. The header declaration must describe the actual crop.
+New provenance stamps fit each literal header line within the fixed width by
+reducing its font size from 14 px when needed. Line 2 keeps the physical page
+visible; the band remains 86 px with the same reserved white rows. Re-stamping
+with the same script, font and header lines is byte-exact. Historical records
+remain byte-immutable and use their original script when reconstructing stamps.
 The writer never trusts a supplied
 drawing hash. Output index version 2 has each original `sha256`, derived
 `drawingSha256`, `headerPixels` and `retained` file. The first crop in input-index
@@ -599,11 +712,18 @@ match the crop entry's signed `drawingSha256` and the retained PNG's recomputed
 hash. This also covers `notMove` citations. A C1 run at `baseCommit` regenerates
 the source crop and drawing if rendering is deterministic; rebuilding the
 original stamped PNG additionally needs the stamping script, header text and same
-fonts. Header provenance and crop/source correspondence remain reviewer judgments. R4 stamps use
+fonts. New bindings compare crop pixels against the recorded source region; that
+ties the recorded source and instance metadata to the hash-bound report. It does
+not establish the report's truth or the engineering meaning; those still require
+review. Historical records have no retrospective source attestation. R4 stamps use
 [`scripts/stamp-drawing-crop.mjs`](../../scripts/stamp-drawing-crop.mjs), the bundled
 Noto Sans face and four literal ASCII `headerLines` in each index row. Rebuild a
-non-retained original from its representative PNG with `--strip-header` and the
-row's header-lines JSON; omit that flag when starting with a raw C1 crop. The
+non-retained original from its representative PNG with `--strip-header`, the
+row's header-lines JSON, `--instance <instance.json>` and
+`--source-bbox <source-bbox.json>`; those geometry files must describe the cited
+instance and region. The instance JSON is `{ "bbox": { "x": ..., "y": ..., "w": ..., "h": ... } }`;
+the source-box JSON is the plain `{ "x": ..., "y": ..., "w": ..., "h": ... }`.
+Omit only `--strip-header` when starting with a raw C1 crop. The
 writer still derives drawing hashes independently from pixels.
 Only `thermite-draw-crop-index/2.0` and the legacy
 `thermite-d1-real-crops/1.0` index formats are accepted. D1's original index/layout
@@ -719,3 +839,9 @@ removed causes are measured on the destination rather than called not-measured.
 Keep a changed header in its rename; retire only the removed body instances.
 The acceptance requirement remains a **fresh full strict C1 with exit 0 and no
 drift**, after review of the applicable decisions, with each sign-off's kind recorded.
+
+The stamper's general API also requires `{instance, cropBbox}` as its fourth
+argument, including when restamping. Its CLI requires `--instance <instance.json>`
+and `--source-bbox <bbox.json>` in addition to drawing/header/output arguments.
+`stampInstanceDrawingCrop` supplies the same containment guard. Stamping only
+checks geometry; the bind step performs the independent source-pixel comparison.
