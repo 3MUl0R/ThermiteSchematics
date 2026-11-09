@@ -11,6 +11,9 @@ import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { chromium } from "playwright-core";
+// Preserve the calibrated path: software rasterization broke a retained binding.
+// The repeat-capture check supplies explicit candidate arguments for experiments.
+export const drawingLaunchArgs = Object.freeze([]);
 export async function browserPath() {
   if (process.env.THERMITE_DRAW_CHROMIUM) {
     try {
@@ -54,10 +57,11 @@ export async function browserPath() {
     "Drawing eval infrastructure: Chromium missing. Install the local Chromium build with bunx playwright-core install chromium, or set THERMITE_DRAW_CHROMIUM to its executable. No checks were skipped.",
   );
 }
-export async function launch() {
+export async function launch(args = drawingLaunchArgs) {
   return chromium.launch({
     executablePath: await browserPath(),
     headless: true,
+    args,
   });
 }
 // Executed inside Chromium. All positions are transformed to outer-sheet mm.
