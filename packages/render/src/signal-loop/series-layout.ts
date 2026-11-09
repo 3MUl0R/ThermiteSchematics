@@ -20,6 +20,11 @@ import {
 } from "../svg/escape.js";
 import { n, text } from "../packet/svg.js";
 import { terminalKey as key } from "./polarity.js";
+import {
+  assertOrthogonalSegment,
+  routeTolerance,
+  snappedPath,
+} from "./route-geometry.js";
 
 type Selection = ReturnType<typeof selectSignalLoop>;
 type Box = { x: number; y: number; width: number; height: number };
@@ -43,7 +48,6 @@ const loopFunctions = (selected: Selection) => [
 ];
 const wrap = (s: string, w: number) => wrapText(s, w, 2.7);
 const width = (s: string) => measureText(s, 2.7).width;
-const routeTolerance = 1e-6;
 const landingKey = (id: string, t: TerminalId) => JSON.stringify([id, key(t)]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -388,12 +392,7 @@ function checkLayout(graph: ElkNode) {
       for (let i = 1; i < path.length; i++) {
         const a = need(path[i - 1]),
           b = need(path[i]);
-        if (
-          ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
-          (Math.abs(a.x - b.x) > routeTolerance &&
-            Math.abs(a.y - b.y) > routeTolerance)
-        )
-          throw new Error("Non-orthogonal signal loop route.");
+        assertOrthogonalSegment(a, b);
         const segment = {
           x: Math.min(a.x, b.x),
           y: Math.min(a.y, b.y),
@@ -407,25 +406,6 @@ function checkLayout(graph: ElkNode) {
         )
           throw new Error("A signal loop label conceals another conductor.");
       }
-}
-
-function snappedPath(raw: { x: number; y: number }[]) {
-  const out: { x: number; y: number }[] = [];
-  raw.forEach((p, i) => {
-    const previous = raw[i - 1],
-      emitted = out[i - 1];
-    out.push({
-      x:
-        previous && emitted && Math.abs(p.x - previous.x) <= routeTolerance
-          ? emitted.x
-          : Number(n(p.x)),
-      y:
-        previous && emitted && Math.abs(p.y - previous.y) <= routeTolerance
-          ? emitted.y
-          : Number(n(p.y)),
-    });
-  });
-  return out;
 }
 
 function checkSharedRuns(graph: ElkNode) {

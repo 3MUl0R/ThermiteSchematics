@@ -521,6 +521,10 @@ export function selectSeriesLoop(
   conductors: readonly Conductor[],
 ) {
   const power = resolvePower(ir, required(request.loopPower));
+  if (power.device.uid === from.device.uid)
+    throw new Error(
+      `Series loop power source ${power.device.designation} cannot also be the transmitter; use an explicit circuit view.`,
+    );
   if (!input || (request.auxiliary?.length ?? 0) > 0)
     throw new Error(
       "Series loop power is supported only for input views without auxiliary pairs.",
