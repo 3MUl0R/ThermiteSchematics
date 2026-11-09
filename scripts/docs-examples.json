@@ -5,7 +5,7 @@
       "file": "docs/circuit-symbols.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'circuit-symbols'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "c6a62354e8c7c07e2e3e42d9e3a9d7c5727ef2f30aa015c92bee6f7b076e2b94"
       ]
@@ -14,7 +14,7 @@
       "file": "docs/circuit-views.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'circuit-views'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "e6e39668067c723f28b5bf239ad8d42c0fa9076600f4b09c6e70ac995ac2c71b",
         "44116775927065c381addfdd729b4881afea480b3a04fbbabd991a0a56000b4d",
@@ -25,7 +25,7 @@
       "file": "docs/completeness.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'completeness'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "fc74a75bbaf971dcad5cb5b4da8031993429b0b0e72c24629f0739662b755c1b",
         "5439aafd418cd153cbc6fa2d3fd1cf9f1133b9e1a62cbe71e9bf4af9c818828d",
@@ -36,7 +36,7 @@
       "file": "docs/data-model.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'modeling'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "9a851fde5d66bdd643023eaf98e3e7253c2294d49215e44910211bd2597e99f1",
         "9112980ee28867bf9e4ab0add400f218369b897b920414f6f447c96d35fb983a",
@@ -54,7 +54,7 @@
       "file": "docs/libraries.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'libraries'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "73aac4a32ba7a2adee8a27cdddc295292f901b8f1a5e9c64f6bdbe1665475563",
         "b85ccd30c72d2d99dcf8c203f39c63b83e400cd65fc50341091efbc0e8c030a6",
@@ -65,7 +65,7 @@
       "file": "docs/report-filtering.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'report-filtering'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "31ffe79fe892c16c125a375416522d990268f80bb62e6d0ae3f7210dedc6721a",
         "0f67c6e9349a96176424413e00094b6b0a0f2704f44615fe661bad0930bd505a",
@@ -77,7 +77,7 @@
       "file": "docs/review.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'review'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "5f456f5940d272c3a3bab614092dc3afe0d6ebcab91c6dcf783522c8d856de73"
       ]
@@ -86,10 +86,11 @@
       "file": "docs/signal-loops.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'signal-loops'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "b2b3d1b82aa1456fef73ad8e838fcacac8af6cbcaa2baec9dde1fe65ead8d476",
         "0eacea81184fdaad19fe84bfcebb5526182e0e46c3f3d9ef91e93d3a1a2703ff",
+        "dedae19ebe03f60533580cfefef579c0f9cd547bfe9f1b94af5ceed2d2e74041",
         "2b835085eefac43b6fa1c7b6660b5ee8f1599c152c5a55268520fa61623949ea",
         "386fa2464850f9ddfd084a852c96b5a190f54361bd33b19139f0c4c4efc8da65"
       ]
@@ -98,7 +99,7 @@
       "file": "docs/views.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'views'",
-      "testHash": "06d833542ec517c9f6c773c40c33c2572b87c0b7600719270584de6ce514326e",
+      "testHash": "d26f7ec7478c890a7f9757f32a1af2ffc0677d105c5c785fee8fc40ce57681d9",
       "consumedHashes": [
         "e07a4a200aa591311550195895677746eb622360fc723b8ae0da91854c87dd63",
         "33d7163fb82854b11e9d1802b453d3bafdc592d9c9560b694a818c963485ec8a",
@@ -590,6 +591,24 @@
       "hash": "0eacea81184fdaad19fe84bfcebb5526182e0e46c3f3d9ef91e93d3a1a2703ff",
       "kind": "executed",
       "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "dedae19ebe03f60533580cfefef579c0f9cd547bfe9f1b94af5ceed2d2e74041",
+      "kind": "executed",
+      "recipe": "topic-signal-loops"
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "0c47d9b35c7ee9e10894811b9e2a42b8382db6572e7110fc321c735609828c28",
+      "kind": "illustrative",
+      "reason": "Exact generated engine-note format with {PS} and {function} placeholders; output notation, not executable input."
+    },
+    {
+      "file": "docs/signal-loops.md",
+      "hash": "09de3fe79f9bbd9f9717dac393bb6f81643d8668238c7943907cf895d43cd371",
+      "kind": "illustrative",
+      "reason": "Generated distribution-note format with terminal/count placeholders and optional repeated entries [; ...]; output notation, not executable input."
     },
     {
       "file": "docs/signal-loops.md",

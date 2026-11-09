@@ -220,10 +220,14 @@ bindings, with a shared blade, gap and fixed-contact disconnector bar. Only
 authored `ganged_with` relations permit mechanical gang ink; no manual-operator
 linkage is drawn. Control retains switch traversal, with no loads or signal-loop
 binding. Closed-state profile defaults refuse rendering; no closed mark or new
-override value is provided. The transmitter's existing
-profile supports direct transmitter-to-AI signal-loop wiring only; a normal
-series loop through its power supply fails R006, with or without an auxiliary
-supply pair. Circuit/rooted requests report the pinned unsupported-profile gaps. `thermite guide symbols` shows current family support.
+override value is provided. The transmitter supports direct transmitter-to-AI views and explicit
+series-powered views using `loopPower` with the existing PSU `dc_output` function.
+The opt-in [series-loop requests](test/fixtures/series-loop/rm2.request.json) use
+a separate normally locked synthetic copy; the original unpowered RM3 harness
+is unchanged. Without `loopPower`, series wiring still refuses R006, including
+requests that try an auxiliary supply pair. Input mode, isolation, bonding
+suitability and loop voltage budget are not assessed. See the
+[signal-loop limits and notes](../../docs/signal-loops.md#series-loop-power). Circuit/rooted requests report the pinned unsupported-profile gaps. `thermite guide symbols` shows current family support.
 
 | Fixture deliverable    | Result in both flows     |
 | ---------------------- | ------------------------ |

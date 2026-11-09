@@ -64,3 +64,31 @@ export async function rm3LoopView(ir: ElectricalIr, root: string, flow: Flow) {
   expect(clone).toEqual(loop);
   return request;
 }
+
+/** Opt-in powered copy; the old two-net harness above stays unchanged. */
+export async function rm3SeriesLoopView(
+  ir: ElectricalIr,
+  request: any,
+  flow: Flow,
+) {
+  const view = { ...request.views[0], flow },
+    before = JSON.stringify(ir),
+    loop = await prepareSignalLoopDrawing(ir, view);
+  expect(loop.references.map((r) => r.designation).sort()).toEqual([
+    "PLC1",
+    "PS1",
+    "TB1",
+    "TX1",
+  ]);
+  expect(loop.content.match(/data-loop-conductor=/g)).toHaveLength(5);
+  expect(loop.engineNotes).toContain(
+    "Three separate loop nets; loop power from PS1.dc_output as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.",
+  );
+  const clone = await prepareSignalLoopDrawing(
+    cloneMachineType(ir, "core:transmitter-2wire-4-20ma"),
+    view,
+  );
+  expect(clone).toEqual(loop);
+  expect(JSON.stringify(ir)).toBe(before);
+  return view;
+}

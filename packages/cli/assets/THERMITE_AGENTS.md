@@ -185,14 +185,7 @@ See `thermite guide libraries` for optional-library limits.
 
 ## Multi-conductor cables
 
-`thermite cable CBL1 --json` lists every physical core. Cable `fromLocation` /
-`toLocation` name end A / end B. Conductor `endpoints` has exactly two slots,
-ordered A then B. `usage` is `in-use` or `spare`. Only an explicitly spare core
-can have a null endpoint. Two real endpoints remain connected even for a spare;
-one real endpoint still occupies its terminal. An omitted core is unassigned,
-never implicitly spare. A core without usage is unspecified; a cable with no
-usage or locations uses canonical end order. Shield construction never implies a
-shield bond.
+`thermite cable CBL1 --json` lists every physical core. Cable `fromLocation`/`toLocation` name ends A/B. Conductor `endpoints`: two slots, A then B. `usage` is `in-use` or `spare`. Only explicit spares allow null endpoints. Two real endpoints stay connected for spares; a lone real endpoint still occupies its terminal. Omitted cores are unassigned, never spare. Cores without usage are unspecified; without usage or locations, cables use canonical end order. Shielding never implies a bond.
 
 ## Reports and change review
 
@@ -253,7 +246,7 @@ A packet can include `signal-loop-view-request/0.1` with
 "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter,
 authored cordset, continuous bulkhead contacts, optional feed-through terminals
 and the input channel. The opt-in `field-interfaces` library supplies proposed
-generic M12 profiles. See `thermite guide signal-loops` for limits and fixtures.
+generic M12 profiles. For series power, read `thermite guide signal-loops`.
 
 Both paths must be complete and unbranched, with every traversed cable core
 represented; extra cores must be explicitly spare and terminated at both ends.
@@ -349,6 +342,7 @@ use a larger sheet; never change topology to obtain a drawing.
 Library `circuitSymbols` maps real function keys to explicit closed-catalog marks,
 for example different marks for a device's main and auxiliary contacts. E206
 checks function existence, kind, terminal count and contact state.
+Read `thermite guide circuit-symbols` before selecting a disconnector profile.
 Follow `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
 infer a mark from a tag or part-number substring. Marks do not create continuity
 or bonds.

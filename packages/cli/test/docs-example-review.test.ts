@@ -76,6 +76,13 @@ async function topicFixture() {
   await writeFile(join(root, "docs/topics.json"), JSON.stringify(topics));
   for (const name of ["examples", "libraries", "node_modules"])
     await symlink(join(repositoryRoot, name), join(root, name), "junction");
+  const series = "packages/core-library/test/fixtures/series-loop";
+  await mkdir(join(root, "packages/core-library/test/fixtures"), {
+    recursive: true,
+  });
+  await cp(join(repositoryRoot, series), join(root, series), {
+    recursive: true,
+  });
   const harness = join(
     repositoryRoot,
     "packages/cli/test/project-guide/harness.ts",

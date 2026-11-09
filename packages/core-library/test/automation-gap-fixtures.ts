@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compileProject, lockProject } from "@thermite/compiler";
 
@@ -122,4 +122,29 @@ export async function writeGapProject(root: string, kind: Gap) {
   const compiled = await compileProject(root);
   if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
   return compiled;
+}
+
+/** A separate powered copy; never changes the original unpowered RM3 inventory. */
+export async function writeSeriesProject(root: string) {
+  const fixture = new URL("./fixtures/series-loop/", import.meta.url);
+  await mkdir(root, { recursive: true });
+  for (const file of [
+    "system.json",
+    "source.json",
+    "rm2.request.json",
+    "rm3.request.json",
+  ])
+    await cp(new URL(file, fixture), join(root, file));
+  const lock = await lockProject(root);
+  if (!lock.ok) throw Error(JSON.stringify(lock.diagnostics));
+  const compiled = await compileProject(root);
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  return {
+    ...compiled,
+    requests: await Promise.all(
+      ["rm2", "rm3"].map(async (name) =>
+        JSON.parse(await readFile(join(root, `${name}.request.json`), "utf8")),
+      ),
+    ),
+  };
 }
