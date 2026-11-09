@@ -49,6 +49,15 @@ export function sourcePixelStats(cropBytes, sourceBytes, headerPixels = 0) {
   return { pixels, changed, maximum, absoluteError: sum };
 }
 
+export function pixelRefusal({ pixels, changed, maximum, absoluteError }) {
+  if (maximum > SOURCE_TOLERANCE.channel)
+    return "Crop/source pixel delta exceeds antialiasing tolerance";
+  if (changed / pixels > SOURCE_TOLERANCE.fraction)
+    return "Crop/source differing pixel fraction exceeds tolerance";
+  if (absoluteError / pixels > SOURCE_TOLERANCE.mean)
+    return "Crop/source mean pixel error exceeds tolerance";
+  return null;
+}
 export function compareSourcePixels(cropBytes, sourceBytes, headerPixels = 0) {
   const {
     pixels,

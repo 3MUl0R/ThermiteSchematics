@@ -1,3 +1,5 @@
+import { writeVerification } from "./verification-io.mjs";
+import { verificationFixtures } from "./crop-source-fixture.mjs";
 import {
   withSourceHashFixtures,
   sourceVerificationFixture,
@@ -505,6 +507,10 @@ async function ioFixture() {
   c.decisions[0].entries[2].sourceVerification = sourceVerificationFixture();
   c.cropHashes = new Map([[crop.path, crop.sha256]]);
   await writeFile(join(root, crop.path), png);
+  await writeVerification(
+    root,
+    verificationFixtures(new Map([[crop.path, png]])),
+  );
   const target = join(root, "evals/draw/expectations.mjs");
   await writeFile(target, serializeRegistry(c.registry));
   c.registryPath = target;
@@ -1582,6 +1588,39 @@ it("production preview refuses an otherwise valid source fact for the wrong shee
         specs,
       }),
     ).rejects.toThrow(/medium\/physical sheet/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+it("production preview recomputes passing attempt statistics from retained references", async () => {
+  const { root, c, target } = await ioFixture();
+  try {
+    refreshSources(c);
+    c.decisions[0].entries.find(
+      (e) => e.crop,
+    ).sourceVerification.attempts[0].stats = {
+      pixels: 360,
+      changed: 1,
+      maximum: 1,
+      absoluteError: 1,
+    };
+    const report = join(root, "report.json"),
+      decision = join(root, "decisions.json"),
+      baseline = join(root, "baseline.json");
+    await writeFile(report, json(c.report));
+    await writeFile(decision, json(c.decisions[0]));
+    await writeFile(baseline, json(c.baselines.values().next().value));
+    await expect(
+      loadRepinInputs({
+        root,
+        reportPath: report,
+        decisionPaths: [decision],
+        baselinePaths: [baseline],
+        registryPath: target,
+        registry: c.registry,
+        specs,
+      }),
+    ).rejects.toThrow(/statistics differ/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -1,3 +1,4 @@
+import { verificationFixtures } from "./crop-source-fixture.mjs";
 import { pngFixture } from "./png-fixture.mjs";
 import { it, expect } from "vitest";
 import { gunzipSync } from "node:zlib";
@@ -17,6 +18,11 @@ function args() {
     signed: c.files.get("decisions.json"),
     receipt: c.files.get("receipt.json.gz"),
     cropIndex: c.files.get("crop-index.json"),
+    verification: verificationFixtures(
+      new Map([
+        [c.signed.entries[0].crop.path, c.files.get("crops/fixture.png")],
+      ]),
+    ),
     crops: new Map([
       [c.signed.entries[0].crop.path, c.files.get("crops/fixture.png")],
     ]),

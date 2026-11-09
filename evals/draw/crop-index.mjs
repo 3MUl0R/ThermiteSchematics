@@ -139,7 +139,7 @@ export function instanceCropRow(plan, path, bytes, box, source) {
     instanceBbox: canonical(t.bbox),
     text: t.facts.text,
     sourceBbox: canonical(box),
-    capture: plan.pipelineCrop ? "pipeline" : "instance",
+    capture: "fresh-source",
     sourceRender: {
       medium,
       [medium]: plan.sourceRef?.path ?? sourcePath(t),

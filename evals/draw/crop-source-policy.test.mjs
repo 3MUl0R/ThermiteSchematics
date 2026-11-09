@@ -71,7 +71,11 @@ function draft() {
       format: "thermite-draw-decisions/1.0",
       entries: [{ reviewed: false, crop: { path, sha256 } }],
     },
-    index: { crops: [{ path, sha256, ...sourceGeometryFixture() }] },
+    index: {
+      crops: [
+        { path, sha256, ...sourceGeometryFixture(), capture: "fresh-source" },
+      ],
+    },
     crops: new Map([[path, bytes]]),
   };
 }
@@ -109,4 +113,17 @@ it("the binder refuses crop-less facts at its own call site", () => {
     drawingSha256: hash("unused"),
   });
   expect(() => bindDrawingDraft(c.file, c.index, c.crops)).toThrow(/Crop-less/);
+});
+
+it.each([
+  undefined,
+  "pipeline",
+  "fresh-source ",
+  { implementation: "fresh-source" },
+])("bind requires the exact fresh-source capture label: %j", (capture) => {
+  const c = draft();
+  c.index.crops[0].capture = capture;
+  expect(() => bindDrawingDraft(c.file, c.index, c.crops)).toThrow(
+    /capture: "fresh-source"/,
+  );
 });

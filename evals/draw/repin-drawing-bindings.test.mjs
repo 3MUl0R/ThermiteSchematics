@@ -2,6 +2,7 @@ import { cropHeader } from "./crop-report.mjs";
 import {
   sourceGeometryFixture,
   sourceVerificationFixture,
+  verificationFixtures,
 } from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import {
@@ -34,7 +35,12 @@ function fixture({ notMove = false } = {}) {
   const crops = new Map(
     [0, 1, 2].map((n) => [
       `evals/out/draw-samples/binding/${n}.png`,
-      pngFixture({ stamped: true, header: n + 1, seed: n === 2 ? 9 : 1 }),
+      pngFixture({
+        stamped: true,
+        width: 760,
+        header: n + 1,
+        seed: n === 2 ? 9 : 1,
+      }),
     ]),
   );
   const index = {
@@ -43,6 +49,7 @@ function fixture({ notMove = false } = {}) {
       sha256: hash(b),
       headerPixels: 86,
       ...sourceGeometryFixture(),
+      capture: "fresh-source",
     })),
   };
   const file = {
@@ -79,7 +86,10 @@ function fixture({ notMove = false } = {}) {
       x.crops.map((entry) => ({ entry })),
     ),
   ])
-    entry.sourceVerification = sourceVerificationFixture();
+    entry.sourceVerification = sourceVerificationFixture(
+      crops.get(entry.crop?.path ?? entry.path),
+      entry.crop?.headerPixels ?? entry.headerPixels ?? 0,
+    );
   return { file, index, crops, bound };
 }
 function reviewed(c = fixture()) {
@@ -97,6 +107,7 @@ function reviewed(c = fixture()) {
     checkerSha256: signed.checkerSha256,
     registryBeforeSha256: signed.registrySha256,
     registryAfterSha256: hash("after"),
+    reviewerJudged: { notMove: signed.notMove ?? [] },
     decisions: signed.entries.map((e) => ({
       ...e,
       reviewerJudged: {
@@ -115,6 +126,7 @@ function reviewed(c = fixture()) {
     signed: Buffer.from(json(signed)),
     receipt: Buffer.from(json(receipt)),
     cropIndex: Buffer.from(json(c.index)),
+    verification: verificationFixtures(c.crops, c.index.crops),
     crops: c.crops,
   };
   return { ...c, signed, receipt, args, result: recordFor(args) };
@@ -182,7 +194,11 @@ it.each(["duplicate", "missing", "extra", "extra buffer", "missing buffer"])(
     if (shape === "duplicate") c.index.crops.push(c.index.crops[0]);
     if (shape === "missing") c.index.crops.pop();
     if (shape === "extra")
-      c.index.crops.push({ path: "extra", sha256: hash("extra") });
+      c.index.crops.push({
+        path: "extra",
+        sha256: hash("extra"),
+        capture: "fresh-source",
+      });
     if (shape === "extra buffer") c.crops.set("extra", Buffer.from("extra"));
     if (shape === "missing buffer") c.crops.delete([...c.crops.keys()][0]);
     expect(() => bindDrawingDraft(c.file, c.index, c.crops)).toThrow(
@@ -333,6 +349,7 @@ it("checkSignedDrawings accepts the facts computed from the actual crops", () =>
     }));
   expect(() => checkSignedDrawings(c.bound, rows)).not.toThrow();
 });
+// These real-CLI PNG hash comparisons require the project's Bun runner and its zlib output.
 it.each([0, 86])(
   "real CLI with mock source raster: draft → bind pixels → mock independent sign-off → preview → archive, header=%s",
   async (header) => {
@@ -343,7 +360,10 @@ it.each([0, 86])(
         ),
         draft = draftDecisions(inventory, { pr: "#7" }),
         entry = draft.entries.find((e) => e.crop),
-        png = pngFixture({ stamped: header === 86 }),
+        png = pngFixture({
+          stamped: header === 86,
+          width: header === 86 ? 760 : 4,
+        }),
         path = "evals/out/draw-samples/bind/crop.png",
         t = inventory.current.find((t) => entry.instances.includes(t.token)),
         row = {
@@ -364,6 +384,7 @@ it.each([0, 86])(
           sha256: hash(png),
           headerPixels: header,
           ...sourceGeometryFixture(),
+          capture: "fresh-source",
         };
       expect(entry.drawingSha256).toBe("");
       entry.crop = { path, sha256: row.sha256 };
@@ -429,7 +450,8 @@ it.each([0, 86])(
       expect(await readFile(input, "utf8")).toBe(json(draft));
       const existing = run(output);
       expect(existing.status).toBe(1);
-      expect(existing.stderr).toContain("EEXIST");
+      expect(existing.stderr).toContain("Bind audit already exists");
+      expect(await readFile(output, "utf8")).toBe(json(bound));
       const outside = run(join(c.root, "outside.json"));
       expect(outside.status).toBe(1);
       expect(outside.stderr).toContain("under");
@@ -488,6 +510,7 @@ it.each([0, 86])(
         receipt: Buffer.from(preview.stdout),
         cropIndex: Buffer.from(json({ crops: [row] })),
         crops: new Map([[path, png]]),
+        verification: verificationFixtures(new Map([[path, png]]), [row]),
       });
       expect(verifyRecord(archived.record, archived.files).drawingGroups).toBe(
         1,

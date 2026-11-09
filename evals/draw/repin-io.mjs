@@ -5,6 +5,7 @@ import { checkReportedSources } from "./crop-report.mjs";
 import { predatesSourceVerification } from "./crop-source-policy.mjs";
 import { checkSourceReferences } from "./crop-source-policy.mjs";
 import assert from "node:assert/strict";
+import { readVerification, verifyDrawingAttempts } from "./verification-io.mjs";
 import {
   readFile,
   writeFile,
@@ -141,6 +142,12 @@ async function loadCrops(root, file, cropHashes, reports) {
     }
   }
   await verifyStampHeaders({ crops: headerRows }, cropBytes);
+  if (!predatesSourceVerification(file.value, file.sha256))
+    verifyDrawingAttempts(
+      file.value,
+      cropBytes,
+      await readVerification(root, file.value),
+    );
 }
 export async function loadRepinInputs({
   root,

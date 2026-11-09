@@ -32,7 +32,7 @@ export async function cliFixture({ survivor = false } = {}) {
   // Browser-free protocol test double. Real browser acceptance runs separately.
   await writeFile(
     join(kit, "crop-source.mjs"),
-    `import {verificationFact} from "./crop-report.mjs";export async function verifyCropSources(root,index){return new Map(index.crops.map(c=>[c.path,verificationFact(c,c.sourceRender[c.scope.medium+"Sha256"])]));}`,
+    `import {verificationFact} from "./crop-report.mjs";import {sourceVerificationFixture,verificationFixtures} from "./crop-source-fixture.mjs";export async function verifyCropSources(root,index,crops){const p=new Map(index.crops.map(c=>[c.path,{...sourceVerificationFixture(crops.get(c.path),c.headerPixels??0),...verificationFact(c,c.sourceRender[c.scope.medium+"Sha256"])}]));p.references=verificationFixtures(crops,index.crops);return p;}`,
   );
   await writeFile(
     join(kit, "crop-stamp-check.mjs"),

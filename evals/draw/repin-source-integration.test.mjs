@@ -87,6 +87,7 @@ it("real bind CLI refuses missing Chromium and creates no apparently verified ou
       path,
       sha256: hash(png),
       ...sourceGeometryFixture(),
+      capture: "fresh-source",
       scope: t.scope,
       markerId: t.markerId,
       token: t.token,
@@ -117,6 +118,8 @@ it("real bind CLI refuses missing Chromium and creates no apparently verified ou
         ],
       }),
     );
+    await mkdir(join(dir, t.scope.case));
+    await writeFile(join(dir, row.sourceRender.svg), "source");
     const output = join(dir, "output.json");
     const r = spawnSync(
       "bun",

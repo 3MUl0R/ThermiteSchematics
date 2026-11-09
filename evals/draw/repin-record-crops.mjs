@@ -4,6 +4,11 @@ import { hash, json } from "./support.mjs";
 import { citedCrops } from "./repin-record-crosscheck.mjs";
 import { checkSignedDrawings } from "./repin-drawing-bindings.mjs";
 import { drawingHash } from "./png-ink.mjs";
+import { verifyRecordedAttempts } from "./repin-record-verification.mjs";
+import {
+  predatesSourceVerification,
+  checkIndexCapture,
+} from "./crop-source-policy.mjs";
 export function groupCrops(rows, crops, legacy = false) {
   assert(
     crops instanceof Map && crops.size === rows.length,
@@ -33,6 +38,8 @@ export function groupCrops(rows, crops, legacy = false) {
   return { rows: grouped, files, pathMap, groups: files.size };
 }
 export function verifyCrops(record, files, signed, index) {
+  if (!predatesSourceVerification(signed, record.signedDecisionsSha256))
+    checkIndexCapture(index.crops);
   const seen = new Map(),
     retained = new Set(),
     ink = new Map();
@@ -99,6 +106,9 @@ export function verifyCrops(record, files, signed, index) {
     record.receipt,
     record.cropIndex,
     ...retained,
+    ...(predatesSourceVerification(signed, record.signedDecisionsSha256)
+      ? []
+      : verifyRecordedAttempts(record, files, signed)),
   ]);
   assert(
     Object.keys(record.files).every((p) => allowed.has(p)),

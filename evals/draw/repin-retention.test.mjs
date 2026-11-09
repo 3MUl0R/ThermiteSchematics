@@ -1,4 +1,7 @@
-import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
+import {
+  sourceVerificationFixture,
+  verificationFixtures,
+} from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,19 +23,23 @@ function grouped() {
   const crops = new Map(
     [1, 2].map((n) => [
       `evals/out/draw-samples/header-${n}.png`,
-      pngFixture({ header: n, stamped: true }),
+      pngFixture({ width: 760, header: n, stamped: true }),
     ]),
   );
   const rows = [...crops].map(([path, b]) => ({
     path,
     sha256: hash(b),
+    capture: "fresh-source",
     headerPixels: 86,
   }));
   s.entries = rows.map((crop) => ({
     ...s.entries[0],
     crop,
     drawingSha256: drawingHash(crops.get(crop.path), crop.headerPixels),
-    sourceVerification: sourceVerificationFixture(),
+    sourceVerification: sourceVerificationFixture(
+      crops.get(crop.path),
+      crop.headerPixels ?? 0,
+    ),
   }));
   r.decisions = s.entries.map((e) => ({
     ...e,
@@ -52,6 +59,7 @@ function grouped() {
     receipt: Buffer.from(json(r)),
     cropIndex: Buffer.from(json({ crops: rows })),
     crops,
+    verification: verificationFixtures(crops, rows),
   };
   return { args, result: recordFor(args) };
 }
@@ -110,14 +118,18 @@ it("does not merge distinct drawing ink", () => {
   const { args } = grouped(),
     i = JSON.parse(args.cropIndex),
     [path] = [...args.crops.keys()].slice(1);
-  const b = pngFixture({ seed: 9, stamped: true });
+  const b = pngFixture({ seed: 9, stamped: true, width: 760 });
   args.crops.set(path, b);
   i.crops[1].sha256 = hash(b);
   args.cropIndex = Buffer.from(json(i));
   const s = JSON.parse(args.signed);
   s.entries[1].crop.sha256 = hash(b);
   s.entries[1].drawingSha256 = drawingHash(b, 86);
+  s.entries[1].sourceVerification = sourceVerificationFixture(b, 86);
+  args.verification = verificationFixtures(args.crops, i.crops);
   const receipt = JSON.parse(args.receipt);
+  receipt.decisions[1].reviewerJudged.sourceVerification =
+    s.entries[1].sourceVerification;
   receipt.decisions[1].reviewerJudged.drawingSha256 =
     s.entries[1].drawingSha256;
   args.receipt = Buffer.from(json(receipt));
@@ -176,6 +188,11 @@ it.each([false, true])(
     c.files.set("receipt.json.gz", z);
     c.record.receiptSha256 = hash(b);
     c.record.files["receipt.json.gz"] = hash(z);
+    for (const p of c.files.keys())
+      if (p.startsWith("verification/")) {
+        c.files.delete(p);
+        delete c.record.files[p];
+      }
     c.files.delete("crops/fixture.png");
     delete c.record.files["crops/fixture.png"];
     c.record.pathMap = {};

@@ -52,7 +52,7 @@ it("pins metadata even when an attacker rebinds the signed file and receipt", ()
     /Pinned record.json hash changed/,
   );
 });
-it("the pin's explicit size exception reaches record verification", () => {
+it("the pin cannot increase the v2 record cap", () => {
   const c = fixture(),
     b = Buffer.alloc(3000000);
   recordPadding(c.r, b.length);
@@ -60,7 +60,9 @@ it("the pin's explicit size exception reaches record verification", () => {
   c.pin.recordSha256 = hash(c.r.files.get("record.json"));
   c.pin.maxBytes = 4000000;
   c.pin.reason = "Synthetic reviewed exception";
-  expect(verifyRecordChain(c.pins, c.records, hash("after"))).toEqual(["7"]);
+  expect(() => verifyRecordChain(c.pins, c.records, hash("after"))).toThrow(
+    /size cap/,
+  );
 });
 it("keeps .DS_Store failing closed", () => {
   const c = fixture();
@@ -101,11 +103,11 @@ it("refuses unlisted files beside the pin table", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
-it("directory reader forwards explicit per-PR size exceptions", async () => {
+it("directory reader applies the v2 cap despite a larger pin", async () => {
   const root = await mkdtemp(join(tmpdir(), "repin-chain-budget-"));
   try {
     const c = fixture(),
-      b = Buffer.alloc(3000000);
+      b = Buffer.alloc(2000000);
     recordPadding(c.r, b.length);
     c.r.files.set("record.json", Buffer.from(json(c.r.record)));
     c.pin.recordSha256 = hash(c.r.files.get("record.json"));
@@ -120,7 +122,14 @@ it("directory reader forwards explicit per-PR size exceptions", async () => {
     const { rename } = await import("node:fs/promises");
     await rename(join(root, "7"), join(recordsDir, "7"));
     await rename(join(root, "pins.json"), join(recordsDir, "pins.json"));
-    expect((await readRecordChain(recordsDir, registry)).records.size).toBe(1);
+    const { appendFile } = await import("node:fs/promises");
+    await appendFile(
+      join(recordsDir, "7/countersignatures.json"),
+      Buffer.alloc(1000000, 32),
+    );
+    await expect(readRecordChain(recordsDir, registry)).rejects.toThrow(
+      /size cap/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -81,55 +81,48 @@ if (!v.decisions) {
   await within(samples, samplesRoot, { existing: true });
   const { stampInstanceDrawingCrop } =
     await import("../../scripts/stamp-drawing-crop.mjs");
-  let browser, page;
+  let browser;
   try {
     for (const plan of plans) {
-      const medium = plan.t.scope.medium,
-        sourceRoot = roots.get(plan.reportSha256),
-        sourceRef = plan.sourceRef,
-        source = await readFile(
-          await within(join(sourceRoot, sourceRef.path), sourceRoot, {
-            existing: true,
-          }),
-        );
+      const sourceRoot = roots.get(plan.reportSha256),
+        sourceRef = plan.sourceRef;
+      const source = await readFile(
+        await within(join(sourceRoot, sourceRef.path), sourceRoot, {
+          existing: true,
+        }),
+      );
       assertSourceBytes(source, sourceRef);
-      plan.sourceRef = sourceRef;
-      let box = plan.sourceBbox,
-        raw;
-      if (plan.pipelineCrop)
-        raw = await readFile(
-          await within(join(sourceRoot, plan.pipelineCrop), sourceRoot, {
-            existing: true,
-          }),
-        );
-      else {
-        const { launch, drawingContextOptions, cropBox } =
-          await import("./browser.mjs");
-        const { renderSourceCrop } = await import("./crop-source.mjs");
-        if (!browser) {
-          browser = await launch();
-          const c = await browser.newContext(drawingContextOptions);
-          page = await c.newPage();
-          await page.emulateMedia({ media: "print" });
-        }
-        // The target is measured; a crop is derived from that instance, never from the row's first finding.
-        const text = sourceRef.path.endsWith(".gz")
-          ? (await import("node:zlib")).gunzipSync(source).toString()
-          : source.toString();
+      const { launch, cropBox } = await import("./browser.mjs");
+      const { readCropSource, captureSourceCrop } =
+        await import("./crop-source.mjs");
+      const medium = plan.t.scope.medium;
+      const row = {
+        scope: plan.t.scope,
+        physicalSheet: plan.t.physicalSheet,
+        sourceRender: {
+          medium,
+          [medium]: sourceRef.path,
+          [medium + "Sha256"]: sourceRef.sha256,
+        },
+      };
+      const { text } = await readCropSource(sourceRoot, row);
+      let box = plan.sourceBbox;
+      if (!box) {
         const { parseHTML } = await import("linkedom");
         const doc = parseHTML(text).document;
         const svg =
           medium === "html"
             ? doc.querySelector(`#sheet-${plan.t.physicalSheet}>svg`)
             : doc.querySelector("svg");
+        assert(svg, "Source physical sheet is missing");
         const vb = svg.getAttribute("viewBox").split(/\s+/).map(Number);
         box = canonical(cropBox(plan.t.bbox, vb[2], vb[3]));
-        raw = await renderSourceCrop(page, text, {
-          scope: plan.t.scope,
-          physicalSheet: plan.t.physicalSheet,
-          sourceBbox: box,
-        });
       }
+      if (!browser) browser = await launch();
+      const raw = await captureSourceCrop(browser, text, {
+        ...row,
+        sourceBbox: box,
+      });
       const bytes = await stampInstanceDrawingCrop(
         raw,
         plan.headerLines,

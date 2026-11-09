@@ -9,6 +9,12 @@ import { deterministicReceipt, verifyRecord } from "./repin-record.mjs";
 import { TEXT_LIMIT, legacyRecord } from "./repin-record-policy.mjs";
 import { checkSignedDrawings } from "./repin-drawing-bindings.mjs";
 import { groupCrops } from "./repin-record-crops.mjs";
+import { verificationFiles } from "./repin-record-verification.mjs";
+import {
+  checkSourceReferences,
+  predatesSourceVerification,
+} from "./crop-source-policy.mjs";
+import { drawingReferences } from "./repin-drawing-bindings.mjs";
 function input(bytes) {
   assert(Buffer.isBuffer(bytes), "Record inputs must be byte buffers");
   const zipped = bytes[0] === 31 && bytes[1] === 139;
@@ -40,6 +46,7 @@ export function recordFor({
   receipt,
   cropIndex,
   crops,
+  verification = new Map(),
   signedName = "decisions.signed",
   receiptName = "receipt.json.gz",
   indexName = "crop-index.json",
@@ -52,6 +59,15 @@ export function recordFor({
   const grouped = groupCrops(strictJsonBytes(i.raw).crops, crops, legacy);
   if (!legacy)
     checkSignedDrawings(strictJsonBytes(s.raw), grouped.rows, "Writer signed");
+  const decodedSigned = strictJsonBytes(s.raw);
+  checkSourceReferences(
+    decodedSigned,
+    drawingReferences(decodedSigned),
+    hash(s.raw),
+  );
+  const references = predatesSourceVerification(decodedSigned, hash(s.raw))
+    ? new Map()
+    : verificationFiles(decodedSigned, verification);
   const indexData = legacy
     ? i
     : {
@@ -71,6 +87,7 @@ export function recordFor({
       [receiptName, receiptBytes],
       [index.path, index.bytes],
       ...grouped.files,
+      ...references,
     ]),
     pathMap = grouped.pathMap;
   const decoded = strictJsonBytes(s.raw),

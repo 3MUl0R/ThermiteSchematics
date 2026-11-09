@@ -80,6 +80,7 @@ export function mixedCropFixture({ reverse = false, changedBox = true } = {}) {
     return {
       crops: [
         {
+          capture: "fresh-source",
           path: crop.path,
           sha256: crop.sha256,
           reportSha256: sha,

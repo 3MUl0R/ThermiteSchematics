@@ -4,11 +4,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
-import { renderSourceCrop } from "./crop-source.mjs";
-import {
-  compareSourcePixels,
-  sourcePixelStats,
-} from "./crop-source-pixels.mjs";
+import { captureSourceCrop } from "./crop-source.mjs";
+import { captureAttempts } from "./crop-attempts.mjs";
+import { pinnedSource, assertSourceBytes } from "./source-hashes.mjs";
 import { pipelineCrops } from "./crop-index.mjs";
 import { json, hash } from "./support.mjs";
 const { values: v } = parseArgs({
@@ -19,7 +17,8 @@ assert(
   "Use --report <summary.json> --output <swaps.json>",
 );
 const raw = await readFile(resolve(v.report)),
-  root = dirname(resolve(v.report));
+  root = dirname(resolve(v.report)),
+  report = JSON.parse(raw);
 const rows = pipelineCrops(JSON.parse(raw), hash(raw))
   .filter((r) => r.scope.medium === "svg")
   .sort(
@@ -40,6 +39,7 @@ try {
       ),
       "utf8",
     );
+    assertSourceBytes(Buffer.from(svg), pinnedSource(report, row));
     await openSheet(page, svg);
     const nodes = await page.evaluate((box) => {
       const root = document.querySelector("body>svg"),
@@ -125,16 +125,28 @@ try {
           },
           { i: node.i, char },
         );
-        return renderSourceCrop(page, svg, c.row);
+        return svg;
       }
       for (const [a, b] of pairs) {
-        const A = await variant(a),
+        const A = await captureSourceCrop(browser, await variant(a), c.row),
           B = await variant(b),
-          stats = sourcePixelStats(A, B);
+          attempts = [],
+          references = new Map();
         let refused = false;
         try {
-          compareSourcePixels(A, B);
-        } catch {
+          await captureAttempts(
+            A,
+            0,
+            () => captureSourceCrop(browser, B, c.row),
+            references,
+            attempts,
+          );
+        } catch (error) {
+          if (
+            attempts.length !== 3 ||
+            attempts.some((x) => x.verdict !== "refused")
+          )
+            throw error;
           refused = true;
         }
         results.push({
@@ -145,7 +157,8 @@ try {
           text: node.text,
           swap: `${a}→${b}`,
           refused,
-          ...stats,
+          frozenSha256: hash(A),
+          attempts,
         });
       }
     }
@@ -160,10 +173,17 @@ const accepted = results.filter((r) => !r.refused);
 console.log(
   json({
     pairs: results.length,
+    comparisons: results.reduce((n, r) => n + r.attempts.length, 0),
     accepted: accepted.length,
-    minMaximum: Math.min(...results.map((r) => r.maximum)),
+    minMaximum: Math.min(
+      ...results.flatMap((r) => r.attempts.map((a) => a.stats.maximum)),
+    ),
     minFontMm: Math.min(...results.map((r) => r.fontMm)),
   }),
+);
+assert(
+  results.length === 90 && results.every((r) => r.attempts.length === 3),
+  "Expected 90 frozen wrong crops and 270 comparisons",
 );
 assert(
   !accepted.length,

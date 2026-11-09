@@ -6,6 +6,7 @@ import { canonical, json } from "./support.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import { renameTextChanged } from "./repin-mappings.mjs";
+import { SOURCE_FORMAT, checkIndexCapture } from "./crop-source-policy.mjs";
 const same = (a, b, message) => assert(json(a) === json(b), message);
 const ascii = (s) =>
   String(s).replace(
@@ -108,6 +109,7 @@ export function checkIndexedEntries(
     reports.has(file.summarySha256),
     "Bind requires the exact --report named by summarySha256",
   );
+  checkIndexCapture(index.crops);
   const inventories = reportInstances(reports),
     eligible = renameCropEligibility(file, inventories),
     rows = new Map(index.crops.map((c) => [c.path, c]));
@@ -203,7 +205,7 @@ export function checkReportedSources(file, reports) {
 
 export function verificationFact(row, sourceSha256) {
   return {
-    format: "thermite-draw-source-crop/1.0",
+    format: SOURCE_FORMAT,
     sourceSha256,
     medium: row.scope.medium,
     sheet: row.physicalSheet,

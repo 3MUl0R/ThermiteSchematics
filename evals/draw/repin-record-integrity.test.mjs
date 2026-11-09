@@ -1,3 +1,4 @@
+import { verificationFixtures } from "./crop-source-fixture.mjs";
 import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { pngFixture } from "./png-fixture.mjs";
 import { it, expect } from "vitest";
@@ -249,8 +250,11 @@ function notMove() {
   const c = recordFixture(),
     cs = [1, 2].map((n) => ({
       path: `evals/out/draw-samples/exception${n}.png`,
+      capture: "fresh-source",
       sha256: hash(pngFixture({ seed: n + 3 })),
-      sourceVerification: sourceVerificationFixture(),
+      sourceVerification: sourceVerificationFixture(
+        pngFixture({ seed: n + 3 }),
+      ),
     }));
   signed(
     c,
@@ -259,6 +263,14 @@ function notMove() {
         { from: "a", to: "b", reason: "Synthetic distinction", crops: cs },
       ]),
   );
+  receipt(c, (r) => (r.reviewerJudged = { notMove: c.signed.notMove }));
+  for (const [sha, bytes] of verificationFixtures(
+    new Map(cs.map((x, n) => [x.path, pngFixture({ seed: n + 4 })])),
+  )) {
+    const p = `verification/${sha}.png`;
+    c.files.set(p, bytes);
+    c.record.files[p] = sha;
+  }
   return { c, cs };
 }
 it("requires notMove crops in the retained index", () => {
@@ -279,6 +291,7 @@ it("retains all notMove crops as well as entry crops", () => {
 it("refuses an orphan added to index, map and manifest", () => {
   const c = recordFixture(),
     crop = {
+      capture: "fresh-source",
       path: "evals/out/draw-samples/orphan.png",
       sha256: hash(pngFixture({ seed: 8 })),
     };
@@ -302,6 +315,7 @@ it("requires path map values to be one-to-one", () => {
   const c = recordFixture(),
     crop = {
       ...c.signed.entries[0].crop,
+      capture: "fresh-source",
       path: "evals/out/draw-samples/same.png",
     };
   signed(c, (s) => (s.entries[0].crop = crop));
@@ -321,6 +335,7 @@ it("requires path map values to be one-to-one", () => {
         },
       ]),
   );
+  receipt(c, (r) => (r.reviewerJudged = { notMove: c.signed.notMove }));
   index(c, (i) => i.crops.push(crop));
   c.record.pathMap[crop.path] = "crops/fixture.png";
   expect(() => verifyRecord(c.record, c.files)).toThrow(/one-to-one/);
@@ -333,6 +348,11 @@ function archived() {
     signed: c.files.get("decisions.json"),
     receipt: c.files.get("receipt.json.gz"),
     cropIndex: c.files.get("crop-index.json"),
+    verification: verificationFixtures(
+      new Map([
+        [c.signed.entries[0].crop.path, c.files.get("crops/fixture.png")],
+      ]),
+    ),
     crops: new Map([
       [c.signed.entries[0].crop.path, c.files.get("crops/fixture.png")],
     ]),
@@ -364,7 +384,7 @@ it("forces sidecar mode for compressed signed inputs", () => {
     /Gzipped signed decisions require sidecar/,
   );
 });
-it("enforces the default cap and an explicit per-PR size exception", () => {
+it("enforces the v2 cap even with an explicit per-PR size exception", () => {
   const c = recordFixture();
   side(c);
   c.files.set(
@@ -375,11 +395,11 @@ it("enforces the default cap and an explicit per-PR size exception", () => {
     ]),
   );
   expect(() => verifyRecord(c.record, c.files)).toThrow(/size cap/);
-  expect(
+  expect(() =>
     verifyRecord(c.record, c.files, {
       pin: { pr: 7, maxBytes: 4000000, reason: "Synthetic reviewed exception" },
-    }).entries,
-  ).toBe(1);
+    }),
+  ).toThrow(/size cap/);
   expect(() =>
     verifyRecord(c.record, c.files, { pin: { pr: 7, maxBytes: 4000000 } }),
   ).toThrow(/explicit larger cap and reason/);

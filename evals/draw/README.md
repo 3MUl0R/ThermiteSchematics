@@ -395,8 +395,10 @@ review records the applicable kind and reviewer. New defects have empty crop met
 complete the cause/rationale/mappings/crops. Each crop-bearing draft entry starts
 with an empty root `drawingSha256`. Build the evidence and index with the tracked
 helper before independent review. It uses the report's exact instance tokens,
-boxes and text to stamp each crop. It reuses a pipeline crop only if that crop
-contains the cited instance; otherwise it captures the instance's own region.
+boxes and text to stamp each crop. It reuses a containing pipeline crop's report-pinned **geometry**, never its PNG
+pixels. Every unsigned crop is freshly rendered from pinned source through the
+same isolated capture path used for independent bind verification; otherwise
+its region is derived from the cited instance's own box.
 It writes no causes or approvals. Paths below are repository-relative:
 
 ```sh
@@ -467,7 +469,7 @@ unchanged.
 
 The cited instance must fit inside `sourceBbox` on every edge, allowing only
 0.001 mm report rounding. Non-finite coordinates and invalid extents are refused.
-Capture and verification use the same offline Chromium context, print media,
+Capture and verification use separate offline Chromium contexts, print media,
 SVG/HTML loading, fonts-ready barrier and screenshot operation, at 300 dpi.
 Page scripts and service workers are disabled; offline mode also blocks beacon,
 prefetch and WebSocket requests. Raster dimensions and alpha must match; only a
@@ -475,22 +477,85 @@ validated stamp may add white right padding. The comparison has no registration,
 translation, resizing or user-supplied tolerance. All per-crop refusals are listed
 before the bind exits; no bound file is written on failure.
 
-Across all 1,067 SVG/HTML pipeline crops, comparing each retained pipeline PNG
-with two independent fresh renders measured maxima of 60/255 RGB channel delta,
-2.698% changed drawing pixels and 0.487 total absolute RGB error per pixel.
-Fresh-render-versus-fresh-render maxima were 60,
-1.868% and 0.487. The fixed limits are **64/255**, **3%** and **1.0**, applied
-together: outward binary/integer-percent bounds and a whole-unit accumulated
-error ceiling. The actual pipeline-versus-fresh margins are only **4 channel
-levels, 0.302 percentage points (about 0.30) and 0.513 mean error (about 0.51)**.
-The margin is thin. Capture noise exhausting these unchanged limits causes a
-**false refusal** of a matching crop, never a false acceptance; binding remains
-fail-closed. This preserves a channel separation from the tested single-character
-changes in the current dark text colours (`#17212b` and `#18212b`). A light-grey
-character swap can stay below the channel limit and be diluted below the fraction
-and mean limits in a large crop. These limits are not a guarantee for lighter
-text palettes; such a palette needs fresh calibration and review. The full audit must show zero false refusals; a failed comparison needs
-new evidence, not a caller-supplied limit. No image alignment is attempted.
+### Fresh-source binding and retained attempts
+
+Bind writes `thermite-draw-source-crop/2.0`. In addition to report, token, source,
+text and geometry facts it records the capture implementation, Chromium version,
+platform, launch arguments, fixed limits, selected attempt and ordered attempts.
+Every attempt records its ordinal, previous-attempt hash, reference PNG SHA-256,
+integer pixel/changed-pixel counts, maximum channel delta, integer accumulated
+absolute RGB error, verdict and reason. Fractions are derived without rounding.
+The limits remain **64/255**, **3% changed pixels** and **1.0 total RGB error per
+pixel**, all required. There is no caller-set N, tolerance or bypass.
+
+The policy is **three attempts total**, stopping at the first pass. Only numeric
+pixel refusals retry. Each new reference capture gets a fresh isolated context;
+source, identity, geometry, header, alpha, dimensions and infrastructure failures
+refuse immediately. Identical capture inputs may reuse immutable reference bytes,
+but every cited crop is compared independently. Cache keys include source hash,
+medium, physical page, canonical region, capture version and drawing hash.
+
+New crop index rows must declare exactly `capture: "fresh-source"`. Bind, report
+binding and archive verification refuse missing or different values. The exact
+signed-hash exemptions preserve the immutable #61/#92 indexes.
+
+Binding refuses an existing `<output>.audit.json` before reading inputs or starting
+captures, naming the stale audit and the recovery choices. Use a fresh `--output`,
+or preserve then remove the audit only after checking that no signed evidence
+depends on it. Neither audits nor bound outputs are silently overwritten.
+
+Binding writes `<output>.audit.json`, including exhausted attempts or structural
+errors (with null stats if no comparison can be computed). Exhaustion writes no
+bound draft. Successful output keeps every attempt and stays unreviewed. Reference
+PNGs are stored by hash under `evals/out/draw-samples/verification/` and validated
+when preview loads them; an existing hash-named file must have the expected bytes.
+
+New records retain these PNGs in an explicit `verification/<sha256>.png` collection,
+deduplicating identical reference bytes. They bind the hashes through signed
+attestations and the original file manifest, recompute every comparison against
+retained drawing pixels, and check attempt order, first-pass stopping and receipt
+judgments, including `notMove`. References are not additional independently
+reviewed drawings. V2 records have a **3,000,000-byte cap including references**;
+a larger per-PR pin cannot override it. Offline verification rejects discrepancies
+between retained PNGs, declared hashes, statistics and receipt judgments, as well
+as v1 downgrades. After signing, the signed payload and pinned record hash bind
+the declared evidence and expose later changes. Exact historical signed-hash
+exemptions keep #61 and #92 byte-immutable; they are never retrospectively rebound.
+
+The signer trusts the binder's attempt history and reference images. Before
+signing, a binder can drop refused attempts and renumber the rest, or substitute a
+reference image and recompute matching statistics. Offline consistency checks
+cannot detect those changes. The attempt chain proves the recorded order, not
+where the images came from or whether the history is complete. Only re-running
+bind with Chromium confirms the reference's claim to come from the pinned source.
+
+A careful signer should independently re-run bind on the cited crops, or spot-check
+a selection and explicitly trust the binder for the remainder. Use a fresh
+`--output`. Inspect the cited drawing, literal report facts, recorded reference
+rasters and comparison stats before approving causes. A later verifier can
+recompute the comparisons without Chromium; that checks consistency, not source
+origin. The report remains the trust root:
+pixel binding does not authenticate a hand-edited report or establish engineering
+meaning. Capture noise can still exhaust the unchanged limits; failure requires
+new unsigned evidence, never looser limits. The calibration protects the tested
+dark text palette; lighter ink or different fonts need new sensitivity checks.
+
+The original full audit compared 1,067 retained pipeline PNGs with two fresh
+renders: maxima 60/255, 2.698% changed pixels and 0.487 mean error, leaving margins
+of 4 levels, 0.302 percentage points and 0.513 mean error. The fresh-evidence path
+removes that retained-pipeline comparison from new binds; it does not make PNGs
+bit-for-bit deterministic. `bind-audit.mjs` audits every retained pipeline region
+using fresh unsigned evidence and independent bounded verification, reporting
+pipeline-versus-fresh statistics separately. `crop-swaps.check.mjs` freezes each
+of 90 wrong-character crops, then tries three independent references (270
+comparisons). Both are opt-in browser checks with JSON evidence, not approvals:
+
+```sh
+bun evals/draw/bind-audit.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/fresh-bind-audit.json
+bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/frozen-swaps.json
+```
 
 The runner captures the canonical 0.001 mm box it serializes. Rounding a previously
 captured full-precision box can cross a raster boundary. Such historical evidence
@@ -510,13 +575,11 @@ Fractions retain full numeric precision, independently of report coordinate
 rounding. No captures or signed records are replaced.
 
 The repeat check compares **two fresh renders** using the same pixel metrics as
-bind. Bind instead compares a **retained C1 pipeline PNG with a fresh render**.
-That pairing includes a **fixed pipeline-versus-fresh component**: the earlier
-full-corpus audit measured up to 2.698% changed pixels, reproduced in both fresh
-passes against the same pipeline PNG. More fresh-versus-fresh repeats do not
-measure or remove that fixed component. Use `crop-audit.mjs` against the retained
-pipeline crops to measure the comparison bind actually makes. A repeat-only
-sample cannot establish a generous bind margin.
+v2 bind. Earlier binding compared a retained pipeline PNG with a fresh render;
+that pairing included a fixed component of up to 2.698% changed pixels, reproduced
+in both full-corpus passes. `crop-audit.mjs` still measures that historical pairing.
+`bind-audit.mjs` measures the new fresh-evidence path over all exported pipeline
+regions. A repeat-only sample cannot establish a corpus-wide bind margin.
 
 By default it samples every SVG/HTML pipeline crop from both init-starter flows
 and the rendered motor-starter left-to-right case (power, control and reports),
@@ -543,8 +606,8 @@ bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.jso
 Issue #137 measurements on darwin-arm64, macOS 26.3 and Chromium 145.0.7632.6
 used twenty captures per region across ten fresh launches. Each column below is
 the worst per-crop pairwise result, so maxima need not come from the same pair.
-These are fresh-versus-fresh measurements, not pipeline-versus-fresh binding
-measurements.
+These historical measurements compare fresh renders; the original bind still
+compared pipeline PNGs with fresh renders.
 
 | Sample / capture arguments                         | Varied crops |     Differing pixels | Channel delta /255 | Changed pixels | Pixels over 64/255 | Mean RGB error |
 | -------------------------------------------------- | -----------: | -------------------: | -----------------: | -------------: | -----------------: | -------------: |
@@ -563,9 +626,8 @@ the review's worst-row results: 60/255 in machine-demo left-to-right sheet 3 and
 top-to-bottom sheets 5 and 7, 58/255 in the A3 sweep sheet 1, and **171/9,156
 changed pixels (1.8676%)** in the letter sweep sheet 5. Forty-nine crops varied;
 zero repeat pairs exceeded the numeric limits and no pixels exceeded 64/255.
-That repeat channel margin is only four levels. The corpus-wide binding margins
-remain the thin pipeline-versus-fresh margins above; this run does not establish
-a generous bind margin.
+That repeat channel margin is only four levels. It does not establish a generous
+corpus-wide margin or guarantee that future captures will pass.
 
 The wider sample covers both `requests.signal` flows, the maintained high-side
 top-to-bottom series-loop SVG, and both physical pages of the complete DOL control
@@ -613,18 +675,17 @@ This probe measures compatibility, not the current records' bind risk.
 
 The deterministic candidate was rejected. The original default launch arguments,
 calibrated font/colour settings, bind limits and signed records are preserved.
-These measurements are **Part of #137**. The issue stays open for a separate
-design, such as bounded re-capture or removing the fixed pipeline-versus-fresh
-component; neither is implemented here.
+Those measurements informed #137. Fresh unsigned evidence with bounded verification
+now implements the design described above; software rasterization remains rejected.
 
 Passing `args: []` in `launch()` preserves the previous capture path:
 [Playwright's `args` option](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-args)
 adds arguments to its standard launch switches. The installed Playwright 1.64.1
 Chromium implementation (`Chromium._innerDefaultArgs`) defaults omitted `args`
 to `[]`, builds its default switches, then appends `...args`; neither launch
-sets `ignoreDefaultArgs`. Since the default launch, renderer
-and measurements are unchanged, this measurement/documentation change needs no
-additional full C1.
+sets `ignoreDefaultArgs`. The default launch, renderer and C1 measurement predicates
+remain unchanged. The new evidence checker bundle still needs a fresh strict C1
+for a re-pin target.
 
 For a full audit of actual pipeline PNGs (without replacing them), and the browser
 protocol acceptance with an isolated synthetic registry:
@@ -888,14 +949,14 @@ The dependency-free decoder supports the tool's eight-bit RGB/RGBA PNGs, filters
 checked. Palette, grayscale, other bit depths, transparency/color-profile chunks
 that require interpretation (including `gAMA`, `cHRM` and `eXIf`), and unsupported chunks are refused. It does not
 guess pixels for unsupported input. Unknown manifest files (not just PNGs),
-including `.DS_Store`, fail closed. Only signed text, receipt, index and retained
-PNGs belong in the original manifest. No entry schema has a generic `crops` field.
+including `.DS_Store`, fail closed. Only signed text, receipt, index, retained drawing PNGs and the referenced v2
+verification PNG collection belong in the original manifest. No entry schema has a generic `crops` field.
 
 Signed text or crop indexes **over 256 KiB** are stored gzipped, with their
 uncompressed hashes bound separately. A gzipped signed file always uses sidecar
 countersigns. The default record cap is **3,000,000 bytes**, including metadata and
-countersigns. A larger cap requires a per-PR pin row with `maxBytes` and a non-empty
-review reason. D1's byte-immutable record is grandfathered unchanged, including
+countersigns. Historical records retain their reviewed size policy; a v2 source-verification
+record cannot exceed 3,000,000 bytes through a larger per-PR pin. D1's byte-immutable record is grandfathered unchanged, including
 its uncompressed signed file. Raw signed JSON uses `.signed` to prevent formatter
 rewrites.
 
@@ -908,7 +969,9 @@ byte-exact D1 reproduction on other zlib builds without requiring recompression.
 
 #### Writing and pinning an applied record
 
-`recordFor()` and `writeRecord()` in `repin-record-write.mjs` build and validate an
+`readVerification()` from `verification-io.mjs` loads the hash-bound reference
+buffers for a newly bound signed file. Pass its returned map as `verification` to
+`recordFor()`. `recordFor()` and `writeRecord()` in `repin-record-write.mjs` build and validate an
 archive, refuse an existing destination and clean up failed new writes. After
 review/apply, supply the unchanged signed file, captured receipt, reviewed crop
 index and precisely its indexed buffers. Set `headerPixels: 86` on the index
@@ -920,15 +983,19 @@ number, pre-apply base and evidence paths:
 import { readFile } from "node:fs/promises";
 import { recordFor, writeRecord } from "./evals/draw/repin-record-write.mjs";
 import { hash } from "./evals/draw/support.mjs";
+import { readVerification } from "./evals/draw/verification-io.mjs";
 
 const pr = 123;
 const baseCommit = "<40-hex pre-apply commit>";
 const cropIndex = await readFile("evals/out/review/crop-index.json");
 const index = JSON.parse(cropIndex);
+const signed = await readFile("evals/out/review/decisions.signed");
+const verification = await readVerification(process.cwd(), JSON.parse(signed));
 const result = recordFor({
+  verification,
   pr,
   baseCommit,
-  signed: await readFile("evals/out/review/decisions.signed"),
+  signed,
   receipt: await readFile("evals/out/review/apply-receipt.json"),
   cropIndex,
   crops: new Map(
