@@ -1,4 +1,6 @@
 // Durable originals plus additive person countersigns; no live corpus or browser.
+import { checkSourceReferences } from "./crop-source-policy.mjs";
+import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -209,6 +211,11 @@ export function verifyRecord(record, files, { pin } = {}) {
       record.registryBeforeSha256 === record.registryAfterSha256,
     "Empty decisions cannot change the registry",
   );
+  const sourceVerification = checkSourceReferences(
+    signed,
+    drawingReferences(signed),
+    record.signedDecisionsSha256,
+  );
   crossCheckReceipt(signed, receipt);
   sidecar(record, files.get("countersignatures.json"), signed.entries);
   const drawingGroups = cropBindings(record, files, signed);
@@ -222,6 +229,7 @@ export function verifyRecord(record, files, { pin } = {}) {
     crops: Object.keys(record.pathMap).length,
     drawingGroups,
     countersignMode: record.countersignMode,
+    sourceVerification,
   };
 }
 export async function readRecord(directory, options) {

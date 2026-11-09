@@ -1,3 +1,4 @@
+import { captureSources, SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
 import { checkSvgFontBudget } from "./font-budget.mjs";
@@ -38,6 +39,7 @@ import {
   cropBox,
   screenshotCrop,
   measureSheet,
+  drawingContextOptions,
 } from "./browser.mjs";
 import {
   loadPdf,
@@ -366,10 +368,7 @@ try {
         packet.sheets.length,
         "PDF page count differs from SVG",
       );
-      context = await browser.newContext({
-        deviceScaleFactor: 300 / 96,
-        viewport: { width: 1800, height: 1800 },
-      });
+      context = await browser.newContext(drawingContextOptions);
       const page = await context.newPage();
       await page.emulateMedia({ media: "print" });
       const geometries = [],
@@ -413,6 +412,12 @@ try {
           svg: svgLocators(s.svg, ir, s.view, tables),
           html: svgLocators(htmlSvgs[s.number - 1], ir, s.view, tables),
         };
+        // Pin the call-site wiring independently of the chosen index argument.
+        assert.deepEqual(
+          locatorIndexes.html,
+          svgLocators(htmlSvgs[s.number - 1], ir, s.view, tables),
+          "HTML locator index must use the measured HTML SVG, not delivered SVG",
+        );
         assert.equal(
           htmlGeometry[s.number - 1].texts.filter((t) => t.painted !== false)
             .length,
@@ -426,9 +431,12 @@ try {
           await page
             .locator("body>svg")
             .screenshot({ path: pngPath, scale: "css" });
-        const mask = await page.addStyleTag({
-          content:
-            "svg :is(path,line,polyline,polygon,rect,circle,ellipse):not(defs *){visibility:hidden!important}",
+        const mask = await page.evaluateHandle(() => {
+          const style = document.createElement("style");
+          style.textContent =
+            "svg :is(path,line,polyline,polygon,rect,circle,ellipse):not(defs *){visibility:hidden!important}";
+          document.head.append(style);
+          return style;
         });
         const labelCanvas = await imageCanvas(
           await page.locator("body>svg").screenshot({ scale: "css" }),
@@ -537,7 +545,7 @@ try {
               "Sheet-level or entirely clipped/off-sheet finding; inspect SVG and geometry evidence";
             continue;
           }
-          const box = cropBox(finding.bbox, g.width, g.height),
+          const box = canonical(cropBox(finding.bbox, g.width, g.height)),
             crop = join(
               directory,
               `${prefix}-${row.dq}${row === htmlRow ? "-html" : row.medium === "pdf" ? "-pdf" : ""}.png`,
@@ -573,6 +581,7 @@ try {
             await writeFile(crop, canvas.toBuffer("image/png"));
           } else if (row === htmlRow) {
             await page.setContent(await readFile(htmlPath, "utf8"));
+            await page.evaluate(() => document.fonts.ready);
             await screenshotCrop(page, box, crop, `#sheet-${s.number}>svg`);
           } else await screenshotCrop(page, box, crop);
           row.evidence.crop = relativeEvidence(crop);
@@ -626,10 +635,12 @@ try {
       )) {
         const s = packet.sheets.find((s) => s.number === row.sheet);
         await openSheet(page, s.svg);
-        const box = cropBox(
-            row.evidence.findings[0].bbox,
-            packet.page.widthMm,
-            packet.page.heightMm,
+        const box = canonical(
+            cropBox(
+              row.evidence.findings[0].bbox,
+              packet.page.widthMm,
+              packet.page.heightMm,
+            ),
           ),
           crop = join(
             directory,
@@ -644,6 +655,7 @@ try {
           await writeFile(crop, canvas.toBuffer("image/png"));
         } else if (row.evidence.findings[0].medium === "html") {
           await page.setContent(await readFile(htmlPath, "utf8"));
+          await page.evaluate(() => document.fonts.ready);
           await screenshotCrop(page, box, crop, `#sheet-${row.sheet}>svg`);
         } else await screenshotCrop(page, box, crop);
         row.evidence.crop = relativeEvidence(crop);
@@ -682,6 +694,12 @@ try {
       return {
         case: c.id,
         spec: c,
+        sourceHashes: await captureSources(
+          directory,
+          c.id,
+          packet.sheets.map((s) => s.number),
+          values.artifacts ? "packet.html" : "packet.html.gz",
+        ),
         ok: true,
         rows: local,
         sheets: sheetEvidence,
@@ -794,6 +812,10 @@ await writeFile(
   JSON.stringify(
     canonical({
       ...metadata,
+      sourceHashes: {
+        format: SOURCE_HASH_FORMAT,
+        sheets: results.flatMap((r) => r.sourceHashes ?? []),
+      },
       exitCode: code,
       summary: counts,
       policySummary: policyCounts,

@@ -1,3 +1,4 @@
+import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -62,6 +63,7 @@ it("permits a reviewed notMove only on a non-named candidate", () => {
     const p = {
       path: `evals/out/draw-samples/exception-${n}.png`,
       sha256: String(n).repeat(64),
+      sourceVerification: sourceVerificationFixture(),
     };
     c.cropHashes.set(p.path, p.sha256);
     return p;

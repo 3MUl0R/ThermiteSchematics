@@ -1,3 +1,4 @@
+import { pngFixture } from "../evals/draw/png-fixture.mjs";
 import { expect, it, vi } from "vitest";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { drawingHash } from "../evals/draw/png-ink.mjs";
@@ -6,6 +7,10 @@ import {
   stampInstanceDrawingCrop,
   stampDrawingCrop,
 } from "./stamp-drawing-crop.mjs";
+const geometry = {
+  instance: { bbox: { x: 1, y: 1, w: 1, h: 1 } },
+  cropBbox: { x: 0, y: 0, w: 3, h: 3 },
+};
 it("rebuilds each original stamp from a group's retained pixels and literal header lines", async () => {
   const canvas = createCanvas(90, 30),
     ctx = canvas.getContext("2d");
@@ -16,11 +21,13 @@ it("rebuilds each original stamp from a group's retained pixels and literal head
   const raw = canvas.toBuffer("image/png");
   const a = ["marker A", "case one", "source.png", "token A"];
   const b = ["marker B", "case two", "source.png", "token B"];
-  const first = await stampDrawingCrop(raw, a),
-    second = await stampDrawingCrop(raw, b);
+  const first = await stampDrawingCrop(raw, a, false, geometry),
+    second = await stampDrawingCrop(raw, b, false, geometry);
   expect(first.equals(second)).toBe(false);
   expect(drawingHash(first, 86)).toBe(drawingHash(second, 86));
-  expect((await stampDrawingCrop(first, b, true)).equals(second)).toBe(true);
+  expect(
+    (await stampDrawingCrop(first, b, true, geometry)).equals(second),
+  ).toBe(true);
 });
 it("refuses unstorable or multiline header provenance", async () => {
   await expect(stampDrawingCrop(Buffer.alloc(0), ["one"])).rejects.toThrow(
@@ -54,7 +61,7 @@ it("refuses the false C005 header on the row's C001 representative crop", async 
   ).not.toThrow();
   await expect(
     stampInstanceDrawingCrop(
-      Buffer.alloc(0),
+      pngFixture(),
       ["marker", "scope", "source", "C005 / 01"],
       instance,
       { x: 232.584, y: 116.955, w: 15.029, h: 7.617 },
@@ -85,6 +92,81 @@ it("refuses to strip an 86-pixel band that is not a stamped header", async () =>
   ctx.strokeStyle = "black";
   ctx.strokeRect(5, 100, 50, 15);
   await expect(
-    stampDrawingCrop(canvas.toBuffer("image/png"), ["a", "b", "c", "d"], true),
+    stampDrawingCrop(
+      canvas.toBuffer("image/png"),
+      ["a", "b", "c", "d"],
+      true,
+      geometry,
+    ),
   ).rejects.toThrow("Stamped header band must not be blank");
+});
+
+it("requires instance containment on the general stamper API", async () => {
+  await expect(
+    stampDrawingCrop(pngFixture(), ["a", "b", "c", "d"]),
+  ).rejects.toThrow("outside the source crop");
+});
+
+it.each(["instance", "source-bbox"])(
+  "the stamper CLI independently requires --%s",
+  async (missing) => {
+    const { spawnSync } = await import("node:child_process");
+    const r = spawnSync(
+      "bun",
+      [
+        "scripts/stamp-drawing-crop.mjs",
+        "--drawing",
+        "missing.png",
+        "--header-lines",
+        "missing.json",
+        "--output",
+        "missing-output.png",
+        ...(missing === "instance"
+          ? ["--source-bbox", "bbox.json"]
+          : ["--instance", "instance.json"]),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(
+      /AssertionError(?: \[ERR_ASSERTION\])?: Use --drawing/,
+    );
+  },
+);
+it("bind refuses header pixels that contradict report-owned literal header lines", async () => {
+  const { verifyStampHeaders } =
+    await import("../evals/draw/crop-stamp-check.mjs");
+  const actual = await stampDrawingCrop(
+    pngFixture(),
+    ["marker", "scope", "token", "Text B"],
+    false,
+    geometry,
+  );
+  const row = {
+    path: "crop.png",
+    headerPixels: 86,
+    headerLines: ["marker", "scope", "token", "Text A"],
+    instanceBbox: geometry.instance.bbox,
+    sourceBbox: geometry.cropBbox,
+  };
+  await expect(
+    verifyStampHeaders({ crops: [row] }, new Map([[row.path, actual]])),
+  ).rejects.toThrow(/header pixels differ/);
+  row.headerLines[3] = "Text B";
+  await expect(
+    verifyStampHeaders({ crops: [row] }, new Map([[row.path, actual]])),
+  ).resolves.toBeUndefined();
+});
+it("keeps the physical page visible on an overflowing case/view line", async () => {
+  const line =
+    "case-with-a-long-prefix | " +
+    "a detailed view title ".repeat(7) +
+    " | physical page ";
+  const a = ["marker", line + "1", "token", "Text W-C11"],
+    b = ["marker", line + "9", "token", "Text W-C11"];
+  const A = await stampDrawingCrop(pngFixture(), a, false, geometry),
+    B = await stampDrawingCrop(pngFixture(), b, false, geometry);
+  expect(A.equals(B)).toBe(false);
+  expect(drawingHash(A, 86)).toBe(drawingHash(B, 86));
+  expect((await stampDrawingCrop(A, a, true, geometry)).equals(A)).toBe(true);
 });

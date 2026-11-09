@@ -1,3 +1,8 @@
+import { cropHeader } from "./crop-report.mjs";
+import {
+  sourceGeometryFixture,
+  sourceVerificationFixture,
+} from "./crop-source-fixture.mjs";
 import { it, expect } from "vitest";
 import {
   mkdtemp,
@@ -37,6 +42,7 @@ function fixture({ notMove = false } = {}) {
       path,
       sha256: hash(b),
       headerPixels: 86,
+      ...sourceGeometryFixture(),
     })),
   };
   const file = {
@@ -67,6 +73,13 @@ function fixture({ notMove = false } = {}) {
     file.entries = file.entries.slice(0, 1);
   }
   const bound = bindDrawingDraft(file, index, crops);
+  for (const { entry } of [
+    ...bound.entries.map((entry) => ({ entry })),
+    ...(bound.notMove ?? []).flatMap((x) =>
+      x.crops.map((entry) => ({ entry })),
+    ),
+  ])
+    entry.sourceVerification = sourceVerificationFixture();
   return { file, index, crops, bound };
 }
 function reviewed(c = fixture()) {
@@ -91,6 +104,7 @@ function reviewed(c = fixture()) {
         note: e.note,
         cause: e.cause,
         drawingSha256: e.drawingSha256,
+        sourceVerification: e.sourceVerification,
         signOffs: [e.signOff],
       },
     })),
@@ -320,7 +334,7 @@ it("checkSignedDrawings accepts the facts computed from the actual crops", () =>
   expect(() => checkSignedDrawings(c.bound, rows)).not.toThrow();
 });
 it.each([0, 86])(
-  "real CLI: draft → bind pixels → mock independent sign-off → preview → archive, header=%s",
+  "real CLI with mock source raster: draft → bind pixels → mock independent sign-off → preview → archive, header=%s",
   async (header) => {
     const c = await cliFixture();
     try {
@@ -331,7 +345,26 @@ it.each([0, 86])(
         entry = draft.entries.find((e) => e.crop),
         png = pngFixture({ stamped: header === 86 }),
         path = "evals/out/draw-samples/bind/crop.png",
-        row = { path, sha256: hash(png), headerPixels: header };
+        t = inventory.current.find((t) => entry.instances.includes(t.token)),
+        row = {
+          ...t,
+          token: t.token,
+          scope: t.scope,
+          text: t.facts.text,
+          reportSha256: inventory.binding?.summarySha256 ?? draft.summarySha256,
+          physicalSheet: t.physicalSheet,
+          instanceBbox: t.bbox,
+          sourceRender: {
+            medium: t.scope.medium,
+            svg: `${t.scope.case}/sheet-001.svg`,
+            svgSha256: hash("source"),
+          },
+          headerLines: cropHeader(t),
+          path,
+          sha256: hash(png),
+          headerPixels: header,
+          ...sourceGeometryFixture(),
+        };
       expect(entry.drawingSha256).toBe("");
       entry.crop = { path, sha256: row.sha256 };
       entry.drawingSha256 = hash("signer typed claim");
@@ -351,6 +384,8 @@ it.each([0, 86])(
             join(c.root, "evals/draw/repin-bind-crops.mjs"),
             "--decisions",
             input,
+            "--report",
+            join(c.out, "report.json"),
             "--crop-index",
             index,
             "--output",
@@ -367,6 +402,24 @@ it.each([0, 86])(
       expect(noArgs.stderr).toMatch(
         /AssertionError(?: \[ERR_ASSERTION\])?: Supply --decisions/,
       );
+      const wrong = structuredClone(row);
+      wrong.physicalSheet = 999;
+      await writeFile(index, json({ crops: [wrong] }));
+      const rejected = run(output);
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("physical sheet differs");
+      await expect(readFile(output)).rejects.toThrow(/ENOENT/);
+      await writeFile(index, json({ crops: [row] }));
+      const stampPath = join(c.root, "evals/draw/crop-stamp-check.mjs"),
+        stampSource = await readFile(stampPath);
+      await writeFile(
+        stampPath,
+        'export async function verifyStampHeaders(){throw Error("stamp-check sentinel");}',
+      );
+      const stampFailure = run(output);
+      expect(stampFailure.status).toBe(1);
+      expect(stampFailure.stderr).toContain("stamp-check sentinel");
+      await writeFile(stampPath, stampSource);
       const result = run(output);
       expect(result.status, result.stderr).toBe(0);
       const bound = JSON.parse(await readFile(output, "utf8")),
@@ -394,6 +447,23 @@ it.each([0, 86])(
         baseline = join(c.out, "baseline.json");
       await writeFile(signed, json(bound));
       await writeFile(baseline, json([...c.context.baselines.values()][0]));
+      await writeFile(
+        stampPath,
+        'export async function verifyStampHeaders(){throw Error("stamp-check sentinel");}',
+      );
+      const stampPreview = c.run(
+        "--report",
+        join(c.out, "report.json"),
+        "--decisions",
+        signed,
+        "--baseline",
+        baseline,
+        "--preview",
+        join(c.out, "must-not-preview.mjs"),
+      );
+      expect(stampPreview.status).toBe(1);
+      expect(stampPreview.stderr).toContain("stamp-check sentinel");
+      await writeFile(stampPath, stampSource);
       const preview = c.run(
         "--report",
         join(c.out, "report.json"),

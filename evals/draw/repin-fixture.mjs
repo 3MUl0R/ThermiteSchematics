@@ -1,4 +1,5 @@
 // Synthetic report/instance fixtures, adapted from the independent reviewer probes.
+import { withSourceHashFixtures } from "./crop-source-fixture.mjs";
 import { prepareRepin, reassess, instanceInventory } from "./repin-core.mjs";
 import { serializeRegistry } from "./marker-authoring.mjs";
 import { markerId } from "./locators.mjs";
@@ -145,6 +146,7 @@ function make({
           findings: list.map((x) => ({
             kind: x.kind,
             text: x.text,
+            ...(x.bbox ? { bbox: x.bbox } : {}),
             ...(x.kind === "iso-cap-height-policy" ? { capHeightMm: 1.8 } : {}),
             sourceLocator: x.src,
             identities: [ident(x)],
@@ -193,7 +195,7 @@ export function assemble({
     media,
   });
   const finish = (items) => {
-    const r = m.report(items);
+    const r = withSourceHashFixtures(m.report(items));
     r.checkerSha256 = checkerManifestHash(r.checkers);
     const a = reassess(r, m.registry, specs);
     return {

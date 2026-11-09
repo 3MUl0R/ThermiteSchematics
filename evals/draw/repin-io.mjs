@@ -1,4 +1,9 @@
 // File guards and atomic writes; no browser, native PDF or live-corpus reads.
+import { verifyStampHeaders } from "./crop-stamp-check.mjs";
+import { cropHeader } from "./crop-report.mjs";
+import { checkReportedSources } from "./crop-report.mjs";
+import { predatesSourceVerification } from "./crop-source-policy.mjs";
+import { checkSourceReferences } from "./crop-source-policy.mjs";
 import assert from "node:assert/strict";
 import {
   readFile,
@@ -104,13 +109,38 @@ export async function readReviewedCrop(root, crop) {
 export async function reviewedCrop(root, crop) {
   return hash(await readReviewedCrop(root, crop));
 }
-async function loadCrops(root, file, cropHashes) {
+async function loadCrops(root, file, cropHashes, reports) {
   const legacy = file.value.pr === "#92" && legacyRecord(92, file.sha256);
+  checkSourceReferences(file.value, drawingReferences(file.value), file.sha256);
+  if (!predatesSourceVerification(file.value, file.sha256))
+    checkReportedSources(file.value, reports);
+  const headerRows = [],
+    cropBytes = new Map();
   for (const { entry, crop } of drawingReferences(file.value)) {
     const bytes = await readReviewedCrop(root, crop);
     if (!legacy) checkCropDrawing(entry, crop, bytes);
     cropHashes.set(crop.path, hash(bytes));
+    cropBytes.set(crop.path, bytes);
+    if (
+      !predatesSourceVerification(file.value, file.sha256) &&
+      crop.headerPixels === 86
+    ) {
+      const v = entry.sourceVerification;
+      headerRows.push({
+        ...crop,
+        instanceBbox: v.instanceBbox,
+        sourceBbox: v.sourceBbox,
+        headerLines: cropHeader({
+          token: v.token,
+          markerId: v.markerId,
+          scope: v.scope,
+          physicalSheet: v.sheet,
+          facts: { text: v.text },
+        }),
+      });
+    }
   }
+  await verifyStampHeaders({ crops: headerRows }, cropBytes);
 }
 export async function loadRepinInputs({
   root,
@@ -138,7 +168,12 @@ export async function loadRepinInputs({
   for (const path of decisionPaths) {
     const file = await strictJsonFile(path);
     decisions.push(file.value);
-    await loadCrops(root, file, cropHashes);
+    await loadCrops(
+      root,
+      file,
+      cropHashes,
+      new Map([[report.sha256, report.value], ...baselines]),
+    );
   }
   return {
     report: report.value,

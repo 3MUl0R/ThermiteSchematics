@@ -473,7 +473,10 @@ export function prepareRepin({
           ? {
               cropSha256: r.crop.sha256,
               ...(entry.drawingSha256
-                ? { drawingSha256: entry.drawingSha256 }
+                ? {
+                    drawingSha256: entry.drawingSha256,
+                    sourceVerification: entry.sourceVerification,
+                  }
                 : {}),
             }
           : {}),
@@ -489,7 +492,10 @@ export function prepareRepin({
           ? {
               crop: entry.crop,
               ...(entry.drawingSha256
-                ? { drawingSha256: entry.drawingSha256 }
+                ? {
+                    drawingSha256: entry.drawingSha256,
+                    sourceVerification: entry.sourceVerification,
+                  }
                 : {}),
             }
           : {}),
@@ -579,7 +585,7 @@ export function prepareRepin({
         "reviewed",
         "signOff",
         "counterSignOffs",
-        ...(entry.crop ? ["drawingSha256"] : []),
+        ...(entry.crop ? ["drawingSha256", "sourceVerification"] : []),
       ];
       assert(
         entry.reviewed === true,
