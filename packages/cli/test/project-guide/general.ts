@@ -1392,7 +1392,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Cable `fromLocation` / `toLocation` name end A / end B.",
+      claim: "Cable `fromLocation`/`toLocation` name ends A/B.",
       async check() {
         const [cable, { csv }] = await Promise.all([
           pristineCable(),
@@ -1418,7 +1418,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Conductor `endpoints` has exactly two slots, ordered A then B.",
+      claim: "Conductor `endpoints`: two slots, A then B.",
       async check() {
         const [schema, cable] = await Promise.all([
           schemaErrors(),
@@ -1459,7 +1459,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Only an explicitly spare core can have a null endpoint.",
+      claim: "Only explicit spares allow null endpoints.",
       async check() {
         const [schema, wiresReport] = await Promise.all([
           schemaErrors(),
@@ -1485,7 +1485,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Two real endpoints remain connected even for a spare; one real endpoint still occupies its terminal.",
+        "Two real endpoints stay connected for spares; a lone real endpoint still occupies its terminal.",
       async check() {
         const [cable, fixture] = await Promise.all([fixtureCable(), cables()]);
         const spare = cable.cores.find((c: any) => c.id === "2+");
@@ -1511,7 +1511,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "An omitted core is unassigned, never implicitly spare.",
+      claim: "Omitted cores are unassigned, never spare.",
       async check() {
         const [cable, wiresReport] = await Promise.all([
           fixtureCable(),
@@ -1535,7 +1535,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "A core without usage is unspecified; a cable with no usage or locations uses canonical end order.",
+        "Cores without usage are unspecified; without usage or locations, cables use canonical end order.",
       async check() {
         const [cable, wiresReport, sheets] = await Promise.all([
           fixtureCable(),
@@ -1581,7 +1581,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Shield construction never implies a shield bond.",
+      claim: "Shielding never implies a bond.",
       async check() {
         const [cable, { csv }] = await Promise.all([
           pristineCable(),

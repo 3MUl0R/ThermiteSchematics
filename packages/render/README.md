@@ -7,6 +7,14 @@ or mutate compiler IR. Pass it the `ir` and detached `presentation` from a
 successful `CompileResult` (`ok === true`). Malformed or partial IR is an invariant
 violation, not a supported render input.
 
+Packet signal-loop views can explicitly select `loopPower: {device, function}`
+to draw three conductor-only series legs using the existing DC-source profile.
+The series-only path preserves terminal, conductor and net identities, prints
+mandatory assessment/distribution notes and refuses incomplete, ambiguous or
+unprintable selections with R006. Input mode, isolation, bonding suitability and
+loop voltage budget are not assessed. Requests without `loopPower` retain their
+existing output. See [signal-loop requests and measured limits](../../docs/signal-loops.md#series-loop-power).
+
 ## Runtime
 
 The source workflow runs on Bun 1.4.2. The renderer loads the pinned ELK 0.12.0

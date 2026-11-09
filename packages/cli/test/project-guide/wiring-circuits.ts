@@ -363,6 +363,17 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "Read `thermite guide circuit-symbols` before selecting a disconnector profile.",
+      async check() {
+        const guide = await ok(["guide", "circuit-symbols"], ctx.work);
+        expect(guide.stdout).toContain("thermite:disconnector");
+        expect(guide.stdout.replace(/\s+/gu, " ")).toContain(
+          "Isolation suitability",
+        );
+      },
+    },
+    {
+      claim:
         "Packets accept `wiring-view-request/0.1` with `title`, unique `conductors` (wire/jumper tags or UIDs, or cores terminated at both ends such as `CBL1/1+`), optional `notes`, and optional `deviceOrder` listing every included device.",
       async check() {
         const [drawing, { cable }, project] = await Promise.all([

@@ -415,7 +415,14 @@ async function executeJson(id: string, value: any): Promise<void> {
     let project: string;
     const view = value.views?.[0] ?? value;
     if (view.format === "signal-loop-view-request/0.1")
-      project = await loopProject(view.from.device === "AQ1");
+      project = view.loopPower
+        ? await copyProject(
+            join(
+              repositoryRoot,
+              "packages/core-library/test/fixtures/series-loop",
+            ),
+          )
+        : await loopProject(view.from.device === "AQ1");
     else if (value.family)
       project = await copyProject(
         join(repositoryRoot, "examples/motor-starter"),

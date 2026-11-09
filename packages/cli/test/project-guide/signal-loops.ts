@@ -390,7 +390,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "See `thermite guide signal-loops` for limits and fixtures.",
+      claim: "For series power, read `thermite guide signal-loops`.",
       async check() {
         const doc = flatten(
           await readFile(join(repositoryRoot, "docs/signal-loops.md"), "utf8"),
@@ -400,6 +400,12 @@ const module: FactModule = {
         );
         expect(doc).toContain(
           "At most seven cable assembly options and four enclosure groups may be supplied.",
+        );
+        expect(doc).toContain(
+          '"loopPower": { "device": "PS1", "function": "dc_output" }',
+        );
+        expect(doc).toContain(
+          "Not assessed: input mode (passive/active), isolation, loop voltage budget.",
         );
         for (const path of [
           "packages/cli/fixtures/signal-loop/source.json",
