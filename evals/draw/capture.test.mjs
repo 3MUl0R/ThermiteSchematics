@@ -123,3 +123,46 @@ it("the builder freshly captures source rather than reading a pipeline PNG", asy
   expect(source).toContain("await captureSourceCrop(browser, text,");
   expect(source).not.toContain("join(sourceRoot, plan.pipelineCrop)");
 });
+
+it("PDF measurement and report pins receive the same single-read byte buffer", async () => {
+  const s = await readFile(new URL("./run.mjs", import.meta.url), "utf8"),
+    ast = ts.createSourceFile(
+      "run.mjs",
+      s,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.JS,
+    );
+  let statement;
+  function walk(n) {
+    if (ts.isVariableDeclaration(n) && n.name.getText(ast) === "pdfSource")
+      statement = n.parent.parent.getText(ast);
+    ts.forEachChild(n, walk);
+  }
+  walk(ast);
+  const bytes = Buffer.from("delivered PDF"),
+    loads = [];
+  let reads = 0;
+  const source = await new Function(
+    "readFile",
+    "pdfPath",
+    "loadPdfBytes",
+    "PDFJS_VERSION",
+    `return (async()=>{${statement};return pdfSource;})()`,
+  )(
+    async () => {
+      reads++;
+      return bytes;
+    },
+    "packet.pdf",
+    async (data) => {
+      loads.push(data);
+      return {};
+    },
+    "version",
+  );
+  expect(reads).toBe(1);
+  expect(source.bytes).toBe(loads[0]);
+  expect(source.bytes).toBe(bytes);
+  expect(source.pdfjsVersion).toBe("version");
+});

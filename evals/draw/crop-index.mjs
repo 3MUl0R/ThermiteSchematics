@@ -10,6 +10,7 @@ import {
   reportInstances,
   renameCropEligibility,
 } from "./crop-report.mjs";
+import { checkPdfRegion } from "./pdf-source-policy.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 export const contains = (bbox, box) => {
   try {
@@ -20,6 +21,17 @@ export const contains = (bbox, box) => {
   }
 };
 export function pipelineCrops(report, reportSha256) {
+  const pdfInstances = report.results.some(
+    (r) =>
+      r.evidence?.crop &&
+      (r.medium === "pdf" ||
+        r.dq === "DQ-01" ||
+        r.evidence?.findings?.[0]?.medium === "pdf"),
+  )
+    ? instanceInventory(report, reportSha256).instances.filter(
+        (t) => t.scope.medium === "pdf",
+      )
+    : [];
   return report.results
     .filter((r) => r.evidence?.crop)
     .map((r) => {
@@ -27,18 +39,35 @@ export function pipelineCrops(report, reportSha256) {
         r.dq === "DQ-01" || r.evidence.findings?.[0]?.medium === "pdf"
           ? "pdf"
           : (r.medium ?? "svg");
+      let pdfInstance, reason;
+      if (medium === "pdf") {
+        try {
+          pdfInstance = pdfInstances.find((t) => t.row === r.id);
+          assert(pdfInstance, "PDF row has no exported PDF instance");
+          const ref = pinnedSource(report, pdfInstance);
+          checkPdfRegion(ref.page, pdfInstance.bbox, pdfInstance.bbox);
+        } catch (error) {
+          reason = error.message;
+        }
+      }
       return {
         reportSha256,
         row: r.id,
         scope: { case: r.case, medium, sheet: r.viewScope ?? "packet" },
         physicalSheet: r.sheet,
-        sourceBbox: canonical(r.evidence.cropBbox),
+        sourceBbox: canonical(pdfInstance?.bbox ?? r.evidence.cropBbox),
+        ...(pdfInstance
+          ? {
+              token: pdfInstance.token,
+              markerId: pdfInstance.markerId,
+              instanceBbox: canonical(pdfInstance.bbox),
+              classification: pdfInstance.classification,
+              text: pdfInstance.facts.text,
+            }
+          : {}),
         pipelineCrop: r.evidence.crop,
-        supported: medium !== "pdf",
-        reason:
-          medium === "pdf"
-            ? "PDF crop source verification is not implemented"
-            : undefined,
+        supported: !reason,
+        reason,
       };
     });
 }
@@ -94,7 +123,11 @@ export function cropPlans(file, reports, contexts = new Map()) {
         candidates.find(({ t }) => t.bbox) ??
         candidates[0];
       const { t, sha, report } = selected;
-      sourcePath(t); // Reject PDF before creating misleading evidence.
+      assert(
+        ref.entry.to?.scope.medium !== "pdf" || t.scope.medium === "pdf",
+        "A PDF-scope entry cannot use SVG/HTML evidence",
+      );
+      sourcePath(t);
       assert(t.bbox, "Instance has no exported bbox; no crop can be invented");
       const sourceRef = pinnedSource(report, t, contexts.get(sha));
       const row = report.results.find((r) => r.id === t.row),
@@ -104,7 +137,12 @@ export function cropPlans(file, reports, contexts = new Map()) {
         t,
         reportSha256: sha,
         sourceRef,
-        sourceBbox: reuse ? canonical(row.evidence.cropBbox) : null,
+        sourceBbox:
+          t.scope.medium === "pdf"
+            ? canonical(t.bbox)
+            : reuse
+              ? canonical(row.evidence.cropBbox)
+              : null,
         pipelineCrop: reuse ? row.evidence.crop : undefined,
         headerLines: cropHeader(t),
       });
@@ -140,8 +178,16 @@ export function instanceCropRow(plan, path, bytes, box, source) {
     text: t.facts.text,
     sourceBbox: canonical(box),
     capture: "fresh-source",
+    ...(medium === "pdf" ? { classification: t.classification } : {}),
     sourceRender: {
       medium,
+      ...(medium === "pdf"
+        ? {
+            backend: plan.sourceRef.backend,
+            pdfjsVersion: plan.sourceRef.pdfjsVersion,
+            page: plan.sourceRef.page,
+          }
+        : {}),
       [medium]: plan.sourceRef?.path ?? sourcePath(t),
       [medium + "Sha256"]: hash(source),
     },

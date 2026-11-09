@@ -32,16 +32,23 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 await within(resolve(root, "evals/out"), root, { existing: true });
 const output = await within(resolve(values.output), resolve(root, "evals/out"));
 const auditPath = output + ".audit.json";
-const auditExists = await lstat(auditPath).then(
-  () => true,
-  (error) => {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  },
-);
+const exists = (path) =>
+  lstat(path).then(
+    () => true,
+    (error) => {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    },
+  );
+const auditExists = await exists(auditPath),
+  outputExists = await exists(output);
 assert(
   !auditExists,
   `Bind audit already exists: ${JSON.stringify(auditPath)}. Choose a fresh --output, or preserve then remove this audit after checking that no signed evidence depends on it. No captures were started.`,
+);
+assert(
+  !outputExists,
+  `Bound output already exists: ${JSON.stringify(output)}. Choose a fresh --output; existing evidence is never overwritten. No captures were started.`,
 );
 const file = await strictJsonFile(resolve(values.decisions)),
   index = await strictJsonFile(resolve(values["crop-index"]));

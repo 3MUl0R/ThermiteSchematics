@@ -50,7 +50,10 @@ const raw = await readFile(resolve(v.report)),
     "sweep-functional-symbols-letter-landscape-compact-left-to-right",
   ];
 const rows = pipelineCrops(report, hash(raw)).filter(
-  (r) => r.supported && selected.includes(r.scope.case),
+  (r) =>
+    r.supported &&
+    ["svg", "html"].includes(r.scope.medium) &&
+    selected.includes(r.scope.case),
 );
 for (const id of selected)
   assert(

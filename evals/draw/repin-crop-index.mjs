@@ -103,9 +103,18 @@ if (!v.decisions) {
           medium,
           [medium]: sourceRef.path,
           [medium + "Sha256"]: sourceRef.sha256,
+          ...(medium === "pdf"
+            ? {
+                backend: sourceRef.backend,
+                pdfjsVersion: sourceRef.pdfjsVersion,
+                page: sourceRef.page,
+              }
+            : {}),
         },
+        instanceBbox: plan.t.bbox,
       };
-      const { text } = await readCropSource(sourceRoot, row);
+      const sourceData = await readCropSource(sourceRoot, row),
+        { text } = sourceData;
       let box = plan.sourceBbox;
       if (!box) {
         const { parseHTML } = await import("linkedom");
@@ -118,11 +127,20 @@ if (!v.decisions) {
         const vb = svg.getAttribute("viewBox").split(/\s+/).map(Number);
         box = canonical(cropBox(plan.t.bbox, vb[2], vb[3]));
       }
-      if (!browser) browser = await launch();
-      const raw = await captureSourceCrop(browser, text, {
-        ...row,
-        sourceBbox: box,
-      });
+      let raw;
+      if (medium === "pdf") {
+        const { capturePdfCrop } = await import("./pdf-source.mjs");
+        raw = await capturePdfCrop(sourceData.bytes, {
+          ...row,
+          sourceBbox: box,
+        });
+      } else {
+        if (!browser) browser = await launch();
+        raw = await captureSourceCrop(browser, text, {
+          ...row,
+          sourceBbox: box,
+        });
+      }
       const bytes = await stampInstanceDrawingCrop(
         raw,
         plan.headerLines,

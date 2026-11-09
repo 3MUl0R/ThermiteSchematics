@@ -1,5 +1,6 @@
 // Verification rasters are evidence references, not additional reviewed drawings.
 import assert from "node:assert/strict";
+import { checkPdfIndexAttestation } from "./pdf-source-policy.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import { verificationPath, verifyAttemptPixels } from "./crop-attempts.mjs";
 import { hash } from "./support.mjs";
@@ -26,7 +27,7 @@ export function verificationFiles(signed, references) {
     }),
   );
 }
-export function verifyRecordedAttempts(record, files, signed) {
+export function verifyRecordedAttempts(record, files, signed, index) {
   const references = new Map(),
     paths = new Set();
   for (const sha of verificationHashes(signed)) {
@@ -39,12 +40,18 @@ export function verifyRecordedAttempts(record, files, signed) {
     references.set(sha, bytes);
     paths.add(path);
   }
-  for (const { entry, crop } of drawingReferences(signed))
+  for (const { entry, crop } of drawingReferences(signed)) {
+    if (entry.sourceVerification.medium === "pdf")
+      checkPdfIndexAttestation(
+        index.crops.find((r) => r.path === crop.path),
+        entry.sourceVerification,
+      );
     verifyAttemptPixels(
       entry.sourceVerification,
       files.get(record.pathMap[crop.path]),
       crop.headerPixels ?? 0,
       references,
     );
+  }
   return paths;
 }

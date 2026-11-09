@@ -206,7 +206,7 @@ try {
       (d, i) => {
         d.entries.find((e) => e.crop).to.scope.medium = "pdf";
       },
-      "PDF crop source verification is not implemented",
+      "A PDF-scope entry cannot use SVG/HTML evidence",
     ],
   ]) {
     const d = structuredClone(prepared),

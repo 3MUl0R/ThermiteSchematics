@@ -94,3 +94,46 @@ it("refuses W-C11 to W-C17 in a substituted source folder", () => {
     assertSourceBytes(Buffer.from("<text>W-C17</text>"), ref),
   ).toThrow(/hash differs from C1 report/);
 });
+it("adds exact PDF byte and physical-page pins without changing SVG/HTML pins", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "source-pdf-hashes-"));
+  try {
+    await writeFile(join(dir, "sheet-001.svg"), "SVG");
+    await writeFile(join(dir, "sheet-002.svg"), "SVG two");
+    await writeFile(join(dir, "packet.html"), "HTML");
+    const page = {
+        number: 1,
+        view: [0, 0, 720, 360],
+        userUnit: 1,
+        rotation: 0,
+        widthMm: 254,
+        heightMm: 127,
+      },
+      bytes = Buffer.from("%PDF-fixture");
+    const old = await captureSources(dir, "example", [1, 2], "packet.html"),
+      pins = await captureSources(dir, "example", [1, 2], "packet.html", {
+        bytes,
+        pdfjsVersion: "6.5.438",
+        pages: [
+          page,
+          { ...page, number: 2, rotation: 90, widthMm: 127, heightMm: 254 },
+        ],
+      });
+    expect(pins[0].svg).toEqual(old[0].svg);
+    expect(pins[0].html).toEqual(old[0].html);
+    expect(pins[1].pdf.page).toMatchObject({
+      number: 2,
+      rotation: 90,
+      widthMm: 127,
+      heightMm: 254,
+    });
+    expect(pins[0].pdf).toEqual({
+      path: "example/packet.pdf",
+      sha256: hash(bytes),
+      backend: "pdf.js",
+      pdfjsVersion: "6.5.438",
+      page,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

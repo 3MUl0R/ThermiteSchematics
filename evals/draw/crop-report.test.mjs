@@ -96,7 +96,7 @@ it.each([
         ...c.file.entries[0].to,
         scope: { ...c.row.scope, medium: "pdf" },
       }),
-    /PDF.*not implemented/,
+    /PDF-scope entry cannot use SVG/,
   ],
   [
     "token",
@@ -152,8 +152,14 @@ it("refuses a crop object without a decision reference", () => {
   );
 });
 
-it("refuses a genuine PDF instance in the source-path builder", () => {
-  expect(() =>
+it("names the delivered PDF packet, never an SVG substitute", () => {
+  expect(
     sourcePath({ scope: { case: "fixture", medium: "pdf" }, physicalSheet: 1 }),
-  ).toThrow(/PDF crop source verification is not implemented/);
+  ).toBe("fixture/packet.pdf");
+  expect(() =>
+    sourcePath({
+      scope: { case: "fixture", medium: "PDFKit" },
+      physicalSheet: 1,
+    }),
+  ).toThrow(/medium/);
 });

@@ -108,7 +108,7 @@ export function verifyCrops(record, files, signed, index) {
     ...retained,
     ...(predatesSourceVerification(signed, record.signedDecisionsSha256)
       ? []
-      : verifyRecordedAttempts(record, files, signed)),
+      : verifyRecordedAttempts(record, files, signed, index)),
   ]);
   assert(
     Object.keys(record.files).every((p) => allowed.has(p)),

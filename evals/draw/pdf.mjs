@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { maskLossRegions } from "./pdf-operators.mjs";
 import {
   createCanvas,
@@ -13,14 +14,28 @@ globalThis.DOMMatrix ??= DOMMatrix;
 globalThis.Path2D ??= Path2D;
 globalThis.ImageData ??= ImageData;
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+export const PDFJS_VERSION = pdfjs.version;
 export async function loadPdf(path) {
-  const bytes = await readFile(path);
+  return loadPdfBytes(await readFile(path));
+}
+export async function loadPdfBytes(bytes) {
+  const requests = [];
+  class DeniedPdfResources {
+    async fetch(request) {
+      requests.push(request);
+      throw Error("External PDF resources are denied");
+    }
+  }
   const document = await pdfjs.getDocument({
     data: new Uint8Array(bytes),
     useSystemFonts: false,
     isEvalSupported: false,
     fontExtraProperties: true,
+    useWorkerFetch: false,
+    BinaryDataFactory: DeniedPdfResources,
   }).promise;
+  document.assertNoExternalResources = () =>
+    assert(!requests.length, "External PDF resources are denied");
   document.fontFamilies = [
     ...new Set(
       [...bytes.toString("latin1").matchAll(/\/BaseFont\s*\/([^\s/<>]+)/g)].map(
