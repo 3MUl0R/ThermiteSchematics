@@ -194,7 +194,7 @@ it.each(flows)(
     ]);
     expect(built.value.summary.functionIds).toEqual(selected.functionIds);
     const result = await renderSchematic(ir, request(flow));
-    expect(result).toMatchObject({ ok: false, error: { code: "R004" } });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(JSON.stringify(ir)).toBe(before);
   },
 );

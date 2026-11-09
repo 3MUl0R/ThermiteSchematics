@@ -124,6 +124,15 @@ export function emitCircuitContinuationBlock(
 }
 
 /** Find crossings of rooted viewports and add reciprocal physical conductor links. */
+function continuationEdges(
+  graph: { readonly edges: readonly Pick<PresentationEdge, "id" | "label">[] },
+  edges: readonly Pick<LayoutEdge, "id" | "points" | "netId">[],
+) {
+  return edges.filter(
+    (e) => graph.edges.find((s) => s.id === e.id)?.label?.role !== "reference",
+  );
+}
+
 export function drawingContinuations(
   drafts: Draft[],
   graph: {
@@ -144,7 +153,7 @@ export function drawingContinuations(
     nx = xs.length - 1,
     ny = ys.length - 1;
   let serial = 0;
-  for (const edge of layout.edges) {
+  for (const edge of continuationEdges(graph, layout.edges)) {
     const semantic = graph.edges.find(({ id }) => id === edge.id)!;
     const conductor =
       semantic.label?.text ?? semantic.netLabel?.text ?? edge.netId;

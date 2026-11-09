@@ -1,3 +1,4 @@
+import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { printableLabelGeometry } from "../symbols/printable-label.js";
 import type {
@@ -143,9 +144,7 @@ function invalidLayoutError(
   graph: Readonly<PresentationGraph>,
   violation: LayoutContractViolation,
 ): InvalidLayoutError {
-  const names = new Map(
-    graph.deviceGroups.map((d) => [d.deviceUid, d.designation]),
-  );
+  const names = presentationDeviceNames(graph);
   const terminal = (t: import("@thermite/compiler").TerminalId) => ({
     ...t,
     designation: names.get(t.deviceUid) ?? t.deviceUid,

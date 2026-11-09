@@ -1,3 +1,5 @@
+import { portBorderOffset } from "./port-geometry.js";
+import { terminalContextAttachment } from "../terminal-context-reference.js";
 import {
   graphSemanticOrder,
   compareSemanticElementIds,
@@ -217,26 +219,6 @@ function portPosition(
 
 function uppercaseSide(side: SymbolSide): string {
   return side.toUpperCase();
-}
-
-function portBorderOffset(
-  side: SymbolSide,
-  position: Readonly<{ x: number; y: number }>,
-  width: number,
-  height: number,
-): number {
-  // ELK 0.12 places a side-constrained zero-size port on the node border. A
-  // negative border offset keeps the FIXED_POS anchor at the D6 primitive.
-  switch (side) {
-    case "west":
-      return -position.x;
-    case "east":
-      return -(width - position.x);
-    case "north":
-      return -position.y;
-    case "south":
-      return -(height - position.y);
-  }
 }
 
 function labelsForPort(
@@ -578,6 +560,7 @@ function edgeAdapter(
   edge: PresentationEdge,
   prioritizeDirection: boolean,
   assignments: ElkOptionAssignment[],
+  contextSource?: boolean,
 ): ElkExtendedEdge {
   const labels = [edge.label, edge.netLabel]
     .filter((label): label is PresentationLabel => label !== undefined)
@@ -588,7 +571,13 @@ function edgeAdapter(
         targetKind: "edge-label",
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
-            label.role === "net" ? "TAIL" : "CENTER",
+            contextSource === undefined
+              ? label.role === "net"
+                ? "TAIL"
+                : "CENTER"
+              : (label.role === "reference") === contextSource
+                ? "TAIL"
+                : "HEAD",
           [ELK_OPTIONS.edgeLabelsInline]: "false",
         },
       }),
@@ -816,7 +805,12 @@ export function buildElkAdapterGraph(
     }),
     children: [...locationChildren, ...rootLeafChildren],
     edges: edges.map((edge) =>
-      edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments),
+      edgeAdapter(
+        edge,
+        edge.id === prioritizedEdgeId,
+        assignments,
+        terminalContextAttachment(graph, edge)?.junctionIsSource,
+      ),
     ),
   };
   return Object.freeze({
