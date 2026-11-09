@@ -6,6 +6,7 @@ import { instanceCropRow } from "./crop-index.mjs";
 import { cropHeader, verificationFact } from "./crop-report.mjs";
 import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
 import { PDF_CAPTURE_IMPLEMENTATION } from "./pdf-source-policy.mjs";
+import { pdfInkRegion } from "./pdf-ink-policy.mjs";
 import { pngFixture } from "./png-fixture.mjs";
 export const pdfPageFixture = () => ({
   number: 1,
@@ -76,11 +77,25 @@ export function pdfPolicyFixture(kind = "text-below-minimum-em") {
     t = instanceInventory(report, sha).instances[0],
     png = pngFixture(),
     path = "evals/out/draw-samples/pdf.png";
+  const cropShape = {
+    kind: "pdf-em-ink/1.0",
+    inkBbox: bbox,
+    marginPixels: 1,
+    textItem: 0,
+    operators: [1],
+    fontPrograms: [hash("embedded")],
+  };
   const row = instanceCropRow(
-    { t, reportSha256: sha, sourceRef: pin, headerLines: cropHeader(t) },
+    {
+      t,
+      reportSha256: sha,
+      sourceRef: pin,
+      headerLines: cropHeader(t),
+      cropShape,
+    },
     path,
     png,
-    bbox,
+    pdfInkRegion(page, bbox, cropShape),
     Buffer.from("PDF"),
   );
   row.headerPixels = 0;
@@ -120,7 +135,7 @@ export function pdfPolicyFixture(kind = "text-below-minimum-em") {
     file,
     v,
     png,
-    index: { crops: [row] },
+    index: { format: "thermite-draw-crop-index/3.0", crops: [row] },
     reports: new Map([[sha, report]]),
   };
 }

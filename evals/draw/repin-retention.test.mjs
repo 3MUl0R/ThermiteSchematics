@@ -317,7 +317,7 @@ it("D1 base pin has its own literal refusal", async () => {
 it.each([
   undefined,
   "thermite-draw-crop-index/1.0",
-  "thermite-draw-crop-index/3.0",
+  "thermite-draw-crop-index/4.0",
   "invented",
 ])("refuses unknown legacy crop-index format %s", (format) => {
   const c = recordFixture();

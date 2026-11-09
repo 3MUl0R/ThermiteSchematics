@@ -20,7 +20,8 @@ export function pdfCaptureEnvironment() {
     externalResources: "deny",
   };
 }
-export async function capturePdfCrop(bytes, row) {
+import { derivePdfInk } from "./pdf-ink.mjs";
+async function withPdfPage(bytes, row, usePage) {
   const ref = row.sourceRender;
   assert(
     row.scope.medium === "pdf" &&
@@ -35,7 +36,6 @@ export async function capturePdfCrop(bytes, row) {
     "PDF source bytes are not a PDF",
   );
   checkPdfPage(ref.page, row.physicalSheet);
-  checkPdfRegion(ref.page, row.instanceBbox, row.sourceBbox);
   const document = await loadPdfBytes(bytes);
   try {
     assert(
@@ -47,11 +47,38 @@ export async function capturePdfCrop(bytes, row) {
       equal(pdfPageMetadata(page), ref.page),
       "Actual PDF page size, bounds or rotation differs from pin",
     );
-    const box = canonical(row.sourceBbox);
-    const canvas = await renderPdf(page, 300, box);
-    document.assertNoExternalResources();
-    return canvas.toBuffer("image/png");
+    try {
+      return await usePage(page, document);
+    } finally {
+      document.assertNoExternalResources();
+    }
   } finally {
     await document.loadingTask.destroy();
   }
+}
+
+export async function preparePdfCrop(bytes, row) {
+  return withPdfPage(bytes, row, async (page, document) => ({
+    ...row,
+    ...(await derivePdfInk(page, document, row)),
+  }));
+}
+export async function capturePdfCrop(bytes, row) {
+  assert(row.cropShape, "New PDF capture requires em+ink cropShape");
+  checkPdfRegion(
+    row.sourceRender.page,
+    row.instanceBbox,
+    row.sourceBbox,
+    row.cropShape,
+  );
+  return withPdfPage(bytes, row, async (page, document) => {
+    const expected = await derivePdfInk(page, document, row);
+    assert(
+      equal(expected.cropShape, row.cropShape) &&
+        equal(expected.sourceBbox, canonical(row.sourceBbox)),
+      "PDF ink shape differs from independently derived pinned-source geometry",
+    );
+    const box = canonical(row.sourceBbox);
+    return (await renderPdf(page, 300, box)).toBuffer("image/png");
+  });
 }

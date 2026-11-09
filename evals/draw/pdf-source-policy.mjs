@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual as equal } from "node:util";
 import { canonical } from "./support.mjs";
 import { assertCropContainsInstance } from "./crop-geometry.mjs";
-export const PDF_CAPTURE_IMPLEMENTATION = "pdfjs-source/1.0";
+import { PDF_INK_FORMAT, pdfInkRegion } from "./pdf-ink-policy.mjs";
+export const PDF_CAPTURE_IMPLEMENTATION = "pdfjs-source/2.0";
 export function pdfPageMetadata(page) {
   const viewport = page.getViewport({ scale: 25.4 / 72 });
   return canonical({
@@ -44,14 +45,17 @@ export function checkPdfPage(p, number) {
     "PDF pin page dimensions differ from its bounds and rotation",
   );
 }
-export function checkPdfRegion(page, instance, box) {
+export function checkPdfRegion(page, instance, box, shape) {
   checkPdfPage(page, page?.number);
   assertCropContainsInstance({ bbox: instance }, box);
   assert(
     instance.w > 0 &&
       instance.h > 0 &&
-      equal(canonical(instance), canonical(box)),
-    "PDF source crop must be exactly the exported instance box",
+      equal(
+        canonical(box),
+        shape ? pdfInkRegion(page, instance, shape) : canonical(instance),
+      ),
+    "PDF source crop must be exactly the derived em+ink region (or archived instance box)",
   );
   assert(
     box.x >= 0 &&
@@ -87,14 +91,22 @@ export function pdfFacts(ref) {
     page: ref.page,
   };
 }
-export function checkPdfCapture(v) {
+export function checkPdfCapture(v, archivePdf2 = false) {
+  const old = archivePdf2 && v.format === "thermite-draw-source-crop/2.0";
+  assert(
+    old
+      ? v.cropShape === undefined
+      : v.format === PDF_INK_FORMAT && v.cropShape,
+    "New PDF evidence requires v3 em+ink shape",
+  );
   const p = v.pdf,
     c = v.capture;
   assert(
     p?.backend === "pdf.js" &&
       typeof p.pdfjsVersion === "string" &&
       /^\d+\.\d+\.\d+$/.test(p.pdfjsVersion) &&
-      c?.implementation === PDF_CAPTURE_IMPLEMENTATION &&
+      c?.implementation ===
+        (old ? "pdfjs-source/1.0" : PDF_CAPTURE_IMPLEMENTATION) &&
       c.pdfjsVersion === p.pdfjsVersion &&
       typeof c.platform === "string" &&
       c.platform.length > 0 &&
@@ -109,12 +121,13 @@ export function checkPdfCapture(v) {
     "PDF source verification requires the report classification",
   );
   checkPdfPage(p.page, v.sheet);
-  checkPdfRegion(p.page, v.instanceBbox, v.sourceBbox);
+  checkPdfRegion(p.page, v.instanceBbox, v.sourceBbox, v.cropShape);
 }
 export function checkPdfIndexAttestation(row, v) {
   const ref = row?.sourceRender;
   assert(
     ref &&
+      v.medium === "pdf" &&
       row.scope?.medium === "pdf" &&
       ref.medium === "pdf" &&
       row.physicalSheet === v.sheet &&
@@ -124,6 +137,7 @@ export function checkPdfIndexAttestation(row, v) {
       equal(pdfFacts(ref), v.pdf) &&
       equal(row.instanceBbox, v.instanceBbox) &&
       equal(row.sourceBbox, v.sourceBbox) &&
+      equal(row.cropShape, v.cropShape) &&
       ["reportSha256", "token", "row", "markerId", "text"].every(
         (k) => row[k] === v[k],
       ) &&

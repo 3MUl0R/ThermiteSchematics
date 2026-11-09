@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual as equal } from "node:util";
 import { checkPdfCapture } from "./pdf-source-policy.mjs";
+import { decodePng } from "./png-ink.mjs";
 import { hash, json } from "./support.mjs";
 import {
   sourcePixelStats,
@@ -40,12 +41,12 @@ export function checkAttemptStats(s) {
     "Pixel statistics require consistent nonnegative integer counts and error sums",
   );
 }
-export function checkAttempts(v) {
+export function checkAttempts(v, archivePdf2 = false) {
   assert(
     v.maxAttempts === MAX_SOURCE_ATTEMPTS && equal(v.limits, SOURCE_TOLERANCE),
     "Source verification policy cannot change the attempt cap or limits",
   );
-  if (v.medium === "pdf") checkPdfCapture(v);
+  if (v.medium === "pdf") checkPdfCapture(v, archivePdf2);
   else
     assert(
       v.capture?.implementation === CAPTURE_IMPLEMENTATION &&
@@ -137,14 +138,28 @@ export async function captureAttempts(
     `Source pixels refused after ${MAX_SOURCE_ATTEMPTS} attempts: ${audit.at(-1).reason}`,
   );
 }
-export function verifyAttemptPixels(v, crop, header, references) {
-  checkAttempts(v);
+export function verifyAttemptPixels(
+  v,
+  crop,
+  header,
+  references,
+  archivePdf2 = false,
+) {
+  checkAttempts(v, archivePdf2);
   for (const a of v.attempts) {
     const png = references.get(a.referenceSha256);
     assert(
       png && hash(png) === a.referenceSha256,
       "Missing or changed verification PNG",
     );
+    if (v.medium === "pdf" && v.format === "thermite-draw-source-crop/3.0") {
+      const raster = decodePng(png);
+      assert(
+        raster.width === Math.ceil((v.sourceBbox.w * 300) / 25.4) &&
+          raster.height === Math.ceil((v.sourceBbox.h * 300) / 25.4),
+        "PDF reference dimensions differ from ink shape",
+      );
+    }
     assert(
       equal(sourcePixelStats(crop, png, header), a.stats),
       "Recorded source pixel statistics differ from retained pixels",

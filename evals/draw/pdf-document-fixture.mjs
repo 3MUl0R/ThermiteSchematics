@@ -4,6 +4,7 @@ export async function pdfDocumentFixture(
   text = "LABEL",
   rotation = 0,
   embedded = true,
+  fontSize = 12,
 ) {
   const doc = new PDFDocument({ autoFirstPage: false, compress: true }),
     chunks = [];
@@ -23,7 +24,7 @@ export async function pdfDocumentFixture(
         ),
       ),
     );
-  doc.fontSize(12).text(text, 30, 30);
+  doc.fontSize(fontSize).text(text, rotation ? 200 : 30, rotation ? 120 : 30);
   doc.end();
   return done;
 }

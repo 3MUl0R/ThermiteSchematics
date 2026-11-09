@@ -108,10 +108,16 @@ function sidecar(record, bytes, entries) {
     used.add(key);
   }
 }
-function cropBindings(record, files, signed) {
+function cropBindings(record, files, signed, archivePdf2) {
   const bytes = payloadBytes(record, record.cropIndex, files);
   assert(hash(bytes) === record.cropIndexSha256, "Crop index hash mismatch");
-  return verifyCrops(record, files, signed, strictJsonBytes(bytes));
+  return verifyCrops(
+    record,
+    files,
+    signed,
+    strictJsonBytes(bytes),
+    archivePdf2,
+  );
 }
 
 function boundFiles(record, files) {
@@ -218,14 +224,21 @@ export function verifyRecord(record, files, { pin } = {}) {
       record.registryBeforeSha256 === record.registryAfterSha256,
     "Empty decisions cannot change the registry",
   );
+  const archivePdf2 = !!(
+    pin?.recordSha256 &&
+    files.has("record.json") &&
+    pin.recordSha256 === hash(files.get("record.json")) &&
+    json(record) === json(strictJsonBytes(files.get("record.json")))
+  );
   const sourceVerification = checkSourceReferences(
     signed,
     drawingReferences(signed),
     record.signedDecisionsSha256,
+    archivePdf2,
   );
   crossCheckReceipt(signed, receipt);
   sidecar(record, files.get("countersignatures.json"), signed.entries);
-  const drawingGroups = cropBindings(record, files, signed);
+  const drawingGroups = cropBindings(record, files, signed, archivePdf2);
   assert(!pin || pin.pr === record.pr, "Record size pin belongs to another PR");
   const budget = predatesSourceVerification(
     signed,

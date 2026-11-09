@@ -96,7 +96,7 @@ if (!v.decisions) {
       const { readCropSource, captureSourceCrop } =
         await import("./crop-source.mjs");
       const medium = plan.t.scope.medium;
-      const row = {
+      let row = {
         scope: plan.t.scope,
         physicalSheet: plan.t.physicalSheet,
         sourceRender: {
@@ -112,10 +112,18 @@ if (!v.decisions) {
             : {}),
         },
         instanceBbox: plan.t.bbox,
+        text: plan.t.facts.text,
       };
       const sourceData = await readCropSource(sourceRoot, row),
         { text } = sourceData;
       let box = plan.sourceBbox;
+      if (medium === "pdf") {
+        row = await (
+          await import("./pdf-source.mjs")
+        ).preparePdfCrop(sourceData.bytes, row);
+        box = row.sourceBbox;
+        plan.cropShape = row.cropShape;
+      }
       if (!box) {
         const { parseHTML } = await import("linkedom");
         const doc = parseHTML(text).document;
@@ -159,7 +167,12 @@ if (!v.decisions) {
   }
   await writeFile(
     await within(resolve(v.index), join(root, "evals/out")),
-    json({ format: "thermite-draw-crop-index/2.0", crops: rows }),
+    json({
+      format: rows.some((r) => r.scope.medium === "pdf")
+        ? "thermite-draw-crop-index/3.0"
+        : "thermite-draw-crop-index/2.0",
+      crops: rows,
+    }),
     { flag: "wx" },
   );
   await writeFile(

@@ -56,7 +56,13 @@ export function recordFor({
     r = input(receipt),
     i = input(cropIndex);
   const legacy = legacyRecord(pr, hash(s.raw));
-  const grouped = groupCrops(strictJsonBytes(i.raw).crops, crops, legacy);
+  const decodedIndex = strictJsonBytes(i.raw);
+  assert(
+    !decodedIndex.crops.some((c) => c.scope?.medium === "pdf") ||
+      decodedIndex.format === "thermite-draw-crop-index/3.0",
+    "New PDF writer requires index 3.0",
+  );
+  const grouped = groupCrops(decodedIndex.crops, crops, legacy);
   if (!legacy)
     checkSignedDrawings(strictJsonBytes(s.raw), grouped.rows, "Writer signed");
   const decodedSigned = strictJsonBytes(s.raw);
@@ -74,7 +80,9 @@ export function recordFor({
         raw: Buffer.from(
           json({
             ...strictJsonBytes(i.raw),
-            format: "thermite-draw-crop-index/2.0",
+            format: grouped.rows.some((r) => r.scope?.medium === "pdf")
+              ? "thermite-draw-crop-index/3.0"
+              : "thermite-draw-crop-index/2.0",
             crops: grouped.rows,
           }),
         ),
@@ -116,6 +124,9 @@ export function recordFor({
   return { record, files, pin };
 }
 export async function writeRecord(directory, result) {
+  const rawSigned = input(result.files.get(result.record.signedDecisions)).raw,
+    signed = strictJsonBytes(rawSigned);
+  checkSourceReferences(signed, drawingReferences(signed), hash(rawSigned));
   verifyRecord(result.record, result.files, { pin: result.pin });
   assert(
     result.files.get("record.json")?.equals(Buffer.from(json(result.record))),

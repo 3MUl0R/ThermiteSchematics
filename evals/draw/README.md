@@ -398,8 +398,8 @@ helper before independent review. It uses the report's exact instance tokens,
 boxes and text to stamp each crop. It reuses a containing pipeline crop's report-pinned **geometry**, never its PNG
 pixels. Every unsigned crop is freshly rendered from pinned source through the
 same isolated capture path used for independent bind verification; otherwise
-its region is derived from the cited instance's own box. PDF crops always use the
-exact exported instance box, without pipeline padding.
+its region is derived from the cited instance's own box. PDF crops derive the em-plus-glyph-ink union and fixed margin described below,
+without borrowing pipeline padding.
 It writes no causes or approvals. Paths below are repository-relative:
 
 ```sh
@@ -500,60 +500,82 @@ denies every external font/CMap/Wasm request. Even a request whose error pdf.js
 catches is a fatal capture refusal. The installed pdf.js version must match the
 report pin. There is no PDFKit or SVG/HTML rendering fallback.
 
-The source region is exactly the exported PDF instance rectangle, canonicalized to
-0.001 mm, on its report-owned physical page. The actual page's view bounds, user
-unit, rotation and physical dimensions must match the pin. `renderPdf` supplies the
-existing viewport at scale `300/72`; crop translation is
-`[1, 0, 0, 1, -x*300/25.4, -y*300/25.4]`, and each PNG dimension is
-`ceil(extentMm*300/25.4)`. Rotation and user unit come from the PDF viewport;
-coordinates use its top-left millimetres. No new box, context padding, scaling,
-alignment or crop repair is invented. Missing, non-finite, zero-area or off-page
-boxes refuse. Changes confined to ink outside the exported em box are accepted.
-Identical-text instances cannot be distinguished by pixels; instance identity
-rests on the report-owned box. Signers must read characters with tails or
-descenders from the pinned page as well as inspecting the crop. A follow-up under
-#129 will pad PDF crops to glyph ink bounds; this PR keeps the exact exported box.
+New PDF crops use **the union of the report's exported em rectangle and the
+positioned glyph ink**, plus a fixed one-pixel margin at 300 dpi. Embedded font
+programs exposed by pdf.js are parsed by pinned Fontkit 2.0.4. Glyphs use their
+actual fontChar mappings and PDF placement, not a reshaped Unicode string or a
+host font. An exact report text/em/page match must associate uniquely with the
+painted text operations. Only the current producer's flat, horizontal filled
+outline-text path is supported; unsupported positioning/forms, font data, glyph
+mappings, accents, text modes and ambiguous associations refuse structurally.
+There is no heuristic or ascent/descent fallback in this implementation.
+The parser reads every text operator on the pinned page, so one unsupported
+operator anywhere on that page refuses all PDF evidence on it. A producer change
+elsewhere on a sheet can therefore disable PDF crops for that whole sheet.
 
-The v2 source attestation includes the PDF hash/path, pdf.js backend/version,
-physical page metadata, exact box and report classification. Archive verification
-checks these facts against its retained index and recomputes comparisons from the
-retained reference PNGs. The fixed N=3 policy, numeric-only retry, stamp checks,
-integer statistics, verification collection and 3 MB cap apply unchanged.
+The em rectangle remains instanceBbox. cropShape records pdf-em-ink/1.0, outward
+rounded ink bounds, the fixed one-pixel margin, text-item/operator association and
+embedded font-program hashes. sourceBbox is the derived union plus margin.
+Left/top round down and right/bottom up to 0.001 mm. Em and ink must fit the page;
+only margin may meet the page edge. Builder derives the shape and bind independently
+recomputes it from the same hash-checked PDF bytes in a fresh document. Any altered
+association, font hash, ink bounds or rectangle refuses before pixel comparison.
+There is no caller-selected shape, margin or font.
 
-Opt-in calibration uses the retained PDF bytes and independently verifies each
-selected text/page/exported-box association. It writes explicitly non-applicable
-calibration results, leaving the old report unchanged. The PDF swap check uses the
-CLI's PDF producer with the same shipped fonts and layout, freezes one wrong crop,
-and compares it with three independently loaded references, including after an
-accepted comparison. These calibration trials are not a bind attempt chain.
-The controls cover the smallest and largest boxes plus mid-string positions in
-1.667 mm and the common 2.2 mm Regular text. Accepted O/Q controls are recorded as
-the known em-box clipping gap, rather than failing the calibration; other
-accepted swaps still fail. The npm PDF producer is separate from the optional
-Apple PDFKit raster backend, which remains refused.
+The viewport remains 300/72, crop translation remains
+[1, 0, 0, 1, -x*300/25.4, -y*300/25.4], and dimensions remain
+ceil(extentMm*300/25.4). Rotation and user unit come from the pinned page viewport.
+The four-line stamp labels new PDF evidence PDF em+ink and keeps the 86-pixel band,
+14 px default, 10 px floor and original drawing scale.
+
+New PDF evidence requires crop-index **3.0**, source attestation **3.0** and
+pdfjs-source/2.0 capture. The attestation retains PDF hash/path, backend/version,
+page metadata, em/ink shape and unchanged report classification. All ordered
+attempts, numeric-only retries, retained references and the 3 MB cap carry forward.
+SVG/HTML attestations remain 2.0. A v2 PDF archive can be read through the strict
+em-only path only when its manifest matches an explicitly trusted record pin;
+preview, bind and new record writers reject that downgrade. There are no committed
+v2 PDF records: #61/#92 remain the only historical records and are unchanged.
+
+Opt-in calibration independently matches delivered text/page/em associations and
+writes non-applicable results; it never upgrades old reports into apply targets.
+The swap check uses the CLI's PDF producer with shipped fonts, derives a shape
+from the expected source and freezes a wrong raster at that exact rectangle.
+Three independent references are measured even after a pass. Dimension refusal
+cannot count as pixel sensitivity. The npm PDF producer is separate from the
+unsupported Apple PDFKit raster backend. Distinct-ink controls, including both
+O/Q directions, must refuse; the former O/Q acceptance allowance is removed.
 
 ```sh
 bun evals/draw/pdf-evidence.check.mjs --report evals/out/draw/C1-current/summary.json \
   --output evals/out/pdf-evidence.json
+bun evals/draw/pdf-repeat-capture.check.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/pdf-repeats.json
 bun evals/draw/pdf-swaps.check.mjs --report evals/out/draw/C1-current/summary.json \
   --output evals/out/pdf-swaps.json
 ```
 
 Calibration on pdf.js 6.5.438 / darwin-arm64 covered **238 rows: 141 small-text and
-97 font-policy**, three independent verification trials each (**714 comparisons,
-zero false refusals**). All 714 comparisons showed zero pixel noise.
-**62 frozen swap controls / 186 independent comparisons** produced **180 refusals
-and six acceptances**, all six from two O/Q controls. The weakest measured case
-is **O→Q, accepted at 40/255 at 2.2 mm and 50/255 at 1.667 mm**, both mid-string
-Regular text. The exported em box clips the distinguishing Q tail. This known
-gap supersedes the earlier 82/255 minimum from first-character controls; it is not
-evidence that every character swap is detected. No limit was loosened. Signers
-review the page/box association and this calibration, and independently re-run bind
-or spot-check the cited crops before trusting the binder's history and references.
+97 font-policy**, with **714 fresh-load comparisons, zero false refusals**.
+Ten separate processes repeated all rows, **7,140 comparisons**, with zero
+refusals and pixel-identical cross-process rasters. The padded controls produced
+**351/351 refusals across 117 frozen swaps**. The minimum channel signal was
+**175/255** (E→F at 1.667 mm), **111 above 64**. Formerly accepted O→Q and Q→O
+now produce **231–232/255** at small, common 2.2 mm and large sizes, including
+mid-string positions. These are measured controls for the shipped fonts and dark
+palette, not a guarantee for arbitrary text, fonts or colours. No limit changed.
+
+Identical-text instances and identical rendered glyphs cannot be distinguished by
+pixels; instance identity still rests on the report-owned box. Signers inspect
+full tails, descenders and overhangs against the pinned page, inspect the recorded
+em/ink/page association and independently re-run bind or explicitly trust
+spot-checks. The attempt history and reference-image origin still require that
+trust; archive verification establishes retained consistency.
 
 ### Fresh-source binding and retained attempts
 
-Bind writes `thermite-draw-source-crop/2.0`. In addition to report, token, source,
+Bind writes `thermite-draw-source-crop/2.0` for SVG/HTML and `/3.0` for new PDF
+evidence. In addition to report, token, source,
 text and geometry facts it records the capture implementation and platform,
 Chromium version/arguments for SVG/HTML or pdf.js version/page/environment for PDF,
 fixed limits, selected attempt and ordered attempts.
@@ -595,7 +617,7 @@ deduplicating identical reference bytes. They bind the hashes through signed
 attestations and the original file manifest, recompute every comparison against
 retained drawing pixels, and check attempt order, first-pass stopping and receipt
 judgments, including `notMove`. References are not additional independently
-reviewed drawings. V2 records have a **3,000,000-byte cap including references**;
+reviewed drawings. Records with v2 or v3 source verification have a **3,000,000-byte cap including references**;
 a larger per-PR pin cannot override it. Offline verification rejects discrepancies
 between retained PNGs, declared hashes, statistics and receipt judgments, as well
 as v1 downgrades. After signing, the signed payload and pinned record hash bind
@@ -1030,13 +1052,13 @@ The dependency-free decoder supports the tool's eight-bit RGB/RGBA PNGs, filters
 checked. Palette, grayscale, other bit depths, transparency/color-profile chunks
 that require interpretation (including `gAMA`, `cHRM` and `eXIf`), and unsupported chunks are refused. It does not
 guess pixels for unsupported input. Unknown manifest files (not just PNGs),
-including `.DS_Store`, fail closed. Only signed text, receipt, index, retained drawing PNGs and the referenced v2
+including `.DS_Store`, fail closed. Only signed text, receipt, index, retained drawing PNGs and the referenced
 verification PNG collection belong in the original manifest. No entry schema has a generic `crops` field.
 
 Signed text or crop indexes **over 256 KiB** are stored gzipped, with their
 uncompressed hashes bound separately. A gzipped signed file always uses sidecar
 countersigns. The default record cap is **3,000,000 bytes**, including metadata and
-countersigns. Historical records retain their reviewed size policy; a v2 source-verification
+countersigns. Historical records retain their reviewed size policy; a v2/v3 source-verification
 record cannot exceed 3,000,000 bytes through a larger per-PR pin. D1's byte-immutable record is grandfathered unchanged, including
 its uncompressed signed file. Raw signed JSON uses `.signed` to prevent formatter
 rewrites.

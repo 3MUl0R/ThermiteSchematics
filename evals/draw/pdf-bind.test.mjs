@@ -107,7 +107,7 @@ it.each(["text-below-minimum-em", "iso-cap-height-policy"])(
       const index = JSON.parse(await readFile(indexPath));
       expect(index.crops[0]).toMatchObject({
         capture: "fresh-source",
-        sourceBbox: box,
+        cropShape: { kind: "pdf-em-ink/1.0" },
         instanceBbox: box,
         classification: t.classification,
         sourceRender: { medium: "pdf", pdfSha256: hash(pdf) },
@@ -181,7 +181,7 @@ it.each(["text-below-minimum-em", "iso-cap-height-policy"])(
       });
       await writeRecord(join(c.out, "record"), r);
       expect((await readRecord(join(c.out, "record"))).sourceVerification).toBe(
-        "source-crop/2.0",
+        "source-crop/3.0",
       );
       const changed = JSON.parse(r.files.get(r.record.cropIndex));
       changed.crops[0].sourceRender.page.rotation = 180;

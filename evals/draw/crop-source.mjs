@@ -124,6 +124,7 @@ export async function verifyCropSources(sourceRoot, index, crops) {
             row.sourceRender.page,
             row.instanceBbox,
             row.sourceBbox,
+            row.cropShape,
           );
         const crop = crops.get(row.path),
           header = row.headerPixels ?? 0;
@@ -138,6 +139,9 @@ export async function verifyCropSources(sourceRoot, index, crops) {
                 row.sourceRender.page,
                 row.sourceRender.backend,
                 row.sourceRender.pdfjsVersion,
+                row.cropShape,
+                row.text,
+                row.instanceBbox,
               ]
             : []),
           drawingHash(crop, header),

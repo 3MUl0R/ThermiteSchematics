@@ -17,7 +17,7 @@ it.each(["text-below-minimum-em", "iso-cap-height-policy"])(
     checkIndexedEntries(c.file, c.index, c.reports);
     c.file.entries[0].sourceVerification = c.v;
     checkReportedSources(c.file, c.reports);
-    expect(cropPlans(c.file, c.reports)[0].sourceBbox).toEqual(c.t.bbox);
+    expect(cropPlans(c.file, c.reports)[0].sourceBbox).toBeNull();
     expect(() =>
       checkSourceVerification({ sourceVerification: c.v }),
     ).not.toThrow();
@@ -87,7 +87,7 @@ it.each([
   [
     "padded crop",
     (c) => (c.row.sourceBbox = { x: 7, y: 7, w: 16, h: 9 }),
-    /exactly.*instance box/,
+    /exactly.*derived/,
   ],
   [
     "classification",
@@ -178,4 +178,26 @@ it("source verification invokes the PDF capture policy", () => {
   expect(() => checkSourceVerification({ sourceVerification: c.v })).toThrow(
     /capture environment/,
   );
+});
+
+it("new PDF indexes require their shape and format independently of rendering", async () => {
+  const { checkIndexCapture } = await import("./crop-source-policy.mjs"),
+    c = pdfPolicyFixture();
+  delete c.row.cropShape;
+  expect(() => checkIndexCapture([c.row])).toThrow(/requires em\+ink/);
+  const other = pdfPolicyFixture();
+  other.index.format = "thermite-draw-crop-index/2.0";
+  expect(() =>
+    checkIndexedEntries(other.file, other.index, other.reports),
+  ).toThrow(/format 3.0/);
+});
+
+it("PDF capture cannot claim v3 with an em-only shape or put an ink shape in a v2 archive", () => {
+  const c = pdfPolicyFixture();
+  delete c.v.cropShape;
+  c.v.sourceBbox = c.v.instanceBbox;
+  expect(() => checkPdfCapture(c.v)).toThrow(/requires v3 em\+ink/);
+  const d = pdfPolicyFixture();
+  d.v.format = "thermite-draw-source-crop/2.0";
+  expect(() => checkPdfCapture(d.v, true)).toThrow(/requires v3 em\+ink/);
 });

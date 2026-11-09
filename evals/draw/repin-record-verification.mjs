@@ -27,7 +27,13 @@ export function verificationFiles(signed, references) {
     }),
   );
 }
-export function verifyRecordedAttempts(record, files, signed, index) {
+export function verifyRecordedAttempts(
+  record,
+  files,
+  signed,
+  index,
+  archivePdf2 = false,
+) {
   const references = new Map(),
     paths = new Set();
   for (const sha of verificationHashes(signed)) {
@@ -41,16 +47,19 @@ export function verifyRecordedAttempts(record, files, signed, index) {
     paths.add(path);
   }
   for (const { entry, crop } of drawingReferences(signed)) {
-    if (entry.sourceVerification.medium === "pdf")
-      checkPdfIndexAttestation(
-        index.crops.find((r) => r.path === crop.path),
-        entry.sourceVerification,
-      );
+    const row = index.crops.find((r) => r.path === crop.path);
+    if (
+      entry.sourceVerification.medium === "pdf" ||
+      row?.scope?.medium === "pdf" ||
+      row?.sourceRender?.medium === "pdf"
+    )
+      checkPdfIndexAttestation(row, entry.sourceVerification);
     verifyAttemptPixels(
       entry.sourceVerification,
       files.get(record.pathMap[crop.path]),
       crop.headerPixels ?? 0,
       references,
+      archivePdf2,
     );
   }
   return paths;
