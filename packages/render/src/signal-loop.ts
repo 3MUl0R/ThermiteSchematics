@@ -14,6 +14,7 @@ import {
 } from "./signal-loop/series-selection.js";
 import { prepareSeriesLoopDrawing } from "./signal-loop/series-layout.js";
 import { snappedPath } from "./signal-loop/route-geometry.js";
+import { pinMapPair } from "./signal-loop/pin-map.js";
 import {
   directLoopPolarity,
   finishDirectLoopDrawing,
@@ -217,7 +218,7 @@ export function selectSignalLoop(
   }
   conductors.sort((a, b) => compare(a.id, b.id));
   if (request.loopPower) {
-    const series = selectSeriesLoop(ir, request, from, to, input, conductors);
+    const series = selectSeriesLoop(ir, request, from, to, conductors);
     return {
       from,
       to,
@@ -452,10 +453,7 @@ export async function prepareSignalLoopDrawing(
       );
     if (width(spec.connector) > 15)
       throw new Error("Connector label is too wide.");
-    const mapping = members.map(
-      (m) =>
-        `${m.ends[0].terminalKey}-${m.ends[1].terminalKey}${m.spare ? " spare" : ""}`,
-    );
+    const mapping = members.map((m) => pinMapPair(m));
     assemblies.push({
       id: `assembly:${cable.uid}`,
       cable: cable.uid,

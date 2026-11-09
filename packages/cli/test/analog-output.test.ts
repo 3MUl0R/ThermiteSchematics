@@ -50,7 +50,7 @@ it.each(["left-to-right", "top-to-bottom"])(
       "Q3+",
       "Q3-",
       "ch3 / selected channel",
-      "1-1, 2-2, 3-3, 4-4",
+      "1:1, 2:2, 3:3, 4:4",
     ])
       expect(svg).toContain(value);
     expect(svg).not.toContain(">unused</text>");

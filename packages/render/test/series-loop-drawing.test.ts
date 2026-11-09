@@ -159,7 +159,7 @@ it("refuses a combined input and supply device rather than draw an ambiguous sel
         request({ to: { device: "PS1", function: "input" } }),
       ),
     ).toThrow(
-      "Series loop requires the transmitter, input and loop power on three separate devices; use an explicit circuit view for combined devices.",
+      "Series loop power source PS1 cannot also be the input channel; use an explicit circuit view.",
     );
   } finally {
     await f.dispose();
@@ -352,7 +352,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       const d = await prepareSignalLoopDrawing(f.ir, spec);
       routeOracle(d.content, selectSignalLoop(f.ir, spec));
       expect(d.content).toContain("data-wall-device-uid");
-      expect(visible(d.content)).toContain("Pin map: p-1, n-2, spare-3 spare");
+      expect(visible(d.content)).toContain("Pin map: p:1, n:2, spare:3 spare");
       const r = await renderSchematicPacket(
         f.ir,
         packet(spec, {

@@ -297,7 +297,7 @@ it("keeps a third-leg cable assembly pin map consistent when a spare runs in the
           ],
         }),
       );
-      expect(d.content).toContain("Pin map: n-3, aux-4 spare");
+      expect(d.content).toContain("Pin map: n:3, aux:4 spare");
       expect(sharedRuns(d.content)).toEqual([]);
     }
   } finally {
