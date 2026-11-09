@@ -33,6 +33,16 @@ Historical macOS CI evidence used `macos-14`. The pinned `macos-15` ARM64
 runner needs fresh source and runtime-package verification from the exact
 release commit; a skipped `dev` workflow does not provide that evidence.
 
+`watch` uses the same polling implementation on macOS, Linux and Windows. It
+waits one second after each load/rebuild finishes, reloads declared project and
+library inputs plus the saved packet request, and rebuilds when they change.
+It does not use recursive OS file watchers. The release CI matrix runs the watch
+integration tests on all three systems, including the linked-worktree check. Tests use
+longer change-detection deadlines on Linux and Windows to allow for rendering
+time; the polling interval is the same on every platform. In a terminal, Ctrl+C
+stops watch. Windows does not support catchable POSIX termination signals, so
+tests of graceful signal-handler cleanup invoke the JavaScript handler directly.
+
 Package acceptance exercises both project templates, validation, all six agent
 commands, guarded patch dry-run/apply/stale rejection, deterministic SVG/HTML/PDF,
 embedded fonts, source/package drawing parity, and unchanged runtime files.

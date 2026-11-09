@@ -175,20 +175,36 @@ describe.each(["validate", "lock"])("%s project path aliases", (name) => {
         );
         expect(positional.exitCode).toBe(0);
         expect(alias).toEqual(positional);
+        for (const paths of [
+          [path, "--project", path],
+          ["--project", path, path],
+        ])
+          expect(
+            await runDirectCli([name, ...paths, ...selected], dirname(project)),
+          ).toEqual(positional);
         expect(alias.stderr).toBe("");
         if (selected.includes("--json"))
           expect(Array.isArray(JSON.parse(alias.stdout))).toBe(true);
       }
     }
-    const defaulted = await runDirectCli([name, ...flags], project);
-    expect(defaulted).toEqual(
-      await runDirectCli([name, "--project", ".", ...flags], project),
-    );
-    expect(defaulted.exitCode).toBe(0);
+    for (const selected of [flags, flags.filter((flag) => flag !== "--json")]) {
+      const defaulted = await runDirectCli([name, ...selected], project);
+      for (const paths of [
+        ["."],
+        ["--project", "."],
+        [".", "--project", project],
+        ["--project", "./", project],
+        ["system.json", "--project", join(project, "system.json")],
+      ])
+        expect(
+          await runDirectCli([name, ...paths, ...selected], project),
+        ).toEqual(defaulted);
+      expect(defaulted.exitCode).toBe(0);
+    }
     expect(await projectBytes(dirname(project))).toEqual(before);
   });
 
-  it("rejects both forms before loading or writing, even when equal and in either order", async () => {
+  it("rejects conflicting paths before loading or writing in human/JSON modes and either order", async () => {
     const first = await copyValidLockFixture();
     const second = await copyValidLockFixture();
     const cwd = await copyValidLockFixture();
@@ -199,33 +215,41 @@ describe.each(["validate", "lock"])("%s project path aliases", (name) => {
       name === "validate" ? "compileProject" : "lockProject",
     );
     try {
-      for (const other of [first, second, join(first, "system.json")]) {
+      for (const other of [second, join(first, "system.json"), "missing"]) {
         for (const paths of [
           [first, "--project", other],
           ["--project", other, first],
         ]) {
-          const result = await runDirectCli([name, ...paths, "--json"], cwd);
-          expect(loading).not.toHaveBeenCalled();
-          expect(await Promise.all(roots.map(projectBytes))).toEqual(before);
-          expect(result).toEqual({
-            exitCode: 2,
-            stdout: "",
-            stderr:
-              "error: specify either [path] or --project <path>, not both\n",
-          });
+          for (const extra of [[], ["--json"]]) {
+            const result = await runDirectCli([name, ...paths, ...extra], cwd);
+            expect(loading).not.toHaveBeenCalled();
+            expect(await Promise.all(roots.map(projectBytes))).toEqual(before);
+            expect(result).toEqual({
+              exitCode: 2,
+              stdout: "",
+              stderr: "error: [path] and --project refer to different paths\n",
+            });
+          }
         }
       }
-      const missing = join(cwd, "missing");
-      expect(
-        await runDirectCli([name, missing, "--project", missing], cwd),
-      ).toEqual({
-        exitCode: 2,
-        stdout: "",
-        stderr: "error: specify either [path] or --project <path>, not both\n",
-      });
-      expect(loading).not.toHaveBeenCalled();
     } finally {
       loading.mockRestore();
+    }
+  });
+
+  it("loads equal missing paths and preserves positional tool diagnostics", async () => {
+    const cwd = await copyValidCompileFixture();
+    const missing = join(cwd, "missing");
+    for (const extra of [[], ["--json"]]) {
+      const positional = await runDirectCli([name, missing, ...extra], cwd);
+      expect(positional.exitCode).toBe(2);
+      expect(positional.stderr).toBe("");
+      expect(
+        await runDirectCli(
+          [name, missing, "--project", "missing", ...extra],
+          cwd,
+        ),
+      ).toEqual(positional);
     }
   });
 
@@ -236,10 +260,10 @@ describe.each(["validate", "lock"])("%s project path aliases", (name) => {
     const text = help.stdout.replace(/\s+/g, " ");
     expect(text).toContain("--project <path>");
     expect(text).toContain(
-      "alias for [path]: project directory or direct manifest path; use only one form",
+      "alias for [path]: project directory or direct manifest path",
     );
     expect(text).toContain(
-      "Defaults to the current directory. Supply [path] or --project <path>, not both.",
+      "Defaults to the current directory. If both [path] and --project are supplied, they must resolve to the same path.",
     );
     for (const args of [
       [name, "--project"],

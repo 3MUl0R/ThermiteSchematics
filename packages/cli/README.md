@@ -32,6 +32,12 @@ validate, inspect, dry-run, apply, validate and create-view workflow described i
 the project guide. Local library edits require an intentional `lock` followed by
 validation; neither validation nor rendering updates library bytes or the lock.
 
+`validate` and `lock` accept a positional project directory or manifest path,
+or the alias `--project <path>`. Both default to the current directory. Supplying
+both forms is allowed when they resolve to the same path relative to the current
+directory; different paths fail with exit 2 before loading or writing a project.
+These path forms work with both human output and `--json`.
+
 ## Source alpha: repeatable drawings and reports
 
 Save semantic view requests so the same selections can be regenerated after

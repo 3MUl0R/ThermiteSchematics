@@ -1046,7 +1046,8 @@ export async function runCli(
 
   validateCommand.action(async (inputPath: string | undefined) => {
     const flags = validateCommand.opts<{ json?: boolean; strict?: boolean }>();
-    const result = await runValidate(projectPath(validateCommand, inputPath), {
+    const path = projectPath(validateCommand, inputPath, options.cwd);
+    const result = await runValidate(path, {
       json: flags.json === true,
       strict: flags.strict === true,
       color: flags.json !== true && stdout.isTTY === true,
@@ -1059,14 +1060,14 @@ export async function runCli(
 
     exitCode = result.exitCode;
   });
-
   const lockCommand = projectCommand(program, "lock")
     .option("--check", "verify the lock without writing")
     .option("--json", "emit diagnostics as JSON");
 
   lockCommand.action(async (inputPath: string | undefined) => {
     const flags = lockCommand.opts<{ check?: boolean; json?: boolean }>();
-    const result = await runLock(projectPath(lockCommand, inputPath), {
+    const path = projectPath(lockCommand, inputPath, options.cwd);
+    const result = await runLock(path, {
       check: flags.check === true,
       json: flags.json === true,
       color: flags.json !== true && stdout.isTTY === true,
@@ -1079,7 +1080,6 @@ export async function runCli(
 
     exitCode = result.exitCode;
   });
-
   const compileCommand = program
     .command("compile")
     .description("compile an electrical-system project to canonical IR")
