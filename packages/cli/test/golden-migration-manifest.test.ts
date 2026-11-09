@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { updateShippedCoreGoldens } from "../../../scripts/update-shipped-core-goldens.mjs";
 import { updateTask4Goldens } from "../../../scripts/update-task4-goldens.mjs";
+import { updateSeriesLoopGoldens } from "../../../scripts/update-series-loop-goldens.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -40,13 +41,19 @@ function files(root: string): string[] {
   });
 }
 
+// This migration is closed; opt-in series sheets have their own generating owner.
+const seriesGoldenPrefix = "packages/render/test/goldens/series-loop/";
+function legacyRenderGoldenPaths(): string[] {
+  return files(
+    join(repositoryRoot, "packages", "render", "test", "goldens"),
+  ).filter((path) => !path.startsWith(seriesGoldenPrefix));
+}
+
 function currentGoldenPaths(): string[] {
   const cli = files(join(packageRoot, "test", "goldens")).filter(
     (path) => !path.includes("/m8-r005/"),
   );
-  const render = files(
-    join(repositoryRoot, "packages", "render", "test", "goldens"),
-  );
+  const render = legacyRenderGoldenPaths();
   return [
     ...cli,
     ...render,
@@ -120,12 +127,29 @@ function readManifest(): readonly MigrationRow[] {
 }
 
 describe("M8 Task 4 closed golden migration manifest", () => {
-  it("deep-equals all 99 current paths and exact classifications", () => {
+  it("deep-equals all 99 historical paths and exact classifications", () => {
     const cliPaths = files(join(packageRoot, "test", "goldens")).filter(
       (path) => !path.includes("/m8-r005/"),
     );
-    const renderPaths = files(
-      join(repositoryRoot, "packages", "render", "test", "goldens"),
+    const renderPaths = legacyRenderGoldenPaths();
+    expect(
+      files(
+        join(
+          repositoryRoot,
+          "packages",
+          "render",
+          "test",
+          "goldens",
+          "series-loop",
+        ),
+      ).sort(compareText),
+    ).toEqual(
+      [
+        "high-left-to-right",
+        "high-top-to-bottom",
+        "low-left-to-right",
+        "low-top-to-bottom",
+      ].map((name) => seriesGoldenPrefix + name + ".svg"),
     );
     expect(cliPaths).toHaveLength(84);
     expect(renderPaths).toHaveLength(13);
@@ -187,8 +211,9 @@ describe("M8 Task 4 closed golden migration manifest", () => {
     );
   });
 
-  it("runs both generating owners in non-writing check mode", async () => {
+  it("runs the historical and series generating owners in non-writing check mode", async () => {
     await updateShippedCoreGoldens("--check");
     await updateTask4Goldens("--check");
+    await updateSeriesLoopGoldens("--check");
   });
 });

@@ -1,3 +1,4 @@
+import { wrapText } from "../text-metrics.js";
 import { prepareWiringDrawing, type WiringViewRequest } from "../wiring.js";
 import { circuitTextLines } from "../circuit.js";
 import {
@@ -28,6 +29,35 @@ import { bounds, zone } from "./page.js";
 import { n, text, wrapReport, assemblyNoteLines } from "./svg.js";
 import { communicationPartLines } from "./continuations.js";
 
+type NotedDrawing = CommunicationDrawing & {
+  paginated?: boolean;
+  engineNotes?: readonly string[];
+};
+function topologyNoteLines(
+  drawing: NotedDrawing,
+  width: number,
+  assembly: boolean,
+) {
+  return drawing.note
+    .split("\n")
+    .flatMap((line) =>
+      drawing.engineNotes
+        ? wrapText(line, width, 2.5)
+        : wrapReport(line, Math.floor(width / 1.6)),
+    )
+    .flatMap((line) => {
+      if (!assembly && !drawing.pagination) return [line];
+      const measured = assemblyNoteLines(line, width);
+      return measured.length > 1 ? measured : [line];
+    });
+}
+function seriesFitRefusal(page: PaperPage) {
+  const alternatives =
+    page.size === "tabloid"
+      ? "another orientation or flow, or fewer devices or shorter notes"
+      : "another orientation or flow, larger paper, or fewer devices or shorter notes";
+  return `Series loop notes and diagram cannot fit at readable size. Try ${alternatives}.`;
+}
 export async function topologyDrafts(
   ir: Readonly<ElectricalIr>,
   request:
@@ -42,9 +72,7 @@ export async function topologyDrafts(
     const wiring = request.format === "wiring-view-request/0.1";
     const signalLoop = request.format === "signal-loop-view-request/0.1";
     const assembly = request.format === "connector-assembly-view-request/0.1";
-    const compose = (
-      drawing: CommunicationDrawing & { paginated?: boolean },
-    ): RenderOutcome<Draft> => {
+    const compose = (drawing: NotedDrawing): RenderOutcome<Draft> => {
       const title = topologyTitle(
         ir.project.name,
         drawing.title,
@@ -59,15 +87,7 @@ export async function topologyDrafts(
         : [drawing.title];
       const headingHeight = 9 + (headingLines.length - 1) * 4.8;
       const partLines = communicationPartLines(drawing, b.w);
-      const noteLines = drawing.note
-        .split("\n")
-        .flatMap((line) => wrapReport(line, Math.floor(b.w / 1.6)))
-        .flatMap((line) => {
-          if (!assembly && !drawing.pagination) return [line];
-          const measured = assemblyNoteLines(line, b.w);
-          // Preserve existing line breaks where their measured text fits.
-          return measured.length > 1 ? measured : [line];
-        });
+      const noteLines = topologyNoteLines(drawing, b.w, assembly);
       const noteHeight = (noteLines.length + partLines.length) * 3.5;
       let scale = Math.min(
         1,
@@ -75,7 +95,7 @@ export async function topologyDrafts(
         (b.h - headingHeight - 6) / drawing.height,
       );
       const reserveNotes =
-        (assembly || !!drawing.pagination) &&
+        (assembly || !!drawing.pagination || !!drawing.engineNotes) &&
         headingHeight + drawing.height * scale + 4 + noteHeight > b.h;
       if (reserveNotes) {
         // Reserve notes before fitting; round down to the emitted SVG precision.
@@ -90,15 +110,17 @@ export async function topologyDrafts(
       if (scale < 2.5 / 2.7 || !Number.isFinite(scale))
         return failure(
           "unprintable-layout",
-          reserveNotes && assembly
-            ? "Connector assembly notes and diagram cannot fit at readable size. Shorten notes, select fewer assemblies or use larger paper."
-            : wiring
-              ? "Wiring view cannot fit at readable text size. Select fewer conductors or larger paper."
-              : signalLoop
-                ? "Signal loop cannot fit at readable text size. Use larger paper or another flow."
-                : assembly
-                  ? "Connector assembly view cannot fit at readable text size. Select fewer assemblies or larger paper; omitted ports remain identified."
-                  : "Communication view cannot fit at readable text size. Select fewer devices or larger paper; boundary links will remain visible.",
+          drawing.engineNotes
+            ? seriesFitRefusal(page)
+            : reserveNotes && assembly
+              ? "Connector assembly notes and diagram cannot fit at readable size. Shorten notes, select fewer assemblies or use larger paper."
+              : wiring
+                ? "Wiring view cannot fit at readable text size. Select fewer conductors or larger paper."
+                : signalLoop
+                  ? "Signal loop cannot fit at readable text size. Use larger paper or another flow."
+                  : assembly
+                    ? "Connector assembly view cannot fit at readable text size. Select fewer assemblies or larger paper; omitted ports remain identified."
+                    : "Communication view cannot fit at readable text size. Select fewer devices or larger paper; boundary links will remain visible.",
         );
       const x = b.x + (b.w - drawing.width * scale) / 2,
         y = b.y + headingHeight;
@@ -142,7 +164,8 @@ export async function topologyDrafts(
           },
           title,
           drawingBounds: b,
-          communicationHeight: height,
+          // Keep complete series notes with their view through compact packing.
+          ...(drawing.engineNotes ? {} : { communicationHeight: height }),
           ...(drawing.pagination
             ? {
                 communicationBlock: {
@@ -160,6 +183,9 @@ export async function topologyDrafts(
               }
             : {}),
           references,
+          ...(drawing.engineNotes
+            ? { referenceNotes: drawing.engineNotes }
+            : {}),
           links: [],
           note: wiring
             ? "Selected physical wiring - terminal details and other connections in schedules"
@@ -182,7 +208,9 @@ export async function topologyDrafts(
               )
               .join("") +
             `<g transform="translate(${n(x)} ${n(y)}) scale(${n(scale)})">${drawing.content}</g>` +
-            note,
+            (drawing.engineNotes
+              ? `<g data-engine-notes="true">${note}</g>`
+              : note),
         },
       };
     };

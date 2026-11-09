@@ -428,7 +428,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
         role: "series-power",
         functions: [DC_SOURCE],
         notes:
-          "Selection and polarity are checked; series loop drawing is not available yet.",
+          "Three-net series loop drawing with authored polarity checks; input mode, isolation and loop voltage budget are not assessed.",
       },
     ],
   },

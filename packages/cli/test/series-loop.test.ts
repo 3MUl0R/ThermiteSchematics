@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
 import {
@@ -9,9 +9,14 @@ import {
 } from "../../render/test/series-loop-fixture.js";
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "refuses a series drawing through the CLI in %s",
+  "draws a clean series loop with --strict through the CLI in %s",
   async (flow) => {
-    const f = await seriesFixture();
+    const f = await seriesFixture((m) => {
+      m.objects = m.objects.filter(
+        (o) =>
+          o.kind !== "device" || ["TX1", "AI1", "PS1"].includes(o.designation),
+      );
+    });
     try {
       const input = join(f.root, "packet.json"),
         output = join(f.root, "diagram.html");
@@ -31,30 +36,28 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           f.root,
           "--input",
           input,
+          "--strict",
           "--output",
           output,
         ],
         { encoding: "utf8" },
       );
       expect(run.error).toBeUndefined();
-      expect(run.status).toBe(1);
-      expect(run.stdout).toBe("");
-      expect(JSON.parse(run.stderr)).toMatchObject({
-        error: {
-          code: "R006",
-          reason: "unprintable-layout",
-          message:
-            'Packet view[0] "TX1 - signal loop": Series loop drawing is not available in this increment; use an explicit circuit view.',
-        },
-      });
-      await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(run.status, run.stderr).toBe(0);
+      expect(JSON.parse(run.stderr)).toEqual({ diagnostics: [], error: null });
+      const html = await readFile(output, "utf8");
+      expect(html).toContain(
+        "Three separate loop nets; loop power from PS1.output as wired.",
+      );
+      expect(html).toContain("Loop power: PS1");
+      expect(html).not.toContain("Two separate signal nets");
     } finally {
       await f.dispose();
     }
   },
 );
 
-it("explains the series drawing gate in the public symbol catalog", () => {
+it("explains the series drawing assessment limits in the public symbol catalog", () => {
   const run = spawnSync(
     process.execPath,
     [resolve("thermite.mjs"), "guide", "symbols", "--json"],
@@ -70,7 +73,7 @@ it("explains the series drawing gate in the public symbol catalog", () => {
       (s: any) => s.family === "signal-loop" && s.role === "series-power",
     ).notes,
   ).toBe(
-    "Selection and polarity are checked; series loop drawing is not available yet.",
+    "Three-net series loop drawing with authored polarity checks; input mode, isolation and loop voltage budget are not assessed.",
   );
 });
 
@@ -102,3 +105,126 @@ it("discloses the signal-loop family in W111 for an unfit legacy alias clone", a
     await f.dispose();
   }
 });
+
+it.each([false, true])(
+  "paints source labels and the exact engine note in direct PDF, high side %s",
+  async (high) => {
+    const { renderSchematicPacket } =
+      await import("../../render/src/sheets.js");
+    const { packetPdf } = await import("../src/alpha-pdf.js");
+    const raster = await import("./helpers/pdf-raster.js");
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const note =
+      "Three separate loop nets; loop power from PS1.output as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.";
+    const f = await seriesFixture(undefined, high);
+    try {
+      for (const flow of ["left-to-right", "top-to-bottom"]) {
+        const result = await renderSchematicPacket(f.ir, {
+          format: "schematic-packet-request/0.1",
+          index: false,
+          views: [request({ flow })],
+        });
+        expect(result.ok, JSON.stringify(result)).toBe(true);
+        if (!result.ok) continue;
+        const pdf = await packetPdf(result.value, "Series loop");
+        expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+        const task = getDocument({
+          data: new Uint8Array(pdf),
+          useSystemFonts: false,
+        });
+        try {
+          const doc = await task.promise;
+          expect(doc.numPages).toBe(1);
+          const page = await doc.getPage(1),
+            content = await page.getTextContent();
+          const printed = content.items
+            .map((i: any) => i.str ?? "")
+            .join(" ")
+            .replace(/\s+/g, " ");
+          expect(printed).toContain(note);
+          expect(printed).toContain("Loop power: PS1");
+          expect(printed).not.toContain("Two separate signal nets");
+        } finally {
+          await task.destroy();
+        }
+        for (const value of [note, "Loop power: PS1"])
+          for (const crop of await raster.svgTextCrops(
+            result.value.sheets[0]!.svg,
+            value,
+          )) {
+            const ink = raster.inkBounds(
+              await raster.pdfCrop(pdf, { ...crop, width: crop.width + 25 }),
+            );
+            expect(ink.count).toBeGreaterThan(100);
+          }
+      }
+    } finally {
+      await f.dispose();
+    }
+  },
+);
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "keeps the existing W906 strict failure when the authored PE connection has no other sheet in %s",
+  async (flow) => {
+    const f = await seriesFixture(async (m) => {
+      const pe = JSON.parse(
+        await readFile(
+          new URL(
+            "../../core-library/versions/0.2.0/types/terminal-pe.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ).types[0];
+      m.types[3] = { ...pe, id: "series:strip" };
+      m.objects.find((o) => o.designation === "TB1").designation = "PE1";
+      m.objects = m.objects.filter((o) => o.designation !== "PLC1");
+      m.objects.push({
+        kind: "jumper",
+        uid: "74000000-0000-4000-8000-000000000099",
+        endpoints: [
+          { device: "PS1", terminal: "n" },
+          { device: "PE1", terminal: "PE" },
+        ],
+      });
+    });
+    try {
+      const input = join(f.root, "packet.json");
+      await writeFile(
+        input,
+        JSON.stringify({
+          format: "schematic-packet-request/0.1",
+          index: false,
+          views: [request({ flow })],
+        }),
+      );
+      const run = spawnSync(
+        process.execPath,
+        [
+          resolve("thermite.mjs"),
+          "packet",
+          "--project",
+          f.root,
+          "--input",
+          input,
+          "--strict",
+          "--output",
+          join(f.root, "pe.html"),
+        ],
+        { encoding: "utf8" },
+      );
+      expect(run.status, run.stderr).toBe(1);
+      const report = JSON.parse(run.stderr);
+      expect(report.error).toBeNull();
+      expect(report.diagnostics).toHaveLength(1);
+      expect(report.diagnostics[0]).toMatchObject({
+        code: "W906",
+        severity: "warning",
+        devices: [{ designation: "PE1", appearance: "absent" }],
+      });
+    } finally {
+      await f.dispose();
+    }
+  },
+);
