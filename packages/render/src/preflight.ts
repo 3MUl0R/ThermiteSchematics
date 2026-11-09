@@ -18,6 +18,7 @@ import type {
 import type { NormalizedSchematicView } from "./types.js";
 import type { DeviceTypeSymbolMapping } from "./symbols/mappings.js";
 import { isFunctionTraversable } from "./symbols/validate.js";
+import { protectionControlRefusal } from "./symbols/protection-control.js";
 
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 
@@ -52,6 +53,14 @@ export function unsupportedProfileError<E extends RenderError>(
   const profile = type.symbol ?? "<missing>";
   const functionKey = f?.id.functionKey;
   const shape = f ? `${f.kind}/${f.terminals.length}` : "terminal-only";
+  cause ??=
+    family === "control" && f?.terminals.length === 2
+      ? protectionControlRefusal(
+          symbolProfile(type),
+          type.circuitSymbols?.[f.id.functionKey],
+          f,
+        )
+      : undefined;
   return Object.freeze({
     ...error,
     ...("reason" in error ? {} : { reason: "unsupported-symbol-profile" }),

@@ -530,7 +530,15 @@ describe("schema/render symbol profile conformance", () => {
                 declaredRoles.includes("supply_positive") &&
                 declaredRoles.includes("supply_return"));
             for (const family of ["power", "control"] as const) {
+              const first = type.functions[0]!;
               const fits =
+                // The catalog note qualifies unmarked fuse contacts in control.
+                !(
+                  profile.id === "thermite:fuse" &&
+                  family === "control" &&
+                  first.kind === "contact" &&
+                  first.normal_state === "open"
+                ) &&
                 (profile.id !== "thermite:sensor-3wire" ||
                   kind !== "channel" ||
                   variant === "output") &&

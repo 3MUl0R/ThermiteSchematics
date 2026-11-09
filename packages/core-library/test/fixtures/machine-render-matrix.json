@@ -5,7 +5,7 @@
     "bindings": {
       "circuit": ["pole1"],
       "power": ["pole1"],
-      "control": [],
+      "control": ["pole1"],
       "loads": []
     },
     "probes": {
@@ -15,10 +15,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",
@@ -35,7 +32,7 @@
     "bindings": {
       "circuit": ["pole1", "pole2"],
       "power": ["pole1", "pole2"],
-      "control": [],
+      "control": ["pole1", "pole2"],
       "loads": []
     },
     "probes": {
@@ -45,10 +42,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",
@@ -65,7 +59,7 @@
     "bindings": {
       "circuit": ["pole1", "pole2", "pole3"],
       "power": ["pole1", "pole2", "pole3"],
-      "control": [],
+      "control": ["pole1", "pole2", "pole3"],
       "loads": []
     },
     "probes": {
@@ -75,10 +69,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",
@@ -297,7 +288,7 @@
     "bindings": {
       "circuit": ["pole1"],
       "power": ["pole1"],
-      "control": [],
+      "control": ["pole1"],
       "loads": []
     },
     "probes": {
@@ -307,10 +298,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",
@@ -330,7 +318,7 @@
     "bindings": {
       "circuit": ["pole1", "pole2"],
       "power": ["pole1", "pole2"],
-      "control": [],
+      "control": ["pole1", "pole2"],
       "loads": []
     },
     "probes": {
@@ -340,10 +328,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",
@@ -364,7 +349,7 @@
     "bindings": {
       "circuit": ["pole1", "pole2", "pole3"],
       "power": ["pole1", "pole2", "pole3"],
-      "control": [],
+      "control": ["pole1", "pole2", "pole3"],
       "loads": []
     },
     "probes": {
@@ -374,10 +359,7 @@
       },
       "control": {
         "key": "pole1",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "pole1"
+        "outcome": "renders"
       },
       "loads": {
         "key": "pole1",

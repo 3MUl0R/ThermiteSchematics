@@ -80,26 +80,17 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           .sort(),
       ).toEqual(functions);
     }
-    for (const root of ["K1", "R1"]) {
+    for (const root of ["K1", "R1"] as const) {
       const rooted = await renderSchematic(ir, {
         format: "schematic-view-request/0.1",
         root: { by: "designation", value: root },
         family: "control",
         flow,
       });
-      expect(rooted).toMatchObject({
-        ok: false,
-        error: {
-          code: "R002",
-          reason: "unsupported-symbol-profile",
-          unsupported: {
-            designation: "F1",
-            profile: "thermite:fuse",
-            functionKey: "pole1",
-            family: "control",
-          },
-        },
-      });
+      const expected = structuredClone(rootedPins[root]);
+      if ("alternative" in expected.error.details)
+        expected.error.details.alternative.flow = flow;
+      expect(rooted).toEqual(expected);
     }
     const power = await renderSchematic(ir, {
       format: "schematic-view-request/0.1",
@@ -220,3 +211,187 @@ it("joins only two-ended power cable cores; a spare PE end cannot complete the m
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// Exact live refusal output after control protection bindings; no layout repair here.
+const rootedPins = {
+  K1: {
+    ok: false,
+    error: {
+      code: "R003",
+      message:
+        'Unsupported terminal representation: R1.A1 on "core:relay-1co" is incident to selected conductors W36, W37, W38 but has no selected function, mapped terminal-display symbol, or boundary representation in this rooted view. Use a circuit view to draw these conductors with their real endpoint terminals. Put details.alternative in the views array of a schematic-packet-request/0.1 file and run thermite packet --input <file>. The alternative selects K1.coil.',
+      family: "control",
+      deviceUid: "10000000-0000-4000-8000-000000000012",
+      typeId: "core:relay-1co",
+      root: "K1",
+      details: {
+        reason: "unrepresented-terminal",
+        designation: "R1",
+        terminalIds: [
+          {
+            deviceUid: "10000000-0000-4000-8000-000000000012",
+            terminalKey: "A1",
+          },
+        ],
+        conductors: [
+          {
+            kind: "wire",
+            uid: "10000000-0000-4000-8000-000000000036",
+            designation: "W36",
+          },
+          {
+            kind: "wire",
+            uid: "10000000-0000-4000-8000-000000000037",
+            designation: "W37",
+          },
+          {
+            kind: "wire",
+            uid: "10000000-0000-4000-8000-000000000038",
+            designation: "W38",
+          },
+        ],
+        alternative: {
+          format: "circuit-view-request/0.1",
+          title: "K1 selected conductors",
+          flow: "left-to-right",
+          groups: [
+            {
+              id: "selected-path",
+              functions: [
+                {
+                  device: {
+                    by: "designation",
+                    value: "K1",
+                  },
+                  key: "coil",
+                },
+              ],
+              conductors: [
+                "W30",
+                "W31",
+                "W32",
+                "W33",
+                "W34",
+                "W35",
+                "W36",
+                "W37",
+                "W38",
+                "W41",
+              ],
+            },
+          ],
+        },
+        typeId: "core:relay-1co",
+        functions: [
+          {
+            functionKey: "coil",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "A1",
+                designation: "R1",
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "A2",
+                designation: "R1",
+              },
+            ],
+          },
+          {
+            functionKey: "contact12",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "11",
+                designation: "R1",
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "12",
+                designation: "R1",
+              },
+            ],
+          },
+          {
+            functionKey: "contact14",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "11",
+                designation: "R1",
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "14",
+                designation: "R1",
+              },
+            ],
+          },
+        ],
+        stoppedAt: [
+          {
+            deviceUid: "10000000-0000-4000-8000-000000000012",
+            terminalKey: "A1",
+            designation: "R1",
+            functionKeys: ["coil"],
+          },
+        ],
+      },
+    },
+  },
+  R1: {
+    ok: false,
+    error: {
+      code: "R004",
+      message:
+        "Invalid layout: edges W34 (OL1.96 / aux95 → S2.13 / contact13) and W35 (OL1.96 / aux95 → R1.11 / contact14) overlap collinearly.",
+      details: {
+        originalMessage:
+          'Invalid layout: edges ["wire","10000000-0000-4000-8000-000000000034"] and ["wire","10000000-0000-4000-8000-000000000035"] overlap collinearly.',
+        conductors: [
+          {
+            id: '["wire","10000000-0000-4000-8000-000000000034"]',
+            designation: "W34",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000004",
+                terminalKey: "96",
+                designation: "OL1",
+                functionKeys: ["aux95"],
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000011",
+                terminalKey: "13",
+                designation: "S2",
+                functionKeys: ["contact13"],
+              },
+            ],
+          },
+          {
+            id: '["wire","10000000-0000-4000-8000-000000000035"]',
+            designation: "W35",
+            terminals: [
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000004",
+                terminalKey: "96",
+                designation: "OL1",
+                functionKeys: ["aux95"],
+              },
+              {
+                deviceUid: "10000000-0000-4000-8000-000000000012",
+                terminalKey: "11",
+                designation: "R1",
+                functionKeys: ["contact14"],
+              },
+            ],
+          },
+        ],
+      },
+      family: "control",
+      netId:
+        "net:sha256:5f735b4a219185b3b4f0ee45f4d391f7671404b731f6d0955a316a43accd0fb8",
+      root: "R1",
+    },
+  },
+};

@@ -141,7 +141,16 @@ export const ROOTED_CONTRACTS: Readonly<
         true,
       ),
     ],
-    control: [],
+    control: [
+      c(
+        "contact-closed",
+        shape("contact", 2),
+        "ais:contact-nc",
+        "protection-contact",
+        [],
+        true,
+      ),
+    ],
     loads: [],
   },
   "thermite:overload": {
@@ -179,7 +188,17 @@ export const ROOTED_CONTRACTS: Readonly<
       ),
       c("other", shape("other", 2), "ais:fuse", "breaker-pole", [], true),
     ],
-    control: [],
+    control: [
+      c(
+        "contact-closed",
+        shape("contact", 2),
+        "ais:fuse",
+        "protection-contact",
+        [],
+        true,
+      ),
+      c("other", shape("other", 2), "ais:fuse", "protection-contact", [], true),
+    ],
     loads: [],
   },
   "thermite:motor-3ph": {
@@ -438,6 +457,7 @@ export async function contractProject(
   mode: string,
   family: RootedFamily,
 ): Promise<{
+  root: string;
   ir: ElectricalIr;
   request: unknown;
   dispose: () => Promise<void>;
@@ -620,6 +640,7 @@ export async function contractProject(
   const result = await compileProject(root);
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return {
+    root,
     ir: result.ir,
     request: view,
     dispose: () => rm(root, { recursive: true, force: true }),
