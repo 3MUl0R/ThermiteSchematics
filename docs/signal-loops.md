@@ -85,6 +85,15 @@ input channels. Alternatively, a two-terminal output channel can drive a
 `thermite:analog-actuator` endpoint. Branches away from the selected series supply and split field chains are
 unsupported. No wiring or layout is synthesized by an agent.
 
+Direct transmitter-to-input loops use the exact transmitter and input role pairs
+listed below. A recognized reversal refuses with R006, naming both terminals and
+roles. Unrecognized endpoint polarity prints `polarity not verified: {D.F[, D.F]}.`
+below the hookup explanation, in SVG `desc` and in enabled packet references;
+endpoints are sorted by designation and function. The note adds no warning, so a
+clean `--strict` stays clean. Nothing is inferred from terminal names, descriptions
+or function order. Output-to-actuator views and auxiliary pairs keep their existing
+behavior.
+
 ## Series loop power
 
 Opt in with `loopPower`; the engine never discovers a supply or changes wiring.
@@ -147,8 +156,9 @@ Endpoint polarity follows roles regardless of terminal names or function-array
 order. Other, missing, partial, duplicate or mixed pairs, including cross-channel
 pairs, mean **polarity not verified**. No case, suffix, description or arbitrary
 channel-number inference is made. A recognized contradiction refuses and names
-both terminals and roles. This check applies to explicitly selected series mode;
-no direct-loop polarity assessment is added.
+both terminals and roles. Series mode checks the selected supply path; direct
+input loops check that transmitter positive reaches input positive through the
+authored wiring.
 
 Both low-side wiring (PS+ → TX+, TX− → AI+, AI− → PS−) and high-side wiring
 (PS+ → AI+, AI− → TX+, TX− → PS−) can be depicted. The arrows describe reading

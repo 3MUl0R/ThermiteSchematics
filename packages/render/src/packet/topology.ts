@@ -51,12 +51,16 @@ function topologyNoteLines(
       return measured.length > 1 ? measured : [line];
     });
 }
-function seriesFitRefusal(page: PaperPage) {
+function loopFitRefusal(
+  page: PaperPage,
+  request: { format: string; loopPower?: unknown },
+) {
+  const kind = request.loopPower ? "Series" : "Signal";
   const alternatives =
     page.size === "tabloid"
       ? "another orientation or flow, or fewer devices or shorter notes"
       : "another orientation or flow, larger paper, or fewer devices or shorter notes";
-  return `Series loop notes and diagram cannot fit at readable size. Try ${alternatives}.`;
+  return `${kind} loop notes and diagram cannot fit at readable size. Try ${alternatives}.`;
 }
 export async function topologyDrafts(
   ir: Readonly<ElectricalIr>,
@@ -111,7 +115,7 @@ export async function topologyDrafts(
         return failure(
           "unprintable-layout",
           drawing.engineNotes
-            ? seriesFitRefusal(page)
+            ? loopFitRefusal(page, request)
             : reserveNotes && assembly
               ? "Connector assembly notes and diagram cannot fit at readable size. Shorten notes, select fewer assemblies or use larger paper."
               : wiring
