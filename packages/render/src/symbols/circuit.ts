@@ -8,6 +8,7 @@ import {
   type SharedMark,
   sourceEnclosure,
   sourceEnclosureInk,
+  windingPolyline,
 } from "./printable-policy.js";
 import { escapeXmlText as xml } from "../svg/escape.js";
 
@@ -647,18 +648,15 @@ export function circuitWinding(
   terminalXs?: readonly [number, number],
 ): string {
   const x = width / 2 + (coupled ? (source ? 3 : -3) : 0),
-    edge = source ? width : 0,
-    span = y2 - y1;
-  const points: Point[] = [
-    [terminalXs?.[0] ?? edge, y1],
-    [x, y1],
-    ...[1, 2, 3, 4, 5, 6, 7].map((i): Point => [
-      x + (i % 2 ? (coupled && source ? -2 : 2) : 0),
-      y1 + (span * i) / 8,
-    ]),
-    [x, y2],
-    [terminalXs?.[1] ?? edge, y2],
-  ];
+    edge = source ? width : 0;
+  const points = windingPolyline(
+    x,
+    y1,
+    y2,
+    edge,
+    coupled && source ? -2 : 2,
+    terminalXs,
+  );
   return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
 }
 
@@ -672,18 +670,15 @@ export function circuitWindingVertical(
   terminalYs?: readonly [number, number],
 ): string {
   const y = center + (coupled ? (source ? 3 : -3) : 0),
-    edge = source ? height : 0,
-    span = x2 - x1;
-  const points: Point[] = [
-    [x1, terminalYs?.[0] ?? edge],
-    [x1, y],
-    ...[1, 2, 3, 4, 5, 6, 7].map((i): Point => [
-      x1 + (span * i) / 8,
-      y + (i % 2 ? (coupled && source ? -2 : 2) : 0),
-    ]),
-    [x2, y],
-    [x2, terminalYs?.[1] ?? edge],
-  ];
+    edge = source ? height : 0;
+  const points = windingPolyline(
+    y,
+    x1,
+    x2,
+    edge,
+    coupled && source ? -2 : 2,
+    terminalYs,
+  ).map(([cross, along]): Point => [along, cross]);
   return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
 }
 

@@ -22,7 +22,12 @@ import type {
   SelectionContext,
   SearchSuccess,
 } from "./contracts.js";
-import { compareSelectedStep, searchPath } from "./traversal.js";
+import {
+  searchControlArm,
+  pairTransformerPaths,
+  type ControlArm,
+} from "./transformer.js";
+import { compareSelectedStep } from "./traversal.js";
 
 function compareControlSelection(
   context: SelectionContext,
@@ -157,8 +162,9 @@ export function selectControlPaths(
     },
   ];
   const paths: SearchSuccess[] = [];
+  const arms: ControlArm[] = [];
   for (const search of searches) {
-    const result = searchPath(context, search.start, {
+    const arm = searchControlArm(context, search.start, {
       lane: search.spec.lane,
       allowFunctions: true,
       boundaryAtEnd: search.spec.kind === "control-return",
@@ -172,6 +178,8 @@ export function selectControlPaths(
           search.spec,
         ),
     });
+    arms.push(arm);
+    const result = arm.result;
     if (!result.ok) return result;
     if (result.value === undefined) {
       return {
@@ -188,10 +196,12 @@ export function selectControlPaths(
     }
     paths.push(result.value);
   }
+  const paired = pairTransformerPaths(context, arms, paths);
+  if (!paired.ok) return paired;
   return {
     ok: true,
     paths: Object.freeze(
-      paths.sort((left, right) =>
+      [...paired.paths].sort((left, right) =>
         compareControlSelection(context, left, right),
       ),
     ),

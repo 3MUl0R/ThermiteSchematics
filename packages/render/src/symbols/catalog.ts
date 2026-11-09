@@ -1,4 +1,8 @@
-import { sharedMarkPrimitives, sourceEnclosure } from "./printable-policy.js";
+import {
+  sharedMarkPrimitives,
+  sourceEnclosure,
+  windingPolyline,
+} from "./printable-policy.js";
 import { validateSymbolCatalog } from "./validate.js";
 import type {
   SymbolDefinition,
@@ -148,6 +152,16 @@ const CATALOG_DEFINITIONS = [
       line(13, 8, 21, 8, "annotation"),
       line(17, 4, 17, 12, "annotation"),
       line(13, 56, 21, 56, "annotation"),
+    ],
+  ),
+  symbol(
+    "ais:source-winding",
+    36,
+    64,
+    [port("feed", "east", 1 / 8, 0), port("return", "east", 7 / 8, 1)],
+    [
+      polyline(windingPolyline(12, 8, 56, 36, 6), "body"),
+      line(24, 12, 24, 52, "body"),
     ],
   ),
   symbol(

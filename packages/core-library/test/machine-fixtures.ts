@@ -1,3 +1,7 @@
+import {
+  transformerFixture,
+  transformerRequest,
+} from "../../render/test/transformer-control-fixture.js";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +23,14 @@ export type Family = "power" | "control" | "loads";
  * Like P4's contractProject, control load bindings are exercised through loads
  * selection, since the legacy control root contract requires a coil. */
 export async function machineProbe(type: any, family: Family, key: string) {
+  if (
+    type.symbol === "thermite:transformer" &&
+    family === "control" &&
+    type.functions[key]?.kind === "source"
+  ) {
+    const fixture = await transformerFixture("matrix");
+    return { ...fixture, request: transformerRequest("left-to-right") };
+  }
   const root = await mkdtemp(join(tmpdir(), "thermite-machine-matrix-"));
   let n = 0;
   const objects: any[] = [];

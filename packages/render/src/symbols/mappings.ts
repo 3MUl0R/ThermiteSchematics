@@ -8,6 +8,7 @@ import type { PresentationClass } from "../ordering.js";
 import type { SchematicViewFamily } from "../types.js";
 import type { SymbolDefinition, SymbolPortBinding } from "./types.js";
 import { protectionFamilyRules } from "./protection-control.js";
+import { sourceBoundaryRules } from "./source-winding.js";
 const IN_OUT = ["in", "out"] as const;
 
 export type { SchematicViewFamily } from "../types.js";
@@ -1090,23 +1091,14 @@ export function projectDeviceTypeSymbolMappings(
               "channel-boundary",
             );
           else if (f.kind === "source" && terminals.length === 2) {
+            const winding = profile === "thermite:transformer";
             rule = make(
-              "ais:power-source-dc",
-              ["positive", "return"],
+              winding ? "ais:source-winding" : "ais:power-source-dc",
+              winding ? ["feed", "return"] : ["positive", "return"],
               "source",
               "source-boundary",
             );
-            for (const [i, boundaryKind] of [
-              "control-source",
-              "control-return",
-            ].entries())
-              boundaryTerminals.push({
-                functionKey: f.key,
-                terminalKey: terminals[i]!,
-                families: CONTROL,
-                boundaryKind: boundaryKind as BoundaryKind,
-                requiredRole: role(terminals[i]!)!,
-              });
+            boundaryTerminals.push(...sourceBoundaryRules(f, role, winding));
           }
         }
         if (rule)

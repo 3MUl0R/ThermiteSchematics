@@ -173,7 +173,7 @@
     "bindings": {
       "circuit": ["primary", "secondary"],
       "power": [],
-      "control": [],
+      "control": ["secondary"],
       "loads": []
     },
     "probes": {
@@ -186,10 +186,7 @@
       },
       "control": {
         "key": "secondary",
-        "outcome": "gap",
-        "code": "R002",
-        "reason": "unsupported-symbol-profile",
-        "functionKey": "secondary"
+        "outcome": "renders"
       },
       "loads": {
         "key": "primary",
