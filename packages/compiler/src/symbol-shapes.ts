@@ -1,9 +1,15 @@
 import type {
   SymbolFunctionShape,
+  SymbolRendererFamily,
   ValidatedDeviceType,
 } from "@thermite/schema";
+import { SYMBOL_PROFILES, symbolProfile } from "@thermite/schema";
 
-import type { IrDeviceType, IrDeviceTypeFunction } from "./expansion.js";
+import type {
+  IrDeviceType,
+  IrDeviceTypeFunction,
+  IrFunction,
+} from "./expansion.js";
 
 type ShapeType =
   Pick<ValidatedDeviceType, "terminals"> | Pick<IrDeviceType, "terminals">;
@@ -55,4 +61,33 @@ export function formatSymbolFunctionShape(shape: SymbolFunctionShape): string {
   if (shape.terminalRoles) constraints.push(shape.terminalRoles.join(", "));
   const suffix = constraints.length ? ` (${constraints.join("; ")})` : "";
   return `${shape.kind}/${count}${suffix}`;
+}
+
+/** State is the cause only when the same family admits the other authored facts. */
+export function symbolFunctionStateMismatch(
+  type: ShapeType & { readonly symbol?: string },
+  fn: ShapeFunction | IrFunction,
+  family?: SymbolRendererFamily,
+): boolean {
+  const facts =
+    "terminalKeys" in fn
+      ? fn
+      : {
+          ...fn,
+          terminalKeys: fn.terminals.map((t) =>
+            typeof t === "string" ? t : t.terminalKey,
+          ),
+        };
+  const shapes =
+    SYMBOL_PROFILES.find((p) => p.id === symbolProfile(type))
+      ?.support.filter((s) => family === undefined || s.family === family)
+      .flatMap((s) => s.functions) ?? [];
+  return (
+    !shapes.some((s) => symbolFunctionMatchesShape(type, facts, s)) &&
+    shapes.some(
+      ({ normalState, ...shape }) =>
+        normalState !== undefined &&
+        symbolFunctionMatchesShape(type, facts, shape),
+    )
+  );
 }

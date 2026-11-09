@@ -319,7 +319,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:breaker",
     notes:
-      'Protection contacts; control accepts unmarked contacts or circuitSymbols marks "breaker", "contact-no" and "contact-nc"; other marks refuse. Power compatibility is unchanged.',
+      'Protection contacts; power and circuit retain each supported authored mark. Control accepts unmarked contacts or circuitSymbols marks "breaker", "contact-no" and "contact-nc"; other marks refuse.',
     aliases: [],
     coreAliases: CORE_SYMBOL_BINDINGS.filter(
       (b) => b.equivalent === "thermite:breaker",
@@ -345,7 +345,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:fuse",
     notes:
-      'Control accepts unmarked other/2, a "fuse" circuitSymbols mark, or a closed unmarked contact/2; open unmarked contacts and other marks refuse. Power compatibility is unchanged.',
+      'Unmarked other/2, a "fuse" circuitSymbols mark, or a closed unmarked contact/2 retains fuse identity. Power and circuit draw open unmarked contacts as plain NO and retain supported authored marks. Control refuses open unmarked contacts and other marks.',
     aliases: [],
     coreAliases: [],
     support: [
@@ -530,19 +530,19 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:disconnector",
     notes:
-      "Open contact only. Opting in asserts author-selected disconnector-function identity. Isolation suitability (impulse withstand, contact gap, position indication, lockability), load-break and ratings are not asserted.",
+      "Main contacts require open state. Contacts with aux roles on both terminals draw as plain contacts of their authored state in control and circuit. Opting in asserts author-selected main disconnector-function identity. Isolation suitability (impulse withstand, contact gap, position indication, lockability), load-break and ratings are not asserted.",
     aliases: [],
     coreAliases: [],
     support: [
       ...rooted(
         [{ ...POWER_CONTACT, normalState: "open" }],
-        [{ ...CONTACT, normalState: "open" }],
+        [{ ...CONTACT, normalState: "open" }, AUX_CONTACT],
         [],
       ),
       {
         family: "circuit",
         role: "function",
-        functions: [BUS, { ...CONTACT, normalState: "open" }],
+        functions: [BUS, { ...CONTACT, normalState: "open" }, AUX_CONTACT],
       },
     ],
   },

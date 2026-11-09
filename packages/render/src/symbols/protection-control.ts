@@ -1,8 +1,8 @@
 import type { IrDeviceType, IrDeviceTypeFunction } from "@thermite/compiler";
 import type { FunctionSymbolRule } from "./mappings.js";
+import { protectionPowerRule } from "./protection-power.js";
 
-/** A control binding must preserve the authored protection/contact identity.
- * Power keeps its existing compatibility rules, including unsupported overrides. */
+/** Control's protection identity policy is deliberately narrower than power/circuit. */
 export function protectionControlRefusal(
   profile: string | undefined,
   mark: string | undefined,
@@ -45,11 +45,26 @@ export function protectionFamilyRules(
   );
   return rule.families
     .filter((family) => family !== "control" || !refusal)
-    .map((family) => ({
-      ...rule,
-      families: [family],
-      classification: family === "control" ? "protection" : rule.classification,
-      traversalRole:
-        family === "control" ? "protection-contact" : rule.traversalRole,
-    }));
+    .flatMap((family) => {
+      const projected =
+        family === "power"
+          ? protectionPowerRule(profile, type, fn, rule)
+          : rule;
+      return projected
+        ? [
+            {
+              ...projected,
+              families: [family],
+              classification:
+                family === "control"
+                  ? ("protection" as const)
+                  : projected.classification,
+              traversalRole:
+                family === "control"
+                  ? ("protection-contact" as const)
+                  : projected.traversalRole,
+            },
+          ]
+        : [];
+    });
 }

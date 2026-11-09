@@ -20,7 +20,10 @@ import type {
   InstanceTypeResolution,
   ResolveLoadedProjectResult,
 } from "./resolution.js";
-import { symbolFunctionMatchesShape } from "./symbol-shapes.js";
+import {
+  symbolFunctionMatchesShape,
+  symbolFunctionStateMismatch,
+} from "./symbol-shapes.js";
 
 const FAMILIES: readonly SymbolRendererFamily[] = [
   "power",
@@ -203,11 +206,13 @@ function unfitFunctions(type: ValidatedDeviceType, profile?: SymbolProfile) {
 
 function describeFunctions(
   functions: ReturnType<typeof drawableFunctions>,
+  type: ValidatedDeviceType,
 ): string {
   const names = functions
     .slice(0, MAX_FUNCTION_NAMES)
     .map(
-      ([key, f]) => `${JSON.stringify(key)} (${f.kind}/${f.terminals.length})`,
+      ([key, f]) =>
+        `${JSON.stringify(key)} (${symbolFunctionStateMismatch(type, f) && f.kind === "contact" ? `${f.normal_state} ` : ""}${f.kind}/${f.terminals.length})`,
     )
     .join(", ");
   const rest = functions.length - MAX_FUNCTION_NAMES;
@@ -356,7 +361,7 @@ export function symbolProfileDiagnostics(
       parts.push(`${context}.`);
       if (unfit.length)
         parts.push(
-          `Functions with no cataloged family: ${describeFunctions(unfit)}.`,
+          `Functions with no cataloged family: ${describeFunctions(unfit, type)}.`,
         );
     }
     if (roleProblems.length)

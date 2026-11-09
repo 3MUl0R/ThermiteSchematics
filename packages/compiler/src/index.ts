@@ -18,6 +18,7 @@ export {
 } from "./compiler.js";
 export {
   symbolFunctionMatchesShape,
+  symbolFunctionStateMismatch,
   formatSymbolFunctionShape,
 } from "./symbol-shapes.js";
 export {

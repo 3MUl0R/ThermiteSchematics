@@ -17,6 +17,7 @@ describe("compiler public API", () => {
       "compileLoadedProject",
       "compileProject",
       "symbolFunctionMatchesShape",
+      "symbolFunctionStateMismatch",
       "formatSymbolFunctionShape",
       "expandResolvedProject",
       "normalizeProjectGraph",
@@ -47,6 +48,7 @@ describe("compiler public API", () => {
     expect(compiler.compileLoadedProject).toBeTypeOf("function");
     expect(compiler.compileProject).toBeTypeOf("function");
     expect(compiler.symbolFunctionMatchesShape).toBeTypeOf("function");
+    expect(compiler.symbolFunctionStateMismatch).toBeTypeOf("function");
     expect(compiler.formatSymbolFunctionShape).toBeTypeOf("function");
     expect(compiler.serializeIr).toBeTypeOf("function");
     expect(compiler.expandResolvedProject).toBeTypeOf("function");

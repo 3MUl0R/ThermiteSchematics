@@ -9,7 +9,10 @@ import {
   SYMBOL_PROFILES,
   resolveSensorSupply,
 } from "@thermite/schema";
-import { symbolFunctionMatchesShape } from "@thermite/compiler";
+import {
+  symbolFunctionMatchesShape,
+  symbolFunctionStateMismatch,
+} from "@thermite/compiler";
 import type {
   RenderError,
   UnsupportedSymbolMappingError,
@@ -19,6 +22,7 @@ import type { NormalizedSchematicView } from "./types.js";
 import type { DeviceTypeSymbolMapping } from "./symbols/mappings.js";
 import { isFunctionTraversable } from "./symbols/validate.js";
 import { protectionControlRefusal } from "./symbols/protection-control.js";
+import { protectionPowerRefusal } from "./symbols/protection-power.js";
 
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 
@@ -52,15 +56,23 @@ export function unsupportedProfileError<E extends RenderError>(
   const type = ir.deviceTypes.find((t) => t.id === device.typeId)!;
   const profile = type.symbol ?? "<missing>";
   const functionKey = f?.id.functionKey;
-  const shape = f ? `${f.kind}/${f.terminals.length}` : "terminal-only";
+  const stateProblem = f && symbolFunctionStateMismatch(type, f, family);
+  const shape = f
+    ? `${stateProblem && f.kind === "contact" ? `${f.normal_state} ` : ""}${f.kind}/${f.terminals.length}`
+    : "terminal-only";
   cause ??=
-    family === "control" && f?.terminals.length === 2
-      ? protectionControlRefusal(
+    (family === "control" || family === "power") && f?.terminals.length === 2
+      ? (family === "control"
+          ? protectionControlRefusal
+          : protectionPowerRefusal)(
           symbolProfile(type),
           type.circuitSymbols?.[f.id.functionKey],
           f,
         )
       : undefined;
+  cause ??= stateProblem
+    ? `This ${symbolProfile(type)?.replace(/^thermite:/, "") ?? "profile"} binding requires an open contact.`
+    : undefined;
   return Object.freeze({
     ...error,
     ...("reason" in error ? {} : { reason: "unsupported-symbol-profile" }),
