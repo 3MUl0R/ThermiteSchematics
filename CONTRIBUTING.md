@@ -180,6 +180,29 @@ Findings are sorted as `file:line target reason`; exits are 0 (clean), 1
 (findings), and 2 (tool failure). Both scripts accept `--root <directory>` for
 checking a separate source tree.
 
+`check:docs` also checks the [runnable-example inventory](scripts/docs-examples.json).
+It covers every code block in the root README and indexed live `docs/`, excluding
+the archive and planning. All languages are inventoried, including diagrams and
+fragments. Entries use the file path and a SHA-256 of language, metadata and body;
+moving a fence down the page does not invalidate it. Each entry is executed,
+illustrative with a reason, or limited to a named platform/setup with a reason.
+Freshness checks run no examples. The test suite executes current Markdown bodies
+in temporary projects. Existing topic examples name their exact test, pin its
+source bytes, and require evidence that the test parser consumed the selected
+fence hash. A passing test that omitted that fence cannot approve it.
+
+After changing a fence, use `bun scripts/docs-examples.mjs --help` to choose its
+classification. For example, `bun scripts/docs-examples.mjs --classify README.md#4 --as executed --recipe repo-shell`
+runs that recipe before recording the current hash; a failed run leaves the
+inventory untouched. Use the recipe already named by the reviewed entry when
+updating it. Illustrative entries require `--reason`; platform entries also need
+`--setup`. Inspect the inventory diff. `bun scripts/docs-examples.mjs --measure`
+prints counts by file and language. No bulk updater silently approves examples.
+Child commands close unused stdin and have deadlines (30 seconds for recipe
+commands, 120 seconds for bound tests). Teardown kills and awaits owned children
+before removing their temporary files; bound-test scratch files also live under
+the owned temporary directory.
+
 Historical runtime and installation instructions belong in `docs/legacy/`.
 The scan checks configured old-runtime phrases in live prose and code, joining
 shell continuations before checking. `scripts/docs-policy.json` has an empty

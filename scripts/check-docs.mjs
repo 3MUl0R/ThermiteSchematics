@@ -1,5 +1,6 @@
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exampleFindings } from "./docs-examples-lib.mjs";
 import {
   compare,
   excluded,
@@ -241,6 +242,7 @@ export async function checkDocs(root = repositoryRoot) {
     ...indexFindings(corpus),
     ...topicFindings(corpus),
     ...legacyFindings(corpus),
+    ...(await exampleFindings(corpus)),
   ];
   const edges = await linkGraph(corpus, findings);
   findings.push(...navigationFindings(corpus.documents, edges));
