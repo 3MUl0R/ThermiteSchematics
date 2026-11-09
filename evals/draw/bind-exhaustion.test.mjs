@@ -164,7 +164,10 @@ it.each([0, 2])(
         await rm(output + ".audit.json");
         const existing = runAgain();
         expect(existing.status).toBe(1);
-        expect(existing.stderr).toContain("EEXIST");
+        expect(existing.stderr).toContain("Bound output already exists");
+        await expect(readFile(output + ".audit.json")).rejects.toThrow(
+          /ENOENT/,
+        );
         expect(await readFile(output)).toEqual(boundBytes);
       }
       for (const a of audit.crops[0].attempts)
@@ -220,6 +223,41 @@ it.each(["file", "directory", "dangling symlink"])(
       expect(await readFile(output, "utf8")).toBe("retain signed output");
       if (kind === "file")
         expect(await readFile(auditPath, "utf8")).toBe("retain audit evidence");
+    } finally {
+      await c.cleanup();
+    }
+  },
+);
+
+it.each(["file", "directory", "dangling symlink"])(
+  "refuses an existing %s bound output before any capture or audit write",
+  async (kind) => {
+    const c = await cliFixture();
+    try {
+      const output = join(c.out, "occupied.json");
+      if (kind === "file") await writeFile(output, "retain signed evidence");
+      else if (kind === "directory") await mkdir(output);
+      else await symlink(join(c.out, "missing-target"), output);
+      const p = spawnSync(
+        "bun",
+        [
+          join(c.root, "evals/draw/repin-bind-crops.mjs"),
+          "--decisions",
+          join(c.out, "missing.json"),
+          "--crop-index",
+          join(c.out, "missing-index.json"),
+          "--output",
+          output,
+        ],
+        { cwd: c.root, encoding: "utf8" },
+      );
+      expect(p.status).toBe(1);
+      expect(p.stderr).toContain("Bound output already exists");
+      expect(p.stderr).toContain("Choose a fresh --output");
+      expect(p.stderr).toContain("No captures were started");
+      await expect(readFile(output + ".audit.json")).rejects.toThrow(/ENOENT/);
+      if (kind === "file")
+        expect(await readFile(output, "utf8")).toBe("retain signed evidence");
     } finally {
       await c.cleanup();
     }

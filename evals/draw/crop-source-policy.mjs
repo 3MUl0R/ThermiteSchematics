@@ -16,10 +16,10 @@ export function checkSourceVerification(entry) {
     v?.format === SOURCE_FORMAT &&
       v.dpi === 300 &&
       /^[a-f0-9]{64}$/.test(v.sourceSha256 ?? "") &&
-      ["svg", "html"].includes(v.medium) &&
+      ["svg", "html", "pdf"].includes(v.medium) &&
       Number.isSafeInteger(v.sheet) &&
       v.sheet > 0,
-    "Bind crop against its source with Chromium before sign-off",
+    "Bind crop against its source with Chromium (SVG/HTML) or pdf.js (PDF) before sign-off",
   );
   assertCropContainsInstance({ bbox: v.instanceBbox }, v.sourceBbox);
   checkAttempts(v);

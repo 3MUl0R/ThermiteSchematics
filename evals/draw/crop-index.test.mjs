@@ -47,7 +47,7 @@ it("indexes all pipeline rows and names unsupported PDF rows", () => {
   expect(a).toHaveLength(2);
   expect(a[1]).toMatchObject({
     supported: false,
-    reason: "PDF crop source verification is not implemented",
+    reason: "PDF row has no exported PDF instance",
   });
 });
 it("refuses unknown target tokens before creating evidence", () => {
@@ -64,7 +64,7 @@ it("refuses a PDF target instead of substituting an SVG crop", () => {
   r.evidence.findings[0].identities[0].medium = "pdf";
   const t = instanceInventory(x.c.report, x.c.reportSha256).instances[0];
   x.file.entries[0].instances = [t.token];
-  expect(() => cropPlans(x.file, x.reports)).toThrow(/PDF.*not implemented/);
+  expect(() => cropPlans(x.file, x.reports)).toThrow(/no pinned PDF source/);
 });
 it("refuses an instance without exported geometry", () => {
   const x = fixture(),
@@ -99,5 +99,13 @@ it("lists every unsupported entry with its case, view, physical page and marker"
   ])
     expect(message).toContain(text);
   expect(message).toContain("no exported bbox");
-  expect(message).toContain("PDF crop source verification is not implemented");
+  expect(message).toMatch(/entry 1.*no exported bbox/);
+});
+
+it("the builder refuses a PDF-scope entry carrying an SVG instance token", () => {
+  const c = fixture();
+  c.file.entries[0].to.scope = { ...c.file.entries[0].to.scope, medium: "pdf" };
+  expect(() => cropPlans(c.file, c.reports)).toThrow(
+    /PDF-scope entry cannot use SVG/,
+  );
 });

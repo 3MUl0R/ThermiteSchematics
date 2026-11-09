@@ -5,6 +5,7 @@ import { resolve, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { launch } from "./browser.mjs";
 import { pipelineCrops } from "./crop-index.mjs";
+import { pdfFacts } from "./pdf-source-policy.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import { readCropSource, captureSourceCrop } from "./crop-source.mjs";
 import { captureAttempts } from "./crop-attempts.mjs";
@@ -40,19 +41,33 @@ try {
       medium,
       [medium]: ref.path,
       [medium + "Sha256"]: ref.sha256,
+      ...(medium === "pdf" ? pdfFacts(ref) : {}),
     };
     const source = await readCropSource(root, row),
       attempts = [],
       references = new Map();
     try {
       // This uses the builder's fresh capture operation, without inventing instance geometry.
-      const evidence = await captureSourceCrop(browser, source.text, row);
-      const pipeline = await readFile(join(root, row.pipelineCrop));
-      const pipelineStats = sourcePixelStats(pipeline, evidence);
+      const capture =
+        medium === "pdf"
+          ? async () =>
+              (await import("./pdf-source.mjs")).capturePdfCrop(
+                source.bytes,
+                row,
+              )
+          : () => captureSourceCrop(browser, source.text, row);
+      const evidence = await capture();
+      const pipelineStats =
+        medium === "pdf"
+          ? null
+          : sourcePixelStats(
+              await readFile(join(root, row.pipelineCrop)),
+              evidence,
+            );
       const selectedAttempt = await captureAttempts(
         evidence,
         0,
-        () => captureSourceCrop(browser, source.text, row),
+        capture,
         references,
         attempts,
       );
@@ -61,7 +76,7 @@ try {
         status: "pass",
         evidenceSha256: hash(evidence),
         pipelineStats,
-        pipelineRefusal: pixelRefusal(pipelineStats),
+        pipelineRefusal: pipelineStats ? pixelRefusal(pipelineStats) : null,
         selectedAttempt,
         attempts,
       });

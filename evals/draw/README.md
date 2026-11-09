@@ -398,7 +398,8 @@ helper before independent review. It uses the report's exact instance tokens,
 boxes and text to stamp each crop. It reuses a containing pipeline crop's report-pinned **geometry**, never its PNG
 pixels. Every unsigned crop is freshly rendered from pinned source through the
 same isolated capture path used for independent bind verification; otherwise
-its region is derived from the cited instance's own box.
+its region is derived from the cited instance's own box. PDF crops always use the
+exact exported instance box, without pipeline padding.
 It writes no causes or approvals. Paths below are repository-relative:
 
 ```sh
@@ -418,11 +419,11 @@ bun evals/draw/repin-bind-crops.mjs \
   --output evals/out/review/decisions.bound-unsigned.json
 ```
 
-Binding cropped entries is a **browser-required source check**, separate from the
-portable unit suite. Chromium is discovered exactly as for a checkpoint. Missing
-Chromium or missing source files refuses the bind with an infrastructure message;
-no cropped entry is silently skipped and no bound output is written. Crop-free
-files do not need Chromium. There is no bypass flag.
+Binding cropped entries independently renders pinned source, separate from the
+portable unit suite. SVG/HTML use Chromium, discovered exactly as for a checkpoint;
+PDF uses fresh pdf.js documents. A missing required renderer or source refuses the
+bind with an infrastructure message; no cropped entry is silently skipped and no
+bound output is written. Crop-free files need neither renderer. There is no bypass flag.
 Bind and the crop-index builder require `--report` and the hash-bound baseline
 inventories for every file containing a rename, even if it contains no crops.
 Source paths resolve from the report's directory (and each baseline's directory); `--source-root` overrides the
@@ -457,8 +458,11 @@ the builder and bind name its role, supplied path and SHA-256 in the refusal.
 A fresh target does not supply baseline pins: obtain a trustworthy pinned capture
 at the baseline's original source revision or keep the evidence refused.
 Diagnostic paths are not written into signed evidence.
-**PDF crop source verification is not implemented**: PDF-scope crops cannot use an
-SVG/HTML index row instead. A PDF new defect or changed-text move remains blocked.
+PDF evidence supports boxed pdf.js `text-below-minimum-em` and
+`iso-cap-height-policy` instances. A PDF scope requires the exact delivered
+`case/packet.pdf` pin; SVG/HTML pixels cannot stand in for it. PDFKit raster
+findings and other PDF finding kinds remain refused. Font-policy instances keep
+`classification: "policy-gap"`; evidence binding does not adopt that policy.
 **Sheet-level new defects without an exported instance box are also unsupported.**
 The review census found 5,818 of 8,471 marker-scope groups, from 178 markers, had
 no box; these are potential re-pin shapes, not additional C1 failures. This
@@ -469,19 +473,90 @@ unchanged.
 
 The cited instance must fit inside `sourceBbox` on every edge, allowing only
 0.001 mm report rounding. Non-finite coordinates and invalid extents are refused.
-Capture and verification use separate offline Chromium contexts, print media,
-SVG/HTML loading, fonts-ready barrier and screenshot operation, at 300 dpi.
+SVG/HTML capture and verification use separate offline Chromium contexts, print
+media, a fonts-ready barrier and the same screenshot operation, at 300 dpi.
 Page scripts and service workers are disabled; offline mode also blocks beacon,
 prefetch and WebSocket requests. Raster dimensions and alpha must match; only a
 validated stamp may add white right padding. The comparison has no registration,
 translation, resizing or user-supplied tolerance. All per-crop refusals are listed
 before the bind exits; no bound file is written on failure.
 
+### Boxed PDF source evidence
+
+New reports add an optional `pdf` pin to each physical sheet in
+`thermite-draw-sources/1.0`: exact delivered `case/packet.pdf` SHA-256,
+`backend: "pdf.js"`, pdf.js version and page metadata (`number`, native point
+`view`, `userUnit`, normalized `rotation`, `widthMm`, `heightMm`). The C1 runner
+hashes the same single-read bytes it gives to pdf.js. Existing SVG/HTML pins and
+older SVG/HTML-only reports remain compatible as baselines. Reports without PDF
+pins stay refused for PDF, including baseline `notMove` crops; obtain a fresh
+report at the original source revision. Calibration tools never upgrade those
+reports into apply targets.
+
+PDF capture reads and hashes one buffer, then gives that buffer to a fresh pdf.js
+loader. It never reopens the path between hashing and rendering. System fonts and
+eval are disabled; worker resource fetch is off and the binary-resource factory
+denies every external font/CMap/Wasm request. Even a request whose error pdf.js
+catches is a fatal capture refusal. The installed pdf.js version must match the
+report pin. There is no PDFKit or SVG/HTML rendering fallback.
+
+The source region is exactly the exported PDF instance rectangle, canonicalized to
+0.001 mm, on its report-owned physical page. The actual page's view bounds, user
+unit, rotation and physical dimensions must match the pin. `renderPdf` supplies the
+existing viewport at scale `300/72`; crop translation is
+`[1, 0, 0, 1, -x*300/25.4, -y*300/25.4]`, and each PNG dimension is
+`ceil(extentMm*300/25.4)`. Rotation and user unit come from the PDF viewport;
+coordinates use its top-left millimetres. No new box, context padding, scaling,
+alignment or crop repair is invented. Missing, non-finite, zero-area or off-page
+boxes refuse. Changes confined to ink outside the exported em box are accepted.
+Identical-text instances cannot be distinguished by pixels; instance identity
+rests on the report-owned box. Signers must read characters with tails or
+descenders from the pinned page as well as inspecting the crop. A follow-up under
+#129 will pad PDF crops to glyph ink bounds; this PR keeps the exact exported box.
+
+The v2 source attestation includes the PDF hash/path, pdf.js backend/version,
+physical page metadata, exact box and report classification. Archive verification
+checks these facts against its retained index and recomputes comparisons from the
+retained reference PNGs. The fixed N=3 policy, numeric-only retry, stamp checks,
+integer statistics, verification collection and 3 MB cap apply unchanged.
+
+Opt-in calibration uses the retained PDF bytes and independently verifies each
+selected text/page/exported-box association. It writes explicitly non-applicable
+calibration results, leaving the old report unchanged. The PDF swap check uses the
+CLI's PDF producer with the same shipped fonts and layout, freezes one wrong crop,
+and compares it with three independently loaded references, including after an
+accepted comparison. These calibration trials are not a bind attempt chain.
+The controls cover the smallest and largest boxes plus mid-string positions in
+1.667 mm and the common 2.2 mm Regular text. Accepted O/Q controls are recorded as
+the known em-box clipping gap, rather than failing the calibration; other
+accepted swaps still fail. The npm PDF producer is separate from the optional
+Apple PDFKit raster backend, which remains refused.
+
+```sh
+bun evals/draw/pdf-evidence.check.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/pdf-evidence.json
+bun evals/draw/pdf-swaps.check.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/pdf-swaps.json
+```
+
+Calibration on pdf.js 6.5.438 / darwin-arm64 covered **238 rows: 141 small-text and
+97 font-policy**, three independent verification trials each (**714 comparisons,
+zero false refusals**). All 714 comparisons showed zero pixel noise.
+**62 frozen swap controls / 186 independent comparisons** produced **180 refusals
+and six acceptances**, all six from two O/Q controls. The weakest measured case
+is **O→Q, accepted at 40/255 at 2.2 mm and 50/255 at 1.667 mm**, both mid-string
+Regular text. The exported em box clips the distinguishing Q tail. This known
+gap supersedes the earlier 82/255 minimum from first-character controls; it is not
+evidence that every character swap is detected. No limit was loosened. Signers
+review the page/box association and this calibration, and independently re-run bind
+or spot-check the cited crops before trusting the binder's history and references.
+
 ### Fresh-source binding and retained attempts
 
 Bind writes `thermite-draw-source-crop/2.0`. In addition to report, token, source,
-text and geometry facts it records the capture implementation, Chromium version,
-platform, launch arguments, fixed limits, selected attempt and ordered attempts.
+text and geometry facts it records the capture implementation and platform,
+Chromium version/arguments for SVG/HTML or pdf.js version/page/environment for PDF,
+fixed limits, selected attempt and ordered attempts.
 Every attempt records its ordinal, previous-attempt hash, reference PNG SHA-256,
 integer pixel/changed-pixel counts, maximum channel delta, integer accumulated
 absolute RGB error, verdict and reason. Fractions are derived without rounding.
@@ -489,18 +564,23 @@ The limits remain **64/255**, **3% changed pixels** and **1.0 total RGB error pe
 pixel**, all required. There is no caller-set N, tolerance or bypass.
 
 The policy is **three attempts total**, stopping at the first pass. Only numeric
-pixel refusals retry. Each new reference capture gets a fresh isolated context;
+pixel refusals retry. Each new SVG/HTML reference gets a fresh isolated context;
+each PDF reference loads a fresh document from the hash-checked byte buffer and
+destroys its loading task afterwards;
 source, identity, geometry, header, alpha, dimensions and infrastructure failures
 refuse immediately. Identical capture inputs may reuse immutable reference bytes,
 but every cited crop is compared independently. Cache keys include source hash,
-medium, physical page, canonical region, capture version and drawing hash.
+medium, physical page, canonical region, capture version and drawing hash, plus
+PDF page/backend/version metadata.
 
 New crop index rows must declare exactly `capture: "fresh-source"`. Bind, report
 binding and archive verification refuse missing or different values. The exact
 signed-hash exemptions preserve the immutable #61/#92 indexes.
 
-Binding refuses an existing `<output>.audit.json` before reading inputs or starting
-captures, naming the stale audit and the recovery choices. Use a fresh `--output`,
+Binding checks both the bound `--output` path and `<output>.audit.json` before
+reading inputs or starting captures. An existing bound output requires a fresh
+`--output`; no success audit is written for it. A stale audit is named with its
+recovery choices. Use a fresh `--output`,
 or preserve then remove the audit only after checking that no signed evidence
 depends on it. Neither audits nor bound outputs are silently overwritten.
 
@@ -527,7 +607,8 @@ signing, a binder can drop refused attempts and renumber the rest, or substitute
 reference image and recompute matching statistics. Offline consistency checks
 cannot detect those changes. The attempt chain proves the recorded order, not
 where the images came from or whether the history is complete. Only re-running
-bind with Chromium confirms the reference's claim to come from the pinned source.
+bind through the recorded backend confirms the reference's claim to come from the
+pinned source: Chromium for SVG/HTML, pdf.js for PDF.
 
 A careful signer should independently re-run bind on the cited crops, or spot-check
 a selection and explicitly trust the binder for the remainder. Use a fresh

@@ -16,7 +16,7 @@ it.each([
   ["format", "invented"],
   ["dpi", 96],
   ["sourceSha256", "invented"],
-  ["medium", "pdf"],
+  ["medium", "PDFKit"],
   ["sheet", 0],
   ["sheet", 1.5],
 ])("requires verified source %s = %s", (key, value) => {

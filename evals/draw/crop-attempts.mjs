@@ -1,6 +1,7 @@
 // Portable v2 attempt policy. No browser or caller-adjustable limits.
 import assert from "node:assert/strict";
 import { isDeepStrictEqual as equal } from "node:util";
+import { checkPdfCapture } from "./pdf-source-policy.mjs";
 import { hash, json } from "./support.mjs";
 import {
   sourcePixelStats,
@@ -44,16 +45,18 @@ export function checkAttempts(v) {
     v.maxAttempts === MAX_SOURCE_ATTEMPTS && equal(v.limits, SOURCE_TOLERANCE),
     "Source verification policy cannot change the attempt cap or limits",
   );
-  assert(
-    v.capture?.implementation === CAPTURE_IMPLEMENTATION &&
-      typeof v.capture.browser === "string" &&
-      v.capture.browser.length > 0 &&
-      typeof v.capture.platform === "string" &&
-      v.capture.platform.length > 0 &&
-      equal(v.capture.args, []) &&
-      v.capture.deviceScaleFactor === 300 / 96,
-    "Source verification requires the calibrated capture implementation and environment",
-  );
+  if (v.medium === "pdf") checkPdfCapture(v);
+  else
+    assert(
+      v.capture?.implementation === CAPTURE_IMPLEMENTATION &&
+        typeof v.capture.browser === "string" &&
+        v.capture.browser.length > 0 &&
+        typeof v.capture.platform === "string" &&
+        v.capture.platform.length > 0 &&
+        equal(v.capture.args, []) &&
+        v.capture.deviceScaleFactor === 300 / 96,
+      "Source verification requires the calibrated capture implementation and environment",
+    );
   assert(
     Array.isArray(v.attempts) &&
       v.attempts.length >= 1 &&

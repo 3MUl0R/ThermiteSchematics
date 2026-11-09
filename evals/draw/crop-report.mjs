@@ -6,6 +6,7 @@ import { canonical, json } from "./support.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import { renameTextChanged } from "./repin-mappings.mjs";
+import { checkPdfRegion, pdfFacts } from "./pdf-source-policy.mjs";
 import { SOURCE_FORMAT, checkIndexCapture } from "./crop-source-policy.mjs";
 const same = (a, b, message) => assert(json(a) === json(b), message);
 const ascii = (s) =>
@@ -21,12 +22,14 @@ export const cropHeader = (t) => [
 ];
 export function sourcePath(t) {
   assert(
-    t.scope.medium !== "pdf",
-    "PDF crop source verification is not implemented; SVG/HTML evidence cannot stand in for a PDF crop",
+    ["svg", "html", "pdf"].includes(t.scope.medium),
+    "Source crop medium must be SVG, HTML or supported PDF",
   );
-  return t.scope.medium === "html"
-    ? `${t.scope.case}/packet.html.gz`
-    : `${t.scope.case}/sheet-${String(t.physicalSheet).padStart(3, "0")}.svg`;
+  return t.scope.medium === "pdf"
+    ? `${t.scope.case}/packet.pdf`
+    : t.scope.medium === "html"
+      ? `${t.scope.case}/packet.html.gz`
+      : `${t.scope.case}/sheet-${String(t.physicalSheet).padStart(3, "0")}.svg`;
 }
 export function reportInstances(reports) {
   return new Map(
@@ -85,8 +88,8 @@ function checkTarget(file, entry, crop, t, eligible) {
   const ref = entry.to;
   if (ref) {
     assert(
-      ref.scope.medium !== "pdf",
-      "PDF crop source verification is not implemented; a PDF-scope entry cannot use SVG/HTML evidence",
+      ref.scope.medium !== "pdf" || t.scope.medium === "pdf",
+      "A PDF-scope entry cannot use SVG/HTML evidence",
     );
     same(
       ref,
@@ -140,7 +143,7 @@ export function checkIndexedEntries(
         "Crop row/physical sheet differs from report instance",
       );
       assert(c.text === t.facts.text, "Crop text differs from report instance");
-      sourcePath(t); // PDF has no source-verification path.
+      sourcePath(t);
       const ref = pinnedSource(
           reports.get(c.reportSha256),
           t,
@@ -157,6 +160,19 @@ export function checkIndexedEntries(
         "Source render hash differs from C1 report",
       );
       assertCropContainsInstance({ bbox: c.instanceBbox }, c.sourceBbox);
+      if (t.scope.medium === "pdf") {
+        same(
+          pdfFacts(r),
+          pdfFacts(ref),
+          "PDF source page/backend/version differs from report pin",
+        );
+        same(
+          c.classification,
+          t.classification,
+          "PDF classification differs from report instance",
+        );
+        checkPdfRegion(ref.page, c.instanceBbox, c.sourceBbox);
+      }
       if (c.headerPixels === 86)
         same(
           c.headerLines,
@@ -196,6 +212,18 @@ export function checkReportedSources(file, reports) {
         v.sourcePath === pinnedSource(reports.get(v.reportSha256), t).path,
       "Source attestation text/path differs from report",
     );
+    if (t.scope.medium === "pdf") {
+      same(
+        v.pdf,
+        pdfFacts(pinnedSource(reports.get(v.reportSha256), t)),
+        "PDF attestation page/backend/version differs from report pin",
+      );
+      same(
+        v.classification,
+        t.classification,
+        "PDF classification differs from report instance",
+      );
+    }
     assert(
       v.sourceSha256 === pinnedSource(reports.get(v.reportSha256), t).sha256,
       "Source attestation hash differs from C1 report",
@@ -219,5 +247,8 @@ export function verificationFact(row, sourceSha256) {
     text: row.text,
     row: row.row,
     sourcePath: row.sourceRender[row.scope.medium],
+    ...(row.scope.medium === "pdf"
+      ? { pdf: pdfFacts(row.sourceRender), classification: row.classification }
+      : {}),
   };
 }

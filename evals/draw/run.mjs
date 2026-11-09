@@ -42,7 +42,8 @@ import {
   drawingContextOptions,
 } from "./browser.mjs";
 import {
-  loadPdf,
+  loadPdfBytes,
+  PDFJS_VERSION,
   renderPdf,
   pdfText,
   imageCanvas,
@@ -58,6 +59,7 @@ import {
   sweepResults,
   observation,
 } from "./evaluate.mjs";
+import { pdfPageMetadata } from "./pdf-source-policy.mjs";
 import { attachSheetIdentities } from "./sheet-identities.mjs";
 import { svgLocators, attachIdentities, viewKey } from "./locators.mjs";
 import { criteria } from "./criteria.mjs";
@@ -362,7 +364,9 @@ try {
         if (r.code !== 0)
           throw Error(`PDFKit rasterization failed: ${r.stderr}`);
       }
-      const pdf = await loadPdf(pdfPath);
+      const pdfBytes = await readFile(pdfPath),
+        pdf = await loadPdfBytes(pdfBytes),
+        pdfSource = { bytes: pdfBytes, pdfjsVersion: PDFJS_VERSION, pages: [] };
       assert.equal(
         pdf.numPages,
         packet.sheets.length,
@@ -447,6 +451,7 @@ try {
           pdfPngPath = join(directory, `${prefix}-pdfjs.png`);
         if (values.artifacts)
           await writeFile(pdfPngPath, pdfCanvas.toBuffer("image/png"));
+        pdfSource.pages.push(pdfPageMetadata(pdfPage));
         const text = await pdfText(pdfPage, pdf.fontFamilies, pdf.fontCaps);
         g.pdfTexts = text;
         if (values.artifacts)
@@ -699,6 +704,7 @@ try {
           c.id,
           packet.sheets.map((s) => s.number),
           values.artifacts ? "packet.html" : "packet.html.gz",
+          pdfSource,
         ),
         ok: true,
         rows: local,

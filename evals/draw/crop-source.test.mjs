@@ -221,7 +221,7 @@ it("refuses an otherwise readable PDF claim as an SVG source", () =>
     r.sourceRender.pdf = "sheet.svg";
     r.sourceRender.pdfSha256 = r.sourceRender.svgSha256;
     await expect(readCropSource(root, r)).rejects.toThrow(
-      /cited SVG\/HTML medium/,
+      /PDF source must name/,
     );
   }));
 

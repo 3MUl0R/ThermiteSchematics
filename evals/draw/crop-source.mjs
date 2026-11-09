@@ -1,4 +1,8 @@
 // Browser work is explicit at bind time; unit tests use decoded synthetic rasters.
+import {
+  PDF_CAPTURE_IMPLEMENTATION,
+  checkPdfRegion,
+} from "./pdf-source-policy.mjs";
 import { verificationFact } from "./crop-report.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -19,8 +23,8 @@ export async function readCropSource(sourceRoot, row) {
   const r = row.sourceRender,
     medium = r?.medium;
   assert(
-    ["svg", "html"].includes(medium) && medium === row.scope?.medium,
-    "Source render must name the cited SVG/HTML medium",
+    ["svg", "html", "pdf"].includes(medium) && medium === row.scope?.medium,
+    "Source render must name the cited SVG/HTML/PDF medium",
   );
   const path = r[medium],
     sha = r[medium + "Sha256"];
@@ -30,13 +34,22 @@ export async function readCropSource(sourceRoot, row) {
       !path.split(/[\\/]/).includes(".."),
     "Source render path must be relative without traversal",
   );
+  if (medium === "pdf")
+    assert(
+      path === `${row.scope.case}/packet.pdf`,
+      "PDF source must name the delivered case/packet.pdf, never an SVG/HTML substitute",
+    );
   const target = await within(resolve(sourceRoot, path), sourceRoot, {
     existing: true,
   });
   const bytes = await readFile(target);
   assert(hash(bytes) === sha, "Source render hash differs from index");
   return {
-    text: (path.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8"),
+    bytes,
+    text:
+      medium === "pdf"
+        ? undefined
+        : (path.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8"),
     sha,
   };
 }
@@ -83,7 +96,7 @@ export async function verifyCropSources(sourceRoot, index, crops) {
   if (!index.crops.length) return proofs;
   assert(
     sourceRoot,
-    "Supply --source-root <checkpoint> to verify crop pixels with Chromium; no source checks are skipped",
+    "Supply --source-root <checkpoint> to verify crop pixels with Chromium (SVG/HTML) or pdf.js (PDF); no source checks are skipped",
   );
   const { launch, drawingLaunchArgs, drawingContextOptions } =
     await import("./browser.mjs");
@@ -105,6 +118,13 @@ export async function verifyCropSources(sourceRoot, index, crops) {
             : sourceRoot,
           row,
         );
+        const isPdf = row.scope.medium === "pdf";
+        if (isPdf)
+          checkPdfRegion(
+            row.sourceRender.page,
+            row.instanceBbox,
+            row.sourceBbox,
+          );
         const crop = crops.get(row.path),
           header = row.headerPixels ?? 0;
         const key = json([
@@ -112,18 +132,34 @@ export async function verifyCropSources(sourceRoot, index, crops) {
           row.scope.medium,
           row.physicalSheet,
           canonical(row.sourceBbox),
-          CAPTURE_IMPLEMENTATION,
+          isPdf ? PDF_CAPTURE_IMPLEMENTATION : CAPTURE_IMPLEMENTATION,
+          ...(isPdf
+            ? [
+                row.sourceRender.page,
+                row.sourceRender.backend,
+                row.sourceRender.pdfjsVersion,
+              ]
+            : []),
           drawingHash(crop, header),
         ]);
-        if (!browser) browser = await launch();
+        if (!isPdf && !browser) browser = await launch();
         if (!rasters.has(key)) rasters.set(key, []);
         const cache = rasters.get(key);
         const selectedAttempt = await captureAttempts(
           crop,
           header,
           async (n) => {
-            if (!cache[n - 1])
-              cache[n - 1] = await captureSourceCrop(browser, source.text, row);
+            if (!cache[n - 1]) {
+              if (isPdf) {
+                const { capturePdfCrop } = await import("./pdf-source.mjs");
+                cache[n - 1] = await capturePdfCrop(source.bytes, row);
+              } else
+                cache[n - 1] = await captureSourceCrop(
+                  browser,
+                  source.text,
+                  row,
+                );
+            }
             return cache[n - 1];
           },
           references,
@@ -131,13 +167,15 @@ export async function verifyCropSources(sourceRoot, index, crops) {
         );
         proofs.set(row.path, {
           ...verificationFact(row, source.sha),
-          capture: {
-            implementation: CAPTURE_IMPLEMENTATION,
-            browser: browser.version(),
-            platform: `${process.platform}-${process.arch}`,
-            args: [...drawingLaunchArgs],
-            deviceScaleFactor: drawingContextOptions.deviceScaleFactor,
-          },
+          capture: isPdf
+            ? (await import("./pdf-source.mjs")).pdfCaptureEnvironment()
+            : {
+                implementation: CAPTURE_IMPLEMENTATION,
+                browser: browser.version(),
+                platform: `${process.platform}-${process.arch}`,
+                args: [...drawingLaunchArgs],
+                deviceScaleFactor: drawingContextOptions.deviceScaleFactor,
+              },
           maxAttempts: MAX_SOURCE_ATTEMPTS,
           limits: { ...SOURCE_TOLERANCE },
           selectedAttempt,

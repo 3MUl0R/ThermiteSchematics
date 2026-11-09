@@ -52,6 +52,10 @@ const all = [
   "evals/draw/repin-verification.test.mjs",
   "evals/draw/bind-exhaustion.test.mjs",
   "evals/draw/verification-io.test.mjs",
+  "evals/draw/pdf-source-policy.test.mjs",
+  "evals/draw/pdf-source.test.mjs",
+  "evals/draw/pdf-load.test.mjs",
+  "evals/draw/pdf-bind.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -105,10 +109,19 @@ for (const [name, tests] of [
       "evals/draw/crop-report.test.mjs",
       "evals/draw/crop-review.test.mjs",
       "evals/draw/crop-rename.test.mjs",
+      "evals/draw/pdf-source-policy.test.mjs",
     ],
   ],
   ["crop-index", ["evals/draw/crop-index.test.mjs"]],
-  ["source-hashes", ["evals/draw/source-hashes.test.mjs"]],
+  [
+    "source-hashes",
+    [
+      "evals/draw/source-hashes.test.mjs",
+      "evals/draw/pdf-source-policy.test.mjs",
+    ],
+  ],
+  ["pdf-source-policy", ["evals/draw/pdf-source-policy.test.mjs"]],
+  ["pdf-source", ["evals/draw/pdf-source.test.mjs"]],
   ["crop-attempts", ["evals/draw/crop-attempts.test.mjs"]],
   ["repin-record-verification", ["evals/draw/repin-verification.test.mjs"]],
   ["verification-io", ["evals/draw/verification-io.test.mjs"]],
@@ -456,6 +469,54 @@ for (const [id, file, call, tests] of [
     ["evals/draw/repin-verification.test.mjs"],
   ],
   [
+    "pdf-builder-capture",
+    "evals/draw/repin-crop-index.mjs",
+    "capturePdfCrop",
+    ["evals/draw/pdf-bind.test.mjs"],
+  ],
+  [
+    "pdf-source-capture",
+    "evals/draw/crop-source.mjs",
+    "capturePdfCrop",
+    ["evals/draw/pdf-source.test.mjs"],
+  ],
+  [
+    "pdf-capture-policy",
+    "evals/draw/crop-attempts.mjs",
+    "checkPdfCapture",
+    ["evals/draw/pdf-source-policy.test.mjs"],
+  ],
+  [
+    "pdf-report-kind",
+    "evals/draw/source-hashes.mjs",
+    "checkPdfInstance",
+    ["evals/draw/pdf-source-policy.test.mjs"],
+  ],
+  [
+    "pdf-report-page",
+    "evals/draw/source-hashes.mjs",
+    "checkPdfPage",
+    ["evals/draw/pdf-source-policy.test.mjs"],
+  ],
+  [
+    "pdf-capture-region",
+    "evals/draw/pdf-source.mjs",
+    "checkPdfRegion",
+    ["evals/draw/pdf-source.test.mjs"],
+  ],
+  [
+    "pdf-resource-refusal",
+    "evals/draw/pdf-source.mjs",
+    "document.assertNoExternalResources",
+    ["evals/draw/pdf-source.test.mjs"],
+  ],
+  [
+    "pdf-archive-association",
+    "evals/draw/repin-record-verification.mjs",
+    "checkPdfIndexAttestation",
+    ["evals/draw/pdf-bind.test.mjs"],
+  ],
+  [
     "v2-policy-attempts",
     "evals/draw/crop-source-policy.mjs",
     "checkAttempts(v)",
@@ -533,6 +594,75 @@ await edit(
   "return cache[n - 1];",
   "return cache[0];",
   ["evals/draw/crop-source.test.mjs"],
+);
+await edit(
+  "pdf-pin-bytes",
+  "evals/draw/source-hashes.mjs",
+  "sha256: hash(pdfSource.bytes)",
+  "sha256: hash(html)",
+  ["evals/draw/source-hashes.test.mjs"],
+);
+await edit(
+  "pdf-pin-page",
+  "evals/draw/source-hashes.mjs",
+  "pdfSource.pages.find((p) => p.number === sheet)",
+  "pdfSource.pages[0]",
+  ["evals/draw/source-hashes.test.mjs"],
+);
+await edit(
+  "pdf-cache-page-metadata",
+  "evals/draw/crop-source.mjs",
+  `row.sourceRender.page,
+                row.sourceRender.backend,
+                row.sourceRender.pdfjsVersion,`,
+  "undefined,",
+  ["evals/draw/pdf-source.test.mjs"],
+);
+await edit(
+  "bind-existing-output-preflight",
+  "evals/draw/repin-bind-crops.mjs",
+  "!outputExists,",
+  "true,",
+  ["evals/draw/bind-exhaustion.test.mjs"],
+);
+for (const [id, from, to] of [
+  ["pdf-system-fonts", "useSystemFonts: false", "useSystemFonts: true"],
+  ["pdf-eval", "isEvalSupported: false", "isEvalSupported: true"],
+  ["pdf-worker-fetch", "useWorkerFetch: false", "useWorkerFetch: true"],
+  [
+    "pdf-external-resources",
+    "BinaryDataFactory: DeniedPdfResources",
+    "BinaryDataFactory: undefined",
+  ],
+  [
+    "pdf-same-bytes",
+    "data: new Uint8Array(bytes)",
+    "data: new Uint8Array([0])",
+  ],
+])
+  await edit(id, "evals/draw/pdf.mjs", from, to, [
+    "evals/draw/pdf-load.test.mjs",
+  ]);
+await edit(
+  "pdf-canonical-raster-box",
+  "evals/draw/pdf-source.mjs",
+  "renderPdf(page, 300, box)",
+  "renderPdf(page, 300, row.sourceBbox)",
+  ["evals/draw/pdf-source.test.mjs"],
+);
+await edit(
+  "pdf-runner-same-bytes",
+  "evals/draw/run.mjs",
+  "bytes: pdfBytes,",
+  'bytes: Buffer.from("unbound"),',
+  ["evals/draw/capture.test.mjs"],
+);
+await edit(
+  "pdf-exact-instance-region",
+  "evals/draw/crop-index.mjs",
+  't.scope.medium === "pdf"\n            ? canonical(t.bbox)',
+  "false ? canonical(t.bbox)",
+  ["evals/draw/pdf-source-policy.test.mjs"],
 );
 await edit(
   "bind-stale-audit-preflight",

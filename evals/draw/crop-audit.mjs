@@ -33,8 +33,16 @@ try {
     page = await context.newPage();
   await page.emulateMedia({ media: "print" });
   for (const [n, row] of rows.entries()) {
-    if (!row.supported) {
-      results.push({ ...row, status: "not-implemented" });
+    if (!row.supported || row.scope.medium === "pdf") {
+      results.push({
+        ...row,
+        supported: false,
+        status: "not-in-this-audit",
+        reason:
+          row.scope.medium === "pdf"
+            ? "Pipeline-PNG comparison covers SVG/HTML; use pdf-evidence.check.mjs for exported PDF instance boxes"
+            : row.reason,
+      });
       continue;
     }
     const medium = row.scope.medium,
