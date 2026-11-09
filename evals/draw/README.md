@@ -461,12 +461,17 @@ validated stamp may add white right padding. The comparison has no registration,
 translation, resizing or user-supplied tolerance. All per-crop refusals are listed
 before the bind exits; no bound file is written on failure.
 
-Across all 1,067 SVG/HTML pipeline crops, two independent re-renders per crop
-measured maxima of 60/255 RGB channel delta, 2.698% changed drawing pixels and
-0.487 total absolute RGB error per pixel. Repeat-vs-repeat maxima were 60,
+Across all 1,067 SVG/HTML pipeline crops, comparing each retained pipeline PNG
+with two independent fresh renders measured maxima of 60/255 RGB channel delta,
+2.698% changed drawing pixels and 0.487 total absolute RGB error per pixel.
+Fresh-render-versus-fresh-render maxima were 60,
 1.868% and 0.487. The fixed limits are **64/255**, **3%** and **1.0**, applied
 together: outward binary/integer-percent bounds and a whole-unit accumulated
-error ceiling. This preserves a channel separation from the tested single-character
+error ceiling. The actual pipeline-versus-fresh margins are only **4 channel
+levels, 0.302 percentage points (about 0.30) and 0.513 mean error (about 0.51)**.
+The margin is thin. Capture noise exhausting these unchanged limits causes a
+**false refusal** of a matching crop, never a false acceptance; binding remains
+fail-closed. This preserves a channel separation from the tested single-character
 changes in the current dark text colours (`#17212b` and `#18212b`). A light-grey
 character swap can stay below the channel limit and be diluted below the fraction
 and mean limits in a large crop. These limits are not a guarantee for lighter
@@ -476,6 +481,136 @@ new evidence, not a caller-supplied limit. No image alignment is attempted.
 The runner captures the canonical 0.001 mm box it serializes. Rounding a previously
 captured full-precision box can cross a raster boundary. Such historical evidence
 needs a new unsigned crop, not a search for a nearby region.
+
+### Repeat-capture check
+
+`repeat-capture.mjs` is an opt-in browser check, separate from the portable E3
+suite. It requires at least ten fresh Chromium launches and captures each region
+twice per launch, including an unchanged-page screenshot. It compares every pair
+of distinct PNG variants, rather than only comparing with the first capture.
+The JSON retains each capture's SHA-256 and reports per-crop worst differing-pixel
+count/fraction, maximum RGB channel delta, fraction of pixels exceeding 64/255,
+mean absolute RGB error and remaining margin to all three fixed bind limits.
+The **3% limit counts every changed pixel**, not only pixels exceeding 64/255.
+Fractions retain full numeric precision, independently of report coordinate
+rounding. No captures or signed records are replaced.
+
+The repeat check compares **two fresh renders** using the same pixel metrics as
+bind. Bind instead compares a **retained C1 pipeline PNG with a fresh render**.
+That pairing includes a **fixed pipeline-versus-fresh component**: the earlier
+full-corpus audit measured up to 2.698% changed pixels, reproduced in both fresh
+passes against the same pipeline PNG. More fresh-versus-fresh repeats do not
+measure or remove that fixed component. Use `crop-audit.mjs` against the retained
+pipeline crops to measure the comparison bind actually makes. A repeat-only
+sample cannot establish a generous bind margin.
+
+By default it samples every SVG/HTML pipeline crop from both init-starter flows
+and the rendered motor-starter left-to-right case (power, control and reports),
+both machine-demo flows, and the functional-symbol sweep cases
+`sweep-functional-symbols-a3-portrait-compact-left-to-right` and
+`sweep-functional-symbols-letter-landscape-compact-left-to-right`.
+This includes the calibration's worst rows: machine-demo left-to-right sheet 3,
+top-to-bottom sheets 5 and 7, the A3 sweep sheet 1 and the letter sweep sheet 5.
+Repeat `--case <case-id>` to select other rendered cases. `--baseline` uses the
+original launch arguments; repeated `--browser-arg=--flag` options test candidates.
+`--fresh-page` also tests page isolation. All modes retain the same offline print
+context, 300/96 device scale and fonts-ready barrier. The normal check fails if
+any repeat pair exceeds a bind limit; `--require-identical` additionally requires
+identical PNG bytes.
+
+```sh
+bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/repeat-capture.json
+bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json \
+  --output evals/out/repeat-candidate.json --baseline \
+  --browser-arg=--disable-gpu-rasterization --require-identical
+```
+
+Issue #137 measurements on darwin-arm64, macOS 26.3 and Chromium 145.0.7632.6
+used twenty captures per region across ten fresh launches. Each column below is
+the worst per-crop pairwise result, so maxima need not come from the same pair.
+These are fresh-versus-fresh measurements, not pipeline-versus-fresh binding
+measurements.
+
+| Sample / capture arguments                         | Varied crops |     Differing pixels | Channel delta /255 | Changed pixels | Pixels over 64/255 | Mean RGB error |
+| -------------------------------------------------- | -----------: | -------------------: | -----------------: | -------------: | -----------------: | -------------: |
+| 22 exploratory SVG text regions, original          |         3/22 |                  206 |                 16 |         1.031% |                 0% |         0.2372 |
+| 34 selected SVG/HTML pipeline crops, original      |        14/34 |                1,105 |                 16 |        0.1921% |                 0% |         0.0268 |
+| 24 signal/series-loop and DOL regions, original    |        11/24 |                  316 |                 22 |        0.8951% |                 0% |         0.2896 |
+| 146 expanded default crop regions, original        |       49/146 |                1,917 |                 60 |        1.8676% |                 0% |         0.2308 |
+| Same 34 pipeline crops, GPU rasterization disabled |         0/34 |                    0 |                  0 |             0% |                 0% |              0 |
+| Bind limits                                        |            — | Depends on crop area |                 64 |             3% |                 0% |            1.0 |
+
+The earlier 34- and 24-crop samples omit the calibration's known worst rows;
+their smaller deltas do not bound corpus-wide noise or the binding comparison.
+The expanded default rerun covers 146 crops and 2,920 captures across ten fresh
+launches; every SVG/HTML source hash matches the dev baseline's pins. It confirms
+the review's worst-row results: 60/255 in machine-demo left-to-right sheet 3 and
+top-to-bottom sheets 5 and 7, 58/255 in the A3 sweep sheet 1, and **171/9,156
+changed pixels (1.8676%)** in the letter sweep sheet 5. Forty-nine crops varied;
+zero repeat pairs exceeded the numeric limits and no pixels exceeded 64/255.
+That repeat channel margin is only four levels. The corpus-wide binding margins
+remain the thin pipeline-versus-fresh margins above; this run does not establish
+a generous bind margin.
+
+The wider sample covers both `requests.signal` flows, the maintained high-side
+top-to-bottom series-loop SVG, and both physical pages of the complete DOL control
+fixture. Its 24 regions include 19 conductor regions and five text regions, with
+three millimetres of context padding. Ten fresh launches produce 480 captures.
+Those measurements describe this focused sample; they are not a corpus-wide
+margin claim. Counts, rather than rounded percentages, decide comparisons.
+
+Prepare that focused sample without a full C1, then use the same repeat check:
+
+```sh
+bun evals/draw/repeat-capture-sample.mjs --output evals/out/repeat-loop-sample
+bun evals/draw/repeat-capture.mjs --report evals/out/repeat-loop-sample/summary.json \
+  --output evals/out/repeat-loops.json --runs 10 \
+  --case signal-loop-left-to-right --case signal-loop-top-to-bottom \
+  --case series-loop-high-top-to-bottom --case dol-control
+```
+
+The builder renders the shipped `requests.signal` fixtures and the complete DOL
+control request with the built CLI, and embeds the same printable fonts in the
+maintained series-loop golden. It records source hashes and canonical crop boxes
+in a raster-only sample report; it assigns no evaluation scores or observations
+and writes only beneath `evals/out`.
+
+Disabling partial raster alone reproduced the exploratory variation. Disabling
+GPU rasterization alone, disabling GPU alone, and the full proposed
+software/colour/font flag set each produced zero differing PNGs. However,
+`--disable-gpu-rasterization` changed all 1,067 SVG/HTML pipeline PNGs, and a full
+two-pass audit refused **840/1,067** old crops under the unchanged bind limits.
+The candidate strict C1 still exited 0 with all 17,948 observations and 1,231
+non-PNG drawing artifacts identical to the dev baseline. CLI logs differ only in
+checkpoint output paths; report provenance, headings, timing and cost metadata
+are separate from those drawing artifacts.
+
+The retained [record #61 crop](repins/61/crops/entry-0037.png) establishes a
+compatibility failure, independently of the gate. Its recorded source SVG hash
+(`e42556eff61296ab2b189a065b553489e31670d4385a5b6bc88621036df97f41`)
+still matches the current source. The original capture reproduces the drawing
+pixels exactly. With GPU rasterization disabled, **468/15,400 pixels change
+(3.039%)**, with channel delta 10/255 and mean RGB error 0.0779. This exceeds the
+3% fraction limit in a hypothetical source-pixel comparison. Record #61 is never
+re-bound: both #61 and #92 are exempt from source verification by their exact
+signed hashes. Their integrity and the immutable registry chain still verify.
+This probe measures compatibility, not the current records' bind risk.
+
+The deterministic candidate was rejected. The original default launch arguments,
+calibrated font/colour settings, bind limits and signed records are preserved.
+These measurements are **Part of #137**. The issue stays open for a separate
+design, such as bounded re-capture or removing the fixed pipeline-versus-fresh
+component; neither is implemented here.
+
+Passing `args: []` in `launch()` preserves the previous capture path:
+[Playwright's `args` option](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-args)
+adds arguments to its standard launch switches. The installed Playwright 1.64.1
+Chromium implementation (`Chromium._innerDefaultArgs`) defaults omitted `args`
+to `[]`, builds its default switches, then appends `...args`; neither launch
+sets `ignoreDefaultArgs`. Since the default launch, renderer
+and measurements are unchanged, this measurement/documentation change needs no
+additional full C1.
 
 For a full audit of actual pipeline PNGs (without replacing them), and the browser
 protocol acceptance with an isolated synthetic registry:
