@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { hash, json } from "./support.mjs";
 import { drawingHash } from "./png-ink.mjs";
 import { assertCropContainsInstance } from "./crop-geometry.mjs";
-import { assertNoCroplessFacts } from "./crop-source-policy.mjs";
+import {
+  assertNoCroplessFacts,
+  checkIndexCapture,
+} from "./crop-source-policy.mjs";
 export function drawingReferences(file) {
   return [
     ...file.entries
@@ -57,6 +60,7 @@ export function bindDrawingDraft(file, index, crops) {
     "Bind crops before review/sign-off; never edit signed content",
   );
   assertNoCroplessFacts(file);
+  checkIndexCapture(index.crops);
   const result = structuredClone(file),
     refs = drawingReferences(result),
     rows = new Map(index.crops.map((c) => [c.path, c]));

@@ -7,7 +7,13 @@ import { gunzipSync } from "node:zlib";
 import { within } from "./repin-io.mjs";
 import { hash, json, canonical } from "./support.mjs";
 import { assertCropContainsInstance } from "./crop-geometry.mjs";
-import { compareSourcePixels } from "./crop-source-pixels.mjs";
+import { drawingHash } from "./png-ink.mjs";
+import {
+  captureAttempts,
+  MAX_SOURCE_ATTEMPTS,
+  CAPTURE_IMPLEMENTATION,
+} from "./crop-attempts.mjs";
+import { SOURCE_TOLERANCE } from "./crop-source-pixels.mjs";
 
 export async function readCropSource(sourceRoot, row) {
   const r = row.sourceRender,
@@ -57,23 +63,36 @@ export async function renderSourceCrop(page, text, row) {
   );
   return screenshotCrop(page, b, undefined, selector);
 }
+export async function captureSourceCrop(browser, text, row) {
+  const { drawingContextOptions } = await import("./browser.mjs");
+  const context = await browser.newContext(drawingContextOptions);
+  try {
+    const page = await context.newPage();
+    await page.emulateMedia({ media: "print" });
+    return await renderSourceCrop(page, text, row);
+  } finally {
+    await context.close();
+  }
+}
 export async function verifyCropSources(sourceRoot, index, crops) {
-  const refusals = [];
-  const proofs = new Map(),
+  const refusals = [],
+    audit = [],
+    references = new Map(),
+    proofs = new Map(),
     rasters = new Map();
   if (!index.crops.length) return proofs;
   assert(
     sourceRoot,
     "Supply --source-root <checkpoint> to verify crop pixels with Chromium; no source checks are skipped",
   );
-  const { launch } = await import("./browser.mjs");
-  const browser = await launch(); // Missing Chromium is an explicit infrastructure refusal.
+  const { launch, drawingLaunchArgs, drawingContextOptions } =
+    await import("./browser.mjs");
+  let browser;
   try {
-    const { drawingContextOptions } = await import("./browser.mjs");
-    const context = await browser.newContext(drawingContextOptions);
-    const page = await context.newPage();
-    await page.emulateMedia({ media: "print" });
     for (const row of index.crops) {
+      const attempts = [],
+        record = { crop: row.path, attempts };
+      audit.push(record);
       try {
         assertCropContainsInstance({ bbox: row.instanceBbox }, row.sourceBbox);
         assert(
@@ -86,30 +105,68 @@ export async function verifyCropSources(sourceRoot, index, crops) {
             : sourceRoot,
           row,
         );
+        const crop = crops.get(row.path),
+          header = row.headerPixels ?? 0;
         const key = json([
           source.sha,
           row.scope.medium,
           row.physicalSheet,
-          row.sourceBbox,
+          canonical(row.sourceBbox),
+          CAPTURE_IMPLEMENTATION,
+          drawingHash(crop, header),
         ]);
-        if (!rasters.has(key))
-          rasters.set(key, await renderSourceCrop(page, source.text, row));
-        const raster = rasters.get(key);
-        compareSourcePixels(crops.get(row.path), raster, row.headerPixels ?? 0);
-        proofs.set(row.path, verificationFact(row, source.sha));
+        if (!browser) browser = await launch();
+        if (!rasters.has(key)) rasters.set(key, []);
+        const cache = rasters.get(key);
+        const selectedAttempt = await captureAttempts(
+          crop,
+          header,
+          async (n) => {
+            if (!cache[n - 1])
+              cache[n - 1] = await captureSourceCrop(browser, source.text, row);
+            return cache[n - 1];
+          },
+          references,
+          attempts,
+        );
+        proofs.set(row.path, {
+          ...verificationFact(row, source.sha),
+          capture: {
+            implementation: CAPTURE_IMPLEMENTATION,
+            browser: browser.version(),
+            platform: `${process.platform}-${process.arch}`,
+            args: [...drawingLaunchArgs],
+            deviceScaleFactor: drawingContextOptions.deviceScaleFactor,
+          },
+          maxAttempts: MAX_SOURCE_ATTEMPTS,
+          limits: { ...SOURCE_TOLERANCE },
+          selectedAttempt,
+          attempts,
+        });
       } catch (error) {
+        record.reason = error.message;
         refusals.push({ crop: row.path, reason: error.message });
       }
     }
   } finally {
-    await browser.close();
+    try {
+      await browser?.close();
+    } catch (error) {
+      refusals.push({ crop: "capture", reason: error.message });
+    }
   }
-  assert(
-    !refusals.length,
-    "Source verification refused " +
-      refusals.length +
-      " crop(s):\n" +
-      refusals.map((r) => r.crop + ": " + r.reason).join("\n"),
-  );
+  if (refusals.length) {
+    const error = new Error(
+      "Source verification refused " +
+        refusals.length +
+        " crop(s):\n" +
+        refusals.map((r) => r.crop + ": " + r.reason).join("\n"),
+    );
+    error.audit = audit;
+    error.references = references;
+    throw error;
+  }
+  proofs.references = references;
+  proofs.audit = audit;
   return proofs;
 }

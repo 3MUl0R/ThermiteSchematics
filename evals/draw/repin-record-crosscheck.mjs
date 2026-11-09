@@ -42,6 +42,15 @@ export function crossCheckReceipt(signed, receipt) {
     json(expected) === json(observed),
     "Signed judgments differ from receipt",
   );
+  const notMoves = (rows) =>
+    rows
+      .map(({ from, to, reason, crops }) => json({ from, to, reason, crops }))
+      .sort();
+  assert(
+    json(notMoves(signed.notMove ?? [])) ===
+      json(notMoves(receipt.reviewerJudged?.notMove ?? [])),
+    "Signed notMove source judgments differ from receipt",
+  );
 }
 export function citedCrops(signed) {
   return drawingReferences(signed).map(({ entry, crop }) => ({

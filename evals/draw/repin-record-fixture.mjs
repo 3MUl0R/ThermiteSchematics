@@ -1,4 +1,7 @@
-import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
+import {
+  sourceVerificationFixture,
+  referenceFixture,
+} from "./crop-source-fixture.mjs";
 import { hash, json } from "./support.mjs";
 import { deterministicReceipt } from "./repin-record.mjs";
 import { drawingHash } from "./png-ink.mjs";
@@ -51,13 +54,17 @@ export function recordFixture(canonical = false) {
     }),
   );
   const index = Buffer.from(
-    json({ format: "thermite-d1-real-crops/1.0", crops: [crop] }),
+    json({
+      format: "thermite-d1-real-crops/1.0",
+      crops: [{ ...crop, capture: "fresh-source" }],
+    }),
   );
   const files = new Map([
     ["decisions.json", bytes],
     ["receipt.json.gz", deterministicReceipt(receipt)],
     ["crop-index.json", index],
     ["crops/fixture.png", pngFixture()],
+    [`verification/${hash(referenceFixture())}.png`, referenceFixture()],
   ]);
   const record = {
     format: "thermite-draw-repin-record/1.0",

@@ -1,5 +1,8 @@
 // Durable originals plus additive person countersigns; no live corpus or browser.
-import { checkSourceReferences } from "./crop-source-policy.mjs";
+import {
+  checkSourceReferences,
+  predatesSourceVerification,
+} from "./crop-source-policy.mjs";
 import { drawingReferences } from "./repin-drawing-bindings.mjs";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -9,7 +12,11 @@ import { hash, json } from "./support.mjs";
 import { strictJsonBytes } from "./repin-io.mjs";
 import { signOffs } from "./repin-signoff.mjs";
 import { crossCheckReceipt } from "./repin-record-crosscheck.mjs";
-import { payloadBytes, recordBudget } from "./repin-record-policy.mjs";
+import {
+  payloadBytes,
+  recordBudget,
+  RECORD_LIMIT,
+} from "./repin-record-policy.mjs";
 import { verifyCrops } from "./repin-record-crops.mjs";
 const digest = (s) => /^[a-f0-9]{64}$/.test(s ?? "");
 const local = (p) =>
@@ -220,8 +227,14 @@ export function verifyRecord(record, files, { pin } = {}) {
   sidecar(record, files.get("countersignatures.json"), signed.entries);
   const drawingGroups = cropBindings(record, files, signed);
   assert(!pin || pin.pr === record.pr, "Record size pin belongs to another PR");
+  const budget = predatesSourceVerification(
+    signed,
+    record.signedDecisionsSha256,
+  )
+    ? recordBudget(pin)
+    : Math.min(RECORD_LIMIT, recordBudget(pin));
   assert(
-    [...files.values()].reduce((n, b) => n + b.length, 0) <= recordBudget(pin),
+    [...files.values()].reduce((n, b) => n + b.length, 0) <= budget,
     "Record exceeds reviewed size cap",
   );
   return {

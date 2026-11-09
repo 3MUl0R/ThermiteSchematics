@@ -12,13 +12,17 @@ const fake = vi.hoisted(() => ({
   openSheet: vi.fn(),
   screenshotCrop: vi.fn(),
   route: vi.fn(),
+  contextClose: vi.fn(),
+  newContext: vi.fn(),
 }));
 vi.mock("./browser.mjs", () => ({
   launch: fake.launch,
+  drawingLaunchArgs: [],
   drawingContextOptions: {
     offline: true,
     serviceWorkers: "block",
     javaScriptEnabled: false,
+    deviceScaleFactor: 300 / 96,
   },
   openSheet: fake.openSheet,
   screenshotCrop: fake.screenshotCrop,
@@ -81,11 +85,15 @@ it("refuses a source symlink outside its checkpoint", () =>
     }
   }));
 function browser() {
+  fake.newContext.mockReset().mockImplementation(async () => ({
+    route: fake.route,
+    newPage: async () => fake.page,
+    close: fake.contextClose,
+  }));
+  fake.contextClose.mockReset();
   fake.launch.mockReset().mockResolvedValue({
-    newContext: async () => ({
-      route: fake.route,
-      newPage: async () => fake.page,
-    }),
+    version: () => "synthetic",
+    newContext: fake.newContext,
     close: fake.close,
   });
   fake.page.evaluate.mockReset().mockResolvedValue({ w: 100, h: 100 });
@@ -189,7 +197,11 @@ it("does not turn missing Chromium into a skip", () =>
       Error("Chromium missing. No checks were skipped."),
     );
     await expect(
-      verifyCropSources(root, { crops: [row()] }, new Map()),
+      verifyCropSources(
+        root,
+        { crops: [row()] },
+        new Map([["crop.png", pngFixture()]]),
+      ),
     ).rejects.toThrow(/No checks were skipped/);
   }));
 it("refuses absolute or traversing spellings even when they resolve inside the source root", () =>
@@ -235,4 +247,107 @@ it("reports every refused crop rather than stopping at the first", () =>
     await expect(
       verifyCropSources(root, { crops: [a, b] }, new Map()),
     ).rejects.toThrow(/2 crop\(s\):\ncrop.png:[\s\S]*other.png:/);
+  }));
+it.each([1, 2, 3])("captures attempt %s in its own isolated context", (n) =>
+  files(async (root) => {
+    browser();
+    let captured = 0;
+    fake.screenshotCrop.mockImplementation(async () =>
+      ++captured === n ? pngFixture() : pngFixture({ seed: 10 }),
+    );
+    const r = row(),
+      proofs = await verifyCropSources(
+        root,
+        { crops: [r] },
+        new Map([[r.path, pngFixture()]]),
+      );
+    expect(proofs.get(r.path).selectedAttempt).toBe(n);
+    expect(fake.newContext).toHaveBeenCalledTimes(n);
+    expect(fake.contextClose).toHaveBeenCalledTimes(n);
+    for (const [options] of fake.newContext.mock.calls)
+      expect(options).toMatchObject({
+        offline: true,
+        serviceWorkers: "block",
+        javaScriptEnabled: false,
+        deviceScaleFactor: 300 / 96,
+      });
+  }),
+);
+it.each(["dimensions", "alpha", "infrastructure"])(
+  "does not retry a %s error",
+  (kind) =>
+    files(async (root) => {
+      browser();
+      const r = row();
+      if (kind === "infrastructure")
+        fake.screenshotCrop.mockRejectedValue(Error("capture crashed"));
+      else
+        fake.screenshotCrop.mockResolvedValue(
+          kind === "dimensions"
+            ? pngFixture({ width: 5 })
+            : pngFixture({ pixel: () => [0, 0, 0, 0] }),
+        );
+      await expect(
+        verifyCropSources(
+          root,
+          { crops: [r] },
+          new Map([[r.path, pngFixture()]]),
+        ),
+      ).rejects.toThrow();
+      expect(fake.newContext).toHaveBeenCalledTimes(1);
+      expect(fake.contextClose).toHaveBeenCalledTimes(1);
+    }),
+);
+it.each(["source", "medium", "page", "box", "crop"])(
+  "isolates the raster cache by %s",
+  (kind) =>
+    files(async (root) => {
+      browser();
+      const a = row(),
+        b = {
+          ...row(),
+          path: "other.png",
+          scope: { ...row().scope },
+          sourceRender: { ...row().sourceRender },
+        };
+      if (kind === "source") {
+        await writeFile(join(root, "other.svg"), "<svg id='other'/>");
+        b.sourceRender.svg = "other.svg";
+        b.sourceRender.svgSha256 = hash("<svg id='other'/>");
+      }
+      if (kind === "medium") {
+        b.scope.medium = b.sourceRender.medium = "html";
+        b.sourceRender.html = "sheet.svg";
+        b.sourceRender.htmlSha256 = a.sourceRender.svgSha256;
+      }
+      if (kind === "page") b.physicalSheet = 2;
+      if (kind === "box") b.sourceBbox = { ...b.sourceBbox, w: 4 };
+      const crops = new Map([
+        [a.path, pngFixture()],
+        [b.path, kind === "crop" ? pngFixture({ seed: 10 }) : pngFixture()],
+      ]);
+      if (kind === "crop")
+        await expect(
+          verifyCropSources(root, { crops: [a, b] }, crops),
+        ).rejects.toThrow(/3 attempts/);
+      else await verifyCropSources(root, { crops: [a, b] }, crops);
+      expect(fake.newContext).toHaveBeenCalledTimes(kind === "crop" ? 4 : 2);
+    }),
+);
+it("shares only identical capture inputs, comparing every citation", () =>
+  files(async (root) => {
+    browser();
+    const a = row(),
+      b = { ...row(), path: "copy.png" };
+    const p = await verifyCropSources(
+      root,
+      { crops: [a, b] },
+      new Map([
+        [a.path, pngFixture()],
+        [b.path, pngFixture()],
+      ]),
+    );
+    expect(fake.newContext).toHaveBeenCalledTimes(1);
+    expect(p.size).toBe(2);
+    expect(p.get(a.path)).not.toBe(p.get(b.path));
   }));

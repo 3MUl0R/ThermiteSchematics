@@ -48,6 +48,10 @@ const all = [
   "evals/draw/crop-rename.test.mjs",
   "evals/draw/crop-baseline.test.mjs",
   "evals/draw/source-hashes.test.mjs",
+  "evals/draw/crop-attempts.test.mjs",
+  "evals/draw/repin-verification.test.mjs",
+  "evals/draw/bind-exhaustion.test.mjs",
+  "evals/draw/verification-io.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -105,6 +109,9 @@ for (const [name, tests] of [
   ],
   ["crop-index", ["evals/draw/crop-index.test.mjs"]],
   ["source-hashes", ["evals/draw/source-hashes.test.mjs"]],
+  ["crop-attempts", ["evals/draw/crop-attempts.test.mjs"]],
+  ["repin-record-verification", ["evals/draw/repin-verification.test.mjs"]],
+  ["verification-io", ["evals/draw/verification-io.test.mjs"]],
 ]) {
   const file = `evals/draw/${name}.mjs`;
   await source(file);
@@ -204,7 +211,7 @@ for (const [i, box] of boxes.entries())
   add("capture-canonical-box-" + i, run, box, box.slice(10, -1), [
     "evals/draw/capture.test.mjs",
   ]);
-for (const file of ["run.mjs", "crop-source.mjs", "repin-crop-index.mjs"]) {
+for (const file of ["run.mjs", "crop-source.mjs"]) {
   await edit(
     "isolated-context-" + file,
     "evals/draw/" + file,
@@ -236,13 +243,6 @@ await edit(
   "source-contains",
   src,
   "assertCropContainsInstance({ bbox: row.instanceBbox }, row.sourceBbox);",
-  "",
-  [all[3]],
-);
-await edit(
-  "source-compares-pixels",
-  src,
-  "compareSourcePixels(crops.get(row.path), raster, row.headerPixels ?? 0);",
   "",
   [all[3]],
 );
@@ -435,6 +435,159 @@ await edit(
   "pixels >= MIN_HEADER_FONT_PIXELS",
   "true",
   ["scripts/stamp-drawing-crop.test.mjs"],
+);
+for (const [id, file, call, tests] of [
+  [
+    "bind-capture-label",
+    "evals/draw/repin-drawing-bindings.mjs",
+    "checkIndexCapture",
+    ["evals/draw/crop-source-policy.test.mjs"],
+  ],
+  [
+    "report-capture-label",
+    "evals/draw/crop-report.mjs",
+    "checkIndexCapture",
+    ["evals/draw/crop-report.test.mjs"],
+  ],
+  [
+    "record-capture-label",
+    "evals/draw/repin-record-crops.mjs",
+    "checkIndexCapture",
+    ["evals/draw/repin-verification.test.mjs"],
+  ],
+  [
+    "v2-policy-attempts",
+    "evals/draw/crop-source-policy.mjs",
+    "checkAttempts(v)",
+    ["evals/draw/crop-attempts.test.mjs"],
+  ],
+  [
+    "v2-integer-stats",
+    "evals/draw/crop-attempts.mjs",
+    "checkAttemptStats(a.stats)",
+    ["evals/draw/crop-attempts.test.mjs"],
+  ],
+  [
+    "v2-recompute-attempts",
+    "evals/draw/crop-attempts.mjs",
+    "checkAttempts(v)",
+    ["evals/draw/crop-attempts.test.mjs"],
+  ],
+  [
+    "record-reference-pixels",
+    "evals/draw/repin-record-verification.mjs",
+    "verifyAttemptPixels",
+    ["evals/draw/repin-verification.test.mjs"],
+  ],
+  [
+    "preview-reference-pixels",
+    "evals/draw/repin-io.mjs",
+    "verifyDrawingAttempts",
+    ["evals/draw/repin.test.mjs"],
+  ],
+]) {
+  await source(file);
+  const name = call.split("(")[0],
+    found = calls(file, name).filter(
+      (x) => !call.includes("(") || x.text === call,
+    );
+  assert(found.length === 1, "Expected one guard call: " + id);
+  add(id, file, found[0].text + ";", "undefined;", tests);
+}
+await edit(
+  "retry-cap",
+  "evals/draw/crop-attempts.mjs",
+  "n <= MAX_SOURCE_ATTEMPTS",
+  "n <= 4",
+  ["evals/draw/crop-attempts.test.mjs"],
+);
+await edit(
+  "builder-fresh-source",
+  "evals/draw/repin-crop-index.mjs",
+  "await captureSourceCrop(browser, text,",
+  "await bogusPipelineCopy(browser, text,",
+  ["evals/draw/capture.test.mjs"],
+);
+for (const [label, condition] of [
+  ["channel", "maximum > SOURCE_TOLERANCE.channel"],
+  ["fraction", "changed / pixels > SOURCE_TOLERANCE.fraction"],
+  ["mean", "absoluteError / pixels > SOURCE_TOLERANCE.mean"],
+])
+  await edit(
+    "retry-numeric-" + label,
+    "evals/draw/crop-source-pixels.mjs",
+    condition,
+    "false",
+    ["evals/draw/crop-attempts.test.mjs"],
+  );
+await edit(
+  "cache-isolation",
+  "evals/draw/crop-source.mjs",
+  "const key = json([",
+  'const key = \"shared\" || json([',
+  ["evals/draw/crop-source.test.mjs"],
+);
+await edit(
+  "reuse-first-attempt-raster",
+  "evals/draw/crop-source.mjs",
+  "return cache[n - 1];",
+  "return cache[0];",
+  ["evals/draw/crop-source.test.mjs"],
+);
+await edit(
+  "bind-stale-audit-preflight",
+  "evals/draw/repin-bind-crops.mjs",
+  "!auditExists,",
+  "true,",
+  ["evals/draw/bind-exhaustion.test.mjs"],
+);
+await edit(
+  "record-hard-cap",
+  "evals/draw/repin-record.mjs",
+  "Math.min(RECORD_LIMIT, recordBudget(pin))",
+  "recordBudget(pin)",
+  ["evals/draw/repin-record-integrity.test.mjs"],
+);
+await source("evals/draw/crop-source.mjs");
+const verifyAttemptsCall = calls(
+  "evals/draw/crop-source.mjs",
+  "captureAttempts",
+);
+assert(verifyAttemptsCall.length === 1);
+add(
+  "source-compares-pixels",
+  "evals/draw/crop-source.mjs",
+  verifyAttemptsCall[0].text,
+  "1",
+  ["evals/draw/crop-source.test.mjs"],
+);
+await edit(
+  "structural-no-retry",
+  "evals/draw/crop-attempts.mjs",
+  "throw error;",
+  "continue;",
+  ["evals/draw/crop-attempts.test.mjs"],
+);
+await edit(
+  "stop-first-pass",
+  "evals/draw/crop-attempts.mjs",
+  "if (!reason) return n;",
+  "if (!reason) continue;",
+  ["evals/draw/crop-attempts.test.mjs"],
+);
+await edit(
+  "bind-retains-references",
+  "evals/draw/repin-bind-crops.mjs",
+  "await writeVerification(root, proofs.references);",
+  "",
+  ["evals/draw/bind-exhaustion.test.mjs"],
+);
+await edit(
+  "bind-failure-audit",
+  "evals/draw/repin-bind-crops.mjs",
+  "crops: error.audit ?? [],",
+  "crops: [],",
+  ["evals/draw/bind-exhaustion.test.mjs"],
 );
 // Deliberately harmless mutation must survive; it proves survivors are observable.
 await edit(

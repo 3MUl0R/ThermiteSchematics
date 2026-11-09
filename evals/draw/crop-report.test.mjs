@@ -34,6 +34,7 @@ function fixture() {
   };
   const row = {
     ...sourceGeometryFixture(),
+    capture: "fresh-source",
     path: crop.path,
     reportSha256: ctx.reportSha256,
     token: t.token,
@@ -60,6 +61,12 @@ it("accepts report-owned scope, token, text, box and source path", () => {
   checkReportedSources(c.file, c.reports);
 });
 it.each([
+  ["missing capture", (c) => delete c.row.capture, /capture: "fresh-source"/],
+  [
+    "old capture",
+    (c) => (c.row.capture = "pipeline"),
+    /capture: "fresh-source"/,
+  ],
   ["header", (c) => (c.row.headerLines[3] = "Text B"), /header/],
   ["source containment", (c) => (c.row.sourceBbox.x = 100), /outside/],
   [

@@ -1,4 +1,7 @@
-import { sourceVerificationFixture } from "./crop-source-fixture.mjs";
+import {
+  sourceVerificationFixture,
+  verificationFixtures,
+} from "./crop-source-fixture.mjs";
 // Synthetic provenance/PNG data only: no project or electrical facts.
 import { deflateSync } from "node:zlib";
 import { hash, json } from "./support.mjs";
@@ -21,7 +24,7 @@ function chunk(kind, data) {
   return Buffer.concat([length, type, data, crc]);
 }
 function png(seed) {
-  const width = 64,
+  const width = 32,
     height = 32,
     pixels = Buffer.alloc((width * 4 + 1) * height),
     header = Buffer.alloc(13);
@@ -52,6 +55,7 @@ export function largeRecordFixture() {
       bytes = png(n);
     crops.set(path, bytes);
     rows.push({
+      capture: "fresh-source",
       path,
       sha256: hash(bytes),
       context: "Synthetic index evidence, not reviewed project data. ".repeat(
@@ -72,7 +76,9 @@ export function largeRecordFixture() {
       ? {
           crop: { path: rows[n].path, sha256: rows[n].sha256 },
           drawingSha256: drawingHash(crops.get(rows[n].path)),
-          sourceVerification: sourceVerificationFixture(),
+          sourceVerification: sourceVerificationFixture(
+            crops.get(rows[n].path),
+          ),
         }
       : {
           markerId: `synthetic/${n}`,
@@ -124,6 +130,7 @@ export function largeRecordFixture() {
       receipt,
       cropIndex,
       crops,
+      verification: verificationFixtures(crops, rows),
     }),
     uncompressed: {
       signed: signed.length,

@@ -53,7 +53,7 @@ it("uses offline capture without service workers or page scripts", () => {
     deviceScaleFactor: 300 / 96,
   });
 });
-it.each(["run.mjs", "crop-source.mjs", "repin-crop-index.mjs"])(
+it.each(["run.mjs", "crop-source.mjs"])(
   "%s wires the shared isolated capture context",
   async (name) => {
     const source = await readFile(new URL(name, import.meta.url), "utf8"),
@@ -113,4 +113,13 @@ it("the runner captures delivered source files and includes the per-sheet pins i
       { case: "two", sheet: 2 },
     ],
   });
+});
+
+it("the builder freshly captures source rather than reading a pipeline PNG", async () => {
+  const source = await readFile(
+    new URL("./repin-crop-index.mjs", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("await captureSourceCrop(browser, text,");
+  expect(source).not.toContain("join(sourceRoot, plan.pipelineCrop)");
 });
