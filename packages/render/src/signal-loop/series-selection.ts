@@ -528,6 +528,10 @@ export function selectSeriesLoop(
   const adjacent = adjacency(conductors);
   const legs = selectLegs(ir, [from, to, power], adjacent);
   checkLegSources(ir, legs, power);
+  if (new Set([from.device.uid, to.device.uid, power.device.uid]).size !== 3)
+    throw new Error(
+      "Series loop requires the transmitter, input and loop power on three separate devices; use an explicit circuit view for combined devices.",
+    );
   const stages = checkStages(ir, legs, from);
   const branches = supplyBranches(ir, power, legs, adjacent);
   const shown = completeCableInventory(ir, legs, conductors, adjacent);

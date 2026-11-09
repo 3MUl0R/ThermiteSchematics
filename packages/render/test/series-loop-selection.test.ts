@@ -1,9 +1,6 @@
 import { expect, it } from "vitest";
 import { SYMBOL_PROFILES } from "@thermite/schema";
-import {
-  selectSignalLoop,
-  prepareSignalLoopDrawing,
-} from "../src/signal-loop.js";
+import { selectSignalLoop } from "../src/signal-loop.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import {
   seriesFixture,
@@ -19,8 +16,6 @@ import {
 
 const topology =
   "Series loop requires exactly one unbranched physical leg between each selected function pair on three distinct nets.";
-const gate =
-  "Series loop drawing is not available in this increment; use an explicit circuit view.";
 
 it("pins the series-power catalog profile and its existing DC source role contract", () => {
   const support = SYMBOL_PROFILES.flatMap((p) =>
@@ -56,34 +51,6 @@ it.each([false, true])(
       expect(new Set(selected.conductors.map((c) => c.net)).size).toBe(3);
       expect(selected.conductors).toHaveLength(3);
       expect(JSON.stringify(f.ir)).toBe(before);
-    } finally {
-      await f.dispose();
-    }
-  },
-);
-
-it.each(["left-to-right", "top-to-bottom"] as const)(
-  "refuses drawing honestly in %s",
-  async (flow) => {
-    const f = await seriesFixture();
-    try {
-      const spec = request({ flow });
-      await expect(prepareSignalLoopDrawing(f.ir, spec)).rejects.toMatchObject({
-        message: gate,
-      });
-      const result = await renderSchematicPacket(f.ir, {
-        format: "schematic-packet-request/0.1",
-        views: [spec],
-      });
-      expect(result).toMatchObject({
-        ok: false,
-        error: {
-          code: "R006",
-          reason: "unprintable-layout",
-          message: `Packet view[0] "TX1 - signal loop": ${gate}`,
-        },
-      });
-      expect(result).not.toHaveProperty("value");
     } finally {
       await f.dispose();
     }

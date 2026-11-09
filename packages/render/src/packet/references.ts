@@ -5,13 +5,47 @@ import type {
   SchematicPacketRequest,
   ReferenceSelection,
 } from "./types.js";
-import { sheetLabel } from "./page.js";
+import { sheetLabel, bounds, normalizePaperPage } from "./page.js";
+import { wrapText } from "../text-metrics.js";
+
+type ReferenceDraft = Pick<
+  Draft,
+  "view" | "references" | "documentationTable" | "referenceNotes"
+>;
+function referenceNotes(
+  drafts: readonly ReferenceDraft[],
+  request: Pick<SchematicPacketRequest, "page">,
+) {
+  const notes = [...new Set(drafts.flatMap((d) => d.referenceNotes ?? []))];
+  if (!notes.length) return notes;
+  const paper = normalizePaperPage(request.page);
+  if (!paper.ok) return notes; // Packet validation already reports an invalid page.
+  const width = bounds(
+    {
+      projectName: "",
+      revision: "",
+      toolVersion: "",
+      backgroundColor: "#ffffff",
+      lines: [],
+    },
+    paper.value,
+  ).w;
+  // The report retains its legacy character wrapping. Bound new engine lines
+  // by measured width first; any further split can only make them narrower.
+  return notes.flatMap((note) => wrapText(note, width, 2.5));
+}
+
+const designationOrder = (
+  a: { designation: string },
+  b: { designation: string },
+) =>
+  a.designation < b.designation ? -1 : a.designation > b.designation ? 1 : 0;
 
 /** Indexes describe content drafts only; appending index pages must happen later. */
 export function referenceTables(
   ir: Readonly<ElectricalIr>,
-  drafts: readonly Pick<Draft, "view" | "references" | "documentationTable">[],
-  request: Pick<SchematicPacketRequest, "references">,
+  drafts: readonly ReferenceDraft[],
+  request: Pick<SchematicPacketRequest, "references" | "page">,
   referenceDevices: ReturnType<typeof resolveDeviceFilter> | undefined,
 ): {
   tables: DocumentationTable[];
@@ -118,15 +152,10 @@ export function referenceTables(
             `Filtered reference index: ${retainedGroups.size} of ${groups.size} device/function groups retained. Content sheets and continuation references are unchanged.`,
           ]
         : []),
+      ...referenceNotes(drafts, request),
     ],
     rows: [...retainedGroups]
-      .sort(([, a], [, b]) =>
-        a.designation < b.designation
-          ? -1
-          : a.designation > b.designation
-            ? 1
-            : 0,
-      )
+      .sort(([, a], [, b]) => designationOrder(a, b))
       .map(([key, g]) => ({
         key,
         cells: [

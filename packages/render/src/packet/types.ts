@@ -135,6 +135,7 @@ export interface Link {
   side: "left" | "right" | "top" | "bottom";
 }
 export interface Draft {
+  referenceNotes?: readonly string[];
   diagnostics?: import("@thermite/schema").Diagnostic[];
   views?: import("./errors.js").PacketViewContext[];
   view: NormalizedSchematicView | NormalizedDocumentationView;

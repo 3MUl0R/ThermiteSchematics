@@ -12,6 +12,7 @@ import {
   validateSignalLoopRequest,
   selectSeriesLoop,
 } from "./signal-loop/series-selection.js";
+import { prepareSeriesLoopDrawing } from "./signal-loop/series-layout.js";
 import { drawEnclosures } from "./signal-loop-enclosures.js";
 
 export interface SignalLoopViewRequest {
@@ -404,24 +405,13 @@ export function signalLoopTitle(
     : `${selected.from.device.designation} - signal loop`;
 }
 
-function selectDrawableSignalLoop(
-  ir: Readonly<ElectricalIr>,
-  request: SignalLoopViewRequest,
-) {
-  const selected = selectSignalLoop(ir, request);
-  if (selected.series)
-    throw new Error(
-      "Series loop drawing is not available in this increment; use an explicit circuit view.",
-    );
-  return selected;
-}
-
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
 ) {
-  const selected = selectDrawableSignalLoop(ir, request),
-    { stages, devices, types } = selected;
+  const selected = selectSignalLoop(ir, request);
+  if (selected.series) return prepareSeriesLoopDrawing(ir, request, selected);
+  const { stages, devices, types } = selected;
   const vertical = request.flow === "top-to-bottom";
   const physicalEdges = selected.conductors.map((c) =>
     stages.indexOf(c.ends[0].deviceUid) < stages.indexOf(c.ends[1].deviceUid)
@@ -532,9 +522,8 @@ export async function prepareSignalLoopDrawing(
         e.ends.filter((t) => t.deviceUid === uid).map((t) => t.terminalKey),
       ),
     );
-    // Match intermediate schematic contact order to the actuator connector.
-    // Contact numbers still come from source; this is not a mechanical strip
-    // or connector-face drawing. ELK continues to own placement and routing.
+    // Order contacts toward the actuator; real identifiers remain schematic,
+    // not a connector-face view. ELK owns placement and routing.
     const destinationOrder = (terminal: string): number => {
       let current: TerminalId = { deviceUid: uid, terminalKey: terminal };
       while (current.deviceUid !== stages.at(-1)) {

@@ -44,7 +44,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 );
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "selects the series-powered reproduction but refuses drawing in %s",
+  "draws the selected series-powered reproduction in %s",
   async (flow) => {
     const root = await mkdtemp(join(tmpdir(), "thermite-series-gap-"));
     try {
@@ -58,17 +58,24 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       ).toBe(3);
       const result = await renderSchematicPacket(compiled.ir, {
         ...request,
+        page: {
+          size: "tabloid",
+          orientation: flow === "top-to-bottom" ? "portrait" : "landscape",
+        },
         views: [view],
       });
-      expect(result).toMatchObject({
-        ok: false,
-        error: {
-          code: "R006",
-          reason: "unprintable-layout",
-          message:
-            'Packet view[0] "TX1 - signal loop": Series loop drawing is not available in this increment; use an explicit circuit view.',
-        },
-      });
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      if (result.ok) {
+        expect(result.value.sheets[0]!.svg).toContain(
+          "Three separate loop nets",
+        );
+        expect(result.value.sheets[0]!.svg).toContain(
+          "Outside selected loop at PS1.+: 1 authored connections:",
+        );
+        expect(result.value.sheets[0]!.svg).toContain(
+          "Outside selected loop at PS1.-: 1 authored connections:",
+        );
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
