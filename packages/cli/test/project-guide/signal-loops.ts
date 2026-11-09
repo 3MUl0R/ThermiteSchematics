@@ -562,7 +562,7 @@ const module: FactModule = {
         ).toHaveLength(4);
         for (const text of [
           "4 cores / pin map:",
-          "1-1, 2-2, 3-3 spare, 4-4 spare",
+          "1:1, 2:2, 3:3 spare, 4:4 spare",
           "Heavy line = cable assembly, not a shared electrical net.",
         ])
           expect(d.visible).toContain(text);
@@ -575,7 +575,7 @@ const module: FactModule = {
         expect(drawing.ok).toBe(true);
         if (drawing.ok)
           expect(drawing.value.sheets[0]!.svg).toContain(
-            "1-1, 2-2, 3-4 spare, 4-3 spare",
+            "1:1, 2:2, 3:4 spare, 4:3 spare",
           );
       },
     },

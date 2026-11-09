@@ -147,7 +147,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const visible = [...document.querySelectorAll("text")]
       .map((t) => t.textContent)
       .join(" ");
-    expect(visible).toContain("1-1, 2-2, 3-3 spare, 4-4 spare");
+    expect(visible).toContain("1:1, 2:2, 3:3 spare, 4:4 spare");
     for (const color of ["Brown", "White", "Blue", "Black"])
       expect(visible).not.toContain(color);
     expect(visible).toContain("Main electrical cabinet");
@@ -208,7 +208,7 @@ it("preserves non-straight pin mapping and fully expanded cabinet detail", async
     result = await renderSchematicPacket(ir, packet(assemblyView));
   expect(result.ok).toBe(true);
   if (result.ok) {
-    expect(result.value.sheets[0]!.svg).toContain("3-4 spare, 4-3 spare");
+    expect(result.value.sheets[0]!.svg).toContain("3:4 spare, 4:3 spare");
   }
   const detail = await renderSchematicPacket(
     ir,

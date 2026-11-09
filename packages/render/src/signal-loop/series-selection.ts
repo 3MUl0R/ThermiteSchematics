@@ -517,7 +517,6 @@ export function selectSeriesLoop(
   request: SignalLoopViewRequest,
   from: LoopFunction,
   to: LoopFunction,
-  input: boolean,
   conductors: readonly Conductor[],
 ) {
   const power = resolvePower(ir, required(request.loopPower));
@@ -525,7 +524,24 @@ export function selectSeriesLoop(
     throw new Error(
       `Series loop power source ${power.device.designation} cannot also be the transmitter; use an explicit circuit view.`,
     );
-  if (!input || (request.auxiliary?.length ?? 0) > 0)
+  if (power.device.uid === to.device.uid)
+    throw new Error(
+      `Series loop power source ${power.device.designation} cannot also be the input channel; use an explicit circuit view.`,
+    );
+  if (
+    ![
+      "thermite:pressure-transmitter",
+      "thermite:two-wire-transmitter",
+    ].includes(from.type.symbol ?? "")
+  )
+    throw new Error(
+      `Series loop from ${from.device.designation}.${from.function.id.functionKey} is not a supported two-wire transmitter; use an explicit circuit view.`,
+    );
+  if (to.function.kind !== "channel" || to.function.direction !== "input")
+    throw new Error(
+      `Series loop to ${to.device.designation}.${to.function.id.functionKey} is not an input channel; use an explicit circuit view.`,
+    );
+  if ((request.auxiliary?.length ?? 0) > 0)
     throw new Error(
       "Series loop power is supported only for input views without auxiliary pairs.",
     );

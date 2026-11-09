@@ -124,7 +124,7 @@ it("uses the series-only refusal for endpoints that are neither a valid input no
   );
   try {
     expect(() => selectSignalLoop(f.ir, request())).toThrow(
-      "Series loop power is supported only for input views without auxiliary pairs.",
+      "Series loop to AI1.input is not an input channel; use an explicit circuit view.",
     );
     const direct = { ...request() };
     delete direct.loopPower;

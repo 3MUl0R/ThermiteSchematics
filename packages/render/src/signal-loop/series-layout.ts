@@ -20,6 +20,7 @@ import {
 } from "../svg/escape.js";
 import { n, text } from "../packet/svg.js";
 import { terminalKey as key } from "./polarity.js";
+import { pinMapPair } from "./pin-map.js";
 import {
   assertOrthogonalSegment,
   routeTolerance,
@@ -177,12 +178,7 @@ function assemblyLabels(
       );
     if (width(spec.connector) > 15)
       throw new Error("Connector label is too wide.");
-    const mapping = members
-      .map(
-        (m) =>
-          `${m.ends[0].terminalKey}-${m.ends[1].terminalKey}${m.spare ? " spare" : ""}`,
-      )
-      .join(", ");
+    const mapping = members.map((m) => pinMapPair(m)).join(", ");
     labels.set(need(members[0]).id, [
       spec.connector,
       ...wrap(spec.description, 55),

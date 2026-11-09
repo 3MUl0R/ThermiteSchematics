@@ -130,7 +130,9 @@ it("refuses a shared source/input terminal instead of counting a zero-length leg
   });
   try {
     const spec = request({ to: { device: "PS1", function: "input" } });
-    expect(() => selectSignalLoop(f.ir, spec)).toThrow(topology);
+    expect(() => selectSignalLoop(f.ir, spec)).toThrow(
+      "Series loop power source PS1 cannot also be the input channel; use an explicit circuit view.",
+    );
     expect(
       await renderSchematicPacket(f.ir, {
         format: "schematic-packet-request/0.1",
@@ -141,7 +143,7 @@ it("refuses a shared source/input terminal instead of counting a zero-length leg
       error: {
         code: "R006",
         reason: "unprintable-layout",
-        message: `Packet view[0] "Untitled view": ${topology}`,
+        message: `Packet view[0] "Untitled view": Series loop power source PS1 cannot also be the input channel; use an explicit circuit view.`,
       },
     });
   } finally {
@@ -201,7 +203,7 @@ it("refuses loop power on an output view", async () => {
   });
   try {
     expect(() => selectSignalLoop(f.ir, request())).toThrow(
-      "Series loop power is supported only for input views without auxiliary pairs.",
+      "Series loop from TX1.signal is not a supported two-wire transmitter; use an explicit circuit view.",
     );
   } finally {
     await f.dispose();

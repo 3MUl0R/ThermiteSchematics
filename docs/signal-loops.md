@@ -141,7 +141,10 @@ ordered positive then return, with the two required roles below. No type edit,
 new schema field, or relock of an existing PSU is needed. The transmitter, input
 and supply must be on three separate devices. Selecting the loop-power source as
 `from` refuses with a message naming the supply and pointing to an explicit circuit
-view. Series mode accepts input views without `auxiliary` pairs.
+view. A non-transmitter `from`, a `to` that is not an input channel, and selecting
+loop power as `to` each refuse with a message naming the device or channel and
+pointing to an explicit circuit view. Series mode accepts input views without
+`auxiliary` pairs.
 
 Only these exact authored terminal-role pairs are recognized for series polarity:
 
@@ -291,8 +294,13 @@ jacket line and grouped connector glyphs represent the assembly, not a shared
 net or exposed conductor breakout. Core colors are absent from that overview. In series mode, an assembly retains
 individual active/spare core routes and adds the explicit pin map; no shared
 electrical net is implied.
-Every pin pair is derived from actual endpoints and printed beside the cable;
-spares retain their explicit designation. Mapping direction follows `from` toward `to` (transmitter toward input or
+Every pin pair is derived from actual endpoints and printed beside the cable
+with `:` between terminal names: `+:5, -:6` maps transmitter `+` to pin `5` and
+transmitter `-` to pin `6`. The separator stays distinct from signed terminal
+names such as `+`, `-`, `~` and `±`; spares retain their explicit designation.
+If either terminal name contains `:`, the pin map refuses with R006, naming the
+pair; use an explicit circuit view. Terminal names are preserved.
+Mapping direction follows `from` toward `to` (transmitter toward input or
 output toward actuator), independent of authored end A/B order. A non-straight pin map is
 printed as authored, never silently converted to straight-through wiring. Full
 core IDs, endpoints and separate net IDs also remain in the SVG description.

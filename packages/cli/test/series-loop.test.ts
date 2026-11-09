@@ -229,9 +229,49 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
   },
 );
 
-for (const supplyAsTransmitter of [true, false])
+for (const c of [
+  {
+    name: "auxiliary pair and supply as transmitter",
+    extra: {
+      from: { device: "PS1", function: "output" },
+      auxiliary: [{ from: request().from, to: request().to }],
+    },
+    message:
+      "Series loop power source PS1 cannot also be the transmitter; use an explicit circuit view.",
+  },
+  {
+    name: "a supply as transmitter",
+    extra: { from: { device: "PS1", function: "output" } },
+    message:
+      "Series loop power source PS1 cannot also be the transmitter; use an explicit circuit view.",
+  },
+  {
+    name: "a genuine auxiliary pair",
+    extra: { auxiliary: [{ from: request().from, to: request().to }] },
+    message:
+      "Series loop power is supported only for input views without auxiliary pairs.",
+  },
+  {
+    name: "a non-transmitter from function",
+    extra: { from: { device: "PLC1", function: "supply" } },
+    message:
+      "Series loop from PLC1.supply is not a supported two-wire transmitter; use an explicit circuit view.",
+  },
+  {
+    name: "a non-input to function",
+    extra: { to: { device: "PLC1", function: "supply" } },
+    message:
+      "Series loop to PLC1.supply is not an input channel; use an explicit circuit view.",
+  },
+  {
+    name: "a supply as input",
+    extra: { to: { device: "PS1", function: "output" } },
+    message:
+      "Series loop power source PS1 cannot also be the input channel; use an explicit circuit view.",
+  },
+])
   it.each(["left-to-right", "top-to-bottom"] as const)(
-    `refuses ${supplyAsTransmitter ? "a supply as transmitter" : "a genuine auxiliary pair"} through the CLI in %s`,
+    `refuses ${c.name} through the CLI in %s`,
     async (flow) => {
       const f = await seriesFixture();
       try {
@@ -239,9 +279,7 @@ for (const supplyAsTransmitter of [true, false])
           output = join(f.root, "refusal.html");
         const view = request({
           flow,
-          ...(supplyAsTransmitter
-            ? { from: { device: "PS1", function: "output" } }
-            : { auxiliary: [{ from: request().from, to: request().to }] }),
+          ...c.extra,
         });
         await writeFile(
           input,
@@ -267,13 +305,10 @@ for (const supplyAsTransmitter of [true, false])
         expect(run.error).toBeUndefined();
         expect(run.status, run.stderr).toBe(1);
         expect(run.stdout).toBe("");
-        const message = supplyAsTransmitter
-          ? 'Packet view[0] "Untitled view": Series loop power source PS1 cannot also be the transmitter; use an explicit circuit view.'
-          : 'Packet view[0] "Untitled view": Series loop power is supported only for input views without auxiliary pairs.';
         expect(JSON.parse(run.stderr).error).toMatchObject({
           code: "R006",
           reason: "unprintable-layout",
-          message,
+          message: `Packet view[0] "Untitled view": ${c.message}`,
         });
         await expect(readFile(output)).rejects.toMatchObject({
           code: "ENOENT",
