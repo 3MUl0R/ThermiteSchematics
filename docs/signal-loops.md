@@ -139,8 +139,9 @@ wire-only reproduction; the RM3 request uses the copied inventory's CBL3 pair.
 `loopPower` uses exactly `{device, function}`. Supply function terminals must be
 ordered positive then return, with the two required roles below. No type edit,
 new schema field, or relock of an existing PSU is needed. The transmitter, input
-and supply must be on three separate devices. Series mode accepts input views
-without `auxiliary` pairs.
+and supply must be on three separate devices. Selecting the loop-power source as
+`from` refuses with a message naming the supply and pointing to an explicit circuit
+view. Series mode accepts input views without `auxiliary` pairs.
 
 Only these exact authored terminal-role pairs are recognized for series polarity:
 

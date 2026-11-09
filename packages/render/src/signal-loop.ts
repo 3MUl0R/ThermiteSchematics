@@ -13,6 +13,7 @@ import {
   selectSeriesLoop,
 } from "./signal-loop/series-selection.js";
 import { prepareSeriesLoopDrawing } from "./signal-loop/series-layout.js";
+import { snappedPath } from "./signal-loop/route-geometry.js";
 import {
   directLoopPolarity,
   finishDirectLoopDrawing,
@@ -734,19 +735,14 @@ export async function prepareSignalLoopDrawing(
         `<g data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
       );
     for (const section of edge.sections) {
-      const points = [
+      const points = snappedPath([
         section.startPoint,
         ...(section.bendPoints ?? []),
         section.endPoint,
-      ].map((p) => ({ x: Number(n(p.x)), y: Number(n(p.y)) }));
+      ]);
       for (let i = 1; i < points.length; i++) {
         const a = points[i - 1]!,
           b = points[i]!;
-        if (
-          ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
-          (a.x !== b.x && a.y !== b.y)
-        )
-          throw new Error("Non-orthogonal signal loop route.");
         for (const node of graph.children ?? []) {
           if (
             a.x === b.x

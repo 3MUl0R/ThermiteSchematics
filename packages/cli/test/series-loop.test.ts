@@ -228,3 +228,58 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     }
   },
 );
+
+for (const supplyAsTransmitter of [true, false])
+  it.each(["left-to-right", "top-to-bottom"] as const)(
+    `refuses ${supplyAsTransmitter ? "a supply as transmitter" : "a genuine auxiliary pair"} through the CLI in %s`,
+    async (flow) => {
+      const f = await seriesFixture();
+      try {
+        const input = join(f.root, "refusal.json"),
+          output = join(f.root, "refusal.html");
+        const view = request({
+          flow,
+          ...(supplyAsTransmitter
+            ? { from: { device: "PS1", function: "output" } }
+            : { auxiliary: [{ from: request().from, to: request().to }] }),
+        });
+        await writeFile(
+          input,
+          JSON.stringify({
+            format: "schematic-packet-request/0.1",
+            views: [view],
+          }),
+        );
+        const run = spawnSync(
+          process.execPath,
+          [
+            resolve("thermite.mjs"),
+            "packet",
+            "--project",
+            f.root,
+            "--input",
+            input,
+            "--output",
+            output,
+          ],
+          { encoding: "utf8" },
+        );
+        expect(run.error).toBeUndefined();
+        expect(run.status, run.stderr).toBe(1);
+        expect(run.stdout).toBe("");
+        const message = supplyAsTransmitter
+          ? 'Packet view[0] "Untitled view": Series loop power source PS1 cannot also be the transmitter; use an explicit circuit view.'
+          : 'Packet view[0] "Untitled view": Series loop power is supported only for input views without auxiliary pairs.';
+        expect(JSON.parse(run.stderr).error).toMatchObject({
+          code: "R006",
+          reason: "unprintable-layout",
+          message,
+        });
+        await expect(readFile(output)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      } finally {
+        await f.dispose();
+      }
+    },
+  );
