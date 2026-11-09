@@ -189,6 +189,13 @@ export interface SelectedSubgraph {
   readonly functionIds: readonly FunctionId[];
   readonly conductiveElementIds: readonly ConductiveElementId[];
   readonly netIds: readonly string[];
+  /** Terminal context only; owner functions are not selected or covered. */
+  readonly terminalOwners?: readonly SelectedTerminalOwner[];
+}
+
+export interface SelectedTerminalOwner {
+  readonly terminal: TerminalId;
+  readonly ownerFunctionIds: readonly FunctionId[];
 }
 
 export type LocationIdentity =
@@ -257,7 +264,7 @@ export interface PresentationPort {
 }
 
 export type SemanticAttachmentKind =
-  "function" | "channel" | "aggregate" | "collapsed-boundary";
+  "function" | "channel" | "aggregate" | "collapsed-boundary" | "terminal";
 
 export interface SemanticAttachment {
   readonly kind: SemanticAttachmentKind;
@@ -269,7 +276,7 @@ export interface SemanticAttachment {
 
 export interface SymbolPresentationNode {
   readonly kind: "symbol";
-  readonly representation: "function" | "aggregate";
+  readonly representation: "function" | "aggregate" | "terminal";
   readonly id: string;
   readonly deviceUid: string;
   readonly designation: string;

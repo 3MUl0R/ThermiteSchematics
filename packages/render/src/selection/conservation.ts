@@ -24,7 +24,7 @@ import {
   compareFunctionId,
 } from "../ordering.js";
 import { validateMaterializedFunctionFacts } from "../symbols/validate.js";
-import type { SelectedSubgraph } from "../types.js";
+import type { SelectedSubgraph, SelectedTerminalOwner } from "../types.js";
 import {
   deviceTypeFor,
   compareCompleteTerminal,
@@ -85,14 +85,11 @@ export function terminalDisplayFunctionId(
   return cloneFunction(materialized.id);
 }
 
-export function pathTerminalDisplayFunctionIds(
+function pathTerminalOwnership(
   context: SelectionContext,
   selections: readonly SearchSuccess[],
-  invalidMapping: (detail: string) => never,
-  rootFunctionIds: readonly FunctionId[] = [],
-):
-  | { readonly ok: true; readonly value: readonly FunctionId[] }
-  | { readonly ok: false; readonly error: UnsupportedSymbolMappingError } {
+  rootFunctionIds: readonly FunctionId[],
+) {
   const endpoints = new Set<string>();
   const touched = new Map<string, TerminalId>();
   const selectedFunctions = new Map(
@@ -117,6 +114,23 @@ export function pathTerminalDisplayFunctionIds(
     for (const terminal of context.functionByKey.get(functionIdKey(id))!
       .terminals)
       endpoints.add(terminalIdKey(terminal));
+  return { endpoints, touched, selectedFunctions };
+}
+
+export function pathTerminalDisplayFunctionIds(
+  context: SelectionContext,
+  selections: readonly SearchSuccess[],
+  invalidMapping: (detail: string) => never,
+  rootFunctionIds: readonly FunctionId[] = [],
+  terminalOwners?: SelectedTerminalOwner[],
+):
+  | { readonly ok: true; readonly value: readonly FunctionId[] }
+  | { readonly ok: false; readonly error: UnsupportedSymbolMappingError } {
+  const { endpoints, touched, selectedFunctions } = pathTerminalOwnership(
+    context,
+    selections,
+    rootFunctionIds,
+  );
   const ids: FunctionId[] = [];
   for (const terminal of [...touched.values()].sort((left, right) =>
     compareCompleteTerminal(context, left, right),
@@ -129,6 +143,22 @@ export function pathTerminalDisplayFunctionIds(
       context.view.family,
     );
     if (functionId === undefined) {
+      const owner =
+        terminalOwners === undefined
+          ? undefined
+          : projectedCoilTerminalOwner(
+              context,
+              {
+                view: context.view,
+                paths: selections.map((s) => s.path),
+                functionIds: [...selectedFunctions.values()],
+              },
+              terminal,
+            );
+      if (owner !== undefined) {
+        terminalOwners?.push(owner);
+        continue;
+      }
       const device = context.deviceByUid.get(terminal.deviceUid);
       if (device === undefined) {
         throw new Error(
@@ -161,6 +191,72 @@ export function pathTerminalDisplayFunctionIds(
     ids.push(functionId);
   }
   return { ok: true, value: Object.freeze(ids) };
+}
+
+/** A physical pass-through on an actuation input is context, never a coil selection. */
+export function projectedCoilTerminalOwner(
+  context: SymbolMappingContext,
+  selected: Pick<SelectedSubgraph, "view" | "paths" | "functionIds">,
+  terminal: TerminalId,
+): SelectedTerminalOwner | undefined {
+  if (
+    selected.view.format !== "schematic-view/0.1" ||
+    selected.view.family !== "control"
+  )
+    return undefined;
+  const incident = selected.paths.filter((p) =>
+    p.steps.some(
+      (s) => sameTerminal(s.from, terminal) || sameTerminal(s.to, terminal),
+    ),
+  );
+  if (
+    !incident.length ||
+    incident.some(
+      (p) =>
+        p.lane !== "input" ||
+        sameTerminal(p.start.terminal, terminal) ||
+        sameTerminal(p.end.terminal, terminal),
+    )
+  )
+    return undefined;
+  const owners = [...context.functionByKey.values()].filter((f) =>
+    f.terminals.some((t) => sameTerminal(t, terminal)),
+  );
+  if (
+    owners.some((f) =>
+      selected.functionIds.some(
+        (id) => functionIdKey(id) === functionIdKey(f.id),
+      ),
+    )
+  )
+    return undefined;
+  const device = context.deviceByUid.get(terminal.deviceUid);
+  const mapping = device && context.mappingByTypeId.get(device.typeId);
+  const coils = owners.filter(
+    (f) =>
+      f.kind === "coil" &&
+      f.terminals.length === 2 &&
+      mapping?.functions.some(
+        (r) =>
+          r.functionKey === f.id.functionKey &&
+          r.families.includes("control") &&
+          r.traversalRole === "coil-root" &&
+          f.terminals.every((t) =>
+            r.bindings.some((b) => b.terminalKey === t.terminalKey),
+          ),
+      ),
+  );
+  if (!coils.length || !device) return undefined;
+  for (const f of coils)
+    validateMaterializedFunctionFacts(deviceTypeFor(context, device), f);
+  return Object.freeze({
+    terminal: Object.freeze(cloneTerminal(terminal)),
+    ownerFunctionIds: Object.freeze(
+      coils
+        .map((f) => Object.freeze(cloneFunction(f.id)))
+        .sort((a, b) => compareText(functionIdKey(a), functionIdKey(b))),
+    ),
+  });
 }
 
 function unrepresentedTerminalError(

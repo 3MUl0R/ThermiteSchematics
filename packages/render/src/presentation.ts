@@ -5,6 +5,10 @@ import {
   type SemanticOrder,
 } from "./semantic-order.js";
 import { printableSlotWidth } from "./symbols/printable-font.js";
+import {
+  assertSymbolTruth,
+  assertSemanticAttachments,
+} from "./layout/topology-conservation.js";
 import { symbolProfile } from "./symbols/profiles.js";
 import { printableCaption } from "./symbols/printable-policy.js";
 import {
@@ -117,7 +121,7 @@ interface PresentationContext {
 
 interface SymbolRepresentation {
   readonly id: string;
-  readonly kind: "function" | "aggregate";
+  readonly kind: "function" | "aggregate" | "terminal";
   readonly device: IrDevice;
   readonly deviceType: IrDeviceType;
   readonly rule: FunctionSymbolRule | AggregateSymbolRule;
@@ -1079,6 +1083,7 @@ function semanticAttachmentKind(
   context: PresentationContext,
   representation: SymbolRepresentation,
 ): SemanticAttachmentKind {
+  if (representation.kind === "terminal") return "terminal";
   if (representation.kind === "aggregate") return "aggregate";
   const materialized = required(
     context.functionByKey.get(functionIdKey(representation.functionIds[0]!)),
@@ -1104,28 +1109,19 @@ function connectedTerminalPortHasLabel(
   );
 }
 
-function buildSymbolNode(
+function representationLabel(
   context: PresentationContext,
   representation: SymbolRepresentation,
-  boundaries: ReadonlyMap<string, BoundaryRecord>,
-  constraints: ReadonlyMap<string, BoundaryConstraint>,
-  groups: PresentationGroups,
-): SymbolPresentationNode {
-  const symbol = required(
-    context.symbolById.get(representation.rule.symbolId),
-    `Presentation symbol ${representation.rule.symbolId} is missing.`,
-  );
-  const deviceGroup = required(
-    groups.deviceByUid.get(representation.device.uid),
-    `Presentation device group ${representation.device.uid} is missing.`,
-  );
-  const locationGroup = required(
-    groups.locationByDeviceUid.get(representation.device.uid),
-    `Presentation location group ${representation.device.uid} is missing.`,
-  );
-  const orientation = orientationFor(context.selected);
-  const nodeLabel =
-    representation.kind === "aggregate"
+) {
+  return representation.kind === "terminal"
+    ? presentationLabel(
+        "symbol",
+        representation.id,
+        "function",
+        "coil outside view",
+        [],
+      )
+    : representation.kind === "aggregate"
       ? presentationLabel(
           "symbol",
           representation.id,
@@ -1168,37 +1164,75 @@ function buildSymbolNode(
             ],
           );
         })();
+}
+
+function symbolCaption(
+  context: PresentationContext,
+  representation: SymbolRepresentation,
+  symbol: SymbolDefinition,
+) {
+  const nodeLabel = representationLabel(context, representation);
+  const printableText =
+    representation.kind === "terminal"
+      ? "coil outside view"
+      : representation.kind === "aggregate"
+        ? printableCaption({
+            kind: "aggregate",
+            mark: symbol.id,
+            type: required(
+              context.ir.deviceTypes.find(
+                (t) => t.id === representation.device.typeId,
+              ),
+              "Missing aggregate caption type",
+            ),
+          })
+        : printableCaption({
+            kind: "function",
+            fn: required(
+              context.functionByKey.get(
+                functionIdKey(representation.functionIds[0]!),
+              ),
+              "Missing caption function",
+            ),
+            type: required(
+              context.ir.deviceTypes.find(
+                (t) => t.id === representation.device.typeId,
+              ),
+              "Missing caption type",
+            ),
+            mark: symbol.id,
+          });
+  return { nodeLabel, printableText };
+}
+
+function buildSymbolNode(
+  context: PresentationContext,
+  representation: SymbolRepresentation,
+  boundaries: ReadonlyMap<string, BoundaryRecord>,
+  constraints: ReadonlyMap<string, BoundaryConstraint>,
+  groups: PresentationGroups,
+): SymbolPresentationNode {
+  const symbol = required(
+    context.symbolById.get(representation.rule.symbolId),
+    `Presentation symbol ${representation.rule.symbolId} is missing.`,
+  );
+  const deviceGroup = required(
+    groups.deviceByUid.get(representation.device.uid),
+    `Presentation device group ${representation.device.uid} is missing.`,
+  );
+  const locationGroup = required(
+    groups.locationByDeviceUid.get(representation.device.uid),
+    `Presentation location group ${representation.device.uid} is missing.`,
+  );
+  const orientation = orientationFor(context.selected);
+  const { nodeLabel, printableText } = symbolCaption(
+    context,
+    representation,
+    symbol,
+  );
   const portDefinitionById = new Map(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
-  const printableText =
-    representation.kind === "aggregate"
-      ? printableCaption({
-          kind: "aggregate",
-          mark: symbol.id,
-          type: required(
-            context.ir.deviceTypes.find(
-              (t) => t.id === representation.device.typeId,
-            ),
-            "Missing aggregate caption type",
-          ),
-        })
-      : printableCaption({
-          kind: "function",
-          fn: required(
-            context.functionByKey.get(
-              functionIdKey(representation.functionIds[0]!),
-            ),
-            "Missing caption function",
-          ),
-          type: required(
-            context.ir.deviceTypes.find(
-              (t) => t.id === representation.device.typeId,
-            ),
-            "Missing caption type",
-          ),
-          mark: symbol.id,
-        });
   const captionWidth = Math.max(nodeLabel.width, labelWidth(printableText));
   const labels: PresentationLabel[] = [
     {
@@ -1217,14 +1251,17 @@ function buildSymbolNode(
       deviceUid: representation.device.uid,
       terminalKey: binding.terminalKey,
     };
-    const memberFunctionId = {
-      deviceUid: representation.device.uid,
-      functionKey:
-        representation.kind === "aggregate"
-          ? (binding as AggregateSymbolRule["bindings"][number])
-              .memberFunctionKey
-          : representation.functionIds[0]!.functionKey,
-    };
+    const memberFunctionId =
+      representation.kind === "terminal"
+        ? undefined
+        : {
+            deviceUid: representation.device.uid,
+            functionKey:
+              representation.kind === "aggregate"
+                ? (binding as AggregateSymbolRule["bindings"][number])
+                    .memberFunctionKey
+                : representation.functionIds[0]!.functionKey,
+          };
     const transformed = orientedSide(
       definition.side,
       definition.offset,
@@ -1254,7 +1291,7 @@ function buildSymbolNode(
       id,
       symbolPortId: definition.id,
       terminal,
-      memberFunctionId,
+      ...(memberFunctionId === undefined ? {} : { memberFunctionId }),
       netId: netForTerminal(context, terminal),
       side: transformed.side,
       offset: transformed.offset,
@@ -1508,6 +1545,43 @@ function attachmentsByTerminal(
   return byTerminal;
 }
 
+function projectedTerminalRepresentations(
+  context: PresentationContext,
+): SymbolRepresentation[] {
+  return (context.selected.terminalOwners ?? []).map(
+    ({ terminal, ownerFunctionIds }) => {
+      const device = required(
+        context.deviceByUid.get(terminal.deviceUid),
+        "Missing terminal context device",
+      );
+      return {
+        id: structuralTupleId("terminal", device.uid, terminal.terminalKey),
+        kind: "terminal",
+        device,
+        deviceType: required(
+          context.typeById.get(device.typeId),
+          "Missing terminal context type",
+        ),
+        functionIds: [],
+        rule: {
+          functionKey: required(
+            ownerFunctionIds[0],
+            "Missing terminal context owner",
+          ).functionKey,
+          families: ["control"],
+          symbolId: "ais:terminal",
+          bindings: ["in", "out"].map((portId) => ({
+            portId,
+            terminalKey: terminal.terminalKey,
+          })),
+          classification: "terminal",
+          traversalRole: "terminal-display",
+        },
+      };
+    },
+  );
+}
+
 function buildSymbolAndRailNodes(
   context: PresentationContext,
   allRepresentations: readonly SymbolRepresentation[],
@@ -1531,7 +1605,10 @@ function buildSymbolAndRailNodes(
     boundaries,
   );
   if (!withImplicit.ok) return withImplicit;
-  const representations = withImplicit.value;
+  const representations = [
+    ...withImplicit.value,
+    ...projectedTerminalRepresentations(context),
+  ];
   const groups = buildGroups(context, representations);
   const symbols = representations.map((representation) =>
     buildSymbolNode(context, representation, boundaries, constraints, groups),
@@ -4154,123 +4231,6 @@ function collectPresentationLabels(
   ];
 }
 
-function validateSymbolTruth(
-  ir: Readonly<ElectricalIr>,
-  selected: Readonly<SelectedSubgraph>,
-  node: Readonly<SymbolPresentationNode>,
-  mappings: readonly DeviceTypeSymbolMapping[],
-): void {
-  const device = ir.devices.find(({ uid }) => uid === node.deviceUid);
-  invariant(device !== undefined, `${node.id} device exists`);
-  invariant(device.designation === node.designation, `${node.id} designation`);
-  invariant(device.typeId === node.typeId, `${node.id} type`);
-  const deviceType = ir.deviceTypes.find(({ id }) => id === device.typeId);
-  invariant(deviceType !== undefined, `${node.id} device type exists`);
-  const mapping = mappings.find(({ typeId }) => typeId === device.typeId);
-  invariant(mapping !== undefined, `${node.id} mapping exists`);
-  const portBySymbolId = new Map(
-    node.ports.map((port) => [port.symbolPortId, port]),
-  );
-  if (node.representation === "function") {
-    invariant(node.functionIds.length === 1, `${node.id} one function`);
-    const functionId = node.functionIds[0]!;
-    invariant(
-      functionId.deviceUid === node.deviceUid,
-      `${node.id} function owner`,
-    );
-    const rule = mapping.functions.find(
-      ({ functionKey, families }) =>
-        functionKey === functionId.functionKey &&
-        families.includes(selected.view.family),
-    );
-    invariant(rule !== undefined, `${node.id} function mapping`);
-    invariant(rule.symbolId === node.symbolId, `${node.id} symbol mapping`);
-    invariant(
-      rule.classification === node.classification,
-      `${node.id} classification`,
-    );
-    const materialized = ir.functions.find(
-      ({ id }) => functionIdKey(id) === functionIdKey(functionId),
-    );
-    invariant(materialized !== undefined, `${node.id} function exists`);
-    invariant(
-      sameStringSet(
-        node.ports.map(({ terminal }) => terminal.terminalKey),
-        materialized.terminals.map(({ terminalKey }) => terminalKey),
-      ),
-      `${node.id} required function terminal coverage`,
-    );
-    for (const binding of rule.bindings) {
-      const port = portBySymbolId.get(binding.portId);
-      invariant(
-        port !== undefined,
-        `${node.id} port binding ${binding.portId}`,
-      );
-      invariant(
-        port.terminal.terminalKey === binding.terminalKey,
-        `${node.id} binding terminal`,
-      );
-      invariant(
-        port.memberFunctionId !== undefined &&
-          functionIdKey(port.memberFunctionId) === functionIdKey(functionId),
-        `${node.id} member function`,
-      );
-    }
-  } else {
-    const rules = mapping.aggregates.filter(
-      (rule) =>
-        rule.families.includes(selected.view.family) &&
-        rule.symbolId === node.symbolId &&
-        rule.classification === node.classification &&
-        sameStringSet(
-          rule.functionKeys,
-          node.functionIds.map(({ functionKey }) => functionKey),
-        ),
-    );
-    invariant(rules.length === 1, `${node.id} aggregate mapping`);
-    const rule = rules[0]!;
-    const coveredByMember = new Map<string, string[]>();
-    for (const binding of rule.bindings) {
-      const port = portBySymbolId.get(binding.portId);
-      invariant(
-        port !== undefined,
-        `${node.id} aggregate port ${binding.portId}`,
-      );
-      invariant(
-        port.terminal.terminalKey === binding.terminalKey,
-        `${node.id} aggregate terminal`,
-      );
-      invariant(
-        port.memberFunctionId !== undefined &&
-          port.memberFunctionId.deviceUid === node.deviceUid &&
-          port.memberFunctionId.functionKey === binding.memberFunctionKey,
-        `${node.id} aggregate member provenance`,
-      );
-      coveredByMember.set(binding.memberFunctionKey, [
-        ...(coveredByMember.get(binding.memberFunctionKey) ?? []),
-        binding.terminalKey,
-      ]);
-    }
-    for (const functionKey of rule.functionKeys) {
-      const materialized = ir.functions.find(
-        ({ id }) =>
-          id.deviceUid === node.deviceUid && id.functionKey === functionKey,
-      );
-      invariant(
-        materialized !== undefined,
-        `${node.id} aggregate member ${functionKey}`,
-      );
-      invariant(
-        sameStringSet(
-          coveredByMember.get(functionKey) ?? [],
-          materialized.terminals.map(({ terminalKey }) => terminalKey),
-        ),
-        `${node.id} aggregate member terminal coverage ${functionKey}`,
-      );
-    }
-  }
-}
-
 export function validatePresentationGraph(
   ir: Readonly<ElectricalIr>,
   selected: Readonly<SelectedSubgraph>,
@@ -4363,8 +4323,10 @@ export function validatePresentationGraph(
           `${port.id} same-device terminal`,
         );
         invariant(
-          port.memberFunctionId !== undefined,
-          `${port.id} required member function`,
+          node.representation === "terminal"
+            ? port.memberFunctionId === undefined
+            : port.memberFunctionId !== undefined,
+          `${port.id} required member function or terminal context`,
         );
         invariant(
           port.label === port.terminal.terminalKey,
@@ -4419,7 +4381,7 @@ export function validatePresentationGraph(
         node.locationGroupId === group.parentId,
         `${node.id} location parent`,
       );
-      validateSymbolTruth(ir, selected, node, mappings);
+      assertSymbolTruth(ir, selected, node, mappings);
     } else if (node.kind === "rail") {
       invariant(node.parentId === "root", `${node.id} rail root parent`);
       invariant(
@@ -4455,52 +4417,14 @@ export function validatePresentationGraph(
     "presentation node order",
   );
 
-  for (const node of graph.nodes) {
-    if (node.kind === "junction") continue;
-    const expectedKind: SemanticAttachmentKind =
-      node.kind === "rail"
-        ? "collapsed-boundary"
-        : node.representation === "aggregate"
-          ? "aggregate"
-          : ir.functions.find(
-                ({ id }) =>
-                  functionIdKey(id) === functionIdKey(node.functionIds[0]!),
-              )?.kind === "channel"
-            ? "channel"
-            : "function";
-    const uniqueOwnerTerminals = new Set<string>();
-    for (const attachment of node.attachments) {
-      invariant(attachment.nodeId === node.id, `${node.id} attachment owner`);
-      invariant(
-        attachment.kind === expectedKind,
-        `${node.id} exclusive attachment kind`,
-      );
-      const key = terminalIdKey(attachment.terminal);
-      invariant(
-        !uniqueOwnerTerminals.has(key),
-        `${node.id} one incidence per terminal`,
-      );
-      uniqueOwnerTerminals.add(key);
-      invariant(
-        attachment.netId === netByTerminal.get(key),
-        `${node.id} attachment net`,
-      );
-      invariant(
-        attachment.portIds.length > 0 &&
-          attachment.portIds.every(
-            (portId) =>
-              ownerByPortId.get(portId)?.id === node.id &&
-              sameTerminal(portById.get(portId)!.terminal, attachment.terminal),
-          ),
-        `${node.id} attachment visual ports`,
-      );
-    }
-    invariant(
-      uniqueOwnerTerminals.size ===
-        new Set(node.ports.map(({ terminal }) => terminalIdKey(terminal))).size,
-      `${node.id} complete attachment incidence`,
-    );
-  }
+  assertSemanticAttachments(
+    ir,
+    selected,
+    graph,
+    netByTerminal,
+    portById,
+    ownerByPortId,
+  );
 
   const conductorCountByPort = new Map<string, number>();
   for (const edge of graph.edges) {

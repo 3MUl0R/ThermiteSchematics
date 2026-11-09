@@ -63,6 +63,61 @@ describe("packet page bounds", () => {
 });
 
 describe("packet reference ownership", () => {
+  it.each(["all", "drawings"] as const)(
+    "keeps terminal context separate from another empty-function appearance in %s references",
+    (appearances) => {
+      const device = ir.devices[0]!;
+      const a = draft(),
+        b = draft();
+      a.view = b.view = {
+        format: "schematic-view/0.1",
+        root: { deviceUid: device.uid, designation: device.designation },
+        family: "control",
+        flow: "left-to-right",
+      };
+      a.references = [
+        {
+          deviceUid: device.uid,
+          designation: device.designation,
+          functions: [],
+          zone: "A1",
+          representation: "terminal",
+        },
+      ];
+      b.references = [
+        {
+          deviceUid: device.uid,
+          designation: device.designation,
+          functions: [],
+          zone: "B2",
+        },
+      ];
+      const result = referenceTables(
+        ir,
+        [a, b],
+        { references: { appearances } },
+        undefined,
+      );
+      const rows = result.tables.find((t) => t.kind === "references")!.rows;
+      expect(rows.map((r) => r.cells)).toEqual([
+        [device.designation, "Terminal context (coil outside view)", "1 / A1"],
+        [
+          device.designation,
+          appearances === "drawings"
+            ? "Device / terminal / port"
+            : "Terminal / schedule",
+          "2 / B2",
+        ],
+      ]);
+      expect(new Set(rows.map((r) => r.key)).size).toBe(2);
+      expect(result.referenceSelection).toMatchObject({
+        totalGroups: 2,
+        retainedGroups: 2,
+        omittedGroupKeys: [],
+      });
+    },
+  );
+
   it("recomputes zones when compact packing moves an appearance to another row", () => {
     const a = draft(),
       b = draft();

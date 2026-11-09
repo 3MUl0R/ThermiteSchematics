@@ -894,37 +894,37 @@ function symbolGroupAttributes(
             ),
     };
   }
-  if (node.representation === "function") {
-    const key = required(
-      node.functionIds[0],
-      `Function ${node.id} has no function ID.`,
-    ).functionKey;
-    return {
-      id: svgSemanticId("function", [node.deviceUid, key]),
-      class: `symbol function-symbol ${node.classification}`,
-      transform: `translate(${formatSvgNumber(global(origin.x))} ${formatSvgNumber(global(origin.y))})`,
-      "data-symbol-id": node.symbolId,
-      "data-device-uid": node.deviceUid,
-      "data-function-key": sourceValue(
-        registry,
-        "function.key",
-        key,
-        `function ${node.id} key`,
-      ),
-    };
-  }
-  const key = aggregateKey(node);
+  const terminal = node.representation === "terminal";
+  const kind = node.representation;
+  const key = terminal
+    ? required(node.ports[0], "Terminal context has no port").terminal
+        .terminalKey
+    : kind === "function"
+      ? required(node.functionIds[0], `Function ${node.id} has no function ID.`)
+          .functionKey
+      : aggregateKey(node);
   return {
-    id: svgSemanticId("aggregate", [node.deviceUid, key]),
-    class: `symbol aggregate-symbol ${node.classification}`,
+    id: svgSemanticId(kind, [
+      node.deviceUid,
+      key,
+      ...(terminal ? ["context"] : []),
+    ]),
+    class: terminal
+      ? "symbol terminal-context"
+      : `symbol ${kind}-symbol ${node.classification}`,
     transform: `translate(${formatSvgNumber(global(origin.x))} ${formatSvgNumber(global(origin.y))})`,
     "data-symbol-id": node.symbolId,
     "data-device-uid": node.deviceUid,
-    "data-aggregate-key": sourceValue(
+    ...(terminal ? { "data-representation": "terminal" } : {}),
+    [`data-${terminal ? "terminal" : kind}-key`]: sourceValue(
       registry,
-      "aggregate.key",
+      terminal
+        ? "terminal.key"
+        : kind === "function"
+          ? "function.key"
+          : "aggregate.key",
       key,
-      `aggregate ${node.id} key`,
+      `${kind} ${node.id} key`,
     ),
   };
 }

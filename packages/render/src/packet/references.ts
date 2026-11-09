@@ -2,6 +2,7 @@ import type { ElectricalIr } from "@thermite/compiler";
 import type { DocumentationTable, resolveDeviceFilter } from "@thermite/query";
 import type {
   Draft,
+  SheetReference,
   SchematicPacketRequest,
   ReferenceSelection,
 } from "./types.js";
@@ -40,6 +41,23 @@ const designationOrder = (
   b: { designation: string },
 ) =>
   a.designation < b.designation ? -1 : a.designation > b.designation ? 1 : 0;
+
+function referenceGroupKey(r: SheetReference): string {
+  return JSON.stringify([
+    r.deviceUid,
+    r.functions,
+    ...(r.representation ? [r.representation] : []),
+  ]);
+}
+function referenceRepresentation(r: SheetReference): string {
+  return r.representation === "terminal"
+    ? "Terminal context (coil outside view)"
+    : r.functions.join(", ") || "Terminal / schedule";
+}
+
+function isDeviceReference(r: SheetReference): boolean {
+  return !r.functions.length && !r.representation;
+}
 
 /** Indexes describe content drafts only; appending index pages must happen later. */
 export function referenceTables(
@@ -90,10 +108,10 @@ export function referenceTables(
   );
   drafts.forEach((d, i) =>
     d.references?.forEach((r) => {
-      const key = JSON.stringify([r.deviceUid, r.functions]);
+      const key = referenceGroupKey(r);
       const g = groups.get(key) ?? {
         designation: r.designation,
-        functions: r.functions.join(", ") || "Terminal / schedule",
+        functions: referenceRepresentation(r),
         locations: [],
         uid: r.deviceUid,
       };
@@ -110,7 +128,7 @@ export function referenceTables(
           ...g,
           functions:
             request.references?.appearances === "drawings" &&
-            !r.functions.length
+            isDeviceReference(r)
               ? "Device / terminal / port"
               : g.functions,
           locations: [],

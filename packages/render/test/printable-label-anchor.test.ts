@@ -67,13 +67,13 @@ it("keeps every own-wire ink distance no worse than dev across 50 requests and b
     );
     if (c.error) {
       expect(drawing.ok, c.key).toBe(false);
-      // Only these refused DOL views advance past the fuse. Retain every
+      // Only these refused DOL views advance past terminal ownership. Retain every
       // numeric anchor baseline and every other refusal from the fixture.
       const expected = [
         "packages_core-library_test_fixtures_dol-starter-1-left-to-right",
         "packages_core-library_test_fixtures_dol-starter-1-top-to-bottom",
       ].includes(c.key)
-        ? "R003"
+        ? "R004"
         : c.error;
       if (!drawing.ok) expect(drawing.error.code).toBe(expected);
       continue;
