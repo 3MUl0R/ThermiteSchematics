@@ -315,13 +315,13 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:breaker",
     notes:
-      "Protection contacts; explicit circuitSymbols marks distinguish main protection poles from auxiliary contacts.",
+      'Protection contacts; control accepts unmarked contacts or circuitSymbols marks "breaker", "contact-no" and "contact-nc"; other marks refuse. Power compatibility is unchanged.',
     aliases: [],
     coreAliases: CORE_SYMBOL_BINDINGS.filter(
       (b) => b.equivalent === "thermite:breaker",
     ),
     support: [
-      ...rooted([CONTACT], []),
+      ...rooted([CONTACT], [CONTACT], []),
       { family: "circuit", role: "function", functions: [BUS, CONTACT] },
     ],
   },
@@ -341,11 +341,11 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:fuse",
     notes:
-      "Protection contacts or a two-terminal other function; explicit marks distinguish main and auxiliary functions.",
+      'Control accepts unmarked other/2, a "fuse" circuitSymbols mark, or a closed unmarked contact/2; open unmarked contacts and other marks refuse. Power compatibility is unchanged.',
     aliases: [],
     coreAliases: [],
     support: [
-      ...rooted([CONTACT, OTHER2], []),
+      ...rooted([CONTACT, OTHER2], [CONTACT, OTHER2], []),
       {
         family: "circuit",
         role: "function",

@@ -176,13 +176,29 @@ describe("core profile clone matrix", () => {
         }
       }, 30000);
     }
-  it("preserves all existing rooted core bindings (PSU AC input is additive)", () => {
+  it("preserves rooted core bindings with only PSU input and breaker control additions", () => {
     const mappings = projectDeviceTypeSymbolMappings(core);
     expect(mappings).toHaveLength(12);
     for (const expected of CORE_DEVICE_TYPE_SYMBOL_MAPPINGS) {
       const actual = mappings.find((m) => m.typeId === expected.typeId)!;
+      const addedControl = actual.functions.filter(
+        (f) =>
+          expected.typeId === "core:breaker-3p" &&
+          f.families.includes("control"),
+      );
+      expect(addedControl).toEqual(
+        expected.typeId === "core:breaker-3p"
+          ? expected.functions.map((f) => ({
+              ...f,
+              families: ["control"],
+              traversalRole: "protection-contact",
+            }))
+          : [],
+      );
       expect(
-        actual.functions.filter((f) => f.functionKey !== "ac_input"),
+        actual.functions.filter(
+          (f) => f.functionKey !== "ac_input" && !addedControl.includes(f),
+        ),
       ).toEqual(expected.functions);
       expect(actual.aggregates).toEqual(expected.aggregates);
       expect(actual.boundaryTerminals).toEqual(expected.boundaryTerminals);
@@ -196,7 +212,17 @@ describe("core profile clone matrix", () => {
                 ? 1
                 : 0,
           );
-      expect(omissions(actual)).toEqual(omissions(expected));
+      expect(omissions(actual)).toEqual(
+        omissions(expected).filter(
+          (f) =>
+            !addedControl.some(
+              (c) =>
+                c.functionKey === f.functionKey &&
+                f.reason === "outside-family" &&
+                f.families.every((family) => c.families.includes(family)),
+            ),
+        ),
+      );
     }
   });
 });

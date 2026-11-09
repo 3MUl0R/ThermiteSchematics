@@ -23,7 +23,7 @@ afterAll(async () => {
 });
 describe("profile binding edge cases", () => {
   it.each(["contact", "other"] as const)(
-    "draws power through a fuse %s without a traversal change",
+    "preserves fuse %s power traversal while adding a distinct control rule",
     async (kind) => {
       const ir = structuredClone(core),
         type = ir.deviceTypes.find((t) => t.id === "core:breaker-3p")!;
@@ -48,14 +48,23 @@ describe("profile binding edge cases", () => {
       const rules = projectDeviceTypeSymbolMappings(ir).find(
         (m) => m.typeId === type.id,
       )!.functions;
-      expect(
-        rules.every(
-          (r) =>
-            r.symbolId === "ais:fuse" &&
-            r.traversalRole === "breaker-pole" &&
-            isFunctionTraversable("power", r.traversalRole),
-        ),
-      ).toBe(true);
+      for (const family of ["power", "control"] as const) {
+        const selected = rules.filter((r) => r.families.includes(family));
+        expect(selected).toHaveLength(3);
+        for (const rule of selected) {
+          expect(rule.symbolId).toBe("ais:fuse");
+          expect(rule.traversalRole).toBe(
+            family === "power" ? "breaker-pole" : "protection-contact",
+          );
+          expect(isFunctionTraversable(family, rule.traversalRole)).toBe(true);
+          expect(
+            isFunctionTraversable(
+              family === "power" ? "control" : "power",
+              rule.traversalRole,
+            ),
+          ).toBe(false);
+        }
+      }
       for (const flow of ["left-to-right", "top-to-bottom"] as const) {
         const r = await renderSchematic(ir, {
           format: "schematic-view-request/0.1",

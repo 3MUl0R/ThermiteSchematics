@@ -7,6 +7,8 @@ import { symbolProfile } from "./profiles.js";
 import type { PresentationClass } from "../ordering.js";
 import type { SchematicViewFamily } from "../types.js";
 import type { SymbolDefinition, SymbolPortBinding } from "./types.js";
+import { protectionFamilyRules } from "./protection-control.js";
+const IN_OUT = ["in", "out"] as const;
 
 export type { SchematicViewFamily } from "../types.js";
 
@@ -973,6 +975,8 @@ export function projectDeviceTypeSymbolMappings(
             };
           else if (f.kind === "coil")
             rule = make("ais:coil", ["A1", "A2"], "coil", "coil-root");
+          else if (profile === "thermite:fuse")
+            rule = make("ais:fuse", IN_OUT, "protection", "breaker-pole");
           else if (f.kind === "contact") {
             const open = f.normal_state === "open";
             if (profile === "thermite:disconnector") {
@@ -994,19 +998,17 @@ export function projectDeviceTypeSymbolMappings(
                 (!explicit &&
                   power.includes("power_input") &&
                   power.includes("power_output"));
-              const symbol =
-                explicit === "contact-no"
-                  ? "ais:contact-no"
-                  : explicit === "contact-nc"
-                    ? "ais:contact-nc"
-                    : pole
-                      ? "ais:breaker-pole"
-                      : open
-                        ? "ais:contact-no"
-                        : "ais:contact-nc";
+              const symbol: SymbolDefinition["id"] =
+                explicit === "contact-no" || explicit === "contact-nc"
+                  ? `ais:${explicit}`
+                  : pole
+                    ? "ais:breaker-pole"
+                    : open
+                      ? "ais:contact-no"
+                      : "ais:contact-nc";
               rule = make(
                 symbol,
-                ["in", "out"],
+                IN_OUT,
                 pole ? "protection" : "power-contact",
                 pole ? "breaker-pole" : "power-contact",
               );
@@ -1024,13 +1026,6 @@ export function projectDeviceTypeSymbolMappings(
                     "protection",
                     "protection-contact",
                   );
-            else if (profile === "thermite:fuse")
-              rule = make(
-                "ais:fuse",
-                ["in", "out"],
-                "protection",
-                "breaker-pole",
-              );
             else if (
               profile === "thermite:estop" ||
               profile === "thermite:selector"
@@ -1068,14 +1063,7 @@ export function projectDeviceTypeSymbolMappings(
                   ? "power-contact"
                   : "control-contact",
               );
-          } else if (f.kind === "other" && profile === "thermite:fuse")
-            rule = make(
-              "ais:fuse",
-              ["in", "out"],
-              "protection",
-              "breaker-pole",
-            );
-          else if (f.kind === "load" && terminals.length === 2)
+          } else if (f.kind === "load" && terminals.length === 2)
             rule = make(
               profile === "thermite:motor"
                 ? "ais:motor"
@@ -1121,7 +1109,8 @@ export function projectDeviceTypeSymbolMappings(
               });
           }
         }
-        if (rule) functions.push(rule);
+        if (rule)
+          functions.push(...protectionFamilyRules(profile, type, f, rule));
       }
       // Preserve omission diagnostics for every function/family without a binding.
       for (const f of definitions) {
