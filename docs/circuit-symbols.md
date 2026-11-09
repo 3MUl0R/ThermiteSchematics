@@ -97,6 +97,15 @@ auxiliary contacts retain their normal state. Pressure and level marks, and
 non-fuse `other/2` marks, have no rooted power primitive and refuse with R002 and
 a specific cause. Use a circuit view for those supported circuit marks.
 
+Overload-profile power contacts use the same per-function explicit contact marks
+and refuse pressure and level marks with R002 and circuit-view advice. Power
+still requires ordered `power_input`/`power_output` terminal roles; an explicit
+mark does not grant a binding to another shape or role pair. Unmarked power
+contacts retain the overload pole. There is no overload `other/2` binding;
+non-overload marks on that shape receive an explicit power refusal cause too.
+Overload control and circuit behavior is unchanged: control retains its auxiliary
+contact defaults, and circuit views retain compatible authored marks.
+
 Control retains its narrower protection policy. Fuse control accepts unmarked
 `other/2`, an explicit `fuse` mark, or a closed unmarked `contact/2`. Breaker
 control accepts unmarked contacts or `breaker`, `contact-no` and `contact-nc`
@@ -109,7 +118,7 @@ Rooted and circuit views use independently authored, IEC-informed marks from the
 printable policy. A coil is a rectangle; AC/DC appears only from its authored
 coil-terminal voltage class. A breaker uses a blade and cross without inferred
 trip technology. Aligned authored breaker and disconnector gangs get a nonconductive mechanical
-link where the corridor is clear. Overload power poles use a stepped thermal
+link where the corridor is clear. Unmarked overload power poles use a stepped thermal
 element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
 
