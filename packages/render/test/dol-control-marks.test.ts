@@ -5,7 +5,7 @@ import { projectDeviceTypeSymbolMappings } from "../src/symbols/mappings.js";
 import { contractProject } from "./rooted-profile-contracts.js";
 
 // Independent acceptance table, including every contact mark supported by circuit
-// views. Only the listed marks may bind in rooted control; power stays as before.
+// views. Only the listed marks may bind in rooted control; power preserves identity.
 const contactMarks = [
   undefined,
   "fuse",
@@ -22,6 +22,17 @@ const contactMarks = [
   "level-no",
   "level-nc",
 ] as const;
+const powerIdentities = {
+  fuse: ["ais:fuse", "protection", "breaker-pole"],
+  breaker: ["ais:breaker-pole", "protection", "breaker-pole"],
+  overload: ["ais:overload-pole", "overload", "overload-pole"],
+  "contact-no": ["ais:contact-no", "power-contact", "power-contact"],
+  "contact-nc": ["ais:contact-nc", "power-contact", "power-contact"],
+  "switch-no": ["ais:switch-no", "power-contact", "power-contact"],
+  "switch-nc": ["ais:switch-nc", "power-contact", "power-contact"],
+  "pushbutton-no": ["ais:pushbutton-no", "power-contact", "power-contact"],
+  "pushbutton-nc": ["ais:pushbutton-nc", "power-contact", "power-contact"],
+} as const;
 const profiles = ["thermite:fuse", "thermite:breaker"] as const;
 for (const profile of profiles)
   for (const state of ["open", "closed"] as const)
@@ -59,35 +70,32 @@ for (const profile of profiles)
             expect(control.map((f) => f.symbolId)).toEqual(
               expected ? [expected] : [],
             );
-            // Exact baseline power rule for this role-less two-terminal contact.
+            const powerIdentity = mark
+              ? powerIdentities[mark as keyof typeof powerIdentities]
+              : profile === "thermite:fuse" && state === "closed"
+                ? powerIdentities.fuse
+                : powerIdentities[
+                    state === "open" ? "contact-no" : "contact-nc"
+                  ];
             expect(
               mapping.functions.filter((f) => f.families.includes("power")),
-            ).toEqual([
-              {
-                functionKey: "function",
-                families: ["power"],
-                symbolId:
-                  profile === "thermite:fuse"
-                    ? "ais:fuse"
-                    : mark === "breaker"
-                      ? "ais:breaker-pole"
-                      : mark === "contact-no" || mark === "contact-nc"
-                        ? `ais:${mark}`
-                        : `ais:contact-${state === "open" ? "no" : "nc"}`,
-                bindings: [
-                  { portId: "in", terminalKey: "A" },
-                  { portId: "out", terminalKey: "B" },
-                ],
-                classification:
-                  profile === "thermite:fuse" || mark === "breaker"
-                    ? "protection"
-                    : "power-contact",
-                traversalRole:
-                  profile === "thermite:fuse" || mark === "breaker"
-                    ? "breaker-pole"
-                    : "power-contact",
-              },
-            ]);
+            ).toEqual(
+              powerIdentity
+                ? [
+                    {
+                      functionKey: "function",
+                      families: ["power"],
+                      symbolId: powerIdentity[0],
+                      bindings: [
+                        { portId: "in", terminalKey: "A" },
+                        { portId: "out", terminalKey: "B" },
+                      ],
+                      classification: powerIdentity[1],
+                      traversalRole: powerIdentity[2],
+                    },
+                  ]
+                : [],
+            );
             const result = await renderSchematic(ir, {
               ...(fixture.request as object),
               flow,
@@ -179,6 +187,27 @@ for (const mark of [
       try {
         const type = fixture.ir.deviceTypes.find((t) => t.id === "local:dut")!;
         if (mark) type.circuitSymbols = { function: mark };
+        expect(
+          projectDeviceTypeSymbolMappings(fixture.ir)
+            .find((m) => m.typeId === type.id)!
+            .functions.filter((f) => f.families.includes("power")),
+        ).toEqual(
+          !mark || mark === "fuse"
+            ? [
+                {
+                  functionKey: "function",
+                  families: ["power"],
+                  symbolId: "ais:fuse",
+                  bindings: [
+                    { portId: "in", terminalKey: "A" },
+                    { portId: "out", terminalKey: "B" },
+                  ],
+                  classification: "protection",
+                  traversalRole: "breaker-pole",
+                },
+              ]
+            : [],
+        );
         const result = await renderSchematic(fixture.ir, {
           ...(fixture.request as object),
           flow,

@@ -1,5 +1,6 @@
 import { symbolProfile } from "./profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
+import { symbolFunctionStateMismatch } from "@thermite/compiler";
 import {
   PRINTABLE_SYMBOL_POLICY,
   sharedMarkHeight,
@@ -97,6 +98,45 @@ export function isCircuitTerminalStrip(type: IrDeviceType): boolean {
   return symbolProfile(type) === "thermite:terminal-strip";
 }
 
+function protectiveContactMark(
+  type: IrDeviceType,
+  f: Extract<IrFunction, { kind: "contact" }>,
+  profile: string,
+): CircuitMark | undefined {
+  if (profile === "thermite:breaker") {
+    const roles = f.terminals.map(
+      (t) => type.terminals.find((p) => p.key === t.terminalKey)?.role,
+    );
+    return roles.includes("power_input") && roles.includes("power_output")
+      ? "breaker"
+      : f.normal_state === "open"
+        ? "contact-no"
+        : "contact-nc";
+  }
+  if (profile === "thermite:overload")
+    return f.terminals.every(
+      (t, i) =>
+        type.terminals.find((p) => p.key === t.terminalKey)?.role ===
+        (i === 0 ? "power_input" : "power_output"),
+    )
+      ? "overload"
+      : f.normal_state === "open"
+        ? "contact-no"
+        : "contact-nc";
+  if (profile === "thermite:fuse")
+    return f.normal_state === "open" ? "contact-no" : "fuse";
+  if (
+    profile === "thermite:disconnector" &&
+    f.terminals.every(
+      (t) =>
+        type.terminals.find((p) => p.key === t.terminalKey)?.role === "aux",
+    )
+  )
+    return f.normal_state === "open" ? "contact-no" : "contact-nc";
+  if (profile === "thermite:disconnector" && f.normal_state === "open")
+    return "disconnector";
+}
+
 export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   const count = f.terminals.length;
   const explicit =
@@ -169,29 +209,8 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
       )
     )
       return f.normal_state === "open" ? "contact-no" : "contact-nc";
-    if (profile === "thermite:breaker") {
-      const roles = f.terminals.map(
-        (t) => type.terminals.find((p) => p.key === t.terminalKey)?.role,
-      );
-      return roles.includes("power_input") && roles.includes("power_output")
-        ? "breaker"
-        : f.normal_state === "open"
-          ? "contact-no"
-          : "contact-nc";
-    }
-    if (profile === "thermite:overload")
-      return f.terminals.every(
-        (t, i) =>
-          type.terminals.find((p) => p.key === t.terminalKey)?.role ===
-          (i === 0 ? "power_input" : "power_output"),
-      )
-        ? "overload"
-        : f.normal_state === "open"
-          ? "contact-no"
-          : "contact-nc";
-    if (profile === "thermite:fuse") return "fuse";
-    if (profile === "thermite:disconnector" && f.normal_state === "open")
-      return "disconnector";
+    const protective = protectiveContactMark(type, f, profile);
+    if (protective) return protective;
     if (profile === "thermite:switch")
       return f.normal_state === "open" ? "switch-no" : "switch-nc";
     if (profile === "thermite:pressure-switch")
@@ -276,8 +295,9 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
     return "fuse";
   if (profile === "thermite:thermocouple" && f.kind === "other" && count === 2)
     return "thermocouple";
+  const stateProblem = symbolFunctionStateMismatch(type, f, "circuit");
   throw new Error(
-    `Unsupported circuit function ${type.id}/${f.id.functionKey}: ${profile} does not map ${f.kind} with ${count} terminals.`,
+    `Unsupported circuit function ${type.id}/${f.id.functionKey}: ${profile} does not map ${stateProblem && f.kind === "contact" ? `${f.normal_state} contact/${count}` : `${f.kind} with ${count} terminals`}.`,
   );
 }
 

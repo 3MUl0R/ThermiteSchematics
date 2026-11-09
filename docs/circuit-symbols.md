@@ -21,8 +21,9 @@ auxiliary contacts as NO/NC contacts, while retaining one physical device.
 The example assumes those five functions are explicitly declared: `fault` is
 normally open and `interlock` normally closed. Unspecified functions retain the
 renderer profile's mapping. Function names do not imply a symbol or electrical
-behavior. These overrides apply to circuit drawings; they do not change the
-original continuous SVG profiles.
+behavior. Circuit drawings honor compatible explicit marks before profile
+defaults. Rooted power views also honor the supported contact marks on fuse and
+breaker profiles, as described below; other profiles keep their existing rules.
 
 The compiler checks each explicit mark against these function shapes:
 
@@ -86,6 +87,24 @@ still checked and can return R006.
 
 ## Shared printable vocabulary
 
+Fuse and breaker profiles resolve power symbols per function. An open unmarked
+contact on a fuse-profile type draws as a plain NO contact, including a monitor
+contact on a fuse base. Unmarked `other/2`, a closed unmarked `contact/2`, or an
+explicit `fuse` mark retains fuse identity. Other compatible contact marks use
+their authored identity: `breaker`, `overload`, `contact-no/nc`, `switch-no/nc`
+and `pushbutton-no/nc`. Unmarked breaker main pairs use their power roles;
+auxiliary contacts retain their normal state. Pressure and level marks, and
+non-fuse `other/2` marks, have no rooted power primitive and refuse with R002 and
+a specific cause. Use a circuit view for those supported circuit marks.
+
+Control retains its narrower protection policy. Fuse control accepts unmarked
+`other/2`, an explicit `fuse` mark, or a closed unmarked `contact/2`. Breaker
+control accepts unmarked contacts or `breaker`, `contact-no` and `contact-nc`
+marks. Other identities refuse with R002 rather than acquire protective ink.
+Circuit views preserve compatible explicit marks; an unmarked open fuse contact
+draws as contact-no there too. If any selected circuit function cannot be drawn,
+the whole view refuses with R006 and names the selected keys; it is never omitted.
+
 Rooted and circuit views use independently authored, IEC-informed marks from the
 printable policy. A coil is a rectangle; AC/DC appears only from its authored
 coil-terminal voltage class. A breaker uses a blade and cross without inferred
@@ -103,8 +122,13 @@ element is drawn. Gang ink requires authored `ganged_with` relations and a clear
 aligned corridor; unaligned poles retain their device tags and terminal pairs.
 Power requires `power_input`/`power_output` roles in authored function order;
 control retains switch traversal. Loads and signal-loop bindings are absent.
-Only `normal_state: "open"` is supported: closed rooted requests return the
-existing R002 unsupported-profile diagnostic, and circuit defaults refuse them.
+Main contacts require `normal_state: "open"`. A contact with role `aux` on both
+real terminals draws as a plain contact of its authored open or closed state in
+control and circuit views. This auxiliary exception adds no power binding or
+main-blade gang decoration. Closed main contacts still refuse: R002 in rooted
+views and R006 for circuit defaults. W111 and render refusals name
+`closed contact/2` when state is the failed constraint; arity or role failures
+keep their own descriptions.
 There is no new `circuitSymbols` override value. Core 0.2.0's `disconnect-3p`
 opts in; project-local switch types require an explicit profile change. On older
 engines the unknown profile can validate with a renderability warning, but rooted

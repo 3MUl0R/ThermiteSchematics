@@ -984,7 +984,11 @@ export function projectDeviceTypeSymbolMappings(
               for (const family of families)
                 functions.push({
                   ...make(
-                    "ais:disconnector",
+                    terminals.every((t) => role(t) === "aux")
+                      ? open
+                        ? "ais:contact-no"
+                        : "ais:contact-nc"
+                      : "ais:disconnector",
                     ["in", "out"],
                     family === "power" ? "power-contact" : "permissive",
                     family === "power" ? "power-contact" : "permissive-contact",
