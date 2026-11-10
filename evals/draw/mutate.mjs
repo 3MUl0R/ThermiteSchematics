@@ -60,6 +60,7 @@ const all = [
   "evals/draw/pdf-ink-policy.test.mjs",
   "evals/draw/pdf-ink.test.mjs",
   "evals/draw/pdf-ink-archive.test.mjs",
+  "evals/draw/utilisation.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -822,6 +823,36 @@ await edit(
       row?.sourceRender?.medium === "pdf"`,
   'entry.sourceVerification.medium === "pdf"',
   ["evals/draw/pdf-ink-archive.test.mjs"],
+);
+for (const [id, from, to] of [
+  [
+    "original-bounds-eligibility",
+    ".filter((s) => s.conductor || s.symbol || s.mark)",
+    ".filter((s) => (s.conductor || s.symbol || s.mark) && s.bbox.x >= 20 && s.bbox.y >= 25 && s.bbox.y + s.bbox.h < g.height - 35)",
+  ],
+  ["painted-outline", "shape.paintedBbox ?? shape.bbox", "shape.bbox"],
+  ["viewport", "shape.viewport", "undefined"],
+  ["clip-paths", "...(shape.clips ?? [])", "...[]"],
+  ["sheet", "[sheet, shape.viewport,", "[undefined, shape.viewport,"],
+  ["left", "Math.max(box.x, clip.x)", "box.x"],
+  ["top", "Math.max(box.y, clip.y)", "box.y"],
+  ["right", "Math.min(box.x + box.w, clip.x + clip.w)", "box.x + box.w"],
+  ["bottom", "Math.min(box.y + box.h, clip.y + clip.h)", "box.y + box.h"],
+  [
+    "range",
+    "Math.min(1, (bbox.w * bbox.h) / area)",
+    "(bbox.w * bbox.h) / area",
+  ],
+])
+  await edit("utilisation-" + id, "evals/draw/utilisation.mjs", from, to, [
+    "evals/draw/utilisation.test.mjs",
+  ]);
+await edit(
+  "utilisation-partial-median",
+  "evals/draw/evaluate.mjs",
+  "geometries.some((g) => g.utilisationErrors?.length)",
+  "false",
+  ["evals/draw/utilisation.test.mjs"],
 );
 // Deliberately harmless mutation must survive; it proves survivors are observable.
 await edit(

@@ -224,7 +224,7 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                            |
 | 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                             |
 | 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                                |
-| 12  | Packet median content envelope utilisation. Optimal repacking needs block/clearance exports.                                                                                    |
+| 12  | Packet median visible outline geometry envelope utilisation. Optimal repacking needs block/clearance exports.                                                                   |
 | 13  | Stroke hierarchy and filled terminal/junction dots with fewer than three rays.                                                                                                  |
 | 14  | Distinct conductor endpoints sharing one final landing stroke. Missing physical endpoint identities are a gap.                                                                  |
 | 15  | Straight-route jogs <3 mm and visible detour >2×Manhattan+20 mm. Curves need segment exports; routing intent still needs review.                                                |
@@ -237,6 +237,32 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                         |
 | 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                                   |
 | 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                              |
+
+DQ-12 measures the SVG packet's **visible outline geometry**: the bounding envelope
+of conductor/symbol/mark outlines in outer-sheet millimetres, using stroke centre
+lines rather than stroke-width coverage. Clipped shapes use the
+existing 0.2 mm outline samples plus exact path endpoints and native SVG
+fill/stroke hit tests, so a path turning outside a strip cannot contribute a
+phantom bounding-box corner; wholly contained bounds remain exact. Each shape is intersected with
+the physical sheet, its strip and every nested viewport, then all ancestor clip
+paths before the envelope calculation. The existing furniture/shape eligibility
+filters (`x >= 20`, `y >= 25`, bottom `< height - 35`) apply to these visible bounds,
+so a conductor starting off-sheet still counts where visible. Rectangle
+clip paths (including transformed and object-bounding-box units) are measured
+from the DOM; unsupported non-rectangular or rotated clip paths refuse rather
+than contribute an unclipped estimate. An active mask on a shape or ancestor also
+refuses. Unsupported clips/masks and invalid clipped paths refuse only DQ-12 for
+that sheet; other checks retain their original geometry and still run. No partial
+packet median is reported when any sheet refuses. Hidden shapes contribute no
+geometry. The nominal denominator `(width - 56) * (height - 80)`, packet median, 40% threshold
+and existing tolerances are unchanged; occupancy saturates at 100% of that
+nominal area. Table/index sheets without eligible drawing shapes remain
+excluded. Passing and failing packet medians and per-sheet boxes are retained
+in `evidence.measurement`. SVG and HTML share the geometry extraction, tested
+with `bun evals/draw/utilisation-browser.check.mjs`; DQ-12 does not introduce a
+PDF or HTML utilisation score. No renderer layout helpers are used.
+The browser-required clip mutations run with
+`bun evals/draw/utilisation-mutations.check.mjs evals/out/dq12-native-mutations.json`.
 
 DQ-19 also enforces the explicit source identifier fields in
 [`identifier-policy.mjs`](identifier-policy.mjs). SVG and actual CLI HTML use

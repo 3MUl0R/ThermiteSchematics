@@ -1,4 +1,5 @@
 import { straightPath } from "./path.mjs";
+export { utilisation } from "./utilisation.mjs";
 // Browser-free predicates. Inputs are measured DOM geometry, PDF text/raster
 // observations, and unchanged compiled IR. No renderer layout estimator is used.
 export const ANISOTROPY_EPSILON = 1e-9; // numerical comparison only, dimensionless
@@ -667,24 +668,6 @@ export function routeQuality(g) {
     }
   }
   return out;
-}
-export function utilisation(g) {
-  const shapes = g.shapes.filter(
-    (s) =>
-      (s.conductor || s.symbol || s.mark) &&
-      s.bbox.x >= 20 &&
-      s.bbox.y >= 25 &&
-      s.bbox.y + s.bbox.h < g.height - 35,
-  );
-  if (!shapes.length) return null;
-  const x = Math.min(...shapes.map((s) => s.bbox.x)),
-    y = Math.min(...shapes.map((s) => s.bbox.y)),
-    right = Math.max(...shapes.map((s) => s.bbox.x + s.bbox.w)),
-    bottom = Math.max(...shapes.map((s) => s.bbox.y + s.bbox.h));
-  const bbox = { x, y, w: right - x, h: bottom - y },
-    area = (g.width - 56) * (g.height - 80),
-    fraction = (bbox.w * bbox.h) / area;
-  return { bbox, fraction };
 }
 export function wirePlacement(g) {
   const routes = g.shapes.filter((s) => s.conductor && s.wire),
