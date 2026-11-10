@@ -1,3 +1,4 @@
+import type { FoldAxis } from "./fold-axis.js";
 import { sumContent } from "./rooted-content.js";
 import { required } from "../presentation/util.js";
 import type { Draft, DrawingBounds } from "./types.js";
@@ -20,16 +21,18 @@ export function sectionGroups(heights: readonly number[], available: number) {
   });
   return groups;
 }
-function scopedSection(content: string, index: number) {
+function scopedSection(content: string, index: number, axis: FoldAxis) {
   return content.replace(/<[^>]+>/gu, (tag) =>
     tag
       .replace(
         /(?<=\s)id="([^"]+)"/gu,
-        (_, id: string) => `id="section-${index}-${id}"`,
+        (_, id: string) =>
+          `id="${axis === "y" ? "section" : "side"}-${index}-${id}"`,
       )
       .replace(
         /(?<=\s)clip-path="url\(#([^)]+)\)"/gu,
-        (_, id: string) => `clip-path="url(#section-${index}-${id})"`,
+        (_, id: string) =>
+          `clip-path="url(#${axis === "y" ? "section" : "side"}-${index}-${id})"`,
       ),
   );
 }
@@ -40,30 +43,47 @@ function append(
   offset: number,
   destinations: Map<number, number>,
   b: DrawingBounds,
+  axis: FoldAxis,
 ) {
-  draft.content += `<g transform="translate(0 ${n(offset)})">${scopedSection(source.content, index)}</g>`;
+  draft.content += `<g transform="translate(${axis === "y" ? `0 ${n(offset)}` : `${n(offset)} 0`})">${scopedSection(source.content, index, axis)}</g>`;
   draft.links.push(
     ...source.links.map((l) => ({
       ...l,
       to: required(destinations.get(l.to), "Missing folded destination"),
-      y: l.y + offset,
+      [axis]: l[axis] + offset,
     })),
   );
   draft.references?.push(
     ...(source.references ?? []).map((r) => ({
       ...r,
-      ...(r.yMm === undefined ? {} : { yMm: r.yMm + offset }),
+      ...(axis === "y"
+        ? r.yMm === undefined
+          ? {}
+          : { yMm: r.yMm + offset }
+        : r.xMm === undefined
+          ? {}
+          : { xMm: r.xMm + offset }),
       zone:
         r.xMm === undefined || r.yMm === undefined
           ? r.zone
-          : zone(r.xMm, r.yMm + offset, b),
+          : zone(
+              r.xMm + (axis === "x" ? offset : 0),
+              r.yMm + (axis === "y" ? offset : 0),
+              b,
+            ),
     })),
   );
   draft.rootedCaptionInk?.push(
-    ...(source.rootedCaptionInk ?? []).map((s) => ({ ...s, y: s.y + offset })),
+    ...(source.rootedCaptionInk ?? []).map((s) => ({
+      ...s,
+      [axis]: s[axis] + offset,
+    })),
   );
   draft.rootedShapes?.push(
-    ...(source.rootedShapes ?? []).map((s) => ({ ...s, y: s.y + offset })),
+    ...(source.rootedShapes ?? []).map((s) => ({
+      ...s,
+      [axis]: s[axis] + offset,
+    })),
   );
 }
 export function stackSections(
@@ -71,6 +91,7 @@ export function stackSections(
   heights: readonly number[],
   groups: readonly number[][],
   b: DrawingBounds,
+  axis: FoldAxis = "y",
 ) {
   const destinations = new Map(
     groups.flatMap((g, i) => g.map((n) => [n + 1, i + 1] as const)),
@@ -104,6 +125,7 @@ export function stackSections(
         offset,
         destinations,
         b,
+        axis,
       );
       offset += required(heights[i], "Missing strip height") + SECTION_GAP;
     }
