@@ -9,6 +9,36 @@ import { noteJson, type FactModule } from "./harness.js";
 const module: FactModule = {
   facts: [
     {
+      claim: "Standard spacing may fold onto fewer sheets.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+        const r = await renderSchematicPacket(
+          c.ir,
+          {
+            format: "schematic-packet-request/0.1",
+            layout: "standard",
+            page: { size: "a3", orientation: "portrait" },
+            views: [
+              {
+                format: "schematic-view-request/0.1",
+                family: "power",
+                root: { by: "designation", value: "M1" },
+                flow: "left-to-right",
+              },
+            ],
+          },
+          c.presentation,
+        );
+        if (!r.ok) throw Error(JSON.stringify(r.error));
+        expect(r.value.sheets).toHaveLength(1);
+        expect(r.value.html).toContain("Folded circuit sections");
+        expect(continuationOracle(c.ir, r.value).sameSheet).toBeGreaterThan(0);
+        noteJson({ standardFoldedSheets: r.value.sheets.length });
+      },
+    },
+
+    {
       claim:
         "Cards name omissions. Continuations print wire ID + peer `sheet.zone` at 2.5 mm; unnamed jumpers use `JUMPER` + full UID.",
       async check() {

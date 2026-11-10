@@ -24,9 +24,7 @@ operating system; redact hostnames and absolute paths from A005/W801 diagnostics
 Without GitHub access, write a ready-to-submit issue title and body. Do not patch
 a downloaded runtime in place.
 
-From source, make focused engine fixes in the separate engine checkout and open a
-pull request following its AGENTS.md and CONTRIBUTING.md, keeping this project's
-private machine data and credentials out of issues and pull requests. The human
+From source, make engine fixes in the separate checkout; follow its AGENTS.md and CONTRIBUTING.md for pull requests, keeping private data and credentials out of issues and pull requests. The human
 contributor must accept any CLA; an agent must not sign it.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
@@ -144,6 +142,7 @@ single sheet only (R006 otherwise).
 Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
+Standard spacing may fold onto fewer sheets.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

@@ -1484,7 +1484,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "From source, make focused engine fixes in the separate engine checkout and open a pull request following its AGENTS.md and CONTRIBUTING.md, keeping this project's private machine data and credentials out of issues and pull requests.",
+      "From source, make engine fixes in the separate checkout; follow its AGENTS.md and CONTRIBUTING.md for pull requests, keeping private data and credentials out of issues and pull requests.",
       "Contribution process; no runtime behavior.",
     ],
     [

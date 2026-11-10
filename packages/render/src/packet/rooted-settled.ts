@@ -1,3 +1,5 @@
+import { localityRegression } from "./rooted-locality.js";
+import { routeGrowth } from "./rooted-clipped-routes.js";
 import {
   nativeWinner,
   rootedWinner,
@@ -14,9 +16,12 @@ export function searchSettled(run: RootedSearch, page: PaperPage): boolean {
   return (
     !!candidate &&
     !!baseline &&
+    !localityRegression(candidate, run.localityReference) &&
     candidate.drafts.length <= baseline.drafts.length &&
     newJogs(candidate, baseline.jogs) === 0 &&
     newDetours(candidate, baseline.detours ?? new Map()) === 0 &&
+    routeGrowth(candidate, baseline).every((v) => v === 0) &&
+    routeGrowth(candidate, baseline, false).every((v) => v === 0) &&
     candidate.drafts.every((d) => (d.rootedContent?.figures ?? 0) > 0)
   );
 }

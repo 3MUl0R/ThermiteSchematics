@@ -88,8 +88,9 @@ fails. Refresh the HTML after a successful rebuild. A rendering error remains
 explicit; a retained old packet should not be mistaken for a successful build of
 invalid source.
 
-Use `--layout standard` to compare conventional tiling with compact mode. Compact
-mode preserves circuit text at 2.5 mm or larger. It may still need multiple sheets;
+Use `--layout standard` to keep standard spacing; compact mode also compares
+compact and dense spacing. Both modes may fold validated strips onto fewer
+sheets, preserving routes and circuit text at 2.5 mm or larger. It may still need multiple sheets;
 manual arrangement hints and permanently pinned page breaks are future work.
 
 ## Component evidence and model boundaries

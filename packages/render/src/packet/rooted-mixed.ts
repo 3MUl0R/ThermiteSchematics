@@ -1,3 +1,4 @@
+import { nativeWinner } from "./rooted-search.js";
 import type { RootedSearch } from "./rooted-search.js";
 import type { PaperPage } from "./types.js";
 import { compareCandidates } from "./rooted-score.js";
@@ -30,7 +31,15 @@ export async function mixedPlacements(
     const best = run.candidates
       .filter((c) => c.profile === profile)
       .sort((a, b) =>
-        compareCandidates(a, b, baseline, page, baselineDetours),
+        compareCandidates(
+          a,
+          b,
+          baseline,
+          page,
+          baselineDetours,
+          nativeWinner(run),
+          run.localityReference,
+        ),
       )[0];
     const seed = best?.prepared ?? p;
     for (const ids of cardGroups(seed).filter((g) => g.length > 1))

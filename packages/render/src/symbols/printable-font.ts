@@ -1,3 +1,4 @@
+import { cachedFontMetrics } from "./font-metric-cache.js";
 import { create } from "fontkit";
 import { readFileSync } from "node:fs";
 import { unshapedPrintableFont } from "./font-shaping.js";
@@ -21,9 +22,22 @@ const load = (name: string) => {
 const regular = load("NotoSans-Regular"),
   boldFace = load("NotoSans-Bold"),
   math = load("NotoSansMath-Regular");
+function printableRuns(text: string, primary: typeof regular) {
+  const runs: { face: typeof primary; text: string }[] = [];
+  for (const c of text) {
+    const face = primary.hasGlyphForCodePoint(c.codePointAt(0)!)
+      ? primary
+      : math.hasGlyphForCodePoint(c.codePointAt(0)!)
+        ? math
+        : primary;
+    if (runs.at(-1)?.face === face) runs.at(-1)!.text += c;
+    else runs.push({ face, text: c });
+  }
+  return runs;
+}
 /** Exact, pinned font tables; no host font service, clock or platform measurement.
  * Fontkit 2.0.4 uses the same feature-free tables as SVG and PDFKit. */
-export function printableTextMetrics(
+function measurePrintableText(
   value: string,
   size = 10,
   bold = false,
@@ -41,16 +55,7 @@ export function printableTextMetrics(
     bottom = Infinity,
     top = -Infinity;
   const primary = bold ? boldFace : regular;
-  const runs: { face: typeof primary; text: string }[] = [];
-  for (const c of text) {
-    const face = primary.hasGlyphForCodePoint(c.codePointAt(0)!)
-      ? primary
-      : math.hasGlyphForCodePoint(c.codePointAt(0)!)
-        ? math
-        : primary;
-    if (runs.at(-1)?.face === face) runs.at(-1)!.text += c;
-    else runs.push({ face, text: c });
-  }
+  const runs = printableRuns(text, primary);
   for (const run of runs) {
     const scale = size / run.face.unitsPerEm,
       layout = run.face.layout(run.text);
@@ -74,6 +79,17 @@ export function printableTextMetrics(
     top: Number.isFinite(top) ? top : 0,
     middleBaseline: (size * regular.xHeight) / regular.unitsPerEm / 2,
   };
+}
+/** Cache exact argument tuples only within an explicit rooted-view scope. */
+export function printableTextMetrics(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  return cachedFontMetrics([value, size, bold, literal], () =>
+    measurePrintableText(value, size, bold, literal),
+  );
 }
 /** Keep reservations where possible. Single glyphs print uncompressed. */
 export function printableSlotWidth(text: string, oldWidth: number, size = 10) {

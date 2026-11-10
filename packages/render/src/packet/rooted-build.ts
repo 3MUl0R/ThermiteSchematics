@@ -1,3 +1,4 @@
+import { cardDistances, CARD_LOCALITY_AIM_MM } from "./rooted-locality.js";
 import {
   continuationBanks,
   bankBounds,
@@ -20,7 +21,7 @@ import { bounds } from "./page.js";
 import { gridLinks, type RootedGrid } from "./rooted-plans.js";
 import { rootedBankGrids } from "./rooted-bank-grids.js";
 import { rootedDraft } from "./rooted-draft.js";
-import { captionConstraint } from "./rooted-caption.js";
+import { postTrimCaptionConstraint } from "./rooted-caption.js";
 import { foldDrawingDrafts } from "./folding.js";
 import { emitSchematicSvg } from "../svg/emitter.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
@@ -28,6 +29,7 @@ import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 import { interiorJogs, routeDetours } from "./rooted-ink.js";
 
 export interface RootedCandidate {
+  printableDrafts?: Draft[];
   drafts: Draft[];
   bank: ContinuationBank;
   grid: RootedGrid;
@@ -38,6 +40,7 @@ export interface RootedCandidate {
   detours?: ReadonlyMap<string, number>;
   greedy?: boolean;
   proximity: number;
+  localityExcess?: number;
 }
 export type RootedBuildResult = RenderOutcome<RootedCandidate[]> &
   RootedDiagnostic;
@@ -66,33 +69,7 @@ export function rootedSpace(
   );
   return { b, scale };
 }
-function proximity(p: PreparedSchematicDrawing) {
-  return p.graph.nodes.reduce(
-    (sum, node) =>
-      sum +
-      (node.kind === "junction"
-        ? 0
-        : node.labels.reduce((n, l) => {
-            if (!l.offView) return n;
-            const port = required(
-              p.layout.ports.find((v) => v.id === l.ownerId),
-              "Missing rooted geometry",
-            );
-            const label = required(
-              p.layout.labels.find((v) => v.id === l.id),
-              "Missing rooted geometry",
-            );
-            return (
-              n +
-              Math.hypot(
-                Math.max(label.x - port.x, 0, port.x - label.x - label.width),
-                Math.max(label.y - port.y, 0, port.y - label.y - label.height),
-              )
-            );
-          }, 0)),
-    0,
-  );
-}
+
 function makeDrafts(
   p: PreparedSchematicDrawing,
   grid: RootedGrid,
@@ -125,21 +102,11 @@ function makeDrafts(
   for (const d of drafts) d.rootedScoreBounds = original;
   if (!gridLinks(p, grid, b, scale, drafts))
     return "Continuation spacing does not fit this grid.";
-  if (!native) {
-    for (const d of drafts) {
-      const constraint = captionConstraint(
-        d.continuedCaption ?? "",
-        b,
-        page,
-        p.view,
-        d.links,
-        d.continuedCaptionY,
-      );
-      if (constraint) return constraint;
-    }
-  }
+  const caption = postTrimCaptionConstraint(drafts, page, native);
+  if (caption) return caption;
+  const originalDrafts = structuredClone(drafts);
   const pages =
-    compact && grid.ys.length === 2 && grid.xs.length > 2
+    grid.ys.length === 2 && grid.xs.length > 2
       ? foldDrawingDrafts(
           drafts,
           p.layout,
@@ -147,11 +114,23 @@ function makeDrafts(
           b,
           scale,
           p.layout.height + 2 * pad,
+          { prepared: p, inner, ...(profile ? { profile } : {}) },
         )
       : drafts;
   const visible = contentPages(pages);
   if (typeof visible === "string") return visible;
-  return fitContinuations(visible, page, bank, native) ?? visible;
+  const failure =
+    fitContinuations(visible, page, bank, native) ??
+    postTrimCaptionConstraint(visible, page, native);
+  if (!failure) return visible;
+  if (pages === drafts) return failure;
+  // Conservative fallback retains the complete original viewports and captions.
+  const fallback = contentPages(originalDrafts);
+  return typeof fallback === "string"
+    ? fallback
+    : (fitContinuations(fallback, page, bank, native) ??
+        postTrimCaptionConstraint(fallback, page, native) ??
+        fallback);
 }
 
 export function buildRootedCandidates(
@@ -172,6 +151,7 @@ export function buildRootedCandidates(
     );
   const banks = continuationBanks(p, b, scale, offset);
   const inner = "";
+  const distances = cardDistances(p, scale);
   const constraint = continuationGridConstraint(
     p,
     banks.map((bank) => bankBounds(b, bank)),
@@ -206,7 +186,11 @@ export function buildRootedCandidates(
         jogs: interiorJogs(p, scale),
         detours: routeDetours(p, scale),
         greedy: g.greedy === true,
-        proximity: proximity(p) * scale,
+        proximity: distances.reduce((sum, n) => sum + n, 0),
+        localityExcess: distances.reduce(
+          (sum, n) => sum + Math.max(0, n - CARD_LOCALITY_AIM_MM),
+          0,
+        ),
       },
     ];
   });

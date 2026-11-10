@@ -1,3 +1,5 @@
+import { withFontMetricCache } from "../symbols/font-metric-cache.js";
+import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
 import { searchSettled } from "./rooted-settled.js";
 import { MAX_MIXED_LAYOUTS } from "./rooted-mixed.js";
@@ -37,6 +39,10 @@ export interface RootedSearch {
   tried: Set<string>;
   settled?: boolean;
   earlyExit?: boolean;
+  standardEconomy?: boolean;
+  economyStartedAt?: number;
+  validatedCandidate?: RootedCandidate;
+  localityReference?: RootedCandidate;
 }
 async function initial(
   ir: Readonly<ElectricalIr>,
@@ -121,7 +127,15 @@ export function nativeWinner(run: RootedSearch) {
 export function rootedWinner(run: RootedSearch, page: PaperPage) {
   const baseline = nativeWinner(run)?.jogs ?? new Map<string, number>();
   return [...run.candidates].sort((a, b) =>
-    compareCandidates(a, b, baseline, page, nativeWinner(run)?.detours),
+    compareCandidates(
+      a,
+      b,
+      baseline,
+      page,
+      nativeWinner(run)?.detours,
+      nativeWinner(run),
+      run.localityReference,
+    ),
   )[0];
 }
 
@@ -133,29 +147,34 @@ export async function searchRootedCandidates(
   compact: boolean,
   referenceOffset = 0,
 ) {
-  const run: RootedSearch = {
-    diagnostics: [],
-    referenceOffset,
-    candidates: [],
-    native: [],
-    errors: [],
-    nativeErrors: new Map(),
-    prepared: [],
-    attempts: 0,
-    tried: new Set(),
-  };
-  for (const profile of compact
-    ? ([undefined, "compact", "dense"] as const)
-    : [undefined]) {
-    await initial(ir, request, presentation, page, profile, run);
-  }
-  if (searchSettled(run, page)) {
-    run.earlyExit = true;
-    return run;
-  }
+  return withFontMetricCache(async () => {
+    const run: RootedSearch = {
+      standardEconomy: !compact,
+      diagnostics: [],
+      referenceOffset,
+      candidates: [],
+      native: [],
+      errors: [],
+      nativeErrors: new Map(),
+      prepared: [],
+      attempts: 0,
+      tried: new Set(),
+    };
+    for (const profile of compact
+      ? ([undefined, "compact", "dense"] as const)
+      : [undefined]) {
+      await initial(ir, request, presentation, page, profile, run);
+    }
+    validateEconomyCandidate(ir, run, page);
+    if (searchSettled(run, page)) {
+      run.earlyExit = true;
+      return run;
+    }
 
-  await placements(ir, request, presentation, page, run);
-  return run;
+    await placements(ir, request, presentation, page, run);
+    if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
+    return run;
+  });
 }
 
 function profileBuilder(

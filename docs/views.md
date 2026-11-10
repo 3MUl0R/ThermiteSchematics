@@ -262,13 +262,29 @@ view/packet commands to retain its complete inventory. HTML is an SVG container,
 
 ## Compact sheets and references
 
-Compact mode tries standard, compact and dense spacing, stopping when one sheet
-is achieved and selecting fewer sheets, then fewer continuations. All candidates
-pass existing routing validation. A proven one-sheet candidate can reclaim
-continuation gutters. Horizontal tiles may be cropped to their actual vertical
-content bounds and stacked on a sheet with a gap; this changes only composition,
-not routed geometry. If they cannot fit, retain separate pages. The selection
-never changes flow or reduces the minimum circuit text size.
+Standard selects standard spacing; it may fold validated horizontal strips onto
+fewer sheets. Compact additionally tries compact and dense spacing. Both modes
+preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
+strip height; any partly painted location heading stays whole, while wholly
+hidden headings follow the continued-location caption rule. Post-trim captions,
+wrapped notices and final continuation ink are validated before acceptance;
+unprintable compositions retain the conservative separate-page alternative.
+
+Candidates prefer no new raw or physically clipped route defects per authored
+conductor, then fewer physical sheets. For equal sheets, the first route-safe
+printable reference guards each owner/terminal card against growth over 0.1 mm;
+a card absent from that reference conservatively counts as a regression.
+Physical sheet savings always take priority over that reference. The soft 15 mm
+card-distance excess precedes utilisation and the deterministic tie key in
+ranking; it never causes R006. Early exit shares the route/locality guards and
+native-page limit, and uses neither soft excess nor utilisation.
+The useful-utilisation boundary
+remains exactly 0.40, without rounding across it.
+Distance ordering uses 0.001 mm and utilisation 0.000001 precision with an exact
+placement/grid/composition tie key. Standard economy search has four additional
+placement attempts only after an emitter/ink/page-cost validated candidate
+exists; ordinary recovery retains its existing budget. Exhaustion keeps the
+validated candidate and does not declare the search settled.
 
 Each sheet includes references identifying the visible device/function and its
 A-D / 1-6 zone. Cable endpoints and schedule rows also contribute references.

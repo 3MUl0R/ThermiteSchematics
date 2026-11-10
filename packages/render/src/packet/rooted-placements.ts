@@ -1,3 +1,7 @@
+import {
+  economyExhausted,
+  validateEconomyCandidate,
+} from "./rooted-economy.js";
 import { mixedPlacements } from "./rooted-mixed.js";
 import {
   actualChoices,
@@ -42,6 +46,7 @@ async function tryPlacement(
   const key = choiceKey(profile, choices);
   if (
     run.settled ||
+    economyExhausted(run) ||
     run.attempts >= MAX_PLACEMENT_LAYOUTS ||
     run.tried.has(key)
   )
@@ -67,6 +72,12 @@ async function tryPlacement(
   if (candidates.ok) {
     run.candidates.push(...candidates.value);
     trimCandidates(run, page);
+    if (
+      run.validatedCandidate &&
+      !run.candidates.includes(run.validatedCandidate)
+    )
+      run.candidates.push(run.validatedCandidate);
+    validateEconomyCandidate(ir, run, page);
     run.settled = searchSettled(run, page);
   }
 }
@@ -94,12 +105,22 @@ function trimCandidates(run: RootedSearch, page: PaperPage) {
           baseline,
           page,
           nativeWinner(run)?.detours,
+          nativeWinner(run),
+          run.localityReference,
         ) < 0
       )
         byLayout.set(c.prepared, c);
     }
     const ordered = [...byLayout.values()].sort((a, b) =>
-      compareCandidates(a, b, baseline, page, nativeWinner(run)?.detours),
+      compareCandidates(
+        a,
+        b,
+        baseline,
+        page,
+        nativeWinner(run)?.detours,
+        nativeWinner(run),
+        run.localityReference,
+      ),
     );
     const compact = [...ordered].sort(
       (a, b) =>

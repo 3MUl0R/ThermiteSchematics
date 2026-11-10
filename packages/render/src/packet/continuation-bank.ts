@@ -1,3 +1,4 @@
+import { maximumContinuationSerial } from "./continuation-reservation.js";
 import { rootedGrids } from "./rooted-plans.js";
 import { rootedCrossings } from "./rooted-crossings.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
@@ -37,15 +38,7 @@ export function continuationBanks(
   );
   const xCuts = sides.has("left") || sides.has("right"),
     yCuts = sides.has("top") || sides.has("bottom");
-  const maximumSerial = Math.max(
-    1,
-    offset +
-      39 *
-        p.layout.edges.reduce(
-          (n, e) => n + Math.max(0, e.points.length - 1),
-          0,
-        ),
-  );
+  const maximumSerial = maximumContinuationSerial(p, offset);
   const headerWidth = continuationHeaderWidth(maximumSerial);
   const sources = reserveContinuationSources(p.graph);
   const maxBody = Math.max(headerWidth, ...sources.map((s) => s.width));
