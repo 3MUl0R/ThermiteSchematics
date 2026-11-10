@@ -9,9 +9,13 @@ import { rootedLocationContent } from "./location-headings.js";
 import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
-import type { RenderOutcome } from "../types.js";
+import type { RenderOutcome, RenderFailure } from "../types.js";
 import type { Draft, PaperPage } from "./types.js";
 import { continuationGridConstraint } from "./continuation-constraint.js";
+import type {
+  RootedConstraint,
+  RootedDiagnostic,
+} from "./rooted-constraint.js";
 import { bounds } from "./page.js";
 import { gridLinks, type RootedGrid } from "./rooted-plans.js";
 import { rootedBankGrids } from "./rooted-bank-grids.js";
@@ -35,6 +39,8 @@ export interface RootedCandidate {
   greedy?: boolean;
   proximity: number;
 }
+export type RootedBuildResult = RenderOutcome<RootedCandidate[]> &
+  RootedDiagnostic;
 export function rootedSpace(
   p: PreparedSchematicDrawing,
   page: PaperPage,
@@ -156,7 +162,7 @@ export function buildRootedCandidates(
   native = false,
   explore = false,
   offset = 0,
-): RenderOutcome<RootedCandidate[]> {
+): RootedBuildResult {
   const { b, scale } = rootedSpace(p, page, !!profile, native);
   if (b.w < 60 || b.h < 50)
     return offViewPacketFailure(
@@ -166,11 +172,12 @@ export function buildRootedCandidates(
     );
   const banks = continuationBanks(p, b, scale, offset);
   const inner = "";
-  let captionFailure = continuationGridConstraint(
+  const constraint = continuationGridConstraint(
     p,
-    bankBounds(b, required(banks[0], "Missing bank plan")),
+    banks.map((bank) => bankBounds(b, bank)),
     scale,
   );
+  let captionFailure: string | RootedConstraint = constraint;
   const search = rootedBankGrids(p, b, scale, banks, explore);
   const candidates = search.grids.flatMap(({ bank, grid: g }) => {
     const drafts = makeDrafts(
@@ -205,11 +212,28 @@ export function buildRootedCandidates(
   });
   if (!candidates.length && !explore)
     return buildRootedCandidates(ir, p, page, profile, native, true, offset);
-  return candidates.length
-    ? { ok: true, value: candidates }
-    : search.identityFailure
-      ? { ok: false, error: search.identityFailure }
-      : offViewPacketFailure(p.graph, "unprintable-layout", captionFailure);
+  if (candidates.length) return { ok: true, value: candidates, constraint };
+  return failedBuild(p, constraint, captionFailure, search.identityFailure);
+}
+
+function failedBuild(
+  p: PreparedSchematicDrawing,
+  constraint: RootedConstraint,
+  caption: string | RootedConstraint,
+  identityFailure: RenderFailure | undefined,
+): RootedBuildResult {
+  const message = typeof caption === "string" ? caption : caption.message;
+  const error =
+    identityFailure ??
+    offViewPacketFailure(p.graph, "unprintable-layout", message).error;
+  return {
+    ok: false,
+    error,
+    constraint,
+    ...(!identityFailure && typeof caption !== "string"
+      ? { gridFailure: { error, suffix: error.message.slice(message.length) } }
+      : {}),
+  };
 }
 
 /** Only the selected layout is emitted; it still passes the original emitter. */

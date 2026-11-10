@@ -165,7 +165,14 @@ ink. Complete IDs may wrap; they never clip, abbreviate, compress or shrink.
 Within a bank, bounded text placement preserves connector order and leaves
 conductor routes and anchors intact. Only conductors crossed by a candidate cut
 need a printable continuation identity. If no candidate grid succeeds, R006 names
-the crossed conductor and its identity problem, or the layout constraint. Other R006
+the crossed conductor and its identity problem, with advice to avoid cutting that
+conductor. A protected width/height shortfall is carried in the message and
+`details.pageConstraint` only when every continuation bank in every tested layout
+falls short. The alternative with the smallest maximum width/height shortfall
+supplies the measurements; any span-fitting bank or layout clears that claim.
+The ordinary no-candidate message uses the same
+all-bank measurement. This diagnosis never rejects an
+uncut identity before grid search. Other R006
 messages explain a label or paging constraint;
 use larger paper, landscape/another flow or a narrower selection. The labels
 add no electrical connections or completeness claims. W906 and strict packet

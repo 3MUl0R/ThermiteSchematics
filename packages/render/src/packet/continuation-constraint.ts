@@ -2,18 +2,29 @@ import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { DrawingBounds, Link } from "./types.js";
 import type { InkBox } from "./rooted-ink.js";
 import { reserveContinuationSources } from "./continuation-source.js";
-import { rootedConstraint } from "./rooted-constraint.js";
+import {
+  rootedConstraint,
+  leastRootedConstraint,
+  type RootedConstraint,
+} from "./rooted-constraint.js";
+import { required } from "../presentation/util.js";
 
 export function continuationGridConstraint(
   p: PreparedSchematicDrawing,
-  b: DrawingBounds,
+  bounds: readonly DrawingBounds[],
   scale: number,
-) {
+): RootedConstraint {
   const ids = reserveContinuationSources(p.graph).map((s) => s.conductor);
-  const constraint = rootedConstraint(p, b, scale);
-  return ids.length
-    ? `${constraint} Continuation identities: ${ids.join(", ")}.`
-    : constraint;
+  const constraint = required(
+    leastRootedConstraint(bounds.map((b) => rootedConstraint(p, b, scale))),
+    "Missing bank constraint",
+  );
+  return {
+    ...constraint,
+    message: ids.length
+      ? `${constraint.message} Continuation identities: ${ids.join(", ")}.`
+      : constraint.message,
+  };
 }
 
 /** Largest additional separation needed for one mm of clear ink. */
