@@ -61,6 +61,7 @@ const all = [
   "evals/draw/pdf-ink.test.mjs",
   "evals/draw/pdf-ink-archive.test.mjs",
   "evals/draw/utilisation.test.mjs",
+  "evals/draw/continuation-labels.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -854,6 +855,146 @@ await edit(
   "false",
   ["evals/draw/utilisation.test.mjs"],
 );
+
+for (const [id, file, from, to] of [
+  [
+    "pdf-font-required",
+    "continuation-labels",
+    "!Number.isFinite(p.fontSize) || p.fontSize <= 0",
+    "false",
+  ],
+  [
+    "printed-wire-number",
+    "continuation-labels",
+    "w.properties?.label ?? w.designation",
+    "w.designation",
+  ],
+  [
+    "ambiguous-source",
+    "continuation-labels",
+    "selected.length !== 1",
+    "selected.length === 0",
+  ],
+  [
+    "literal-identity",
+    "continuation-labels",
+    "return body === expected.text;",
+    "return body.includes(expected.text);",
+  ],
+  [
+    "full-jumper-uid",
+    "continuation-labels",
+    "=== expected.uid",
+    "=== expected.uid.slice(0,8)",
+  ],
+  [
+    "reference-anywhere",
+    "checks",
+    "reference = referenceRow(rows, c.id)",
+    "reference = rows[0]",
+  ],
+  [
+    "identity-reference-anywhere",
+    "continuation-labels",
+    "const reference = referenceRow(rows, c.id);",
+    "const reference = rows[0];",
+  ],
+  [
+    "identity-above",
+    "continuation-labels",
+    "const parts = rows",
+    "const parts = rows.slice(rows.indexOf(reference) + 1)",
+  ],
+  [
+    "identity-below",
+    "continuation-labels",
+    "const parts = rows",
+    "const parts = rows.slice(0, rows.indexOf(reference))",
+  ],
+  [
+    "identity-split",
+    "continuation-labels",
+    'const body = parts.join("");',
+    "const body = parts[0];",
+  ],
+  [
+    "identity-split-order",
+    "continuation-labels",
+    'const body = parts.join("");',
+    'const body = parts.reverse().join("");',
+  ],
+  [
+    "reference-single",
+    "continuation-labels",
+    "refs.length === 1",
+    "refs.length > 0",
+  ],
+  [
+    "jumper-contract",
+    "continuation-labels",
+    'const jumper = parts.join("\\n");',
+    'const jumper = parts.join("\\n").replace(/^JUMPER(?: ?\\(no designation\\))?(?: ?UID )?/, "JUMPER ");',
+  ],
+  [
+    "pdf-text-envelope",
+    "continuation-labels",
+    "p.bbox.x >= b.x - 0.17",
+    "true",
+  ],
+  [
+    "link-ownership",
+    "continuation-labels",
+    "t.continuationLink === source.element",
+    "true",
+  ],
+  [
+    "physical-rows",
+    "continuation-labels",
+    "Math.abs(last.rowY - y) <= 0.17",
+    "true",
+  ],
+  [
+    "same-sheet-peer",
+    "checks",
+    "p !== source && p.id === c.id",
+    "p.id === c.id",
+  ],
+  ["reciprocal-other", "checks", "r !== c &&", "true &&"],
+  [
+    "peer-grid",
+    "checks",
+    "zoneAt(targetGeometry, anchor)",
+    "zoneAt(g, source.anchor)",
+  ],
+  ["missing-pdf-row", "continuation-labels", "if (!runs.length)", "if (false)"],
+  [
+    "pdf-actual-text",
+    "continuation-labels",
+    "renderedString: p.renderedString ?? p.text,",
+    "renderedString: t.renderedString ?? t.text,",
+  ],
+  [
+    "pdf-actual-size",
+    "continuation-labels",
+    "emBbox: p.bbox,",
+    "emBbox: p.bbox, fontSize: t.fontSize,",
+  ],
+  [
+    "pdf-proximity",
+    "continuation-labels",
+    ".filter((x) => x.dy < Math.max(0.8, x.t.fontSize * 0.65) && x.dx < 0.5)",
+    ".filter(() => true)",
+  ],
+  [
+    "medium-rows",
+    "continuation-labels",
+    "a.length === b.length && a.every((s, i) => s === b[i])",
+    "true",
+  ],
+])
+  await edit("continuation-" + id, "evals/draw/" + file + ".mjs", from, to, [
+    "evals/draw/continuation-labels.test.mjs",
+  ]);
 // Deliberately harmless mutation must survive; it proves survivors are observable.
 await edit(
   "benign-comment-control",

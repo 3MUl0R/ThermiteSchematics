@@ -279,16 +279,28 @@ it("checks a continuation's destination zone against the peer connector geometry
     c.continuations(
       sheets[0],
       { sheets },
-      g({ texts: [text({ text: "C1 / 02.A1 W1" })] }),
+      g({
+        connectors: [
+          { id: "C1", toSheet: 2, element: "source", anchor: { x: 20, y: 20 } },
+        ],
+        texts: [text({ text: "C1 / 02.A1 / W1", continuationLink: "source" })],
+      }),
       [g(), peer],
+      { wires: [{ uid: "w", designation: "W1" }] },
     )[0].missing,
   ).toContain("printed destination zone");
   expect(
     c.continuations(
       sheets[0],
       { sheets },
-      g({ texts: [text({ text: "C1 / 02.D5 W1" })] }),
+      g({
+        connectors: [
+          { id: "C1", toSheet: 2, element: "source", anchor: { x: 20, y: 20 } },
+        ],
+        texts: [text({ text: "C1 / 02.D5 / W1", continuationLink: "source" })],
+      }),
       [g(), peer],
+      { wires: [{ uid: "w", designation: "W1" }] },
     ),
   ).toEqual([]);
 });

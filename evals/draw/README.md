@@ -220,7 +220,7 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                           |
 | 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                               |
 | 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                     |
-| 08  | Reciprocal continuations and printed conductor/sheet.zone; destination from measured reciprocal anchor/grid. Ordered ports need an export.                                      |
+| 08  | Reciprocal continuations, source-derived printed conductor and peer sheet.zone; associated rows across SVG/HTML/PDF. Ordered ports need an export.                              |
 | 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                            |
 | 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                             |
 | 11  | Both sweep arms and executed remedies. Refusals remain diagnostics, never unseen visual markers.                                                                                |
@@ -237,6 +237,45 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                         |
 | 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                                   |
 | 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                              |
+
+DQ-08 resolves the other endpoint of a reciprocal continuation pair, excluding
+the source even when both ends share a sheet. The expected destination zone is
+recomputed from that peer's measured anchor and the printed grid; exported
+zone metadata is never an answer. Visible rows must belong to the real
+connector link, not merely repeat its text nearby. Separate text nodes and
+positioned leaf tspans are measured individually; mixed direct/positioned span
+content refuses only that connector’s DQ-08 measurement, without interrupting
+other checks on the sheet. Font runs
+are combined only to read a row's character stream; each run retains its own
+size/ink checks and tspans retain their parent text defect locator.
+
+One reference row `<Cnnn> / <sheet>.<zone>` may sit in any position.
+Identity occupies the other owned rows in physical order, or follows a second `/`.
+Prefer separate `<text>` rows.
+
+The expected printed identity comes independently from IR: a wire's authored
+`properties.label` when present, otherwise its designation; cable designation
+plus full core ID; a jumper's designation, or `JUMPER`, whitespace/a row break, and its full authored UID.
+Unknown/ambiguous/synthetic sources refuse identity; no net/display-detail
+fallback supplies a name. Existing conductor strings can identify an IR element;
+optional `sourceElement: {kind:"wire"|"jumper",uid}` or
+`{kind:"core",cableUid,conductorId}` selects it explicitly. Those fields select
+source only, never dictate printed text. Complete wrapped character streams
+must match literally, including preserved spaces and Unicode.
+
+HTML and PDF rows must match their SVG source rows in physical row order.
+HTML occurrences match independently measured connector anchors and destinations;
+DOM ordinals are local to each medium and are never shared as identity.
+PDF fragments associate by
+physical row geometry, then their actual text and font sizes are checked; no SVG
+font size substitutes for an unmatched PDF row. Missing/invalid actual PDF font
+sizes and missing/unassociated PDF rows
+refuse measurement, so becoming unmatched cannot clear a small-text pin.
+Extra PDF rows are checked inside the union of owned text rows plus the existing
+0.17 mm geometry uncertainty; nearby text along the connector stroke is excluded.
+Existing short Cnnn / NN labels keep their missing-field locators. Run the native
+controls with `bun run test -- evals/draw/continuation-browser.test.mjs` and native
+guard mutations with `bun evals/draw/continuation-mutations.check.mjs evals/out/continuation-mutations.json`.
 
 DQ-12 measures the SVG packet's **visible outline geometry**: the bounding envelope
 of conductor/symbol/mark outlines in outer-sheet millimetres, using stroke centre

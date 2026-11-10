@@ -208,14 +208,74 @@ export function measureSheet(options = {}) {
       },
     ];
   });
+  const continuationOwner = (e) => {
+    const a = e.closest('a[href^="#sheet-"]');
+    return a?.querySelector("path,line") ? a : null;
+  };
+  const continuationInfo = (e) => {
+    const a = continuationOwner(e),
+      line = a?.querySelector("path,line");
+    if (!line || typeof line.getPointAtLength !== "function") return undefined;
+    const p = line.getPointAtLength(0),
+      m = line.getScreenCTM();
+    const q = new DOMPoint(p.x, p.y).matrixTransform(m);
+    return {
+      anchor: point(q.x, q.y),
+      toSheet: Number(a.getAttribute("href").slice(7)),
+    };
+  };
   const textCanvas = document.createElement("canvas").getContext("2d");
-  const textCandidates = Array.from(root.querySelectorAll("text")).flatMap(
-    (e) => {
+  const continuationErrors = new Map();
+  const textCandidates = Array.from(root.querySelectorAll("text"))
+    .flatMap((e) => {
+      if (!continuationOwner(e) || !e.querySelector("tspan")) return [e];
+      if (
+        [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
+      ) {
+        continuationErrors.set(
+          e,
+          "Mixed direct text and positioned spans unsupported",
+        );
+        return [e];
+      }
+      const spans = [...e.querySelectorAll("tspan")];
+      if (
+        spans.some(
+          (n) =>
+            n.children.length &&
+            [...n.childNodes].some(
+              (q) => q.nodeType === 3 && q.textContent.trim(),
+            ),
+        )
+      ) {
+        continuationErrors.set(e, "Mixed nested span content unsupported");
+        return [e];
+      }
+      return spans.filter((n) => !n.children.length);
+    })
+    .flatMap((e) => {
       if (!e.textContent.trim()) return [];
       const v = visible(e, true);
       if (!v) return [];
       const css = getComputedStyle(e),
         m = e.getScreenCTM();
+      let hiddenContinuation = false;
+      if (continuationOwner(e)) {
+        for (let node = e; node; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (Number(style.opacity) === 0 || style.visibility === "collapse")
+            hiddenContinuation = true;
+          if (style.maskImage && style.maskImage !== "none")
+            throw Error("Continuation measurement: unsupported mask");
+        }
+        if (
+          (css.fill === "none" ||
+            css.fill === "rgba(0, 0, 0, 0)" ||
+            Number(css.fillOpacity) === 0) &&
+          (css.stroke === "none" || Number(css.strokeOpacity) === 0)
+        )
+          hiddenContinuation = true;
+      }
       const emBbox = v.b;
       textCanvas.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
       textCanvas.textAlign = "left";
@@ -240,7 +300,14 @@ export function measureSheet(options = {}) {
       const start = e.getStartPositionOfChar(0);
       // Chromium's start position uses the selected SVG baseline. Measure the
       // baseline displacement with an alphabetic clone in the same text context.
-      const alphabetic = e.cloneNode(true);
+      const textRoot = e.closest("text"),
+        alphabetic = textRoot.cloneNode(true);
+      const part =
+        e === textRoot
+          ? alphabetic
+          : [...alphabetic.querySelectorAll("tspan")][
+              [...textRoot.querySelectorAll("tspan")].indexOf(e)
+            ];
       alphabetic.style.setProperty(
         "dominant-baseline",
         "alphabetic",
@@ -251,8 +318,10 @@ export function measureSheet(options = {}) {
         "alphabetic",
         "important",
       );
-      e.parentElement.appendChild(alphabetic);
-      const baselineShift = e.getBBox().y - alphabetic.getBBox().y;
+      part.style.setProperty("dominant-baseline", "alphabetic", "important");
+      part.style.setProperty("alignment-baseline", "alphabetic", "important");
+      textRoot.parentElement.appendChild(alphabetic);
+      const baselineShift = e.getBBox().y - part.getBBox().y;
       alphabetic.remove();
       const local = {
         x: start.x - metrics.actualBoundingBoxLeft * lengthScale,
@@ -265,7 +334,8 @@ export function measureSheet(options = {}) {
       };
       v.b = bounds(e, local);
       const intersection = intersect(v.b, v.clip);
-      v.painted = intersection.w > 0.001 && intersection.h > 0.001;
+      v.painted =
+        !hiddenContinuation && intersection.w > 0.001 && intersection.h > 0.001;
       const scaleX = Math.hypot(m.a * sx, m.b * sy),
         scaleY = Math.hypot(m.c * sx, m.d * sy);
       const anchor = new DOMPoint(
@@ -370,7 +440,10 @@ export function measureSheet(options = {}) {
             id.wire ??= entity[1];
         } catch {}
       }
-      const role = e.getAttribute("class") ?? "";
+      const role =
+        e.getAttribute("class") ??
+        e.closest("text")?.getAttribute("class") ??
+        "";
       if (role.includes("label-terminal") || role.includes("label-net")) {
         const closest = terminals
           .filter(
@@ -440,6 +513,9 @@ export function measureSheet(options = {}) {
       return [
         {
           ...id,
+          ...(e.tagName.toLowerCase() === "tspan"
+            ? { locatorElement: ids.get(e.closest("text")) }
+            : {}),
           sourceTextKey,
           text: renderedString.trim(),
           renderedString,
@@ -470,6 +546,12 @@ export function measureSheet(options = {}) {
             : undefined,
           sheetText: e.parentElement === root,
           continuation: !!e.closest('a[href^="#sheet-"]'),
+          continuationError: continuationErrors.get(e.closest("text")),
+          continuationAnchor: continuationInfo(e)?.anchor,
+          continuationDestination: continuationInfo(e)?.toSheet,
+          continuationLink: continuationOwner(e)
+            ? ids.get(continuationOwner(e))
+            : undefined,
           circuitText: e.parentElement.hasAttribute("data-circuit-functions")
             ? (() => {
                 const owner = e.parentElement;
@@ -503,8 +585,7 @@ export function measureSheet(options = {}) {
           advance: e.getComputedTextLength() * Math.hypot(m.a * sx, m.b * sy),
         },
       ];
-    },
-  );
+    });
   const texts = textCandidates.filter((t) => t.painted);
   const hiddenTexts = textCandidates.filter((t) => !t.painted);
   const frameElement = [...root.children].find(
@@ -532,8 +613,19 @@ export function measureSheet(options = {}) {
       : null;
   const connectors = [...root.querySelectorAll('a[href^="#sheet-"]')].flatMap(
     (a) => {
-      const line = a.querySelector("path,line"),
-        id = a.textContent.trim().match(/^(\S+)\s*\//)?.[1];
+      const line = a.querySelector("path,line");
+      const owned = texts.filter((t) => t.continuationLink === ids.get(a));
+      const rows = [];
+      for (const t of owned.slice().sort((a, b) => a.anchor.y - b.anchor.y)) {
+        const last = rows.at(-1);
+        if (last && Math.abs(last.y - t.anchor.y) <= 0.17)
+          last.text += t.renderedString ?? t.text;
+        else rows.push({ y: t.anchor.y, text: t.renderedString ?? t.text });
+      }
+      const references = rows
+        .map((t) => t.text.match(/^(C\d+)\s*\//)?.[1])
+        .filter(Boolean);
+      const id = references.length === 1 ? references[0] : undefined;
       if (!line || !id || typeof line.getPointAtLength !== "function")
         return [];
       const p = line.getPointAtLength(0),
@@ -542,6 +634,7 @@ export function measureSheet(options = {}) {
       return [
         {
           id,
+          element: ids.get(a),
           toSheet: Number(a.getAttribute("href").slice(7)),
           anchor: point(q.x, q.y),
         },

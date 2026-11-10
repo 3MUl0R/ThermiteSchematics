@@ -436,22 +436,55 @@ it("reconciles report source row identities and multiplicities without guessing 
 });
 it("checks both printed ends of a repeated same-sheet continuation ID", () => {
   const continuation = { id: "C001", toSheet: 1, conductor: "W1", netId: "n" },
-    sheet = { number: 1, continuations: [continuation, continuation] },
+    sheet = { number: 1, continuations: [continuation, { ...continuation }] },
     packet = { sheets: [] };
   packet.sheets = [sheet];
   const texts = [
-    text("C001 / 01.A1 W1"),
-    text("C001 / 01", { element: "other-end", bbox: { ...bbox, y: 100 } }),
+    text("C001 / 01.A1 / W1", { continuationLink: "a" }),
+    text("C001 / 01", {
+      element: "other-end",
+      continuationLink: "b",
+      bbox: { ...bbox, y: 100 },
+    }),
   ];
-  expect(c.continuations(sheet, packet, geometry({ texts }))).toHaveLength(1);
-  expect(c.continuations(sheet, packet, geometry({ texts }))[0].element).toBe(
+  const ir = { wires: [{ uid: "w", designation: "W1" }] };
+  const grid = [
+    ...Array.from({ length: 6 }, (_, i) =>
+      text(String(i + 1), {
+        anchor: { x: 30 + 40 * i, y: 20 },
+        bbox: { x: 30 + 40 * i, y: 20, w: 1, h: 1 },
+      }),
+    ),
+    ...Array.from({ length: 4 }, (_, i) =>
+      text("ABCD"[i], {
+        anchor: { x: 10, y: 40 + 40 * i },
+        bbox: { x: 10, y: 40 + 40 * i, w: 1, h: 1 },
+      }),
+    ),
+  ];
+  const g = geometry({
+    texts: [...texts, ...grid],
+    connectors: [
+      { id: "C001", toSheet: 1, element: "a", anchor: { x: 30, y: 40 } },
+      { id: "C001", toSheet: 1, element: "b", anchor: { x: 35, y: 40 } },
+    ],
+  });
+  expect(c.continuations(sheet, packet, g, [g], ir)).toHaveLength(1);
+  expect(c.continuations(sheet, packet, g, [g], ir)[0].element).toBe(
     "other-end",
   );
   expect(
     c.continuations(
       { ...sheet, continuations: [continuation] },
       packet,
-      geometry({ texts: [text("C001 / 99.A1 W1")] }),
+      geometry({
+        texts: [text("C001 / 99.A1 / W1", { continuationLink: "a" })],
+        connectors: [
+          { id: "C001", toSheet: 1, element: "a", anchor: { x: 30, y: 40 } },
+        ],
+      }),
+      [g],
+      ir,
     )[0].missing,
   ).toContain("printed sheet.zone");
 });
