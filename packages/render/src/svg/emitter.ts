@@ -3,10 +3,8 @@ import { rootedNoticeLines, rootedNoticeSvg } from "../off-view/notice.js";
 import { SvgWriter, type SvgAttributes } from "./writer.js";
 import { orthogonalPathData } from "./edge-path.js";
 export { orthogonalPathData } from "./edge-path.js";
-import {
-  terminalContextAttachment,
-  contextReferenceLeader,
-} from "../terminal-context-reference.js";
+import { terminalContextAttachment } from "../terminal-context-reference.js";
+import { contextJunctionInk } from "../layout/context-reference-ink.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { printableLabelGeometry } from "../symbols/printable-label.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
@@ -515,9 +513,11 @@ function emitFrames(
 function emitEdges(
   writer: SvgWriter,
   graph: Readonly<PresentationGraph>,
-  edgeLayouts: ReadonlyMap<string, LayoutEdge>,
+  layout: Readonly<NormalizedSchematicLayout>,
   registry: RenderSourceRegistry,
 ): void {
+  const edgeLayouts = indexById(layout.edges, "layout edge"),
+    references = indexById(layout.contextReferences ?? [], "context reference");
   const grouped = new Map<string, PresentationEdge[]>();
   for (const edge of graph.edges) {
     grouped.set(edge.netId, [...(grouped.get(edge.netId) ?? []), edge]);
@@ -540,31 +540,32 @@ function emitEdges(
             ),
     });
     for (const edge of edges) {
-      const layout = required(
-        edgeLayouts.get(edge.id),
-        `Edge ${edge.id} has no layout.`,
-      );
       const context = terminalContextAttachment(graph, edge);
       if (context) {
+        const reference = required(
+          references.get(edge.id),
+          `Reference ${edge.id} has no ink.`,
+        );
         writer.open(2, "g", {
           ...edgeAttributes(edge, registry),
           class: "context-attachment",
         });
-        for (const source of [true, false])
+        for (const leader of reference.leaders)
           writer.element(3, "path", {
             class: "context-reference-leader",
             fill: "none",
             stroke: "#475467",
             "stroke-width": 0.5,
-            d: orthogonalPathData(
-              contextReferenceLeader(layout.points, source),
-            ),
+            d: orthogonalPathData(leader),
           });
         writer.close(2, "g");
       } else
         writer.element(2, "path", {
           ...edgeAttributes(edge, registry),
-          d: orthogonalPathData(layout.points),
+          d: orthogonalPathData(
+            required(edgeLayouts.get(edge.id), `Edge ${edge.id} has no layout.`)
+              .points,
+          ),
         });
     }
     writer.close(1, "g");
@@ -583,11 +584,12 @@ function emitJunctions(
       nodeLayouts.get(node.id),
       `Junction ${node.id} has no layout.`,
     );
+    const ink = contextJunctionInk(graph, node);
     writer.element(1, "circle", {
       id: svgSemanticId("junction", [node.id]),
       class: "junction-dot",
-      cx: global(layout.x + layout.width / 2),
-      cy: global(layout.y + layout.height / 2),
+      cx: global(layout.x + ink.anchor.x),
+      cy: global(layout.y + ink.anchor.y),
       r: 3,
       "data-device-uid": node.terminal.deviceUid,
       "data-terminal-key": sourceValue(
@@ -1069,7 +1071,6 @@ export function emitSchematicSvg(
 
   const nodeLayouts = indexById(layout.nodes, "layout node");
   const portLayouts = indexById(layout.ports, "layout port");
-  const edgeLayouts = indexById(layout.edges, "layout edge");
   const labels = canonicalLabels(graph, layout);
   const {
     width,
@@ -1149,7 +1150,7 @@ export function emitSchematicSvg(
   });
   beginDiagram(writer, graph, width, diagramOnly, noticeHeight);
   emitFrames(writer, graph, nodeLayouts, registry);
-  emitEdges(writer, graph, edgeLayouts, registry);
+  emitEdges(writer, graph, layout, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
   if (ir)
     for (const segment of rootedGangSegments(ir, graph, layout))
