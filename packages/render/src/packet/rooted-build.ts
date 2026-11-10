@@ -1,4 +1,5 @@
 import { contentPages } from "./rooted-content.js";
+import { rootedLocationContent } from "./location-headings.js";
 import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
@@ -208,7 +209,7 @@ export function materializeRootedCandidate(
     candidate.grid,
     page,
     scale,
-    inner,
+    rootedLocationContent(inner, p, candidate.drafts),
     !!candidate.profile,
     candidate.profile,
   );

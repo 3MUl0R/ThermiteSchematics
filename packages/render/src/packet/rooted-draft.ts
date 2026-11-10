@@ -27,29 +27,27 @@ function continuedLocations(
   w: number,
   h: number,
 ) {
-  return p.graph.locationGroups
-    .filter((group) => {
-      const box = required(
-          p.layout.nodes.find((n) => n.id === group.id),
-          "Missing rooted geometry",
-        ),
-        label = required(
-          p.layout.labels.find((l) => l.id === group.label.id),
-          "Missing rooted geometry",
-        );
-      const intersects =
-        box.x + pad < x + w &&
-        box.x + box.width + pad > x &&
-        box.y + pad < y + h &&
-        box.y + box.height + pad > y;
-      const visible =
-        label.x + pad >= x &&
-        label.x + label.width + pad <= x + w &&
-        label.y + pad >= y &&
-        label.y + label.height + pad <= y + h;
-      return intersects && !visible;
-    })
-    .map((g) => g.label.text);
+  return p.graph.locationGroups.filter((group) => {
+    const box = required(
+        p.layout.nodes.find((n) => n.id === group.id),
+        "Missing rooted geometry",
+      ),
+      label = required(
+        p.layout.labels.find((l) => l.id === group.label.id),
+        "Missing rooted geometry",
+      );
+    const intersects =
+      box.x + pad < x + w &&
+      box.x + box.width + pad > x &&
+      box.y + pad < y + h &&
+      box.y + box.height + pad > y;
+    const visible =
+      label.x + pad >= x &&
+      label.x + label.width + pad <= x + w &&
+      label.y + pad >= y &&
+      label.y + label.height + pad <= y + h;
+    return intersects && !visible;
+  });
 }
 function references(
   p: PreparedSchematicDrawing,
@@ -90,7 +88,7 @@ export function rootedDraft(
     h = required(grid.ys[row + 1], "Missing rooted geometry") - y;
   const continued = continuedLocations(p, x, y, w, h);
   const caption = continued.length
-    ? `CONTINUED LOCATION: ${continued.join(" / ")}`
+    ? `CONTINUED LOCATION: ${continued.map((g) => g.label.text).join(" / ")}`
     : "";
   const shapes = viewportShapes(
     p,
@@ -101,6 +99,12 @@ export function rootedDraft(
   );
   const ink = unionInk(shapes);
   return {
+    rootedSections: [
+      {
+        viewport: { x: x - pad, y: y - pad, w, h },
+        continuedLocationIds: continued.map((g) => g.label.id),
+      },
+    ],
     rootedShapes: shapes,
     rootedContent: viewportContent(p, { x: x - pad, y: y - pad, w, h }),
     view: p.view,

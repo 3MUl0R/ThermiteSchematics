@@ -49,7 +49,11 @@ order constrains card stacks,
 and local candidates prefer the nearest clear position. Every changed reservation
 still runs ELK and the full validation guards.
 The continued-location caption has a separate measured lane between the notice
-and continuation text.
+and continuation text. A continued-location caption replaces its original
+heading only when that heading is wholly outside every nested viewport of the
+view. The renderer omits that text consistently from the shared drawing source;
+headings painted by any section, including partly visible headings, stay. Frames,
+backgrounds and layout are unchanged.
 
 These annotations add no electrical edges or device/function appearances. Coverage,
 W906 and strict packet behavior are unchanged. See [view rules](../../docs/views.md).

@@ -2,7 +2,12 @@ import { sumContent } from "./rooted-content.js";
 import { required } from "../presentation/util.js";
 import type { Draft, DrawingBounds } from "./types.js";
 import type { NormalizedSchematicLayout } from "../types.js";
-import { unionInk, shiftRootedInk, clipRootedInk } from "./rooted-ink.js";
+import {
+  unionInk,
+  shiftRootedInk,
+  clipRootedInk,
+  type InkBox,
+} from "./rooted-ink.js";
 import { zone } from "./page.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import { n } from "./svg.js";
@@ -33,7 +38,9 @@ export function foldDrawingDrafts(
     const h = (end - start) * scale,
       draft = drafts[col]!;
     heights.push(h);
-    // Only the first viewport belongs to this section; text/metadata is unchanged.
+    const viewport = { x: x0, y: start - pad, w: x1 - x0, h: end - start };
+    trimSectionViewport(draft, viewport);
+    // Only the first viewport belongs to this section; drawing text is unchanged.
     draft.content = draft.content.replace(/<svg\b[^>]*>/u, (tag) =>
       tag
         .replace(/\bheight="[^"]*"/u, `height="${n(h)}"`)
@@ -75,6 +82,7 @@ export function foldDrawingDrafts(
       const draft: Draft = {
         ...drafts[group[0]!]!,
         rootedContent: sumContent(group.map((i) => drafts[i]!)),
+        rootedSections: group.flatMap((i) => drafts[i]!.rootedSections ?? []),
         content: "",
         links: [],
         references: [],
@@ -123,6 +131,14 @@ export function foldDrawingDrafts(
   }
   // If packing is not possible, keep the untrimmed draft geometry/references.
   return untrimmed;
+}
+
+function trimSectionViewport(draft: Draft, viewport: InkBox) {
+  if (draft.rootedSections)
+    draft.rootedSections = draft.rootedSections.map((section) => ({
+      ...section,
+      viewport,
+    }));
 }
 
 function scopedSection(content: string, index: number): string {
