@@ -1,3 +1,4 @@
+import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { offViewAdapterLabels } from "./off-view-labels.js";
 import { portPosition, quantizedInput } from "./port-geometry.js";
@@ -132,18 +133,22 @@ function leafHeaderLabel(
 ): ElkLabel & { id: string } {
   const vertical = node.orientation === "top-to-bottom";
   const box = node.contentBox ?? { x: 0, y: 0, width: node.width };
+  const caption =
+    node.kind === "symbol" ? contactCaptionRegion(node, label) : undefined;
   return {
     ...adapterLabel(label),
     x:
       box.x +
       quantizedInput(
-        vertical
-          ? node.kind === "rail"
-            ? 5
-            : 8
-          : (box.width - label.width) / 2,
+        caption
+          ? caption.x
+          : vertical
+            ? node.kind === "rail"
+              ? 5
+              : 8
+            : (box.width - label.width) / 2,
       ),
-    y: (node.kind === "rail" ? 5 : 4) + box.y,
+    y: (caption?.y ?? (node.kind === "rail" ? 5 : 4)) + box.y,
     layoutOptions: assignedOptions(label.id, assignments, {
       targetKind: "node-label",
       options: { [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE" },

@@ -168,3 +168,8 @@ standards compliance or safety performance is claimed.
 Breaker auxiliary captions are placed beside their owning contact and checked
 against nearby ink. If no clear position fits, the renderer omits the redundant
 NO/NC caption and reports `W907`; the contact mark still shows the authored state.
+
+Rooted vertical NO/NC captions occupy a measured slot beside their own contact.
+The renderer reserves and validates that slot before ELK routing, retaining the
+leaf envelope and electrical port anchors. Caption ink clears the contact and
+nearby wiring by at least 1 mm at printed scale.

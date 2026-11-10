@@ -1,8 +1,18 @@
+import { circuitTextLines, measure } from "./symbols/circuit-text.js";
+export { circuitTextLines } from "./symbols/circuit-text.js";
+import { relationCaptionPlan } from "./symbols/circuit-relations.js";
+import { nodeCaptionSegments } from "./symbols/circuit-node-ink.js";
+import { reserveCircuitCaptions } from "./symbols/circuit-caption-reservation.js";
 import {
   emitCircuitContactCaption,
   type CaptionBox,
 } from "./symbols/circuit-caption.js";
 import { printableTextMetrics } from "./symbols/printable-font.js";
+import {
+  captionInk,
+  ownerCaption,
+  strokeBoxes,
+} from "./symbols/caption-ink.js";
 import { printableLabelGeometry } from "./symbols/printable-label.js";
 import { unsupportedProfileError } from "./preflight.js";
 import { CircuitRenderError } from "./render-error-context.js";
@@ -158,45 +168,6 @@ const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const fkey = (f: IrFunction) =>
   JSON.stringify([f.id.deviceUid, f.id.functionKey]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const measure = (s: string, size = 2.5) =>
-  [...s].reduce(
-    (sum, c) =>
-      sum +
-      (/[ilI1 .,:;'|!]/u.test(c)
-        ? 0.35
-        : /[MW@%]/u.test(c)
-          ? 1
-          : c.codePointAt(0)! > 127
-            ? 1.2
-            : 0.64) *
-        size,
-    0,
-  );
-export function circuitTextLines(
-  value: string,
-  width: number,
-  size = 2.5,
-): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of value.split(/\s+/u)) {
-    if (line && measure(`${line} ${word}`, size) > width) {
-      lines.push(line);
-      line = "";
-    }
-    if (measure(word, size) > width) {
-      for (const c of word) {
-        if (measure(line + c, size) > width) {
-          lines.push(line);
-          line = "";
-        }
-        line += c;
-      }
-    } else line += (line ? " " : "") + word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
 const text = (
   x: number,
   y: number,
@@ -771,31 +742,9 @@ function makeNodes(
         )!,
       ),
     }));
-    const fullCaptions = captions.map((caption) => printableCaption(caption));
-    width = Math.max(
-      width,
-      Math.min(
-        100,
-        Math.max(0, ...fullCaptions.map((s) => measure(s, 2.3) + 4)),
-      ),
-    );
-    const printableRelated = captions.flatMap((caption, i) => {
-      const value = fullCaptions[i]!,
-        available = width - 4;
-      const lines = circuitTextLines(value, available, 2.3);
-      // Never split terminal identities or let an unbounded contact mirror
-      // consume a page. A typed summary retains kind, count and destination.
-      const fits =
-        lines.length <= 4 &&
-        value.split(/\s+/u).every((word) => measure(word, 2.3) <= available);
-      return fits
-        ? lines
-        : circuitTextLines(
-            printableCaption({ ...caption, kind: "relation-summary" }),
-            available,
-            2.3,
-          );
-    });
+    const related = relationCaptionPlan(captions, width);
+    width = related.width;
+    const printableRelated = related.lines;
     for (const p of pins) p.x = p.side === "WEST" ? 0 : width;
     let height = bodyHeight + 2 + printableRelated.length * 3.1,
       verticalOffsetX = 0,
@@ -854,7 +803,11 @@ function makeNodes(
       width = Math.max(
         rightBound - leftBound + 2,
         measure(device.designation, 2.7) + Math.max(4, designationLeft + 2),
-        ...printableRelated.map((s) => measure(s, 2.3) + 4),
+        ...printableRelated.map(
+          (s) =>
+            Math.max(measure(s, 2.3), printableTextMetrics(s, 2.3).advance) +
+            Math.max(4, designationLeft + 2),
+        ),
       );
       height =
         Math.max(
@@ -934,6 +887,9 @@ function makeNodes(
       gangs,
     };
   });
+  reserveCircuitCaptions(result, vertical, (node) =>
+    emitNode(node, 0, 0, vertical, conductors, []),
+  );
   return result;
 }
 
@@ -1034,22 +990,17 @@ function emitNode(
       ),
     );
   const coilRow = node.rows.find((row) => row.f.kind === "coil");
-  const designationX =
+  let designationX =
     vertical && node.relationLabels.length && coilRow
       ? (node.bodyHeight - coilRow.center) * node.verticalScaleX +
         node.verticalOffsetX +
         3
       : node.width / 2;
-  out.push(
-    text(
-      designationX,
-      3.3,
-      node.device.designation,
-      2.7,
-      vertical && node.relationLabels.length && coilRow ? "start" : "middle",
-      true,
-    ),
-  );
+  const designationAnchor =
+    vertical && node.relationLabels.length && coilRow ? "start" : "middle";
+  // Compute ink first, then fill this original paint-order position.
+  const designationIndex = out.length;
+  out.push("");
   if (node.boundary)
     out.push(
       text(
@@ -1103,73 +1054,14 @@ function emitNode(
       },
     };
   });
-  const captionSegments = captionCenters.flatMap((c, i) =>
-    circuitMarkSegments(node.rows[i]!.mark, c.x, c.y, vertical),
+  const { captionSegments, ownerSegments } = nodeCaptionSegments(
+    node,
+    captionCenters,
+    vertical,
+    oneSidedFunction,
   );
-  for (const [i, row] of node.rows.entries())
-    for (const [j, terminal] of row.f.terminals.entries()) {
-      if (j !== 0 && j !== row.f.terminals.length - 1) continue;
-      const side = vertical
-        ? j === 0
-          ? "NORTH"
-          : "SOUTH"
-        : j === 0
-          ? "WEST"
-          : "EAST";
-      const pin =
-        node.pins.find(
-          (p) => key(p.terminal) === key(terminal) && p.side === side,
-        ) ?? node.pins.find((p) => key(p.terminal) === key(terminal));
-      if (!pin) continue;
-      const c = captionCenters[i]!,
-        target = vertical
-          ? { x: c.x, y: c.y + (j === 0 ? -4 : 4) }
-          : { x: c.x + (j === 0 ? -4 : 4), y: c.y };
-      const ps = circuitAttachmentPoints(
-        pin,
-        target,
-        side,
-        node.width,
-        node.height,
-      );
-      for (let k = 1; k < ps.length; k++)
-        captionSegments.push([
-          { x: ps[k - 1]![0], y: ps[k - 1]![1] },
-          { x: ps[k]![0], y: ps[k]![1] },
-        ]);
-    }
-  const box = (
-    value: string,
-    x: number,
-    y: number,
-    size: number,
-    anchor = "start",
-    bold = false,
-  ): CaptionBox => {
-    const m = printableTextMetrics(value, size, bold),
-      start =
-        x -
-        (anchor === "middle"
-          ? m.advance / 2
-          : anchor === "end"
-            ? m.advance
-            : 0);
-    return {
-      left: start + m.left,
-      right: start + m.right,
-      top: y - m.top,
-      bottom: y - m.bottom,
-    };
-  };
+  const box = captionInk;
   const captionBoxes: CaptionBox[] = [
-    box(
-      node.device.designation,
-      designationX,
-      3.3,
-      2.7,
-      vertical && node.relationLabels.length && coilRow ? "start" : "middle",
-      true,
-    ),
     ...node.pins.map((p) =>
       box(
         pinLabel(p),
@@ -1188,8 +1080,10 @@ function emitNode(
       ),
     ),
   ];
-  for (const gang of mechanicalGangs(node, vertical, diagramCenterY))
+  for (const gang of mechanicalGangs(node, vertical, diagramCenterY)) {
     captionSegments.push([gang.from, gang.to]);
+    ownerSegments.push([gang.from, gang.to]);
+  }
   captionBoxes.push(
     ...node.pins.map((p) => ({
       left: p.x - 0.75,
@@ -1208,19 +1102,64 @@ function emitNode(
         "middle",
       ),
     );
-  node.relationLabels.forEach((value, i) =>
-    captionBoxes.push(
-      box(
-        value,
-        node.width / 2,
-        node.height -
-          (vertical ? 7 : 1) -
-          (node.relationLabels.length - 1 - i) * 3.1,
-        2.3,
-        "middle",
-      ),
+  const bounds = {
+    left: 0.5,
+    right: node.width - 0.5,
+    top: 0.5,
+    bottom: node.height - 0.5,
+  };
+  const obstacles = strokeBoxes(ownerSegments, 0.4);
+  const designation = vertical
+    ? ownerCaption(
+        node.device.designation,
+        designationX,
+        3.3,
+        2.7,
+        designationAnchor,
+        true,
+        bounds,
+        obstacles,
+        captionBoxes,
+      )
+    : { x: designationX, y: 3.3, anchor: designationAnchor };
+  designationX = designation.x;
+  captionBoxes.push(
+    box(
+      node.device.designation,
+      designation.x,
+      designation.y,
+      2.7,
+      designationAnchor,
+      true,
     ),
   );
+  out[designationIndex] = text(
+    designation.x,
+    designation.y,
+    node.device.designation,
+    2.7,
+    designationAnchor,
+    true,
+  );
+  const footers = node.relationLabels.map((value, i) => {
+    const y =
+      node.height -
+      (vertical ? 7 : 1) -
+      (node.relationLabels.length - 1 - i) * 3.1;
+    const p = ownerCaption(
+      value,
+      vertical && coilRow ? designationX : node.width / 2,
+      y,
+      2.3,
+      vertical && coilRow ? designationAnchor : "middle",
+      false,
+      bounds,
+      obstacles,
+      captionBoxes,
+    );
+    captionBoxes.push(p.box);
+    return { ...p, value };
+  });
   for (const row of node.rows) {
     const { f, mark } = row;
     const cx = vertical
@@ -1434,19 +1373,7 @@ function emitNode(
       );
     out.push("</g>");
   }
-  node.relationLabels.forEach((s, i) =>
-    out.push(
-      text(
-        node.width / 2,
-        node.height -
-          (vertical ? 7 : 1) -
-          (node.relationLabels.length - 1 - i) * 3.1,
-        s,
-        2.3,
-        "middle",
-      ),
-    ),
-  );
+  footers.forEach((p) => out.push(text(p.x, p.y, p.value, 2.3, p.anchor)));
   out.push("</g>");
   return out.join("");
 }
