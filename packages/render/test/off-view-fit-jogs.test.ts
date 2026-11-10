@@ -91,7 +91,7 @@ function candidate(
     prepared: {} as RootedCandidate["prepared"],
   };
 }
-it("scores no new jog, then page count, median utilisation, then proximity with stable ties", () => {
+it("scores no new jog, then page count, soft locality, utilisation and stable ties", () => {
   const base = new Map([["wire", 0]]),
     better = candidate(2, 0, 100, 20);
   expect(
@@ -101,10 +101,10 @@ it("scores no new jog, then page count, median utilisation, then proximity with 
     compareCandidates(better, candidate(3, 0, 200, 1), base, page),
   ).toBeLessThan(0);
   expect(
-    compareCandidates(better, candidate(2, 0, 90, 1), base, page),
+    compareCandidates(better, candidate(2, 0, 90, 20), base, page),
   ).toBeLessThan(0);
   expect(
-    compareCandidates(better, candidate(2, 0, 100, 30), base, page),
+    compareCandidates(better, candidate(2, 0, 200, 30), base, page),
   ).toBeLessThan(0);
   expect(compareCandidates(better, candidate(2, 0, 100, 20), base, page)).toBe(
     0,

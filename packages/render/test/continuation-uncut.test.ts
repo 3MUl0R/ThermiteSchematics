@@ -3,8 +3,9 @@ import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { uncutFixture } from "./continuation-uncut-fixtures.js";
 
-// Full packet byte digests captured from the independently built round-3
-// renderer, including all SVG, HTML, metadata and reciprocal continuations.
+// Full packet digests reviewed for D2 composition and page-first locality.
+// Init remains byte-identical to #154 round 3; motor retains seven sheets,
+// the same cut/uncut wire sets and coverage, with intended layout/cut shifts.
 const reference = {
   "init-starter": [
     "dde9b5313201efd7985baece36ce68a3dd46bec886110d9ec5749b810d2cf448",
@@ -12,14 +13,14 @@ const reference = {
     "dab607cb276ece38eda33cb30ab181dc45dd77d23e475db378b0e306deefc255",
   ],
   "motor-starter": [
-    "3a960f9925cea5373eeb16371ee8e5b18756bf54ff87ed3d871b2c84ae58838a",
-    "a6f4dc7edcbaefdb57f8630ca4806c40ec223d4cac92d24a91cd11cdb5482036",
-    "5f2d523e1a94e9af0b3be5595443de5a8183c1b912e04da0df9498a02b7ff282",
+    "1a45d9ae49ca32b99f1afea9a7f4f6fa8e496888cfef36e45fa884a80ec957b1",
+    "dad30c15a4125549ba98f97eb7c541a01223d81ebc4d729b2836db169d746e93",
+    "6d5f3e4f06ebca8b6759f6006db3f7e55ba133994239eba04f7d4a99eb725c57",
   ],
 };
 
 it.each(["init-starter", "motor-starter"] as const)(
-  "keeps uncut empty, whitespace and newline labels byte-identical to round 3 (%s)",
+  "keeps uncut empty, whitespace and newline labels printable with reviewed layout bytes (%s)",
   async (name) => {
     const input = await uncutFixture(name);
     const base = await renderSchematicPacket(

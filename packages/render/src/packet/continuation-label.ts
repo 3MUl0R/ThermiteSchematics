@@ -125,9 +125,13 @@ export function continuationLabel(
     headerWidth,
   };
 }
+/** A final continuation identity/ink invariant failed its reservation. */
+export class ContinuationLabelError extends Error {}
 export function continuationLabelSvg(link: Link) {
   if (!link.label || !link.toZone)
-    throw Error(`Unresolved continuation ${link.id}: ${link.conductor}`);
+    throw new ContinuationLabelError(
+      `Unresolved continuation ${link.id}: ${link.conductor}`,
+    );
   const value =
     continuationHeader(link) +
     (link.label.single ? ` / ${link.conductor}` : "");
@@ -144,7 +148,7 @@ export function continuationLabelSvg(link: Link) {
         row.y - m.bottom - box.y - box.h,
       );
       if (shortfall > 0.001)
-        throw Error(
+        throw new ContinuationLabelError(
           `Continuation ${link.id} (${link.conductor}) final ink needs ${shortfall.toFixed(2)} mm more than its reserved ${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm. Use a larger sheet or landscape.`,
         );
       return text(

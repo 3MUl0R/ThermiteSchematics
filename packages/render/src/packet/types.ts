@@ -45,6 +45,9 @@ export interface SchematicPacketRequest {
     | CircuitViewRequest
   )[];
   readonly index?: boolean;
+  /** Both modes may fold validated rooted strips. Standard retains standard
+   * spacing; compact additionally compares compact/dense spacing profiles.
+   * Composition preserves routed geometry, minimum type and final peer zones. */
   readonly layout?: "standard" | "compact";
   readonly references?:
     | false

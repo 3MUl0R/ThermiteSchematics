@@ -19,7 +19,7 @@ it.skipIf(!browserPath)(
         viewport: { width: 1700, height: 1100 },
       });
     try {
-      let visible = 0;
+      let visibleBody = 0;
       const firstView = JSON.stringify(r.value.sheets[0]!.view);
       for (const sheet of r.value.sheets.filter(
         (s) => JSON.stringify(s.view) === firstView,
@@ -40,28 +40,41 @@ it.skipIf(!browserPath)(
                 !e.closest("defs") &&
                 ((e as SVGElement).style.visibility = "hidden"),
             );
-          return [...document.querySelectorAll("text.label-text")].map((t) => {
-            const rect = document
-                .getElementById(t.getAttribute("clip-path")!.slice(5, -1))!
-                .querySelector("rect")!,
-              b = rect.getBBox(),
-              m = t.getScreenCTM()!,
-              a = new DOMPoint(b.x, b.y).matrixTransform(m),
-              z = new DOMPoint(b.x + b.width, b.y + b.height).matrixTransform(
-                m,
-              );
-            t.removeAttribute("clip-path");
-            return {
-              text: t.textContent!,
-              left: a.x,
-              right: z.x,
-              top: a.y,
-              bottom: z.y,
-            };
-          });
+          return {
+            sections: document.querySelectorAll(
+              "svg[data-layout-config-version]",
+            ).length,
+            labels: [...document.querySelectorAll("text.label-text")].map(
+              (t) => {
+                const rect = document
+                    .getElementById(t.getAttribute("clip-path")!.slice(5, -1))!
+                    .querySelector("rect")!,
+                  b = rect.getBBox(),
+                  m = t.getScreenCTM()!,
+                  a = new DOMPoint(b.x, b.y).matrixTransform(m),
+                  z = new DOMPoint(
+                    b.x + b.width,
+                    b.y + b.height,
+                  ).matrixTransform(m);
+                t.removeAttribute("clip-path");
+                return {
+                  text: t.textContent!,
+                  location: t.classList.contains("label-location"),
+                  left: a.x,
+                  right: z.x,
+                  top: a.y,
+                  bottom: z.y,
+                };
+              },
+            ),
+          };
         });
-        expect(labels).toHaveLength(52);
-        for (const [index, b] of labels.entries()) {
+        // The frozen fixture has 50 body labels plus two location headings.
+        // Each folded strip repeats the source; #163 may omit hidden headings.
+        expect(labels.labels.filter((l) => !l.location)).toHaveLength(
+          50 * labels.sections,
+        );
+        for (const [index, b] of labels.labels.entries()) {
           // Full continuous geometry is repeated behind the sheet's fold viewport.
           if (b.left < 3 || b.top < 3 || b.right > 1697 || b.bottom > 1097)
             continue;
@@ -99,11 +112,11 @@ it.skipIf(!browserPath)(
               }
           // Continuous source labels outside this folded sheet have no painted ink.
           if (!ink) continue;
-          visible++;
+          if (!b.location) visibleBody++;
           expect(gap, b.text).toBeGreaterThanOrEqual(1);
         }
       }
-      expect(visible).toBe(52);
+      expect(visibleBody).toBe(50);
     } finally {
       await page.close();
       await browser.close();

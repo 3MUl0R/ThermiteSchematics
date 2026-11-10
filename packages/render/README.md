@@ -53,13 +53,37 @@ uses bounded safe-gap alternatives when needed, preserving protected bounds,
 continuation spacing and the 40-cut/80-sheet limits. Card alternatives re-run ELK
 against the same validated selection. Candidates prefer no new interior jogs under
 3 mm and no new detours beyond `2 × Manhattan + 20 mm`, fewer pages,
-clipped median utilisation, then proximity, with stable ties. A
+equal-sheet card locality, soft 15 mm excess and clipped median utilisation,
+with stable ties. A
 complete packet exceeding twice its native comparison page count returns R006.
 The no-card baseline uses the same safe-cut fallback. Empty enclosure-only cells
 are removed with destination remapping; a remaining conductor-only page refuses.
 Geometry envelopes are clipped to each strip when scoring. A guarded original
 placement exits before the bounded placement search only when it uses no more
 pages than its native no-card view; the 2× limit remains a packet refusal bound.
+Standard spacing may use the same validated strip composition as compact mode;
+compact additionally compares its original spacing profiles. Strip envelopes
+include strokes, terminal markers, cards and pinned heading ink, expanding any
+partly intersected heading to a bounded fixed point. Rebuilt captions and wrapped
+notices are checked after trimming/stacking, with conservative untrimmed fallback.
+Raw and clipped route populations use exact authored wire/jumper UIDs or cable
+UID plus core, comparing positive count and severity growth per identity against
+the logical view's native population in both early exit and scoring. The cache
+includes grid, final viewports, scale and composition state. Official route
+thresholds have no added epsilon. Four extra standard economy placements begin
+only after materialization, final ink/peer checks and sufficient page-cost
+eligibility; failed recovery keeps its original budget, and exhaustion never
+means settled. The first route-safe printable candidate fixes the locality
+reference, keyed by physical terminal and owner. Route safety precedes physical
+sheet count; equal-sheet replacements cannot grow any card distance by more than
+0.1 mm against that reference. A sheet-saving candidate is never vetoed for
+locality. The soft summed positive excess over 15 mm precedes utilisation and the
+exact tie key. Ranking and early exit share this rule; it introduces no refusal
+or search budget. Useful utilisation is exactly >=0.40, without rounding across
+that boundary. Ordering quantizes distance to 0.001 mm and utilisation to 0.000001, then
+uses an exact profile/placement/grid/composition key. Each rooted-view search
+reuses exact pinned-font metrics in an isolated async scope, capped at 4,096
+entries. Outside that scope, measurement stays uncached; no result is rescaled.
 Compact mode compares its original spacing profiles first. Displayed terminal
 order constrains card stacks,
 and local candidates prefer the nearest clear position. Every changed reservation
@@ -93,7 +117,11 @@ deduplicated forms, including the measured longest literal token.
 Bounded packing moves text by at most one row pitch; anchors, conductor paths and their
 order stay intact. Caption, notice, bank and card ink are checked after folding.
 Final packet assembly resolves the reciprocal endpoint's actual `sheet.zone`,
-including same-sheet folds and omitted cells. Metadata retains the printed
+including same-sheet folds and omitted cells. Reservation precedes layout using
+the real preceding-view serial offset, at most 39 cuts per orthogonal segment,
+and destination width through sheet 100. This conservative monotone digit ceiling
+covers C999/C1000 and sheet 99/100 without optimistic bank tightening; final
+assembly assigns real serials/zones and rechecks their pinned ink. Metadata retains the printed
 `conductor` and adds `designation`, `toZone`, source-element `provenance` and
 reciprocal `end`. The no-card baseline uses the same continuation policy.
 Cable usage text reserves complete measured rows at 2.5 mm before paging/cards.

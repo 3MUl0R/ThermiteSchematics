@@ -43,7 +43,9 @@ export async function drawingDrafts(
       };
     throw Error("Rooted search returned neither drawing nor error");
   }
-  const materialized = materializeRootedCandidate(ir, winner, page);
+  const materialized = winner.printableDrafts
+    ? { ok: true as const, value: winner.printableDrafts }
+    : materializeRootedCandidate(ir, winner, page);
   if (!materialized.ok) return materialized;
   winner.drafts = materialized.value;
   const context = graphCardContext(winner.prepared.graph);

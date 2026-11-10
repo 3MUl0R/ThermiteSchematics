@@ -1,3 +1,6 @@
+import { localityRegression } from "./rooted-locality.js";
+import { candidateOrder, compareTerms, economyTerms } from "./rooted-order.js";
+import { routeGrowth } from "./rooted-clipped-routes.js";
 import { required } from "../presentation/util.js";
 import { unionInk, intersectInk } from "./rooted-ink.js";
 import type { RootedCandidate } from "./rooted-build.js";
@@ -49,19 +52,39 @@ export function newDetours(
     0,
   );
 }
-/** Stable caller order breaks exact ties. No route points are modified. */
+/** Total order over route safety, pages, guarded utilisation/locality and a
+ * deterministic placement/grid/composition key. No route points are modified. */
 export function compareCandidates(
   a: RootedCandidate,
   b: RootedCandidate,
   baseline: ReadonlyMap<string, number>,
   page: PaperPage,
   baselineDetours: ReadonlyMap<string, number> = new Map(),
+  reference?: RootedCandidate,
+  localityReference?: RootedCandidate,
 ) {
+  const ar = reference
+    ? [...routeGrowth(a, reference, false), ...routeGrowth(a, reference)]
+    : [];
+  const br = reference
+    ? [...routeGrowth(b, reference, false), ...routeGrowth(b, reference)]
+    : [];
+  const physical = ar.map((v, i) => v - (br[i] ?? 0)).find((v) => v !== 0) ?? 0;
   return (
     newJogs(a, baseline) - newJogs(b, baseline) ||
     newDetours(a, baselineDetours) - newDetours(b, baselineDetours) ||
+    physical ||
     a.drafts.length - b.drafts.length ||
-    candidateUtilisation(b, page) - candidateUtilisation(a, page) ||
-    a.proximity - b.proximity
+    Number(localityRegression(a, localityReference)) -
+      Number(localityRegression(b, localityReference)) ||
+    compareTerms(
+      economyTerms(a, candidateUtilisation(a, page)),
+      economyTerms(b, candidateUtilisation(b, page)),
+    ) ||
+    (candidateOrder(a) < candidateOrder(b)
+      ? -1
+      : candidateOrder(a) > candidateOrder(b)
+        ? 1
+        : 0)
   );
 }

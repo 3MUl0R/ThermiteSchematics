@@ -1,14 +1,12 @@
-import { sumContent } from "./rooted-content.js";
+import { sectionGroups, stackSections } from "./fold-stack.js";
+import { stripEnvelope } from "./strip-envelope.js";
+import { rootedDraft } from "./rooted-draft.js";
+import type { PreparedSchematicDrawing } from "../renderer.js";
 import { required } from "../presentation/util.js";
 import type { Draft, DrawingBounds } from "./types.js";
 import type { NormalizedSchematicLayout } from "../types.js";
-import {
-  unionInk,
-  shiftRootedInk,
-  clipRootedInk,
-  type InkBox,
-} from "./rooted-ink.js";
-import { zone } from "./page.js";
+import { shiftRootedInk, clipRootedInk, type InkBox } from "./rooted-ink.js";
+
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import { n } from "./svg.js";
 
@@ -20,6 +18,11 @@ export function foldDrawingDrafts(
   b: DrawingBounds,
   scale: number,
   fullH: number,
+  context?: {
+    prepared: PreparedSchematicDrawing;
+    inner: string;
+    profile?: "compact" | "dense";
+  },
 ): Draft[] {
   const pad = OUTER_SVG_PADDING,
     nx = xs.length - 1;
@@ -28,6 +31,39 @@ export function foldDrawingDrafts(
   for (let col = 0; col < nx; col++) {
     const x0 = xs[col]! - pad,
       x1 = xs[col + 1]! - pad;
+    if (context) {
+      const envelope = stripEnvelope(context.prepared, x0, x1, fullH - pad);
+      if (!envelope) return untrimmed;
+      const source = required(drafts[col], "Missing strip");
+      const next = rootedDraft(
+        context.prepared,
+        {
+          xs: [x0 + pad, x1 + pad],
+          ys: [envelope.y + pad, envelope.y + envelope.h + pad],
+        },
+        0,
+        0,
+        b,
+        scale,
+        context.inner,
+        context.profile,
+        source.continuedCaptionY,
+      );
+      if (source.rootedScoreBounds)
+        next.rootedScoreBounds = source.rootedScoreBounds;
+      const oldY = required(
+        source.rootedSections?.[0],
+        "Missing strip viewport",
+      ).viewport.y;
+      next.links = source.links.map((l) => ({
+        ...l,
+        y: l.y + (oldY - envelope.y) * scale,
+      }));
+      drafts[col] = next;
+      heights.push(envelope.h * scale);
+      continue;
+    }
+    // Layout-only test callers retain this crop; production supplies context.
     const spans = sectionSpans(layout, x0, x1);
     if (!spans.length) return untrimmed;
     const start = Math.max(0, Math.min(...spans.map((s) => s.y)) + pad - 12);
@@ -36,10 +72,14 @@ export function foldDrawingDrafts(
       Math.max(...spans.map((s) => s.y + s.h)) + pad + 12,
     );
     const h = (end - start) * scale,
-      draft = drafts[col]!;
+      draft = required(drafts[col], "Missing strip");
     heights.push(h);
-    const viewport = { x: x0, y: start - pad, w: x1 - x0, h: end - start };
-    trimSectionViewport(draft, viewport);
+    trimSectionViewport(draft, {
+      x: x0,
+      y: start - pad,
+      w: x1 - x0,
+      h: end - start,
+    });
     // Only the first viewport belongs to this section; drawing text is unchanged.
     draft.content = draft.content.replace(/<svg\b[^>]*>/u, (tag) =>
       tag
@@ -61,78 +101,10 @@ export function foldDrawingDrafts(
         ...(r.yMm === undefined ? {} : { yMm: r.yMm - start * scale }),
       }));
   }
-  const groups: number[][] = [];
-  let used = 0;
-  heights.forEach((h, i) => {
-    if (!groups.length || used + h + 14 > b.h) {
-      groups.push([i]);
-      used = h;
-    } else {
-      groups.at(-1)!.push(i);
-      used += 14 + h;
-    }
-  });
-  if (groups.length < drafts.length) {
-    const destinations = new Map(
-      groups.flatMap((group, index) =>
-        group.map((i) => [i + 1, index + 1] as const),
-      ),
-    );
-    const folded = groups.map((group) => {
-      const draft: Draft = {
-        ...drafts[group[0]!]!,
-        rootedContent: sumContent(group.map((i) => drafts[i]!)),
-        rootedSections: group.flatMap((i) => drafts[i]!.rootedSections ?? []),
-        content: "",
-        links: [],
-        references: [],
-        note: "Folded circuit sections; follow paired conductor references.",
-        drawingBounds: b,
-      };
-      const inks = [];
-      draft.rootedShapes = [];
-      draft.rootedCaptionInk = [];
-      let offset = 0;
-      for (const i of group) {
-        const source = drafts[i]!;
-        const scoped = scopedSection(source.content, i);
-        draft.content += `<g transform="translate(0 ${n(offset)})">${scoped}</g>`;
-        draft.links.push(
-          ...source.links.map((link) => ({
-            ...link,
-            to: destinations.get(link.to)!,
-            y: link.y + offset,
-          })),
-        );
-        draft.references!.push(
-          ...(source.references ?? []).map((r) => ({
-            ...r,
-            ...(r.yMm === undefined ? {} : { yMm: r.yMm + offset }),
-            zone:
-              r.xMm === undefined || r.yMm === undefined
-                ? r.zone
-                : zone(r.xMm, r.yMm + offset, b),
-          })),
-        );
-        appendCaptionInk(draft, source, offset);
-        draft.rootedShapes.push(
-          ...(source.rootedShapes ?? []).map((s) => ({
-            ...s,
-            y: s.y + offset,
-          })),
-        );
-        if (source.rootedInk)
-          inks.push({ ...source.rootedInk, y: source.rootedInk.y + offset });
-        offset += heights[i]! + 14;
-      }
-      const ink = unionInk(inks);
-      if (ink) draft.rootedInk = ink;
-      return draft;
-    });
-    return folded;
-  }
-  // If packing is not possible, keep the untrimmed draft geometry/references.
-  return untrimmed;
+  const groups = sectionGroups(heights, b.h);
+  return groups.length < drafts.length
+    ? stackSections(drafts, heights, groups, b)
+    : untrimmed;
 }
 
 function trimSectionViewport(draft: Draft, viewport: InkBox) {
@@ -141,20 +113,6 @@ function trimSectionViewport(draft: Draft, viewport: InkBox) {
       ...section,
       viewport,
     }));
-}
-
-function scopedSection(content: string, index: number): string {
-  return content.replace(/<[^>]+>/gu, (tag) =>
-    tag
-      .replace(
-        /(?<=\s)id="([^"]+)"/gu,
-        (_, id: string) => `id="section-${index}-${id}"`,
-      )
-      .replace(
-        /(?<=\s)clip-path="url\(#([^)]+)\)"/gu,
-        (_, id: string) => `clip-path="url(#section-${index}-${id})"`,
-      ),
-  );
 }
 
 function sectionSpans(
@@ -178,10 +136,4 @@ function sectionSpans(
         spans.push({ y: Math.min(a.y, z.y), h: Math.abs(a.y - z.y) });
     }
   return spans;
-}
-
-function appendCaptionInk(draft: Draft, source: Draft, offset: number) {
-  draft.rootedCaptionInk?.push(
-    ...(source.rootedCaptionInk ?? []).map((s) => ({ ...s, y: s.y + offset })),
-  );
 }
