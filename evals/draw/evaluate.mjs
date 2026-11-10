@@ -147,11 +147,22 @@ export function evaluateSheet(
       }),
     );
   out.push(
-    obs("DQ-12", [], {
-      status: "not-implemented",
-      reason:
-        "Packet median measured separately; proving previous-sheet packability needs exported movable content blocks and ELK clearance constraints.",
-    }),
+    obs(
+      "DQ-12",
+      [],
+      g.utilisationErrors?.length
+        ? {
+            status: "infrastructure-error",
+            reason: g.utilisationErrors
+              .map((e) => `${e.element}: ${e.reason}`)
+              .join("; "),
+          }
+        : {
+            status: "not-implemented",
+            reason:
+              "Packet median measured separately; proving previous-sheet packability needs exported movable content blocks and ELK clearance constraints.",
+          },
+    ),
   );
   out.push(obs("DQ-13", checks.strokesAndDots(g)));
   out.push(
@@ -410,18 +421,21 @@ export function evaluatePacket(c, packet, geometries, tables = []) {
         reason:
           "Needs a stable per-appearance/connector anchor identity to distinguish repeated device appearances or a device spanning zone boundaries. Unique unambiguous targets are measured from the printed grid.",
       });
-  const measured = geometries
-    .map((g, i) => ({
-      sheet: packet.sheets[i].number,
-      ...checks.utilisation(g),
-    }))
-    .filter((x) => x.fraction !== undefined);
+  // A refused sheet cannot silently disappear from the packet median.
+  const measured = geometries.some((g) => g.utilisationErrors?.length)
+    ? []
+    : geometries
+        .map((g, i) => ({
+          sheet: packet.sheets[i].number,
+          ...checks.utilisation(g),
+        }))
+        .filter((x) => x.fraction !== undefined);
   if (measured.length) {
     const sorted = measured.map((x) => x.fraction).sort((a, b) => a - b),
       n = sorted.length,
       median =
         n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
-    out.push({
+    const row = {
       ...observation(
         c,
         first,
@@ -441,8 +455,11 @@ export function evaluatePacket(c, packet, geometries, tables = []) {
       ),
       id: `${c.id}/DQ-12/packet-median`,
       scope:
-        "Bounding envelope of measured conductor/symbol ink divided by the inner drawing area (frame/title excluded); table/index sheets excluded. Packability is separately unimplemented.",
-    });
+        "Bounding envelope of visible outline geometry for conductors/symbols/marks (stroke centre lines), clipped to the sheet, nested viewports and clip paths, divided by the inner drawing area (frame/title excluded); table/index sheets excluded. Packability is separately unimplemented.",
+    };
+    // Retain passing medians too, so a full report can audit threshold crossings.
+    row.evidence.measurement = { median, perSheet: measured };
+    out.push(row);
   }
   return out;
 }

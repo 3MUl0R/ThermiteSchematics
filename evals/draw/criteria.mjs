@@ -12,7 +12,8 @@ export const criteria = {
   "DQ-10": "Monotone L1-L2-L3(-PE), U-V-W and upright qualifiers",
   "DQ-11":
     "Vertical flow succeeds wherever horizontal does, or executed R006 remedy works",
-  "DQ-12": "Median drawing-area utilisation >=40%; no avoidable extra sheet",
+  "DQ-12":
+    "Median visible drawing-area utilisation >=40%; no avoidable extra sheet",
   "DQ-13": "Conductor >= outline stroke; filled dots only at >=3-way junctions",
   "DQ-14": "Double landings appear as two conductors",
   "DQ-15": "No jog <3 mm or unreasoned detour >2x Manhattan +20 mm",
