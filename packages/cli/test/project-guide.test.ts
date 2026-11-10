@@ -61,6 +61,7 @@ import core, { assertCloneWarnings, viewRoots } from "./project-guide/core.js";
 import general from "./project-guide/general.js";
 import signalLoops from "./project-guide/signal-loops.js";
 import wiring from "./project-guide/wiring-circuits.js";
+import continuations from "./project-guide/continuations.js";
 
 const guidePath = join(
   repositoryRoot,
@@ -84,6 +85,7 @@ const MODULES: Record<string, FactModule> = {
   "communication-completeness": communication,
   "signal-loops": signalLoops,
   "wiring-circuits": wiring,
+  continuations,
 };
 const FACTS = Object.entries(MODULES).flatMap(([module, { facts }]) =>
   facts.map((fact) => ({ module, ...fact })),

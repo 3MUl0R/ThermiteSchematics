@@ -68,6 +68,8 @@ Within a group, the first appearance of each device in `functions` establishes i
 
 ## Source identity and boundaries
 
+Rooted sheet continuations follow the same printed wire-number rule described below; see [view and packet rules](views.md).
+
 - Every selected physical conductor appears once within its group, with its exact endpoint TerminalIds, conductor identity and derived net ID in SVG metadata. A wire's `properties.label` is the prominent printed wire number; its designation and UID remain available in metadata and schedules. Authored conductor size and color print below the wire number when present. Unknown size or color is omitted.
 - All terminals of each selected function are represented. A fully terminated selected wire whose endpoint function is not selected ends at a boundary representation of the real device terminal. Boundaries do not create virtual devices or new nets.
 - A filled terminal mark has selected physical wiring. An open terminal has no selected wire on that drawing. `[+N]` reports additional physical connections outside the group, or outside the current part when a group is split; it does not claim that an unused terminal is electrically isolated.

@@ -1,0 +1,43 @@
+import type { PreparedSchematicDrawing } from "../renderer.js";
+import type { DrawingBounds, Link } from "./types.js";
+import type { InkBox } from "./rooted-ink.js";
+import { reserveContinuationSources } from "./continuation-source.js";
+import { rootedConstraint } from "./rooted-constraint.js";
+
+export function continuationGridConstraint(
+  p: PreparedSchematicDrawing,
+  b: DrawingBounds,
+  scale: number,
+) {
+  const ids = reserveContinuationSources(p.graph).map((s) => s.conductor);
+  const constraint = rootedConstraint(p, b, scale);
+  return ids.length
+    ? `${constraint} Continuation identities: ${ids.join(", ")}.`
+    : constraint;
+}
+
+/** Largest additional separation needed for one mm of clear ink. */
+export function continuationShortfall(rows: InkBox[], occupied: InkBox[]) {
+  return Math.max(
+    0,
+    ...rows.flatMap((a) =>
+      occupied.map((b) =>
+        Math.max(
+          0,
+          1 -
+            Math.max(
+              a.x - b.x - b.w,
+              b.x - a.x - a.w,
+              a.y - b.y - b.h,
+              b.y - a.y - a.h,
+            ),
+        ),
+      ),
+    ),
+  );
+}
+
+export function continuationPackingConstraint(links: Link[]) {
+  const ids = links.map((l) => `${l.id} (${l.conductor})`).join(", ");
+  return `Continuations ${ids} cannot keep 1 mm clear ink within the 3.5 mm placement range. Use a larger sheet, landscape or another flow.`;
+}

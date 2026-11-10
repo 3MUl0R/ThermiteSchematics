@@ -58,11 +58,13 @@ it("settles only at or below native pages, keeping 2x exclusively for packet ref
   expect(searchSettled(empty, page)).toBe(false);
 });
 
+// Complete 2.5 mm continuation banks add one sheet in these three witnesses.
+// The native-only early-exit assertions above remain unchanged.
 it.each([
-  ["tabloid", "landscape", 2],
-  ["a3", "landscape", 2],
+  ["tabloid", "landscape", 3],
+  ["a3", "landscape", 3],
   ["a3", "portrait", 2],
-  ["letter", "portrait", 5],
+  ["letter", "portrait", 6],
   ["letter", "landscape", 5],
 ] as const)(
   "searches past 2x settlement on %s %s compact LR",

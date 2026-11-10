@@ -1,3 +1,7 @@
+import {
+  renderedRootedContinuations,
+  resolveRootedContinuations,
+} from "./continuation-resolve.js";
 import { PacketDraftError, type PacketViewContext } from "./errors.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type {
@@ -102,6 +106,7 @@ export function assembleSheets(
       draft.content += emitCommunicationContinuationBlock(
         draft.communicationBlock,
       );
+  resolveRootedContinuations(drafts, page);
   const sheets = drafts.map((draft, index) => ({
     number: index + 1,
     view: draft.view,
@@ -132,12 +137,7 @@ export function assembleSheets(
           ),
         }
       : {}),
-    continuations: draft.links.map((link) => ({
-      id: link.id,
-      toSheet: link.to,
-      conductor: link.conductor,
-      netId: link.netId,
-    })),
+    continuations: renderedRootedContinuations(draft),
     ...(draft.communicationBlock
       ? {
           communicationContinuations: draft.communicationBlock.rows.flatMap(

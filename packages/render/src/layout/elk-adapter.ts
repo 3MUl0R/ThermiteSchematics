@@ -1,3 +1,4 @@
+import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { offViewAdapterLabels } from "./off-view-labels.js";
 import { portPosition, quantizedInput } from "./port-geometry.js";
 import { portBorderOffset } from "./port-geometry.js";
@@ -71,6 +72,7 @@ export interface ElkAdapterBuild {
 }
 
 export interface ElkLayoutRequestOptions {
+  readonly packetContinuations?: boolean;
   readonly catalog?: readonly SymbolDefinition[];
   readonly engine?: ElkApi;
   readonly selected?: Readonly<SelectedSubgraph>;
@@ -859,6 +861,7 @@ export async function layoutPresentationGraph(
   const catalog = options.catalog ?? SYMBOL_CATALOG;
   const engine = options.engine ?? createElkEngine();
   const run = async (candidate: Readonly<PresentationGraph>) => {
+    if (options.packetContinuations) reserveContinuationSources(candidate);
     const build = buildElkAdapterGraph(candidate, options.selected);
     await validateElkRuntimeOptions(build, engine);
     const input = structuredClone(build.graph);

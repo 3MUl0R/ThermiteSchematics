@@ -25,6 +25,7 @@ export async function viewDrafts(
   page: PaperPage,
   layout: SchematicPacketRequest["layout"],
   circuitAppearances: Map<string, string[]>,
+  referenceOffset = 0,
 ): Promise<RenderOutcome<Draft[]>> {
   return record(view) && view.format === "circuit-view-request/0.1"
     ? await circuitDrafts(
@@ -71,5 +72,6 @@ export async function viewDrafts(
               presentation,
               page,
               layout,
+              referenceOffset,
             );
 }

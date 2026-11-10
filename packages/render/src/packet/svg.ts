@@ -9,8 +9,9 @@ export function text(
   size = 2.8,
   anchor = "start",
   weight = 400,
+  literal = false,
 ): string {
-  return `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b">${xml(value)}</text>`;
+  return `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b"${literal ? ' xml:space="preserve" style="white-space:pre"' : ""}>${xml(value)}</text>`;
 }
 export function line(
   x1: number,

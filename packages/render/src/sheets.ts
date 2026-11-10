@@ -170,6 +170,7 @@ async function renderPacket(
       paper.value,
       request.layout,
       circuitAppearances,
+      referenceNumber,
     );
     if (!result.ok)
       return { ok: false, error: contextError(result.error, [context]) };

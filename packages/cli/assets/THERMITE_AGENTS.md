@@ -141,9 +141,9 @@ views. `--flow left-to-right|top-to-bottom`,
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
 single sheet only (R006 otherwise).
 
-Rooted views are bounded: unequal parallel paths and authored conductors at drawn
-terminals can be omitted without markers. Audit with circuit/wiring views and
-packet coverage.
+Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
+2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
+and packet coverage.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

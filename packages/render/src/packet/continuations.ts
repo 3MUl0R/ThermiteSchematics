@@ -1,7 +1,5 @@
-import type { Draft, DrawingBounds } from "./types.js";
-import type { PresentationEdge, LayoutEdge, RenderOutcome } from "../types.js";
-import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
-import { failure } from "./errors.js";
+import type { Draft } from "./types.js";
+import type { RenderOutcome } from "../types.js";
 
 import { circuitTextLines, type CircuitDrawing } from "../circuit.js";
 import type { CommunicationDrawing } from "../communication.js";
@@ -123,126 +121,7 @@ export function emitCircuitContinuationBlock(
   return out.join("");
 }
 
-/** Find crossings of rooted viewports and add reciprocal physical conductor links. */
-function continuationEdges(
-  graph: { readonly edges: readonly Pick<PresentationEdge, "id" | "label">[] },
-  edges: readonly Pick<LayoutEdge, "id" | "points" | "netId">[],
-) {
-  return edges.filter(
-    (e) => graph.edges.find((s) => s.id === e.id)?.label?.role !== "reference",
-  );
-}
-
-export function drawingContinuations(
-  drafts: Draft[],
-  graph: {
-    readonly edges: readonly Pick<
-      PresentationEdge,
-      "id" | "label" | "netLabel"
-    >[];
-  },
-  layout: {
-    readonly edges: readonly Pick<LayoutEdge, "id" | "points" | "netId">[];
-  },
-  xs: readonly number[],
-  ys: readonly number[],
-  b: DrawingBounds,
-  scale: number,
-): RenderOutcome<void> {
-  const pad = OUTER_SVG_PADDING,
-    nx = xs.length - 1,
-    ny = ys.length - 1;
-  let serial = 0;
-  for (const edge of continuationEdges(graph, layout.edges)) {
-    const semantic = graph.edges.find(({ id }) => id === edge.id)!;
-    const conductor =
-      semantic.label?.text ?? semantic.netLabel?.text ?? edge.netId;
-    for (let j = 1; j < edge.points.length; j++) {
-      const p = edge.points[j - 1]!,
-        q = edge.points[j]!;
-      for (let col = 1; col < nx; col++) {
-        const x = xs[col]! - pad;
-        if (p.y !== q.y || x <= Math.min(p.x, q.x) || x >= Math.max(p.x, q.x))
-          continue;
-        const row = ys.findIndex(
-          (start, index) =>
-            index < ny && p.y + pad >= start && p.y + pad < ys[index + 1]!,
-        );
-        if (row < 0) continue;
-        const left = row * nx + col - 1,
-          right = left + 1,
-          id = `C${String(++serial).padStart(3, "0")}`;
-        const y = b.y + (p.y + pad - ys[row]!) * scale;
-        drafts[left]!.links.push({
-          id,
-          conductor,
-          netId: edge.netId,
-          to: right + 1,
-          x: b.x + (xs[col]! - xs[col - 1]!) * scale,
-          y,
-          side: "right",
-        });
-        drafts[right]!.links.push({
-          id,
-          conductor,
-          netId: edge.netId,
-          to: left + 1,
-          x: b.x,
-          y,
-          side: "left",
-        });
-      }
-      for (let row = 1; row < ny; row++) {
-        const y = ys[row]! - pad;
-        if (p.x !== q.x || y <= Math.min(p.y, q.y) || y >= Math.max(p.y, q.y))
-          continue;
-        const col = xs.findIndex(
-          (start, index) =>
-            index < nx && p.x + pad >= start && p.x + pad < xs[index + 1]!,
-        );
-        if (col < 0) continue;
-        const top = (row - 1) * nx + col,
-          bottom = top + nx,
-          id = `C${String(++serial).padStart(3, "0")}`;
-        const x = b.x + (p.x + pad - xs[col]!) * scale;
-        drafts[top]!.links.push({
-          id,
-          conductor,
-          netId: edge.netId,
-          to: bottom + 1,
-          x,
-          y: b.y + (ys[row]! - ys[row - 1]!) * scale,
-          side: "bottom",
-        });
-        drafts[bottom]!.links.push({
-          id,
-          conductor,
-          netId: edge.netId,
-          to: top + 1,
-          x,
-          y: b.y,
-          side: "top",
-        });
-      }
-    }
-  }
-  for (const draft of drafts)
-    for (let i = 0; i < draft.links.length; i++)
-      for (const other of draft.links.slice(i + 1)) {
-        const link = draft.links[i]!;
-        if (
-          link.side === other.side &&
-          (link.side === "left" || link.side === "right"
-            ? Math.abs(link.y - other.y) < 3
-            : Math.abs(link.x - other.x) < 18)
-        )
-          return failure(
-            "unprintable-layout",
-            "Continuation labels are too close to print clearly. Change flow, use a larger sheet, or narrow the view.",
-          );
-      }
-  return { ok: true, value: undefined };
-}
+export { drawingContinuations } from "./rooted-links.js";
 
 export function resolveCircuitContinuations(drafts: Draft[]): void {
   for (const draft of drafts)

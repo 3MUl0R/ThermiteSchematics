@@ -305,7 +305,17 @@ describe("packet reference ownership", () => {
     const a = draft(),
       b = draft();
     const area = { x: 0, y: 0, w: 100, h: 100 };
-    const graph = { edges: [{ id: "wire1" }, { id: "wire2" }] };
+    const graph = {
+      edges: [1, 2].map((i) => ({
+        id: `wire${i}`,
+        elementIds: [{ kind: "wire" as const, uid: `wire${i}` }],
+        conductor: {
+          kind: "wire" as const,
+          uid: `wire${i}`,
+          designation: `W${i}`,
+        },
+      })),
+    };
     const first = {
       id: "wire1",
       netId: "N1",

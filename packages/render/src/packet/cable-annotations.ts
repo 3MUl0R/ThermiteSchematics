@@ -80,8 +80,12 @@ export function cableCardContext(cards: CableEndpointCards[number]): string {
 export function cableRowHeight(
   cards: CableEndpointCards[number],
   rows: readonly (readonly string[])[],
+  usageExtraHeight = 0,
 ) {
   const labelHeight = Math.max(...rows.map((r) => r.length)) * 4;
   const height = Math.max(0, ...cards.map((c) => (c ? c.height * 0.25 : 0)));
-  return Math.max(19, labelHeight + (height ? height + 10 : 12));
+  return Math.max(
+    19,
+    labelHeight + (height ? height + 10 : 12) + usageExtraHeight,
+  );
 }

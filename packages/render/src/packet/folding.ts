@@ -91,6 +91,7 @@ export function foldDrawingDrafts(
       };
       const inks = [];
       draft.rootedShapes = [];
+      draft.rootedCaptionInk = [];
       let offset = 0;
       for (const i of group) {
         const source = drafts[i]!;
@@ -113,6 +114,7 @@ export function foldDrawingDrafts(
                 : zone(r.xMm, r.yMm + offset, b),
           })),
         );
+        appendCaptionInk(draft, source, offset);
         draft.rootedShapes.push(
           ...(source.rootedShapes ?? []).map((s) => ({
             ...s,
@@ -176,4 +178,10 @@ function sectionSpans(
         spans.push({ y: Math.min(a.y, z.y), h: Math.abs(a.y - z.y) });
     }
   return spans;
+}
+
+function appendCaptionInk(draft: Draft, source: Draft, offset: number) {
+  draft.rootedCaptionInk?.push(
+    ...(source.rootedCaptionInk ?? []).map((s) => ({ ...s, y: s.y + offset })),
+  );
 }

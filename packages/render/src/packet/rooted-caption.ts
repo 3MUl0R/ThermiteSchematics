@@ -36,9 +36,10 @@ export function captionConstraint(
   page: PaperPage,
   view: NormalizedSchematicView,
   links: readonly Link[],
+  captionY = b.y - 9,
 ) {
   if (!caption) return undefined;
-  const ink = textInk(caption, b.x, b.y - 9, 2.5);
+  const ink = textInk(caption, b.x, captionY, 2.5);
   const shortfall = Math.max(b.x - ink.x, ink.x + ink.w - b.x - b.w);
   if (shortfall > 0.001)
     return `Continued-location caption exceeds its header width by ${shortfall.toFixed(2)} mm. Use a larger sheet or landscape.`;
@@ -55,26 +56,7 @@ export function captionConstraint(
       l.bold,
     ),
   );
-  const captions = links.map((l) => {
-    const label = `${l.id} / ${String(l.to).padStart(2, "0")}`;
-    if (l.side === "top" || l.side === "bottom")
-      return textInk(
-        label,
-        l.x,
-        l.y + (l.side === "top" ? -4 : 4),
-        2.2,
-        false,
-        "middle",
-      );
-    return textInk(
-      label,
-      l.x + (l.side === "left" ? -3 : 3),
-      l.y + 0.8,
-      2.2,
-      false,
-      l.side === "left" ? "end" : "start",
-    );
-  });
+  const captions = links.flatMap((l) => l.label?.rows.map((r) => r.ink) ?? []);
   if ([...notices, ...captions].some((other) => inkOverlaps(ink, other)))
     return "Continued-location caption ink overlaps the notice or a continuation. Use a larger sheet or landscape.";
   return undefined;

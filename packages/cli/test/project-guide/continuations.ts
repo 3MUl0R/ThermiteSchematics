@@ -1,0 +1,82 @@
+import { continuationFixture } from "../../../render/test/continuation-fixtures.js";
+import { expect } from "vitest";
+import { compileProject } from "@thermite/compiler";
+import { renderSchematicPacket } from "../../../render/src/sheets.js";
+import { continuationOracle } from "../../../render/test/continuation-oracle.js";
+import { parseSvg } from "../../../render/test/off-view-fixtures.js";
+import { noteJson, type FactModule } from "./harness.js";
+
+const module: FactModule = {
+  facts: [
+    {
+      claim:
+        "Cards name omissions. Continuations print wire ID + peer `sheet.zone` at 2.5 mm; unnamed jumpers use `JUMPER` + full UID.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+        const r = await renderSchematicPacket(c.ir, {
+          format: "schematic-packet-request/0.1",
+          views: [
+            {
+              format: "schematic-view-request/0.1",
+              root: { by: "designation", value: "M1" },
+              family: "power",
+            },
+            {
+              format: "schematic-view-request/0.2",
+              root: { by: "designation", value: "CBL1" },
+              family: "control",
+              intent: { kind: "conductors" },
+            },
+          ],
+        });
+        if (!r.ok) throw Error(JSON.stringify(r.error));
+        const jumper = await continuationFixture(true);
+        try {
+          const j = await renderSchematicPacket(jumper.ir, {
+            format: "schematic-packet-request/0.1",
+            views: [
+              {
+                format: "schematic-view-request/0.1",
+                root: { by: "designation", value: "K1" },
+                family: "control",
+              },
+            ],
+          });
+          if (!j.ok) throw Error(JSON.stringify(j.error));
+          noteJson(
+            j.value.sheets.flatMap((s) =>
+              [...parseSvg(s.svg).querySelectorAll("a text")].map(
+                (t) => t.textContent,
+              ),
+            ),
+          );
+          expect(continuationOracle(jumper.ir, j.value).ends).toBeGreaterThan(
+            0,
+          );
+          expect(j.value.sheets.map((s) => s.svg).join("\n")).toContain(
+            ">JUMPER</text>",
+          );
+        } finally {
+          await jumper.dispose();
+        }
+        expect(continuationOracle(c.ir, r.value).ends).toBeGreaterThan(0);
+        const svg = r.value.sheets.map((s) => s.svg).join("\n");
+        expect(svg).toContain("Off-view at");
+        const texts = r.value.sheets.flatMap((s) => [
+          ...parseSvg(s.svg).querySelectorAll(
+            "a[data-continuation-id] text, [data-cable-uid][data-conductor-id] text",
+          ),
+        ]);
+        const usage = texts.filter(
+          (t) => t.textContent === "ASSIGNED / USAGE UNSPECIFIED",
+        );
+        expect(usage.length).toBe(4);
+        for (const t of [...usage, ...texts.filter((t) => t.closest("a"))])
+          expect(Number(t.getAttribute("font-size"))).toBe(2.5);
+      },
+    },
+  ],
+  unexecuted: new Map(),
+};
+export default module;

@@ -23,11 +23,18 @@ const regular = load("NotoSans-Regular"),
   math = load("NotoSansMath-Regular");
 /** Exact, pinned font tables; no host font service, clock or platform measurement.
  * Fontkit 2.0.4 uses the same feature-free tables as SVG and PDFKit. */
-export function printableTextMetrics(value: string, size = 10, bold = false) {
-  const text = value
-    .normalize("NFC")
-    .replace(/[\t\r\n ]+/gu, " ")
-    .trim();
+export function printableTextMetrics(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  const text = literal
+    ? value
+    : value
+        .normalize("NFC")
+        .replace(/[\t\r\n ]+/gu, " ")
+        .trim();
   let advance = 0,
     left = Infinity,
     right = -Infinity,
