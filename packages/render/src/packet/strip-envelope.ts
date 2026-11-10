@@ -1,3 +1,4 @@
+import { axisBox, type FoldAxis } from "./fold-axis.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { InkBox } from "./rooted-ink.js";
@@ -41,7 +42,18 @@ export function expandHeadings(
   headings: readonly InkBox[],
   fullH: number,
   minimum = 0,
-) {
+  axis: FoldAxis = "y",
+): InkBox {
+  if (axis === "x")
+    return axisBox(
+      expandHeadings(
+        axisBox(initial, axis),
+        headings.map((h) => axisBox(h, axis)),
+        fullH,
+        minimum,
+      ),
+      axis,
+    );
   let top = initial.y,
     bottom = initial.y + initial.h;
   for (let pass = 0; pass <= headings.length; pass++) {
@@ -61,17 +73,23 @@ export function expandHeadings(
   }
   return { ...initial, y: top, h: bottom - top };
 }
-export function stripEnvelope(
+function stripSpans(
   p: PreparedSchematicDrawing,
   x0: number,
   x1: number,
-  fullH: number,
+  axis: FoldAxis,
 ) {
-  const spans = drawingBoxes(p).filter((b) => b.x < x1 && b.x + b.w > x0);
+  const spans = drawingBoxes(p)
+    .map((b) => axisBox(b, axis))
+    .filter((b) => b.x < x1 && b.x + b.w > x0);
   for (const edge of p.layout.edges)
     for (let i = 1; i < edge.points.length; i++) {
-      const a = required(edge.points[i - 1], "Missing route point"),
-        z = required(edge.points[i], "Missing route point");
+      const point = (index: number) => {
+        const p = required(edge.points[index], "Missing route point");
+        return axis === "y" ? p : { x: p.y, y: p.x };
+      };
+      const a = point(i - 1),
+        z = point(i);
       if (Math.max(a.x, z.x) >= x0 && Math.min(a.x, z.x) <= x1)
         spans.push({
           x: x0,
@@ -80,16 +98,10 @@ export function stripEnvelope(
           h: Math.abs(a.y - z.y) + 1.5,
         });
     }
-  if (!spans.length) return undefined;
-  const top = Math.max(
-    -OUTER_SVG_PADDING,
-    Math.min(...spans.map((s) => s.y)) - MARGIN,
-  );
-  const bottom = Math.min(
-    fullH,
-    Math.max(...spans.map((s) => s.y + s.h)) + MARGIN,
-  );
-  const headings = p.graph.locationGroups.map((g) => {
+  return spans;
+}
+function locationBoxes(p: PreparedSchematicDrawing, axis: FoldAxis) {
+  return p.graph.locationGroups.map((g) => {
     const l = required(
       p.layout.labels.find((l) => l.id === g.label.id),
       "Missing location heading",
@@ -101,17 +113,42 @@ export function stripEnvelope(
     ).ink;
     const x = Math.min(l.x, ink.left),
       y = Math.min(l.y, ink.top);
-    return {
-      x,
-      y,
-      w: Math.max(l.x + l.width, ink.right) - x,
-      h: Math.max(l.y + l.height, ink.bottom) - y,
-    };
+    return axisBox(
+      {
+        x,
+        y,
+        w: Math.max(l.x + l.width, ink.right) - x,
+        h: Math.max(l.y + l.height, ink.bottom) - y,
+      },
+      axis,
+    );
   });
-  return expandHeadings(
-    { x: x0, y: top, w: x1 - x0, h: bottom - top },
-    headings,
-    fullH,
+}
+export function stripEnvelope(
+  p: PreparedSchematicDrawing,
+  x0: number,
+  x1: number,
+  fullH: number,
+  axis: FoldAxis = "y",
+) {
+  const spans = stripSpans(p, x0, x1, axis);
+  if (!spans.length) return undefined;
+  const top = Math.max(
     -OUTER_SVG_PADDING,
+    Math.min(...spans.map((s) => s.y)) - MARGIN,
+  );
+  const bottom = Math.min(
+    fullH,
+    Math.max(...spans.map((s) => s.y + s.h)) + MARGIN,
+  );
+  const headings = locationBoxes(p, axis);
+  return axisBox(
+    expandHeadings(
+      { x: x0, y: top, w: x1 - x0, h: bottom - top },
+      headings,
+      fullH,
+      -OUTER_SVG_PADDING,
+    ),
+    axis,
   );
 }

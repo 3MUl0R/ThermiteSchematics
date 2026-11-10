@@ -1,3 +1,4 @@
+import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
 import { rootedDiagnosticError } from "./rooted-constraint.js";
@@ -14,7 +15,7 @@ import {
 } from "./rooted-search.js";
 export { cuts } from "./rooted-cuts.js";
 
-/** All alternatives run ELK and the same geometry, text and pagination guards. */
+/** Search owns ELK; the selected winner may then compose its existing strips. */
 export async function drawingDrafts(
   ir: Readonly<ElectricalIr>,
   request: SchematicViewRequest,
@@ -48,11 +49,12 @@ export async function drawingDrafts(
     : materializeRootedCandidate(ir, winner, page);
   if (!materialized.ok) return materialized;
   winner.drafts = materialized.value;
-  const context = graphCardContext(winner.prepared.graph);
-  winner.drafts[0]!.rootedFit = {
+  const selected = composeRootedWinner(ir, winner, native, page);
+  const context = graphCardContext(selected.prepared.graph);
+  selected.drafts[0]!.rootedFit = {
     basePages: native.drafts.length,
-    actualPages: winner.drafts.length,
+    actualPages: selected.drafts.length,
     context,
   };
-  return { ok: true, value: winner.drafts };
+  return { ok: true, value: selected.drafts };
 }

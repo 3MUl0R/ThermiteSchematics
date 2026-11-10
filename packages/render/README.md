@@ -62,7 +62,14 @@ Geometry envelopes are clipped to each strip when scoring. A guarded original
 placement exits before the bounded placement search only when it uses no more
 pages than its native no-card view; the 2× limit remains a packet refusal bound.
 Standard spacing may use the same validated strip composition as compact mode;
-compact additionally compares its original spacing profiles. Strip envelopes
+compact additionally compares its original spacing profiles. After search,
+TB views may compose the selected winner's existing single-column vertical
+strips horizontally, in order, with the same 14 mm gap. Only the original and
+one composed materialized state are compared through the D2 order; this adds no
+ELK run, placement alternative or cut. Each constituent must have a device,
+terminal or card, independently of page totals. Final ink, reciprocal labels,
+physical zones and page cost are checked before acceptance; a failed alternative
+retains the original. Unrelated errors propagate. Strip envelopes
 include strokes, terminal markers, cards and pinned heading ink, expanding any
 partly intersected heading to a bounded fixed point. Rebuilt captions and wrapped
 notices are checked after trimming/stacking, with conservative untrimmed fallback.

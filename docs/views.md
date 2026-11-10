@@ -262,10 +262,17 @@ view/packet commands to retain its complete inventory. HTML is an SVG container,
 
 ## Compact sheets and references
 
-Standard selects standard spacing; it may fold validated horizontal strips onto
-fewer sheets. Compact additionally tries compact and dense spacing. Both modes
+Standard selects standard spacing; it may fold validated strips onto fewer
+sheets. After layout selection, a top-to-bottom view may also place its existing
+vertical strips side by side, in order, using one deterministic alternative.
+The renderer compares this with the original using the same route, page,
+locality and utilisation order. It adds no ELK runs, cuts or placement choices.
+Every constituent must contain a device, terminal or card; merging cannot hide
+a blank or conductor-only strip. Failed final ink, peer or page-cost checks
+retain the original. References use final physical sheet numbers and zones.
+Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
-strip height; any partly painted location heading stays whole, while wholly
+strip extents; any partly painted location heading stays whole, while wholly
 hidden headings follow the continued-location caption rule. Post-trim captions,
 wrapped notices and final continuation ink are validated before acceptance;
 unprintable compositions retain the conservative separate-page alternative.
