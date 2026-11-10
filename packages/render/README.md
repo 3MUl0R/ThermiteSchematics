@@ -55,6 +55,22 @@ view. The renderer omits that text consistently from the shared drawing source;
 headings painted by any section, including partly visible headings, stay. Frames,
 backgrounds and layout are unchanged.
 
+Rooted continuation banks print the authored wire number (`properties.label`
+when present, else `designation`), qualified cable core ID, or jumper designation.
+An undesignated jumper prints exactly `JUMPER` followed by its full authored UID
+with a space or row break. Source text is
+measured in pinned faces before ELK; discovery cuts determine the crossed sides
+and serial envelope, then complete banks are reserved before selecting the paper
+layout. Natural 2.5 mm text uses 3.5 mm pitch and 1 mm ink clearance. Bounded
+packing moves text by at most one row pitch; anchors, conductor paths and their
+order stay intact. Caption, notice, bank and card ink are checked after folding.
+Final packet assembly resolves the reciprocal endpoint's actual `sheet.zone`,
+including same-sheet folds and omitted cells. Metadata retains the printed
+`conductor` and adds `designation`, `toZone`, source-element `provenance` and
+reciprocal `end`. The no-card baseline uses the same continuation policy.
+Cable usage text reserves complete measured rows at 2.5 mm before paging/cards.
+Unprintable labels refuse with contextual R006, without clipping or truncation.
+
 These annotations add no electrical edges or device/function appearances. Coverage,
 W906 and strict packet behavior are unchanged. See [view rules](../../docs/views.md).
 

@@ -144,6 +144,32 @@ The renderer caps a packet at 100 sheets. The result `schematic-packet/0.1`
 contains normalized `page`, ordered `sheets`, and self-contained `html`.
 Each sheet includes its SVG, normalized view, number, and continuation records
 with the matching destination sheet, conductor label, and electrical net ID.
+Rooted continuation labels print a generated connector reference and the peer's
+final `sheet.zone`, followed by the complete printed conductor identity, for
+example `C017 / 03.C1` and `PE-SRC-M1`. Both ends name the other connector,
+including when folded sections share one physical sheet. Sheet numbers and zones
+are resolved after folding, empty-cell omission and packet composition.
+
+A wire uses its authored `properties.label` when present, otherwise its
+`designation`; cable cores use `cable.core`, and designated jumpers use their
+designation. An undesignated jumper is explicitly identified by its full authored
+UID, preceded only by `JUMPER` and a space or row break. Net names, hashes, color
+and size never substitute for these identities.
+Continuation metadata retains `conductor` as that printed identity and adds
+`designation` when authored, `toZone`, source-element `provenance` and reciprocal
+`end` (0 or 1). Existing request and packet format versions are unchanged.
+
+Every continuation row and cable usage label prints at least 2.5 mm em.
+Measured label banks reserve natural text with 3.5 mm row pitch and 1 mm clear
+ink. Complete IDs may wrap; they never clip, abbreviate, compress or shrink.
+Within a bank, bounded text placement preserves connector order and leaves
+conductor routes and anchors intact. Only conductors crossed by a candidate cut
+need a printable continuation identity. If no candidate grid succeeds, R006 names
+the crossed conductor and its identity problem, or the layout constraint. Other R006
+messages explain a label or paging constraint;
+use larger paper, landscape/another flow or a narrower selection. The labels
+add no electrical connections or completeness claims. W906 and strict packet
+behavior remain unchanged.
 
 Packet failures add `details.views` with the zero-based authored `viewIndex` and
 view title. A single-view failure also has `details.viewIndex` and

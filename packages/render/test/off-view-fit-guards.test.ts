@@ -1,3 +1,4 @@
+import { continuationLabel } from "../src/packet/continuation-label.js";
 import { gridLinks, rootedGrids } from "../src/packet/rooted-plans.js";
 import type { PreparedSchematicDrawing } from "../src/renderer.js";
 import { expect, it } from "vitest";
@@ -81,7 +82,13 @@ it("reserves caption ink between wrapped notices and continuation labels and ref
       },
     ];
     expect(
-      captionConstraint(caption, b, page.value, p.value.view, links),
+      captionConstraint(
+        caption,
+        b,
+        page.value,
+        p.value.view,
+        links.map((l) => ({ ...l, label: continuationLabel(l, 18, 18) })),
+      ),
     ).toBeUndefined();
     expect(
       inkOverlaps(
@@ -91,7 +98,11 @@ it("reserves caption ink between wrapped notices and continuation labels and ref
     ).toBe(false);
     expect(
       captionConstraint(caption, b, page.value, p.value.view, [
-        { ...links[0]!, y: b.y - 5 },
+        {
+          ...links[0]!,
+          y: b.y - 5,
+          label: continuationLabel({ ...links[0]!, y: b.y - 5 }, 18, 18),
+        },
       ]),
     ).toContain("overlaps");
     expect(
@@ -124,7 +135,9 @@ it("keeps continuation separation and the 80-sheet grid guard in the fallback", 
     graph: {
       edges: edges.map((e) => ({
         id: e.id,
-        label: { text: e.id, role: "conductor" },
+        label: { text: e.id, role: "conductor", textSources: [] },
+        elementIds: [{ kind: "wire", uid: e.id }],
+        conductor: { kind: "wire", uid: e.id, designation: e.id },
       })),
     },
     layout: { edges },

@@ -83,6 +83,10 @@ export interface RenderedSheet {
     readonly toSheet: number;
     readonly conductor: string;
     readonly netId: string;
+    readonly designation?: string;
+    readonly toZone?: string;
+    readonly provenance?: import("@thermite/compiler").ConductiveElementId;
+    readonly end?: 0 | 1;
   }[];
   readonly circuitContinuations?: readonly CircuitContinuation[];
   readonly communicationContinuations?: readonly CommunicationContinuation[];
@@ -130,6 +134,12 @@ export interface Link {
   id: string;
   to: number;
   conductor: string;
+  designation?: string;
+  provenance?: import("@thermite/compiler").ConductiveElementId;
+  descriptor?: string;
+  end?: 0 | 1;
+  toZone?: string;
+  label?: import("./continuation-label.js").ContinuationLabel;
   netId: string;
   x: number;
   y: number;
@@ -140,8 +150,11 @@ export interface Draft {
     viewport: import("./rooted-ink.js").InkBox;
     continuedLocationIds: readonly string[];
   }[];
+  rootedScoreBounds?: DrawingBounds;
   rootedContent?: import("./rooted-content.js").RootedContent;
   continuedCaption?: string;
+  continuedCaptionY?: number;
+  rootedCaptionInk?: import("./rooted-ink.js").InkBox[];
   rootedShapes?: import("./rooted-ink.js").InkBox[];
   rootedInk?: import("./rooted-ink.js").InkBox;
   rootedFit?: { basePages: number; actualPages: number; context: string };

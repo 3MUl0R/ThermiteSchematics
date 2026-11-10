@@ -1,3 +1,9 @@
+import {
+  continuationBanks,
+  bankBounds,
+  type ContinuationBank,
+} from "./continuation-bank.js";
+import { fitContinuations } from "./continuation-fit.js";
 import { contentPages } from "./rooted-content.js";
 import { rootedLocationContent } from "./location-headings.js";
 import { required } from "../presentation/util.js";
@@ -5,9 +11,10 @@ import type { ElectricalIr } from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { RenderOutcome } from "../types.js";
 import type { Draft, PaperPage } from "./types.js";
-import { rootedConstraint } from "./rooted-constraint.js";
+import { continuationGridConstraint } from "./continuation-constraint.js";
 import { bounds } from "./page.js";
-import { rootedGrids, gridLinks, type RootedGrid } from "./rooted-plans.js";
+import { gridLinks, type RootedGrid } from "./rooted-plans.js";
+import { rootedBankGrids } from "./rooted-bank-grids.js";
 import { rootedDraft } from "./rooted-draft.js";
 import { captionConstraint } from "./rooted-caption.js";
 import { foldDrawingDrafts } from "./folding.js";
@@ -18,6 +25,7 @@ import { interiorJogs, routeDetours } from "./rooted-ink.js";
 
 export interface RootedCandidate {
   drafts: Draft[];
+  bank: ContinuationBank;
   grid: RootedGrid;
   profile?: "compact" | "dense";
   prepared: PreparedSchematicDrawing;
@@ -86,14 +94,29 @@ function makeDrafts(
   scale: number,
   inner: string,
   compact: boolean,
-  profile?: "compact" | "dense",
-  native = false,
+  profile: "compact" | "dense" | undefined,
+  native: boolean,
+  bank: ContinuationBank,
 ): Draft[] | string {
-  const { b } = rootedSpace(p, page, compact, native);
+  const original = rootedSpace(p, page, compact, native).b;
+  const b = bankBounds(original, bank);
   const drafts: Draft[] = [];
   for (let row = 0; row < grid.ys.length - 1; row++)
     for (let col = 0; col < grid.xs.length - 1; col++)
-      drafts.push(rootedDraft(p, grid, col, row, b, scale, inner, profile));
+      drafts.push(
+        rootedDraft(
+          p,
+          grid,
+          col,
+          row,
+          b,
+          scale,
+          inner,
+          profile,
+          original.y - 9,
+        ),
+      );
+  for (const d of drafts) d.rootedScoreBounds = original;
   if (!gridLinks(p, grid, b, scale, drafts))
     return "Continuation spacing does not fit this grid.";
   if (!native) {
@@ -104,6 +127,7 @@ function makeDrafts(
         page,
         p.view,
         d.links,
+        d.continuedCaptionY,
       );
       if (constraint) return constraint;
     }
@@ -119,7 +143,9 @@ function makeDrafts(
           p.layout.height + 2 * pad,
         )
       : drafts;
-  return contentPages(pages);
+  const visible = contentPages(pages);
+  if (typeof visible === "string") return visible;
+  return fitContinuations(visible, page, bank, native) ?? visible;
 }
 
 export function buildRootedCandidates(
@@ -129,6 +155,7 @@ export function buildRootedCandidates(
   profile?: "compact" | "dense",
   native = false,
   explore = false,
+  offset = 0,
 ): RenderOutcome<RootedCandidate[]> {
   const { b, scale } = rootedSpace(p, page, !!profile, native);
   if (b.w < 60 || b.h < 50)
@@ -137,16 +164,15 @@ export function buildRootedCandidates(
       "unprintable-layout",
       "Title information leaves insufficient drawing space. Use a larger sheet or landscape.",
     );
-  const grids = rootedGrids(p, b, scale, true, explore);
-  if (!grids.length)
-    return offViewPacketFailure(
-      p.graph,
-      "unprintable-layout",
-      rootedConstraint(p, b, scale),
-    );
+  const banks = continuationBanks(p, b, scale, offset);
   const inner = "";
-  let captionFailure = "No caption candidate fits its separate ink lane.";
-  const candidates = grids.flatMap((g) => {
+  let captionFailure = continuationGridConstraint(
+    p,
+    bankBounds(b, required(banks[0], "Missing bank plan")),
+    scale,
+  );
+  const search = rootedBankGrids(p, b, scale, banks, explore);
+  const candidates = search.grids.flatMap(({ bank, grid: g }) => {
     const drafts = makeDrafts(
       p,
       g,
@@ -156,6 +182,7 @@ export function buildRootedCandidates(
       !!profile,
       profile,
       native,
+      bank,
     );
     if (typeof drafts === "string") {
       captionFailure = drafts;
@@ -164,6 +191,7 @@ export function buildRootedCandidates(
     return [
       {
         drafts,
+        bank,
         grid: g,
         ...(profile ? { profile } : {}),
         prepared: p,
@@ -176,10 +204,12 @@ export function buildRootedCandidates(
     ];
   });
   if (!candidates.length && !explore)
-    return buildRootedCandidates(ir, p, page, profile, native, true);
+    return buildRootedCandidates(ir, p, page, profile, native, true, offset);
   return candidates.length
     ? { ok: true, value: candidates }
-    : offViewPacketFailure(p.graph, "unprintable-layout", captionFailure);
+    : search.identityFailure
+      ? { ok: false, error: search.identityFailure }
+      : offViewPacketFailure(p.graph, "unprintable-layout", captionFailure);
 }
 
 /** Only the selected layout is emitted; it still passes the original emitter. */
@@ -212,6 +242,8 @@ export function materializeRootedCandidate(
     rootedLocationContent(inner, p, candidate.drafts),
     !!candidate.profile,
     candidate.profile,
+    false,
+    candidate.bank,
   );
   return typeof drafts === "string"
     ? offViewPacketFailure(p.graph, "unprintable-layout", drafts)

@@ -1,3 +1,4 @@
+import { textInk } from "./rooted-caption.js";
 import { viewportContent } from "./rooted-content.js";
 import { required } from "../presentation/util.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
@@ -81,6 +82,7 @@ export function rootedDraft(
   scale: number,
   inner: string,
   profile?: "compact" | "dense",
+  captionY = b.y - 9,
 ): Draft {
   const x = required(grid.xs[col], "Missing rooted geometry"),
     y = required(grid.ys[row], "Missing rooted geometry"),
@@ -112,11 +114,13 @@ export function rootedDraft(
     links: [],
     drawingBounds: b,
     continuedCaption: caption,
+    continuedCaptionY: captionY,
+    rootedCaptionInk: caption ? [textInk(caption, b.x, captionY, 2.5)] : [],
     ...(ink ? { rootedInk: ink } : {}),
     references: references(p, x, y, w, h, b, scale),
     note: `Layout: ${profile ?? "standard"}. Drawing scale: ${n(scale)} mm/unit. Continuations: reference / destination sheet.`,
     content:
       `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${n(w * scale)}" height="${n(h * scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${inner}</svg>` +
-      (caption ? text(b.x, b.y - 9, caption, 2.5) : ""),
+      (caption ? text(b.x, captionY, caption, 2.5) : ""),
   };
 }

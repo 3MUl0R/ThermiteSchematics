@@ -1998,10 +1998,6 @@ const module: FactModule = {
   ],
   unexecuted: new Map([
     [
-      "Rooted views are bounded: unequal parallel paths and authored conductors at drawn terminals can be omitted without markers.",
-      "Disclosure of a known bounded-selection limit (#84), not an executed guide claim. A separate test-only DOL witness records the current reproduction omissions for #84b to update.",
-    ],
-    [
       "Audit with circuit/wiring views and packet coverage.",
       "Review advice; packet coverage tests pin the explicit circuit/wiring scope.",
     ],

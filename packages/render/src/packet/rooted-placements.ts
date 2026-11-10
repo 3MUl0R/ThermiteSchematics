@@ -60,6 +60,7 @@ async function tryPlacement(
     profile,
     false,
     false,
+    run.referenceOffset ?? 0,
   );
   if (candidates.ok) {
     run.candidates.push(...candidates.value);

@@ -1,4 +1,5 @@
 import type { PreparedSchematicDrawing } from "../renderer.js";
+import type { RenderFailure } from "../types.js";
 import { drawingContinuations } from "./continuations.js";
 import { protectedDrawingIntervals } from "./rooted-geometry.js";
 import { cuts } from "./rooted-cuts.js";
@@ -17,10 +18,11 @@ export function gridLinks(
   b: DrawingBounds,
   scale: number,
   drafts?: Draft[],
+  onFailure?: (error: RenderFailure) => void,
 ) {
   const count = (grid.xs.length - 1) * (grid.ys.length - 1);
   if (count > MAX_GRID_SHEETS) return false;
-  return drawingContinuations(
+  const result = drawingContinuations(
     drafts ??
       Array.from({ length: count }, () => ({ links: [] }) as unknown as Draft),
     p.graph,
@@ -29,7 +31,9 @@ export function gridLinks(
     grid.ys,
     b,
     scale,
-  ).ok;
+  );
+  if (!result.ok) onFailure?.(result.error);
+  return result.ok;
 }
 
 /** Keep the successful greedy plan. On failure score complete safe grids. */
@@ -39,6 +43,8 @@ export function rootedGrids(
   scale: number,
   fallback = true,
   explore = false,
+  onFailure?: (error: RenderFailure) => void,
+  diagnoseIdentity = false,
 ): RootedGrid[] {
   const w = p.layout.width + 2 * OUTER_SVG_PADDING,
     h = p.layout.height + 2 * OUTER_SVG_PADDING;
@@ -48,24 +54,22 @@ export function rootedGrids(
   );
   const xs = cuts(w, b.w / scale, [...protectedX]),
     ys = cuts(h, b.h / scale, [...protectedY]);
-  const fast =
-    xs && ys && gridLinks(p, { xs, ys }, b, scale)
-      ? [{ xs, ys, greedy: true }]
-      : [];
+  const fits = gridPredicate(p, b, scale, onFailure, diagnoseIdentity);
+  const fast = xs && ys && fits({ xs, ys }) ? [{ xs, ys, greedy: true }] : [];
   if (fast.length && !explore) return fast;
   if (!fallback) return [];
   const xp = safeAxisPlans(w, b.w / scale, protectedX, (x) =>
-    gridLinks(p, { xs: [0, x, w], ys: [0, h] }, b, scale),
+    fits({ xs: [0, x, w], ys: [0, h] }, true),
   );
   const grids: RootedGrid[] = [...fast];
   for (const x of xp) {
     const yp = safeAxisPlans(h, b.h / scale, protectedY, (y) =>
-      gridLinks(p, { xs: x, ys: [0, y, h] }, b, scale),
+      fits({ xs: x, ys: [0, y, h] }, true),
     );
     for (const y of yp) {
       const grid = { xs: x, ys: y };
       if (
-        gridLinks(p, grid, b, scale) &&
+        fits(grid) &&
         !grids.some(
           (g) =>
             JSON.stringify([g.xs, g.ys]) === JSON.stringify([grid.xs, grid.ys]),
@@ -76,4 +80,23 @@ export function rootedGrids(
     }
   }
   return grids;
+}
+
+function gridPredicate(
+  p: PreparedSchematicDrawing,
+  b: DrawingBounds,
+  scale: number,
+  onFailure: ((error: RenderFailure) => void) | undefined,
+  diagnoseIdentity: boolean,
+) {
+  return (grid: RootedGrid, axis = false) => {
+    let identity = false;
+    const ok = gridLinks(p, grid, b, scale, undefined, (error) => {
+      identity = error.code === "R006" && !!error.details?.continuationIdentity;
+      if (!axis) onFailure?.(error);
+    });
+    // Diagnostic replay can pass an identity problem through axis pruning, but
+    // a complete grid still fails. Never report an incomplete axis probe.
+    return ok || (diagnoseIdentity && axis && identity);
+  };
 }

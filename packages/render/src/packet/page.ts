@@ -1,3 +1,4 @@
+import { continuationLabelSvg } from "./continuation-label.js";
 import { circuitTextLines } from "../circuit.js";
 import {
   rootedNoticeLines,
@@ -177,28 +178,15 @@ export function frame(
     );
   for (const link of draft.links) {
     out.push(
-      `<a href="#sheet-${link.to}" aria-label="Continue on sheet ${link.to}">`,
+      `<a href="#sheet-${link.to}" data-continuation-id="${attr(link.id)}" data-continuation-end="${link.end}" data-conductor-id="${attr(link.conductor)}" aria-label="${attr(`Continue ${link.conductor} on sheet ${link.to}.${link.toZone}`)}">`,
     );
-    const label = `${link.id} / ${String(link.to).padStart(2, "0")}`;
-    if (link.side === "left" || link.side === "right") {
-      const sign = link.side === "left" ? -1 : 1;
-      out.push(
-        line(link.x, link.y, link.x + sign * 2, link.y),
-        text(
-          link.x + sign * 3,
-          link.y + 0.8,
-          label,
-          2.2,
-          sign < 0 ? "end" : "start",
-        ),
-      );
-    } else {
-      const sign = link.side === "top" ? -1 : 1;
-      out.push(
-        line(link.x, link.y, link.x, link.y + sign * 2),
-        text(link.x, link.y + sign * 4, label, 2.2, "middle"),
-      );
-    }
+    const sign = link.side === "left" || link.side === "top" ? -1 : 1;
+    out.push(
+      link.side === "left" || link.side === "right"
+        ? line(link.x, link.y, link.x + sign * 2, link.y)
+        : line(link.x, link.y, link.x, link.y + sign * 2),
+    );
+    out.push(continuationLabelSvg(link));
     out.push("</a>");
   }
   out.push(

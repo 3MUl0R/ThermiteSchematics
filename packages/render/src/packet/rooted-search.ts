@@ -22,6 +22,7 @@ export const MAX_PLACEMENT_LAYOUTS =
   INITIAL_PLACEMENT_LAYOUTS + MAX_MIXED_LAYOUTS;
 type Profile = "compact" | "dense" | undefined;
 export interface RootedSearch {
+  referenceOffset?: number;
   candidates: RootedCandidate[];
   native: RootedCandidate[];
   errors: RenderFailure[];
@@ -44,7 +45,9 @@ async function initial(
     ir,
     request,
     presentation,
-    profile ? { spacingProfile: profile } : {},
+    profile
+      ? { spacingProfile: profile, packetContinuations: true }
+      : { packetContinuations: true },
   );
   if (!result.ok) {
     run.errors.push(result.error);
@@ -63,7 +66,8 @@ async function initial(
     return;
   }
   run.prepared.push({ p, profile });
-  const actual = buildRootedCandidates(ir, p, page, profile);
+  const build = profileBuilder(ir, page, profile, run.referenceOffset ?? 0);
+  const actual = build(p);
   if (actual.ok) run.candidates.push(...actual.value);
   else run.errors.push(actual.error);
   const native = await nativeDrawing(p);
@@ -77,7 +81,7 @@ async function initial(
     run.errors.push(error);
     return;
   }
-  const baseline = buildRootedCandidates(ir, native.value, page, profile, true);
+  const baseline = build(native.value, true);
   if (baseline.ok) {
     run.native.push(...baseline.value);
     if (
@@ -85,7 +89,7 @@ async function initial(
       Math.min(...actual.value.map((c) => c.drafts.length)) >
         Math.min(...baseline.value.map((c) => c.drafts.length))
     ) {
-      const repacked = buildRootedCandidates(ir, p, page, profile, false, true);
+      const repacked = build(p, false, true);
       if (repacked.ok) run.candidates.push(...repacked.value);
     }
   } else {
@@ -121,8 +125,10 @@ export async function searchRootedCandidates(
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
   compact: boolean,
+  referenceOffset = 0,
 ) {
   const run: RootedSearch = {
+    referenceOffset,
     candidates: [],
     native: [],
     errors: [],
@@ -143,4 +149,14 @@ export async function searchRootedCandidates(
 
   await placements(ir, request, presentation, page, run);
   return run;
+}
+
+function profileBuilder(
+  ir: Readonly<ElectricalIr>,
+  page: PaperPage,
+  profile: Profile,
+  offset: number,
+) {
+  return (p: PreparedSchematicDrawing, native = false, explore = false) =>
+    buildRootedCandidates(ir, p, page, profile, native, explore, offset);
 }

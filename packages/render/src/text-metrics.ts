@@ -51,7 +51,7 @@ if (offset !== data.length) throw Error("Invalid committed text metrics.");
 // The bundled faces cover Latin/Greek/Cyrillic and mathematical text. Keep
 // their combining marks and joiner sequences together without host locale/ICU
 // segmentation (render output must be portable across supported platforms).
-function textClusters(value: string): string[] {
+export function textClusters(value: string): string[] {
   const clusters: string[] = [];
   for (const char of value) {
     if (

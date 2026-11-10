@@ -1,4 +1,5 @@
 import { cableRowLabels } from "./cable-row.js";
+import { cableRowPlan } from "./cable-row-plan.js";
 import { required } from "../presentation/util.js";
 import type {
   CompiledProjectPresentation,
@@ -17,7 +18,7 @@ import { normalizeSchematicView } from "../view-spec.js";
 import type { Draft, PaperPage, SheetReference } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds, zone } from "./page.js";
-import { n, text, line, wrap } from "./svg.js";
+import { n, text, line } from "./svg.js";
 import {
   cableEndpointCards,
   cableCardContext,
@@ -144,21 +145,19 @@ export async function cableDrafts(
     const core = schedule.cores[i]!;
     const leftEnd = core.endpoints[0],
       rightEnd = core.endpoints[1];
-    const a =
-      leftEnd === null
-        ? [core.status === "unassigned" ? "? UNASSIGNED" : "X UNTERMINATED"]
-        : wrap(leftEnd.display, maxEnd);
-    const z =
-      rightEnd === null
-        ? [core.status === "unassigned" ? "? UNASSIGNED" : "X UNTERMINATED"]
-        : wrap(rightEnd.display, maxEnd);
-    const center = `${core.id} / ${core.color}${core.size ? ` / ${core.size}` : ""}`;
-    const centerRows = wrap(center, Math.floor((jacketR - jacketL - 6) / 1.5));
+    const planned = cableRowPlan(core, schedule.designation, {
+      left,
+      right,
+      jacketL,
+      jacketR,
+    });
+    if (!planned.ok) return planned;
+    const { a, z, centerRows, usage, midOffset, extraHeight } = planned.value;
     const cards = required(
       annotations.value[i],
       "Missing cable endpoint cards",
     );
-    const height = cableRowHeight(cards, [a, z, centerRows]);
+    const height = cableRowHeight(cards, [a, z, centerRows], extraHeight);
     if (y + height + 24 > b.y + b.h) {
       if (i === first)
         return failure(
@@ -169,7 +168,7 @@ export async function cableDrafts(
       first = i;
       header();
     }
-    const midY = y + Math.max(a.length, z.length, centerRows.length) * 4 + 1;
+    const midY = y + midOffset;
     const dashed = core.usage === "spare" || core.status === "unassigned";
     content.push(
       `<g data-cable-uid="${attr(schedule.cableUid)}" data-conductor-id="${attr(core.id)}" data-usage="${core.usage}" data-status="${core.status}">`,
@@ -182,7 +181,7 @@ export async function cableDrafts(
       ),
     );
     content.push(
-      ...cableRowLabels(a, z, centerRows, core.usage, { left, right, y, midY }),
+      ...cableRowLabels(a, z, centerRows, usage, { left, right, y, midY }),
     );
     for (const [end, x] of [
       [leftEnd, left + 1],
@@ -212,7 +211,7 @@ export async function cableDrafts(
           offViewCardSvg(
             card,
             index === 0 ? left + 2 : right - card.width * 0.25 - 2,
-            midY + 5,
+            midY + 5 + usage.extraHeight,
             0.25,
           ),
         );

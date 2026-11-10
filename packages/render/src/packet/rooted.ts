@@ -20,6 +20,7 @@ export async function drawingDrafts(
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
   mode: "standard" | "compact" = "standard",
+  referenceOffset = 0,
 ): Promise<RenderOutcome<Draft[]>> {
   const run = await searchRootedCandidates(
     ir,
@@ -27,6 +28,7 @@ export async function drawingDrafts(
     presentation,
     page,
     mode === "compact",
+    referenceOffset,
   );
   const winner = rootedWinner(run, page),
     native = nativeWinner(run);

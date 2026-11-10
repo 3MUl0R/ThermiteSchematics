@@ -20,7 +20,8 @@ export function candidateUtilisation(
           return clipped ? [clipped] : [];
         }),
       );
-      return ink ? [(ink.w * ink.h) / (bounds.w * bounds.h)] : [];
+      const nominal = d.rootedScoreBounds ?? bounds;
+      return ink ? [(ink.w * ink.h) / (nominal.w * nominal.h)] : [];
     })
     .sort((a, b) => a - b);
   const n = values.length;

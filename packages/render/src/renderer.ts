@@ -40,6 +40,7 @@ import { traceRootRuleForType } from "./intent-rules.js";
 import { offViewLayoutFailure } from "./off-view/presentation.js";
 
 export interface SchematicRendererDependencies {
+  readonly packetContinuations?: boolean;
   readonly mappings?: readonly DeviceTypeSymbolMapping[];
   readonly catalog?: readonly SymbolDefinition[];
   readonly queryEngineFactory?: (ir: Readonly<ElectricalIr>) => QueryEngine;
@@ -161,6 +162,7 @@ export async function prepareSchematicDrawing(
 
   let graph = presented.value.graph;
   const layoutOptions = {
+    ...(dependencies.packetContinuations ? { packetContinuations: true } : {}),
     catalog,
     selected: selected.value,
     ...(dependencies.spacingProfile

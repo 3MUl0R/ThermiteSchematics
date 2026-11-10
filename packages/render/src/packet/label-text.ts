@@ -1,0 +1,37 @@
+import { required } from "../presentation/util.js";
+import { printableTextMetrics } from "../symbols/printable-font.js";
+import { textClusters } from "../text-metrics.js";
+
+const cache = new Map<string, ReturnType<typeof printableTextMetrics>>();
+
+/** Literal source characters, using the same pinned faces as SVG and PDF. */
+export function labelMetrics(value: string, size = 2.5) {
+  const key = JSON.stringify([size, value]);
+  let m = cache.get(key);
+  if (!m) {
+    m = Object.freeze(printableTextMetrics(value, size, false, true));
+    if (cache.size >= 8192)
+      cache.delete(required(cache.keys().next().value, "Missing cache key"));
+    cache.set(key, m);
+  }
+  return {
+    ...m,
+    width: Math.max(m.advance, m.right) - Math.min(0, m.left),
+  };
+}
+
+/** No inserted hyphens, discarded spaces or split combining characters. */
+export function labelRows(value: string, width: number, size = 2.5): string[] {
+  const chars = textClusters(value);
+  const rows: string[] = [];
+  let row = "";
+  for (const char of chars) {
+    if (row && labelMetrics(row + char, size).width > width + 0.001) {
+      rows.push(row);
+      row = "";
+    }
+    row += char;
+  }
+  if (row || !rows.length) rows.push(row);
+  return rows;
+}
