@@ -1,3 +1,11 @@
+import {
+  printedConductor,
+  connectorRows,
+  identityMatches,
+  referenceRow,
+  continuationPdfRows,
+  requirePdfFont,
+} from "./continuation-labels.mjs";
 import { straightPath } from "./path.mjs";
 export { utilisation } from "./utilisation.mjs";
 // Browser-free predicates. Inputs are measured DOM geometry, PDF text/raster
@@ -24,6 +32,7 @@ export function distance(p, a, b) {
 }
 const issue = (kind, item, measurement = {}) => ({
   element: item.element ?? "sheet",
+  ...(item.locatorElement ? { locatorElement: item.locatorElement } : {}),
   ...(item.medium ? { medium: item.medium } : {}),
   ...(item.boxKind ? { boxKind: item.boxKind } : {}),
   designation: item.designation ?? item.text ?? item.deviceUid ?? "sheet",
@@ -509,13 +518,14 @@ export function zones(g, refs) {
   }
   return out;
 }
-export function continuations(sheet, packet, g, geometries = []) {
+export function continuations(sheet, packet, g, geometries = [], ir) {
   const out = [],
     used = new Map();
   for (const c of sheet.continuations ?? []) {
     const target = packet.sheets.find((s) => s.number === c.toSheet),
       back = target?.continuations?.some(
         (r) =>
+          r !== c &&
           r.id === c.id &&
           r.toSheet === sheet.number &&
           r.conductor === c.conductor &&
@@ -523,22 +533,36 @@ export function continuations(sheet, packet, g, geometries = []) {
       );
     const occurrence = used.get(c.id) ?? 0;
     used.set(c.id, occurrence + 1);
-    const printed = g.texts.filter((t) => t.text.startsWith(c.id + " /"))[
-      occurrence
-    ];
-    const destination = printed?.text.match(/\/\s*(\d+)[. :/]([A-D][1-6])/);
+    const { source, rows } = connectorRows(g, c, occurrence),
+      reference = referenceRow(rows, c.id),
+      printed = reference ?? rows[0];
+    const refusal = rows.find((t) => t.continuationError);
+    if (refusal) {
+      out.push(
+        issue("continuation-measurement-refused", refusal, {
+          id: c.id,
+          toSheet: c.toSheet,
+          reason: refusal.continuationError,
+        }),
+      );
+      continue;
+    }
+    const destination = reference?.text.match(/\/\s*(\d+)[. :/]([A-D][1-6])/);
     const missing = [];
     if (!back) missing.push("reciprocal peer");
+    if (!reference) missing.push("printed connector reference");
     if (!destination || Number(destination[1]) !== c.toSheet)
       missing.push("printed sheet.zone");
     const targetGeometry = geometries[packet.sheets.indexOf(target)];
-    const anchor = targetGeometry?.connectors?.filter(
-      (p) => p.id === c.id && p.toSheet === sheet.number,
-    )[occurrence]?.anchor;
+    const peers =
+      targetGeometry?.connectors?.filter(
+        (p) => p !== source && p.id === c.id && p.toSheet === sheet.number,
+      ) ?? [];
+    const anchor = peers.length === 1 ? peers[0].anchor : undefined;
     const expectedZone = anchor && zoneAt(targetGeometry, anchor);
-    if (destination && expectedZone && destination[2] !== expectedZone)
+    if (destination && (!expectedZone || destination[2] !== expectedZone))
       missing.push("printed destination zone");
-    if (!printed?.text.includes(c.conductor))
+    if (!identityMatches(rows, c, printedConductor(c, ir)))
       missing.push("conductor label on connector");
     if (missing.length)
       out.push(
@@ -845,10 +869,24 @@ export function requireReportCells(g) {
 // xMm/yMm or zone estimate participates in this calculation.
 export function zoneAt(g, p) {
   const top = g.texts
-    .filter((t) => /^[1-6]$/.test(t.text) && t.anchor && t.bbox.y < 30)
+    .filter(
+      (t) =>
+        !t.continuation &&
+        !t.continuationLink &&
+        /^[1-6]$/.test(t.text) &&
+        t.anchor &&
+        t.bbox.y < 30,
+    )
     .sort((a, b) => +a.text - +b.text);
   const left = g.texts
-    .filter((t) => /^[A-D]$/.test(t.text) && t.anchor && t.bbox.x < 20)
+    .filter(
+      (t) =>
+        !t.continuation &&
+        !t.continuationLink &&
+        /^[A-D]$/.test(t.text) &&
+        t.anchor &&
+        t.bbox.x < 20,
+    )
     .sort((a, b) => (a.text < b.text ? -1 : 1));
   if (top.length !== 6 || left.length !== 4) return null;
   const dx = (top[5].anchor.x - top[0].anchor.x) / 5,
@@ -1324,13 +1362,26 @@ export function clipRoute(points, box) {
 }
 
 export function pdfGeometryTexts(svg, pdf) {
-  const used = new Set();
-  return pdf.flatMap((p) => {
+  const used = new Set(),
+    usedPdf = new Set();
+  const multiline = new Set(
+    svg
+      .filter(
+        (t) =>
+          t.continuationLink &&
+          !t.continuationError &&
+          svg.filter((q) => q.continuationLink === t.continuationLink).length >
+            1,
+      )
+      .map((t) => t.element),
+  );
+  const measured = pdf.flatMap((p) => {
     const candidates = svg
       .filter(
         (t) =>
           t.painted !== false &&
           !used.has(t.element) &&
+          !multiline.has(t.element) &&
           t.text.replace(/\s+/g, " ") === p.text.replace(/\s+/g, " ") &&
           Math.hypot(t.bbox.x - p.bbox.x, t.bbox.y - p.bbox.y) <=
             2 * Math.max(t.fontSize ?? 2.5, p.fontSize ?? 2.5),
@@ -1342,7 +1393,9 @@ export function pdfGeometryTexts(svg, pdf) {
       );
     const t = candidates[0];
     if (!t) return [];
+    if (t.continuationLink && !t.continuationError) requirePdfFont(p);
     used.add(t.element);
+    usedPdf.add(p);
     return [
       {
         ...t,
@@ -1358,4 +1411,17 @@ export function pdfGeometryTexts(svg, pdf) {
       },
     ];
   });
+  const rows = svg.filter(
+    (t) =>
+      t.continuationLink &&
+      !t.continuationError &&
+      t.painted !== false &&
+      !used.has(t.element),
+  );
+  return measured.concat(
+    continuationPdfRows(
+      rows,
+      pdf.filter((p) => !usedPdf.has(p)),
+    ),
+  );
 }

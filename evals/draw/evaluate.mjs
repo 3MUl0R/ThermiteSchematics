@@ -1,4 +1,5 @@
 import { classifyTextGeometry } from "./text-classification.mjs";
+import { continuationMediaIssues } from "./continuation-labels.mjs";
 import * as checks from "./checks.mjs";
 import { identifierFindings } from "./identifier-checks.mjs";
 import { identifierTable } from "./identifier-tables.mjs";
@@ -122,10 +123,24 @@ export function evaluateSheet(
     }),
   );
   out.push(
-    obs("DQ-08", checks.continuations(s, packet, g, geometries), {
-      scope:
-        "Reciprocal exported continuations and printed sheet.zone/conductor. Conductor order needs an exported ordered connector/port association.",
-    }),
+    obs(
+      "DQ-08",
+      [
+        ...checks.continuations(s, packet, g, geometries, ir),
+        ...(g.htmlTexts
+          ? continuationMediaIssues(g.texts, g.htmlTexts, "html")
+          : []),
+        ...continuationMediaIssues(
+          g.texts,
+          checks.pdfGeometryTexts(g.texts, pdf),
+          "pdf",
+        ),
+      ],
+      {
+        scope:
+          "Reciprocal exported continuations and printed sheet.zone/conductor. Conductor order needs an exported ordered connector/port association.",
+      },
+    ),
   );
   if (s.continuations?.length)
     out.push(

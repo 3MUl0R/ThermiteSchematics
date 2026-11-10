@@ -97,6 +97,7 @@ export async function pdfText(page, families = [], fontCaps = {}) {
           ? "PDF FontDescriptor /CapHeight for " + face
           : undefined,
         text: x.str.trim(),
+        renderedString: x.str,
         bbox: { x: t[4], y: t[5] - size, w: (x.width * 25.4) / 72, h: size },
         font:
           face?.replace(/-(Regular|Bold|Italic|BoldItalic)$/, "") ??

@@ -172,7 +172,7 @@ export function identities(
   ir = {},
 ) {
   const names = sourceNames(ir),
-    meta = index.get(finding.element);
+    meta = index.get(finding.locatorElement ?? finding.element);
   let locator = meta?.locator,
     source = meta?.source ?? false;
   const sourceElement = names.get(finding.element);
