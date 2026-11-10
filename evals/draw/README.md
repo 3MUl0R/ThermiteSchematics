@@ -369,8 +369,10 @@ Unlisted marker fields remain unchanged. `pin.mjs` remains a read-only initial/
 legacy proposal generator; it is not the mixed-update path. `update-markers.mjs` is deprecated: it lacks checker-bundle bindings and reviewed
 receipts. Use re-pin for current checkpoints, including retire-only updates.
 
-For each re-pin, make one full strict report on dev, then
-reconcile **one decisions file per merged PR**. Do not reuse another change's
+For each re-pin, make one full strict report on dev. A consolidated re-pin may
+use **one decisions file keyed to the dominant change**, with co-cause notes for
+shared entries; merged PRs with no surviving delta need no file. Otherwise,
+reconcile one decisions file per merged PR. Do not reuse another change's
 previously reviewed population after its registry or checker binding changes. Use that same target
 report/registry/checker-bundle/seal/version binding in every file. Individual lane audits remain
 review evidence; old lane report hashes cannot be copied into the consolidated
