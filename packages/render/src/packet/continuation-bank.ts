@@ -5,6 +5,7 @@ import type { DrawingBounds } from "./types.js";
 import { reserveContinuationSources } from "./continuation-source.js";
 import { continuationHeaderWidth } from "./continuation-label.js";
 import { labelMetrics, labelRows } from "./label-text.js";
+import { identityTokens } from "./label-wrap.js";
 
 export interface ContinuationBank {
   width: number;
@@ -48,10 +49,19 @@ export function continuationBanks(
   const headerWidth = continuationHeaderWidth(maximumSerial);
   const sources = reserveContinuationSources(p.graph);
   const maxBody = Math.max(headerWidth, ...sources.map((s) => s.width));
+  const tokenWidth = sources.reduce(
+    (width, source) =>
+      identityTokens(source.conductor).reduce(
+        (width, token) => Math.max(width, labelMetrics(token).width),
+        width,
+      ),
+    headerWidth,
+  );
   const plans: ContinuationBank[] = [];
   for (const [width, single] of [
     [maxBody, false],
     [headerWidth, false],
+    [tokenWidth, false],
     [maxBody, true],
   ] as const) {
     const { maxW, maxH } = bankExtent(sources, width, headerWidth, single);

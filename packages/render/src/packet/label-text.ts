@@ -1,6 +1,6 @@
 import { required } from "../presentation/util.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
-import { textClusters } from "../text-metrics.js";
+import { wrapIdentity } from "./label-wrap.js";
 
 const cache = new Map<string, ReturnType<typeof printableTextMetrics>>();
 
@@ -22,16 +22,5 @@ export function labelMetrics(value: string, size = 2.5) {
 
 /** No inserted hyphens, discarded spaces or split combining characters. */
 export function labelRows(value: string, width: number, size = 2.5): string[] {
-  const chars = textClusters(value);
-  const rows: string[] = [];
-  let row = "";
-  for (const char of chars) {
-    if (row && labelMetrics(row + char, size).width > width + 0.001) {
-      rows.push(row);
-      row = "";
-    }
-    row += char;
-  }
-  if (row || !rows.length) rows.push(row);
-  return rows;
+  return wrapIdentity(value, width, (text) => labelMetrics(text, size).width);
 }

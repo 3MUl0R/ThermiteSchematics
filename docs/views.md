@@ -168,6 +168,11 @@ Continuation metadata retains `conductor` as that printed identity and adds
 Every continuation row and cable usage label prints at least 2.5 mm em.
 Measured label banks reserve natural text with 3.5 mm row pitch and 1 mm clear
 ink. Complete IDs may wrap; they never clip, abbreviate, compress or shrink.
+Wrapping prefers authored hyphens, dots, slashes and spaces, including UUID group
+boundaries. Every separator and space is retained. An oversized segment splits
+only between grapheme clusters, balancing the rows to avoid one- or two-character
+orphans where a legal alternative fits. A measured longest-token bank is also
+considered; a wider bank is accepted only through the existing sheet-fit checks.
 Within a bank, bounded text placement preserves connector order and leaves
 conductor routes and anchors intact. Only conductors crossed by a candidate cut
 need a printable continuation identity. If no candidate grid succeeds, R006 names

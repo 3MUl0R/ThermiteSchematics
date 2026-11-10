@@ -78,7 +78,19 @@ with a space or row break. Source text is
 measured in pinned faces before ELK; discovery cuts determine the crossed sides
 and serial envelope, then complete banks are reserved before selecting the paper
 layout. Natural 2.5 mm text uses 3.5 mm pitch and 1 mm ink clearance. Bounded
-packing moves text by at most one row pitch; anchors, conductor paths and their
+identity wrapping prefers literal `-`, `.`, `/` and space separators, including
+UUID groups, without discarding doubled or trailing spaces. Oversized segments
+use balanced grapheme splits rather than one- or two-character orphan rows when
+a legal alternative fits. The formatter considers at most 64 breaks per state,
+memoizes up to 8192 widths, and stores suffix backpointers. At a fitting 64-cluster
+prefix it tries deterministic greedy rows once (at most 32 binary calls to the
+memoized width function and 64 separator checks per row, plus five balancing
+width calls); if orphans remain, the capped search continues. These limits bound
+measurement calls, not total string-processing work: a probe can join and measure
+the remaining input. A fitting whole
+identity takes one width measurement. The bank planner compares at most four
+deduplicated forms, including the measured longest literal token.
+Bounded packing moves text by at most one row pitch; anchors, conductor paths and their
 order stay intact. Caption, notice, bank and card ink are checked after folding.
 Final packet assembly resolves the reciprocal endpoint's actual `sheet.zone`,
 including same-sheet folds and omitted cells. Metadata retains the printed
