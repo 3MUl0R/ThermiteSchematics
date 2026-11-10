@@ -136,6 +136,10 @@ export interface Link {
   side: "left" | "right" | "top" | "bottom";
 }
 export interface Draft {
+  rootedSections?: {
+    viewport: import("./rooted-ink.js").InkBox;
+    continuedLocationIds: readonly string[];
+  }[];
   rootedContent?: import("./rooted-content.js").RootedContent;
   continuedCaption?: string;
   rootedShapes?: import("./rooted-ink.js").InkBox[];

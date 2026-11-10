@@ -177,8 +177,15 @@ describe("packet reference ownership", () => {
       })),
     };
     const sources = [draft(), draft(), draft()];
-    for (const [index, source] of sources.entries())
+    for (const [index, source] of sources.entries()) {
       source.content = `<svg height="200" viewBox="0 0 100 200"><g id="body-${index}"/></svg>`;
+      source.rootedSections = [
+        {
+          viewport: { x: index * 100 - 20, y: -20, w: 100, h: 200 },
+          continuedLocationIds: [`location-${index}`],
+        },
+      ];
+    }
     const link = (id: string, to: number) => ({
       id,
       to,
@@ -201,6 +208,24 @@ describe("packet reference ownership", () => {
     );
     // The first two short sections share sheet 1; the tall third section owns sheet 2.
     expect(folded).toHaveLength(2);
+    expect(folded.map((d) => d.rootedSections)).toEqual([
+      [
+        {
+          viewport: { x: -20, y: -12, w: 100, h: 34 },
+          continuedLocationIds: ["location-0"],
+        },
+        {
+          viewport: { x: 80, y: -12, w: 100, h: 34 },
+          continuedLocationIds: ["location-1"],
+        },
+      ],
+      [
+        {
+          viewport: { x: 180, y: -12, w: 100, h: 94 },
+          continuedLocationIds: ["location-2"],
+        },
+      ],
+    ]);
     expect(folded.map((d) => d.links.map((l) => [l.id, l.to]))).toEqual([
       [
         ["C001", 2],
