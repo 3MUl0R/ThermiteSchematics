@@ -20,6 +20,8 @@ import type { SymbolDefinition } from "../src/symbols/types.js";
 import type {
   NormalizedSchematicLayout,
   PresentationGraph,
+  PresentationNode,
+  PresentationLabel,
   SchematicFlow,
   SchematicViewFamily,
 } from "../src/types.js";
@@ -212,6 +214,38 @@ async function rawLayout(graph: PresentationGraph): Promise<{
 
 function allNodes(root: ElkNode): ElkNode[] {
   return (root.children ?? []).flatMap((child) => [child, ...allNodes(child)]);
+}
+
+function reservedHeaderPosition(
+  leaf: Exclude<PresentationNode, { kind: "junction" }>,
+  header: PresentationLabel,
+  input: ElkNode,
+  flow: SchematicFlow,
+) {
+  if (
+    flow === "top-to-bottom" &&
+    leaf.kind === "symbol" &&
+    header.role === "function" &&
+    ["NO", "NC"].includes(header.printableText ?? "")
+  ) {
+    const slot = required(
+      required(allNodes(input).find((n) => n.id === leaf.id)).labels?.find(
+        (l) => l.id === header.id,
+      ),
+    );
+    return { x: required(slot.x), y: required(slot.y) };
+  }
+  return {
+    x:
+      flow === "top-to-bottom"
+        ? (leaf.contentBox?.x ?? 0) + (leaf.kind === "rail" ? 5 : 8)
+        : quantizeLayoutNumber(
+            (leaf.contentBox?.x ?? 0) +
+              ((leaf.contentBox?.width ?? leaf.width) - header.width) / 2,
+            `${header.id} frozen x`,
+          ),
+    y: (leaf.contentBox?.y ?? 0) + (leaf.kind === "rail" ? 5 : 4),
+  };
 }
 
 function rawLeafLabelPositions(
@@ -642,19 +676,12 @@ describe("real pinned ELK layouts", () => {
           );
           const raw = required(rawLabels.get(header.id));
           expect(raw.nodeId).toBe(leaf.id);
+          const expected = reservedHeaderPosition(leaf, header, input, flow);
           expect(quantizeLayoutNumber(raw.localX, `${header.id} raw x`)).toBe(
-            flow === "top-to-bottom"
-              ? leaf.kind === "rail"
-                ? (leaf.contentBox?.x ?? 0) + 5
-                : (leaf.contentBox?.x ?? 0) + 8
-              : quantizeLayoutNumber(
-                  (leaf.contentBox?.x ?? 0) +
-                    ((leaf.contentBox?.width ?? leaf.width) - header.width) / 2,
-                  `${header.id} frozen x`,
-                ),
+            expected.x,
           );
           expect(quantizeLayoutNumber(raw.localY, `${header.id} raw y`)).toBe(
-            (leaf.contentBox?.y ?? 0) + (leaf.kind === "rail" ? 5 : 4),
+            expected.y,
           );
           const copied = required(
             normalized.value.labels.find(({ id }) => id === header.id),

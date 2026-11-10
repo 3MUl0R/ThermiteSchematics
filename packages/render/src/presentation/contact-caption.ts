@@ -1,0 +1,46 @@
+import type { PresentationLabel, SymbolPresentationNode } from "../types.js";
+import { printableTextMetrics } from "../symbols/printable-font.js";
+import { CAPTION_CLEARANCE_MM } from "../symbols/caption-ink.js";
+
+export function verticalContactCaption(
+  orientation: string,
+  label: PresentationLabel,
+): boolean {
+  return (
+    orientation === "top-to-bottom" &&
+    label.role === "function" &&
+    ["NO", "NC"].includes(label.printableText ?? "")
+  );
+}
+
+export function contactCaptionWidth(label: PresentationLabel): number {
+  return (
+    Math.ceil(
+      (printableTextMetrics(label.printableText ?? label.text, 10).advance +
+        6) *
+        1000,
+    ) / 1000
+  );
+}
+
+/** Native 10-unit type at 0.25 mm/unit. The full former leaf lane remains
+ * reserved; only the caption's measured slot moves beside its own mark. */
+export function contactCaptionRegion(
+  node: Pick<
+    SymbolPresentationNode,
+    "symbolId" | "orientation" | "primitiveOrigin" | "symbolSize" | "contentBox"
+  >,
+  label: PresentationLabel,
+) {
+  if (!verticalContactCaption(node.orientation, label)) return undefined;
+  const m = printableTextMetrics(label.printableText ?? label.text, 10);
+  const gap = CAPTION_CLEARANCE_MM / 0.25 + 1.5 / 2 + 0.01;
+  const x = node.primitiveOrigin.x - (node.contentBox?.x ?? 0);
+  const y = node.primitiveOrigin.y - (node.contentBox?.y ?? 0);
+  return {
+    x: Number((x - gap - m.right - 3).toFixed(3)),
+    y: Number((y + node.symbolSize.height / 2 - label.height / 2).toFixed(3)),
+    width: label.width,
+    height: label.height,
+  };
+}

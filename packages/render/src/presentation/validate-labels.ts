@@ -1,3 +1,7 @@
+import {
+  contactCaptionWidth,
+  verticalContactCaption,
+} from "./contact-caption.js";
 import type {
   PresentationLabel,
   PresentationGraph,
@@ -11,17 +15,26 @@ import { summarizePresentationGraph } from "./summary.js";
 import { svgSemanticId } from "../svg/escape.js";
 import { validateOffViewLabel } from "../off-view/validate.js";
 
-function validateLabel(label: PresentationLabel): void {
+function validateLabel(
+  label: PresentationLabel,
+  graph: Readonly<PresentationGraph>,
+): void {
   if (label.role === "off-view") {
     validateOffViewLabel(label);
     return;
   }
+  const owner = graph.nodes.find((n) => n.id === label.ownerId);
+  const contact =
+    owner?.kind === "symbol" &&
+    verticalContactCaption(owner.orientation, label);
   invariant(
     label.width ===
-      Math.max(
-        labelWidth(label.text),
-        labelWidth(label.printableText ?? label.text),
-      ),
+      (contact
+        ? contactCaptionWidth(label)
+        : Math.max(
+            labelWidth(label.text),
+            labelWidth(label.printableText ?? label.text),
+          )),
     `${label.id} width`,
   );
   invariant(label.height === 14, `${label.id} height`);
@@ -91,7 +104,7 @@ export function validateLabelsAndMetadata(
   for (const label of labels) {
     invariant(!labelIds.has(label.id), `${label.id} unique label`);
     labelIds.add(label.id);
-    validateLabel(label);
+    validateLabel(label, graph);
   }
   const sortedMetadata = [...graph.metadataTextSources].sort(
     compareRenderTextSource,

@@ -1,3 +1,7 @@
+import {
+  contactCaptionWidth,
+  verticalContactCaption,
+} from "./contact-caption.js";
 import type {
   PresentationContext,
   SymbolRepresentation,
@@ -86,7 +90,7 @@ function buildSymbolNode(
     orientation,
     context,
   );
-  const geometry = leafGeometry(symbol, orientation, nodeLabel);
+  const geometry = leafGeometry(symbol, orientation, nodeLabel, labels[0]);
   const attachments = buildSymbolAttachments(context, representation, ports);
   const boundaryConstraint = representationBoundaryConstraint(
     representation,
@@ -184,7 +188,10 @@ function buildSymbolPorts(
   const portDefinitionById = new Map(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
-  const captionWidth = Math.max(nodeLabel.width, labelWidth(printableText));
+  const printedLabel = { ...nodeLabel, printableText };
+  const captionWidth = verticalContactCaption(orientation, printedLabel)
+    ? contactCaptionWidth(printedLabel)
+    : Math.max(nodeLabel.width, labelWidth(printableText));
   const labels: PresentationLabel[] = [
     {
       ...nodeLabel,

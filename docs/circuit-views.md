@@ -205,6 +205,17 @@ ELK places device/function blocks and routes all selected physical conductors. T
 
 Wire labels, conductor details, terminal labels and PLC channel addresses use at least 2.5 mm text at printed scale. Secondary cross-reference and boundary captions use 2.3 mm text. Long labels are measured before routing and pagination; an unreadable block or group is rejected rather than clipped.
 
+Vertical device designations, and relation footers in both flows, use pinned
+font ink to find
+the nearest clear position inside their owning device. They clear the owner's
+attachment and stub strokes by at least 1 mm; unrelated terminal-caption text
+retains its existing spacing rule. Placement preserves SVG element order and
+never shrinks type. If the existing owner has no clear position, a measured side
+lane is reserved before ELK, with a bounded retry. Owners that already fit keep
+their dimensions. Relation summaries reserve width from their final printed
+lines and the body/pin minimum, rather than retaining a discarded full caption's
+width. A required caption that cannot fit produces `R006`.
+
 ### Oversized group parts
 
 Packet rendering first prepares and validates the complete group. If its measured width or height cannot fit, it tries smaller selections of whole conductors. Every selected wire, jumper or fully terminated cable core appears once across the parts, with both original terminal endpoints on the same part. Conductors are never cut into invented wire segments. Complete selected functions incident to those conductors may repeat; unconnected selected functions are retained. Selected mechanical gang members and transformer windings with a shared core stay together. Unselected endpoint functions remain real terminal boundaries.

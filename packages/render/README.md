@@ -703,6 +703,8 @@ Four-lane three-phase source and motor ports use a frozen `24`-unit pitch. In
 left-to-right flow a leaf keeps the centered top header; in top-to-bottom flow its
 upright label occupies a left header column and the rotated symbol begins at
 `label width + 16`, leaving an `8`-unit gap between label and symbol/lead corridor.
+Vertical NO/NC captions instead use a measured slot beside their contact, inside
+that same leaf envelope; their primitive origin and port anchors stay fixed.
 
 The normalizer matches ELK output by stable ID rather than return-array order. Node,
 port, and node-label positions accumulate parent offsets. Root-owned edge sections and
@@ -874,6 +876,18 @@ SVGs are reviewed byte goldens from the same unchanged motor-starter IR.
 Semantic/provenance/layout/XML assertions are authoritative; the goldens supplement
 them and are not auto-updated or platform-specific. No saved-view or cache format is
 committed yet.
+
+Caption placement uses bundled font ink and measured stroke bounds. Vertical
+rooted NO/NC captions have a compact owner-nearest slot inside the existing leaf
+envelope, checked before ELK and again in the returned layout. Circuit vertical
+designations and relation footers use deterministic candidates inside their
+owner, with 1 mm clearance to attachment/stub ink and the existing spacing to
+unrelated terminal text. Moving a caption preserves element order and port
+anchors. A measured side lane is added before ELK only when the existing
+owner cannot print a required caption, with a bounded retry. Final relation-summary lines determine the reserved width, together
+with the body/pin minimum. Required captions refuse with `R006` when no clear
+position fits. Independent renderer tests measure every emitted terminal
+attachment, including strokes not inventoried by the drawing checker.
 
 [`@thermite/agent-tools`](../agent-tools/README.md) passes the existing public
 `SchematicViewRequest` union and compiler-owned presentation through to this

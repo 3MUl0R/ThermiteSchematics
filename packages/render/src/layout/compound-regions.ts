@@ -1,3 +1,4 @@
+import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import type { LayoutLabel, PresentationGraph } from "../types.js";
 import type { Bounds, Padding, GeometryIndex } from "./validate-output.js";
 import {
@@ -74,6 +75,28 @@ function validateLeafHeader(
     source && source.kind !== "junction" ? source.contentBox : undefined;
   const x = owner.x + (box?.x ?? 0),
     y = owner.y + (box?.y ?? 0);
+  const semantic =
+    source?.kind === "symbol"
+      ? source.labels.find((l) => l.id === label.id)
+      : undefined;
+  const caption =
+    source?.kind === "symbol" && semantic
+      ? contactCaptionRegion(source, semantic)
+      : undefined;
+  if (caption) {
+    if (
+      Math.abs(label.x - x - caption.x) > 0.002 ||
+      Math.abs(label.y - y - caption.y) > 0.002 ||
+      caption.x < 0 ||
+      caption.y < 0 ||
+      caption.x + caption.width > (box?.width ?? owner.width) ||
+      caption.y + caption.height > (box?.height ?? owner.height)
+    )
+      checks.reject(
+        `label ${label.id} escapes its owner-nearest contact region`,
+      );
+    return;
+  }
   if (
     label.x < x ||
     label.x + label.width > x + (box?.width ?? owner.width) ||

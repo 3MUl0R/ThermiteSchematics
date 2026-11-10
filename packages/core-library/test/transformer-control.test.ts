@@ -68,7 +68,7 @@ it.each(transformerFlows)(
     ).toBe(
       flow === "left-to-right"
         ? "ec455e7070ab8ae79b60b8a9e573d42c9646269305da3a3201b1d41609f24284"
-        : "3510331604bd8e2849c94e5a9568a96c7d8b5340dc38125d68a767bca9708334",
+        : "425becd9675ab313708f67a8b3832c5455a1b0f4734dfedc1aa38ab40ad85e67",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);

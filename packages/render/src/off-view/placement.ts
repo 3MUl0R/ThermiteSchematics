@@ -1,4 +1,5 @@
 import { required } from "../presentation/util.js";
+import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import type {
   PresentationLabel,
   PresentationPort,
@@ -88,6 +89,8 @@ function cardObstacles(node: Owner): Box[] {
     node.labels.find((l) => l.ownerId === node.id),
     "Missing node header",
   );
+  const caption =
+    node.kind === "symbol" ? contactCaptionRegion(node, header) : undefined;
   return [
     {
       x: node.primitiveOrigin.x - 4,
@@ -104,6 +107,16 @@ function cardObstacles(node: Owner): Box[] {
       width: header.width + 8,
       height: 22,
     },
+    ...(caption
+      ? [
+          {
+            x: caption.x - 4,
+            y: caption.y - 4,
+            width: caption.width + 8,
+            height: caption.height + 8,
+          },
+        ]
+      : []),
     ...node.ports.map((p) => portLane(node, p)),
     ...terminalLabelBoxes(node),
   ];

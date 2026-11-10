@@ -15,7 +15,8 @@ import {
 import { createElkEngine } from "../src/layout/elk-runtime.js";
 import { ELK_OPTIONS } from "../src/layout/options.js";
 import { buildPresentationGraph } from "../src/presentation.js";
-import type { PresentationGraph } from "../src/types.js";
+import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import type { PresentationGraph, PresentationNode } from "../src/types.js";
 import {
   compileCoreFixture,
   required,
@@ -45,6 +46,46 @@ function presentation(
 
 function nodes(root: Readonly<ElkNode>): ElkNode[] {
   return (root.children ?? []).flatMap((child) => [child, ...nodes(child)]);
+}
+
+function assertDownHeader(
+  semantic: Exclude<PresentationNode, { kind: "junction" }>,
+  node: ElkNode,
+) {
+  const header = required(
+    semantic.labels.find((l) =>
+      ["function", "aggregate", "rail"].includes(l.role),
+    ),
+  );
+  const adapted = required(node.labels?.find((l) => l.id === header.id));
+  if (
+    semantic.kind === "symbol" &&
+    header.role === "function" &&
+    ["NO", "NC"].includes(header.printableText ?? "")
+  ) {
+    const m = printableTextMetrics(header.printableText ?? header.text, 10);
+    expect(header.width).toBeGreaterThanOrEqual(m.advance + 6);
+    expect(
+      semantic.primitiveOrigin.x - required(adapted.x) - 3 - m.right,
+    ).toBeGreaterThanOrEqual(4.75);
+    expect(required(adapted.y) + header.height / 2).toBeCloseTo(
+      semantic.primitiveOrigin.y + semantic.symbolSize.height / 2,
+      3,
+    );
+  } else {
+    expect(
+      semantic.primitiveOrigin.x -
+        (semantic.contentBox?.x ?? 0) -
+        (8 + header.width),
+    ).toBeCloseTo(8);
+    expect({ x: adapted.x, y: adapted.y }).toEqual({
+      x: (semantic.contentBox?.x ?? 0) + (semantic.kind === "rail" ? 5 : 8),
+      y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
+    });
+  }
+  expect(adapted.layoutOptions).toEqual({
+    [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE",
+  });
 }
 
 function sha256(value: string): string {
@@ -291,27 +332,7 @@ describe("pinned ELK adapter", () => {
       expect(node.layoutOptions?.[ELK_OPTIONS.nodeLabelsPlacement]).toBe(
         "INSIDE H_LEFT V_TOP",
       );
-      const header = required(
-        semantic.labels.find(
-          ({ role }) =>
-            role === "function" || role === "aggregate" || role === "rail",
-        ),
-      );
-      expect(
-        semantic.primitiveOrigin.x -
-          (semantic.contentBox?.x ?? 0) -
-          (8 + header.width),
-      ).toBeCloseTo(8);
-      const adaptedHeader = required(
-        node.labels?.find(({ id }) => id === header.id),
-      );
-      expect({ x: adaptedHeader.x, y: adaptedHeader.y }).toEqual({
-        x: (semantic.contentBox?.x ?? 0) + (semantic.kind === "rail" ? 5 : 8),
-        y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
-      });
-      expect(adaptedHeader.layoutOptions).toEqual({
-        [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE",
-      });
+      assertDownHeader(semantic, node);
     }
 
     for (const [candidate, axis] of [

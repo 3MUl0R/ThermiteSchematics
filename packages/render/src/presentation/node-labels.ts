@@ -22,6 +22,7 @@ import { representationBindings } from "./context.js";
 import { compareCompleteFunction } from "./util.js";
 import type { AggregateSymbolRule } from "../symbols/mappings.js";
 import { printableCaption } from "../symbols/printable-policy.js";
+import { contactCaptionRegion } from "./contact-caption.js";
 
 function functionLabelText(materialized: IrFunction): string {
   if (materialized.kind === "contact") {
@@ -59,6 +60,7 @@ export function leafGeometry(
   symbol: SymbolDefinition,
   orientation: "left-to-right" | "top-to-bottom",
   label: PresentationLabel,
+  caption = label,
 ): Readonly<{
   symbolSize: Readonly<{ width: number; height: number }>;
   width: number;
@@ -71,7 +73,7 @@ export function leafGeometry(
     ? label.width + symbolSize.width + 24
     : Math.max(symbolSize.width + 16, label.width + 16);
   const height = 22 + symbolSize.height + 8;
-  return {
+  const geometry = {
     symbolSize,
     width,
     height,
@@ -82,6 +84,23 @@ export function leafGeometry(
       y: 22,
     },
   };
+  // Retain the leaf lane and port anchors. The measured caption slot must fit
+  // beside its own primitive before ELK sees the node or routes conductors.
+  const region = contactCaptionRegion(
+    { ...geometry, symbolId: symbol.id, orientation },
+    caption,
+  );
+  if (
+    region &&
+    (region.x < 0 ||
+      region.y < 0 ||
+      region.x + region.width > width ||
+      region.y + region.height > height)
+  )
+    throw Error(
+      `Contact caption ${caption.text} exceeds its reserved leaf region.`,
+    );
+  return geometry;
 }
 
 export function representationBoundaryConstraint(
