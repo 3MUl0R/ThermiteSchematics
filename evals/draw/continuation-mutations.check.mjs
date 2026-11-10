@@ -28,7 +28,14 @@ try {
     "junction",
   );
   await symlink(join(root, "packages"), join(copy, "packages"), "junction");
-  const paths = ["browser", "evaluate", "continuation-labels"],
+  const paths = [
+      "browser",
+      "evaluate",
+      "continuation-labels",
+      "pdf",
+      "pdf-painted",
+      "identifier-pdf",
+    ],
     original = new Map();
   for (const n of paths)
     original.set(
@@ -105,14 +112,44 @@ try {
     [
       "reference-single",
       "browser",
-      "references.length === 1",
-      "references.length > 0",
+      "references.filter((r) => r === id).length === 1",
+      "true",
     ],
     [
       "mixed-content-scope",
       "browser",
       '"Mixed direct text and positioned spans unsupported",',
       '(() => { throw Error("Mixed direct text and positioned spans unsupported"); })(),',
+    ],
+    [
+      "painted-pdf-call",
+      "pdf",
+      "return paintedPdfItems(page, await rawPdfText(page, families, fontCaps));",
+      "return rawPdfText(page, families, fontCaps);",
+    ],
+    [
+      "painted-ink-clip",
+      "pdf-painted",
+      "visible: !!overlap && overlap.w > 0 && overlap.h > 0,",
+      "visible: true,",
+    ],
+    [
+      "painted-visible",
+      "pdf-painted",
+      "if (!ink.some((g) => g.visible)) return [];",
+      "return [];",
+    ],
+    [
+      "identifier-painted",
+      "identifier-pdf",
+      "await paintedPdfItems(page, measured, nonempty)",
+      "measured",
+    ],
+    [
+      "exact-reference",
+      "browser",
+      "const idsForLink = [...new Set(references)].filter(",
+      "const idsForLink = (references.length === 1 ? [...new Set(references)] : []).filter(",
     ],
     ["html-call", "evaluate", media("html"), "[]"],
     ["pdf-call", "evaluate", media("pdf"), "[]"],
@@ -131,6 +168,7 @@ try {
         "--reporter=json",
         "--outputFile=" + path,
         "evals/draw/continuation-browser.test.mjs",
+        "evals/draw/pdf-painted-browser.test.mjs",
       ],
       {
         cwd: copy,

@@ -120,18 +120,22 @@ export function referenceRow(rows, id) {
   );
   return refs.length === 1 ? refs[0] : undefined;
 }
+export function referenceHeader(row, id) {
+  const m = (row?.renderedString ?? row?.text ?? "").match(
+    /^([^\s/]+)\s*\/\s*(\d+)(?:[. :/]([A-D][1-6]))?(?:\s*\/\s*(.*))?$/,
+  );
+  return m?.[1] === id
+    ? { page: Number(m[2]), zone: m[3], body: m[4] ?? "" }
+    : undefined;
+}
 export function identityMatches(rows, c, expected) {
   if (!expected || !rows.length) return false;
   const reference = referenceRow(rows, c.id);
   if (!reference) return false;
-  const header = (reference.renderedString ?? reference.text).match(
-    /^[^\s/]+\s*\/\s*\d+(?:[. :/]([A-D][1-6]))?(?:\s*\/\s*(.*))?$/,
-  );
+  const header = referenceHeader(reference, c.id);
   if (!header) return false;
   const parts = rows
-    .map((t) =>
-      t === reference ? (header[2] ?? "") : (t.renderedString ?? t.text),
-    )
+    .map((t) => (t === reference ? header.body : (t.renderedString ?? t.text)))
     .filter((t) => t.length);
   const body = parts.join("");
   if (expected.undesignated) {

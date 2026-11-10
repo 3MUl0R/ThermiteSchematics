@@ -3,6 +3,7 @@ import {
   connectorRows,
   identityMatches,
   referenceRow,
+  referenceHeader,
   continuationPdfRows,
   requirePdfFont,
 } from "./continuation-labels.mjs";
@@ -547,11 +548,12 @@ export function continuations(sheet, packet, g, geometries = [], ir) {
       );
       continue;
     }
-    const destination = reference?.text.match(/\/\s*(\d+)[. :/]([A-D][1-6])/);
+    const header = referenceHeader(reference, c.id);
+    const destination = header?.zone ? header : undefined;
     const missing = [];
     if (!back) missing.push("reciprocal peer");
     if (!reference) missing.push("printed connector reference");
-    if (!destination || Number(destination[1]) !== c.toSheet)
+    if (!destination || destination.page !== c.toSheet)
       missing.push("printed sheet.zone");
     const targetGeometry = geometries[packet.sheets.indexOf(target)];
     const peers =
@@ -560,7 +562,7 @@ export function continuations(sheet, packet, g, geometries = [], ir) {
       ) ?? [];
     const anchor = peers.length === 1 ? peers[0].anchor : undefined;
     const expectedZone = anchor && zoneAt(targetGeometry, anchor);
-    if (destination && (!expectedZone || destination[2] !== expectedZone))
+    if (destination && (!expectedZone || destination.zone !== expectedZone))
       missing.push("printed destination zone");
     if (!identityMatches(rows, c, printedConductor(c, ir)))
       missing.push("conductor label on connector");

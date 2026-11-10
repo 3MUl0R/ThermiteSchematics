@@ -527,3 +527,26 @@ browserIt("ignores unrelated PDF text by the connector stroke", async () => {
   const actual = pdfGeometryTexts(g.texts, await pdf(extra));
   expect(continuationMediaIssues(g.texts, actual, "pdf")).toEqual([]);
 });
+browserIt(
+  "an identity resembling another ID cannot hide the exact reference",
+  async () => {
+    const rows = body.replace("PE-SRC", "C12/3"),
+      g = await measure(rows),
+      wire = { ...c, conductor: "W1" },
+      s = { ...sheet, continuations: [wire] },
+      pk = {
+        sheets: [s, { number: 2, continuations: [{ ...wire, toSheet: 1 }] }],
+      },
+      source = {
+        wires: [
+          { uid: "wire", designation: "W1", properties: { label: "C12/3" } },
+        ],
+      };
+    expect(g.connectors.filter((p) => p.id === "C001")).toHaveLength(1);
+    expect(continuations(s, pk, g, [g, peer], source)).toEqual([]);
+    const wrong = await measure(rows.replace("C001", "C099"));
+    expect(
+      continuations(s, pk, wrong, [wrong, peer], source)[0].missing,
+    ).toContain("printed connector reference");
+  },
+);

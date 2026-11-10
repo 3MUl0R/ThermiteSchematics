@@ -623,22 +623,21 @@ export function measureSheet(options = {}) {
         else rows.push({ y: t.anchor.y, text: t.renderedString ?? t.text });
       }
       const references = rows
-        .map((t) => t.text.match(/^(C\d+)\s*\//)?.[1])
+        .map((t) => t.text.match(/^([^\s/]+)\s*\//)?.[1])
         .filter(Boolean);
-      const id = references.length === 1 ? references[0] : undefined;
-      if (!line || !id || typeof line.getPointAtLength !== "function")
-        return [];
+      const idsForLink = [...new Set(references)].filter(
+        (id) => references.filter((r) => r === id).length === 1,
+      );
+      if (!line || typeof line.getPointAtLength !== "function") return [];
       const p = line.getPointAtLength(0),
         m = line.getScreenCTM(),
         q = new DOMPoint(p.x, p.y).matrixTransform(m);
-      return [
-        {
-          id,
-          element: ids.get(a),
-          toSheet: Number(a.getAttribute("href").slice(7)),
-          anchor: point(q.x, q.y),
-        },
-      ];
+      return idsForLink.map((id) => ({
+        id,
+        element: ids.get(a),
+        toSheet: Number(a.getAttribute("href").slice(7)),
+        anchor: point(q.x, q.y),
+      }));
     },
   );
   // DQ-12 alone consumes clipped visible outline geometry (stroke centre lines).

@@ -263,6 +263,16 @@ optional `sourceElement: {kind:"wire"|"jumper",uid}` or
 source only, never dictate printed text. Complete wrapped character streams
 must match literally, including preserved spaces and Unicode.
 
+The sheet.zone parser reads only the anchored reference header; inline identity
+text cannot supply a missing zone. Reference candidates are unique per exact ID,
+so a literal identity such as `C12/3` does not hide a different connector ID.
+
+PDF text consumers use native PDF rectangular clip state (including nested clips
+and save/restore) and embedded glyph outline bounds. Wholly clipped glyphs are
+excluded; partially visible glyphs retain their measured characters and font size.
+Unsupported clips or positioning refuse. No SVG visibility or string/prefix filter
+supplies the PDF visibility answer. Extraction-only whitespace remains a separator.
+
 HTML and PDF rows must match their SVG source rows in physical row order.
 HTML occurrences match independently measured connector anchors and destinations;
 DOM ordinals are local to each medium and are never shared as identity.
@@ -276,6 +286,11 @@ Extra PDF rows are checked inside the union of owned text rows plus the existing
 Existing short Cnnn / NN labels keep their missing-field locators. Run the native
 controls with `bun run test -- evals/draw/continuation-browser.test.mjs` and native
 guard mutations with `bun evals/draw/continuation-mutations.check.mjs evals/out/continuation-mutations.json`.
+
+Case failures retain every delivered sheet SVG and run the same lossless packet,
+HTML and JSON compaction as successful cases. Output-budget error rewrites keep
+all report source pins, and `cost.json` includes its own bytes and the final report.
+The 100 MB ceiling is unchanged.
 
 DQ-12 measures the SVG packet's **visible outline geometry**: the bounding envelope
 of conductor/symbol/mark outlines in outer-sheet millimetres, using stroke centre
