@@ -37,7 +37,7 @@ export function drawingContinuations(
         `A candidate cut crosses this conductor. ${required(
           continuationIdentityConstraint(semantic),
           "Missing identity constraint",
-        )}`,
+        )} Use larger paper, landscape, or the other flow so no cut crosses this conductor.`,
         { continuationIdentity: edge.id },
       );
     for (const c of crossings) {

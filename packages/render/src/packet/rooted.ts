@@ -1,5 +1,6 @@
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
+import { rootedDiagnosticError } from "./rooted-constraint.js";
 import type {
   CompiledProjectPresentation,
   ElectricalIr,
@@ -35,7 +36,11 @@ export async function drawingDrafts(
   if (!winner || !native) {
     const profile = winner ? winner.profile : run.prepared[0]?.profile;
     const error = (!native && run.nativeErrors.get(profile)) || run.errors[0];
-    if (error) return { ok: false, error };
+    if (error)
+      return {
+        ok: false,
+        error: rootedDiagnosticError(error, run.diagnostics),
+      };
     throw Error("Rooted search returned neither drawing nor error");
   }
   const materialized = materializeRootedCandidate(ir, winner, page);

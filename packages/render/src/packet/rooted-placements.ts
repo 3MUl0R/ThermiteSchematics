@@ -14,6 +14,7 @@ import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { SchematicViewRequest } from "../types.js";
 import type { PaperPage } from "./types.js";
 import { buildRootedCandidates, type RootedCandidate } from "./rooted-build.js";
+import { recordRootedDiagnostic } from "./rooted-constraint.js";
 import {
   compareCandidates,
   candidateUtilisation,
@@ -62,6 +63,7 @@ async function tryPlacement(
     false,
     run.referenceOffset ?? 0,
   );
+  recordRootedDiagnostic(run.diagnostics, candidates);
   if (candidates.ok) {
     run.candidates.push(...candidates.value);
     trimCandidates(run, page);
