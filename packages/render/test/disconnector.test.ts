@@ -210,6 +210,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const packet = await renderSchematicPacket(ir, {
       format: "schematic-packet-request/0.1",
       page: { size: "a3", orientation: "landscape", marginMm: 10 },
+      layout: "compact",
       views: [
         { ...powerRequest, flow },
         { ...disconnectCircuit, flow },

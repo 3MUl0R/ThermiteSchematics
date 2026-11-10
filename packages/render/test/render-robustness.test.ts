@@ -180,46 +180,55 @@ it.each(["minimal", "plant", "same-location"] as const)(
         if (variant === "same-location")
           expect(attempts.length).toBeGreaterThan(1);
       }
-      if (variant === "plant") {
-        const packet = await renderSchematicPacket(ir, {
-          format: "schematic-packet-request/0.1",
-          page: { size: "a3" },
-          layout: "compact",
-          index: true,
-          views: [
-            {
-              format: "schematic-view-request/0.1",
-              root: byDesignation("M1"),
-              family: "power",
-            },
-            {
-              format: "schematic-view-request/0.1",
-              root: byDesignation("K1"),
-              family: "control",
-            },
-            loads,
-            {
-              format: "schematic-view-request/0.2",
-              root: byDesignation("LS1"),
-              intent: {
-                kind: "trace",
-                to: byDesignation("PLC1"),
-                includePower: false,
-              },
-            },
-            {
-              format: "documentation-view-request/0.1",
-              kind: "wires",
-              filter: { types: ["core:plc-compact"] },
-            },
-          ],
-        });
-        expect(
-          packet.ok,
-          `${variant} packet seed=${seed}: ${JSON.stringify(packet.ok ? "ok" : packet)}`,
-        ).toBe(true);
-      }
     }
+  },
+  30000,
+);
+
+// Keep the same thirty real packets, with independent per-seed failures rather
+// than accumulating paper search time inside the topology test's 30 s budget.
+it.each(Array.from({ length: 30 }, (_, seed) => seed))(
+  "prints the plant packet for seeded UID assignment %i",
+  async (seed) => {
+    const variant = "plant";
+    const { ir } = await fixture.compile(variant, seed);
+    const packet = await renderSchematicPacket(ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "a3" },
+      layout: "compact",
+      index: true,
+      views: [
+        {
+          format: "schematic-view-request/0.1",
+          root: byDesignation("M1"),
+          family: "power",
+        },
+        {
+          format: "schematic-view-request/0.1",
+          root: byDesignation("K1"),
+          family: "control",
+        },
+        loads,
+        {
+          format: "schematic-view-request/0.2",
+          root: byDesignation("LS1"),
+          intent: {
+            kind: "trace",
+            to: byDesignation("PLC1"),
+            includePower: false,
+          },
+        },
+        {
+          format: "documentation-view-request/0.1",
+          kind: "wires",
+          filter: { types: ["core:plc-compact"] },
+        },
+      ],
+    });
+    expect(
+      packet.ok,
+      `${variant} packet seed=${seed}: ${JSON.stringify(packet.ok ? "ok" : packet)}`,
+    ).toBe(true);
   },
   30000,
 );
@@ -498,7 +507,10 @@ it.each(["plc3", "pnp"] as const)(
           { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
         );
         expect(trace.status, trace.stderr).toBe(0);
-        expect(JSON.parse(trace.stdout).sheets).toHaveLength(1);
+        const traceSheets = JSON.parse(trace.stdout).sheets;
+        expect(traceSheets).toHaveLength(1);
+        for (const sheet of traceSheets)
+          expect(sheet.svg).toContain("data-selected-view-notice");
       }
     }
   },

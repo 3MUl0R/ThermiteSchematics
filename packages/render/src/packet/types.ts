@@ -136,6 +136,11 @@ export interface Link {
   side: "left" | "right" | "top" | "bottom";
 }
 export interface Draft {
+  rootedContent?: import("./rooted-content.js").RootedContent;
+  continuedCaption?: string;
+  rootedShapes?: import("./rooted-ink.js").InkBox[];
+  rootedInk?: import("./rooted-ink.js").InkBox;
+  rootedFit?: { basePages: number; actualPages: number; context: string };
   referenceNotes?: readonly string[];
   diagnostics?: import("@thermite/schema").Diagnostic[];
   views?: import("./errors.js").PacketViewContext[];

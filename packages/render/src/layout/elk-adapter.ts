@@ -1,3 +1,5 @@
+import { offViewAdapterLabels } from "./off-view-labels.js";
+import { portPosition, quantizedInput } from "./port-geometry.js";
 import { portBorderOffset } from "./port-geometry.js";
 import { terminalContextAttachment } from "../terminal-context-reference.js";
 import {
@@ -84,12 +86,6 @@ function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`ELK adapter invariant: ${message}`);
 }
 
-function quantizedInput(value: number): number {
-  invariant(Number.isFinite(value), "adapter geometry must be finite");
-  const quantized = Number(value.toFixed(3));
-  return Object.is(quantized, -0) ? 0 : quantized;
-}
-
 function assignedOptions(
   targetId: string,
   assignments: ElkOptionAssignment[],
@@ -133,16 +129,19 @@ function leafHeaderLabel(
   assignments: ElkOptionAssignment[],
 ): ElkLabel & { id: string } {
   const vertical = node.orientation === "top-to-bottom";
+  const box = node.contentBox ?? { x: 0, y: 0, width: node.width };
   return {
     ...adapterLabel(label),
-    x: quantizedInput(
-      vertical
-        ? node.kind === "rail"
-          ? 5
-          : 8
-        : (node.width - label.width) / 2,
-    ),
-    y: node.kind === "rail" ? 5 : 4,
+    x:
+      box.x +
+      quantizedInput(
+        vertical
+          ? node.kind === "rail"
+            ? 5
+            : 8
+          : (box.width - label.width) / 2,
+      ),
+    y: (node.kind === "rail" ? 5 : 4) + box.y,
     layoutOptions: assignedOptions(label.id, assignments, {
       targetKind: "node-label",
       options: { [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE" },
@@ -188,35 +187,6 @@ function sortedPorts(
   );
 }
 
-function portPosition(
-  node: SymbolPresentationNode | RailPresentationNode,
-  port: PresentationPort,
-): Readonly<{ x: number; y: number }> {
-  const origin = node.primitiveOrigin;
-  switch (port.side) {
-    case "west":
-      return {
-        x: quantizedInput(origin.x),
-        y: quantizedInput(origin.y + port.offset * node.symbolSize.height),
-      };
-    case "east":
-      return {
-        x: quantizedInput(origin.x + node.symbolSize.width),
-        y: quantizedInput(origin.y + port.offset * node.symbolSize.height),
-      };
-    case "north":
-      return {
-        x: quantizedInput(origin.x + port.offset * node.symbolSize.width),
-        y: quantizedInput(origin.y),
-      };
-    case "south":
-      return {
-        x: quantizedInput(origin.x + port.offset * node.symbolSize.width),
-        y: quantizedInput(origin.y + node.symbolSize.height),
-      };
-  }
-}
-
 function uppercaseSide(side: SymbolSide): string {
   return side.toUpperCase();
 }
@@ -226,7 +196,12 @@ function labelsForPort(
   portId: string,
 ): readonly PresentationLabel[] {
   return node.labels
-    .filter((label) => label.ownerKind === "port" && label.ownerId === portId)
+    .filter(
+      (label) =>
+        label.role !== "off-view" &&
+        label.ownerKind === "port" &&
+        label.ownerId === portId,
+    )
     .sort(comparePresentationLabel);
 }
 
@@ -302,16 +277,19 @@ function leafNode(
       targetKind: "node",
       options: nodeOptions,
     }),
-    labels: node.labels
-      .filter(
-        (label) =>
-          label.ownerId === node.id &&
-          (label.role === "function" ||
-            label.role === "aggregate" ||
-            label.role === "rail"),
-      )
-      .sort(comparePresentationLabel)
-      .map((label) => leafHeaderLabel(node, label, assignments)),
+    labels: [
+      ...offViewAdapterLabels(node),
+      ...node.labels
+        .filter(
+          (label) =>
+            label.ownerId === node.id &&
+            (label.role === "function" ||
+              label.role === "aggregate" ||
+              label.role === "rail"),
+        )
+        .sort(comparePresentationLabel)
+        .map((label) => leafHeaderLabel(node, label, assignments)),
+    ],
     ports: ports.map((port, index) =>
       adapterPort(node, port, index, assignments),
     ),

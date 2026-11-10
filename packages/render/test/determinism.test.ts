@@ -592,8 +592,10 @@ describe("D8 end-to-end determinism", () => {
           const hasLabeledZeroIncidencePort = node.ports.some(
             (port) =>
               node.labels.some(
-                ({ ownerKind, ownerId }) =>
-                  ownerKind === "port" && ownerId === port.id,
+                ({ ownerKind, ownerId, role }) =>
+                  role !== "off-view" &&
+                  ownerKind === "port" &&
+                  ownerId === port.id,
               ) && !incidentPortIds.has(port.id),
           );
           const placement = required(

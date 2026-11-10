@@ -186,6 +186,7 @@ const PRESENTATION_LABEL_ROLE_RANK: Readonly<
   conductor: 4,
   net: 5,
   reference: 6,
+  "off-view": 7,
 });
 
 export function comparePresentationLabel(

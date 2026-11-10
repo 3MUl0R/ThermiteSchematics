@@ -15,6 +15,45 @@ unprintable selections with R006. Input mode, isolation, bonding suitability and
 loop voltage budget are not assessed. Requests without `loopPower` retain their
 existing output. See [signal-loop requests and measured limits](../../docs/signal-loops.md#series-loop-power).
 
+Rooted views disclose direct authored connections omitted at a drawn terminal in
+adjacent, lightly bordered, unfilled **Off-view at D.T** cards. Rows use conductor
+IDs and authored opposite endpoints (`W5 → H1.X1`); they infer no logic, potential,
+function or routing direction. The whole logical view's drawn conductor identities
+are subtracted, including continuations; other packet views and context-reference
+leaders do not suppress local disclosures. Wires, jumpers and assigned spare cores
+participate; loose/unassigned cores add no incidence at a nonexistent endpoint.
+Cable sheets reserve endpoint-card space alongside every core/spare row.
+
+`off-view/*` owns incidence, measurement, reservation, validation and annotation
+emission. The presentation graph reserves card bounds before ELK, and sheet cuts
+keep the terminal and card together. Pinned regular/bold/math ink and advance
+metrics reserve natural 3 mm text with 4 mm baseline pitch, padding and a white
+gap. Text wraps without ellipsis, clipping, compression or shrinking. Unprintable content returns contextual R006;
+invalid authored fields retain R005. Every rooted sheet repeats a selected-path
+(or selected-cable) notice in a reserved band above the drawing, even with no cards.
+Gang reservations share only Y in top-to-bottom flow and X in left-to-right flow;
+each card stays on its owning pole. Paging retains the successful greedy grid and
+uses bounded safe-gap alternatives when needed, preserving protected bounds,
+continuation spacing and the 40-cut/80-sheet limits. Card alternatives re-run ELK
+against the same validated selection. Candidates prefer no new interior jogs under
+3 mm and no new detours beyond `2 × Manhattan + 20 mm`, fewer pages,
+clipped median utilisation, then proximity, with stable ties. A
+complete packet exceeding twice its native comparison page count returns R006.
+The no-card baseline uses the same safe-cut fallback. Empty enclosure-only cells
+are removed with destination remapping; a remaining conductor-only page refuses.
+Geometry envelopes are clipped to each strip when scoring. A guarded original
+placement exits before the bounded placement search only when it uses no more
+pages than its native no-card view; the 2× limit remains a packet refusal bound.
+Compact mode compares its original spacing profiles first. Displayed terminal
+order constrains card stacks,
+and local candidates prefer the nearest clear position. Every changed reservation
+still runs ELK and the full validation guards.
+The continued-location caption has a separate measured lane between the notice
+and continuation text.
+
+These annotations add no electrical edges or device/function appearances. Coverage,
+W906 and strict packet behavior are unchanged. See [view rules](../../docs/views.md).
+
 ## Runtime
 
 The source workflow runs on Bun 1.4.2. The renderer loads the pinned ELK 0.12.0

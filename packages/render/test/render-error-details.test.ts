@@ -224,9 +224,9 @@ describe("render error details", () => {
   });
   it.each([
     ["tabloid", true],
-    ["a4", false],
+    ["a4", true],
   ] as const)(
-    "only recommends compact after proving it succeeds on %s",
+    "prints formerly refused standard and compact layouts on %s",
     async (size, rescued) => {
       const request = {
         format: "schematic-packet-request/0.1",
@@ -245,7 +245,7 @@ describe("render error details", () => {
         ...request,
         layout: "compact",
       });
-      expect(a.ok).toBe(false);
+      expect(a.ok).toBe(true);
       expect(b.ok).toBe(rescued);
       if (!a.ok) {
         expect(a.error.message.includes("--layout compact")).toBe(rescued);
@@ -258,17 +258,25 @@ describe("render error details", () => {
   );
   it("resolves UID packet roots to designations in the view title", async () => {
     const uid = ir.devices.find((d) => d.designation === "M1")!.uid;
-    const result = await renderSchematicPacket(ir, {
-      format: "schematic-packet-request/0.1",
-      views: [
-        {
-          format: "schematic-view-request/0.1",
-          family: "power",
-          root: { by: "uid", value: uid },
-          flow: "top-to-bottom",
-        },
-      ],
-    });
+    const result = await renderSchematicPacket(
+      ir,
+      {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            family: "power",
+            root: { by: "uid", value: uid },
+            flow: "top-to-bottom",
+          },
+        ],
+      },
+      {
+        revision: "R".repeat(500),
+        backgroundColor: "#fff",
+        titleBlockLines: [],
+      },
+    );
     expect(result).toMatchObject({
       ok: false,
       error: {

@@ -228,11 +228,26 @@ describe("core profile clone matrix", () => {
 });
 
 describe("automatic terminal-plan profile clones", () => {
+  let baseline: Extract<
+    Awaited<ReturnType<typeof compileProject>>,
+    { ok: true }
+  >;
+  let before: Awaited<ReturnType<typeof renderSchematicPacket>>;
+  let packet: Parameters<typeof renderSchematicPacket>[1];
+  beforeAll(async () => {
+    const c = await compileProject("examples/machine-demo");
+    if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+    baseline = c;
+    packet = JSON.parse(
+      await readFile("examples/machine-demo/packet.request.json", "utf8"),
+    );
+    before = await renderSchematicPacket(c.ir, packet, c.presentation);
+    expect(before.ok, JSON.stringify(before)).toBe(true);
+  });
   it.each(["IEC", "profile"] as const)(
     "preserves the complete machine-demo packet and eight references per strip for %s",
     async (variant) => {
-      const c = await compileProject("examples/machine-demo");
-      if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+      const c = baseline;
       let changed = structuredClone(c.ir);
       for (const id of CORE_SYMBOL_BINDINGS.map((b) => b.typeId))
         changed = clone(
@@ -258,11 +273,11 @@ describe("automatic terminal-plan profile clones", () => {
         ).toHaveLength(8);
       }
       expect(actual).toEqual(original);
-      const packet = JSON.parse(
-        await readFile("examples/machine-demo/packet.request.json", "utf8"),
+      const after = await renderSchematicPacket(
+        changed,
+        packet,
+        c.presentation,
       );
-      const before = await renderSchematicPacket(c.ir, packet, c.presentation),
-        after = await renderSchematicPacket(changed, packet, c.presentation);
       expect(before.ok, JSON.stringify(before)).toBe(true);
       expect(after.ok, JSON.stringify(after)).toBe(true);
       const normalized = CORE_SYMBOL_BINDINGS.reduce(

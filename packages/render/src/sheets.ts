@@ -1,3 +1,4 @@
+import { rootedPageCostFailure } from "./packet/rooted-bound.js";
 import { referenceTables } from "./packet/references.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { appendViewDrafts, assembleSheets } from "./packet/assembly.js";
@@ -48,6 +49,7 @@ import {
   packetViewContext,
   withPacketViews,
   PacketDraftError,
+  composedPacketFailure,
 } from "./packet/errors.js";
 import { normalizePaperPage, sheetLabel } from "./packet/page.js";
 export { normalizePaperPage, sheetLabel } from "./packet/page.js";
@@ -121,18 +123,8 @@ async function renderPacket(
   );
   if (!paper.ok) return paper;
   const drafts: Draft[] = [];
-  const composedFailure = (message: string) => {
-    const result = failure("unprintable-layout", message);
-    return !result.ok
-      ? {
-          ok: false as const,
-          error: contextError(
-            result.error,
-            drafts.flatMap((d) => d.views ?? []),
-          ),
-        }
-      : result;
-  };
+  const composedFailure = (message: string) =>
+    composedPacketFailure(message, drafts, contextError);
   const documentationSelections: (DocumentationSelection & { view: number })[] =
     [];
   let referenceSelection: ReferenceSelection | undefined;
@@ -197,6 +189,15 @@ async function renderPacket(
         "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
       );
   }
+  const pageCostFailure = rootedPageCostFailure(drafts);
+  if (pageCostFailure)
+    return {
+      ok: false,
+      error: contextError(
+        pageCostFailure,
+        drafts.flatMap((d) => d.views ?? []),
+      ),
+    };
   if (request.index) {
     const indexes = referenceTables(ir, drafts, request, referenceDevices);
     referenceSelection = indexes.referenceSelection;

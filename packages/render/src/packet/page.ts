@@ -1,4 +1,10 @@
 import { circuitTextLines } from "../circuit.js";
+import {
+  rootedNoticeLines,
+  rootedSheetNoticeSvg,
+  rootedSheetView,
+} from "../off-view/notice.js";
+import type { NormalizedSchematicView } from "../types.js";
 
 import {
   escapeXmlAttribute as attr,
@@ -14,7 +20,7 @@ import type {
   DrawingBounds,
 } from "./types.js";
 import { failure, record } from "./errors.js";
-import { n, text, line, wrap } from "./svg.js";
+import { n, text, line, wrap, namespaceSheetContent } from "./svg.js";
 
 const PAPERS = {
   letter: [215.9, 279.4],
@@ -102,13 +108,17 @@ function titleHeight(title: SchematicTitleContext, page: PaperPage): number {
 export function bounds(
   title: SchematicTitleContext,
   page: PaperPage,
+  rooted?: NormalizedSchematicView,
 ): DrawingBounds {
   const m = page.marginMm;
+  const noticeHeight = rooted
+    ? rootedNoticeLines(rooted, page.widthMm - 2 * m - 36, 2.7).length * 4 + 4
+    : 0;
   return {
     x: m + 18,
-    y: m + 21,
+    y: m + 21 + noticeHeight,
     w: page.widthMm - 2 * m - 36,
-    h: page.heightMm - 2 * m - titleHeight(title, page) - 35,
+    h: page.heightMm - 2 * m - titleHeight(title, page) - 35 - noticeHeight,
   };
 }
 export function sheetLabel(view: RenderedSheet["view"]): string {
@@ -129,17 +139,7 @@ export function frame(
     bottom = page.heightMm - m;
   const titleTop = bottom - titleHeight(draft.title, page);
   const label = sheetLabel(draft.view);
-  const prefix = `sheet-${number}-`;
-  // Text is XML-escaped by the emitter. Scope rewriting to real tag attributes
-  // so a designation containing id="..." or url(#...) remains verbatim.
-  const content = draft.content.replace(/<[^>]+>/g, (tag) =>
-    tag
-      .replace(/(?<=\s)id="([^"]+)"/g, (_, id: string) => `id="${prefix}${id}"`)
-      .replace(
-        /(?<=\s)clip-path="url\(#([^)]+)\)"/g,
-        (_, id: string) => `clip-path="url(#${prefix}${id})"`,
-      ),
-  );
+  const content = namespaceSheetContent(draft.content, number);
   const out = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(page.widthMm)}mm" height="${n(page.heightMm)}mm" viewBox="0 0 ${n(page.widthMm)} ${n(page.heightMm)}" role="img" aria-label="${attr(`${label}, sheet ${number} of ${total}`)}" data-sheet="${number}" data-total-sheets="${total}" data-paper="${page.size}">`,
@@ -157,7 +157,10 @@ export function frame(
     line(m, m + 8, page.widthMm - m, m + 8),
     content,
   ];
-  const area = draft.drawingBounds ?? bounds(draft.title, page);
+  const rooted = rootedSheetView(draft.view);
+  const area = draft.drawingBounds ?? bounds(draft.title, page, rooted);
+  const notice = rootedSheetNoticeSvg(draft.view, page);
+  if (notice) out.push(notice);
   for (let col = 0; col < 6; col++)
     out.push(
       text(

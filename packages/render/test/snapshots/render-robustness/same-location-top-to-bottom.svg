@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 703.2 755" width="703.2" height="755" role="img" aria-label="loads schematic: PS1" data-project-name="Thermite Schematics Starter Project" data-project-revision="UNSPECIFIED" data-tool-version="0.2.0" data-view-format="schematic-view/0.2" data-view-family="control" data-view-intent="loads" data-view-flow="top-to-bottom" data-renderer-version="render/0.3" data-symbol-catalog-version="ais-symbols/0.3" data-layout-config-version="elk-layered/0.4+elkjs-0.12.0" data-root-device-uid="33a15867-296b-40e4-a56b-15282f131b4c">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 703.2 819" width="703.2" height="819" role="img" aria-label="loads schematic: PS1" data-project-name="Thermite Schematics Starter Project" data-project-revision="UNSPECIFIED" data-tool-version="0.2.0" data-view-format="schematic-view/0.2" data-view-family="control" data-view-intent="loads" data-view-flow="top-to-bottom" data-renderer-version="render/0.3" data-symbol-catalog-version="ais-symbols/0.3" data-layout-config-version="elk-layered/0.4+elkjs-0.12.0" data-root-device-uid="33a15867-296b-40e4-a56b-15282f131b4c">
   <title>loads schematic: PS1</title>
   <desc>Deterministic top-to-bottom control electrical schematic.</desc>
   <style>.location-frame{fill:#f7f8fa;stroke:#667085;stroke-width:1.5}.device-frame{fill:#fff;stroke:#98a2b3;stroke-width:1.5}.net-path{fill:none;stroke:#101828;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}.boundary-path{fill:none;stroke:#475467;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}.symbol-body,.symbol-operator,.symbol-actuator,.symbol-annotation{fill:none;stroke:#101828;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.symbol-terminal{fill:#fff;stroke:#101828;stroke-width:1.5}.terminal-marker{fill:#fff;stroke:#101828;stroke-width:1.5}.junction-dot{fill:#101828;stroke:none}.label-background{fill:#fff;stroke:none}.label-text{fill:#101828;stroke:none}</style>
@@ -62,7 +62,13 @@
       <rect width="63.157" height="15.357" x="269.922" y="164.322"/>
     </clipPath>
   </defs>
-  <rect width="703.2" height="755" class="canvas-background" x="0" y="0" fill="#ffffff"/>
+  <rect width="703.2" height="819" class="canvas-background" x="0" y="0" fill="#ffffff"/>
+  <g class="selected-view-notice" data-selected-view-notice="true">
+    <text x="16" y="16" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12" font-weight="700">SELECTED PATH VIEW — PS1 / loads.</text>
+    <text x="16" y="32" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12">Other authored connections may be outside this view. See circuit views or packet </text>
+    <text x="16" y="48" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12">coverage.</text>
+  </g>
+  <g transform="translate(0 64)">
   <g id="location-0061007500740068006f007200650064--004d00410049004e002d00500041004e0045004c" class="location-group" data-location="MAIN-PANEL">
     <rect width="631.2" height="579" class="location-frame" x="36" y="36" rx="4" ry="4"/>
   </g>
@@ -160,11 +166,12 @@
   <text class="label-text label-function" clip-path="url(#clip-005b0022006c006100620065006c0022002c002200730079006d0062006f006c0022002c0022005b005c002200660075006e006300740069006f006e005c0022002c005c002200610064006400350061006100310030002d0063006500660038002d0034006200360033002d0039003400630036002d006100360039003500310031003800360037003700300032005c0022002c005c00220073007500700070006c0079005c0022005d0022002c002200660075006e006300740069006f006e0022005d)" x="516.6" y="534.68" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="alphabetic">load</text>
   <rect width="30.57" height="5.56" class="label-background label-function" x="274.11" y="169.22"/>
   <text class="label-text label-function" clip-path="url(#clip-005b0022006c006100620065006c0022002c002200730079006d0062006f006c0022002c0022005b005c002200660075006e006300740069006f006e005c0022002c005c002200330033006100310035003800360037002d0032003900360062002d0034003000650034002d0061003500360062002d003100350032003800320066003100330031006200340063005c0022002c005c002200640063005f006f00750074007000750074005c0022005d0022002c002200660075006e006300740069006f006e0022005d)" x="273.6" y="174.68" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="alphabetic">source</text>
+  </g>
   <g class="title-block">
-    <rect width="240" height="72" class="title-block-panel" x="447.2" y="667" fill="#ffffff" stroke="#344054"/>
-    <text class="title-block-text" x="455.2" y="675" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Project: Thermite Schematics Starter Project</text>
-    <text class="title-block-text" x="455.2" y="689" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Revision: UNSPECIFIED</text>
-    <text class="title-block-text" x="455.2" y="703" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">View: PS1 | control/loads</text>
-    <text class="title-block-text" x="455.2" y="717" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Tool: Thermite Schematics 0.2.0 | render/0.3</text>
+    <rect width="240" height="72" class="title-block-panel" x="447.2" y="731" fill="#ffffff" stroke="#344054"/>
+    <text class="title-block-text" x="455.2" y="739" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Project: Thermite Schematics Starter Project</text>
+    <text class="title-block-text" x="455.2" y="753" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Revision: UNSPECIFIED</text>
+    <text class="title-block-text" x="455.2" y="767" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">View: PS1 | control/loads</text>
+    <text class="title-block-text" x="455.2" y="781" fill="#101828" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="10" text-anchor="start" dominant-baseline="hanging">Tool: Thermite Schematics 0.2.0 | render/0.3</text>
   </g>
 </svg>

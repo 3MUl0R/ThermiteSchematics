@@ -157,3 +157,20 @@ export class PacketDraftError extends Error {
     super(message);
   }
 }
+
+export function composedPacketFailure(
+  message: string,
+  drafts: readonly import("./types.js").Draft[],
+  contextError: typeof withPacketViews,
+): RenderOutcome<never> {
+  const result = failure("unprintable-layout", message);
+  return !result.ok
+    ? {
+        ok: false as const,
+        error: contextError(
+          result.error,
+          drafts.flatMap((d) => d.views ?? []),
+        ),
+      }
+    : result;
+}

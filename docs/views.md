@@ -20,7 +20,49 @@ and looped supplies; placement and routing use a bounded, validated ELK search.
 Trace and loads traverse conductors;
 control/power may select supported function steps for presentation only.
 
-Rooted views use bounded selection: unequal parallel paths and authored conductors at drawn terminals can be omitted without markers. Use explicit circuit/wiring selections and packet coverage within its documented scope. Success proves neither complete rung coverage nor operation.
+Rooted views use bounded selection. At each drawn terminal with authored conductors
+outside the selected view, a nearby light, unfilled card reads **Off-view at D.T**
+and lists each conductor identity and opposite endpoint, for example `W5 → H1.X1`.
+The arrow identifies the authored opposite endpoint; it makes no current-direction,
+logic, potential or function claim. A card has no conductor stub or reference leader.
+It does not add the omitted device or function to the drawing.
+
+Every rooted sheet, including continuations and views with no cards, carries a
+**SELECTED PATH VIEW** notice above the drawing. Cable inventories use
+**SELECTED CABLE VIEW**. Both say: “Other authored connections may be outside this
+view. See circuit views or packet coverage.” Success proves neither complete rung
+coverage nor operation. Use explicit circuit/wiring selections and packet coverage
+within its documented scope.
+
+Cards use direct authored wire, jumper and cable-core endpoints, not other terminals
+on the same net. Conductors drawn elsewhere in the same logical view are not
+reported again; a conductor drawn in another packet view still needs local
+disclosure. Terminal-context references do not count as conductors. Assigned spare
+cores count at their terminated ends; a loose far end reads `unterminated (spare)`.
+Both-loose and unassigned cores add no terminal incidence. Jumpers without a
+designation use `jumper:<uuid>`.
+
+Card space is reserved before layout, and cuts keep each terminal with its card.
+The full text wraps at 3 mm em and 4 mm line pitch without truncation, clipping
+or shrinking. Nearby card placements and safe sheet cuts are evaluated before a
+refusal. Cards can add pages; a packet exceeding twice the sheet count of the same
+geometry without disclosures also refuses with R006. The message names the
+terminal, conductor IDs and binding constraint. Use a larger sheet or landscape.
+Empty enclosure-only cells are removed before output, with continuation destinations
+renumbered. A remaining drawing page without a device, terminal or card is refused;
+conductors are never dropped to remove a tail. The original placement is retained
+when its print guards and route-quality checks pass and it uses no more sheets
+than the same view without cards. The 2× packet bound is a refusal limit.
+Stacked cards follow displayed terminal order, with the nearest valid positions
+preferred.
+
+The [synthetic connection inventory](../examples/off-view-connections/source.json)
+and its [packet request](../examples/off-view-connections/packet.json) exercise an
+in-use cable core, a terminated spare and an undesignated jumper. Its omitted
+connections are checked independently against the authored JSON in the render tests.
+
+Invalid authored text retains R005. Off-view cards and notices do not change W906,
+coverage accounting or `packet --strict` behavior.
 
 `schematic-view-request/0.1` uses `root`, `family` (`power` or `control`) and
 `flow`. On the motor-starter fixture:

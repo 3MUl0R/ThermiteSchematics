@@ -53,6 +53,7 @@ function loadsPresentation(
   ir: ElectricalIr,
   flow: SchematicFlow,
   catalog: readonly SymbolDefinition[] = SYMBOL_CATALOG,
+  authoredOmissions = true,
 ): PresentationGraph {
   const root = required(
     ir.devices.find(({ designation }) => designation === "PS1"),
@@ -69,8 +70,19 @@ function loadsPresentation(
     catalog,
   });
   if (!selected.ok) throw new Error(JSON.stringify(selected.error));
+  // The historical B1 coordinate witness isolates port geometry. Other tests
+  // exercise the same loads view with all authored incidences and reserved cards.
+  const ids = new Set(selected.value.conductiveElementIds.map((id) => id.uid));
   const built = buildPresentationGraph({
-    ir,
+    ir: authoredOmissions
+      ? ir
+      : {
+          ...ir,
+          wires: ir.wires.filter((w) => ids.has(w.uid)),
+          jumpers: [],
+          cableConductors: [],
+          cables: [],
+        },
     selected: selected.value,
     catalog,
   });
@@ -496,7 +508,12 @@ describe("real pinned ELK layouts", () => {
     };
 
     const oldCatalog = oldDcCatalog();
-    const oldGraph = loadsPresentation(coreIr, "top-to-bottom", oldCatalog);
+    const oldGraph = loadsPresentation(
+      coreIr,
+      "top-to-bottom",
+      oldCatalog,
+      false,
+    );
     const old = await rawLayout(oldGraph);
     expect({
       sourcePositive: portPosition(old.input, oldGraph, "PS1", "positive"),
@@ -531,7 +548,12 @@ describe("real pinned ELK layouts", () => {
     expect(oldResult.ok).toBe(false);
     if (!oldResult.ok) expect(oldResult.error.code).toBe("R004");
 
-    const graph = loadsPresentation(coreIr, "top-to-bottom");
+    const graph = loadsPresentation(
+      coreIr,
+      "top-to-bottom",
+      SYMBOL_CATALOG,
+      false,
+    );
     const current = await rawLayout(graph);
     expect({
       width: current.output.width,
@@ -604,7 +626,13 @@ describe("real pinned ELK layouts", () => {
           output,
           new Set(leaves.map(({ id }) => id)),
         );
-        expect(rawLabels.size).toBe(leaves.length);
+        expect(rawLabels.size).toBe(
+          leaves.length +
+            leaves.reduce(
+              (n, leaf) => n + leaf.labels.filter((l) => l.offView).length,
+              0,
+            ),
+        );
         for (const leaf of leaves) {
           const header = required(
             leaf.labels.find(
@@ -617,15 +645,16 @@ describe("real pinned ELK layouts", () => {
           expect(quantizeLayoutNumber(raw.localX, `${header.id} raw x`)).toBe(
             flow === "top-to-bottom"
               ? leaf.kind === "rail"
-                ? 5
-                : 8
+                ? (leaf.contentBox?.x ?? 0) + 5
+                : (leaf.contentBox?.x ?? 0) + 8
               : quantizeLayoutNumber(
-                  (leaf.width - header.width) / 2,
+                  (leaf.contentBox?.x ?? 0) +
+                    ((leaf.contentBox?.width ?? leaf.width) - header.width) / 2,
                   `${header.id} frozen x`,
                 ),
           );
           expect(quantizeLayoutNumber(raw.localY, `${header.id} raw y`)).toBe(
-            leaf.kind === "rail" ? 5 : 4,
+            (leaf.contentBox?.y ?? 0) + (leaf.kind === "rail" ? 5 : 4),
           );
           const copied = required(
             normalized.value.labels.find(({ id }) => id === header.id),

@@ -221,8 +221,13 @@ describe("pinned ELK adapter", () => {
         node.labels?.find(({ id }) => id === header.id),
       );
       expect({ x: adaptedHeader.x, y: adaptedHeader.y }).toEqual({
-        x: Number(((semantic.width - header.width) / 2).toFixed(3)),
-        y: semantic.kind === "rail" ? 5 : 4,
+        x: Number(
+          (
+            (semantic.contentBox?.x ?? 0) +
+            ((semantic.contentBox?.width ?? semantic.width) - header.width) / 2
+          ).toFixed(3),
+        ),
+        y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
       });
       expect(adaptedHeader.layoutOptions).toEqual({
         [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE",
@@ -292,13 +297,17 @@ describe("pinned ELK adapter", () => {
             role === "function" || role === "aggregate" || role === "rail",
         ),
       );
-      expect(semantic.primitiveOrigin.x - (8 + header.width)).toBeCloseTo(8);
+      expect(
+        semantic.primitiveOrigin.x -
+          (semantic.contentBox?.x ?? 0) -
+          (8 + header.width),
+      ).toBeCloseTo(8);
       const adaptedHeader = required(
         node.labels?.find(({ id }) => id === header.id),
       );
       expect({ x: adaptedHeader.x, y: adaptedHeader.y }).toEqual({
-        x: semantic.kind === "rail" ? 5 : 8,
-        y: semantic.kind === "rail" ? 5 : 4,
+        x: (semantic.contentBox?.x ?? 0) + (semantic.kind === "rail" ? 5 : 8),
+        y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
       });
       expect(adaptedHeader.layoutOptions).toEqual({
         [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE",

@@ -4,6 +4,15 @@ Circuit views render complete, explicitly selected electrical circuits with conv
 
 Project JSON and compiled physical wiring are authoritative. Selecting a contact, coil, motor or transformer function for drawing does not join its terminals into one net. Circuit views do not simulate energized state, infer equipment behavior, or verify electrical design suitability.
 
+Rooted views disclose omitted direct connections at drawn terminals with nearby
+**Off-view at D.T** cards and repeat a selected-view notice on every sheet. Cards retain legal text sizes; placement and paging may add sheets or
+return contextual R006 when the complete disclosure cannot fit reasonably.
+A row such as `W5 → H1.X1` names only an authored conductor and its opposite endpoint;
+it makes no operating, potential or function claim. These annotations neither
+complete the selected circuit nor count as coverage appearances. W906 and strict
+packet behavior remain unchanged. For the marker and fit rules, see
+[rooted view disclosure](views.md#intents-and-roots).
+
 ## Request
 
 Add a `circuit-view-request/0.1` to a normal packet request:

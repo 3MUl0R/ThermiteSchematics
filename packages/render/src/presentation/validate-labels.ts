@@ -9,8 +9,13 @@ import type { ElectricalIr, IrDevice } from "@thermite/compiler";
 import type { DeviceTypeSymbolMapping } from "../symbols/mappings.js";
 import { summarizePresentationGraph } from "./summary.js";
 import { svgSemanticId } from "../svg/escape.js";
+import { validateOffViewLabel } from "../off-view/validate.js";
 
 function validateLabel(label: PresentationLabel): void {
+  if (label.role === "off-view") {
+    validateOffViewLabel(label);
+    return;
+  }
   invariant(
     label.width ===
       Math.max(

@@ -2,7 +2,6 @@ import type { InvalidRenderTextError, RenderTextReason } from "../errors.js";
 import type {
   NormalizedSchematicView,
   PresentationGraph,
-  RenderOutcome,
   RenderTextSource,
 } from "../types.js";
 import { buildRenderSourceRegistry } from "./source-registry.js";
@@ -66,6 +65,10 @@ export function decodeSvgSemanticId(
       return decoded;
     });
 }
+
+type TextCheck =
+  | { readonly ok: true; readonly value: undefined }
+  | { readonly ok: false; readonly error: InvalidRenderTextError };
 
 type StringContentReason = Extract<
   RenderTextReason,
@@ -134,7 +137,7 @@ function preflightSources(
   view: Readonly<NormalizedSchematicView>,
   sources: readonly RenderTextSource[],
   forbidSingleLineCodePoints: boolean,
-): RenderOutcome<undefined> {
+): TextCheck {
   for (const source of sources) {
     const reason = invalidTextReason(source.value, forbidSingleLineCodePoints);
     if (reason !== undefined) {
@@ -150,15 +153,46 @@ function preflightSources(
 export function preflightTitleRenderText(
   view: Readonly<NormalizedSchematicView>,
   sources: readonly RenderTextSource[],
-): RenderOutcome<undefined> {
+): TextCheck {
   return preflightSources(view, sources, true);
 }
 
 export function preflightRenderText(
   graph: Readonly<PresentationGraph>,
-): RenderOutcome<undefined> {
+): TextCheck {
+  const annotations = graph.nodes.flatMap((n) =>
+    n.kind === "junction"
+      ? []
+      : n.labels.filter((l) => l.offView).flatMap((l) => l.textSources),
+  );
+  const checked = preflightOffViewSources(graph.view, annotations);
+  if (!checked.ok) return checked;
   const sources = buildRenderSourceRegistry(graph).sources;
   return preflightSources(graph.view, sources, false);
+}
+
+export function preflightOffViewSources(
+  view: NormalizedSchematicView,
+  sources: readonly RenderTextSource[],
+): TextCheck {
+  const valid = preflightSources(view, sources, true);
+  if (!valid.ok) return valid;
+  for (const source of sources)
+    if ([...source.value].length > 160)
+      return {
+        ok: false,
+        error: {
+          code: "R005",
+          family: view.family,
+          root: view.root.designation,
+          ownerKind: source.ownerKind,
+          ownerId: source.ownerId,
+          field: source.field,
+          reason: "over-160-code-points",
+          message: `Invalid off-view text: ${source.ownerKind} field ${source.field} exceeds 160 Unicode code points.`,
+        },
+      };
+  return { ok: true, value: undefined };
 }
 
 function escapeXml(value: string, attribute: boolean): string {

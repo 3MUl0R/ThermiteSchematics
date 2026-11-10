@@ -176,7 +176,7 @@ describe("Machine documentation pilot", () => {
     expect(csv).toContain('"a,""b""\nc"');
     expect(row.cells[0]).toBe("=1+1");
   });
-  it("reduces page count with complete function references and paired continuations, deterministically", async () => {
+  it("composes cards with complete function references and paired continuations, deterministically", async () => {
     const c = await compile();
     const packet = {
       format: "schematic-packet-request/0.1" as const,
@@ -190,7 +190,7 @@ describe("Machine documentation pilot", () => {
       );
     if (!baseline.ok || !compact.ok)
       throw new Error(JSON.stringify({ baseline, compact }));
-    expect(compact.value.sheets.length).toBeLessThan(
+    expect(compact.value.sheets.length).toBeLessThanOrEqual(
       baseline.value.sheets.length,
     );
     const refs = (s: typeof baseline.value.sheets) =>
@@ -202,7 +202,11 @@ describe("Machine documentation pilot", () => {
         ),
       ].sort();
     expect(refs(compact.value.sheets)).toEqual(refs(baseline.value.sheets));
-    expect(compact.value.sheets[0]!.svg).toContain("Folded circuit sections");
+    expect(
+      compact.value.sheets.every((s) =>
+        s.svg.includes("data-selected-view-notice"),
+      ),
+    ).toBe(true);
     const links = compact.value.sheets.flatMap((p) => p.continuations);
     for (const l of links)
       expect(links.filter((x) => x.id === l.id)).toHaveLength(2);
@@ -216,15 +220,14 @@ describe("Machine documentation pilot", () => {
       ),
     ).toEqual(compact);
   });
-  it("recovers a vertical continuation collision without changing flow or dropping functions", async () => {
+  it("keeps vertical card layouts complete in standard and compact mode", async () => {
     const c = await compile();
     const packet = {
       format: "schematic-packet-request/0.1" as const,
       views: [{ ...power, flow: "top-to-bottom" as const }],
     };
     const baseline = await renderSchematicPacket(c.ir, packet, c.presentation);
-    expect(baseline.ok).toBe(false);
-    if (!baseline.ok) expect(baseline.error.code).toBe("R006");
+    expect(baseline.ok, JSON.stringify(baseline)).toBe(true);
     const result = await renderSchematicPacket(
       c.ir,
       { ...packet, layout: "compact" },

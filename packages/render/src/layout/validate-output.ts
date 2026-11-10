@@ -1,6 +1,7 @@
+import { validateCompoundRegions } from "./compound-regions.js";
 import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
-import { printableLabelGeometry } from "../symbols/printable-label.js";
+import { layoutLabelInk } from "./label-bounds.js";
 import type {
   ElkExtendedEdge,
   ElkLabel,
@@ -34,13 +35,6 @@ import type {
   PresentationPort,
 } from "../types.js";
 import { MAX_SVG_MAGNITUDE } from "../svg/numbers.js";
-import {
-  DEVICE_PADDING,
-  LABEL_PORT_HORIZONTAL_SPACING,
-  LABEL_PORT_VERTICAL_SPACING,
-  LOCATION_PADDING,
-  ROOT_PADDING,
-} from "./options.js";
 
 export { MAX_SVG_MAGNITUDE } from "../svg/numbers.js";
 
@@ -90,21 +84,21 @@ interface PresentationIndex {
   readonly edges: ReadonlyMap<string, PresentationEdge>;
 }
 
-interface GeometryIndex {
+export interface GeometryIndex {
   readonly nodes: Map<string, LayoutNode>;
   readonly ports: Map<string, LayoutPort>;
   readonly labels: Map<string, LayoutLabel>;
   readonly edges: Map<string, LayoutEdge>;
 }
 
-interface Bounds {
+export interface Bounds {
   readonly left: number;
   readonly top: number;
   readonly right: number;
   readonly bottom: number;
 }
 
-interface Padding {
+export interface Padding {
   readonly top: number;
   readonly left: number;
   readonly bottom: number;
@@ -123,7 +117,10 @@ function invariant(condition: unknown, message: string): asserts condition {
 }
 
 export type LayoutFailureKind =
-  "contract-violation" | "ambiguous-intersection" | "collinear-overlap";
+  | "contract-violation"
+  | "ambiguous-intersection"
+  | "collinear-overlap"
+  | "symbol-intersection";
 export type LayoutValidationOutcome =
   | { readonly ok: true; readonly value: NormalizedSchematicLayout }
   | {
@@ -888,136 +885,6 @@ function positiveAreaIntersection(left: Bounds, right: Bounds): boolean {
   );
 }
 
-function validateCompoundRegions(
-  graph: Readonly<PresentationGraph>,
-  geometry: Readonly<GeometryIndex>,
-  rootWidth: number,
-  rootHeight: number,
-): void {
-  const parentContract = new Map<
-    string,
-    Readonly<{ bounds: Bounds; padding: Padding }>
-  >();
-  parentContract.set("root", {
-    bounds: { left: 0, top: 0, right: rootWidth, bottom: rootHeight },
-    padding: ROOT_PADDING,
-  });
-  for (const group of graph.locationGroups) {
-    const layout = geometry.nodes.get(group.id);
-    if (layout === undefined) reject(`location ${group.id} is missing`);
-    if (
-      layout.width < Math.max(32, group.label.width + 16) ||
-      layout.height < 54
-    ) {
-      reject(`location ${group.id} violates its minimum size`);
-    }
-    parentContract.set(group.id, {
-      bounds: boundsOf(layout),
-      padding: LOCATION_PADDING,
-    });
-  }
-  for (const group of graph.deviceGroups) {
-    const layout = geometry.nodes.get(group.id);
-    if (layout === undefined) reject(`device ${group.id} is missing`);
-    if (
-      layout.width < Math.max(16, group.label.width + 16) ||
-      layout.height < 38
-    ) {
-      reject(`device ${group.id} violates its minimum size`);
-    }
-    parentContract.set(group.id, {
-      bounds: boundsOf(layout),
-      padding: DEVICE_PADDING,
-    });
-  }
-  for (const node of geometry.nodes.values()) {
-    const parent = parentContract.get(node.parentId);
-    if (parent === undefined) reject(`node ${node.id} has no layout parent`);
-    const content: Bounds = {
-      left: quantizeLayoutNumber(
-        parent.bounds.left + parent.padding.left,
-        `parent ${node.parentId} content left`,
-      ),
-      top: quantizeLayoutNumber(
-        parent.bounds.top + parent.padding.top,
-        `parent ${node.parentId} content top`,
-      ),
-      right: quantizeLayoutNumber(
-        parent.bounds.right - parent.padding.right,
-        `parent ${node.parentId} content right`,
-      ),
-      bottom: quantizeLayoutNumber(
-        parent.bounds.bottom - parent.padding.bottom,
-        `parent ${node.parentId} content bottom`,
-      ),
-    };
-    if (!inside(boundsOf(node), content))
-      reject(`node ${node.id} escapes its parent padding`);
-  }
-  for (const label of geometry.labels.values()) {
-    const box = boundsOf(label);
-    if (label.role === "location" || label.role === "device") {
-      const owner = geometry.nodes.get(label.ownerId);
-      if (owner === undefined)
-        reject(`label ${label.id} has no compound owner`);
-      const headerBottom = owner.y + (label.role === "location" ? 38 : 30);
-      if (
-        !inside(box, boundsOf(owner)) ||
-        label.y < owner.y ||
-        label.y + label.height > headerBottom
-      ) {
-        reject(`label ${label.id} escapes its compound header`);
-      }
-    } else if (
-      label.role === "function" ||
-      label.role === "aggregate" ||
-      label.role === "rail"
-    ) {
-      const owner = geometry.nodes.get(label.ownerId);
-      if (owner === undefined) reject(`label ${label.id} has no leaf owner`);
-      if (
-        label.x < owner.x ||
-        label.x + label.width > owner.x + owner.width ||
-        label.y < owner.y ||
-        label.y + label.height > owner.y + 22
-      ) {
-        reject(`label ${label.id} escapes its leaf header`);
-      }
-    } else if (label.role === "terminal") {
-      const port = geometry.ports.get(label.ownerId);
-      if (port === undefined) reject(`label ${label.id} has no port owner`);
-      const expected =
-        port.side === "west"
-          ? {
-              x: port.x - label.width - LABEL_PORT_HORIZONTAL_SPACING,
-              y: port.y + LABEL_PORT_VERTICAL_SPACING,
-            }
-          : port.side === "east"
-            ? {
-                x: port.x + LABEL_PORT_HORIZONTAL_SPACING,
-                y: port.y + LABEL_PORT_VERTICAL_SPACING,
-              }
-            : port.side === "north"
-              ? {
-                  x: port.x + LABEL_PORT_VERTICAL_SPACING,
-                  y: port.y - label.height - LABEL_PORT_HORIZONTAL_SPACING,
-                }
-              : {
-                  x: port.x + LABEL_PORT_VERTICAL_SPACING,
-                  y: port.y + LABEL_PORT_HORIZONTAL_SPACING,
-                };
-      if (
-        label.x !==
-          quantizeLayoutNumber(expected.x, `label ${label.id} expected x`) ||
-        label.y !==
-          quantizeLayoutNumber(expected.y, `label ${label.id} expected y`)
-      ) {
-        reject(`terminal label ${label.id} is outside its ELK port placement`);
-      }
-    }
-  }
-}
-
 function normalizedAngle(value: number): number {
   const fullTurn = 2 * Math.PI;
   const normalized = value % fullTurn;
@@ -1232,6 +1099,7 @@ function validateNodeAndLabelCollisions(
         reject(
           `edge ${segment.edge.id} crosses symbol ${nodeId}`,
           segment.edge.netId,
+          "symbol-intersection",
         );
     }
   }
@@ -1248,19 +1116,8 @@ function validateNodeAndLabelCollisions(
       ),
     ].map((l) => [l.id, l]),
   );
-  const inkBounds = (label: LayoutLabel): Bounds => {
-    const caption = captions.get(label.id);
-    if (!caption) reject(`label ${label.id} has no presentation caption`);
-    const text = caption.printableText ?? caption.text;
-    return printableLabelGeometry(
-      label,
-      text,
-      caption.textLength,
-      label.ownerKind === "edge"
-        ? [geometry.edges.get(label.ownerId)?.points ?? []]
-        : undefined,
-    ).ink;
-  };
+  const inkBounds = (label: LayoutLabel) =>
+    layoutLabelInk(label, captions, geometry.edges, reject);
   for (const label of labels) {
     const labelBounds = inkBounds(label);
     for (const [nodeId, boundsList] of primitiveBounds) {
@@ -1604,6 +1461,20 @@ function freezeLayout(
   return Object.freeze(layout);
 }
 
+function validateLayoutRegions(
+  graph: PresentationGraph,
+  geometry: GeometryIndex,
+  width: number,
+  height: number,
+) {
+  validateCompoundRegions(graph, geometry, width, height, {
+    boundsOf,
+    inside,
+    quantizeLayoutNumber,
+    reject,
+  });
+}
+
 export function normalizeAndValidateLayout(
   graph: Readonly<PresentationGraph>,
   adapterInput: Readonly<ElkNode>,
@@ -1640,7 +1511,7 @@ export function normalizeAndValidateLayout(
     sameIds(input.labels, geometry.labels, "label");
     const rootWidth = dimension(elkOutput.width, "root.width");
     const rootHeight = dimension(elkOutput.height, "root.height");
-    validateCompoundRegions(graph, geometry, rootWidth, rootHeight);
+    validateLayoutRegions(graph, geometry, rootWidth, rootHeight);
     const edges = input.edgeOrder.map((id) => {
       const edge = geometry.edges.get(id);
       if (edge === undefined) reject(`edge ${id} is missing`);

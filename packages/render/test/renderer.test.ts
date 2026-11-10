@@ -396,8 +396,8 @@ describe("integrated renderer", () => {
 
       if (flow === "left-to-right") {
         expect(rawSizes).toEqual([
-          [1082.6, 377],
-          [1082.6, 377],
+          [1387, 431],
+          [1387, 431],
         ]);
         expect(first).toMatchObject({
           ok: false,
@@ -414,8 +414,8 @@ describe("integrated renderer", () => {
         });
       } else {
         expect(rawSizes).toEqual([
-          [543.6, 828],
-          [543.6, 828],
+          [655.8, 832],
+          [655.8, 832],
         ]);
         expect(first.ok, first.ok ? "" : JSON.stringify(first.error)).toBe(
           true,
