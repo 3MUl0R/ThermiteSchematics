@@ -267,7 +267,7 @@ it.each(flows)(
 );
 
 it.each(flows)(
-  "retains the shorter fuse branch limitation and draws equal branches in %s",
+  "discloses the shorter fuse branch limitation and draws equal branches in %s",
   async (flow) => {
     for (const name of ["fuse-short", "fuse-equal", "rail-contacts"] as const) {
       const f = await dolFixture(name);
@@ -285,7 +285,7 @@ it.each(flows)(
             : ["W1", "W2", "W3", "W4", "W5"],
         );
         if (name === "fuse-short")
-          expect(r.value.svg).not.toContain("data-off-view-terminal");
+          expect(r.value.svg).toContain("data-off-view-terminal");
       } finally {
         await f.dispose();
       }

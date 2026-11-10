@@ -1,3 +1,4 @@
+import { initialCardLayout, rememberDrawing } from "./off-view/prepared.js";
 import { diagnoseRooted } from "./rooted-diagnostics.js";
 import { renderErrorContext } from "./render-error-context.js";
 import { compareText, functionIdKey } from "./ordering.js";
@@ -9,7 +10,6 @@ import type { ELK as ElkApi } from "elkjs/lib/elk-api.js";
 import type { QueryEngine } from "@thermite/query";
 
 import { deepFreeze } from "./internal.js";
-import { layoutPresentationGraph } from "./layout/elk-adapter.js";
 import { buildPresentationGraph } from "./presentation.js";
 import {
   selectCableConductorSubgraph,
@@ -37,6 +37,7 @@ import type {
 } from "./types.js";
 import { normalizeSchematicView } from "./view-spec.js";
 import { traceRootRuleForType } from "./intent-rules.js";
+import { offViewLayoutFailure } from "./off-view/presentation.js";
 
 export interface SchematicRendererDependencies {
   readonly mappings?: readonly DeviceTypeSymbolMapping[];
@@ -44,6 +45,7 @@ export interface SchematicRendererDependencies {
   readonly queryEngineFactory?: (ir: Readonly<ElectricalIr>) => QueryEngine;
   readonly layoutEngine?: ElkApi;
   readonly spacingProfile?: "compact" | "dense";
+  readonly offViewPlacements?: Readonly<Record<string, number>>;
 }
 
 function detachedFrozen<Value>(value: Value): Value {
@@ -138,10 +140,18 @@ export async function prepareSchematicDrawing(
             });
   if (!selected.ok) return failed(diagnose(selected.error));
 
+  const presentationMappings = orientSourceWindingMappings(
+    ir,
+    selected.value,
+    mappings,
+  );
   const presented = buildPresentationGraph({
     ir,
     selected: selected.value,
-    mappings: orientSourceWindingMappings(ir, selected.value, mappings),
+    mappings: presentationMappings,
+    ...(dependencies.offViewPlacements
+      ? { offViewPlacements: dependencies.offViewPlacements }
+      : {}),
     catalog,
   });
   if (!presented.ok) return failed(diagnose(presented.error));
@@ -149,7 +159,8 @@ export async function prepareSchematicDrawing(
   const preflight = preflightRenderText(presented.value.graph);
   if (!preflight.ok) return failed(preflight.error);
 
-  const laidOut = await layoutPresentationGraph(presented.value.graph, {
+  let graph = presented.value.graph;
+  const layoutOptions = {
     catalog,
     selected: selected.value,
     ...(dependencies.spacingProfile
@@ -158,9 +169,22 @@ export async function prepareSchematicDrawing(
     ...(dependencies.layoutEngine === undefined
       ? {}
       : { engine: dependencies.layoutEngine }),
-  });
+  };
+  const sourceContext = {
+    ir,
+    selected: selected.value,
+    mappings: presentationMappings,
+    options: layoutOptions,
+  };
+  const initial = await initialCardLayout(
+    graph,
+    sourceContext,
+    !dependencies.offViewPlacements,
+  );
+  graph = initial.graph;
+  const laidOut = initial.layout;
   if (!laidOut.ok) {
-    let error = laidOut.error;
+    let error = offViewLayoutFailure(graph, laidOut.error);
     if (
       error.code === "R004" &&
       normalized.value.view.format === "schematic-view/0.2" &&
@@ -207,13 +231,16 @@ export async function prepareSchematicDrawing(
 
   return {
     ok: true,
-    value: {
-      graph: presented.value.graph,
-      layout: laidOut.value,
-      titleContext: titleContext.value,
-      summary: presented.value.summary,
-      view: normalized.value.view,
-    },
+    value: rememberDrawing(
+      {
+        graph,
+        layout: laidOut.value,
+        titleContext: titleContext.value,
+        summary: presented.value.summary,
+        view: normalized.value.view,
+      },
+      sourceContext,
+    ),
   };
 }
 

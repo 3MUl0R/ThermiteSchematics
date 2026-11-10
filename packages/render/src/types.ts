@@ -217,12 +217,14 @@ export type PresentationLabelRole =
   | "terminal"
   | "conductor"
   | "net"
-  | "reference";
+  | "reference"
+  | "off-view";
 
 export type PresentationLabelOwnerKind =
   "location" | "device" | "symbol" | "rail" | "port" | "edge";
 
 export interface PresentationLabel {
+  readonly offView?: import("./off-view/model.js").OffViewCard;
   readonly id: string;
   readonly ownerKind: PresentationLabelOwnerKind;
   readonly ownerId: string;
@@ -276,6 +278,12 @@ export interface SemanticAttachment {
 }
 
 export interface SymbolPresentationNode {
+  readonly contentBox?: Readonly<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
   readonly kind: "symbol";
   readonly representation: "function" | "aggregate" | "terminal";
   readonly id: string;
@@ -300,6 +308,12 @@ export interface SymbolPresentationNode {
 }
 
 export interface RailPresentationNode {
+  readonly contentBox?: Readonly<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
   readonly kind: "rail";
   readonly id: string;
   readonly parentId: "root";

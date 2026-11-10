@@ -94,8 +94,12 @@ async function checkSeeds(
     string,
     { inputs: string[]; svg: string | null; outcome: string }
   >();
+  // An undesignated jumper's fallback label is its authored UID. Changing that
+  // public label can legitimately change exact font metrics; mutate internal
+  // identities while keeping these printed labels fixed in this matrix.
+  const printed = base.jumpers.filter((j) => !j.designation).map((j) => j.uid);
   for (let seed = 0; seed < 30; seed++) {
-    const ir = reidentify(base, seed);
+    const ir = reidentify(base, seed, printed);
     for (const request of requests)
       for (const flow of flows) {
         const engine = createElkEngine(),
@@ -164,11 +168,11 @@ const exampleProjects = [
       .map(dirname),
   ),
 ].sort();
-it("discovers all 13 shipped example projects", () => {
-  expect(exampleProjects).toHaveLength(13);
+it("discovers all 14 shipped example projects", () => {
+  expect(exampleProjects).toHaveLength(14);
 });
 it.each(exampleProjects)(
-  "shipped %s rooted views have one ELK input sequence and SVG over 30 UID assignments",
+  "shipped %s rooted views have one ELK input sequence and SVG over 30 internal UID assignments",
   async (project) => {
     const compiled = await compileProject(join("examples", project));
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));

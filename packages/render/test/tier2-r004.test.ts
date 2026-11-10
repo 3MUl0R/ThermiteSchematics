@@ -52,7 +52,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "left-to-right",
     netId:
       "net:sha256:1fcf84453b5d3f3e8329a721d27507407fe5d2459f887ee0eb251aca0370d0c9",
-    rawSize: [1425.4999999999998, 734],
+    rawSize: [1724.3, 850],
     boundaryTerminal: "6",
     wireUid: "f0000000-0000-4000-8000-000000000410",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
@@ -65,7 +65,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "top-to-bottom",
     netId:
       "net:sha256:1fcf84453b5d3f3e8329a721d27507407fe5d2459f887ee0eb251aca0370d0c9",
-    rawSize: [1000, 1222],
+    rawSize: [1196, 1232],
     boundaryTerminal: "7",
     wireUid: "e84a9629-373c-4946-8b48-184b7464d474",
     priorityWireUid: "f0000000-0000-4000-8000-000000000410",
@@ -78,7 +78,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "left-to-right",
     netId:
       "net:sha256:c55a63c4fc47d3f27ef4b2b375c57112c9256428728f69ebf96505ce12560308",
-    rawSize: [1514.4, 789],
+    rawSize: [1813.1999999999998, 853],
     boundaryTerminal: "6",
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",
@@ -91,7 +91,7 @@ const CASES: readonly Tier2Case[] = [
     flow: "top-to-bottom",
     netId:
       "net:sha256:c55a63c4fc47d3f27ef4b2b375c57112c9256428728f69ebf96505ce12560308",
-    rawSize: [1347.2, 1224],
+    rawSize: [1595.4, 1234],
     boundaryTerminal: "6",
     wireUid: "00000000-0000-4000-8000-000000000302",
     priorityWireUid: "f0000000-0000-4000-8000-000000000300",

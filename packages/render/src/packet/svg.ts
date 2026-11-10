@@ -87,3 +87,17 @@ export function assemblyNoteLines(value: string, maxWidth: number): string[] {
   }
   return rows.length ? rows : [value];
 }
+
+export function namespaceSheetContent(content: string, number: number): string {
+  const prefix = `sheet-${number}-`;
+  // Text is XML-escaped by the emitter. Scope rewriting to real tag attributes
+  // so a designation containing id="..." or url(#...) remains verbatim.
+  return content.replace(/<[^>]+>/g, (tag) =>
+    tag
+      .replace(/(?<=\s)id="([^"]+)"/g, (_, id: string) => `id="${prefix}${id}"`)
+      .replace(
+        /(?<=\s)clip-path="url\(#([^)]+)\)"/g,
+        (_, id: string) => `clip-path="url(#${prefix}${id})"`,
+      ),
+  );
+}

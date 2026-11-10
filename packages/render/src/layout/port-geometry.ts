@@ -1,3 +1,8 @@
+import type {
+  SymbolPresentationNode,
+  RailPresentationNode,
+  PresentationPort,
+} from "../types.js";
 import type { SymbolSide } from "../symbols/types.js";
 
 export function portBorderOffset(
@@ -18,4 +23,40 @@ export function portBorderOffset(
     case "south":
       return -(height - position.y);
   }
+}
+
+export function portPosition(
+  node: SymbolPresentationNode | RailPresentationNode,
+  port: PresentationPort,
+): Readonly<{ x: number; y: number }> {
+  const origin = node.primitiveOrigin;
+  switch (port.side) {
+    case "west":
+      return {
+        x: quantizedInput(origin.x),
+        y: quantizedInput(origin.y + port.offset * node.symbolSize.height),
+      };
+    case "east":
+      return {
+        x: quantizedInput(origin.x + node.symbolSize.width),
+        y: quantizedInput(origin.y + port.offset * node.symbolSize.height),
+      };
+    case "north":
+      return {
+        x: quantizedInput(origin.x + port.offset * node.symbolSize.width),
+        y: quantizedInput(origin.y),
+      };
+    case "south":
+      return {
+        x: quantizedInput(origin.x + port.offset * node.symbolSize.width),
+        y: quantizedInput(origin.y + node.symbolSize.height),
+      };
+  }
+}
+
+export function quantizedInput(value: number): number {
+  if (!Number.isFinite(value))
+    throw new Error("ELK adapter invariant: adapter geometry must be finite");
+  const quantized = Number(value.toFixed(3));
+  return Object.is(quantized, -0) ? 0 : quantized;
 }

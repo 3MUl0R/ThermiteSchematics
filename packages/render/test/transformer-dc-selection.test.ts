@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 import { prepareSchematicDrawing, renderSchematic } from "../src/renderer.js";
 import { dcNames, dcTransformerFixture } from "./transformer-dc-fixture.js";
-import { dcBaselineHashes } from "./transformer-dc-baseline.js";
+import { cards } from "./off-view-fixtures.js";
 import {
   transformerFlows,
   transformerRequest,
@@ -29,11 +28,24 @@ for (const [supply, transformer] of dcNames)
             expect(r.value.svg).not.toContain(
               'data-symbol-id="ais:source-winding"',
             );
-            expect(createHash("sha256").update(r.value.svg).digest("hex")).toBe(
-              dcBaselineHashes[
-                `${supply}-${transformer}/${branch}/${reordered}/${flow}`
-              ],
+            expect(
+              cards(r.value.svg)
+                .flatMap((c) => c.rows)
+                .sort(),
+            ).toEqual(
+              [
+                `WC → ${transformer}.X2`,
+                ...(branch === "contact" ? ["WD → K2.11"] : []),
+              ].sort(),
             );
+            expect(
+              r.value.summary.conductiveElementIds
+                .map(
+                  (id) => f.ir.wires.find((w) => w.uid === id.uid)?.designation,
+                )
+                .sort(),
+            ).toEqual(["WA", "WB"]);
+            expect(r.value.svg).toContain("data-selected-view-notice");
             const selected = r.value.summary.functionIds
               .map((id) => [
                 f.ir.devices.find((d) => d.uid === id.deviceUid)!.designation,

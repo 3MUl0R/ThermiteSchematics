@@ -47,6 +47,7 @@ import {
   summarizePresentationGraph,
 } from "./presentation/summary.js";
 import { validatePresentationGraph } from "./presentation/validate.js";
+import { addOffViewCards } from "./off-view/presentation.js";
 
 function insertSemanticJunctions(
   context: PresentationContext,
@@ -176,7 +177,7 @@ export function buildPresentationGraph(
   );
   const mutableEdges = [...conductors.edges, ...inserted.boundaryEdges];
   attachNetLabels(context, mutableEdges);
-  const graph: PresentationGraph = labelTerminalContextReferences({
+  const original: PresentationGraph = labelTerminalContextReferences({
     format: "schematic-presentation/0.1",
     directLoadPair: context.directLoadPair,
     view: cloneView(context.selected),
@@ -194,6 +195,13 @@ export function buildPresentationGraph(
       mutableEdges,
     ),
   });
+  const annotated = addOffViewCards(
+    request.ir,
+    original,
+    request.offViewPlacements,
+  );
+  if (!annotated.ok) return annotated;
+  const graph = annotated.value;
   validatePresentationGraph(
     request.ir,
     request.selected,

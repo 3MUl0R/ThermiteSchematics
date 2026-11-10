@@ -103,5 +103,8 @@ it("keeps every shipped 0.2.0 template/example free of missing overload outputs"
       ).toEqual([]);
     }
   }
-  expect(selected.sort()).toEqual(["packages/cli/templates/starter-default"]);
+  expect(selected.sort()).toEqual([
+    "examples/off-view-connections",
+    "packages/cli/templates/starter-default",
+  ]);
 });

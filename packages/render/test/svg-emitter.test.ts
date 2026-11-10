@@ -182,11 +182,13 @@ describe("canonical semantic SVG emitter", () => {
     expect(new Set(checked.ids).size).toBe(checked.ids.length);
   });
 
-  it("emits exactly one stable clip definition and reference per label", () => {
+  it("emits one stable clip per fitted label and leaves off-view cards unclipped", () => {
     const checked = checkRestrictedSvgXml(svg);
-    expect(checked.clipIds).toHaveLength(layout.labels.length);
+    expect(checked.clipIds).toHaveLength(
+      layout.labels.filter((l) => l.role !== "off-view").length,
+    );
     expect(checked.clipReferences).toEqual(checked.clipIds);
-    for (const label of layout.labels) {
+    for (const label of layout.labels.filter((l) => l.role !== "off-view")) {
       const clip = svgSemanticId("clip", [label.id]);
       expect(svg).toContain(
         `<clipPath id="${clip}" clipPathUnits="userSpaceOnUse">`,

@@ -104,13 +104,13 @@ function assertKnownOmissions(ir: ElectricalIr, rendered: RenderedSchematic) {
       svg.querySelectorAll(`[data-device-uid="${device.uid}"]`).length,
     ).toBe(0);
   }
-  // #84b must flip these absence assertions when it adds the disclosure markers.
-  expect(svg.querySelectorAll("[data-off-view-terminal]").length).toBe(0);
-  expect(rendered.svg).not.toContain("Off-view at");
+  // #84 discloses the bounded selection without expanding its six selected wires.
+  expect(svg.querySelectorAll("[data-off-view-terminal]").length).toBe(4);
+  expect(rendered.svg).toContain("Off-view at");
 }
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "known limitation #84: bounded K1 actuation omits authored branches without markers (%s); #84b updates this witness",
+  "bounded K1 actuation discloses omitted authored branches without expanding selection (%s)",
   async (flow) => {
     const root = await mkdtemp(
       join(realpathSync(tmpdir()), "thermite-repro84-"),

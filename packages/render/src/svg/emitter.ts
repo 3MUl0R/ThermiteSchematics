@@ -1,3 +1,6 @@
+import { offViewCardSvg } from "../off-view/svg.js";
+import { rootedNoticeLines, rootedNoticeSvg } from "../off-view/notice.js";
+import { SvgWriter, type SvgAttributes } from "./writer.js";
 import { orthogonalPathData } from "./edge-path.js";
 export { orthogonalPathData } from "./edge-path.js";
 import {
@@ -57,8 +60,6 @@ import {
 } from "../types.js";
 import {
   decodeSvgSemanticId,
-  escapeXmlAttribute,
-  escapeXmlText,
   preflightRenderText,
   preflightTitleRenderText,
   svgSemanticId,
@@ -69,230 +70,8 @@ import {
   type RenderSourceRegistry,
 } from "./source-registry.js";
 
-type SvgElementName =
-  | "circle"
-  | "clipPath"
-  | "defs"
-  | "desc"
-  | "g"
-  | "line"
-  | "path"
-  | "polyline"
-  | "rect"
-  | "style"
-  | "svg"
-  | "text"
-  | "title";
-
-type SvgAttributeName =
-  | "aria-label"
-  | "class"
-  | "clip-path"
-  | "clipPathUnits"
-  | "cx"
-  | "cy"
-  | "d"
-  | `data-${string}`
-  | "dominant-baseline"
-  | "fill"
-  | "font-family"
-  | "font-size"
-  | "height"
-  | "id"
-  | "lengthAdjust"
-  | "points"
-  | "r"
-  | "role"
-  | "rx"
-  | "ry"
-  | "stroke"
-  | "stroke-linecap"
-  | "stroke-linejoin"
-  | "stroke-dasharray"
-  | "stroke-width"
-  | "text-anchor"
-  | "textLength"
-  | "transform"
-  | "version"
-  | "viewBox"
-  | "width"
-  | "x"
-  | "x1"
-  | "x2"
-  | "xmlns"
-  | "y"
-  | "y1"
-  | "y2";
-
-type SvgAttributeValue = string | number | undefined;
-type SvgAttributes = Readonly<
-  Partial<Record<SvgAttributeName, SvgAttributeValue>>
->;
-
-const FIXED_ATTRIBUTE_ORDER = Object.freeze([
-  "xmlns",
-  "version",
-  "viewBox",
-  "width",
-  "height",
-  "id",
-  "class",
-  "clipPathUnits",
-  "clip-path",
-  "x",
-  "y",
-  "x1",
-  "y1",
-  "x2",
-  "y2",
-  "cx",
-  "cy",
-  "r",
-  "rx",
-  "ry",
-  "d",
-  "points",
-  "transform",
-  "fill",
-  "stroke",
-  "stroke-width",
-  "stroke-dasharray",
-  "stroke-linecap",
-  "stroke-linejoin",
-  "font-family",
-  "font-size",
-  "text-anchor",
-  "dominant-baseline",
-  "textLength",
-  "lengthAdjust",
-  "role",
-  "aria-label",
-] as const satisfies readonly Exclude<SvgAttributeName, `data-${string}`>[]);
-
-const FIXED_DATA_ATTRIBUTE_ORDER = Object.freeze([
-  "data-mechanical-association",
-  "data-ganged-functions",
-  "data-location",
-  "data-virtual-location",
-  "data-boundary-kind",
-  "data-device-uid",
-  "data-designation",
-  "data-type-id",
-  "data-function-key",
-  "data-aggregate-key",
-  "data-terminal-key",
-  "data-member-function-key",
-  "data-net-id",
-  "data-potential-uid",
-  "data-potential-name",
-  "data-wire-uid",
-  "data-jumper-uid",
-  "data-cable-uid",
-  "data-conductor-id",
-  "data-presentation-only",
-] as const);
-
-const PREFIXED_DATA_ATTRIBUTE_ORDER = Object.freeze([
-  "data-project-name",
-  "data-project-revision",
-  "data-tool-version",
-  "data-view-format",
-  "data-view-family",
-  "data-view-intent",
-  "data-view-flow",
-  "data-renderer-version",
-  "data-symbol-catalog-version",
-] as const);
-
 const BUILT_IN_STYLE =
   ".location-frame{fill:#f7f8fa;stroke:#667085;stroke-width:1.5}.device-frame{fill:#fff;stroke:#98a2b3;stroke-width:1.5}.net-path{fill:none;stroke:#101828;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}.boundary-path{fill:none;stroke:#475467;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}.symbol-body,.symbol-operator,.symbol-actuator,.symbol-annotation{fill:none;stroke:#101828;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}.symbol-terminal{fill:#fff;stroke:#101828;stroke-width:1.5}.terminal-marker{fill:#fff;stroke:#101828;stroke-width:1.5}.junction-dot{fill:#101828;stroke:none}.label-background{fill:#fff;stroke:none}.label-text{fill:#101828;stroke:none}";
-
-function dataAttributeRank(name: string): number {
-  if (name.startsWith("data-view-")) return 0;
-  if (name.startsWith("data-renderer-")) return 1;
-  if (name.startsWith("data-symbol-")) return 2;
-  const fixed = FIXED_DATA_ATTRIBUTE_ORDER.indexOf(
-    name as (typeof FIXED_DATA_ATTRIBUTE_ORDER)[number],
-  );
-  return fixed < 0 ? 100 : fixed + 3;
-}
-
-function compareAttributeNames(left: string, right: string): number {
-  const leftFixed = FIXED_ATTRIBUTE_ORDER.indexOf(
-    left as (typeof FIXED_ATTRIBUTE_ORDER)[number],
-  );
-  const rightFixed = FIXED_ATTRIBUTE_ORDER.indexOf(
-    right as (typeof FIXED_ATTRIBUTE_ORDER)[number],
-  );
-  if (leftFixed >= 0 || rightFixed >= 0) {
-    return (
-      (leftFixed < 0 ? 1_000 : leftFixed) -
-      (rightFixed < 0 ? 1_000 : rightFixed)
-    );
-  }
-  const leftPrefixed = PREFIXED_DATA_ATTRIBUTE_ORDER.indexOf(left as never);
-  const rightPrefixed = PREFIXED_DATA_ATTRIBUTE_ORDER.indexOf(right as never);
-  if (leftPrefixed >= 0 && rightPrefixed >= 0)
-    return leftPrefixed - rightPrefixed;
-  const rank = dataAttributeRank(left) - dataAttributeRank(right);
-  return rank || compareText(left, right);
-}
-
-function serializedAttributes(attributes: SvgAttributes): string {
-  return Object.entries(attributes)
-    .filter(
-      (entry): entry is [string, string | number] => entry[1] !== undefined,
-    )
-    .sort(([left], [right]) => compareAttributeNames(left, right))
-    .map(([name, raw]) => {
-      if (
-        !name.startsWith("data-") &&
-        !FIXED_ATTRIBUTE_ORDER.includes(name as never)
-      ) {
-        throw new Error(`SVG emitter rejected attribute ${name}.`);
-      }
-      const value = typeof raw === "number" ? formatSvgNumber(raw) : raw;
-      return ` ${name}="${escapeXmlAttribute(value)}"`;
-    })
-    .join("");
-}
-
-class SvgWriter {
-  readonly lines: string[] = [];
-
-  element(
-    indent: number,
-    name: SvgElementName,
-    attributes: SvgAttributes = {},
-    text?: string,
-  ): void {
-    const prefix = "  ".repeat(indent);
-    const attrs = serializedAttributes(attributes);
-    this.lines.push(
-      text === undefined
-        ? `${prefix}<${name}${attrs}/>`
-        : `${prefix}<${name}${attrs}>${escapeXmlText(text)}</${name}>`,
-    );
-  }
-
-  open(
-    indent: number,
-    name: SvgElementName,
-    attributes: SvgAttributes = {},
-  ): void {
-    this.lines.push(
-      `${"  ".repeat(indent)}<${name}${serializedAttributes(attributes)}>`,
-    );
-  }
-
-  close(indent: number, name: SvgElementName): void {
-    this.lines.push(`${"  ".repeat(indent)}</${name}>`);
-  }
-
-  finish(): string {
-    return `${this.lines.join("\n")}\n`;
-  }
-}
 
 function indexById<Value extends { readonly id: string }>(
   values: readonly Value[],
@@ -621,12 +400,14 @@ function emitDefinitions(
   writer: SvgWriter,
   labels: readonly LayoutLabel[],
   mmPerUnit: number,
+  pixels: number,
 ): void {
-  // Allow one antialias fringe pixel plus one clear 300 dpi pixel.
+  // Paged drawing transforms also need one pixel for raster-origin rounding.
+  // Keep the antialias fringe and one clear 300 dpi pixel at any page phase.
   // Clip padding does not participate in placement or validated ink.
-  const padding = (2 * 25.4) / 300 / mmPerUnit + 0.001;
+  const padding = (pixels * 25.4) / 300 / mmPerUnit + 0.001;
   writer.open(1, "defs");
-  for (const label of labels) {
+  for (const label of labels.filter((l) => l.role !== "off-view")) {
     writer.open(2, "clipPath", {
       id: svgSemanticId("clip", [label.id]),
       clipPathUnits: "userSpaceOnUse",
@@ -1062,6 +843,30 @@ function presentationLabelIndex(
   );
 }
 
+function assertPrintableLabel(
+  label: LayoutLabel,
+  presentation: PresentationLabel,
+  registry: RenderSourceRegistry,
+): void {
+  if (
+    presentation.text !== label.text ||
+    presentation.width !== label.width ||
+    presentation.height !== label.height
+  ) {
+    throw new Error(
+      `Layout label ${label.id} disagrees with presentation text geometry.`,
+    );
+  }
+  for (const source of presentation.textSources) {
+    sourceValue(
+      registry,
+      source.field,
+      source.value,
+      `label ${presentation.id} source`,
+    );
+  }
+}
+
 function emitLabels(
   writer: SvgWriter,
   graph: Readonly<PresentationGraph>,
@@ -1075,22 +880,12 @@ function emitLabels(
       semantic.get(label.id),
       `Layout label ${label.id} has no presentation label.`,
     );
-    if (
-      presentation.text !== label.text ||
-      presentation.width !== label.width ||
-      presentation.height !== label.height
-    ) {
-      throw new Error(
-        `Layout label ${label.id} disagrees with presentation text geometry.`,
+    assertPrintableLabel(label, presentation, registry);
+    if (presentation.offView) {
+      writer.lines.push(
+        offViewCardSvg(presentation, global(label.x), global(label.y)),
       );
-    }
-    for (const source of presentation.textSources) {
-      sourceValue(
-        registry,
-        source.field,
-        source.value,
-        `label ${presentation.id} source`,
-      );
+      continue;
     }
     const printed = presentation.printableText ?? label.text;
     // Empty captions retain clip identity and the PDF label contract.
@@ -1203,6 +998,56 @@ function emitTitleBlock(
   writer.close(1, "g");
 }
 
+function canvasDimensions(
+  graph: PresentationGraph,
+  layout: NormalizedSchematicLayout,
+  titleContext: SchematicTitleContext,
+  diagramOnly: boolean,
+) {
+  const diagramWidth = layout.width + OUTER_SVG_PADDING * 2;
+  const diagramHeight = layout.height + OUTER_SVG_PADDING * 2;
+  const longestTextLength = Math.max(
+    ...titleContext.lines.map((line) => titleTextLength(line.value)),
+  );
+  const blockWidth = Math.max(240, longestTextLength + 16);
+  const blockHeight = 16 + 14 * titleContext.lines.length;
+  const width = diagramOnly
+    ? diagramWidth
+    : Math.max(diagramWidth, blockWidth + 32);
+  const noticeHeight = diagramOnly
+    ? 0
+    : rootedNoticeLines(graph.view, width - 32, 12).length * 16 + 16;
+  const height = diagramOnly
+    ? diagramHeight
+    : diagramHeight + noticeHeight + 16 + blockHeight + 16;
+  const blockX = width - blockWidth - 16;
+  const blockY = diagramHeight + noticeHeight + 16;
+  return {
+    width,
+    height,
+    blockX,
+    blockY,
+    blockWidth,
+    blockHeight,
+    noticeHeight,
+  };
+}
+
+function beginDiagram(
+  writer: SvgWriter,
+  graph: PresentationGraph,
+  width: number,
+  diagramOnly: boolean,
+  noticeHeight: number,
+) {
+  if (!diagramOnly) {
+    writer.lines.push(rootedNoticeSvg(graph.view, 16, 16, width - 32, 12, 16));
+    writer.open(1, "g", {
+      transform: `translate(0 ${formatSvgNumber(noticeHeight)})`,
+    });
+  }
+}
+
 export function emitSchematicSvg(
   graph: Readonly<PresentationGraph>,
   layout: Readonly<NormalizedSchematicLayout>,
@@ -1226,21 +1071,15 @@ export function emitSchematicSvg(
   const portLayouts = indexById(layout.ports, "layout port");
   const edgeLayouts = indexById(layout.edges, "layout edge");
   const labels = canonicalLabels(graph, layout);
-  const diagramWidth = layout.width + OUTER_SVG_PADDING * 2;
-  const diagramHeight = layout.height + OUTER_SVG_PADDING * 2;
-  const longestTextLength = Math.max(
-    ...titleContext.lines.map((line) => titleTextLength(line.value)),
-  );
-  const blockWidth = Math.max(240, longestTextLength + 16);
-  const blockHeight = 16 + 14 * titleContext.lines.length;
-  const width = diagramOnly
-    ? diagramWidth
-    : Math.max(diagramWidth, blockWidth + 32);
-  const height = diagramOnly
-    ? diagramHeight
-    : diagramHeight + 16 + blockHeight + 16;
-  const blockX = width - blockWidth - 16;
-  const blockY = diagramHeight + 16;
+  const {
+    width,
+    height,
+    blockX,
+    blockY,
+    blockWidth,
+    blockHeight,
+    noticeHeight,
+  } = canvasDimensions(graph, layout, titleContext, diagramOnly);
   const rootDesignation = sourceValue(
     registry,
     graph.view.format === "schematic-view/0.2" &&
@@ -1299,7 +1138,7 @@ export function emitSchematicSvg(
     `Deterministic ${graph.view.flow} ${graph.view.family} electrical schematic.`,
   );
   writer.element(1, "style", {}, BUILT_IN_STYLE);
-  emitDefinitions(writer, labels, mmPerUnit);
+  emitDefinitions(writer, labels, mmPerUnit, diagramOnly ? 3 : 2);
   writer.element(1, "rect", {
     class: "canvas-background",
     x: 0,
@@ -1308,6 +1147,7 @@ export function emitSchematicSvg(
     height,
     fill: titleContext.backgroundColor,
   });
+  beginDiagram(writer, graph, width, diagramOnly, noticeHeight);
   emitFrames(writer, graph, nodeLayouts, registry);
   emitEdges(writer, graph, edgeLayouts, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
@@ -1336,6 +1176,7 @@ export function emitSchematicSvg(
     ir,
   );
   emitLabels(writer, graph, labels, registry, layout.edges);
+  if (!diagramOnly) writer.close(1, "g");
   if (!diagramOnly)
     emitTitleBlock(
       writer,

@@ -532,7 +532,8 @@ function expectedIncidencePlacement(
   const hasLabeledZeroIncidencePort = node.ports.some(
     (port) =>
       node.labels.some(
-        ({ ownerKind, ownerId }) => ownerKind === "port" && ownerId === port.id,
+        ({ ownerKind, ownerId, role }) =>
+          role !== "off-view" && ownerKind === "port" && ownerId === port.id,
       ) && !incident.has(port.id),
   );
   return hasLabeledZeroIncidencePort
@@ -1010,9 +1011,36 @@ describe("M6 Task 7 before/after semantic propagation", () => {
     expect(replaceNetReferences(pnp.selected, replacements)).toEqual(
       baseline.selected,
     );
-    expect(replaceNetReferences(pnp.presentation.nodes, replacements)).toEqual(
-      baseline.presentation.nodes,
+    const physicalNodes = (stages: ViewStages) =>
+      stages.presentation.nodes.map((node) => {
+        if (node.kind === "junction") return node;
+        const {
+          width,
+          height,
+          primitiveOrigin,
+          contentBox,
+          labels,
+          ...physical
+        } = node;
+        return { ...physical, labels: labels.filter((l) => !l.offView) };
+      });
+    expect(replaceNetReferences(physicalNodes(pnp), replacements)).toEqual(
+      physicalNodes(baseline),
     );
+    const offViewRows = (stages: ViewStages) =>
+      stages.presentation.nodes.flatMap((n) =>
+        n.kind === "junction"
+          ? []
+          : n.labels.flatMap(
+              (l) =>
+                l.offView?.connections.map(
+                  (c) => `${c.designation} → ${c.destination}`,
+                ) ?? [],
+            ),
+      );
+    expect(offViewRows(baseline)).toContain("W-FLD-002 → LS1.13");
+    expect(offViewRows(pnp)).toContain("W-FLD-002 → LS1.1");
+    expect(offViewRows(pnp)).toContain("W-FLD-004 → LS1.3");
     expect(
       replaceNetReferences(pnp.presentation.summary, replacements),
     ).toEqual(baseline.presentation.summary);
@@ -1503,15 +1531,13 @@ describe("Amendment B2 collision-free real-layout evidence", () => {
       ["attachment", "west"],
     ]);
     expect(route(right, "W-CTL-001")).toEqual([
-      { x: 312.4, y: 214 },
-      { x: 513.2, y: 214 },
-      { x: 513.2, y: 387 },
-      { x: 642.4, y: 387 },
+      { x: 399.6, y: 387 },
+      { x: 729.6, y: 387 },
     ]);
     expect(route(right, "W-CTL-003")).toEqual([
-      { x: 312.4, y: 214 },
-      { x: 312.4, y: 173 },
-      { x: 642.7, y: 173 },
+      { x: 399.6, y: 387 },
+      { x: 399.6, y: 173 },
+      { x: 729.9, y: 173 },
     ]);
 
     const down = view(pnpViews, "loads", "top-to-bottom");
@@ -1526,34 +1552,30 @@ describe("Amendment B2 collision-free real-layout evidence", () => {
       ["attachment", "north"],
     ]);
     expect(route(down, "W-CTL-001")).toEqual([
-      { x: 587.8, y: 290 },
-      { x: 587.8, y: 389 },
-      { x: 295.4, y: 389 },
-      { x: 295.4, y: 523 },
+      { x: 373.8, y: 294 },
+      { x: 373.8, y: 527 },
     ]);
     expect(route(down, "W-CTL-003")).toEqual([
-      { x: 587.8, y: 290 },
-      { x: 683.2, y: 290 },
-      { x: 683.2, y: 389 },
-      { x: 616, y: 389 },
-      { x: 616, y: 523 },
+      { x: 373.8, y: 294 },
+      { x: 694.4, y: 294 },
+      { x: 694.4, y: 527 },
     ]);
 
     for (const [stages, expected] of [
       [
         right,
         {
-          node: { x: 1580.6, y: 141 },
-          port: { x: 1646.6, y: 183 },
-          label: { x: 1650.6, y: 187, width: 12.2, height: 14 },
+          node: { x: 1667.8, y: 177 },
+          port: { x: 1737.8, y: 237 },
+          label: { x: 1741.8, y: 241, width: 12.2, height: 14 },
         },
       ],
       [
         down,
         {
-          node: { x: 392.2, y: 1312 },
-          port: { x: 496.2, y: 1382 },
-          label: { x: 500.2, y: 1386, width: 12.2, height: 14 },
+          node: { x: 530.4, y: 1316 },
+          port: { x: 684.4, y: 1390 },
+          label: { x: 688.4, y: 1394, width: 12.2, height: 14 },
         },
       ],
     ] as const) {
@@ -1615,12 +1637,14 @@ describe("Amendment B2 collision-free real-layout evidence", () => {
         return required(adapted.x);
       })
       .sort((left, right) => left - right);
-    expect(anchors).toEqual([85.8, 133.8]);
+    expect(
+      anchors.map((x) => Number((x - (source.contentBox?.x ?? 0)).toFixed(3))),
+    ).toEqual([85.8, 133.8]);
     expect(anchors[1]! - anchors[0]!).toBeCloseTo(48);
     expect(48).toBeGreaterThanOrEqual(3 + 43.2);
     expect(stages.layout).toMatchObject({
-      width: 417,
-      height: 549,
+      width: orderingMetrics.sizes["baseline:loads:top-to-bottom"][0],
+      height: orderingMetrics.sizes["baseline:loads:top-to-bottom"][1],
     });
   });
 });

@@ -26,7 +26,11 @@ import type {
   AggregateSymbolRule,
 } from "../symbols/mappings.js";
 import type { SymbolDefinition, SymbolSide } from "../symbols/types.js";
-import type { UnsupportedSymbolMappingError } from "../errors.js";
+import type {
+  UnsupportedSymbolMappingError,
+  InvalidSheetError,
+  InvalidRenderTextError,
+} from "../errors.js";
 import type { SemanticOrder } from "../semantic-order.js";
 
 export interface BuildPresentationGraphRequest {
@@ -34,6 +38,7 @@ export interface BuildPresentationGraphRequest {
   readonly selected: Readonly<SelectedSubgraph>;
   readonly mappings?: readonly DeviceTypeSymbolMapping[];
   readonly catalog?: readonly SymbolDefinition[];
+  readonly offViewPlacements?: Readonly<Record<string, number>>;
 }
 
 export type BuildPresentationGraphResult =
@@ -44,7 +49,13 @@ export type BuildPresentationGraphResult =
         summary: RenderSummary;
       }>;
     }
-  | { readonly ok: false; readonly error: UnsupportedSymbolMappingError };
+  | {
+      readonly ok: false;
+      readonly error:
+        | UnsupportedSymbolMappingError
+        | InvalidSheetError
+        | InvalidRenderTextError;
+    };
 
 export interface PresentationContext {
   readonly order: SemanticOrder;

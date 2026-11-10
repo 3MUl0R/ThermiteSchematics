@@ -6,7 +6,11 @@ import { irSemanticOrder } from "../src/semantic-order.js";
 /** Reassign every instance identity, net hash and index reference together. Source
  * positions and type/function/terminal keys remain authored. Shuffle IR records
  * too: a producer's incidental collection order is not a layout constraint. */
-export function reidentify(ir: ElectricalIr, seed: number): ElectricalIr {
+export function reidentify(
+  ir: ElectricalIr,
+  seed: number,
+  printedUids: readonly string[] = [],
+): ElectricalIr {
   const names = new Map<string, string>();
   for (const item of [
     ...ir.devices,
@@ -17,6 +21,10 @@ export function reidentify(ir: ElectricalIr, seed: number): ElectricalIr {
     ...ir.nets,
   ]) {
     const id = "uid" in item ? item.uid : item.id;
+    if (printedUids.includes(id)) {
+      names.set(id, id);
+      continue;
+    }
     const h = createHash("sha256").update(`${seed}:${id}`).digest("hex");
     names.set(
       id,

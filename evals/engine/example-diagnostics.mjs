@@ -6,6 +6,29 @@ import {
 // W903 = authored required connection omitted; W904 = declared partial model;
 // W905 = authored deferred work. Any addition, removal or changed message fails.
 export const exampleDiagnostics = {
+  "off-view-connections": {
+    classification: "authored-model-obligations",
+    rationale:
+      "Synthetic endpoint inventory intentionally leaves PS1 input L/N unwired and declares no potential voltage intent on its rated output net; preserve both disclosures.",
+    diagnostics: [
+      {
+        file: "source.json",
+        jsonPointer: "/objects/0",
+        code: "W903",
+        severity: "warning",
+        message:
+          "PS1: Required terminal PS1.L has no connection. Required terminal PS1.N has no connection.",
+      },
+      {
+        file: "system.json",
+        jsonPointer: "/project",
+        code: "I304",
+        severity: "info",
+        message:
+          'Voltage compatibility is unassessed on rated nets without voltage facts in potentials (1 net: ["H1.X1, K1.A1, PS1.+, TB1.3 [net:sha256:00933889f14bdad9383ee70514a9657af81acb118df0f804acc1270aa2320a5a]"]). Ratings describe equipment capability; potentials declare net intent.',
+      },
+    ],
+  },
   "assembly-note-bounds": {
     classification: "authored-model-obligations",
     rationale:

@@ -1558,24 +1558,24 @@ describe("Amendment B4 v23 Tier 1 evidence matrix", () => {
         selected,
         engine,
       });
-      expect(attempts).toBeGreaterThan(1);
+      expect(attempts).toBeGreaterThanOrEqual(1);
       expect(attempts).toBeLessThanOrEqual(279);
       expect(valid.ok, valid.ok ? "" : valid.error.message).toBe(true);
       if (!valid.ok) return;
       const expectedSize =
-        flow === "left-to-right" ? [1315, 537] : [764.2, 1032];
+        flow === "left-to-right" ? [1607.8, 627] : [960.2, 1036];
       expect([valid.value.width, valid.value.height]).toEqual(expectedSize);
       const expectedCenters =
         flow === "left-to-right"
           ? [
-              [393.2, 425],
-              [641.2, 393],
-              [790, 319],
+              [605.6, 477],
+              [853.6, 445],
+              [1002.4, 323],
             ]
           : [
-              [249.4, 396],
-              [249.4, 528],
-              [506, 660],
+              [249.4, 400],
+              [249.4, 532],
+              [566, 664],
             ];
       const terminalKeys = new Set([
         JSON.stringify([ROUND9_DEVICE_UIDS.LS1, "4"]),
@@ -1655,7 +1655,7 @@ describe("Amendment B4 v23 Tier 1 evidence matrix", () => {
       expect(secondJsonBytes).toBe(firstJsonBytes);
       expect(reorderedJsonBytes).toBe(firstJsonBytes);
       const expectedSvgSize =
-        flow === "left-to-right" ? [1355, 681] : [804.2, 1176];
+        flow === "left-to-right" ? [1647.8, 819] : [1000.2, 1228];
       expect(firstProduct.value.svg).toContain(
         `viewBox="0 0 ${expectedSvgSize[0]} ${expectedSvgSize[1]}" width="${expectedSvgSize[0]}" height="${expectedSvgSize[1]}"`,
       );

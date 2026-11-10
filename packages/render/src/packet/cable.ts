@@ -1,3 +1,5 @@
+import { cableRowLabels } from "./cable-row.js";
+import { required } from "../presentation/util.js";
 import type {
   CompiledProjectPresentation,
   ElectricalIr,
@@ -16,6 +18,12 @@ import type { Draft, PaperPage, SheetReference } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds, zone } from "./page.js";
 import { n, text, line, wrap } from "./svg.js";
+import {
+  cableEndpointCards,
+  cableCardContext,
+  cableRowHeight,
+} from "./cable-annotations.js";
+import { offViewCardSvg } from "../off-view/svg.js";
 
 export async function cableDrafts(
   ir: Readonly<ElectricalIr>,
@@ -38,7 +46,7 @@ export async function cableDrafts(
   );
   if (!preparedTitle.ok) return preparedTitle;
   const title = preparedTitle.value,
-    b = bounds(title, page);
+    b = bounds(title, page, view);
   const sources = cableLabelSources(schedule);
   const preflight = preflightTitleRenderText(
     view,
@@ -55,6 +63,13 @@ export async function cableDrafts(
     jacketL = left + b.w * 0.35,
     jacketR = right - b.w * 0.35;
   const maxEnd = Math.floor((jacketL - left - 8) / 1.55);
+  const annotations = cableEndpointCards(
+    ir,
+    schedule,
+    view,
+    jacketL - left - 8,
+  );
+  if (!annotations.ok) return annotations;
   if (maxEnd < 12 || sources.some((value) => [...value].length > 160))
     return failure(
       "unprintable-layout",
@@ -139,15 +154,16 @@ export async function cableDrafts(
         : wrap(rightEnd.display, maxEnd);
     const center = `${core.id} / ${core.color}${core.size ? ` / ${core.size}` : ""}`;
     const centerRows = wrap(center, Math.floor((jacketR - jacketL - 6) / 1.5));
-    const height = Math.max(
-      19,
-      Math.max(a.length, z.length, centerRows.length) * 4 + 12,
+    const cards = required(
+      annotations.value[i],
+      "Missing cable endpoint cards",
     );
+    const height = cableRowHeight(cards, [a, z, centerRows]);
     if (y + height + 24 > b.y + b.h) {
       if (i === first)
         return failure(
           "unprintable-layout",
-          "A cable core row cannot fit on this page. Shorten labels or use a larger page.",
+          `A cable core row cannot fit on this page. ${cableCardContext(cards)}. Use a larger page or change flow.`,
         );
       finish(i);
       first = i;
@@ -165,27 +181,8 @@ export async function cableDrafts(
         dashed ? 'stroke-dasharray="2 1"' : "",
       ),
     );
-    a.forEach((row, index) =>
-      content.push(text(left, y + index * 4 + 4, row, 2.7)),
-    );
-    z.forEach((row, index) =>
-      content.push(text(right, y + index * 4 + 4, row, 2.7, "end")),
-    );
-    centerRows.forEach((row, index) =>
-      content.push(
-        text((left + right) / 2, y + index * 4 + 3, row, 2.6, "middle"),
-      ),
-    );
     content.push(
-      text(
-        (left + right) / 2,
-        midY + 4,
-        core.usage === "unspecified"
-          ? "ASSIGNED / USAGE UNSPECIFIED"
-          : core.usage.toUpperCase(),
-        2.2,
-        "middle",
-      ),
+      ...cableRowLabels(a, z, centerRows, core.usage, { left, right, y, midY }),
     );
     for (const [end, x] of [
       [leftEnd, left + 1],
@@ -209,6 +206,17 @@ export async function cableDrafts(
         );
       }
     }
+    cards.forEach((card, index) => {
+      if (card)
+        content.push(
+          offViewCardSvg(
+            card,
+            index === 0 ? left + 2 : right - card.width * 0.25 - 2,
+            midY + 5,
+            0.25,
+          ),
+        );
+    });
     content.push("</g>");
     y += height;
   }

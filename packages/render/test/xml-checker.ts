@@ -46,6 +46,7 @@ const ATTRIBUTES = new Set([
   "stroke-linejoin",
   "font-family",
   "font-size",
+  "font-weight",
   "text-anchor",
   "dominant-baseline",
   "textLength",

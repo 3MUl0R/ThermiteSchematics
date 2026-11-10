@@ -23,6 +23,7 @@ import {
 import { validateNodes } from "./validate-nodes.js";
 import { comparePresentationNode, terminalIdKey } from "../ordering.js";
 import { assertSemanticAttachments } from "../layout/topology-conservation.js";
+import { validateOffViewIncidence } from "../off-view/validate.js";
 
 export function validatePresentationGraph(
   ir: Readonly<ElectricalIr>,
@@ -78,6 +79,7 @@ export function validatePresentationGraph(
   );
 
   validateLabelsAndMetadata(graph, selected, deviceByUid);
+  validateOffViewIncidence(ir, graph);
   validateProvenance(ir, graph, mappings, selected);
 }
 

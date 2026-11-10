@@ -8,9 +8,18 @@ import { spawnSync } from "node:child_process";
 import { cases, prepare } from "../../../evals/draw/corpus.mjs";
 import { checkSvgFontBudget } from "../../../evals/draw/font-budget.mjs";
 import { embedPrintableFont } from "../src/printable-font.js";
+const fontCases = [
+  ...cases().filter((c) => !c.sweep),
+  ...["left-to-right", "top-to-bottom"].map((flow) => ({
+    id: `off-view-connections-${flow}`,
+    project: "examples/off-view-connections",
+    request: "examples/off-view-connections/packet.json",
+    flow,
+  })),
+];
 const scratch = await mkdtemp(join(tmpdir(), "thermite-font-examples-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
-it.each(cases().filter((c) => !c.sweep))(
+it.each(fontCases)(
   "bounds every rendered shipped-example SVG: $id",
   async (c) => {
     const dir = join(scratch, c.id);
@@ -55,7 +64,7 @@ it("covers every shipped example project in the font budget matrix", async () =>
     inventory.push(file.replace(/\\/gu, "/").replace(/\/system.json$/u, ""));
   expect(
     new Set(
-      cases()
+      fontCases
         .filter((c) => c.project.startsWith("examples/"))
         .map((c) => c.project),
     ),
