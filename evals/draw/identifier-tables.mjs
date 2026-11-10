@@ -1,5 +1,42 @@
 // Index/reference tables are packet-owned; public query tables cover all other
 // reports. Values below come from packet references and IR, never printed text.
+// Keep this explicit: normalized documentation views also include diagrams.
+// A renderer-backed test pins every documentationTable kind to this list.
+export const documentationTableKinds = [
+  "bom",
+  "wires",
+  "cables",
+  "terminals",
+  "io",
+  "io-ports",
+  "network",
+  "assemblies",
+  "index",
+  "references",
+];
+
+function referenceContent(packet, content) {
+  const selection = packet.referenceSelection;
+  if (!selection) return content;
+  if (
+    selection.enabled !== true ||
+    !["all", "drawings"].includes(selection.appearances) ||
+    !Array.isArray(selection.deviceUids)
+  )
+    throw Error("Identifier measurement: invalid reference selection");
+  const selected = new Set(selection.deviceUids);
+  return content
+    .filter(
+      (s) =>
+        selection.appearances !== "drawings" ||
+        !documentationTableKinds.includes(s.view.kind),
+    )
+    .map((s) => ({
+      ...s,
+      references: s.references.filter((r) => selected.has(r.deviceUid)),
+    }));
+}
+
 export function identifierTable(sheet, packet, g, ir, tables) {
   const kind = sheet.view.kind;
   const table = tables.find((table) => table.kind === kind);
@@ -12,6 +49,9 @@ export function identifierTable(sheet, packet, g, ir, tables) {
   const content = packet.sheets.filter(
     (s) => !["index", "references"].includes(s.view.kind),
   );
+  // Index every content sheet; only the reference projection obeys its scope.
+  const appearances =
+    kind === "references" ? referenceContent(packet, content) : [];
   const columns =
     kind === "index"
       ? ["Sheet", "View", "Devices"]
@@ -34,7 +74,7 @@ export function identifierTable(sheet, packet, g, ir, tables) {
             throw Error(
               `Identifier measurement: unknown reference device ${uid}`,
             );
-          const entries = content.flatMap((s) =>
+          const entries = appearances.flatMap((s) =>
             s.references
               .filter(
                 (r) =>
