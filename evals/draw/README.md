@@ -253,6 +253,14 @@ Both registries' header positions are tested against the public query output and
 packet-only wire reference columns. Terminal-plan connection columns protect
 complete peer endpoint units from authored wires, jumpers and cable cores;
 printed arrows and semicolons never determine their unit boundaries.
+For packet reference cells, the oracle applies the effective `referenceSelection`
+appearance scope and device selection to structured content-sheet references.
+`drawings` excludes documentation-table appearances; omitted options retain
+`all`. The drawing index still includes every content sheet. An explicit report
+kind list is tested against actual renderer table drafts, including packet-owned
+indexes; normalized documentation format alone does not distinguish drawings
+from tables. Filtered reference cells retain the same independent line and
+text-integrity checks in all three media.
 
 These checker and test additions change the complete checker bundle hash.
 Existing C1 targets and draft decisions need a fresh full target before a re-pin;
