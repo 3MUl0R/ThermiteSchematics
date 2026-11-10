@@ -1,4 +1,7 @@
-import { expect, it } from "vitest";
+vi.mock("./pdf-painted.mjs", () => ({
+  paintedPdfItems: async (_page, items) => items,
+}));
+import { expect, it, vi } from "vitest";
 import { identifierFindings } from "./identifier-checks.mjs";
 import { expectedIdentifierCells } from "./identifier-policy.mjs";
 import { pdfIdentifierRuns } from "./identifier-pdf.mjs";

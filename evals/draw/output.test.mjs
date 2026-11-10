@@ -16,3 +16,44 @@ it("accounts for its own bytes and rejects an exceeded default budget", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+it("a forced budget refusal retains source pins and accounts for the final summary", async () => {
+  const { finalizeOutput } = await import("./output.mjs"),
+    { readFile } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "draw-budget-"));
+  try {
+    const report = {
+      exitCode: 0,
+      sourceHashes: {
+        format: "sources",
+        sheets: [{ case: "one", sheet: 1, svg: { sha256: "a".repeat(64) } }],
+      },
+      results: [],
+    };
+    const done = await finalizeOutput(root, report, false, 1),
+      written = JSON.parse(await readFile(join(root, "summary.json"), "utf8"));
+    expect(written.sourceHashes).toEqual(report.sourceHashes);
+    expect(written.exitCode).toBe(2);
+    expect(written.results[0].id).toBe("harness/output-budget");
+    expect(done.cost.outputBytes).toBe(await directoryBytes(root));
+    expect(done.cost.withinBudget).toBe(false);
+    expect(JSON.parse(await readFile(join(root, "cost.json"), "utf8"))).toEqual(
+      done.cost,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("cost remains exact across its own byte-count and budget boundaries", async () => {
+  const root = await mkdtemp(join(tmpdir(), "draw-cost-boundary-"));
+  try {
+    for (const budget of [120, 121, 122, 123, 124, 125, 126, 127, 128]) {
+      const cost = await outputCost(root, false, budget),
+        bytes = await directoryBytes(root);
+      expect(cost.outputBytes).toBe(bytes);
+      expect(cost.withinBudget).toBe(bytes <= budget);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

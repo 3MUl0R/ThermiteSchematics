@@ -405,3 +405,14 @@ it("limits extra PDF rows to the owned text envelope", () => {
     ]),
   ).toThrow(/unassociated extra row/);
 });
+it("never borrows a destination zone from the inline identity", () => {
+  const f = fixture([row("C001 / 01 / 01.D6")]),
+    source = {
+      wires: [
+        { uid: "w", designation: "PE-SRC", properties: { label: "01.D6" } },
+      ],
+    };
+  expect(
+    continuations(f.sheet, f.packet, f.g, [f.g], source)[0].missing,
+  ).toContain("printed sheet.zone");
+});

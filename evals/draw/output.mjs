@@ -1,3 +1,6 @@
+import assert from "node:assert/strict";
+import { summary } from "./assessment.mjs";
+import { canonical } from "./support.mjs";
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { json } from "./support.mjs";
@@ -20,10 +23,43 @@ export async function outputCost(root, artifacts = false, budget = 100000000) {
     budgetBytes: artifacts ? null : budget,
   };
   data.withinBudget = true;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 32; i++) {
     data.outputBytes = base + Buffer.byteLength(json(data));
     data.withinBudget = artifacts || data.outputBytes <= data.budgetBytes;
+    const bytes = json(data);
+    if (data.outputBytes === base + Buffer.byteLength(bytes)) {
+      await writeFile(join(root, "cost.json"), bytes);
+      return data;
+    }
   }
-  await writeFile(join(root, "cost.json"), json(data));
-  return data;
+  assert.fail("Output cost did not converge");
+}
+
+export async function finalizeOutput(
+  root,
+  report,
+  artifacts = false,
+  budget = 100000000,
+) {
+  const write = (value) =>
+    writeFile(
+      join(root, "summary.json"),
+      JSON.stringify(canonical(value)) + "\n",
+    );
+  await write(report);
+  let cost = await outputCost(root, artifacts, budget);
+  if (!cost.withinBudget) {
+    const results = [
+      ...report.results,
+      {
+        id: "harness/output-budget",
+        status: "infrastructure-error",
+        reason: `Default output ${cost.outputBytes} exceeds ${budget} byte budget`,
+      },
+    ];
+    report = { ...report, exitCode: 2, summary: summary(results), results };
+    await write(report);
+    cost = await outputCost(root, artifacts, budget);
+  }
+  return { report, cost };
 }

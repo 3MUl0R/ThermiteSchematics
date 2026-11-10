@@ -1,3 +1,4 @@
+import { paintedPdfItems } from "./pdf-painted.mjs";
 import assert from "node:assert/strict";
 import { maskLossRegions } from "./pdf-operators.mjs";
 import {
@@ -74,7 +75,7 @@ export async function renderPdf(page, dpi = 96, box) {
   }).promise;
   return canvas;
 }
-export async function pdfText(page, families = [], fontCaps = {}) {
+export async function rawPdfText(page, families = [], fontCaps = {}) {
   await page.getOperatorList();
   const content = await page.getTextContent({ disableNormalization: true }),
     viewport = page.getViewport({ scale: 25.4 / 72 });
@@ -105,6 +106,9 @@ export async function pdfText(page, families = [], fontCaps = {}) {
         fontFamily: `${content.styles[x.fontName]?.fontFamily ?? "unknown"} [${families.join(",")}]`,
       };
     });
+}
+export async function pdfText(page, families = [], fontCaps = {}) {
+  return paintedPdfItems(page, await rawPdfText(page, families, fontCaps));
 }
 export async function imageCanvas(bytes) {
   const img = await loadImage(bytes);

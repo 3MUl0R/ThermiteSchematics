@@ -62,6 +62,9 @@ const all = [
   "evals/draw/pdf-ink-archive.test.mjs",
   "evals/draw/utilisation.test.mjs",
   "evals/draw/continuation-labels.test.mjs",
+  "evals/draw/pdf-painted.test.mjs",
+  "evals/draw/retention.test.mjs",
+  "evals/draw/output.test.mjs",
 ];
 await mkdir(join(copy, "evals/out"), { recursive: true }); // Test fixtures rely on the ignored output root.
 await cp(join(root, "evals/draw"), join(copy, "evals/draw"), {
@@ -138,6 +141,7 @@ for (const [name, tests] of [
   ["pdf-source", ["evals/draw/pdf-source.test.mjs"]],
   ["pdf-ink", ["evals/draw/pdf-ink.test.mjs"]],
   ["pdf-ink-operators", ["evals/draw/pdf-ink-operators.test.mjs"]],
+  ["pdf-glyph-metrics", ["evals/draw/pdf-ink.test.mjs"]],
   ["pdf-ink-policy", ["evals/draw/pdf-ink-policy.test.mjs"]],
   [
     "crop-attempts",
@@ -995,6 +999,71 @@ for (const [id, file, from, to] of [
   await edit("continuation-" + id, "evals/draw/" + file + ".mjs", from, to, [
     "evals/draw/continuation-labels.test.mjs",
   ]);
+for (const [id, file, from, to, tests] of [
+  [
+    "header-zone",
+    "checks",
+    "const header = referenceHeader(reference, c.id);",
+    "const match=reference?.text.match(/\\/\\s*(\\d+)[. :/]([A-D][1-6])/); const header=match ? {page:Number(match[1]),zone:match[2]}:undefined;",
+    ["continuation-labels"],
+  ],
+  [
+    "clip-intersection",
+    "pdf-clip-operators",
+    "Math.max(a.x, b.x)",
+    "a.x",
+    ["pdf-painted"],
+  ],
+  [
+    "clip-rectangle",
+    "pdf-clip-operators",
+    "p.length === 13",
+    "true",
+    ["pdf-painted"],
+  ],
+  [
+    "painted-partial",
+    "pdf-painted",
+    "if (ink.every((g) => g.visible))",
+    "if (true)",
+    ["pdf-painted"],
+  ],
+  [
+    "retention-svg",
+    "retention",
+    "for (const sheet of packet.sheets)",
+    "for (const sheet of packet.sheets.slice(0,1))",
+    ["retention"],
+  ],
+  [
+    "retention-finally",
+    "retention",
+    "await compactCase(directory, artifacts);",
+    "void directory;",
+    ["retention"],
+  ],
+  [
+    "budget-pins",
+    "output",
+    "report = { ...report, exitCode: 2, summary: summary(results), results };",
+    "report = { ...report, sourceHashes:undefined, exitCode: 2, summary: summary(results), results };",
+    ["output"],
+  ],
+  [
+    "budget-cost",
+    "output",
+    "    cost = await outputCost(root, artifacts, budget);",
+    "    void cost;",
+    ["output"],
+  ],
+])
+  await edit(
+    "k154b-" + id,
+    "evals/draw/" + file + ".mjs",
+    from,
+    to,
+    tests.map((t) => "evals/draw/" + t + ".test.mjs"),
+  );
 // Deliberately harmless mutation must survive; it proves survivors are observable.
 await edit(
   "benign-comment-control",

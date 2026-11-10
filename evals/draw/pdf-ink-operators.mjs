@@ -8,7 +8,7 @@ const point = (m, x, y) => [
   m[0] * x + m[2] * y + m[4],
   m[1] * x + m[3] * y + m[5],
 ];
-export function pdfGlyphRuns(list, ops, viewport, glyphMetric) {
+export function pdfGlyphRuns(list, ops, viewport, glyphMetric, onGlyph) {
   assert(
     list.fnArray.length <= 1_000_000,
     "PDF operator resource budget exceeded",
@@ -129,12 +129,17 @@ export function pdfGlyphRuns(list, ops, viewport, glyphMetric) {
         );
         run.text += g.unicode;
         run.fonts.add(metric.sha256);
+        const advance =
+          (g.width * state.size) / 1000 +
+          state.charSpace +
+          (g.isSpace ? state.wordSpace : 0);
+        const points = [];
         if (metric.box) {
           const b = metric.box,
             scale = state.size / metric.unitsPerEm;
           for (const x of [b.minX, b.maxX])
             for (const y of [b.minY, b.maxY])
-              run.points.push(
+              points.push(
                 point(
                   m,
                   (state.cursor + x * scale) * state.hscale,
@@ -142,11 +147,19 @@ export function pdfGlyphRuns(list, ops, viewport, glyphMetric) {
                 ),
               );
         }
-        state.cursor +=
-          (g.width * state.size) / 1000 +
-          state.charSpace +
-          (g.isSpace ? state.wordSpace : 0);
+        run.points.push(...points);
+        state.cursor += advance;
         run.end = point(m, state.cursor * state.hscale, state.rise);
+        onGlyph?.({
+          text: g.unicode,
+          font: state.font,
+          size,
+          base,
+          end: run.end,
+          points,
+          operator: i,
+          run,
+        });
       }
     } else {
       // The producer sets absolute matrices. Never approximate relative text,
