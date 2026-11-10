@@ -24,6 +24,22 @@ leaders do not suppress local disclosures. Wires, jumpers and assigned spare cor
 participate; loose/unassigned cores add no incidence at a nonexistent endpoint.
 Cable sheets reserve endpoint-card space alongside every core/spare row.
 
+Same-terminal context associations remain in the semantic graph with their
+ports and provenance, but have no ELK edge or normalized routed edge. A measured
+junction envelope reserves the explicit “reference, no wire” caption and local
+2 mm leaders. Normalization validates the node-carried label and both real port
+anchors; clearance checks cover nearby symbols, routes and text at 1 mm, allowing
+the intentional attachment at each leader origin. Ordinary boundary attachments
+and authored conductors still route through ELK.
+
+Only graphs with a detached context reference can try control-fork recovery.
+The existing fast path runs first. For at most two two-arm forks, authored port
+incidence orders a fixed set of straight/turned assignments (at most 15 additional
+candidates). The incoming attachment stays fixed, ELK routes every candidate,
+and the unchanged topology/intersection guards must pass. No names or function
+heuristics, phantom edges or edited conductor paths choose a route. This cleanup
+does not promise the one-sheet/short-holding-loop goal tracked separately.
+
 `off-view/*` owns incidence, measurement, reservation, validation and annotation
 emission. The presentation graph reserves card bounds before ELK, and sheet cuts
 keep the terminal and card together. Pinned regular/bold/math ink and advance

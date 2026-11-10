@@ -1,4 +1,5 @@
 import { contactCaptionRegion } from "../presentation/contact-caption.js";
+import { contextJunctionInk } from "./context-reference-ink.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { offViewAdapterLabels } from "./off-view-labels.js";
 import { portPosition, quantizedInput } from "./port-geometry.js";
@@ -45,6 +46,7 @@ import type {
 } from "../types.js";
 import { createElkEngine } from "./elk-runtime.js";
 import { rootedRouteAlternatives } from "./direct-load-routes.js";
+import { contextForkOrderAlternatives } from "./context-fork-order.js";
 import {
   DEVICE_LABEL_PADDING,
   DEVICE_PADDING,
@@ -309,18 +311,32 @@ function junctionNode(
   assignments: ElkOptionAssignment[],
 ): ElkNode {
   const ports = sortedPorts(graph, node.ports);
+  const ink = contextJunctionInk(graph, node);
   return {
     id: node.id,
-    width: 6,
-    height: 6,
+    width: ink.width,
+    height: ink.height,
     layoutOptions: assignedOptions(node.id, assignments, {
       targetKind: "node",
       options: { [ELK_OPTIONS.portConstraints]: "FIXED_POS" },
     }),
+    ...(ink.labels.length
+      ? {
+          labels: ink.labels.map(({ label, x, y }) => ({
+            ...adapterLabel(label),
+            x,
+            y,
+            layoutOptions: assignedOptions(label.id, assignments, {
+              targetKind: "node-label",
+              options: { [ELK_OPTIONS.nodeLabelsPlacement]: "INSIDE" },
+            }),
+          })),
+        }
+      : {}),
     ports: ports.map((port, index) => ({
       id: port.id,
-      x: 3,
-      y: 3,
+      x: ink.anchor.x,
+      y: ink.anchor.y,
       width: 0,
       height: 0,
       layoutOptions: assignedOptions(port.id, assignments, {
@@ -328,7 +344,9 @@ function junctionNode(
         options: {
           [ELK_OPTIONS.portSide]: uppercaseSide(port.side),
           [ELK_OPTIONS.portIndex]: String(index),
-          [ELK_OPTIONS.portBorderOffset]: "-3",
+          [ELK_OPTIONS.portBorderOffset]: String(
+            portBorderOffset(port.side, ink.anchor, ink.width, ink.height),
+          ),
         },
       }),
       labels: [],
@@ -545,7 +563,6 @@ function edgeAdapter(
   edge: PresentationEdge,
   prioritizeDirection: boolean,
   assignments: ElkOptionAssignment[],
-  contextSource?: boolean,
 ): ElkExtendedEdge {
   const labels = [edge.label, edge.netLabel]
     .filter((label): label is PresentationLabel => label !== undefined)
@@ -556,13 +573,7 @@ function edgeAdapter(
         targetKind: "edge-label",
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
-            contextSource === undefined
-              ? label.role === "net"
-                ? "TAIL"
-                : "CENTER"
-              : (label.role === "reference") === contextSource
-                ? "TAIL"
-                : "HEAD",
+            label.role === "net" ? "TAIL" : "CENTER",
           [ELK_OPTIONS.edgeLabelsInline]: "false",
         },
       }),
@@ -789,14 +800,11 @@ export function buildElkAdapterGraph(
       options: rootOptions,
     }),
     children: [...locationChildren, ...rootLeafChildren],
-    edges: edges.map((edge) =>
-      edgeAdapter(
-        edge,
-        edge.id === prioritizedEdgeId,
-        assignments,
-        terminalContextAttachment(graph, edge)?.junctionIsSource,
+    edges: edges
+      .filter((edge) => !terminalContextAttachment(graph, edge))
+      .map((edge) =>
+        edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments),
       ),
-    ),
   };
   return Object.freeze({
     graph: adapter,
@@ -900,10 +908,16 @@ export async function layoutPresentationGraph(
       first.failureKind !== "collinear-overlap")
   )
     return first;
-  for (const candidate of rootedRouteAlternatives(graph)) {
-    const result = await run(candidate);
-    // Every alternative passes the complete geometry and topology checks.
-    if (result.ok) return result;
-  }
+  // Fork alternatives deliberately run first: repair the detached-reference
+  // branch order from incidence before trying broader rooted routing changes.
+  for (const alternatives of [
+    contextForkOrderAlternatives(graph),
+    rootedRouteAlternatives(graph),
+  ])
+    for (const candidate of alternatives) {
+      const result = await run(candidate);
+      // Every alternative passes the complete geometry and topology checks.
+      if (result.ok) return result;
+    }
   return first;
 }

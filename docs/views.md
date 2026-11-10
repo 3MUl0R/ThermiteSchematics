@@ -42,6 +42,12 @@ cores count at their terminated ends; a loose far end reads `unterminated (spare
 Both-loose and unassigned cores add no terminal incidence. Jumpers without a
 designation use `jumper:<uuid>`.
 
+A same-terminal context association prints its explicit “reference, no wire”
+caption and two short leaders. These are local reference ink reserved before
+layout, not an invisible full-length routed edge or an authored conductor. The
+leaders attach to the real terminal/common point and clear unrelated ink by at
+least 1 mm. This does not disclose a complete rung or promise a one-sheet view.
+
 Card space is reserved before layout, and cuts keep each terminal with its card.
 The full text wraps at 3 mm em and 4 mm line pitch without truncation, clipping
 or shrinking. Nearby card placements and safe sheet cuts are evaluated before a

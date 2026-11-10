@@ -1,4 +1,12 @@
+import { validateContextInk } from "./context-reference-validation.js";
+import {
+  validateLeafSize,
+  validateReferenceInput,
+  contextReferenceLayouts,
+} from "./context-reference-layout.js";
 import { validateCompoundRegions } from "./compound-regions.js";
+import { contextJunctionInk } from "./context-reference-ink.js";
+import { terminalContextAttachment } from "../terminal-context-reference.js";
 import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { layoutLabelInk } from "./label-bounds.js";
@@ -20,6 +28,7 @@ import {
 import type { SymbolDefinition, SymbolPrimitive } from "../symbols/types.js";
 import type {
   LayoutCrossing,
+  LayoutContextReference,
   LayoutEdge,
   LayoutEdgeSection,
   LayoutLabel,
@@ -433,6 +442,7 @@ function normalizeNodes(
   input: Readonly<InputIndex>,
   presentation: Readonly<PresentationIndex>,
   geometry: GeometryIndex,
+  graphForReferences: Readonly<PresentationGraph>,
 ): void {
   if (output.id !== "root") reject("returned root ID changed");
   const rootWidth = dimension(output.width, "root.width");
@@ -476,16 +486,7 @@ function normalizeNodes(
       const kind = presentation.nodeKind.get(id);
       if (kind === undefined) reject(`node ${id} has no presentation owner`);
       const semanticNode = presentation.nodes.get(id);
-      if (
-        semanticNode !== undefined &&
-        semanticNode.kind !== "junction" &&
-        (width !== semanticNode.width || height !== semanticNode.height)
-      ) {
-        reject(`leaf node ${id} dimensions changed`);
-      }
-      if (semanticNode?.kind === "junction" && (width !== 6 || height !== 6)) {
-        reject(`junction node ${id} dimensions changed`, semanticNode.netId);
-      }
+      validateLeafSize(graphForReferences, semanticNode, width, height, reject);
       const primitiveOrigin =
         semanticNode === undefined || semanticNode.kind === "junction"
           ? undefined
@@ -1078,6 +1079,8 @@ function validateNodeAndLabelCollisions(
   geometry: Readonly<GeometryIndex>,
   catalog: readonly SymbolDefinition[],
   segments: readonly Segment[],
+  references: readonly LayoutContextReference[],
+  captions: ReadonlyMap<string, PresentationLabel>,
 ): void {
   const primitiveBounds = translatedPrimitiveBounds(graph, geometry, catalog);
   const symbolRectangles = new Map<string, Bounds>();
@@ -1104,18 +1107,6 @@ function validateNodeAndLabelCollisions(
     }
   }
   const labels = [...geometry.labels.values()];
-  const captions = new Map(
-    [
-      ...graph.locationGroups.map((g) => g.label),
-      ...graph.deviceGroups.map((g) => g.label),
-      ...graph.nodes.flatMap((n) => (n.kind === "junction" ? [] : n.labels)),
-      ...graph.edges.flatMap((e) =>
-        [e.label, e.netLabel].filter(
-          (l): l is PresentationLabel => l !== undefined,
-        ),
-      ),
-    ].map((l) => [l.id, l]),
-  );
   const inkBounds = (label: LayoutLabel) =>
     layoutLabelInk(label, captions, geometry.edges, reject);
   for (const label of labels) {
@@ -1137,6 +1128,16 @@ function validateNodeAndLabelCollisions(
       );
     }
   }
+  if (references.length)
+    validateContextInk(
+      graph,
+      geometry,
+      references,
+      primitiveBounds,
+      segments,
+      inkBounds,
+      reject,
+    );
   for (let leftIndex = 0; leftIndex < labels.length; leftIndex++) {
     for (
       let rightIndex = leftIndex + 1;
@@ -1229,13 +1230,24 @@ function allowedConnectionPoints(
 function validateJunctions(
   graph: Readonly<PresentationGraph>,
   geometry: Readonly<GeometryIndex>,
+  references: readonly LayoutContextReference[],
 ): void {
   for (const node of graph.nodes) {
     if (node.kind !== "junction") continue;
     const layout = geometry.nodes.get(node.id);
     if (layout === undefined)
       reject(`junction ${node.id} is missing`, node.netId);
-    const center = { x: layout.x + 3, y: layout.y + 3 };
+    const ink = contextJunctionInk(graph, node);
+    const center = {
+      x: quantizeLayoutNumber(
+        layout.x + ink.anchor.x,
+        `junction ${node.id} center x`,
+      ),
+      y: quantizeLayoutNumber(
+        layout.y + ink.anchor.y,
+        `junction ${node.id} center y`,
+      ),
+    };
     for (const port of node.ports) {
       const portLayout = geometry.ports.get(port.id);
       if (
@@ -1249,8 +1261,18 @@ function validateJunctions(
         (edge) =>
           edge.sourcePortId === port.id || edge.targetPortId === port.id,
       );
-      if (incident.length !== 1)
+      const reference = references.filter(
+        (r) => r.sourcePortId === port.id || r.targetPortId === port.id,
+      );
+      if (incident.length + reference.length !== 1)
         reject(`junction ${node.id} port incidence changed`, node.netId);
+      const r = reference[0];
+      if (r) {
+        const origin = r.leaders[r.sourcePortId === port.id ? 0 : 1][0];
+        if (!origin || !samePoint(origin, center))
+          reject(`junction ${node.id} reference is off-center`, node.netId);
+        continue;
+      }
       const edge = incident[0]!;
       const endpoint =
         edge.sourcePortId === port.id
@@ -1458,6 +1480,14 @@ function freezeLayout(
   }
   Object.freeze(layout.edges);
   Object.freeze(layout.crossings);
+  if (layout.contextReferences) {
+    for (const reference of layout.contextReferences) {
+      for (const leader of reference.leaders) Object.freeze(leader);
+      Object.freeze(reference.leaders);
+      Object.freeze(reference);
+    }
+    Object.freeze(layout.contextReferences);
+  }
   return Object.freeze(layout);
 }
 
@@ -1475,14 +1505,10 @@ function validateLayoutRegions(
   });
 }
 
-export function normalizeAndValidateLayout(
-  graph: Readonly<PresentationGraph>,
-  adapterInput: Readonly<ElkNode>,
-  elkOutput: Readonly<ElkNode>,
-  catalog: readonly SymbolDefinition[],
-): LayoutValidationOutcome {
-  const input = inputIndex(adapterInput);
-  const presentation = presentationIndex(graph);
+function validateInputCounts(
+  input: InputIndex,
+  presentation: PresentationIndex,
+) {
   invariant(
     input.nodes.size === presentation.nodeKind.size,
     "adapter nodes do not match presentation nodes",
@@ -1495,10 +1521,18 @@ export function normalizeAndValidateLayout(
     input.labels.size === presentation.labels.size,
     "adapter labels do not match presentation labels",
   );
-  invariant(
-    input.edges.size === presentation.edges.size,
-    "adapter edges do not match presentation edges",
-  );
+}
+
+export function normalizeAndValidateLayout(
+  graph: Readonly<PresentationGraph>,
+  adapterInput: Readonly<ElkNode>,
+  elkOutput: Readonly<ElkNode>,
+  catalog: readonly SymbolDefinition[],
+): LayoutValidationOutcome {
+  const input = inputIndex(adapterInput);
+  const presentation = presentationIndex(graph);
+  validateInputCounts(input, presentation);
+  validateReferenceInput(graph, input.edges, input.labels, invariant);
   try {
     const geometry: GeometryIndex = {
       nodes: new Map(),
@@ -1506,7 +1540,7 @@ export function normalizeAndValidateLayout(
       labels: new Map(),
       edges: new Map(),
     };
-    normalizeNodes(elkOutput, input, presentation, geometry);
+    normalizeNodes(elkOutput, input, presentation, geometry, graph);
     normalizeEdges(elkOutput, input, presentation, geometry);
     sameIds(input.labels, geometry.labels, "label");
     const rootWidth = dimension(elkOutput.width, "root.width");
@@ -1518,8 +1552,16 @@ export function normalizeAndValidateLayout(
       return edge;
     });
     const segments = edges.flatMap(edgeSegments);
-    validateJunctions(graph, geometry);
-    validateNodeAndLabelCollisions(graph, geometry, catalog, segments);
+    const references = contextReferenceLayouts(graph, geometry.ports, reject);
+    validateJunctions(graph, geometry, references);
+    validateNodeAndLabelCollisions(
+      graph,
+      geometry,
+      catalog,
+      segments,
+      references,
+      presentation.labels,
+    );
     const crossings = validateRouteInteractions(graph, geometry, segments);
     validateFinalBounds(graph, geometry, rootWidth, rootHeight, catalog);
     const order = graphSemanticOrder(graph);
@@ -1542,6 +1584,7 @@ export function normalizeAndValidateLayout(
         labels,
         edges,
         crossings,
+        ...(references.length ? { contextReferences: references } : {}),
       }),
     };
   } catch (error) {

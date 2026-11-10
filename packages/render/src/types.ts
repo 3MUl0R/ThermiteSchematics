@@ -456,6 +456,17 @@ export interface LayoutCrossing {
   readonly point: LayoutPoint;
 }
 
+/** Two local ink marks for a semantic association; never a routed conductor. */
+export interface LayoutContextReference {
+  readonly id: string;
+  readonly sourcePortId: string;
+  readonly targetPortId: string;
+  readonly leaders: readonly [
+    readonly [LayoutPoint, LayoutPoint],
+    readonly [LayoutPoint, LayoutPoint],
+  ];
+}
+
 export interface NormalizedSchematicLayout {
   readonly format: "schematic-layout/0.1";
   readonly view: NormalizedSchematicView;
@@ -466,4 +477,5 @@ export interface NormalizedSchematicLayout {
   readonly labels: readonly LayoutLabel[];
   readonly edges: readonly LayoutEdge[];
   readonly crossings: readonly LayoutCrossing[];
+  readonly contextReferences?: readonly LayoutContextReference[];
 }
