@@ -222,3 +222,137 @@ it("keeps repeated device appearances as separate physical blocks", async () => 
     "authored part P/1-A",
   );
 });
+
+// Round-2 negative controls: these all falsely passed under checker 4.3.
+const descriptionWith = (attrs = "", wrap = (s) => s) =>
+  text("designation", "TB 1", 20) +
+  wrap(text("description", "Field terminals", 25, attrs)) +
+  text("part", "P/1-A", 30);
+const missingDescription = async (content) => {
+  const g = await openSheet(page, svg(body(content)));
+  return deviceTags(g, ir, refs, true).flatMap((f) => f.missing ?? []);
+};
+it.each(["clipPath", "mask", "symbol", "pattern", "marker"])(
+  "excludes uninstantiated text in %s outside defs",
+  async (container) => {
+    expect(
+      await missingDescription(
+        descriptionWith(
+          "",
+          (s) => `<${container} id="unused">${s}</${container}>`,
+        ),
+      ),
+    ).toContain("authored description");
+    expect(await missingDescription(descriptionWith())).toEqual([]);
+  },
+);
+it.each([
+  "#fff0",
+  "#ff000000",
+  "rgba(255, 0, 0, 0)",
+  "rgb(255 0 0 / 10%)",
+  "hsla(120, 100%, 50%, 0.1)",
+  "hsl(120 100% 50% / 10%)",
+  "transparent",
+  "color(srgb 1 0 0 / 0.1)",
+  "lab(50% 0 0 / 0.1)",
+  "lch(50% 0 0 / 0.1)",
+  "oklab(50% 0 0 / 0.1)",
+  "oklch(50% 0 0 / 0.1)",
+  "white",
+  "#fff",
+  "#ffffffff",
+  "hsl(0 0% 100%)",
+])("excludes invisible/background paint %s", async (fill) => {
+  expect(await missingDescription(descriptionWith(`fill="${fill}"`))).toContain(
+    "authored description",
+  );
+  expect(await missingDescription(descriptionWith('fill="#111f"'))).toEqual([]);
+});
+it("multiplies colour alpha, fill opacity and every ancestor opacity", async () => {
+  const wrap = (s) => `<g opacity="0.5"><g opacity="0.5">${s}</g></g>`;
+  expect(
+    await missingDescription(
+      descriptionWith('fill="rgba(255,0,0,0.8)" fill-opacity="0.9"', wrap),
+    ),
+  ).toContain("authored description");
+  expect(
+    await missingDescription(
+      descriptionWith('fill="rgba(255,0,0,0.8)" fill-opacity="1"', wrap),
+    ),
+  ).toEqual([]);
+  expect(
+    await missingDescription(
+      descriptionWith("", (s) => `<g opacity="0.001">${s}</g>`),
+    ),
+  ).toContain("authored description");
+});
+it("uses the existing physical em floor including transforms", async () => {
+  expect(
+    await missingDescription(
+      descriptionWith(
+        "",
+        (s) => `<g transform="translate(15 25) scale(0.02)">${s}</g>`,
+      ),
+    ),
+  ).toContain("authored description");
+  expect(
+    await missingDescription(descriptionWith('style="font-size:2.46px"')),
+  ).toContain("authored description");
+  expect(
+    await missingDescription(descriptionWith('style="font-size:2.5px"')),
+  ).toEqual([]);
+});
+it("rejects later filled occluders regardless of pointer events; ignores strokes, earlier fills and translucent shapes", async () => {
+  const cover = (attrs) =>
+    `<rect x="12" y="21" width="60" height="5" ${attrs}/>`;
+  for (const attrs of [
+    'fill="white"',
+    'fill="black" pointer-events="none"',
+    'fill="rgba(255,255,255,0.99)"',
+  ])
+    expect(
+      await missingDescription(descriptionWith() + cover(attrs)),
+    ).toContain("authored description");
+  for (const content of [
+    cover('fill="white"') + descriptionWith(),
+    descriptionWith() + cover('fill="none" stroke="black" stroke-width="0.2"'),
+    descriptionWith() +
+      '<path d="M12 24 L75 24" fill="none" stroke="black" stroke-width="0.2"/>',
+    descriptionWith() + cover('fill="white" opacity="0.1"'),
+    descriptionWith() + '<circle cx="17" cy="24" r="1" fill="white"/>',
+    descriptionWith() +
+      '<path d="M12 21 L12 22 L75 22 L75 21 Z" fill="white"/>',
+  ])
+    expect(await missingDescription(content)).toEqual([]);
+});
+it("requires a body-owned block when a body is drawn, and a full reference block otherwise", async () => {
+  const reference = `<g data-tag-kind="reference" data-tag-owner-uid="a" data-tag-block="ref">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"').replaceAll('data-tag-block="a"', 'data-tag-block="ref"')}</g>`;
+  const g = await openSheet(
+    page,
+    svg(body(text("designation", "TB 1", 20)) + reference),
+  );
+  expect(deviceTags(g, ir, refs, true)[0].missing).toEqual([
+    "authored part P/1-A",
+    "authored description",
+  ]);
+  expect(
+    deviceTags(await openSheet(page, svg(reference)), ir, refs, true),
+  ).toEqual([]);
+  expect(
+    deviceTags(
+      await openSheet(page, svg(body(full()) + reference)),
+      ir,
+      refs,
+      true,
+    ),
+  ).toEqual([]);
+  const onlyIdentity = reference.replace(
+    /<text[^>]+data-tag-field="(?:part|description)"[^>]*>[^<]*<\/text>/g,
+    "",
+  );
+  expect(
+    deviceTags(await openSheet(page, svg(onlyIdentity)), ir, refs, true)[0]
+      .missing,
+  ).toEqual(["authored part P/1-A", "authored description"]);
+});

@@ -1,3 +1,4 @@
+import { hasLegibleEm } from "./text-legibility.mjs";
 // Independent oracle: never import the renderer's tag resolver or source strings.
 const normalized = (s) => s.replace(/\s+/gu, " ").trim();
 const value = (s) => (typeof s === "string" && s.trim() ? s : undefined);
@@ -5,16 +6,17 @@ const rowText = (t) => t.renderedString ?? t.text;
 
 function matches(rows, expected, literal = false) {
   if (!rows.length) return false;
-  if (literal) return rows.map(rowText).join("") === expected;
-  const target = normalized(expected);
+  const target = literal ? expected : normalized(expected);
   let positions = new Set([0]);
-  for (const row of rows) {
-    const text = normalized(rowText(row)),
+  for (const [index, row] of rows.entries()) {
+    const text = literal ? rowText(row) : normalized(rowText(row)),
       next = new Set();
     for (const position of positions)
       for (const start of [
         position,
-        ...(target[position] === " " ? [position + 1] : []),
+        ...((!literal || index > 0) && target[position] === " "
+          ? [position + 1]
+          : []),
       ])
         if (target.startsWith(text, start)) next.add(start + text.length);
     positions = next;
@@ -52,6 +54,7 @@ function ownedBlocks(g, uid) {
     if (
       row.tagOwnerUid !== uid ||
       row.tagPainted !== true ||
+      !hasLegibleEm(row) ||
       !row.tagBlock ||
       !["body", "reference"].includes(row.tagKind) ||
       row.tagOwnershipValid !== true
@@ -127,8 +130,11 @@ export function deviceTagFindings(g, ir, references, issue) {
       blocks = ownedBlocks(g, uid);
     const referencesHere = local.filter((r) => r.deviceUid === uid);
     const targets = referencesHere.filter((r) => r.tagRef).map((r) => r.tagRef);
-    const candidates = blocks.filter(
-      (b) => b.kind === "body" || !targets.length || targets.includes(b.id),
+    const bodyHere = appearances.some((a) => a.deviceUid === uid);
+    const candidates = blocks.filter((b) =>
+      bodyHere
+        ? b.kind === "body"
+        : b.kind === "body" || !targets.length || targets.includes(b.id),
     );
     const missing = (candidates.length ? candidates : [{ rows: [] }])
       .map((b) => missingFields(b, d, type, ir))

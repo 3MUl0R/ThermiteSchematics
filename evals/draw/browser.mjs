@@ -107,7 +107,7 @@ export function measureSheet(options = {}) {
   });
   const visible = (e, keepHidden = false) => {
     if (
-      e.closest("defs") ||
+      e.closest("defs,clipPath,mask,symbol,pattern,marker") ||
       getComputedStyle(e).display === "none" ||
       getComputedStyle(e).visibility === "hidden"
     )
@@ -915,18 +915,121 @@ export function measureSheet(options = {}) {
       y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   };
-  // DQ-06 uses complete painted owned rows. The same native rectangular clip
-  // parser checks every ancestor; unsupported clipping refuses this row only.
+  // Let Chromium parse every supported CSS colour syntax into sRGB + alpha,
+  // including hex alpha, percentages, HSL and modern colour spaces. Never let
+  // canvas's invalid-colour fallback turn a paint server into black evidence.
+  const paintCanvas = document.createElement("canvas");
+  paintCanvas.width = paintCanvas.height = 1;
+  const paintContext = paintCanvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+  const colourCache = new Map();
+  const colour = (fill) => {
+    if (!colourCache.has(fill)) {
+      let rgba = null;
+      if (CSS.supports("color", fill)) {
+        paintContext.clearRect(0, 0, 1, 1);
+        paintContext.fillStyle = fill;
+        paintContext.fillRect(0, 0, 1, 1);
+        rgba = [...paintContext.getImageData(0, 0, 1, 1).data];
+      }
+      colourCache.set(fill, rgba);
+    }
+    return colourCache.get(fill);
+  };
+  const fillPaint = (e) => {
+    const css = getComputedStyle(e),
+      rgba = colour(css.fill);
+    let alpha = rgba ? (rgba[3] / 255) * Number(css.fillOpacity) : 0;
+    for (let node = e; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (
+        style.display === "none" ||
+        ["hidden", "collapse"].includes(style.visibility)
+      )
+        alpha = 0;
+      alpha *= Number(style.opacity);
+    }
+    return {
+      alpha,
+      background: rgba?.slice(0, 3).every((c) => c === 255) ?? false,
+    };
+  };
+  // Native fill geometry honours holes, transforms and rounded corners, unlike
+  // bounding-box coverage. Strokes never occlude DQ-06 rows. Test all shapes,
+  // including pointer-events:none, in SVG document paint order.
+  const occluders = all
+    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse"))
+    .flatMap((e) => {
+      const v = visible(e),
+        paint = fillPaint(e);
+      if (!v || paint.alpha < 0.95) return [];
+      try {
+        const clips = shapeClips(e);
+        if (clips === null) return [];
+        return [
+          {
+            e,
+            bbox: v.b,
+            clips: [v.clip, ...clips],
+            inverse: e.getScreenCTM().inverse(),
+            order: all.indexOf(e),
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
+  const contains = (b, p) =>
+    p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+  const occlusion = (t) => {
+    const candidates = occluders.filter(
+      (o) =>
+        o.order > t.order &&
+        intersect(o.bbox, t.bbox).w > 0 &&
+        intersect(o.bbox, t.bbox).h > 0,
+    );
+    if (!candidates.length) return 0;
+    let covered = 0;
+    // 45 interior samples across the ink box; majority coverage excludes small
+    // crossings and isolated glyph overlaps. Coordinates may be off-viewport.
+    for (let x = 0; x < 15; x++)
+      for (let y = 0; y < 3; y++) {
+        const p = {
+          x: t.bbox.x + (t.bbox.w * (x + 0.5)) / 15,
+          y: t.bbox.y + (t.bbox.h * (y + 0.5)) / 3,
+        };
+        if (
+          candidates.some(
+            (o) =>
+              contains(o.bbox, p) &&
+              o.clips.every((b) => contains(b, p)) &&
+              o.e.isPointInFill(
+                new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy).matrixTransform(
+                  o.inverse,
+                ),
+              ),
+          )
+        )
+          covered++;
+      }
+    return covered / 45;
+  };
+  // DQ-06 uses complete painted owned rows. The rectangular clip rules used
+  // for native shape measurement also apply to the whole measured ink box.
   for (const t of texts.filter((t) => t.tagOwnerUid)) {
     const e = elementsById.get(t.element),
-      css = getComputedStyle(e);
+      paint = fillPaint(e);
+    t.tagPaintAlpha = paint.alpha;
+    t.tagOcclusion = occlusion(t);
     try {
       const clips = shapeClips(e);
       t.tagPainted =
         t.painted &&
         clips !== null &&
-        !["none", "rgba(0, 0, 0, 0)"].includes(css.fill) &&
-        Number(css.fillOpacity) > 0 &&
+        paint.alpha >= 0.2 &&
+        !paint.background &&
+        t.tagOcclusion <= 0.5 &&
         [t.viewport, ...clips].every(
           (b) =>
             t.bbox.x >= b.x - 0.001 &&

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
 import { deviceTags } from "./checks.mjs";
 const device = (uid = "a", designation = "K1", extra = {}) => ({
   uid,
@@ -189,4 +190,85 @@ describe("DQ-06 independent owned-field oracle", () => {
       check([], data(), [], { terminals: [{ deviceUid: "a" }] }),
     ).toHaveLength(1);
   });
+});
+
+const pilotTypes = new URL(
+  "../../libraries/siemens-et200pro-pilot/types/",
+  import.meta.url,
+);
+const spacedTypes = readdirSync(pilotTypes)
+  .flatMap(
+    (name) => JSON.parse(readFileSync(new URL(name, pilotTypes), "utf8")).types,
+  )
+  .filter((t) => t.catalog.orderNumber.includes(" + "));
+it.each(spacedTypes)(
+  "matches wrapped spaced Siemens order number $id literally",
+  (type) => {
+    const part = type.catalog.orderNumber;
+    const ir = {
+      devices: [device("a", "K1", { description: undefined })],
+      deviceTypes: [{ ...type, id: "t", description: undefined }],
+    };
+    const rows = (parts) => [
+      row("designation", "K1"),
+      ...parts.map((s, i) => row("part", s, { order: i + 2 })),
+    ];
+    expect(check(rows([part]), ir)).toEqual([]);
+    expect(
+      check(
+        rows(part.split(" + ").map((s, i) => (i === 0 ? s + " +" : s))),
+        ir,
+      ),
+    ).toEqual([]);
+    expect(
+      check(
+        rows(part.split(" + ").map((s, i) => (i === 0 ? s + " + " : s))),
+        ir,
+      ),
+    ).toEqual([]);
+    for (const wrong of [
+      part.replace(" + ", "+"),
+      part.replace(" + ", "  + "),
+      part.replace("-", "/"),
+      part.toLowerCase(),
+    ])
+      expect(check(rows([wrong]), ir)[0].missing).toContain(
+        `authored part ${part}`,
+      );
+  },
+);
+it("requires body-owned fields if the sheet has a body appearance", () => {
+  const reference = complete({ tagKind: "reference", tagBlock: "ref" });
+  expect(check(reference, data(), [{ deviceUid: "a" }])).toEqual([]);
+  expect(
+    check(reference, data(), [], { devices: [{ deviceUid: "a" }] })[0].missing,
+  ).toHaveLength(3);
+  expect(
+    check([...complete(), ...reference], data(), [], {
+      devices: [{ deviceUid: "a" }],
+    }),
+  ).toEqual([]);
+});
+it("does not Unicode-normalise literal parts or descriptions", () => {
+  const ir = data([device("a", "K1", { description: "Café" })]);
+  expect(
+    check(
+      [
+        row("designation", "K1"),
+        row("part", "P-1"),
+        row("description", "Cafe\u0301"),
+      ],
+      ir,
+    )[0].missing,
+  ).toEqual(["authored description"]);
+  expect(
+    check(
+      [
+        row("designation", "K1"),
+        row("part", "P-1"),
+        row("description", "Café"),
+      ],
+      ir,
+    ),
+  ).toEqual([]);
 });

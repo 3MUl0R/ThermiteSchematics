@@ -1,3 +1,4 @@
+import { minimumTextEmMm } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
 import {
   printedConductor,
@@ -867,7 +868,7 @@ export function zoneAt(g, p) {
 export function legibility(g) {
   const out = [];
   for (const t of g.texts.filter((t) => t.painted !== false)) {
-    const minimumMm = t.secondaryReference ? 2.3 : 2.5;
+    const minimumMm = minimumTextEmMm(t);
     if (
       !t.furniture &&
       t.fontSize !== undefined &&
