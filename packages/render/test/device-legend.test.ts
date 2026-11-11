@@ -3,7 +3,10 @@ import { beforeAll, expect, it } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend } from "../src/device-legend.js";
 import { planDeviceTag } from "../src/device-tags.js";
-import { legendFitDiagnostic } from "../src/device-legend/failure.js";
+import {
+  legendFreeRegions,
+  legendFitDiagnostic,
+} from "../src/device-legend/failure.js";
 import { placeLegend, legendColumns } from "../src/device-legend/placement.js";
 import { generatedSvgInk } from "../src/device-legend/svg-ink.js";
 import { renderSchematic } from "../src/renderer.js";
@@ -181,6 +184,9 @@ it("returns R006 for a blocked sheet instead of dropping an entry", () => {
   expect(r.ok).toBe(false);
   if (!r.ok) {
     expect(r.error.message).toMatch(/M1.*requires.*available free region/);
+    expect(r.error.message).toContain(
+      "available free region (largest tried) is 0.00 × 0.00 mm after 3 mm ink clearance.",
+    );
     expect(r.error.details).toMatchObject({
       availableWidthMm: 0,
       availableHeightMm: 0,
@@ -210,4 +216,106 @@ it("identifies the width-constraining part rather than the tallest description",
   const failure = legendFitDiagnostic(planned, { x: 0, y: 0, w: 40, h: 200 });
   expect(failure.tag.ownerUid).toBe(wide.uid);
   expect(failure.field).toBe("part");
+});
+
+it("names the indivisible oversized device and field against the whole drawing area", () => {
+  const input = structuredClone(ir),
+    d = input.devices.find((d) => d.designation === "M1")!,
+    other = input.devices.find((d) => d.designation === "CB1")!;
+  d.description = "Motor";
+  other.description = "Authored maintenance qualification ".repeat(200);
+  const xml = source().replace(
+    "</svg>",
+    `<g data-device-uid="${other.uid}"><rect class="device-frame" x="50" y="20" width="10" height="10" stroke="black"/><text x="52" y="25" data-tag-kind="body" data-tag-owner-uid="${other.uid}" data-tag-key="CB1" font-size="2.5">CB1</text></g></svg>`,
+  );
+  const result = addDeviceLegend(input, xml, { x: 10, y: 10, w: 180, h: 60 });
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: "R006",
+      root: "CB1",
+      details: {
+        device: "CB1",
+        field: "description",
+        capacityKind: "drawing-area",
+        availableWidthMm: 180,
+        availableHeightMm: 60,
+      },
+    },
+  });
+  if (!result.ok)
+    expect(result.error.message).toMatch(
+      /Device CB1 legend field description.*single entry requires.*available drawing area is 180.00 × 60.00 mm/,
+    );
+  d.designation = "W".repeat(80);
+  const wide = addDeviceLegend(
+    input,
+    source()
+      .replace('viewBox="0 0 200 200"', 'viewBox="0 0 500 200"')
+      .replaceAll('data-tag-key="M1"', `data-tag-key="${d.designation}"`)
+      .replace(">M1</text>", `>${d.designation}</text>`),
+    { x: 0, y: 0, w: 30, h: 180 },
+  );
+  expect(wide).toMatchObject({
+    ok: false,
+    error: {
+      code: "R006",
+      details: {
+        device: d.designation,
+        field: "designation",
+        capacityKind: "drawing-area",
+        availableWidthMm: 30,
+      },
+    },
+  });
+});
+it("retains maximal free rectangles instead of discarding a later usable pocket", () => {
+  const bounds = { x: 0, y: 0, w: 100, h: 100 },
+    blocked = [
+      { x: 40, y: 0, w: 20, h: 60 },
+      { x: 0, y: 70, w: 80, h: 10 },
+    ],
+    regions = legendFreeRegions(bounds, blocked);
+  expect(
+    regions.some(
+      (r) =>
+        Math.abs(r.x) < 0.001 &&
+        Math.abs(r.y) < 0.001 &&
+        Math.abs(r.w - 36.87) < 0.001 &&
+        Math.abs(r.h - 66.87) < 0.001,
+    ),
+  ).toBe(true);
+  expect(regions[0]!.w).toBeCloseTo(36.87, 8);
+  expect(regions[0]!.h).toBeCloseTo(66.87, 8);
+});
+
+it("refuses an oversized rail reference with its authored device and field", () => {
+  const input = structuredClone(ir),
+    device = input.devices.find((d) => d.designation === "PS1")!;
+  device.description = "Authored reference maintenance instructions ".repeat(
+    200,
+  );
+  const terminal = JSON.stringify({
+      deviceUid: device.uid,
+      terminalKey: "-",
+    }).replaceAll('"', "&quot;"),
+    xml = source().replace(
+      "</svg>",
+      `<g class="off-view-annotation"><text x="20" y="65" font-size="2.7" data-tag-owner-uid="${device.uid}" data-tag-kind="reference" data-tag-block="rail" data-tag-field="designation" data-tag-terminal-id="${terminal}">Off-view at PS1.-</text></g></svg>`,
+    ),
+    before = JSON.stringify(input);
+  const result = addDeviceLegend(input, xml, area);
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: "R006",
+      root: "PS1",
+      details: {
+        device: "PS1",
+        field: "description",
+        capacityKind: "drawing-area",
+      },
+    },
+  });
+  expect(JSON.stringify(input)).toBe(before);
 });

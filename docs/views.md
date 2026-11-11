@@ -43,8 +43,10 @@ fits, legal strip repacking or recutting protected gaps can reserve a band at th
 unchanged print scale and within the existing page-cost and recovery limits.
 This reuses the selected drawing without new ELK or routing attempts. An impossible
 complete legend returns R006 with the constraining entry/field, the required
-dimensions versus the largest free region actually tried (or the column capacity),
-and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
+dimensions versus the largest maximal free rectangle (or the column capacity),
+and a remedy. A single entry larger than the drawing area names that device and
+field with its size versus the whole drawing area; a fully blocked sheet reports
+zero free capacity. Compound geometry, routes, electrical identity, recovery budgets and
 utilisation accounting do not change.
 
 Rail-only devices appear under **Referenced devices** in that same frame, once

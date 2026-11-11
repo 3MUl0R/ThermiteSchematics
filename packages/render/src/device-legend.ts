@@ -1,3 +1,4 @@
+import { oversizedLegendEntry } from "./device-legend/oversize.js";
 import {
   legendFreeRegions,
   legendFitDiagnostic,
@@ -79,6 +80,7 @@ export function addDeviceLegend(
       return unfitLegend(
         variants,
         required(free[0], "Missing free-region trial"),
+        area,
       );
   }
   let result = svg.replace(
@@ -208,7 +210,17 @@ function plannedTags(
 function unfitLegend(
   variants: readonly (readonly LegendTag[])[],
   available: Rect,
+  drawingArea: Rect,
 ): RenderOutcome<never> {
+  const oversized = oversizedLegendEntry(variants, drawingArea);
+  if (oversized)
+    return drawingAreaFailure(
+      oversized.device,
+      oversized.field,
+      oversized.width,
+      oversized.height,
+      drawingArea,
+    );
   const failure = required(
     variants
       .map((tags) => legendFitDiagnostic(tags, available))
@@ -281,6 +293,14 @@ function columnFailure(
       true,
     ),
     height = m.top - m.bottom + 3;
+  if (details.requiredMm + 6 > area.w || height > area.h)
+    return drawingAreaFailure(
+      device,
+      details.field,
+      details.requiredMm + 6,
+      height,
+      area,
+    );
   const result = legendFailure(
     device,
     details.field,
@@ -295,6 +315,25 @@ function columnFailure(
       ...result.error,
       details: { ...result.error.details, capacityKind: "column" },
       message: `Device ${device} legend field ${details.field} needs ${(details.requiredMm + 6).toFixed(2)} × ${height.toFixed(2)} mm; available column 50.00 × ${area.h.toFixed(2)} mm. Use a shorter authored designation or a wider approved column.`,
+    },
+  };
+}
+
+function drawingAreaFailure(
+  device: string,
+  field: string,
+  width: number,
+  height: number,
+  area: Rect,
+): RenderOutcome<never> {
+  const failed = legendFailure(device, field, width, height, area);
+  if (failed.ok || failed.error.code !== "R006") return failed;
+  return {
+    ...failed,
+    error: {
+      ...failed.error,
+      message: `Device ${device} legend field ${field} cannot be placed: single entry requires ${width.toFixed(2)} × ${height.toFixed(2)} mm; available drawing area is ${area.w.toFixed(2)} × ${area.h.toFixed(2)} mm. Use larger paper, another flow, or split the view.`,
+      details: { ...failed.error.details, capacityKind: "drawing-area" },
     },
   };
 }

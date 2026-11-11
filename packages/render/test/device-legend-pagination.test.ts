@@ -1,16 +1,27 @@
-import { assertTagRows } from "./helpers/tag-row-source.js";
-import { beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { continuationOracle } from "./continuation-oracle.js";
-import { generatedSvgInk } from "../src/device-legend.js";
+import { assertTagRows } from "./helpers/tag-row-source.js";
+import {
+  launch,
+  openSheet,
+  drawingContextOptions,
+} from "../../../evals/draw/browser.mjs";
+import { deviceTags } from "../../../evals/draw/checks.mjs";
+let browser: Awaited<ReturnType<typeof launch>>, page: any;
 
 let compiled: Extract<Awaited<ReturnType<typeof compileProject>>, { ok: true }>;
 beforeAll(async () => {
   const result = await compileProject("examples/motor-starter");
   if (!result.ok) throw result;
   compiled = result;
+  browser = await launch();
+  page = await (await browser.newContext(drawingContextOptions)).newPage();
+});
+afterAll(async () => {
+  await browser?.close();
 });
 const note =
   "Equipment identification and maintenance access for the process cell. Verify the labelled terminal against the installation drawing before planned maintenance.";
@@ -47,12 +58,21 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const originalContinuations = new Set(
       native.value.sheets.flatMap((s) => s.continuations.map(identity)),
     );
+    const bodyUids = new Set<string>();
+    for (const sheet of native.value.sheets) {
+      const measured = await openSheet(page, sheet.svg);
+      for (const body of measured.devices)
+        if (body.tagKind !== "reference") bodyUids.add(body.deviceUid);
+    }
     for (const repetitions of [2, 5]) {
       const ir = structuredClone(compiled.ir),
         description = Array(repetitions).fill(note).join(" ");
       expect(description.length).toBeGreaterThan(repetitions === 2 ? 280 : 745);
       expect(description.length).toBeLessThan(repetitions === 2 ? 325 : 800);
-      for (const device of ir.devices) device.description = description;
+      // Stress the actual body population. Reference-only devices retain their
+      // authored fields, which the independent sheet oracle also requires.
+      for (const device of ir.devices)
+        if (bodyUids.has(device.uid)) device.description = description;
       const before = JSON.stringify(ir),
         nets = JSON.stringify(ir.nets);
       const rendered = await renderSchematicPacket(
@@ -81,8 +101,16 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       expect(continuationOracle(ir, rendered.value).ends).toBeGreaterThan(0);
       for (const sheet of rendered.value.sheets) {
         const doc = parseHTML(sheet.svg).document,
-          bodies = generatedSvgInk(sheet.svg).bodies,
+          measured = await openSheet(page, sheet.svg),
+          bodies = new Set(
+            measured.devices
+              .filter((d) => d.tagKind !== "reference")
+              .map((d) => d.deviceUid),
+          ),
           entries = [...doc.querySelectorAll("[data-device-legend-entry]")];
+        expect(
+          deviceTags(measured, ir, sheet.references, true, sheet.view),
+        ).toEqual([]);
         expect(entries).toHaveLength(bodies.size);
         expect(
           new Set(entries.map((e) => e.getAttribute("data-tag-owner-uid")))
@@ -120,3 +148,24 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
   },
   120000,
 );
+
+it("returns R006 for the all-device 799-character reference stress within the unchanged page-cost bound", async () => {
+  const ir = structuredClone(compiled.ir),
+    description = Array(5).fill(note).join(" ");
+  for (const d of ir.devices) d.description = description;
+  const before = JSON.stringify(ir),
+    result = await renderSchematicPacket(
+      ir,
+      request("top-to-bottom"),
+      compiled.presentation,
+    );
+  expect(result).toMatchObject({
+    ok: false,
+    error: { code: "R006", reason: "unprintable-layout" },
+  });
+  if (!result.ok)
+    expect(result.error.message).toMatch(
+      /description.*requires.*mm.*available/,
+    );
+  expect(JSON.stringify(ir)).toBe(before);
+}, 120000);
