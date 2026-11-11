@@ -1,3 +1,7 @@
+import {
+  ownedTagText,
+  drawingDeviceReference,
+} from "./device-tag-ownership.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import {
@@ -467,23 +471,23 @@ export async function prepareWiringDrawing(
     );
     labels
       .get(uid)!
-      .forEach((s, i) => out.push(text(3, 5 + i * 3.7, s, i === 0)));
-    for (const p of rows.get(uid)!)
-      out.push(
-        `<circle data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : node.width}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
-        text(
-          p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
-          p.y + 1,
-          p.label,
+      .forEach((s, i) =>
+        out.push(
+          ownedTagText(
+            text(3, 5 + i * 3.7, s, i === 0),
+            uid,
+            i === 0
+              ? "designation"
+              : i <=
+                  wrap(types.get(d.typeId)?.description ?? d.typeId, 42).length
+                ? "description"
+                : undefined,
+          ),
         ),
       );
+    out.push(...wiringPortSvg(node, rows.get(uid)!));
     out.push("</g>");
-    references.push({
-      deviceUid: uid,
-      designation: d.designation,
-      x: node.x! + node.width! / 2,
-      y: node.y! + node.height! / 2,
-    });
+    references.push(drawingDeviceReference(node, d));
   }
   return {
     title: request.title,
@@ -509,4 +513,26 @@ function wiringWidthError(designation: string, terminalKey?: string) {
       ? `Wiring device ${JSON.stringify(designation)} designation is too wide.`
       : `Wiring terminal ${JSON.stringify(`${designation}.${terminalKey}`)} label is too wide.`,
   );
+}
+
+function wiringPortSvg(
+  node: ElkNode,
+  ports: readonly {
+    key: string;
+    label: string;
+    side: "WEST" | "EAST";
+    y: number;
+  }[],
+) {
+  const result: string[] = [];
+  for (const p of ports)
+    result.push(
+      `<circle data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : node.width}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
+      text(
+        p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
+        p.y + 1,
+        p.label,
+      ),
+    );
+  return result;
 }

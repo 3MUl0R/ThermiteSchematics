@@ -1,3 +1,4 @@
+import { EVALS_VERSION } from "./version.mjs";
 import { it, expect } from "vitest";
 import {
   prepareRepin,
@@ -102,7 +103,7 @@ function fixture({
         subset: "full",
         cases: [cid],
         corpusSha256: "seal",
-        evalsVersion: "4.2",
+        evalsVersion: EVALS_VERSION,
         checkers,
         checkerSha256: checkerManifestHash(checkers),
         results: rows,
@@ -150,7 +151,7 @@ function fixture({
     registrySha256,
     checkerSha256: current.checkerSha256,
     corpusSha256: "seal",
-    evalsVersion: "4.2",
+    evalsVersion: EVALS_VERSION,
     baselineSha256,
     entries,
     ...(addition && provable

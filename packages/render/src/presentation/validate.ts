@@ -1,3 +1,4 @@
+import { validateDeviceTagSources } from "../device-tags.js";
 import type { ElectricalIr, IrTerminal, IrDevice } from "@thermite/compiler";
 import type {
   SelectedSubgraph,
@@ -79,6 +80,13 @@ export function validatePresentationGraph(
   );
 
   validateLabelsAndMetadata(graph, selected, deviceByUid);
+  validateDeviceTagSources(ir, [
+    ...graph.metadataTextSources,
+    ...graph.deviceGroups.flatMap((g) => g.label.textSources),
+    ...graph.nodes.flatMap((n) =>
+      n.kind === "junction" ? [] : n.labels.flatMap((l) => l.textSources),
+    ),
+  ]);
   validateOffViewIncidence(ir, graph);
   validateProvenance(ir, graph, mappings, selected);
 }

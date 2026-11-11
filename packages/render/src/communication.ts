@@ -1,4 +1,8 @@
 import {
+  ownedTagText,
+  drawingDeviceReference,
+} from "./device-tag-ownership.js";
+import {
   assertTopologyIdentities,
   assertTopologyRouteEndpoints,
 } from "./layout/topology-conservation.js";
@@ -379,9 +383,14 @@ async function layoutCommunicationDrawing(
       `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})">`,
       `<rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#f5f8fb" stroke="#344054" stroke-width="0.3"/>`,
     );
-    captions
-      .get(uid)!
-      .forEach((s, j) => out.push(text(3, 5 + j * 3.7, s, j === 0)));
+    out.push(
+      ...communicationCaptionSvg(
+        uid,
+        captions.get(uid)!,
+        types.get(device.typeId),
+        request.medium,
+      ),
+    );
     for (const port of rows.get(uid)!) {
       const px = port.side === "WEST" ? 0 : node.width!;
       out.push(
@@ -395,12 +404,7 @@ async function layoutCommunicationDrawing(
       );
     }
     out.push("</g>");
-    references.push({
-      deviceUid: uid,
-      designation: device.designation,
-      x: node.x! + node.width! / 2,
-      y: node.y! + node.height! / 2,
-    });
+    references.push(drawingDeviceReference(node, device));
   }
   assertTopologyRouteEndpoints(graph);
   return {
@@ -558,4 +562,38 @@ export async function prepareCommunicationPages(
       "Communication pagination did not conserve the original selection.",
     );
   return drawings;
+}
+
+function communicationCaptionSvg(
+  uid: string,
+  caption: readonly string[],
+  type: ElectricalIr["deviceTypes"][number] | undefined,
+  medium: string,
+) {
+  const result: string[] = [],
+    nodeWidth = medium === "nrg-bus" ? 44 : 66;
+  caption.forEach((s, j) =>
+    result.push(
+      ownedTagText(
+        text(3, 5 + j * 3.7, s, j === 0),
+        uid,
+        j === 0
+          ? "designation"
+          : j <=
+              wrap(
+                type?.catalog?.orderNumber ??
+                  type?.description ??
+                  type?.id ??
+                  "",
+                medium === "nrg-bus" ? 24 : 35,
+                nodeWidth - 6,
+              ).length
+            ? type?.catalog?.orderNumber
+              ? "part"
+              : "description"
+            : undefined,
+      ),
+    ),
+  );
+  return result;
 }

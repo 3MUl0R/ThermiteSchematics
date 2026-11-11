@@ -107,7 +107,7 @@ export function measureSheet(options = {}) {
   });
   const visible = (e, keepHidden = false) => {
     if (
-      e.closest("defs") ||
+      e.closest("defs,clipPath,mask,symbol,pattern,marker") ||
       getComputedStyle(e).display === "none" ||
       getComputedStyle(e).visibility === "hidden"
     )
@@ -145,6 +145,58 @@ export function measureSheet(options = {}) {
   const ids = new Map(
     all.map((e, i) => [e, `${e.tagName.toLowerCase()}-${i}`]),
   );
+  const elementsById = new Map([...ids].map(([e, id]) => [id, e]));
+  const tagIdentity = (e) => {
+    const owner = attr(e, "data-tag-owner-uid"),
+      kind = attr(e, "data-tag-kind");
+    if (!owner) return {};
+    let terminal;
+    try {
+      terminal = JSON.parse(attr(e, "data-tag-terminal-id") ?? "null");
+    } catch {}
+    let rootedOwner;
+    if (e.classList.contains("label-device")) {
+      try {
+        const hex = e.getAttribute("clip-path").match(/-clip-([a-f0-9]+)\)/)[1];
+        const label = JSON.parse(
+          hex
+            .match(/.{4}/g)
+            .map((h) => String.fromCharCode(parseInt(h, 16)))
+            .join(""),
+        );
+        const identity = JSON.parse(label[2]);
+        if (
+          label[0] === "label" &&
+          label[1] === "device" &&
+          identity[0] === "device"
+        )
+          rootedOwner = identity[1];
+      } catch {}
+    }
+    const parent = attr(e, "data-device-uid");
+    return {
+      tagOwnerUid: owner,
+      tagField: attr(e, "data-tag-field"),
+      tagKind: kind,
+      tagBlock: attr(e, "data-tag-block"),
+      tagContainer:
+        ids.get(
+          kind === "body"
+            ? e.closest("[data-device-uid]")
+            : e.closest(
+                'g[data-tag-kind="reference"][data-tag-block],.off-view-annotation',
+              ),
+        ) ?? rootedOwner,
+      tagTerminal: terminal,
+      tagTerminalDeclared: attr(e, "data-tag-terminal-id") != null,
+      tagRef: attr(e, "data-tag-ref"),
+      tagOwnershipValid:
+        kind === "body"
+          ? (parent ?? rootedOwner) === owner &&
+            !e.closest('[data-tag-kind="reference"],.off-view-annotation')
+          : kind === "reference" && (!parent || parent === owner),
+    };
+  };
   const identity = (e) => ({
     element: ids.get(e),
     deviceUid: attr(e, "data-device-uid"),
@@ -196,6 +248,8 @@ export function measureSheet(options = {}) {
       "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key]",
     ),
   ).flatMap((e) => {
+    if (e.closest('[data-tag-kind="reference"],.off-view-annotation'))
+      return [];
     const v = visible(e);
     if (!v) return [];
     const b = v.b;
@@ -513,6 +567,7 @@ export function measureSheet(options = {}) {
       return [
         {
           ...id,
+          ...tagIdentity(e),
           ...(e.tagName.toLowerCase() === "tspan"
             ? { locatorElement: ids.get(e.closest("text")) }
             : {}),
@@ -860,6 +915,153 @@ export function measureSheet(options = {}) {
       y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   };
+  // Let Chromium parse every supported CSS colour syntax into sRGB + alpha,
+  // including hex alpha, percentages, HSL and modern colour spaces. Never let
+  // canvas's invalid-colour fallback turn a paint server into black evidence.
+  const paintCanvas = document.createElement("canvas");
+  paintCanvas.width = paintCanvas.height = 1;
+  const paintContext = paintCanvas.getContext("2d", {
+    willReadFrequently: true,
+  });
+  const colourCache = new Map();
+  const colour = (fill) => {
+    if (!colourCache.has(fill)) {
+      let rgba = null;
+      if (CSS.supports("color", fill)) {
+        paintContext.clearRect(0, 0, 1, 1);
+        paintContext.fillStyle = fill;
+        paintContext.fillRect(0, 0, 1, 1);
+        rgba = [...paintContext.getImageData(0, 0, 1, 1).data];
+      }
+      colourCache.set(fill, rgba);
+    }
+    return colourCache.get(fill);
+  };
+  const fillPaint = (e) => {
+    const css = getComputedStyle(e),
+      rgba = colour(css.fill);
+    let alpha = rgba ? (rgba[3] / 255) * Number(css.fillOpacity) : 0;
+    for (let node = e; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (
+        style.display === "none" ||
+        ["hidden", "collapse"].includes(style.visibility)
+      )
+        alpha = 0;
+      alpha *= Number(style.opacity);
+    }
+    return {
+      alpha,
+      background: rgba?.slice(0, 3).every((c) => c === 255) ?? false,
+    };
+  };
+  // Native fill geometry honours holes, transforms and rounded corners, unlike
+  // bounding-box coverage. Strokes never occlude DQ-06 rows. Test all shapes,
+  // including pointer-events:none, in SVG document paint order.
+  const occluders = all
+    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse"))
+    .flatMap((e) => {
+      const v = visible(e),
+        paint = fillPaint(e);
+      if (!v || paint.alpha < 0.95) return [];
+      try {
+        const clips = shapeClips(e);
+        if (clips === null) return [];
+        return [
+          {
+            e,
+            bbox: v.b,
+            clips: [v.clip, ...clips],
+            inverse: e.getScreenCTM().inverse(),
+            order: all.indexOf(e),
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
+  const contains = (b, p) =>
+    p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+  const occlusion = (t) => {
+    const candidates = occluders.filter(
+      (o) =>
+        o.order > t.order &&
+        intersect(o.bbox, t.bbox).w > 0 &&
+        intersect(o.bbox, t.bbox).h > 0,
+    );
+    if (!candidates.length) return 0;
+    let covered = 0;
+    // 45 interior samples across the ink box; majority coverage excludes small
+    // crossings and isolated glyph overlaps. Coordinates may be off-viewport.
+    for (let x = 0; x < 15; x++)
+      for (let y = 0; y < 3; y++) {
+        const p = {
+          x: t.bbox.x + (t.bbox.w * (x + 0.5)) / 15,
+          y: t.bbox.y + (t.bbox.h * (y + 0.5)) / 3,
+        };
+        if (
+          candidates.some(
+            (o) =>
+              contains(o.bbox, p) &&
+              o.clips.every((b) => contains(b, p)) &&
+              o.e.isPointInFill(
+                new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy).matrixTransform(
+                  o.inverse,
+                ),
+              ),
+          )
+        )
+          covered++;
+      }
+    return covered / 45;
+  };
+  // DQ-06 uses complete painted owned rows. The rectangular clip rules used
+  // for native shape measurement also apply to the whole measured ink box.
+  for (const t of texts.filter((t) => t.tagOwnerUid)) {
+    const e = elementsById.get(t.element),
+      paint = fillPaint(e);
+    t.tagPaintAlpha = paint.alpha;
+    t.tagOcclusion = occlusion(t);
+    try {
+      const clips = shapeClips(e);
+      t.tagPainted =
+        t.painted &&
+        clips !== null &&
+        paint.alpha >= 0.2 &&
+        !paint.background &&
+        t.tagOcclusion <= 0.5 &&
+        [t.viewport, ...clips].every(
+          (b) =>
+            t.bbox.x >= b.x - 0.001 &&
+            t.bbox.y >= b.y - 0.001 &&
+            t.bbox.x + t.bbox.w <= b.x + b.w + 0.001 &&
+            t.bbox.y + t.bbox.h <= b.y + b.h + 0.001,
+        );
+    } catch (error) {
+      t.tagPainted = false;
+      t.tagVisibilityError = error.message;
+    }
+  }
+  const deviceReferences = texts
+    .filter((t) => t.tagTerminalDeclared && t.painted)
+    .map((t) => ({
+      deviceUid: t.tagOwnerUid,
+      terminalKey: t.tagTerminal?.terminalKey,
+      tagBlock: t.tagBlock,
+      tagContainer: t.tagContainer,
+      tagRef: t.tagRef,
+      bbox: t.bbox,
+      element: t.element,
+    }))
+    .filter(
+      (r, i, all) =>
+        all.findIndex(
+          (s) =>
+            s.deviceUid === r.deviceUid &&
+            s.tagBlock === r.tagBlock &&
+            s.tagContainer === r.tagContainer,
+        ) === i,
+    );
   const utilisationErrors = [];
   const shapes = Array.from(
     options.textOnly
@@ -1005,13 +1207,14 @@ export function measureSheet(options = {}) {
   const devices = Array.from(root.querySelectorAll("[data-device-uid]"))
     .filter(
       (e) =>
-        e.matches(".device-group") ||
-        e.hasAttribute("data-layout-width") ||
-        (e.tagName.toLowerCase() === "g" &&
-          !e.hasAttribute("data-symbol-id") &&
-          Array.from(e.children).some(
-            (c) => c.tagName.toLowerCase() === "rect",
-          )),
+        !e.closest('[data-tag-kind="reference"],.off-view-annotation') &&
+        (e.matches(".device-group") ||
+          e.hasAttribute("data-layout-width") ||
+          (e.tagName.toLowerCase() === "g" &&
+            !e.hasAttribute("data-symbol-id") &&
+            Array.from(e.children).some(
+              (c) => c.tagName.toLowerCase() === "rect",
+            ))),
     )
     .flatMap((e) => {
       const v = visible(e);
@@ -1032,6 +1235,7 @@ export function measureSheet(options = {}) {
     shapes,
     ...(utilisationErrors.length ? { utilisationErrors } : {}),
     devices,
+    deviceReferences,
     catalogs: [
       ...(root.querySelector("[data-symbol-id]") ? ["ais"] : []),
       ...(root.querySelector("[data-circuit-mark]") ? ["circuit"] : []),

@@ -116,7 +116,11 @@ function balanceLast(
 /** Wide banks use one greedy state per emitted row, not a suffix-wide search.
  * Each state probes at most 32 widths and inspects at most 64 separator breaks;
  * balancing adds at most five width probes. No source character is changed. */
-function wideRows(chars: readonly string[], fits: (value: string) => boolean) {
+function wideRows(
+  chars: readonly string[],
+  fits: (value: string) => boolean,
+  preferredSeparator: (value: string) => boolean = separator,
+) {
   const ends: number[] = [];
   for (let start = 0; start < chars.length;) {
     let end = fittingEnd(chars, start, fits);
@@ -124,7 +128,9 @@ function wideRows(chars: readonly string[], fits: (value: string) => boolean) {
     for (let cut = end; cut > stop; cut--) {
       if (
         (cut === chars.length ||
-          separator(required(chars[cut - 1], "Missing separator cluster"))) &&
+          preferredSeparator(
+            required(chars[cut - 1], "Missing separator cluster"),
+          )) &&
         (cut === chars.length || chars.length - cut >= 3)
       ) {
         end = cut;
@@ -146,6 +152,7 @@ export function wrapIdentity(
   value: string,
   width: number,
   measure: (value: string) => number,
+  preferredSeparator: (value: string) => boolean = separator,
 ): string[] {
   const measured = memoized(measure),
     fits = (text: string) => measured(text) <= width + 0.001;
@@ -164,7 +171,7 @@ export function wrapIdentity(
       const used = measured(row);
       if (used > width + 0.001 && end > start + 1) break;
       if (end < count && end === limit && fits(row) && !triedWide) {
-        const rows = wideRows(chars, fits);
+        const rows = wideRows(chars, fits, preferredSeparator);
         if (rows.every((r) => textClusters(r).length >= 3)) return rows;
         // A fitting long row can be split into 3–64-cluster rows. Continuing
         // the capped DP retains every feasible orphan-free partition.
@@ -175,7 +182,7 @@ export function wrapIdentity(
         tail[0] + (end - start <= 2 && count > 2 ? 1 : 0),
         tail[1] +
           (end < count &&
-          !separator(required(chars[end - 1], "Missing row cluster"))
+          !preferredSeparator(required(chars[end - 1], "Missing row cluster"))
             ? 1
             : 0),
         tail[2] + 1,

@@ -1,3 +1,4 @@
+import { svgSemanticId } from "../svg/escape.js";
 import { required } from "../presentation/util.js";
 import type { PresentationLabel } from "../types.js";
 import { SvgWriter } from "../svg/writer.js";
@@ -36,6 +37,15 @@ export function offViewCardSvg(
       "text",
       {
         class: line.bold ? "off-view-heading" : "off-view-row",
+        "data-tag-owner-uid": line.bold ? card.terminal.deviceUid : undefined,
+        "data-tag-field": line.bold ? "designation" : undefined,
+        "data-tag-kind": line.bold ? "reference" : undefined,
+        "data-tag-block": line.bold
+          ? svgSemanticId("clip", [label.id])
+          : undefined,
+        "data-tag-terminal-id": line.bold
+          ? JSON.stringify(card.terminal)
+          : undefined,
         x: x + (CARD_PAD + line.offsetX) * scale,
         y: y + line.baseline * scale,
         "font-family": "Thermite Sans, Thermite Math, sans-serif",
