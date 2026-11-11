@@ -234,6 +234,30 @@ describe("frozen release workflow topology", () => {
     expect(text).toContain("run: bun install --frozen-lockfile");
     expect(text).toContain("run: bun run check");
     expect(text).toContain("run: bun run package:pack");
+    // The linked-worktree full check runs as its own matrix job, in
+    // parallel with the clone check, so neither exceeds the job time limit.
+    const jobs = block(text, "jobs", 0);
+    expect(mappingKeys(jobs, 2)).toEqual(["check", "worktree"]);
+    const clone = block(jobs, "check", 2);
+    const worktree = block(jobs, "worktree", 2);
+    expect(clone).toContain("run: bun run check");
+    expect(clone).not.toContain("check-worktree");
+    for (const job of [clone, worktree]) {
+      expect(job).toContain(
+        "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
+      );
+      expect(job).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
+      expect(job).toContain("timeout-minutes: 90");
+      expect(job).toContain("VITEST_MAX_WORKERS: 2");
+      expect(job).toContain('THERMITE_REQUIRE_BROWSER: "1"');
+      expect(job).toContain("persist-credentials: false");
+      expect(job).toContain('python-version: "3.12"');
+      expect(job).toContain("run: bun install --frozen-lockfile");
+      expect(job).toContain("THERMITE_RESEARCH_PYTHON: python");
+    }
+    expect(worktree).toContain("run: bun scripts/check-worktree.mjs");
+    expect(worktree).not.toContain("run: bun run check");
+    expect(worktree).not.toContain("package:pack");
     expect(text).toContain("--network=none");
     expect(text).toContain("if: runner.os == 'Linux'");
     expect(text).toContain(

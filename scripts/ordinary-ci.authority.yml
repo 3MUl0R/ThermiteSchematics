@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [macos-15, ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
@@ -34,10 +34,6 @@ jobs:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run check
-        env:
-          THERMITE_RESEARCH_PYTHON: python
-      - name: Check a linked worktree
-        run: bun scripts/check-worktree.mjs
         env:
           THERMITE_RESEARCH_PYTHON: python
       - run: bun run package:pack
@@ -70,3 +66,33 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+  # The linked-worktree check runs the full check again from a linked
+  # worktree. It runs as its own job so the two full checks run in parallel
+  # instead of exceeding one job's time limit.
+  worktree:
+    if: github.ref == 'refs/heads/release' || github.base_ref == 'release'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      VITEST_MAX_WORKERS: 2
+      THERMITE_REQUIRE_BROWSER: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: Check a linked worktree
+        run: bun scripts/check-worktree.mjs
+        env:
+          THERMITE_RESEARCH_PYTHON: python

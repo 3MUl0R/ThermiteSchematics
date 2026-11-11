@@ -22,7 +22,9 @@ for the commit, test counts, skips and downloaded-asset evidence.
 
 The [ordinary CI workflow](../.github/workflows/ci.yml) runs the complete check
 and runtime packaging on `macos-15`, `ubuntu-24.04`, and `windows-2022` for
-pull requests targeting `release` and pushes to `release`. Manual runs also
+pull requests targeting `release` and pushes to `release`. A parallel
+`worktree` job repeats the complete check from a linked worktree on the same
+three systems. Manual runs also
 require the `release` branch. Pull requests and merges into `dev` skip this
 workflow; contributors still run the local checks before submitting changes.
 Linux network-disabled acceptance uses a matching-architecture container;
