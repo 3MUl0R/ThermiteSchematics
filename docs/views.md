@@ -74,12 +74,22 @@ preferred.
 
 In rooted **power** views, authored gangs of at least two independently drawn
 power-switching poles must paint every link between those poles. The closed
-breaker, disconnector and overload pole marks identify those roles; NO/NC contact
-marks additionally require the `power-contact` classification and declared
-`power_input` / `power_output` terminals to distinguish main contactor poles
-from auxiliary contacts. The rule uses no designation or
-caption text. Cards reserve a finite band inside their prospective owner box,
-contained in the device group, before ELK runs; final checks use actual member
+breaker, disconnector and overload pole marks identify those roles. Mapped
+`power-contact` functions also require gang ink, including NO/NC contact and
+switch marks; an unsupported anchor refuses rather than exempting the group.
+No shared vocabulary for power terminal roles is required: libraries use
+`power_input`/`power_output`, `line`/`load`, `power` and `passive`.
+A contact is exempt only when **every**
+terminal explicitly has a control role (`aux`, `auxiliary` or `control`). Generic
+`common`/`no_contact`/`nc_contact` roles describe topology and do not exempt a power
+mapping; changeover halves with control mappings remain optional. Missing,
+unknown or mixed roles on a mapped power contact remain mandatory: refusing an
+ambiguous drawing is safer than silently
+losing an authored mechanical association. Classification uses no designation or
+caption text. This policy checks admitted mappings; it does not grant unsupported
+profiles new power-family bindings. Cards reserve a finite band inside their
+prospective owner box, contained in the device group, before ELK runs; final
+checks use actual member
 spans. A missing anchor, misalignment or collision refuses with R006 naming the
 device and group. Other gangs, including aux/control contacts, pushbutton blocks
 and changeover halves, paint only supported, aligned, unobstructed links. They

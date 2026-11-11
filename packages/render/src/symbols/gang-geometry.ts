@@ -19,11 +19,17 @@ export function gangAnchor(
   const contact = [
     "ais:contact-no",
     "ais:contact-nc",
+    "ais:switch-no",
+    "ais:switch-nc",
     "ais:overload-pole",
   ].includes(node.symbolId);
   if (!blade && !contact) return undefined;
+  const height =
+    node.orientation === "left-to-right"
+      ? node.symbolSize.height
+      : node.symbolSize.width;
   const x = blade ? 18.5 : 20,
-    y = blade ? 6.5 : 10;
+    y = blade ? 6.5 : height / 2;
   return node.orientation === "left-to-right"
     ? { x, y }
     : { x: node.symbolSize.width - y, y: x };
@@ -64,10 +70,18 @@ export function visibleRootedGangs(
     });
 }
 
-/** Closed power marks identify pole roles; contact marks additionally need the
- * power-contact classification so auxiliary/control contacts stay optional. */
+// Explicit control roles seen in the library/core gang inventory. This is an
+// exemption, not a whitelist of power vocabularies: unknown/missing/mixed roles
+// on a mapped power contact must fail safe rather than permit silent gang loss.
+const CONTROL_ROLES = new Set(["aux", "auxiliary", "control"]);
+
+/** Mapping/mark semantics identify power poles. Only wholly explicit control
+ * terminals exempt a mapped power contact; captions and type IDs are irrelevant. */
 export function isPowerSwitchingPole(
-  node: SymbolPresentationNode,
+  node: Pick<
+    SymbolPresentationNode,
+    "representation" | "symbolId" | "classification" | "ports"
+  >,
   ir: Readonly<ElectricalIr>,
 ): boolean {
   if (node.representation !== "function") return false;
@@ -77,11 +91,7 @@ export function isPowerSwitchingPole(
     )
   )
     return true;
-  if (
-    !["ais:contact-no", "ais:contact-nc"].includes(node.symbolId) ||
-    node.classification !== "power-contact"
-  )
-    return false;
+  if (node.classification !== "power-contact") return false;
   const roles = node.ports.map(
     (p) =>
       ir.terminals.find(
@@ -90,7 +100,7 @@ export function isPowerSwitchingPole(
           t.id.terminalKey === p.terminal.terminalKey,
       )?.role,
   );
-  return roles.includes("power_input") && roles.includes("power_output");
+  return !roles.length || !roles.every((role) => CONTROL_ROLES.has(role ?? ""));
 }
 
 /** Before ELK, the finite prospective owner box is contained in its device
