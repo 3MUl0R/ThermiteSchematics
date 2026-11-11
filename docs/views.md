@@ -269,7 +269,9 @@ The renderer compares this with the original using the same route, page,
 locality and utilisation order. It adds no ELK runs, cuts or placement choices.
 Every constituent must contain a device, terminal or card; merging cannot hide
 a blank or conductor-only strip. Failed final ink, peer or page-cost checks
-retain the original. References use final physical sheet numbers and zones.
+retain the original. Composition is also skipped when earlier pagination omitted
+a strip: surviving drafts no longer map one-to-one to the original grid rows.
+References use final physical sheet numbers and zones.
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
 strip extents; any partly painted location heading stays whole, while wholly

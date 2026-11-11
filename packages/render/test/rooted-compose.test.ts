@@ -37,7 +37,6 @@ it("compares at most the winner and one materialized alternative with no ELK wor
   expect(selected.prepared).toBe(c.prepared); // Phase/gang geometry and owners are unchanged.
   expect(selected.grid).toBe(c.grid);
   expect(selected.scale).toBe(c.scale);
-  expect(selected.printableDrafts).toBe(selected.drafts);
   expect(c).toEqual(snapshot);
   expect(elk).not.toHaveBeenCalled();
   expect(emitter.emitSchematicSvg).toHaveBeenCalledTimes(1);
@@ -73,7 +72,7 @@ it("uses the D2 comparator rather than accepting every shorter alternative", () 
   vi.spyOn(scores, "compareCandidates").mockReturnValue(1);
   expect(composeRootedWinner(ir, c, c, sidePage)).toBe(c);
 });
-it("retains the original on structured emitter refusal", () => {
+it("treats failed re-emission of a validated winner as a defensive invariant", () => {
   const c = source();
   vi.mocked(emitter.emitSchematicSvg).mockReturnValue({
     ok: false,
@@ -84,7 +83,9 @@ it("retains the original on structured emitter refusal", () => {
       message: "Fixture refuses",
     },
   } as never);
-  expect(composeRootedWinner(ir, c, c, sidePage)).toBe(c);
+  expect(() => composeRootedWinner(ir, c, c, sidePage)).toThrow(
+    "Presentation invariant: Validated rooted winner failed re-emission during composition",
+  );
 });
 it("rejects final peer, page-cost and post-trim caption failures", () => {
   const c = source(),
