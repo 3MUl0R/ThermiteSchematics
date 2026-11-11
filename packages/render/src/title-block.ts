@@ -2,7 +2,7 @@ import type { CompiledProjectPresentation } from "@thermite/compiler";
 
 import type { InvalidRenderTextError } from "./errors.js";
 import { THERMITE_SCHEMATICS_PRODUCT_VERSION } from "./product-version.js";
-import { preflightTitleRenderText } from "./svg/escape.js";
+import { preflightNamedTitle } from "./render-text-context.js";
 import {
   RENDERER_VERSION,
   type NormalizedSchematicView,
@@ -103,7 +103,7 @@ export function prepareSchematicTitleContext(
     })),
   ];
 
-  const preflight = preflightTitleRenderText(view, lines);
+  const preflight = preflightNamedTitle(view, lines);
   if (!preflight.ok) return preflight;
 
   return {

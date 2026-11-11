@@ -131,9 +131,11 @@ bun evals/engine/reseed.mjs --verify
 manifest byte. `seed-corpus.mjs` and `seed-mutations.mjs` are the recipes;
 `baselines.json` is an authored input. The check-included recipe drift test
 compares formatted `mutationRecipe()` bytes with `mutations.json`. Expectations
-are never learned from compiler output. The version remains unpublished v1.0
-through review; after publication, change the task/checker version and replay
-the previous checkpoint before collecting new scoring evidence.
+are never learned from compiler output. Version 1.1 replaces the stale compact
+refusal premises with portrait A4 motor-starter witnesses (10 mm margins can be
+rescued; 25 mm margins cannot). It also requires an unprintable-layout refusal.
+Change the task/checker version and replay the previous checkpoint before
+collecting new scoring evidence.
 
 ## Replay a different engine
 

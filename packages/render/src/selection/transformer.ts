@@ -164,8 +164,14 @@ function pairError(
           : `Incomplete control view: input and return must reach distinct terminals on distinct nets of the same transformer source function; reached ${label(input)} and ${label(ret)}.`,
     details: {
       reason: "transformer-source-pair",
-      input: input.boundary,
-      return: ret.boundary,
+      input: {
+        ...input.boundary,
+        designation: designationFor(context, input.boundary.terminal.deviceUid),
+      },
+      return: {
+        ...ret.boundary,
+        designation: designationFor(context, ret.boundary.terminal.deviceUid),
+      },
     },
   };
 }

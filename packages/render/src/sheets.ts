@@ -1,6 +1,8 @@
 import { rootedPageCostFailure } from "./packet/rooted-bound.js";
+import { renderErrorContext } from "./render-error-context.js";
 import { referenceTables } from "./packet/references.js";
 import { viewDrafts } from "./packet/dispatch.js";
+import { circuitSelectionContext } from "./packet/circuit.js";
 import { appendViewDrafts, assembleSheets } from "./packet/assembly.js";
 
 import {
@@ -140,10 +142,7 @@ async function renderPacket(
           ...new Set([...(circuitAppearances.get(key) ?? []), ...labels]),
         ]);
     } catch (error) {
-      const failed = failure(
-        "invalid-packet",
-        error instanceof Error ? error.message : "Invalid circuit view.",
-      );
+      const failed = invalidCircuitFailure(ir, view, error);
       if (!failed.ok)
         return {
           ok: false,
@@ -173,7 +172,10 @@ async function renderPacket(
       referenceNumber,
     );
     if (!result.ok)
-      return { ok: false, error: contextError(result.error, [context]) };
+      return {
+        ok: false,
+        error: contextError(renderErrorContext(ir, result.error), [context]),
+      };
     const reportSelection = result.value[0]?.documentationSelection;
     if (reportSelection)
       documentationSelections.push({ ...reportSelection, view: viewIndex + 1 });
@@ -275,12 +277,78 @@ async function renderPacket(
       : failed;
   }
 }
+function invalidCircuitFailure(
+  ir: Readonly<ElectricalIr>,
+  view: unknown,
+  error: unknown,
+) {
+  return failure(
+    "invalid-packet",
+    error instanceof Error ? error.message : "Invalid circuit view.",
+    circuitSelectionContext(ir, view as CircuitViewRequest),
+  );
+}
+
+function compactAdviceView(
+  request: SchematicPacketRequest,
+  details: Readonly<Record<string, unknown>> | undefined,
+) {
+  const index =
+    typeof details?.viewIndex === "number"
+      ? details.viewIndex
+      : request.views.length === 1
+        ? 0
+        : undefined;
+  const view = index === undefined ? undefined : request.views[index];
+  return (
+    record(view) &&
+    (view.format === "schematic-view-request/0.1" ||
+      view.format === "schematic-view-request/0.2") &&
+    view.flow === "top-to-bottom"
+  );
+}
+
+async function renderPacketWithAdvice(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicPacketRequest,
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
+  explicitPacket: boolean,
+): Promise<RenderOutcome<RenderedPacket>> {
+  const result = await renderPacket(ir, request, presentation, explicitPacket);
+  if (
+    result.ok ||
+    result.error.code !== "R006" ||
+    result.error.reason !== "unprintable-layout" ||
+    request.layout === "compact" ||
+    !compactAdviceView(request, result.error.details)
+  )
+    return result;
+  // Advice is evidence about the complete export, including assembly and the
+  // packet page-cost bound. It never substitutes a different drawing.
+  const compact = await renderPacket(
+    ir,
+    { ...request, layout: "compact" },
+    presentation,
+    explicitPacket,
+  );
+  return compact.ok
+    ? {
+        ok: false,
+        error: {
+          ...result.error,
+          message: `${result.error.message} Try --layout compact; it produces a printable version of this packet on this page.`,
+          details: { ...result.error.details, compactLayoutAvailable: true },
+        },
+      }
+    : result;
+}
+
 export function renderSchematicPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
   presentation?: Readonly<CompiledProjectPresentation>,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return renderPacket(ir, request, presentation, true);
+  return renderPacketWithAdvice(ir, request, presentation, true);
 }
 export function renderSchematicSheets(
   ir: Readonly<ElectricalIr>,
@@ -289,7 +357,7 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return renderPacket(
+  return renderPacketWithAdvice(
     ir,
     {
       ...options,

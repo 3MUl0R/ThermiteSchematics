@@ -139,7 +139,7 @@ views. `--flow left-to-right|top-to-bottom`,
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
 single sheet only (R006 otherwise).
 
-Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
+Device R-codes name tags. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
 Standard spacing may fold onto fewer sheets.

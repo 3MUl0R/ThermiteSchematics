@@ -496,6 +496,18 @@ describe("integrated renderer", () => {
           field,
           reason,
           root: "K1",
+          details:
+            field === "device.location"
+              ? { designation: "K1" }
+              : {
+                  designation: "W-CTL-007",
+                  terminals: selectedWire(ir, "W-CTL-007").endpoints.map(
+                    (e, i) => ({
+                      ...e.terminal,
+                      designation: ["OL1", "K1"][i],
+                    }),
+                  ),
+                },
         },
       });
       expect(spy.knownLayoutOptions).not.toHaveBeenCalled();
@@ -721,6 +733,19 @@ describe("integrated renderer", () => {
           ...expectedOwner,
           reason,
           root: field === "cable.designation" ? value : "CBL1",
+          ...(field === "cable.designation"
+            ? { details: { designation: "\\ud800" } }
+            : {
+                details: {
+                  designation: "CBL1",
+                  conductorId:
+                    field === "cable.conductor.id" ? "\\ufffe" : "1+",
+                  terminals: conductor.endpoints.map((e, i) => ({
+                    ...e.terminal,
+                    designation: ["TB1", "JB1"][i],
+                  })),
+                },
+              }),
         },
       });
       expect(spy.knownLayoutOptions).not.toHaveBeenCalled();
@@ -747,6 +772,7 @@ describe("integrated renderer", () => {
           ownerId: svgSemanticId("device", [device.uid]),
           field: "device.designation" as const,
           reason: "unpaired-surrogate" as const,
+          details: { designation: "PS1\\ud800" },
         };
       },
     },
@@ -766,6 +792,13 @@ describe("integrated renderer", () => {
           ownerId: svgSemanticId("wire", [wire.uid]),
           field: "wire.designation" as const,
           reason: "xml-illegal-code-point" as const,
+          details: {
+            designation: "WIRE\\ufffe",
+            terminals: wire.endpoints.map((e, i) => ({
+              ...e.terminal,
+              designation: ["OL1", "K1"][i],
+            })),
+          },
         };
       },
     },
@@ -829,6 +862,7 @@ describe("integrated renderer", () => {
           field: "device.type",
           reason,
           root: "K1",
+          details: { designation: "K1" },
         },
       });
       expect(spy.knownLayoutOptions).not.toHaveBeenCalled();
@@ -1224,6 +1258,11 @@ describe("M8 complete title R005 preflight", () => {
         field: "title.view-line",
         reason: "forbidden-single-line-code-point",
         root: root.designation,
+        details: {
+          designation: which === "root" ? "REJECTED-CONTENT\\u2028" : "LS1",
+          targetDesignation:
+            which === "target" ? "REJECTED-CONTENT\\u2029" : "PLC1",
+        },
       });
     },
   );

@@ -103,7 +103,7 @@ it("serves schema aliases as exact bytes", async () => {
     expect((await ok(["guide", "schema", alias], ctx.work)).stdout).toBe(bytes);
 });
 
-it("explains the CLI's fieldless R006 for multi-sheet SVG output", async () => {
+it("explains the CLI's R006 device context for multi-sheet SVG output", async () => {
   const project = await freshProject("starter");
   const request = {
     format: "schematic-packet-request/0.1",
@@ -123,9 +123,21 @@ it("explains the CLI's fieldless R006 for multi-sheet SVG output", async () => {
   );
   expect(result.code).toBe(1);
   expect(result.stdout).toBe("");
+  const ps1 = {
+    deviceUid: "33a15867-296b-40e4-a56b-15282f131b4c",
+    designation: "PS1",
+  };
+  const plc1 = {
+    deviceUid: "81148ad3-8c03-4c8d-8c70-6b33bb3b0266",
+    designation: "PLC1",
+  };
   expect(JSON.parse(result.stderr).error).toEqual({
     code: "R006",
     message: expect.stringContaining("requires 2 sheets"),
+    details: { devices: [ps1, plc1, plc1, ps1] },
   });
-  expect(DIAGNOSTIC_CATALOG.R006.meaning).toContain("without those fields");
+  expect(DIAGNOSTIC_CATALOG.R006.meaning).toContain("without reason");
+  expect(DIAGNOSTIC_CATALOG.R006.meaning).toContain(
+    "known device designations",
+  );
 });

@@ -372,6 +372,12 @@ describe("packet reference ownership", () => {
         reason: "unprintable-layout",
         message:
           "Continuation labels are too close to print clearly. Change flow, use a larger sheet, or narrow the view.",
+        details: {
+          conductorIds: [
+            { kind: "wire", uid: "wire1" },
+            { kind: "wire", uid: "wire2" },
+          ],
+        },
       },
     });
   });

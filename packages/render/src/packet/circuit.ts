@@ -1,4 +1,7 @@
-import { CircuitRenderError } from "../render-error-context.js";
+import {
+  CircuitRenderError,
+  renderErrorContext,
+} from "../render-error-context.js";
 import {
   circuitTextLines,
   prepareCircuitView,
@@ -17,7 +20,7 @@ import type { SchematicTitleContext } from "../title-block.js";
 import type { RenderOutcome } from "../types.js";
 
 import type { Draft, PaperPage, DrawingBounds } from "./types.js";
-import { failure } from "./errors.js";
+import { failure, record } from "./errors.js";
 import { bounds, zone } from "./page.js";
 import { n, text } from "./svg.js";
 import {
@@ -123,6 +126,7 @@ export async function circuitDrafts(
         return failure(
           "unprintable-layout",
           `Circuit ${group.id} needs ${n(group.width)} mm at readable size; select a narrower circuit group, another flow, or larger paper.`,
+          { groupId: group.id, devices: group.references },
         );
       const heading = [
         group.lineReference ? `Ref. ${group.lineReference}` : undefined,
@@ -138,6 +142,7 @@ export async function circuitDrafts(
         return failure(
           "unprintable-layout",
           `Circuit ${group.id} cannot fit as a complete group at readable size. Split its source selection into smaller circuit or channel groups.`,
+          { groupId: group.id, devices: group.references },
         );
       let offset = spanning ? Math.max(...cursors) : cursors[column]!;
       if (offset + height > available) {
@@ -209,15 +214,11 @@ export async function circuitDrafts(
     return { ok: true, value: drafts };
   } catch (error) {
     if (error instanceof CircuitRenderError) {
-      const circuitGroups = request.groups.map((g) => ({
-        groupId: g.id,
-        functionKeys: g.functions.map((f) => `${f.device.value}/${f.key}`),
-        conductorKeys: g.conductors,
-      }));
+      const { circuitGroups } = circuitSelectionContext(ir, request);
       return {
         ok: false,
         error: {
-          ...error.error,
+          ...renderErrorContext(ir, error.error),
           message: `${error.error.message} Selected circuit keys: ${circuitGroups.map((g) => `${g.groupId}: functions ${g.functionKeys.join(", ")}; conductors ${g.conductorKeys.join(", ") || "none"}`).join("; ")}.`,
           details: { ...error.error.details, circuitGroups },
         },
@@ -225,16 +226,43 @@ export async function circuitDrafts(
     }
     return failure(
       "unprintable-layout",
-      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${f.device.value}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
-      {
-        circuitGroups: request.groups.map((g) => ({
-          groupId: g.id,
-          functionKeys: g.functions.map((f) => `${f.device.value}/${f.key}`),
-          conductorKeys: g.conductors,
-        })),
-      },
+      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${circuitDeviceName(ir, f.device)}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
+      circuitSelectionContext(ir, request),
     );
   }
+}
+
+export function circuitSelectionContext(
+  ir: Readonly<ElectricalIr>,
+  request: CircuitViewRequest,
+) {
+  return {
+    circuitGroups: (Array.isArray(request.groups) ? request.groups : [])
+      .filter(record)
+      .map((g) => ({
+        groupId: g.id,
+        functionKeys: (Array.isArray(g.functions) ? g.functions : [])
+          .filter(
+            (f) =>
+              record(f) &&
+              record(f.device) &&
+              typeof f.device.value === "string",
+          )
+          .map((f) => `${circuitDeviceName(ir, f.device)}/${f.key}`),
+        conductorKeys: Array.isArray(g.conductors) ? g.conductors : [],
+      })),
+  };
+}
+
+function circuitDeviceName(
+  ir: Readonly<ElectricalIr>,
+  selector: CircuitViewRequest["groups"][number]["functions"][number]["device"],
+): string {
+  return (
+    (selector.by === "uid"
+      ? ir.devices.find((d) => d.uid === selector.value)?.designation
+      : undefined) ?? selector.value
+  );
 }
 
 function appendCircuitNotes(

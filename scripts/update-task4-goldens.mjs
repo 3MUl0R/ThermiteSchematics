@@ -487,6 +487,7 @@ const r005Cases = Object.freeze([
       field: "title.view-line",
       reason: "forbidden-single-line-code-point",
       root: "LS1\u2028BROKEN",
+      details: { designation: "LS1\\u2028BROKEN", targetDesignation: "PLC1" },
     },
   },
   {

@@ -256,6 +256,45 @@ describe("render error details", () => {
       }
     },
   );
+  it.each([
+    [10, true],
+    [25, false],
+  ] as const)(
+    "suggests compact for a genuine A4 refusal at %s mm margins only when the full export succeeds",
+    async (marginMm, rescued) => {
+      const request = {
+        format: "schematic-packet-request/0.1",
+        page: { size: "a4", orientation: "portrait", marginMm },
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "M1" },
+            family: "power",
+            flow: "top-to-bottom",
+          },
+        ],
+      } as const;
+      const standard = await renderSchematicPacket(ir, request);
+      const compact = await renderSchematicPacket(ir, {
+        ...request,
+        layout: "compact",
+      });
+      expect(standard).toMatchObject({
+        ok: false,
+        error: {
+          code: "R006",
+          reason: "unprintable-layout",
+          details: { viewIndex: 0, viewTitle: "M1 / power" },
+        },
+      });
+      expect(compact.ok).toBe(rescued);
+      if (standard.ok) throw Error("Expected refusal");
+      expect(standard.error.message.includes("--layout compact")).toBe(rescued);
+      expect(standard.error.details?.compactLayoutAvailable === true).toBe(
+        rescued,
+      );
+    },
+  );
   it("resolves UID packet roots to designations in the view title", async () => {
     const uid = ir.devices.find((d) => d.designation === "M1")!.uid;
     const result = await renderSchematicPacket(

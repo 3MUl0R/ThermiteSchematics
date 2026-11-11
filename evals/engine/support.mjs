@@ -16,7 +16,7 @@ import { engineRoot } from "./engine.mjs";
 
 export const root = fileURLToPath(new URL("../../", import.meta.url));
 export const corpus = join(root, "evals/corpus");
-export const version = "1.0";
+export const version = "1.1";
 export const sha256 = (bytes) =>
   createHash("sha256").update(bytes).digest("hex");
 export const integrity = (bytes) =>

@@ -52,6 +52,10 @@
     "ownerId": "normalized-view",
     "field": "title.view-line",
     "reason": "forbidden-single-line-code-point",
-    "root": "LS1 BROKEN"
+    "root": "LS1 BROKEN",
+    "details": {
+      "designation": "LS1\\u2028BROKEN",
+      "targetDesignation": "PLC1"
+    }
   }
 }

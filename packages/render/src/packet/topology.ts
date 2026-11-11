@@ -25,6 +25,7 @@ import type { RenderOutcome } from "../types.js";
 
 import type { Draft, PaperPage } from "./types.js";
 import { failure } from "./errors.js";
+import { topologySelectionContext } from "./selection-context.js";
 import { bounds, zone } from "./page.js";
 import { n, text, wrapReport, assemblyNoteLines } from "./svg.js";
 import { communicationPartLines } from "./continuations.js";
@@ -125,6 +126,7 @@ export async function topologyDrafts(
                   : assembly
                     ? "Connector assembly view cannot fit at readable text size. Select fewer assemblies or larger paper; omitted ports remain identified."
                     : "Communication view cannot fit at readable text size. Select fewer devices or larger paper; boundary links will remain visible.",
+          { devices: drawing.references },
         );
       const x = b.x + (b.w - drawing.width * scale) / 2,
         y = b.y + headingHeight;
@@ -141,6 +143,7 @@ export async function topologyDrafts(
         return failure(
           "unprintable-layout",
           "Diagram notes exceed the sheet bounds.",
+          { devices: drawing.references },
         );
       const note = noteLines
         .map((v, i) =>
@@ -237,11 +240,20 @@ export async function topologyDrafts(
     }
     return { ok: true, value: drafts };
   } catch (e) {
-    return failure(
-      "unprintable-layout",
-      e instanceof Error ? e.message : "Topology view failed.",
-    );
+    return topologyFailure(ir, request, e);
   }
+}
+
+function topologyFailure(
+  ir: Readonly<ElectricalIr>,
+  request: unknown,
+  error: unknown,
+) {
+  return failure(
+    "unprintable-layout",
+    error instanceof Error ? error.message : "Topology view failed.",
+    topologySelectionContext(ir, request),
+  );
 }
 
 function topologyTitle(

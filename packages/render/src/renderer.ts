@@ -158,7 +158,7 @@ export async function prepareSchematicDrawing(
   if (!presented.ok) return failed(diagnose(presented.error));
 
   const preflight = preflightRenderText(presented.value.graph);
-  if (!preflight.ok) return failed(preflight.error);
+  if (!preflight.ok) return failed(renderErrorContext(ir, preflight.error));
 
   let graph = presented.value.graph;
   const layoutOptions = {
@@ -280,8 +280,7 @@ export function createSchematicRendererWithDependencies(
               code: "R006",
               root: cable.designation,
               reason: "unprintable-layout",
-              message:
-                "This cable inventory needs multiple sheets. Use thermite view --conductors with HTML or JSON output to retain every core.",
+              message: `Cable ${JSON.stringify(cable.designation)} inventory needs multiple sheets. Use thermite view --conductors with HTML or JSON output to retain every core.`,
             });
           const terminals = new Map(
             cable.assignments.flatMap((core) =>
@@ -351,7 +350,7 @@ export function createSchematicRendererWithDependencies(
         undefined,
         ir,
       );
-      if (!emitted.ok) return failed(emitted.error);
+      if (!emitted.ok) return failed(renderErrorContext(ir, emitted.error));
       return succeeded({ view, summary, svg: emitted.value });
     },
   });

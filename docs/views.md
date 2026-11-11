@@ -287,9 +287,10 @@ and input targets (`target-not-accepted`); choose another eligible device. A dec
 unknown symbol or a shape that mismatches its own profile is instead an unsupported
 profile. Missing bindings on a traversed path remain profile context for that path.
 `acceptedRoots` always contains `{profile, aliases, shapes}` records, for every family.
-R006 circuit failures name the involved source keys. A top-to-bottom R006
-suggests `--layout compact` only after a successful compact composition and
-sheet assembly on the same page.
+R006 circuit failures name the involved source keys, resolving known device
+UIDs to designations even with a custom view title. Top-to-bottom rooted layout refusals suggest
+`--layout compact` only after the complete compact export succeeds on the same
+page, including sheet assembly and the packet page-cost bound.
 
 `coverage.diagnostics`, when present, contains W906 for placed devices that have
 no schematic appearance anywhere in a successful packet containing a drawing.
@@ -386,7 +387,11 @@ A/Q request and query errors are explained in [agent requests](agent-requests.md
 
 `R005` means render text failed preflight. Its owner, field and reason identify
 an unpaired surrogate, an XML-illegal code point, a character forbidden in a
-single-line field, or an empty or over-160-code-point project name. Correct the
+single-line field, or an empty or over-160-code-point project name. Device-owned
+text includes its known designation and terminal, function or aggregate key in
+`details`; conductor-owned text includes its designation and known endpoint
+devices. Project, page and font failures identify their own scope without an
+invented device designation. Correct the
 identified authored text; do not bypass the check or edit generated SVG.
 
 `T001` reports a caught CLI exception on stderr, normally with exit 2. In

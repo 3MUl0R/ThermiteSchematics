@@ -43,9 +43,9 @@ const request: SchematicPacketRequest = {
 // span-fitting bad-label alternative clears pageConstraint. Uncut digests stay pinned.
 const outcomes = {
   valid: "414a7cceee28e650bf741a28563c6afc7e49ce297cd2c2e8abf09e17bf3cb217",
-  one: "d586c23258397913f8a004ce8aa4c0dfdead26df46d9789864b8349a02b40f2e",
-  half: "d586c23258397913f8a004ce8aa4c0dfdead26df46d9789864b8349a02b40f2e",
-  all: "d586c23258397913f8a004ce8aa4c0dfdead26df46d9789864b8349a02b40f2e",
+  one: "dee2ba00971be0530140f3d9740b3e6861afd91a7229779cd5c422881a2d3cf8",
+  half: "dee2ba00971be0530140f3d9740b3e6861afd91a7229779cd5c422881a2d3cf8",
+  all: "dee2ba00971be0530140f3d9740b3e6861afd91a7229779cd5c422881a2d3cf8",
 };
 
 it.each(["valid", "one", "half", "all"] as const)(
