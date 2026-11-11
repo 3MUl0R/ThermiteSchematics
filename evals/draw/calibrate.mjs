@@ -3,10 +3,12 @@
 // Usage (from review worktree root): bun <this> <checkpoint-dir> <case/sheet>...
 import { readFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-const wt = process.cwd();
+import { isAbsolute, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+const browserModule =
+  process.env.BROWSER_MODULE ?? join(process.cwd(), "evals/draw/browser.mjs");
 const { launch, openSheet } = await import(
-  process.env.BROWSER_MODULE ?? join(wt, "evals/draw/browser.mjs")
+  isAbsolute(browserModule) ? pathToFileURL(browserModule).href : browserModule
 );
 const { loadImage, createCanvas } = await import("@napi-rs/canvas");
 const checkpoint = resolve(process.argv[2]);

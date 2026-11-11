@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -12,6 +12,7 @@ import {
   cropHeader,
 } from "./crop-report.mjs";
 import { json, hash } from "./support.mjs";
+import { pinnedSource } from "./source-hashes.mjs";
 
 function fixture(side = 0) {
   const c = mixedCropFixture();
@@ -81,12 +82,19 @@ function fixture(side = 0) {
     },
   };
 }
-it.each([0, 1])(
-  "identifies the unpinned report for notMove crop %s without borrowing pins",
-  (side) => {
+const diagnosticPaths = [
+  "old/baseline.json",
+  "/tmp/space path/baseline.json",
+  String.raw`D:\space path\baseline.json`,
+];
+it.each(diagnosticPaths.flatMap((path) => [0, 1].map((side) => [side, path])))(
+  "identifies the unpinned report for notMove crop %s at %s without borrowing pins",
+  (side, path) => {
     const c = fixture(side),
       sha = side === 0 ? c.oldSha : c.currentSha;
-    const { role, path } = c.contexts.get(sha);
+    const context = c.contexts.get(sha);
+    context.path = path;
+    const { role } = context;
     for (const check of [
       () => cropPlans(c.file, c.reports, c.contexts),
       () => checkIndexedEntries(c.file, c.index, c.reports, c.contexts),
@@ -97,6 +105,20 @@ it.each([0, 1])(
         /original source revision.*fresh target cannot supply baseline pins/i,
       );
     }
+  },
+);
+it.each(diagnosticPaths)(
+  "names the unpinned PDF source at %s verbatim",
+  (path) => {
+    const c = fixture(2);
+    const t = instanceInventory(c.baseline, c.oldSha).instances[0];
+    t.scope.medium = "pdf";
+    for (const sheet of c.baseline.sourceHashes.sheets) delete sheet.pdf;
+    expect(() =>
+      pinnedSource(c.baseline, t, { role: "baseline", path, sha256: c.oldSha }),
+    ).toThrow(
+      `baseline "${path}" (SHA-256 ${c.oldSha}) has no pinned PDF source`,
+    );
   },
 );
 it("keeps diagnostic paths out of successful index and attestation payloads", () => {
@@ -131,8 +153,9 @@ it("keeps diagnostic paths out of successful index and attestation payloads", ()
 it.each(["repin-crop-index.mjs", "repin-bind-crops.mjs"])(
   "%s names the exact baseline path and SHA before writing output",
   async (script) => {
-    const root = fileURLToPath(new URL("../../", import.meta.url)),
-      dir = await mkdtemp(join(root, "evals/out/baseline-guard-"));
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    await mkdir(join(root, "evals/out"), { recursive: true });
+    const dir = await mkdtemp(join(root, "evals/out/baseline guard-"));
     try {
       const c = fixture(),
         baselinePath = join(dir, "baseline.json"),
@@ -169,6 +192,13 @@ it.each(["repin-crop-index.mjs", "repin-bind-crops.mjs"])(
       expect(r.stderr).toContain('baseline "' + baselinePath + '"');
       expect(r.stderr).toContain(c.oldSha);
       await expect(readFile(output)).rejects.toThrow(/ENOENT/);
+      await expect(
+        readFile(
+          script === "repin-crop-index.mjs"
+            ? join(dir, "created.json")
+            : output + ".audit.json",
+        ),
+      ).rejects.toThrow(/ENOENT/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
