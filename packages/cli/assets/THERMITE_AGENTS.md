@@ -127,13 +127,12 @@ thermite view CBL1 --conductors -o drawings/cbl1.html
 thermite view PS1 --power # R002: AC input PS1.L is unfed
 ```
 
-Each view needs a matching root, else R001: `--power` a load with mapped load
-terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil,
-`--loads` a source with source/return terminals (PS1), `--conductors` a cable (else
-Q002), and `--to <device> [--include-power]` only a switch with one NO contact or
-a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`). Roots
-bind by `symbol` and function shape, not type ID, so a cloned core type keeps its
-views. `--flow left-to-right|top-to-bottom`,
+Roots (else R001): `--power` a mapped load (motor or PS1 AC input),
+`--actuation` a mapped two-terminal coil,
+`--loads` a source/return pair (PS1), `--conductors` a cable (else Q002),
+and `--to <device> [--include-power]` a one-NO switch or three-wire sensor
+(`core:limit-switch-2wire`, `core:prox-pnp-3wire`). Roots
+bind by `symbol` and function shape, not type ID. `--flow left-to-right|top-to-bottom`,
 `--paper letter|tabloid|a4|a3`, `--orientation landscape|portrait`,
 `--margin <mm>` (5-25), `--layout compact` and `--index` override project page
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
@@ -143,6 +142,8 @@ Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
 Standard spacing may fold onto fewer sheets.
+One terminal caption per drawn appearance, nearest its body; keep all landings.
+Split/continuation appearances each keep theirs.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

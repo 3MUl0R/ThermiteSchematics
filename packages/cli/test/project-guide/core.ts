@@ -1222,7 +1222,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Each view needs a matching root, else R001: `--power` a load with mapped load terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil, `--loads` a source with source/return terminals (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` only a switch with one NO contact or a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
+        "Roots (else R001): `--power` a mapped load (motor or PS1 AC input), `--actuation` a mapped two-terminal coil, `--loads` a source/return pair (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` a one-NO switch or three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
       async check() {
         const { robustnessFixture } =
           await import("../../../render/test/render-robustness-fixture.js");
@@ -1307,8 +1307,7 @@ const module: FactModule = {
       },
     },
     {
-      claim:
-        "Roots bind by `symbol` and function shape, not type ID, so a cloned core type keeps its views.",
+      claim: "Roots bind by `symbol` and function shape, not type ID.",
       async check() {
         const project = await viewRoots();
         // Each clone, under its own type ID, gets its original's outcome and

@@ -28,6 +28,15 @@ terminals. This convention moves symbol geometry and conductor landings together
 terminal identities, physical connections and electrical net IDs do not change.
 Single-pole and asymmetric control symbols keep their clockwise orientation.
 
+Rooted drawings print one owned terminal caption per physical terminal per
+drawn symbol appearance. When several ports land on that terminal, the caption
+uses the existing slot nearest the device body; ties use catalog port order,
+then port ID. All conductor landings, ports, label reservations and ELK routes
+remain intact. Only redundant caption ink is suppressed. Separate drawn
+appearances, including splits and continuations, each keep their own caption.
+Semantic net labels keep their different meaning even when their spelling equals
+a terminal identity; they must still clear other text and terminal markers.
+
 Rooted power and control drawings in both flows carry a thin-framed **Devices on
 this sheet** legend, including continuous SVG. Each local body keeps its exact
 owned designation as a key to one complete legend entry per device UID per sheet:
