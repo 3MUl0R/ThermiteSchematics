@@ -78,6 +78,18 @@ series/parallel wiring still requires explicit wires or jumpers. Selecting one
 winding shows only that winding and its source-backed references. The drawing
 neither infers a turns ratio nor asserts galvanic isolation.
 
+### Transformer control sources
+
+Rooted control also accepts a two-terminal transformer source whose terminals
+both have the secondary role. Input and return must reach distinct terminals on
+distinct nets of the same source function. Wiring chooses feed and return,
+preserving X1/X2 labels when reversed; array order assigns no polarity.
+Primary/load windings gain no rooted power or loads binding. Ambiguous or
+incompatible source pairs refuse with R002. The drawing does not establish
+voltage, waveform or coil compatibility. The
+[unrated transformer fixture](../packages/core-library/test/fixtures/transformer-control/source.json)
+exercises this drawing convention without a coil rating or waveform claim.
+
 The catalog uses original Thermite geometry, not reproduced legacy drawings or
 a claim of compliance with a particular symbol standard. The
 [synthetic example](../examples/functional-symbols/README.md) demonstrates these
