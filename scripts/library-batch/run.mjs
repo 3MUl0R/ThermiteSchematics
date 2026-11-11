@@ -17,8 +17,8 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
 import { createAjv2020, parseJson } from "@thermite/schema";
+import { createChildProcessGroup, groupAlive } from "./process-group.mjs";
 
 const terminalSuccess = new Set(["completed", "needs-evidence"]);
 const artifactNames = [
@@ -372,24 +372,6 @@ function archivePrevious(job, previousAttempt) {
   return destination;
 }
 
-function groupAlive(pid) {
-  try {
-    process.kill(process.platform === "win32" ? pid : -pid, 0);
-    return true;
-  } catch (error) {
-    return error.code !== "ESRCH";
-  }
-}
-
-function signalGroup(pid, signal) {
-  if (!pid) return;
-  try {
-    process.kill(process.platform === "win32" ? pid : -pid, signal);
-  } catch (error) {
-    if (error.code !== "ESRCH") throw error;
-  }
-}
-
 async function runJob(job, record, options, save, control) {
   const archive = archivePrevious(job, record.attempts.length);
   if (archive && record.attempts.length)
@@ -417,17 +399,15 @@ async function runJob(job, record, options, save, control) {
   };
   save();
   let child;
+  let group;
   let timedOut = false;
   let stopped = false;
-  let killTimer;
   let timeout;
   const fds = [];
   const stop = (reason) => {
     if (reason === "timed-out") timedOut = true;
     else stopped = true;
-    if (!child?.pid) return;
-    signalGroup(child.pid, "SIGTERM");
-    killTimer ??= setTimeout(() => signalGroup(child.pid, "SIGKILL"), 1500);
+    group?.stop();
   };
   control.cancel = stop;
   try {
@@ -440,6 +420,7 @@ async function runJob(job, record, options, save, control) {
       detached: process.platform !== "win32",
       stdio: fds,
     });
+    group = createChildProcessGroup(child.pid, { kill: control.kill });
     const completion = new Promise((resolveCompletion) => {
       child.once("error", (error) =>
         resolveCompletion({ code: null, signal: null, error: error.message }),
@@ -454,15 +435,12 @@ async function runJob(job, record, options, save, control) {
       () => stop("timed-out"),
       options.timeoutMinutes * 60_000,
     );
-    const outcome = await completion;
+    const outcome = await Promise.race([completion, group.failure]);
     clearTimeout(timeout);
     // A worker may have exited while leaving its own descendants behind.
-    if (child.pid && groupAlive(child.pid)) {
-      signalGroup(child.pid, "SIGTERM");
-      await delay(1000);
-      signalGroup(child.pid, "SIGKILL");
-    }
-    clearTimeout(killTimer);
+    await group.drain();
+    group.clear();
+    if (group.errors.length) throw group.errors[0];
     const result = inspectResult(job);
     const stdout = tail(attempt.stdoutFile);
     const backendOutcome = terminalOutcome(stdout);
@@ -502,26 +480,26 @@ async function runJob(job, record, options, save, control) {
     });
     return { state, rateLimit };
   } catch (error) {
-    if (child?.pid) {
-      signalGroup(child.pid, "SIGTERM");
-      await delay(1000);
-      signalGroup(child.pid, "SIGKILL");
-    }
+    await group?.terminate();
     update({
       state: stopped ? "interrupted" : "failed",
       endedAt: now(),
-      diagnostics: [error.message],
+      diagnostics: [
+        ...new Set(
+          [error, ...(group?.errors ?? [])].map((item) => item.message),
+        ),
+      ],
     });
     return { state: record.state, rateLimit: null };
   } finally {
     clearTimeout(timeout);
-    clearTimeout(killTimer);
+    group?.clear();
     for (const fd of fds) closeSync(fd);
     control.cancel = null;
   }
 }
 
-export async function runBatch(options) {
+export async function runBatch(options, { kill = process.kill } = {}) {
   const batch = realpathSync(options.batch);
   const { queue, integrity } = readQueue(batch);
   let limits = options.limitsFile
@@ -679,7 +657,7 @@ export async function runBatch(options) {
           }
           pending.splice(index, 1);
           counts[job.backend]++;
-          const control = {};
+          const control = { kill };
           active.set(job.id, control);
           control.promise = runJob(
             job,

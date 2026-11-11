@@ -138,6 +138,10 @@ attempt artifacts and retries eligible jobs. Completed and needs-evidence jobs
 are retained. Do not edit the queue to retry or append items; create a new batch
 for a different selection. Ctrl-C stops this runner's own worker groups and
 records interrupted work. A worker has a default 25-minute execution timeout.
+On POSIX, an `EPERM` group signal falls back to the leader PID only for groups
+spawned by this runner; leader permission failures remain job diagnostics.
+This lets macOS zombie-only groups finish cleanup without crashing a signal
+timer. Resume checks remain conservative for process groups from an earlier run.
 
 ## Verify, review and integrate
 

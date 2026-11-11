@@ -14,7 +14,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { parseArgs, rateLimitDiagnostic, terminalOutcome } from "./run.mjs";
+import {
+  parseArgs,
+  rateLimitDiagnostic,
+  runBatch,
+  terminalOutcome,
+} from "./run.mjs";
+import {
+  createChildProcessGroup,
+  groupAlive,
+  signalGroup,
+} from "./process-group.mjs";
 
 const runner = join(dirname(fileURLToPath(import.meta.url)), "run.mjs");
 const fakeSource = `
@@ -33,7 +43,9 @@ if (config.mode === 'descendant') {
   writeFileSync('descendant.pid', String(child.pid));
 }
 await new Promise(resolve => setTimeout(resolve, config.delay ?? 60));
+const releaseDeadline = performance.now() + 120_000;
 while (config.waitForRelease && !existsSync('release-worker')) {
+  if (performance.now() >= releaseDeadline) process.exit(1);
   await new Promise(resolve => setTimeout(resolve, 20));
 }
 if (config.mode === 'rate') {
@@ -120,13 +132,17 @@ function launch(batch, args = []) {
   return { child, done };
 }
 
-async function until(predicate, timeout = 5000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
+// Child startup, status publication and process reaping can all be delayed on
+// loaded CI hosts. Keep polling the actual condition with a monotonic bound.
+async function until(predicate, timeout = 30_000) {
+  const deadline = performance.now() + timeout;
+  for (;;) {
     if (predicate()) return;
-    await delay(20);
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) break;
+    await delay(Math.min(20, remaining));
   }
-  assert.fail("Timed out waiting for local test process");
+  assert.fail(`Timed out after ${timeout} ms waiting for local test process`);
 }
 
 function processAlive(pid) {
@@ -137,6 +153,171 @@ function processAlive(pid) {
     return error.code !== "ESRCH";
   }
 }
+
+test("owned POSIX groups fall back to the leader on EPERM without hiding permission failures", () => {
+  const denied = Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+  const missing = Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+  const unexpected = Object.assign(new Error("kill EIO"), { code: "EIO" });
+  for (const signal of ["SIGTERM", "SIGKILL"]) {
+    for (const leaderError of [null, missing, denied, unexpected]) {
+      const calls = [];
+      const options = {
+        owned: true,
+        platform: "darwin",
+        kill(pid, value) {
+          calls.push([pid, value]);
+          if (pid < 0) throw denied;
+          if (leaderError) throw leaderError;
+        },
+      };
+      if (leaderError && leaderError !== missing)
+        assert.throws(() => signalGroup(42, signal, options), leaderError);
+      else assert.doesNotThrow(() => signalGroup(42, signal, options));
+      assert.deepEqual(calls, [
+        [-42, signal],
+        [42, signal],
+      ]);
+    }
+  }
+  for (const options of [
+    { platform: "darwin" },
+    { owned: true, platform: "win32" },
+  ]) {
+    const calls = [];
+    assert.throws(
+      () =>
+        signalGroup(42, "SIGTERM", {
+          ...options,
+          kill(pid) {
+            calls.push(pid);
+            throw denied;
+          },
+        }),
+      denied,
+    );
+    assert.deepEqual(calls, [options.platform === "win32" ? 42 : -42]);
+  }
+  for (const error of [missing, unexpected]) {
+    const call = () =>
+      signalGroup(42, "SIGKILL", {
+        owned: true,
+        platform: "darwin",
+        kill() {
+          throw error;
+        },
+      });
+    if (error === missing) assert.doesNotThrow(call);
+    else assert.throws(call, error);
+  }
+});
+
+test("owned zombie groups finish draining while unknown or denied groups remain alive", async () => {
+  const denied = Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+  const missing = Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+  for (const leaderError of [null, missing, denied]) {
+    const calls = [];
+    const options = {
+      platform: "darwin",
+      kill(pid, signal) {
+        calls.push([pid, signal]);
+        if (pid < 0) throw denied;
+        if (leaderError) throw leaderError;
+      },
+    };
+    assert.equal(
+      groupAlive(42, { ...options, owned: true }),
+      leaderError === denied,
+    );
+    assert.deepEqual(calls, [
+      [-42, 0],
+      [42, 0],
+    ]);
+    calls.length = 0;
+    assert.equal(groupAlive(42, options), true);
+    assert.deepEqual(calls, [[-42, 0]]);
+    if (leaderError !== denied) {
+      calls.length = 0;
+      const group = createChildProcessGroup(42, options);
+      await group.drain();
+      assert.deepEqual(calls, [
+        [-42, 0],
+        [42, 0],
+      ]);
+      assert.deepEqual(group.errors, []);
+      group.clear();
+    }
+  }
+  const calls = [];
+  assert.equal(
+    groupAlive(42, {
+      owned: true,
+      platform: "darwin",
+      kill(pid, signal) {
+        calls.push([pid, signal]);
+      },
+    }),
+    true,
+  );
+  // A reaped leader must not hide descendants that still accept group signals.
+  assert.deepEqual(calls, [[-42, 0]]);
+  assert.equal(
+    groupAlive(42, {
+      kill() {
+        throw missing;
+      },
+    }),
+    false,
+  );
+});
+
+test("escalation timer reports unexpected signal errors through its awaited failure", async () => {
+  const unexpected = Object.assign(new Error("synthetic kill EIO"), {
+    code: "EIO",
+  });
+  const calls = [];
+  const group = createChildProcessGroup(42, {
+    platform: "darwin",
+    kill(pid, signal) {
+      calls.push([pid, signal]);
+      if (signal === "SIGKILL") throw unexpected;
+    },
+  });
+  try {
+    const failure = assert.rejects(group.failure, unexpected);
+    assert.doesNotThrow(() => group.stop());
+    await failure;
+    assert.deepEqual(calls, [
+      [-42, "SIGTERM"],
+      [-42, "SIGKILL"],
+    ]);
+    assert.deepEqual(group.errors, [unexpected]);
+  } finally {
+    group.clear();
+  }
+});
+
+test("escalation errors become failed-job diagnostics without escaping the runner", async (t) => {
+  const f = fixture(t, [{ waitForRelease: true }]);
+  const unexpected = Object.assign(new Error("synthetic escalation EIO"), {
+    code: "EIO",
+  });
+  const code = await runBatch(
+    parseArgs(["--batch", f.batch, "--timeout-minutes", "0.001"]),
+    {
+      kill(pid, signal) {
+        // Hold the worker through SIGTERM so the real escalation timer fires.
+        if (signal === "SIGTERM") return;
+        process.kill(pid, signal);
+        if (signal === "SIGKILL") throw unexpected;
+      },
+    },
+  );
+  assert.equal(code, 1);
+  assert.equal(f.status().jobs[0].state, "failed");
+  assert.deepEqual(f.status().jobs[0].diagnostics, [unexpected.message]);
+  await until(() => !processAlive(f.status().jobs[0].pid));
+  assert.equal(existsSync(join(f.batch, ".runner.lock.json")), false);
+});
 
 test("argument validation and conservative rate-limit detection", () => {
   assert.equal(parseArgs(["--batch", "/tmp/test"]).timeoutMinutes, 25);
@@ -490,7 +671,7 @@ test("rate limit pauses only the affected backend without automatically retrying
 });
 
 test("active runner lock rejects duplicate execution", async (t) => {
-  const f = fixture(t, [{ delay: 600 }]);
+  const f = fixture(t, [{ waitForRelease: true }]);
   const first = launch(f.batch);
   t.after(() => {
     if (first.child.exitCode === null) first.child.kill("SIGTERM");
@@ -499,6 +680,7 @@ test("active runner lock rejects duplicate execution", async (t) => {
   const duplicate = await launch(f.batch, ["--resume"]).done;
   assert.equal(duplicate.code, 2);
   assert.match(duplicate.stderr, /active runner/);
+  writeFileSync(join(f.jobs[0].directory, "release-worker"), "release");
   assert.equal((await first.done).code, 0);
   assert.equal(f.status().jobs[0].attempts.length, 1);
 });
@@ -517,7 +699,7 @@ test(
   "interrupt terminates the worker process group and preserves interrupted status",
   { skip: process.platform === "win32" },
   async (t) => {
-    const f = fixture(t, [{ mode: "descendant", delay: 10_000 }, {}]);
+    const f = fixture(t, [{ mode: "descendant", waitForRelease: true }, {}]);
     const running = launch(f.batch);
     t.after(() => {
       if (running.child.exitCode === null) running.child.kill("SIGTERM");
@@ -543,7 +725,7 @@ test(
   "resume refuses a live orphan after a runner crash",
   { skip: process.platform === "win32" },
   async (t) => {
-    const f = fixture(t, [{ delay: 10_000 }]);
+    const f = fixture(t, [{ waitForRelease: true }]);
     const running = launch(f.batch);
     await until(() => existsSync(f.trace));
     const pid = f.status().jobs[0].pid;
@@ -601,7 +783,12 @@ test("live limits keep a zero-capacity queue alive and activate it after a valid
 });
 
 test("decreasing live limits drains workers, and invalid edits retain the last valid count", async (t) => {
-  const f = fixture(t, [{ delay: 1100 }, { delay: 1700 }, {}, {}]);
+  const f = fixture(t, [
+    { waitForRelease: true },
+    { waitForRelease: true },
+    {},
+    {},
+  ]);
   const limitsFile = join(f.batch, "limits.json");
   writeFileSync(limitsFile, JSON.stringify({ claude: 2, codex: 0 }));
   const running = launch(f.batch, ["--limits-file", limitsFile]);
@@ -615,9 +802,16 @@ test("decreasing live limits drains workers, and invalid edits retain the last v
   );
   writeFileSync(limitsFile, JSON.stringify({ claude: 1, codex: 0 }));
   await until(() => f.status().concurrency.claude === 1);
+  writeFileSync(join(f.jobs[0].directory, "release-worker"), "release");
+  await until(() => f.status().jobs[0].state === "completed");
   writeFileSync(limitsFile, JSON.stringify({ claude: -1, codex: 3 }));
   await until(() => Boolean(f.status().limitsFile.warning));
   assert.deepEqual(f.status().concurrency, { claude: 1, codex: 0 });
+  // Clearing the warning requires another limits reload, so worker 1 stays
+  // blocked through a full scheduler pass with the freed slot.
+  writeFileSync(limitsFile, JSON.stringify({ claude: 1, codex: 0 }));
+  await until(() => f.status().limitsFile.warning === null);
+  writeFileSync(join(f.jobs[1].directory, "release-worker"), "release");
   const outcome = await running.done;
   assert.equal(outcome.code, 0, outcome.stderr);
   assert.deepEqual(
@@ -647,7 +841,8 @@ test("decreasing live limits drains workers, and invalid edits retain the last v
 
 test("raising live limits cannot clear a backend rate-limit pause", async (t) => {
   const f = fixture(t, [
-    { mode: "rate" },
+    // Cross the former five-second wait bound without relying on host load.
+    { mode: "rate", delay: 6000 },
     {},
     { backend: "codex", waitForRelease: true },
   ]);
