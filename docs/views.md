@@ -45,7 +45,16 @@ This reuses the selected drawing without new ELK or routing attempts. An impossi
 complete legend returns R006 with the constraining entry/field, the required
 dimensions versus the largest free region actually tried (or the column capacity),
 and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
-utilisation accounting do not change. Rail-only and cable reference tags are a separate rollout.
+utilisation accounting do not change.
+
+Rail-only devices appear under **Referenced devices** in that same frame, once
+per UID without a local body. Their keys are exact, owned, painted terminal
+identities such as `Off-view at PS1.-`; a reference never substitutes for a body.
+Cable core pages keep exact endpoint captions such as `TB1.2` and `JB1.X1.1`,
+with complete **Referenced devices** blocks under the end-A/end-B headings.
+Each page repeats its local blocks. Pagination reserves the prospective endpoint
+set before accepting a core row, so the row and its blocks fit together. These
+annotations add no device symbols, inferred connector faces, coverage or terminals.
 
 Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
 parallel branches can remain outside the view. Success does not promise complete

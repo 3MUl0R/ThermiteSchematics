@@ -179,8 +179,8 @@ describe("DQ-06 independent owned-field oracle", () => {
     expect(
       check(complete({ tagKind: "reference" }), data(), [], {
         devices: [{ deviceUid: "a", tagKind: "reference" }],
-      }),
-    ).toEqual([]);
+      }).some((f) => f.kind === "invalid-device-reference-key"),
+    ).toBe(true);
   });
   it("does not let a missing packet reference hide a visible device or terminal", () => {
     expect(
@@ -238,16 +238,25 @@ it.each(spacedTypes)(
   },
 );
 it("requires body-owned fields if the sheet has a body appearance", () => {
-  const reference = complete({ tagKind: "reference", tagBlock: "ref" });
+  const reference = [
+    ...complete({ tagKind: "reference", tagBlock: "ref", tagKey: "K1.2" }),
+    row("designation", "K1.2", {
+      tagKind: "reference",
+      tagBlock: "endpoint",
+      tagTerminal: { deviceUid: "a", terminalKey: "2" },
+    }),
+  ];
   expect(check(reference, data(), [{ deviceUid: "a" }])).toEqual([]);
   expect(
-    check(reference, data(), [], { devices: [{ deviceUid: "a" }] })[0].missing,
+    check(reference, data(), [], { devices: [{ deviceUid: "a" }] }).find(
+      (f) => f.kind === "missing-device-tag-fields",
+    ).missing,
   ).toHaveLength(3);
   expect(
     check([...complete(), ...reference], data(), [], {
       devices: [{ deviceUid: "a" }],
-    }),
-  ).toEqual([]);
+    }).some((f) => f.kind === "invalid-device-reference-key"),
+  ).toBe(true);
 });
 it("does not Unicode-normalise literal parts or descriptions", () => {
   const ir = data([device("a", "K1", { description: "Café" })]);
@@ -364,3 +373,54 @@ describe("DQ-06 keyed rooted sheet legend", () => {
       ).toBeGreaterThan(0);
   });
 });
+
+it.each(["TB1", "TB.1", "TB 1"])(
+  "requires an exact qualified key for a complete reference entry owned by %s",
+  (designation) => {
+    const ir = data([device("a", designation)]),
+      entry = complete({
+        tagKind: "reference",
+        tagBlock: "entry",
+        tagContainer: "entry-1",
+        tagKey: `${designation}.2`,
+      }).map((r) =>
+        r.tagField === "designation"
+          ? { ...r, text: designation, renderedString: designation }
+          : r,
+      ),
+      endpoint = (text) =>
+        row("designation", text, {
+          tagKind: "reference",
+          tagBlock: "endpoint",
+          tagTerminal: { deviceUid: "a", terminalKey: "2" },
+        });
+    expect(check([...entry, endpoint(`${designation}.2`)], ir)).toEqual([]);
+    for (const text of [
+      `${designation}0.2`,
+      `${designation}.20`,
+      `${designation}.`,
+    ])
+      expect(
+        check([...entry, endpoint(text)], ir).some(
+          (f) => f.kind === "invalid-device-reference-key",
+        ),
+      ).toBe(true);
+    expect(
+      check(
+        [...entry, endpoint(`${designation}.2`)],
+        ir,
+        [{ deviceUid: "a" }],
+        {
+          deviceReferenceEntries: [
+            {
+              deviceUid: "a",
+              container: "entry-1",
+              key: "WRONG",
+              kind: "reference",
+            },
+          ],
+        },
+      ).some((f) => f.kind === "invalid-device-reference-key"),
+    ).toBe(true);
+  },
+);

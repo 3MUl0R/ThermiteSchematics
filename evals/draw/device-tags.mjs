@@ -109,6 +109,95 @@ function missingFields(block, d, type, ir) {
   return missing;
 }
 
+function referenceEntryAudit(g, blocks, uid, d, ir, bodyHere, issue) {
+  const entries = (g.deviceReferenceEntries ?? []).filter(
+      (e) => e.deviceUid === uid,
+    ),
+    references = blocks.filter(
+      (b) => b.kind === "reference" && terminalIdentity(b, d, ir),
+    ),
+    tags = blocks.filter(
+      (b) =>
+        b.kind === "reference" &&
+        b.rows.some(
+          (r) =>
+            r.tagReferenceEntry ||
+            r.tagKey != null ||
+            ["description", "part", "rating", "partNumber"].includes(
+              r.tagField,
+            ),
+        ),
+    );
+  const keyFor = (b) => b.rows[0]?.tagKey,
+    qualified = (b) => {
+      const terminal = b.rows.find((r) => r.tagTerminal)?.tagTerminal;
+      return terminal ? `${d.designation}.${terminal.terminalKey}` : undefined;
+    },
+    counts = (key) =>
+      Math.max(
+        tags.filter((b) => keyFor(b) === key).length,
+        entries.filter((e) => e.key === key).length,
+      ),
+    valid = new Set(),
+    findings = [];
+  const keys = new Set([...entries.map((e) => e.key), ...tags.map(keyFor)]);
+  for (const key of keys) {
+    const local = references.some(
+        (b) => qualified(b) === key && !b.rows.some((r) => r.tagReferenceEntry),
+      ),
+      declared = entries.filter((e) => e.key === key),
+      duplicate = counts(key) > 1;
+    if (duplicate)
+      findings.push(
+        issue(
+          "duplicate-device-reference-entry",
+          { deviceUid: uid, designation: d.designation },
+          { key, entries: counts(key) },
+        ),
+      );
+    for (const tag of tags.filter((b) => keyFor(b) === key)) {
+      const containerEntries = entries.filter(
+          (e) => e.container === tag.container,
+        ),
+        matchesEntry =
+          !containerEntries.length ||
+          containerEntries.every(
+            (e) => e.key === key && e.kind === "reference",
+          );
+      if (
+        !bodyHere &&
+        local &&
+        !duplicate &&
+        matchesEntry &&
+        tag.rows.every((r) => r.tagKey === key)
+      )
+        valid.add(tag);
+      else
+        findings.push(
+          issue(
+            "invalid-device-reference-key",
+            { deviceUid: uid, designation: d.designation },
+            {
+              key,
+              reason: bodyHere
+                ? "device has a same-sheet body"
+                : "missing exact same-sheet owned qualified key, duplicate, or entry ownership",
+            },
+          ),
+        );
+    }
+    if (declared.length && !tags.some((b) => keyFor(b) === key))
+      findings.push(
+        issue(
+          "invalid-device-reference-key",
+          { deviceUid: uid, designation: d.designation },
+          { key, reason: "entry is not painted" },
+        ),
+      );
+  }
+  return { valid, findings };
+}
+
 export function deviceTagFindings(g, ir, references, issue, view) {
   const appearances = (g.devices ?? []).filter(
     (d) => d.tagKind !== "reference",
@@ -120,7 +209,11 @@ export function deviceTagFindings(g, ir, references, issue, view) {
       ...appearances,
       ...(g.terminals ?? []).filter((t) => t.tagKind !== "reference"),
       ...local,
+      ...g.texts
+        .filter((t) => t.tagKind === "reference")
+        .map((t) => ({ deviceUid: t.tagOwnerUid })),
       ...(g.deviceLegendEntries ?? []),
+      ...(g.deviceReferenceEntries ?? []),
     ].map((r) => r.deviceUid),
   );
   const out = [];
@@ -185,6 +278,16 @@ export function deviceTagFindings(g, ir, references, issue, view) {
           { entries: Math.max(legends.length, entries.length) },
         ),
       );
+    const referenceAudit = referenceEntryAudit(
+      g,
+      blocks,
+      uid,
+      d,
+      ir,
+      bodyHere,
+      issue,
+    );
+    out.push(...referenceAudit.findings);
     const candidates = blocks.filter((b) =>
       bodyHere
         ? b.kind === "body" ||
@@ -196,7 +299,11 @@ export function deviceTagFindings(g, ir, references, issue, view) {
             legends.length === 1 &&
             b.rows.every((t) => t.tagKey === d.designation))
         : b.kind !== "legend" &&
-          (b.kind === "body" || !targets.length || targets.includes(b.id)),
+          (b.kind === "body" ||
+            ((referenceAudit.valid.has(b) ||
+              (terminalIdentity(b, d, ir) &&
+                b.rows.every((r) => r.tagField === "designation"))) &&
+              (!targets.length || targets.includes(b.id)))),
     );
     const missing = (candidates.length ? candidates : [{ rows: [] }])
       .map((b) => missingFields(b, d, type, ir))

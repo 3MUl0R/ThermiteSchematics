@@ -264,7 +264,7 @@ complete reference-owned block may satisfy the obligation. A designation-only
 reference cannot satisfy an authored description or part. Tags use at least 2.7 mm designation em and 2.5 mm for other fields
 when rolled out; ownership exports alone do not fix existing omitted fields.
 
-Checker 4.5 adds one exception for rooted power/control views only: exactly one
+Checker 4.6 retains the 4.5 exception for rooted power/control views only: exactly one
 complete `data-tag-kind="legend"` entry with an explicit `data-tag-key` equal to the
 IR designation may satisfy a body appearance when that same sheet paints the
 exact owned body designation key. The local key is `body` metadata with
@@ -273,6 +273,15 @@ key, a key on another sheet, or a duplicate legend entry is rejected. Reference
 annotations still cannot satisfy a body, and other drawing families retain in-place
 tags. Every row carrying `data-tag-field` uses the primary floor: 2.7 mm for a
 designation and 2.5 mm otherwise, regardless of circuit relations or tag kind.
+
+Checker 4.6 accepts a complete reference entry only with an exact same-sheet
+owned qualified annotation key, resolved against IR. `data-device-reference-entry`
+declares the entry and `data-tag-key` carries that qualified identity; the entry's
+designation row still prints the authored designation. Missing, foreign, hidden,
+other-sheet and duplicate keys fail. Hidden declared duplicates are counted.
+Rooted references share the body legend frame under “Referenced devices”; cable
+pages repeat blocks under their end headings. A UID with a local body cannot use
+a reference entry. Reference metadata never exports `data-device-uid`.
 
 Qualified identities resolve a structured `data-tag-terminal-id` against the
 owner's actual IR terminal key: `TB1.2`, `JB1.X1.1`, or the fixed heading grammar

@@ -19,6 +19,7 @@ import {
   type SvgNode,
 } from "./svg-tree.js";
 import { pathInk, rectangleInk } from "./shape-ink.js";
+import { legendReference, type LegendReference } from "./reference.js";
 interface State {
   matrix: Matrix;
   clip: Rect;
@@ -30,6 +31,7 @@ export interface SvgInk {
   regions: Rect[];
   bodies: Map<string, Rect>;
   keys: Map<string, string[]>;
+  references: Map<string, LegendReference[]>;
 }
 const number = (a: Record<string, string>, k: string, fallback = 0) =>
   Number.parseFloat(a[k] ?? String(fallback));
@@ -171,6 +173,15 @@ function shapeInk(n: SvgNode, css: Record<string, string>): Rect[] {
   }
   return [];
 }
+function emptyInk(): SvgInk {
+  return {
+    ink: [],
+    regions: [],
+    bodies: new Map(),
+    keys: new Map(),
+    references: new Map(),
+  };
+}
 /** All final visible ink, including nested fold/stack viewports and label clips. */
 export function generatedSvgInk(svg: string, scale = 1): SvgInk {
   const tree = svgTree(svg),
@@ -191,7 +202,7 @@ export function generatedSvgInk(svg: string, scale = 1): SvgInk {
   const v = required(root.attrs.viewBox, "Missing legend geometry")
       .split(/[ ,]+/)
       .map(Number),
-    out: SvgInk = { ink: [], regions: [], bodies: new Map(), keys: new Map() };
+    out = emptyInk();
   const visit = (node: SvgNode, parent: State, nested: boolean) => {
     if (["defs", "style", "title", "desc"].includes(node.name)) return;
     const css = {
@@ -244,6 +255,23 @@ function collectNode(node: SvgNode, state: State, out: SvgInk) {
     cls = a.class ?? "",
     local = node.name === "text" ? textInk(node, state.css) : undefined;
   const boxes = local ? [local] : shapeInk(node, state.css);
+  if (
+    local &&
+    state.css["data-tag-kind"] === "reference" &&
+    state.css["data-tag-field"] === "designation" &&
+    dark(state.css.fill) &&
+    inside(project(local, state.matrix), expand(state.clip, 0.002))
+  ) {
+    const uid = state.css["data-tag-owner-uid"],
+      reference = legendReference(
+        node.text,
+        state.css["data-tag-terminal-id"],
+        uid,
+        project(local, state.matrix),
+      );
+    if (uid && reference)
+      out.references.set(uid, [...(out.references.get(uid) ?? []), reference]);
+  }
   for (const b of boxes) {
     const clipped = intersection(project(b, state.matrix), state.clip);
     if (clipped && clipped.w + clipped.h > 0)

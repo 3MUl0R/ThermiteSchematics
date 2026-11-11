@@ -3,8 +3,12 @@ import {
   cableTerminations,
 } from "./cable-endpoint-ownership.js";
 import { cableRowLabels } from "./cable-row.js";
-import { cableRowPlan } from "./cable-row-plan.js";
-import { required } from "../presentation/util.js";
+import {
+  cableCorePages,
+  cableReferenceHeight,
+} from "./cable-reference-tags.js";
+import { legendSvg } from "../device-legend/emission.js";
+import type { LegendLayout } from "../device-legend/placement.js";
 import type {
   CompiledProjectPresentation,
   ElectricalIr,
@@ -23,11 +27,7 @@ import type { Draft, PaperPage, SheetReference } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds } from "./page.js";
 import { n, text, line } from "./svg.js";
-import {
-  cableEndpointCards,
-  cableCardContext,
-  cableRowHeight,
-} from "./cable-annotations.js";
+import { cableEndpointCards } from "./cable-annotations.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 
 export async function cableDrafts(
@@ -85,7 +85,7 @@ export async function cableDrafts(
     refs: SheetReference[] = [],
     y = b.y,
     first = 0;
-  function header() {
+  function header(blocks: (LegendLayout | undefined)[]) {
     refs = [];
     content = [
       text(left, b.y + 4, `CABLE ${schedule.designation}`, 4, "start", 700),
@@ -109,7 +109,21 @@ export async function cableDrafts(
       text(left, b.y + 25, a, 3, "start", 700),
       text(right, b.y + 25, z, 3, "end", 700),
     );
-    y = b.y + 33;
+    blocks.forEach((block, side) => {
+      if (block)
+        content.push(
+          legendSvg({
+            ...block,
+            box: {
+              ...block.box,
+              x: side === 0 ? left : right - block.box.w,
+              y: b.y + 29,
+            },
+          }),
+        );
+    });
+    y =
+      b.y + 33 + cableReferenceHeight(blocks) + (blocks.some(Boolean) ? 3 : 0);
     return true;
   }
   function finish(last: number) {
@@ -140,80 +154,69 @@ export async function cableDrafts(
       note: `Core inventory ${first + 1}-${last} of ${schedule.cores.length}. ${schedule.endOrder === "canonical" ? "Legacy endpoints shown in canonical order." : "End A/B follows authored endpoint order."}`,
     });
   }
-  if (!header())
-    return failure(
-      "unprintable-layout",
-      "Cable cabinet or type labels are too long for this page.",
-    );
-  for (let i = 0; i < schedule.cores.length; i++) {
-    const core = schedule.cores[i]!;
-    const planned = cableRowPlan(core, schedule.designation, {
-      left,
-      right,
-      jacketL,
-      jacketR,
-    });
-    if (!planned.ok) return planned;
-    const { a, z, centerRows, usage, midOffset, extraHeight } = planned.value;
-    const cards = required(
-      annotations.value[i],
-      "Missing cable endpoint cards",
-    );
-    const height = cableRowHeight(cards, [a, z, centerRows], extraHeight);
-    if (y + height + 24 > b.y + b.h) {
-      if (i === first)
-        return failure(
-          "unprintable-layout",
-          `A cable core row cannot fit on this page. ${cableCardContext(cards)}. Use a larger page or change flow.`,
-        );
-      finish(i);
-      first = i;
-      header();
+  const pages = cableCorePages(ir, schedule, annotations.value, view, {
+    left,
+    right,
+    jacketL,
+    jacketR,
+    height: b.h,
+  });
+  if (!pages.ok) return pages;
+  for (const corePage of pages.value) {
+    first = corePage.first;
+    if (!header(corePage.blocks))
+      return failure(
+        "unprintable-layout",
+        "Cable cabinet or type labels are too long for this page.",
+      );
+    for (const row of corePage.rows) {
+      const { core, cards, height } = row,
+        { a, z, centerRows, usage, midOffset } = row.plan;
+      const midY = y + midOffset;
+      const dashed = core.usage === "spare" || core.status === "unassigned";
+      content.push(
+        `<g data-cable-uid="${attr(schedule.cableUid)}" data-conductor-id="${attr(core.id)}" data-usage="${core.usage}" data-status="${core.status}">`,
+        line(
+          left + 1,
+          midY,
+          right - 1,
+          midY,
+          dashed ? 'stroke-dasharray="2 1"' : "",
+        ),
+      );
+      const rowLabels = cableRowLabels(a, z, centerRows, usage, {
+        left,
+        right,
+        y,
+        midY,
+      });
+      cableEndpointOwnership(
+        rowLabels,
+        core,
+        schedule.cableUid,
+        a.length,
+        z.length,
+      );
+      content.push(...rowLabels);
+      const terminations = cableTerminations(ir, core, b, left, right, midY);
+      refs.push(...terminations.references);
+      content.push(...terminations.content);
+      cards.forEach((card, index) => {
+        if (card)
+          content.push(
+            offViewCardSvg(
+              card,
+              index === 0 ? left + 2 : right - card.width * 0.25 - 2,
+              midY + 5 + usage.extraHeight,
+              0.25,
+            ),
+          );
+      });
+      content.push("</g>");
+      y += height;
     }
-    const midY = y + midOffset;
-    const dashed = core.usage === "spare" || core.status === "unassigned";
-    content.push(
-      `<g data-cable-uid="${attr(schedule.cableUid)}" data-conductor-id="${attr(core.id)}" data-usage="${core.usage}" data-status="${core.status}">`,
-      line(
-        left + 1,
-        midY,
-        right - 1,
-        midY,
-        dashed ? 'stroke-dasharray="2 1"' : "",
-      ),
-    );
-    const rowLabels = cableRowLabels(a, z, centerRows, usage, {
-      left,
-      right,
-      y,
-      midY,
-    });
-    cableEndpointOwnership(
-      rowLabels,
-      core,
-      schedule.cableUid,
-      a.length,
-      z.length,
-    );
-    content.push(...rowLabels);
-    const terminations = cableTerminations(ir, core, b, left, right, midY);
-    refs.push(...terminations.references);
-    content.push(...terminations.content);
-    cards.forEach((card, index) => {
-      if (card)
-        content.push(
-          offViewCardSvg(
-            card,
-            index === 0 ? left + 2 : right - card.width * 0.25 - 2,
-            midY + 5 + usage.extraHeight,
-            0.25,
-          ),
-        );
-    });
-    content.push("</g>");
-    y += height;
+    finish(first + corePage.rows.length);
   }
-  finish(schedule.cores.length);
   return { ok: true, value: drafts };
 }
 

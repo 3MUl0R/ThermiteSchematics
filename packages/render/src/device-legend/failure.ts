@@ -1,4 +1,4 @@
-import type { DeviceTagPlan } from "../device-tags.js";
+import type { LegendTag } from "./reference.js";
 import { required } from "../presentation/util.js";
 import { expand, intersection, type Rect } from "./geometry.js";
 import { legendLayouts, type LegendLayout } from "./placement.js";
@@ -39,7 +39,7 @@ export function legendFreeRegions(
 const ratio = (required: number, available: number) =>
   available > 0 ? required / available : Infinity;
 export function legendFitDiagnostic(
-  tags: readonly DeviceTagPlan[],
+  tags: readonly LegendTag[],
   available: Rect,
 ) {
   const layout = required(

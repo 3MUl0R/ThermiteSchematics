@@ -5,16 +5,16 @@ import {
 import { printableTextMetrics } from "./symbols/printable-font.js";
 import { required } from "./presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
-import {
-  planDeviceTag,
-  deviceTagFields,
-  type DeviceTagPlan,
-} from "./device-tags.js";
+import { planDeviceTag, deviceTagFields } from "./device-tags.js";
 import { preflightDeviceTagSources } from "./svg/escape.js";
 import type { NormalizedSchematicView, RenderOutcome } from "./types.js";
 import { generatedSvgInk } from "./device-legend/svg-ink.js";
 import { placeLegend, legendColumns } from "./device-legend/placement.js";
 import { legendSvg } from "./device-legend/emission.js";
+import {
+  localReferenceKey,
+  type LegendTag,
+} from "./device-legend/reference.js";
 import type { Rect } from "./device-legend/geometry.js";
 export { generatedSvgInk } from "./device-legend/svg-ink.js";
 export function rootedLegendView(view: {
@@ -38,13 +38,8 @@ export function addDeviceLegend(
   view?: NormalizedSchematicView,
 ): RenderOutcome<string> {
   const measured = generatedSvgInk(svg, scale),
-    uids = [...measured.bodies.keys()];
+    uids = legendOwners(ir, measured);
   if (!uids.length) return { ok: true, value: svg };
-  uids.sort((a, b) => {
-    const x = required(measured.bodies.get(a), "Missing legend geometry"),
-      y = required(measured.bodies.get(b), "Missing legend geometry");
-    return x.y - y.y || x.x - y.x || (a < b ? -1 : a > b ? 1 : 0);
-  });
   const plans = plannedTags(ir, measured, uids, area, view);
   if (!plans.ok) return plans;
   const tags = plans.value,
@@ -98,6 +93,36 @@ export function addDeviceLegend(
     );
   return { ok: true, value: result };
 }
+function legendOwners(
+  ir: Readonly<ElectricalIr>,
+  measured: import("./device-legend/svg-ink.js").SvgInk,
+) {
+  const uids = [
+    ...measured.bodies.keys(),
+    ...[...measured.references.keys()].filter(
+      (uid) =>
+        !measured.bodies.has(uid) &&
+        localReferenceKey(ir, uid, measured.references.get(uid) ?? []),
+    ),
+  ];
+  uids.sort((a, b) => {
+    const x = required(
+        measured.bodies.get(a) ?? measured.references.get(a)?.[0]?.box,
+        "Missing legend geometry",
+      ),
+      y = required(
+        measured.bodies.get(b) ?? measured.references.get(b)?.[0]?.box,
+        "Missing legend geometry",
+      );
+    return (
+      Number(!measured.bodies.has(a)) - Number(!measured.bodies.has(b)) ||
+      x.y - y.y ||
+      x.x - y.x ||
+      (a < b ? -1 : a > b ? 1 : 0)
+    );
+  });
+  return uids;
+}
 function expandContinuousCanvas(svg: string, width: number, height: number) {
   return svg.replace(/<svg\b[^>]*>/, (tag) =>
     tag
@@ -142,8 +167,8 @@ function plannedTags(
   area: Rect,
   view?: NormalizedSchematicView,
   width = 50,
-): RenderOutcome<DeviceTagPlan[]> {
-  const tags: DeviceTagPlan[] = [];
+): RenderOutcome<LegendTag[]> {
+  const tags: LegendTag[] = [];
   for (const uid of uids) {
     const device = required(
         ir.devices.find((d) => d.uid === uid),
@@ -153,7 +178,10 @@ function plannedTags(
         ir.deviceTypes.find((t) => t.id === device.typeId),
         "Missing legend geometry",
       );
-    if (!measured.keys.get(uid)?.includes(device.designation))
+    const referenceKey = measured.bodies.has(uid)
+      ? undefined
+      : localReferenceKey(ir, uid, measured.references.get(uid) ?? []);
+    if (!referenceKey && !measured.keys.get(uid)?.includes(device.designation))
       return legendFailure(
         device.designation,
         "designation key",
@@ -172,13 +200,13 @@ function plannedTags(
     const plan = planDeviceTag(device, type, width);
     if (!plan.ok)
       return columnFailure(device.designation, fields, plan.error, area);
-    tags.push(plan.value);
+    tags.push({ ...plan.value, ...(referenceKey ? { referenceKey } : {}) });
   }
   return { ok: true as const, value: tags };
 }
 
 function unfitLegend(
-  variants: readonly (readonly DeviceTagPlan[])[],
+  variants: readonly (readonly LegendTag[])[],
   available: Rect,
 ): RenderOutcome<never> {
   const failure = required(

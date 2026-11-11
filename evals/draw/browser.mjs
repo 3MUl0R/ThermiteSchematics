@@ -179,6 +179,7 @@ export function measureSheet(options = {}) {
       tagField: attr(e, "data-tag-field"),
       tagKind: kind,
       tagKey: attr(e, "data-tag-key"),
+      tagReferenceEntry: !!e.closest("[data-device-reference-entry]"),
       tagBlock: attr(e, "data-tag-block"),
       tagContainer:
         ids.get(
@@ -206,7 +207,14 @@ export function measureSheet(options = {}) {
                 "data-tag-owner-uid",
               ) === owner &&
               !e.closest("[data-device-uid],.off-view-annotation")
-            : kind === "reference" && (!parent || parent === owner),
+            : kind === "reference" &&
+              (!parent || parent === owner) &&
+              (!e.closest("[data-device-reference-entry]") ||
+                (attr(
+                  e.closest("[data-device-reference-entry]"),
+                  "data-tag-owner-uid",
+                ) === owner &&
+                  !parent)),
     };
   };
   const identity = (e) => ({
@@ -1254,6 +1262,14 @@ export function measureSheet(options = {}) {
     deviceReferences,
     deviceLegendEntries: Array.from(
       root.querySelectorAll("[data-device-legend-entry]"),
+    ).map((e) => ({
+      deviceUid: e.getAttribute("data-tag-owner-uid"),
+      key: e.getAttribute("data-tag-key"),
+      kind: e.getAttribute("data-tag-kind"),
+      container: ids.get(e),
+    })),
+    deviceReferenceEntries: Array.from(
+      root.querySelectorAll("[data-device-reference-entry]"),
     ).map((e) => ({
       deviceUid: e.getAttribute("data-tag-owner-uid"),
       key: e.getAttribute("data-tag-key"),
