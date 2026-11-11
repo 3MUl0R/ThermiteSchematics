@@ -1,3 +1,4 @@
+import { selectedChannelCaption } from "../symbols/printable-policy.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type {
@@ -245,7 +246,7 @@ function nodeCaption(
   ];
   if (source) values.push(`Loop power: ${device.designation}`);
   if (uid === selected.to.device.uid)
-    values.push(`${selected.to.function.id.functionKey} / selected channel`);
+    values.push(selectedChannelCaption(selected.to));
   if (width(device.designation) > 44)
     throw new Error("Device designation is too wide for a signal loop view.");
   const captionWidth = vertical
@@ -498,7 +499,7 @@ function emitNode(
         vertical ? 25 : w / 2,
       );
   const mark = info.source
-    ? `<g transform="translate(${n(vertical ? 19 : w / 2 - 6)} 3)">${emitCircuitMark("dc-output")}</g>`
+    ? `<g transform="translate(${n(vertical ? 19 : w / 2 - 6)} 3)">${emitCircuitMark("dc-output", false, 1)}</g>`
     : "";
   const caption = info.caption
     .map((s, i) =>
