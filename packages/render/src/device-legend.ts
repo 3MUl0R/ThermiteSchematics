@@ -1,3 +1,7 @@
+import {
+  legendFreeRegions,
+  legendFitDiagnostic,
+} from "./device-legend/failure.js";
 import { printableTextMetrics } from "./symbols/printable-font.js";
 import { required } from "./presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
@@ -43,15 +47,18 @@ export function addDeviceLegend(
   });
   const plans = plannedTags(ir, measured, uids, area, view);
   if (!plans.ok) return plans;
-  const tags = plans.value;
+  const tags = plans.value,
+    variants = [tags];
   let layout = placeLegend(tags, area, measured.ink, measured.regions);
   // 50 mm is a cap. Legal rewrapping can fit an existing narrower free lane;
   // these bounded font plans add no electrical/layout/routing search attempts.
   for (const width of [46, 42, 38, 34]) {
     if (layout) break;
     const wrapped = plannedTags(ir, measured, uids, area, view, width);
-    if (wrapped.ok)
+    if (wrapped.ok) {
+      variants.push(wrapped.value);
       layout = placeLegend(wrapped.value, area, measured.ink, measured.regions);
+    }
   }
   if (!layout && continuous) {
     const block = legendColumns(tags, 1);
@@ -65,7 +72,20 @@ export function addDeviceLegend(
       },
     };
   }
-  if (!layout) return unfitLegend(ir, tags, area);
+  if (!layout) {
+    const free = legendFreeRegions(area, [
+      ...measured.ink,
+      ...measured.regions,
+    ]);
+    for (const region of free)
+      for (const variant of variants)
+        layout ??= placeLegend(variant, region, measured.ink, measured.regions);
+    if (!layout)
+      return unfitLegend(
+        variants,
+        required(free[0], "Missing free-region trial"),
+      );
+  }
   let result = svg.replace(
     /<\/svg>(\s*)$/,
     (_, tail: string) => legendSvg(layout, scale) + "</svg>" + tail,
@@ -99,7 +119,7 @@ function legendFailure(
       code: "R006",
       root: device,
       reason: "unprintable-layout",
-      message: `Device ${device} legend field ${field} cannot be placed: complete legend requires ${width.toFixed(2)} × ${height.toFixed(2)} mm; available drawing area ${area.w.toFixed(2)} × ${area.h.toFixed(2)} mm has no region with 3 mm ink clearance. Use larger paper, another flow, or split the view.`,
+      message: `Device ${device} legend field ${field} cannot be placed: complete legend requires ${width.toFixed(2)} × ${height.toFixed(2)} mm; available free region (largest tried) is ${area.w.toFixed(2)} × ${area.h.toFixed(2)} mm after 3 mm ink clearance. Use larger paper, another flow, or split the view.`,
       details: {
         device,
         field,
@@ -108,6 +128,8 @@ function legendFailure(
         availableWidthMm: area.w,
         availableHeightMm: area.h,
         clearanceMm: 3,
+        capacityKind: "free-region",
+        availableRegion: area,
       },
     },
   };
@@ -156,37 +178,35 @@ function plannedTags(
 }
 
 function unfitLegend(
-  ir: Readonly<ElectricalIr>,
-  tags: readonly DeviceTagPlan[],
-  area: Rect,
+  variants: readonly (readonly DeviceTagPlan[])[],
+  available: Rect,
 ): RenderOutcome<never> {
-  const block = legendColumns(tags, Math.min(2, tags.length)),
-    tag = tags.reduce((a, b) => (a.heightMm > b.heightMm ? a : b)),
-    field = required(
-      [...tag.fields].sort(
+  const failure = required(
+    variants
+      .map((tags) => legendFitDiagnostic(tags, available))
+      .sort(
         (a, b) =>
-          tag.rows.filter((r) => r.field === b.field).length -
-            tag.rows.filter((r) => r.field === a.field).length ||
           Math.max(
-            ...tag.rows.filter((r) => r.field === b.field).map((r) => r.ink.w),
+            a.layout.box.w / Math.max(0.001, available.w),
+            a.layout.box.h / Math.max(0.001, available.h),
           ) -
-            Math.max(
-              ...tag.rows
-                .filter((r) => r.field === a.field)
-                .map((r) => r.ink.w),
-            ),
+          Math.max(
+            b.layout.box.w / Math.max(0.001, available.w),
+            b.layout.box.h / Math.max(0.001, available.h),
+          ),
       )[0],
-      "Missing legend geometry",
-    ).field;
+    "Missing legend constraint",
+  );
+  const device = required(
+    failure.tag.fields.find((f) => f.field === "designation"),
+    "Missing legend designation",
+  ).value;
   return legendFailure(
-    required(
-      ir.devices.find((d) => d.uid === tag.ownerUid),
-      "Missing legend geometry",
-    ).designation,
-    field,
-    block.box.w,
-    block.box.h,
-    area,
+    device,
+    failure.field,
+    failure.layout.box.w,
+    failure.layout.box.h,
+    available,
   );
 }
 
@@ -240,11 +260,12 @@ function columnFailure(
     height,
     { ...area, w: 50 },
   );
-  if (result.ok) return result;
+  if (result.ok || result.error.code !== "R006") return result;
   return {
     ...result,
     error: {
       ...result.error,
+      details: { ...result.error.details, capacityKind: "column" },
       message: `Device ${device} legend field ${details.field} needs ${(details.requiredMm + 6).toFixed(2)} × ${height.toFixed(2)} mm; available column 50.00 × ${area.h.toFixed(2)} mm. Use a shorter authored designation or a wider approved column.`,
     },
   };

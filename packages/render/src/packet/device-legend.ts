@@ -1,3 +1,4 @@
+import { legendPagination } from "./legend-pagination.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend, rootedLegendView } from "../device-legend.js";
 import type { RenderOutcome } from "../types.js";
@@ -157,7 +158,7 @@ function legendBand(
     originalGroups,
     b,
     axis,
-    (_, position) => (position === 0 ? SECTION_GAP : 3.13),
+    (index, position) => legendSectionGap(parts, sizes, axis, index, position),
   );
   if (fit)
     required(band[0], "Missing band draft").rootedFit = {
@@ -165,6 +166,51 @@ function legendBand(
       actualPages: band.length,
     };
   return band;
+}
+function legendSectionGap(
+  parts: readonly Draft[],
+  sizes: readonly number[],
+  axis: "x" | "y",
+  index: number,
+  position: number,
+) {
+  const current = required(parts[index], "Missing legend strip"),
+    next = parts[index + 1];
+  const normal = position === 0 ? SECTION_GAP : 3.13;
+  if (!next) return normal;
+  if (axis === "y") return next.rootedCaptionInk?.length ? SECTION_GAP : normal;
+  const x = required(current.drawingBounds, "Missing strip bounds").x,
+    nextX = required(next.drawingBounds, "Missing strip bounds").x,
+    right = Math.max(
+      0,
+      ...(current.rootedCaptionInk ?? []).map((r) => r.x + r.w - x),
+    ),
+    left = Math.min(
+      0,
+      ...(next.rootedCaptionInk ?? []).map((r) => r.x - nextX),
+    );
+  // Match continuation-fit's 1 mm clear-ink rule. Captions can overhang a
+  // trimmed viewport, so the gap includes that measured overhang, not just 3.13 mm.
+  return Math.max(
+    normal,
+    right - required(sizes[index], "Missing strip size") - left + 1.001,
+  );
+}
+function failureCapacity(result: RenderOutcome<unknown>) {
+  if (result.ok || !("details" in result.error)) return 0;
+  return (
+    Number(result.error.details?.availableWidthMm ?? 0) *
+    Number(result.error.details?.availableHeightMm ?? 0)
+  );
+}
+function* legendCandidates(
+  ir: Readonly<ElectricalIr>,
+  drafts: readonly Draft[],
+  page: PaperPage,
+  otherViews: readonly Draft[],
+) {
+  yield* repartitions(drafts, page);
+  yield* legendPagination(ir, drafts, page, otherViews);
 }
 function rebuild(
   views: readonly LegendViewDrafts[],
@@ -184,8 +230,8 @@ function rebuild(
     );
   return drafts;
 }
-/** Repartition existing source strips to release a legend band. Every source
- * viewport, cut, route and print scale stays intact; no ELK work or cap changes. */
+/** Release a legend band by repacking strips, then recutting protected gaps if
+ * needed. Route geometry and print scale stay intact; no ELK work or cap changes. */
 export function fitLegendDrafts(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
@@ -205,12 +251,23 @@ export function fitLegendDrafts(
       view = views.find((v) => v.viewIndex === index);
     if (!view || overrides.has(view.viewIndex)) return rendered;
     let accepted = false;
-    for (const candidate of repartitions(view.drafts, page)) {
+    let bestFailure = rendered;
+    const otherViews = current.filter(
+      (d) => d.views?.[0]?.viewIndex !== view.viewIndex,
+    );
+    for (const candidate of legendCandidates(
+      ir,
+      view.drafts,
+      page,
+      otherViews,
+    )) {
       overrides.set(view.viewIndex, candidate);
       const next = rebuild(views, overrides, layout);
       if (rootedPageCostFailure(next) || next.length > 100) continue;
       const trial = legendSheets(ir, next, page);
       if (trial.ok) return { ok: true, value: next };
+      if (failureCapacity(trial) > failureCapacity(bestFailure))
+        bestFailure = trial;
       if (
         required(
           next[required(trial.failedSheet, "Missing legend geometry")],
@@ -222,7 +279,7 @@ export function fitLegendDrafts(
         break;
       }
     }
-    if (!accepted) return rendered;
+    if (!accepted) return bestFailure;
   }
   throw Error("Legend pagination did not settle");
 }

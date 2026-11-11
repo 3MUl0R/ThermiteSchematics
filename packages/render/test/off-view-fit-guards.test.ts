@@ -38,6 +38,26 @@ it("searches safe gaps deterministically, including short first strips, without 
   expect(safeAxisPlans(410, 10, [], () => true)).toEqual([]);
   expect(safeAxisPlans(100, 40, [], () => false)).toEqual([]);
 });
+it("reserves extra band space even when the uncut drawing fits, without cutting protected spans", () => {
+  expect(
+    safeAxisPlans(
+      12,
+      20,
+      [],
+      () => true,
+      (a, b) => b - a <= 6,
+    ),
+  ).toEqual([[0, 6, 12]]);
+  expect(
+    safeAxisPlans(
+      12,
+      20,
+      [{ start: 2, end: 10 }],
+      () => true,
+      (a, b) => b - a <= 6,
+    ),
+  ).toEqual([]);
+});
 it("applies the 2x bound to the complete packet, not separately to each view", () => {
   const drafts = Array.from({ length: 8 }, () => ({}) as Draft);
   drafts[0]!.rootedFit = {

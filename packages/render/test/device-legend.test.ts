@@ -2,6 +2,7 @@ import { beforeAll, expect, it } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend } from "../src/device-legend.js";
 import { planDeviceTag } from "../src/device-tags.js";
+import { legendFitDiagnostic } from "../src/device-legend/failure.js";
 import { placeLegend, legendColumns } from "../src/device-legend/placement.js";
 import { generatedSvgInk } from "../src/device-legend/svg-ink.js";
 import { renderSchematic } from "../src/renderer.js";
@@ -184,6 +185,35 @@ it("returns R006 for a blocked sheet instead of dropping an entry", () => {
     area,
   );
   expect(r.ok).toBe(false);
-  if (!r.ok)
-    expect(r.error.message).toMatch(/M1.*description.*requires.*available/);
+  if (!r.ok) {
+    expect(r.error.message).toMatch(/M1.*requires.*available free region/);
+    expect(r.error.details).toMatchObject({
+      availableWidthMm: 0,
+      availableHeightMm: 0,
+      capacityKind: "free-region",
+    });
+  }
+});
+
+it("identifies the width-constraining part rather than the tallest description", () => {
+  const input = structuredClone(ir),
+    tall = input.devices.find((d) => d.designation === "M1")!,
+    wide = input.devices.find((d) => d.designation === "CB1")!;
+  tall.description = "maintenance ".repeat(20).trim();
+  wide.description = "Breaker";
+  const type = input.deviceTypes.find((t) => t.id === wide.typeId)!;
+  type.catalog = { ...type.catalog, orderNumber: "W".repeat(17) };
+  const planned = [tall, wide].map((d) => {
+    const p = planDeviceTag(
+      d,
+      input.deviceTypes.find((t) => t.id === d.typeId)!,
+      50,
+    );
+    if (!p.ok) throw p;
+    return p.value;
+  });
+  expect(planned[0]!.heightMm).toBeGreaterThan(planned[1]!.heightMm);
+  const failure = legendFitDiagnostic(planned, { x: 0, y: 0, w: 40, h: 200 });
+  expect(failure.tag.ownerUid).toBe(wide.uid);
+  expect(failure.field).toBe("part");
 });

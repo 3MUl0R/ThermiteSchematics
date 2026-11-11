@@ -172,8 +172,8 @@ thermite packet --input packet.json -o drawings/packet.pdf
 ```
 
 Print at 100% on matching paper; disable browser headers/footers.
-Rooted legends key exact body designations to description/part, once per UID/sheet.
-Tag em is ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders.
+Rooted legends key exact designations to description/part once per UID/sheet.
+Bands repaginate. Tag em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders.
 R006 gives device, field and required/available dimensions; never omit/shrink text.
 
 ## Visible component libraries

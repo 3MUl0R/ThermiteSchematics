@@ -36,18 +36,21 @@ export function legendColumns(
   }
   return { box: { x: 0, y: 0, w: x - 2, h: height }, entries };
 }
+export function legendLayouts(tags: readonly DeviceTagPlan[]) {
+  return [
+    legendColumns(tags, 1),
+    ...Array.from({ length: Math.max(0, tags.length - 1) }, (_, i) =>
+      legendColumns(tags, 2, i + 1),
+    ).sort((a, b) => a.box.h - b.box.h),
+  ];
+}
 export function placeLegend(
   tags: readonly DeviceTagPlan[],
   area: Rect,
   ink: readonly Rect[],
   regions: readonly Rect[],
 ): LegendLayout | undefined {
-  const layouts = [
-    legendColumns(tags, 1),
-    ...Array.from({ length: Math.max(0, tags.length - 1) }, (_, i) =>
-      legendColumns(tags, 2, i + 1),
-    ).sort((a, b) => a.box.h - b.box.h),
-  ];
+  const layouts = legendLayouts(tags);
   const valid = (box: Rect) =>
     inside(box, area) &&
     ink.every((b) => separated(box, b, 3.13)) &&

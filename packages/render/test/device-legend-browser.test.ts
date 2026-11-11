@@ -177,6 +177,25 @@ it("has at least 3 mm from all final ink and location borders after letter-portr
     for (const s of r.value.sheets) await audit(s.svg, c.ir, s.references);
   }
 }, 60000);
+async function captionClearance() {
+  const captions = await page.evaluate(() => {
+    const root = document.querySelector("svg")! as unknown as SVGSVGElement,
+      inverse = root.getScreenCTM()!.inverse();
+    return [...root.querySelectorAll("text")]
+      .filter((e) => e.textContent?.startsWith("CONTINUED LOCATION:"))
+      .map((e) => {
+        const b = e.getBBox(),
+          m = inverse.multiply(e.getScreenCTM()!),
+          a = new DOMPoint(b.x, b.y).matrixTransform(m),
+          z = new DOMPoint(b.x + b.width, b.y + b.height).matrixTransform(m);
+        return { left: a.x, top: a.y, right: z.x, bottom: z.y };
+      });
+  });
+  expect(captions.length).toBeGreaterThan(1);
+  for (const [i, caption] of captions.entries())
+    for (const other of captions.slice(i + 1))
+      expect(distance(caption, other)).toBeGreaterThanOrEqual(0.999);
+}
 it("protects the dense DOL one-sheet packet and PLC1 tags in both flows", async () => {
   const f = await dolFixture("saved");
   try {
@@ -188,6 +207,7 @@ it("protects the dense DOL one-sheet packet and PLC1 tags in both flows", async 
     if (!r.ok) throw r;
     expect(r.value.sheets).toHaveLength(1);
     await audit(r.value.sheets[0]!.svg, f.ir, r.value.sheets[0]!.references);
+    await captionClearance();
   } finally {
     await f.dispose();
   }

@@ -26,6 +26,7 @@ export function draftCompositionFits(
   bank: ContinuationBank,
   basePages: number,
   page: PaperPage,
+  otherViews: readonly Draft[] = [],
 ) {
   if (
     fitContinuations(drafts, page, bank) ||
@@ -45,7 +46,7 @@ export function draftCompositionFits(
     actualPages: probe.length,
     context: "post-search composition",
   };
-  if (rootedPageCostFailure(probe)) return false;
+  if (rootedPageCostFailure([...otherViews, ...probe])) return false;
   try {
     resolveRootedContinuations(probe, page);
     for (const draft of probe)

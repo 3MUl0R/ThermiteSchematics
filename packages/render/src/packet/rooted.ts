@@ -56,6 +56,12 @@ export async function drawingDrafts(
     actualPages: selected.drafts.length,
     context,
   };
+  selected.drafts[0]!.rootedLegendSource = {
+    prepared: selected.prepared,
+    grid: selected.grid,
+    scale: selected.scale,
+    ...(selected.profile ? { profile: selected.profile } : {}),
+  };
   for (const draft of selected.drafts) draft.rootedBank = selected.bank;
   return { ok: true, value: selected.drafts };
 }

@@ -303,7 +303,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Rooted legends key exact body designations to description/part, once per UID/sheet. Tag em is ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders. R006 gives device, field and required/available dimensions; never omit/shrink text.",
+        "Rooted legends key exact designations to description/part once per UID/sheet. Bands repaginate. Tag em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders. R006 gives device, field and required/available dimensions; never omit/shrink text.",
       async check() {
         const { compileProject } = await import("@thermite/compiler");
         const { renderSchematicPacket } = await import("@thermite/render");

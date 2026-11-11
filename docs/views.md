@@ -39,9 +39,12 @@ After trimming, folding and stacking, placement prefers top-right, then bottom-r
 above the title block, then other free space in deterministic sheet order. The
 frame stays at least 3 mm from all drawing ink, including location borders, notices,
 captions, cards and gangs, and never crosses a location border. If no free region
-fits, legal strip repacking can reserve a band within the existing page-cost and
-recovery limits. An impossible complete legend returns R006 with the device, field, required/available dimensions
-and remedy. Compound geometry, routes, electrical identity, recovery budgets and
+fits, legal strip repacking or recutting protected gaps can reserve a band at the
+unchanged print scale and within the existing page-cost and recovery limits.
+This reuses the selected drawing without new ELK or routing attempts. An impossible
+complete legend returns R006 with the constraining entry/field, the required
+dimensions versus the largest free region actually tried (or the column capacity),
+and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
 utilisation accounting do not change. Rail-only and cable reference tags are a separate rollout.
 
 Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
