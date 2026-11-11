@@ -28,7 +28,11 @@ when its text exactly equals a terminal key or qualified identity (`L1` or
 `SRC1.L1`). Disjoint net/terminal labels are allowed; actual overlaps still fail
 DQ-17 and the general DQ-02 text-overlap check. Version 4.8 corrects that role
 distinction; older checker reports must be replayed before attributing renderer
-changes. The legacy 15 mm duplicate fallback applies only without exported
+changes. Version 4.9 fails DQ-17 on missing/malformed terminal-caption owner keys,
+unresolved device/terminal/appearance identity, inconsistent marker declarations,
+and port/net or edge/terminal role mismatches. Matching nearby text never repairs
+ownership. A valid edge-owned net label keeps its semantic role even when its
+text equals a terminal identity. The legacy 15 mm duplicate fallback applies only without exported
 appearance identity, never to infer an owner.
 
 ## Prerequisites and costs

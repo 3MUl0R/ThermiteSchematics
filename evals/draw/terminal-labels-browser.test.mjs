@@ -18,14 +18,22 @@ const svg = (body) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="100mm" viewBox="0 0 200 100">${body}</svg>`;
 const marker = (uid, fn, terminal, x) =>
   `<g class="symbol function-symbol" data-symbol-id="test" data-device-uid="${uid}" data-function-key="${fn}"><circle class="terminal-marker" id="terminal-${[uid, terminal, "in"].map(encode).join("--")}" data-terminal-key="${terminal}" cx="${x}" cy="20" r=".5" fill="white" stroke="black"/></g>`;
-const label = (uid, fn, x, value = "A1") => {
+const label = (
+  uid,
+  fn,
+  x,
+  value = "A1",
+  role = "terminal",
+  ownerKind = "port",
+) => {
   const port = JSON.stringify([
     "port",
     JSON.stringify(["function", uid, fn]),
     "in",
   ]);
-  const clip = `clip-${encode(JSON.stringify(["label", "port", port, "terminal"]))}`;
-  return `<defs><clipPath id="${clip}"><rect width="200" height="100"/></clipPath></defs><text class="label-terminal" clip-path="url(#${clip})" x="${x}" y="18" font-size="2.5">${value}</text>`;
+  const owner = ownerKind === "edge" ? JSON.stringify(["wire", "w"]) : port;
+  const clip = `clip-${encode(JSON.stringify(["label", ownerKind, owner, role]))}`;
+  return `<defs><clipPath id="${clip}"><rect width="200" height="100"/></clipPath></defs><text class="label-${role}" clip-path="url(#${clip})" x="${x}" y="18" font-size="2.5">${value}</text>`;
 };
 
 it("resolves a caption from its owned port, even beside a foreign marker", async () => {
@@ -44,6 +52,100 @@ it("resolves a caption from its owned port, even beside a foreign marker", async
   });
   expect(g.texts[0].terminalAppearance).toBeTruthy();
 });
+
+it.each([
+  ["net", "port"],
+  ["terminal", "edge"],
+])("rejects the inconsistent %s role on a %s owner", async (role, kind) => {
+  const g = await openSheet(
+    page,
+    svg(
+      marker("owner", "feed", "A1", 100) +
+        label("owner", "feed", 15, "A1", role, kind),
+    ),
+  );
+  expect(terminalText(g)).toEqual([
+    expect.objectContaining({
+      kind: "invalid-terminal-caption-ownership",
+      reason: "role-owner-mismatch",
+    }),
+  ]);
+  if (kind === "port")
+    expect(g.texts[0]).toMatchObject({
+      deviceUid: "owner",
+      terminal: "A1",
+      labelRole: "net",
+    });
+});
+
+it.each([
+  [
+    "unknown marker id",
+    (body) => body.replace(/id="terminal-[^"]*"/, 'id="unresolved"'),
+  ],
+  [
+    "different port id",
+    (body) => body.replace(`${encode("in")}"`, `${encode("out")}"`),
+  ],
+  [
+    "foreign marker identity",
+    (body) =>
+      body.replace(
+        `terminal-${encode("owner")}--`,
+        `terminal-${encode("foreign")}--`,
+      ),
+  ],
+  [
+    "inconsistent terminal key",
+    (body) => body.replace('data-terminal-key="A1"', 'data-terminal-key="B1"'),
+  ],
+  [
+    "missing device owner",
+    (body) => body.replace(' data-device-uid="owner"', ""),
+  ],
+  [
+    "missing terminal owner",
+    (body) => body.replace(' data-terminal-key="A1"', ""),
+  ],
+  [
+    "duplicate marker declaration",
+    (body) => body.replace("</g>", `${body.match(/<circle[^>]*\/>/)[0]}</g>`),
+  ],
+])("fails closed on %s", async (_name, mutate) => {
+  const body = mutate(marker("owner", "feed", "A1", 100));
+  const g = await openSheet(page, svg(body + label("owner", "feed", 15)));
+  expect(terminalText(g)).toEqual([
+    expect.objectContaining({
+      kind: "invalid-terminal-caption-ownership",
+      reason: "unresolved-terminal-caption-owner",
+    }),
+  ]);
+});
+
+it.each(["absent", "malformed"])(
+  "rejects %s caption keys 5 mm apart near a marker",
+  async (kind) => {
+    const attrs = kind === "malformed" ? ' clip-path="url(#unrecognized)"' : "";
+    const captions = [15, 20]
+      .map(
+        (x) =>
+          `<text class="label-terminal" x="${x}" y="18" font-size="2.5"${attrs}>A1</text>`,
+      )
+      .join("");
+    const g = await openSheet(
+      page,
+      svg(marker("owner", "feed", "A1", 18) + captions),
+    );
+    expect(terminalText(g)).toHaveLength(2);
+    expect(
+      terminalText(g).every(
+        (f) =>
+          f.kind === "invalid-terminal-caption-ownership" &&
+          f.reason === "missing-caption-owner-key",
+      ),
+    ).toBe(true);
+  },
+);
 
 it("keeps equal-spelled net labels semantic and still rejects real overlap", async () => {
   const netClip = `clip-${encode(JSON.stringify(["label", "edge", JSON.stringify(["wire", "w"]), "net"]))}`;

@@ -28,6 +28,21 @@ const geometry = (extra = {}) => ({
   reportRows: [],
   ...extra,
 });
+const terminalCaption = (value = "L1", extra = {}) =>
+  text(value, {
+    role: "label-terminal",
+    labelRole: "terminal",
+    labelOwnerKind: "port",
+    labelOwnerKey: [
+      "port",
+      JSON.stringify(["function", extra.deviceUid ?? "s", "feed"]),
+      "in",
+    ],
+    deviceUid: "s",
+    terminal: value,
+    terminalAppearance: "body",
+    ...extra,
+  });
 const primitive = (points, extra = {}) => ({
   element: "line-1",
   points,
@@ -308,7 +323,7 @@ describe("mandatory DQ mutation kills", () => {
     ).toEqual([]);
   });
   it("DQ-17 kills duplicated and overlapping terminal labels", () => {
-    const t = text("L1", { terminal: "L1", deviceUid: "s" });
+    const t = terminalCaption();
     expect(c.terminalText(geometry({ texts: [t] }))).toEqual([]);
     expect(
       c.terminalText(
@@ -319,6 +334,9 @@ describe("mandatory DQ mutation kills", () => {
               ...t,
               element: "net-label",
               role: "label-net",
+              labelRole: "net",
+              labelOwnerKind: "edge",
+              labelOwnerKey: ["wire", "w"],
               bbox: { ...bbox, x: bbox.x + 10 },
             },
           ],
@@ -330,13 +348,13 @@ describe("mandatory DQ mutation kills", () => {
     ).toHaveLength(1);
     expect(
       c.terminalText(
-        geometry({ texts: [text("PE PE", { terminal: "PE" })] }),
+        geometry({ texts: [terminalCaption("PE PE", { terminal: "PE" })] }),
       )[0].kind,
     ).toBe("duplicate-terminal-caption");
   });
   it("DQ-17 preserves overlap checks when a semantic net name equals a terminal identity", () => {
     for (const name of ["L1", "SRC1.L1"]) {
-      const t = text(name, {
+      const t = terminalCaption(name, {
         terminal: name,
         deviceUid: "source",
         labelRole: "terminal",
@@ -347,6 +365,8 @@ describe("mandatory DQ mutation kills", () => {
         ...t,
         element: "net",
         labelRole: "net",
+        labelOwnerKind: "edge",
+        labelOwnerKey: ["wire", "w"],
         role: "label-terminal",
       };
       expect(
@@ -363,7 +383,7 @@ describe("mandatory DQ mutation kills", () => {
     }
   });
   it("DQ-17 owns duplicates per drawn appearance, without a proximity assumption", () => {
-    const a = text("A1", {
+    const a = terminalCaption("A1", {
       terminal: "A1",
       deviceUid: "relay",
       terminalAppearance: "body-one",
@@ -383,6 +403,68 @@ describe("mandatory DQ mutation kills", () => {
         }),
       ),
     ).toHaveLength(1);
+  });
+  it.each([
+    [{ deviceUid: undefined }, "unresolved-terminal-caption-owner"],
+    [{ terminal: undefined }, "unresolved-terminal-caption-owner"],
+    [{ terminalAppearance: undefined }, "unresolved-terminal-caption-owner"],
+    [{ labelRole: "net" }, "role-owner-mismatch"],
+    [
+      { labelOwnerKind: "edge", labelOwnerKey: ["wire", "w"] },
+      "role-owner-mismatch",
+    ],
+    [
+      {
+        labelRole: undefined,
+        labelOwnerKind: undefined,
+        labelOwnerKey: undefined,
+      },
+      "missing-caption-owner-key",
+    ],
+    [{ labelOwnerKey: undefined }, "missing-caption-owner-key"],
+    [
+      { labelOwnerKey: ["port", "not JSON", "in"] },
+      "invalid-caption-owner-key",
+    ],
+    [
+      {
+        labelOwnerKey: [
+          "port",
+          JSON.stringify(["function", "foreign", "feed"]),
+          "in",
+        ],
+      },
+      "inconsistent-terminal-caption-owner",
+    ],
+  ])("DQ-17 rejects caption ownership mutation %j", (change, reason) => {
+    expect(c.terminalText(geometry({ texts: [terminalCaption()] }))).toEqual(
+      [],
+    );
+    expect(
+      c.terminalText(geometry({ texts: [terminalCaption("L1", change)] })),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "invalid-terminal-caption-ownership",
+        reason,
+      }),
+    ]);
+  });
+  it("DQ-17 fails closed on keyless captions 5 mm apart beside their marker", () => {
+    const a = text("A1", {
+      role: "label-terminal",
+      bbox: { x: 20, y: 15, w: 2, h: 2 },
+    });
+    const b = { ...a, element: "second", bbox: { ...a.bbox, x: 25 } };
+    const findings = c.terminalText(
+      geometry({
+        texts: [a, b],
+        terminals: [{ terminal: "A1", bbox: { x: 22.5, y: 20, w: 1, h: 1 } }],
+      }),
+    );
+    expect(findings).toHaveLength(2);
+    expect(
+      findings.every((f) => f.reason === "missing-caption-owner-key"),
+    ).toBe(true);
   });
   it("DQ-18 kills a missing revision table", () => {
     const t = text(

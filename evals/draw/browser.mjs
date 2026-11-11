@@ -314,23 +314,41 @@ export function measureSheet(options = {}) {
     for (const marker of group.querySelectorAll("circle.terminal-marker")) {
       const port = marker.id.match(/terminal-([a-f0-9]+(?:--[a-f0-9]+)*)$/);
       if (!port) continue;
-      const symbolPort = port[1]
-        .split("--")
-        .at(-1)
-        .match(/.{4}/g)
-        .map((h) => String.fromCharCode(parseInt(h, 16)))
-        .join("");
+      const parts = port[1].split("--").map((part) =>
+        part.length % 4
+          ? null
+          : part
+              .match(/.{4}/g)
+              .map((h) => String.fromCharCode(parseInt(h, 16)))
+              .join(""),
+      );
+      const terminal = marker.getAttribute("data-terminal-key");
+      if (
+        parts.length !== 3 ||
+        !uid ||
+        !key ||
+        !terminal ||
+        parts[0] !== uid ||
+        parts[1] !== terminal ||
+        !parts[2] ||
+        attr(marker, "data-device-uid") !== uid
+      )
+        continue;
+      const ownerKey = JSON.stringify([
+        ids.get(group.closest("svg")),
+        JSON.stringify(node),
+        parts[2],
+      ]);
+      // Duplicate or inconsistent marker declarations cannot establish an owner.
       terminalCaptionOwners.set(
-        JSON.stringify([
-          ids.get(group.closest("svg")),
-          JSON.stringify(node),
-          symbolPort,
-        ]),
-        {
-          deviceUid: uid,
-          terminal: marker.getAttribute("data-terminal-key"),
-          terminalAppearance: ids.get(group),
-        },
+        ownerKey,
+        terminalCaptionOwners.has(ownerKey)
+          ? undefined
+          : {
+              deviceUid: uid,
+              terminal,
+              terminalAppearance: ids.get(group),
+            },
       );
     }
   }
@@ -562,21 +580,21 @@ export function measureSheet(options = {}) {
           );
           const entity =
             typeof key[2] === "string" ? JSON.parse(key[2]) : key[2];
-          if (key[0] === "label") id.labelRole = key[3];
+          if (key[0] !== "label") throw Error("Not a semantic label key");
+          id.labelRole = key[3];
+          id.labelOwnerKind = key[1];
+          id.labelOwnerKey = entity;
           if (entity?.[0] === "wire" && /conductor|net/.test(key[3] ?? ""))
             id.wire ??= entity[1];
-          if (entity?.[0] === "port" && key[3] === "terminal")
-            Object.assign(
-              id,
-              terminalCaptionOwners.get(
-                JSON.stringify([
-                  ids.get(e.closest("svg")),
-                  entity[1],
-                  entity[2],
-                ]),
-              ),
+          if (entity?.[0] === "port" && key[1] === "port") {
+            const owner = terminalCaptionOwners.get(
+              JSON.stringify([ids.get(e.closest("svg")), entity[1], entity[2]]),
             );
-          if (key[3] === "net") id.terminal = undefined;
+            id.deviceUid = owner?.deviceUid;
+            id.terminal = owner?.terminal;
+            id.terminalAppearance = owner?.terminalAppearance;
+          }
+          if (key[3] === "net" && key[1] === "edge") id.terminal = undefined;
         } catch {}
       }
       const role =
