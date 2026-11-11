@@ -384,7 +384,7 @@ const module: FactModule = {
 
     {
       claim:
-        "Here `thermite` means `bun <thermite>/thermite.mjs`; use one runtime/source folder's absolute path (ask if unknown), separate from this project. No `thermite` is on PATH.",
+        "`thermite` means `bun <thermite>/thermite.mjs`; use one absolute runtime/source path outside this project (ask if unknown). No `thermite` is on PATH.",
       async check() {
         // Every run in this suite is `bun <checkout>/thermite.mjs <command>`;
         // the setup parsed this tree from the root `--help`.
@@ -1222,7 +1222,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Roots (else R001): `--power` a mapped load (motor or PS1 AC input), `--actuation` a mapped two-terminal coil, `--loads` a source/return pair (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` a one-NO switch or three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
+        "Roots (else R001): `--power` a load with mapped load terminals (motor or PS1 AC input), `--actuation` a mapped two-terminal coil, `--loads` a source/return pair (PS1), `--conductors` a cable (else Q002), and `--to <device> [--include-power]` a one-NO switch or three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`).",
       async check() {
         const { robustnessFixture } =
           await import("../../../render/test/render-robustness-fixture.js");
@@ -1307,7 +1307,8 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Roots bind by `symbol` and function shape, not type ID.",
+      claim:
+        "Roots bind by `symbol` and function shape, not type ID, so cloned core types keep their views.",
       async check() {
         const project = await viewRoots();
         // Each clone, under its own type ID, gets its original's outcome and
@@ -1552,19 +1553,19 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "Report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing issues.",
+      "Check existing issues, then report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub access, draft the issue title/body.",
+      "Without GitHub, draft the issue title/body.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Never patch a downloaded runtime in place.",
+      "Never patch a downloaded runtime.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Make engine fixes in the separate source checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Fix the separate engine checkout; follow AGENTS.md and CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
