@@ -48,7 +48,8 @@ and a remedy. A single entry larger than the drawing area names that device and
 field with its size versus the whole drawing area; a fully blocked sheet reports
 zero free capacity. The maximal-rectangle search retains at most 64 pockets and
 uses a linear conservative pass above 512 obstacles, so reported capacity never
-overstates free space. Compound geometry, routes, electrical identity, recovery budgets and
+overstates free space. Bound exhaustion names the final sheet's required devices,
+the packet page limit and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
 utilisation accounting do not change.
 
 Rail-only devices appear under **Referenced devices** in that same frame, once

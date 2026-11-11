@@ -14,6 +14,12 @@ import { rootedLocationContent } from "./location-headings.js";
 import { draftCompositionFits } from "./composition-fit.js";
 import { trimLegendStrip } from "./legend-strip.js";
 import type { Draft, PaperPage, RootedLegendSource } from "./types.js";
+import type { RenderFailure } from "../types.js";
+import { rootedPageCostFailure } from "./rooted-bound.js";
+export interface LegendSearchFailure {
+  tail?: { start: number; failure: RenderFailure };
+  bound?: RenderFailure;
+}
 
 interface BandContext {
   ir: Readonly<ElectricalIr>;
@@ -22,6 +28,7 @@ interface BandContext {
   page: PaperPage;
   inner: string;
   axis: "xs" | "ys";
+  failures?: LegendSearchFailure;
 }
 function bandDrafts(c: BandContext, points: number[], inner: string) {
   const p = c.source.prepared,
@@ -73,7 +80,7 @@ function legendSpan(c: BandContext, start: number, end: number) {
       link.toZone = "D6";
     }
     if (fitContinuations([d], c.page, bank)) return false;
-    return addDeviceLegend(
+    const result = addDeviceLegend(
       c.ir,
       frame(d, c.page, 99, 100),
       {
@@ -84,7 +91,15 @@ function legendSpan(c: BandContext, start: number, end: number) {
       1,
       false,
       p.view,
-    ).ok;
+    );
+    if (
+      !result.ok &&
+      end === length &&
+      c.failures &&
+      start >= (c.failures.tail?.start ?? -1)
+    )
+      c.failures.tail = { start, failure: result.error };
+    return result.ok;
   });
 }
 function bandContext(
@@ -127,9 +142,11 @@ export function* legendPagination(
   original: readonly Draft[],
   page: PaperPage,
   otherViews: readonly Draft[],
+  failures?: LegendSearchFailure,
 ): Generator<Draft[]> {
   const c = bandContext(ir, original, page);
   if (!c) return;
+  if (failures) c.failures = failures;
   const { source } = c,
     first = required(original[0], "Missing legend source"),
     p = source.prepared;
@@ -166,6 +183,8 @@ export function* legendPagination(
       context: fit?.context ?? "legend band",
     };
     for (const d of visible) d.rootedBank = bank;
+    const bound = rootedPageCostFailure([...otherViews, ...visible]);
+    if (bound && failures) failures.bound = bound;
     if (
       draftCompositionFits(
         visible,

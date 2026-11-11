@@ -1,4 +1,7 @@
-import { legendPagination } from "./legend-pagination.js";
+import {
+  legendPagination,
+  type LegendSearchFailure,
+} from "./legend-pagination.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend, rootedLegendView } from "../device-legend.js";
 import type { RenderOutcome } from "../types.js";
@@ -11,6 +14,7 @@ import { draftCompositionFits } from "./composition-fit.js";
 import { SECTION_GAP } from "./fold-stack.js";
 import { stackSections } from "./fold-stack.js";
 import { required } from "../presentation/util.js";
+import { legendBoundFailure } from "./legend-bound-failure.js";
 export interface LegendViewDrafts {
   drafts: Draft[];
   viewIndex: number;
@@ -208,9 +212,10 @@ function* legendCandidates(
   drafts: readonly Draft[],
   page: PaperPage,
   otherViews: readonly Draft[],
+  failures: LegendSearchFailure,
 ) {
   yield* repartitions(drafts, page);
-  yield* legendPagination(ir, drafts, page, otherViews);
+  yield* legendPagination(ir, drafts, page, otherViews, failures);
 }
 function rebuild(
   views: readonly LegendViewDrafts[],
@@ -252,6 +257,7 @@ export function fitLegendDrafts(
     if (!view || overrides.has(view.viewIndex)) return rendered;
     let accepted = false;
     let bestFailure = rendered;
+    const failures: LegendSearchFailure = {};
     const otherViews = current.filter(
       (d) => d.views?.[0]?.viewIndex !== view.viewIndex,
     );
@@ -260,10 +266,13 @@ export function fitLegendDrafts(
       view.drafts,
       page,
       otherViews,
+      failures,
     )) {
       overrides.set(view.viewIndex, candidate);
       const next = rebuild(views, overrides, layout);
-      if (rootedPageCostFailure(next) || next.length > 100) continue;
+      const bound = rootedPageCostFailure(next);
+      if (bound) failures.bound = bound;
+      if (bound || next.length > 100) continue;
       const trial = legendSheets(ir, next, page);
       if (trial.ok) return { ok: true, value: next };
       if (failureCapacity(trial) > failureCapacity(bestFailure))
@@ -279,7 +288,11 @@ export function fitLegendDrafts(
         break;
       }
     }
-    if (!accepted) return bestFailure;
+    if (!accepted) {
+      const failure = legendBoundFailure(failures, current, view.context.title);
+      if (failure) return { ok: false, error: failure };
+      return bestFailure;
+    }
   }
   throw Error("Legend pagination did not settle");
 }

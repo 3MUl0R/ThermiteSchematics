@@ -167,9 +167,30 @@ it("returns R006 for the all-device 799-character reference stress within the un
     ok: false,
     error: { code: "R006", reason: "unprintable-layout" },
   });
-  if (!result.ok)
-    expect(result.error.message).toMatch(
-      /description.*requires.*mm.*available/,
+  if (!result.ok) {
+    expect(result.error.message).toContain(
+      "exhausted the 8-sheet packet page-cost bound (4 native sheets)",
     );
+    expect(result.error.message).toContain(
+      "final sheet of K1 / control cannot fit complete entries for PB1 (body), PS1 (reference)",
+    );
+    expect(result.error.message).toContain(
+      "Use larger paper, another flow, or split the view.",
+    );
+    expect(result.error.message).not.toContain("OL1");
+    expect(result.error).toMatchObject({
+      root: "packet",
+      details: {
+        constraint: "legend-pagination-bound",
+        maximumPages: 8,
+        basePages: 4,
+        sheet: "final",
+        legendEntries: [
+          expect.objectContaining({ designation: "PB1", kind: "body" }),
+          expect.objectContaining({ designation: "PS1", kind: "reference" }),
+        ],
+      },
+    });
+  }
   expect(JSON.stringify(ir)).toBe(before);
 }, 120000);

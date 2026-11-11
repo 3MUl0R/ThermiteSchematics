@@ -139,6 +139,7 @@ function legendFailure(
   width: number,
   height: number,
   area: Rect,
+  tags: readonly LegendTag[] = [],
 ): RenderOutcome<never> {
   return {
     ok: false,
@@ -157,6 +158,14 @@ function legendFailure(
         clearanceMm: 3,
         capacityKind: "free-region",
         availableRegion: area,
+        legendEntries: tags.map((tag) => ({
+          deviceUid: tag.ownerUid,
+          designation: required(
+            tag.fields.find((f) => f.field === "designation"),
+            "Missing legend designation",
+          ).value,
+          kind: tag.referenceKey ? "reference" : "body",
+        })),
       },
     },
   };
@@ -247,6 +256,7 @@ function unfitLegend(
     failure.layout.box.w,
     failure.layout.box.h,
     available,
+    variants[0] ?? [],
   );
 }
 
