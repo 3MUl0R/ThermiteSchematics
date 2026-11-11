@@ -1,3 +1,4 @@
+import { invariant } from "../presentation/util.js";
 import { emitSchematicSvg } from "../svg/emitter.js";
 import { sideSections } from "./fold-side.js";
 import { rootedLocationContent } from "./location-headings.js";
@@ -29,7 +30,11 @@ export function composeRootedWinner(
     original.scale,
     ir,
   );
-  if (!emitted.ok) return original;
+  // Defensive invariant: the validated winner has already passed this emitter.
+  invariant(
+    emitted.ok,
+    "Validated rooted winner failed re-emission during composition",
+  );
   const inner = emitted.value
     .replace(/^<\?xml[^>]*>\s*/, "")
     .replace(/^<svg[^>]*>\s*/, "")
@@ -56,6 +61,5 @@ export function composeRootedWinner(
     !compositionFits(alternative, native, page)
   )
     return original;
-  alternative.printableDrafts = drafts;
   return alternative;
 }

@@ -57,6 +57,7 @@ export function sideSections(
     c.prepared.view.flow !== "top-to-bottom" ||
     c.grid.xs.length !== 2 ||
     c.grid.ys.length <= 2 ||
+    // D2 omission breaks the direct grid-row/draft mapping; retain its winner.
     c.drafts.length !== c.grid.ys.length - 1 ||
     c.drafts.some((d) => d.rootedSections?.length !== 1)
   )
