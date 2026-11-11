@@ -123,7 +123,7 @@ export function evaluateSheet(
   );
   out.push(obs("DQ-05", checks.functionKeys(g, ir)));
   out.push(
-    obs("DQ-06", checks.deviceTags(g, ir, s.references, schematic), {
+    obs("DQ-06", checks.deviceTags(g, ir, s.references, schematic, s.view), {
       scope:
         "One complete owned, painted tag per device UID per sheet, including graphical communication/connector drawings and keyed local terminal references. Instance description (else type), catalog part and explicit string rating/part fields only; no inferred rating.",
     }),

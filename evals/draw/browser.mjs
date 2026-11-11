@@ -178,14 +178,17 @@ export function measureSheet(options = {}) {
       tagOwnerUid: owner,
       tagField: attr(e, "data-tag-field"),
       tagKind: kind,
+      tagKey: attr(e, "data-tag-key"),
       tagBlock: attr(e, "data-tag-block"),
       tagContainer:
         ids.get(
-          kind === "body"
-            ? e.closest("[data-device-uid]")
-            : e.closest(
-                'g[data-tag-kind="reference"][data-tag-block],.off-view-annotation',
-              ),
+          kind === "legend"
+            ? e.closest('[data-device-legend-entry][data-tag-kind="legend"]')
+            : kind === "body"
+              ? e.closest("[data-device-uid]")
+              : e.closest(
+                  'g[data-tag-kind="reference"][data-tag-block],.off-view-annotation',
+                ),
         ) ?? rootedOwner,
       tagTerminal: terminal,
       tagTerminalDeclared: attr(e, "data-tag-terminal-id") != null,
@@ -194,7 +197,16 @@ export function measureSheet(options = {}) {
         kind === "body"
           ? (parent ?? rootedOwner) === owner &&
             !e.closest('[data-tag-kind="reference"],.off-view-annotation')
-          : kind === "reference" && (!parent || parent === owner),
+          : kind === "legend"
+            ? !!e.closest(
+                '[data-device-legend-entry][data-tag-kind="legend"]',
+              ) &&
+              attr(
+                e.closest('[data-device-legend-entry][data-tag-kind="legend"]'),
+                "data-tag-owner-uid",
+              ) === owner &&
+              !e.closest("[data-device-uid],.off-view-annotation")
+            : kind === "reference" && (!parent || parent === owner),
     };
   };
   const identity = (e) => ({
@@ -607,29 +619,31 @@ export function measureSheet(options = {}) {
           continuationLink: continuationOwner(e)
             ? ids.get(continuationOwner(e))
             : undefined,
-          circuitText: e.parentElement.hasAttribute("data-circuit-functions")
-            ? (() => {
-                const owner = e.parentElement;
-                const fn = [...owner.children].find((c) =>
-                  c.hasAttribute("data-function-key"),
-                );
-                const key = fn?.getAttribute("data-function-key");
-                const title = fn?.querySelector("title")?.textContent;
-                return {
-                  boundary:
-                    JSON.parse(owner.getAttribute("data-circuit-functions"))
-                      .length === 0,
-                  related:
-                    JSON.parse(
-                      owner.getAttribute("data-related-functions") ?? "[]",
-                    ).length > 0,
-                  primaryDesignation:
-                    key && title?.endsWith("/" + key)
-                      ? title.slice(0, -key.length - 1)
-                      : undefined,
-                };
-              })()
-            : undefined,
+          circuitText:
+            !tagIdentity(e).tagField &&
+            e.parentElement.hasAttribute("data-circuit-functions")
+              ? (() => {
+                  const owner = e.parentElement;
+                  const fn = [...owner.children].find((c) =>
+                    c.hasAttribute("data-function-key"),
+                  );
+                  const key = fn?.getAttribute("data-function-key");
+                  const title = fn?.querySelector("title")?.textContent;
+                  return {
+                    boundary:
+                      JSON.parse(owner.getAttribute("data-circuit-functions"))
+                        .length === 0,
+                    related:
+                      JSON.parse(
+                        owner.getAttribute("data-related-functions") ?? "[]",
+                      ).length > 0,
+                    primaryDesignation:
+                      key && title?.endsWith("/" + key)
+                        ? title.slice(0, -key.length - 1)
+                        : undefined,
+                  };
+                })()
+              : undefined,
           fontMeasured: "Chromium resolved " + css.fontFamily,
           clip,
           role,
@@ -1225,6 +1239,8 @@ export function measureSheet(options = {}) {
   return {
     width: vb.width,
     height: vb.height,
+    viewFormat: root.getAttribute("data-view-format"),
+    viewFamily: root.getAttribute("data-view-family"),
     texts,
     hiddenTexts,
     frame,
@@ -1236,6 +1252,14 @@ export function measureSheet(options = {}) {
     ...(utilisationErrors.length ? { utilisationErrors } : {}),
     devices,
     deviceReferences,
+    deviceLegendEntries: Array.from(
+      root.querySelectorAll("[data-device-legend-entry]"),
+    ).map((e) => ({
+      deviceUid: e.getAttribute("data-tag-owner-uid"),
+      key: e.getAttribute("data-tag-key"),
+      kind: e.getAttribute("data-tag-kind"),
+      container: ids.get(e),
+    })),
     catalogs: [
       ...(root.querySelector("[data-symbol-id]") ? ["ais"] : []),
       ...(root.querySelector("[data-circuit-mark]") ? ["circuit"] : []),

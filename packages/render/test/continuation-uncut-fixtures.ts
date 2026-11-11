@@ -1,4 +1,4 @@
-import { compileProject } from "@thermite/compiler";
+import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { SchematicPacketRequest } from "../src/sheets.js";
 
 export async function uncutFixture(name: "init-starter" | "motor-starter") {
@@ -56,4 +56,23 @@ export async function uncutFixture(name: "init-starter" | "motor-starter") {
           ],
   };
   return { ir: c.ir, presentation: c.presentation, request };
+}
+
+/** Same authored-label mutations for the oracle and its explicit digest updater. */
+export function uncutLabelVariant(
+  source: ElectricalIr,
+  crossed: ReadonlySet<string | undefined>,
+  name: "init-starter" | "motor-starter",
+  label: string,
+) {
+  const ir = structuredClone(source);
+  const changed = ir.wires.filter(
+    (w) =>
+      !crossed.has(w.uid) &&
+      (label !== "" ||
+        name === "init-starter" ||
+        w.designation === "W-PWR-001"),
+  );
+  for (const w of changed) w.properties = { ...w.properties, label };
+  return { ir, changed };
 }

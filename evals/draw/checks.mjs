@@ -246,8 +246,8 @@ export function functionKeys(g, ir) {
       }),
     );
 }
-export function deviceTags(g, ir, references, schematic) {
-  return schematic ? deviceTagFindings(g, ir, references, issue) : [];
+export function deviceTags(g, ir, references, schematic, view) {
+  return schematic ? deviceTagFindings(g, ir, references, issue, view) : [];
 }
 export function phaseOrder(g, flow) {
   const out = [],

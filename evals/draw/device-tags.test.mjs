@@ -272,3 +272,95 @@ it("does not Unicode-normalise literal parts or descriptions", () => {
     ),
   ).toEqual([]);
 });
+
+describe("DQ-06 keyed rooted sheet legend", () => {
+  const legend = () =>
+    complete({
+      tagKind: "legend",
+      tagBlock: "legend:a",
+      tagContainer: "entry-1",
+      tagKey: "K1",
+      fontSize: 2.7,
+    });
+  const context = {
+    devices: [{ deviceUid: "a" }],
+    viewFormat: "schematic-view/0.1",
+    viewFamily: "control",
+  };
+  const key = () =>
+    row(undefined, "K1", { tagKey: "K1", tagContainer: "body", fontSize: 2.5 });
+  it("accepts exactly one complete legend with a painted owned local body key", () => {
+    expect(
+      check([key(), ...legend()], data(), [{ deviceUid: "a" }], context),
+    ).toEqual([]);
+    expect(
+      check([key(), ...legend()], data(), [{ deviceUid: "a" }], {
+        ...context,
+        viewFamily: "power",
+      }),
+    ).toEqual([]);
+  });
+  it("requires the exact key on this body's sheet, never another sheet or a reference", () => {
+    for (const keys of [
+      [],
+      [row("designation", "OTHER")],
+      [row("designation", "K1", { tagOwnerUid: "foreign" })],
+      [row("designation", "K1", { tagKind: "reference" })],
+      [row("designation", "K1", { tagPainted: false })],
+    ])
+      expect(
+        check(
+          [...keys, ...legend()],
+          data(),
+          [{ deviceUid: "a" }],
+          context,
+        ).some((f) => f.kind === "invalid-device-legend-key"),
+      ).toBe(true);
+    const first = check([key()], data(), [{ deviceUid: "a" }], context),
+      second = check(legend(), data(), [{ deviceUid: "a" }], context);
+    expect(first.length).toBeGreaterThan(0);
+    expect(second.some((f) => f.kind === "invalid-device-legend-key")).toBe(
+      true,
+    );
+  });
+  it("rejects a wrong legend key, duplicate entry and use in another drawing family", () => {
+    expect(
+      check(
+        [key(), ...legend().map((t) => ({ ...t, tagKey: "K2" }))],
+        data(),
+        [{ deviceUid: "a" }],
+        context,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(
+      check(
+        [
+          key(),
+          ...legend(),
+          ...legend().map((t) => ({ ...t, tagContainer: "entry-2" })),
+        ],
+        data(),
+        [{ deviceUid: "a" }],
+        context,
+      ).some((f) => f.kind === "duplicate-device-legend-entry"),
+    ).toBe(true);
+    expect(
+      check([key(), ...legend()], data(), [{ deviceUid: "a" }], {
+        ...context,
+        viewFormat: "documentation-view/0.1",
+        viewFamily: "wiring",
+      }).length,
+    ).toBeGreaterThan(0);
+  });
+  it("rejects absent/hidden/small/incomplete fields and preserves the body/reference rule", () => {
+    for (const rows of [
+      legend().filter((t) => t.tagField !== "part"),
+      legend().map((t) => ({ ...t, tagPainted: false })),
+      legend().map((t) => ({ ...t, fontSize: 2.4 })),
+      legend().map((t) => ({ ...t, tagKind: "reference" })),
+    ])
+      expect(
+        check([key(), ...rows], data(), [{ deviceUid: "a" }], context).length,
+      ).toBeGreaterThan(0);
+  });
+});

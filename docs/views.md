@@ -28,6 +28,25 @@ terminals. This convention moves symbol geometry and conductor landings together
 terminal identities, physical connections and electrical net IDs do not change.
 Single-pole and asymmetric control symbols keep their clockwise orientation.
 
+Rooted power and control drawings in both flows carry a thin-framed **Devices on
+this sheet** legend, including continuous SVG. Each local body keeps its exact
+owned designation as a key to one complete legend entry per device UID per sheet:
+bold designation at 2.7 mm em, instance description (otherwise type description),
+and exact authored catalog part at 2.5 mm em. Absent optional fields add no row;
+no rating is inferred. Measured tags wrap without shrinking or truncating text. Columns have a 50 mm cap; a second column is allowed.
+
+After trimming, folding and stacking, placement prefers top-right, then bottom-right
+above the title block, then other free space in deterministic sheet order. The
+frame stays at least 3 mm from all drawing ink, including location borders, notices,
+captions, cards and gangs, and never crosses a location border. If no free region
+fits, legal strip repacking or recutting protected gaps can reserve a band at the
+unchanged print scale and within the existing page-cost and recovery limits.
+This reuses the selected drawing without new ELK or routing attempts. An impossible
+complete legend returns R006 with the constraining entry/field, the required
+dimensions versus the largest free region actually tried (or the column capacity),
+and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
+utilisation accounting do not change. Rail-only and cable reference tags are a separate rollout.
+
 Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
 parallel branches can remain outside the view. Success does not promise complete
 rungs. At each drawn terminal with authored conductors

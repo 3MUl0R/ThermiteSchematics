@@ -70,9 +70,11 @@ export function safeAxisPlans(
   capacity: number,
   intervals: readonly Interval[],
   valid: (point: number) => boolean,
+  validSpan?: (start: number, end: number) => boolean,
 ) {
   if (!(capacity > 0) || length > capacity * MAX_CUTS) return [];
-  if (length <= capacity) return [[0, length]];
+  if (length <= capacity && (!validSpan || validSpan(0, length)))
+    return [[0, length]];
   const points = gapPoints(length, capacity, intervals).filter(
     (v) => v === 0 || v === length || valid(v),
   );
@@ -81,6 +83,7 @@ export function safeAxisPlans(
     const options: number[][] = [];
     for (const [start, paths] of states) {
       if (end - start <= 0.001 || end - start > capacity + 0.001) continue;
+      if (validSpan && !validSpan(start, end)) continue;
       for (const path of paths)
         if (path.length <= MAX_CUTS) options.push([...path, end]);
     }

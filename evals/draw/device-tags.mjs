@@ -55,8 +55,12 @@ function ownedBlocks(g, uid) {
       row.tagOwnerUid !== uid ||
       row.tagPainted !== true ||
       !hasLegibleEm(row) ||
+      (row.tagKind === "legend" &&
+        row.tagField === "designation" &&
+        row.fontSize !== undefined &&
+        row.fontSize < 2.7 - 0.03) ||
       !row.tagBlock ||
-      !["body", "reference"].includes(row.tagKind) ||
+      !["body", "reference", "legend"].includes(row.tagKind) ||
       row.tagOwnershipValid !== true
     )
       continue;
@@ -105,7 +109,7 @@ function missingFields(block, d, type, ir) {
   return missing;
 }
 
-export function deviceTagFindings(g, ir, references, issue) {
+export function deviceTagFindings(g, ir, references, issue, view) {
   const appearances = (g.devices ?? []).filter(
     (d) => d.tagKind !== "reference",
   );
@@ -116,6 +120,7 @@ export function deviceTagFindings(g, ir, references, issue) {
       ...appearances,
       ...(g.terminals ?? []).filter((t) => t.tagKind !== "reference"),
       ...local,
+      ...(g.deviceLegendEntries ?? []),
     ].map((r) => r.deviceUid),
   );
   const out = [];
@@ -131,10 +136,67 @@ export function deviceTagFindings(g, ir, references, issue) {
     const referencesHere = local.filter((r) => r.deviceUid === uid);
     const targets = referencesHere.filter((r) => r.tagRef).map((r) => r.tagRef);
     const bodyHere = appearances.some((a) => a.deviceUid === uid);
+    const legends = blocks.filter((b) => b.kind === "legend");
+    const entries = (g.deviceLegendEntries ?? []).filter(
+      (e) => e.deviceUid === uid,
+    );
+    const invalidEntry = entries.some(
+      (e) => e.key !== d.designation || e.kind !== "legend",
+    );
+    const bodyKey = g.texts.some(
+      (t) =>
+        t.tagOwnerUid === uid &&
+        t.tagKind === "body" &&
+        (t.tagField === "designation" ||
+          (!t.tagField && t.tagKey === d.designation)) &&
+        t.tagOwnershipValid === true &&
+        t.tagPainted === true &&
+        hasLegibleEm(t) &&
+        rowText(t) === d.designation,
+    );
+    const rootedLegend =
+      /^schematic-view\//.test(view?.format ?? g.viewFormat ?? "") &&
+      ["power", "control"].includes(view?.family ?? g.viewFamily);
+    for (const legend of legends) {
+      if (
+        !rootedLegend ||
+        invalidEntry ||
+        !bodyHere ||
+        !bodyKey ||
+        legend.rows.some((t) => t.tagKey !== d.designation)
+      )
+        out.push(
+          issue(
+            "invalid-device-legend-key",
+            { deviceUid: uid, designation: d.designation },
+            {
+              reason: !bodyKey
+                ? "missing same-sheet owned body designation"
+                : "legend designation key or view",
+            },
+          ),
+        );
+    }
+    if (Math.max(legends.length, entries.length) > 1)
+      out.push(
+        issue(
+          "duplicate-device-legend-entry",
+          { deviceUid: uid, designation: d.designation },
+          { entries: Math.max(legends.length, entries.length) },
+        ),
+      );
     const candidates = blocks.filter((b) =>
       bodyHere
-        ? b.kind === "body"
-        : b.kind === "body" || !targets.length || targets.includes(b.id),
+        ? b.kind === "body" ||
+          (b.kind === "legend" &&
+            rootedLegend &&
+            bodyKey &&
+            !invalidEntry &&
+            entries.length <= 1 &&
+            legends.length === 1 &&
+            b.rows.every((t) => t.tagKey === d.designation))
+        : b.kind !== "legend" &&
+          (b.kind === "body" || !targets.length || targets.includes(b.id)),
     );
     const missing = (candidates.length ? candidates : [{ rows: [] }])
       .map((b) => missingFields(b, d, type, ir))

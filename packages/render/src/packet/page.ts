@@ -1,3 +1,4 @@
+import { rootedLegendView } from "../device-legend.js";
 import { continuationLabelSvg } from "./continuation-label.js";
 import { circuitTextLines } from "../circuit.js";
 import {
@@ -143,7 +144,7 @@ export function frame(
   const content = namespaceSheetContent(draft.content, number);
   const out = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${n(page.widthMm)}mm" height="${n(page.heightMm)}mm" viewBox="0 0 ${n(page.widthMm)} ${n(page.heightMm)}" role="img" aria-label="${attr(`${label}, sheet ${number} of ${total}`)}" data-sheet="${number}" data-total-sheets="${total}" data-paper="${page.size}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${n(page.widthMm)}mm" height="${n(page.heightMm)}mm" viewBox="0 0 ${n(page.widthMm)} ${n(page.heightMm)}" role="img" aria-label="${attr(`${label}, sheet ${number} of ${total}`)}" data-sheet="${number}" data-total-sheets="${total}"${rootedLegendView(draft.view) ? ` data-view-format="${attr(draft.view.format)}" data-view-family="${attr("family" in draft.view ? draft.view.family : "")}"` : ""} data-paper="${page.size}">`,
     `<title>${xml(label)} - Sheet ${number} of ${total}</title>`,
     `<rect width="${n(page.widthMm)}" height="${n(page.heightMm)}" fill="white"/>`,
     `<rect x="${n(m)}" y="${n(m)}" width="${n(w)}" height="${n(bottom - m)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,

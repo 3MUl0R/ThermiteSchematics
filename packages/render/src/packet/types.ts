@@ -150,7 +150,20 @@ export interface Link {
   y: number;
   side: "left" | "right" | "top" | "bottom";
 }
+export interface RootedLegendSource {
+  prepared: import("../renderer.js").PreparedSchematicDrawing;
+  grid: import("./rooted-plans.js").RootedGrid;
+  scale: number;
+  profile?: "compact" | "dense";
+}
 export interface Draft {
+  /** The selected, already routed drawing: legend bands never rerun ELK. */
+  rootedLegendSource?: RootedLegendSource;
+  /** Validated source strips retained for legend-space pagination, without ELK. */
+  rootedParts?: readonly Draft[];
+  rootedBank?: import("./continuation-bank.js").ContinuationBank;
+  rootedPartAxis?: "x" | "y";
+  rootedPartSizes?: readonly number[];
   rootedSections?: {
     viewport: import("./rooted-ink.js").InkBox;
     continuedLocationIds: readonly string[];

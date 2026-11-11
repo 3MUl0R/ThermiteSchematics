@@ -1308,8 +1308,7 @@ const module: FactModule = {
       },
     },
     {
-      claim:
-        "After edits run `thermite lock .`, then validate (E107/E108 otherwise).",
+      claim: "After edits: `thermite lock .`, then validate (else E107/E108).",
       async check() {
         // A new library file: E107, not E108.
         const added = async () => {
@@ -1725,7 +1724,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "PLC addresses and spare usage live in the device's `io` object; never infer spare from a missing connection.",
+        "PLC addresses/spares live in device `io`; never infer spare from a missing connection.",
       async check() {
         const { csv } = await plantIo();
         // PLC1's io gives di0 an address and signal and di1 spare usage.
@@ -1768,7 +1767,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Snapshot before a change; review after the guarded workflow, then regenerate the packet.",
+        "Snapshot before changes; review after the guarded workflow, then regenerate.",
       async check() {
         const { snapshot, changes, coil, html } = await guarded();
         expect((await readJson(snapshot)).format).toBe("thermite-snapshot/0.1");
@@ -1780,7 +1779,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Semantic review does not replace source/lock/presentation review or engineering judgment.",
+        "Semantic review cannot replace source/lock/presentation review or engineering judgment.",
       async check() {
         // Presentation edits, reformatted source and the relock are
         // invisible; the library change shows only as the type field.

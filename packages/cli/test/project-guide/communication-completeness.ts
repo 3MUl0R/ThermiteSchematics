@@ -1009,7 +1009,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "A communication relation's `connection.cable` requires `specification` and may add `lengthM` (at least 0.001 m) and `route`, shown in network schedules and reviews apart from electrical cable inventories.",
+        "Communication `connection.cable` requires `specification`; optional `lengthM` (≥0.001 m) and `route` appear in network schedules/reviews, apart from electrical cable inventories.",
       async check() {
         const cable = (await schema("relation")).properties.connection
           .properties.cable;
@@ -1091,7 +1091,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "A conduit route does not imply a shield or protective bond.",
+      claim: "Conduit implies no shield or protective bond.",
       async check() {
         // The record has no field to declare one.
         const cable = (await schema("relation")).properties.connection

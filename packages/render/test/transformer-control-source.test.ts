@@ -1,3 +1,4 @@
+import type { ElectricalIr } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { createQueryEngine } from "@thermite/query";
@@ -16,6 +17,98 @@ import { DOMMatrix, ImageData, Path2D } from "@napi-rs/canvas";
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
 const forbidden =
   /\b(?:AC|DC|polarity|ratio|ground(?:ed|ing)?|bond(?:ed|ing)?|voltage|ratings?|VA|VAC|VDC)\b|[+−]/i;
+const normalizedText = (s: string) => s.replace(/\s+/gu, " ").trim();
+/** Independently prove every permitted tag phrase comes exactly from authored IR. */
+function authoredTagBlocks(
+  document: ReturnType<typeof parseHTML>["document"],
+  ir: ElectricalIr,
+) {
+  const blocks: string[] = [];
+  for (const entry of document.querySelectorAll(
+    "g[data-device-legend-entry]",
+  )) {
+    const uid = entry.getAttribute("data-tag-owner-uid"),
+      d = ir.devices.find((d) => d.uid === uid)!;
+    expect(d).toBeDefined();
+    const type = ir.deviceTypes.find((t) => t.id === d.typeId)!;
+    const expected = {
+      designation: d.designation,
+      description: d.description?.trim() ? d.description : type.description,
+      part: type.catalog?.orderNumber,
+    };
+    const rows = [...entry.querySelectorAll("text")];
+    expect(
+      rows.every((row) => {
+        const field = row.getAttribute("data-tag-field");
+        return (
+          field != null &&
+          Object.hasOwn(expected, field) &&
+          Boolean(expected[field as keyof typeof expected]?.trim())
+        );
+      }),
+    ).toBe(true);
+    // Removing an authored block must not also erase an injected unowned text
+    // element, title, or raw text node from the forbidden-claim oracle.
+    expect(entry.textContent).toBe(rows.map((row) => row.textContent).join(""));
+    expect(rows.map((row) => row.getAttribute("data-tag-field"))).toEqual(
+      Object.keys(expected).flatMap((field) =>
+        rows
+          .filter((row) => row.getAttribute("data-tag-field") === field)
+          .map(() => field),
+      ),
+    );
+    const fields: string[] = [];
+    for (const [field, value] of Object.entries(expected)) {
+      const actual = [
+        ...entry.querySelectorAll(`text[data-tag-field="${field}"]`),
+      ]
+        .map((t) => t.textContent)
+        .join("");
+      expect(field === "part" ? actual : normalizedText(actual)).toBe(
+        field === "part" ? (value ?? "") : normalizedText(value ?? ""),
+      );
+      if (value?.trim()) fields.push(normalizedText(value));
+    }
+    blocks.push(fields.join(" "));
+    entry.remove();
+  }
+  return blocks;
+}
+function noInferredClaims(svg: string, ir: ElectricalIr) {
+  const document = parseHTML(svg).document;
+  authoredTagBlocks(document, ir);
+  expect(document.querySelector("svg")!.textContent).not.toMatch(forbidden);
+}
+function noInferredHtmlClaims(html: string, ir: ElectricalIr) {
+  const document = parseHTML(html).document;
+  document.querySelectorAll("script, style").forEach((e) => e.remove());
+  authoredTagBlocks(document, ir);
+  expect(document.body.textContent).not.toMatch(forbidden);
+}
+it("rejects an unauthored electrical claim hidden in a legitimate legend entry in SVG and HTML", async () => {
+  const f = await transformerFixture();
+  try {
+    const result = await renderSchematicPacket(f.ir, {
+      format: "schematic-packet-request/0.1",
+      views: [transformerRequest("left-to-right")],
+    });
+    if (!result.ok) throw Error(result.error.message);
+    const inject = (svg: string) =>
+      svg.replace(
+        /(<g data-device-legend-entry[^>]*>)/,
+        "$1<text>480/120 VAC 250 VA</text>",
+      );
+    const svg = result.value.sheets[0]!.svg;
+    expect(() => noInferredClaims(svg, f.ir)).not.toThrow();
+    expect(() => noInferredClaims(inject(svg), f.ir)).toThrow();
+    expect(() => noInferredHtmlClaims(result.value.html, f.ir)).not.toThrow();
+    expect(() =>
+      noInferredHtmlClaims(inject(result.value.html), f.ir),
+    ).toThrow();
+  } finally {
+    await f.dispose();
+  }
+});
 for (const mode of ["normal", "reversed", "array-reversed", "renamed"])
   it.each(transformerFlows)(
     `wiring-selected transformer ${mode} in %s`,
@@ -91,9 +184,7 @@ for (const mode of ["normal", "reversed", "array-reversed", "renamed"])
         const drawn = await renderSchematic(f.ir, request);
         expect(drawn.ok).toBe(true);
         if (!drawn.ok) throw Error(drawn.error.message);
-        expect(
-          parseHTML(drawn.value.svg).document.querySelector("svg")!.textContent,
-        ).not.toMatch(forbidden);
+        noInferredClaims(drawn.value.svg, f.ir);
         expect(JSON.stringify(f.ir)).toBe(before);
       } finally {
         await f.dispose();
@@ -187,7 +278,7 @@ for (const mode of ["missing-roles", "wrong-shape"])
     },
   );
 it.each(transformerFlows)(
-  "draws no ratings or electrical claims in SVG HTML or direct PDF in %s",
+  "preserves authored tags without inferred ratings or electrical claims in SVG HTML or direct PDF in %s",
   async (flow) => {
     const f = await transformerFixture();
     try {
@@ -205,13 +296,8 @@ it.each(transformerFlows)(
         r.value.page,
         "Transformer control",
       );
-      const document = parseHTML(html).document;
-      document.querySelectorAll("script, style").forEach((e) => e.remove());
-      expect(document.body.textContent).not.toMatch(forbidden);
-      for (const s of r.value.sheets)
-        expect(
-          parseHTML(s.svg).document.querySelector("svg")!.textContent,
-        ).not.toMatch(forbidden);
+      noInferredHtmlClaims(html, f.ir);
+      for (const s of r.value.sheets) noInferredClaims(s.svg, f.ir);
       const pdf = await packetPdf(r.value, "Transformer control");
       const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
       const task = getDocument({
@@ -224,9 +310,15 @@ it.each(transformerFlows)(
         for (let i = 1; i <= doc.numPages; i++) {
           const page = await doc.getPage(i);
           const text = await page.getTextContent();
-          expect(
+          let printed = normalizedText(
             text.items.map((x) => ("str" in x ? x.str : "")).join(" "),
-          ).not.toMatch(forbidden);
+          );
+          const source = parseHTML(r.value.sheets[i - 1]!.svg).document;
+          for (const block of authoredTagBlocks(source, f.ir)) {
+            expect(printed).toContain(block);
+            printed = printed.replace(block, "");
+          }
+          expect(printed).not.toMatch(forbidden);
         }
       } finally {
         await task.destroy();

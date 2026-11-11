@@ -303,6 +303,88 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "Rooted legends key exact designations to description/part once per UID/sheet. Bands repaginate. Tag em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders. R006 gives device, field and required/available dimensions; never omit/shrink text.",
+      async check() {
+        const { compileProject } = await import("@thermite/compiler");
+        const { renderSchematicPacket } = await import("@thermite/render");
+        const { parseHTML } = await import("linkedom");
+        const project = await freshProject("starter");
+        const compiled = await compileProject(project);
+        if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+        const view = {
+          format: "schematic-view-request/0.2" as const,
+          root: { by: "designation" as const, value: "PS1" },
+          intent: { kind: "loads" as const },
+          flow: "left-to-right" as const,
+        };
+        const input = {
+          format: "schematic-packet-request/0.1" as const,
+          views: [view],
+        };
+        const run = await packet(project, input);
+        expect(run.code, run.stderr).toBe(0);
+        for (const sheet of run.json.sheets) {
+          const doc = parseHTML(sheet.svg).document;
+          const rows = [
+            ...doc.querySelectorAll('text[data-tag-kind="legend"]'),
+          ];
+          expect(rows.length).toBeGreaterThan(0);
+          for (const row of rows)
+            expect(
+              Number(row.getAttribute("font-size")),
+            ).toBeGreaterThanOrEqual(
+              row.getAttribute("data-tag-field") === "designation" ? 2.7 : 2.5,
+            );
+          for (const uid of new Set(
+            rows.map((r) => r.getAttribute("data-tag-owner-uid")),
+          )) {
+            const d = compiled.ir.devices.find((d) => d.uid === uid);
+            if (!d) throw Error("Missing tag owner");
+            const t = compiled.ir.deviceTypes.find((t) => t.id === d.typeId);
+            if (!t) throw Error("Missing tag type");
+            const values = {
+              designation: d.designation,
+              description: d.description?.trim()
+                ? d.description
+                : t.description,
+              part: t.catalog?.orderNumber,
+            };
+            for (const [field, value] of Object.entries(values)) {
+              if (!value?.trim()) continue;
+              expect(
+                rows
+                  .filter(
+                    (r) =>
+                      r.getAttribute("data-tag-owner-uid") === uid &&
+                      r.getAttribute("data-tag-field") === field,
+                  )
+                  .map((r) => r.textContent)
+                  .join(""),
+              ).toBe(value.replace(/\s+/gu, " ").trim());
+            }
+          }
+        }
+        const ir = structuredClone(compiled.ir),
+          source = ir.devices.find((d) => d.designation === "PS1");
+        if (!source) throw Error("Missing source");
+        source.description = "Long authored header ".repeat(600);
+        const refused = await renderSchematicPacket(
+          ir,
+          input,
+          compiled.presentation,
+        );
+        expect(refused.ok).toBe(false);
+        if (!refused.ok) {
+          expect(refused.error.code).toBe("R006");
+          expect(refused.error.message).toMatch(
+            /PS1.*description.*requires.*mm.*available/,
+          );
+        }
+      },
+    },
+
+    {
+      claim:
         "Here `thermite` means `bun <thermite>/thermite.mjs`; use one runtime/source folder's absolute path (ask if unknown), separate from this project. No `thermite` is on PATH.",
       async check() {
         // Every run in this suite is `bun <checkout>/thermite.mjs <command>`;
@@ -321,7 +403,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Include the use case, expected and actual behavior, a minimal reproduction, relevant diagnostics, Thermite/Bun versions and operating system; redact hostnames and absolute paths from A005/W801 diagnostics.",
+        "Include use case, expected/actual behavior, minimal reproduction, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
       async check() {
         // Why redaction is needed: these reports carry this machine's host
         // name and absolute paths.
@@ -1472,23 +1554,27 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "When using a runtime package, report bugs, missing capabilities, and unclear documentation at https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing issues.",
+      "Report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub access, write a ready-to-submit issue title and body.",
+      "Without GitHub access, draft the issue title/body.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Do not patch a downloaded runtime in place.",
+      "Never patch a downloaded runtime in place.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "From source, make engine fixes in the separate checkout; follow its AGENTS.md and CONTRIBUTING.md for pull requests, keeping private data and credentials out of issues and pull requests.",
+      "Make engine fixes in the separate source checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "The human contributor must accept any CLA; an agent must not sign it.",
+      "Keep private data and credentials out of issues/PRs.",
+      "Contribution process; no runtime behavior.",
+    ],
+    [
+      "The human must accept any CLA; an agent must not sign it.",
       "Contribution policy; no runtime behavior.",
     ],
     [
@@ -1516,7 +1602,7 @@ const module: FactModule = {
       "Workflow order; each step is executed by the agent-tool facts and blocks.",
     ],
     [
-      "Print at 100% on matching paper and disable browser headers/footers.",
+      "Print at 100% on matching paper; disable browser headers/footers.",
       "Printing advice for a browser; the PDF page-size facts cover paper sizes.",
     ],
     [
