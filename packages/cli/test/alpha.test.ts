@@ -267,7 +267,7 @@ describe("Thermite alpha printable sheets", () => {
         );
         expect(result.ok, JSON.stringify(result)).toBe(true);
         if (!result.ok) continue;
-        const svg = result.value.sheets[0]!.svg;
+        const svg = result.value.sheets.map((sheet) => sheet.svg).join("\n");
         expect(svg).toContain(`width="${result.value.page.widthMm}mm"`);
         expect(svg).toContain(`height="${result.value.page.heightMm}mm"`);
         expect(svg).toContain('data-usage="spare" data-status="unterminated"');

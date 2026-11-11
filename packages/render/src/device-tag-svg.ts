@@ -1,6 +1,6 @@
 import type { IrDevice, IrDeviceType } from "@thermite/compiler";
 import { planDeviceTag, type DeviceTagPlan } from "./device-tags.js";
-import { ownedTagText } from "./device-tag-ownership.js";
+import { ownedTagText, tagRowAttributes } from "./device-tag-ownership.js";
 import { CircuitRenderError } from "./render-error-context.js";
 import { printableTextMetrics } from "./symbols/printable-font.js";
 import { text } from "./packet/svg.js";
@@ -58,7 +58,7 @@ export function deviceTagSvg(plan: DeviceTagPlan, x = 0, y = 0): string {
           "start",
           row.bold ? 700 : 400,
           row.field === "part",
-        ),
+        ).replace("<text ", `<text ${tagRowAttributes(row)} `),
         plan.ownerUid,
         row.field,
       ),

@@ -160,7 +160,7 @@ it("resolves fixed qualified references and local keys, retaining reference-only
   const terminal =
     "{&quot;deviceUid&quot;:&quot;a&quot;,&quot;terminalKey&quot;:&quot;X1.1&quot;}";
   const ref = `<g data-tag-owner-uid="a" data-tag-kind="reference" data-tag-block="end" data-tag-field="designation" data-tag-terminal-id="${terminal}" data-tag-ref="a"><text x="100" y="20" font-size="2.7">Off-view at TB 1.X1.1</text></g>`;
-  const tag = `<g data-device-uid="a" data-tag-kind="reference">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"')}</g>`;
+  const tag = `<g data-tag-key="TB 1.X1.1" data-tag-kind="reference">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"')}</g>`;
   const g = await openSheet(page, svg(tag + ref));
   expect(g.devices).toHaveLength(0);
   expect(g.terminals).toHaveLength(0);
@@ -183,7 +183,7 @@ it("resolves fixed qualified references and local keys, retaining reference-only
       ),
     ),
   );
-  expect(deviceTags(masquerade, ir, [], true)).toEqual([]);
+  expect(deviceTags(masquerade, ir, [], true).length).toBeGreaterThan(0);
   expect(masquerade.devices).toHaveLength(0);
   expect(masquerade.terminals).toHaveLength(0);
 });
@@ -372,17 +372,23 @@ it("rejects later filled occluders regardless of pointer events; ignores strokes
     expect(await missingDescription(content)).toEqual([]);
 });
 it("requires a body-owned block when a body is drawn, and a full reference block otherwise", async () => {
-  const reference = `<g data-tag-kind="reference" data-tag-owner-uid="a" data-tag-block="ref">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"').replaceAll('data-tag-block="a"', 'data-tag-block="ref"')}</g>`;
+  const reference = `<g data-tag-key="TB 1.X1.1" data-tag-kind="reference" data-tag-owner-uid="a" data-tag-block="ref">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"').replaceAll('data-tag-block="a"', 'data-tag-block="ref"')}</g>`;
   const g = await openSheet(
     page,
     svg(body(text("designation", "TB 1", 20)) + reference),
   );
-  expect(deviceTags(g, ir, refs, true)[0].missing).toEqual([
-    "authored part P/1-A",
-    "authored description",
-  ]);
   expect(
-    deviceTags(await openSheet(page, svg(reference)), ir, refs, true),
+    deviceTags(g, ir, refs, true).find(
+      (f) => f.kind === "missing-device-tag-fields",
+    ).missing,
+  ).toEqual(["authored part P/1-A", "authored description"]);
+  expect(
+    deviceTags(
+      await openSheet(page, svg(reference + qualifiedKey())),
+      ir,
+      refs,
+      true,
+    ),
   ).toEqual([]);
   expect(
     deviceTags(
@@ -390,15 +396,19 @@ it("requires a body-owned block when a body is drawn, and a full reference block
       ir,
       refs,
       true,
-    ),
-  ).toEqual([]);
+    ).some((f) => f.kind === "invalid-device-reference-key"),
+  ).toBe(true);
   const onlyIdentity = reference.replace(
     /<text[^>]+data-tag-field="(?:part|description)"[^>]*>[^<]*<\/text>/g,
     "",
   );
   expect(
-    deviceTags(await openSheet(page, svg(onlyIdentity)), ir, refs, true)[0]
-      .missing,
+    deviceTags(
+      await openSheet(page, svg(onlyIdentity + qualifiedKey())),
+      ir,
+      refs,
+      true,
+    )[0].missing,
   ).toEqual(["authored part P/1-A", "authored description"]);
 });
 
@@ -468,4 +478,116 @@ it("rejects an incorrect entry key despite correct row keys, and counts a hidden
       true,
     ).some((f) => f.kind === "duplicate-device-legend-entry"),
   ).toBe(true);
+});
+
+function qualifiedKey(content = "Off-view at TB 1.X1.1", attrs = "") {
+  return `<g data-tag-owner-uid="a" data-tag-kind="reference" data-tag-block="qualified" data-tag-field="designation" data-tag-terminal-id="{&quot;deviceUid&quot;:&quot;a&quot;,&quot;terminalKey&quot;:&quot;X1.1&quot;}" ${attrs}><text x="100" y="70" font-size="2.7">${content}</text></g>`;
+}
+const referenceEntry = () =>
+  `<g data-device-reference-entry="true" data-tag-key="TB 1.X1.1" data-tag-kind="reference" data-tag-owner-uid="a" data-tag-block="entry">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"').replaceAll('data-tag-block="a"', 'data-tag-block="entry"')}</g>`;
+it.each(["rooted legend frames", "cable end blocks"])(
+  "rejects different reference keys for one UID across %s",
+  async (kind) => {
+    const input = structuredClone(ir);
+    input.deviceTypes[0].terminals.push({ key: "X1.2" });
+    const entry = referenceEntry().replace(
+      'data-device-reference-entry="true"',
+      'data-device-legend-entry="true" data-device-reference-entry="true"',
+    );
+    const other = entry
+      .replaceAll("X1.1", "X1.2")
+      .replaceAll('data-tag-block="entry"', 'data-tag-block="entry-2"');
+    const keys =
+      qualifiedKey() +
+      qualifiedKey().replaceAll("X1.1", "X1.2").replace('y="70"', 'y="85"');
+    const block = (content, x) =>
+      `<g data-device-legend="${kind}" transform="translate(${x} 0)">${content}</g>`;
+    const good = await openSheet(page, svg(block(entry, 0) + keys));
+    expect(deviceTags(good, input, refs, true)).toEqual([]);
+    expect(good.deviceLegendEntries).toHaveLength(1);
+    expect(good.deviceReferenceEntries).toHaveLength(1);
+    const sharedOnly = await openSheet(
+      page,
+      svg(
+        block(entry.replace('data-device-reference-entry="true"', ""), 0) +
+          keys,
+      ),
+    );
+    expect(sharedOnly.deviceReferenceEntries).toEqual([]);
+    expect(deviceTags(sharedOnly, input, refs, true)).toEqual([]);
+    for (const second of [
+      other,
+      other.replace("<g ", '<g style="display:none" '),
+    ]) {
+      const bad = await openSheet(
+        page,
+        svg(block(entry, 0) + block(second, 80) + keys),
+      );
+      expect(deviceTags(bad, input, refs, true)).toContainEqual(
+        expect.objectContaining({
+          kind: "duplicate-device-reference-entry",
+          designation: "TB 1",
+          entries: 2,
+        }),
+      );
+      expect(bad.devices).toEqual([]);
+      expect(bad.terminals).toEqual([]);
+    }
+  },
+);
+it("requires exact same-sheet owned qualified reference keys and rejects hidden duplicates without adding electrical appearances", async () => {
+  const g = await openSheet(page, svg(referenceEntry() + qualifiedKey()));
+  expect(deviceTags(g, ir, refs, true)).toEqual([]);
+  expect(g.devices).toEqual([]);
+  expect(g.terminals).toEqual([]);
+  for (const key of [
+    "",
+    qualifiedKey("TB 10.X1.1"),
+    qualifiedKey("TB 1.X1.10"),
+    qualifiedKey("TB 1."),
+    qualifiedKey().replace(
+      "deviceUid&quot;:&quot;a",
+      "deviceUid&quot;:&quot;foreign",
+    ),
+    qualifiedKey(undefined, 'opacity="0"'),
+    qualifiedKey(undefined, 'transform="translate(300 0)"'),
+    qualifiedKey(undefined, 'fill="white"'),
+  ]) {
+    const bad = await openSheet(page, svg(referenceEntry() + key));
+    expect(
+      deviceTags(bad, ir, refs, true).some(
+        (f) => f.kind === "invalid-device-reference-key",
+      ),
+    ).toBe(true);
+  }
+  await openSheet(page, svg(qualifiedKey()));
+  expect(
+    deviceTags(await openSheet(page, svg(referenceEntry())), ir, refs, true)
+      .length,
+  ).toBeGreaterThan(0);
+  const duplicate = await openSheet(
+    page,
+    svg(
+      referenceEntry() +
+        referenceEntry().replace("<g ", '<g style="display:none" ') +
+        qualifiedKey(),
+    ),
+  );
+  expect(
+    deviceTags(duplicate, ir, refs, true).some(
+      (f) => f.kind === "duplicate-device-reference-entry",
+    ),
+  ).toBe(true);
+  const onlyDesignation = referenceEntry().replace(
+    /<text[^>]+data-tag-field="(?:part|description)"[^>]*>[^<]*<\/text>/g,
+    "",
+  );
+  expect(
+    deviceTags(
+      await openSheet(page, svg(onlyDesignation + qualifiedKey())),
+      ir,
+      refs,
+      true,
+    ).flatMap((f) => f.missing ?? []),
+  ).toEqual(["authored part P/1-A", "authored description"]);
 });

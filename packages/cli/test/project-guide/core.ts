@@ -1,3 +1,4 @@
+import { assertTagRows } from "../../../render/test/helpers/tag-row-source.js";
 // Facts for the guide's setup, agent-tool, reservation, printing, cable-command
 // and report-filter sentences.
 import { randomUUID } from "node:crypto";
@@ -303,7 +304,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Rooted legends key exact designations to description/part once per UID/sheet. Bands repaginate. Tag em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders. R006 gives device, field and required/available dimensions; never omit/shrink text.",
+        "Rooted legends key designation to description/part per UID/sheet; bands repaginate. Rail/cable tags key owned terminals once per UID/page. Em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear. R006 gives device/field sizes. Never omit/shrink text.",
       async check() {
         const { compileProject } = await import("@thermite/compiler");
         const { renderSchematicPacket } = await import("@thermite/render");
@@ -351,16 +352,14 @@ const module: FactModule = {
             };
             for (const [field, value] of Object.entries(values)) {
               if (!value?.trim()) continue;
-              expect(
-                rows
-                  .filter(
-                    (r) =>
-                      r.getAttribute("data-tag-owner-uid") === uid &&
-                      r.getAttribute("data-tag-field") === field,
-                  )
-                  .map((r) => r.textContent)
-                  .join(""),
-              ).toBe(value.replace(/\s+/gu, " ").trim());
+              assertTagRows(
+                rows.filter(
+                  (r) =>
+                    r.getAttribute("data-tag-owner-uid") === uid &&
+                    r.getAttribute("data-tag-field") === field,
+                ),
+                field === "part" ? value : value.replace(/\s+/gu, " ").trim(),
+              );
             }
           }
         }

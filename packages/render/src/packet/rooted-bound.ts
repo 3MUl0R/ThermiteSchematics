@@ -1,14 +1,17 @@
 import type { Draft } from "./types.js";
 import type { RenderFailure } from "../types.js";
+export function rootedPageBudget(drafts: readonly Draft[]) {
+  const fits = drafts.flatMap((d) => (d.rootedFit ? [d.rootedFit] : []));
+  const base =
+    drafts.length - fits.reduce((n, f) => n + f.actualPages - f.basePages, 0);
+  return { fits, base, limit: 2 * base };
+}
 /** Compare complete packets, rather than imposing a stricter per-view page cap. */
 export function rootedPageCostFailure(
   drafts: readonly Draft[],
 ): RenderFailure | undefined {
-  const fits = drafts.flatMap((d) => (d.rootedFit ? [d.rootedFit] : []));
+  const { fits, base, limit } = rootedPageBudget(drafts);
   if (!fits.length) return undefined;
-  const base =
-    drafts.length - fits.reduce((n, f) => n + f.actualPages - f.basePages, 0);
-  const limit = 2 * base;
   if (drafts.length <= limit) return undefined;
   const context = fits
     .map((f) => f.context)

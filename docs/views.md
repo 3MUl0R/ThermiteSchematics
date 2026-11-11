@@ -43,9 +43,25 @@ fits, legal strip repacking or recutting protected gaps can reserve a band at th
 unchanged print scale and within the existing page-cost and recovery limits.
 This reuses the selected drawing without new ELK or routing attempts. An impossible
 complete legend returns R006 with the constraining entry/field, the required
-dimensions versus the largest free region actually tried (or the column capacity),
-and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
-utilisation accounting do not change. Rail-only and cable reference tags are a separate rollout.
+dimensions versus the largest tried free rectangle (or the column capacity),
+and a remedy. A single entry larger than the drawing area names that device and
+field with its size versus the whole drawing area; a fully blocked sheet reports
+zero free capacity. The maximal-rectangle search retains at most 64 pockets and
+uses a linear conservative pass above 512 obstacles, so reported capacity never
+overstates free space. Bound exhaustion names the final sheet's required devices,
+the packet page limit and a remedy. Compound geometry, routes, electrical identity, recovery budgets and
+utilisation accounting do not change.
+
+Rail-only devices appear under **Referenced devices** in that same frame, once
+per UID without a local body. Their keys are exact, owned, painted terminal
+identities such as `Off-view at PS1.-`; a reference never substitutes for a body.
+Cable core pages keep exact endpoint captions such as `TB1.2` and `JB1.X1.1`,
+with complete **Referenced devices** blocks under the end-A/end-B headings. Each
+UID appears once per sheet, in the first referencing end block (A, then B); the
+other end resolves to that entry, and empty end blocks are omitted.
+Each page repeats its local blocks. Pagination reserves the prospective endpoint
+set before accepting a core row, so the row and its blocks fit together. These
+annotations add no device symbols, inferred connector faces, coverage or terminals.
 
 Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
 parallel branches can remain outside the view. Success does not promise complete

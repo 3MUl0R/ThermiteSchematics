@@ -252,7 +252,9 @@ Only complete painted rows with `data-tag-owner-uid`, `data-tag-field`,
 Rows must have valid body ownership or reference semantics. Expected values come
 independently from IR; sheet-wide text and SVG titles do not supply evidence.
 Wrapped rows stay within their owned field/block. Parts retain every literal
-character; a row boundary may consume exactly one authored space, or no space.
+character. Source-span rows must cover the independent IR value contiguously;
+only trailing whitespace in each span may be unpainted. Legacy rows without spans
+may consume exactly one authored space at a boundary, or no space.
 No Unicode normalisation is performed, so canonically equivalent spellings can
 cause false failures. The device inventory still comes from renderer references
 plus browser measurement, rather than an independent source-to-sheet inventory.
@@ -264,7 +266,7 @@ complete reference-owned block may satisfy the obligation. A designation-only
 reference cannot satisfy an authored description or part. Tags use at least 2.7 mm designation em and 2.5 mm for other fields
 when rolled out; ownership exports alone do not fix existing omitted fields.
 
-Checker 4.5 adds one exception for rooted power/control views only: exactly one
+Checker 4.7 retains the 4.5 exception for rooted power/control views only: exactly one
 complete `data-tag-kind="legend"` entry with an explicit `data-tag-key` equal to the
 IR designation may satisfy a body appearance when that same sheet paints the
 exact owned body designation key. The local key is `body` metadata with
@@ -273,6 +275,19 @@ key, a key on another sheet, or a duplicate legend entry is rejected. Reference
 annotations still cannot satisfy a body, and other drawing families retain in-place
 tags. Every row carrying `data-tag-field` uses the primary floor: 2.7 mm for a
 designation and 2.5 mm otherwise, regardless of circuit relations or tag kind.
+
+Checker 4.7 accepts a complete reference entry only with an exact same-sheet
+owned qualified annotation key, resolved against IR. `data-device-legend-entry` (also exported on reference entries)
+declares the entry and `data-tag-key` carries that qualified identity; the entry's
+designation row still prints the authored designation. Missing, foreign, hidden,
+other-sheet and duplicate keys fail. Complete entries are counted per UID per sheet
+across every frame and end block, including hidden declared duplicates and entries
+with different qualified keys. Dual markers on one physical entry count once.
+Rooted references share the body legend frame under “Referenced devices”; cable
+pages repeat blocks under their end headings. Each UID goes in the first end block
+(A, then B) that references it; the other end resolves to that entry. Empty end
+blocks are omitted. A UID with a local body cannot use
+a reference entry. Reference metadata never exports `data-device-uid`.
 
 Qualified identities resolve a structured `data-tag-terminal-id` against the
 owner's actual IR terminal key: `TB1.2`, `JB1.X1.1`, or the fixed heading grammar

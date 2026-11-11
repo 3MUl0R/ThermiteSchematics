@@ -1,11 +1,14 @@
 import { expect, it } from "vitest";
-import { wrapDeviceTagText } from "../src/device-tag-wrap.js";
+import {
+  wrapDeviceTagText,
+  wrappedDeviceTagRows,
+} from "../src/device-tag-wrap.js";
 const measure = (s: string) =>
   [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(s)].length;
 
 it("prefers whole description words before punctuation within a word", () => {
   expect(wrapDeviceTagText("word abc-def", 8, measure, true)).toEqual([
-    "word ",
+    "word",
     "abc-def",
   ]);
 });
@@ -32,4 +35,14 @@ it("retains literal part whitespace and falls back to whole graphemes only", () 
     "e\u0301".repeat(2),
   ]);
   expect(rows.join("")).toBe(value);
+});
+
+it("measures and emits only nonblank wrap tails while retaining exact source spans", () => {
+  const value = "word  abc-def ",
+    rows = wrappedDeviceTagRows(value, 8, measure, true);
+  expect(rows.map((r) => r.text)).toEqual(["word", "abc-def"]);
+  expect(rows.map((r) => value.slice(r.start, r.end)).join("")).toBe(value);
+  expect(
+    rows.every((r) => r.text === r.text.trimEnd() && measure(r.text) <= 8),
+  ).toBe(true);
 });
