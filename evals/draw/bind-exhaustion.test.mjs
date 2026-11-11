@@ -214,8 +214,7 @@ it.each(["file", "directory", "dangling symlink"])(
       );
       expect(p.status).toBe(1);
       expect(p.stderr).toContain(
-        "Bind audit already exists: " +
-          JSON.stringify(join(await realpath(c.out), "bound.json.audit.json")),
+        `Bind audit already exists: "${join(await realpath(c.out), "bound.json.audit.json")}"`,
       );
       expect(p.stderr).toContain("Choose a fresh --output");
       expect(p.stderr).toContain("preserve then remove");
@@ -252,12 +251,66 @@ it.each(["file", "directory", "dangling symlink"])(
         { cwd: c.root, encoding: "utf8" },
       );
       expect(p.status).toBe(1);
-      expect(p.stderr).toContain("Bound output already exists");
+      expect(p.stderr).toContain(
+        `Bound output already exists: "${join(await realpath(c.out), "occupied.json")}"`,
+      );
       expect(p.stderr).toContain("Choose a fresh --output");
       expect(p.stderr).toContain("No captures were started");
       await expect(readFile(output + ".audit.json")).rejects.toThrow(/ENOENT/);
       if (kind === "file")
         expect(await readFile(output, "utf8")).toBe("retain signed evidence");
+    } finally {
+      await c.cleanup();
+    }
+  },
+);
+
+it.each(["audit", "output"])(
+  "preserves a synthetic Windows path in an existing %s refusal",
+  async (kind) => {
+    const c = await cliFixture();
+    try {
+      const output = String.raw`D:\space path\bound.json`,
+        occupied = kind === "audit" ? output + ".audit.json" : output,
+        probe = join(c.root, "evals/draw/windows-bind-probe.mjs");
+      // Only path resolution and existence are simulated. Execute the actual
+      // CLI assertion without asking the host filesystem to interpret Windows.
+      await writeFile(
+        probe,
+        `
+        import { mock } from "bun:test";
+        const io = await import("./repin-io.mjs");
+        const fs = await import("node:fs/promises");
+        mock.module("./repin-io.mjs", () => ({
+          ...io, within: async () => ${JSON.stringify(output)},
+        }));
+        mock.module("node:fs/promises", () => ({
+          ...fs,
+          lstat: async (path) => {
+            if (path === ${JSON.stringify(occupied)}) return {};
+            throw Object.assign(new Error("missing"), { code: "ENOENT" });
+          },
+        }));
+        await import("./repin-bind-crops.mjs");
+      `,
+      );
+      const p = spawnSync(
+        "bun",
+        [
+          probe,
+          "--decisions",
+          "unused.json",
+          "--crop-index",
+          "unused.json",
+          "--output",
+          "unused.json",
+        ],
+        { cwd: c.root, encoding: "utf8" },
+      );
+      expect(p.status).toBe(1);
+      const label = kind === "audit" ? "Bind audit" : "Bound output";
+      expect(p.stderr).toContain(`${label} already exists: "${occupied}"`);
+      expect(p.stderr).toContain("No captures were started");
     } finally {
       await c.cleanup();
     }
