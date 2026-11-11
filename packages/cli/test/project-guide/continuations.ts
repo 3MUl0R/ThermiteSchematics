@@ -93,6 +93,20 @@ const module: FactModule = {
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+        const refused = await renderSchematicPacket(c.ir, {
+          format: "schematic-packet-request/0.1",
+          views: [
+            {
+              format: "schematic-view-request/0.1",
+              root: { by: "designation", value: "LS1" },
+              family: "power",
+            },
+          ],
+        });
+        expect(refused).toMatchObject({
+          ok: false,
+          error: { code: "R001", details: { designation: "LS1" } },
+        });
         const r = await renderSchematicPacket(c.ir, {
           format: "schematic-packet-request/0.1",
           views: [

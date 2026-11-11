@@ -47,14 +47,14 @@ export function renderDiagnosticRecipe() {
       {
         id: "compact-hint-succeeds",
         probe: "compact",
-        paper: "tabloid",
+        page: { size: "a4", orientation: "portrait", marginMm: 10 },
         rescued: true,
         code: "R006",
       },
       {
         id: "compact-hint-fails",
         probe: "compact",
-        paper: "a4",
+        page: { size: "a4", orientation: "portrait", marginMm: 25 },
         rescued: false,
         code: "R006",
       },

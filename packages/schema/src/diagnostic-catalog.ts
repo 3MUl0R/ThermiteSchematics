@@ -370,7 +370,7 @@ export const DIAGNOSTIC_CATALOG = {
     severity: "error",
     producer: "code",
     meaning:
-      "Invalid page or packet request, or an unprintable layout, including unsupported selected circuit mappings and content that cannot fit safely. Renderer errors include reason (invalid-page, invalid-packet or unprintable-layout) and may include details. The CLI also uses R006 without those fields when an SVG output would require multiple sheets; use HTML, PDF or JSON to retain them.",
+      "Invalid page or packet request, or an unprintable layout, including unsupported selected circuit mappings and content that cannot fit safely. Renderer errors include reason (invalid-page, invalid-packet or unprintable-layout) and may include details. The CLI also uses R006 without reason, with known device designations in details, when an SVG output would require multiple sheets; use HTML, PDF or JSON to retain them.",
   },
   Q001: {
     severity: "error",

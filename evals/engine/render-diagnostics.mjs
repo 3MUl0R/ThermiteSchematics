@@ -214,7 +214,7 @@ export async function renderDiagnostics() {
                 flow: "top-to-bottom",
               },
             ]),
-            page: { size: scenario.paper },
+            page: scenario.page,
           };
           result = await renderSchematicPacket(ir, req);
           const compact = await renderSchematicPacket(ir, {
@@ -224,6 +224,7 @@ export async function renderDiagnostics() {
           extra = { compactSucceeded: compact.ok };
           passed =
             !result.ok &&
+            result.error.reason === "unprintable-layout" &&
             compact.ok === scenario.rescued &&
             result.error.message.includes("--layout compact") ===
               scenario.rescued &&

@@ -1,6 +1,6 @@
 {
   "format": "thermite-eval-corpus/1.0",
-  "evalsVersion": "1.0",
+  "evalsVersion": "1.1",
   "provenance": [
     {
       "path": "topology/",
@@ -64,7 +64,7 @@
     },
     {
       "path": "render-diagnostics.json",
-      "sha256": "a48b3cd71e68c6073e9b038263f755c56040435fd8a89df7c4b286047f413d5b"
+      "sha256": "d20d6e1c451fa732bd90c150934eb25b8448282a3857d56c0e5ba7a1f74134ba"
     },
     {
       "path": "topology/cables/cables.json",

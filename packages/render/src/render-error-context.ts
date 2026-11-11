@@ -3,6 +3,8 @@ import { projectDeviceTypeSymbolMappings } from "./symbols/mappings.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { RenderError } from "./errors.js";
 import type { RenderFailure } from "./types.js";
+import { renderInputErrorContext } from "./render-text-context.js";
+import { continuationErrorContext } from "./packet/conductor-context.js";
 
 export class CircuitRenderError extends Error {
   constructor(readonly error: RenderError) {
@@ -16,10 +18,15 @@ export function renderErrorContext<E extends RenderFailure>(
   error: E,
   classifyProfile = true,
 ): E {
+  if (error.code === "R001" || error.code === "R005")
+    return renderInputErrorContext(ir, error) as E;
+  if (error.code === "R006") return continuationErrorContext(ir, error) as E;
   if (error.code !== "R002" && error.code !== "R003") return error;
   const e = error as Extract<RenderError, { code: "R002" | "R003" }>;
   const deviceUid = "deviceUid" in e ? e.deviceUid : undefined;
   const device = ir.devices.find((d) => d.uid === deviceUid);
+  const cable =
+    "cableUid" in e ? ir.cables.find((c) => c.uid === e.cableUid) : undefined;
   if (
     classifyProfile &&
     e.code === "R003" &&
@@ -47,12 +54,7 @@ export function renderErrorContext<E extends RenderFailure>(
   }
   const terminalIds = (e.details?.terminalIds ?? []) as TerminalId[];
   const terminalDetails = (ids: readonly TerminalId[]) =>
-    ids.map((t) => ({
-      ...t,
-      designation:
-        ir.devices.find((d) => d.uid === t.deviceUid)?.designation ??
-        t.deviceUid,
-    }));
+    renderTerminalDetails(ir, ids);
   const functions = ir.functions.filter((f) => {
     if (f.id.deviceUid !== deviceUid) return false;
     if ("functionKey" in e && e.functionKey)
@@ -82,10 +84,7 @@ export function renderErrorContext<E extends RenderFailure>(
   ) {
     message += ` Device ${JSON.stringify(device.designation)}${functions.length ? `, function${functions.length === 1 ? "" : "s"} ${functions.map((f) => JSON.stringify(f.id.functionKey)).join(", ")}` : ""}.`;
   }
-  const target =
-    "targetDeviceUid" in e
-      ? ir.devices.find((d) => d.uid === e.targetDeviceUid)
-      : undefined;
+  const target = targetDevice(ir, e);
   if (target && !unrepresented)
     message += ` Target device ${JSON.stringify(target.designation)}.`;
   if (stops.length && !unrepresented)
@@ -98,6 +97,7 @@ export function renderErrorContext<E extends RenderFailure>(
       ...(device
         ? { designation: device.designation, typeId: device.typeId }
         : {}),
+      ...(cable ? { designation: cable.designation } : {}),
       ...(functions.length
         ? {
             functions: functions.map((f) => ({
@@ -112,4 +112,20 @@ export function renderErrorContext<E extends RenderFailure>(
         : {}),
     },
   };
+}
+
+function targetDevice(ir: Readonly<ElectricalIr>, error: RenderError) {
+  return "targetDeviceUid" in error
+    ? ir.devices.find((d) => d.uid === error.targetDeviceUid)
+    : undefined;
+}
+
+function renderTerminalDetails(
+  ir: Readonly<ElectricalIr>,
+  ids: readonly TerminalId[],
+) {
+  return ids.map((t) => {
+    const device = ir.devices.find((d) => d.uid === t.deviceUid);
+    return { ...t, ...(device ? { designation: device.designation } : {}) };
+  });
 }

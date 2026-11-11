@@ -183,7 +183,7 @@ export async function prepareWiringDrawing(
       type = types.get(d.typeId)!;
     const nodeWidth = 48;
     if (width(d.designation) > nodeWidth - 6)
-      throw new Error("Wiring device designation is too wide.");
+      throw wiringWidthError(d.designation);
     const caption = [
       d.designation,
       ...wrap(type.description ?? type.id, nodeWidth - 6),
@@ -207,7 +207,7 @@ export async function prepareWiringDrawing(
         : ("EAST" as const);
       const label = `${t.terminalKey}${boundary.get(key(t)) ? ` [ +${boundary.get(key(t))} ]` : ""}`;
       if (width(label) > nodeWidth - 6)
-        throw new Error("Wiring terminal label is too wide.");
+        throw wiringWidthError(d.designation, t.terminalKey);
       const row = { key: t.terminalKey, label, side, y };
       y += 6;
       return row;
@@ -501,4 +501,12 @@ export async function prepareWiringDrawing(
       ...(request.notes ?? []),
     ].join("\n"),
   };
+}
+
+function wiringWidthError(designation: string, terminalKey?: string) {
+  return new Error(
+    terminalKey === undefined
+      ? `Wiring device ${JSON.stringify(designation)} designation is too wide.`
+      : `Wiring terminal ${JSON.stringify(`${designation}.${terminalKey}`)} label is too wide.`,
+  );
 }

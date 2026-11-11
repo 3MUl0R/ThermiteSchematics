@@ -22,6 +22,7 @@ import {
   type PageSettings,
   type SchematicPacketRequest,
   type SchematicViewRequest,
+  type RenderedPacket,
 } from "@thermite/render";
 import { parseJson } from "@thermite/schema";
 import { Command, CommanderError, Option } from "commander";
@@ -34,6 +35,27 @@ import { completenessText, completenessCsv } from "./alpha-diagnostics.js";
 import { writeAlphaOutput } from "./alpha-output.js";
 
 export const THERMITE_VERSION = "0.3.0-alpha.2";
+function multipleSheetError(packet: RenderedPacket) {
+  const seen = new Set<string>();
+  return {
+    code: "R006",
+    message: `This view requires ${packet.sheets.length} sheets. Use .html, .pdf or .json to retain the complete drawing.`,
+    details: {
+      devices: packet.sheets.flatMap((s) =>
+        s.references
+          .filter(({ deviceUid }) => {
+            if (seen.has(deviceUid)) return false;
+            seen.add(deviceUid);
+            return true;
+          })
+          .map(({ deviceUid, designation }) => ({
+            deviceUid,
+            designation,
+          })),
+      ),
+    },
+  };
+}
 interface Flags {
   project: string;
   output?: string;
@@ -486,10 +508,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
           process.stderr.write(
             JSON.stringify({
               diagnostics: compiled.diagnostics,
-              error: {
-                code: "R006",
-                message: `This view requires ${result.value.sheets.length} sheets. Use .html, .pdf or .json to retain the complete drawing.`,
-              },
+              error: multipleSheetError(result.value),
             }) + "\n",
           );
           exitCode = 1;

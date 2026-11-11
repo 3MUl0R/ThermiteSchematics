@@ -70,6 +70,7 @@ export function drawingContinuations(
           return failure(
             "unprintable-layout",
             "Continuation labels are too close to print clearly. Change flow, use a larger sheet, or narrow the view.",
+            { conductorIds: [l.provenance, other.provenance] },
           );
       }
   return { ok: true, value: undefined };
