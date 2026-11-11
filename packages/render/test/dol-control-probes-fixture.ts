@@ -1,6 +1,7 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { SchematicPacketRequest } from "../src/sheets.js";
 import p4 from "./fixtures/dol-control-probes/p4.json";
@@ -9,10 +10,9 @@ import p6 from "./fixtures/dol-control-probes/p6.json";
 import p7 from "./fixtures/dol-control-probes/p7.json";
 import packet from "./fixtures/dol-control-probes/packet.json";
 
-export const dolStarter = new URL(
-  "../../core-library/test/fixtures/dol-starter/",
-  import.meta.url,
-).pathname;
+export const dolStarter = fileURLToPath(
+  new URL("../../core-library/test/fixtures/dol-starter/", import.meta.url),
+);
 export const recipes = { p4, p5, p6, p7 };
 export type DolProbe = "saved" | keyof typeof recipes;
 export type DrawingProbe = Exclude<DolProbe, "p7">;

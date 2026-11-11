@@ -1,6 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import {
   compileProject,
   writeFileAtomically,
@@ -54,7 +54,7 @@ export async function updateDolControlGoldens(mode) {
         await writeFileAtomically(fileURLToPath(path), bytes);
       else if (!(await readFile(path)).equals(bytes))
         throw Error(
-          `DOL control golden is stale: ${path.pathname.split("/").at(-1)}`,
+          `DOL control golden is stale: ${basename(fileURLToPath(path))}`,
         );
     }
 }

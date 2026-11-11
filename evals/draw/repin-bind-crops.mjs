@@ -44,11 +44,11 @@ const auditExists = await exists(auditPath),
   outputExists = await exists(output);
 assert(
   !auditExists,
-  `Bind audit already exists: ${JSON.stringify(auditPath)}. Choose a fresh --output, or preserve then remove this audit after checking that no signed evidence depends on it. No captures were started.`,
+  `Bind audit already exists: "${auditPath}". Choose a fresh --output, or preserve then remove this audit after checking that no signed evidence depends on it. No captures were started.`,
 );
 assert(
   !outputExists,
-  `Bound output already exists: ${JSON.stringify(output)}. Choose a fresh --output; existing evidence is never overwritten. No captures were started.`,
+  `Bound output already exists: "${output}". Choose a fresh --output; existing evidence is never overwritten. No captures were started.`,
 );
 const file = await strictJsonFile(resolve(values.decisions)),
   index = await strictJsonFile(resolve(values["crop-index"]));

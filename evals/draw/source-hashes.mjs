@@ -44,7 +44,7 @@ export function pinnedSource(report, t, context) {
   assert(
     pins?.format === SOURCE_HASH_FORMAT && Array.isArray(pins.sheets),
     context
-      ? `Run a fresh C1: ${context.role} ${JSON.stringify(context.path)} (SHA-256 ${context.sha256}) has no pinned source hashes; regenerate this ${context.role} at its original source revision. A fresh target cannot supply baseline pins.`
+      ? `Run a fresh C1: ${context.role} "${context.path}" (SHA-256 ${context.sha256}) has no pinned source hashes; regenerate this ${context.role} at its original source revision. A fresh target cannot supply baseline pins.`
       : "Run a fresh C1: report has no pinned source hashes; older reports cannot verify crop sources",
   );
   const sheets = pins.sheets.filter(
@@ -55,7 +55,7 @@ export function pinnedSource(report, t, context) {
     assert(
       ref,
       context
-        ? `Run a fresh C1: ${context.role} ${JSON.stringify(context.path)} (SHA-256 ${context.sha256}) has no pinned PDF source; regenerate it at its original source revision. A fresh target cannot supply baseline pins.`
+        ? `Run a fresh C1: ${context.role} "${context.path}" (SHA-256 ${context.sha256}) has no pinned PDF source; regenerate it at its original source revision. A fresh target cannot supply baseline pins.`
         : "Report has no pinned PDF source; run a fresh C1 at its original source revision",
     );
   assert(

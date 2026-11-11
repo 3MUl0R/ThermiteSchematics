@@ -50,7 +50,7 @@ it("schedules the initial and subsequent polls after a 1000 ms wait", async () =
   expect(new Set(process.listeners("SIGTERM"))).toEqual(originalHandlers);
 });
 
-it("waits 1000 ms after slow initial and subsequent rebuilds finish", async () => {
+it("waits 1000 ms after slow rebuilds and detects edits made while rebuilding", async () => {
   const originalHandlers = new Set(process.listeners("SIGTERM"));
   vi.useFakeTimers();
   const scheduled = vi.spyOn(globalThis, "setTimeout");
@@ -77,9 +77,10 @@ it("waits 1000 ms after slow initial and subsequent rebuilds finish", async () =
     await vi.advanceTimersByTimeAsync(1500);
     expect(rebuild).toHaveBeenCalledTimes(1);
     expect(scheduled).not.toHaveBeenCalled();
+    // An edit during the initial build is still seen by the first poll.
+    revision++;
     finish!();
     await vi.advanceTimersByTimeAsync(0);
-    revision++;
     await vi.advanceTimersByTimeAsync(999);
     expect(loadProject).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -87,12 +88,16 @@ it("waits 1000 ms after slow initial and subsequent rebuilds finish", async () =
     expect(loadProject).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1500);
     expect(loadProject).toHaveBeenCalledTimes(2);
+    // The same ordering holds for later builds; no post-build snapshot may
+    // swallow an edit before the following poll.
+    revision++;
     finish!();
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(999);
     expect(loadProject).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(loadProject).toHaveBeenCalledTimes(3);
+    expect(rebuild).toHaveBeenCalledTimes(3);
     expect(stderr).toHaveBeenCalledWith(
       expect.stringContaining("one second after each run finishes"),
     );

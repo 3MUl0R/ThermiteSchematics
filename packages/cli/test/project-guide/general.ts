@@ -1887,17 +1887,12 @@ const module: FactModule = {
         child.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
         const closed = new Promise((done) => child.on("close", done));
         const builds = () => (stdout.match(/^Wrote /gm) ?? []).length;
-        // The deterministic alpha-watch test separately pins both 1000 ms
-        // schedules. Keep the original 2500 ms bound on macOS, the guide's
-        // scoped platform. Windows exceeded it in run 42038869517; Ubuntu
-        // exceeded it in run 42072555353 (7552 ms whole fact, one Wrote).
-        // Their poll-plus-render work gets machine-demo's existing 15 s bound.
-        const changeCeiling = process.platform === "darwin" ? 2500 : 15000;
-        // No claim bounds the first build. Ubuntu exceeded 4000 ms in run
-        // 42314825831's linked-worktree check, with the same fact passing in
-        // that job's first check.
-        const firstBuildCeiling = Math.max(4000, changeCeiling);
-        const until = (done: () => boolean, ceiling = 4000): Promise<void> =>
+        // Hosted runners can spend over four seconds on the initial render
+        // alone (macOS run 130302064179 had no Wrote before its deadline).
+        // This is a liveness bound, shared across platforms;
+        // alpha-watch's fake-clock tests pin the exact 1000 ms schedules and
+        // check that edits during the wait or a rebuild reach the next poll.
+        const until = (done: () => boolean, phase: string): Promise<void> =>
           new Promise((resolve, reject) => {
             const finish = (error?: Error) => {
               clearTimeout(timer);
@@ -1910,8 +1905,19 @@ const module: FactModule = {
             const check = () => {
               if (done()) finish();
             };
-            const ended = () => finish(new Error(stdout + stderr));
-            const timer = setTimeout(ended, ceiling);
+            const ended = () =>
+              finish(
+                new Error(`Watch exited during ${phase}:\n${stdout}${stderr}`),
+              );
+            const timer = setTimeout(
+              () =>
+                finish(
+                  new Error(
+                    `Watch timed out during ${phase}:\n${stdout}${stderr}`,
+                  ),
+                ),
+              15000,
+            );
             child.stdout.on("data", check);
             child.stderr.on("data", check);
             child.once("close", ended);
@@ -1920,7 +1926,7 @@ const module: FactModule = {
           });
         const html = join(project, "drawings/packet.html");
         try {
-          await until(() => builds() === 1, firstBuildCeiling);
+          await until(() => builds() === 1, "initial build");
           expect(builds()).toBe(1);
           expect(stderr).toContain(
             "Polling declared source, libraries and the request one second after each run finishes",
@@ -1932,12 +1938,12 @@ const module: FactModule = {
           await editJson(join(project, EQUIPMENT), (file) => {
             file.objects[0].description = "Edited supply";
           });
-          await until(() => builds() === 2, changeCeiling);
+          await until(() => builds() === 2, "source rebuild");
           expect(builds()).toBe(2);
           const kept = integrity(await readFile(html));
           // A broken request fails the build and keeps the last packet.
           await writeJson(join(project, "packet.json"), { ...bom, views: [] });
-          await until(() => stderr.includes('"R006"'), changeCeiling);
+          await until(() => stderr.includes('"R006"'), "invalid request");
           expect(stderr).toContain('"R006"');
           expect(builds()).toBe(2);
           expect(integrity(await readFile(html))).toBe(kept);

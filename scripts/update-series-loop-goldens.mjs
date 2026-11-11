@@ -1,6 +1,6 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { writeFileAtomically } from "../packages/compiler/dist/index.js";
 import { renderSchematicPacket } from "../packages/render/dist/index.js";
 import {
@@ -37,7 +37,7 @@ export async function updateSeriesLoopGoldens(mode) {
           await writeFileAtomically(fileURLToPath(path), bytes);
         else if (!(await readFile(path)).equals(bytes))
           throw new Error(
-            `Series-loop golden is stale: ${path.pathname.split("/").at(-1)}`,
+            `Series-loop golden is stale: ${basename(fileURLToPath(path))}`,
           );
       }
     } finally {

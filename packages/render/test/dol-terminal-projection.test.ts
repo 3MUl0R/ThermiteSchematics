@@ -1,6 +1,7 @@
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
 import { expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
 import { terminalOnlyProbe } from "./dol-terminal-projection-fixture.js";
 import { normalizeSchematicView } from "../src/view-spec.js";
 import { selectSemanticSubgraph } from "../src/selection.js";
@@ -34,8 +35,9 @@ function selection(ir: ElectricalIr, flow: (typeof flows)[number]) {
   return { selected: selected.value, mappings };
 }
 const project = (name: string) =>
-  new URL(`../../core-library/test/fixtures/${name}/`, import.meta.url)
-    .pathname;
+  fileURLToPath(
+    new URL(`../../core-library/test/fixtures/${name}/`, import.meta.url),
+  );
 
 it("keeps the complete R003 contract for ineligible returns and non-actuation paths", async () => {
   const fixture = await robustnessFixture();
