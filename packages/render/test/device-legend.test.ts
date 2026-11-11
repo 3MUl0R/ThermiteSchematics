@@ -6,6 +6,9 @@ import { planDeviceTag } from "../src/device-tags.js";
 import {
   legendFreeRegions,
   legendFitDiagnostic,
+  legendFreeRegionSearch,
+  MAX_FREE_REGIONS,
+  MAX_FREE_REGION_OBSTACLES,
 } from "../src/device-legend/failure.js";
 import { placeLegend, legendColumns } from "../src/device-legend/placement.js";
 import { generatedSvgInk } from "../src/device-legend/svg-ink.js";
@@ -291,6 +294,50 @@ it("retains maximal free rectangles instead of discarding a later usable pocket"
   ).toBe(true);
   expect(regions[0]!.w).toBeCloseTo(36.87, 8);
   expect(regions[0]!.h).toBeCloseTo(66.87, 8);
+});
+
+it("bounds large free-region searches and reports only obstacle-free capacity", () => {
+  const bounds = { x: 0, y: 0, w: 100, h: 100 },
+    obstacles = Array.from({ length: 1200 }, (_, i) => ({
+      x: 40,
+      y: i % 90,
+      w: 10,
+      h: 1,
+    })),
+    search = legendFreeRegionSearch(bounds, obstacles);
+  expect(obstacles.length).toBeGreaterThan(MAX_FREE_REGION_OBSTACLES);
+  expect(search.bounded).toBe(true);
+  expect(search.maximalObstacleTests).toBe(0);
+  expect(search.peakRegions).toBeLessThanOrEqual(MAX_FREE_REGIONS);
+  expect(search.regions).toHaveLength(1);
+  expect(search.regions[0]!.w * search.regions[0]!.h).toBeGreaterThan(0);
+  for (const r of search.regions)
+    for (const o of obstacles)
+      expect(
+        r.w === 0 ||
+          r.h === 0 ||
+          r.x + r.w <= o.x - 3.13 ||
+          r.x >= o.x + o.w + 3.13 ||
+          r.y + r.h <= o.y - 3.13 ||
+          r.y >= o.y + o.h + 3.13,
+      ).toBe(true);
+  expect(legendFreeRegions(bounds, [...obstacles, bounds])).toEqual([
+    { ...bounds, w: 0, h: 0 },
+  ]);
+  const fragmented = legendFreeRegionSearch(
+    { x: 0, y: 0, w: 1000, h: 1000 },
+    Array.from({ length: MAX_FREE_REGION_OBSTACLES }, (_, i) => ({
+      x: (i * 37) % 970,
+      y: (i * 53) % 970,
+      w: 1,
+      h: 1,
+    })),
+  );
+  expect(fragmented.bounded).toBe(true);
+  expect(fragmented.peakRegions).toBeLessThanOrEqual(MAX_FREE_REGIONS);
+  expect(fragmented.maximalObstacleTests).toBeLessThanOrEqual(
+    MAX_FREE_REGION_OBSTACLES,
+  );
 });
 
 it("refuses an oversized rail reference with its authored device and field", () => {
