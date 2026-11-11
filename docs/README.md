@@ -373,6 +373,7 @@
 - [Completeness example](../packages/cli/fixtures/completeness/README.md)
 - [Component research batches](../scripts/library-batch/README.md)
 - [Drawing evaluations (E3)](../evals/draw/README.md)
+- [Durable DOL control probes](../packages/render/test/fixtures/dol-control-probes/README.md)
 - [ELK source availability](../scripts/runtime-package/third-party/ELK-SOURCE.md)
 - [Engine observations (unpublished evals v1.0)](../evals/engine/BASELINE.md)
 - [Fixed engine evaluations (unpublished v1.0)](../evals/README.md)
