@@ -466,6 +466,22 @@ describe("mandatory DQ mutation kills", () => {
       findings.every((f) => f.reason === "missing-caption-owner-key"),
     ).toBe(true);
   });
+  it.each(["terminal", "net"])(
+    "DQ-17 rejects a declared %s role after owner-key parsing fails, without a terminal class",
+    (labelRole) => {
+      const t = terminalCaption("A1", {
+        role: "",
+        labelRole,
+        labelOwnerKey: undefined,
+      });
+      expect(c.terminalText(geometry({ texts: [t] }))).toEqual([
+        expect.objectContaining({
+          kind: "invalid-terminal-caption-ownership",
+          reason: "missing-caption-owner-key",
+        }),
+      ]);
+    },
+  );
   it("DQ-18 kills a missing revision table", () => {
     const t = text(
       "DWG No 1 Drawn Checked Approved Customer REV A Revision history",

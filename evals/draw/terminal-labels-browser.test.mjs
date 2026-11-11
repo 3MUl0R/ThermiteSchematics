@@ -147,6 +147,32 @@ it.each(["absent", "malformed"])(
   },
 );
 
+it.each(["terminal", "net"])(
+  "retains the declared %s role when the inner owner key cannot be parsed",
+  async (role) => {
+    const key = encode(JSON.stringify(["label", "port", "not JSON", role]));
+    const clip = `clip-${key}`;
+    const g = await openSheet(
+      page,
+      svg(
+        `<defs><clipPath id="${clip}"><rect width="200" height="100"/></clipPath></defs>` +
+          // No terminal class may be needed to discover the semantic declaration.
+          `<text x="15" y="18" font-size="2.5" clip-path="url(#${clip})">A1</text>`,
+      ),
+    );
+    expect(g.texts[0]).toMatchObject({
+      labelRole: role,
+      labelOwnerKind: "port",
+    });
+    expect(terminalText(g)).toEqual([
+      expect.objectContaining({
+        kind: "invalid-terminal-caption-ownership",
+        reason: "missing-caption-owner-key",
+      }),
+    ]);
+  },
+);
+
 it("keeps equal-spelled net labels semantic and still rejects real overlap", async () => {
   const netClip = `clip-${encode(JSON.stringify(["label", "edge", JSON.stringify(["wire", "w"]), "net"]))}`;
   const net = (x) =>

@@ -578,11 +578,13 @@ export function measureSheet(options = {}) {
               .map((h) => String.fromCharCode(parseInt(h, 16)))
               .join(""),
           );
-          const entity =
-            typeof key[2] === "string" ? JSON.parse(key[2]) : key[2];
           if (key[0] !== "label") throw Error("Not a semantic label key");
           id.labelRole = key[3];
           id.labelOwnerKind = key[1];
+          // Retain the declared role even if the inner owner key is malformed.
+          // DQ-17 must reject that declaration instead of falling back to class.
+          const entity =
+            typeof key[2] === "string" ? JSON.parse(key[2]) : key[2];
           id.labelOwnerKey = entity;
           if (entity?.[0] === "wire" && /conductor|net/.test(key[3] ?? ""))
             id.wire ??= entity[1];
