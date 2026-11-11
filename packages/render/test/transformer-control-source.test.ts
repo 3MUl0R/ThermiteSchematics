@@ -36,6 +36,27 @@ function authoredTagBlocks(
       description: d.description?.trim() ? d.description : type.description,
       part: type.catalog?.orderNumber,
     };
+    const rows = [...entry.querySelectorAll("text")];
+    expect(
+      rows.every((row) => {
+        const field = row.getAttribute("data-tag-field");
+        return (
+          field != null &&
+          Object.hasOwn(expected, field) &&
+          Boolean(expected[field as keyof typeof expected]?.trim())
+        );
+      }),
+    ).toBe(true);
+    // Removing an authored block must not also erase an injected unowned text
+    // element, title, or raw text node from the forbidden-claim oracle.
+    expect(entry.textContent).toBe(rows.map((row) => row.textContent).join(""));
+    expect(rows.map((row) => row.getAttribute("data-tag-field"))).toEqual(
+      Object.keys(expected).flatMap((field) =>
+        rows
+          .filter((row) => row.getAttribute("data-tag-field") === field)
+          .map(() => field),
+      ),
+    );
     const fields: string[] = [];
     for (const [field, value] of Object.entries(expected)) {
       const actual = [
@@ -58,6 +79,36 @@ function noInferredClaims(svg: string, ir: ElectricalIr) {
   authoredTagBlocks(document, ir);
   expect(document.querySelector("svg")!.textContent).not.toMatch(forbidden);
 }
+function noInferredHtmlClaims(html: string, ir: ElectricalIr) {
+  const document = parseHTML(html).document;
+  document.querySelectorAll("script, style").forEach((e) => e.remove());
+  authoredTagBlocks(document, ir);
+  expect(document.body.textContent).not.toMatch(forbidden);
+}
+it("rejects an unauthored electrical claim hidden in a legitimate legend entry in SVG and HTML", async () => {
+  const f = await transformerFixture();
+  try {
+    const result = await renderSchematicPacket(f.ir, {
+      format: "schematic-packet-request/0.1",
+      views: [transformerRequest("left-to-right")],
+    });
+    if (!result.ok) throw Error(result.error.message);
+    const inject = (svg: string) =>
+      svg.replace(
+        /(<g data-device-legend-entry[^>]*>)/,
+        "$1<text>480/120 VAC 250 VA</text>",
+      );
+    const svg = result.value.sheets[0]!.svg;
+    expect(() => noInferredClaims(svg, f.ir)).not.toThrow();
+    expect(() => noInferredClaims(inject(svg), f.ir)).toThrow();
+    expect(() => noInferredHtmlClaims(result.value.html, f.ir)).not.toThrow();
+    expect(() =>
+      noInferredHtmlClaims(inject(result.value.html), f.ir),
+    ).toThrow();
+  } finally {
+    await f.dispose();
+  }
+});
 for (const mode of ["normal", "reversed", "array-reversed", "renamed"])
   it.each(transformerFlows)(
     `wiring-selected transformer ${mode} in %s`,
@@ -245,10 +296,7 @@ it.each(transformerFlows)(
         r.value.page,
         "Transformer control",
       );
-      const document = parseHTML(html).document;
-      document.querySelectorAll("script, style").forEach((e) => e.remove());
-      authoredTagBlocks(document, f.ir);
-      expect(document.body.textContent).not.toMatch(forbidden);
+      noInferredHtmlClaims(html, f.ir);
       for (const s of r.value.sheets) noInferredClaims(s.svg, f.ir);
       const pdf = await packetPdf(r.value, "Transformer control");
       const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
