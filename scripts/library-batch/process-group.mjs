@@ -2,7 +2,12 @@ import { setTimeout as delay } from "node:timers/promises";
 
 export function groupAlive(
   pid,
-  { owned = false, kill = process.kill, platform = process.platform } = {},
+  {
+    owned = false,
+    kill = process.kill,
+    platform = process.platform,
+    notes,
+  } = {},
 ) {
   if (!pid) return false;
   try {
@@ -15,8 +20,15 @@ export function groupAlive(
       // the probe for our own groups, and retain a denied leader as alive.
       try {
         kill(pid, 0);
+        notes?.push(
+          `Owned process group ${pid}: probe returned EPERM; leader probe succeeded; treating group as finished`,
+        );
         return false;
       } catch (leaderError) {
+        if (leaderError.code === "ESRCH")
+          notes?.push(
+            `Owned process group ${pid}: probe returned EPERM; leader probe returned ESRCH; treating group as finished`,
+          );
         return leaderError.code !== "ESRCH";
       }
     }
@@ -27,7 +39,12 @@ export function groupAlive(
 export function signalGroup(
   pid,
   signal,
-  { owned = false, kill = process.kill, platform = process.platform } = {},
+  {
+    owned = false,
+    kill = process.kill,
+    platform = process.platform,
+    notes,
+  } = {},
 ) {
   if (!pid) return;
   try {
@@ -41,13 +58,17 @@ export function signalGroup(
       kill(pid, signal);
     } catch (leaderError) {
       if (leaderError.code !== "ESRCH") throw leaderError;
+      notes?.push(
+        `Owned process group ${pid}: ${signal} returned EPERM; leader signal returned ESRCH; group cleanup may leave unsignalable descendants`,
+      );
     }
   }
 }
 
 // Construct only for children spawned by this runner, never persisted PIDs.
 export function createChildProcessGroup(pid, dependencies = {}) {
-  const options = { ...dependencies, owned: true };
+  const notes = [];
+  const options = { ...dependencies, owned: true, notes };
   const errors = [];
   let killTimer;
   let rejectFailure;
@@ -75,6 +96,7 @@ export function createChildProcessGroup(pid, dependencies = {}) {
   };
   return {
     errors,
+    notes,
     failure,
     stop() {
       if (!pid) return;
