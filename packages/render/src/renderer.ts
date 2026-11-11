@@ -1,3 +1,4 @@
+import { addContinuousLegend } from "./device-legend.js";
 import { initialCardLayout, rememberDrawing } from "./off-view/prepared.js";
 import { diagnoseRooted } from "./rooted-diagnostics.js";
 import { renderErrorContext } from "./render-error-context.js";
@@ -340,18 +341,7 @@ export function createSchematicRendererWithDependencies(
         normalized,
       );
       if (!prepared.ok) return failed(prepared.error);
-      const { graph, layout, titleContext, summary } = prepared.value;
-      const emitted = emitSchematicSvg(
-        graph,
-        layout,
-        titleContext,
-        dependencies.catalog ?? SYMBOL_CATALOG,
-        false,
-        undefined,
-        ir,
-      );
-      if (!emitted.ok) return failed(renderErrorContext(ir, emitted.error));
-      return succeeded({ view, summary, svg: emitted.value });
+      return finishSchematic(ir, prepared.value, dependencies);
     },
   });
 }
@@ -366,4 +356,26 @@ export function renderSchematic(
   presentation?: Readonly<CompiledProjectPresentation>,
 ): Promise<RenderOutcome<RenderedSchematic>> {
   return createSchematicRenderer().render(ir, request, presentation);
+}
+
+function finishSchematic(
+  ir: Readonly<ElectricalIr>,
+  p: PreparedSchematicDrawing,
+  dependencies: Readonly<SchematicRendererDependencies>,
+): RenderOutcome<RenderedSchematic> {
+  const { graph, layout, titleContext, summary, view } = p;
+  const emitted = emitSchematicSvg(
+    graph,
+    layout,
+    titleContext,
+    dependencies.catalog ?? SYMBOL_CATALOG,
+    false,
+    undefined,
+    ir,
+  );
+  if (!emitted.ok) return failed(renderErrorContext(ir, emitted.error));
+  const legend = addContinuousLegend(ir, emitted.value, view);
+  return legend.ok
+    ? succeeded({ view, summary, svg: legend.value })
+    : failed(renderErrorContext(ir, legend.error));
 }

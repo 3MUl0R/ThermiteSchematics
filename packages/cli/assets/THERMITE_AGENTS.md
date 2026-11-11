@@ -16,16 +16,16 @@ thermite init ../cabinets --template cabinets
 supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
 two spare cores). `--name` sets `project.name`, the title-block heading.
 
-When using a runtime package, report bugs, missing capabilities, and unclear
-documentation at https://github.com/BlackettApplied/ThermiteSchematics/issues
-after checking existing issues. Include the use case, expected and actual
-behavior, a minimal reproduction, relevant diagnostics, Thermite/Bun versions and
-operating system; redact hostnames and absolute paths from A005/W801 diagnostics.
-Without GitHub access, write a ready-to-submit issue title and body. Do not patch
-a downloaded runtime in place.
+Report runtime bugs, gaps or unclear docs at
+https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing
+issues. Include use case, expected/actual behavior, minimal reproduction,
+diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute
+paths. Without GitHub access, draft the issue title/body. Never patch a downloaded
+runtime in place.
 
-From source, make engine fixes in the separate checkout; follow its AGENTS.md and CONTRIBUTING.md for pull requests, keeping private data and credentials out of issues and pull requests. The human
-contributor must accept any CLA; an agent must not sign it.
+Make engine fixes in the separate source checkout; follow its AGENTS.md and
+CONTRIBUTING.md for PRs. Keep private data and credentials out of issues/PRs.
+The human must accept any CLA; an agent must not sign it.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
 ## Authority and workflow
@@ -171,13 +171,16 @@ root `CBL1` and intent `conductors`.
 thermite packet --input packet.json -o drawings/packet.pdf
 ```
 
-Print at 100% on matching paper and disable browser headers/footers.
+Print at 100% on matching paper; disable browser headers/footers.
+Rooted legends key exact body designations to description/part, once per UID/sheet.
+Tag em is ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear of ink/borders.
+R006 gives device, field and required/available dimensions; never omit/shrink text.
 
 ## Visible component libraries
 
 Init copies `core@0.2.0` to `libraries/core`; 0.1.0 locks persist.
 system.json selects path/version; electrical-system.lock.json pins bytes.
-After edits run `thermite lock .`, then validate (E107/E108 otherwise).
+After edits: `thermite lock .`, then validate (else E107/E108).
 Starter PS1.L/N are required but deferred: strict fails W905; cabinets passes.
 Invent no pins/ratings; keep manufacturer document/revision and review notes.
 See `thermite guide libraries` for optional-library limits.
@@ -200,8 +203,8 @@ peer details, cable inventories and endpoint-free records; CSV selection metadat
 is on stderr, packets expose `documentationSelections`. With `index: true`,
 `references: {"appearances": "drawings", "filter": {...}}` scopes only the
 reference index; `references: false` omits reference pages.
-See `thermite guide report-filtering`. PLC addresses and spare usage
-live in the device's `io` object; never infer spare from a missing connection.
+See `thermite guide report-filtering`. PLC addresses/spares live in device `io`;
+never infer spare from a missing connection.
 E202 checks channel keys and duplicate addresses (case-insensitive), not PLC
 byte/word overlap or programming validity.
 
@@ -214,9 +217,9 @@ thermite snapshot -o drawings/before.json
 thermite review --before drawings/before.json --json
 ```
 
-Snapshot before a change; review after the guarded workflow, then regenerate the
-packet. Semantic review does not replace source/lock/presentation review or
-engineering judgment. UIDs identify devices; page numbers may change.
+Snapshot before changes; review after the guarded workflow, then regenerate.
+Semantic review cannot replace source/lock/presentation review or engineering
+judgment. UIDs identify devices; page numbers may change.
 
 `thermite watch --input packet.json -o drawings/packet.html` polls declared inputs
 one second after work finishes; failures preserve the previous packet.
@@ -313,10 +316,9 @@ at a terminal, and omitted terminals are counted. Add terminal/wire schedules fo
 complete detail. Continuity through functions is not inferred. Oversize
 selections fail R006.
 
-A communication relation's `connection.cable` requires `specification` and may
-add `lengthM` (at least 0.001 m) and `route`, shown in network schedules and
-reviews apart from electrical cable inventories. A conduit route does not imply
-a shield or protective bond.
+Communication `connection.cable` requires `specification`; optional `lengthM`
+(≥0.001 m) and `route` appear in network schedules/reviews, apart from electrical
+cable inventories. Conduit implies no shield or protective bond.
 
 ## Function-based circuit drawings
 

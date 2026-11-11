@@ -401,3 +401,71 @@ it("requires a body-owned block when a body is drawn, and a full reference block
       .missing,
   ).toEqual(["authored part P/1-A", "authored description"]);
 });
+
+it("accepts a framed rooted legend only with the exact painted local body key", async () => {
+  const key = `<text x="15" y="20" font-size="2.5" data-tag-owner-uid="a" data-tag-kind="body" data-tag-block="a" data-tag-key="TB 1">TB 1</text>`;
+  const entry = () =>
+    `<g data-device-legend-entry="true" data-tag-owner-uid="a" data-tag-kind="legend" data-tag-block="legend:a" data-tag-key="TB 1">${["designation", "description", "part"].map((field, i) => `<text x="110" y="${30 + i * 5}" font-size="${i ? 2.5 : 2.7}" fill="#101828" data-tag-field="${field}">${["TB 1", "Field terminals", "P/1-A"][i]}</text>`).join("")}</g>`;
+  const drawing = (bodyKey = key, legend = entry()) =>
+    svg(body(bodyKey) + legend).replace(
+      "<svg ",
+      '<svg data-view-format="schematic-view/0.1" data-view-family="control" ',
+    );
+  expect(deviceTags(await openSheet(page, drawing()), ir, refs, true)).toEqual(
+    [],
+  );
+  for (const [keyText, legend] of [
+    ["", entry()],
+    [key.replace(">TB 1<", ">WRONG<"), entry()],
+    [key, entry() + entry()],
+    [key, entry().replace('data-tag-key="TB 1"', 'data-tag-key="WRONG"')],
+    [key, entry().replace('font-size="2.5"', 'font-size="2.4"')],
+    [key, entry().replace('fill="#101828"', 'fill="white"')],
+    [key, entry().replace("<g ", '<g style="display:none" ')],
+  ])
+    expect(
+      deviceTags(
+        await openSheet(page, drawing(keyText, legend)),
+        ir,
+        refs,
+        true,
+      ).length,
+    ).toBeGreaterThan(0);
+});
+
+it("rejects an incorrect entry key despite correct row keys, and counts a hidden duplicate entry", async () => {
+  const bodyKey = body(
+    '<text x="15" y="20" font-size="2.5" data-tag-owner-uid="a" data-tag-kind="body" data-tag-key="TB 1">TB 1</text>',
+  );
+  const rows = full()
+    .replaceAll(
+      'data-tag-kind="body"',
+      'data-tag-kind="legend" data-tag-key="TB 1"',
+    )
+    .replaceAll('x="15"', 'x="110"');
+  const entry = (key) =>
+    `<g data-device-legend-entry="true" data-tag-owner-uid="a" data-tag-kind="legend" data-tag-key="${key}">${rows}</g>`;
+  const doc = (content) =>
+    svg(bodyKey + content).replace(
+      "<svg ",
+      '<svg data-view-format="schematic-view/0.1" data-view-family="power" ',
+    );
+  expect(
+    deviceTags(await openSheet(page, doc(entry("WRONG"))), ir, refs, true)
+      .length,
+  ).toBeGreaterThan(0);
+  expect(
+    deviceTags(
+      await openSheet(
+        page,
+        doc(
+          entry("TB 1") +
+            entry("TB 1").replace("<g ", '<g style="display:none" '),
+        ),
+      ),
+      ir,
+      refs,
+      true,
+    ).some((f) => f.kind === "duplicate-device-legend-entry"),
+  ).toBe(true);
+});

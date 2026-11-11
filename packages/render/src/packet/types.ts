@@ -151,6 +151,11 @@ export interface Link {
   side: "left" | "right" | "top" | "bottom";
 }
 export interface Draft {
+  /** Validated source strips retained for legend-space pagination, without ELK. */
+  rootedParts?: readonly Draft[];
+  rootedBank?: import("./continuation-bank.js").ContinuationBank;
+  rootedPartAxis?: "x" | "y";
+  rootedPartSizes?: readonly number[];
   rootedSections?: {
     viewport: import("./rooted-ink.js").InkBox;
     continuedLocationIds: readonly string[];

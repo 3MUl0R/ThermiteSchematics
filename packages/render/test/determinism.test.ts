@@ -1,3 +1,4 @@
+import { addContinuousLegend } from "../src/device-legend.js";
 import { orderingMetrics } from "./layout-metrics.js";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -396,10 +397,12 @@ async function pipelineSnapshot(
     ir,
   );
   if (!emitted.ok) throw new Error(JSON.stringify(emitted.error));
+  const legend = addContinuousLegend(ir, emitted.value, normalized.value.view);
+  if (!legend.ok) throw new Error(JSON.stringify(legend.error));
   const rendered: RenderedSchematic = {
     view: normalized.value.view,
     summary: presented.value.summary,
-    svg: emitted.value,
+    svg: legend.value,
   };
   return {
     view: JSON.stringify(normalized.value.view),
@@ -409,7 +412,7 @@ async function pipelineSnapshot(
     layout: laidOut.value,
     summary: presented.value.summary,
     json: JSON.stringify(rendered) + String.fromCharCode(10),
-    svg: emitted.value,
+    svg: legend.value,
   };
 }
 
@@ -647,6 +650,7 @@ describe("D8 end-to-end determinism", () => {
         `import { buildPresentationGraph } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "presentation.js")).href)};`,
         `import { selectCableConductorSubgraph, selectLoadsSubgraph, selectSemanticSubgraph, selectTraceSubgraph } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "selection.js")).href)};`,
         `import { SYMBOL_CATALOG } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "symbols", "catalog.js")).href)};`,
+        `import { addContinuousLegend } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "device-legend.js")).href)};`,
         `import { emitSchematicSvg } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "svg", "emitter.js")).href)};`,
         `import { prepareSchematicTitleContext } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "title-block.js")).href)};`,
         `import { normalizeSchematicView } from ${JSON.stringify(pathToFileURL(join(packageRoot, "dist", "view-spec.js")).href)};`,
@@ -676,8 +680,10 @@ describe("D8 end-to-end determinism", () => {
         "  if (!titleContext.ok) throw new Error(JSON.stringify(titleContext.error));",
         "  const emitted = emitSchematicSvg(presented.value.graph, layout.value, titleContext.value, undefined, false, undefined, ir);",
         "  if (!emitted.ok) throw new Error(JSON.stringify(emitted.error));",
-        "  const rendered = { view: prepared.view, summary: presented.value.summary, svg: emitted.value };",
-        "  return { view: JSON.stringify(prepared.view), selected: selected.value, presentation: JSON.stringify(presented.value.graph), adapter: serializeElkAdapterForTest(adapter), layout: layout.value, summary: presented.value.summary, json: JSON.stringify(rendered) + String.fromCharCode(10), svg: emitted.value };",
+        "  const legend = addContinuousLegend(ir, emitted.value, prepared.view);",
+        "  if (!legend.ok) throw new Error(JSON.stringify(legend.error));",
+        "  const rendered = { view: prepared.view, summary: presented.value.summary, svg: legend.value };",
+        "  return { view: JSON.stringify(prepared.view), selected: selected.value, presentation: JSON.stringify(presented.value.graph), adapter: serializeElkAdapterForTest(adapter), layout: layout.value, summary: presented.value.summary, json: JSON.stringify(rendered) + String.fromCharCode(10), svg: legend.value };",
         "}",
         "const values = [];",
         "for (const [state, project] of projects) {",

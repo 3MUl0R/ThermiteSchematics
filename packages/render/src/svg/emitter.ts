@@ -920,7 +920,7 @@ function emitLabels(
       "text",
       {
         class: `label-text label-${label.role}`,
-        ...tagLabelAttributes(presentation),
+        ...tagLabelAttributes(presentation, graph.view),
         "clip-path": `url(#${svgSemanticId("clip", [label.id])})`,
         x: global(position.x),
         y: global(position.baseline),
@@ -1194,7 +1194,10 @@ export function emitSchematicSvg(
   return { ok: true, value: writer.finish() };
 }
 
-function tagLabelAttributes(presentation: PresentationLabel): SvgAttributes {
+function tagLabelAttributes(
+  presentation: PresentationLabel,
+  view: PresentationGraph["view"],
+): SvgAttributes {
   const source =
     presentation.role === "device"
       ? presentation.textSources.find((s) => s.field === "device.designation")
@@ -1203,7 +1206,9 @@ function tagLabelAttributes(presentation: PresentationLabel): SvgAttributes {
   const owner = decodeSvgSemanticId("device", source.ownerId)[0];
   return {
     "data-tag-owner-uid": owner,
-    "data-tag-field": "designation",
+    ...(view.format === "schematic-view/0.2" && view.intent === "conductors"
+      ? { "data-tag-field": "designation" }
+      : { "data-tag-key": presentation.text }),
     "data-tag-kind": "body",
     "data-tag-block": owner,
   };

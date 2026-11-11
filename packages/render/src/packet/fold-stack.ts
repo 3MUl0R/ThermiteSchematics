@@ -92,6 +92,7 @@ export function stackSections(
   groups: readonly number[][],
   b: DrawingBounds,
   axis: FoldAxis = "y",
+  gapAfter: (source: number, position: number) => number = () => SECTION_GAP,
 ) {
   const destinations = new Map(
     groups.flatMap((g, i) => g.map((n) => [n + 1, i + 1] as const)),
@@ -107,6 +108,11 @@ export function stackSections(
     const draft: Draft = {
       ...first,
       rootedContent: sumContent(sources),
+      rootedParts: sources,
+      rootedPartAxis: axis,
+      rootedPartSizes: group.map((i) =>
+        required(heights[i], "Missing source strip size"),
+      ),
       rootedSections: sources.flatMap((s) => s.rootedSections ?? []),
       content: "",
       links: [],
@@ -117,7 +123,7 @@ export function stackSections(
       rootedCaptionInk: [],
     };
     let offset = 0;
-    for (const i of group) {
+    for (const [position, i] of group.entries()) {
       append(
         draft,
         required(drafts[i], "Missing fold source"),
@@ -127,7 +133,8 @@ export function stackSections(
         b,
         axis,
       );
-      offset += required(heights[i], "Missing strip height") + SECTION_GAP;
+      offset +=
+        required(heights[i], "Missing strip height") + gapAfter(i, position);
     }
     const ink = unionInk(draft.rootedShapes ?? []);
     if (ink) draft.rootedInk = ink;

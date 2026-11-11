@@ -56,5 +56,6 @@ export async function drawingDrafts(
     actualPages: selected.drafts.length,
     context,
   };
+  for (const draft of selected.drafts) draft.rootedBank = selected.bank;
   return { ok: true, value: selected.drafts };
 }

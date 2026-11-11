@@ -1,9 +1,15 @@
+import { withFontMetricCache } from "./symbols/font-metric-cache.js";
+import {
+  fitLegendDrafts,
+  legendSheets,
+  type LegendViewDrafts,
+} from "./packet/device-legend.js";
 import { rootedPageCostFailure } from "./packet/rooted-bound.js";
 import { renderErrorContext } from "./render-error-context.js";
 import { referenceTables } from "./packet/references.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
-import { appendViewDrafts, assembleSheets } from "./packet/assembly.js";
+import { appendViewDrafts } from "./packet/assembly.js";
 
 import {
   circuitFunctionAppearances,
@@ -124,7 +130,8 @@ async function renderPacket(
       : (presentation?.page ?? {}),
   );
   if (!paper.ok) return paper;
-  const drafts: Draft[] = [];
+  let drafts: Draft[] = [];
+  const legendViews: LegendViewDrafts[] = [];
   const composedFailure = (message: string) =>
     composedPacketFailure(message, drafts, contextError);
   const documentationSelections: (DocumentationSelection & { view: number })[] =
@@ -179,6 +186,11 @@ async function renderPacket(
     const reportSelection = result.value[0]?.documentationSelection;
     if (reportSelection)
       documentationSelections.push({ ...reportSelection, view: viewIndex + 1 });
+    legendViews.push({
+      drafts: structuredClone(result.value),
+      viewIndex,
+      context,
+    });
     referenceNumber = appendViewDrafts(
       drafts,
       result.value,
@@ -192,6 +204,23 @@ async function renderPacket(
         "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
       );
   }
+  const legendFit = fitPacketLegends(
+    ir,
+    drafts,
+    legendViews,
+    paper.value,
+    request.layout,
+    contextError,
+  );
+  if (!legendFit.ok)
+    return {
+      ok: false,
+      error: contextError(
+        legendFit.error,
+        drafts.flatMap((d) => d.views ?? []),
+      ),
+    };
+  drafts = legendFit.value;
   const pageCostFailure = rootedPageCostFailure(drafts);
   if (pageCostFailure)
     return {
@@ -221,8 +250,52 @@ async function renderPacket(
     return composedFailure(
       "Packet exceeds the 100-sheet limit including indexes.",
     );
+  return assemblePacket(
+    ir,
+    drafts,
+    paper.value,
+    explicitPacket,
+    documentationSelections,
+    referenceSelection,
+  );
+}
+function fitPacketLegends(
+  ir: Readonly<ElectricalIr>,
+  drafts: Draft[],
+  views: readonly LegendViewDrafts[],
+  page: import("./packet/types.js").PaperPage,
+  layout: "standard" | "compact" | undefined,
+  contextError: typeof withPacketViews,
+): RenderOutcome<Draft[]> {
   try {
-    const sheets = assembleSheets(ir, drafts, paper.value);
+    return fitLegendDrafts(ir, drafts, views, page, layout);
+  } catch (error) {
+    return assemblyError(error, drafts, contextError);
+  }
+}
+function assemblePacket(
+  ir: Readonly<ElectricalIr>,
+  drafts: Draft[],
+  page: import("./packet/types.js").PaperPage,
+  explicitPacket: boolean,
+  documentationSelections: readonly (DocumentationSelection & {
+    view: number;
+  })[],
+  referenceSelection: ReferenceSelection | undefined,
+): RenderOutcome<RenderedPacket> {
+  const contextError: typeof withPacketViews = (error, views) =>
+    explicitPacket ? withPacketViews(error, views) : error;
+  try {
+    const rendered = legendSheets(ir, drafts, page);
+    if (!rendered.ok)
+      return {
+        ok: false,
+        error: contextError(
+          rendered.error,
+          drafts.flatMap((d) => d.views ?? []),
+        ),
+      };
+    const sheets = rendered.value;
     const diagnostics = explicitPacket
       ? packetDeviceCoverageDiagnostics(
           ir,
@@ -238,9 +311,9 @@ async function renderPacket(
       ok: true,
       value: {
         format: "schematic-packet/0.1",
-        page: paper.value,
+        page: page,
         sheets,
-        html: printPacketHtml(sheets, paper.value, ir.project.name),
+        html: printPacketHtml(sheets, page, ir.project.name),
         coverage: {
           ...buildPacketCoverage(
             ir,
@@ -258,25 +331,33 @@ async function renderPacket(
       },
     };
   } catch (error) {
-    const failed = failure(
-      "unprintable-layout",
-      error instanceof Error
-        ? error.message
-        : "Unable to produce the sheet title block.",
-    );
-    return !failed.ok
-      ? {
-          ok: false,
-          error: contextError(
-            failed.error,
-            error instanceof PacketDraftError
-              ? error.views
-              : drafts.flatMap((d) => d.views ?? []),
-          ),
-        }
-      : failed;
+    return assemblyError(error, drafts, contextError);
   }
 }
+function assemblyError(
+  error: unknown,
+  drafts: readonly Draft[],
+  contextError: typeof withPacketViews,
+): RenderOutcome<never> {
+  const failed = failure(
+    "unprintable-layout",
+    error instanceof Error
+      ? error.message
+      : "Unable to produce the sheet title block.",
+  );
+  return !failed.ok
+    ? {
+        ok: false,
+        error: contextError(
+          failed.error,
+          error instanceof PacketDraftError
+            ? error.views
+            : drafts.flatMap((d) => d.views ?? []),
+        ),
+      }
+    : failed;
+}
+
 function invalidCircuitFailure(
   ir: Readonly<ElectricalIr>,
   view: unknown,
@@ -352,7 +433,9 @@ export function renderSchematicPacket(
   request: SchematicPacketRequest,
   presentation?: Readonly<CompiledProjectPresentation>,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return renderPacketWithAdvice(ir, request, presentation, true);
+  return withFontMetricCache(() =>
+    renderPacketWithAdvice(ir, request, presentation, true),
+  );
 }
 export function renderSchematicSheets(
   ir: Readonly<ElectricalIr>,
@@ -361,15 +444,17 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return renderPacketWithAdvice(
-    ir,
-    {
-      ...options,
-      format: "schematic-packet-request/0.1",
-      ...(page === undefined ? {} : { page }),
-      views: [view],
-    },
-    presentation,
-    false,
+  return withFontMetricCache(() =>
+    renderPacketWithAdvice(
+      ir,
+      {
+        ...options,
+        format: "schematic-packet-request/0.1",
+        ...(page === undefined ? {} : { page }),
+        views: [view],
+      },
+      presentation,
+      false,
+    ),
   );
 }

@@ -248,7 +248,7 @@ fields need no placeholder. Explicit string device part/rating fields remain
 conditional; terminal capability never supplies an inferred device rating.
 
 Only complete painted rows with `data-tag-owner-uid`, `data-tag-field`,
-`data-tag-kind` (`body` or `reference`) and `data-tag-block` can satisfy fields.
+`data-tag-kind` (`body`, `reference` or `legend`) and `data-tag-block` can satisfy fields.
 Rows must have valid body ownership or reference semantics. Expected values come
 independently from IR; sheet-wide text and SVG titles do not supply evidence.
 Wrapped rows stay within their owned field/block. Parts retain every literal
@@ -263,6 +263,16 @@ where the device appears only through off-view or cross-sheet references, a
 complete reference-owned block may satisfy the obligation. A designation-only
 reference cannot satisfy an authored description or part. Tags use at least 2.7 mm designation em and 2.5 mm for other fields
 when rolled out; ownership exports alone do not fix existing omitted fields.
+
+Checker 4.5 adds one exception for rooted power/control views only: exactly one
+complete `data-tag-kind="legend"` entry with an explicit `data-tag-key` equal to the
+IR designation may satisfy a body appearance when that same sheet paints the
+exact owned body designation key. The local key is `body` metadata with
+`data-tag-key`, not a second multiline tag, and retains the ordinary 2.5 mm primary floor. A missing, hidden, wrong-owner or wrong
+key, a key on another sheet, or a duplicate legend entry is rejected. Reference
+annotations still cannot satisfy a body, and other drawing families retain in-place
+tags. Every row carrying `data-tag-field` uses the primary floor: 2.7 mm for a
+designation and 2.5 mm otherwise, regardless of circuit relations or tag kind.
 
 Qualified identities resolve a structured `data-tag-terminal-id` against the
 owner's actual IR terminal key: `TB1.2`, `JB1.X1.1`, or the fixed heading grammar
