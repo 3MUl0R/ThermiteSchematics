@@ -2,7 +2,7 @@ import type { ElectricalIr, IrDevice, IrDeviceType } from "@thermite/compiler";
 import type { RenderOutcome, RenderTextSource } from "./types.js";
 import { svgSemanticId } from "./svg/escape.js";
 import { printableTextMetrics } from "./symbols/printable-font.js";
-import { wrapDeviceTagText } from "./device-tag-wrap.js";
+import { wrappedDeviceTagRows } from "./device-tag-wrap.js";
 
 export type DeviceTagField = "designation" | "description" | "part";
 export interface DeviceTagSource {
@@ -14,7 +14,7 @@ export interface DeviceTagSource {
 export interface DeviceTagRow {
   readonly field: DeviceTagField;
   readonly text: string;
-  /** UTF-16 offsets in the displayed field, preserving literal wrap boundaries. */
+  /** UTF-16 display-source spans, including consumed trailing wrap whitespace. */
   readonly start: number;
   readonly end: number;
   readonly x: number;
@@ -115,27 +115,20 @@ function fieldRows(field: DeviceTagSource, widthMm: number): RowSpec[] {
   const metrics = (text: string) =>
     printableTextMetrics(text, emMm, bold, true);
   const lines = bold
-    ? [value]
-    : wrapDeviceTagText(
+    ? [{ text: value, start: 0, end: value.length }]
+    : wrappedDeviceTagRows(
         value,
         widthMm - 6,
         (text) => metricWidth(metrics(text)),
         field.field === "description",
       );
-  let start = 0;
-  return lines.map((text) => {
-    const row = {
-      field: field.field,
-      text,
-      start,
-      end: start + text.length,
-      emMm,
-      bold,
-      metrics: metrics(text),
-    };
-    start += text.length;
-    return row;
-  });
+  return lines.map((row) => ({
+    field: field.field,
+    ...row,
+    emMm,
+    bold,
+    metrics: metrics(row.text),
+  }));
 }
 function positionRows(specs: readonly RowSpec[]): DeviceTagRow[] {
   let baseline = 1.5,

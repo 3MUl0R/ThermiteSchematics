@@ -252,7 +252,9 @@ Only complete painted rows with `data-tag-owner-uid`, `data-tag-field`,
 Rows must have valid body ownership or reference semantics. Expected values come
 independently from IR; sheet-wide text and SVG titles do not supply evidence.
 Wrapped rows stay within their owned field/block. Parts retain every literal
-character; a row boundary may consume exactly one authored space, or no space.
+character. Source-span rows must cover the independent IR value contiguously;
+only trailing whitespace in each span may be unpainted. Legacy rows without spans
+may consume exactly one authored space at a boundary, or no space.
 No Unicode normalisation is performed, so canonically equivalent spellings can
 cause false failures. The device inventory still comes from renderer references
 plus browser measurement, rather than an independent source-to-sheet inventory.

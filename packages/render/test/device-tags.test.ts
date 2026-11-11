@@ -67,11 +67,13 @@ it("measures complete literal rows and ink with existing pinned metrics", () => 
       field.field === "part"
         ? field.value
         : field.value.replace(/\s+/gu, " ").trim();
-    expect(rows.map((row) => row.text).join("")).toBe(displayed);
+    expect(
+      rows.map((row) => displayed.slice(row.start, row.end)).join(""),
+    ).toBe(displayed);
     expect(rows[0]!.start).toBe(0);
     expect(rows.at(-1)!.end).toBe(displayed.length);
     for (const row of rows) {
-      expect(row.text).toBe(displayed.slice(row.start, row.end));
+      expect(row.text).toBe(displayed.slice(row.start, row.end).trimEnd());
       expect(row.emMm).toBeGreaterThanOrEqual(2.5);
       const m = printableTextMetrics(row.text, row.emMm, row.bold, true);
       expect(row.ink.w).toBeCloseTo(m.right - m.left, 9);

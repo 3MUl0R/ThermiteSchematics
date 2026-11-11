@@ -1,3 +1,4 @@
+import { assertTagRows } from "./helpers/tag-row-source.js";
 import { beforeAll, expect, it } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend } from "../src/device-legend.js";
@@ -115,12 +116,7 @@ it("emits one complete owned legend per local UID with the exact body key in bot
           const texts = [
             ...e.querySelectorAll(`text[data-tag-field="${field}"]`),
           ];
-          expect(
-            texts
-              .map((t) => t.textContent)
-              .join("")
-              .trim(),
-          ).toBe((value ?? "").trim());
+          assertTagRows(texts, (value ?? "").trim());
           for (const row of texts) {
             expect(
               Number(row.getAttribute("font-size")),
@@ -152,12 +148,10 @@ it("keeps long Unicode descriptions and unbroken part numbers literal, or refuse
   const r = addDeviceLegend(input, source(), area);
   if (!r.ok) throw r;
   const doc = parseHTML(r.value).document;
-  expect(
-    [...doc.querySelectorAll('text[data-tag-field="description"]')]
-      .map((t) => t.textContent)
-      .join("")
-      .trim(),
-  ).toBe(d.description);
+  assertTagRows(
+    [...doc.querySelectorAll('text[data-tag-field="description"]')],
+    d.description,
+  );
   expect(
     [...doc.querySelectorAll('text[data-tag-field="part"]')]
       .map((t) => t.textContent)

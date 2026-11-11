@@ -1,5 +1,5 @@
 import { required } from "../presentation/util.js";
-import { tagAttributes } from "../device-tag-ownership.js";
+import { tagAttributes, tagRowAttributes } from "../device-tag-ownership.js";
 import {
   escapeXmlAttribute as attr,
   escapeXmlText as xml,
@@ -23,7 +23,7 @@ export function legendSvg(layout: LegendLayout, scale = 1) {
         ).value;
     svg += `<g ${kind === "reference" ? 'data-device-reference-entry="true"' : 'data-device-legend-entry="true"'} ${tagAttributes(uid, undefined, kind, block)} data-tag-key="${attr(key)}">`;
     for (const row of e.tag.rows)
-      svg += `<text ${tagAttributes(uid, row.field, kind, block)} data-tag-key="${attr(key)}" x="${n(box.x + e.x + row.x)}" y="${n(box.y + e.y + row.baseline)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${row.emMm}" font-weight="${row.bold ? "bold" : "normal"}" fill="#101828" xml:space="preserve" style="white-space:pre">${xml(row.text)}</text>`;
+      svg += `<text ${tagRowAttributes(row)} ${tagAttributes(uid, row.field, kind, block)} data-tag-key="${attr(key)}" x="${n(box.x + e.x + row.x)}" y="${n(box.y + e.y + row.baseline)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${row.emMm}" font-weight="${row.bold ? "bold" : "normal"}" fill="#101828" xml:space="preserve" style="white-space:pre">${xml(row.text)}</text>`;
     svg += "</g>";
   }
   return svg + "</g>";

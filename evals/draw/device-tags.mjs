@@ -7,6 +7,25 @@ const rowText = (t) => t.renderedString ?? t.text;
 function matches(rows, expected, literal = false) {
   if (!rows.length) return false;
   const target = literal ? expected : normalized(expected);
+  if (
+    rows.some((r) => r.tagRowStart !== undefined || r.tagRowEnd !== undefined)
+  ) {
+    let position = 0;
+    for (const row of rows) {
+      const { tagRowStart: start, tagRowEnd: end } = row;
+      if (
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start !== position ||
+        end < start ||
+        end > target.length ||
+        rowText(row) !== target.slice(start, end).trimEnd()
+      )
+        return false;
+      position = end;
+    }
+    return position === target.length;
+  }
   let positions = new Set([0]);
   for (const [index, row] of rows.entries()) {
     const text = literal ? rowText(row) : normalized(rowText(row)),

@@ -1,3 +1,4 @@
+import { assertTagRows } from "./helpers/tag-row-source.js";
 import { readFile } from "node:fs/promises";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
@@ -60,7 +61,8 @@ function complete(
           `[data-tag-owner-uid="${uid}"][data-tag-field="${field}"]`,
         ),
       ];
-      expect(rows.map((r) => r.textContent).join("")).toBe(
+      assertTagRows(
+        rows,
         value === undefined
           ? ""
           : field === "part"

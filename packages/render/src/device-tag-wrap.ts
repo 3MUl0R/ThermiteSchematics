@@ -4,17 +4,20 @@ import { fittingEnd } from "./packet/label-wrap.js";
 const separator = (s: string) => /^[-/._:–—\s]$/u.test(s);
 
 /** Descriptions prefer words, then retained separators, then graphemes.
- * Parts prefer retained separators. Never insert or discard a character. */
-export function wrapDeviceTagText(
+ * Parts prefer retained separators. Retain source spans; discard only ink-less
+ * trailing whitespace from the measured and emitted row. */
+export function wrappedDeviceTagRows(
   value: string,
   width: number,
   measure: (s: string) => number,
   description: boolean,
-): string[] {
+): { text: string; start: number; end: number }[] {
   const fits = (s: string) => measure(s) <= width + 0.001;
-  if (!value || fits(value)) return [value];
+  if (!value || fits(value))
+    return [{ text: value.trimEnd(), start: 0, end: value.length }];
   const chars = textClusters(value),
-    rows: string[] = [];
+    rows: { text: string; start: number; end: number }[] = [];
+  let offset = 0;
   for (let start = 0; start < chars.length;) {
     let end = fittingEnd(chars, start, fits);
     if (end < chars.length) {
@@ -31,8 +34,21 @@ export function wrapDeviceTagText(
         }
       }
     }
-    rows.push(chars.slice(start, end).join(""));
+    const raw = chars.slice(start, end).join("");
+    rows.push({ text: raw.trimEnd(), start: offset, end: offset + raw.length });
+    offset += raw.length;
     start = end;
   }
   return rows;
+}
+
+export function wrapDeviceTagText(
+  value: string,
+  width: number,
+  measure: (s: string) => number,
+  description: boolean,
+): string[] {
+  return wrappedDeviceTagRows(value, width, measure, description).map(
+    (row) => row.text,
+  );
 }

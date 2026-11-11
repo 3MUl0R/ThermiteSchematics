@@ -1,3 +1,4 @@
+import { assertTagRows } from "../../../render/test/helpers/tag-row-source.js";
 // Facts for the guide's setup, agent-tool, reservation, printing, cable-command
 // and report-filter sentences.
 import { randomUUID } from "node:crypto";
@@ -351,16 +352,14 @@ const module: FactModule = {
             };
             for (const [field, value] of Object.entries(values)) {
               if (!value?.trim()) continue;
-              expect(
-                rows
-                  .filter(
-                    (r) =>
-                      r.getAttribute("data-tag-owner-uid") === uid &&
-                      r.getAttribute("data-tag-field") === field,
-                  )
-                  .map((r) => r.textContent)
-                  .join(""),
-              ).toBe(value.replace(/\s+/gu, " ").trim());
+              assertTagRows(
+                rows.filter(
+                  (r) =>
+                    r.getAttribute("data-tag-owner-uid") === uid &&
+                    r.getAttribute("data-tag-field") === field,
+                ),
+                field === "part" ? value : value.replace(/\s+/gu, " ").trim(),
+              );
             }
           }
         }

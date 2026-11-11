@@ -179,6 +179,12 @@ export function measureSheet(options = {}) {
       tagField: attr(e, "data-tag-field"),
       tagKind: kind,
       tagKey: attr(e, "data-tag-key"),
+      tagRowStart: e.hasAttribute("data-tag-row-start")
+        ? Number(e.getAttribute("data-tag-row-start"))
+        : undefined,
+      tagRowEnd: e.hasAttribute("data-tag-row-end")
+        ? Number(e.getAttribute("data-tag-row-end"))
+        : undefined,
       tagReferenceEntry: !!e.closest("[data-device-reference-entry]"),
       tagBlock: attr(e, "data-tag-block"),
       tagContainer:

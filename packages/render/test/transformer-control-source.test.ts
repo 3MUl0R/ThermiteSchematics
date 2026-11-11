@@ -1,3 +1,4 @@
+import { assertTagRows } from "./helpers/tag-row-source.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
@@ -61,10 +62,9 @@ function authoredTagBlocks(
     for (const [field, value] of Object.entries(expected)) {
       const actual = [
         ...entry.querySelectorAll(`text[data-tag-field="${field}"]`),
-      ]
-        .map((t) => t.textContent)
-        .join("");
-      expect(field === "part" ? actual : normalizedText(actual)).toBe(
+      ];
+      assertTagRows(
+        actual,
         field === "part" ? (value ?? "") : normalizedText(value ?? ""),
       );
       if (value?.trim()) fields.push(normalizedText(value));

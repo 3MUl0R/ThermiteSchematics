@@ -67,8 +67,8 @@ it.each(transformerFlows)(
       createHash("sha256").update(view.groups[0]!.content).digest("hex"),
     ).toBe(
       flow === "left-to-right"
-        ? "af45a7d4633cf0c195b087f96cf9dc4da23c84818d152ff62c23020bbcd1d62f"
-        : "b28272d3281768b1e06a79287d7aea5746cbebf3ac4d64b65c6d37ffe489d090",
+        ? "a7b671b133353676cbcfebd9f251a6f4381cabff488d2a9651786550fe047d90"
+        : "38533e5e7448dbd83d93c6e3f5ee614b5b16783e4b02f73a98bb521d19bb5ed4",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);

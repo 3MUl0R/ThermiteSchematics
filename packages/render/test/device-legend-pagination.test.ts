@@ -1,3 +1,4 @@
+import { assertTagRows } from "./helpers/tag-row-source.js";
 import { beforeAll, expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
@@ -105,7 +106,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
             const rows = [
               ...entry.querySelectorAll(`text[data-tag-field="${field}"]`),
             ];
-            expect(rows.map((r) => r.textContent).join("")).toBe(value ?? "");
+            assertTagRows(rows, value ?? "");
             for (const row of rows) {
               expect(
                 Number(row.getAttribute("font-size")),

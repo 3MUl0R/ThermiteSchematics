@@ -44,3 +44,8 @@ export function drawingDeviceReference(
     y: y + height / 2,
   };
 }
+
+/** Source intervals include removed wrap whitespace, never omitted glyphs. */
+export function tagRowAttributes(row: { start: number; end: number }): string {
+  return `data-tag-row-start="${row.start}" data-tag-row-end="${row.end}"`;
+}

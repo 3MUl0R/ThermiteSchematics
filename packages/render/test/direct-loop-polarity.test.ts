@@ -113,8 +113,8 @@ it.each(flows)(
         createHash("sha256").update(result.value.sheets[0]!.svg).digest("hex"),
       ).toBe(
         flow === "left-to-right"
-          ? "4379101a7f58f7cfcc30b29b25e7508470904d08592c7e656123122f52192098"
-          : "8ba4eb7093b4542128cbd482256e0fa4ce9367eb39ee52d54bfe5cd19015ded1",
+          ? "62ca4c1e14ada419eabff3207ce9b12cd8cac11e2cfef1787149b8cd0eb0d888"
+          : "116e6df6c8d2e7636f3a4a15e71619a373cc44c742244e0b72fb5e59422295e6",
       );
       // Pin the complete measured-tag drawing independently of ownership metadata.
       expect(
@@ -128,8 +128,8 @@ it.each(flows)(
           .digest("hex"),
       ).toBe(
         flow === "left-to-right"
-          ? "035d28f4c57626826d56be16f1089aeec3caa5ad8b73d2c507dbfdca11af8244"
-          : "6d463a5fdaaf08ae459b60df84664066f10e0df1214589dc3d1703fafed444a7",
+          ? "c82e42d456faeb88bb8370962ba63807f70d5a10b311161cf366f459f1d16078"
+          : "cbb406b171d427f83333dc9388657c31ad97e89d3ed00f25e30910ad534d7d94",
       );
     }
     expect(JSON.stringify(ir)).toBe(before);

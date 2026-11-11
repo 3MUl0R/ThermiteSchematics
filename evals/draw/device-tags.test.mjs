@@ -424,3 +424,31 @@ it.each(["TB1", "TB.1", "TB 1"])(
     ).toBe(true);
   },
 );
+
+it("checks trimmed wrap rows against complete independent source spans, including literal whitespace", () => {
+  const ir = data([device("a", "K1", { description: "Feed contactor" })]);
+  ir.deviceTypes[0].catalog.orderNumber = "P-  1";
+  const rows = [
+    row("designation", "K1", { tagRowStart: 0, tagRowEnd: 2 }),
+    row("description", "Feed", { tagRowStart: 0, tagRowEnd: 5 }),
+    row("description", "contactor", {
+      tagRowStart: 5,
+      tagRowEnd: 14,
+      order: 2,
+    }),
+    row("part", "P-", { tagRowStart: 0, tagRowEnd: 4 }),
+    row("part", "1", { tagRowStart: 4, tagRowEnd: 5, order: 2 }),
+  ];
+  expect(check(rows, ir)).toEqual([]);
+  for (const mutation of [
+    (r) =>
+      r.tagField === "part" && r.text === "P-"
+        ? { ...r, renderedString: "P" }
+        : r,
+    (r) => (r.text === "1" ? { ...r, tagRowStart: 3 } : r),
+    (r) => (r.text === "1" ? { ...r, tagRowEnd: 6 } : r),
+  ])
+    expect(
+      check(rows.map(mutation), ir).flatMap((f) => f.missing ?? []),
+    ).toContain("authored part P-  1");
+});
