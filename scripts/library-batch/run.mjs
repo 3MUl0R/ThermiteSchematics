@@ -479,7 +479,7 @@ async function runJob(job, record, options, save, control) {
       result,
       backendOutcome,
       diagnostics: [
-        ...group.notes,
+        ...new Set(group.notes),
         ...(outcome.error ? [outcome.error] : []),
         ...(rateLimit ? [rateLimit] : []),
         ...(!rateLimit && backendOutcome?.diagnostic
