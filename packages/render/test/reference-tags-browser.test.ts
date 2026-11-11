@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { buildCableSchedule } from "@thermite/query";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { initializeAlphaProject } from "../../cli/src/alpha-init.js";
 import { renderSchematicPacket } from "../src/sheets.js";
+import { cableEndpointCards } from "../src/packet/cable-annotations.js";
 import {
   cableCorePages,
   cableReferenceHeight,
@@ -21,6 +26,90 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
 });
+async function reversedCabinets() {
+  const parent = await realpath(
+      await mkdtemp(join(tmpdir(), "thermite-c4-cable-")),
+    ),
+    root = join(parent, "project");
+  try {
+    await initializeAlphaProject(root, {
+      template: "cabinets",
+    });
+    const file = join(root, "devices/equipment.json"),
+      source = JSON.parse(await readFile(file, "utf8")),
+      cable = source.objects.find((o: any) => o.kind === "cable");
+    cable.conductors[2] = {
+      id: "2+",
+      usage: "in-use",
+      endpoints: [
+        { device: "TB2", terminal: "3" },
+        { device: "TB1", terminal: "3" },
+      ],
+    };
+    await writeFile(file, JSON.stringify(source));
+    const compiled = await compileProject(root);
+    if (!compiled.ok) throw compiled;
+    return {
+      ...compiled,
+      dispose: () => rm(parent, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await rm(parent, { recursive: true, force: true });
+    throw error;
+  }
+}
+it.each(flows)(
+  "lists each cable UID in the first referencing end block when core 3 is reversed in %s",
+  async (flow) => {
+    const c = await reversedCabinets();
+    try {
+      const before = JSON.stringify(c.ir),
+        result = await renderSchematicPacket(
+          c.ir,
+          {
+            format: "schematic-packet-request/0.1",
+            views: [
+              {
+                format: "schematic-view-request/0.2",
+                root: { by: "designation", value: "CBL1" },
+                intent: { kind: "conductors" },
+                flow,
+              },
+            ],
+          },
+          c.presentation,
+        );
+      if (!result.ok) throw result;
+      const sheet = result.value.sheets[0]!,
+        g = await openSheet(page, sheet.svg);
+      expect(deviceTags(g, c.ir, sheet.references, true)).toEqual([]);
+      expect(g.deviceLegendEntries).toHaveLength(2);
+      expect(g.deviceLegendEntries.every((e) => e.kind === "reference")).toBe(
+        true,
+      );
+      expect(g.deviceReferenceEntries).toHaveLength(2);
+      expect(
+        new Set(g.deviceReferenceEntries.map((e) => e.deviceUid)).size,
+      ).toBe(2);
+      expect(g.deviceReferenceEntries.map((e) => e.key)).toEqual([
+        "TB1.1",
+        "TB2.3",
+      ]);
+      expect(await page.locator("[data-device-legend]").count()).toBe(1);
+      expect(g.texts.some((t) => t.text === "TB2.1")).toBe(true);
+      expect(g.devices).toEqual([]);
+      expect(g.terminals).toEqual([]);
+      expect(
+        await page
+          .locator("[data-device-legend-entry][data-device-uid]")
+          .count(),
+      ).toBe(0);
+      expect(JSON.stringify(c.ir)).toBe(before);
+    } finally {
+      await c.dispose();
+    }
+  },
+);
 it.each(flows)(
   "keys rail-only devices once in the existing frame without adding appearances in %s",
   async (flow) => {
@@ -211,6 +300,18 @@ it("reserves prospective endpoint sets before accepting rows and never emits a b
       expect(refused.error.message).toContain(
         "row plus referenced-device blocks cannot fit",
       );
+    const endpointCards = cableEndpointCards(c.ir, schedule, view, 55);
+    if (!endpointCards.ok) throw endpointCards;
+    const withContext = cableCorePages(
+      c.ir,
+      schedule,
+      endpointCards.value,
+      view,
+      { ...geometry, height: 50 },
+    );
+    if (withContext.ok) throw Error("Expected row-fit refusal");
+    expect(withContext.error.message).toContain("Endpoint cards: PS1.+:");
+    expect(withContext.error.message).toContain("W1");
   } finally {
     await c.dispose();
   }

@@ -53,7 +53,9 @@ Rail-only devices appear under **Referenced devices** in that same frame, once
 per UID without a local body. Their keys are exact, owned, painted terminal
 identities such as `Off-view at PS1.-`; a reference never substitutes for a body.
 Cable core pages keep exact endpoint captions such as `TB1.2` and `JB1.X1.1`,
-with complete **Referenced devices** blocks under the end-A/end-B headings.
+with complete **Referenced devices** blocks under the end-A/end-B headings. Each
+UID appears once per sheet, in the first referencing end block (A, then B); the
+other end resolves to that entry, and empty end blocks are omitted.
 Each page repeats its local blocks. Pagination reserves the prospective endpoint
 set before accepting a core row, so the row and its blocks fit together. These
 annotations add no device symbols, inferred connector faces, coverage or terminals.

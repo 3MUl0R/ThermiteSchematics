@@ -425,6 +425,68 @@ it.each(["TB1", "TB.1", "TB 1"])(
   },
 );
 
+it.each(["rooted legend", "cable end blocks"])(
+  "counts two qualified keys for one UID as duplicate entries across %s",
+  (context) => {
+    const ir = data([device("a", "TB 1")]);
+    ir.deviceTypes[0].terminals.push({ key: "X1.2" });
+    const endpoint = (terminalKey) =>
+      row("designation", `Off-view at TB 1.${terminalKey}`, {
+        tagKind: "reference",
+        tagBlock: terminalKey,
+        tagTerminal: { deviceUid: "a", terminalKey },
+      });
+    const entry = (terminalKey) =>
+      complete({
+        tagKind: "reference",
+        tagBlock: `entry-${terminalKey}`,
+        tagContainer: `${context}-${terminalKey}`,
+        tagKey: `TB 1.${terminalKey}`,
+        tagReferenceEntry: true,
+      }).map((r) =>
+        r.tagField === "designation"
+          ? { ...r, text: "TB 1", renderedString: "TB 1" }
+          : r,
+      );
+    const declaration = (terminalKey) => ({
+      deviceUid: "a",
+      kind: "reference",
+      key: `TB 1.${terminalKey}`,
+      container: `${context}-${terminalKey}`,
+    });
+    const keys = [endpoint("X1.1"), endpoint("X1.2")];
+    const declarations = [declaration("X1.1")];
+    const extra = (entries) => ({
+      viewFamily: "control",
+      viewIntent: context === "cable end blocks" ? "conductors" : undefined,
+      deviceLegendEntries: entries,
+      deviceReferenceEntries: entries,
+    });
+    expect(
+      check(
+        [...entry("X1.1"), ...keys],
+        ir,
+        [{ deviceUid: "a" }],
+        extra(declarations),
+      ),
+    ).toEqual([]);
+    expect(
+      check(
+        [...entry("X1.1"), ...entry("X1.2"), ...keys],
+        ir,
+        [{ deviceUid: "a" }],
+        extra([...declarations, declaration("X1.2")]),
+      ),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "duplicate-device-reference-entry",
+        designation: "TB 1",
+        entries: 2,
+      }),
+    );
+  },
+);
+
 it("checks trimmed wrap rows against complete independent source spans, including literal whitespace", () => {
   const ir = data([device("a", "K1", { description: "Feed contactor" })]);
   ir.deviceTypes[0].catalog.orderNumber = "P-  1";

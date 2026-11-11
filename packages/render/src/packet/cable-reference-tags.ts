@@ -12,6 +12,7 @@ import { required } from "../presentation/util.js";
 import { cableRowPlan } from "./cable-row-plan.js";
 import {
   cableRowHeight,
+  cableCardContext,
   type CableEndpointCards,
 } from "./cable-annotations.js";
 import { failure } from "./errors.js";
@@ -24,14 +25,12 @@ function referenceBlocks(
   view: NormalizedSchematicView,
 ): RenderOutcome<Blocks> {
   const blocks: Blocks = [],
-    keys = new Set<string>();
+    seen = new Set<string>();
   for (const side of [0, 1]) {
-    const tags: LegendTag[] = [],
-      seen = new Set<string>();
+    const tags: LegendTag[] = [];
     for (const core of cores) {
       const end = core.endpoints[side];
-      if (!end || seen.has(end.terminal.deviceUid) || keys.has(end.display))
-        continue;
+      if (!end || seen.has(end.terminal.deviceUid)) continue;
       const device = required(
           ir.devices.find((d) => d.uid === end.terminal.deviceUid),
           "Missing endpoint device",
@@ -48,7 +47,6 @@ function referenceBlocks(
       );
       if (!valid.ok) return valid;
       seen.add(device.uid);
-      keys.add(end.display);
       tags.push({
         ...plan.value,
         referenceKey: end.display,
@@ -120,7 +118,7 @@ export function cableCorePages(
     if (!fits(blocks.value))
       return failure(
         "unprintable-layout",
-        `Cable ${schedule.designation}.${core.id} row plus referenced-device blocks cannot fit in the ${b.height.toFixed(2)} mm drawing area. Use a larger page or change flow.`,
+        `Cable ${schedule.designation}.${core.id} row plus referenced-device blocks cannot fit in the ${b.height.toFixed(2)} mm drawing area. ${cableCardContext(ends) ? `Endpoint cards: ${cableCardContext(ends)}. ` : ""}Use a larger page or change flow.`,
       );
     page.blocks = blocks.value;
     page.rows.push({ core, plan: p, cards: ends, height });

@@ -21,7 +21,7 @@ export function legendSvg(layout: LegendLayout, scale = 1) {
           e.tag.fields.find((f) => f.field === "designation"),
           "Missing legend geometry",
         ).value;
-    svg += `<g ${kind === "reference" ? 'data-device-reference-entry="true"' : 'data-device-legend-entry="true"'} ${tagAttributes(uid, undefined, kind, block)} data-tag-key="${attr(key)}">`;
+    svg += `<g data-device-legend-entry="true"${kind === "reference" ? ' data-device-reference-entry="true"' : ""} ${tagAttributes(uid, undefined, kind, block)} data-tag-key="${attr(key)}">`;
     for (const row of e.tag.rows)
       svg += `<text ${tagRowAttributes(row)} ${tagAttributes(uid, row.field, kind, block)} data-tag-key="${attr(key)}" x="${n(box.x + e.x + row.x)}" y="${n(box.y + e.y + row.baseline)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${row.emMm}" font-weight="${row.bold ? "bold" : "normal"}" fill="#101828" xml:space="preserve" style="white-space:pre">${xml(row.text)}</text>`;
     svg += "</g>";

@@ -107,7 +107,11 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
               .filter((d) => d.tagKind !== "reference")
               .map((d) => d.deviceUid),
           ),
-          entries = [...doc.querySelectorAll("[data-device-legend-entry]")];
+          entries = [
+            ...doc.querySelectorAll(
+              '[data-device-legend-entry][data-tag-kind="legend"]',
+            ),
+          ];
         expect(
           deviceTags(measured, ir, sheet.references, true, sheet.view),
         ).toEqual([]);

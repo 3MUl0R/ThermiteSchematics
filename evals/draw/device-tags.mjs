@@ -128,35 +128,73 @@ function missingFields(block, d, type, ir) {
   return missing;
 }
 
-function referenceEntryAudit(g, blocks, uid, d, ir, bodyHere, issue) {
-  const entries = (g.deviceReferenceEntries ?? []).filter(
-      (e) => e.deviceUid === uid,
-    ),
-    references = blocks.filter(
+function referenceEntry(block) {
+  return (
+    block.kind === "reference" &&
+    block.rows.some(
+      (r) =>
+        r.tagReferenceEntry ||
+        r.tagKey != null ||
+        ["description", "part", "rating", "partNumber"].includes(r.tagField),
+    )
+  );
+}
+// Both markers describe the same physical element during the transition. Never
+// collapse different elements or keys that happen to share an owner UID.
+function declaredEntries(g, uid) {
+  const entries = [];
+  for (const e of [
+    ...(g.deviceLegendEntries ?? []),
+    ...(g.deviceReferenceEntries ?? []),
+  ]) {
+    if (e.deviceUid !== uid) continue;
+    if (
+      e.container != null &&
+      entries.some(
+        (other) =>
+          other.container === e.container &&
+          other.key === e.key &&
+          other.kind === e.kind,
+      )
+    )
+      continue;
+    entries.push(e);
+  }
+  return entries;
+}
+function sheetEntryCount(entries, blocks) {
+  const observed = blocks.filter(
+    (b) => b.kind === "legend" || referenceEntry(b),
+  );
+  if (entries.some((e) => e.container == null))
+    return Math.max(entries.length, observed.length);
+  return (
+    entries.length +
+    observed.filter((b) => !entries.some((e) => e.container === b.container))
+      .length
+  );
+}
+
+function referenceEntryAudit(
+  entries,
+  blocks,
+  uid,
+  d,
+  ir,
+  bodyHere,
+  duplicate,
+  issue,
+) {
+  entries = entries.filter((e) => e.kind === "reference");
+  const references = blocks.filter(
       (b) => b.kind === "reference" && terminalIdentity(b, d, ir),
     ),
-    tags = blocks.filter(
-      (b) =>
-        b.kind === "reference" &&
-        b.rows.some(
-          (r) =>
-            r.tagReferenceEntry ||
-            r.tagKey != null ||
-            ["description", "part", "rating", "partNumber"].includes(
-              r.tagField,
-            ),
-        ),
-    );
+    tags = blocks.filter(referenceEntry);
   const keyFor = (b) => b.rows[0]?.tagKey,
     qualified = (b) => {
       const terminal = b.rows.find((r) => r.tagTerminal)?.tagTerminal;
       return terminal ? `${d.designation}.${terminal.terminalKey}` : undefined;
     },
-    counts = (key) =>
-      Math.max(
-        tags.filter((b) => keyFor(b) === key).length,
-        entries.filter((e) => e.key === key).length,
-      ),
     valid = new Set(),
     findings = [];
   const keys = new Set([...entries.map((e) => e.key), ...tags.map(keyFor)]);
@@ -164,16 +202,7 @@ function referenceEntryAudit(g, blocks, uid, d, ir, bodyHere, issue) {
     const local = references.some(
         (b) => qualified(b) === key && !b.rows.some((r) => r.tagReferenceEntry),
       ),
-      declared = entries.filter((e) => e.key === key),
-      duplicate = counts(key) > 1;
-    if (duplicate)
-      findings.push(
-        issue(
-          "duplicate-device-reference-entry",
-          { deviceUid: uid, designation: d.designation },
-          { key, entries: counts(key) },
-        ),
-      );
+      declared = entries.filter((e) => e.key === key);
     for (const tag of tags.filter((b) => keyFor(b) === key)) {
       const containerEntries = entries.filter(
           (e) => e.container === tag.container,
@@ -249,9 +278,10 @@ export function deviceTagFindings(g, ir, references, issue, view) {
     const targets = referencesHere.filter((r) => r.tagRef).map((r) => r.tagRef);
     const bodyHere = appearances.some((a) => a.deviceUid === uid);
     const legends = blocks.filter((b) => b.kind === "legend");
-    const entries = (g.deviceLegendEntries ?? []).filter(
-      (e) => e.deviceUid === uid,
-    );
+    const declarations = declaredEntries(g, uid),
+      entryCount = sheetEntryCount(declarations, blocks),
+      duplicate = entryCount > 1,
+      entries = declarations.filter((e) => e.kind === "legend");
     const invalidEntry = entries.some(
       (e) => e.key !== d.designation || e.kind !== "legend",
     );
@@ -289,21 +319,25 @@ export function deviceTagFindings(g, ir, references, issue, view) {
           ),
         );
     }
-    if (Math.max(legends.length, entries.length) > 1)
+    if (duplicate)
       out.push(
         issue(
-          "duplicate-device-legend-entry",
+          blocks.some(referenceEntry) ||
+            declarations.some((e) => e.kind === "reference")
+            ? "duplicate-device-reference-entry"
+            : "duplicate-device-legend-entry",
           { deviceUid: uid, designation: d.designation },
-          { entries: Math.max(legends.length, entries.length) },
+          { entries: entryCount },
         ),
       );
     const referenceAudit = referenceEntryAudit(
-      g,
+      declarations,
       blocks,
       uid,
       d,
       ir,
       bodyHere,
+      duplicate,
       issue,
     );
     out.push(...referenceAudit.findings);
@@ -314,6 +348,7 @@ export function deviceTagFindings(g, ir, references, issue, view) {
             rootedLegend &&
             bodyKey &&
             !invalidEntry &&
+            !duplicate &&
             entries.length <= 1 &&
             legends.length === 1 &&
             b.rows.every((t) => t.tagKey === d.designation))

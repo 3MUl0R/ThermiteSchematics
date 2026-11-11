@@ -485,6 +485,56 @@ function qualifiedKey(content = "Off-view at TB 1.X1.1", attrs = "") {
 }
 const referenceEntry = () =>
   `<g data-device-reference-entry="true" data-tag-key="TB 1.X1.1" data-tag-kind="reference" data-tag-owner-uid="a" data-tag-block="entry">${full().replaceAll('data-tag-kind="body"', 'data-tag-kind="reference"').replaceAll('data-tag-block="a"', 'data-tag-block="entry"')}</g>`;
+it.each(["rooted legend frames", "cable end blocks"])(
+  "rejects different reference keys for one UID across %s",
+  async (kind) => {
+    const input = structuredClone(ir);
+    input.deviceTypes[0].terminals.push({ key: "X1.2" });
+    const entry = referenceEntry().replace(
+      'data-device-reference-entry="true"',
+      'data-device-legend-entry="true" data-device-reference-entry="true"',
+    );
+    const other = entry
+      .replaceAll("X1.1", "X1.2")
+      .replaceAll('data-tag-block="entry"', 'data-tag-block="entry-2"');
+    const keys =
+      qualifiedKey() +
+      qualifiedKey().replaceAll("X1.1", "X1.2").replace('y="70"', 'y="85"');
+    const block = (content, x) =>
+      `<g data-device-legend="${kind}" transform="translate(${x} 0)">${content}</g>`;
+    const good = await openSheet(page, svg(block(entry, 0) + keys));
+    expect(deviceTags(good, input, refs, true)).toEqual([]);
+    expect(good.deviceLegendEntries).toHaveLength(1);
+    expect(good.deviceReferenceEntries).toHaveLength(1);
+    const sharedOnly = await openSheet(
+      page,
+      svg(
+        block(entry.replace('data-device-reference-entry="true"', ""), 0) +
+          keys,
+      ),
+    );
+    expect(sharedOnly.deviceReferenceEntries).toEqual([]);
+    expect(deviceTags(sharedOnly, input, refs, true)).toEqual([]);
+    for (const second of [
+      other,
+      other.replace("<g ", '<g style="display:none" '),
+    ]) {
+      const bad = await openSheet(
+        page,
+        svg(block(entry, 0) + block(second, 80) + keys),
+      );
+      expect(deviceTags(bad, input, refs, true)).toContainEqual(
+        expect.objectContaining({
+          kind: "duplicate-device-reference-entry",
+          designation: "TB 1",
+          entries: 2,
+        }),
+      );
+      expect(bad.devices).toEqual([]);
+      expect(bad.terminals).toEqual([]);
+    }
+  },
+);
 it("requires exact same-sheet owned qualified reference keys and rejects hidden duplicates without adding electrical appearances", async () => {
   const g = await openSheet(page, svg(referenceEntry() + qualifiedKey()));
   expect(deviceTags(g, ir, refs, true)).toEqual([]);

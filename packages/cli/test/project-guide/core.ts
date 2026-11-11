@@ -304,7 +304,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Rooted legends key designation to description/part per UID/sheet; bands repaginate. Rail/cable tags key owned terminals; repeat per page. Em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear. R006 gives device/field sizes. Never omit/shrink text.",
+        "Rooted legends key designation to description/part per UID/sheet; bands repaginate. Rail/cable tags key owned terminals once per UID/page. Em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear. R006 gives device/field sizes. Never omit/shrink text.",
       async check() {
         const { compileProject } = await import("@thermite/compiler");
         const { renderSchematicPacket } = await import("@thermite/render");

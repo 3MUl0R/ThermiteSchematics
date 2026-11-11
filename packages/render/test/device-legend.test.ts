@@ -99,7 +99,11 @@ it("emits one complete owned legend per local UID with the exact body key in bot
     if (!r.ok) throw r;
     for (const s of r.value.sheets) {
       const doc = parseHTML(s.svg).document,
-        entries = [...doc.querySelectorAll("[data-device-legend-entry]")],
+        entries = [
+          ...doc.querySelectorAll(
+            '[data-device-legend-entry][data-tag-kind="legend"]',
+          ),
+        ],
         uids = entries.map((e) => e.getAttribute("data-tag-owner-uid"));
       expect(new Set(uids).size).toBe(uids.length);
       for (const e of entries) {

@@ -173,7 +173,7 @@ thermite packet --input packet.json -o drawings/packet.pdf
 
 Print at 100% on matching paper; disable browser headers/footers.
 Rooted legends key designation to description/part per UID/sheet; bands repaginate.
-Rail/cable tags key owned terminals; repeat per page.
+Rail/cable tags key owned terminals once per UID/page.
 Em ≥2.7/2.5 mm; columns ≤50 mm, 3 mm clear. R006 gives device/field sizes.
 Never omit/shrink text.
 

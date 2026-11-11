@@ -185,7 +185,9 @@ export function measureSheet(options = {}) {
       tagRowEnd: e.hasAttribute("data-tag-row-end")
         ? Number(e.getAttribute("data-tag-row-end"))
         : undefined,
-      tagReferenceEntry: !!e.closest("[data-device-reference-entry]"),
+      tagReferenceEntry: !!e.closest(
+        '[data-device-reference-entry],[data-device-legend-entry][data-tag-kind="reference"]',
+      ),
       tagBlock: attr(e, "data-tag-block"),
       tagContainer:
         ids.get(
@@ -215,9 +217,13 @@ export function measureSheet(options = {}) {
               !e.closest("[data-device-uid],.off-view-annotation")
             : kind === "reference" &&
               (!parent || parent === owner) &&
-              (!e.closest("[data-device-reference-entry]") ||
+              (!e.closest(
+                '[data-device-reference-entry],[data-device-legend-entry][data-tag-kind="reference"]',
+              ) ||
                 (attr(
-                  e.closest("[data-device-reference-entry]"),
+                  e.closest(
+                    '[data-device-reference-entry],[data-device-legend-entry][data-tag-kind="reference"]',
+                  ),
                   "data-tag-owner-uid",
                 ) === owner &&
                   !parent)),
@@ -1267,7 +1273,9 @@ export function measureSheet(options = {}) {
     devices,
     deviceReferences,
     deviceLegendEntries: Array.from(
-      root.querySelectorAll("[data-device-legend-entry]"),
+      root.querySelectorAll(
+        "[data-device-legend-entry],[data-device-reference-entry]",
+      ),
     ).map((e) => ({
       deviceUid: e.getAttribute("data-tag-owner-uid"),
       key: e.getAttribute("data-tag-key"),
