@@ -1,4 +1,5 @@
 import { offViewCardSvg } from "../off-view/svg.js";
+import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
 import { rootedNoticeLines, rootedNoticeSvg } from "../off-view/notice.js";
 import { SvgWriter, type SvgAttributes } from "./writer.js";
 import { orthogonalPathData } from "./edge-path.js";
@@ -38,7 +39,6 @@ import {
 } from "../symbols/printable-policy.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type {
-  LayoutEdge,
   LayoutLabel,
   LayoutNode,
   LayoutPoint,
@@ -874,9 +874,14 @@ function emitLabels(
   graph: Readonly<PresentationGraph>,
   labels: readonly LayoutLabel[],
   registry: RenderSourceRegistry,
-  edges: readonly LayoutEdge[],
+  layout: Readonly<NormalizedSchematicLayout>,
 ): void {
   const semantic = presentationLabelIndex(graph);
+  const hiddenTerminalCaptions = duplicateTerminalCaptionIds(
+    graph,
+    labels,
+    indexById(layout.nodes, "layout node"),
+  );
   for (const label of labels) {
     const presentation = required(
       semantic.get(label.id),
@@ -889,15 +894,12 @@ function emitLabels(
       );
       continue;
     }
-    const printed = presentation.printableText ?? label.text;
+    const printed = hiddenTerminalCaptions.has(label.id)
+      ? ""
+      : (presentation.printableText ?? label.text);
     // Empty captions retain clip identity and the PDF label contract.
     if (!printed) {
-      writer.element(
-        1,
-        "text",
-        { "clip-path": `url(#${svgSemanticId("clip", [label.id])})` },
-        "",
-      );
+      emitEmptyCaption(writer, label);
       continue;
     }
     const position = printableLabelGeometry(
@@ -905,7 +907,7 @@ function emitLabels(
       printed,
       presentation.textLength,
       label.ownerKind === "edge"
-        ? [edges.find((e) => e.id === label.ownerId)?.points ?? []]
+        ? [layout.edges.find((e) => e.id === label.ownerId)?.points ?? []]
         : undefined,
     );
     writer.element(1, "rect", {
@@ -933,6 +935,15 @@ function emitLabels(
       printed,
     );
   }
+}
+
+function emitEmptyCaption(writer: SvgWriter, label: LayoutLabel): void {
+  writer.element(
+    1,
+    "text",
+    { "clip-path": `url(#${svgSemanticId("clip", [label.id])})` },
+    "",
+  );
 }
 
 function assertMatchingInputs(
@@ -1179,7 +1190,7 @@ export function emitSchematicSvg(
     mmPerUnit,
     ir,
   );
-  emitLabels(writer, graph, labels, registry, layout.edges);
+  emitLabels(writer, graph, labels, registry, layout);
   if (!diagramOnly) writer.close(1, "g");
   if (!diagramOnly)
     emitTitleBlock(

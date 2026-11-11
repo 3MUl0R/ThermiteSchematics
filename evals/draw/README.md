@@ -20,6 +20,21 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+DQ-17 resolves terminal captions from owned terminal metadata and the exported
+semantic port/node/marker identities, never from proximity. Its duplicate rule
+is per physical terminal **per drawn appearance**; separate split/continuation
+appearances retain their captions. A semantic net label remains a net label even
+when its text exactly equals a terminal key or qualified identity (`L1` or
+`SRC1.L1`). Disjoint net/terminal labels are allowed; actual overlaps still fail
+DQ-17 and the general DQ-02 text-overlap check. Version 4.8 corrects that role
+distinction; older checker reports must be replayed before attributing renderer
+changes. Version 4.9 fails DQ-17 on missing/malformed terminal-caption owner keys,
+unresolved device/terminal/appearance identity, inconsistent marker declarations,
+and port/net or edge/terminal role mismatches. Matching nearby text never repairs
+ownership. A valid edge-owned net label keeps its semantic role even when its
+text equals a terminal identity. The legacy 15 mm duplicate fallback applies only without exported
+appearance identity, never to infer an owner.
+
 ## Prerequisites and costs
 
 Bun 1.4.2 and R2's existing development dependencies are used:

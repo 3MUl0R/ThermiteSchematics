@@ -323,23 +323,87 @@ export function strokesAndDots(g) {
   }
   return out;
 }
+function captionOwnershipFinding(t) {
+  const role = t.labelRole,
+    kind = t.labelOwnerKind,
+    key = t.labelOwnerKey;
+  if (
+    !t.role?.split(/\s+/).includes("label-terminal") &&
+    role !== "terminal" &&
+    role !== "net"
+  )
+    return;
+  let reason;
+  if (!kind || !Array.isArray(key) || !key.length)
+    reason = "missing-caption-owner-key";
+  else if (role === "net") {
+    if (kind !== "edge" || key[0] === "port") reason = "role-owner-mismatch";
+  } else if (role !== "terminal") reason = "invalid-caption-role";
+  else if (kind !== "port" || key[0] !== "port") reason = "role-owner-mismatch";
+  else if (
+    key.length !== 3 ||
+    typeof key[1] !== "string" ||
+    typeof key[2] !== "string" ||
+    !key[2]
+  )
+    reason = "invalid-caption-owner-key";
+  else if (
+    ![t.deviceUid, t.terminal, t.terminalAppearance].every(
+      (value) => typeof value === "string" && value.length > 0,
+    )
+  )
+    reason = "unresolved-terminal-caption-owner";
+  else {
+    try {
+      const node = JSON.parse(key[1]);
+      if (!Array.isArray(node) || node[1] !== t.deviceUid)
+        reason = "inconsistent-terminal-caption-owner";
+    } catch {
+      reason = "invalid-caption-owner-key";
+    }
+  }
+  if (reason)
+    return issue("invalid-terminal-caption-ownership", t, {
+      text: t.text,
+      reason,
+      labelRole: role,
+      labelOwnerKind: kind,
+      labelOwnerKey: key,
+    });
+}
+
 export function terminalText(g) {
+  const netLabel = (t) =>
+    t.labelRole ? t.labelRole === "net" : t.role?.includes("label-net");
+  const caption = (t) => !netLabel(t) && t.tagKind !== "reference";
   const ts = g.texts.filter(
-      (t) => t.role.includes("label-terminal") || t.terminal,
+      (t) =>
+        t.labelRole === "terminal" ||
+        t.role?.includes("label-terminal") ||
+        netLabel(t) ||
+        t.terminal,
     ),
     out = [];
   for (let i = 0; i < ts.length; i++) {
     const a = ts[i];
-    if (/^(\S+)\s+\1$/.test(a.text))
+    const ownership = captionOwnershipFinding(a);
+    if (ownership) out.push(ownership);
+    if (caption(a) && /^(\S+)\s+\1$/.test(a.text))
       out.push(issue("duplicate-terminal-caption", a, { text: a.text }));
     for (let j = i + 1; j < ts.length; j++) {
       const b = ts[j];
       if (
         overlap(a.bbox, b.bbox) ||
-        (a.deviceUid === b.deviceUid &&
+        (caption(a) &&
+          caption(b) &&
+          a.deviceUid &&
+          a.terminal &&
+          a.deviceUid === b.deviceUid &&
           a.terminal === b.terminal &&
           a.text === b.text &&
-          Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15)
+          (a.terminalAppearance && b.terminalAppearance
+            ? a.terminalAppearance === b.terminalAppearance
+            : Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))
       )
         out.push(
           issue("duplicate-or-overlapping-terminal-text", a, {

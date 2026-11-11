@@ -1,8 +1,8 @@
 # Thermite Schematics project guide
 
-This TypeScript + ELK alpha uses Bun 1.4.2. Here `thermite` means
-`bun <thermite>/thermite.mjs`; use one runtime/source folder's absolute path
-(ask if unknown), separate from this project. No `thermite` is on PATH.
+This TypeScript + ELK alpha uses Bun 1.4.2. `thermite` means
+`bun <thermite>/thermite.mjs`; use one absolute runtime/source path outside this
+project (ask if unknown). No `thermite` is on PATH.
 Never install/build in a downloaded runtime. Source checkouts need
 `bun install --frozen-lockfile && bun run build` before use and
 after engine changes.
@@ -16,15 +16,14 @@ thermite init ../cabinets --template cabinets
 supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
 two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Report runtime bugs, gaps or unclear docs at
-https://github.com/BlackettApplied/ThermiteSchematics/issues after checking existing
-issues. Include use case, expected/actual behavior, minimal reproduction,
+Check existing issues, then report runtime bugs, gaps or unclear docs at
+https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case,
+expected/actual behavior, minimal reproduction,
 diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute
-paths. Without GitHub access, draft the issue title/body. Never patch a downloaded
-runtime in place.
+paths. Without GitHub, draft the issue title/body. Never patch a downloaded runtime.
 
-Make engine fixes in the separate source checkout; follow its AGENTS.md and
-CONTRIBUTING.md for PRs. Keep private data and credentials out of issues/PRs.
+Fix the separate engine checkout; follow AGENTS.md and CONTRIBUTING.md for PRs.
+Keep private data and credentials out of issues/PRs.
 The human must accept any CLA; an agent must not sign it.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
@@ -127,12 +126,13 @@ thermite view CBL1 --conductors -o drawings/cbl1.html
 thermite view PS1 --power # R002: AC input PS1.L is unfed
 ```
 
-Each view needs a matching root, else R001: `--power` a load with mapped load
-terminals (a motor, or PS1's AC input), `--actuation` a mapped two-terminal coil,
-`--loads` a source with source/return terminals (PS1), `--conductors` a cable (else
-Q002), and `--to <device> [--include-power]` only a switch with one NO contact or
-a three-wire sensor (`core:limit-switch-2wire`, `core:prox-pnp-3wire`). Roots
-bind by `symbol` and function shape, not type ID, so a cloned core type keeps its
+Roots (else R001): `--power` a load with mapped load terminals (motor or PS1 AC
+input),
+`--actuation` a mapped two-terminal coil,
+`--loads` a source/return pair (PS1), `--conductors` a cable (else Q002),
+and `--to <device> [--include-power]` a one-NO switch or three-wire sensor
+(`core:limit-switch-2wire`, `core:prox-pnp-3wire`). Roots
+bind by `symbol` and function shape, not type ID, so cloned core types keep their
 views. `--flow left-to-right|top-to-bottom`,
 `--paper letter|tabloid|a4|a3`, `--orientation landscape|portrait`,
 `--margin <mm>` (5-25), `--layout compact` and `--index` override project page
@@ -143,6 +143,8 @@ Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
 Standard spacing may fold onto fewer sheets.
+One terminal caption per drawn appearance, nearest its body; keep all landings.
+Split/continuation appearances each keep theirs.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

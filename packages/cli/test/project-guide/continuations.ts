@@ -1,6 +1,7 @@
 import { prepareSchematicDrawing } from "../../../render/src/renderer.js";
 import { rootedGangSegments } from "../../../render/src/symbols/rooted-gangs.js";
 import { emitSchematicSvg } from "../../../render/src/svg/emitter.js";
+import { svgSemanticId } from "../../../render/src/svg/escape.js";
 import { SYMBOL_CATALOG } from "../../../render/src/symbols/catalog.js";
 import { continuationFixture } from "../../../render/test/continuation-fixtures.js";
 import { expect } from "vitest";
@@ -12,6 +13,75 @@ import { noteJson, type FactModule } from "./harness.js";
 
 const module: FactModule = {
   facts: [
+    {
+      claim:
+        "One terminal caption per drawn appearance, nearest its body; keep all landings. Split/continuation appearances each keep theirs.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c));
+        for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+          const d = await prepareSchematicDrawing(c.ir, {
+            format: "schematic-view-request/0.2",
+            root: { by: "designation", value: "LS1" },
+            intent: {
+              kind: "trace",
+              to: { by: "designation", value: "PLC1" },
+              includePower: true,
+            },
+            flow,
+          });
+          if (!d.ok) throw Error(JSON.stringify(d));
+          const { graph, layout, titleContext } = d.value;
+          const svg = emitSchematicSvg(
+            graph,
+            layout,
+            titleContext,
+            SYMBOL_CATALOG,
+            false,
+            undefined,
+            c.ir,
+          );
+          if (!svg.ok) throw Error(JSON.stringify(svg));
+          const document = parseSvg(svg.value);
+          let doubleLandings = 0;
+          for (const node of graph.nodes) {
+            if (node.kind === "junction") continue;
+            const groups = new Map<string, (typeof node.labels)[number][]>();
+            for (const label of node.labels.filter(
+              (l) => l.role === "terminal",
+            )) {
+              const terminal = node.ports.find(
+                (p) => p.id === label.ownerId,
+              )!.terminal;
+              const key = JSON.stringify(terminal);
+              groups.set(key, [...(groups.get(key) ?? []), label]);
+            }
+            for (const labels of groups.values()) {
+              const painted = labels.filter(
+                (l) =>
+                  document.querySelector(
+                    `text[clip-path="url(#${svgSemanticId("clip", [l.id])})"]`,
+                  )?.textContent,
+              );
+              expect(painted).toHaveLength(1);
+              if (labels.length > 1) doubleLandings++;
+            }
+            for (const p of node.ports)
+              expect(
+                document.getElementById(
+                  svgSemanticId("terminal", [
+                    p.terminal.deviceUid,
+                    p.terminal.terminalKey,
+                    p.symbolPortId,
+                  ]),
+                ),
+              ).not.toBeNull();
+          }
+          expect(doubleLandings).toBeGreaterThan(0);
+          noteJson({ flow, doubleLandings, captionsPerAppearance: 1 });
+        }
+      },
+    },
     {
       claim: "Power view switch gangs: ink/R006.",
       async check() {
