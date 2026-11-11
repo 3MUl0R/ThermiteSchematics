@@ -372,6 +372,15 @@ function archivePrevious(job, previousAttempt) {
   return destination;
 }
 
+function failureDiagnostics(error, group) {
+  return [
+    ...new Set([
+      ...[error, ...(group?.errors ?? [])].map((item) => item.message),
+      ...(group?.notes ?? []),
+    ]),
+  ];
+}
+
 async function runJob(job, record, options, save, control) {
   const archive = archivePrevious(job, record.attempts.length);
   if (archive && record.attempts.length)
@@ -420,7 +429,7 @@ async function runJob(job, record, options, save, control) {
       detached: process.platform !== "win32",
       stdio: fds,
     });
-    group = createChildProcessGroup(child.pid, { kill: control.kill });
+    group = createChildProcessGroup(child.pid, control.groupDependencies);
     const completion = new Promise((resolveCompletion) => {
       child.once("error", (error) =>
         resolveCompletion({ code: null, signal: null, error: error.message }),
@@ -470,6 +479,7 @@ async function runJob(job, record, options, save, control) {
       result,
       backendOutcome,
       diagnostics: [
+        ...new Set(group.notes),
         ...(outcome.error ? [outcome.error] : []),
         ...(rateLimit ? [rateLimit] : []),
         ...(!rateLimit && backendOutcome?.diagnostic
@@ -482,13 +492,9 @@ async function runJob(job, record, options, save, control) {
   } catch (error) {
     await group?.terminate();
     update({
-      state: stopped ? "interrupted" : "failed",
+      state: stopped ? "interrupted" : timedOut ? "timed-out" : "failed",
       endedAt: now(),
-      diagnostics: [
-        ...new Set(
-          [error, ...(group?.errors ?? [])].map((item) => item.message),
-        ),
-      ],
+      diagnostics: failureDiagnostics(error, group),
     });
     return { state: record.state, rateLimit: null };
   } finally {
@@ -499,7 +505,7 @@ async function runJob(job, record, options, save, control) {
   }
 }
 
-export async function runBatch(options, { kill = process.kill } = {}) {
+export async function runBatch(options, dependencies = {}) {
   const batch = realpathSync(options.batch);
   const { queue, integrity } = readQueue(batch);
   let limits = options.limitsFile
@@ -657,7 +663,7 @@ export async function runBatch(options, { kill = process.kill } = {}) {
           }
           pending.splice(index, 1);
           counts[job.backend]++;
-          const control = { kill };
+          const control = { groupDependencies: dependencies };
           active.set(job.id, control);
           control.promise = runJob(
             job,

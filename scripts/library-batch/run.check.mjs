@@ -296,7 +296,131 @@ test("escalation timer reports unexpected signal errors through its awaited fail
   }
 });
 
-test("escalation errors become failed-job diagnostics without escaping the runner", async (t) => {
+test("owned-group fallbacks record non-fatal notes when the leader is gone or the probe finishes", async () => {
+  const denied = Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+  const missing = Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+  for (const leaderError of [null, missing]) {
+    const group = createChildProcessGroup(42, {
+      platform: "darwin",
+      kill(pid) {
+        if (pid < 0) throw denied;
+        if (leaderError) throw leaderError;
+      },
+    });
+    try {
+      await group.drain();
+      assert.deepEqual(group.errors, []);
+      assert.equal(group.notes.length, 1);
+      assert.match(group.notes[0], /42.*probe.*EPERM.*leader.*finished/);
+      if (leaderError) assert.match(group.notes[0], /ESRCH/);
+      else assert.match(group.notes[0], /succeeded/);
+    } finally {
+      group.clear();
+    }
+  }
+  for (const signal of ["SIGTERM", "SIGKILL"]) {
+    const notes = [];
+    assert.doesNotThrow(() =>
+      signalGroup(42, signal, {
+        owned: true,
+        platform: "darwin",
+        notes,
+        kill(pid) {
+          throw pid < 0 ? denied : missing;
+        },
+      }),
+    );
+    assert.equal(notes.length, 1);
+    assert.match(notes[0], /42.*EPERM.*leader.*ESRCH/);
+    assert.ok(notes[0].includes(signal));
+  }
+});
+
+test("finished owned-group probe notes reach job and attempt diagnostics without changing outcomes", async (t) => {
+  for (const leaderGone of [false, true]) {
+    const f = fixture(t, [{}, { mode: "blocked" }, { mode: "missing" }]);
+    const calls = [];
+    const code = await runBatch(parseArgs(["--batch", f.batch]), {
+      platform: "darwin",
+      kill(pid, signal) {
+        calls.push([pid, signal]);
+        assert.equal(signal, 0);
+        if (pid < 0)
+          throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+        if (leaderGone)
+          throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      },
+    });
+    assert.equal(code, 1);
+    const records = f.status().jobs;
+    assert.deepEqual(
+      records.map((record) => record.state),
+      ["completed", "needs-evidence", "failed"],
+    );
+    assert.equal(calls.length, 6);
+    for (const record of records) {
+      assert.match(
+        record.diagnostics.join(" "),
+        /probe.*EPERM.*leader.*finished/,
+      );
+      assert.deepEqual(record.attempts[0].diagnostics, record.diagnostics);
+      assert.equal(record.attempts[0].state, record.state);
+    }
+    assert.equal(records[0].result.usable, true);
+    assert.equal(records[1].result.usable, true);
+    assert.match(records[2].diagnostics.join(" "), /result.json/);
+    assert.equal(existsSync(join(f.batch, ".runner.lock.json")), false);
+  }
+});
+
+test("signalling errors preserve every combination of timeout and interruption flags", async (t) => {
+  for (const [timedOut, stopped, state] of [
+    [false, false, "failed"],
+    [false, true, "interrupted"],
+    [true, true, "interrupted"],
+    [true, false, "timed-out"],
+  ]) {
+    const f = fixture(t, [{ waitForRelease: timedOut }]);
+    const unexpected = Object.assign(new Error("synthetic stop EIO"), {
+      code: "EIO",
+    });
+    let interrupted = false;
+    const code = await runBatch(
+      parseArgs([
+        "--batch",
+        f.batch,
+        "--timeout-minutes",
+        timedOut ? "0.001" : "25",
+      ]),
+      {
+        kill(pid, signal) {
+          if (signal === 0) return;
+          if (stopped && !interrupted) {
+            interrupted = true;
+            process.emit("SIGINT");
+          }
+          try {
+            process.kill(pid, signal);
+          } catch (error) {
+            if (error.code !== "ESRCH") throw error;
+          }
+          throw unexpected;
+        },
+      },
+    );
+    assert.equal(code, stopped ? 130 : 1);
+    const record = f.status().jobs[0];
+    assert.equal(record.state, state, JSON.stringify({ timedOut, stopped }));
+    assert.equal(record.attempts[0].state, state);
+    assert.deepEqual(record.diagnostics, [unexpected.message]);
+    assert.deepEqual(record.attempts[0].diagnostics, record.diagnostics);
+    assert.equal(interrupted, stopped);
+    await until(() => !processAlive(record.pid));
+    assert.equal(existsSync(join(f.batch, ".runner.lock.json")), false);
+  }
+});
+
+test("owned-group signal fallback notes survive the timed-out catch path", async (t) => {
   const f = fixture(t, [{ waitForRelease: true }]);
   const unexpected = Object.assign(new Error("synthetic escalation EIO"), {
     code: "EIO",
@@ -304,14 +428,51 @@ test("escalation errors become failed-job diagnostics without escaping the runne
   const code = await runBatch(
     parseArgs(["--batch", f.batch, "--timeout-minutes", "0.001"]),
     {
+      platform: "darwin",
       kill(pid, signal) {
-        // Hold the worker through SIGTERM so the real escalation timer fires.
-        if (signal === "SIGTERM") return;
-        process.kill(pid, signal);
+        if (signal === "SIGTERM")
+          throw Object.assign(
+            new Error(`kill ${pid < 0 ? "EPERM" : "ESRCH"}`),
+            {
+              code: pid < 0 ? "EPERM" : "ESRCH",
+            },
+          );
+        try {
+          process.kill(
+            process.platform === "win32" ? Math.abs(pid) : pid,
+            signal,
+          );
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+        }
         if (signal === "SIGKILL") throw unexpected;
       },
     },
   );
+  assert.equal(code, 1);
+  const record = f.status().jobs[0];
+  assert.ok(record.diagnostics.includes(unexpected.message));
+  assert.match(record.diagnostics.join(" "), /SIGTERM.*EPERM.*leader.*ESRCH/);
+  assert.equal(record.state, "timed-out");
+  assert.equal(record.attempts[0].state, "timed-out");
+  assert.deepEqual(record.attempts[0].diagnostics, record.diagnostics);
+  await until(() => !processAlive(record.pid));
+  assert.equal(existsSync(join(f.batch, ".runner.lock.json")), false);
+});
+
+test("cleanup escalation errors become failed-job diagnostics without escaping the runner", async (t) => {
+  const f = fixture(t, [{}]);
+  const unexpected = Object.assign(new Error("synthetic escalation EIO"), {
+    code: "EIO",
+  });
+  const code = await runBatch(parseArgs(["--batch", f.batch]), {
+    kill(pid, signal) {
+      // Force final cleanup after normal completion, without either stop flag.
+      if (signal === 0) return;
+      if (signal === "SIGTERM") return;
+      if (signal === "SIGKILL") throw unexpected;
+    },
+  });
   assert.equal(code, 1);
   assert.equal(f.status().jobs[0].state, "failed");
   assert.deepEqual(f.status().jobs[0].diagnostics, [unexpected.message]);

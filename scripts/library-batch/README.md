@@ -141,7 +141,12 @@ records interrupted work. A worker has a default 25-minute execution timeout.
 On POSIX, an `EPERM` group signal falls back to the leader PID only for groups
 spawned by this runner; leader permission failures remain job diagnostics.
 This lets macOS zombie-only groups finish cleanup without crashing a signal
-timer. Resume checks remain conservative for process groups from an earlier run.
+timer. If a fallback finds the leader gone, or a group probe treats the group as
+finished, the job and attempt diagnostics retain a note without changing the
+outcome. Such a group may still contain descendants the runner cannot signal.
+Signalling errors during timeout cleanup retain `timed-out`; an interruption
+retains `interrupted`, including when both occur. Resume checks remain
+conservative for process groups from an earlier run.
 
 ## Verify, review and integrate
 
