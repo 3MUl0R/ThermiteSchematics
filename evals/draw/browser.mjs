@@ -294,6 +294,46 @@ export function measureSheet(options = {}) {
       },
     ];
   });
+  // Resolve rooted captions through the exported port/node and marker identities.
+  // A nearby marker (even one with matching text) never establishes ownership.
+  const terminalCaptionOwners = new Map();
+  for (const group of root.querySelectorAll("g[data-symbol-id]")) {
+    const uid = group.getAttribute("data-device-uid");
+    const kind = group.matches(".rail-symbol")
+      ? "rail"
+      : group.getAttribute("data-representation") === "terminal"
+        ? "terminal"
+        : group.hasAttribute("data-function-key")
+          ? "function"
+          : "aggregate";
+    const key = group.getAttribute(
+      `data-${kind === "rail" ? "terminal" : kind}-key`,
+    );
+    const node = [kind, uid, key];
+    if (kind === "rail") node.push(group.getAttribute("data-boundary-kind"));
+    for (const marker of group.querySelectorAll("circle.terminal-marker")) {
+      const port = marker.id.match(/terminal-([a-f0-9]+(?:--[a-f0-9]+)*)$/);
+      if (!port) continue;
+      const symbolPort = port[1]
+        .split("--")
+        .at(-1)
+        .match(/.{4}/g)
+        .map((h) => String.fromCharCode(parseInt(h, 16)))
+        .join("");
+      terminalCaptionOwners.set(
+        JSON.stringify([
+          ids.get(group.closest("svg")),
+          JSON.stringify(node),
+          symbolPort,
+        ]),
+        {
+          deviceUid: uid,
+          terminal: marker.getAttribute("data-terminal-key"),
+          terminalAppearance: ids.get(group),
+        },
+      );
+    }
+  }
   const continuationOwner = (e) => {
     const a = e.closest('a[href^="#sheet-"]');
     return a?.querySelector("path,line") ? a : null;
@@ -511,7 +551,7 @@ export function measureSheet(options = {}) {
       const id = identity(e);
       const semantic = e
         .getAttribute("clip-path")
-        ?.match(/-clip-([a-f0-9]+)\)/)?.[1];
+        ?.match(/(?:#|-)clip-([a-f0-9]+)\)/)?.[1];
       if (semantic) {
         try {
           const key = JSON.parse(
@@ -522,34 +562,31 @@ export function measureSheet(options = {}) {
           );
           const entity =
             typeof key[2] === "string" ? JSON.parse(key[2]) : key[2];
+          if (key[0] === "label") id.labelRole = key[3];
           if (entity?.[0] === "wire" && /conductor|net/.test(key[3] ?? ""))
             id.wire ??= entity[1];
+          if (entity?.[0] === "port" && key[3] === "terminal")
+            Object.assign(
+              id,
+              terminalCaptionOwners.get(
+                JSON.stringify([
+                  ids.get(e.closest("svg")),
+                  entity[1],
+                  entity[2],
+                ]),
+              ),
+            );
+          if (key[3] === "net") id.terminal = undefined;
         } catch {}
       }
       const role =
         e.getAttribute("class") ??
         e.closest("text")?.getAttribute("class") ??
         "";
-      if (role.includes("label-terminal") || role.includes("label-net")) {
-        const closest = terminals
-          .filter(
-            (t) =>
-              !role.includes("label-net") ||
-              t.terminal === e.textContent.trim(),
-          )
-          .map((t) => [
-            t,
-            Math.hypot(
-              t.point.x - (v.b.x + v.b.w / 2),
-              t.point.y - (v.b.y + v.b.h / 2),
-            ),
-          ])
-          .sort((a, b) => a[1] - b[1])[0];
-        if (closest && closest[1] < 15) {
-          id.deviceUid = closest[0].deviceUid;
-          id.terminal = closest[0].terminal;
-        }
-      }
+      if (id.terminal && !id.terminalAppearance)
+        id.terminalAppearance = ids.get(
+          e.closest("[data-terminal-id],[data-loop-terminal]"),
+        );
       const nestedRoot = e.parentElement.closest(
         "svg:not(body>svg):not(section>svg)",
       );

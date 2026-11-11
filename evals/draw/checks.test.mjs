@@ -324,7 +324,7 @@ describe("mandatory DQ mutation kills", () => {
           ],
         }),
       ),
-    ).toHaveLength(1);
+    ).toEqual([]);
     expect(
       c.terminalText(geometry({ texts: [t, { ...t, element: "duplicate" }] })),
     ).toHaveLength(1);
@@ -333,6 +333,56 @@ describe("mandatory DQ mutation kills", () => {
         geometry({ texts: [text("PE PE", { terminal: "PE" })] }),
       )[0].kind,
     ).toBe("duplicate-terminal-caption");
+  });
+  it("DQ-17 preserves overlap checks when a semantic net name equals a terminal identity", () => {
+    for (const name of ["L1", "SRC1.L1"]) {
+      const t = text(name, {
+        terminal: name,
+        deviceUid: "source",
+        labelRole: "terminal",
+      });
+      // Even inherited terminal identity and a misleading class cannot change
+      // the owned net role. Equal spelling does not make this a terminal caption.
+      const net = {
+        ...t,
+        element: "net",
+        labelRole: "net",
+        role: "label-terminal",
+      };
+      expect(
+        c.terminalText(
+          geometry({ texts: [t, { ...net, bbox: { ...bbox, x: 40 } }] }),
+        ),
+      ).toEqual([]);
+      expect(c.terminalText(geometry({ texts: [t, net] }))[0].kind).toBe(
+        "duplicate-or-overlapping-terminal-text",
+      );
+      expect(c.textBounds(geometry({ texts: [t, net] }))[0].kind).toBe(
+        "text-text-overlap",
+      );
+    }
+  });
+  it("DQ-17 owns duplicates per drawn appearance, without a proximity assumption", () => {
+    const a = text("A1", {
+      terminal: "A1",
+      deviceUid: "relay",
+      terminalAppearance: "body-one",
+    });
+    const b = { ...a, element: "second", bbox: { ...bbox, x: 70 } };
+    expect(c.terminalText(geometry({ texts: [a, b] }))).toHaveLength(1);
+    expect(
+      c.terminalText(
+        geometry({ texts: [a, { ...b, terminalAppearance: "body-two" }] }),
+      ),
+    ).toEqual([]);
+    // Separate appearances still cannot overlap.
+    expect(
+      c.terminalText(
+        geometry({
+          texts: [a, { ...b, terminalAppearance: "body-two", bbox }],
+        }),
+      ),
+    ).toHaveLength(1);
   });
   it("DQ-18 kills a missing revision table", () => {
     const t = text(

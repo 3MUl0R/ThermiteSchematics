@@ -324,22 +324,35 @@ export function strokesAndDots(g) {
   return out;
 }
 export function terminalText(g) {
+  const netLabel = (t) =>
+    t.labelRole ? t.labelRole === "net" : t.role?.includes("label-net");
+  const caption = (t) => !netLabel(t) && t.tagKind !== "reference";
   const ts = g.texts.filter(
-      (t) => t.role.includes("label-terminal") || t.terminal,
+      (t) =>
+        t.labelRole === "terminal" ||
+        t.role?.includes("label-terminal") ||
+        netLabel(t) ||
+        t.terminal,
     ),
     out = [];
   for (let i = 0; i < ts.length; i++) {
     const a = ts[i];
-    if (/^(\S+)\s+\1$/.test(a.text))
+    if (caption(a) && /^(\S+)\s+\1$/.test(a.text))
       out.push(issue("duplicate-terminal-caption", a, { text: a.text }));
     for (let j = i + 1; j < ts.length; j++) {
       const b = ts[j];
       if (
         overlap(a.bbox, b.bbox) ||
-        (a.deviceUid === b.deviceUid &&
+        (caption(a) &&
+          caption(b) &&
+          a.deviceUid &&
+          a.terminal &&
+          a.deviceUid === b.deviceUid &&
           a.terminal === b.terminal &&
           a.text === b.text &&
-          Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15)
+          (a.terminalAppearance && b.terminalAppearance
+            ? a.terminalAppearance === b.terminalAppearance
+            : Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))
       )
         out.push(
           issue("duplicate-or-overlapping-terminal-text", a, {
