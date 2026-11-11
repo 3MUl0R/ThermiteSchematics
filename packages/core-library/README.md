@@ -150,9 +150,16 @@ do not select operator identity. Core 0.1.0 bytes remain frozen.
 
 Every device except the two-wire transmitter can be drawn in circuit views and
 schematic packets. The transmitter currently has signal-loop support only. Rooted support
-is narrower: protection poles have power bindings, operator/relay contacts have
-control bindings, and lamps have control load bindings. Transformer windings have
-only circuit bindings. Loads selection does not traverse contacts or coils.
+is narrower: shipped fuse and breaker poles have power and control bindings;
+overload main poles have power bindings and auxiliary contacts have control bindings.
+Operator/relay contacts and lamps retain their control bindings. Transformer
+secondary source/2 functions with two secondary-role terminals also support paired
+rooted control boundaries; primary windings remain circuit-only. Control refuses
+incompatible `circuitSymbols` marks under the
+[protection policy](../../docs/circuit-symbols.md#shared-printable-vocabulary).
+Loads selection does not traverse contacts or coils. See
+[bounded DOL selection](../../docs/views.md#bounded-dol-selection) and
+[transformer source pairing](../../docs/circuit-symbols.md#transformer-control-sources).
 The shipped `versions/0.2.0/types/*.json` files declare profiles and function
 shapes; `thermite guide symbols` lists their catalog family support. A legacy
 control root requires a coil. A valid profile does not promise that every family

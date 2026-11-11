@@ -72,6 +72,7 @@ Rooted sheet continuations follow the same printed wire-number rule described be
 
 - Every selected physical conductor appears once within its group, with its exact endpoint TerminalIds, conductor identity and derived net ID in SVG metadata. A wire's `properties.label` is the prominent printed wire number; its designation and UID remain available in metadata and schedules. Authored conductor size and color print below the wire number when present. Unknown size or color is omitted.
 - All terminals of each selected function are represented. A fully terminated selected wire whose endpoint function is not selected ends at a boundary representation of the real device terminal. Boundaries do not create virtual devices or new nets.
+- A real coil terminal shown as a boundary or rooted context does not draw the coil function. Select that function explicitly in a circuit view to give it an audited function appearance. Multiple rooted views can expose more paths but do not replace a source inventory or enter the circuit/wiring coverage audit. See the [bounded DOL example](views.md#bounded-dol-selection).
 - A filled terminal mark has selected physical wiring. An open terminal has no selected wire on that drawing. `[+N]` reports additional physical connections outside the group, or outside the current part when a group is split; it does not claim that an unused terminal is electrically isolated.
 - Terminal-strip pass-through ports can show one physical terminal on both sides of its symbol. Local function attachments and shared relay COM terminals retain that same source TerminalId. Those display segments are distinct from scheduled physical wires.
 - PLC channel rows print the authored I/O address and signal meaning, with long signal text wrapped into a measured row. Without an authored address, the function key identifies the channel. `SPARE` appears only when the source explicitly marks the channel spare. An unconnected channel is not automatically spare.
@@ -111,8 +112,10 @@ views. `thermite:io-module` supports one/two-terminal channels in circuit views,
 but rooted control bindings accept only one-terminal channels; loads support
 covers its declared load/source context instead of standalone channels.
 Rooted profiles also cover contactor/relay coils and contacts, pushbuttons,
-switches, breakers, fuses, overloads, motors, lamps, power sources and three-wire
-sensors. Main contactor and overload poles require ordered `power_input` /
+switches, breakers, fuses, overloads, motors, lamps, power sources, transformer
+secondary sources and three-wire sensors. Transformer control uses
+[paired secondary terminals](circuit-symbols.md#transformer-control-sources).
+Main contactor and overload poles require ordered `power_input` /
 `power_output` roles; their control auxiliaries require two `aux` roles. A circuit-capable profile does not
 automatically work in rooted power, control, or loads views. The catalog also
 records existing signal-loop-only profiles so they are not mistaken for unknown
@@ -258,7 +261,12 @@ includes terminal-free mechanisms in its function inventory. It proves neither
 printed readability nor an upstream supply path; use visual review and electrical
 checks separately. Unknown selectors still fail before any packet is returned.
 
-Rooted views can omit parallel branches at drawn terminals without markers. Packet coverage audits explicit circuit/wiring selections; rooted sheets remain unaudited. outsideAuditedViews proves neither absence from every sheet nor a complete supply path.
+Rooted views can omit longer parallel branches; off-view cards disclose omitted
+direct conductors at drawn terminals without drawing their functions. See the
+[bounded DOL example](views.md#bounded-dol-selection). Packet coverage audits
+explicit circuit/wiring selections; rooted sheets remain unaudited.
+`outsideAuditedViews` proves neither absence from every sheet nor a complete supply
+path.
 
 Packets also include a separate [`coverage.topology` inventory](topology-coverage.md)
 for connector assemblies, communication links and individually drawn ports.

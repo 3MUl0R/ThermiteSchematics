@@ -8,7 +8,7 @@ semantic-selection rules. `thermite` means the launcher from the project guide.
 | CLI intent | Required root and behavior |
 | --- | --- |
 | `--power` | A mapped load with a path to a mapped power source; each phase is separate. The motor-starter fixture uses M1. A DC supply's AC input load can root when its authored feed reaches a power source. |
-| `--actuation` | One mapped two-terminal coil; searches through mapped control contacts to an output/positive source and a return. The motor-starter fixture uses K1. |
+| `--actuation` | One mapped two-terminal coil; searches through mapped control contacts to an output/positive source and return, or a compatible pair of transformer-secondary terminals. The motor-starter fixture uses K1. |
 | `--loads` | One mapped DC control source and its source/return pair; shows complete mapped loads on those nets. The starter uses PS1. |
 | `--conductors` | An exact cable; the cabinets template uses CBL1. Retains all physical type cores and spare assignments. |
 | `--to <device>` | A mapped two-wire contact sensor or three-wire sensor root and a distinct target with a reachable mapped input. `--include-power` adds only the declared supply arms. |
@@ -20,7 +20,9 @@ and looped supplies; placement and routing use a bounded, validated ELK search.
 Trace and loads traverse conductors;
 control/power may select supported function steps for presentation only.
 
-Rooted views use bounded selection. At each drawn terminal with authored conductors
+Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
+parallel branches can remain outside the view. Success does not promise complete
+rungs. At each drawn terminal with authored conductors
 outside the selected view, a nearby light, unfilled card reads **Off-view at D.T**
 and lists each conductor identity and opposite endpoint, for example `W5 → H1.X1`.
 The arrow identifies the authored opposite endpoint; it makes no current-direction,
@@ -69,6 +71,25 @@ connections are checked independently against the authored JSON in the render te
 
 Invalid authored text retains R005. Off-view cards and notices do not change W906,
 coverage accounting or `packet --strict` behavior.
+
+### Bounded DOL selection
+
+The [synthetic P6 probe](../packages/render/test/off-view-fixtures.ts) puts its
+seal-in branch on a longer path. In both flows, K1 selects only `W30`, `W32`,
+`W33`, `W34`, `W36` and `W41`; `R1.contact14`, `R1.coil` and `H1.lamp` remain
+outside the view. Four off-view cards list six omitted direct connections at
+drawn terminals. The cards disclose omissions without completing the rung.
+
+In the [saved DOL fixture](../packages/core-library/test/fixtures/dol-starter/source.json),
+K1's view shows `R1.A1` as `coil outside view`; `R1.contact14` is selected and `R1.coil`
+is not. A terminal-only context has empty function references and gives no
+audited function appearance.
+
+Use [explicit circuit selections](circuit-views.md#request) and
+[packet coverage](circuit-views.md#packet-coverage-inventory) to audit a broader
+inventory; multiple rooted views remain outside the circuit/wiring audit.
+
+### Rooted request formats
 
 `schematic-view-request/0.1` uses `root`, `family` (`power` or `control`) and
 `flow`. On the motor-starter fixture:
@@ -207,6 +228,13 @@ Trace advice names only loads accepted as trace roots (such as B1), with a
 connected input target supplied through `--to` and `--include-power`; PLC/RIO
 supply loads receive only circuit advice. Stable
 identity fields remain present; no connection change is implied.
+
+A supported unselected two-terminal coil can contribute an intermediate input-path
+terminal as context only. The mark says “coil outside view”; it does not select
+that coil, its other terminal, return wire or parallel loads. Return paths, loads,
+power and trace do not acquire this projection. See the
+[bounded DOL example](#bounded-dol-selection).
+
 Unsupported rooted or circuit profile/function shapes retain the existing R001–R006
 classification and fields, with `details.reason: "unsupported-symbol-profile"`
 (and `error.reason` only when it has no existing value), plus
@@ -235,8 +263,9 @@ no schematic appearance anywhere in a successful packet containing a drawing.
 Reports-only packets are exempt; there is no opt-out field. Circuit, rooted and
 other drawing families count, so topology-only drawings also establish scope.
 Its `devices` inventory names each UID and designation, distinguishes `reports-only` from `absent`, and
-lists report/index sheets. Every drawing family counts, including endpoint
-appearances; reports and indexes do not count as schematics. Existing conductor
+lists report/index sheets. Every drawing family counts device-function and
+device-symbol appearances, including ordinary endpoint symbols. Terminal-only
+contexts, reports and indexes do not provide device coverage. Existing conductor
 and function coverage retains its narrower scope. W906 is advisory and does not
 certify complete wiring or readability. The `packet` CLI emits it on stderr with
 compiler diagnostics and exits 0 for warnings, or 1 with `--strict`; info does not

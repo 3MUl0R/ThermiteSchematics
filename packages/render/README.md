@@ -439,10 +439,15 @@ a stop. Potential UID is the final tie-breaker for duplicate declarations.
 
 ### Control
 
-A control root is one mapped two-terminal coil. The input side searches for, in
-order, a PLC output channel, an exact positive-potential anchor, or a mapped DC source.
-The return side searches for an exact return-potential anchor, a mapped source-return,
-or an exact-role mapped fallback. Only `control-contact`, `command-contact`,
+A control root is one mapped two-terminal coil. The input side searches, in order,
+for a PLC output channel, an exact positive-potential anchor, or a mapped control
+source. The return side searches, in order, for an exact return-potential anchor,
+a mapped source-return boundary, or an exact-role mapped fallback.
+Transformer-source candidates are paired across both arms using distinct
+terminals/nets of one source function; incompatible, mixed or equally ranked
+ambiguous pairs refuse with R002. See the
+[source-pairing policy](../../docs/circuit-symbols.md#transformer-control-sources).
+Only `control-contact`, `command-contact`,
 `permissive-contact`, and `protection-contact` functions are traversable.
 
 The K1 reference view is exactly PLC1 DO0 -> `W-CTL-005` -> PB1 NC ->
@@ -545,21 +550,23 @@ not claim that each terminal belongs to every member.
 `breaker-pole`, `overload-pole`, `terminal-display`, and `non-traversable`. Visual
 class never grants path adjacency.
 
-The core 0.1.0 mapping surface is:
+The following core 0.1.0 rows describe projected production bindings from
+`projectDeviceTypeSymbolMappings` (the internal compatibility table in
+`symbols/mappings.ts` is maintained separately):
 
-| Core type                                      | Rendered function or aggregate                           | Family behavior                                                                                  |
-| ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `core:supply-480v-3ph`                         | `three-phase-source` aggregate -> `ais:power-source-3ph` | Power source with ordered L1/L2/L3/PE; control omitted.                                          |
-| `core:breaker-3p`                              | `pole1..3` -> `ais:breaker-pole`                         | Power only; `trip` is metadata-only in both families.                                            |
-| `core:contactor-3p-1no`                        | `coil`, `pole1..3`, `aux13`                              | Control selects coil or aux; power selects poles; other functions are explicitly outside-family. |
-| `core:overload-3p-1nc`                         | `pole1..3`, `aux95`                                      | Control selects aux; power selects poles; `trip` is metadata-only.                               |
-| `core:motor-3ph`                               | `motor` aggregate -> `ais:motor-3ph`                     | Power load U/V/W/PE; control omitted.                                                            |
-| `core:pushbutton-nc`                           | `contact11` -> `ais:pushbutton-nc`                       | Control only.                                                                                    |
-| `core:limit-switch-2wire`                      | `contact13` -> `ais:switch-no`                           | Control only.                                                                                    |
-| `core:prox-pnp-3wire`                          | `pnp-sensor` aggregate -> `ais:switch-sensor-pnp`        | Control mapping for the M6 source-edit seam; power omitted.                                      |
-| `core:plc-compact`                             | `di0`, `di1`, `do0`, `do1`, `supply`                     | Selected control channel or `supply` via `ais:dc-load`; power omitted.                           |
-| `core:psu-24vdc`                               | `dc_output` -> `ais:power-source-dc`                     | Control boundary; power omitted; `ac_input` is unsupported in v0.1.                              |
-| `core:terminal-block-8`, `core:junction-box-8` | each `terminal1..8` -> `ais:terminal`                    | Selected positions render in either family.                                                      |
+| Core type                                      | Rendered function or aggregate                           | Family behavior                                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `core:supply-480v-3ph`                         | `three-phase-source` aggregate -> `ais:power-source-3ph` | Power source with ordered L1/L2/L3/PE; control omitted.                                                      |
+| `core:breaker-3p`                              | `pole1..3` -> `ais:breaker-pole`                         | Power poles and control protection contacts; `trip` is metadata-only in both families.                       |
+| `core:contactor-3p-1no`                        | `coil`, `pole1..3`, `aux13`                              | Control selects coil or aux; power selects poles; other functions are explicitly outside-family.             |
+| `core:overload-3p-1nc`                         | `pole1..3`, `aux95`                                      | Control selects aux; power selects poles; `trip` is metadata-only.                                           |
+| `core:motor-3ph`                               | `motor` aggregate -> `ais:motor-3ph`                     | Power load U/V/W/PE; control omitted.                                                                        |
+| `core:pushbutton-nc`                           | `contact11` -> `ais:pushbutton-nc`                       | Control only.                                                                                                |
+| `core:limit-switch-2wire`                      | `contact13` -> `ais:switch-no`                           | Control only.                                                                                                |
+| `core:prox-pnp-3wire`                          | `pnp-sensor` aggregate -> `ais:switch-sensor-pnp`        | Control mapping for the M6 source-edit seam; power omitted.                                                  |
+| `core:plc-compact`                             | `di0`, `di1`, `do0`, `do1`, `supply`                     | Selected control channel or `supply` via `ais:dc-load`; power omitted.                                       |
+| `core:psu-24vdc`                               | `dc_output` -> `ais:power-source-dc`, `ac_input`         | DC output is a control boundary; the AC input can root power when its authored feed reaches a mapped source. |
+| `core:terminal-block-8`, `core:junction-box-8` | each `terminal1..8` -> `ais:terminal`                    | Selected positions render in either family.                                                                  |
 
 Omission reasons are exactly `metadata-only-mechanism`, `boundary-metadata-only`,
 `outside-family`, and `unsupported-v0.1`. The cable type is not a device mapping; a
@@ -884,6 +891,11 @@ named snapshots pin the live semantic-layout witnesses.
 
 Control, power, trace and loads selection check intermediate conductor terminals
 for a selected function, mapped terminal-display symbol or selected boundary.
+Rooted control input paths additionally admit terminal-only context owned by an
+unselected supported coil/2. Its presentation and reference function lists stay
+empty. This does not select the coil or broaden other path families; ineligible
+terminals retain R003. See the
+[bounded DOL example and coverage distinction](../../docs/views.md#bounded-dol-selection).
 Invalid profiles retain their existing binding diagnostic. Otherwise, a supported
 function terminal without a selected owner returns R003 with
 `details.reason: "unrepresented-terminal"`, the real device/terminal and incident
