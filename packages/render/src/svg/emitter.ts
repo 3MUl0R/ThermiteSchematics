@@ -1068,6 +1068,10 @@ export function emitSchematicSvg(
   if (!preflight.ok) return preflight;
   const registry = buildRenderSourceRegistry(graph);
   assertMatchingInputs(graph, layout);
+  const gangs = ir
+    ? rootedGangSegments(ir, graph, layout)
+    : { ok: true as const, value: [] };
+  if (!gangs.ok) return gangs;
 
   const nodeLayouts = indexById(layout.nodes, "layout node");
   const portLayouts = indexById(layout.ports, "layout port");
@@ -1152,20 +1156,20 @@ export function emitSchematicSvg(
   emitFrames(writer, graph, nodeLayouts, registry);
   emitEdges(writer, graph, layout, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
-  if (ir)
-    for (const segment of rootedGangSegments(ir, graph, layout))
-      writer.element(1, "line", {
-        class: "mechanical-gang",
-        "data-mechanical-association": "ganged",
-        "data-ganged-functions": JSON.stringify(segment.functions),
-        x1: global(segment.from.x),
-        y1: global(segment.from.y),
-        x2: global(segment.to.x),
-        y2: global(segment.to.y),
-        stroke: "#17212b",
-        "stroke-width": 0.25 / mmPerUnit,
-        "stroke-dasharray": `${1.5 / mmPerUnit} ${1 / mmPerUnit}`,
-      });
+  for (const segment of gangs.value)
+    writer.element(1, "line", {
+      class: "mechanical-gang",
+      "data-ganged-group": segment.groupId,
+      "data-mechanical-association": "ganged",
+      "data-ganged-functions": JSON.stringify(segment.functions),
+      x1: global(segment.from.x),
+      y1: global(segment.from.y),
+      x2: global(segment.to.x),
+      y2: global(segment.to.y),
+      stroke: "#17212b",
+      "stroke-width": 0.25 / mmPerUnit,
+      "stroke-dasharray": `${1.5 / mmPerUnit} ${1 / mmPerUnit}`,
+    });
   emitSymbols(
     writer,
     graph,

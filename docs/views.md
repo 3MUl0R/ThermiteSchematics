@@ -20,6 +20,14 @@ and looped supplies; placement and routing use a bounded, validated ELK search.
 Trace and loads traverse conductors;
 control/power may select supported function steps for presentation only.
 
+Rooted three-phase power drawings read L1, L2, L3, PE from top to bottom in
+`left-to-right` flow and from left to right in `top-to-bottom` flow. The same
+lane order applies at both ends of breaker, contactor and overload poles and at
+the motor's U, V, W, PE terminals. Unbonded symbols retain only their authored
+terminals. This convention moves symbol geometry and conductor landings together;
+terminal identities, physical connections and electrical net IDs do not change.
+Single-pole and asymmetric control symbols keep their clockwise orientation.
+
 Rooted actuation views retain equal-shortest paths to the chosen boundary; longer
 parallel branches can remain outside the view. Success does not promise complete
 rungs. At each drawn terminal with authored conductors
@@ -63,6 +71,13 @@ when its print guards and route-quality checks pass and it uses no more sheets
 than the same view without cards. The 2× packet bound is a refusal limit.
 Stacked cards follow displayed terminal order, with the nearest valid positions
 preferred.
+
+Authored mechanical gangs with at least two independently drawn members must
+paint every link between those members. Their stroke bands reserve clearance
+from cards and captions before ELK runs. A missing anchor, misalignment or
+collision refuses the drawing with R006, naming the device and ganged-group ID;
+no partial gang is emitted. A lone selected member establishes no link to an
+omitted member, and no gang is inferred for unassociated poles.
 
 The [synthetic connection inventory](../examples/off-view-connections/source.json)
 and its [packet request](../examples/off-view-connections/packet.json) exercise an

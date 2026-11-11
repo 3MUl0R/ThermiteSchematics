@@ -66,12 +66,39 @@ describe("profile binding edge cases", () => {
         }
       }
       for (const flow of ["left-to-right", "top-to-bottom"] as const) {
-        const r = await renderSchematic(ir, {
+        const request = {
           format: "schematic-view-request/0.1",
           root: { by: "designation", value: "M1" },
           family: "power",
           flow,
+        } as const;
+        // A fuse mark has no mechanical gang anchor. Retaining the original
+        // breaker gang must refuse, rather than silently dropping its links.
+        const uid = ir.devices.find((d) => d.typeId === type.id)!.uid;
+        const group = ir.gangedGroups.find((g) =>
+          g.functionIds.some((f) => f.deviceUid === uid),
+        )!;
+        const ganged = await renderSchematic(ir, request);
+        expect(ganged).toMatchObject({
+          ok: false,
+          error: {
+            code: "R006",
+            details: {
+              reason: "mechanical-gang",
+              groupId: group.id,
+              blockedBy: "missing supported gang anchor",
+            },
+          },
         });
+        // The separate positive fixture explicitly models independent fuses.
+        const independent = structuredClone(ir);
+        independent.gangedGroups = independent.gangedGroups.filter(
+          (g) => g.id !== group.id,
+        );
+        independent.internalRelations = independent.internalRelations.filter(
+          (r) => r.deviceUid !== uid || r.verb !== "ganged_with",
+        );
+        const r = await renderSchematic(independent, request);
         expect(r.ok, JSON.stringify(r)).toBe(true);
         if (r.ok) expect(r.value.svg).toContain("ais:fuse");
       }

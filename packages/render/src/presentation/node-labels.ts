@@ -64,6 +64,7 @@ export function leafGeometry(
   orientation: "left-to-right" | "top-to-bottom",
   label: PresentationLabel,
   caption = label,
+  compactEmptyCaption = false,
 ): Readonly<{
   symbolSize: Readonly<{ width: number; height: number }>;
   width: number;
@@ -71,10 +72,15 @@ export function leafGeometry(
   primitiveOrigin: Readonly<{ x: number; y: number }>;
 }> {
   const symbolSize = orientedSymbolSize(symbol, orientation);
-  const vertical = orientation === "top-to-bottom";
-  const width = vertical
-    ? label.width + symbolSize.width + 24
-    : Math.max(symbolSize.width + 16, label.width + 16);
+  // A blank ordered power pole needs a 1 mm horizontal inset at minimum print
+  // scale, without a side lane for its nonprinting function key.
+  const emptyPower = compactEmptyCaption && caption.printableText === "";
+  const vertical = orientation === "top-to-bottom" && !emptyPower;
+  const width = emptyPower
+    ? symbolSize.width + 8
+    : vertical
+      ? label.width + symbolSize.width + 24
+      : Math.max(symbolSize.width + 16, label.width + 16);
   const height = 22 + symbolSize.height + 8;
   const geometry = {
     symbolSize,

@@ -511,37 +511,54 @@ export function findSymbolDefinition(
   return catalog.find((definition) => definition.id === id);
 }
 
-function rotatePointClockwise(
-  value: SymbolPoint,
-  sourceHeight: number,
-): SymbolPoint {
-  return { x: sourceHeight - value.y, y: value.x };
+/** Only the three-phase lane families use a transposed vertical composition.
+ * Other glyphs retain their clockwise rotation, including asymmetric controls. */
+export function preservesVerticalPowerLaneOrder(
+  id: SymbolDefinition["id"] | undefined,
+): boolean {
+  return (
+    id === "ais:power-source-3ph" ||
+    id === "ais:power-source-3wire" ||
+    id === "ais:motor-3ph" ||
+    id === "ais:motor-3ph-unbonded"
+  );
 }
 
-function rotatePrimitiveClockwise(
+function verticalPoint(
+  value: SymbolPoint,
+  sourceHeight: number,
+  preserveLanes: boolean,
+): SymbolPoint {
+  return { x: preserveLanes ? value.y : sourceHeight - value.y, y: value.x };
+}
+
+function verticalPrimitive(
   primitive: SymbolPrimitive,
   sourceHeight: number,
+  preserveLanes: boolean,
 ): SymbolPrimitive {
+  const transform = (value: SymbolPoint) =>
+    verticalPoint(value, sourceHeight, preserveLanes);
   switch (primitive.kind) {
     case "line":
       return {
         kind: "line",
-        from: rotatePointClockwise(primitive.from, sourceHeight),
-        to: rotatePointClockwise(primitive.to, sourceHeight),
+        from: transform(primitive.from),
+        to: transform(primitive.to),
         style: primitive.style,
       };
     case "polyline":
       return {
         kind: "polyline",
-        points: primitive.points.map((value) =>
-          rotatePointClockwise(value, sourceHeight),
-        ),
+        points: primitive.points.map(transform),
         style: primitive.style,
       };
     case "rect":
       return {
         kind: "rect",
-        x: sourceHeight - primitive.y - primitive.height,
+        x: preserveLanes
+          ? primitive.y
+          : sourceHeight - primitive.y - primitive.height,
         y: primitive.x,
         width: primitive.height,
         height: primitive.width,
@@ -551,35 +568,37 @@ function rotatePrimitiveClockwise(
     case "circle":
       return {
         kind: "circle",
-        center: rotatePointClockwise(primitive.center, sourceHeight),
+        center: transform(primitive.center),
         radius: primitive.radius,
         style: primitive.style,
       };
     case "arc":
       return {
         kind: "arc",
-        from: rotatePointClockwise(primitive.from, sourceHeight),
-        to: rotatePointClockwise(primitive.to, sourceHeight),
+        from: transform(primitive.from),
+        to: transform(primitive.to),
         radiusX: primitive.radiusY,
         radiusY: primitive.radiusX,
-        clockwise: primitive.clockwise,
+        clockwise: preserveLanes ? !primitive.clockwise : primitive.clockwise,
         style: primitive.style,
       };
   }
 }
 
-function rotatePortClockwise(
+function verticalPort(
   value: SymbolPortDefinition,
+  preserveLanes: boolean,
 ): SymbolPortDefinition {
+  const offset = preserveLanes ? value.offset : 1 - value.offset;
   switch (value.side) {
     case "west":
-      return { ...value, side: "north", offset: 1 - value.offset };
+      return { ...value, side: "north", offset };
     case "east":
-      return { ...value, side: "south", offset: 1 - value.offset };
+      return { ...value, side: "south", offset };
     case "north":
-      return { ...value, side: "east" };
+      return { ...value, side: preserveLanes ? "west" : "east" };
     case "south":
-      return { ...value, side: "west" };
+      return { ...value, side: preserveLanes ? "east" : "west" };
   }
 }
 
@@ -591,6 +610,7 @@ export function orientSymbolDefinition(
     return deepFreeze(structuredClone(definition));
   }
 
+  const preserveLanes = preservesVerticalPowerLaneOrder(definition.id);
   const rotated: SymbolDefinition = {
     format: definition.format,
     id: definition.id,
@@ -598,9 +618,9 @@ export function orientSymbolDefinition(
       width: definition.size.height,
       height: definition.size.width,
     },
-    ports: definition.ports.map(rotatePortClockwise),
+    ports: definition.ports.map((value) => verticalPort(value, preserveLanes)),
     primitives: definition.primitives.map((primitive) =>
-      rotatePrimitiveClockwise(primitive, definition.size.height),
+      verticalPrimitive(primitive, definition.size.height, preserveLanes),
     ),
   };
   validateSymbolCatalog([rotated]);

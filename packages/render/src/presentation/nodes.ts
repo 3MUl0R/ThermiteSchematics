@@ -1,3 +1,4 @@
+import { selectedGangId } from "../symbols/gang-geometry.js";
 import {
   contactCaptionWidth,
   verticalContactCaption,
@@ -33,6 +34,7 @@ import {
   cloneFunction,
   required,
   orientationFor,
+  orderedPowerLanes,
   cloneTerminal,
   labelWidth,
   orientedSide,
@@ -82,6 +84,11 @@ function buildSymbolNode(
     representation,
     symbol,
   );
+  const mechanicalGangId = selectedGangId(
+    context.ir,
+    context.selected.functionIds,
+    representation.functionIds,
+  );
   const { ports, labels } = buildSymbolPorts(
     symbol,
     nodeLabel,
@@ -89,8 +96,17 @@ function buildSymbolNode(
     representation,
     orientation,
     context,
+    mechanicalGangId !== undefined,
   );
-  const geometry = leafGeometry(symbol, orientation, nodeLabel, labels[0]);
+  const orderedPower = orderedPowerLanes(context.selected);
+  const caption = required(labels[0], "Missing symbol caption.");
+  const geometry = leafGeometry(
+    symbol,
+    orientation,
+    orderedPower || mechanicalGangId ? caption : nodeLabel,
+    caption,
+    orderedPower,
+  );
   const attachments = buildSymbolAttachments(context, representation, ports);
   const boundaryConstraint = representationBoundaryConstraint(
     representation,
@@ -98,6 +114,7 @@ function buildSymbolNode(
   );
   return {
     kind: "symbol",
+    ...(mechanicalGangId ? { mechanicalGangId } : {}),
     representation: representation.kind,
     id: representation.id,
     deviceUid: representation.device.uid,
@@ -184,14 +201,19 @@ function buildSymbolPorts(
   representation: SymbolRepresentation,
   orientation: SchematicFlow,
   context: PresentationContext,
+  ganged = false,
 ) {
   const portDefinitionById = new Map(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
   const printedLabel = { ...nodeLabel, printableText };
-  const captionWidth = verticalContactCaption(orientation, printedLabel)
-    ? contactCaptionWidth(printedLabel)
-    : Math.max(nodeLabel.width, labelWidth(printableText));
+  const captionWidth =
+    verticalContactCaption(orientation, printedLabel) ||
+    (ganged && ["NO", "NC"].includes(printableText))
+      ? contactCaptionWidth(printedLabel)
+      : orderedPowerLanes(context.selected)
+        ? labelWidth(printableText)
+        : Math.max(nodeLabel.width, labelWidth(printableText));
   const labels: PresentationLabel[] = [
     {
       ...nodeLabel,
@@ -245,6 +267,7 @@ function mapSymbolPorts(
       definition.side,
       definition.offset,
       orientation,
+      symbol.id,
     );
     const id = structuralTupleId("port", representation.id, definition.id);
     const terminalLabel = presentationLabel(

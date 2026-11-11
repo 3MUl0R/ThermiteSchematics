@@ -23,6 +23,7 @@ import type {
   PresentationGraph,
 } from "../types.js";
 import type { SymbolSide, SymbolDefinition } from "../symbols/types.js";
+import { preservesVerticalPowerLaneOrder } from "../symbols/catalog.js";
 import { printableSlotWidth } from "../symbols/printable-font.js";
 import { type SvgSemanticIdPrefix, svgSemanticId } from "../svg/escape.js";
 
@@ -99,21 +100,34 @@ export function orientationFor(
   return selected.view.flow;
 }
 
+export function orderedPowerLanes(
+  selected: Readonly<SelectedSubgraph>,
+): boolean {
+  return (
+    selected.view.flow === "top-to-bottom" &&
+    selected.view.family === "power" &&
+    new Set(selected.paths.map((p) => p.lane).filter((lane) => lane !== "PE"))
+      .size >= 3
+  );
+}
+
 export function orientedSide(
   side: SymbolSide,
   offset: number,
   orientation: "left-to-right" | "top-to-bottom",
+  symbolId?: SymbolDefinition["id"],
 ): Readonly<{ side: SymbolSide; offset: number }> {
   if (orientation === "left-to-right") return { side, offset };
+  const preserveLanes = preservesVerticalPowerLaneOrder(symbolId);
   switch (side) {
     case "west":
-      return { side: "north", offset: 1 - offset };
+      return { side: "north", offset: preserveLanes ? offset : 1 - offset };
     case "east":
-      return { side: "south", offset: 1 - offset };
+      return { side: "south", offset: preserveLanes ? offset : 1 - offset };
     case "north":
-      return { side: "east", offset };
+      return { side: preserveLanes ? "west" : "east", offset };
     case "south":
-      return { side: "west", offset };
+      return { side: preserveLanes ? "east" : "west", offset };
   }
 }
 

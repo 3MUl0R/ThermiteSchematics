@@ -8,6 +8,7 @@ import type {
 } from "../types.js";
 import { CARD_GAP } from "./card.js";
 import { cardInkFits } from "./ink.js";
+import { GANG_CLEARANCE, gangAnchor } from "../symbols/gang-geometry.js";
 import {
   LABEL_PORT_HORIZONTAL_SPACING as H,
   LABEL_PORT_VERTICAL_SPACING as V,
@@ -91,7 +92,28 @@ function cardObstacles(node: Owner): Box[] {
   );
   const caption =
     node.kind === "symbol" ? contactCaptionRegion(node, header) : undefined;
+  const anchor =
+    node.kind === "symbol" && node.mechanicalGangId
+      ? gangAnchor(node)
+      : undefined;
   return [
+    ...(anchor
+      ? [
+          node.orientation === "top-to-bottom"
+            ? {
+                x: -1e8,
+                y: node.primitiveOrigin.y + anchor.y - GANG_CLEARANCE,
+                width: 2e8,
+                height: 2 * GANG_CLEARANCE,
+              }
+            : {
+                x: node.primitiveOrigin.x + anchor.x - GANG_CLEARANCE,
+                y: -1e8,
+                width: 2 * GANG_CLEARANCE,
+                height: 2e8,
+              },
+        ]
+      : []),
     {
       x: node.primitiveOrigin.x - 4,
       y: node.primitiveOrigin.y - 4,

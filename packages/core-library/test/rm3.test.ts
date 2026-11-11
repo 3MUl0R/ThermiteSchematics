@@ -268,29 +268,28 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       expect(
         result.value.svg.match(/data-symbol-id="ais:disconnector"/g),
       ).toHaveLength(3);
-      if (flow === "left-to-right") {
-        const segments = [
-          ...parseHTML(result.value.svg).document.querySelectorAll(
-            'line[data-mechanical-association="ganged"]',
+      const segments = [
+        ...parseHTML(result.value.svg).document.querySelectorAll(
+          'line[data-mechanical-association="ganged"]',
+        ),
+      ];
+      // DS1, Q1 and the authored contactor gang all retain their links.
+      expect(segments).toHaveLength(6);
+      for (const designation of ["DS1", "Q1", "K1"]) {
+        const uid = compiled.ir.devices.find(
+          (d) => d.designation === designation,
+        )!.uid;
+        expect(
+          segments.filter((s) =>
+            s.getAttribute("data-ganged-functions")!.includes(uid),
           ),
-        ];
-        expect(segments).toHaveLength(4);
-        for (const designation of ["DS1", "Q1"]) {
-          const uid = compiled.ir.devices.find(
-            (d) => d.designation === designation,
-          )!.uid;
-          expect(
-            segments.filter((s) =>
-              s.getAttribute("data-ganged-functions")!.includes(uid),
-            ),
-          ).toHaveLength(2);
-        }
-        for (const segment of segments) {
-          const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((a) =>
-            Number(segment.getAttribute(a)),
-          );
-          expect(Math.hypot(x2! - x1!, y2! - y1!)).toBeGreaterThan(0);
-        }
+        ).toHaveLength(2);
+      }
+      for (const segment of segments) {
+        const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((a) =>
+          Number(segment.getAttribute(a)),
+        );
+        expect(Math.hypot(x2! - x1!, y2! - y1!)).toBeGreaterThan(0);
       }
       expect(compiled.ir.wires).toHaveLength(ir.wires.length + 3);
       expect(JSON.stringify(compiled.ir)).toBe(before);

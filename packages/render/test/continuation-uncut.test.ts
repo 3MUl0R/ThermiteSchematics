@@ -6,6 +6,7 @@ import { uncutFixture } from "./continuation-uncut-fixtures.js";
 // Full packet digests reviewed for D2 composition and page-first locality.
 // Init remains byte-identical to #154 round 3; motor retains seven sheets,
 // the same cut/uncut wire sets and coverage, with intended layout/cut shifts.
+// Lane B round 2 restores authored gang ink and clears its captions.
 const reference = {
   "init-starter": [
     "dde9b5313201efd7985baece36ce68a3dd46bec886110d9ec5749b810d2cf448",
@@ -13,9 +14,9 @@ const reference = {
     "dab607cb276ece38eda33cb30ab181dc45dd77d23e475db378b0e306deefc255",
   ],
   "motor-starter": [
-    "1a45d9ae49ca32b99f1afea9a7f4f6fa8e496888cfef36e45fa884a80ec957b1",
-    "dad30c15a4125549ba98f97eb7c541a01223d81ebc4d729b2836db169d746e93",
-    "6d5f3e4f06ebca8b6759f6006db3f7e55ba133994239eba04f7d4a99eb725c57",
+    "ffa2eeddfe71cd9ee6b83bbc22105b6f94a2b213c589e835657c32b3d951dd99",
+    "21f43edf12c43ba4a181748e513ba216e9a9614a3d5255c5c504025922d72fb6",
+    "8fdda145e311dea03dd90151a91b639aafabf834ba93dc41ea2e6970734abbe3",
   ],
 };
 

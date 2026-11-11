@@ -213,7 +213,7 @@ it("keeps a genuine tight-A4 constraint when every bank and layout falls short",
   );
   if (valid.ok) throw Error("Expected tight-A4 refusal");
   expect(valid.error.message).toContain(
-    "protected width 158.45 mm exceeds 124.00 mm by 34.45 mm",
+    "protected width 134.70 mm exceeds 124.00 mm by 10.70 mm",
   );
   const bad = structuredClone(ir);
   for (const [i, wire] of bad.wires.entries())
@@ -223,19 +223,16 @@ it("keeps a genuine tight-A4 constraint when every bank and layout falls short",
     { ...request, views },
     presentation,
   );
-  if (result.ok) throw Error("Expected crossed identity refusal");
-  expect(result.error.message).toContain("U+000A");
-  expect(result.error.details?.pageConstraint).toMatchObject({
-    kind: "protected-span",
-    spans: [
-      {
-        axis: "width",
-        requiredMm: expect.closeTo(158.45),
-        availableMm: 124,
-        shortfallMm: expect.closeTo(34.45),
-      },
-    ],
-  });
+  if (result.ok) throw Error("Expected tight-A4 refusal with bad labels");
+  expect(result.error.code).toBe("R006");
+  expect(result.error.message).toContain(
+    "protected width 126.91 mm exceeds 124.00 mm by 2.91 mm",
+  );
+  // With ordered vertical lanes no complete cut grid is available here, so
+  // an untested malformed conductor must not be reported as a crossed identity.
+  // The LTR cases above and typed merge test below retain identity diagnostics.
+  expect(result.error.details?.continuationIdentity).toBeUndefined();
+  expect(result.error.details?.pageConstraint).toBeUndefined();
 });
 
 it("uses the constraint type rather than prose to merge an identity refusal", () => {

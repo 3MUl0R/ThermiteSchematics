@@ -9,6 +9,7 @@ import { conductorKey } from "../presentation/util.js";
 import { authoredTerminalIncidence, omittedConnections } from "./incidence.js";
 import { createOffViewCard } from "./card.js";
 import { reserveOffViewCards } from "./placement.js";
+import { reserveGangAnnotations } from "../symbols/gang-geometry.js";
 
 type AnnotatedGraph =
   | { readonly ok: true; readonly value: PresentationGraph }
@@ -22,6 +23,7 @@ export function addOffViewCards(
   graph: PresentationGraph,
   choices: Readonly<Record<string, number>> = {},
 ): AnnotatedGraph {
+  graph = reserveGangAnnotations(ir, graph);
   const incidence = authoredTerminalIncidence(ir);
   // View union, not a path, page fragment, reference leader or packet union.
   const drawn = new Set(

@@ -1,33 +1,33 @@
-import { PRINTABLE_SYMBOL_POLICY } from "./printable-policy.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type {
   PresentationGraph,
   NormalizedSchematicLayout,
   LayoutPoint,
   SymbolPresentationNode,
+  RenderOutcome,
 } from "../types.js";
+import {
+  GANG_CLEARANCE,
+  gangAnchor,
+  visibleRootedGangs,
+} from "./gang-geometry.js";
 
-/** Mechanical ink is permitted only for authored gangs of aligned breaker or disconnector poles.
- * It never participates in ELK routing, ports, nets or conductor accounting. */
+export interface RootedGangSegment {
+  groupId: string;
+  from: LayoutPoint;
+  to: LayoutPoint;
+  functions: SymbolPresentationNode["functionIds"];
+}
+
+/** An authored visible association is mandatory ink. Any missing, misaligned or
+ * obstructed stroke refuses the whole drawing; it never becomes a partial gang. */
 export function rootedGangSegments(
   ir: Readonly<ElectricalIr>,
   graph: Readonly<PresentationGraph>,
   layout: Readonly<NormalizedSchematicLayout>,
-) {
-  // Both strokes plus the printable ink gap, at the smallest composition scale.
-  const clearance =
-    (PRINTABLE_SYMBOL_POLICY.conductorStrokeMm / 2 +
-      0.25 / 2 +
-      PRINTABLE_SYMBOL_POLICY.minimumGapMm) /
-    PRINTABLE_SYMBOL_POLICY.rootedMmPerUnit;
+): RenderOutcome<readonly RootedGangSegment[]> {
   const vertical = graph.view.flow === "left-to-right";
-  const poles = graph.nodes.filter(
-    (node): node is SymbolPresentationNode =>
-      node.kind === "symbol" &&
-      (node.symbolId === "ais:breaker-pole" ||
-        node.symbolId === "ais:disconnector"),
-  );
-  const labelText = new Map(
+  const labels = new Map(
     [
       ...graph.locationGroups.map((g) => g.label),
       ...graph.deviceGroups.map((g) => g.label),
@@ -38,37 +38,32 @@ export function rootedGangSegments(
       ]),
     ].map((l) => [l.id, l.printableText ?? l.text]),
   );
-  const result: {
-    from: LayoutPoint;
-    to: LayoutPoint;
-    functions: SymbolPresentationNode["functionIds"];
-  }[] = [];
-  for (const group of ir.gangedGroups) {
-    const members = poles.filter((p) =>
-      p.functionIds.some((f) =>
-        group.functionIds.some(
-          (g) => g.deviceUid === f.deviceUid && g.functionKey === f.functionKey,
-        ),
-      ),
-    );
-    if (
-      members.length < 2 ||
-      new Set(members.map((p) => p.deviceUid)).size !== 1
-    )
-      continue;
-    const centers = members.map((node) => {
-      const origin = layout.nodes.find(
-        (n) => n.id === node.id,
-      )?.primitiveOrigin;
-      return origin
-        ? {
-            node,
-            x: origin.x + (vertical ? 18.5 : node.symbolSize.width - 6.5),
-            y: origin.y + (vertical ? 6.5 : 18.5),
-          }
-        : undefined;
+  const result: RootedGangSegment[] = [];
+  for (const { group, members } of visibleRootedGangs(ir, graph)) {
+    const member = members[0];
+    if (!member) continue;
+    const refuse = (blockedBy: string): RenderOutcome<never> => ({
+      ok: false,
+      error: {
+        code: "R006",
+        reason: "unprintable-layout",
+        root: graph.view.root.designation,
+        message: `Mechanical gang ${group.id} (${member.designation}) cannot paint all ${members.length - 1} links: ${blockedBy}. Use a larger page or change flow.`,
+        details: {
+          reason: "mechanical-gang",
+          groupId: group.id,
+          designation: member.designation,
+          expectedStrokes: members.length - 1,
+          blockedBy,
+        },
+      },
     });
-    if (centers.some((c) => !c)) continue;
+    const centers = members.map((node) => {
+      const o = layout.nodes.find((n) => n.id === node.id)?.primitiveOrigin,
+        a = gangAnchor(node);
+      return o && a ? { node, x: o.x + a.x, y: o.y + a.y } : undefined;
+    });
+    if (centers.some((c) => !c)) return refuse("missing supported gang anchor");
     const aligned = centers
       .filter((c) => c !== undefined)
       .sort((a, b) => (vertical ? a.y - b.y : a.x - b.x));
@@ -80,59 +75,52 @@ export function rootedGangSegments(
           ) > 0.001,
       )
     )
-      continue;
+      return refuse("misaligned poles");
     for (let i = 1; i < aligned.length; i++) {
       const from = aligned[i - 1]!,
         to = aligned[i]!;
       const between = (x: number, y: number, w: number, h: number) =>
         vertical
-          ? from.x > x - clearance &&
-            from.x < x + w + clearance &&
-            y + h > from.y - clearance &&
-            y < to.y + clearance
-          : from.y > y - clearance &&
-            from.y < y + h + clearance &&
-            x + w > from.x - clearance &&
-            x < to.x + clearance;
-      if (
-        layout.nodes.some(
-          (n) =>
-            n.id !== from.node.id &&
-            n.id !== to.node.id &&
-            (n.kind === "symbol" ||
-              n.kind === "rail" ||
-              n.kind === "junction") &&
-            between(n.x, n.y, n.width, n.height),
-        )
-      )
-        continue;
-      if (
-        layout.labels.some(
-          (l) => labelText.get(l.id) && between(l.x, l.y, l.width, l.height),
-        )
-      )
-        continue;
-      if (
-        layout.edges.some((e) =>
-          e.points.some(
-            (p, j) =>
-              j > 0 &&
-              between(
-                Math.min(p.x, e.points[j - 1]!.x),
-                Math.min(p.y, e.points[j - 1]!.y),
-                Math.abs(p.x - e.points[j - 1]!.x),
-                Math.abs(p.y - e.points[j - 1]!.y),
-              ),
-          ),
-        )
-      )
-        continue;
+          ? from.x > x - GANG_CLEARANCE &&
+            from.x < x + w + GANG_CLEARANCE &&
+            y + h > from.y - GANG_CLEARANCE &&
+            y < to.y + GANG_CLEARANCE
+          : from.y > y - GANG_CLEARANCE &&
+            from.y < y + h + GANG_CLEARANCE &&
+            x + w > from.x - GANG_CLEARANCE &&
+            x < to.x + GANG_CLEARANCE;
+      const node = layout.nodes.find(
+        (n) =>
+          n.id !== from.node.id &&
+          n.id !== to.node.id &&
+          ["symbol", "rail", "junction"].includes(n.kind) &&
+          between(n.x, n.y, n.width, n.height),
+      );
+      if (node) return refuse(`node ${node.id}`);
+      const label = layout.labels.find(
+        (l) => labels.get(l.id) && between(l.x, l.y, l.width, l.height),
+      );
+      if (label) return refuse(`annotation ${label.id}`);
+      const edge = layout.edges.find((e) =>
+        e.points.some(
+          (p, j) =>
+            j > 0 &&
+            between(
+              Math.min(p.x, e.points[j - 1]!.x),
+              Math.min(p.y, e.points[j - 1]!.y),
+              Math.abs(p.x - e.points[j - 1]!.x),
+              Math.abs(p.y - e.points[j - 1]!.y),
+            ),
+        ),
+      );
+      if (edge) return refuse(`conductor ${edge.id}`);
       result.push({
+        groupId: group.id,
         from: { x: from.x, y: from.y },
         to: { x: to.x, y: to.y },
         functions: [...from.node.functionIds, ...to.node.functionIds],
       });
     }
   }
-  return result;
+  return { ok: true, value: result };
 }

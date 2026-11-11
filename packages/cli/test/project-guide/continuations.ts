@@ -1,3 +1,7 @@
+import { prepareSchematicDrawing } from "../../../render/src/renderer.js";
+import { rootedGangSegments } from "../../../render/src/symbols/rooted-gangs.js";
+import { emitSchematicSvg } from "../../../render/src/svg/emitter.js";
+import { SYMBOL_CATALOG } from "../../../render/src/symbols/catalog.js";
 import { continuationFixture } from "../../../render/test/continuation-fixtures.js";
 import { expect } from "vitest";
 import { compileProject } from "@thermite/compiler";
@@ -8,6 +12,51 @@ import { noteJson, type FactModule } from "./harness.js";
 
 const module: FactModule = {
   facts: [
+    {
+      claim: "Gang loss fails R006 by group.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+        const p = await prepareSchematicDrawing(c.ir, {
+          format: "schematic-view-request/0.1",
+          family: "power",
+          root: { by: "designation", value: "M1" },
+          flow: "top-to-bottom",
+        });
+        if (!p.ok) throw Error(p.error.message);
+        const { graph, layout, titleContext } = p.value,
+          good = rootedGangSegments(c.ir, graph, layout);
+        if (!good.ok) throw Error(good.error.message);
+        expect(good.value).toHaveLength(4);
+        const stroke = good.value[0]!,
+          blocked = structuredClone(layout);
+        const caption = blocked.labels.find((l) =>
+          graph.deviceGroups.some((g) => g.label.id === l.id),
+        )!;
+        caption.x = (stroke.from.x + stroke.to.x) / 2 - caption.width / 2;
+        caption.y = (stroke.from.y + stroke.to.y) / 2 - caption.height / 2;
+        const result = emitSchematicSvg(
+          graph,
+          blocked,
+          titleContext,
+          SYMBOL_CATALOG,
+          false,
+          undefined,
+          c.ir,
+        );
+        expect(result).toMatchObject({
+          ok: false,
+          error: {
+            code: "R006",
+            reason: "unprintable-layout",
+            details: { reason: "mechanical-gang", groupId: stroke.groupId },
+          },
+        });
+        if (result.ok) throw Error("Expected gang refusal");
+        expect(result.error.message).toContain(stroke.groupId);
+        noteJson(result.error);
+      },
+    },
     {
       claim: "Standard spacing may fold onto fewer sheets.",
       async check() {

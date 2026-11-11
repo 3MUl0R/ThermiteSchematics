@@ -6,6 +6,7 @@ import { validatePresentationGraph } from "../presentation/validate.js";
 import { addOffViewCards } from "./presentation.js";
 import { nativeReservations } from "./native.js";
 import type { DeviceTypeSymbolMapping } from "../symbols/mappings.js";
+import { rootedGangSegments } from "../symbols/rooted-gangs.js";
 export const MAX_INITIAL_CARD_REPAIRS = 16;
 
 /** Reservation changes may move a routed wire onto a symbol. Retry real ELK
@@ -29,6 +30,7 @@ export async function recoverCardLayout(
     if (!annotated.ok) continue;
     validatePresentationGraph(ir, selected, annotated.value, mappings);
     const result = await layoutPresentationGraph(annotated.value, options);
-    if (result.ok) return { graph: annotated.value, layout: result };
+    if (result.ok && rootedGangSegments(ir, annotated.value, result.value).ok)
+      return { graph: annotated.value, layout: result };
   }
 }
