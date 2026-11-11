@@ -1,3 +1,11 @@
+import {
+  compareAdapterNodes,
+  designationLookup,
+  sortedLeafPorts,
+  sortedPorts,
+  verticalPowerLanes,
+  VERTICAL_POWER_EDGE_NODE_SPACING,
+} from "./adapter-ordering.js";
 import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import { contextJunctionInk } from "./context-reference-ink.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
@@ -23,8 +31,6 @@ import { canonicalSerializable } from "../internal.js";
 import {
   compareLocationIdentity,
   comparePresentationLabel,
-  comparePresentationNode,
-  comparePresentationPort,
   compareTerminalId,
   compareText,
   PRESENTATION_CLASS_RANK,
@@ -158,44 +164,6 @@ function leafHeaderLabel(
   };
 }
 
-function designationLookup(graph: PresentationGraph): (uid: string) => string {
-  const values = new Map<string, string>();
-  for (const group of graph.deviceGroups)
-    values.set(group.deviceUid, group.designation);
-  for (const node of graph.nodes) {
-    if (node.kind !== "junction") values.set(node.deviceUid, node.designation);
-  }
-  return (uid) => values.get(uid) ?? "";
-}
-
-function compareAdapterNodes(
-  graph: PresentationGraph,
-  left: PresentationNode,
-  right: PresentationNode,
-  order: SemanticOrder,
-): number {
-  if (left.kind === "junction" && right.kind === "junction") {
-    return (
-      compareTerminalId(
-        left.terminal,
-        right.terminal,
-        designationLookup(graph),
-      ) || comparePresentationNode(left, right, order.key)
-    );
-  }
-  return comparePresentationNode(left, right, order.key);
-}
-
-function sortedPorts(
-  graph: PresentationGraph,
-  ports: readonly PresentationPort[],
-): readonly PresentationPort[] {
-  const designationFor = designationLookup(graph);
-  return [...ports].sort((left, right) =>
-    comparePresentationPort(left, right, designationFor),
-  );
-}
-
 function uppercaseSide(side: SymbolSide): string {
   return side.toUpperCase();
 }
@@ -277,7 +245,7 @@ function leafNode(
       ? {}
       : { [ELK_OPTIONS.layerConstraint]: node.boundaryConstraint }),
   };
-  const ports = sortedPorts(graph, node.ports);
+  const ports = sortedLeafPorts(graph, node);
   return {
     id: node.id,
     width: node.width,
@@ -370,11 +338,15 @@ function compoundOptions(
   kind: "location" | "device",
   containsPortBearingLeaves: boolean,
   assignments: ElkOptionAssignment[],
+  verticalPower: boolean,
 ): LayoutOptions {
   const isLocation = kind === "location";
   const minimumWidth = Math.max(isLocation ? 32 : 16, label.width + 16);
   const parentOptions: LayoutOptions = {
     ...PARENT_SPACING_OPTIONS,
+    ...(verticalPower
+      ? { [ELK_OPTIONS.edgeNodeSpacing]: VERTICAL_POWER_EDGE_NODE_SPACING }
+      : {}),
     [ELK_OPTIONS.padding]: paddingValue(
       isLocation ? LOCATION_PADDING : DEVICE_PADDING,
     ),
@@ -452,6 +424,7 @@ function deviceNode(
       "device",
       containsPortBearingLeaves,
       assignments,
+      verticalPowerLanes(graph),
     ),
     labels: [adapterLabel(group.label)],
     children: children.map((node) => nodeAdapter(graph, node, assignments)),
@@ -482,6 +455,7 @@ function locationNode(
       "location",
       false,
       assignments,
+      verticalPowerLanes(graph),
     ),
     labels: [adapterLabel(group.label)],
     children: [...deviceChildren, ...junctionChildren],
@@ -780,6 +754,9 @@ export function buildElkAdapterGraph(
   );
   const rootOptions = {
     ...rootLayoutOptions(graph.view.flow),
+    ...(verticalPowerLanes(graph)
+      ? { [ELK_OPTIONS.edgeNodeSpacing]: VERTICAL_POWER_EDGE_NODE_SPACING }
+      : {}),
     ...(hasRootPortLabels
       ? {
           [ELK_OPTIONS.labelPortHorizontalSpacing]: String(
@@ -886,7 +863,11 @@ export async function layoutPresentationGraph(
             ...node.layoutOptions,
             [ELK_OPTIONS.nodeNodeSpacing]: dense ? "12" : "18",
             [ELK_OPTIONS.nodeNodeBetweenLayersSpacing]: dense ? "20" : "40",
-            [ELK_OPTIONS.edgeNodeSpacing]: dense ? "10" : "12",
+            [ELK_OPTIONS.edgeNodeSpacing]: verticalPowerLanes(candidate)
+              ? VERTICAL_POWER_EDGE_NODE_SPACING
+              : dense
+                ? "10"
+                : "12",
             [ELK_OPTIONS.componentComponentSpacing]: dense ? "16" : "24",
           };
           node.children.forEach(compact);

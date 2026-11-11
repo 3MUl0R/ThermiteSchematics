@@ -278,6 +278,8 @@ export interface SemanticAttachment {
 }
 
 export interface SymbolPresentationNode {
+  /** Authored visible gang; reserve its annotation band before ELK. */
+  readonly mechanicalGangId?: string;
   readonly contentBox?: Readonly<{
     x: number;
     y: number;

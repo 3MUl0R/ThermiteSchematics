@@ -151,7 +151,10 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const { graph, layout } = drawing.value;
     // Real ELK output, including every caption and conductor, must retain both
     // authored associations. The open-state ink needs no NO caption.
-    expect(rootedGangSegments(ir, graph, layout)).toHaveLength(2);
+    expect(rootedGangSegments(ir, graph, layout)).toMatchObject({
+      ok: true,
+      value: [expect.any(Object), expect.any(Object)],
+    });
     const rendered = await renderSchematic(ir, { ...powerRequest, flow });
     expect(rendered.ok).toBe(true);
     if (!rendered.ok) throw Error(rendered.error.message);
@@ -173,7 +176,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       ),
     ).toEqual(new Set(ir.wires.map((w) => w.uid)));
     // Synthetic guard case: remove unrelated obstacles, then deliberately shift
-    // one pole to verify that misalignment suppresses the whole gang.
+    // one pole to verify that misalignment refuses the whole drawing.
     const gangGraph = {
       ...graph,
       nodes: graph.nodes.filter(
@@ -194,10 +197,13 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       n.y = flow === "left-to-right" ? i * 100 : 0;
       n.primitiveOrigin = { x: n.x, y: n.y };
     });
-    expect(rootedGangSegments(ir, gangGraph, gangLayout)).toHaveLength(2);
+    expect(rootedGangSegments(ir, gangGraph, gangLayout)).toMatchObject({
+      ok: true,
+      value: [expect.any(Object), expect.any(Object)],
+    });
     expect(
       rootedGangSegments({ ...ir, gangedGroups: [] }, gangGraph, gangLayout),
-    ).toEqual([]);
+    ).toEqual({ ok: true, value: [] });
     const shifted = structuredClone(gangLayout);
     const pole = gangGraph.nodes.find(
       (n) => n.kind === "symbol" && n.symbolId === "ais:disconnector",
@@ -206,7 +212,13 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     if (!placed.primitiveOrigin) throw Error("Missing primitive origin");
     const axis = flow === "left-to-right" ? "x" : "y";
     placed.primitiveOrigin[axis] += 5;
-    expect(rootedGangSegments(ir, gangGraph, shifted)).toEqual([]);
+    expect(rootedGangSegments(ir, gangGraph, shifted)).toMatchObject({
+      ok: false,
+      error: {
+        code: "R006",
+        details: { reason: "mechanical-gang", blockedBy: "misaligned poles" },
+      },
+    });
     const packet = await renderSchematicPacket(ir, {
       format: "schematic-packet-request/0.1",
       page: { size: "a3", orientation: "landscape", marginMm: 10 },

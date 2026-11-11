@@ -194,15 +194,15 @@ beforeAll(async () => {
   presentation = c.presentation;
 });
 const witnesses = [
-  ["landscape", "compact", "left-to-right"],
-  ["landscape", "compact", "top-to-bottom"],
-  ["landscape", "standard", "left-to-right"],
-  ["portrait", "compact", "top-to-bottom"],
-  ["portrait", "standard", "top-to-bottom"],
+  ["landscape", "compact", "left-to-right", false],
+  ["landscape", "compact", "top-to-bottom", true],
+  ["landscape", "standard", "left-to-right", false],
+  ["portrait", "compact", "top-to-bottom", true],
+  ["portrait", "standard", "top-to-bottom", true],
 ] as const;
 it.each(witnesses)(
-  "removes both SVG/HTML witnessed copies: letter %s %s %s",
-  async (orientation, layout, flow) => {
+  "keeps only painted SVG/HTML heading copies: letter %s %s %s",
+  async (orientation, layout, flow, originalVisible) => {
     const r = await renderSchematicPacket(
       ir,
       {
@@ -234,12 +234,12 @@ it.each(witnesses)(
         [...doc.querySelectorAll("text.label-location")].some(
           (t) => t.textContent === "MAIN-PANEL",
         ),
-      ).toBe(false);
+      ).toBe(originalVisible);
       expect(
         [...doc.querySelectorAll("text")].some(
           (t) => t.textContent === "CONTINUED LOCATION: MAIN-PANEL",
         ),
-      ).toBe(true);
+      ).toBe(!originalVisible);
     }
   },
   30000,

@@ -16,6 +16,7 @@ import { nativeReservations } from "./native.js";
 import { addOffViewCards, offViewLayoutFailure } from "./presentation.js";
 import { recoverCardLayout } from "./recover.js";
 import { required } from "../presentation/util.js";
+import { rootedGangSegments } from "../symbols/rooted-gangs.js";
 
 export interface DrawingContext {
   ir: Readonly<ElectricalIr>;
@@ -37,7 +38,14 @@ export async function initialCardLayout(
   repair: boolean,
 ) {
   const layout = await layoutPresentationGraph(graph, c.options);
-  if (!layout.ok && repair && layout.failureKind === "symbol-intersection") {
+  const gangs = layout.ok
+    ? rootedGangSegments(c.ir, graph, layout.value)
+    : undefined;
+  if (
+    repair &&
+    ((!layout.ok && layout.failureKind === "symbol-intersection") ||
+      (gangs && !gangs.ok))
+  ) {
     const recovered = await recoverCardLayout(
       c.ir,
       graph,
@@ -47,6 +55,11 @@ export async function initialCardLayout(
     );
     if (recovered) return recovered;
   }
+  if (gangs && !gangs.ok)
+    return {
+      graph,
+      layout: { ...gangs, failureKind: "mechanical-gang" as const },
+    };
   return { graph, layout };
 }
 
@@ -68,6 +81,8 @@ export async function repositionDrawing(
       ok: false,
       error: offViewLayoutFailure(annotated.value, layout.error),
     };
+  const gangs = rootedGangSegments(c.ir, annotated.value, layout.value);
+  if (!gangs.ok) return gangs;
   return {
     ok: true,
     value: rememberDrawing(
@@ -84,6 +99,10 @@ export async function nativeDrawing(
   const c = required(contexts.get(p), "Missing prepared source context"),
     graph = nativeReservations(p.graph);
   const layout = await layoutPresentationGraph(graph, c.options);
+  if (layout.ok) {
+    const gangs = rootedGangSegments(c.ir, graph, layout.value);
+    if (!gangs.ok) return gangs;
+  }
   return layout.ok
     ? { ok: true, value: { ...p, graph, layout: layout.value } }
     : { ok: false, error: layout.error };

@@ -300,9 +300,8 @@ unused notes cannot waive a library requirement. Unknown keys fail E205.
 W903 flags non-deferred required points not fully connected, W904 partial models,
 and W905 deferred or contradictory reviews; preserve them. Optional unconnected
 points, spares and unreviewed models stay visible as information. A single-ended
-cable core does not satisfy a required connection. Connected does not prove an
-upstream supply, correct voltage, protection, bonding or safety. Never mark
-points unused just to clear a finding.
+cable core does not satisfy a required connection. Connectivity proves no supply, voltage, protection, bond or safety. Never mark
+points unused to clear findings. Power view switch gangs: ink/R006.
 
 ## Terminal wiring and communication cable records
 

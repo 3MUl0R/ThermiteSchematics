@@ -1,5 +1,6 @@
 import {
   contactCaptionWidth,
+  contactCaptionSymbol,
   verticalContactCaption,
 } from "./contact-caption.js";
 import type {
@@ -14,10 +15,12 @@ import type { DeviceTypeSymbolMapping } from "../symbols/mappings.js";
 import { summarizePresentationGraph } from "./summary.js";
 import { svgSemanticId } from "../svg/escape.js";
 import { validateOffViewLabel } from "../off-view/validate.js";
+import { orderedPowerLanes } from "./util.js";
 
 function validateLabel(
   label: PresentationLabel,
   graph: Readonly<PresentationGraph>,
+  selected: Readonly<SelectedSubgraph>,
 ): void {
   if (label.role === "off-view") {
     validateOffViewLabel(label);
@@ -26,15 +29,20 @@ function validateLabel(
   const owner = graph.nodes.find((n) => n.id === label.ownerId);
   const contact =
     owner?.kind === "symbol" &&
-    verticalContactCaption(owner.orientation, label);
+    (verticalContactCaption(owner.orientation, label, owner.symbolId) ||
+      (owner.mechanicalGangId !== undefined &&
+        label.role === "function" &&
+        contactCaptionSymbol(owner.symbolId)));
   invariant(
     label.width ===
       (contact
         ? contactCaptionWidth(label)
-        : Math.max(
-            labelWidth(label.text),
-            labelWidth(label.printableText ?? label.text),
-          )),
+        : owner?.kind === "symbol" && orderedPowerLanes(selected)
+          ? labelWidth(label.printableText ?? label.text)
+          : Math.max(
+              labelWidth(label.text),
+              labelWidth(label.printableText ?? label.text),
+            )),
     `${label.id} width`,
   );
   invariant(label.height === 14, `${label.id} height`);
@@ -104,7 +112,7 @@ export function validateLabelsAndMetadata(
   for (const label of labels) {
     invariant(!labelIds.has(label.id), `${label.id} unique label`);
     labelIds.add(label.id);
-    validateLabel(label, graph);
+    validateLabel(label, graph, selected);
   }
   const sortedMetadata = [...graph.metadataTextSources].sort(
     compareRenderTextSource,

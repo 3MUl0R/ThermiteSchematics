@@ -251,8 +251,18 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     });
     if (!r.ok) throw Error(r.error.message);
     const { graph, layout } = r.value;
-    expect(rootedGangSegments(c.ir, graph, layout)).toHaveLength(2);
-    for (const segment of rootedGangSegments(c.ir, graph, layout))
+    const gangs = rootedGangSegments(c.ir, graph, layout);
+    if (!gangs.ok) throw Error(gangs.error.message);
+    expect(gangs.value).toHaveLength(4);
+    const breakerSegments = gangs.value.filter((s) =>
+      s.functions.some(
+        (f) =>
+          c.ir.devices.find((d) => d.uid === f.deviceUid)?.designation ===
+          "CB1",
+      ),
+    );
+    expect(breakerSegments).toHaveLength(2);
+    for (const segment of breakerSegments)
       for (const point of [segment.from, segment.to])
         expect(
           graph.nodes.some((node) => {
@@ -270,7 +280,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
 
     expect(
       rootedGangSegments({ ...c.ir, gangedGroups: [] }, graph, layout),
-    ).toHaveLength(0);
+    ).toEqual({ ok: true, value: [] });
     const moved = structuredClone(layout);
     const pole = graph.nodes.find(
       (n) => n.kind === "symbol" && n.symbolId === "ais:breaker-pole",
@@ -278,9 +288,12 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const origin = moved.nodes.find((n) => n.id === pole.id)!.primitiveOrigin!;
     if (flow === "left-to-right") origin.x += 3;
     else origin.y += 3;
-    expect(rootedGangSegments(c.ir, graph, moved)).toHaveLength(0);
+    expect(rootedGangSegments(c.ir, graph, moved)).toMatchObject({
+      ok: false,
+      error: { code: "R006", details: { reason: "mechanical-gang" } },
+    });
     const blocked = structuredClone(layout),
-      segment = rootedGangSegments(c.ir, graph, layout)[0]!;
+      segment = breakerSegments[0]!;
     blocked.nodes.push({
       id: "obstacle",
       parentId: "root",
@@ -290,7 +303,10 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       width: 2,
       height: 2,
     });
-    expect(rootedGangSegments(c.ir, graph, blocked)).toHaveLength(1);
+    expect(rootedGangSegments(c.ir, graph, blocked)).toMatchObject({
+      ok: false,
+      error: { code: "R006", details: { blockedBy: "node obstacle" } },
+    });
     const near = structuredClone(layout);
     const x = (segment.from.x + segment.to.x) / 2,
       y = (segment.from.y + segment.to.y) / 2;
@@ -308,7 +324,13 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
               { x: x + 3, y: y + 2 },
             ],
     });
-    expect(rootedGangSegments(c.ir, graph, near)).toHaveLength(1);
+    expect(rootedGangSegments(c.ir, graph, near)).toMatchObject({
+      ok: false,
+      error: {
+        code: "R006",
+        details: { blockedBy: "conductor near-conductor" },
+      },
+    });
   },
 );
 

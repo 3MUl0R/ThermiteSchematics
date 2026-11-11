@@ -987,7 +987,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Connected does not prove an upstream supply, correct voltage, protection, bonding or safety.",
+        "Connectivity proves no supply, voltage, protection, bond or safety.",
       async check() {
         const { report } = await auditReport();
         expect(report.limitations[0]).toBe(
@@ -1120,7 +1120,7 @@ const module: FactModule = {
       "Authoring advice: the engine can only check declared terminals and ports.",
     ],
     [
-      "Never mark points unused just to clear a finding.",
+      "Never mark points unused to clear findings.",
       "Authoring advice about review honesty; the engine cannot judge intent.",
     ],
   ]),

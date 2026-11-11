@@ -223,8 +223,8 @@ function reservedHeaderPosition(
   flow: SchematicFlow,
 ) {
   if (
-    flow === "top-to-bottom" &&
     leaf.kind === "symbol" &&
+    (flow === "top-to-bottom" || leaf.mechanicalGangId !== undefined) &&
     header.role === "function" &&
     ["NO", "NC"].includes(header.printableText ?? "")
   ) {

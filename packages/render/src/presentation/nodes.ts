@@ -33,6 +33,7 @@ import {
   cloneFunction,
   required,
   orientationFor,
+  orderedPowerLanes,
   cloneTerminal,
   labelWidth,
   orientedSide,
@@ -90,7 +91,15 @@ function buildSymbolNode(
     orientation,
     context,
   );
-  const geometry = leafGeometry(symbol, orientation, nodeLabel, labels[0]);
+  const orderedPower = orderedPowerLanes(context.selected);
+  const caption = required(labels[0], "Missing symbol caption.");
+  const geometry = leafGeometry(
+    symbol,
+    orientation,
+    orderedPower ? caption : nodeLabel,
+    caption,
+    orderedPower,
+  );
   const attachments = buildSymbolAttachments(context, representation, ports);
   const boundaryConstraint = representationBoundaryConstraint(
     representation,
@@ -189,9 +198,15 @@ function buildSymbolPorts(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
   const printedLabel = { ...nodeLabel, printableText };
-  const captionWidth = verticalContactCaption(orientation, printedLabel)
+  const captionWidth = verticalContactCaption(
+    orientation,
+    printedLabel,
+    symbol.id,
+  )
     ? contactCaptionWidth(printedLabel)
-    : Math.max(nodeLabel.width, labelWidth(printableText));
+    : orderedPowerLanes(context.selected)
+      ? labelWidth(printableText)
+      : Math.max(nodeLabel.width, labelWidth(printableText));
   const labels: PresentationLabel[] = [
     {
       ...nodeLabel,
@@ -245,6 +260,7 @@ function mapSymbolPorts(
       definition.side,
       definition.offset,
       orientation,
+      symbol.id,
     );
     const id = structuralTupleId("port", representation.id, definition.id);
     const terminalLabel = presentationLabel(

@@ -17,6 +17,7 @@ import type {
   SymbolPortDefinition,
 } from "../src/symbols/types.js";
 import { validateSymbolCatalog } from "../src/symbols/validate.js";
+import { orientedSide } from "../src/presentation/util.js";
 
 interface ExpectedSymbol {
   readonly id: SymbolDefinition["id"];
@@ -593,6 +594,67 @@ describe("D3 original symbol catalog", () => {
       { id: "A1", side: "north", offset: 1 / 2, order: 0 },
       { id: "A2", side: "south", offset: 1 / 2, order: 1 },
     ]);
+  });
+
+  it.each([
+    ["ais:power-source-3ph", ["L1", "L2", "L3", "PE"], "south"],
+    ["ais:power-source-3wire", ["L1", "L2", "L3"], "south"],
+    ["ais:motor-3ph", ["U", "V", "W", "PE"], "north"],
+    ["ais:motor-3ph-unbonded", ["U", "V", "W"], "north"],
+  ] as const)(
+    "preserves physical phase lanes and glyph landings for %s",
+    (id, ids, side) => {
+      const original = SYMBOL_CATALOG.find((s) => s.id === id)!;
+      expect(orientSymbolDefinition(original, "left-to-right")).toEqual(
+        original,
+      );
+      const vertical = orientSymbolDefinition(original, "top-to-bottom");
+      expect(vertical.ports.map((p) => p.id)).toEqual(ids);
+      for (const [i, port] of vertical.ports.entries()) {
+        expect(port).toEqual({ ...original.ports[i], side });
+        const landing = {
+          x: port.offset * vertical.size.width,
+          y: side === "north" ? 0 : vertical.size.height,
+        };
+        // Physical ink reaches the port; reversing captions alone cannot pass.
+        expect(
+          vertical.primitives.some((p) =>
+            p.kind === "line"
+              ? [p.from, p.to].some(
+                  (v) => v.x === landing.x && v.y === landing.y,
+                )
+              : p.kind === "polyline" &&
+                p.points.some((v) => v.x === landing.x && v.y === landing.y),
+          ),
+        ).toBe(true);
+      }
+      expectDeepFrozen(vertical);
+    },
+  );
+
+  it("keeps presentation ports aligned with catalog geometry for every symbol and flow", () => {
+    for (const symbol of SYMBOL_CATALOG) {
+      for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+        const oriented = orientSymbolDefinition(symbol, flow);
+        expect(
+          symbol.ports.map((p) => ({
+            ...p,
+            ...orientedSide(p.side, p.offset, flow, symbol.id),
+          })),
+        ).toEqual(oriented.ports);
+      }
+    }
+    // Other multi-port and asymmetric symbols keep their original handedness.
+    for (const id of [
+      "ais:power-source-dc",
+      "ais:dc-load",
+      "ais:switch-sensor-pnp",
+    ] as const) {
+      const symbol = SYMBOL_CATALOG.find((s) => s.id === id)!;
+      expect(
+        orientSymbolDefinition(symbol, "top-to-bottom").ports[0]!.offset,
+      ).toBe(1 - symbol.ports[0]!.offset);
+    }
   });
 
   it("contains no free-form drawing fragment or external artwork reference", () => {

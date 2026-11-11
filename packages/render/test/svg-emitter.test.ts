@@ -58,7 +58,15 @@ function emitted(
     presentation.view,
   );
   if (!titleContext.ok) throw new Error(JSON.stringify(titleContext.error));
-  const result = emitSchematicSvg(presentation, normalized, titleContext.value);
+  const result = emitSchematicSvg(
+    presentation,
+    normalized,
+    titleContext.value,
+    undefined,
+    false,
+    undefined,
+    coreIr,
+  );
   if (!result.ok) throw new Error(JSON.stringify(result.error));
   return result.value;
 }
@@ -72,7 +80,15 @@ function emittedOutcome(
     presentation.view,
   );
   if (!titleContext.ok) throw new Error(JSON.stringify(titleContext.error));
-  return emitSchematicSvg(presentation, normalized, titleContext.value);
+  return emitSchematicSvg(
+    presentation,
+    normalized,
+    titleContext.value,
+    undefined,
+    false,
+    undefined,
+    coreIr,
+  );
 }
 
 beforeAll(async () => {

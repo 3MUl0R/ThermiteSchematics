@@ -68,16 +68,30 @@ function assertDownHeader(
     expect(
       semantic.primitiveOrigin.x - required(adapted.x) - 3 - m.right,
     ).toBeGreaterThanOrEqual(4.75);
-    expect(required(adapted.y) + header.height / 2).toBeCloseTo(
-      semantic.primitiveOrigin.y + semantic.symbolSize.height / 2,
-      3,
-    );
+    if (semantic.mechanicalGangId)
+      expect(
+        required(adapted.y) - semantic.primitiveOrigin.y - 20,
+      ).toBeGreaterThanOrEqual(3);
+    else
+      expect(required(adapted.y) + header.height / 2).toBeCloseTo(
+        semantic.primitiveOrigin.y + semantic.symbolSize.height / 2,
+        3,
+      );
   } else {
-    expect(
-      semantic.primitiveOrigin.x -
-        (semantic.contentBox?.x ?? 0) -
-        (8 + header.width),
-    ).toBeCloseTo(8);
+    if (semantic.kind === "symbol" && header.printableText === "") {
+      expect(
+        semantic.primitiveOrigin.x - (semantic.contentBox?.x ?? 0),
+      ).toBeCloseTo(4);
+      expect(semantic.contentBox?.width ?? semantic.width).toBe(
+        semantic.symbolSize.width + 8,
+      );
+    } else {
+      expect(
+        semantic.primitiveOrigin.x -
+          (semantic.contentBox?.x ?? 0) -
+          (8 + header.width),
+      ).toBeCloseTo(8);
+    }
     expect({ x: adapted.x, y: adapted.y }).toEqual({
       x: (semantic.contentBox?.x ?? 0) + (semantic.kind === "rail" ? 5 : 8),
       y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
@@ -262,12 +276,19 @@ describe("pinned ELK adapter", () => {
         node.labels?.find(({ id }) => id === header.id),
       );
       expect({ x: adaptedHeader.x, y: adaptedHeader.y }).toEqual({
-        x: Number(
-          (
-            (semantic.contentBox?.x ?? 0) +
-            ((semantic.contentBox?.width ?? semantic.width) - header.width) / 2
-          ).toFixed(3),
-        ),
+        x:
+          semantic.kind === "symbol" &&
+          semantic.mechanicalGangId &&
+          ["NO", "NC"].includes(header.printableText ?? "")
+            ? semantic.primitiveOrigin.x + 23
+            : Number(
+                (
+                  (semantic.contentBox?.x ?? 0) +
+                  ((semantic.contentBox?.width ?? semantic.width) -
+                    header.width) /
+                    2
+                ).toFixed(3),
+              ),
         y: (semantic.contentBox?.y ?? 0) + (semantic.kind === "rail" ? 5 : 4),
       });
       expect(adaptedHeader.layoutOptions).toEqual({
@@ -356,11 +377,9 @@ describe("pinned ELK adapter", () => {
         const coordinates = adapted
           .ports!.map((port) => port[axis] as number)
           .sort((left, right) => left - right);
-        expect(
-          coordinates
-            .slice(1)
-            .map((value, index) => value - coordinates[index]!),
-        ).toEqual([24, 24, 24]);
+        expect(coordinates).toHaveLength(4);
+        for (let i = 1; i < coordinates.length; i++)
+          expect(coordinates[i]! - coordinates[i - 1]!).toBeCloseTo(24, 6);
       }
     }
     expect(24 - (4 + 14)).toBe(6);

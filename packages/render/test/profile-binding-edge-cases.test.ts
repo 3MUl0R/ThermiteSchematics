@@ -66,12 +66,35 @@ describe("profile binding edge cases", () => {
         }
       }
       for (const flow of ["left-to-right", "top-to-bottom"] as const) {
-        const r = await renderSchematic(ir, {
+        const request = {
           format: "schematic-view-request/0.1",
           root: { by: "designation", value: "M1" },
           family: "power",
           flow,
-        });
+        } as const;
+        // Fuses are outside the mandatory power-switching mark set. An
+        // unsupported optional gang paints no invented link and does not refuse.
+        const uid = ir.devices.find((d) => d.typeId === type.id)!.uid;
+        const group = ir.gangedGroups.find((g) =>
+          g.functionIds.some((f) => f.deviceUid === uid),
+        )!;
+        const before = JSON.stringify(ir);
+        const ganged = await renderSchematic(ir, request);
+        expect(ganged.ok, JSON.stringify(ganged)).toBe(true);
+        if (ganged.ok)
+          expect(ganged.value.svg).not.toContain(
+            `data-ganged-group="${group.id}"`,
+          );
+        expect(JSON.stringify(ir)).toBe(before);
+        // The separate positive fixture explicitly models independent fuses.
+        const independent = structuredClone(ir);
+        independent.gangedGroups = independent.gangedGroups.filter(
+          (g) => g.id !== group.id,
+        );
+        independent.internalRelations = independent.internalRelations.filter(
+          (r) => r.deviceUid !== uid || r.verb !== "ganged_with",
+        );
+        const r = await renderSchematic(independent, request);
         expect(r.ok, JSON.stringify(r)).toBe(true);
         if (r.ok) expect(r.value.svg).toContain("ais:fuse");
       }
