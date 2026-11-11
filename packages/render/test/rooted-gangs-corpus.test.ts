@@ -13,6 +13,8 @@ import {
 } from "../src/renderer.js";
 import { rootedGangSegments } from "../src/symbols/rooted-gangs.js";
 import { emitSchematicSvg } from "../src/svg/emitter.js";
+import { gangAnchor } from "../src/symbols/gang-geometry.js";
+import { OUTER_SVG_PADDING } from "../src/symbols/catalog.js";
 import { SYMBOL_CATALOG } from "../src/symbols/catalog.js";
 
 it("paints every authored visible gang in the rooted drawing corpus, both flows and spacing profiles", async () => {
@@ -118,8 +120,33 @@ it("paints every authored visible gang in the rooted drawing corpus, both flows 
               line.getAttribute("data-ganged-functions")!,
             );
             expect(functions).toHaveLength(2);
-            for (const fn of functions)
+            for (const [i, fn] of functions.entries()) {
               expect(group.functionIds).toContainEqual(fn);
+              const member = members.find(
+                (n) =>
+                  n.kind === "symbol" &&
+                  n.functionIds.some(
+                    (f) =>
+                      f.deviceUid === fn.deviceUid &&
+                      f.functionKey === fn.functionKey,
+                  ),
+              );
+              if (!member || member.kind !== "symbol")
+                throw Error("Missing emitted gang member");
+              const anchor = gangAnchor(member),
+                origin = drawing.value.layout.nodes.find(
+                  (n) => n.id === member.id,
+                )?.primitiveOrigin;
+              if (!anchor || !origin)
+                throw Error("Missing emitted gang anchor");
+              for (const axis of ["x", "y"] as const)
+                expect(
+                  Number(line.getAttribute(`${axis}${i + 1}`)),
+                ).toBeCloseTo(
+                  origin[axis] + anchor[axis] + OUTER_SVG_PADDING,
+                  3,
+                );
+            }
           }
         }
         expect(strokes).toHaveLength(expectedTotal);

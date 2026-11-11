@@ -8,7 +8,7 @@ import type {
 } from "../types.js";
 import { CARD_GAP } from "./card.js";
 import { cardInkFits } from "./ink.js";
-import { GANG_CLEARANCE, gangAnchor } from "../symbols/gang-geometry.js";
+import { gangReservationBand } from "../symbols/gang-geometry.js";
 import {
   LABEL_PORT_HORIZONTAL_SPACING as H,
   LABEL_PORT_VERTICAL_SPACING as V,
@@ -92,28 +92,7 @@ function cardObstacles(node: Owner): Box[] {
   );
   const caption =
     node.kind === "symbol" ? contactCaptionRegion(node, header) : undefined;
-  const anchor =
-    node.kind === "symbol" && node.mechanicalGangId
-      ? gangAnchor(node)
-      : undefined;
   return [
-    ...(anchor
-      ? [
-          node.orientation === "top-to-bottom"
-            ? {
-                x: -1e8,
-                y: node.primitiveOrigin.y + anchor.y - GANG_CLEARANCE,
-                width: 2e8,
-                height: 2 * GANG_CLEARANCE,
-              }
-            : {
-                x: node.primitiveOrigin.x + anchor.x - GANG_CLEARANCE,
-                y: -1e8,
-                width: 2 * GANG_CLEARANCE,
-                height: 2e8,
-              },
-        ]
-      : []),
     {
       x: node.primitiveOrigin.x - 4,
       y: node.primitiveOrigin.y - 4,
@@ -142,6 +121,17 @@ function cardObstacles(node: Owner): Box[] {
     ...node.ports.map((p) => portLane(node, p)),
     ...terminalLabelBoxes(node),
   ];
+}
+
+function enclosingBox(a: Box, b: Box): Box {
+  const x = Math.min(a.x, b.x),
+    y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    width: Math.max(a.x + a.width, b.x + b.width) - x,
+    height: Math.max(a.y + a.height, b.y + b.height) - y,
+  };
 }
 
 function cardBoxes(
@@ -176,20 +166,20 @@ function cardBoxes(
           .flatMap((b) => [b.y - card.height - 4, b.y + b.height + 4]),
       ]) {
         const box = { x, y, width: card.width, height: card.height };
+        const expanded = enclosingBox(bounds, box);
+        const band =
+          node.kind === "symbol"
+            ? gangReservationBand(node, expanded)
+            : undefined;
         if (
+          (band && intersects(box, band)) ||
           forbidden.some((other) => intersects(box, other)) ||
           !orderedStack(node, card, box, placed)
         )
           continue;
-        const w =
-          Math.max(bounds.x + bounds.width, x + card.width) -
-          Math.min(bounds.x, x);
-        const h =
-          Math.max(bounds.y + bounds.height, y + card.height) -
-          Math.min(bounds.y, y);
         candidates.push({
           box,
-          cost: w * h + gap,
+          cost: expanded.width * expanded.height + gap,
           distance: Math.hypot(
             Math.max(box.x - anchor.x, 0, anchor.x - box.x - box.width),
             Math.max(box.y - anchor.y, 0, anchor.y - box.y - box.height),

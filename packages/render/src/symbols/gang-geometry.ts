@@ -1,5 +1,5 @@
-import { functionIdKey, compareText } from "../ordering.js";
-import type { FunctionId, ElectricalIr } from "@thermite/compiler";
+import { compareText } from "../ordering.js";
+import type { ElectricalIr } from "@thermite/compiler";
 import type { PresentationGraph, SymbolPresentationNode } from "../types.js";
 import { PRINTABLE_SYMBOL_POLICY } from "./printable-policy.js";
 
@@ -48,41 +48,78 @@ export function visibleRootedGangs(
             ),
           ),
       );
-      return members.length >= 2 ? [{ group, members }] : [];
+      const poles =
+        graph.view.family === "power"
+          ? members.filter((n) => isPowerSwitchingPole(n, ir))
+          : [];
+      return members.length >= 2
+        ? [
+            {
+              group,
+              members: poles.length >= 2 ? poles : members,
+              mandatory: poles.length >= 2,
+            },
+          ]
+        : [];
     });
 }
 
-export function reserveGangAnnotations(
+/** Closed power marks identify pole roles; contact marks additionally need the
+ * power-contact classification so auxiliary/control contacts stay optional. */
+export function isPowerSwitchingPole(
+  node: SymbolPresentationNode,
   ir: Readonly<ElectricalIr>,
-  graph: PresentationGraph,
-): PresentationGraph {
-  const ids = new Map(
-    visibleRootedGangs(ir, graph).flatMap(({ group, members }) =>
-      members.map((n) => [n.id, group.id] as const),
-    ),
+): boolean {
+  if (node.representation !== "function") return false;
+  if (
+    ["ais:breaker-pole", "ais:disconnector", "ais:overload-pole"].includes(
+      node.symbolId,
+    )
+  )
+    return true;
+  if (
+    !["ais:contact-no", "ais:contact-nc"].includes(node.symbolId) ||
+    node.classification !== "power-contact"
+  )
+    return false;
+  const roles = node.ports.map(
+    (p) =>
+      ir.terminals.find(
+        (t) =>
+          t.id.deviceUid === p.terminal.deviceUid &&
+          t.id.terminalKey === p.terminal.terminalKey,
+      )?.role,
   );
-  return {
-    ...graph,
-    nodes: graph.nodes.map((n) => {
-      const id = ids.get(n.id);
-      return n.kind === "symbol" && id !== undefined
-        ? { ...n, mechanicalGangId: id }
-        : n;
-    }),
-  };
+  return roles.includes("power_input") && roles.includes("power_output");
 }
 
-export function selectedGangId(
-  ir: Readonly<ElectricalIr>,
-  selected: readonly FunctionId[],
-  represented: readonly FunctionId[],
+/** Before ELK, the finite prospective owner box is contained in its device
+ * group. Only that owner's cards are checked here; actual inter-member spans
+ * are checked after ELK. No sheet-wide or guessed coordinate extent is used. */
+export function gangReservationBand(
+  node: Pick<
+    SymbolPresentationNode,
+    | "symbolId"
+    | "orientation"
+    | "symbolSize"
+    | "primitiveOrigin"
+    | "mechanicalGangId"
+  >,
+  bounds: { x: number; y: number; width: number; height: number },
 ) {
-  const selectedKeys = new Set(selected.map(functionIdKey));
-  const representedKeys = new Set(represented.map(functionIdKey));
-  return ir.gangedGroups.find(
-    (g) =>
-      g.functionIds.some((f) => representedKeys.has(functionIdKey(f))) &&
-      g.functionIds.filter((f) => selectedKeys.has(functionIdKey(f))).length >=
-        2,
-  )?.id;
+  const anchor = node.mechanicalGangId ? gangAnchor(node) : undefined;
+  if (!anchor) return undefined;
+  return node.orientation === "top-to-bottom"
+    ? {
+        x: bounds.x - GANG_CLEARANCE,
+        y: node.primitiveOrigin.y + anchor.y - GANG_CLEARANCE,
+        width: bounds.width + 2 * GANG_CLEARANCE,
+        height: 2 * GANG_CLEARANCE,
+      }
+    : {
+        x: node.primitiveOrigin.x + anchor.x - GANG_CLEARANCE,
+        y: bounds.y - GANG_CLEARANCE,
+        width: 2 * GANG_CLEARANCE,
+        height: bounds.height + 2 * GANG_CLEARANCE,
+      };
 }

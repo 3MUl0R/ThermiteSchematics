@@ -13,7 +13,7 @@ import { noteJson, type FactModule } from "./harness.js";
 const module: FactModule = {
   facts: [
     {
-      claim: "Gang loss fails R006 by group.",
+      claim: "Power view switch gangs: ink/R006.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));

@@ -2,6 +2,7 @@ import {
   comparePresentationNode,
   comparePresentationPort,
   compareTerminalId,
+  compareText,
 } from "../ordering.js";
 import type { SemanticOrder } from "../semantic-order.js";
 import { preservesVerticalPowerLaneOrder } from "../symbols/catalog.js";
@@ -83,9 +84,24 @@ export function sortedLeafPorts(
   // ELK indices run clockwise: north is left-to-right, south right-to-left.
   // These lane families have all ports on one of those two sides. Their
   // semantic order stays intact; only ELK's perimeter indices change.
-  return [...ports].sort((left, right) =>
-    left.side === "south"
+  if (
+    new Set(ports.map((p) => p.side)).size !== 1 ||
+    ports.some((p) => p.side !== "north" && p.side !== "south")
+  )
+    throw Error(
+      `Vertical power lane family ${node.symbolId} requires a single north or south port side.`,
+    );
+  return [...ports].sort(compareVerticalPowerPorts);
+}
+
+export function compareVerticalPowerPorts(
+  left: PresentationPort,
+  right: PresentationPort,
+): number {
+  return (
+    compareText(left.side, right.side) ||
+    (left.side === "south"
       ? right.offset - left.offset
-      : left.offset - right.offset,
+      : left.offset - right.offset)
   );
 }

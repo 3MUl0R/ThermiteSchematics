@@ -3,14 +3,23 @@ import { printableTextMetrics } from "../symbols/printable-font.js";
 import { CAPTION_CLEARANCE_MM } from "../symbols/caption-ink.js";
 import { GANG_CLEARANCE, gangAnchor } from "../symbols/gang-geometry.js";
 
+export function contactCaptionSymbol(
+  symbolId: SymbolPresentationNode["symbolId"],
+): boolean {
+  return /(?:contact|pushbutton|switch|estop|selector)-(?:no|nc)$/.test(
+    symbolId,
+  );
+}
+
 export function verticalContactCaption(
   orientation: string,
   label: PresentationLabel,
+  symbolId: SymbolPresentationNode["symbolId"],
 ): boolean {
   return (
     orientation === "top-to-bottom" &&
     label.role === "function" &&
-    ["NO", "NC"].includes(label.printableText ?? "")
+    contactCaptionSymbol(symbolId)
   );
 }
 
@@ -40,9 +49,7 @@ export function contactCaptionRegion(
 ) {
   const anchor = node.mechanicalGangId && gangAnchor(node);
   const gangedContact =
-    anchor &&
-    label.role === "function" &&
-    ["NO", "NC"].includes(label.printableText ?? "");
+    anchor && label.role === "function" && contactCaptionSymbol(node.symbolId);
   if (gangedContact && node.orientation === "left-to-right")
     return {
       x:
@@ -55,7 +62,8 @@ export function contactCaptionRegion(
       width: label.width,
       height: label.height,
     };
-  if (!verticalContactCaption(node.orientation, label)) return undefined;
+  if (!verticalContactCaption(node.orientation, label, node.symbolId))
+    return undefined;
   const m = printableTextMetrics(label.printableText ?? label.text, 10);
   const gap = CAPTION_CLEARANCE_MM / 0.25 + 1.5 / 2 + 0.01;
   const x = node.primitiveOrigin.x - (node.contentBox?.x ?? 0);

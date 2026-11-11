@@ -72,12 +72,20 @@ than the same view without cards. The 2× packet bound is a refusal limit.
 Stacked cards follow displayed terminal order, with the nearest valid positions
 preferred.
 
-Authored mechanical gangs with at least two independently drawn members must
-paint every link between those members. Their stroke bands reserve clearance
-from cards and captions before ELK runs. A missing anchor, misalignment or
-collision refuses the drawing with R006, naming the device and ganged-group ID;
-no partial gang is emitted. A lone selected member establishes no link to an
-omitted member, and no gang is inferred for unassociated poles.
+In rooted **power** views, authored gangs of at least two independently drawn
+power-switching poles must paint every link between those poles. The closed
+breaker, disconnector and overload pole marks identify those roles; NO/NC contact
+marks additionally require the `power-contact` classification and declared
+`power_input` / `power_output` terminals to distinguish main contactor poles
+from auxiliary contacts. The rule uses no designation or
+caption text. Cards reserve a finite band inside their prospective owner box,
+contained in the device group, before ELK runs; final checks use actual member
+spans. A missing anchor, misalignment or collision refuses with R006 naming the
+device and group. Other gangs, including aux/control contacts, pushbutton blocks
+and changeover halves, paint only supported, aligned, unobstructed links. They
+otherwise render without a link or R006; their shared designation retains the
+relationship. A lone drawn member establishes no link to an omitted member,
+and no gang is inferred for unassociated poles.
 
 The [synthetic connection inventory](../examples/off-view-connections/source.json)
 and its [packet request](../examples/off-view-connections/packet.json) exercise an

@@ -7,7 +7,7 @@ import { terminalContextAttachment } from "../terminal-context-reference.js";
 import { contextJunctionInk } from "../layout/context-reference-ink.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { printableLabelGeometry } from "../symbols/printable-label.js";
-import { rootedGangSegments } from "../symbols/rooted-gangs.js";
+import { rootedGangEmission } from "../symbols/rooted-gangs.js";
 import {
   boundedPrintableAdvance,
   printableSlotWidth,
@@ -1068,9 +1068,7 @@ export function emitSchematicSvg(
   if (!preflight.ok) return preflight;
   const registry = buildRenderSourceRegistry(graph);
   assertMatchingInputs(graph, layout);
-  const gangs = ir
-    ? rootedGangSegments(ir, graph, layout)
-    : { ok: true as const, value: [] };
+  const gangs = rootedGangEmission(ir, graph, layout);
   if (!gangs.ok) return gangs;
 
   const nodeLayouts = indexById(layout.nodes, "layout node");

@@ -1,4 +1,3 @@
-import { selectedGangId } from "../symbols/gang-geometry.js";
 import {
   contactCaptionWidth,
   verticalContactCaption,
@@ -84,11 +83,6 @@ function buildSymbolNode(
     representation,
     symbol,
   );
-  const mechanicalGangId = selectedGangId(
-    context.ir,
-    context.selected.functionIds,
-    representation.functionIds,
-  );
   const { ports, labels } = buildSymbolPorts(
     symbol,
     nodeLabel,
@@ -96,14 +90,13 @@ function buildSymbolNode(
     representation,
     orientation,
     context,
-    mechanicalGangId !== undefined,
   );
   const orderedPower = orderedPowerLanes(context.selected);
   const caption = required(labels[0], "Missing symbol caption.");
   const geometry = leafGeometry(
     symbol,
     orientation,
-    orderedPower || mechanicalGangId ? caption : nodeLabel,
+    orderedPower ? caption : nodeLabel,
     caption,
     orderedPower,
   );
@@ -114,7 +107,6 @@ function buildSymbolNode(
   );
   return {
     kind: "symbol",
-    ...(mechanicalGangId ? { mechanicalGangId } : {}),
     representation: representation.kind,
     id: representation.id,
     deviceUid: representation.device.uid,
@@ -201,19 +193,20 @@ function buildSymbolPorts(
   representation: SymbolRepresentation,
   orientation: SchematicFlow,
   context: PresentationContext,
-  ganged = false,
 ) {
   const portDefinitionById = new Map(
     symbol.ports.map((definition) => [definition.id, definition]),
   );
   const printedLabel = { ...nodeLabel, printableText };
-  const captionWidth =
-    verticalContactCaption(orientation, printedLabel) ||
-    (ganged && ["NO", "NC"].includes(printableText))
-      ? contactCaptionWidth(printedLabel)
-      : orderedPowerLanes(context.selected)
-        ? labelWidth(printableText)
-        : Math.max(nodeLabel.width, labelWidth(printableText));
+  const captionWidth = verticalContactCaption(
+    orientation,
+    printedLabel,
+    symbol.id,
+  )
+    ? contactCaptionWidth(printedLabel)
+    : orderedPowerLanes(context.selected)
+      ? labelWidth(printableText)
+      : Math.max(nodeLabel.width, labelWidth(printableText));
   const labels: PresentationLabel[] = [
     {
       ...nodeLabel,

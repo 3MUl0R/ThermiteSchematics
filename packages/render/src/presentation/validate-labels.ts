@@ -1,5 +1,6 @@
 import {
   contactCaptionWidth,
+  contactCaptionSymbol,
   verticalContactCaption,
 } from "./contact-caption.js";
 import type {
@@ -28,9 +29,10 @@ function validateLabel(
   const owner = graph.nodes.find((n) => n.id === label.ownerId);
   const contact =
     owner?.kind === "symbol" &&
-    (verticalContactCaption(owner.orientation, label) ||
+    (verticalContactCaption(owner.orientation, label, owner.symbolId) ||
       (owner.mechanicalGangId !== undefined &&
-        ["NO", "NC"].includes(label.printableText ?? "")));
+        label.role === "function" &&
+        contactCaptionSymbol(owner.symbolId)));
   invariant(
     label.width ===
       (contact

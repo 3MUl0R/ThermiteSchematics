@@ -9,7 +9,7 @@ import { conductorKey } from "../presentation/util.js";
 import { authoredTerminalIncidence, omittedConnections } from "./incidence.js";
 import { createOffViewCard } from "./card.js";
 import { reserveOffViewCards } from "./placement.js";
-import { reserveGangAnnotations } from "../symbols/gang-geometry.js";
+import { reserveGangAnnotations } from "../presentation/gang-annotations.js";
 
 type AnnotatedGraph =
   | { readonly ok: true; readonly value: PresentationGraph }

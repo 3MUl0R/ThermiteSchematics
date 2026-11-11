@@ -72,24 +72,20 @@ describe("profile binding edge cases", () => {
           family: "power",
           flow,
         } as const;
-        // A fuse mark has no mechanical gang anchor. Retaining the original
-        // breaker gang must refuse, rather than silently dropping its links.
+        // Fuses are outside the mandatory power-switching mark set. An
+        // unsupported optional gang paints no invented link and does not refuse.
         const uid = ir.devices.find((d) => d.typeId === type.id)!.uid;
         const group = ir.gangedGroups.find((g) =>
           g.functionIds.some((f) => f.deviceUid === uid),
         )!;
+        const before = JSON.stringify(ir);
         const ganged = await renderSchematic(ir, request);
-        expect(ganged).toMatchObject({
-          ok: false,
-          error: {
-            code: "R006",
-            details: {
-              reason: "mechanical-gang",
-              groupId: group.id,
-              blockedBy: "missing supported gang anchor",
-            },
-          },
-        });
+        expect(ganged.ok, JSON.stringify(ganged)).toBe(true);
+        if (ganged.ok)
+          expect(ganged.value.svg).not.toContain(
+            `data-ganged-group="${group.id}"`,
+          );
+        expect(JSON.stringify(ir)).toBe(before);
         // The separate positive fixture explicitly models independent fuses.
         const independent = structuredClone(ir);
         independent.gangedGroups = independent.gangedGroups.filter(
