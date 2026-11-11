@@ -1,8 +1,9 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { compileProject, lockProject } from "@thermite/compiler";
 import { DOMParser } from "linkedom";
+import { dolProbeFixture } from "./dol-control-probes-fixture.js";
 
 export const flows = ["left-to-right", "top-to-bottom"] as const;
 export const control = (flow: (typeof flows)[number] = "left-to-right") => ({
@@ -102,35 +103,7 @@ export async function offViewFixture(edit?: (objects: any[]) => void) {
 }
 
 export async function p6Fixture() {
-  const root = await mkdtemp(join(tmpdir(), "thermite-off-view-p6-"));
-  try {
-    await cp("packages/core-library/test/fixtures/dol-starter", root, {
-      recursive: true,
-    });
-    const path = join(root, "source.json"),
-      source = JSON.parse(await readFile(path, "utf8"));
-    const patch: Record<string, string[]> = {
-      W30: ["PS1.+", "S0.11"],
-      W36: ["S2.14", "K1.A1"],
-      W37: ["R1.14", "S2.14"],
-      W38: ["K1.A1", "R1.A1"],
-    };
-    source.objects = source.objects.filter((o: any) => o.designation !== "W31");
-    for (const object of source.objects)
-      if (patch[object.designation])
-        object.endpoints = required(patch[object.designation]).map(end);
-    await writeFile(path, JSON.stringify(source));
-    const result = await compileProject(root);
-    if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-    return {
-      ...result,
-      root,
-      dispose: () => rm(root, { recursive: true, force: true }),
-    };
-  } catch (e) {
-    await rm(root, { recursive: true, force: true });
-    throw e;
-  }
+  return dolProbeFixture("p6");
 }
 
 export function foldedControlFixture(count = 24) {

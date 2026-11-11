@@ -1,12 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
 import { expect, it } from "vitest";
-import {
-  coreTypes,
-  machineProbe,
-} from "../../core-library/test/machine-fixtures.js";
+import { terminalOnlyProbe } from "./dol-terminal-projection-fixture.js";
 import { normalizeSchematicView } from "../src/view-spec.js";
 import { selectSemanticSubgraph } from "../src/selection.js";
 import { projectDeviceTypeSymbolMappings } from "../src/symbols/mappings.js";
@@ -202,29 +197,9 @@ it.each(flows)(
 it.each(["core:relay-1co", "core:contactor-3p-1no"])(
   "projects a pass-through terminal by facts on %s in both flows",
   async (typeId) => {
-    const type = (await coreTypes()).find((t) => t.id === typeId);
-    const probe = await machineProbe(
-      type,
-      "control",
-      typeId.includes("relay") ? "contact14" : "aux13",
-    );
+    const probe = await terminalOnlyProbe(typeId);
     try {
-      const path = join(probe.root, "source.json"),
-        source = JSON.parse(await readFile(path, "utf8"));
-      for (const object of source.objects) {
-        if (object.kind === "device" && object.designation === "DUT")
-          object.designation = "AUX7";
-        if (object.kind === "wire")
-          for (const endpoint of object.endpoints)
-            if (endpoint.device === "DUT") {
-              endpoint.device = "AUX7";
-              endpoint.terminal = "A1";
-            }
-      }
-      await writeFile(path, JSON.stringify(source));
-      const compiled = await compileProject(probe.root);
-      if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
-      const ir = compiled.ir,
+      const ir = probe.ir,
         before = JSON.stringify(ir);
       for (const flow of flows) {
         const { selected, mappings } = selection(ir, flow);

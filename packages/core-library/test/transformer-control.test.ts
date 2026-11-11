@@ -1,5 +1,4 @@
-import { cp, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
@@ -12,6 +11,7 @@ import {
   transformerRequest,
 } from "../../render/test/transformer-control-fixture.js";
 import p7 from "./fixtures/transformer-control/p7-diagnostics.json";
+import { dolProbeFixture } from "../../render/test/dol-control-probes-fixture.js";
 
 it.each(transformerFlows)(
   "uses shipped unrated facts and preserves the complete circuit in %s",
@@ -75,24 +75,10 @@ it.each(transformerFlows)(
   },
 );
 it("keeps P7 validate-only with its exact current I305 diagnostic", async () => {
-  const root = await mkdtemp(join(tmpdir(), "thermite-p7-"));
+  const fixture = await dolProbeFixture("p7");
   try {
-    await cp("packages/core-library/test/fixtures/dol-starter", root, {
-      recursive: true,
-    });
-    const file = join(root, "source.json"),
-      s = JSON.parse(await readFile(file, "utf8"));
-    for (const o of s.objects) {
-      if (o.designation === "W30")
-        o.endpoints[0] = { device: "T1", terminal: "X1" };
-      if (["W40", "W41", "W42"].includes(o.designation))
-        o.endpoints[0] = { device: "T1", terminal: "X2" };
-    }
-    await writeFile(file, JSON.stringify(s));
-    const c = await compileProject(root);
-    expect(c.ok).toBe(true);
-    expect(c.diagnostics).toEqual(p7);
+    expect(fixture.diagnostics).toEqual(p7);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await fixture.dispose();
   }
 });

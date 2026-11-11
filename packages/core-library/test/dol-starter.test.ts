@@ -13,6 +13,12 @@ import {
 } from "../../render/src/circuit.js";
 import { renderSchematic } from "../../render/src/renderer.js";
 import { renderSchematicPacket } from "../../render/src/sheets.js";
+import {
+  dolControlInventory,
+  dolProbeFixture,
+  dolStarter,
+  recipes,
+} from "../../render/test/dol-control-probes-fixture.js";
 const starter = "packages/core-library/test/fixtures/dol-starter";
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
@@ -28,33 +34,12 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       ),
       flow,
     };
-    // Derive the full control inventory from source, independently of the request.
-    // Include the transformer feed, PSU, interlocks, holding contact and indication.
-    const controlDevices = new Set(
-      ir.devices
-        .filter((d) =>
-          ["T1", "PS1", "F1", "S0", "S1", "S2", "R1", "H1"].includes(
-            d.designation,
-          ),
-        )
-        .map((d) => d.uid),
+    const inventory = dolControlInventory(
+      JSON.parse(await readFile(join(starter, "source.json"), "utf8")),
+      ir,
     );
-    const wires = ir.wires
-      .filter((w) =>
-        w.endpoints.some((e) => controlDevices.has(e.terminal.deviceUid)),
-      )
-      .map((w) => w.uid)
-      .sort();
-    const functions = ir.functions
-      .filter(
-        (f) =>
-          f.kind !== "mechanism" &&
-          (controlDevices.has(f.id.deviceUid) ||
-            f.id.functionKey === "coil" ||
-            f.id.functionKey === "aux95"),
-      )
-      .map((f) => JSON.stringify([f.id.deviceUid, f.id.functionKey]))
-      .sort();
+    const wires = inventory.wires.map((w) => w.id).sort();
+    const functions = inventory.functions.map((f) => f.id).sort();
     expect(wires).toHaveLength(17);
     expect(functions).toHaveLength(14);
     const circuit = await prepareCircuitView(ir, request);
@@ -101,6 +86,56 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     });
     expect(power.ok, JSON.stringify(power.ok ? {} : power)).toBe(true);
     expect(JSON.stringify(ir)).toBe(before);
+  },
+);
+
+it.each(["saved", "p4", "p5", "p6", "p7"] as const)(
+  "replays shared %s source without replacing identities, facts or library locks",
+  async (name) => {
+    const fixture = await dolProbeFixture(name);
+    try {
+      const { source, original, ir } = fixture;
+      const patch =
+        name === "saved" ? { remove: [], endpoints: {} } : recipes[name];
+      const endpoints: Record<string, unknown> = patch.endpoints;
+      expect(source.objects.map((o) => o.uid)).toEqual(
+        original.objects
+          .filter((o) => !patch.remove.includes(o.designation))
+          .map((o) => o.uid),
+      );
+      for (const object of source.objects) {
+        const before = original.objects.find((o) => o.uid === object.uid);
+        expect(object).toEqual(
+          endpoints[object.designation]
+            ? { ...before, endpoints: endpoints[object.designation] }
+            : before,
+        );
+      }
+      for (const file of ["system.json", "electrical-system.lock.json"]) {
+        expect(await readFile(join(fixture.root, file))).toEqual(
+          await readFile(join(dolStarter, file)),
+        );
+      }
+      expect(ir.libraries.every((l) => l.resolutionKind === "shipped")).toBe(
+        true,
+      );
+      const inventory = dolControlInventory(source, ir);
+      expect(inventory.wires).toHaveLength(
+        name === "saved" || name === "p7" ? 17 : 16,
+      );
+      expect(inventory.functions).toHaveLength(14);
+      expect(fixture.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+        ["I305", "info"],
+      ]);
+      const replay = await compileProject(fixture.root);
+      if (!replay.ok) throw Error(JSON.stringify(replay.diagnostics));
+      expect(replay.ir.nets).toEqual(ir.nets);
+      expect(replay.ir.indexes.netIdByTerminal).toEqual(
+        ir.indexes.netIdByTerminal,
+      );
+    } finally {
+      await fixture.dispose();
+    }
   },
 );
 

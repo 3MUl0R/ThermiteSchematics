@@ -439,6 +439,9 @@ a stop. Potential UID is the final tie-breaker for duplicate declarations.
 
 ### Control
 
+The [durable DOL probes](test/fixtures/dol-control-probes/README.md) preserve
+measured requests, inventories and scope mutation gates.
+
 A control root is one mapped two-terminal coil. The input side searches, in order,
 for a PLC output channel, an exact positive-potential anchor, or a mapped control
 source. The return side searches, in order, for an exact return-potential anchor,

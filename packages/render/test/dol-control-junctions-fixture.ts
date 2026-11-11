@@ -2,6 +2,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { compileProject } from "@thermite/compiler";
+import { applyDolRecipe } from "./dol-control-probes-fixture.js";
 export type DolCase =
   "saved" | "p4" | "p5" | "rm3" | "fuse-short" | "fuse-equal" | "rail-contacts";
 export const flows = ["left-to-right", "top-to-bottom"] as const;
@@ -20,7 +21,7 @@ export async function dolFixture(name: DolCase, reordered = false) {
       { recursive: true },
     );
     const path = join(root, name === "rm3" ? "starter.json" : "source.json"),
-      source = JSON.parse(
+      original = JSON.parse(
         await readFile(
           name.startsWith("fuse-") || name === "rail-contacts"
             ? new URL(
@@ -31,23 +32,10 @@ export async function dolFixture(name: DolCase, reordered = false) {
           "utf8",
         ),
       );
-    if (name === "p4" || name === "p5") {
-      const patch = JSON.parse(
-        await readFile(
-          new URL(
-            `./fixtures/dol-control-junctions/${name}.json`,
-            import.meta.url,
-          ),
-          "utf8",
-        ),
-      );
-      source.objects = source.objects.filter(
-        (o: any) => !patch.remove.includes(o.designation),
-      );
-      for (const object of source.objects)
-        if (patch.endpoints[object.designation])
-          object.endpoints = patch.endpoints[object.designation];
-    }
+    const source =
+      name === "p4" || name === "p5"
+        ? applyDolRecipe(original, name)
+        : original;
     if (reordered) {
       const ids = new Map(
         source.objects.map((o: any, i: number) => [
