@@ -113,6 +113,21 @@ it.each(flows)(
         createHash("sha256").update(result.value.sheets[0]!.svg).digest("hex"),
       ).toBe(
         flow === "left-to-right"
+          ? "1c9a1bc999df54e030164a56dfdefa9ba3fa91a2b6d09cdbb5d4cfd1d028e81a"
+          : "bacadd1abb5ed079e1b98d3352df8e2129f2310bd57b82558bdbd9b76e052fe5",
+      );
+      // C1 ownership metadata must leave the reviewed printed SVG byte-identical.
+      expect(
+        createHash("sha256")
+          .update(
+            result.value.sheets[0]!.svg.replace(
+              / data-tag-[a-z-]+="[^"]*"/gu,
+              "",
+            ),
+          )
+          .digest("hex"),
+      ).toBe(
+        flow === "left-to-right"
           ? "eb71b4cdc2516856a1b735e230bf039ce37fad9e30341fbb0a426d4156895b04"
           : "f62e5523600d6ddb9600c9bbd6f1986508fa5a5ccf041d50911ea7d82f3f2c55",
       );

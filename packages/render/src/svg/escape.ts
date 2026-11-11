@@ -150,6 +150,14 @@ function preflightSources(
   return { ok: true, value: undefined };
 }
 
+/** Shared tag fields retain the ordinary source-text preflight diagnostics. */
+export function preflightDeviceTagSources(
+  view: Readonly<NormalizedSchematicView>,
+  sources: readonly RenderTextSource[],
+): TextCheck {
+  return preflightSources(view, sources, false);
+}
+
 export function preflightTitleRenderText(
   view: Readonly<NormalizedSchematicView>,
   sources: readonly RenderTextSource[],

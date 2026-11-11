@@ -45,7 +45,13 @@ export function evaluateSheet(
     out = [];
   const schematic =
     s.view.format.startsWith("schematic-view") ||
-    ["circuit", "wiring", "signal-loop"].includes(s.view.kind);
+    [
+      "circuit",
+      "wiring",
+      "signal-loop",
+      "communication",
+      "connector-assembly",
+    ].includes(s.view.kind);
   out.push(
     obs("DQ-01", checks.labelParity(parity), {
       scope:
@@ -119,7 +125,7 @@ export function evaluateSheet(
   out.push(
     obs("DQ-06", checks.deviceTags(g, ir, s.references, schematic), {
       scope:
-        "Designation and authored device description; explicit string rating/part fields when exported. No rating is invented from terminal capability.",
+        "One complete owned, painted tag per device UID per sheet, including graphical communication/connector drawings and keyed local terminal references. Instance description (else type), catalog part and explicit string rating/part fields only; no inferred rating.",
     }),
   );
   out.push(

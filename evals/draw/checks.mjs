@@ -1,3 +1,4 @@
+import { deviceTagFindings } from "./device-tags.mjs";
 import {
   printedConductor,
   connectorRows,
@@ -245,48 +246,7 @@ export function functionKeys(g, ir) {
     );
 }
 export function deviceTags(g, ir, references, schematic) {
-  if (!schematic) return [];
-  const text = g.texts
-      .map((t) => t.text)
-      .join(" ")
-      .replace(/\s+/g, " "),
-    out = [];
-  for (const uid of [...new Set(references.map((r) => r.deviceUid))]) {
-    const d = ir.devices.find((d) => d.uid === uid);
-    if (!d) throw Error(`Unknown drawing device ${uid}`);
-    const missing = [];
-    const type = ir.deviceTypes?.find((t) => t.id === d.typeId),
-      part = type?.catalog?.orderNumber,
-      description = d.description ?? type?.description;
-    if (part && !text.includes(part)) missing.push(`authored part ${part}`);
-    if (
-      !g.texts.some(
-        (t) =>
-          t.text === d.designation || t.text.startsWith(d.designation + " "),
-      )
-    )
-      missing.push("designation");
-    if (description && !text.includes(description.replace(/\s+/g, " ")))
-      missing.push("authored description");
-    for (const field of ["partNumber", "rating"])
-      if (typeof d[field] === "string" && !text.includes(d[field]))
-        missing.push(field);
-    if (missing.length) {
-      const ref = references.find((r) => r.deviceUid === uid);
-      out.push(
-        issue(
-          "missing-device-tag-fields",
-          {
-            deviceUid: uid,
-            designation: d.designation,
-            bbox: g.devices.find((x) => x.deviceUid === uid)?.bbox,
-          },
-          { missing, description: d.description ?? null },
-        ),
-      );
-    }
-  }
-  return out;
+  return schematic ? deviceTagFindings(g, ir, references, issue) : [];
 }
 export function phaseOrder(g, flow) {
   const out = [],

@@ -145,6 +145,58 @@ export function measureSheet(options = {}) {
   const ids = new Map(
     all.map((e, i) => [e, `${e.tagName.toLowerCase()}-${i}`]),
   );
+  const elementsById = new Map([...ids].map(([e, id]) => [id, e]));
+  const tagIdentity = (e) => {
+    const owner = attr(e, "data-tag-owner-uid"),
+      kind = attr(e, "data-tag-kind");
+    if (!owner) return {};
+    let terminal;
+    try {
+      terminal = JSON.parse(attr(e, "data-tag-terminal-id") ?? "null");
+    } catch {}
+    let rootedOwner;
+    if (e.classList.contains("label-device")) {
+      try {
+        const hex = e.getAttribute("clip-path").match(/-clip-([a-f0-9]+)\)/)[1];
+        const label = JSON.parse(
+          hex
+            .match(/.{4}/g)
+            .map((h) => String.fromCharCode(parseInt(h, 16)))
+            .join(""),
+        );
+        const identity = JSON.parse(label[2]);
+        if (
+          label[0] === "label" &&
+          label[1] === "device" &&
+          identity[0] === "device"
+        )
+          rootedOwner = identity[1];
+      } catch {}
+    }
+    const parent = attr(e, "data-device-uid");
+    return {
+      tagOwnerUid: owner,
+      tagField: attr(e, "data-tag-field"),
+      tagKind: kind,
+      tagBlock: attr(e, "data-tag-block"),
+      tagContainer:
+        ids.get(
+          kind === "body"
+            ? e.closest("[data-device-uid]")
+            : e.closest(
+                'g[data-tag-kind="reference"][data-tag-block],.off-view-annotation',
+              ),
+        ) ?? rootedOwner,
+      tagTerminal: terminal,
+      tagTerminalDeclared: attr(e, "data-tag-terminal-id") != null,
+      tagRef: attr(e, "data-tag-ref"),
+      tagOwnershipValid:
+        kind === "body"
+          ? (parent ?? rootedOwner) === owner &&
+            !e.closest('[data-tag-kind="reference"],.off-view-annotation')
+          : kind === "reference" && (!parent || parent === owner),
+    };
+  };
   const identity = (e) => ({
     element: ids.get(e),
     deviceUid: attr(e, "data-device-uid"),
@@ -196,6 +248,8 @@ export function measureSheet(options = {}) {
       "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key]",
     ),
   ).flatMap((e) => {
+    if (e.closest('[data-tag-kind="reference"],.off-view-annotation'))
+      return [];
     const v = visible(e);
     if (!v) return [];
     const b = v.b;
@@ -513,6 +567,7 @@ export function measureSheet(options = {}) {
       return [
         {
           ...id,
+          ...tagIdentity(e),
           ...(e.tagName.toLowerCase() === "tspan"
             ? { locatorElement: ids.get(e.closest("text")) }
             : {}),
@@ -860,6 +915,50 @@ export function measureSheet(options = {}) {
       y = Math.min(...ys);
     return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   };
+  // DQ-06 uses complete painted owned rows. The same native rectangular clip
+  // parser checks every ancestor; unsupported clipping refuses this row only.
+  for (const t of texts.filter((t) => t.tagOwnerUid)) {
+    const e = elementsById.get(t.element),
+      css = getComputedStyle(e);
+    try {
+      const clips = shapeClips(e);
+      t.tagPainted =
+        t.painted &&
+        clips !== null &&
+        !["none", "rgba(0, 0, 0, 0)"].includes(css.fill) &&
+        Number(css.fillOpacity) > 0 &&
+        [t.viewport, ...clips].every(
+          (b) =>
+            t.bbox.x >= b.x - 0.001 &&
+            t.bbox.y >= b.y - 0.001 &&
+            t.bbox.x + t.bbox.w <= b.x + b.w + 0.001 &&
+            t.bbox.y + t.bbox.h <= b.y + b.h + 0.001,
+        );
+    } catch (error) {
+      t.tagPainted = false;
+      t.tagVisibilityError = error.message;
+    }
+  }
+  const deviceReferences = texts
+    .filter((t) => t.tagTerminalDeclared && t.painted)
+    .map((t) => ({
+      deviceUid: t.tagOwnerUid,
+      terminalKey: t.tagTerminal?.terminalKey,
+      tagBlock: t.tagBlock,
+      tagContainer: t.tagContainer,
+      tagRef: t.tagRef,
+      bbox: t.bbox,
+      element: t.element,
+    }))
+    .filter(
+      (r, i, all) =>
+        all.findIndex(
+          (s) =>
+            s.deviceUid === r.deviceUid &&
+            s.tagBlock === r.tagBlock &&
+            s.tagContainer === r.tagContainer,
+        ) === i,
+    );
   const utilisationErrors = [];
   const shapes = Array.from(
     options.textOnly
@@ -1005,13 +1104,14 @@ export function measureSheet(options = {}) {
   const devices = Array.from(root.querySelectorAll("[data-device-uid]"))
     .filter(
       (e) =>
-        e.matches(".device-group") ||
-        e.hasAttribute("data-layout-width") ||
-        (e.tagName.toLowerCase() === "g" &&
-          !e.hasAttribute("data-symbol-id") &&
-          Array.from(e.children).some(
-            (c) => c.tagName.toLowerCase() === "rect",
-          )),
+        !e.closest('[data-tag-kind="reference"],.off-view-annotation') &&
+        (e.matches(".device-group") ||
+          e.hasAttribute("data-layout-width") ||
+          (e.tagName.toLowerCase() === "g" &&
+            !e.hasAttribute("data-symbol-id") &&
+            Array.from(e.children).some(
+              (c) => c.tagName.toLowerCase() === "rect",
+            ))),
     )
     .flatMap((e) => {
       const v = visible(e);
@@ -1032,6 +1132,7 @@ export function measureSheet(options = {}) {
     shapes,
     ...(utilisationErrors.length ? { utilisationErrors } : {}),
     devices,
+    deviceReferences,
     catalogs: [
       ...(root.querySelector("[data-symbol-id]") ? ["ais"] : []),
       ...(root.querySelector("[data-circuit-mark]") ? ["circuit"] : []),

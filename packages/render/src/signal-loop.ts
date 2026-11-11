@@ -1,3 +1,4 @@
+import { ownedTagText } from "./device-tag-ownership.js";
 import { selectedChannelCaption } from "./symbols/printable-policy.js";
 import { measureText, wrapText } from "./text-metrics.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
@@ -788,23 +789,7 @@ export async function prepareSignalLoopDrawing(
         vertical ? 25 : node.width! / 2,
       ),
     );
-    captions
-      .get(uid)!
-      .forEach((s, i) =>
-        out.push(
-          text(
-            3,
-            (index === 0 && type.symbol === "thermite:pressure-transmitter"
-              ? 26
-              : 5) +
-              i * 3.7,
-            s,
-            2.7,
-            "start",
-            i === 0,
-          ),
-        ),
-      );
+    out.push(...signalCaptionSvg(uid, captions.get(uid)!, selected, index));
     const list = ports.get(uid)!;
     for (const p of list) {
       if (p.assembly) {
@@ -960,4 +945,61 @@ export async function prepareSignalLoopDrawing(
     request,
     assemblies.length > 0,
   );
+}
+
+function signalCaptionSvg(
+  uid: string,
+  caption: readonly string[],
+  selected: ReturnType<typeof selectSignalLoop>,
+  index: number,
+) {
+  const device = selected.devices.get(uid),
+    type = selected.types.get(device?.typeId ?? "");
+  if (!type) throw Error("Missing signal caption type");
+  const stages = selected.stages,
+    result: string[] = [];
+  const channelCaption =
+    uid === selected.from.device.uid
+      ? selected.from
+      : uid === selected.to.device.uid
+        ? selected.to
+        : undefined;
+  const partCaption =
+    channelCaption?.function.kind === "channel" && type.catalog?.orderNumber;
+  const tagRows = wrap(
+    partCaption || type.description || type.id,
+    (selected.output
+      ? index === 0 || index === stages.length - 1
+        ? 50
+        : 44
+      : channelCaption?.function.kind === "channel"
+        ? 66
+        : 50) - 6,
+  ).length;
+  caption.forEach((s, i) =>
+    result.push(
+      ownedTagText(
+        text(
+          3,
+          (index === 0 && type.symbol === "thermite:pressure-transmitter"
+            ? 26
+            : 5) +
+            i * 3.7,
+          s,
+          2.7,
+          "start",
+          i === 0,
+        ),
+        uid,
+        i === 0
+          ? "designation"
+          : i <= tagRows
+            ? partCaption
+              ? "part"
+              : "description"
+            : undefined,
+      ),
+    ),
+  );
+  return result;
 }

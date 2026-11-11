@@ -1105,6 +1105,9 @@ describe("M8 complete title R005 preflight", () => {
       "device.designation",
       "device.type",
       "device.location",
+      "device.description",
+      "type.description",
+      "type.catalog.orderNumber",
       "function.key",
       "aggregate.key",
       "terminal.key",
@@ -1126,7 +1129,7 @@ describe("M8 complete title R005 preflight", () => {
       "xml-illegal-code-point",
     ];
     expect(owners).toHaveLength(14);
-    expect(fields).toHaveLength(21);
+    expect(fields).toHaveLength(24);
     expect(reasons).toHaveLength(5);
   });
 

@@ -1,3 +1,4 @@
+import { EVALS_VERSION } from "./version.mjs";
 import { writeVerification } from "./verification-io.mjs";
 import { verificationFixtures } from "./crop-source-fixture.mjs";
 import {
@@ -115,7 +116,7 @@ function makeReport(registry, items, registrySha256) {
     subset: "full",
     cases: [cid],
     corpusSha256: "seal-1",
-    evalsVersion: "4.2",
+    evalsVersion: EVALS_VERSION,
     checkers: { "expectations.mjs": registrySha256 },
     results: rows,
   };

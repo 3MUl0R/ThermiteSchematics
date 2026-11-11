@@ -218,7 +218,7 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 03  | Independent source-port electrical primitives and foreign route/body/port penetration. Circuit primitive electrical roles need an export; symbol meaning/legend manual.         |
 | 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                                |
 | 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                           |
-| 06  | Designation, authored description and explicit part/rating fields; no inferred electrical rating.                                                                               |
+| 06  | Owned painted tag per UID/sheet; instance/type description, catalog part, qualified local references and explicit string rating/part only.                                      |
 | 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                     |
 | 08  | Reciprocal continuations, source-derived printed conductor and peer sheet.zone; associated rows across SVG/HTML/PDF. Ordered ports need an export.                              |
 | 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                            |
@@ -237,6 +237,35 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 22  | Two independent blind drafter forms, fixed checklist, 100% print scale and material/minor sheet.zone red-lines. No fabricated sign-off.                                         |
 | 23  | Graphical terminal-strip availability; actual tables are labelled table-only.                                                                                                   |
 | 24  | Needs configured numbering policy and number-to-conductor exports.                                                                                                              |
+
+DQ-06 assesses rooted power/control (including cable conductors), circuit, wiring,
+signal-loop, communication and connector-assembly drawings. Ordinary report tables
+remain outside this device-tag obligation. Each visible device or explicit local
+terminal reference is reconciled to IR, even if a packet reference export is lost.
+Designation, nonempty instance description (otherwise nonempty type description),
+and exact catalog order number are required only when authored. Blank optional
+fields need no placeholder. Explicit string device part/rating fields remain
+conditional; terminal capability never supplies an inferred device rating.
+
+Only complete painted rows with `data-tag-owner-uid`, `data-tag-field`,
+`data-tag-kind` (`body` or `reference`) and `data-tag-block` can satisfy fields.
+Rows must have valid body ownership or reference semantics. Expected values come
+independently from IR; sheet-wide text and SVG titles do not supply evidence.
+Wrapped rows stay within their owned field/block; parts retain literal characters.
+One complete block serves all appearances of a UID on that sheet, but cannot serve
+another sheet. Tags use at least 2.7 mm designation em and 2.5 mm for other fields
+when rolled out; ownership exports alone do not fix existing omitted fields.
+
+Qualified identities resolve a structured `data-tag-terminal-id` against the
+owner's actual IR terminal key: `TB1.2`, `JB1.X1.1`, or the fixed heading grammar
+`Off-view at PS1.-`. Exact identity, including dot/space designations, is required;
+a prefix or another device's caption is insufficient. `data-tag-ref` selects a
+local tag block explicitly; a broken key is a finding. Reference blocks do not
+create device appearances, coverage or electrical terminals. They retain the same
+authored-description/part obligation. Native browser controls reject hidden,
+partially clipped, title-only and wrong-owner evidence. Checker 4.3 deliberately
+exposes previously masked omissions and assesses the two additional graphical
+families; those are not fixes of old drawing defects.
 
 DQ-08 resolves the other endpoint of a reciprocal continuation pair, excluding
 the source even when both ends share a sheet. The expected destination zone is
@@ -461,7 +490,7 @@ checker hash covers the canonical sorted module manifest described below:
   "registrySha256": "<from inventory>",
   "checkerSha256": "<from inventory>",
   "corpusSha256": "<from inventory>",
-  "evalsVersion": "4.2",
+  "evalsVersion": "4.3",
   "baselineSha256": "<hash of supplied previous summary>",
   "entries": []
 }
@@ -470,7 +499,7 @@ checker hash covers the canonical sorted module manifest described below:
 The checker binding hashes a stable sorted list of every drawing-kit `.mjs`, `.js`, `.cjs`, `.ts` and
 `.swift` file recursively, including subdirectories such as `corpus/`, including the registry. The target manifest must match the local
 files exactly. A changed, removed or added module invalidates the target and its
-decisions; run a fresh full 4.2 report. Apply rechecks the bundle inside its lock.
+decisions; run a fresh full 4.3 report. Apply rechecks the bundle inside its lock.
 Every supplied `baselineSha256` is validated even if that file has no rename.
 Historical full baselines may have older compatible checkers; their raw bytes,
 registry and full report are validated, including their own bundle when present.

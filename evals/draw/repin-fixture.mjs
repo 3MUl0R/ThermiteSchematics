@@ -1,3 +1,4 @@
+import { EVALS_VERSION } from "./version.mjs";
 // Synthetic report/instance fixtures, adapted from the independent reviewer probes.
 import { withSourceHashFixtures } from "./crop-source-fixture.mjs";
 import { prepareRepin, reassess, instanceInventory } from "./repin-core.mjs";
@@ -163,7 +164,7 @@ function make({
         subset: "full",
         cases,
         corpusSha256: "seal",
-        evalsVersion: "4.2",
+        evalsVersion: EVALS_VERSION,
         checkers,
         checkerSha256: null,
         results: rows,
@@ -281,7 +282,7 @@ export function assemble({
     registrySha256: m.registrySha256,
     checkerSha256: current.checkerSha256,
     corpusSha256: "seal",
-    evalsVersion: "4.2",
+    evalsVersion: EVALS_VERSION,
     baselineSha256,
     entries: es,
     ...(sheetRenames ? { sheetRenames } : {}),

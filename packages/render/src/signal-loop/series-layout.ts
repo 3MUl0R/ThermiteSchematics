@@ -1,3 +1,4 @@
+import { ownedTagText } from "../device-tag-ownership.js";
 import { selectedChannelCaption } from "../symbols/printable-policy.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
@@ -263,6 +264,8 @@ function nodeCaption(
       );
   return {
     captionWidth,
+    tagRows: wrapCaption(values[0] ?? "", captionWidth - 6).length,
+    tagField: type.catalog?.orderNumber ? "part" : "description",
     caption: [
       device.designation,
       ...values.flatMap((s) => wrapCaption(s, captionWidth - 6)),
@@ -281,12 +284,7 @@ function deviceNode(
     type = need(selected.types.get(device.typeId));
   const source = uid === need(selected.series).power.device.uid;
   const pressure = type.symbol === "thermite:pressure-transmitter";
-  const { captionWidth, caption } = nodeCaption(
-    selected,
-    uid,
-    vertical,
-    source,
-  );
+  const captionPlan = nodeCaption(selected, uid, vertical, source);
   const terms = [
     ...new Map(
       edges.flatMap((e) =>
@@ -302,6 +300,7 @@ function deviceNode(
       order.indexOf(a.terminalKey) - order.indexOf(b.terminalKey) ||
       compare(a.terminalKey, b.terminalKey),
   );
+  const { caption, captionWidth } = captionPlan;
   const header = (pressure ? 26 : source ? 20 : 5) + caption.length * 3.7;
   const w = vertical ? 50 + Math.max(30, terms.length * 12 + 8) : captionWidth;
   const h = vertical
@@ -334,7 +333,7 @@ function deviceNode(
     uid,
     node,
     ports,
-    caption,
+    ...captionPlan,
     source,
     pressure,
     feedThrough: !loopFunctions(selected).some((f) => f.device.uid === uid),
@@ -503,13 +502,17 @@ function emitNode(
     : "";
   const caption = info.caption
     .map((s, i) =>
-      text(
-        3,
-        (info.pressure ? 26 : info.source ? 20 : 5) + i * 3.7,
-        s,
-        2.7,
-        "start",
-        i === 0 ? 700 : 400,
+      ownedTagText(
+        text(
+          3,
+          (info.pressure ? 26 : info.source ? 20 : 5) + i * 3.7,
+          s,
+          2.7,
+          "start",
+          i === 0 ? 700 : 400,
+        ),
+        info.uid,
+        i === 0 ? "designation" : i <= info.tagRows ? info.tagField : undefined,
       ),
     )
     .join("");

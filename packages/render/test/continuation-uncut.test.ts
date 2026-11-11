@@ -9,14 +9,14 @@ import { uncutFixture } from "./continuation-uncut-fixtures.js";
 // Lane B round 2 restores authored gang ink and clears its captions.
 const reference = {
   "init-starter": [
-    "dde9b5313201efd7985baece36ce68a3dd46bec886110d9ec5749b810d2cf448",
-    "34ce54cc75ca21e23ea031b3ca9dcb6bd73acbc617bcb6c03f8d3895fee8b954",
-    "dab607cb276ece38eda33cb30ab181dc45dd77d23e475db378b0e306deefc255",
+    "ab0781267c8e2b663e9bca95a23cba50714f45ba1dab2b422aa51f70784949aa",
+    "67c0d0408dae8109eaefcea0f5f728badeae23d5d944fa627f0d4cc2ed66c4dd",
+    "747842dad27e5f0f3d723bbcdbc74cfb07e9c5096215ea1d575a80df6297ba8a",
   ],
   "motor-starter": [
-    "ffa2eeddfe71cd9ee6b83bbc22105b6f94a2b213c589e835657c32b3d951dd99",
-    "21f43edf12c43ba4a181748e513ba216e9a9614a3d5255c5c504025922d72fb6",
-    "8fdda145e311dea03dd90151a91b639aafabf834ba93dc41ea2e6970734abbe3",
+    "852a1bce264897d1b032cb926ffb4c8b004ae670b969fb3b9f8a536e2df44f9a",
+    "ef939d73fa737f3ba3f2eb155c781c05c1f218aa9ed34e4a22bb74e9f58bc7cb",
+    "d6cb7415bc66a775fddb54b02ec8f8b2af5e3e2328d9162648708c39bebd91f1",
   ],
 };
 

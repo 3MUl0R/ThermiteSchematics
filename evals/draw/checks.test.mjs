@@ -182,15 +182,49 @@ describe("mandatory DQ mutation kills", () => {
       refs = [{ deviceUid: "d", xMm: 25, yMm: 30 }];
     expect(
       c.deviceTags(
-        geometry({ texts: [text("K1"), text("Feed contactor")] }),
+        geometry({
+          texts: [
+            text("K1", {
+              tagOwnerUid: "d",
+              tagField: "designation",
+              tagKind: "body",
+              tagBlock: "d",
+              tagPainted: true,
+              tagOwnershipValid: true,
+            }),
+            text("Feed contactor", {
+              tagOwnerUid: "d",
+              tagField: "description",
+              tagKind: "body",
+              tagBlock: "d",
+              tagPainted: true,
+              tagOwnershipValid: true,
+            }),
+          ],
+        }),
         data,
         refs,
         true,
       ),
     ).toEqual([]);
     expect(
-      c.deviceTags(geometry({ texts: [text("K1")] }), data, refs, true)[0]
-        .missing,
+      c.deviceTags(
+        geometry({
+          texts: [
+            text("K1", {
+              tagOwnerUid: "d",
+              tagField: "designation",
+              tagKind: "body",
+              tagBlock: "d",
+              tagPainted: true,
+              tagOwnershipValid: true,
+            }),
+          ],
+        }),
+        data,
+        refs,
+        true,
+      )[0].missing,
     ).toEqual(["authored description"]);
   });
   it("DQ-10 kills reversed phase order in both flows and rotated qualifiers", () => {

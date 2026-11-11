@@ -1,3 +1,7 @@
+import {
+  cableEndpointOwnership,
+  cableTerminations,
+} from "./cable-endpoint-ownership.js";
 import { cableRowLabels } from "./cable-row.js";
 import { cableRowPlan } from "./cable-row-plan.js";
 import { required } from "../presentation/util.js";
@@ -17,7 +21,7 @@ import { normalizeSchematicView } from "../view-spec.js";
 
 import type { Draft, PaperPage, SheetReference } from "./types.js";
 import { failure } from "./errors.js";
-import { bounds, zone } from "./page.js";
+import { bounds } from "./page.js";
 import { n, text, line } from "./svg.js";
 import {
   cableEndpointCards,
@@ -143,8 +147,6 @@ export async function cableDrafts(
     );
   for (let i = 0; i < schedule.cores.length; i++) {
     const core = schedule.cores[i]!;
-    const leftEnd = core.endpoints[0],
-      rightEnd = core.endpoints[1];
     const planned = cableRowPlan(core, schedule.designation, {
       left,
       right,
@@ -180,31 +182,23 @@ export async function cableDrafts(
         dashed ? 'stroke-dasharray="2 1"' : "",
       ),
     );
-    content.push(
-      ...cableRowLabels(a, z, centerRows, usage, { left, right, y, midY }),
+    const rowLabels = cableRowLabels(a, z, centerRows, usage, {
+      left,
+      right,
+      y,
+      midY,
+    });
+    cableEndpointOwnership(
+      rowLabels,
+      core,
+      schedule.cableUid,
+      a.length,
+      z.length,
     );
-    for (const [end, x] of [
-      [leftEnd, left + 1],
-      [rightEnd, right - 1],
-    ] as const) {
-      if (end === null)
-        content.push(
-          line(x - 1, midY - 1, x + 1, midY + 1),
-          line(x - 1, midY + 1, x + 1, midY - 1),
-        );
-      else {
-        refs.push({
-          deviceUid: end.terminal.deviceUid,
-          designation: ir.devices.find((d) => d.uid === end.terminal.deviceUid)!
-            .designation,
-          functions: [],
-          zone: zone(x, midY, b),
-        });
-        content.push(
-          `<circle cx="${n(x)}" cy="${n(midY)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
-        );
-      }
-    }
+    content.push(...rowLabels);
+    const terminations = cableTerminations(ir, core, b, left, right, midY);
+    refs.push(...terminations.references);
+    content.push(...terminations.content);
     cards.forEach((card, index) => {
       if (card)
         content.push(

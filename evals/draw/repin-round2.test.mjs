@@ -1,3 +1,4 @@
+import { EVALS_VERSION } from "./version.mjs";
 import { it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import { checkerManifestHash, readCheckers } from "./checker-manifest.mjs";
@@ -95,7 +96,7 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
     subset: "full",
     cases: [cid],
     corpusSha256: "seal",
-    evalsVersion: "4.2",
+    evalsVersion: EVALS_VERSION,
     checkers: { "expectations.mjs": registrySha256 },
     results: rows,
   };
@@ -145,7 +146,7 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
         summarySha256: reportSha256,
         registrySha256,
         corpusSha256: "seal",
-        evalsVersion: "4.2",
+        evalsVersion: EVALS_VERSION,
         entries,
       },
     ],
@@ -255,7 +256,7 @@ function reportFor(registry, findings) {
     subset: "full",
     cases: [cid],
     corpusSha256: "seal",
-    evalsVersion: "4.2",
+    evalsVersion: EVALS_VERSION,
     checkers: { "expectations.mjs": hash(serializeRegistry(registry)) },
     results: rows,
   };
@@ -482,7 +483,7 @@ function d1Fixture() {
         registrySha256,
         checkerSha256: report.checkerSha256,
         corpusSha256: "seal",
-        evalsVersion: "4.2",
+        evalsVersion: EVALS_VERSION,
         baselineSha256,
         entries,
       },

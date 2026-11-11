@@ -1,3 +1,4 @@
+import { ownedTagText } from "./device-tag-ownership.js";
 import {
   assertTopologyIdentities,
   assertTopologyRouteEndpoints,
@@ -484,17 +485,9 @@ async function layoutAssemblyDrawing(
     if (![node.x, node.y, node.width, node.height].every(Number.isFinite))
       throw new Error("Invalid assembly node bounds.");
     out.push(
-      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#fafafa" stroke="#344054" stroke-width=".35"/>${captions
-        .get(uid)!
-        .map((s, i) => text(3, 5 + i * 3.6, s, i === 0))
-        .join("")}`,
+      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#fafafa" stroke="#344054" stroke-width=".35"/>${assemblyCaptionSvg(device, types.get(device.typeId), captions.get(uid)!, nodeWidth)}`,
     );
-    for (const p of rows.get(uid)!) {
-      const x = p.side === "WEST" ? 0 : node.width!;
-      out.push(
-        `<g data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text(3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
-      );
-    }
+    out.push(...assemblyPortSvg(node, rows.get(uid)!));
     out.push("</g>");
     references.push({
       deviceUid: uid,
@@ -670,4 +663,53 @@ export function assertAssemblyRouteSeparation(
           "Distinct connector assemblies share a drawn segment; select a smaller assembly subset.",
         );
     }
+}
+
+function assemblyPortSvg(
+  node: ElkNode,
+  ports: readonly {
+    key: string;
+    connector: string;
+    side: "WEST" | "EAST";
+    y: number;
+    status: string;
+    lines: string[];
+  }[],
+) {
+  const result: string[] = [];
+  for (const p of ports) {
+    const x = p.side === "WEST" ? 0 : node.width!;
+    result.push(
+      `<g data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text(3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
+    );
+  }
+  return result;
+}
+
+function assemblyCaptionSvg(
+  device: ElectricalIr["devices"][number],
+  type: ElectricalIr["deviceTypes"][number] | undefined,
+  caption: readonly string[],
+  nodeWidth: number,
+) {
+  const descriptionRows = wrap(
+    device.description ?? type?.description ?? type?.id ?? "",
+    nodeWidth - 6,
+  ).length;
+  const partRows = wrap(type?.catalog?.orderNumber ?? "", nodeWidth - 6).length;
+  return caption
+    .map((s, i) =>
+      ownedTagText(
+        text(3, 5 + i * 3.6, s, i === 0),
+        device.uid,
+        i === 0
+          ? "designation"
+          : i <= descriptionRows
+            ? "description"
+            : i <= descriptionRows + partRows
+              ? "part"
+              : undefined,
+      ),
+    )
+    .join("");
 }

@@ -1,3 +1,4 @@
+import { ownedTagText } from "./device-tag-ownership.js";
 import {
   circuitTextLines,
   measure,
@@ -1134,13 +1135,17 @@ function emitNode(
       true,
     ),
   );
-  out[designationIndex] = text(
-    designation.x,
-    designation.y,
-    node.device.designation,
-    2.7,
-    designationAnchor,
-    true,
+  out[designationIndex] = ownedTagText(
+    text(
+      designation.x,
+      designation.y,
+      node.device.designation,
+      2.7,
+      designationAnchor,
+      true,
+    ),
+    node.device.uid,
+    "designation",
   );
   const footers = node.relationLabels.map((value, i) => {
     const y =
