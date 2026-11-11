@@ -120,13 +120,17 @@ function launch(batch, args = []) {
   return { child, done };
 }
 
-async function until(predicate, timeout = 5000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
+// Child startup, status publication and process reaping can all be delayed on
+// loaded CI hosts. Keep polling the actual condition with a monotonic bound.
+async function until(predicate, timeout = 30_000) {
+  const deadline = performance.now() + timeout;
+  for (;;) {
     if (predicate()) return;
-    await delay(20);
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) break;
+    await delay(Math.min(20, remaining));
   }
-  assert.fail("Timed out waiting for local test process");
+  assert.fail(`Timed out after ${timeout} ms waiting for local test process`);
 }
 
 function processAlive(pid) {
@@ -490,7 +494,7 @@ test("rate limit pauses only the affected backend without automatically retrying
 });
 
 test("active runner lock rejects duplicate execution", async (t) => {
-  const f = fixture(t, [{ delay: 600 }]);
+  const f = fixture(t, [{ waitForRelease: true }]);
   const first = launch(f.batch);
   t.after(() => {
     if (first.child.exitCode === null) first.child.kill("SIGTERM");
@@ -499,6 +503,7 @@ test("active runner lock rejects duplicate execution", async (t) => {
   const duplicate = await launch(f.batch, ["--resume"]).done;
   assert.equal(duplicate.code, 2);
   assert.match(duplicate.stderr, /active runner/);
+  writeFileSync(join(f.jobs[0].directory, "release-worker"), "release");
   assert.equal((await first.done).code, 0);
   assert.equal(f.status().jobs[0].attempts.length, 1);
 });
@@ -517,7 +522,7 @@ test(
   "interrupt terminates the worker process group and preserves interrupted status",
   { skip: process.platform === "win32" },
   async (t) => {
-    const f = fixture(t, [{ mode: "descendant", delay: 10_000 }, {}]);
+    const f = fixture(t, [{ mode: "descendant", waitForRelease: true }, {}]);
     const running = launch(f.batch);
     t.after(() => {
       if (running.child.exitCode === null) running.child.kill("SIGTERM");
@@ -543,7 +548,7 @@ test(
   "resume refuses a live orphan after a runner crash",
   { skip: process.platform === "win32" },
   async (t) => {
-    const f = fixture(t, [{ delay: 10_000 }]);
+    const f = fixture(t, [{ waitForRelease: true }]);
     const running = launch(f.batch);
     await until(() => existsSync(f.trace));
     const pid = f.status().jobs[0].pid;
@@ -601,7 +606,12 @@ test("live limits keep a zero-capacity queue alive and activate it after a valid
 });
 
 test("decreasing live limits drains workers, and invalid edits retain the last valid count", async (t) => {
-  const f = fixture(t, [{ delay: 1100 }, { delay: 1700 }, {}, {}]);
+  const f = fixture(t, [
+    { waitForRelease: true },
+    { waitForRelease: true },
+    {},
+    {},
+  ]);
   const limitsFile = join(f.batch, "limits.json");
   writeFileSync(limitsFile, JSON.stringify({ claude: 2, codex: 0 }));
   const running = launch(f.batch, ["--limits-file", limitsFile]);
@@ -618,6 +628,8 @@ test("decreasing live limits drains workers, and invalid edits retain the last v
   writeFileSync(limitsFile, JSON.stringify({ claude: -1, codex: 3 }));
   await until(() => Boolean(f.status().limitsFile.warning));
   assert.deepEqual(f.status().concurrency, { claude: 1, codex: 0 });
+  for (const job of f.jobs.slice(0, 2))
+    writeFileSync(join(job.directory, "release-worker"), "release");
   const outcome = await running.done;
   assert.equal(outcome.code, 0, outcome.stderr);
   assert.deepEqual(
@@ -647,7 +659,8 @@ test("decreasing live limits drains workers, and invalid edits retain the last v
 
 test("raising live limits cannot clear a backend rate-limit pause", async (t) => {
   const f = fixture(t, [
-    { mode: "rate" },
+    // Cross the former five-second wait bound without relying on host load.
+    { mode: "rate", delay: 6000 },
     {},
     { backend: "codex", waitForRelease: true },
   ]);
