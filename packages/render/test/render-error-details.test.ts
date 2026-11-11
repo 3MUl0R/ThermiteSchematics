@@ -1,6 +1,7 @@
 import { createElkEngine } from "../src/layout/elk-runtime.js";
 import { signalLoopFixture } from "./render-contract-fixture.js";
-import { beforeAll, describe, it, expect } from "vitest";
+import * as dispatch from "../src/packet/dispatch.js";
+import { beforeAll, describe, it, expect, vi } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import {
   renderSchematic,
@@ -293,6 +294,63 @@ describe("render error details", () => {
       expect(standard.error.details?.compactLayoutAvailable === true).toBe(
         rescued,
       );
+    },
+  );
+  it.each([new Error("compact failed"), "compact failed"])(
+    "keeps the original refusal when the compact attempt throws %s",
+    async (thrown) => {
+      const original = {
+        ok: false as const,
+        error: {
+          code: "R006" as const,
+          root: "packet",
+          reason: "unprintable-layout" as const,
+          message: "Original readable-size refusal.",
+          details: { witness: "original" },
+        },
+      };
+      const request = {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "M1" },
+            family: "power",
+            flow: "top-to-bottom",
+          },
+        ],
+      } as const;
+      const spy = vi.spyOn(dispatch, "viewDrafts").mockResolvedValue(original);
+      try {
+        const expected = await renderSchematicPacket(ir, request);
+        spy.mockImplementation(async (...args) => {
+          if (args[4] === "compact") throw thrown;
+          return original;
+        });
+        const result = await renderSchematicPacket(ir, request);
+        expect(result).toEqual(expected);
+        expect(result).toMatchObject({
+          ok: false,
+          error: {
+            code: "R006",
+            reason: "unprintable-layout",
+            details: { witness: "original" },
+          },
+        });
+        if (result.ok) throw Error("Expected refusal");
+        expect(result.error.message).not.toContain("--layout compact");
+        expect(result.error.details).not.toHaveProperty(
+          "compactLayoutAvailable",
+        );
+        expect(spy.mock.calls.map((args) => args[4])).toEqual([
+          undefined,
+          "compact",
+          undefined,
+          "compact",
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
     },
   );
   it("resolves UID packet roots to designations in the view title", async () => {

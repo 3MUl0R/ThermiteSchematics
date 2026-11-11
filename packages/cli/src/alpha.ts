@@ -36,15 +36,22 @@ import { writeAlphaOutput } from "./alpha-output.js";
 
 export const THERMITE_VERSION = "0.3.0-alpha.2";
 function multipleSheetError(packet: RenderedPacket) {
+  const seen = new Set<string>();
   return {
     code: "R006",
     message: `This view requires ${packet.sheets.length} sheets. Use .html, .pdf or .json to retain the complete drawing.`,
     details: {
       devices: packet.sheets.flatMap((s) =>
-        s.references.map(({ deviceUid, designation }) => ({
-          deviceUid,
-          designation,
-        })),
+        s.references
+          .filter(({ deviceUid }) => {
+            if (seen.has(deviceUid)) return false;
+            seen.add(deviceUid);
+            return true;
+          })
+          .map(({ deviceUid, designation }) => ({
+            deviceUid,
+            designation,
+          })),
       ),
     },
   };

@@ -287,8 +287,11 @@ and input targets (`target-not-accepted`); choose another eligible device. A dec
 unknown symbol or a shape that mismatches its own profile is instead an unsupported
 profile. Missing bindings on a traversed path remain profile context for that path.
 `acceptedRoots` always contains `{profile, aliases, shapes}` records, for every family.
-R006 circuit failures name the involved source keys, resolving known device
-UIDs to designations even with a custom view title. Top-to-bottom rooted layout refusals suggest
+R006 circuit failures name the involved source keys. In `details.circuitGroups`,
+`functionKeys` retains each original selector value and function key (`<uid>/key`
+for UID selectors). The parallel `functionDisplayKeys` resolves known device UIDs
+to designations and otherwise retains the selector value, even with a custom view
+title. Top-to-bottom rooted layout refusals suggest
 `--layout compact` only after the complete compact export succeeds on the same
 page, including sheet assembly and the packet page-cost bound.
 
@@ -391,7 +394,8 @@ single-line field, or an empty or over-160-code-point project name. Device-owned
 text includes its known designation and terminal, function or aggregate key in
 `details`; conductor-owned text includes its designation and known endpoint
 devices. Project, page and font failures identify their own scope without an
-invented device designation. Correct the
+invented device designation. A `designation` field is absent when no designation
+is known; a UID is never substituted for it. Correct the
 identified authored text; do not bypass the check or edit generated SVG.
 
 `T001` reports a caught CLI exception on stderr, normally with exit 2. In

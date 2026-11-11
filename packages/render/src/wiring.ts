@@ -507,6 +507,6 @@ function wiringWidthError(designation: string, terminalKey?: string) {
   return new Error(
     terminalKey === undefined
       ? `Wiring device ${JSON.stringify(designation)} designation is too wide.`
-      : `Wiring terminal ${designation}.${terminalKey} label is too wide.`,
+      : `Wiring terminal ${JSON.stringify(`${designation}.${terminalKey}`)} label is too wide.`,
   );
 }

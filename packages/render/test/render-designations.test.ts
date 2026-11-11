@@ -8,12 +8,16 @@ import { renderSchematicPacket } from "../src/sheets.js";
 import { createElkEngine } from "../src/layout/elk-runtime.js";
 import { errorContractCases } from "./render-contract-fixture.js";
 import { renderErrorContext } from "../src/render-error-context.js";
+import {
+  transformerFixture,
+  transformerRequest,
+} from "./transformer-control-fixture.js";
 import { svgSemanticId } from "../src/svg/escape.js";
 import {
   PrintableFontBudgetError,
   fontBudgetFailure,
 } from "../../cli/src/printable-font.js";
-import type { RenderOutcome } from "../src/types.js";
+import type { RenderOutcome, SchematicViewRequest } from "../src/types.js";
 
 let cases: Awaited<ReturnType<typeof errorContractCases>>;
 let core: ElectricalIr;
@@ -34,8 +38,8 @@ function errorOf<T>(result: RenderOutcome<T>, code: string) {
 // All seven R codes have an emitted example. Project/page/font errors have no
 // affected device; their own scope must survive without an invented designation.
 it.each([
-  ["R001", "PLC1"],
-  ["R002", "PS1"],
+  ["R001", "K1"],
+  ["R002", "T1"],
   ["R003", "TB1"],
   ["R004", "RIO2"],
   ["R005", "K1"],
@@ -56,7 +60,14 @@ it.each([
   const c = cases.find((c) => c.code === code);
   if (!c) throw Error(code);
   let result: RenderOutcome<unknown>;
-  if (code === "R004") {
+  if (code === "R001") {
+    result = await renderSchematic(core, {
+      format: "schematic-view-request/0.1",
+      root: { by: "designation", value: "K1" },
+      family: "control",
+      flow: "sideways",
+    } as unknown as SchematicViewRequest);
+  } else if (code === "R004") {
     const wire = c.ir.wires.find((w) => w.designation === "W-RIO2-L+");
     if (!wire) throw Error("wire");
     const engine = createElkEngine(),
@@ -73,6 +84,16 @@ it.each([
     result = await createSchematicRendererWithDependencies({
       layoutEngine: engine,
     }).render(c.ir, c.view);
+  } else if (code === "R002") {
+    const fixture = await transformerFixture("same");
+    try {
+      result = await renderSchematic(
+        fixture.ir,
+        transformerRequest("left-to-right"),
+      );
+    } finally {
+      await fixture.dispose();
+    }
   } else if (code === "R005") {
     const input = structuredClone(core);
     const wire = input.wires.find((w) => w.designation === "W-CTL-007");
@@ -87,6 +108,56 @@ it.each([
     result = await renderSchematicPacket(c.ir, c.packet);
   else result = await renderSchematic(c.ir, c.view);
   const error = errorOf(result, code);
+  if (code === "R001")
+    expect(error.details).toMatchObject({ designation: "K1" });
+  if (code === "R002")
+    expect(error.details).toMatchObject({
+      input: { designation: "T1", terminal: { terminalKey: "X1" } },
+      return: { designation: "T1", terminal: { terminalKey: "X1" } },
+    });
+  if (code === "R003") {
+    expect(error.details).toMatchObject({ designation: "TB1" });
+    // The positive name already existed; the changed contract omits an unknown
+    // endpoint's designation instead of substituting its UID.
+    const unknown = { deviceUid: "unknown-device", terminalKey: "X" };
+    const contextual = renderErrorContext(core, {
+      code: "R003",
+      family: "control",
+      root: "LS1",
+      deviceUid: "unknown-device",
+      typeId: "unknown-type",
+      message: "Unsupported endpoint.",
+      details: { terminalIds: [unknown] },
+    });
+    expect(contextual.details?.stoppedAt).toEqual([
+      { ...unknown, functionKeys: [] },
+    ]);
+  }
+  if (code === "R004")
+    // R004 has no new designation fields in this PR: pin its existing structure.
+    expect(error.details).toMatchObject({
+      conductors: expect.arrayContaining([
+        expect.objectContaining({
+          designation: "W-RIO2-L+",
+          terminals: expect.arrayContaining([
+            expect.objectContaining({
+              designation: "RIO2",
+              terminalKey: "L+",
+              functionKeys: expect.any(Array),
+            }),
+          ]),
+        }),
+      ]),
+    });
+  if (code === "R006")
+    expect(error.details).toMatchObject({
+      circuitGroups: [
+        {
+          functionKeys: ["PX1/supply", "PX1/output"],
+          functionDisplayKeys: ["PX1/supply", "PX1/output"],
+        },
+      ],
+    });
   if (code === "R005")
     expect(error.details).toMatchObject({
       designation: "W-CTL-007",
@@ -124,7 +195,13 @@ it("resolves UID circuit selectors even before drawing with a custom title", asy
     "R006",
   );
   expect(error.details).toMatchObject({
-    circuitGroups: [{ groupId: "bad-coil", functionKeys: ["K1/ABSENT"] }],
+    circuitGroups: [
+      {
+        groupId: "bad-coil",
+        functionKeys: [`${device.uid}/ABSENT`],
+        functionDisplayKeys: ["K1/ABSENT"],
+      },
+    ],
   });
 });
 
@@ -207,3 +284,101 @@ it("names cable-core endpoints when a UID wiring selection fails before drawing"
     },
   ]);
 });
+
+it("escapes the full terminal identity in wiring width refusals", async () => {
+  const { prepareWiringDrawing } = await import("../src/wiring.js");
+  const input = structuredClone(core);
+  const wire = input.wires.find((w) => w.designation === "W-CTL-007")!;
+  const terminal = wire.endpoints[0].terminal;
+  const device = input.devices.find((d) => d.uid === terminal.deviceUid)!;
+  device.designation = 'OL"1';
+  terminal.terminalKey = "W".repeat(40) + '"\\\n';
+  await expect(
+    prepareWiringDrawing(input, {
+      format: "wiring-view-request/0.1",
+      title: "Width refusal",
+      conductors: [wire.uid],
+    }),
+  ).rejects.toThrow(
+    `Wiring terminal ${JSON.stringify(`${device.designation}.${terminal.terminalKey}`)} label is too wide.`,
+  );
+});
+
+it.each(["input", "return"] as const)(
+  "omits an unknown transformer %s designation while keeping its identity",
+  async (unknownSide) => {
+    const { normalizeSchematicView } = await import("../src/view-spec.js");
+    const { createSelectionContext } =
+      await import("../src/selection/context.js");
+    const { pairTransformerPaths } =
+      await import("../src/selection/transformer.js");
+    const fixture = await transformerFixture();
+    try {
+      const normalized = normalizeSchematicView(
+        fixture.ir,
+        transformerRequest("left-to-right"),
+      );
+      if (
+        !normalized.ok ||
+        normalized.value.view.format !== "schematic-view/0.1"
+      )
+        throw Error("normalize");
+      const created = createSelectionContext({
+        ir: fixture.ir,
+        ...normalized.value,
+      });
+      if (!created.ok) throw Error("context");
+      const device = fixture.ir.devices.find((d) => d.designation === "T1")!;
+      const candidates = (["input", "return"] as const).map((side) => ({
+        classRank: 2,
+        distance: 1,
+        boundary: {
+          kind: "source" as const,
+          label: "X1",
+          netId: "same-net",
+          terminal: {
+            deviceUid: side === unknownSide ? "unknown-device" : device.uid,
+            terminalKey: "X1",
+          },
+        },
+        functionIds: [{ deviceUid: device.uid, functionKey: "secondary" }],
+      }));
+      // Deliberately inconsistent caller identity: winding selection still uses
+      // its real function owner, while one reported boundary device is unknown.
+      const paths = candidates.map((candidate, i) => ({
+        candidate,
+        path: {
+          id: `path-${i}`,
+          lane: i === 0 ? "input" : "return",
+          steps: [],
+          start: { terminal: candidate.boundary.terminal },
+          end: { terminal: candidate.boundary.terminal },
+        },
+      }));
+      const arms = paths.map((path) => ({
+        start: path.path.start.terminal,
+        result: { ok: true as const, value: path },
+        candidates: [path.candidate],
+        policy: {
+          lane: path.path.lane,
+          allowFunctions: false,
+          boundaryAtEnd: true,
+          constrainRoot: false,
+          boundaries: () => [path.candidate],
+        },
+      }));
+      const result = pairTransformerPaths(created.value, arms, paths);
+      expect(result.ok).toBe(false);
+      if (result.ok) throw Error("Expected pair refusal");
+      expect(result.error.code).toBe("R002");
+      expect(result.error.details?.[unknownSide]).toEqual(
+        candidates[unknownSide === "input" ? 0 : 1]!.boundary,
+      );
+      expect(
+        result.error.details?.[unknownSide === "input" ? "return" : "input"],
+      ).toMatchObject({ designation: "T1" });
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);

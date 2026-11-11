@@ -134,7 +134,7 @@ it("explains the CLI's R006 device context for multi-sheet SVG output", async ()
   expect(JSON.parse(result.stderr).error).toEqual({
     code: "R006",
     message: expect.stringContaining("requires 2 sheets"),
-    details: { devices: [ps1, plc1, plc1, ps1] },
+    details: { devices: [ps1, plc1] },
   });
   expect(DIAGNOSTIC_CATALOG.R006.meaning).toContain("without reason");
   expect(DIAGNOSTIC_CATALOG.R006.meaning).toContain(

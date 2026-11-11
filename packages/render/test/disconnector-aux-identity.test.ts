@@ -174,11 +174,12 @@ for (const family of ["power", "control"] as const)
           format: "schematic-packet-request/0.1",
           views: [request],
         });
+        const uid = f.ir.devices.find((d) => d.designation === "DUT")!.uid;
         expect(circuit).toMatchObject({
           ok: false,
           error: {
             code: "R006",
-            message: `Packet view[0] "Authored function identities": ${prefix("circuit", "closed contact/2")} Unsupported circuit function local:dut/function: thermite:disconnector does not map closed contact/2. ${advice} Selected circuit keys: identity: functions DUT/function; conductors none.`,
+            message: `Packet view[0] "Authored function identities": ${prefix("circuit", "closed contact/2")} Unsupported circuit function local:dut/function: thermite:disconnector does not map closed contact/2. ${advice} Selected circuit keys: identity: functions ${uid}/function; conductors none.`,
           },
         });
       } finally {

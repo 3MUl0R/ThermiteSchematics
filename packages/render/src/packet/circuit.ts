@@ -226,7 +226,7 @@ export async function circuitDrafts(
     }
     return failure(
       "unprintable-layout",
-      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${circuitDeviceName(ir, f.device)}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
+      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${f.device.value}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
       circuitSelectionContext(ir, request),
     );
   }
@@ -239,18 +239,22 @@ export function circuitSelectionContext(
   return {
     circuitGroups: (Array.isArray(request.groups) ? request.groups : [])
       .filter(record)
-      .map((g) => ({
-        groupId: g.id,
-        functionKeys: (Array.isArray(g.functions) ? g.functions : [])
-          .filter(
-            (f) =>
-              record(f) &&
-              record(f.device) &&
-              typeof f.device.value === "string",
-          )
-          .map((f) => `${circuitDeviceName(ir, f.device)}/${f.key}`),
-        conductorKeys: Array.isArray(g.conductors) ? g.conductors : [],
-      })),
+      .map((g) => {
+        const functions = (
+          Array.isArray(g.functions) ? g.functions : []
+        ).filter(
+          (f) =>
+            record(f) && record(f.device) && typeof f.device.value === "string",
+        );
+        return {
+          groupId: g.id,
+          functionKeys: functions.map((f) => `${f.device.value}/${f.key}`),
+          functionDisplayKeys: functions.map(
+            (f) => `${circuitDeviceName(ir, f.device)}/${f.key}`,
+          ),
+          conductorKeys: Array.isArray(g.conductors) ? g.conductors : [],
+        };
+      }),
   };
 }
 

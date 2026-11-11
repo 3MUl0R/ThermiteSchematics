@@ -325,22 +325,26 @@ async function renderPacketWithAdvice(
     return result;
   // Advice is evidence about the complete export, including assembly and the
   // packet page-cost bound. It never substitutes a different drawing.
-  const compact = await renderPacket(
-    ir,
-    { ...request, layout: "compact" },
-    presentation,
-    explicitPacket,
-  );
-  return compact.ok
-    ? {
-        ok: false,
-        error: {
-          ...result.error,
-          message: `${result.error.message} Try --layout compact; it produces a printable version of this packet on this page.`,
-          details: { ...result.error.details, compactLayoutAvailable: true },
-        },
-      }
-    : result;
+  try {
+    const compact = await renderPacket(
+      ir,
+      { ...request, layout: "compact" },
+      presentation,
+      explicitPacket,
+    );
+    return compact.ok
+      ? {
+          ok: false,
+          error: {
+            ...result.error,
+            message: `${result.error.message} Try --layout compact; it produces a printable version of this packet on this page.`,
+            details: { ...result.error.details, compactLayoutAvailable: true },
+          },
+        }
+      : result;
+  } catch {
+    return result;
+  }
 }
 
 export function renderSchematicPacket(

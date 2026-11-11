@@ -150,6 +150,10 @@ function pairError(
 ): IncompletePathError {
   const label = (c: BoundaryCandidate) =>
     `${designationFor(context, c.boundary.terminal.deviceUid)}.${c.boundary.terminal.terminalKey}`;
+  const namedBoundary = (c: BoundaryCandidate) => {
+    const designation = designationFor(context, c.boundary.terminal.deviceUid);
+    return { ...c.boundary, ...(designation ? { designation } : {}) };
+  };
   return {
     code: "R002",
     family: "control",
@@ -164,14 +168,8 @@ function pairError(
           : `Incomplete control view: input and return must reach distinct terminals on distinct nets of the same transformer source function; reached ${label(input)} and ${label(ret)}.`,
     details: {
       reason: "transformer-source-pair",
-      input: {
-        ...input.boundary,
-        designation: designationFor(context, input.boundary.terminal.deviceUid),
-      },
-      return: {
-        ...ret.boundary,
-        designation: designationFor(context, ret.boundary.terminal.deviceUid),
-      },
+      input: namedBoundary(input),
+      return: namedBoundary(ret),
     },
   };
 }
