@@ -185,6 +185,112 @@ it("checks communication ownership in drawings and schedules without inventing c
     measure([text("K1.hidden_port", { row, columnIndex: 2 })], c),
   ).toHaveLength(1);
 });
+it.each(["drawing", "schedule"])(
+  "requires the authored key and description in a described port %s",
+  (view) => {
+    const data = structuredClone(ir);
+    data.deviceTypes[0].ports.hidden_port.description = "Ethernet uplink";
+    const drawing = view === "drawing";
+    const attrs = drawing
+      ? { deviceUid: uid, communicationPort: "hidden_port" }
+      : { row: JSON.stringify([uid, "hidden_port"]), columnIndex: 2 };
+    const c = {
+      sheet: { view: { kind: drawing ? "communication" : "network" } },
+    };
+    const expected = drawing
+      ? "hidden_port — Ethernet uplink"
+      : "K1: hidden_port — Ethernet uplink";
+    const inspect = (value) =>
+      functionKeys({ texts: [text(value, attrs)] }, data, c);
+    expect(inspect(expected)).toEqual([]);
+    for (const value of drawing
+      ? ["Ethernet uplink", "hidden_port", "K1.hidden_port — Ethernet uplink"]
+      : [
+          "K1: Ethernet uplink",
+          "K1: hidden_port",
+          "K1.hidden_port — Ethernet uplink",
+        ])
+      expect(inspect(value)).toMatchObject([
+        {
+          mechanism: drawing
+            ? "communication-caption"
+            : "communication-schedule",
+          text: value,
+          expected,
+        },
+      ]);
+  },
+);
+it.each([
+  {
+    names: ["+", "-", "S"],
+    reference: "Other + / - / S",
+    wrongReference: "Other +–-–S",
+  },
+  {
+    names: ["3", "1", "2"],
+    reference: "Other 3 / 1 / 2",
+    wrongReference: "Other 3–1–2",
+  },
+  {
+    names: ["+", "-"],
+    reference: "Output channel + / -",
+    channel: "+ / -",
+    wrongReference: "Output channel +–-",
+    wrongChannel: "+–-",
+  },
+])(
+  "checks authored terminal set $names in reference and I/O cells",
+  (entry) => {
+    const data = {
+      ...ir,
+      devices: [{ ...ir.devices[0], io: undefined }],
+      functions: [
+        {
+          id: { deviceUid: uid, functionKey: key },
+          ...(entry.channel
+            ? { kind: "channel", direction: "output" }
+            : { kind: "other" }),
+          terminals: entry.names.map((terminalKey) => ({
+            deviceUid: uid,
+            terminalKey,
+          })),
+        },
+      ],
+    };
+    const cases = [
+      [
+        context,
+        row,
+        entry.reference,
+        entry.wrongReference,
+        "function-reference",
+      ],
+    ];
+    // Authored channels allow at most two bindings; exercise the I/O fallback
+    // with the valid polarity pair, and larger sets on an "other" function.
+    if (entry.channel)
+      cases.push([
+        { sheet: { view: { kind: "io" } } },
+        JSON.stringify([uid, key]),
+        entry.channel,
+        entry.wrongChannel,
+        "io-channel",
+      ]);
+    for (const [c, cellRow, expected, wrong, mechanism] of cases) {
+      const inspect = (value) =>
+        functionKeys(
+          { texts: [text(value, { row: cellRow, columnIndex: 1 })] },
+          data,
+          c,
+        );
+      expect(inspect(expected)).toEqual([]);
+      expect(inspect(wrong)).toMatchObject([
+        { mechanism, text: wrong, expected },
+      ]);
+    }
+  },
+);
 it("measures schema vocabulary and latent type-ID fallbacks separately", () => {
   const columnIndex = 5,
     row = JSON.stringify(["core:hidden_type", "", null]);

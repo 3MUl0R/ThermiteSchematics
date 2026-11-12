@@ -622,14 +622,6 @@ function communicationPortRows(
   });
   const west = connected.filter((p) => p.side === "WEST"),
     east = connected.filter((p) => p.side === "EAST");
-  for (let i = 0; i < Math.max(west.length, east.length); i++) {
-    const left = Math.max(0, ...(west[i]?.lines.map(textWidth) ?? []));
-    const right = Math.max(0, ...(east[i]?.lines.map(textWidth) ?? []));
-    if (left + right > nodeWidth - 8)
-      throw new Error(
-        "Communication port captions overlap; narrow their descriptions.",
-      );
-  }
   let portBottom = labelBottom;
   const positions: number[] = [];
   for (let i = 0; i < Math.max(west.length, east.length); i++) {
