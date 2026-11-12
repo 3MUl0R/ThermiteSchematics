@@ -179,11 +179,11 @@ for (const flow of flows) {
     const browser = await launchBrowser();
     try {
       const sheet = must(
-          r.value.sheets.find((s) => s.svg.includes("13-14: 300")),
+          r.value.sheets.find((s) => s.svg.includes("13–14: 300")),
         ),
         t = must(
           (await captionOracle(await browser.newPage(), sheet.svg)).find(
-            (t) => t.text === "13-14: 300",
+            (t) => t.text === "13–14: 300",
           ),
         );
       expect(t.attachmentGap).toBeGreaterThanOrEqual(1);
@@ -193,12 +193,12 @@ for (const flow of flows) {
       const doc = parseHTML(sheet.svg).document,
         footer = must(
           [...doc.querySelectorAll("text")].find(
-            (t) => t.textContent === "13-14: 300",
+            (t) => t.textContent === "13–14: 300",
           ),
         ),
         owner = must(footer.closest("[data-device-uid]"));
       expect([...owner.querySelectorAll("text")].at(-1)?.textContent).toBe(
-        "13-14: 300",
+        "13–14: 300",
       );
     } finally {
       await browser.close();

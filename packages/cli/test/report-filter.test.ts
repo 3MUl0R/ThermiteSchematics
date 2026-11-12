@@ -101,7 +101,7 @@ describe("CLI report filter requests", () => {
       .join(" ");
     expect(text).toContain("NET1");
     expect(text).not.toContain("NET2");
-    expect(text).toContain("DOC1: Logical test reservation");
+    expect(text).toContain("DOC1: IN");
     expect(text).not.toContain("DOC1.IN");
   });
   it("rejects malformed/unknown filters and mixed legacy selectors without writing output", async () => {

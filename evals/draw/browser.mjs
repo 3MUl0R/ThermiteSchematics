@@ -1620,6 +1620,28 @@ export function measureSheet(options = {}) {
     connectors,
     terminals,
     relationLandings,
+    communicationRoutes: all
+      .filter((e) => e.hasAttribute("data-communication-link"))
+      .map((e) => ({
+        link: e.getAttribute("data-communication-link"),
+        appearanceScope: ids.get(e.closest("svg")),
+        source: e.getAttribute("data-layout-source-port"),
+        target: e.getAttribute("data-layout-target-port"),
+      })),
+    communicationCaptions: all
+      .filter(
+        (e) =>
+          e.hasAttribute("data-layout-port") &&
+          e.querySelector("circle") &&
+          e.closest("[data-device-uid]") &&
+          visible(e),
+      )
+      .map((e) => ({
+        layoutPort: e.getAttribute("data-layout-port"),
+        appearanceScope: ids.get(e.closest("svg")),
+        deviceUid: attr(e, "data-device-uid"),
+        elements: Array.from(e.querySelectorAll("text")).map((t) => ids.get(t)),
+      })),
     shapes,
     ...(utilisationErrors.length ? { utilisationErrors } : {}),
     devices,

@@ -1,9 +1,10 @@
 import { compileProject } from "@thermite/compiler";
-import { buildDocumentation } from "@thermite/query";
 import {
-  printedFunction,
+  buildDocumentation,
   printedPort,
-} from "../../../render/src/print-projection.js";
+  formatTerminalSet,
+} from "@thermite/query";
+import { printedFunction } from "../../../render/src/print-projection.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
 // jumper, a single-ended core, a PLC and an overload relay, or against the
@@ -371,7 +372,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Visible references use kind/state and terminals; I/O address/terminals; ports authored description/connector.",
+        "References use kind/state and terminals; I/O address/terminals; ports key plus authored description.",
       async check() {
         const compiled = await compileProject(await base());
         if (!compiled.ok) throw Error("compile projection");
@@ -388,7 +389,7 @@ const module: FactModule = {
         )!;
         expect(row.cells[1]).toBe(
           device.io?.channels[fn.id.functionKey]?.address ??
-            fn.terminals.map((t) => t.terminalKey).join(", "),
+            formatTerminalSet(fn.terminals.map((t) => t.terminalKey)),
         );
         expect(printedFunction(fn)).toContain(fn.terminals[0]!.terminalKey);
         expect(
@@ -404,7 +405,7 @@ const module: FactModule = {
             },
             "hidden",
           ),
-        ).toBe("Reader identity");
+        ).toBe("hidden — Reader identity");
       },
     },
     {
@@ -432,7 +433,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Keys stay in metadata/CSV.",
+      claim: "Function keys/type IDs stay in metadata/CSV.",
       async check() {
         const compiled = await compileProject(await base());
         if (!compiled.ok) throw Error("compile CSV identity");
@@ -452,7 +453,8 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Tags: designation ≥2.7 mm; description/part ≥2.5 mm.",
+      claim:
+        "Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.",
       async check() {
         const doc = parseHTML((await multi()).svg).document;
         const texts = [...doc.querySelectorAll("svg")].flatMap((svg) =>
@@ -707,7 +709,8 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Functions keep terminals, wire numbers and references.",
+      claim:
+        "Selected functions retain terminals, wire numbers and references.",
       async check() {
         const { svg, text } = await multi();
         expect(svg).toContain('data-circuit-mark="load"');
@@ -723,7 +726,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Wire `properties.label` is the printed number; repeated labels never join nets.",
+        "A wire's `properties.label` is its printed number, separate from source identity; repeated labels never join nets.",
       async check() {
         const { svg, text } = await multi();
         expect(text.filter((s) => s === "101")).toHaveLength(2);
@@ -738,7 +741,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Boundary counts show connections outside the selection, not completeness.",
+        "Boundary counts expose connections outside the selection; a circuit view is not a completeness audit.",
       async check() {
         const { text, json } = await multi();
         // TB1.1 also carries CBL1/1+, TB2.3 also carries J1, and TB2 itself
@@ -752,7 +755,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "ELK places/routes.",
+      claim: "ELK owns placement/routing.",
       async check() {
         // Requests have no placement fields to override the layout.
         await refused(
@@ -764,7 +767,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Groups split with whole conductors; R006 means something cannot fit. Narrow selection or use larger paper; never change topology to fit.",
+        "Large groups split into numbered parts with whole conductors; R006 means a conductor, coupled symbol or label cannot fit. Narrow selection or use larger paper; never change topology to fit.",
       async check() {
         const source = "examples/circuit-pagination";
         const project = await makeProject({
@@ -821,7 +824,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for a device's main and auxiliary contacts.",
+        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for main and auxiliary contacts.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

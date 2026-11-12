@@ -100,7 +100,7 @@ it("exempts only marked request-note text, keeping identical generated text meas
 
 it("DQ-05 accepts terminal bindings and designation-only fallback", () => {
   for (const note of [
-    "polarity not verified: AI1 terminals 9/13, PT1 terminals 1/2.",
+    "polarity not verified: AI1 terminals 9–13, PT1 terminals 1/2.",
     "polarity not verified: AI1, PT1.",
   ])
     expect(findings(note)).toEqual([]);

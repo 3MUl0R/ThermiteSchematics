@@ -291,7 +291,7 @@ const module: FactModule = {
         ]);
         expect(input.visible).toContain("IN / selected channel");
         expect(input.visible).toContain(
-          "polarity not verified: AI1 terminals 9/13, PT1 terminals 1/2.",
+          "polarity not verified: AI1 terminals 9–13, PT1 terminals 1–2.",
         );
         expect(input.visible).not.toContain("AI1.ch0");
         expect(input.visible).not.toContain("PT1.signal");
@@ -319,7 +319,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'A packet can include `signal-loop-view-request/0.1` with `from: {device: "PT1", function: "signal"}`, `to: {device: "AI1", function: "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter, authored cordset, continuous bulkhead contacts, optional feed-through terminals and the input channel.',
+        'Packets accept `signal-loop-view-request/0.1` with `from: {device: "PT1", function: "signal"}`, `to: {device: "AI1", function: "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter, authored cordset, continuous bulkhead contacts, optional feed-through terminals and the input channel.',
       async check() {
         const { project } = await loop();
         // Flow is optional; a vertical four-device chain fits portrait paper.

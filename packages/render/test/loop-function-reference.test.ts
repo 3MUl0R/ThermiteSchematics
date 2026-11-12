@@ -42,7 +42,7 @@ it.each(flows)(
         for (const key of hidden) expect(text).not.toContain(key);
       }
       expect(result.value.sheets[0]!.svg).toContain(
-        "polarity not verified: AI1 terminals p/n, TX1 terminals p/n.",
+        "polarity not verified: AI1 terminals p–n, TX1 terminals p–n.",
       );
     } finally {
       await f.dispose();
@@ -65,12 +65,12 @@ it("uses only bound terminals in authored order, falling back to the designation
           })),
         },
       });
-    expect(reference(["9", "13"])).toBe("AI1 terminals 9/13");
-    expect(reference(["13", "9"])).toBe("AI1 terminals 13/9");
+    expect(reference(["9", "13"])).toBe("AI1 terminals 9–13");
+    expect(reference(["13", "9"])).toBe("AI1 terminals 13–9");
     expect(reference(["3"])).toBe("AI1 terminal 3");
-    expect(reference(["3", "5", "7"])).toBe("AI1 terminals 3/5/7");
-    expect(reference(["1/2", "2/1"])).toBe("AI1 terminals 1/2, 2/1");
-    expect(reference(["1/2", "3"])).toBe("AI1 terminals 1/2, 3");
+    expect(reference(["3", "5", "7"])).toBe("AI1 terminals 3 / 5 / 7");
+    expect(reference(["1/2", "2/1"])).toBe("AI1 terminals 1/2 / 2/1");
+    expect(reference(["1/2", "3"])).toBe("AI1 terminals 1/2 / 3");
     expect(reference(["1/2"])).toBe("AI1 terminal 1/2");
     expect(reference([])).toBe("AI1");
   } finally {
@@ -106,14 +106,14 @@ it.each(flows)(
       if (!result.ok) return;
       const svg = result.value.sheets[0]!.svg;
       const { document } = parseHTML(svg);
-      const note = `polarity not verified: AI1 terminals ${terminal}/n, TX1 terminals ${terminal}/n.`;
+      const note = `polarity not verified: AI1 terminals ${terminal} / n, TX1 terminals ${terminal} / n.`;
       expect(document.querySelector("desc")!.textContent).toBe(note);
       expect(
         [...document.querySelectorAll("[data-engine-notes] text")]
           .map((t) => t.textContent)
           .join(" "),
       ).toContain(note);
-      expect(svg).toContain('3&lt;&amp;&gt;"/n');
+      expect(svg).toContain('3&lt;&amp;&gt;" / n');
       expect(svg).not.toContain(terminal);
     } finally {
       await f.dispose();

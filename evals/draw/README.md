@@ -101,11 +101,15 @@ exempt generated children. Report rows retain their existing separate policy.
 
 Version 5.5 resolves DQ-05 report cells and communication captions to their
 source owners and independently projects function kind/state and bound terminals,
-authored I/O addresses or terminals, and port descriptions or connector metadata.
+authored I/O addresses or terminals, and authored port markings with optional
+descriptions (`KEY` or `KEY — description`). Owned bare port keys, like terminal
+keys, are reader-facing identities; qualified selectors remain findings. Caption
+ownership is also recovered from routed native relations when a caption marker
+is missing; unresolved ownership fails.
 The report-row exemption is removed. A complete cell is reconciled across wrapped
 lines and font runs; ordinary words such as `coil` are allowed only as authored
 prose or facts derived from the owned function kind. Reference row keys, channel
-selectors, port keys, type IDs and CSV lookups remain machine identities.
+selectors, qualified port selectors, type IDs and CSV lookups remain machine identities.
 
 A sibling DQ-05 observation, `internal-vocabulary`, measures schema/type identifiers
 separately: cable type headings, missing-description type-ID fallbacks and the
@@ -116,7 +120,13 @@ connector names, main/auxiliary status or polarity. Provenance is resolved again
 IR, packet references and request source; a missing owner or forged authored-text
 marker does not exempt generated text. Authored descriptions, addresses, signals,
 request notes and circuit group headings retain their source meaning, including
-literal `coil` or `core:` text. Source report fields are selected by kind/column,
+literal `coil` or `core:` text. Source report fields are selected by kind/column directly from native IR,
+never certified by matching query output. Generated Assignment, Connection review
+and Status columns receive no blanket exemption; an authored reason alone may be
+matched to its source. Circuit heading contents and reference-row packet membership
+must also match their owners. DQ-19 selects historical endpoint/channel identity
+policy through an explicit replay-engine export capability, never by inspecting
+the measured cell's punctuation or value. Source fields are selected
 never by a regex over all text. SVG/HTML geometry and PDF extraction/parity retain
 the same media obligations. Historical replay uses the new checker against the
 old engine before measuring the projection change. No defect pins are learned.

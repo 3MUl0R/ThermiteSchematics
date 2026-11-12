@@ -1,10 +1,8 @@
-function communicationEndpoint(ir, uid, key, source) {
+function communicationEndpoint(ir, uid, key, policy) {
   const d = ir.devices.find((d) => d.uid === uid);
-  // DQ-21 replays legacy endpoint selectors as source units. DQ-05 rejects
-  // those keys. In the print projection, port descriptions remain prose.
-  return source?.includes(`${d.designation}: `)
-    ? d.designation
-    : `${d.designation}.${key}`;
+  return policy.projection === "legacy"
+    ? `${d.designation}.${key}`
+    : `${d.designation}: ${key}`;
 }
 // Independent checker policy. Do not import renderer helpers or trust emitted
 // identifier flags. Column identity is explicitly paired with its query header.
@@ -100,7 +98,7 @@ function portUnits(ir, row, column) {
     ];
   });
 }
-function relationUnits(ir, row, column, kind) {
+function relationUnits(ir, row, column, kind, policy) {
   const r = ir.relations.find((r) => r.uid === row.key);
   if (!r) {
     const [uid, port] = keyParts(row.key),
@@ -108,7 +106,7 @@ function relationUnits(ir, row, column, kind) {
     return column === 2 && d
       ? [
           kind === "network"
-            ? communicationEndpoint(ir, uid, port, row.cells[column])
+            ? communicationEndpoint(ir, uid, port, policy)
             : `${d.designation}.${port}`,
         ]
       : [];
@@ -124,19 +122,19 @@ function relationUnits(ir, row, column, kind) {
           ir,
           d.uid,
           column === 2 ? connection.fromPort : connection.toPort,
-          row.cells[column],
+          policy,
         )
       : `${d.designation}.${column === 2 ? connection.fromPort : connection.toPort}`,
   ];
 }
-function channelIdentity(ir, row) {
+function channelIdentity(ir, row, policy) {
   const [uid, key] = keyParts(row.key),
     d = ir.devices.find((d) => d.uid === uid);
   const fn = ir.functions.find(
     (f) => f.id.deviceUid === uid && f.id.functionKey === key,
   );
   if (!fn) throw Error(`Identifier measurement: unknown channel ${row.key}`);
-  if (row.cells[1] === key) return [key]; // retained legacy engine cell
+  if (policy.projection === "legacy") return [key];
   const channels = d?.io?.channels;
   const assignment =
     channels && Object.hasOwn(channels, key) ? channels[key] : undefined;
@@ -253,19 +251,20 @@ function wireUnits(ir, row, column) {
     );
   return [`${device.designation}.${terminal.terminalKey}`];
 }
-function units(source, ir, row, column, kind) {
+function units(source, ir, row, column, kind, policy) {
   if (source === "cell") return [row.cells[column]];
   if (source === "names") return names(ir, row);
   if (source === "references") return row.cells[column].split("; "); // engine-generated entries
   if (source === "port") return portUnits(ir, row, column);
-  if (source === "relation") return relationUnits(ir, row, column, kind);
+  if (source === "relation")
+    return relationUnits(ir, row, column, kind, policy);
   if (source === "channel") return channelUnits(ir, row, column);
-  if (source === "channel-identity") return channelIdentity(ir, row);
+  if (source === "channel-identity") return channelIdentity(ir, row, policy);
   if (source === "terminal") return terminalUnits(ir, row, column);
   return wireUnits(ir, row, column);
 }
 
-export function expectedIdentifierCells(ir, table) {
+export function expectedIdentifierCells(ir, table, enginePolicy = {}) {
   const policy = identifierColumns[table.kind];
   if (!policy)
     throw Error(
@@ -276,7 +275,7 @@ export function expectedIdentifierCells(ir, table) {
       if (table.columns[column] !== header) return [];
       const identifiers = [
         ...new Set(
-          units(source, ir, row, column, table.kind)
+          units(source, ir, row, column, table.kind, enginePolicy)
             .filter((s) => s?.trim())
             .map((s) => s.normalize("NFC").trim()),
         ),

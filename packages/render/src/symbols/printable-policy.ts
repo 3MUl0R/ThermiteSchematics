@@ -1,3 +1,4 @@
+import { formatTerminalSet } from "@thermite/query";
 import { symbolProfile } from "./profiles.js";
 import type { IrFunction, IrDeviceType, IrDevice } from "@thermite/compiler";
 import type {
@@ -193,7 +194,7 @@ export function printableCaption(
       return `${caption.functions.length} ${noun}${caption.functions.length === 1 ? "" : "s"}: ${caption.destination}`;
     }
     case "relation":
-      return `${caption.functions.map((fn) => (fn.kind === "coil" ? "coil" : fn.terminals.map((t) => t.terminalKey).join("-"))).join(", ")}: ${caption.destination}`;
+      return `${caption.functions.map((fn) => (fn.kind === "coil" ? "coil" : formatTerminalSet(fn.terminals.map((t) => t.terminalKey)))).join(", ")}: ${caption.destination}`;
   }
 }
 

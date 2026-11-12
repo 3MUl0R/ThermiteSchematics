@@ -82,7 +82,7 @@ export async function rm3SeriesLoopView(
   ]);
   expect(loop.content.match(/data-loop-conductor=/g)).toHaveLength(5);
   expect(loop.engineNotes).toContain(
-    "Three separate loop nets; loop power from PS1 terminals +/- as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.",
+    "Three separate loop nets; loop power from PS1 terminals + / - as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.",
   );
   const clone = await prepareSignalLoopDrawing(
     cloneMachineType(ir, "core:transmitter-2wire-4-20ma"),

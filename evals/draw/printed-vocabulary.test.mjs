@@ -168,17 +168,19 @@ it("checks authored I/O identity rather than a selector and detects changed addr
 it("checks communication ownership in drawings and schedules without inventing connectors", () => {
   expect(
     measure([
-      text("RJ45", { deviceUid: uid, communicationPort: "hidden_port" }),
+      text("hidden_port", { deviceUid: uid, communicationPort: "hidden_port" }),
     ]),
   ).toEqual([]);
   expect(
     measure([
-      text("hidden_port", { deviceUid: uid, communicationPort: "hidden_port" }),
+      text("RJ45", { deviceUid: uid, communicationPort: "hidden_port" }),
     ]),
   ).toHaveLength(1);
   const row = JSON.stringify([uid, "hidden_port"]),
     c = { sheet: { view: { kind: "network" } } };
-  expect(measure([text("K1: RJ45", { row, columnIndex: 2 })], c)).toEqual([]);
+  expect(
+    measure([text("K1: hidden_port", { row, columnIndex: 2 })], c),
+  ).toEqual([]);
   expect(
     measure([text("K1.hidden_port", { row, columnIndex: 2 })], c),
   ).toHaveLength(1);
@@ -272,4 +274,139 @@ it("reconciles the owned terminal-order note, including unknown substituted sche
   expect(
     internalVocabulary({ texts: [text("Rows follow objectRefByUid.")] }, ir, c),
   ).toMatchObject([{ mechanism: "missing-report-note-provenance" }]);
+});
+it("does not let matching query output certify generated report columns", () => {
+  for (const [kind, column, value, internal] of [
+    ["wires", 4, `K1.${key}`, false],
+    ["io-ports", 7, "K1.hidden_port", false],
+    ["assemblies", 4, "core:hidden_type", true],
+  ]) {
+    const c = {
+      sheet: { view: { kind } },
+      tables: [
+        {
+          kind,
+          rows: [
+            {
+              key: "forged",
+              cells: Array.from({ length: column + 1 }, (_, i) =>
+                i === column ? value : "",
+              ),
+            },
+          ],
+        },
+      ],
+    };
+    const g = { texts: [text(value, { row: "forged", columnIndex: column })] };
+    expect(
+      (internal ? internalVocabulary : functionKeys)(g, ir, c),
+    ).toHaveLength(1);
+  }
+  const data = structuredClone(ir);
+  data.devices[0].io.channels[key].signal = `coil core: K1.${key}`;
+  expect(
+    functionKeys(
+      {
+        texts: [
+          text(`coil core: K1.${key}`, {
+            row: JSON.stringify([uid, key]),
+            columnIndex: 5,
+          }),
+        ],
+      },
+      data,
+      { sheet: { view: { kind: "io" } } },
+    ),
+  ).toEqual([]);
+});
+it("checks circuit heading content as well as the native group identity", () => {
+  const c = {
+    sheet: { view: { kind: "circuit", title: "Authored" } },
+    request: {
+      views: [{ title: "Authored", groups: [{ id: "g", label: `K1.${key}` }] }],
+    },
+  };
+  expect(measure([text(`K1.${key}`, { circuitHeading: "g" })], c)).toEqual([]);
+  const forged = {
+    ...c,
+    request: {
+      views: [
+        { title: "Authored", groups: [{ id: "g", label: "Check wiring" }] },
+      ],
+    },
+  };
+  expect(
+    measure([text(`K1.${key}`, { circuitHeading: "g" })], forged),
+  ).toHaveLength(1);
+});
+it("cross-checks native reference functions against actual packet appearances", () => {
+  const foreign = { ...context, packet: { sheets: [{ references: [] }] } };
+  expect(
+    measure([text("NO contact 13–14", { row, columnIndex: 1 })], foreign),
+  ).toMatchObject([{ mechanism: "function-reference-owner" }]);
+});
+it("recovers unmarked captions from native routed port ownership", () => {
+  const data = {
+    ...ir,
+    relations: [
+      {
+        uid: "link",
+        fromDeviceUid: uid,
+        toDeviceUid: uid,
+        connection: { fromPort: "hidden_port", toPort: "hidden_port" },
+      },
+    ],
+  };
+  const g = {
+    communicationRoutes: [{ link: "link", source: "p1", target: "p2" }],
+    communicationCaptions: [
+      { layoutPort: "p1", deviceUid: uid, elements: ["t"] },
+    ],
+    texts: [text("hidden_port", { deviceUid: uid })],
+  };
+  const c = { sheet: { view: { kind: "communication" } } };
+  expect(functionKeys(g, data, c)).toEqual([]);
+  for (const value of ["RJ45", "K1.hidden_port", key])
+    expect(
+      functionKeys({ ...g, texts: [text(value, { deviceUid: uid })] }, data, c),
+    ).toHaveLength(1);
+  expect(functionKeys({ ...g, communicationRoutes: [] }, data, c)).toHaveLength(
+    1,
+  );
+});
+it("allows an owned bare port marking while still rejecting its qualified selector", () => {
+  expect(measure([text("hidden_port", { deviceUid: uid })])).toEqual([]);
+  expect(measure([text("K1.hidden_port", { deviceUid: uid })])).toHaveLength(1);
+});
+it("resolves device-only references and never exempts a reference without a packet", () => {
+  const row = JSON.stringify([uid, []]),
+    c = {
+      sheet: { view: { kind: "references" } },
+      packet: { sheets: [{ references: [{ deviceUid: uid, functions: [] }] }] },
+    };
+  expect(
+    measure([text("Terminal / schedule", { row, columnIndex: 1 })], c),
+  ).toEqual([]);
+  expect(
+    measure([text("Device / terminal / port", { row, columnIndex: 1 })], {
+      ...c,
+      request: { references: { appearances: "drawings" } },
+    }),
+  ).toEqual([]);
+  expect(
+    measure(
+      [
+        text("NO contact 13–14", {
+          row: JSON.stringify([uid, [key]]),
+          columnIndex: 1,
+        }),
+      ],
+      { sheet: c.sheet },
+    ),
+  ).toHaveLength(1);
+  expect(
+    measure([text("Drawing index", { row: "1", columnIndex: 1 })], {
+      sheet: { view: { kind: "index" } },
+    }),
+  ).toEqual([]);
 });

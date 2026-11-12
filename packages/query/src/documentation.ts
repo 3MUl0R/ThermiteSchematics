@@ -1,5 +1,6 @@
 import {
   reportTypeProjection,
+  formatTerminalSet,
   printedPortEndpoint,
 } from "./print-projection.js";
 import { symbolProfile } from "@thermite/schema";
@@ -812,6 +813,7 @@ function buildDocumentationTable(
     for (const f of ir.functions
       .filter((f) => f.id.deviceUid === d.uid && f.kind === "channel")
       .sort((a, b) => compare(a.id.functionKey, b.id.functionKey))) {
+      const terminalKeys = f.terminals.map((t) => t.terminalKey);
       const assignment =
         d.io !== undefined && Object.hasOwn(d.io.channels, f.id.functionKey)
           ? d.io.channels[f.id.functionKey]
@@ -830,13 +832,15 @@ function buildDocumentationTable(
           options?.output === "csv"
             ? f.id.functionKey
             : (assignment?.address ??
-              (f.terminals.map((t) => t.terminalKey).join(", ") ||
+              (formatTerminalSet(terminalKeys) ||
                 "Channel identity not specified")),
           f.kind === "channel" ? f.direction : "",
           d.io?.addressSpace ?? "",
           assignment?.address ?? "",
           assignment?.signal ?? "",
-          f.terminals.map(label).join(", "),
+          options?.output === "csv"
+            ? f.terminals.map(label).join(", ")
+            : formatTerminalSet(terminalKeys, (t) => `${d.designation}.${t}`),
           peers.map(label).join("; ") || "None",
           `${assignment?.usage ?? "Unspecified"}; ${f.terminals.some((t) => (connections.get(tid(t)) ?? []).length) ? "terminated" : "unconnected"}`,
         ],

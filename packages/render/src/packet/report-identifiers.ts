@@ -209,13 +209,13 @@ function linkEnd(c: Context, column: number): string[] {
   if (r && connection)
     return [
       r.connection
-        ? deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)
+        ? `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}: ${column === 2 ? connection.fromPort : connection.toPort}`
         : `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}.${column === 2 ? connection.fromPort : connection.toPort}`,
     ];
   return column === 2 && c.device && c.key
     ? [
         c.kind === "network"
-          ? c.device.designation
+          ? `${c.device.designation}: ${c.key}`
           : `${c.device.designation}.${c.key}`,
       ]
     : [];

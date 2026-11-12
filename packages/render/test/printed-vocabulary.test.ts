@@ -1,4 +1,5 @@
-import { printedFunction, printedPort } from "../src/print-projection.js";
+import { printedFunction } from "../src/print-projection.js";
+import { printedPort, formatTerminalSet } from "@thermite/query";
 import { beforeAll, expect, it } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { buildDocumentation } from "@thermite/query";
@@ -46,7 +47,7 @@ it("projects arbitrary function selectors using kind, state and bound terminals 
         { deviceUid: fn.id.deviceUid, terminalKey: "<&>" },
       ],
     }),
-  ).toBe("Coil A–B, <&>");
+  ).toBe("Coil A–B / <&>");
 });
 it("keeps reference row identity and IR intact while printing semantic function facts", () => {
   const before = JSON.stringify(ir);
@@ -102,12 +103,21 @@ it("prints I/O addresses or terminal identities; CSV retains channel lookup keys
   expect(report("print").cells[1]).toBe("Q0.0");
   expect(report("print").cells[5]).toBe("coil core: authored prose");
   expect(report("csv").cells[1]).toBe(fn.id.functionKey);
+  expect(report("csv").cells[6]).toBe(
+    fn.terminals.map((t) => `${d.designation}.${t.terminalKey}`).join(", "),
+  );
+  expect(report("print").cells[6]).toBe(
+    formatTerminalSet(
+      fn.terminals.map((t) => t.terminalKey),
+      (key) => `${d.designation}.${key}`,
+    ),
+  );
   delete d.io;
   expect(report("print").cells[1]).toBe(
-    fn.terminals.map((t) => t.terminalKey).join(", "),
+    formatTerminalSet(fn.terminals.map((t) => t.terminalKey)),
   );
 });
-it("uses authored port descriptions, connector metadata, or an honest fallback", () => {
+it("prints authored port identities with optional supplemental descriptions", () => {
   expect(
     printedPort(
       {
@@ -121,16 +131,14 @@ it("uses authored port descriptions, connector metadata, or an honest fallback",
       },
       "arbitrary",
     ),
-  ).toBe("coil core: reader text");
+  ).toBe("arbitrary — coil core: reader text");
   expect(
     printedPort(
       { ports: { arbitrary: { medium: "ethernet", connector: "RJ45" } } },
       "arbitrary",
     ),
-  ).toBe("RJ45");
-  expect(printedPort(undefined, "arbitrary")).toBe(
-    "Port identity not specified",
-  );
+  ).toBe("arbitrary");
+  expect(printedPort(undefined, "arbitrary")).toBe("arbitrary");
 });
 it("never manufactures a part or rating when type descriptions are missing", () => {
   const input = structuredClone(ir);
@@ -167,62 +175,6 @@ it("keeps transformer source-winding captions independent of selector spelling",
         mark: "ais:source-winding",
       }),
     ).toBe("source");
-});
-it("consistent communication port renames preserve all visible captions and schedule values", async () => {
-  const c = await compileProject("examples/network-pagination");
-  if (!c.ok) throw Error("compile network");
-  const ir = c.ir;
-  const renamed = structuredClone(ir);
-  const rename = (k: string) => `hidden_${k}_923`;
-  for (const t of renamed.deviceTypes)
-    if (t.ports)
-      t.ports = Object.fromEntries(
-        Object.entries(t.ports).map(([k, v]) => [rename(k), v]),
-      );
-  for (const device of renamed.devices)
-    if (device.connectionReview?.ports)
-      device.connectionReview.ports = Object.fromEntries(
-        Object.entries(device.connectionReview.ports).map(([key, value]) => [
-          rename(key),
-          value,
-        ]),
-      );
-  for (const r of renamed.relations)
-    if (r.connection) {
-      r.connection.fromPort = rename(r.connection.fromPort);
-      r.connection.toPort = rename(r.connection.toPort);
-    }
-  const request = {
-    format: "communication-view-request/0.1",
-    medium: "ethernet",
-  } as const;
-  const [a, b] = await Promise.all([
-    prepareCommunicationDrawing(ir, request),
-    prepareCommunicationDrawing(renamed, request),
-  ]);
-  expect(visible(a.content)).toEqual(visible(b.content));
-  const report = (input: ElectricalIr) =>
-    buildDocumentation(input, {
-      format: "documentation-view-request/0.1",
-      kind: "network",
-    }).rows.map((r) => r.cells);
-  expect(report(ir)).toEqual(report(renamed));
-  const requestTable = {
-    format: "documentation-view-request/0.1",
-    kind: "network",
-  } as const;
-  const print = buildDocumentation(ir, requestTable);
-  const csv = buildDocumentation(ir, requestTable, undefined, {
-    output: "csv",
-  });
-  expect(csv.rows.map((row) => row.key)).toEqual(
-    print.rows.map((row) => row.key),
-  );
-  const link = ir.relations.find((r) => r.connection)!;
-  const source = ir.devices.find((d) => d.uid === link.fromDeviceUid)!;
-  expect(csv.rows.find((row) => row.key === link.uid)!.cells[2]).toContain(
-    `${source.designation}.${link.connection!.fromPort}`,
-  );
 });
 
 it("consistent function renames preserve reference and I/O print cells, not source row keys", () => {

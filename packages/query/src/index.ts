@@ -81,3 +81,6 @@ export {
   type ContinuityEndpoint,
   type ContinuityReport,
 } from "./continuity.js";
+
+// Shared print projection for query reports and renderer captions.
+export { formatTerminalSet, printedPort } from "./print-projection.js";

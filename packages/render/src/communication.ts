@@ -1,4 +1,4 @@
-import { printedPort } from "./print-projection.js";
+import { printedPort } from "@thermite/query";
 import {
   routePortAttributes,
   terminalPortAttribute,
@@ -609,10 +609,27 @@ function communicationPortRows(
 ) {
   const connected = communicationPorts(links, uid).map((p) => {
     const label = printedPort(type, p.key);
-    return { ...p, label, lines: wrap(label, 35, (nodeWidth - 8) / 2) };
+    const width = (nodeWidth - 8) / 2;
+    if (textWidth(p.key) > width)
+      throw new Error(
+        `Communication port identity ${p.key} cannot fit on one line.`,
+      );
+    // The key is an atomic authored identity; only its prose may wrap.
+    const lines = wrap(label, 35, (nodeWidth - 8) / 2);
+    if (!lines[0]?.startsWith(p.key))
+      throw new Error(`Communication port identity ${p.key} was split.`);
+    return { ...p, label, lines };
   });
   const west = connected.filter((p) => p.side === "WEST"),
     east = connected.filter((p) => p.side === "EAST");
+  for (let i = 0; i < Math.max(west.length, east.length); i++) {
+    const left = Math.max(0, ...(west[i]?.lines.map(textWidth) ?? []));
+    const right = Math.max(0, ...(east[i]?.lines.map(textWidth) ?? []));
+    if (left + right > nodeWidth - 8)
+      throw new Error(
+        "Communication port captions overlap; narrow their descriptions.",
+      );
+  }
   let portBottom = labelBottom;
   const positions: number[] = [];
   for (let i = 0; i < Math.max(west.length, east.length); i++) {

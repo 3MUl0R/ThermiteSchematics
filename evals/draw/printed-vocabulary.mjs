@@ -1,3 +1,4 @@
+import { isAuthoredReportText } from "./authored-report-fields.mjs";
 // Independent visible projection oracle. Never import renderer/query formatters.
 // Metadata identifies a candidate owner, not an exemption. Resolve it to source
 // and require the complete measured field to equal independently derived facts.
@@ -16,6 +17,13 @@ const parts = (key) => {
     return [];
   }
 };
+function terminalSet(names) {
+  return names.join(
+    names.length === 2 && names.every((s) => /^[A-Za-z0-9]+$/u.test(s))
+      ? "–"
+      : " / ",
+  );
+}
 function functionCaption(fn) {
   const kind =
     fn.kind === "contact"
@@ -24,12 +32,7 @@ function functionCaption(fn) {
         ? `${fn.direction === "input" ? "Input" : "Output"} channel`
         : fn.kind[0].toUpperCase() + fn.kind.slice(1);
   const terminals = fn.terminals.map((t) => t.terminalKey);
-  return [
-    kind,
-    terminals.join(terminals.some((t) => t.includes("–")) ? ", " : "–"),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  return [kind, terminalSet(terminals)].filter(Boolean).join(" ");
 }
 function device(ir, uid) {
   return ir.devices.find((d) => d.uid === uid);
@@ -38,18 +41,15 @@ function portCaption(ir, uid, key) {
   const d = device(ir, uid),
     type = ir.deviceTypes?.find((t) => t.id === d?.typeId),
     p = type?.ports?.[key];
-  return (
-    p?.description?.trim() ||
-    p?.connector?.trim() ||
-    "Port identity not specified"
-  );
+  const description = p?.description?.trim();
+  return description && description !== key ? `${key} — ${description}` : key;
 }
 function portEnd(ir, uid, key) {
   return `${device(ir, uid)?.designation}: ${portCaption(ir, uid, key)}`;
 }
-function referenceSource(ir, row, packet) {
+function referenceSource(ir, row, packet, request) {
   const [uid, keys, representation] = parts(row);
-  if (!Array.isArray(keys) || !device(ir, uid)) return undefined;
+  if (!Array.isArray(keys) || !device(ir, uid) || !packet) return undefined;
   if (
     packet &&
     !packet.sheets.some((s) =>
@@ -64,7 +64,10 @@ function referenceSource(ir, row, packet) {
     return undefined;
   if (representation === "terminal")
     return "Terminal context (coil outside view)";
-  if (!keys.length) return undefined; // no function-key cell
+  if (!keys.length)
+    return request?.references?.appearances === "drawings"
+      ? "Device / terminal / port"
+      : "Terminal / schedule";
   const functions = keys.map((key) =>
     ir.functions.find(
       (f) => f.id.deviceUid === uid && f.id.functionKey === key,
@@ -77,9 +80,13 @@ function referenceSource(ir, row, packet) {
 function ownedCell(ir, row, column, context) {
   const kind = context.sheet?.view.kind;
   if (kind === "references" && column === 1) {
-    const expected = referenceSource(ir, row, context.packet);
+    const expected = referenceSource(ir, row, context.packet, context.request);
     return expected === undefined
-      ? null
+      ? {
+          expected: "Resolved packet reference owner",
+          mechanism: "function-reference-owner",
+          family: "function",
+        }
       : { expected, mechanism: "function-reference", family: "function" };
   }
   if (kind === "io" && column === 1) {
@@ -94,7 +101,7 @@ function ownedCell(ir, row, column, context) {
     return {
       expected:
         device(ir, uid)?.io?.channels?.[key]?.address ??
-        (fn.terminals.map((t) => t.terminalKey).join(", ") ||
+        (terminalSet(fn.terminals.map((t) => t.terminalKey)) ||
           "Channel identity not specified"),
       mechanism: "io-channel",
       family: "function",
@@ -234,16 +241,49 @@ export function ownedVocabulary(g, ir, context, issue) {
     if (compact(combined(texts)) !== compact(source.expected))
       findings.push(fieldIssue(issue, source, texts));
   }
+  // Recover caption ownership from routed source relations as well as the
+  // optional caption marker. Dropping that marker must not hide a changed label.
+  const routed = new Map();
+  for (const route of g.communicationRoutes ?? []) {
+    const link = ir.relations?.find(
+      (r) => r.uid === route.link && r.connection,
+    );
+    if (!link) continue;
+    routed.set(JSON.stringify([route.appearanceScope, route.source]), [
+      link.fromDeviceUid,
+      link.connection.fromPort,
+    ]);
+    routed.set(JSON.stringify([route.appearanceScope, route.target]), [
+      link.toDeviceUid,
+      link.connection.toPort,
+    ]);
+  }
+  const recovered = new Map();
+  if (context.sheet?.view.kind === "communication")
+    for (const caption of g.communicationCaptions ?? []) {
+      const owner = routed.get(
+        JSON.stringify([caption.appearanceScope, caption.layoutPort]),
+      );
+      for (const element of caption.elements)
+        recovered.set(
+          element,
+          owner?.[0] === caption.deviceUid ? owner : [caption.deviceUid, null],
+        );
+    }
   const ports = new Map();
   for (const t of g.texts)
-    if (t.communicationPort != null) {
-      const uid = t.deviceUid,
-        key = t.communicationPort;
+    if (t.communicationPort != null || recovered.has(t.element)) {
+      const owner = recovered.get(t.element),
+        uid = owner?.[0] ?? t.deviceUid,
+        key = owner ? owner[1] : t.communicationPort;
       const d = device(ir, uid),
         port = ir.deviceTypes?.find((type) => type.id === d?.typeId)?.ports?.[
           key
         ];
-      if (!port) {
+      if (
+        !port ||
+        (t.communicationPort != null && t.communicationPort !== key)
+      ) {
         handled.add(t);
         findings.push(
           fieldIssue(
@@ -259,14 +299,13 @@ export function ownedVocabulary(g, ir, context, issue) {
         continue;
       }
       const id = JSON.stringify([t.appearanceScope, uid, key]);
-      if (!ports.has(id)) ports.set(id, []);
-      ports.get(id).push(t);
+      if (!ports.has(id)) ports.set(id, { uid, key, texts: [] });
+      ports.get(id).texts.push(t);
     }
-  for (const texts of ports.values()) {
-    const t = texts[0];
+  for (const { uid, key, texts } of ports.values()) {
     texts.forEach((t) => handled.add(t));
     const source = {
-      expected: portCaption(ir, t.deviceUid, t.communicationPort),
+      expected: portCaption(ir, uid, key),
       mechanism: "communication-caption",
       family: "function",
     };
@@ -385,25 +424,7 @@ function sourceProse(ir, t, context, g) {
     )
       return true;
   }
-  // Authored report fields are selected explicitly by table kind and column.
-  const free = {
-    bom: [2, 3, 4, 5, 6],
-    io: [3, 4, 5],
-    terminals: [1, 3],
-    network: [1],
-    "io-ports": [3, 4, 6, 7],
-    assemblies: [1, 4],
-    wires: [0, 3, 4],
-  };
-  const table = context.tables?.find(
-    (t) => t.kind === context.sheet?.view.kind,
-  );
-  if (table && free[table.kind]?.includes(t.columnIndex)) {
-    const source = table.rows.find((r) => r.key === t.row)?.cells[
-      t.columnIndex
-    ];
-    if (source && compact(source).includes(compact(t.text))) return true;
-  }
+  if (isAuthoredReportText(ir, context.sheet?.view.kind, t)) return true;
   return false;
 }
 function semanticCaption(ir, t) {
@@ -507,7 +528,11 @@ export function vocabularyFindings(g, ir, context = {}, issue) {
     const terminal = ir.terminals?.some(
       (p) => p.id.deviceUid === t.deviceUid && p.id.terminalKey === t.text,
     );
-    if (!terminal && !semanticCaption(ir, t)) {
+    const port = ir.deviceTypes?.find(
+      (type) => type.id === device(ir, t.deviceUid)?.typeId,
+    )?.ports;
+    const ownedPort = port && Object.hasOwn(port, t.text);
+    if (!terminal && !ownedPort && !semanticCaption(ir, t)) {
       const ownerFunctions = t.functionKey
         ? ir.functions.filter(
             (f) =>

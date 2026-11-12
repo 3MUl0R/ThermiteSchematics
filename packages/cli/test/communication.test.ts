@@ -240,7 +240,7 @@ describe("typed communication ports", () => {
     for (const r of drawing.references)
       expect(r.yMm).toBeLessThan(packet.value.page.heightMm - 30);
   });
-  it("validates printed port text while keeping arbitrarily long lookup keys invisible", async () => {
+  it("refuses unprintable authored port identities and descriptions without hiding them", async () => {
     const f = await fixture(),
       c = await compiled(f.p);
     const request = {
@@ -263,16 +263,15 @@ describe("typed communication ports", () => {
       (await compiled(f.p)).ir,
       request,
     );
-    expect(projected.ok, JSON.stringify(projected)).toBe(true);
-    if (projected.ok) {
-      const text = projected.value.sheets
-        .map((s) => s.svg.replace(/<[^>]*>/gu, " "))
-        .join(" ");
-      expect(text).toContain("RJ45");
-      expect(text).not.toContain(long);
+    expect(projected.ok).toBe(false);
+    if (!projected.ok) {
+      expect(projected.error.code).toBe("R006");
+      expect(projected.error.message).toContain(
+        `port identity ${long} cannot fit`,
+      );
     }
-    const tooLong = structuredClone((await compiled(f.p)).ir);
-    tooLong.deviceTypes[0]!.ports![long]!.description = "W".repeat(2000);
+    const tooLong = structuredClone(c.ir);
+    tooLong.deviceTypes[0]!.ports!.ETH1!.description = "W".repeat(2000);
     const refused = await renderSchematicPacket(tooLong, request);
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.error.code).toBe("R006");

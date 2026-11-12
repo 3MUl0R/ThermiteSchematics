@@ -12,7 +12,7 @@ import {
 } from "./direct-loop-fixture.js";
 import { wire } from "./series-loop-fixture.js";
 
-const note = "polarity not verified: AI1 terminals p/n, TX1 terminals p/n.";
+const note = "polarity not verified: AI1 terminals p–n, TX1 terminals p–n.";
 const visible = (svg: string) =>
   [...parseHTML(svg).document.querySelectorAll("text")]
     .map((t) => t.textContent)
@@ -167,7 +167,7 @@ it.each(flows)(
         to: { device: 'AI1<&>"', function: "input" },
       });
       const expected =
-        'polarity not verified: AI1<&>" terminals p/n, TX1<&>" terminals p/n.';
+        'polarity not verified: AI1<&>" terminals p–n, TX1<&>" terminals p–n.';
       const r = await renderSchematicPacket(
         f.ir,
         directPacket(view, { index: true }),
@@ -177,7 +177,7 @@ it.each(flows)(
       const sheet = r.value.sheets[0]!.svg;
       expect(visible(sheet)).toContain(expected);
       expect(sheet.match(/<desc>([\s\S]*?)<\/desc>/g)).toEqual([
-        '<desc>polarity not verified: AI1&lt;&amp;&gt;" terminals p/n, TX1&lt;&amp;&gt;" terminals p/n.</desc>',
+        '<desc>polarity not verified: AI1&lt;&amp;&gt;" terminals p–n, TX1&lt;&amp;&gt;" terminals p–n.</desc>',
       ]);
       expect(sheet).toContain("AI1&lt;&amp;&gt;");
       const { document } = parseHTML(sheet);

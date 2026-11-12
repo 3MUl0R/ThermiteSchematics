@@ -176,6 +176,11 @@ try {
   const query = await import(
     pathToFileURL(join(engine, "packages/query/dist/index.js")).href
   );
+  // Explicit engine capability selects the historical print policy. Never
+  // infer source identifiers from the report cell that is being measured.
+  const identifierPolicy = {
+    projection: typeof query.printedPort === "function" ? "authored" : "legacy",
+  };
   // JSON intentionally carries family references only. Measure standalone SVGs
   // after the built CLI's deterministic font delivery step, just like file export.
   let deliverSvg = (svg) => svg;
@@ -512,6 +517,7 @@ try {
             tables,
             geometries,
             request,
+            identifierPolicy,
           );
           const parityRow = measured.find((r) => r.dq === "DQ-01");
           for (const t of g.texts.filter((t) => t.painted !== false)) {
@@ -562,6 +568,7 @@ try {
                     ir,
                     medium,
                     identifierPdf,
+                    identifierPolicy,
                   ),
                   {
                     id: `${c.id}/DQ-19/${medium}-${s.number}`,

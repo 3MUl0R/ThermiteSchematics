@@ -1,17 +1,27 @@
 import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
 
-/** Port keys are selectors, never connector names. The schema currently has no
- * communication-port terminal binding; an absent identity stays unspecified. */
+/** Authored identities are indivisible; punctuation is a list separator only. */
+export function formatTerminalSet(
+  terminals: readonly string[],
+  label: (terminal: string) => string = (terminal) => terminal,
+): string {
+  return terminals
+    .map(label)
+    .join(
+      terminals.length === 2 &&
+        terminals.every((t) => /^[A-Za-z0-9]+$/u.test(t))
+        ? "–"
+        : " / ",
+    );
+}
+
+/** Port keys are authored markings. Descriptions supplement, never replace, them. */
 export function printedPort(
   type: Pick<IrDeviceType, "ports"> | undefined,
   key: string,
 ): string {
-  const port = type?.ports?.[key];
-  return (
-    port?.description?.trim() ||
-    port?.connector?.trim() ||
-    "Port identity not specified"
-  );
+  const description = type?.ports?.[key]?.description?.trim();
+  return description && description !== key ? `${key} — ${description}` : key;
 }
 
 export function printedPortEndpoint(

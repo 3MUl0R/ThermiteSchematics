@@ -393,7 +393,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "This TypeScript + ELK alpha uses Bun 1.4.2.",
+      claim: "TypeScript + ELK alpha; Bun 1.4.2.",
       async check() {
         const pinned = (await readJson(join(repositoryRoot, "package.json")))
           .packageManager;
@@ -470,7 +470,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Exit 0 means success, 1 an authored/expected failure, and 2 usage or infrastructure failure.",
+        "Exit 0: success; 1: authored/expected failure; 2: usage/infrastructure failure.",
       async check() {
         const project = ctx.pristine.starter;
         expect((await agentValidate()).code).toBe(0);
@@ -690,7 +690,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`create-view`: `spec`, one schematic view request without `page`. It returns the original continuous SVG, or a cable's complete core sheet; a view needing several sheets fails R006, so use the printing commands below.",
+        "`create-view`: `spec`, one schematic view request without `page`. It returns the original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use printing commands below.",
       async check() {
         const svg = /^(<\?xml[^>]*>\s*)?<svg[\s>]/;
         expect((await createViewLoads()).result.value.svg).toMatch(svg);
@@ -1464,7 +1464,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Page settings: packet/presentation, never views.",
+      claim: "Page: packet/presentation, never views.",
       async check() {
         const project = ctx.pristine.starter;
         const paged = structuredClone(STARTER_PACKET) as any;
@@ -1553,7 +1553,7 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "Check existing issues, then report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
+      "Check issues; report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1565,7 +1565,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Fix a separate engine checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1573,7 +1573,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "The human must accept any CLA; an agent must not sign it.",
+      "Humans accept the CLA; agents must not sign it.",
       "Contribution policy; no runtime behavior.",
     ],
     [
@@ -1593,7 +1593,7 @@ const module: FactModule = {
       "Authoring prohibition; no runtime behavior.",
     ],
     [
-      "To change existing source or presentation files:",
+      "To edit existing source/presentation files:",
       "Introduces the workflow line below.",
     ],
     [

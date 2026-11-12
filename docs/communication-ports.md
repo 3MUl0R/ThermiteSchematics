@@ -112,16 +112,14 @@ each section.
 Paginated communication parts keep separate sheets so their reciprocal
 references remain unambiguous in both standard and compact packets.
 
-Visible communication port captions and network schedule endpoints use the
-port's authored description, else its authored connector metadata, else
-`Port identity not specified`. Endpoint descriptions are prefixed by the device
-designation. Port keys remain selectors in IR, row identities, connection metadata
-and CSV. Labels wrap within reserved space; longer labels can change diagram
-height, pagination and sheet references. The projection never invents a connector
-name or electrical terminal mapping.
+Visible communication port captions and network schedule endpoints preserve the
+port's authored key: `KEY`, or `KEY — description` when a description is authored.
+A description that exactly repeats the key is omitted. Repeated descriptions or
+connector metadata never collapse distinct port identities. Endpoints are prefixed
+by the device designation with a colon, for example `PLC1: X1P1 — Ethernet`;
+qualified selectors such as `PLC1.X1P1` remain in metadata and CSV only.
 
-The current communication-port schema requires `connector` and has no terminal
-binding. A model without reader-facing metadata cannot supply a unique socket
-name from its key. Author an accurate port description (and connector value)
-when those facts are known. A future explicit port label/terminal-binding field
-would need schema review; the renderer does not infer one.
+Port keys have the same standing as authored terminal markings. No connector name
+or terminal mapping is inferred. Port keys stay on one line; descriptions wrap in
+reserved space. Longer descriptions can change diagram height, pagination and
+sheet references. An identity that cannot fit at readable size returns R006.

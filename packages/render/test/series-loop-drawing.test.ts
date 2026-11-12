@@ -15,7 +15,7 @@ import {
 } from "./series-loop-fixture.js";
 
 export const assessed =
-  "Three separate loop nets; loop power from PS1 terminals p/n as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.";
+  "Three separate loop nets; loop power from PS1 terminals p–n as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.";
 const packet = (view: ReturnType<typeof request>, extra = {}) => ({
   format: "schematic-packet-request/0.1" as const,
   index: false,
@@ -180,7 +180,7 @@ it("copies exact engine and distribution notes to sheet, desc and enabled refere
   try {
     const notes = [
       assessed.slice(0, -1) +
-        "; polarity not verified: AI1 terminals p/n, TX1 terminals p/n.",
+        "; polarity not verified: AI1 terminals p–n, TX1 terminals p–n.",
       "Outside selected loop at PS1.p: 1 authored connections: W21 to PLC1.p.",
       "Outside selected loop at PS1.n: 1 authored connections: W20 to PLC1.n.",
     ];
@@ -582,7 +582,7 @@ it("retains distinct engine notes in references for repeated same-title series v
       .join(" ");
     expect(refs).toContain(assessed);
     expect(refs).toContain(
-      assessed.replace("PS1 terminals p/n", "PS1 terminals q/r"),
+      assessed.replace("PS1 terminals p–n", "PS1 terminals q–r"),
     );
   } finally {
     await f.dispose();

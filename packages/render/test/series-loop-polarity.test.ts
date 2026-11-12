@@ -140,7 +140,7 @@ it.each([
     });
     try {
       expect(selectSignalLoop(f.ir, request())).toMatchObject({
-        series: { polarity: { unverifiedEndpoints: ["AI1 terminals p/n"] } },
+        series: { polarity: { unverifiedEndpoints: ["AI1 terminals p–n"] } },
       });
     } finally {
       await f.dispose();
@@ -157,7 +157,7 @@ it("reports role-free endpoints once each in stable order, without name inferenc
     expect(selectSignalLoop(f.ir, request())).toMatchObject({
       series: {
         polarity: {
-          unverifiedEndpoints: ["AI1 terminals p/n", "TX1 terminals p/n"],
+          unverifiedEndpoints: ["AI1 terminals p–n", "TX1 terminals p–n"],
         },
       },
     });
@@ -216,7 +216,7 @@ it.each([
     try {
       expect(
         selectSignalLoop(f.ir, request()).series?.polarity.unverifiedEndpoints,
-      ).toEqual(["TX1 terminals p/n"]);
+      ).toEqual(["TX1 terminals p–n"]);
     } finally {
       await f.dispose();
     }
