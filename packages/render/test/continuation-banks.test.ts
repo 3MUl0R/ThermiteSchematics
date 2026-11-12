@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { labelMetrics } from "../src/packet/label-text.js";
 import { packContinuationLabels } from "../src/packet/continuation-pack.js";
 import { fitContinuations } from "../src/packet/continuation-fit.js";
 import {
@@ -28,7 +29,7 @@ const draft = (links: Link[]) =>
     drawingBounds: { x: 28, y: 47, w: 375.8, h: 180 },
     rootedShapes: [],
   }) as unknown as Draft;
-it("packs dense labels in anchor order with one mm of clear ink", () => {
+it("packs dense labels in anchor order with 2.5 mm of clear ink", () => {
   const links = [0, 6, 12].map((y, i) => ({
     id: `C00${i}`,
     to: 2,
@@ -64,7 +65,7 @@ it("packs dense labels in anchor order with one mm of clear ink", () => {
       links[i]!.label.bounds.y -
         links[i - 1]!.label.bounds.y -
         links[i - 1]!.label.bounds.h,
-    ).toBeGreaterThanOrEqual(0.999);
+    ).toBeGreaterThanOrEqual(2.499);
   expect(links.map((l) => l.y)).toEqual([0, 6, 12]);
   expect(
     links.every((l) => Math.abs(l.label.bounds.y - (l.y - 2.7)) <= 3.5),
@@ -200,3 +201,52 @@ it("never turns a reference leader or synthetic attachment into a conductor", ()
   );
   expect(bad).toMatchObject({ ok: false, error: { code: "R006" } });
 });
+
+it.each(["left", "right", "top", "bottom"] as const)(
+  "keeps at least 2.5 mm of row-ink gap between adjacent blocks on the %s bank",
+  (side) => {
+    const axis = side === "left" || side === "right" ? "y" : "x";
+    const dimension = axis === "x" ? "w" : "h";
+    const base: Link = {
+      id: "C001",
+      to: 100,
+      toZone: "D6",
+      conductor: "PLC1-DO0-STOP",
+      netId: "N",
+      x: 100,
+      y: 100,
+      side,
+    };
+    const headerWidth = continuationHeaderWidth(1000);
+    const initial = continuationLabel(base, 30, headerWidth);
+    // Begin at the former 1 mm spacing so the adopted packer must separate them.
+    const links = [0, 1, 2].map((i) => {
+      const link = {
+        ...base,
+        id: `C00${i + 1}`,
+        [axis]: 100 + i * (initial.bounds[dimension] + 1),
+      };
+      return { ...link, label: continuationLabel(link, 30, headerWidth) };
+    });
+    const anchors = links.map((l) => l[axis]);
+    expect(packContinuationLabels(draft(links))).toBe(true);
+    const ink = (row: (typeof initial.rows)[number]) => {
+      const m = labelMetrics(row.text);
+      return {
+        x: row.x + m.left,
+        y: row.y - m.top,
+        w: m.right - m.left,
+        h: m.top - m.bottom,
+      };
+    };
+    for (let i = 1; i < links.length; i++) {
+      const previous = links[i - 1]!.label.rows.map(ink),
+        next = links[i]!.label.rows.map(ink);
+      const gap =
+        Math.min(...next.map((r) => r[axis])) -
+        Math.max(...previous.map((r) => r[axis] + r[dimension]));
+      expect(gap).toBeGreaterThanOrEqual(2.5 - 0.000001);
+    }
+    expect(links.map((l) => l[axis])).toEqual(anchors);
+  },
+);

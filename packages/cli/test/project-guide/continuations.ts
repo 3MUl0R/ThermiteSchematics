@@ -1,3 +1,4 @@
+import { CONTINUATION_BLOCK_GAP } from "../../../render/src/packet/continuation-label.js";
 import { prepareSchematicDrawing } from "../../../render/src/renderer.js";
 import { rootedGangSegments } from "../../../render/src/symbols/rooted-gangs.js";
 import { emitSchematicSvg } from "../../../render/src/svg/emitter.js";
@@ -164,7 +165,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Each flow may fold retained strips.",
+      claim: "Flows may fold retained strips.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
@@ -202,7 +203,7 @@ const module: FactModule = {
 
     {
       claim:
-        "Cards name omissions. Continuations: intact wire ID + peer `sheet.zone`, 2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form per bank.",
+        "Cards name omissions. Continuations: intact ID + peer `sheet.zone`, 2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form/bank, 2.5 mm gap.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
@@ -267,6 +268,7 @@ const module: FactModule = {
           await jumper.dispose();
         }
         expect(continuationOracle(c.ir, r.value).ends).toBeGreaterThan(0);
+        expect(CONTINUATION_BLOCK_GAP).toBe(2.5);
         const svg = r.value.sheets.map((s) => s.svg).join("\n");
         expect(svg).toContain("Off-view at");
         const texts = r.value.sheets.flatMap((s) => [

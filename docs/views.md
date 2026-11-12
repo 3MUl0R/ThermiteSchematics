@@ -271,7 +271,7 @@ or a header followed by the complete identity. Descriptors may occupy separate
 semantic lines. Each crossed block reserves its own natural identity width;
 uncut identities do not enlarge unrelated banks. The planner tries measured
 banks and existing legal cuts/folds before adding pages or returning R006.
-Label banks retain 3.5 mm row pitch, a 1 mm planned inter-block gap, and checks
+Label banks retain 3.5 mm row pitch, a 2.5 mm inter-block gap, and checks
 against fixed captions and the actual zone glyph reservations.
 Within a bank, bounded text placement preserves connector order and leaves
 conductor routes and anchors intact. Only conductors crossed by a candidate cut
