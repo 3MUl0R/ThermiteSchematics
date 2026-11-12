@@ -105,7 +105,7 @@ export function tableDrafts(
     return failure("unprintable-layout", (error as Error).message);
   }
   const headerH = geometry(header, true).height;
-  const notes = table.notes.flatMap((t) => wrap(t, Math.floor(b.w / 1.6)));
+  const notes = reportNotes(table, b.w);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
   if (headerH + 9 > bottom - b.y) {
     const column = header.reduce(
@@ -143,9 +143,7 @@ export function tableDrafts(
     row(header, headerH, true);
   }
   function finish(end: number) {
-    notes.forEach((v, i) =>
-      content.push(text(b.x, b.y + b.h - (notes.length - 1 - i) * 3.5, v, 2.5)),
-    );
+    content.push(...reportNoteSvg(notes, b));
     drafts.push({
       view,
       title,
@@ -228,5 +226,24 @@ function unprintableReportText(
   ];
   return allText.some((t) =>
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/u.test(t),
+  );
+}
+
+function reportNotes(table: DocumentationTable, width: number) {
+  return table.notes.flatMap((note, index) =>
+    wrap(note, Math.floor(width / 1.6)).map((value) => ({ index, value })),
+  );
+}
+function reportNoteSvg(
+  notes: ReturnType<typeof reportNotes>,
+  b: ReturnType<typeof bounds>,
+): string[] {
+  return notes.map((note, i) =>
+    text(
+      b.x,
+      b.y + b.h - (notes.length - 1 - i) * 3.5,
+      note.value,
+      2.5,
+    ).replace("<text ", `<text data-report-note="${note.index}" `),
   );
 }

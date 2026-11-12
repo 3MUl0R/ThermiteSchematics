@@ -38,6 +38,8 @@ export function evaluateSheet(
   symbols,
   tables = [],
   geometries = [],
+  request,
+  identifierPolicy = {},
 ) {
   classifyTextGeometry(g, ir);
   const interference = checks.conductorInterference(g);
@@ -121,7 +123,15 @@ export function evaluateSheet(
         "Two reviewers compare selected-standard glyphs and qualifiers to the fixed checklist.",
     }),
   );
-  out.push(obs("DQ-05", checks.functionKeys(g, ir)));
+  const vocabularyContext = { sheet: s, packet, tables, request };
+  out.push(obs("DQ-05", checks.functionKeys(g, ir, vocabularyContext)));
+  out.push(
+    obs("DQ-05", checks.internalVocabulary(g, ir, vocabularyContext), {
+      id: `${c.id}/DQ-05/internal-vocabulary-${s.number}`,
+      scope:
+        "Owned generated captions and notes: schema/type identifiers, measured separately from function and port selectors.",
+    }),
+  );
   out.push(
     obs("DQ-06", checks.deviceTags(g, ir, s.references, schematic, s.view), {
       scope:
@@ -243,7 +253,16 @@ export function evaluateSheet(
   const identifierSource = identifierTable(s, packet, g, ir, tables);
   out.push(
     obs("DQ-19", [
-      ...(identifierSource ? identifierFindings(g, identifierSource, ir) : []),
+      ...(identifierSource
+        ? identifierFindings(
+            g,
+            identifierSource,
+            ir,
+            "svg",
+            undefined,
+            identifierPolicy,
+          )
+        : []),
       ...checks
         .textBounds({ ...g, texts: g.texts.filter((t) => t.row) })
         .filter((x) => x.kind === "text-outside-cell"),

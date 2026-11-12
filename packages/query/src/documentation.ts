@@ -1,3 +1,8 @@
+import {
+  reportTypeProjection,
+  formatTerminalSet,
+  printedPortEndpoint,
+} from "./print-projection.js";
 import { symbolProfile } from "@thermite/schema";
 import { buildCommunicationInventory } from "./communication.js";
 import { buildConnectorAssemblyInventory } from "./connector-assemblies.js";
@@ -87,47 +92,6 @@ const reportText = (value: string) =>
 // Only absence is canonicalized; keep every character of a nonblank description.
 const reportDescription = (value: string | undefined) =>
   value !== undefined && reportText(value).trim() ? value : undefined;
-// Explicit locale keeps segmentation independent of the host's default locale.
-const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
-const words = new Intl.Segmenter("en", { granularity: "word" });
-const TYPE_TEXT_LIMIT = 160;
-// Bound only print text; a fitting single line, including its qualifiers, is exact.
-const printedTypeDescription = (text: string) => {
-  const first =
-    text.split(/[\n\u2028\u2029]/u).find((line) => line.trim()) ?? "";
-  if (
-    first.trim() === text.trim() &&
-    [...first.trim()].length <= TYPE_TEXT_LIMIT
-  )
-    return first.trim();
-  const omit = (prefix: string) =>
-    `${prefix.trimEnd().replace(/[.…]+$/u, "")}…`;
-  if ([...first].length < TYPE_TEXT_LIMIT) return omit(first);
-  let end = 0,
-    count = 0;
-  const boundaries = new Set([0]);
-  for (const part of graphemes.segment(first)) {
-    count += [...part.segment].length;
-    if (count >= TYPE_TEXT_LIMIT) break;
-    end = part.index + part.segment.length;
-    boundaries.add(end);
-  }
-  let sentenceEnd = 0;
-  for (const part of first.matchAll(/[.!?](?=\s|$)/gu)) {
-    const candidate = part.index + part[0].length;
-    if (candidate > end) break;
-    if (boundaries.has(candidate)) sentenceEnd = candidate;
-  }
-  if (sentenceEnd) return omit(first.slice(0, sentenceEnd));
-  let wordEnd = 0;
-  for (const part of words.segment(first)) {
-    const candidate = part.index + part.segment.length;
-    if (candidate > end) break;
-    if (part.isWordLike && boundaries.has(candidate)) wordEnd = candidate;
-  }
-  // A single overlong word/symbol sequence has no usable word boundary.
-  return omit(first.slice(0, wordEnd || end));
-};
 /** These are physical connection reports. Device functions never imply continuity. */
 export function buildDocumentation(
   ir: Readonly<ElectricalIr>,
@@ -281,29 +245,9 @@ function buildDocumentationTable(
     throw new Error(
       `Device ${JSON.stringify(request.device)} does not resolve uniquely.`,
     );
-  let shortenedType = false,
-    missingType = false;
-  const typeDescription = (value: string | undefined, fallback: string) => {
-    const authored = reportDescription(value);
-    if (authored === undefined) {
-      missingType = true;
-      return fallback;
-    }
-    const text = reportText(authored);
-    if (options?.output === "csv") return text;
-    const preview = printedTypeDescription(text);
-    shortenedType ||= preview.trim() !== text.trim();
-    return preview;
-  };
-  const typeNote = () =>
-    [
-      ...(shortenedType
-        ? [
-            "Type description shortened; full text: thermite inspect <designation> --type-description.",
-          ]
-        : []),
-      ...(missingType ? ["No type description: type ID shown."] : []),
-    ].join(" ");
+  const { describe: typeDescription, note: typeNote } = reportTypeProjection(
+    options?.output,
+  );
   const rows: { key: string; cells: string[]; deviceUids: string[] }[] = [];
   const table = (
     title: string,
@@ -490,10 +434,20 @@ function buildDocumentationTable(
           ]
             .filter(Boolean)
             .join("\n"),
-          [`${a.designation}.${c.fromPort}`, a.location]
+          [
+            options?.output === "csv"
+              ? `${a.designation}.${c.fromPort}`
+              : printedPortEndpoint(ir, a.uid, c.fromPort),
+            a.location,
+          ]
             .filter(Boolean)
             .join("\n"),
-          [`${b.designation}.${c.toPort}`, b.location]
+          [
+            options?.output === "csv"
+              ? `${b.designation}.${c.toPort}`
+              : printedPortEndpoint(ir, b.uid, c.toPort),
+            b.location,
+          ]
             .filter(Boolean)
             .join("\n"),
           c.status ?? "Unspecified",
@@ -510,7 +464,9 @@ function buildDocumentationTable(
           "--",
           port.definition.medium,
           [
-            `${port.designation}.${port.key}`,
+            options?.output === "csv"
+              ? `${port.designation}.${port.key}`
+              : printedPortEndpoint(ir, port.deviceUid, port.key),
             devices.get(port.deviceUid)!.location,
           ]
             .filter(Boolean)
@@ -849,7 +805,7 @@ function buildDocumentationTable(
       [0.1, 0.13, 0.09, 0.14, 0.23, 0.23, 0.08],
       [
         "Lists every terminal, including unconnected terminals and explicit jumpers. Internal continuity is never inferred.",
-        "Rows follow the authored terminalOrder when present. Location groups do not assert installation sides.",
+        "Terminals follow the authored order where specified. Location groups do not assert installation sides.",
       ],
     );
   }
@@ -857,6 +813,7 @@ function buildDocumentationTable(
     for (const f of ir.functions
       .filter((f) => f.id.deviceUid === d.uid && f.kind === "channel")
       .sort((a, b) => compare(a.id.functionKey, b.id.functionKey))) {
+      const terminalKeys = f.terminals.map((t) => t.terminalKey);
       const assignment =
         d.io !== undefined && Object.hasOwn(d.io.channels, f.id.functionKey)
           ? d.io.channels[f.id.functionKey]
@@ -872,12 +829,18 @@ function buildDocumentationTable(
         key: JSON.stringify([d.uid, f.id.functionKey]),
         cells: [
           d.designation,
-          f.id.functionKey,
+          options?.output === "csv"
+            ? f.id.functionKey
+            : (assignment?.address ??
+              (formatTerminalSet(terminalKeys) ||
+                "Channel identity not specified")),
           f.kind === "channel" ? f.direction : "",
           d.io?.addressSpace ?? "",
           assignment?.address ?? "",
           assignment?.signal ?? "",
-          f.terminals.map(label).join(", "),
+          options?.output === "csv"
+            ? f.terminals.map(label).join(", ")
+            : formatTerminalSet(terminalKeys, (t) => `${d.designation}.${t}`),
           peers.map(label).join("; ") || "None",
           `${assignment?.usage ?? "Unspecified"}; ${f.terminals.some((t) => (connections.get(tid(t)) ?? []).length) ? "terminated" : "unconnected"}`,
         ],

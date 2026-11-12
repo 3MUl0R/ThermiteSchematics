@@ -1,3 +1,4 @@
+import { parseHTML } from "linkedom";
 import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { cp, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -93,9 +94,15 @@ describe("CLI report filter requests", () => {
     const packet = JSON.parse(await readFile(out, "utf8"));
     expect(packet.documentationSelections).toHaveLength(1);
     expect(packet.documentationSelections[0].view).toBe(1);
-    expect(packet.sheets[0].svg).toContain("NET1");
-    expect(packet.sheets[0].svg).not.toContain("NET2");
-    expect(packet.sheets[0].svg).toContain("DOC1.IN");
+    const text = [
+      ...parseHTML(packet.sheets[0].svg).document.querySelectorAll("text"),
+    ]
+      .map((t) => t.textContent)
+      .join(" ");
+    expect(text).toContain("NET1");
+    expect(text).not.toContain("NET2");
+    expect(text).toContain("DOC1: IN");
+    expect(text).not.toContain("DOC1.IN");
   });
   it("rejects malformed/unknown filters and mixed legacy selectors without writing output", async () => {
     const p = await project(),

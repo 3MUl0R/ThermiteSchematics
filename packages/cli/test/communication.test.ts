@@ -240,7 +240,7 @@ describe("typed communication ports", () => {
     for (const r of drawing.references)
       expect(r.yMm).toBeLessThan(packet.value.page.heightMm - 30);
   });
-  it("fails unsupported text and overlong port names instead of emitting clipped or invalid SVG", async () => {
+  it("refuses unprintable authored port identities and descriptions without hiding them", async () => {
     const f = await fixture(),
       c = await compiled(f.p);
     const request = {
@@ -259,9 +259,22 @@ describe("typed communication ports", () => {
     await f.write("lib/types.json", f.types);
     await f.write("source.json", f.source);
     expect((await lockProject(f.p)).ok).toBe(true);
-    expect(
-      (await renderSchematicPacket((await compiled(f.p)).ir, request)).ok,
-    ).toBe(false);
+    const projected = await renderSchematicPacket(
+      (await compiled(f.p)).ir,
+      request,
+    );
+    expect(projected.ok).toBe(false);
+    if (!projected.ok) {
+      expect(projected.error.code).toBe("R006");
+      expect(projected.error.message).toContain(
+        `port identity ${long} cannot fit`,
+      );
+    }
+    const tooLong = structuredClone(c.ir);
+    tooLong.deviceTypes[0]!.ports!.ETH1!.description = "W".repeat(2000);
+    const refused = await renderSchematicPacket(tooLong, request);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error.code).toBe("R006");
   });
 });
 

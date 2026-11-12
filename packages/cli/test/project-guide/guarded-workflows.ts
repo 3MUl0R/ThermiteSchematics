@@ -104,7 +104,7 @@ const describeOp = (source: any, value: string) => ({
 
 export const guardedWorkflows: FactModule["facts"] = [
   {
-    claim: "`thermite cable CBL1 --json` lists every physical core.",
+    claim: "`thermite cable CBL1 --json` lists all physical cores.",
     async check() {
       const run = await ok(["cable", "CBL1", "--json"], ctx.pristine.cabinets);
       const cores = JSON.parse(run.stdout).cores.map(

@@ -400,7 +400,11 @@ describe("packet reference ownership", () => {
       undefined,
     );
     expect(tables[0]!.rows.map((r) => r.cells[0])).toEqual(["1", "2"]);
-    expect(tables[1]!.rows[0]!.cells).toEqual(["D1", "coil", "1 / A1"]);
+    expect(tables[1]!.rows[0]!.cells).toEqual([
+      "D1",
+      "Function facts not specified",
+      "1 / A1",
+    ]);
     expect(referenceSelection).toMatchObject({
       totalGroups: 1,
       retainedGroups: 1,

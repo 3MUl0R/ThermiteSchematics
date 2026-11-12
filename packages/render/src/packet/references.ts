@@ -1,3 +1,4 @@
+import { printedFunction } from "../print-projection.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { DocumentationTable, resolveDeviceFilter } from "@thermite/query";
 import type {
@@ -49,10 +50,20 @@ function referenceGroupKey(r: SheetReference): string {
     ...(r.representation ? [r.representation] : []),
   ]);
 }
-function referenceRepresentation(r: SheetReference): string {
+function referenceRepresentation(
+  ir: Readonly<ElectricalIr>,
+  r: SheetReference,
+): string {
   return r.representation === "terminal"
     ? "Terminal context (coil outside view)"
-    : r.functions.join(", ") || "Terminal / schedule";
+    : r.functions
+        .map((key) => {
+          const fn = ir.functions.find(
+            (f) => f.id.deviceUid === r.deviceUid && f.id.functionKey === key,
+          );
+          return fn ? printedFunction(fn) : "Function facts not specified";
+        })
+        .join(", ") || "Terminal / schedule";
 }
 
 function isDeviceReference(r: SheetReference): boolean {
@@ -111,7 +122,7 @@ export function referenceTables(
       const key = referenceGroupKey(r);
       const g = groups.get(key) ?? {
         designation: r.designation,
-        functions: referenceRepresentation(r),
+        functions: referenceRepresentation(ir, r),
         locations: [],
         uid: r.deviceUid,
       };

@@ -62,7 +62,7 @@ describe("documentation preserves authored meaning", () => {
       expect(grouped?.cells[0]).toBe("2");
       expect(grouped?.cells[6]).toBe("");
       expect(row(report("cables", input), "CBL1").cells[1]).toBe(
-        input.cables[0]!.typeId,
+        "Type description not specified",
       );
       expect(buildCableSchedule(input, input.cables[0]!.uid).description).toBe(
         text,
@@ -260,12 +260,12 @@ describe("documentation preserves authored meaning", () => {
       const absent = structuredClone(ir);
       delete absent.cableTypes[0]!.description;
       expect(row(report(kind, absent), "CBL1").cells).toContain(
-        "report-fixture:cable",
+        "Type description not specified",
       );
       absent.cableTypes[0]!.description = "";
       expect(
         row(report(kind, absent), "CBL1").cells[kind === "bom" ? 5 : 1],
-      ).toBe("report-fixture:cable");
+      ).toBe("Type description not specified");
     }
     expect(documentationCsv(report("bom"))).toContain(
       "Field cable; spare core retained",
@@ -334,11 +334,7 @@ describe("documentation preserves authored meaning", () => {
   it("labels sensor channel owners as devices without dropping their output row", () => {
     const table = report("io");
     expect(table.columns[0]).toBe("Device");
-    expect(row(table, "B1").cells.slice(0, 3)).toEqual([
-      "B1",
-      "output",
-      "output",
-    ]);
+    expect(row(table, "B1").cells.slice(0, 3)).toEqual(["B1", "T", "output"]);
     expect(table.title).toBe("I/O schedule");
   });
   it("reserves endpoint sheet.zone columns until injected values exist, including cable cores", () => {

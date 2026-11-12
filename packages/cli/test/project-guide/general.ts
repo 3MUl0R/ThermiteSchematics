@@ -742,7 +742,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Every request has `"format": "agent-tool-request/0.1"` and `"project": "."`.',
+        'Each request has `"format": "agent-tool-request/0.1"` and `"project": "."`.',
       async check() {
         const [wrong, parent, valid] = await Promise.all([
           agent(
@@ -1338,7 +1338,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Invent no pins/ratings; keep manufacturer document/revision and review notes. See `thermite guide libraries` for optional-library limits.",
+        "Invent no pins/ratings; retain manufacturer document/revision and review notes. See `thermite guide libraries` for optional-library limits.",
       async check() {
         const topic = (await ok(["guide", "libraries"], ctx.work)).stdout;
         for (const name of await readdir(join(repositoryRoot, "libraries"))) {
@@ -1391,7 +1391,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Cable `fromLocation`/`toLocation` name ends A/B.",
+      claim: "Cable `fromLocation`/`toLocation`: ends A/B.",
       async check() {
         const [cable, { csv }] = await Promise.all([
           pristineCable(),
@@ -1445,7 +1445,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "`usage` is `in-use` or `spare`.",
+      claim: "`usage`: `in-use` or `spare`.",
       async check() {
         expect(
           diagnosticAt(
@@ -1484,7 +1484,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Two real endpoints stay connected for spares; a lone real endpoint still occupies its terminal.",
+        "Two real ends stay connected even for spares; one real end still occupies its terminal.",
       async check() {
         const [cable, fixture] = await Promise.all([fixtureCable(), cables()]);
         const spare = cable.cores.find((c: any) => c.id === "2+");
@@ -1534,7 +1534,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Cores without usage are unspecified; without usage or locations, cables use canonical end order.",
+        "Missing usage is unspecified; without usage/locations, cables use canonical end order.",
       async check() {
         const [cable, wiresReport, sheets] = await Promise.all([
           fixtureCable(),
@@ -1580,7 +1580,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Shielding never implies a bond.",
+      claim: "Shielding implies no bond.",
       async check() {
         const [cable, { csv }] = await Promise.all([
           pristineCable(),
@@ -1724,7 +1724,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "PLC addresses/spares live in device `io`; never infer spare from a missing connection.",
+        "PLC addresses/spares: device `io`; never infer spare from a missing connection.",
       async check() {
         const { csv } = await plantIo();
         // PLC1's io gives di0 an address and signal and di1 spare usage.
@@ -1767,7 +1767,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Snapshot before changes; review after the guarded workflow, then regenerate.",
+        "Snapshot before edits; review after the guarded workflow, then regenerate.",
       async check() {
         const { snapshot, changes, coil, html } = await guarded();
         expect((await readJson(snapshot)).format).toBe("thermite-snapshot/0.1");
@@ -1976,8 +1976,7 @@ const module: FactModule = {
       },
     },
     {
-      claim:
-        "Unsupported PDF glyphs fail explicitly; use supported labels or SVG/HTML.",
+      claim: "Unsupported PDF glyphs fail; use supported labels or SVG/HTML.",
       async check() {
         const project = await freshProject("starter");
         await editJson(join(project, "presentation.json"), (presentation) => {

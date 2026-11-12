@@ -347,7 +347,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'An `associated_with` relation can carry `connection` with `fromPort`, `toPort`, `medium`, `protocol`, and optional `status: "planned"|"verified"`.',
+        'An `associated_with` relation accepts `connection` with `fromPort`, `toPort`, `medium`, `protocol`, and optional `status: "planned"|"verified"`.',
       async check() {
         const connection = (await schema("relation")).properties.connection;
         expect(connection.required).toEqual([
@@ -411,7 +411,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "These links never join nets; protocol and status are author claims, implying no pinouts, shielding, PoE or live communications.",
+        "Links never join nets; protocol and status are author claims, implying no pinouts, shielding, PoE or live communications.",
       async check() {
         const around = await rio1Neighbors();
         expect(around.conductive).toEqual([]);

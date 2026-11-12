@@ -1,3 +1,9 @@
+function communicationEndpoint(ir, uid, key, policy) {
+  const d = ir.devices.find((d) => d.uid === uid);
+  return policy.projection === "legacy"
+    ? `${d.designation}.${key}`
+    : `${d.designation}: ${key}`;
+}
 // Independent checker policy. Do not import renderer helpers or trust emitted
 // identifier flags. Column identity is explicitly paired with its query header.
 const scalar = (header, column) => ({ header, column, source: "cell" });
@@ -26,7 +32,7 @@ export const identifierColumns = {
   ],
   io: [
     scalar("Device", 0),
-    scalar("Channel", 1),
+    { header: "Channel", column: 1, source: "channel-identity" },
     scalar("Address space", 3),
     scalar("Address", 4),
     { header: "Terminals", column: 6, source: "channel" },
@@ -92,12 +98,18 @@ function portUnits(ir, row, column) {
     ];
   });
 }
-function relationUnits(ir, row, column) {
+function relationUnits(ir, row, column, kind, policy) {
   const r = ir.relations.find((r) => r.uid === row.key);
   if (!r) {
     const [uid, port] = keyParts(row.key),
       d = ir.devices.find((d) => d.uid === uid);
-    return column === 2 && d ? [`${d.designation}.${port}`] : [];
+    return column === 2 && d
+      ? [
+          kind === "network"
+            ? communicationEndpoint(ir, uid, port, policy)
+            : `${d.designation}.${port}`,
+        ]
+      : [];
   }
   if (column === 0) return [r.designation ?? r.uid];
   const connection = r.assembly ?? r.connection;
@@ -105,8 +117,30 @@ function relationUnits(ir, row, column) {
     (d) => d.uid === (column === 2 ? r.fromDeviceUid : r.toDeviceUid),
   );
   return [
-    `${d.designation}.${column === 2 ? connection.fromPort : connection.toPort}`,
+    r.connection
+      ? communicationEndpoint(
+          ir,
+          d.uid,
+          column === 2 ? connection.fromPort : connection.toPort,
+          policy,
+        )
+      : `${d.designation}.${column === 2 ? connection.fromPort : connection.toPort}`,
   ];
+}
+function channelIdentity(ir, row, policy) {
+  const [uid, key] = keyParts(row.key),
+    d = ir.devices.find((d) => d.uid === uid);
+  const fn = ir.functions.find(
+    (f) => f.id.deviceUid === uid && f.id.functionKey === key,
+  );
+  if (!fn) throw Error(`Identifier measurement: unknown channel ${row.key}`);
+  if (policy.projection === "legacy") return [key];
+  const channels = d?.io?.channels;
+  const assignment =
+    channels && Object.hasOwn(channels, key) ? channels[key] : undefined;
+  return assignment?.address !== undefined
+    ? [assignment.address]
+    : fn.terminals.map((t) => t.terminalKey);
 }
 function channelUnits(ir, row, column) {
   const [uid, channel] = keyParts(row.key);
@@ -217,18 +251,20 @@ function wireUnits(ir, row, column) {
     );
   return [`${device.designation}.${terminal.terminalKey}`];
 }
-function units(source, ir, row, column) {
+function units(source, ir, row, column, kind, policy) {
   if (source === "cell") return [row.cells[column]];
   if (source === "names") return names(ir, row);
   if (source === "references") return row.cells[column].split("; "); // engine-generated entries
   if (source === "port") return portUnits(ir, row, column);
-  if (source === "relation") return relationUnits(ir, row, column);
+  if (source === "relation")
+    return relationUnits(ir, row, column, kind, policy);
   if (source === "channel") return channelUnits(ir, row, column);
+  if (source === "channel-identity") return channelIdentity(ir, row, policy);
   if (source === "terminal") return terminalUnits(ir, row, column);
   return wireUnits(ir, row, column);
 }
 
-export function expectedIdentifierCells(ir, table) {
+export function expectedIdentifierCells(ir, table, enginePolicy = {}) {
   const policy = identifierColumns[table.kind];
   if (!policy)
     throw Error(
@@ -239,7 +275,7 @@ export function expectedIdentifierCells(ir, table) {
       if (table.columns[column] !== header) return [];
       const identifiers = [
         ...new Set(
-          units(source, ir, row, column)
+          units(source, ir, row, column, table.kind, enginePolicy)
             .filter((s) => s?.trim())
             .map((s) => s.normalize("NFC").trim()),
         ),

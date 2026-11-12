@@ -64,11 +64,13 @@ describe("Machine documentation pilot", () => {
     const io = buildDocumentation(ir, request("io"));
     expect(io.rows).toHaveLength(32);
     expect(
-      io.rows.find((r) => r.cells[0] === "PLC1" && r.cells[1] === "di0")?.cells,
+      io.rows.find(
+        (r) => r.cells[0] === "PLC1" && JSON.parse(r.key)[1] === "di0",
+      )?.cells,
     ).toContain("I0.0");
     expect(
       io.rows
-        .find((r) => r.cells[0] === "RIO2" && r.cells[1] === "do7")
+        .find((r) => r.cells[0] === "RIO2" && JSON.parse(r.key)[1] === "do7")
         ?.cells.at(-1),
     ).toBe("spare; unconnected");
     expect(buildDocumentation(ir, request("terminals")).rows).toHaveLength(16);

@@ -111,3 +111,15 @@ sheet when they fit, retaining device references and a separate caption for
 each section.
 Paginated communication parts keep separate sheets so their reciprocal
 references remain unambiguous in both standard and compact packets.
+
+Visible communication port captions and network schedule endpoints preserve the
+port's authored key: `KEY`, or `KEY — description` when a description is authored.
+A description that exactly repeats the key is omitted. Repeated descriptions or
+connector metadata never collapse distinct port identities. Endpoints are prefixed
+by the device designation with a colon, for example `PLC1: X1P1 — Ethernet`;
+qualified selectors such as `PLC1.X1P1` remain in metadata and CSV only.
+
+Port keys have the same standing as authored terminal markings. No connector name
+or terminal mapping is inferred. Port keys stay on one line; descriptions wrap in
+reserved space. Longer descriptions can change diagram height, pagination and
+sheet references. An identity that cannot fit at readable size returns R006.

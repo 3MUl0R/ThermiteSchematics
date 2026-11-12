@@ -92,10 +92,12 @@ roles. Unrecognized endpoint polarity prints
 below the hookup explanation, in SVG `desc` and in enabled packet references;
 endpoints are sorted by designation and function. Terminal numbers come only from
 the selected function's authored bindings, in authored order; this order assigns
-no polarity. One binding prints `D terminal T1`; two or more print
-`D terminals T1/T2/...`. If any terminal key contains `/`, the terminal list
-uses comma-space instead, for example `D terminals 1/2, 2/1`. All authored
-bindings are included. If bindings are unavailable, the designation alone is printed.
+no polarity. One binding prints `D terminal T1`; multiple bindings print
+`D terminals {terminal set}`. Exactly two alphanumeric terminal names use an en
+dash (`13–14`, `A1–A2`); other sets use ` / ` (`+ / - / S`, `1/2 / 2/1`).
+The same formatter is used for references and other terminal sets. All authored
+bindings are written out fully, without an ellipsis. If bindings are unavailable,
+the designation alone is printed.
 Function keys are never used as note labels. The note adds no warning, so a
 clean `--strict` stays clean. Nothing is inferred from terminal names, descriptions
 or function order. Output-to-actuator views and auxiliary pairs keep their existing

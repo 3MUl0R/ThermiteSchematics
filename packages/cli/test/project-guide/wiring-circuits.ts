@@ -1,3 +1,10 @@
+import { compileProject } from "@thermite/compiler";
+import {
+  buildDocumentation,
+  printedPort,
+  formatTerminalSet,
+} from "@thermite/query";
+import { printedFunction } from "../../../render/src/print-projection.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
 // jumper, a single-ended core, a PLC and an overload relay, or against the
@@ -365,7 +372,89 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Tags: designation ≥2.7 mm, instance/else-type description and catalog part ≥2.5 mm.",
+        "References use kind/state and terminals; I/O address/terminals; ports key plus authored description.",
+      async check() {
+        const compiled = await compileProject(await base());
+        if (!compiled.ok) throw Error("compile projection");
+        const fn = compiled.ir.functions.find((f) => f.kind === "channel")!;
+        const table = buildDocumentation(compiled.ir, {
+          format: "documentation-view-request/0.1",
+          kind: "io",
+        });
+        const row = table.rows.find(
+          (r) => r.key === JSON.stringify([fn.id.deviceUid, fn.id.functionKey]),
+        )!;
+        const device = compiled.ir.devices.find(
+          (d) => d.uid === fn.id.deviceUid,
+        )!;
+        expect(row.cells[1]).toBe(
+          device.io?.channels[fn.id.functionKey]?.address ??
+            formatTerminalSet(fn.terminals.map((t) => t.terminalKey)),
+        );
+        expect(printedFunction(fn)).toContain(fn.terminals[0]!.terminalKey);
+        expect(
+          printedPort(
+            {
+              ports: {
+                hidden: {
+                  medium: "ethernet",
+                  connector: "RJ45",
+                  description: "Reader identity",
+                },
+              },
+            },
+            "hidden",
+          ),
+        ).toBe("hidden — Reader identity");
+      },
+    },
+    {
+      claim: "Cable headings use type description or state its absence.",
+      async check() {
+        const compiled = await compileProject(await base());
+        if (!compiled.ok) throw Error("compile cable caption");
+        const cable = compiled.ir.cables.find((c) => c.designation === "CBL1")!;
+        const description =
+          compiled.ir.cableTypes
+            .find((t) => t.id === cable.typeId)
+            ?.description?.trim() || "Cable type description not specified";
+        const drawing = await drawn(
+          await base(),
+          sheets([
+            {
+              format: "schematic-view-request/0.2",
+              root: { by: "designation", value: "CBL1" },
+              intent: { kind: "conductors" },
+            },
+          ]),
+        );
+        expect(drawing.text).toContain(description);
+        expect(drawing.text).not.toContain(cable.typeId);
+      },
+    },
+    {
+      claim: "Function keys/type IDs stay in metadata/CSV.",
+      async check() {
+        const compiled = await compileProject(await base());
+        if (!compiled.ok) throw Error("compile CSV identity");
+        const request = {
+          format: "documentation-view-request/0.1",
+          kind: "io",
+        } as const;
+        const print = buildDocumentation(compiled.ir, request),
+          csv = buildDocumentation(compiled.ir, request, undefined, {
+            output: "csv",
+          });
+        expect(csv.rows.map((r) => r.key)).toEqual(
+          print.rows.map((r) => r.key),
+        );
+        for (const row of csv.rows)
+          expect(row.cells[1]).toBe(JSON.parse(row.key)[1]);
+      },
+    },
+    {
+      claim:
+        "Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.",
       async check() {
         const doc = parseHTML((await multi()).svg).document;
         const texts = [...doc.querySelectorAll("svg")].flatMap((svg) =>
@@ -621,7 +710,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Selected functions retain terminal labels, wire numbers and references.",
+        "Selected functions retain terminals, wire numbers and references.",
       async check() {
         const { svg, text } = await multi();
         expect(svg).toContain('data-circuit-mark="load"');
@@ -637,7 +726,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "A wire's `properties.label` is its printed number, separate from its source identity; repeated labels never join nets.",
+        "A wire's `properties.label` is its printed number, separate from source identity; repeated labels never join nets.",
       async check() {
         const { svg, text } = await multi();
         expect(text.filter((s) => s === "101")).toHaveLength(2);
@@ -666,7 +755,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "ELK owns placement and routing.",
+      claim: "ELK owns placement/routing.",
       async check() {
         // Requests have no placement fields to override the layout.
         await refused(
@@ -678,7 +767,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Large groups split into numbered parts with whole conductors; R006 means a conductor, coupled symbol or label cannot fit. Narrow the selection or use a larger sheet; never change topology to obtain a drawing.",
+        "Large groups split into numbered parts with whole conductors; R006 means a conductor, coupled symbol or label cannot fit. Narrow selection or use larger paper; never change topology to fit.",
       async check() {
         const source = "examples/circuit-pagination";
         const project = await makeProject({
@@ -735,7 +824,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for a device's main and auxiliary contacts.",
+        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for main and auxiliary contacts.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

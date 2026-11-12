@@ -109,7 +109,7 @@ describe("bounded printed type descriptions", () => {
       ["Text\n   ", "Text"],
       ["\nText\n", "Text"],
       ["Short description.", "Short description."],
-      [" ", type.id],
+      [" ", "Type description not specified"],
     ]) {
       type.description = authored;
       const row = report(input, "bom").rows.find((r) =>
@@ -282,7 +282,7 @@ describe("bounded printed type descriptions", () => {
     );
     input.deviceTypes[0]!.description = " ";
     expect(report(input, "bom").notes.join(" ")).toContain(
-      "No type description: type ID shown.",
+      "Type description not specified.",
     );
     input.deviceTypes[0]!.description = "W".repeat(2000);
     expect(report(input, "bom").notes.join(" ")).toContain(

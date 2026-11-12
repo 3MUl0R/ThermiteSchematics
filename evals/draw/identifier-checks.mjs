@@ -124,14 +124,21 @@ function cellRuns(g, expected, cell, medium, pdfRuns) {
 }
 
 /** Reports physical identifier lines separately for SVG, actual HTML and PDF. */
-export function identifierFindings(g, table, ir, medium = "svg", pdfRuns) {
+export function identifierFindings(
+  g,
+  table,
+  ir,
+  medium = "svg",
+  pdfRuns,
+  policy = {},
+) {
   if (!Array.isArray(g.reportCells))
     throw Error(
       "Identifier measurement: independently measured cell rectangles missing",
     );
   const findings = [];
-  for (const expected of expectedIdentifierCells(ir, table).filter((cell) =>
-    g.reportRows.includes(cell.row),
+  for (const expected of expectedIdentifierCells(ir, table, policy).filter(
+    (cell) => g.reportRows.includes(cell.row),
   )) {
     const cells = g.reportCells.filter(
       (cell) =>

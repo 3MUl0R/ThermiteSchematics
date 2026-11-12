@@ -1,3 +1,4 @@
+import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { minimumTextEmMm } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
@@ -204,101 +205,11 @@ export function symbolIsolation(symbols) {
   }
   return out;
 }
-const facts = new Set([
-  "coil",
-  "motor",
-  "source",
-  "load",
-  "contact",
-  "supply",
-  "input",
-  "output",
-  "signal",
-  "probe",
-  "power",
-  "bond",
-  "ground",
-  "common",
-  "return",
-]);
-function qualifiedFunctionPatterns(ir) {
-  // Notes embed qualified selectors mid-sentence, including keys such as
-  // "signal" that are harmless as standalone vocabulary. Resolve the owner;
-  // an authored terminal with the same spelling remains a visible fact.
-  return ir.functions.flatMap((f) => {
-    const device = ir.devices.find((d) => d.uid === f.id.deviceUid);
-    if (
-      !device?.designation ||
-      ir.terminals?.some(
-        (t) =>
-          t.id.deviceUid === device.uid &&
-          t.id.terminalKey === f.id.functionKey,
-      )
-    )
-      return [];
-    const value = `${device.designation}.${f.id.functionKey}`;
-    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return [
-      {
-        value,
-        pattern: new RegExp(
-          `(^|[^\\p{L}\\p{N}_.-])${escaped}(?=$|[^\\p{L}\\p{N}_-])`,
-          "gu",
-        ),
-      },
-    ];
-  });
+export function functionKeys(g, ir, context = {}) {
+  return vocabularyFindings(g, ir, context, issue).functions;
 }
-export function functionKeys(g, ir) {
-  const keys = new Set(
-    ir.functions.map((f) => f.id.functionKey).filter((k) => !facts.has(k)),
-  );
-  for (const k of ["three-phase-source", "dc_output", "pnp-sensor"])
-    keys.add(k);
-  const qualified = qualifiedFunctionPatterns(ir);
-  return g.texts
-    .filter(
-      (t) =>
-        !t.row &&
-        t.authoredText !== "request-note" &&
-        !t.role?.includes("label-terminal") &&
-        !ir.terminals?.some(
-          (p) => p.id.deviceUid === t.deviceUid && p.id.terminalKey === t.text,
-        ) &&
-        !(
-          !/label-(function|aggregate)/.test(t.role ?? "") &&
-          authoredDescription(ir, t.deviceUid)?.includes(t.text)
-        ),
-    )
-    .flatMap((t) => {
-      const matches = qualified
-        .flatMap((q) =>
-          [...t.text.matchAll(q.pattern)].map((m) => ({
-            key: q.value,
-            keyOffset: m.index + m[1].length,
-          })),
-        )
-        .sort(
-          (a, b) =>
-            a.keyOffset - b.keyOffset ||
-            (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
-        );
-      if (!matches.length) {
-        const key = [...keys].find(
-          (k) => t.text === k || t.text.startsWith(k + " "),
-        );
-        if (key) matches.push({ key, keyOffset: 0 });
-      }
-      return matches.map((match) =>
-        issue("printed-function-key", t, { text: t.text, ...match }),
-      );
-    });
-}
-function authoredDescription(ir, uid) {
-  const device = ir.devices.find((d) => d.uid === uid);
-  return device?.description?.trim()
-    ? device.description
-    : ir.deviceTypes?.find((type) => type.id === device?.typeId)?.description;
+export function internalVocabulary(g, ir, context = {}) {
+  return vocabularyFindings(g, ir, context, issue).internal;
 }
 export function deviceTags(g, ir, references, schematic, view) {
   return schematic ? deviceTagFindings(g, ir, references, issue, view) : [];

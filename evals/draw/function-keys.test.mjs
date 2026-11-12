@@ -44,7 +44,19 @@ it("retains the authored-description exemption without exempting function captio
   };
   const measure = (role) =>
     functionKeys(
-      { texts: [{ element: "description", text, deviceUid: "ai", role }] },
+      {
+        texts: [
+          {
+            element: "description",
+            text,
+            deviceUid: "ai",
+            tagOwnerUid: "ai",
+            tagField: "description",
+            tagOwnershipValid: true,
+            role,
+          },
+        ],
+      },
       data,
     );
   expect(measure("")).toEqual([]);
@@ -65,6 +77,18 @@ it("exempts only marked request-note text, keeping identical generated text meas
       ],
     },
     ir,
+    {
+      sheet: { view: { title: "Authored", format: "signal-loop-view/0.1" } },
+      request: {
+        views: [
+          {
+            title: "Authored",
+            format: "signal-loop-view-request/0.1",
+            notes: [text],
+          },
+        ],
+      },
+    },
   );
   expect(result.map(({ element, key }) => [element, key])).toEqual([
     ["generated", "AI1.ch0"],
@@ -76,7 +100,7 @@ it("exempts only marked request-note text, keeping identical generated text meas
 
 it("DQ-05 accepts terminal bindings and designation-only fallback", () => {
   for (const note of [
-    "polarity not verified: AI1 terminals 9/13, PT1 terminals 1/2.",
+    "polarity not verified: AI1 terminals 9–13, PT1 terminals 1/2.",
     "polarity not verified: AI1, PT1.",
   ])
     expect(findings(note)).toEqual([]);

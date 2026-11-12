@@ -29,7 +29,7 @@ export const REPORT_IDENTIFIER_COLUMNS = {
   ],
   io: [
     [0, "Device", "cell"],
-    [1, "Channel", "cell"],
+    [1, "Channel", "channelIdentity"],
     [3, "Address space", "cell"],
     [4, "Address", "cell"],
     [6, "Terminals", "channelEnds"],
@@ -111,6 +111,7 @@ function sourceContext(
   ir: Readonly<ElectricalIr>,
   row: Row,
   connections?: ReadonlyMap<string, TerminalId[]>,
+  kind?: DocumentationTable["kind"],
 ) {
   const devices = new Map(ir.devices.map((d) => [d.uid, d]));
   const [uid, key] = rowParts(row);
@@ -123,6 +124,7 @@ function sourceContext(
   return {
     ir,
     row,
+    kind,
     devices,
     uid,
     key,
@@ -187,15 +189,35 @@ function peer(c: Context): string[] {
     ];
   });
 }
+function channelIdentity(c: Context): string[] {
+  const fn = c.ir.functions.find(
+    (f) => f.id.deviceUid === c.uid && f.id.functionKey === c.key,
+  );
+  if (!fn) return [];
+  const channels = c.device?.io?.channels;
+  const assignment =
+    channels && c.key && Object.hasOwn(channels, c.key)
+      ? channels[c.key]
+      : undefined;
+  return assignment?.address !== undefined
+    ? [assignment.address]
+    : fn.terminals.map((t) => t.terminalKey);
+}
 function linkEnd(c: Context, column: number): string[] {
   const r = c.relation,
     connection = r?.assembly ?? r?.connection;
   if (r && connection)
     return [
-      `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}.${column === 2 ? connection.fromPort : connection.toPort}`,
+      r.connection
+        ? `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}: ${column === 2 ? connection.fromPort : connection.toPort}`
+        : `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}.${column === 2 ? connection.fromPort : connection.toPort}`,
     ];
   return column === 2 && c.device && c.key
-    ? [`${c.device.designation}.${c.key}`]
+    ? [
+        c.kind === "network"
+          ? `${c.device.designation}: ${c.key}`
+          : `${c.device.designation}.${c.key}`,
+      ]
     : [];
 }
 const sources = {
@@ -228,6 +250,7 @@ const sources = {
     return end ? [end.display] : [];
   },
   channelEnds,
+  channelIdentity,
   terminalEnds,
   module: (c) => [c.device?.designation],
   port: (c) => [c.key],
@@ -259,7 +282,7 @@ export function reportIdentifiers(
     table.kind === "terminals" ? terminalConnections(ir) : undefined;
   return new Map(
     table.rows.map((row, index) => {
-      const context = sourceContext(ir, row, connections);
+      const context = sourceContext(ir, row, connections, table.kind);
       const columns = table.columns.map(() => [] as string[]);
       for (const [column, header, source] of policy) {
         if (table.columns[column] !== header) continue;

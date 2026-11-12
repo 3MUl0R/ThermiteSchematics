@@ -1,3 +1,4 @@
+import { printedPort } from "@thermite/query";
 import {
   routePortAttributes,
   terminalPortAttribute,
@@ -16,7 +17,7 @@ import {
 import type { TopologyDrawingCoverage } from "./topology-coverage.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { DrawingCoverage } from "./coverage.js";
-import type { ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
 import { buildCommunicationInventory } from "@thermite/query";
 import {
   escapeXmlText as xml,
@@ -189,7 +190,13 @@ async function layoutCommunicationDrawing(
   const portIds = new Map<string, string>();
   const rows = new Map<
     string,
-    { key: string; side: "WEST" | "EAST"; y: number }[]
+    {
+      key: string;
+      label: string;
+      lines: string[];
+      side: "WEST" | "EAST";
+      y: number;
+    }[]
   >();
   const captions = new Map<string, string[]>();
   const tags = new Map<string, DeviceTagPlan>();
@@ -231,27 +238,19 @@ async function layoutCommunicationDrawing(
         `Communication caption for ${device.designation} is too wide; use a shorter label.`,
       );
     captions.set(uid, caption);
-    const connected = communicationPorts(links, uid);
-    const west = connected.filter((p) => p.side === "WEST"),
-      east = connected.filter((p) => p.side === "EAST");
-    for (let i = 0; i < Math.max(west.length, east.length); i++)
-      if (
-        textWidth(west[i]?.key ?? "") + textWidth(east[i]?.key ?? "") >
-        nodeWidth - 8
-      )
-        throw new Error(
-          `Communication port labels on ${device.designation} cannot fit without overlap.`,
-        );
     const labelBottom = deviceHeaderHeight(tag, caption) + 3;
-    const list = [
-      ...west.map((p, i) => ({ ...p, y: labelBottom + 4 + i * 5 })),
-      ...east.map((p, i) => ({ ...p, y: labelBottom + 4 + i * 5 })),
-    ];
+    const { list, portBottom } = communicationPortRows(
+      links,
+      uid,
+      type,
+      nodeWidth,
+      labelBottom,
+    );
     rows.set(uid, list);
     return {
       id: nodeIds.get(uid)!,
       width: nodeWidth,
-      height: labelBottom + 9 + Math.max(west.length, east.length, 1) * 5,
+      height: Math.max(portBottom, labelBottom + 5) + 9,
       layoutOptions: { "elk.portConstraints": "FIXED_POS" },
       ports: list.map((p, i) => {
         const id = `${nodeIds.get(uid)}p${i}`;
@@ -392,10 +391,12 @@ async function layoutCommunicationDrawing(
       const px = port.side === "WEST" ? 0 : node.width!;
       out.push(
         `<g ${terminalPortAttribute(portIds.get(JSON.stringify([uid, port.key]))!)} data-communication-port="${attr(port.key)}"><circle cx="${n(px)}" cy="${n(port.y)}" r="0.7" fill="white" stroke="#344054" stroke-width="0.3"/>`,
-        text(
-          port.side === "WEST" ? 2 : node.width! - 2 - textWidth(port.key),
-          port.y + 1,
-          port.key,
+        ...port.lines.map((label, i) =>
+          text(
+            port.side === "WEST" ? 2 : node.width! - 2 - textWidth(label),
+            port.y + 1 + (i - (port.lines.length - 1) / 2) * 3.5,
+            label,
+          ),
         ),
         "</g>",
       );
@@ -597,4 +598,44 @@ function communicationPorts(
         ? [{ key: l.connection.toPort, side: "WEST" as const }]
         : [],
   );
+}
+
+function communicationPortRows(
+  links: ReturnType<typeof buildCommunicationInventory>["links"],
+  uid: string,
+  type: IrDeviceType,
+  nodeWidth: number,
+  labelBottom: number,
+) {
+  const connected = communicationPorts(links, uid).map((p) => {
+    const label = printedPort(type, p.key);
+    const width = (nodeWidth - 8) / 2;
+    if (textWidth(p.key) > width)
+      throw new Error(
+        `Communication port identity ${p.key} cannot fit on one line.`,
+      );
+    // The key is an atomic authored identity; only its prose may wrap.
+    const lines = wrap(label, 35, (nodeWidth - 8) / 2);
+    if (!lines[0]?.startsWith(p.key))
+      throw new Error(`Communication port identity ${p.key} was split.`);
+    return { ...p, label, lines };
+  });
+  const west = connected.filter((p) => p.side === "WEST"),
+    east = connected.filter((p) => p.side === "EAST");
+  let portBottom = labelBottom;
+  const positions: number[] = [];
+  for (let i = 0; i < Math.max(west.length, east.length); i++) {
+    const extra =
+      (Math.max(west[i]?.lines.length ?? 0, east[i]?.lines.length ?? 0) - 1) *
+      3.5;
+    positions.push(portBottom + 4 + extra / 2);
+    portBottom += 5 + extra;
+  }
+  // Preserve the legacy port order, IDs, offsets and body size for one-line
+  // labels. Only actual wrapped rows reserve additional height before routing.
+  const list = [
+    ...west.map((p, i) => ({ ...p, y: positions[i]! })),
+    ...east.map((p, i) => ({ ...p, y: positions[i]! })),
+  ];
+  return { list, portBottom };
 }

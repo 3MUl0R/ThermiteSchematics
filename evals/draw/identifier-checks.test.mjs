@@ -284,3 +284,80 @@ it.each([4, 5])(
       ).toEqual([]);
   },
 );
+it("selects legacy identifiers from engine policy, never from a changed Channel cell", () => {
+  const source = {
+    devices: [
+      {
+        uid: "d",
+        designation: "AI1",
+        io: { channels: { hidden: { address: "I0.0" } } },
+      },
+    ],
+    functions: [
+      {
+        id: { deviceUid: "d", functionKey: "hidden" },
+        terminals: [{ deviceUid: "d", terminalKey: "3" }],
+      },
+    ],
+  };
+  const table = {
+    kind: "io",
+    columns: ["Device", "Channel"],
+    rows: [
+      {
+        key: JSON.stringify(["d", "hidden"]),
+        cells: ["AI1", "hidden"],
+        deviceUids: ["d"],
+      },
+    ],
+  };
+  expect(
+    expectedIdentifierCells(source, table).find((c) => c.column === 1)
+      .identifiers,
+  ).toEqual(["I0.0"]);
+  table.rows[0].cells[1] = "I0.0";
+  expect(
+    expectedIdentifierCells(source, table, { projection: "legacy" }).find(
+      (c) => c.column === 1,
+    ).identifiers,
+  ).toEqual(["hidden"]);
+});
+it("derives complete network endpoint identities independently of query-cell punctuation", () => {
+  const source = {
+    devices: [{ uid: "d", designation: "PLC1" }],
+    relations: [
+      {
+        uid: "link",
+        fromDeviceUid: "d",
+        toDeviceUid: "d",
+        connection: { fromPort: "P1", toPort: "P2" },
+      },
+    ],
+  };
+  const table = {
+    kind: "network",
+    columns: [
+      "Link",
+      "Protocol / medium",
+      "End A / location",
+      "End B / location",
+    ],
+    rows: [
+      {
+        key: "link",
+        cells: ["link", "", "PLC1.P1", "PLC1: wrong"],
+        deviceUids: ["d"],
+      },
+    ],
+  };
+  expect(
+    expectedIdentifierCells(source, table)
+      .filter((c) => c.column >= 2)
+      .map((c) => c.identifiers),
+  ).toEqual([["PLC1: P1"], ["PLC1: P2"]]);
+  expect(
+    expectedIdentifierCells(source, table, { projection: "legacy" })
+      .filter((c) => c.column >= 2)
+      .map((c) => c.identifiers),
+  ).toEqual([["PLC1.P1"], ["PLC1.P2"]]);
+});

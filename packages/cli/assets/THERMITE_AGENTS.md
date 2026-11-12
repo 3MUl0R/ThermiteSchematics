@@ -1,6 +1,6 @@
 # Thermite Schematics project guide
 
-This TypeScript + ELK alpha uses Bun 1.4.2. `thermite` means
+TypeScript + ELK alpha; Bun 1.4.2. `thermite` means
 `bun <thermite>/thermite.mjs`; use one absolute runtime/source path outside this
 project (ask if unknown). No `thermite` is on PATH.
 Never install/build in a downloaded runtime. Source checkouts need
@@ -16,15 +16,14 @@ thermite init ../cabinets --template cabinets
 supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
 two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Check existing issues, then report runtime bugs, gaps or unclear docs at
-https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case,
-expected/actual behavior, minimal repro,
+Check issues; report runtime bugs, gaps or unclear docs at
+https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual behavior, minimal repro,
 diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute
 paths. Without GitHub, draft an issue. Never patch a downloaded runtime.
 
-Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.
+Fix a separate engine checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.
 Keep private data/credentials out of issues/PRs.
-The human must accept any CLA; an agent must not sign it.
+Humans accept the CLA; agents must not sign it.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
 ## Authority and workflow
@@ -33,15 +32,15 @@ Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never
 hand-author schematic geometry, infer an engineering repair, or suppress compiler
 diagnostics. Device functions do not automatically join physical nets.
 
-To change existing source or presentation files:
+To edit existing source/presentation files:
 
 `validate → resolve/inspect/query → dry-run patch → apply patch → validate → create-view`
 
-The six stateless tools run as `thermite agent <tool> --input <file|->`. Every
+The six stateless tools run as `thermite agent <tool> --input <file|->`. Each
 request has `"format": "agent-tool-request/0.1"` and `"project": "."`. stdout
 carries the result, on success only; stderr always carries the report
-(diagnostics and error). Keep streams separate. Exit 0 means success, 1 an
-authored/expected failure, and 2 usage or infrastructure failure. Diagnostics may
+(diagnostics and error). Keep streams separate. Exit 0: success; 1:
+authored/expected failure; 2: usage/infrastructure failure. Diagnostics may
 carry `allowed`, `allowedCount`, `allowedLookup` (where to read the full list)
 and `pattern`.
 
@@ -58,8 +57,8 @@ and `pattern`.
   the library lock, libraries or this guide. Per-file atomicity and snapshot
   guards apply.
 - `create-view`: `spec`, one schematic view request without `page`. It returns
-  the original continuous SVG, or a cable's complete core sheet; a view needing
-  several sheets fails R006, so use the printing commands below.
+  the original continuous SVG or complete cable core sheet; multi-sheet views
+  fail R006: use printing commands below.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` in the canonical
 project root through revalidation, commit and rollback; it is not the library
@@ -149,7 +148,7 @@ Omit net ink only when its anchored terminal prints the same name.
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:
 "power"|"control"`) or `0.2` (loads/conductors/trace).
-Page settings: packet/presentation, never views.
+Page: packet/presentation, never views.
 W906: undrawn devices in drawing packets; warnings exit 0 or 1 with `--strict`.
 This packet puts every starter device on a schematic sheet; for `cabinets`, use
 root `CBL1` and intent `conductors`.
@@ -185,12 +184,12 @@ Init copies `core@0.2.0` to `libraries/core`; 0.1.0 locks persist.
 system.json selects path/version; electrical-system.lock.json pins bytes.
 After edits: `thermite lock .`, then validate (else E107/E108).
 Starter PS1.L/N are required but deferred: strict fails W905; cabinets passes.
-Invent no pins/ratings; keep manufacturer document/revision and review notes.
+Invent no pins/ratings; retain manufacturer document/revision and review notes.
 See `thermite guide libraries` for optional-library limits.
 
 ## Multi-conductor cables
 
-`thermite cable CBL1 --json` lists every physical core. Cable `fromLocation`/`toLocation` name ends A/B. Conductor `endpoints`: two slots, A then B. `usage` is `in-use` or `spare`. Only explicit spares allow null endpoints. Two real endpoints stay connected for spares; a lone real endpoint still occupies its terminal. Omitted cores are unassigned, never spare. Cores without usage are unspecified; without usage or locations, cables use canonical end order. Shielding never implies a bond.
+`thermite cable CBL1 --json` lists all physical cores. Cable `fromLocation`/`toLocation`: ends A/B. Conductor `endpoints`: two slots, A then B. `usage`: `in-use` or `spare`. Only explicit spares allow null endpoints. Two real ends stay connected even for spares; one real end still occupies its terminal. Omitted cores are unassigned, never spare. Missing usage is unspecified; without usage/locations, cables use canonical end order. Shielding implies no bond.
 
 ## Reports and change review
 
@@ -206,7 +205,7 @@ peer details, cable inventories and endpoint-free records; CSV selection metadat
 is on stderr, packets expose `documentationSelections`. With `index: true`,
 `references: {"appearances": "drawings", "filter": {...}}` scopes only the
 reference index; `references: false` omits reference pages.
-See `thermite guide report-filtering`. PLC addresses/spares live in device `io`;
+See `thermite guide report-filtering`. PLC addresses/spares: device `io`;
 never infer spare from a missing connection.
 E202 checks channel keys and duplicate addresses (case-insensitive), not PLC
 byte/word overlap or programming validity.
@@ -220,21 +219,21 @@ thermite snapshot -o drawings/before.json
 thermite review --before drawings/before.json --json
 ```
 
-Snapshot before changes; review after the guarded workflow, then regenerate.
+Snapshot before edits; review after the guarded workflow, then regenerate.
 Semantic review cannot replace source/lock/presentation review or engineering
 judgment. UIDs identify devices; page numbers may change.
 
 `thermite watch --input packet.json -o drawings/packet.html` polls declared inputs
 one second after work finishes; failures preserve the previous packet.
 `.pdf` is direct vector PDF with physical paper dimensions and fonts.
-Unsupported PDF glyphs fail explicitly; use supported labels or SVG/HTML.
+Unsupported PDF glyphs fail; use supported labels or SVG/HTML.
 
 ## Communication connections
 
 Types may declare `ports` with `medium: "ethernet"|"nrg-bus"` and a `connector`.
-An `associated_with` relation can carry `connection` with `fromPort`, `toPort`,
+An `associated_with` relation accepts `connection` with `fromPort`, `toPort`,
 `medium`, `protocol`, and optional `status: "planned"|"verified"`. E204 checks
-declared ports, media and exclusive port occupancy. These links never join nets;
+declared ports, media and exclusive port occupancy. Links never join nets;
 protocol and status are author claims, implying no pinouts, shielding, PoE or
 live communications.
 
@@ -246,7 +245,7 @@ not automatically spare.
 
 ## Field-device hookup pages
 
-A packet can include `signal-loop-view-request/0.1` with
+Packets accept `signal-loop-view-request/0.1` with
 `from: {device: "PT1", function: "signal"}`, `to: {device: "AI1", function:
 "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter,
 authored cordset, continuous bulkhead contacts, optional feed-through terminals
@@ -334,18 +333,20 @@ functions, not spares. Group order affects presentation; order functions by read
 stage (PLC outputs, terminal points, interlocks, coils). A device's first appearance
 sets its display order.
 
-Tags: designation ≥2.7 mm, instance/else-type description and catalog part ≥2.5 mm.
-Selected functions retain terminal labels, wire numbers and references.
-A wire's `properties.label` is its
-printed number, separate from its source identity; repeated labels never join
-nets. Boundary counts expose connections outside the selection; a circuit view is
-not a completeness audit. ELK owns placement and routing. Large groups split into
-numbered parts with whole conductors; R006 means
-a conductor, coupled symbol or label cannot fit. Narrow the selection or
-use a larger sheet; never change topology to obtain a drawing.
+Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.
+Selected functions retain terminals, wire numbers and references. A wire's
+`properties.label` is its printed number, separate from source identity; repeated
+labels never join nets. Boundary counts expose connections outside the selection;
+a circuit view is not a completeness audit. ELK owns placement/routing. Large
+groups split into numbered parts with whole conductors; R006 means a conductor,
+coupled symbol or label cannot fit. Narrow selection or use larger paper; never
+change topology to fit.
+References use kind/state and terminals; I/O address/terminals; ports key plus
+authored description. Cable headings use type description or state its absence.
+Function keys/type IDs stay in metadata/CSV.
 
 Library `circuitSymbols` maps real function keys to explicit closed-catalog marks,
-for example different marks for a device's main and auxiliary contacts. E206
+for example different marks for main and auxiliary contacts. E206
 checks function existence, kind, terminal count and contact state.
 Read `thermite guide circuit-symbols` before selecting a disconnector profile.
 Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never

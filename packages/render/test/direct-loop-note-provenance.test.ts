@@ -15,7 +15,7 @@ it.each(flows)(
     const f = await directFixture(roleFree);
     try {
       const generated =
-        "polarity not verified: AI1 terminals p/n, TX1 terminals p/n.";
+        "polarity not verified: AI1 terminals p–n, TX1 terminals p–n.";
       const view = directView({ flow, notes: [generated] });
       const result = await renderSchematicPacket(f.ir, directPacket(view));
       expect(result.ok, JSON.stringify(result)).toBe(true);
