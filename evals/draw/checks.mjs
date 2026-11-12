@@ -15,6 +15,10 @@ export { utilisation } from "./utilisation.mjs";
 // observations, and unchanged compiled IR. No renderer layout estimator is used.
 export const ANISOTROPY_EPSILON = 1e-9; // numerical comparison only, dimensionless
 export const INK_ACCURACY_MM = 0.17; // two pixels at 300 dpi, rounded outwards
+// Chromium's SVG-to-mm transform can undershoot an exact 3 mm segment.
+// A3 axis conversion undershoots by up to 0.000009844 mm in the corpus.
+// Numerical noise only: five orders below 1 mm, not a drafting allowance.
+export const JOG_NUMERICAL_TOLERANCE_MM = 1e-5;
 export const inside = (a, b, t = INK_ACCURACY_MM) =>
   a.x >= b.x - t &&
   a.y >= b.y - t &&
@@ -233,9 +237,7 @@ export function functionKeys(g, ir) {
         ) &&
         !(
           !/label-(function|aggregate)/.test(t.role ?? "") &&
-          ir.devices
-            .find((d) => d.uid === t.deviceUid)
-            ?.description?.includes(t.text)
+          authoredDescription(ir, t.deviceUid)?.includes(t.text)
         ) &&
         [...keys].some((k) => t.text === k || t.text.startsWith(k + " ")),
     )
@@ -245,6 +247,12 @@ export function functionKeys(g, ir) {
         key: [...keys].find((k) => t.text === k || t.text.startsWith(k + " ")),
       }),
     );
+}
+function authoredDescription(ir, uid) {
+  const device = ir.devices.find((d) => d.uid === uid);
+  return device?.description?.trim()
+    ? device.description
+    : ir.deviceTypes?.find((type) => type.id === device?.typeId)?.description;
 }
 export function deviceTags(g, ir, references, schematic, view) {
   return schematic ? deviceTagFindings(g, ir, references, issue, view) : [];
@@ -383,7 +391,7 @@ export function terminalText(g) {
         netLabel(t) ||
         t.terminal,
     ),
-    out = [];
+    out = netLabelRepetition(g);
   for (let i = 0; i < ts.length; i++) {
     const a = ts[i];
     const ownership = captionOwnershipFinding(a);
@@ -423,6 +431,71 @@ export function terminalText(g) {
             markerBbox: t.bbox,
           }),
         );
+  }
+  return out;
+}
+// V5.1: TAIL net labels belong at the route source. Target captions cannot
+// replace source ink. Audit declared empty reservations as well as painted names.
+export function netLabelRepetition(g) {
+  const out = [];
+  for (const label of [...g.texts, ...(g.omittedNetLabels ?? [])].filter(
+    (t) =>
+      t.labelRole === "net" &&
+      t.labelOwnerKind === "edge" &&
+      Array.isArray(t.labelOwnerKey),
+  )) {
+    const routes = g.shapes.filter(
+      (s) =>
+        s.conductor &&
+        s.edgeOwnerKey &&
+        s.appearanceScope === label.appearanceScope &&
+        JSON.stringify(s.edgeOwnerKey) === JSON.stringify(label.labelOwnerKey),
+    );
+    const names = [
+      ...new Set(routes.map((s) => s.potentialName).filter(Boolean)),
+    ];
+    const text = label.omitted
+      ? names.length === 1
+        ? names[0]
+        : undefined
+      : label.text;
+    if (!text) continue;
+    const caption = g.texts.find(
+      (t) =>
+        t.labelRole === "terminal" &&
+        !captionOwnershipFinding(t) &&
+        t.text === text &&
+        t.appearanceScope === label.appearanceScope &&
+        routes.some((s) =>
+          s.landingOwners?.some(
+            (p) =>
+              p.landingEnd === "source" &&
+              p.deviceUid === t.deviceUid &&
+              p.terminal === t.terminal &&
+              p.terminalAppearance === t.terminalAppearance,
+          ),
+        ),
+    );
+    if (label.omitted && !caption)
+      out.push(
+        issue("net-label-suppressed-without-source-caption", label, {
+          text,
+          edgeOwnerKey: label.labelOwnerKey,
+          reason: "no-matching-source-caption",
+        }),
+      );
+    else if (!label.omitted && caption)
+      out.push(
+        issue("net-label-repeats-terminal-caption", label, {
+          text: label.text,
+          edgeOwnerKey: label.labelOwnerKey,
+          terminal: caption.terminal,
+          deviceUid: caption.deviceUid,
+          terminalAppearance: caption.terminalAppearance,
+          otherElement: caption.element,
+          otherBbox: caption.bbox,
+        }),
+      );
   }
   return out;
 }
@@ -694,7 +767,7 @@ export function routeQuality(g) {
             i > 0 &&
             i < lengths.length - 1 &&
             x.lengthMm > 0.05 &&
-            x.lengthMm < 3,
+            x.lengthMm < 3 - JOG_NUMERICAL_TOLERANCE_MM,
         );
       const start = points[0],
         end = points.at(-1),
@@ -719,6 +792,25 @@ export function routeQuality(g) {
     }
   }
   return out;
+}
+export function wirePlacementCoverage(g) {
+  if (g.texts.some((t) => t.wire) || !g.shapes.some((s) => s.conductor))
+    return {};
+  const unowned = g.texts.some(
+    (t) =>
+      ["net", "conductor"].includes(t.labelRole) ||
+      /(?:^|\s)label-(?:net|conductor)(?:\s|$)/.test(t.role ?? "") ||
+      t.wireBlock,
+  );
+  return {
+    status: "not-implemented",
+    reasonCode: unowned
+      ? "label-identity-unavailable"
+      : "no-visible-conductor-labels",
+    reason: unowned
+      ? "Visible conductor labels need exported label-to-conductor identity."
+      : "No visible conductor labels to measure on this sheet.",
+  };
 }
 export function wirePlacement(g) {
   const routes = g.shapes.filter((s) => s.conductor && s.wire),

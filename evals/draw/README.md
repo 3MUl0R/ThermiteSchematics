@@ -25,7 +25,7 @@ semantic port/node/marker identities, never from proximity. Its duplicate rule
 is per physical terminal **per drawn appearance**; separate split/continuation
 appearances retain their captions. A semantic net label remains a net label even
 when its text exactly equals a terminal key or qualified identity (`L1` or
-`SRC1.L1`). Disjoint net/terminal labels are allowed; actual overlaps still fail
+`SRC1.L1`). Disjoint net/terminal labels keep separate semantic roles; actual overlaps still fail
 DQ-17 and the general DQ-02 text-overlap check. Version 4.8 corrects that role
 distinction; older checker reports must be replayed before attributing renderer
 changes. Version 4.9 fails DQ-17 on missing/malformed terminal-caption owner keys,
@@ -34,6 +34,38 @@ and port/net or edge/terminal role mismatches. Matching nearby text never repair
 ownership. A valid edge-owned net label keeps its semantic role even when its
 text equals a terminal identity. The legacy 15 mm duplicate fallback applies only without exported
 appearance identity, never to infer an owner.
+
+Version 5.0 exempts authored type-description fallback text from DQ-05 on the
+same terms as instance descriptions; function/aggregate captions still fail.
+DQ-15 compares internal jog lengths against 3 mm with a **0.00001 mm numerical
+tolerance**, solely for SVG-to-mm floating-point conversion. An exact 3 mm jog
+passes even if measured as 2.99999998 mm (or 2.99999016 mm on A3); 2.99 mm and
+2.25 mm still fail. The tolerance bounds the observed A3 conversion error of
+0.000009844 mm and remains 1,000 times smaller than a 0.01 mm drafting change. This
+does not change the drafting minimum or the route-detour bound.
+
+V5.1 reports `net-label-repeats-terminal-caption` under DQ-17 only when an
+edge-owned net label equals a printed caption at its **route source** landing,
+in that same body appearance. Net labels use ELK `TAIL`, so the far/target end
+cannot replace the name at the label's anchor. Exported route-port owner keys,
+resolved marker identities and nested drawing scope establish this relationship;
+neither distance nor net membership does. Historical SVGs without route-port
+keys cannot establish which electrical endpoint is the anchor and provide no
+same-end repetition evidence.
+
+Empty semantic net-label reservations are audited separately from painted text.
+An omitted name without a printed matching source-landing caption reports
+`net-label-suppressed-without-source-caption`, using the edge's exported potential
+name. This catches suppression justified only by a far-end caption. Clip-hidden
+reservations contribute no missing-name finding or text/font measurement.
+The renderer retains reservations, routes and semantic names. A distinct name
+stays printed; all phases use the same source-end rule. Split bodies keep their
+own captions and names.
+
+DQ-16 retains `not-implemented` for an ineligible distance measurement and gives
+separate reason codes: `no-visible-conductor-labels` when there is nothing to
+measure, and `label-identity-unavailable` for declared visible conductor/net
+labels without identity. Neither case becomes a pass.
 
 ## Prerequisites and costs
 

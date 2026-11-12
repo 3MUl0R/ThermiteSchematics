@@ -106,6 +106,36 @@ it("keeps every own-wire ink distance no worse than dev across 50 requests and b
       const text = doc.querySelector(
         `text[clip-path="url(#${svgSemanticId("clip", [label.id])})"]`,
       )!;
+      if (!text.textContent) {
+        expect(label.role).toBe("net");
+        const edge = graph.edges.find((e) => e.id === label.ownerId)!;
+        // An absent net ink distance needs actual replacement ink on its own
+        // landing body. Keep the reviewed numeric baseline for every other label.
+        const replacement = graph.nodes.some(
+          (node) =>
+            node.kind !== "junction" &&
+            node.ports.some(
+              (landing) =>
+                edge.sourcePortId === landing.id &&
+                node.labels.some(
+                  (caption) =>
+                    caption.role === "terminal" &&
+                    node.ports.some(
+                      (p) =>
+                        p.id === caption.ownerId &&
+                        p.terminal.deviceUid === landing.terminal.deviceUid &&
+                        p.terminal.terminalKey === landing.terminal.terminalKey,
+                    ) &&
+                    doc.querySelector(
+                      `text[clip-path="url(#${svgSemanticId("clip", [caption.id])})"]`,
+                    )?.textContent === label.text,
+                ),
+            ),
+        );
+        expect(replacement, c.key + " " + label.text).toBe(true);
+        count++;
+        continue;
+      }
       const m = printableTextMetrics(text.textContent!),
         scale = text.hasAttribute("textLength")
           ? Number(text.getAttribute("textLength")) / m.advance

@@ -231,6 +231,7 @@ export function measureSheet(options = {}) {
   };
   const identity = (e) => ({
     element: ids.get(e),
+    appearanceScope: ids.get(e.closest("svg")),
     deviceUid: attr(e, "data-device-uid"),
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
@@ -351,6 +352,91 @@ export function measureSheet(options = {}) {
             },
       );
     }
+  }
+  function ownerKey(raw, prefix) {
+    const hex = raw?.match(new RegExp(`^${prefix}-([a-f0-9]+)$`))?.[1];
+    if (!hex || hex.length % 4) throw Error("Invalid exported owner key");
+    return JSON.parse(
+      hex
+        .match(/.{4}/g)
+        .map((h) => String.fromCharCode(parseInt(h, 16)))
+        .join(""),
+    );
+  }
+  function landingOwners(e, endpoints) {
+    const scope = ids.get(e.closest("svg")) ?? null;
+    return ["source", "target"].flatMap((end, index) => {
+      const raw = attr(e, `data-route-${end}-port-key`);
+      if (raw !== null && raw !== undefined) {
+        try {
+          const port = ownerKey(raw, "port");
+          if (port[0] !== "port") return [];
+          const owner = terminalCaptionOwners.get(
+            JSON.stringify([scope, port[1], port[2]]),
+          );
+          return owner &&
+            endpoints.some(
+              (p) =>
+                p.deviceUid === owner.deviceUid &&
+                p.terminalKey === owner.terminal,
+            )
+            ? [{ ...owner, landingEnd: end }]
+            : [];
+        } catch {
+          return [];
+        }
+      }
+      // Historical SVGs export electrical endpoints but no landing port keys.
+      // Resolve only a unique body appearance within this nested drawing.
+      const endpoint = endpoints[index];
+      const candidates = [...terminalCaptionOwners.entries()]
+        .filter(
+          ([key, owner]) =>
+            JSON.parse(key)[0] === scope &&
+            owner &&
+            owner.deviceUid === endpoint?.deviceUid &&
+            owner.terminal === endpoint?.terminalKey,
+        )
+        .map(([, owner]) => owner);
+      return new Set(candidates.map((o) => o.terminalAppearance)).size === 1
+        ? candidates
+            .slice(0, 1)
+            .map((owner) => ({ ...owner, landingEnd: "unknown" }))
+        : [];
+    });
+  }
+  // Empty net captions keep their semantic clip/reservation. Audit that declared
+  // omission separately from painted text; it contributes no ink/font metrics.
+  function omittedNetLabels() {
+    return [...root.querySelectorAll("text[clip-path]")].flatMap((e) => {
+      if (e.textContent !== "") return [];
+      const ref = e.getAttribute("clip-path")?.match(/url\(#(.+)\)/)?.[1];
+      const hex = ref?.match(/clip-([a-f0-9]+)$/)?.[1];
+      const rect = ref && document.getElementById(ref)?.querySelector("rect");
+      const v = visible(e, true);
+      if (!hex || !rect || !v) return [];
+      try {
+        const key = ownerKey(`label-${hex}`, "label");
+        if (key[0] !== "label" || key[1] !== "edge" || key[3] !== "net")
+          return [];
+        const bbox = intersect(bounds(e, rect.getBBox()), v.clip);
+        if (bbox.w <= 0.001 || bbox.h <= 0.001) return [];
+        return [
+          {
+            ...identity(e),
+            omitted: true,
+            bbox,
+            boxKind: "label-reservation",
+            labelRole: "net",
+            labelOwnerKind: "edge",
+            labelOwnerKey:
+              typeof key[2] === "string" ? JSON.parse(key[2]) : key[2],
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
   }
   const continuationOwner = (e) => {
     const a = e.closest('a[href^="#sheet-"]');
@@ -1244,6 +1330,25 @@ export function measureSheet(options = {}) {
         utilisationErrors.push({ element: id.element, reason: error.message });
       }
     }
+    const endpoints = conductor
+      ? (() => {
+          const raw = attr(e, "data-endpoints");
+          if (raw) return JSON.parse(raw);
+          return ["source", "target"].map((end) => ({
+            deviceUid: attr(e, `data-${end}-device-uid`),
+            terminalKey: attr(e, `data-${end}-terminal-key`),
+          }));
+        })()
+      : undefined;
+    let edgeOwnerKey;
+    try {
+      const raw = attr(e, "data-edge-key");
+      edgeOwnerKey = raw
+        ? ownerKey(raw, "edge")
+        : id.wire
+          ? ["wire", id.wire]
+          : undefined;
+    } catch {}
     return [
       {
         ...id,
@@ -1270,26 +1375,10 @@ export function measureSheet(options = {}) {
               (m.f - rr.y) * sy,
             ]
           : undefined,
-        endpoints: conductor
-          ? (() => {
-              const raw = attr(e, "data-endpoints");
-              if (raw) return JSON.parse(raw);
-              const source = e.getAttribute("data-source-device-uid"),
-                target = e.getAttribute("data-target-device-uid");
-              return source && target
-                ? [
-                    {
-                      deviceUid: source,
-                      terminalKey: e.getAttribute("data-source-terminal-key"),
-                    },
-                    {
-                      deviceUid: target,
-                      terminalKey: e.getAttribute("data-target-terminal-key"),
-                    },
-                  ]
-                : [];
-            })()
-          : undefined,
+        endpoints,
+        edgeOwnerKey,
+        potentialName: attr(e, "data-potential-name"),
+        landingOwners: conductor ? landingOwners(e, endpoints) : undefined,
         cls:
           cls + (e.hasAttribute("data-wiring-junction") ? " junction-dot" : ""),
       },
@@ -1319,6 +1408,7 @@ export function measureSheet(options = {}) {
     viewFormat: root.getAttribute("data-view-format"),
     viewFamily: root.getAttribute("data-view-family"),
     texts,
+    omittedNetLabels: omittedNetLabels(),
     hiddenTexts,
     frame,
     titleBlock,

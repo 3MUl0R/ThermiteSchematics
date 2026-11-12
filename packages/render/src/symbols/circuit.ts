@@ -308,12 +308,12 @@ export function circuitBlock(
               : "SOUTH";
         const isolated =
           onlySources || sourcePins.some((pin) => pin.side === side);
-        return `<line x1="${n(p.from.x)}" y1="${n(p.from.y)}" x2="${n(p.to.x)}" y2="${n(p.to.y)}" stroke="${ink.color}" stroke-width="${n(isolated ? ink.strokeWidth : PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}"${isolated ? ` stroke-dasharray="${ink.dash}"` : ""}/>`;
+        return `<line x1="${n(p.from.x)}" y1="${n(p.from.y)}" x2="${n(p.to.x)}" y2="${n(p.to.y)}" stroke="${isolated ? ink.color : PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(isolated ? ink.strokeWidth : PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"${isolated ? ` stroke-dasharray="${ink.dash}"` : ""}/>`;
       })
       .join("");
     return `<g data-source-enclosure="true" fill="none"><rect width="${n(width)}" height="${n(height)}" fill="white" stroke="none"/>${lines}</g>`;
   }
-  return `<rect width="${n(width)}" height="${n(height)}" fill="white" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}"/>`;
+  return `<rect width="${n(width)}" height="${n(height)}" fill="white" stroke="${PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"/>`;
 }
 
 export function circuitTerminal(

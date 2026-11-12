@@ -221,13 +221,7 @@ export function evaluateSheet(
     );
   out.push(
     obs("DQ-16", checks.wirePlacement(g), {
-      ...(!g.texts.some((t) => t.wire) && g.shapes.some((s) => s.conductor)
-        ? {
-            status: "not-implemented",
-            reason:
-              "Needs exported label-to-conductor identity for legacy flat conductor labels.",
-          }
-        : {}),
+      ...checks.wirePlacementCoverage(g),
       scope:
         "Paths with conductor identity; legacy net-edge labels without a wire association need that export before proximity can be proven.",
     }),

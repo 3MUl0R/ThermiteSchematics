@@ -402,7 +402,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Include use case, expected/actual behavior, minimal reproduction, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
+        "Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
       async check() {
         // Why redaction is needed: these reports carry this machine's host
         // name and absolute paths.
@@ -1444,7 +1444,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a single sheet only (R006 otherwise).",
+        "`-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one sheet (R006 otherwise).",
       async check() {
         const project = await freshProject("starter");
         await writeJson(join(project, "packet.json"), STARTER_PACKET);
@@ -1557,7 +1557,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub, draft the issue title/body.",
+      "Without GitHub, draft an issue.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1565,11 +1565,11 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Fix the separate engine checkout; follow AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Keep private data and credentials out of issues/PRs.",
+      "Keep private data/credentials out of issues/PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [

@@ -1,5 +1,6 @@
 import { offViewCardSvg } from "../off-view/svg.js";
 import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
+import { redundantNetLabelIds } from "./net-labels.js";
 import { rootedNoticeLines, rootedNoticeSvg } from "../off-view/notice.js";
 import { SvgWriter, type SvgAttributes } from "./writer.js";
 import { orthogonalPathData } from "./edge-path.js";
@@ -349,15 +350,22 @@ function edgeAttributes(
   edge: Readonly<PresentationEdge>,
   registry: RenderSourceRegistry,
 ): SvgAttributes {
-  return edge.kind === "boundary-segment"
-    ? {
-        id: svgSemanticId("boundary", [edge.id]),
-        class: "boundary-path",
-        "data-net-id": edge.netId,
-        "data-presentation-only": "true",
-        ...endpointAttributes(edge.endpoints, registry),
-      }
-    : conductorAttributes(edge, registry);
+  const attributes =
+    edge.kind === "boundary-segment"
+      ? {
+          id: svgSemanticId("boundary", [edge.id]),
+          class: "boundary-path",
+          "data-net-id": edge.netId,
+          "data-presentation-only": "true",
+          ...endpointAttributes(edge.endpoints, registry),
+        }
+      : conductorAttributes(edge, registry);
+  return {
+    ...attributes,
+    "data-edge-key": svgSemanticId("edge", [edge.id]),
+    "data-route-source-port-key": svgSemanticId("port", [edge.sourcePortId]),
+    "data-route-target-port-key": svgSemanticId("port", [edge.targetPortId]),
+  };
 }
 
 function canonicalLabels(
@@ -882,6 +890,7 @@ function emitLabels(
     labels,
     indexById(layout.nodes, "layout node"),
   );
+  const hiddenNetLabels = redundantNetLabelIds(graph, hiddenTerminalCaptions);
   for (const label of labels) {
     const presentation = required(
       semantic.get(label.id),
@@ -894,9 +903,10 @@ function emitLabels(
       );
       continue;
     }
-    const printed = hiddenTerminalCaptions.has(label.id)
-      ? ""
-      : (presentation.printableText ?? label.text);
+    const printed =
+      hiddenTerminalCaptions.has(label.id) || hiddenNetLabels.has(label.id)
+        ? ""
+        : (presentation.printableText ?? label.text);
     // Empty captions retain clip identity and the PDF label contract.
     if (!printed) {
       emitEmptyCaption(writer, label);

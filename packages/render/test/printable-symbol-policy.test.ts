@@ -1,4 +1,36 @@
 import { beforeAll, describe, expect, it } from "vitest";
+
+it("keeps every circuit frame family lighter than a 0.32 mm wire without moving it", () => {
+  const rectangle = parseHTML(
+    `<svg>${circuitBlock(40, 30)}</svg>`,
+  ).document.querySelector("rect")!;
+  expect(
+    ["width", "height", "fill"].map((a) => rectangle.getAttribute(a)),
+  ).toEqual(["40", "30", "white"]);
+  expect(Number(rectangle.getAttribute("stroke-width"))).toBe(0.25);
+  expect(rectangle.getAttribute("stroke")).toBe("#667085");
+  const mixed = parseHTML(
+    `<svg>${circuitBlock(40, 30, [{ x: 40, y: 15, side: "EAST" }], false)}</svg>`,
+  ).document;
+  const solid = [...mixed.querySelectorAll("line:not([stroke-dasharray])")];
+  const isolated = [...mixed.querySelectorAll("line[stroke-dasharray]")];
+  expect(solid).toHaveLength(3);
+  expect(isolated).toHaveLength(2);
+  for (const side of solid) {
+    expect(Number(side.getAttribute("stroke-width"))).toBeLessThan(0.32);
+    expect(side.getAttribute("stroke")).toBe("#667085");
+  }
+  for (const side of isolated) {
+    expect(Number(side.getAttribute("stroke-width"))).toBe(0.18);
+    expect(side.getAttribute("stroke-dasharray")).toBe("0.6 0.6");
+  }
+  expect(
+    isolated.map((s) => ["x1", "y1", "x2", "y2"].map((a) => s.getAttribute(a))),
+  ).toEqual([
+    ["40", "0", "40", "13.5"],
+    ["40", "16.5", "40", "30"],
+  ]);
+});
 import { parseHTML } from "linkedom";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import { renderSchematic } from "../src/renderer.js";
