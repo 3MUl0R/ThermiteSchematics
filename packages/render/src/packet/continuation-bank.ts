@@ -1,3 +1,4 @@
+import { continuationBankSources } from "./continuation-bank-sources.js";
 import { maximumContinuationSerial } from "./continuation-reservation.js";
 import { rootedGrids } from "./rooted-plans.js";
 import { rootedCrossings } from "./rooted-crossings.js";
@@ -6,7 +7,6 @@ import type { DrawingBounds } from "./types.js";
 import { reserveContinuationSources } from "./continuation-source.js";
 import { continuationHeaderWidth } from "./continuation-label.js";
 import { labelMetrics, labelRows } from "./label-text.js";
-import { identityTokens } from "./label-wrap.js";
 
 export interface ContinuationBank {
   width: number;
@@ -41,38 +41,42 @@ export function continuationBanks(
   const maximumSerial = maximumContinuationSerial(p, offset);
   const headerWidth = continuationHeaderWidth(maximumSerial);
   const sources = reserveContinuationSources(p.graph);
+  const cutSources = continuationBankSources(p, seeds, b, scale);
   const maxBody = Math.max(headerWidth, ...sources.map((s) => s.width));
-  const tokenWidth = sources.reduce(
-    (width, source) =>
-      identityTokens(source.conductor).reduce(
-        (width, token) => Math.max(width, labelMetrics(token).width),
-        width,
-      ),
-    headerWidth,
-  );
   const plans: ContinuationBank[] = [];
   for (const [width, single] of [
     [maxBody, false],
-    [headerWidth, false],
-    [tokenWidth, false],
     [maxBody, true],
   ] as const) {
-    const { maxW, maxH } = bankExtent(sources, width, headerWidth, single);
+    const side = (name: string) =>
+      bankExtent(cutSources(name), width, headerWidth, single);
     const plan = {
       width,
       headerWidth,
       single,
       left: xCuts
-        ? Math.max(0, maxW + SIDE_CAPTION_INSET.left - NATIVE_GUTTER.left)
+        ? Math.max(
+            0,
+            side("left").maxW + SIDE_CAPTION_INSET.left - NATIVE_GUTTER.left,
+          )
         : 0,
       right: xCuts
-        ? Math.max(0, maxW + SIDE_CAPTION_INSET.right - NATIVE_GUTTER.right)
+        ? Math.max(
+            0,
+            side("right").maxW + SIDE_CAPTION_INSET.right - NATIVE_GUTTER.right,
+          )
         : 0,
       top: yCuts
-        ? Math.max(0, maxH + VERTICAL_CAPTION_INSET - NATIVE_GUTTER.top)
+        ? Math.max(
+            0,
+            side("top").maxH + VERTICAL_CAPTION_INSET - NATIVE_GUTTER.top,
+          )
         : 0,
       bottom: yCuts
-        ? Math.max(0, maxH + VERTICAL_CAPTION_INSET - NATIVE_GUTTER.bottom)
+        ? Math.max(
+            0,
+            side("bottom").maxH + VERTICAL_CAPTION_INSET - NATIVE_GUTTER.bottom,
+          )
         : 0,
     };
     if (!plans.some((p) => JSON.stringify(p) === JSON.stringify(plan)))
@@ -103,8 +107,9 @@ function bankExtent(
       single && !s.descriptor
         ? [` / ${s.conductor}`]
         : [
-            ...(s.descriptor ? [s.descriptor, s.conductor] : [s.conductor]),
-          ].flatMap((v) => labelRows(v, width));
+            ...(s.descriptor ? labelRows(s.descriptor, width) : []),
+            s.conductor,
+          ];
     const ms = values.map((v) => labelMetrics(v));
     const h =
       single && !s.descriptor

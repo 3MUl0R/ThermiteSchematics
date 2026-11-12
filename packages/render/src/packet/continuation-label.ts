@@ -7,6 +7,8 @@ import { text } from "./svg.js";
 export const CONTINUATION_EM = 2.5;
 export const CONTINUATION_PITCH = 3.5;
 export const CONTINUATION_CLEARANCE = 1;
+// Physical inter-block ink gap; independent checker threshold remains pending.
+export const CONTINUATION_BLOCK_GAP = 1;
 const STROKE_GAP = 3.15;
 export interface ContinuationRow {
   text: string;
@@ -54,8 +56,11 @@ export function continuationHeaderWidth(maximumSerial: number) {
 export function continuationHeader(link: Link) {
   return `${link.id} / ${String(link.to).padStart(2, "0")}.${link.toZone ?? PLANNING_ZONE}`;
 }
-function body(link: Link) {
-  return link.descriptor ? [link.descriptor, link.conductor] : [link.conductor];
+function continuationBody(link: Link, width: number) {
+  return [
+    ...(link.descriptor ? labelRows(link.descriptor, width) : []),
+    link.conductor,
+  ];
 }
 /** Positions and reserved ink are in outer-sheet mm, never scaled SVG units. */
 export function continuationLabel(
@@ -68,7 +73,7 @@ export function continuationLabel(
   const values =
     single && !link.descriptor
       ? [`${header} / ${link.conductor}`]
-      : [header, ...body(link).flatMap((v) => labelRows(v, width))];
+      : [header, ...continuationBody(link, width)];
   const metrics = values.map((v) => labelMetrics(v));
   const reserved = metrics.map((m, i) =>
     i
@@ -131,6 +136,21 @@ export function continuationLabelSvg(link: Link) {
   if (!link.label || !link.toZone)
     throw new ContinuationLabelError(
       `Unresolved continuation ${link.id}: ${link.conductor}`,
+    );
+  const expected = link.label.single
+    ? []
+    : [
+        ...(link.descriptor
+          ? labelRows(link.descriptor, link.label.width)
+          : []),
+        link.conductor,
+      ];
+  if (
+    link.label.rows.length !== expected.length + 1 ||
+    expected.some((v, i) => link.label?.rows[i + 1]?.text !== v)
+  )
+    throw new ContinuationLabelError(
+      `Continuation ${link.id} (${link.conductor}) must keep its authored identity on one line. Use a wider bank or another legal cut.`,
     );
   const value =
     continuationHeader(link) +

@@ -106,6 +106,22 @@ export function continuationOracle(ir: ElectricalIr, packet: RenderedPacket) {
             : source.identity)
       )
         throw Error(`Wrong printed source identity ${body}`);
+      const identityRows =
+        m[4] !== undefined
+          ? [m[4]]
+          : rows
+              .slice(1)
+              .filter((r) => r.textContent !== "JUMPER")
+              .map((r) => r.textContent);
+      if (identityRows.length !== 1 || identityRows[0] !== source.identity)
+        throw Error("Authored conductor identity is not one line unit");
+      const forms = [...root.querySelectorAll('a[href^="#sheet-"]')].map(
+        (link) =>
+          /^(C\d+) \/ \d+\.[A-D][1-6] \/ /u.test(
+            link.querySelector("text")?.textContent ?? "",
+          ),
+      );
+      if (new Set(forms).size > 1) throw Error("Mixed forms within one bank");
       if (body.includes("jumper:")) throw Error("Synthesised jumper name");
       if (Number(a.getAttribute("href")?.slice(7)) !== Number(m[2]))
         throw Error("Href and printed destination differ");

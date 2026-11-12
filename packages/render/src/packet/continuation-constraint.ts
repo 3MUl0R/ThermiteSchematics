@@ -1,3 +1,4 @@
+import { CONTINUATION_BLOCK_GAP } from "./continuation-label.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { DrawingBounds, Link } from "./types.js";
 import type { InkBox } from "./rooted-ink.js";
@@ -50,5 +51,5 @@ export function continuationShortfall(rows: InkBox[], occupied: InkBox[]) {
 
 export function continuationPackingConstraint(links: Link[]) {
   const ids = links.map((l) => `${l.id} (${l.conductor})`).join(", ");
-  return `Continuations ${ids} cannot keep 1 mm clear ink within the 3.5 mm placement range. Use a larger sheet, landscape or another flow.`;
+  return `Continuations ${ids} cannot keep ${CONTINUATION_BLOCK_GAP} mm between blocks within the 3.5 mm placement range. Use a larger sheet, landscape or another flow.`;
 }

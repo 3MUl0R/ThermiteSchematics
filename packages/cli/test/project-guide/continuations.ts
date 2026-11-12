@@ -164,7 +164,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Both flows may fold retained strips to save sheets.",
+      claim: "Each flow may fold retained strips.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
@@ -202,7 +202,7 @@ const module: FactModule = {
 
     {
       claim:
-        "Cards name omissions. Continuations print wire ID + peer `sheet.zone` at 2.5 mm; unnamed jumpers use `JUMPER` + full UID.",
+        "Cards name omissions. Continuations: intact wire ID + peer `sheet.zone`, 2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form per bank.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));

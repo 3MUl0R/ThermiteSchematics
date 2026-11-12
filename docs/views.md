@@ -264,13 +264,15 @@ Continuation metadata retains `conductor` as that printed identity and adds
 `end` (0 or 1). Existing request and packet format versions are unchanged.
 
 Every continuation row and cable usage label prints at least 2.5 mm em.
-Measured label banks reserve natural text with 3.5 mm row pitch and 1 mm clear
-ink. Complete IDs may wrap; they never clip, abbreviate, compress or shrink.
-Wrapping prefers authored hyphens, dots, slashes and spaces, including UUID group
-boundaries. Every separator and space is retained. An oversized segment splits
-only between grapheme clusters, balancing the rows to avoid one- or two-character
-orphans where a legal alternative fits. A measured longest-token bank is also
-considered; a wider bank is accepted only through the existing sheet-fit checks.
+A conductor identity is one indivisible line: separators, combining characters
+and Unicode text are retained without clipping, abbreviation, compression or
+shrinking. A bank uses one form throughout: inline (`C017 / 03.C1 / PE-SRC-M1`)
+or a header followed by the complete identity. Descriptors may occupy separate
+semantic lines. Each crossed block reserves its own natural identity width;
+uncut identities do not enlarge unrelated banks. The planner tries measured
+banks and existing legal cuts/folds before adding pages or returning R006.
+Label banks retain 3.5 mm row pitch, a 1 mm planned inter-block gap, and checks
+against fixed captions and the actual zone glyph reservations.
 Within a bank, bounded text placement preserves connector order and leaves
 conductor routes and anchors intact. Only conductors crossed by a candidate cut
 need a printable continuation identity. If no candidate grid succeeds, R006 names

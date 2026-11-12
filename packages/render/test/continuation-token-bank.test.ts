@@ -1,9 +1,10 @@
 import { expect, it, vi } from "vitest";
 import * as plans from "../src/packet/rooted-plans.js";
+import { labelMetrics } from "../src/packet/label-text.js";
 import { continuationBanks } from "../src/packet/continuation-bank.js";
 import type { PreparedSchematicDrawing } from "../src/renderer.js";
 
-it("retains the measured longest-token bank and at most four deduplicated forms", () => {
+it("reserves the full identity and keeps one uniform form in each bank", () => {
   const uid = "15400000-0000-4000-8000-000000000202";
   const prepared = {
     graph: {
@@ -37,10 +38,8 @@ it("retains the measured longest-token bank and at most four deduplicated forms"
       { x: 28, y: 47, w: 376, h: 180 },
       0.25,
     );
-    expect(banks).toHaveLength(4);
-    expect(
-      banks.some((b) => !b.single && Math.abs(b.width - 17.16) < 0.001),
-    ).toBe(true);
+    expect(banks).toHaveLength(2);
+    expect(banks.every((b) => b.width >= labelMetrics(uid).width)).toBe(true);
     expect(new Set(banks.map((b) => JSON.stringify(b))).size).toBe(
       banks.length,
     );
