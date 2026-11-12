@@ -1,3 +1,13 @@
+import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
+import { continuationTypography } from "./continuation-typography.mjs";
+import {
+  loopRouteFindings,
+  attachmentAudit,
+  strokesIncludingAttachments,
+  routePatternMeasurements,
+} from "./routing-hygiene.mjs";
+import { dependencyFindings } from "./document-dependencies.mjs";
+import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import * as checks from "./checks.mjs";
@@ -117,6 +127,13 @@ export function evaluateSheet(
     }),
   );
   out.push(
+    obs("DQ-04", markFindings(g, ir), {
+      id: `${c.id}/DQ-04/primitive-semantics-${s.number}`,
+      scope:
+        "Measured supported pressure/level operating dashes and NC slash; earth bars. Selected-standard review remains manual.",
+    }),
+  );
+  out.push(
     obs("DQ-04", [], {
       status: "manual",
       reason:
@@ -167,8 +184,28 @@ export function evaluateSheet(
           "Needs ordered physical terminal/port identities on off-page connectors to prove conductor order. Reciprocal connector anchors and destination zones are measured independently where identifiable; current exports associate labels and net IDs.",
       }),
     );
+  const typography = continuationTypography(s, g, ir);
+  out.push(
+    obs("DQ-08", typography.findings, {
+      id: `${c.id}/DQ-08/typography-${s.number}`,
+      evidence: {
+        findingCount: typography.findings.length,
+        findings: typography.findings,
+        blockGaps: typography.measurements,
+        zoneClearances: typography.zoneClearances,
+        sameSheetEnds: typography.sameSheetEnds,
+      },
+      scope:
+        "Native conductor identity is one line unit; valid same-sheet peers remain allowed. Gap threshold pending print calibration.",
+    }),
+  );
   out.push(obs("DQ-09", checks.zones(g, s.references)));
   out.push(obs("DQ-10", checks.phaseOrder(g, c.flow)));
+  out.push(
+    obs("DQ-10", polarityFindings(g, ir), {
+      id: `${c.id}/DQ-10/primitive-polarity-${s.number}`,
+    }),
+  );
   if (!c.sweep)
     out.push(
       obs("DQ-11", [], {
@@ -195,7 +232,28 @@ export function evaluateSheet(
           },
     ),
   );
-  out.push(obs("DQ-13", checks.strokesAndDots(g)));
+  out.push(obs("DQ-13", strokesIncludingAttachments(g)));
+  const attachments = attachmentAudit(g, ir);
+  out.push(
+    obs("DQ-13", attachments.findings, {
+      id: `${c.id}/DQ-13/attachment-weight-${s.number}`,
+      evidence: {
+        findingCount: attachments.findings.length,
+        findings: attachments.findings,
+        unassessed: attachments.unassessed,
+        rayCount: attachments.rayCount,
+      },
+      ...(attachments.rayCount &&
+      attachments.unassessed.length === attachments.rayCount &&
+      !attachments.findings.length
+        ? {
+            status: "not-implemented",
+            reason:
+              "No selected same-sheet incident conductor; attachment-weight policy has no comparison.",
+          }
+        : {}),
+    }),
+  );
   out.push(
     obs("DQ-14", checks.doubleLandings(g), {
       scope:
@@ -206,6 +264,12 @@ export function evaluateSheet(
     obs("DQ-15", checks.routeQuality(g), {
       scope:
         "Routed conductor geometry only; a detour is flagged for review because no routing reason log is exported.",
+    }),
+  );
+  out.push(
+    obs("DQ-15", loopRouteFindings(g, ir), {
+      id: `${c.id}/DQ-15/loop-routes-${s.number}`,
+      routeReview: routePatternMeasurements(g),
     }),
   );
   const curved = g.shapes.filter(
@@ -221,11 +285,31 @@ export function evaluateSheet(
         paths: curved.map((s) => s.element),
       }),
     );
+  const labelCoverage = conductorLabelCoverage(s, packet, g, geometries, ir);
   out.push(
-    obs("DQ-16", checks.wirePlacement(g), {
-      ...checks.wirePlacementCoverage(g),
+    obs("DQ-16", [...checks.wirePlacement(g), ...labelCoverage.findings], {
+      ...labelCoverage.extra,
       scope:
+        labelCoverage.extra.scope ??
         "Paths with conductor identity; legacy net-edge labels without a wire association need that export before proximity can be proven.",
+    }),
+  );
+  const dependencies = dependencyFindings(s, packet, g, geometries, ir);
+  out.push(
+    obs("DQ-09", dependencies.targetFindings, {
+      id: `${c.id}/DQ-09/dependency-targets-${s.number}`,
+    }),
+  );
+  out.push(
+    obs("DQ-19", dependencies.findings, {
+      id: `${c.id}/DQ-19/dependencies-${s.number}`,
+      evidence: {
+        findingCount: dependencies.findings.length,
+        findings: dependencies.findings,
+        measurement: dependencies.measurement,
+      },
+      scope:
+        "Visible printed promises, native scoped dependency facts, and actual issued visible rows; document kind alone proves nothing.",
     }),
   );
   out.push(obs("DQ-17", checks.terminalText(g)));

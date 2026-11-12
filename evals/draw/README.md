@@ -131,6 +131,53 @@ never by a regex over all text. SVG/HTML geometry and PDF extraction/parity reta
 the same media obligations. Historical replay uses the new checker against the
 old engine before measuring the projection change. No defect pins are learned.
 
+Version 5.6 adds the drawing-review E1 measurements in dedicated modules:
+
+- DQ-10 measures native DC polarity primitive orientation, its nearest owned port
+  and lead-ink overlap. Adjacency also requires the mark centre within half the
+  measured positive/return port separation. Missing or foreign native port owners
+  are explicit findings; their loss cannot remove a visible glyph from the population.
+  The bounded radius prevents a distant mark from passing
+  solely because its own port is still nearest. DQ-04 separately measures upright earth bars, disjoint
+  pressure/level operating-link ink after collinear union, and a closed-state
+  slash crossing both contact bars. Native roles/state/profile select obligations;
+  renderer orientation flags do not prove geometry. Standard selection remains manual.
+- DQ-15 includes electrical signal-loop routes with the existing 3 mm numerical
+  tolerance and detour limit. Terminal-end exports recover a stripped loop marker;
+  unresolved/forged native ownership fails. Assembly bars stay excluded.
+- DQ-13 counts terminal attachment paths, including tag-lane extensions, in dot
+  incidence and compares their weight to actual incident native conductors with
+  the existing 0.01 mm stroke tolerance. Rays with no selected incident conductor
+  are explicitly unassessed. This adopts no global symbol-weight convention.
+- DQ-08 requires one intact native conductor identity line, allowing adjacent font
+  fragments. Reciprocal same-sheet folds remain valid. Actual inter-block and
+  zone-ink gaps are recorded as **measured, threshold pending**; 3.5 mm has not
+  been adopted. No alignment or extra-bend aesthetic failure is invented without
+  a proven feasible alternative.
+- DQ-19 reconciles visible concrete pointer notes, source-derived dependency
+  facts, and actual issued painted rows and columns. Wrong-device, filtered,
+  missing, hidden and forged rows fail. DQ-09 separately reports missing exact
+  issued target locations. Legacy notes bootstrap their typed native scopes;
+  document kind/title, JSON coverage and hyperlinks alone cannot satisfy them.
+  Generic honest partial-view wording creates no companion promise. New inventory
+  locators, when supplied, must agree with native scope and source snapshot.
+- DQ-16 measures formerly label-free sheet fragments against a verified visible
+  native conductor identity on their continuation or another fragment of the
+  **same logical view**. A continuation must have a native source, visible owned
+  rows, a reciprocal peer, and a measured anchor at its own route endpoint.
+  Missing/foreign/cross-view names fail. Unowned legacy labels retain an explicit
+  measurement gap.
+
+Browser exports are additive: primitive ownership, port IDs, exact route vertices
+and transforms, and actual visible stroke intervals at 0.025 mm resolution. A
+0.05 mm ink-interval uncertainty is used only for dash union; orientation uses
+0.01 mm numerical axis tolerance. Native stroke hit tests, clipping, alpha and
+later opaque fills establish painted ink. The new primitive measurements concern
+SVG geometry; existing HTML/PDF label parity continues independently, and these
+predicates do not certify PDF primitive visibility. DQ-07 mirrors and M5 repeats
+remain unimplemented until E2's issued-navigation work. No expectations or re-pin
+records change with this version.
+
 ## Prerequisites and costs
 
 Bun 1.4.2 and R2's existing development dependencies are used:

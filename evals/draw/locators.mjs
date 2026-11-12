@@ -132,7 +132,8 @@ export function svgLocators(svg, ir, view, tables = []) {
           attr(e, "data-wire-uid") ??
           attr(e, "data-jumper-uid") ??
           attr(e, "data-circuit-conductor") ??
-          attr(e, "data-wiring-conductor");
+          attr(e, "data-wiring-conductor") ??
+          attr(e, "data-loop-conductor");
       if (uid) {
         const terminal =
             attr(e, "data-terminal-key") ?? attr(e, "data-terminal-id"),

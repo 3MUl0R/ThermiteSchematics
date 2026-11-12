@@ -237,6 +237,7 @@ export function measureSheet(options = {}) {
     terminal: attr(e, "data-terminal-key"),
     row: attr(e, "data-report-row"),
     reportNote: e.getAttribute("data-report-note"),
+    textContainer: ids.get(e.parentElement),
     authoredText: e.getAttribute("data-authored-text"),
     functionKey: attr(e, "data-function-key"),
     communicationPort: attr(e, "data-communication-port"),
@@ -245,8 +246,40 @@ export function measureSheet(options = {}) {
       attr(e, "data-wire-label") ??
       attr(e, "data-wire-uid") ??
       attr(e, "data-circuit-conductor") ??
-      attr(e, "data-wiring-conductor"),
+      attr(e, "data-wiring-conductor") ??
+      attr(e, "data-loop-conductor"),
     net: attr(e, "data-net-id"),
+    symbolGroup: ids.get(
+      e.closest("[data-symbol-id],[data-function-key],[data-aggregate-key]"),
+    ),
+    markGroup: ids.get(e.closest("[data-circuit-mark],[data-function-id]")),
+    symbolPortId: e.getAttribute("data-symbol-port-id"),
+    qualifier: e.getAttribute("data-symbol-qualifier"),
+    polarity: e.getAttribute("data-polarity"),
+    primitiveRole: e.getAttribute("data-circuit-role"),
+    attachment: attr(e, "data-terminal-attachment"),
+    attachmentCandidate: !!e.closest(
+      "[data-attachment-from],[data-attachment-to]",
+    ),
+    layoutPort: attr(e, "data-layout-port"),
+    outsideConnections: attr(e, "data-outside-connections"),
+    loopConductor: attr(e, "data-loop-conductor"),
+    loopCandidate: !!e.closest("[data-terminal-ends][data-net-id]"),
+    terminalEnds: (() => {
+      try {
+        return JSON.parse(attr(e, "data-terminal-ends") ?? "null");
+      } catch {
+        return null;
+      }
+    })(),
+    dependencyId: attr(e, "data-document-dependency"),
+    circuitFunctions: (() => {
+      try {
+        return JSON.parse(attr(e, "data-circuit-functions") ?? "[]");
+      } catch {
+        return [];
+      }
+    })(),
   });
   function terminalDescriptionOwner(e, uid) {
     if (!uid || !e.matches("text")) return undefined;
@@ -1405,6 +1438,83 @@ export function measureSheet(options = {}) {
       t.tagVisibilityError = error.message;
     }
   }
+  for (const t of texts) {
+    const e = elementsById.get(t.element),
+      paint = fillPaint(e);
+    t.reviewPainted =
+      t.painted !== false &&
+      paint.alpha >= 0.2 &&
+      !paint.background &&
+      occlusion(t) <= 0.5;
+    try {
+      const clips = shapeClips(e);
+      t.reviewPainted &&=
+        clips !== null &&
+        [t.viewport, ...(clips ?? [])].every(
+          (b) =>
+            !b ||
+            (t.bbox.x >= b.x - 0.001 &&
+              t.bbox.y >= b.y - 0.001 &&
+              t.bbox.x + t.bbox.w <= b.x + b.w + 0.001 &&
+              t.bbox.y + t.bbox.h <= b.y + b.h + 0.001),
+        );
+    } catch {
+      t.reviewPainted = false;
+    }
+  }
+  // Native stroke hit tests recover actual dash intervals, including overlapping
+  // collinear paths. Sampling resolution is 0.025 mm; comparisons allow 0.05 mm.
+  const strokeInk = (e, clip, matrix) => {
+    if (typeof e.getTotalLength !== "function") return [];
+    const css = getComputedStyle(e),
+      rgba = colour(css.stroke);
+    let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+    for (let node = e; node; node = node.parentElement)
+      alpha *= Number(getComputedStyle(node).opacity);
+    if (alpha < 0.2 || rgba?.slice(0, 3).every((c) => c === 255)) return [];
+    const length = e.getTotalLength(),
+      scale = Math.max(
+        Math.hypot(matrix.a * sx, matrix.b * sy),
+        Math.hypot(matrix.c * sx, matrix.d * sy),
+      );
+    const count = Math.min(
+      20000,
+      Math.max(1, Math.ceil((length * scale) / 0.025)),
+    );
+    let clips;
+    try {
+      clips = shapeClips(e);
+    } catch {
+      return [];
+    }
+    if (clips === null) return [];
+    const intervals = [];
+    let start, previous;
+    const covers = occluders.filter((o) => o.order > all.indexOf(e));
+    for (let i = 0; i <= count; i++) {
+      const local = e.getPointAtLength((length * i) / count),
+        q = local.matrixTransform(matrix),
+        p = point(q.x, q.y);
+      const painted =
+        e.isPointInStroke(local) &&
+        [clip, ...clips].every((b) => contains(b, p)) &&
+        !covers.some(
+          (o) =>
+            contains(o.bbox, p) &&
+            o.clips.every((b) => contains(b, p)) &&
+            o.e.isPointInFill(
+              new DOMPoint(q.x, q.y).matrixTransform(o.inverse),
+            ),
+        );
+      if (painted && !start) start = p;
+      if ((!painted || i === count) && start) {
+        intervals.push([start, painted ? p : previous]);
+        start = undefined;
+      }
+      previous = p;
+    }
+    return intervals;
+  };
   const deviceReferences = texts
     .filter((t) => t.tagTerminalDeclared && t.painted)
     .map((t) => ({
@@ -1471,6 +1581,12 @@ export function measureSheet(options = {}) {
     if (
       !conductor &&
       !lead &&
+      !id.primitiveRole &&
+      !id.qualifier &&
+      !id.attachment &&
+      !id.attachmentCandidate &&
+      !id.loopConductor &&
+      !id.loopCandidate &&
       !outline &&
       !symbol &&
       !mark &&
@@ -1496,7 +1612,7 @@ export function measureSheet(options = {}) {
       });
     }
     let utilisationGeometry = {};
-    if (conductor || symbol || mark) {
+    if (conductor || symbol || mark || id.loopConductor || id.loopCandidate) {
       try {
         const clips = shapeClips(e);
         utilisationGeometry = {
@@ -1538,6 +1654,7 @@ export function measureSheet(options = {}) {
     return [
       {
         ...id,
+        shapeTag: e.tagName.toLowerCase(),
         bbox: v.b,
         symbol,
         viewport: v.clip,
@@ -1550,17 +1667,33 @@ export function measureSheet(options = {}) {
         fill: css.fill,
         dash: css.strokeDasharray,
         points,
-        routePath: conductor ? e.getAttribute("d") : undefined,
-        routeMatrix: conductor
-          ? [
-              m.a * sx,
-              m.b * sy,
-              m.c * sx,
-              m.d * sy,
-              (m.e - rr.x) * sx,
-              (m.f - rr.y) * sy,
-            ]
-          : undefined,
+        inkSegments:
+          symbol || mark || id.attachment || id.attachmentCandidate
+            ? strokeInk(e, v.clip, m)
+            : undefined,
+        routePath:
+          conductor ||
+          id.loopConductor ||
+          id.loopCandidate ||
+          id.attachment ||
+          id.attachmentCandidate
+            ? e.getAttribute("d")
+            : undefined,
+        routeMatrix:
+          conductor ||
+          id.loopConductor ||
+          id.loopCandidate ||
+          id.attachment ||
+          id.attachmentCandidate
+            ? [
+                m.a * sx,
+                m.b * sy,
+                m.c * sx,
+                m.d * sy,
+                (m.e - rr.x) * sx,
+                (m.f - rr.y) * sy,
+              ]
+            : undefined,
         endpoints,
         edgeOwnerKey,
         potentialName: attr(e, "data-potential-name"),
