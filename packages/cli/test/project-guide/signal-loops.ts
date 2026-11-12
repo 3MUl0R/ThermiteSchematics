@@ -1,3 +1,4 @@
+import { assertAttachmentWeights } from "../../../render/test/attachment-weight-fixture.js";
 // Field-device hookup pages. Every case draws a signal-loop packet view of the
 // visible signal-loop fixture (PT1 -> cordset CB1 -> bulkhead XP1 -> feed-through
 // XT1 -> AI1 ch0) or the analog-output fixture (AQ1 ch3 -> XT1 -> XP1 -> V1
@@ -379,8 +380,7 @@ const module: FactModule = {
       },
     },
     {
-      claim:
-        "The opt-in `field-interfaces` library offers proposed M12 profiles.",
+      claim: "Opt-in `field-interfaces` offers proposed M12 profiles.",
       async check() {
         for (const template of ["starter", "cabinets"] as const) {
           const project = ctx.pristine[template];
@@ -557,7 +557,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Numbered symbols are not connector face views; sensor/cordset pin assignments remain subject to part review.",
+        "Symbols are not connector face views; verify sensor/cordset pins for the part.",
       async check() {
         const [{ validation }, d] = await Promise.all([loop(), shared.plain()]);
         expect(d.visible).toContain(
@@ -954,6 +954,13 @@ const module: FactModule = {
         for (const note of request.views[0].notes)
           expect(d.visible).toContain(note);
         expect(d.visible).toContain("feed TBD");
+      },
+    },
+    {
+      claim: "Attachment/tag-lane rays: incident ink; unselected: 0.35 mm.",
+      async check() {
+        for (const flow of ["left-to-right", "top-to-bottom"] as const)
+          await assertAttachmentWeights(flow);
       },
     },
   ],

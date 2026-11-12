@@ -1,3 +1,4 @@
+import { UNSELECTED_ATTACHMENT_STROKE_MM } from "./attachment-stroke.js";
 import { symbolProfile } from "./profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 import { symbolFunctionStateMismatch } from "@thermite/compiler";
@@ -460,13 +461,21 @@ export function circuitAttachmentPoints(
   return points;
 }
 export function circuitAttachment(
-  ...args: Parameters<typeof circuitAttachmentPoints>
+  ...args: [...Parameters<typeof circuitAttachmentPoints>, strokeWidth?: number]
 ): string {
-  const points = circuitAttachmentPoints(...args);
+  const [
+    from,
+    to,
+    side,
+    width,
+    height,
+    stroke = UNSELECTED_ATTACHMENT_STROKE_MM,
+  ] = args;
+  const points = circuitAttachmentPoints(from, to, side, width, height);
   const path = points
     .map((p, i) => `${i ? "L" : "M"} ${n(p[0])} ${n(p[1])}`)
     .join(" ");
-  return `<path d="${path}" fill="none" stroke="white" stroke-width=".8"/><path d="${path}" fill="none" stroke="#17212b" stroke-width=".35"/>`;
+  return `<path d="${path}" fill="none" stroke="white" stroke-width=".8"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${n(stroke)}"/>`;
 }
 
 /** A shared magnetic core is a presentation association, never a conductor. */

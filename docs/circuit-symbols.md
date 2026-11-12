@@ -25,6 +25,14 @@ behavior. Circuit drawings honor compatible explicit marks before profile
 defaults. Rooted power views also honor the supported contact marks on fuse and
 breaker profiles, as described below; other profiles keep their existing rules.
 
+Terminal attachment and tag-lane rays match their selected incident conductor: 0.32 mm
+for wires and cable cores, 0.55 mm for jumper-only incidence. A shared ray uses
+the lightest incident weight. Incidence follows the routed visual port: an
+unused face of a terminal drawn on two sides remains unselected. With no
+selected incident conductor, the ray
+retains the established 0.35 mm symbol weight. This does not change symbol-body
+or conductor weights.
+
 The compiler checks each explicit mark against these function shapes:
 
 | Mark | Function kind | Terminal count | Additional requirement |

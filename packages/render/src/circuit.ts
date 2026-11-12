@@ -1,3 +1,8 @@
+import { circuitTerminalAttachments } from "./symbols/circuit-attachments.js";
+import {
+  attachmentStrokeWeights,
+  terminalAttachmentStroke,
+} from "./symbols/attachment-stroke.js";
 import {
   routePortAttributes,
   terminalPortAttribute,
@@ -59,8 +64,6 @@ import {
 } from "./symbols/printable-policy.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import {
-  circuitAttachment,
-  circuitAttachmentPoints,
   circuitMarkSegments,
   circuitTransformerCore,
   circuitInterfaceMark,
@@ -1002,9 +1005,10 @@ function emitNode(
   conductors: PhysicalConductor[],
   diagnostics: Diagnostic[],
   omitDesignation = false,
+  attachmentWeights?: ReadonlyMap<string, number>,
 ): string {
   if (node.tagLane) {
-    const { body, plan, geometry: g } = node.tagLane; // Shared stubs use the heaviest incident conductor weight.
+    const { body, plan, geometry: g } = node.tagLane;
     const stems = body.pins
       .map((p, i) => {
         const end = node.pins[i]!;
@@ -1012,10 +1016,10 @@ function emitNode(
           sy = p.y + g.bodyY;
         return sx === end.x && sy === end.y
           ? ""
-          : `<g ${terminalPortAttribute(end.id)} data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#17212b" stroke-width="${conductors.some((c) => c.jumper && c.ends.some((t) => key(t) === key(p.terminal))) ? 0.55 : 0.32}"/></g>`;
+          : `<g ${terminalPortAttribute(end.id)} data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#17212b" stroke-width="${terminalAttachmentStroke(p.id, attachmentWeights)}"/></g>`;
       })
       .join("");
-    return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true)}${stems}</g>`;
+    return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights)}${stems}</g>`;
   }
   const out = [
     `<g${omitDesignation ? circuitNodeAttributes(node).replace(/ data-device-uid="[^"]*"/u, "") : circuitNodeAttributes(node)} transform="translate(${n(x)} ${n(y)})"><title>${xml([node.device.description, node.type.catalog?.orderNumber, node.type.description].filter(Boolean).join(" | "))}</title>`,
@@ -1374,30 +1378,18 @@ function emitNode(
             "middle",
           ),
         );
-      if (!oneSidedFunction(f, mark) || f.kind === "bus") {
-        for (const [i, terminal] of [
-          f.terminals[0]!,
-          ...(mark === "earth" ? [] : [f.terminals.at(-1)!]),
-        ].entries()) {
-          const side = vertical
-            ? i === 0
-              ? "NORTH"
-              : "SOUTH"
-            : i === 0
-              ? "WEST"
-              : "EAST";
-          const pin =
-            node.pins.find(
-              (p) => key(p.terminal) === key(terminal) && p.side === side,
-            ) ?? node.pins.find((p) => key(p.terminal) === key(terminal))!;
-          const target = vertical
-            ? { x: cx, y: cy + (i === 0 ? -4 : 4) }
-            : { x: cx + (i === 0 ? -4 : 4), y: cy };
-          out.push(
-            `<g data-terminal-attachment="${attr(key(terminal))}" data-attachment-from="${attr(JSON.stringify({ x: pin.x, y: pin.y }))}" data-attachment-to="${attr(JSON.stringify(target))}">${circuitAttachment(pin, target, side, node.width, node.height)}</g>`,
-          );
-        }
-      }
+      if (!oneSidedFunction(f, mark) || f.kind === "bus")
+        out.push(
+          circuitTerminalAttachments(
+            node,
+            f.terminals,
+            mark === "earth",
+            vertical,
+            cx,
+            cy,
+            attachmentWeights,
+          ),
+        );
     }
     out.push("</g>");
   }
@@ -1464,21 +1456,13 @@ async function layoutGroupUnchecked(
   ir: Readonly<ElectricalIr>,
   group: CircuitGroupRequest,
   fs: IrFunction[],
-  conductors: PhysicalConductor[],
+  cs: PhysicalConductor[],
   all: PhysicalConductor[],
   vertical: boolean,
   appearances: Map<string, string[]>,
   distributed: boolean,
 ): Promise<CircuitDrawing> {
-  const nodes = makeNodes(
-      ir,
-      fs,
-      conductors,
-      all,
-      vertical,
-      appearances,
-      distributed,
-    ),
+  const nodes = makeNodes(ir, fs, cs, all, vertical, appearances, distributed),
     pins = new Map<string, { node: DeviceNode; pins: Pin[] }>();
   for (const node of nodes)
     for (const pin of node.pins) {
@@ -1501,7 +1485,7 @@ async function layoutGroupUnchecked(
     })),
   }));
   const selfLoops = new Set<number>();
-  const edges: ElkExtendedEdge[] = conductors.map((c, i) => {
+  const edges: ElkExtendedEdge[] = cs.map((c, i) => {
     const lines = conductorLabelLines(c);
     let a = pins.get(key(c.ends[0]!))!,
       b = pins.get(key(c.ends[1]!))!;
@@ -1592,11 +1576,11 @@ async function layoutGroupUnchecked(
       text: string;
     }[] = [];
   const wireSvg: string[] = [];
-  if (graph.edges?.length !== conductors.length)
+  if (graph.edges?.length !== cs.length)
     throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
   for (const e of graph.edges ?? []) {
     const index = Number(e.id.slice(1)),
-      c = conductors[index];
+      c = cs[index];
     if (!c || e.sections?.length !== 1)
       throw new Error(`Circuit ${group.id}: incomplete physical route.`);
     const section = e.sections[0]!,
@@ -1682,9 +1666,7 @@ async function layoutGroupUnchecked(
     p.y <= Math.max(a.y, b.y) + 1e-7 &&
     (a.x === b.x ? Math.abs(p.x - a.x) < 1e-7 : Math.abs(p.y - a.y) < 1e-7);
   const common = (a: number, b: number) =>
-    conductors[a]!.ends.some((t) =>
-      conductors[b]!.ends.some((u) => key(t) === key(u)),
-    );
+    cs[a]!.ends.some((t) => cs[b]!.ends.some((u) => key(t) === key(u)));
   for (let i = 0; i < segments.length; i++)
     for (const s of segments.slice(i + 1)) {
       const t = segments[i]!;
@@ -1703,7 +1685,7 @@ async function layoutGroupUnchecked(
         1e-7;
       if ((v && overlap("y")) || (h && overlap("x")))
         throw new Error(
-          `Circuit ${group.id}: unrelated conductors ${conductors[t.index]!.name} (${conductors[t.index]!.id}) and ${conductors[s.index]!.name} (${conductors[s.index]!.id}) overlap.`,
+          `Circuit ${group.id}: unrelated conductors ${cs[t.index]!.name} (${cs[t.index]!.id}) and ${cs[s.index]!.name} (${cs[s.index]!.id}) overlap.`,
         );
     }
   const dots = new Map<string, Point>();
@@ -1830,6 +1812,7 @@ async function layoutGroupUnchecked(
         `Circuit ${group.id}: a wire label overlaps other drawing content.`,
       );
   }
+  const weights = attachmentStrokeWeights(graph.edges ?? [], cs);
   const diagnostics: Diagnostic[] = [];
   const contents = [
     ...wireSvg,
@@ -1839,7 +1822,7 @@ async function layoutGroupUnchecked(
     ),
     ...labels.map(
       (l) =>
-        `<g data-wire-label="${attr(conductors[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
+        `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
           .split("\n")
           .map((line, i) => {
             const p = printableLabelGeometry(
@@ -1858,7 +1841,7 @@ async function layoutGroupUnchecked(
     ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
-      return emitNode(d, l.x!, l.y!, vertical, conductors, diagnostics);
+      return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
     }),
   ].join("");
   return {
@@ -1881,7 +1864,7 @@ async function layoutGroupUnchecked(
       };
     }),
     coverage: {
-      conductorIds: conductors.map((c) => c.id),
+      conductorIds: cs.map((c) => c.id),
       functionIds: fs.map(fkey).sort(compare),
       terminalIds: [...pins.keys()].sort(compare),
       boundaryTerminalIds: nodes

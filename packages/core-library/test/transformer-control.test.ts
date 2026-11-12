@@ -70,7 +70,16 @@ it.each(transformerFlows)(
       view.groups[0]!.content,
     );
     expect(view.groups[0]!.content).toContain('data-layout-source-port="');
+    // Catalog attachment ink follows selected ports now; retain the original
+    // reviewed geometry hash while independently requiring incident wire ink.
+    expect(reviewedContent).toMatch(
+      /data-terminal-attachment=[^>]+><path [^>]+stroke="white"[^>]*\/><path [^>]+stroke="#17212b" stroke-width="0.32"/u,
+    );
     const originalOutlineInk = reviewedContent
+      .replace(
+        /(<g data-terminal-attachment="[^"]*" data-attachment-from="[^"]*" data-attachment-to="[^"]*"><path [^>]+stroke="white"[^>]*\/><path [^>]+stroke="#17212b" stroke-width=")[^"]+(?=")/gu,
+        "$1.35",
+      )
       .replace(
         /(<rect class="circuit-device-frame"[^>]*?)stroke="#667085" stroke-width="0.25"/gu,
         '$1stroke="#17212b" stroke-width="0.4"',

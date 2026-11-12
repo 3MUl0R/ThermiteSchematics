@@ -391,4 +391,8 @@ supply circuit. Their labels say `feed TBD`; selected auxiliary functions also
 appear in device references. Intermediate schematic contacts may be ordered to
 match the actuator connector and reduce crossings. Actual terminal identities
 and net IDs are preserved; the drawing is not a physical terminal-strip layout.
-ELK still owns all device placement and orthogonal routing.
+ELK still owns all device placement and orthogonal routing. Top-to-bottom
+output loops use 3 mm edge spacing within the fixed 14 mm terminal lanes,
+leaving room for wire labels without forcing short sideways jogs. Terminal
+identities, port positions within each device and the authored connector order
+are preserved.
