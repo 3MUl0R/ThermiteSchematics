@@ -69,10 +69,11 @@ it.skipIf(!browserPath)(
             ),
           };
         });
-        // The frozen fixture has 50 body labels plus two location headings.
+        // The fixture has 48 body labels plus two location headings; #217
+        // removes only the redundant L1/PE net ink beside their terminal captions.
         // Each folded strip repeats the source; #163 may omit hidden headings.
         expect(labels.labels.filter((l) => !l.location)).toHaveLength(
-          50 * labels.sections,
+          48 * labels.sections,
         );
         for (const [index, b] of labels.labels.entries()) {
           // Full continuous geometry is repeated behind the sheet's fold viewport.
@@ -116,7 +117,7 @@ it.skipIf(!browserPath)(
           expect(gap, b.text).toBeGreaterThanOrEqual(1);
         }
       }
-      expect(visibleBody).toBe(50);
+      expect(visibleBody).toBe(48);
     } finally {
       await page.close();
       await browser.close();
