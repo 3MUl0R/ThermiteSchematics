@@ -53,3 +53,8 @@ This optional object belongs under the relation's `connection`. Length is in met
 and the network schedule. It does not create eight electrical wire cores, assert
 shield bonding, certify route suitability or add an electrical cable to the
 wire/core inventory. The communication schedule is the Ethernet cable inventory.
+
+Terminal circles and captions use the returned ELK port positions. The wiring
+placer may quantize a fractional fixed port after reserving tag ink; the route
+and its terminal must share that final anchor. Routes are never snapped after
+layout to repair a landing.

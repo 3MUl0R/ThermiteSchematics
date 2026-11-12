@@ -1,3 +1,7 @@
+import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
 import { circuitRoutePitch } from "./symbols/circuit-route-pitch.js";
 import { circuitConductorFunctions } from "./symbols/circuit-pagination-functions.js";
 import { deviceTagFitDetails } from "./packet/device-tag-fit.js";
@@ -1008,7 +1012,7 @@ function emitNode(
           sy = p.y + g.bodyY;
         return sx === end.x && sy === end.y
           ? ""
-          : `<g data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#344054" stroke-width="0.3"/></g>`;
+          : `<g ${terminalPortAttribute(end.id)} data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#17212b" stroke-width="${conductors.some((c) => c.jumper && c.ends.some((t) => key(t) === key(p.terminal))) ? 0.55 : 0.32}"/></g>`;
       })
       .join("");
     return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true)}${stems}</g>`;
@@ -1407,7 +1411,7 @@ function emitNode(
       c.ends.some((t) => key(t) === key(p.terminal)),
     );
     out.push(
-      `<g data-terminal-id="${attr(key(p.terminal))}" data-terminal-key="${attr(p.terminal.terminalKey)}"${p.outside ? ` data-outside-connections="${p.outside}"` : ""}>`,
+      `<g ${terminalPortAttribute(p.id)} data-terminal-id="${attr(key(p.terminal))}" data-terminal-key="${attr(p.terminal.terminalKey)}"${p.outside ? ` data-outside-connections="${p.outside}"` : ""}>`,
       circuitTerminal(p.x, p.y, connected),
     );
     const label = pinLabel(p);
@@ -1653,7 +1657,7 @@ async function layoutGroupUnchecked(
       .map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`)
       .join(" ");
     wireSvg.push(
-      `<g data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${path}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
+      `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${path}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
     );
     for (const l of e.labels ?? []) {
       if (![l.x, l.y, l.width, l.height].every(Number.isFinite))

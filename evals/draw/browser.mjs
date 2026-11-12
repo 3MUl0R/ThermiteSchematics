@@ -349,6 +349,7 @@ export function measureSheet(options = {}) {
               deviceUid: uid,
               terminal,
               terminalAppearance: ids.get(group),
+              anchorElement: ids.get(marker),
             },
       );
     }
@@ -403,6 +404,138 @@ export function measureSheet(options = {}) {
             .slice(0, 1)
             .map((owner) => ({ ...owner, landingEnd: "unknown" }))
         : [];
+    });
+  }
+  // Ordered layout-port keys name the drawn anchor, including a deliberate
+  // attachment extension. Resolve in this nested drawing, never by distance.
+  function ownedLandings(e, endpoints, clip) {
+    const inClip = (p) =>
+      p.x >= clip.x - 0.001 &&
+      p.y >= clip.y - 0.001 &&
+      p.x <= clip.x + clip.w + 0.001 &&
+      p.y <= clip.y + clip.h + 0.001;
+    const scope = e.closest("svg");
+    return ["source", "target"].flatMap((end, index) => {
+      const local = e.getPointAtLength(index ? e.getTotalLength() : 0),
+        p = local.matrixTransform(e.getScreenCTM()),
+        endpoint = point(p.x, p.y);
+      if (!inClip(endpoint)) return [];
+      let candidates = [],
+        reason;
+      const layoutPort = attr(e, `data-layout-${end}-port`),
+        semanticPort = attr(e, `data-route-${end}-port-key`);
+      if (layoutPort) {
+        candidates = all.filter(
+          (a) =>
+            a.closest("svg") === scope &&
+            a.getAttribute("data-layout-port") === layoutPort,
+        );
+        const stems = candidates.filter((a) =>
+          a.hasAttribute("data-terminal-attachment"),
+        );
+        candidates = stems.length ? stems : candidates;
+      } else if (semanticPort) {
+        try {
+          const port = ownerKey(semanticPort, "port"),
+            node = JSON.parse(port[1]);
+          if (port[0] !== "port") throw Error("Invalid route port");
+          if (node[0] === "junction")
+            candidates = all.filter(
+              (a) =>
+                a.closest("svg") === scope &&
+                a.classList.contains("junction-dot") &&
+                ownerKey(
+                  a.id.replace(/^.*?(junction-)/, "$1"),
+                  "junction",
+                )[0] === port[1],
+            );
+          else {
+            const owner = terminalCaptionOwners.get(
+              JSON.stringify([ids.get(scope), port[1], port[2]]),
+            );
+            if (owner?.anchorElement)
+              candidates = [elementsById.get(owner.anchorElement)];
+          }
+        } catch {
+          reason = "invalid-route-port-owner";
+        }
+      } else if (attr(e, "data-wiring-conductor")) {
+        const ep = endpoints[index];
+        candidates = all.filter(
+          (a) =>
+            a.closest("svg") === scope &&
+            a.matches("circle[data-terminal-key]") &&
+            attr(a, "data-device-uid") === ep?.deviceUid &&
+            a.getAttribute("data-terminal-key") === ep?.terminalKey,
+        );
+      } else reason = "missing-route-port-owner";
+      const anchorElement = candidates.length === 1 ? candidates[0] : undefined;
+      let anchor,
+        terminal = anchorElement && attr(anchorElement, "data-terminal-key"),
+        deviceUid = anchorElement && attr(anchorElement, "data-device-uid");
+      if (anchorElement) {
+        const stem = anchorElement.getAttribute("data-attachment-to"),
+          marker = anchorElement.matches("circle,rect")
+            ? anchorElement
+            : anchorElement.querySelector("circle,rect");
+        let localAnchor;
+        if (stem) {
+          const path = anchorElement.querySelector("path");
+          if (path) localAnchor = path.getPointAtLength(path.getTotalLength());
+        } else if (marker) {
+          const b = marker.getBBox();
+          localAnchor = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+        }
+        if (localAnchor) {
+          const q = new DOMPoint(localAnchor.x, localAnchor.y).matrixTransform(
+            (stem
+              ? anchorElement.querySelector("path")
+              : marker
+            ).getScreenCTM(),
+          );
+          anchor = point(q.x, q.y);
+        }
+        for (const name of [
+          "data-terminal-id",
+          "data-loop-terminal",
+          "data-terminal-attachment",
+        ])
+          if (attr(anchorElement, name)) {
+            try {
+              [deviceUid, terminal] = JSON.parse(attr(anchorElement, name));
+            } catch {}
+          }
+        terminal ??=
+          attr(anchorElement, "data-communication-port") ??
+          attr(anchorElement, "data-connector-port");
+      }
+      if (
+        anchor &&
+        endpoints.some((p) => p.deviceUid && p.terminalKey) &&
+        !endpoints.some(
+          (p) => p.deviceUid === deviceUid && p.terminalKey === terminal,
+        )
+      ) {
+        reason = "owned-terminal-mismatch";
+        anchor = undefined;
+      }
+      return [
+        {
+          end,
+          endpoint,
+          anchor,
+          deviceUid,
+          terminal,
+          anchorElement: ids.get(anchorElement),
+          appearanceScope: ids.get(scope),
+          reason: anchor
+            ? undefined
+            : (reason ??
+              (candidates.length > 1
+                ? "ambiguous-owned-anchor"
+                : "missing-owned-anchor")),
+        },
+      ];
     });
   }
   // Empty net captions keep their semantic clip/reservation. Audit that declared
@@ -1379,11 +1512,29 @@ export function measureSheet(options = {}) {
         edgeOwnerKey,
         potentialName: attr(e, "data-potential-name"),
         landingOwners: conductor ? landingOwners(e, endpoints) : undefined,
+        ownedLandings: conductor
+          ? ownedLandings(e, endpoints, v.clip)
+          : undefined,
         cls:
           cls + (e.hasAttribute("data-wiring-junction") ? " junction-dot" : ""),
       },
     ];
   });
+  const relationLandings = all
+    .filter(
+      (e) =>
+        e.matches("path") &&
+        e.closest(
+          "[data-loop-conductor],[data-communication-link],[data-connector-assembly],[data-cable-assembly][data-layout-source-port]",
+        ) &&
+        getComputedStyle(e).stroke !== "rgb(255, 255, 255)",
+    )
+    .flatMap((e) => {
+      const v = visible(e);
+      return v
+        ? [{ ...identity(e), ownedLandings: ownedLandings(e, [], v.clip) }]
+        : [];
+    });
   const devices = Array.from(root.querySelectorAll("[data-device-uid]"))
     .filter(
       (e) =>
@@ -1415,6 +1566,7 @@ export function measureSheet(options = {}) {
     headerRule,
     connectors,
     terminals,
+    relationLandings,
     shapes,
     ...(utilisationErrors.length ? { utilisationErrors } : {}),
     devices,

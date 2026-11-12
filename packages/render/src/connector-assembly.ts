@@ -1,4 +1,8 @@
 import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
+import {
   drawingDeviceTag,
   deviceHeaderSvg,
   deviceHeaderHeight,
@@ -435,7 +439,7 @@ async function layoutAssemblyDrawing(
       segments.push({ a, b, edge: index });
     }
     out.push(
-      `<g data-connector-assembly="${attr(r.uid)}" data-assembly-designation="${attr(r.designation ?? r.uid)}" data-assembly-endpoints="${attr(JSON.stringify(endpoints))}" data-pin-mapping="${r.assembly.pinMapping.status}"><title>${xml(r.assembly.pinMapping.reason)}</title><path d="${points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="white" stroke-width="1.8"/><path d="${points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#4f5964" stroke-width="0.65"${r.assembly.kind === "cap" ? ' stroke-dasharray="1.5 1"' : ""}/></g>`,
+      `<g ${routePortAttributes(edge)} data-connector-assembly="${attr(r.uid)}" data-assembly-designation="${attr(r.designation ?? r.uid)}" data-assembly-endpoints="${attr(JSON.stringify(endpoints))}" data-pin-mapping="${r.assembly.pinMapping.status}"><title>${xml(r.assembly.pinMapping.reason)}</title><path d="${points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="white" stroke-width="1.8"/><path d="${points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#4f5964" stroke-width="0.65"${r.assembly.kind === "cap" ? ' stroke-dasharray="1.5 1"' : ""}/></g>`,
     );
     for (const label of edge.labels ?? []) {
       if (![label.x, label.y, label.width, label.height].every(Number.isFinite))
@@ -489,7 +493,7 @@ async function layoutAssemblyDrawing(
     out.push(
       `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#fafafa" stroke="#344054" stroke-width=".35"/>${deviceHeaderSvg(tags.get(uid), captions.get(uid)!)}`,
     );
-    out.push(...assemblyPortSvg(node, rows.get(uid)!));
+    out.push(...assemblyPortSvg(node, rows.get(uid)!, portIds, uid));
     out.push("</g>");
     references.push({
       deviceUid: uid,
@@ -693,12 +697,14 @@ function assemblyPortSvg(
     status: string;
     lines: string[];
   }[],
+  portIds: ReadonlyMap<string, string>,
+  deviceUid: string,
 ) {
   const result: string[] = [];
   for (const p of ports) {
     const x = p.side === "WEST" ? 0 : node.width!;
     result.push(
-      `<g data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text(3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
+      `<g ${terminalPortAttribute(portIds.get(JSON.stringify([deviceUid, p.key]))!)} data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text(3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
     );
   }
   return result;

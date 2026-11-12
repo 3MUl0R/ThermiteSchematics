@@ -143,7 +143,7 @@ Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
 Both flows may fold retained strips to save sheets.
-One caption per terminal appearance, nearest its body; keep all landings and split captions.
+One caption per terminal appearance, nearest its body; keep exact landings and split captions.
 Omit net ink only when its anchored terminal prints the same name.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:

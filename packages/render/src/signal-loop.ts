@@ -1,4 +1,8 @@
 import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
+import {
   drawingDeviceTag,
   deviceHeaderSvg,
   deviceHeaderHeight,
@@ -729,11 +733,11 @@ export async function prepareSignalLoopDrawing(
       throw new Error("Incomplete signal loop route.");
     if (source.assembly)
       out.push(
-        `<g data-cable-assembly="${attr(source.cable!)}"><desc>${xml(JSON.stringify(source.assembly.members))}</desc>`,
+        `<g ${routePortAttributes(edge)} data-cable-assembly="${attr(source.cable!)}"><desc>${xml(JSON.stringify(source.assembly.members))}</desc>`,
       );
     else
       out.push(
-        `<g data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
+        `<g ${routePortAttributes(edge)} data-terminal-ends="${attr(JSON.stringify(source.ends))}" data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
       );
     for (const section of edge.sections) {
       const points = snappedPath([
@@ -801,13 +805,13 @@ export async function prepareSignalLoopDrawing(
     for (const p of list) {
       if (p.assembly) {
         out.push(
-          connectorPort(
+          `<g ${terminalPortAttribute(p.id)}>${connectorPort(
             p.x,
             p.y,
             vertical,
             p.side,
             p.assembly.assembly!.connector,
-          ),
+          )}</g>`,
         );
         continue;
       }
@@ -832,7 +836,7 @@ export async function prepareSignalLoopDrawing(
         continue;
       }
       out.push(
-        `<circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
+        `<circle ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key({ deviceUid: uid, terminalKey: p.terminal }))}" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
       );
       out.push(
         vertical

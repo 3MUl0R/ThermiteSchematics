@@ -1,3 +1,4 @@
+import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { minimumTextEmMm } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
 import {
@@ -687,35 +688,49 @@ export function routePoints(s) {
   }));
 }
 export function doubleLandings(g) {
-  const out = [];
-  for (const t of g.terminals) {
-    const routes = g.shapes.filter(
-      (s) =>
-        s.conductor &&
-        s.wire &&
-        s.endpoints?.some(
-          (p) => p.deviceUid === t.deviceUid && p.terminalKey === t.terminal,
-        ),
-    );
-    const rays = new Map();
-    for (const s of routes) {
-      const ps = routePoints(s);
-      if (!ps || ps.length < 2) continue;
-      for (const [p, q] of [
-        [ps[0], ps[1]],
-        [ps.at(-1), ps.at(-2)],
-      ])
-        if (Math.hypot(p.x - t.point.x, p.y - t.point.y) < 0.2) {
-          const length = Math.hypot(q.x - p.x, q.y - p.y);
-          if (length > 0.5)
-            rays.set(s.wire, {
-              x: (q.x - p.x) / length,
-              y: (q.y - p.y) / length,
-              wire: s.wire,
-              length,
-            });
-        }
+  const out = endpointLandingFindings(g),
+    groups = new Map();
+  for (const s of g.shapes.filter((s) => s.conductor && s.wire)) {
+    const ps = routePoints(s);
+    if (!ps || ps.length < 2) continue;
+    // Historical/synthetic point-to-point wiring declares ordered endpoints.
+    const landings =
+      s.ownedLandings ??
+      (s.endpoints ?? []).map((ep, i) => ({
+        end: i ? "target" : "source",
+        deviceUid: ep.deviceUid,
+        terminal: ep.terminalKey,
+      }));
+    for (const landing of landings) {
+      if (!landing.deviceUid || !landing.terminal || landing.reason) continue;
+      const key = JSON.stringify([
+        landing.appearanceScope,
+        landing.deviceUid,
+        landing.terminal,
+        landing.anchorElement,
+      ]);
+      const t = g.terminals.find(
+        (t) =>
+          t.deviceUid === landing.deviceUid &&
+          t.terminal === landing.terminal &&
+          (!landing.appearanceScope ||
+            t.appearanceScope === landing.appearanceScope),
+      );
+      const group = groups.get(key) ?? { terminal: t ?? s, rays: new Map() };
+      groups.set(key, group);
+      const [p, q] =
+        landing.end === "source" ? [ps[0], ps[1]] : [ps.at(-1), ps.at(-2)];
+      const length = Math.hypot(q.x - p.x, q.y - p.y);
+      if (length > 0.5)
+        group.rays.set(s.wire, {
+          x: (q.x - p.x) / length,
+          y: (q.y - p.y) / length,
+          wire: s.wire,
+          length,
+        });
     }
+  }
+  for (const { terminal, rays } of groups.values()) {
     const list = [...rays.values()];
     for (let i = 0; i < list.length; i++)
       for (let j = i + 1; j < list.length; j++) {
@@ -723,7 +738,7 @@ export function doubleLandings(g) {
           b = list[j];
         if (a.x * b.x + a.y * b.y > 0.9999)
           out.push(
-            issue("merged-double-landing", t, {
+            issue("merged-double-landing", terminal, {
               wires: [a.wire, b.wire].sort(),
               sharedLengthMm: Math.min(a.length, b.length),
             }),
