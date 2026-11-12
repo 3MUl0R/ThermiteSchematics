@@ -380,7 +380,7 @@ export function measureSheet(options = {}) {
                 p.deviceUid === owner.deviceUid &&
                 p.terminalKey === owner.terminal,
             )
-            ? [owner]
+            ? [{ ...owner, landingEnd: end }]
             : [];
         } catch {
           return [];
@@ -399,8 +399,43 @@ export function measureSheet(options = {}) {
         )
         .map(([, owner]) => owner);
       return new Set(candidates.map((o) => o.terminalAppearance)).size === 1
-        ? candidates.slice(0, 1)
+        ? candidates
+            .slice(0, 1)
+            .map((owner) => ({ ...owner, landingEnd: "unknown" }))
         : [];
+    });
+  }
+  // Empty net captions keep their semantic clip/reservation. Audit that declared
+  // omission separately from painted text; it contributes no ink/font metrics.
+  function omittedNetLabels() {
+    return [...root.querySelectorAll("text[clip-path]")].flatMap((e) => {
+      if (e.textContent !== "") return [];
+      const ref = e.getAttribute("clip-path")?.match(/url\(#(.+)\)/)?.[1];
+      const hex = ref?.match(/clip-([a-f0-9]+)$/)?.[1];
+      const rect = ref && document.getElementById(ref)?.querySelector("rect");
+      const v = visible(e, true);
+      if (!hex || !rect || !v) return [];
+      try {
+        const key = ownerKey(`label-${hex}`, "label");
+        if (key[0] !== "label" || key[1] !== "edge" || key[3] !== "net")
+          return [];
+        const bbox = intersect(bounds(e, rect.getBBox()), v.clip);
+        if (bbox.w <= 0.001 || bbox.h <= 0.001) return [];
+        return [
+          {
+            ...identity(e),
+            omitted: true,
+            bbox,
+            boxKind: "label-reservation",
+            labelRole: "net",
+            labelOwnerKind: "edge",
+            labelOwnerKey:
+              typeof key[2] === "string" ? JSON.parse(key[2]) : key[2],
+          },
+        ];
+      } catch {
+        return [];
+      }
     });
   }
   const continuationOwner = (e) => {
@@ -1342,6 +1377,7 @@ export function measureSheet(options = {}) {
           : undefined,
         endpoints,
         edgeOwnerKey,
+        potentialName: attr(e, "data-potential-name"),
         landingOwners: conductor ? landingOwners(e, endpoints) : undefined,
         cls:
           cls + (e.hasAttribute("data-wiring-junction") ? " junction-dot" : ""),
@@ -1372,6 +1408,7 @@ export function measureSheet(options = {}) {
     viewFormat: root.getAttribute("data-view-format"),
     viewFamily: root.getAttribute("data-view-family"),
     texts,
+    omittedNetLabels: omittedNetLabels(),
     hiddenTexts,
     frame,
     titleBlock,

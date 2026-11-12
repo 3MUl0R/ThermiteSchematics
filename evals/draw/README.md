@@ -44,17 +44,28 @@ passes even if measured as 2.99999998 mm (or 2.99999016 mm on A3); 2.99 mm and
 0.000009844 mm and remains 1,000 times smaller than a 0.01 mm drafting change. This
 does not change the drafting minimum or the route-detour bound.
 
-V5 also reports `net-label-repeats-terminal-caption` under DQ-17 when an
-edge-owned net label equals a printed caption on that conductor's own terminal
-landing in the same drawn appearance. It uses exported edge/port owner keys,
-resolved marker identities and nested drawing scope, never proximity or net
-membership alone. Historical SVGs without landing keys resolve only an
-unambiguous endpoint body in that drawing. Ambiguous appearances provide no
-repetition evidence. The renderer suppresses this redundant net ink while
-retaining reservations, routes and semantic names: the caption already names
-the conductor at the connection, so a second identical local label adds no
-information. A distinct or otherwise unique name stays printed; all phases use
-the same equality rule. Split bodies keep their own captions and names.
+V5.1 reports `net-label-repeats-terminal-caption` under DQ-17 only when an
+edge-owned net label equals a printed caption at its **route source** landing,
+in that same body appearance. Net labels use ELK `TAIL`, so the far/target end
+cannot replace the name at the label's anchor. Exported route-port owner keys,
+resolved marker identities and nested drawing scope establish this relationship;
+neither distance nor net membership does. Historical SVGs without route-port
+keys cannot establish which electrical endpoint is the anchor and provide no
+same-end repetition evidence.
+
+Empty semantic net-label reservations are audited separately from painted text.
+An omitted name without a printed matching source-landing caption reports
+`net-label-suppressed-without-source-caption`, using the edge's exported potential
+name. This catches suppression justified only by a far-end caption. Clip-hidden
+reservations contribute no missing-name finding or text/font measurement.
+The renderer retains reservations, routes and semantic names. A distinct name
+stays printed; all phases use the same source-end rule. Split bodies keep their
+own captions and names.
+
+DQ-16 retains `not-implemented` for an ineligible distance measurement and gives
+separate reason codes: `no-visible-conductor-labels` when there is nothing to
+measure, and `label-identity-unavailable` for declared visible conductor/net
+labels without identity. Neither case becomes a pass.
 
 ## Prerequisites and costs
 

@@ -116,7 +116,7 @@ it("keeps every own-wire ink distance no worse than dev across 50 requests and b
             node.kind !== "junction" &&
             node.ports.some(
               (landing) =>
-                [edge.sourcePortId, edge.targetPortId].includes(landing.id) &&
+                edge.sourcePortId === landing.id &&
                 node.labels.some(
                   (caption) =>
                     caption.role === "terminal" &&

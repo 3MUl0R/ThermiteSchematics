@@ -135,7 +135,8 @@ element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
 
 Rooted drawings omit net-label ink when an identical terminal caption already
-names that conductor at its own landing in the same body appearance. This avoids
+names that conductor at the label's source landing in the same body appearance.
+Net labels anchor at the route source; a far-end caption cannot replace them. This avoids
 repeating a local connection name; distinct names remain printed. The rule applies
 equally to every phase and retains label reservations, routes and net identities.
 Captions on remote or split bodies cannot replace a name at this landing.

@@ -9,6 +9,7 @@ import { svgSemanticId, decodeSvgSemanticId } from "../src/svg/escape.js";
 import { duplicateTerminalCaptionIds } from "../src/svg/terminal-captions.js";
 import { redundantNetLabelIds } from "../src/svg/net-labels.js";
 import { renderSchematic } from "../src/renderer.js";
+import { renderSchematicPacket } from "../src/sheets.js";
 import { prepareSchematicTitleContext } from "../src/title-block.js";
 import { compileCoreFixture } from "./fixtures.js";
 
@@ -270,3 +271,63 @@ it("retains a unique net name when only a hidden or remote appearance repeats it
   ).toEqual(new Set());
   expect(JSON.stringify(changed)).toBe(before);
 });
+
+it.each([
+  ["left-to-right", "tabloid", "standard"],
+  ["top-to-bottom", "tabloid", "standard"],
+  ["left-to-right", "letter", "compact"],
+  ["top-to-bottom", "letter", "compact"],
+] as const)(
+  "retains L+/M at PS1 when only the far PLC landing repeats them: %s %s %s",
+  async (flow, size, layout) => {
+    const source = structuredClone(ir);
+    source.potentials.find((p) => p.name === "+24VDC")!.name = "L+";
+    source.potentials.find((p) => p.name === "0VDC")!.name = "M";
+    const result = await renderSchematicPacket(source, {
+      format: "schematic-packet-request/0.1",
+      layout,
+      page: { size, orientation: "landscape" },
+      views: [
+        {
+          format: "schematic-view-request/0.2",
+          root: { by: "designation", value: "PS1" },
+          intent: { kind: "loads" },
+          flow,
+        },
+        {
+          format: "schematic-view-request/0.2",
+          root: { by: "designation", value: "LS1" },
+          intent: {
+            kind: "trace",
+            to: { by: "designation", value: "PLC1" },
+            includePower: true,
+          },
+          flow,
+        },
+        {
+          format: "schematic-view-request/0.1",
+          root: { by: "designation", value: "K1" },
+          family: "control",
+          flow,
+        },
+      ],
+    });
+    if (!result.ok) throw Error(JSON.stringify(result));
+    const loads = result.value.sheets.filter(
+      (s) =>
+        s.view.format === "schematic-view/0.2" && s.view.intent === "loads",
+    );
+    expect(loads.length).toBeGreaterThan(0);
+    for (const svg of loads.map((s) => s.svg)) {
+      const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+      const names = [...doc.querySelectorAll("text.label-net")].map(
+        (t) => t.textContent,
+      );
+      expect(names).toEqual(expect.arrayContaining(["L+", "M"]));
+      const terminals = [...doc.querySelectorAll("text.label-terminal")].map(
+        (t) => t.textContent,
+      );
+      expect(terminals).toEqual(expect.arrayContaining(["+", "-", "L+", "M"]));
+    }
+  },
+);

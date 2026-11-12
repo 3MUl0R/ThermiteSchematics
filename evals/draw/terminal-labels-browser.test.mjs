@@ -228,7 +228,6 @@ it("V5 resolves net repetition through its own wire and exact landing appearance
     label("owner", "feed", 15) +
     label("owner", "feed", 45, "A1", "net", "edge");
   for (const attrs of [
-    "",
     `data-route-source-port-key='${port}' data-edge-key='["wire","w"]'`,
   ]) {
     const g = await openSheet(page, svg(body + wire(attrs)));
@@ -239,6 +238,7 @@ it("V5 resolves net repetition through its own wire and exact landing appearance
       }),
     ]);
   }
+  expect(terminalText(await openSheet(page, svg(body + wire())))).toEqual([]);
   const split = body + marker("owner", "other", "A1", 140);
   expect(terminalText(await openSheet(page, svg(split + wire())))).toEqual([]);
   for (const attrs of [
@@ -258,3 +258,43 @@ it("V5 resolves net repetition through its own wire and exact landing appearance
     )[0].kind,
   ).toBe("net-label-repeats-terminal-caption");
 });
+
+it.each([
+  ["L+", "+"],
+  ["M", "-"],
+])(
+  "V5 keeps a printed %s name at the source and kills far-end suppression",
+  async (name, sourceCaption) => {
+    const port = (uid, fn) =>
+      `port-${encode(JSON.stringify(["port", JSON.stringify(["function", uid, fn]), "in"]))}`;
+    const wire = `<path data-wire-uid="w" data-potential-name="${name}" data-edge-key="edge-${encode('["wire","w"]')}" data-route-source-port-key="${port("PS1", "supply")}" data-route-target-port-key="${port("PLC1", "load")}" data-source-device-uid="PS1" data-source-terminal-key="${sourceCaption}" data-target-device-uid="PLC1" data-target-terminal-key="${name}" d="M 15 20 H 180" stroke="black" fill="none"/>`;
+    const captions =
+      marker("PS1", "supply", sourceCaption, 15) +
+      label("PS1", "supply", 15, sourceCaption) +
+      marker("PLC1", "load", name, 180) +
+      label("PLC1", "load", 175, name);
+    const net = label("PS1", "supply", 40, name, "net", "edge");
+    expect(
+      terminalText(await openSheet(page, svg(captions + wire + net))),
+    ).toEqual([]);
+    // Exact mutation used by the old renderer: retain only the semantic empty
+    // text/clip placeholder, while the matching far caption stays printed.
+    const missing = net.replace(`>${name}</text>`, "></text>");
+    const g = await openSheet(page, svg(captions + wire + missing));
+    expect(g.omittedNetLabels).toHaveLength(1);
+    expect(terminalText(g)).toEqual([
+      expect.objectContaining({
+        kind: "net-label-suppressed-without-source-caption",
+        text: name,
+      }),
+    ]);
+    // A same-end, same-body printed caption can replace the empty name.
+    const sameEnd = captions.replace(
+      `>${sourceCaption}</text>`,
+      `>${name}</text>`,
+    );
+    expect(
+      terminalText(await openSheet(page, svg(sameEnd + wire + missing))),
+    ).toEqual([]);
+  },
+);

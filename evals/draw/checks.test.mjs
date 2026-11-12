@@ -59,7 +59,12 @@ const netRoute = (extra = {}) =>
     conductor: true,
     edgeOwnerKey: ["wire", "w"],
     landingOwners: [
-      { deviceUid: "s", terminal: "L1", terminalAppearance: "body" },
+      {
+        deviceUid: "s",
+        terminal: "L1",
+        terminalAppearance: "body",
+        landingEnd: "source",
+      },
     ],
     ...extra,
   });
@@ -417,6 +422,16 @@ describe("mandatory DQ mutation kills", () => {
     },
     { appearanceScope: "another-drawing" },
     { landingOwners: [] },
+    {
+      landingOwners: [
+        {
+          deviceUid: "s",
+          terminal: "L1",
+          terminalAppearance: "body",
+          landingEnd: "target",
+        },
+      ],
+    },
   ])(
     "DQ-17 keeps an equal net name without its own caption landing: %j",
     (change) => {
@@ -609,6 +624,26 @@ describe("mandatory DQ mutation kills", () => {
   });
 });
 describe("route geometry without sampling artefacts", () => {
+  it("DQ-16 distinguishes an empty label population from missing identity without passing either", () => {
+    const shapes = [primitive([], { conductor: true, wire: "w" })];
+    expect(c.wirePlacementCoverage(geometry({ shapes }))).toMatchObject({
+      status: "not-implemented",
+      reasonCode: "no-visible-conductor-labels",
+    });
+    expect(
+      c.wirePlacementCoverage(
+        geometry({ shapes, texts: [text("W1", { role: "label-conductor" })] }),
+      ),
+    ).toMatchObject({
+      status: "not-implemented",
+      reasonCode: "label-identity-unavailable",
+    });
+    expect(
+      c.wirePlacementCoverage(
+        geometry({ shapes, texts: [text("W1", { wire: "w" })] }),
+      ),
+    ).toEqual({});
+  });
   it.each([3, 2.9999999807249367, 2.9999901568344285, 2.99, 2.25])(
     "compares a %s mm jog with numerical tolerance at the unchanged 3 mm boundary",
     (length) => {

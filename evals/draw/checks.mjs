@@ -434,11 +434,11 @@ export function terminalText(g) {
   }
   return out;
 }
-// V5: equality is redundant only on the label's own conductor and landing body.
-// Neither distance nor a shared net/electrical terminal establishes an appearance.
+// V5.1: TAIL net labels belong at the route source. Target captions cannot
+// replace source ink. Audit declared empty reservations as well as painted names.
 export function netLabelRepetition(g) {
   const out = [];
-  for (const label of g.texts.filter(
+  for (const label of [...g.texts, ...(g.omittedNetLabels ?? [])].filter(
     (t) =>
       t.labelRole === "net" &&
       t.labelOwnerKind === "edge" &&
@@ -451,22 +451,40 @@ export function netLabelRepetition(g) {
         s.appearanceScope === label.appearanceScope &&
         JSON.stringify(s.edgeOwnerKey) === JSON.stringify(label.labelOwnerKey),
     );
+    const names = [
+      ...new Set(routes.map((s) => s.potentialName).filter(Boolean)),
+    ];
+    const text = label.omitted
+      ? names.length === 1
+        ? names[0]
+        : undefined
+      : label.text;
+    if (!text) continue;
     const caption = g.texts.find(
       (t) =>
         t.labelRole === "terminal" &&
         !captionOwnershipFinding(t) &&
-        t.text === label.text &&
+        t.text === text &&
         t.appearanceScope === label.appearanceScope &&
         routes.some((s) =>
           s.landingOwners?.some(
             (p) =>
+              p.landingEnd === "source" &&
               p.deviceUid === t.deviceUid &&
               p.terminal === t.terminal &&
               p.terminalAppearance === t.terminalAppearance,
           ),
         ),
     );
-    if (caption)
+    if (label.omitted && !caption)
+      out.push(
+        issue("net-label-suppressed-without-source-caption", label, {
+          text,
+          edgeOwnerKey: label.labelOwnerKey,
+          reason: "no-matching-source-caption",
+        }),
+      );
+    else if (!label.omitted && caption)
       out.push(
         issue("net-label-repeats-terminal-caption", label, {
           text: label.text,
@@ -774,6 +792,25 @@ export function routeQuality(g) {
     }
   }
   return out;
+}
+export function wirePlacementCoverage(g) {
+  if (g.texts.some((t) => t.wire) || !g.shapes.some((s) => s.conductor))
+    return {};
+  const unowned = g.texts.some(
+    (t) =>
+      ["net", "conductor"].includes(t.labelRole) ||
+      /(?:^|\s)label-(?:net|conductor)(?:\s|$)/.test(t.role ?? "") ||
+      t.wireBlock,
+  );
+  return {
+    status: "not-implemented",
+    reasonCode: unowned
+      ? "label-identity-unavailable"
+      : "no-visible-conductor-labels",
+    reason: unowned
+      ? "Visible conductor labels need exported label-to-conductor identity."
+      : "No visible conductor labels to measure on this sheet.",
+  };
 }
 export function wirePlacement(g) {
   const routes = g.shapes.filter((s) => s.conductor && s.wire),
