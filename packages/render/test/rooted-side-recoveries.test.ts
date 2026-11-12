@@ -8,7 +8,7 @@ import {
 import { continuationOracle } from "./continuation-oracle.js";
 import { dolFixture, actuation } from "./dol-control-junctions-fixture.js";
 
-it("packs machine TB within22 including its K1/K2 and LS1 compositions", async () => {
+it("packs machine TB on21 including its M1/K1/K2 and LS1 compositions", async () => {
   const c = await compileProject("examples/machine-demo");
   if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
   const request = JSON.parse(
@@ -17,7 +17,7 @@ it("packs machine TB within22 including its K1/K2 and LS1 compositions", async (
   for (const v of request.views) if (v.flow) v.flow = "top-to-bottom";
   const r = await renderSchematicPacket(c.ir, request, c.presentation);
   if (!r.ok) throw Error(JSON.stringify(r.error));
-  expect(r.value.sheets.length).toBeLessThanOrEqual(22);
+  expect(r.value.sheets).toHaveLength(21);
   const pages = (designation: string) =>
     r.value.sheets.filter(
       (s) =>
@@ -25,8 +25,7 @@ it("packs machine TB within22 including its K1/K2 and LS1 compositions", async (
         "root" in s.view &&
         s.view.root.designation === designation,
     );
-  expect(pages("M1").length).toBeGreaterThan(0);
-  expect(pages("M1").length).toBeLessThanOrEqual(2);
+  expect(pages("M1")).toHaveLength(1);
   expect(pages("M2")).toHaveLength(1);
   expect(pages("K1")).toHaveLength(1);
   expect(pages("K2")).toHaveLength(1);
@@ -34,7 +33,7 @@ it("packs machine TB within22 including its K1/K2 and LS1 compositions", async (
   expect(pages("K1")[0]!.svg).toContain("translate(");
   expect(continuationOracle(c.ir, r.value).ends).toBeGreaterThan(0);
 }, 30000);
-it("keeps conveyor TB within13 with complete continuations", async () => {
+it("keeps conveyor TB on11 with complete reciprocal continuations", async () => {
   const c = await compileProject("examples/conveyor-line");
   if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
   const request: SchematicPacketRequest = {
@@ -57,8 +56,25 @@ it("keeps conveyor TB within13 with complete continuations", async () => {
   };
   const r = await renderSchematicPacket(c.ir, request, c.presentation);
   if (!r.ok) throw Error(JSON.stringify(r.error));
-  expect(r.value.sheets.length).toBeLessThanOrEqual(13);
-  expect(continuationOracle(c.ir, r.value).ends).toBeGreaterThan(0);
+  expect(r.value.sheets).toHaveLength(11);
+  const ends = r.value.sheets.flatMap((sheet) =>
+    sheet.continuations.map((end) => ({ sheet: sheet.number, ...end })),
+  );
+  expect(ends).toHaveLength(28);
+  for (const end of ends) {
+    const peers = ends.filter((peer) => peer !== end && peer.id === end.id);
+    expect(peers).toHaveLength(1);
+    expect(peers[0]).toMatchObject({
+      sheet: end.toSheet,
+      toSheet: end.sheet,
+      netId: end.netId,
+      provenance: end.provenance,
+      end: end.end === 0 ? 1 : 0,
+    });
+  }
+  // The independent SVG oracle also checks every printed peer, zone and source
+  // identity and throws on lost, duplicate or non-reciprocal endpoints.
+  expect(continuationOracle(c.ir, r.value).ends).toBe(ends.length);
 }, 30000);
 it.each(["K1", "R1"])(
   "packs %s TB on one tabloid sheet without claiming its short-loop goal",
