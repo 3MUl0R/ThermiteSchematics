@@ -156,7 +156,7 @@ export function semanticIdentities(ir: ElectricalIr, value: unknown): unknown {
   };
   const svg = (v: string) => {
     let result = v.replace(
-      /\b(aggregate|boundary|cable-conductor|cable|clip|device|function|junction|jumper|location|net|potential|rail|terminal|wire)-([0-9a-f]{4,}(?:--[0-9a-f]{4,})*)/gu,
+      /\b(aggregate|boundary|cable-conductor|cable|clip|device|edge|function|junction|jumper|location|net|potential|port|rail|terminal|wire)-([0-9a-f]{4,}(?:--[0-9a-f]{4,})*)/gu,
       (_, prefix: string, encoded: string) =>
         `${prefix}-${JSON.stringify(encoded.split("--").map((p) => visitString(p.replace(/.{4}/gu, (c) => String.fromCharCode(parseInt(c, 16))))))}`,
     );
