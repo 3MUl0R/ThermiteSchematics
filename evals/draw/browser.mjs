@@ -428,6 +428,8 @@ export function measureSheet(options = {}) {
         candidates = all.filter(
           (a) =>
             a.closest("svg") === scope &&
+            a.closest("[data-circuit-group]") ===
+              e.closest("[data-circuit-group]") &&
             a.getAttribute("data-layout-port") === layoutPort,
         );
         const stems = candidates.filter((a) =>

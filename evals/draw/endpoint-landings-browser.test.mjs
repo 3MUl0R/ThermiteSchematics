@@ -76,3 +76,22 @@ it("accepts an owned terminal attachment end while rejecting a gap in its route"
     ).toHaveLength(offset ? 1 : 0);
   }
 });
+
+it("resolves reused layout port IDs within each exported circuit group", async () => {
+  const body = `<g data-circuit-group="a">${marker}${route(1)}</g><g data-circuit-group="b" transform="translate(0 20)">${marker}${route(1)}</g>`;
+  const g = await openSheet(page, svg(body));
+  expect(doubleLandings(g)).toEqual([]);
+});
+it("does not borrow an anchor from another circuit group on the same sheet", async () => {
+  const g = await openSheet(
+    page,
+    svg(
+      `<g data-circuit-group="a">${route(1)}</g><g data-circuit-group="b">${marker}</g>`,
+    ),
+  );
+  expect(
+    doubleLandings(g).some(
+      (f) => f.kind === "endpoint-landing-ownership-unavailable",
+    ),
+  ).toBe(true);
+});
