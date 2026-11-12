@@ -252,7 +252,7 @@ A packet can include `signal-loop-view-request/0.1` with
 authored cordset, continuous bulkhead contacts, optional feed-through terminals
 and the input channel. The opt-in `field-interfaces` library offers proposed
 M12 profiles. See `thermite guide signal-loops` for series power.
-Channels: authored address, proven AI/AO/DI/DO, else IN/OUT; keys are metadata.
+Channels: address or proven AI/AO/DI/DO/IN/OUT; notes: tag/terminals, no keys.
 
 Both paths must be complete and unbranched, with every traversed cable core
 represented; extra cores must be explicitly spare and terminated at both ends.

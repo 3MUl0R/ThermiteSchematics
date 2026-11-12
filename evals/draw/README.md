@@ -37,6 +37,9 @@ appearance identity, never to infer an owner.
 
 Version 5.0 exempts authored type-description fallback text from DQ-05 on the
 same terms as instance descriptions; function/aggregate captions still fail.
+DQ-05 also measures qualified function selectors embedded in note text, including
+keys such as `signal` that are otherwise ordinary caption vocabulary. Authored
+terminal identifiers with the same spelling remain visible facts.
 DQ-15 compares internal jog lengths against 3 mm with a **0.00001 mm numerical
 tolerance**, solely for SVG-to-mm floating-point conversion. An exact 3 mm jog
 passes even if measured as 2.99999998 mm (or 2.99999016 mm on A3); 2.99 mm and

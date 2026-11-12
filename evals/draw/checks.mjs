@@ -228,6 +228,35 @@ export function functionKeys(g, ir) {
   // Aggregate IDs also belong to the engine's internal vocabulary.
   for (const k of ["three-phase-source", "dc_output", "pnp-sensor"])
     keys.add(k);
+  // Notes embed qualified selectors mid-sentence, including keys such as
+  // "signal" that are harmless as standalone vocabulary. Resolve the owner;
+  // an authored terminal with the same spelling remains a visible fact.
+  const qualified = ir.functions.flatMap((f) => {
+    const device = ir.devices.find((d) => d.uid === f.id.deviceUid);
+    if (
+      !device?.designation ||
+      ir.terminals?.some(
+        (t) =>
+          t.id.deviceUid === device.uid &&
+          t.id.terminalKey === f.id.functionKey,
+      )
+    )
+      return [];
+    const value = `${device.designation}.${f.id.functionKey}`;
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return [
+      {
+        value,
+        pattern: new RegExp(
+          `(^|[^\\p{L}\\p{N}_.-])${escaped}(?=$|[^\\p{L}\\p{N}_-])`,
+          "u",
+        ),
+      },
+    ];
+  });
+  const printedKey = (t) =>
+    qualified.find((q) => q.pattern.test(t.text))?.value ??
+    [...keys].find((k) => t.text === k || t.text.startsWith(k + " "));
   return g.texts
     .filter(
       (t) =>
@@ -240,12 +269,12 @@ export function functionKeys(g, ir) {
           !/label-(function|aggregate)/.test(t.role ?? "") &&
           authoredDescription(ir, t.deviceUid)?.includes(t.text)
         ) &&
-        [...keys].some((k) => t.text === k || t.text.startsWith(k + " ")),
+        printedKey(t),
     )
     .map((t) =>
       issue("printed-function-key", t, {
         text: t.text,
-        key: [...keys].find((k) => t.text === k || t.text.startsWith(k + " ")),
+        key: printedKey(t),
       }),
     );
 }

@@ -87,9 +87,13 @@ unsupported. No wiring or layout is synthesized by an agent.
 
 Direct transmitter-to-input loops use the exact transmitter and input role pairs
 listed below. A recognized reversal refuses with R006, naming both terminals and
-roles. Unrecognized endpoint polarity prints `polarity not verified: {D.F[, D.F]}.`
+roles. Unrecognized endpoint polarity prints
+`polarity not verified: {D terminals T1/T2[, D terminals T1/T2]}.`
 below the hookup explanation, in SVG `desc` and in enabled packet references;
-endpoints are sorted by designation and function. The note adds no warning, so a
+endpoints are sorted by designation and function. Terminal numbers come only from
+the selected function's authored bindings, in authored order; this order assigns
+no polarity. If bindings are unavailable, the designation alone is printed.
+Function keys are never used as note labels. The note adds no warning, so a
 clean `--strict` stays clean. Nothing is inferred from terminal names, descriptions
 or function order. Output-to-actuator views and auxiliary pairs keep their existing
 behavior.
@@ -180,12 +184,13 @@ Every series sheet prints this exact engine note, also present in the SVG
 `desc` and enabled packet references:
 
 ```text
-Three separate loop nets; loop power from {PS}.{function} as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.
+Three separate loop nets; loop power from {PS} terminals {T1}/{T2} as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.
 ```
 
 If endpoint polarity is unverified, the final period is replaced by
 `; polarity not verified: {unverifiedEndpoints}.` The endpoint list contains
-`D.F` entries once each, sorted by designation and function, separated by comma-space.
+`D terminals T1/T2` entries once each, sorted by designation and function, separated
+by comma-space, with the same authored-binding and designation-only rules as direct loops.
 For each supply terminal with outside connections, the exact distribution text is:
 
 ```text

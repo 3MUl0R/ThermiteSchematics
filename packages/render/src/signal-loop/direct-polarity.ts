@@ -6,6 +6,7 @@ import {
   assertLoopPolarityEntry,
   readLoopPolarity,
   terminalKey,
+  loopFunctionReference,
 } from "./polarity.js";
 
 export class DirectLoopPolarityError extends Error {
@@ -66,7 +67,7 @@ export function directLoopPolarity(
         compare(a.device.designation, b.device.designation) ||
         compare(a.function.id.functionKey, b.function.id.functionKey),
     )
-    .map((f) => `${f.device.designation}.${f.function.id.functionKey}`);
+    .map(loopFunctionReference);
 }
 
 export function finishDirectLoopDrawing<T extends { content: string }>(

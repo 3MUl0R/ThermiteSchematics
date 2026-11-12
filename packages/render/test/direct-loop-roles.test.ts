@@ -37,10 +37,14 @@ const unknownTransmitters = [
 ] as const;
 
 it.each([
-  ...unknownInputs.map((roles) => ({ index: 2, name: "AI1.input", roles })),
+  ...unknownInputs.map((roles) => ({
+    index: 2,
+    name: "AI1 terminals p/n",
+    roles,
+  })),
   ...unknownTransmitters.map((roles) => ({
     index: 1,
-    name: "TX1.signal",
+    name: "TX1 terminals p/n",
     roles,
   })),
 ])(
@@ -169,7 +173,7 @@ it("keeps roles authoritative after terminal, device and function renames and re
     for (const t of unknown.terminals) delete t.role;
     const d = await prepareSignalLoopDrawing(unknown, view);
     expect(d.engineNotes).toEqual([
-      "polarity not verified: A_AI.renamed, Z_TX.renamed.",
+      "polarity not verified: A_AI terminals +/-, Z_TX terminals +/-.",
     ]);
     const { document } = parseHTML(d.content);
     expect(document.querySelector("desc")!.textContent).toBe(d.engineNotes![0]);

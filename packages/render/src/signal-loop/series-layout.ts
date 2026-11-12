@@ -29,7 +29,7 @@ import {
   escapeXmlAttribute as attr,
 } from "../svg/escape.js";
 import { n, text } from "../packet/svg.js";
-import { terminalKey as key } from "./polarity.js";
+import { terminalKey as key, loopFunctionReference } from "./polarity.js";
 import { pinMapPair } from "./pin-map.js";
 import {
   assertOrthogonalSegment,
@@ -94,7 +94,7 @@ function wrapCaption(value: string, maxWidth: number) {
 
 function engineNotes(selected: Selection) {
   const series = need(selected.series);
-  const base = `Three separate loop nets; loop power from ${series.power.device.designation}.${series.power.function.id.functionKey} as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget`;
+  const base = `Three separate loop nets; loop power from ${loopFunctionReference(series.power)} as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget`;
   const unknown = series.polarity.unverifiedEndpoints;
   const notes = [
     base +

@@ -283,13 +283,18 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Channels: authored address, proven AI/AO/DI/DO, else IN/OUT; keys are metadata.",
+        "Channels: address or proven AI/AO/DI/DO/IN/OUT; notes: tag/terminals, no keys.",
       async check() {
         const [input, output] = await Promise.all([
           shared.grouped(),
           shared.analog(),
         ]);
         expect(input.visible).toContain("IN / selected channel");
+        expect(input.visible).toContain(
+          "polarity not verified: AI1 terminals 9/13, PT1 terminals 1/2.",
+        );
+        expect(input.visible).not.toContain("AI1.ch0");
+        expect(input.visible).not.toContain("PT1.signal");
         expect(output.visible).toContain("OUT / selected channel");
         expect(input.visible).not.toContain("ch0 / selected channel");
         expect(output.visible).not.toContain("ch3 / selected channel");
