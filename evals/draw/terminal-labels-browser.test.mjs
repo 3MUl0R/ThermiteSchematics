@@ -208,3 +208,53 @@ it("rejects duplicate captions on one body and retains separate drawn appearance
   );
   expect(terminalText(split)).toEqual([]);
 });
+
+it("V5 resolves net repetition through its own wire and exact landing appearance", async () => {
+  const port = JSON.stringify([
+    "port",
+    JSON.stringify(["function", "owner", "feed"]),
+    "in",
+  ]);
+  const wire = (attrs = "") => {
+    attrs = attrs.replace(
+      /(data-[\w-]+-key)='([^']+)'/g,
+      (_match, name, key) =>
+        `${name}='${name === "data-edge-key" ? "edge" : "port"}-${encode(key)}'`,
+    );
+    return `<path data-wire-uid="w" data-source-device-uid="owner" data-source-terminal-key="A1" data-target-device-uid="remote" data-target-terminal-key="B1" ${attrs} d="M 100 20 H 180" stroke="black" fill="none"/>`;
+  };
+  const body =
+    marker("owner", "feed", "A1", 100) +
+    label("owner", "feed", 15) +
+    label("owner", "feed", 45, "A1", "net", "edge");
+  for (const attrs of [
+    "",
+    `data-route-source-port-key='${port}' data-edge-key='["wire","w"]'`,
+  ]) {
+    const g = await openSheet(page, svg(body + wire(attrs)));
+    expect(terminalText(g)).toEqual([
+      expect.objectContaining({
+        kind: "net-label-repeats-terminal-caption",
+        text: "A1",
+      }),
+    ]);
+  }
+  const split = body + marker("owner", "other", "A1", 140);
+  expect(terminalText(await openSheet(page, svg(split + wire())))).toEqual([]);
+  for (const attrs of [
+    `data-route-source-port-key='${port.replace("feed", "other")}'`,
+    `data-route-source-port-key='malformed'`,
+    `data-route-source-port-key='${port}' data-edge-key='["wire","foreign"]'`,
+  ])
+    expect(
+      terminalText(await openSheet(page, svg(split + wire(attrs)))),
+    ).toEqual([]);
+  expect(
+    terminalText(
+      await openSheet(
+        page,
+        svg(split + wire(`data-route-source-port-key='${port}'`)),
+      ),
+    )[0].kind,
+  ).toBe("net-label-repeats-terminal-caption");
+});

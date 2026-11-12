@@ -54,6 +54,15 @@ const primitive = (points, extra = {}) => ({
   ...extra,
 });
 const ir = { functions: [], devices: [], nets: [] };
+const netRoute = (extra = {}) =>
+  primitive([], {
+    conductor: true,
+    edgeOwnerKey: ["wire", "w"],
+    landingOwners: [
+      { deviceUid: "s", terminal: "L1", terminalAppearance: "body" },
+    ],
+    ...extra,
+  });
 // Every mandatory automation predicate has a clean control and a seeded defect.
 // These tests use no browser, PDF renderer, engine build, or subprocess.
 describe("mandatory DQ mutation kills", () => {
@@ -185,6 +194,40 @@ describe("mandatory DQ mutation kills", () => {
         }),
         data,
       ),
+    ).toHaveLength(1);
+  });
+  it("DQ-05 exempts the authored type fallback without exempting internal captions", () => {
+    const data = {
+      ...ir,
+      devices: [{ uid: "XT1", typeId: "terminal" }],
+      deviceTypes: [{ id: "terminal", description: "command and power" }],
+      functions: [{ id: { functionKey: "command" } }],
+    };
+    const t = text("command and power", { deviceUid: "XT1" });
+    for (const description of [undefined, "", " \t "])
+      expect(
+        c.functionKeys(geometry({ texts: [t] }), {
+          ...data,
+          devices: [{ ...data.devices[0], description }],
+        }),
+      ).toEqual([]);
+    for (const role of ["label-function", "label-aggregate"])
+      expect(
+        c.functionKeys(geometry({ texts: [{ ...t, role }] }), data),
+      ).toHaveLength(1);
+    for (const change of [
+      { text: "command other prose" },
+      { deviceUid: "unowned" },
+    ])
+      expect(
+        c.functionKeys(geometry({ texts: [{ ...t, ...change }] }), data),
+      ).toHaveLength(1);
+    // An instance description replaces the type fallback, as in the renderer.
+    expect(
+      c.functionKeys(geometry({ texts: [t] }), {
+        ...data,
+        devices: [{ ...data.devices[0], description: "Field terminals" }],
+      }),
     ).toHaveLength(1);
   });
   it("DQ-06 kills a lost authored description without inventing a rating", () => {
@@ -328,6 +371,7 @@ describe("mandatory DQ mutation kills", () => {
     expect(
       c.terminalText(
         geometry({
+          shapes: [netRoute()],
           texts: [
             t,
             {
@@ -342,7 +386,9 @@ describe("mandatory DQ mutation kills", () => {
           ],
         }),
       ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({ kind: "net-label-repeats-terminal-caption" }),
+    ]);
     expect(
       c.terminalText(geometry({ texts: [t, { ...t, element: "duplicate" }] })),
     ).toHaveLength(1);
@@ -352,6 +398,52 @@ describe("mandatory DQ mutation kills", () => {
       )[0].kind,
     ).toBe("duplicate-terminal-caption");
   });
+  it.each([
+    { edgeOwnerKey: ["wire", "other"] },
+    {
+      landingOwners: [
+        { deviceUid: "foreign", terminal: "L1", terminalAppearance: "body" },
+      ],
+    },
+    {
+      landingOwners: [
+        { deviceUid: "s", terminal: "L2", terminalAppearance: "body" },
+      ],
+    },
+    {
+      landingOwners: [
+        { deviceUid: "s", terminal: "L1", terminalAppearance: "split-body" },
+      ],
+    },
+    { appearanceScope: "another-drawing" },
+    { landingOwners: [] },
+  ])(
+    "DQ-17 keeps an equal net name without its own caption landing: %j",
+    (change) => {
+      const net = text("L1", {
+        labelRole: "net",
+        labelOwnerKind: "edge",
+        labelOwnerKey: ["wire", "w"],
+        bbox: { ...bbox, x: 50 },
+      });
+      expect(
+        c.terminalText(
+          geometry({
+            texts: [terminalCaption(), net],
+            shapes: [netRoute(change)],
+          }),
+        ),
+      ).toEqual([]);
+      expect(
+        c.terminalText(
+          geometry({
+            texts: [terminalCaption("L2"), net],
+            shapes: [netRoute()],
+          }),
+        ),
+      ).toEqual([]);
+    },
+  );
   it("DQ-17 preserves overlap checks when a semantic net name equals a terminal identity", () => {
     for (const name of ["L1", "SRC1.L1"]) {
       const t = terminalCaption(name, {
@@ -517,6 +609,24 @@ describe("mandatory DQ mutation kills", () => {
   });
 });
 describe("route geometry without sampling artefacts", () => {
+  it.each([3, 2.9999999807249367, 2.9999901568344285, 2.99, 2.25])(
+    "compares a %s mm jog with numerical tolerance at the unchanged 3 mm boundary",
+    (length) => {
+      const shape = primitive(
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 10 },
+          { x: length, y: 10 },
+          { x: length, y: 20 },
+        ],
+        { conductor: true },
+      );
+      const findings = c.routeQuality(geometry({ shapes: [shape] }));
+      expect(findings.map((f) => f.kind)).toEqual(
+        length < 2.999 ? ["jog-under-3mm"] : [],
+      );
+    },
+  );
   it("reads transformed orthogonal SVG vertices and rejects curved or disjoint paths", () => {
     expect(straightPath("M 0 0 H 10 V 10")).toEqual([
       { x: 0, y: 0 },

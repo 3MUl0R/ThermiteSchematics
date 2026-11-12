@@ -231,6 +231,7 @@ export function measureSheet(options = {}) {
   };
   const identity = (e) => ({
     element: ids.get(e),
+    appearanceScope: ids.get(e.closest("svg")),
     deviceUid: attr(e, "data-device-uid"),
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
@@ -351,6 +352,56 @@ export function measureSheet(options = {}) {
             },
       );
     }
+  }
+  function ownerKey(raw, prefix) {
+    const hex = raw?.match(new RegExp(`^${prefix}-([a-f0-9]+)$`))?.[1];
+    if (!hex || hex.length % 4) throw Error("Invalid exported owner key");
+    return JSON.parse(
+      hex
+        .match(/.{4}/g)
+        .map((h) => String.fromCharCode(parseInt(h, 16)))
+        .join(""),
+    );
+  }
+  function landingOwners(e, endpoints) {
+    const scope = ids.get(e.closest("svg")) ?? null;
+    return ["source", "target"].flatMap((end, index) => {
+      const raw = attr(e, `data-route-${end}-port-key`);
+      if (raw !== null && raw !== undefined) {
+        try {
+          const port = ownerKey(raw, "port");
+          if (port[0] !== "port") return [];
+          const owner = terminalCaptionOwners.get(
+            JSON.stringify([scope, port[1], port[2]]),
+          );
+          return owner &&
+            endpoints.some(
+              (p) =>
+                p.deviceUid === owner.deviceUid &&
+                p.terminalKey === owner.terminal,
+            )
+            ? [owner]
+            : [];
+        } catch {
+          return [];
+        }
+      }
+      // Historical SVGs export electrical endpoints but no landing port keys.
+      // Resolve only a unique body appearance within this nested drawing.
+      const endpoint = endpoints[index];
+      const candidates = [...terminalCaptionOwners.entries()]
+        .filter(
+          ([key, owner]) =>
+            JSON.parse(key)[0] === scope &&
+            owner &&
+            owner.deviceUid === endpoint?.deviceUid &&
+            owner.terminal === endpoint?.terminalKey,
+        )
+        .map(([, owner]) => owner);
+      return new Set(candidates.map((o) => o.terminalAppearance)).size === 1
+        ? candidates.slice(0, 1)
+        : [];
+    });
   }
   const continuationOwner = (e) => {
     const a = e.closest('a[href^="#sheet-"]');
@@ -1244,6 +1295,25 @@ export function measureSheet(options = {}) {
         utilisationErrors.push({ element: id.element, reason: error.message });
       }
     }
+    const endpoints = conductor
+      ? (() => {
+          const raw = attr(e, "data-endpoints");
+          if (raw) return JSON.parse(raw);
+          return ["source", "target"].map((end) => ({
+            deviceUid: attr(e, `data-${end}-device-uid`),
+            terminalKey: attr(e, `data-${end}-terminal-key`),
+          }));
+        })()
+      : undefined;
+    let edgeOwnerKey;
+    try {
+      const raw = attr(e, "data-edge-key");
+      edgeOwnerKey = raw
+        ? ownerKey(raw, "edge")
+        : id.wire
+          ? ["wire", id.wire]
+          : undefined;
+    } catch {}
     return [
       {
         ...id,
@@ -1270,26 +1340,9 @@ export function measureSheet(options = {}) {
               (m.f - rr.y) * sy,
             ]
           : undefined,
-        endpoints: conductor
-          ? (() => {
-              const raw = attr(e, "data-endpoints");
-              if (raw) return JSON.parse(raw);
-              const source = e.getAttribute("data-source-device-uid"),
-                target = e.getAttribute("data-target-device-uid");
-              return source && target
-                ? [
-                    {
-                      deviceUid: source,
-                      terminalKey: e.getAttribute("data-source-terminal-key"),
-                    },
-                    {
-                      deviceUid: target,
-                      terminalKey: e.getAttribute("data-target-terminal-key"),
-                    },
-                  ]
-                : [];
-            })()
-          : undefined,
+        endpoints,
+        edgeOwnerKey,
+        landingOwners: conductor ? landingOwners(e, endpoints) : undefined,
         cls:
           cls + (e.hasAttribute("data-wiring-junction") ? " junction-dot" : ""),
       },
