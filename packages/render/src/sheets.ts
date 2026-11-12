@@ -10,6 +10,9 @@ import { referenceTables } from "./packet/references.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
 import { appendViewDrafts } from "./packet/assembly.js";
+import { navigationViewKey } from "./packet/navigation-identity.js";
+import { centroidReferences } from "./packet/navigation-occurrences.js";
+import { seedCircuitNavigation } from "./packet/navigation-circuit.js";
 
 import {
   circuitFunctionAppearances,
@@ -139,6 +142,7 @@ async function renderPacket(
   let referenceSelection: ReferenceSelection | undefined;
   let referenceNumber = 0;
   const circuitAppearances = new Map<string, string[]>();
+  const navigationDuplicates = new Map<string, number>();
   for (const [viewIndex, view] of request.views.entries()) {
     if (!record(view) || view.format !== "circuit-view-request/0.1") continue;
     try {
@@ -184,12 +188,27 @@ async function renderPacket(
         error: contextError(renderErrorContext(ir, result.error), [context]),
       };
     const reportSelection = result.value[0]?.documentationSelection;
+    if (record(view) && view.format === "circuit-view-request/0.1")
+      seedCircuitNavigation(ir, result.value);
+    const normalizedSelection = result.value[0]?.view.format.startsWith(
+      "schematic-view/",
+    )
+      ? result.value[0].view
+      : view;
+    const identityKey = navigationViewKey(ir, normalizedSelection, 0);
+    const ordinal = navigationDuplicates.get(identityKey) ?? 0;
+    navigationDuplicates.set(identityKey, ordinal + 1);
+    const navigationView = {
+      key: navigationViewKey(ir, normalizedSelection, ordinal),
+      authoredOrder: viewIndex,
+    };
     if (reportSelection)
       documentationSelections.push({ ...reportSelection, view: viewIndex + 1 });
     legendViews.push({
       drafts: structuredClone(result.value),
       viewIndex,
       context,
+      navigationView,
     });
     referenceNumber = appendViewDrafts(
       drafts,
@@ -198,6 +217,7 @@ async function renderPacket(
       request.layout,
       referenceNumber,
       context,
+      navigationView,
     );
     if (drafts.length > 100)
       return composedFailure(
@@ -231,6 +251,9 @@ async function renderPacket(
       ),
     };
   if (request.index) {
+    const located = legendSheets(ir, drafts, paper.value);
+    if (!located.ok) return located;
+    centroidReferences(drafts, located.navigation?.occurrences ?? []);
     const indexes = referenceTables(ir, drafts, request, referenceDevices);
     referenceSelection = indexes.referenceSelection;
     for (const table of indexes.tables) {
@@ -327,6 +350,7 @@ function assemblePacket(
           ...(diagnostics.length ? { diagnostics } : {}),
         },
         ...(documentationSelections.length ? { documentationSelections } : {}),
+        ...(rendered.navigation ? { navigation: rendered.navigation } : {}),
         ...(referenceSelection ? { referenceSelection } : {}),
       },
     };
@@ -400,6 +424,7 @@ async function renderPacketWithAdvice(
     result.ok ||
     result.error.code !== "R006" ||
     result.error.reason !== "unprintable-layout" ||
+    result.error.details?.navigationInvariant ||
     request.layout === "compact" ||
     !compactAdviceView(request, result.error.details)
   )

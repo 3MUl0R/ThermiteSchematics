@@ -94,9 +94,17 @@ for (const poles of [1, 2, 3])
           const packet = await renderSchematicPacket(fixture.ir, packetRequest);
           expect(oldPacket.ok).toBe(true);
           expect(packet.ok).toBe(true);
-          expect(JSON.stringify(packet) === JSON.stringify(oldPacket)).toBe(
-            true,
-          );
+          if (oldPacket.ok && packet.ok)
+            expect(packet.value.navigation!.snapshotDigest).not.toBe(
+              oldPacket.value.navigation!.snapshotDigest,
+            );
+          // Changed function kinds change source provenance. All other packet
+          // metadata and every rendered byte must retain the reviewed equality.
+          const drawing = (value: typeof packet) =>
+            JSON.stringify(value, (key, item) =>
+              key === "snapshotDigest" ? undefined : item,
+            );
+          expect(drawing(packet)).toBe(drawing(oldPacket));
         } finally {
           await fixture.dispose();
         }

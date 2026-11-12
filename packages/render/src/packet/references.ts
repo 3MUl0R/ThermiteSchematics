@@ -70,7 +70,9 @@ function isDeviceReference(r: SheetReference): boolean {
   return !r.functions.length && !r.representation;
 }
 
-/** Indexes describe content drafts only; appending index pages must happen later. */
+/** Content drafts already carry final terminal-centroid locations from the
+ * navigation seam. Preserve aggregate report groups while collecting each
+ * function's final zones; appending index pages must happen later. */
 export function referenceTables(
   ir: Readonly<ElectricalIr>,
   drafts: readonly ReferenceDraft[],

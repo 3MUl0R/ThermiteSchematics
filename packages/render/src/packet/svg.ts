@@ -98,7 +98,9 @@ export function assemblyNoteLines(value: string, maxWidth: number): string[] {
 }
 
 export function namespaceSheetContent(content: string, number: number): string {
-  const prefix = `sheet-${number}-`;
+  return namespaceContentIds(content, `sheet-${number}-`);
+}
+export function namespaceContentIds(content: string, prefix: string): string {
   // Text is XML-escaped by the emitter. Scope rewriting to real tag attributes
   // so a designation containing id="..." or url(#...) remains verbatim.
   return content.replace(/<[^>]+>/g, (tag) =>

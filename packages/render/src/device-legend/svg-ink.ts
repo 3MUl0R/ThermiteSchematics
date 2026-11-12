@@ -28,6 +28,8 @@ interface State {
 }
 export interface SvgInk {
   ink: Rect[];
+  /** Visible text only, in the same sheet-space/clip convention as ink. */
+  texts: Rect[];
   regions: Rect[];
   bodies: Map<string, Rect>;
   keys: Map<string, string[]>;
@@ -176,6 +178,7 @@ function shapeInk(n: SvgNode, css: Record<string, string>): Rect[] {
 function emptyInk(): SvgInk {
   return {
     ink: [],
+    texts: [],
     regions: [],
     bodies: new Map(),
     keys: new Map(),
@@ -274,8 +277,11 @@ function collectNode(node: SvgNode, state: State, out: SvgInk) {
   }
   for (const b of boxes) {
     const clipped = intersection(project(b, state.matrix), state.clip);
-    if (clipped && clipped.w + clipped.h > 0)
-      out.ink.push(expand(clipped, 0.003));
+    if (clipped && clipped.w + clipped.h > 0) {
+      const box = expand(clipped, 0.003);
+      out.ink.push(box);
+      if (local) out.texts.push(box);
+    }
   }
   if (node.name === "rect" && /location-frame|device-frame/.test(cls)) {
     const b = project(

@@ -107,6 +107,13 @@ export function stackSections(
     );
     const draft: Draft = {
       ...first,
+      navigationSeeds: [
+        ...new Map(
+          sources
+            .flatMap((s) => s.navigationSeeds ?? [])
+            .map((s) => [JSON.stringify([s.source, s.logicalKey]), s]),
+        ).values(),
+      ],
       rootedContent: sumContent(sources),
       rootedParts: sources,
       rootedPartAxis: axis,

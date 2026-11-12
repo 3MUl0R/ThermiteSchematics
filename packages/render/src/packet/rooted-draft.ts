@@ -10,6 +10,10 @@ import { LAYOUT_CONFIG_VERSION } from "../types.js";
 import { viewportShapes, unionInk } from "./rooted-ink.js";
 import { zone } from "./page.js";
 import { n, text } from "./svg.js";
+import {
+  nativeOccurrenceSeeds,
+  markNativeOccurrences,
+} from "./navigation-seeds.js";
 
 function nodeReference(node: SymbolPresentationNode | RailPresentationNode) {
   return {
@@ -100,7 +104,9 @@ export function rootedDraft(
     b.y,
   );
   const ink = unionInk(shapes);
+  const navigationSeeds = nativeOccurrenceSeeds(p);
   return {
+    navigationSeeds,
     rootedSections: [
       {
         viewport: { x: x - pad, y: y - pad, w, h },
@@ -120,7 +126,7 @@ export function rootedDraft(
     references: references(p, x, y, w, h, b, scale),
     note: `Layout: ${profile ?? "standard"}. Drawing scale: ${n(scale)} mm/unit. Continuations: reference / destination sheet.`,
     content:
-      `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${n(w * scale)}" height="${n(h * scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${inner}</svg>` +
+      `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${n(w * scale)}" height="${n(h * scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${markNativeOccurrences(inner, navigationSeeds)}</svg>` +
       (caption ? text(b.x, captionY, caption, 2.5) : ""),
   };
 }

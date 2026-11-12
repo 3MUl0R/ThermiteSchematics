@@ -751,7 +751,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Applies (not dry runs) reserve `.thermite-schematics-write.lock` in the canonical project root through revalidation, commit and rollback; it is not the library lock. Never commit it (alpha `init` adds it to `.gitignore`). A005/exit 1 reports contention with the exact path, owner PID/hostname/version, creation time and age. Wait for a live owner. A dead PID on the recorded host indicates abandonment: confirm all writers are stopped, then remove exactly that path. Check the host of an unknown/other-host owner; age alone is insufficient.",
+        "Applies (not dry runs) reserve `.thermite-schematics-write.lock` in the canonical project root through revalidation, commit and rollback; it is not the library lock. Never commit it (alpha `init` adds it to `.gitignore`). A005/exit 1 contention reports the exact path, owner PID/hostname/version, creation time and age. Wait for a live owner. A dead PID on the recorded host indicates abandonment: confirm all writers are stopped, then remove exactly that path. Check the host of an unknown/other-host owner; age alone is insufficient.",
       async check() {
         const { project, lockPath, owner, before, dry, apply, after } =
           await aliveContention();
@@ -851,7 +851,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "A commit whose release fails stays successful with W801 naming the path: verify the committed state instead of replaying, and remove the leftover once that command has exited and no other writer runs.",
+        "W801 names a failed release after a successful commit: verify instead of replaying; remove the leftover only after the command exits and all writers stop.",
       async check() {
         // An engine fixture whose reservation release fails, through the
         // CLI's agent command.
@@ -887,7 +887,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Rollback refuses changed chains or bytes; an incomplete restore is exit 2 and lists restored and unrestored files with reasons.",
+        "Rollback refuses changed chains/bytes; incomplete restore exits 2, listing restored/unrestored files and reasons.",
       async check() {
         // A rollback that a changed chain or changed bytes interrupts, on
         // the engine's fixture through the CLI's agent command.
@@ -1352,10 +1352,18 @@ const module: FactModule = {
           renderHere(await clonedStarter(), loads),
         ]);
         expect(original.ok).toBe(true);
-        const text = JSON.stringify(cloned);
+        // NAV snapshot digests/origins describe the actual source library; cloned
+        // libraries keep identical rendering while having different provenance.
+        const rendering = (r: typeof original) =>
+          r.ok ? { ...r, value: { ...r.value, navigation: undefined } } : r;
+        if (cloned.ok && original.ok)
+          expect(cloned.value.navigation?.snapshotDigest).not.toBe(
+            original.value.navigation?.snapshotDigest,
+          );
+        const text = JSON.stringify(rendering(cloned));
         expect(text).toContain("site:psu-24vdc");
         expect(text.replaceAll("site:", "core:")).toBe(
-          JSON.stringify(original),
+          JSON.stringify(rendering(original)),
         );
       },
     },

@@ -280,13 +280,32 @@ describe("automatic terminal-plan profile clones", () => {
       );
       expect(before.ok, JSON.stringify(before)).toBe(true);
       expect(after.ok, JSON.stringify(after)).toBe(true);
+      // Type IDs are source facts, so their snapshot digest changes. Keep every
+      // occurrence, location and rendered byte in the equality comparison.
+      if (before.ok && after.ok)
+        expect(after.value.navigation!.snapshotDigest).not.toBe(
+          before.value.navigation!.snapshotDigest,
+        );
+      const rendering = (r: typeof before) =>
+        r.ok
+          ? {
+              ...r,
+              value: {
+                ...r.value,
+                navigation: {
+                  ...r.value.navigation,
+                  snapshotDigest: undefined,
+                },
+              },
+            }
+          : r;
       const normalized = CORE_SYMBOL_BINDINGS.reduce(
         (json, b) =>
           json.replaceAll(b.typeId.replace("core:", "local:"), b.typeId),
-        JSON.stringify(after),
+        JSON.stringify(rendering(after)),
       );
       // A boolean comparison keeps a failure from dumping the entire packet.
-      expect(normalized === JSON.stringify(before)).toBe(true);
+      expect(normalized === JSON.stringify(rendering(before))).toBe(true);
     },
     30000,
   );

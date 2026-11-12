@@ -11,11 +11,31 @@ import type {
   SchematicPacketRequest,
 } from "./types.js";
 import { frame, zone, sheetLabel } from "./page.js";
-import { n } from "./svg.js";
+import { n, namespaceContentIds } from "./svg.js";
+import { navigationDraftInputs } from "./navigation-seeds.js";
+import { escapeXmlAttribute } from "../svg/escape.js";
 import {
   emitCircuitContinuationBlock,
   emitCommunicationContinuationBlock,
 } from "./continuations.js";
+
+function markViewDrafts(
+  incoming: Draft[],
+  viewIndex: number,
+  context: PacketViewContext | undefined,
+  navigationView: import("./navigation-types.js").NavigationView | undefined,
+) {
+  for (const draft of incoming) {
+    draft.views = [context ?? { viewIndex, title: sheetLabel(draft.view) }];
+    if (navigationView) {
+      draft.navigationView = navigationView;
+      draft.navigationInputs = [
+        { view: navigationView, seeds: draft.navigationSeeds ?? [] },
+      ];
+      draft.content = `<g data-navigation-view="${escapeXmlAttribute(navigationView.key)}">${draft.content}</g>`;
+    }
+  }
+}
 
 /** Resolve view-local destinations before optional compact packing, in authored order. */
 export function appendViewDrafts(
@@ -25,9 +45,9 @@ export function appendViewDrafts(
   layout: SchematicPacketRequest["layout"],
   referenceNumber: number,
   context?: PacketViewContext,
+  navigationView?: import("./navigation-types.js").NavigationView,
 ): number {
-  for (const draft of incoming)
-    draft.views = [context ?? { viewIndex, title: sheetLabel(draft.view) }];
+  markViewDrafts(incoming, viewIndex, context, navigationView);
   for (const draft of incoming) {
     const block = draft.communicationBlock;
     if (!block) continue;
@@ -63,8 +83,9 @@ export function appendViewDrafts(
         previous.drawingBounds!.h
     ) {
       const offset = previous.communicationHeight + 10;
+      mergeNavigationInputs(previous, draft);
       previous.views = [...(previous.views ?? []), ...(draft.views ?? [])];
-      previous.content += `<g transform="translate(0 ${n(offset)})">${draft.content}</g>`;
+      previous.content += `<g transform="translate(0 ${n(offset)})">${namespaceContentIds(draft.content, `view-${viewIndex}-`)}</g>`;
       previous.coverage = [
         ...(previous.coverage ?? []),
         ...(draft.coverage ?? []),
@@ -154,4 +175,11 @@ export function assembleSheets(
       : {}),
   }));
   return sheets;
+}
+
+function mergeNavigationInputs(previous: Draft, draft: Draft) {
+  previous.navigationInputs = [
+    ...navigationDraftInputs([previous]),
+    ...navigationDraftInputs([draft]),
+  ];
 }

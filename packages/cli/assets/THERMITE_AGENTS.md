@@ -12,9 +12,7 @@ thermite init ../conveyor --name "Conveyor 1"
 thermite init ../cabinets --template cabinets
 ```
 
-`init` needs a new directory. The default `starter` template has PS1, a 24 VDC
-supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
-two spare cores). `--name` sets `project.name`, the title-block heading.
+`init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
 Check issues; report runtime bugs, gaps or unclear docs at
 https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual behavior, minimal repro,
@@ -62,20 +60,14 @@ and `pattern`.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` in the canonical
 project root through revalidation, commit and rollback; it is not the library
-lock. Never commit it (alpha `init` adds it to `.gitignore`). A005/exit 1 reports
-contention with the exact path, owner PID/hostname/version, creation time and age.
+lock. Never commit it (alpha `init` adds it to `.gitignore`). A005/exit 1 contention reports the exact path, owner PID/hostname/version, creation time and age.
 Wait for a live owner. A dead PID on the recorded host indicates abandonment:
 confirm all writers are stopped, then remove exactly that path. Check the host of
 an unknown/other-host owner; age alone is insufficient. Re-inspect and rebuild
 the patch after another edit; do not just copy a new integrity into an old
 request. On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then
 re-raises; embedded hosts keep their own handlers, and signal-revoked writes fail
-closed. Forced termination may leave the reservation. A commit whose release
-fails stays successful with W801 naming the path: verify the committed state
-instead of replaying, and remove the leftover once that command has exited and no
-other writer runs. Failed applies also name any leftover path. Rollback refuses
-changed chains or bytes; an incomplete restore is exit 2 and lists restored and
-unrestored files with reasons.
+closed. Forced termination may leave the reservation. W801 names a failed release after a successful commit: verify instead of replaying; remove the leftover only after the command exits and all writers stop. Failed applies also name any leftover path. Rollback refuses changed chains/bytes; incomplete restore exits 2, listing restored/unrestored files and reasons.
 
 Get guards from agent `inspect`/`resolve` with `include: ["source"]`: use
 `source.file` as `files[].path` and `source.integrity` as `expectedIntegrity`
@@ -325,33 +317,35 @@ cable inventories. Conduit implies no shield or protective bond.
 ## Function-based circuit drawings
 
 Packets accept `circuit-view-request/0.1` with `title`, `groups`, optional
-`flow`, `columns: 1|2` and `notes`. Each group has a unique `id`,
-optional `label` and `lineReference`, `conductors`, and `functions` selectors
-such as `{device: {by: "designation", value: "PLC1"}, key: "do0"}`. Use real
-function keys and conductor identities. Empty conductors show unconnected
-functions, not spares. Group order affects presentation; order functions by reading
-stage (PLC outputs, terminal points, interlocks, coils). A device's first appearance
-sets its display order.
+`flow`, `columns: 1|2` and `notes`. Each group has a unique `id`, optional
+`label` and `lineReference`, `conductors`, and `functions` selectors such as
+`{device: {by: "designation", value: "PLC1"}, key: "do0"}`. Use real function
+keys and conductor identities. Empty conductors show unconnected functions,
+not spares. Group order sets presentation; order functions by reading stage
+(PLC outputs, terminal points, interlocks, coils). First appearance sets
+device display order.
 
-Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.
-Selected functions retain terminals, wire numbers and references. A wire's
-`properties.label` is its printed number, separate from source identity; repeated
-labels never join nets. Boundary counts expose connections outside the selection;
-a circuit view is not a completeness audit. ELK owns placement/routing. Large
-groups split into numbered parts with whole conductors; R006 means a conductor,
-coupled symbol or label cannot fit. Narrow selection or use larger paper; never
-change topology to fit.
-References use kind/state and terminals; I/O address/terminals; ports key plus
-authored description. Cable headings use type description or state its absence.
-Function keys/type IDs stay in metadata/CSV.
+Tags: designation ≥2.7 mm; instance/else-type description and catalog part
+≥2.5 mm. Selected functions retain terminals, wire numbers and references.
+`properties.label` prints a wire's number, independent of source identity;
+repeated labels never join nets. Boundary counts show unselected connections;
+circuit views are not completeness audits. ELK owns placement/routing. Large
+groups split into numbered parts with whole conductors; R006 means a
+conductor, coupled symbol or label cannot fit. Narrow selection or use larger
+paper; never change topology to fit. References use kind/state and terminals;
+I/O address/terminals; ports key plus authored description. Cable headings use
+type description or state its absence. Function keys/type IDs stay in
+metadata/CSV.
 
-Library `circuitSymbols` maps real function keys to explicit closed-catalog marks,
-for example different marks for main and auxiliary contacts. E206
+Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ. E206
 checks function existence, kind, terminal count and contact state.
-Read `thermite guide circuit-symbols` before selecting a disconnector profile.
-Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
-guess marks; check links/earth/DC ink in both flows. Marks do not create continuity
-or bonds.
+Read `thermite guide circuit-symbols` before disconnector selection.
+Also read `thermite guide circuit-views`; never guess marks; check
+links/earth/DC ink in both flows. Marks create no continuity or bonds.
 
 Reconstruction: record page/line provenance, separate aliases from verified
 pins, preserve conflicts for review, and assert critical endpoints and nets.
+
+One repeat per device/view/sheet; fixed local slots, else own sheet.zone.
+Repeat text keeps 4 mm horizontally from overlapping text bands; centroids
+round half-up to 0.01 mm.

@@ -488,3 +488,109 @@ A standalone SVG whose embedded font subset exceeds 60 KiB returns `R007`
 instead. Packet HTML whose font block exceeds 500 KiB returns `R007`; export
 `.pdf` instead. The CLI writes no file on either refusal. JSON and agent results
 remain font-free.
+
+Packet navigation resolves function locations after sheet composition. Locations
+use the rounded centroid of each function's own visible terminals (0.01 mm,
+then half-open zone classification). The device/function report uses the same
+locations. A boundary context or a report row is not a full-function destination.
+
+When selected views repeat a full function, the earliest authored view is the
+canonical appearance; ties use final sheet and zone reading order. Local
+`Repeat of ss.zone` and `Also shown ss.zone` labels retain every appearance's
+connections and off-view disclosures. Repeated conductor drawings refer to one
+source conductor; they do not add wires or join nets.
+
+Navigation labels occupy measured vacant sheet space after legends and real
+continuation blocks. Each slot reserves the larger of both possible roles and
+the complete 1–100 sheet-token domain before canonical selection. Labels cannot
+grow electrical leaves, change routing or shrink type. If bounded composition
+cannot provide a clear slot, the packet returns R006.
+
+Packet JSON adds `navigation` (`issued-navigation/0.1`): native selection seeds,
+source UID/function occurrence identities, final anchors and transform/clip
+provenance, repeat targets, fixed reservations, primitive locators and millimetre
+page regions for SVG, HTML and PDF review. Canonical status and sheet numbers are
+not occurrence identity. Circuit pagination's source-endpoint-owned boundary
+copies remain separate from full repeats selected in independent views. A
+logical circuit placement keeps its full occurrence with its first native
+endpoint unit; other conductor-unit copies carry boundary provenance. This
+ownership follows source endpoints when pages are repacked. These
+locators support independent source/geometry checking; they do not establish
+visible ink or electrical completeness by themselves. Contact mirrors and
+companion inventory resolution are separate additions.
+
+A device appearance gets one repeat label even when its functions use separate
+glyphs (for example, gang poles). Group by device UID, selected view and sheet;
+glyph identity is only a locator.
+Its label lists each distinct target sheet.zone once, in reading order, using
+exactly the per-function destinations in the reference report. Multiple repeated
+functions use `(same functions)`; one contact uses `(same contact)`. The local
+prefix is `TAG:`. Local slots are preferred: on the owner's sheet, at most 60 mm
+from the distinct-terminal centroid of the whole device appearance, with its own
+device frame strictly nearer than another device frame. Distances are from the label
+box to the centroid/frame. Otherwise the prefix is `TAG (ss.zone):`, where the
+location is the whole appearance's distinct-terminal centroid, including drawn
+functions that are not repeated and visible terminals of boundary fragments.
+This self-location is measured from the final sheet; it is not one arbitrarily
+chosen member function's zone.
+Each mode reserves both roles; the self-located mode also reserves the prefix.
+Frame ownership uses source UID, selected view and measured centroid, including
+drawings whose device frames and function glyphs occupy sibling SVG layers.
+
+For lane E, `snapshotDigest` is SHA-256 of the UTF-8 bytes of
+`JSON.stringify(serializeIr(ir))`, including the JSON string quoting/escaping;
+`serializeIr` is the compiler's canonical IR serialization, including its final
+newline. This is a digest of a JSON-encoded string, not of the raw IR object or
+unquoted serialization. `quantumMm: 0.01` uses `decimal-half-up/1`: decimal ties
+round away from zero (`1.005` → `1.01`, `-1.005` → `-1.01`), using the shortest
+decimal representation of the input number; round before zone classification.
+
+Occurrence `pageRegions` are locator boxes, not ink evidence. Rooted regions
+have `basis: catalog-box`, from the catalog `symbolSize`; circuit adapters expose
+`adapter-box` bounds. Annotation regions are fixed `reservation-box` envelopes.
+The appearance/logical keys are renderer layout locators. Establish completeness
+independently from native IR selection and actual visible symbol/terminal ink
+carrying `data-function-key` / `data-device-uid`, including transforms, clips and
+occlusion; exported seeds, regions and roles cannot establish completeness.
+
+Every reservation ID is unique packet-wide and names one full owner occurrence;
+fragments claim no reservation. A grouped annotation lists its full
+`ownerOccurrences`, while `ownerOccurrence` identifies the representative full
+owner used for allocation. Its targets remain individual function occurrences.
+`locality` records measured geometry and the prefix mode as locators for an
+independent check; it does not confer a locality pass. An invariant refusal is
+R006 with a `Navigation invariant:` message and `navigationInvariant` detail,
+which does not enter layout-repartition retries.
+
+The navigation incidence census retains endpoint ordinals, including both ends
+of a same-terminal loop in defensive IR-level checks. The compiler rejects such
+project loops with E024; the shared off-view producer retains one disclosure per
+physical conductor at that terminal rather than printing a duplicate row.
+
+Repeat envelopes are mode dependent. Allocation tries every local shape before
+any self-located shape. Within each mode the order is the unwrapped maximum,
+then 84, 70, 56, 42 and 28 mm text widths where narrower than that maximum and
+wide enough for an indivisible word. Greedy word wrapping preserves sheet.zone
+tokens and role breaks. Each shape reserves the widest 1–100 sheet/zone token,
+pre-selection multiplicity, and both canonical and secondary roles (including
+mixed groups). These dimensions never depend on the actual destination tokens.
+Only post-pagination vacancy and locality select the mode and shape; selected
+`shapeId`, envelope and maximum forms are exported with the reservation. If no
+shape fits, normal fit refusal applies. This cannot create a token sizing cycle.
+Whether a label exists, and its final membership, can depend on pagination and
+full/fragment status. Its envelope uses
+the native pre-pagination function candidates and multiplicities for that device
+and selected view, including candidates that later become fragments. Pagination
+never changes that capacity profile.
+
+Repeat-label locality intentionally has no zone adjacency condition: same sheet,
+≤60 mm from the appearance's terminal centroid and the owning device as nearest
+frame suffice. The "in or next to the zone" condition belongs to NAV2 mirror
+tables. Each Repeat heading's qualifier follows that heading's distinct source
+functions, not the total group size.
+
+Navigation text envelopes keep at least 4 mm horizontal clearance from other
+text when their line bands overlap vertically, including continuation/location
+headers and other navigation labels. Non-text ink retains 1.5 mm clearance.
+The allocator uses the protected maximum text envelopes; it never shrinks a
+reservation to the current destination text.

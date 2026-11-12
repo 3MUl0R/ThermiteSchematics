@@ -244,7 +244,8 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     expect(r.value.sheets.length).toBeGreaterThan(1);
     for (const sheet of r.value.sheets) {
       const doc = parseHTML(sheet.svg).document;
-      for (const owner of doc.querySelectorAll("[data-device-uid]")) {
+      // Terminal primitives also own source UIDs; only device containers owe tags.
+      for (const owner of doc.querySelectorAll("g[data-device-uid]")) {
         const uid = owner.getAttribute("data-device-uid")!;
         complete(c.ir, owner.outerHTML, [{ deviceUid: uid }]);
       }

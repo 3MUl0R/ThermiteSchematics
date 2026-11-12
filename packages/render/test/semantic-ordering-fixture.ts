@@ -161,6 +161,11 @@ export function semanticIdentities(ir: ElectricalIr, value: unknown): unknown {
         `${prefix}-${JSON.stringify(encoded.split("--").map((p) => visitString(p.replace(/.{4}/gu, (c) => String.fromCharCode(parseInt(c, 16))))))}`,
     );
     for (const id of ids) result = result.replaceAll(id, semanticOrder.key(id));
+    // Reassigning source UIDs changes this opaque locator, not native geometry.
+    result = result.replace(
+      /data-navigation-view="view\/1\/[a-f0-9]+"/gu,
+      'data-navigation-view="UID-dependent-view-key"',
+    );
     return result;
   };
   const visit = (v: unknown): unknown => {

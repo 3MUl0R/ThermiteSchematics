@@ -146,10 +146,12 @@ async function audit(svg: string, ir: any, refs: any[]) {
   }
   return { measured, legends };
 }
-it("has at least 3 mm from all final ink and location borders after letter-portrait trim/fold/stack", async () => {
-  const c = await compileProject("examples/motor-starter");
-  if (!c.ok) throw c;
-  for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+// Audit each independent flow within the same 60-second per-test deadline.
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "has at least 3 mm from all final ink and location borders after letter-portrait trim/fold/stack in %s",
+  async (flow) => {
+    const c = await compileProject("examples/motor-starter");
+    if (!c.ok) throw c;
     const r = await renderSchematicPacket(
       c.ir,
       {
@@ -175,8 +177,9 @@ it("has at least 3 mm from all final ink and location borders after letter-portr
     );
     if (!r.ok) throw r;
     for (const s of r.value.sheets) await audit(s.svg, c.ir, s.references);
-  }
-}, 60000);
+  },
+  60000,
+);
 async function captionClearance() {
   const captions = await page.evaluate(() => {
     const root = document.querySelector("svg")! as unknown as SVGSVGElement,

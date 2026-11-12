@@ -372,6 +372,51 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "One repeat per device/view/sheet; fixed local slots, else own sheet.zone. Repeat text keeps 4 mm horizontally from overlapping text bands; centroids round half-up to 0.01 mm.",
+      async check() {
+        const project = ctx.pristine.starter,
+          view = {
+            format: "schematic-view-request/0.2",
+            root: { by: "designation", value: "PS1" },
+            intent: { kind: "loads" },
+          };
+        const result = await packet(project, {
+          format: "schematic-packet-request/0.1",
+          views: [view, view],
+        });
+        expect(result.code, describeRun(result.args, result)).toBe(0);
+        const value = result.json,
+          nav = value.navigation;
+        expect(nav.quantumMm).toBe(0.01);
+        expect(nav.anchorRule).toBe("function-terminal-centroid/2");
+        expect(nav.annotations.length).toBeGreaterThan(0);
+        expect(
+          nav.reservations.every(
+            (r: any) => r.space === "sheet-slot" && r.maximumForms.length >= 2,
+          ),
+        ).toBe(true);
+        const paths = (svg: string) =>
+          [...parseHTML(svg).document.querySelectorAll("[data-wire-uid]")].map(
+            (e) => [
+              e.getAttribute("data-wire-uid"),
+              e.getAttribute("data-net-id"),
+              e.getAttribute("d"),
+            ],
+          );
+        expect(paths(value.sheets[0].svg)).toEqual(paths(value.sheets[1].svg));
+        for (const o of nav.occurrences)
+          for (const n of Object.values(o.destination.anchorMm) as number[])
+            expect(Math.abs(n * 100 - Math.round(n * 100))).toBeLessThan(
+              0.000001,
+            );
+        for (const a of nav.annotations)
+          expect(value.sheets.some((s: any) => s.svg.includes(a.text))).toBe(
+            true,
+          );
+      },
+    },
+    {
+      claim:
         "References use kind/state and terminals; I/O address/terminals; ports key plus authored description.",
       async check() {
         const compiled = await compileProject(await base());
@@ -484,7 +529,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Read `thermite guide circuit-symbols` before selecting a disconnector profile.",
+        "Read `thermite guide circuit-symbols` before disconnector selection.",
       async check() {
         const guide = await ok(["guide", "circuit-symbols"], ctx.work);
         expect(guide.stdout).toContain("thermite:disconnector");
@@ -695,7 +740,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Group order affects presentation; order functions by reading stage (PLC outputs, terminal points, interlocks, coils). A device's first appearance sets its display order.",
+        "Group order sets presentation; order functions by reading stage (PLC outputs, terminal points, interlocks, coils). First appearance sets device display order.",
       async check() {
         const [drawing, { tb1, tb2 }] = await Promise.all([accepted(), ids()]);
         const forward = sheet(drawing, "Forward").svg;
@@ -726,7 +771,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "A wire's `properties.label` is its printed number, separate from source identity; repeated labels never join nets.",
+        "`properties.label` prints a wire's number, independent of source identity; repeated labels never join nets.",
       async check() {
         const { svg, text } = await multi();
         expect(text.filter((s) => s === "101")).toHaveLength(2);
@@ -741,7 +786,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Boundary counts expose connections outside the selection; a circuit view is not a completeness audit.",
+        "Boundary counts show unselected connections; circuit views are not completeness audits.",
       async check() {
         const { text, json } = await multi();
         // TB1.1 also carries CBL1/1+, TB2.3 also carries J1, and TB2 itself
@@ -824,7 +869,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for main and auxiliary contacts.",
+        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({
@@ -887,7 +932,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Marks do not create continuity or bonds.",
+      claim: "Marks create no continuity or bonds.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         const before = nets(sheet(drawing, "Overload").svg);
@@ -905,7 +950,7 @@ const module: FactModule = {
       "Advice; the wiring view only points readers to the schedules.",
     ],
     [
-      "Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never guess marks; check links/earth/DC ink in both flows.",
+      "Also read `thermite guide circuit-views`; never guess marks; check links/earth/DC ink in both flows.",
       "Manual drawing review advice; geometry and mutations are checked in polarity-qualifiers.test.ts and circuit-operator-fidelity.test.ts.",
     ],
   ]),
