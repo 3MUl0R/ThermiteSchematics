@@ -14,6 +14,7 @@ import {
   terminalRole,
   polarityTerminal,
   assertLoopPolarityEntry,
+  loopFunctionReference,
 } from "./polarity.js";
 
 const record = (v: unknown): v is Record<string, unknown> =>
@@ -462,7 +463,7 @@ function verifyPolarity(
         compare(a.device.designation, b.device.designation) ||
         compare(a.function.id.functionKey, b.function.id.functionKey),
     )
-    .map((f) => `${f.device.designation}.${f.function.id.functionKey}`);
+    .map(loopFunctionReference);
   let departure = required(power.function.terminals[0]);
   const visited = new Set<string>();
   for (let i = 0; i < 3; i++) {

@@ -236,6 +236,7 @@ export function measureSheet(options = {}) {
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
     row: attr(e, "data-report-row"),
+    authoredText: e.getAttribute("data-authored-text"),
     wire:
       attr(e, "data-wire-label") ??
       attr(e, "data-wire-uid") ??

@@ -23,7 +23,7 @@ import type { RenderOutcome } from "../types.js";
 import type { Draft, PaperPage, DrawingBounds } from "./types.js";
 import { failure, record } from "./errors.js";
 import { bounds, zone } from "./page.js";
-import { n, text } from "./svg.js";
+import { n, text, requestNoteText } from "./svg.js";
 import {
   circuitPartHeight,
   resolveCircuitContinuations,
@@ -315,7 +315,9 @@ function appendCircuitNotes(
     y = b.y + headerHeight + noteOffset;
   drafts.at(-1)!.content +=
     text(x, y + 3, "View notes", 2.7, "start", 700) +
-    printedNotes.map((s, i) => text(x, y + 7 + i * 3.5, s, 2.5)).join("");
+    printedNotes
+      .map((s, i) => requestNoteText(x, y + 7 + i * 3.5, s, 2.5))
+      .join("");
   return { ok: true, value: undefined };
 }
 

@@ -40,7 +40,9 @@ it.each(flows)(
       expect(run.status, run.stderr).toBe(0);
       expect(JSON.parse(run.stderr)).toEqual({ diagnostics: [], error: null });
       const html = await readFile(output, "utf8");
-      expect(html).toContain("polarity not verified: AI1.input, TX1.signal.");
+      expect(html).toContain(
+        "polarity not verified: AI1 terminals p/n, TX1 terminals p/n.",
+      );
     } finally {
       await f.dispose();
     }

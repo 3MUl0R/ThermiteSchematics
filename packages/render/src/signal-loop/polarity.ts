@@ -1,4 +1,18 @@
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
+import type { LoopFunction } from "./series-selection.js";
+
+/** Function keys are selectors, not labels. Preserve authored terminal order;
+ * listing the bindings does not assign polarity or infer a terminal number. */
+export function loopFunctionReference(endpoint: LoopFunction) {
+  const terminals = endpoint.function.terminals.map((t) => t.terminalKey);
+  const separator = terminals.some((t) => t.includes("/")) ? ", " : "/";
+  return (
+    endpoint.device.designation +
+    (terminals.length
+      ? ` terminal${terminals.length === 1 ? "" : "s"} ${terminals.join(separator)}`
+      : "")
+  );
+}
 
 export type LoopPolarityKind = "transmitter" | "input";
 const pairs: Readonly<

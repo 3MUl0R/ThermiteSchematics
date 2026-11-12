@@ -47,7 +47,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       expect(JSON.parse(run.stderr)).toEqual({ diagnostics: [], error: null });
       const html = await readFile(output, "utf8");
       expect(html).toContain(
-        "Three separate loop nets; loop power from PS1.output as wired.",
+        "Three separate loop nets; loop power from PS1 terminals p/n as wired.",
       );
       expect(html).toContain("Loop power: PS1");
       expect(html).not.toContain("Two separate signal nets");
@@ -115,7 +115,7 @@ it.each([false, true])(
     const raster = await import("./helpers/pdf-raster.js");
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const note =
-      "Three separate loop nets; loop power from PS1.output as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.";
+      "Three separate loop nets; loop power from PS1 terminals p/n as wired. Not assessed: input mode (passive/active), isolation, loop voltage budget.";
     const f = await seriesFixture(undefined, high);
     try {
       for (const flow of ["left-to-right", "top-to-bottom"]) {

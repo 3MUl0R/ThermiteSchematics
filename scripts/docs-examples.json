@@ -600,9 +600,9 @@
     },
     {
       "file": "docs/signal-loops.md",
-      "hash": "0c47d9b35c7ee9e10894811b9e2a42b8382db6572e7110fc321c735609828c28",
+      "hash": "8c742b53fc265452096bb8c39395faa86bd48405df1fd2ea2e5345afff354df0",
       "kind": "illustrative",
-      "reason": "Exact generated engine-note format with {PS} and {function} placeholders; output notation, not executable input."
+      "reason": "Generated engine-note template with a variable-length authored power reference; output notation, not executable input."
     },
     {
       "file": "docs/signal-loops.md",

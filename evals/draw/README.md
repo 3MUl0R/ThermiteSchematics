@@ -89,6 +89,16 @@ separate reason codes: `no-visible-conductor-labels` when there is nothing to
 measure, and `label-identity-unavailable` for declared visible conductor/net
 labels without identity. Neither case becomes a pass.
 
+Version 5.4 measures every occurrence of a qualified function selector embedded
+in generated text, including ordinary-word keys such as `signal`. Each finding
+records the key and its offset in that text. Authored terminal identifiers with
+the same spelling remain visible facts. Existing instance/type-description
+exemptions remain unchanged. Request-authored `notes` are exempt only on text
+nodes explicitly marked `data-authored-text="request-note"` by the renderer;
+wrapping retains that provenance. Generated engine notes stay measured even when
+a request note contains identical text. Marking a containing group does not
+exempt generated children. Report rows retain their existing separate policy.
+
 ## Prerequisites and costs
 
 Bun 1.4.2 and R2's existing development dependencies are used:
