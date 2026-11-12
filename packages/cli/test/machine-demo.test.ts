@@ -234,7 +234,7 @@ describe("Machine documentation pilot", () => {
       c.presentation,
     );
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.sheets).toHaveLength(2);
+    expect(result.value.sheets).toHaveLength(1);
     const designations = new Set(
       result.value.sheets.flatMap((s) =>
         s.references.map((r) => r.designation),

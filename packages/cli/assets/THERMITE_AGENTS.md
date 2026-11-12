@@ -142,7 +142,7 @@ sheet (R006 otherwise).
 Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
-Standard spacing may use fewer sheets.
+Both flows may fold retained strips to save sheets.
 One caption per terminal appearance, nearest its body; keep all landings and split captions.
 Omit net ink only when its anchored terminal prints the same name.
 
@@ -335,7 +335,7 @@ stage (PLC outputs, terminal points, interlocks, coils). A device's first appear
 sets its display order.
 
 Tags: designation ≥2.7 mm, instance/else-type description and catalog part ≥2.5 mm.
-The view draws selected functions with terminal labels, wire numbers and references.
+Selected functions retain terminal labels, wire numbers and references.
 A wire's `properties.label` is its
 printed number, separate from its source identity; repeated labels never join
 nets. Boundary counts expose connections outside the selection; a circuit view is

@@ -401,9 +401,13 @@ The renderer compares this with the original using the same route, page,
 locality and utilisation order. It adds no ELK runs, cuts or placement choices.
 Every constituent must contain a device, terminal or card; merging cannot hide
 a blank or conductor-only strip. Failed final ink, peer or page-cost checks
-retain the original. Composition is also skipped when earlier pagination omitted
-a strip: surviving drafts no longer map one-to-one to the original grid rows.
+retain the original. Empty grid rows may already have been omitted; composition
+uses the retained viewports and their remapped peer references.
 References use final physical sheet numbers and zones.
+A power view with a short interior jog may spend one remaining placement attempt
+on extra turn space beside captioned poles or a source phase port. The original stays selected unless
+the retry passes page fit, gang and ink checks, reduces jogs, preserves each
+conductor's route quality and card locality, and uses no additional pages.
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
 strip extents; any partly painted location heading stays whole, while wholly

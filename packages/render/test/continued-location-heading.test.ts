@@ -195,7 +195,9 @@ beforeAll(async () => {
 });
 const witnesses = [
   ["landscape", "compact", "left-to-right", false],
-  ["landscape", "compact", "top-to-bottom", true],
+  // The retained strips now compose; the original MAIN-PANEL heading is
+  // wholly outside their viewports and its continued caption supplies context.
+  ["landscape", "compact", "top-to-bottom", false],
   ["landscape", "standard", "left-to-right", false],
   ["portrait", "compact", "top-to-bottom", true],
   ["portrait", "standard", "top-to-bottom", true],

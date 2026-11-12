@@ -621,7 +621,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "The view draws selected functions with terminal labels, wire numbers and references.",
+        "Selected functions retain terminal labels, wire numbers and references.",
       async check() {
         const { svg, text } = await multi();
         expect(svg).toContain('data-circuit-mark="load"');

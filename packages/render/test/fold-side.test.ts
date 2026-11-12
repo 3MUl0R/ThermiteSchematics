@@ -3,6 +3,7 @@ import { sectionGroups } from "../src/packet/fold-stack.js";
 import { sideSections } from "../src/packet/fold-side.js";
 import { stripEnvelope, expandHeadings } from "../src/packet/strip-envelope.js";
 import { sideCandidate, fixtureInk } from "./helpers/side-candidate.js";
+import { contentPages, viewportContent } from "../src/packet/rooted-content.js";
 
 it.each([2, 3, 4])(
   "composes %i existing TB strips in order without changing layout or cuts",
@@ -63,6 +64,30 @@ it.each(["tail", "blank", "enclosure"])(
     expect(sideSections(c, fixtureInk)).toBeUndefined();
   },
 );
+it("composes retained viewports after an empty leading grid row is omitted", () => {
+  const c = sideCandidate(3, 0);
+  c.prepared.layout.edges[0]!.points[0] = { x: 120, y: 230 };
+  c.drafts[0]!.links = [];
+  c.drafts[1]!.links = c.drafts[1]!.links.filter((l) => l.to !== 1);
+  for (const draft of c.drafts)
+    draft.rootedContent = viewportContent(
+      c.prepared,
+      draft.rootedSections![0]!.viewport,
+    );
+  const kept = contentPages(c.drafts);
+  if (typeof kept === "string") throw Error(kept);
+  c.drafts = kept;
+  expect(c.drafts).toHaveLength(2);
+  const result = sideSections(c, fixtureInk)!;
+  expect(result).toHaveLength(1);
+  expect(result[0]!.rootedSections).toHaveLength(2);
+  expect(result[0]!.references!.map((r) => r.designation)).toEqual([
+    "D1",
+    "D2",
+  ]);
+  expect(result[0]!.links).toHaveLength(2);
+  expect(result[0]!.links.every((l) => l.to === 1)).toBe(true);
+});
 it("retains LR, omitted-row, two-column, already composed and overwide originals", () => {
   const lr = sideCandidate();
   lr.prepared = {
