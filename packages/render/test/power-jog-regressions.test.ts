@@ -3,13 +3,20 @@ import { compileProject } from "@thermite/compiler";
 import { drawingDrafts } from "../src/packet/rooted.js";
 import { sidePage } from "./helpers/side-candidate.js";
 import { lengths } from "./helpers/route-quality.js";
+import {
+  rootedWinner,
+  searchRootedCandidates,
+} from "../src/packet/rooted-search.js";
+import { candidateUtilisation } from "../src/packet/rooted-score.js";
 
 it.each([
-  ["motor-starter", "M1", ["W-PWR-003"]],
-  ["machine-demo", "M2", ["W-PWR-007-M2", "W-PWR-009-M2"]],
+  ["motor-starter", "M1", ["W-PWR-003"], "standard"],
+  ["motor-starter", "M1", ["W-PWR-003"], "compact"],
+  ["machine-demo", "M2", ["W-PWR-007-M2", "W-PWR-009-M2"], "standard"],
+  ["machine-demo", "M2", ["W-PWR-007-M2", "W-PWR-009-M2"], "compact"],
 ] as const)(
   "repairs %s power jogs without moving them onto another conductor",
-  async (project, root, names) => {
+  async (project, root, names, mode) => {
     const c = await compileProject("examples/" + project);
     if (!c.ok) throw Error("Compile failed");
     const result = await drawingDrafts(
@@ -22,6 +29,7 @@ it.each([
       },
       c.presentation,
       sidePage,
+      mode,
     );
     if (!result.ok) throw Error(JSON.stringify(result));
     const p = result.value[0]!.rootedLegendSource!.prepared;
@@ -43,6 +51,41 @@ it.each([
         ),
       ).toBe(true);
     }
+  },
+  30000,
+);
+
+it.each([
+  ["a3", 297, 420],
+  ["tabloid", 279.4, 431.8],
+] as const)(
+  "preserves useful compact %s portrait recovery before trying a jog repair",
+  async (size, widthMm, heightMm) => {
+    const c = await compileProject("examples/motor-starter");
+    if (!c.ok) throw Error("Compile failed");
+    const page = {
+      size,
+      orientation: "portrait" as const,
+      widthMm,
+      heightMm,
+      marginMm: 10,
+    };
+    const run = await searchRootedCandidates(
+      c.ir,
+      {
+        format: "schematic-view-request/0.1",
+        family: "power",
+        flow: "top-to-bottom",
+        root: { by: "designation", value: "M1" },
+      },
+      c.presentation,
+      page,
+      true,
+    );
+    const winner = rootedWinner(run, page)!;
+    expect(winner.drafts).toHaveLength(1);
+    expect(candidateUtilisation(winner, page)).toBeGreaterThanOrEqual(0.4);
+    expect([...winner.jogs.values()].every((n) => n === 0)).toBe(true);
   },
   30000,
 );

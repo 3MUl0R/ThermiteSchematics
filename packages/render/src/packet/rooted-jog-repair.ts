@@ -17,6 +17,7 @@ import {
 } from "./rooted-build.js";
 import { routeGrowth } from "./rooted-clipped-routes.js";
 import { candidateUtilisation } from "./rooted-score.js";
+import { USEFUL_UTILISATION } from "./rooted-order.js";
 import { localityRegression } from "./rooted-locality.js";
 import { composeRootedWinner } from "./rooted-compose.js";
 import { compositionFits } from "./composition-fit.js";
@@ -86,7 +87,7 @@ export async function repairRootedJogs(
   candidate.drafts = materialized.value;
   if (
     !compositionFits(candidate, native, page) ||
-    !preservesPrintedPages(ir, original, candidate, native, page)
+    !preservesPrintedQuality(ir, original, candidate, native, page, run)
   )
     return original;
   candidate.printableDrafts = materialized.value;
@@ -114,12 +115,13 @@ export async function repairSearchJogs(
 
 /** Compare the final strip compositions too: equal virtual grids can fold to
  * different physical page counts after a reservation changes the strip widths. */
-function preservesPrintedPages(
+function preservesPrintedQuality(
   ir: Readonly<ElectricalIr>,
   original: RootedCandidate,
   candidate: RootedCandidate,
   native: RootedCandidate,
   page: PaperPage,
+  run: RootedSearch,
 ) {
   const printed = original.printableDrafts
     ? { ok: true as const, value: original.printableDrafts }
@@ -132,7 +134,14 @@ function preservesPrintedPages(
     page,
   );
   const after = composeRootedWinner(ir, candidate, native, page);
-  return after.drafts.length <= before.drafts.length;
+  // A sparse repaired first layout must not settle compact recovery before
+  // it finds a useful placement. Use the existing economy threshold, measured
+  // after composition, without extending the recovery or retry budgets.
+  return (
+    after.drafts.length <= before.drafts.length &&
+    (run.standardEconomy !== false ||
+      candidateUtilisation(after, page) >= USEFUL_UTILISATION)
+  );
 }
 
 /** Reserve only the measured source-side shortfall. One 0.001-unit coordinate

@@ -408,6 +408,8 @@ A power view with a short interior jog may spend one remaining placement attempt
 on extra turn space beside captioned poles or a source phase port. The original stays selected unless
 the retry passes page fit, gang and ink checks, reduces jogs, preserves each
 conductor's route quality and card locality, and uses no additional pages.
+In compact mode the repaired composition must meet the existing useful
+utilisation threshold before it can replace ordinary placement recovery.
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
 strip extents; any partly painted location heading stays whole, while wholly

@@ -10,6 +10,7 @@ import * as prepared from "../src/off-view/prepared.js";
 import * as build from "../src/packet/rooted-build.js";
 import * as compose from "../src/packet/rooted-compose.js";
 import * as fit from "../src/packet/composition-fit.js";
+import * as score from "../src/packet/rooted-score.js";
 import { sideCandidate, sidePage } from "./helpers/side-candidate.js";
 
 const ir = {} as ElectricalIr;
@@ -84,7 +85,7 @@ it.each(["placement", "economy"])(
     expect(layout).not.toHaveBeenCalled();
   },
 );
-it.each(["pages", "composed-pages", "worse-jog", "fit", "gang"])(
+it.each(["pages", "composed-pages", "sparse", "worse-jog", "fit", "gang"])(
   "retains the original on a %s regression",
   async (failure) => {
     const { original, candidate, run, layout, check } = fixture();
@@ -104,6 +105,10 @@ it.each(["pages", "composed-pages", "worse-jog", "fit", "gang"])(
           : c,
       );
     if (failure === "fit") check.mockReturnValue(false);
+    if (failure === "sparse") {
+      run.standardEconomy = false;
+      vi.spyOn(score, "candidateUtilisation").mockReturnValue(0.399999);
+    }
     if (failure === "gang")
       layout.mockResolvedValue({
         ok: false,
