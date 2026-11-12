@@ -136,7 +136,8 @@ Version 5.6 adds the drawing-review E1 measurements in dedicated modules:
 - DQ-10 measures native DC polarity primitive orientation, its nearest owned port
   and lead-ink overlap. Adjacency also requires the mark centre within half the
   measured positive/return port separation. Missing or foreign native port owners
-  are explicit findings; their loss cannot remove a visible glyph from the population.
+  are explicit findings. Native DC port pairs stay in the population even when
+  both qualifier and glyph-id locators disappear; missing glyph ink then fails.
   The bounded radius prevents a distant mark from passing
   solely because its own port is still nearest. DQ-04 separately measures upright earth bars, disjoint
   pressure/level operating-link ink after collinear union, and a closed-state
@@ -147,7 +148,11 @@ Version 5.6 adds the drawing-review E1 measurements in dedicated modules:
   unresolved/forged native ownership fails. Assembly bars stay excluded.
 - DQ-13 counts terminal attachment paths, including tag-lane extensions, in dot
   incidence and compares their weight to actual incident native conductors with
-  the existing 0.01 mm stroke tolerance. Rays with no selected incident conductor
+  a 0.01 mm measurement epsilon. Helm's E1 review decision requires attachment
+  and tag-lane rays to equal their incident conductor weight; the checker reports
+  rays exceeding that weight by more than the epsilon. The 0.35 mm versus 0.32 mm
+  instances are minor consistency findings, retained as honest fails until lane RT
+  fixes the renderer, not permanent pins. Rays with no selected incident conductor
   are explicitly unassessed. This adopts no global symbol-weight convention.
 - DQ-08 requires one intact native conductor identity line, allowing adjacent font
   fragments. Reciprocal same-sheet folds remain valid. Actual inter-block and
@@ -159,6 +164,13 @@ Version 5.6 adds the drawing-review E1 measurements in dedicated modules:
   missing, hidden and forged rows fail. DQ-09 separately reports missing exact
   issued target locations. Legacy notes bootstrap their typed native scopes;
   document kind/title, JSON coverage and hyperlinks alone cannot satisfy them.
+  A circuit-coverage promise requires actual issued function ink matched to an
+  authored `circuit-view-request/0.1` group and its native function selections.
+  Planner `view.kind` is not an oracle; rooted power/control sheets cannot count,
+  even if they draw every promised function or claim a circuit kind. The reason
+  `no-sufficient-issued-circuit-view` names that exact check. No printed coverage
+  document kind is currently issuable: `schematic-coverage/0.1` is packet JSON,
+  so the checker makes no claim to validate a printed coverage table.
   Generic honest partial-view wording creates no companion promise. New inventory
   locators, when supplied, must agree with native scope and source snapshot.
 - DQ-16 measures formerly label-free sheet fragments against a verified visible
@@ -284,8 +296,11 @@ per (font, medium), pending renderer/user adoption (DECISIONS-FOR-USER item 12).
 
 Frame/zone/title furniture has no documented primary-label minimum. Header and
 title regions come from the measured frame and full-width divider rules; the top
-zone strip ends at the measured ink bottom of the complete 1–6 zone row. The A–D
-border column is recognized separately. There is no fixed 35 mm body cutoff.
+zone strip ends at the measured ink bottom of a complete sequential numeric zone
+row starting at 1, including multi-digit columns. The sequential alphabetic border
+column is recognized separately, continuing beyond D and Z (AA, AB, ...).
+Both strips require measured alignment and unowned sheet text; there is no fixed
+35 mm body cutoff or fixed count of zones.
 Owned drawing labels and off-page continuation links are never furniture; bounds,
 overlap, distortion and ISO policy still apply to furniture. Secondary captions
 come from direct circuit-node roles, exported related-function/boundary metadata

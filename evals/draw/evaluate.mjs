@@ -294,7 +294,14 @@ export function evaluateSheet(
         "Paths with conductor identity; legacy net-edge labels without a wire association need that export before proximity can be proven.",
     }),
   );
-  const dependencies = dependencyFindings(s, packet, g, geometries, ir);
+  const dependencies = dependencyFindings(
+    s,
+    packet,
+    g,
+    geometries,
+    ir,
+    request,
+  );
   out.push(
     obs("DQ-09", dependencies.targetFindings, {
       id: `${c.id}/DQ-09/dependency-targets-${s.number}`,

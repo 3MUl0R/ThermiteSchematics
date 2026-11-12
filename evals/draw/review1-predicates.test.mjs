@@ -9,6 +9,8 @@ import {
 import { continuationTypography } from "./continuation-typography.mjs";
 import { dependencyFindings } from "./document-dependencies.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
+import { classifyTextGeometry } from "./text-classification.mjs";
+import { printedZones } from "./printed-zones.mjs";
 const bbox = { x: 0, y: 0, w: 20, h: 20 };
 const line = (element, a, b, extra = {}) => ({
   element,
@@ -386,6 +388,55 @@ const labels = () => [
     anchor: p(0, 5),
   }),
 ];
+it("M4 measures complete zone strips beyond D/6, including AA and multi-digit columns", () => {
+  const zoneText = (value, x, y) =>
+    text(value, {
+      element: `zone-${value}`,
+      sheetText: true,
+      bbox: { x, y, w: 2, h: 2 },
+      anchor: p(x, y + 2),
+    });
+  const numbers = Array.from({ length: 12 }, (_, i) =>
+    zoneText(String(i + 1), 20 + i * 10, 10),
+  );
+  const letters = Array.from({ length: 27 }, (_, i) =>
+    zoneText(i === 26 ? "AA" : String.fromCharCode(65 + i), 2, 30 + i * 5),
+  );
+  const fake = zoneText("AB", 2, 165);
+  fake.row = "a-report-row";
+  const g = geometry({
+    width: 200,
+    height: 200,
+    frame: { x: 0, y: 0, w: 200, h: 200 },
+    headerRule: { x: 0, y: 5, w: 200, h: 0 },
+    texts: [...numbers, ...letters, fake],
+  });
+  classifyTextGeometry(g);
+  expect(printedZones(g)).toEqual({ numbers, letters });
+  expect([...numbers, ...letters].every((t) => t.furniture)).toBe(true);
+  expect(fake.furniture).toBe(false);
+  for (const target of [letters[4], letters[26], numbers[9]]) {
+    const near = labels().map((t) => ({
+      ...t,
+      bbox: { ...target.bbox, x: target.bbox.x + 3 },
+    }));
+    const result = continuationTypography(
+      sheet,
+      { ...g, connectors: [connector], texts: [...g.texts, ...near] },
+      wireIr,
+    );
+    expect(result.findings).toEqual([]);
+    expect(
+      result.zoneClearances.find((m) => m.zoneText === target.text)?.gapMm,
+    ).toBe(1);
+  }
+  // Partial strips and owned labels do not manufacture zone evidence.
+  const incomplete = {
+    ...g,
+    texts: [...numbers.filter((t) => t.text !== "7"), ...letters, fake],
+  };
+  expect(printedZones(incomplete)).toEqual({ numbers: [], letters: [] });
+});
 describe("M4 continuation line units and #230 label-free fragments", () => {
   it("one native identifier line, not merely concatenated bytes", () => {
     const g = geometry({ connectors: [connector], texts: labels() });
@@ -769,19 +820,38 @@ it("M3 generic circuit promise requires every native function in scope", () => {
       ],
     },
     first = { number: 1, view: { kind: "power" } },
-    report = { number: 2, view: { kind: "circuit" } },
-    pk = { sheets: [first, report] };
+    report = { number: 2, view: { kind: "circuit", title: "Functions" } },
+    pk = { sheets: [first, report] },
+    request = {
+      views: [
+        {
+          format: "circuit-view-request/0.1",
+          title: "Functions",
+          groups: [
+            {
+              id: "main",
+              functions: [
+                { device: { by: "uid", value: "d" }, key: "one" },
+                { device: { by: "designation", value: "D" }, key: "two" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
   const g = geometry({
       devices: [{ deviceUid: "d" }],
       texts: [text("See circuit views or packet coverage.")],
     }),
     q = geometry({
       shapes: [
-        { deviceUid: "d", functionKey: "one" },
-        { deviceUid: "d", functionKey: "two" },
+        { deviceUid: "d", functionKey: "one", circuitGroup: "main" },
+        { deviceUid: "d", functionKey: "two", circuitGroup: "main" },
       ],
     });
-  expect(dependencyFindings(first, pk, g, [g, q], source).findings).toEqual([]);
+  expect(
+    dependencyFindings(first, pk, g, [g, q], source, request).findings,
+  ).toEqual([]);
   expect(
     dependencyFindings(
       first,
@@ -789,9 +859,116 @@ it("M3 generic circuit promise requires every native function in scope", () => {
       g,
       [g, { ...q, shapes: q.shapes.slice(0, 1) }],
       source,
+      request,
     ).findings[0]?.kind,
   ).toBe("printed-document-target-insufficient");
+  // Kind is determined by the authored request; the planner cannot veto or
+  // manufacture a circuit appearance by changing its kind field.
+  expect(
+    dependencyFindings(
+      first,
+      {
+        sheets: [first, { ...report, view: { ...report.view, kind: "power" } }],
+      },
+      g,
+      [g, q],
+      source,
+      request,
+    ).findings,
+  ).toEqual([]);
+  for (const badRequest of [
+    undefined,
+    {
+      views: [
+        {
+          ...request.views[0],
+          format: "schematic-view/0.2",
+          family: "power",
+        },
+      ],
+    },
+    { views: [{ ...request.views[0], title: "Another circuit" }] },
+    {
+      views: [
+        {
+          ...request.views[0],
+          groups: [
+            { id: "foreign", functions: request.views[0].groups[0].functions },
+          ],
+        },
+      ],
+    },
+    {
+      views: [
+        {
+          ...request.views[0],
+          groups: [
+            {
+              id: "main",
+              functions: request.views[0].groups[0].functions.slice(0, 1),
+            },
+          ],
+        },
+      ],
+    },
+  ])
+    expect(
+      dependencyFindings(first, pk, g, [g, q], source, badRequest).findings[0]
+        ?.reason,
+    ).toBe("no-sufficient-issued-circuit-view");
 });
+it.each(["power", "control"])(
+  "M3 a complete rooted %s sheet cannot discharge a circuit promise, even with forged planner kind",
+  (family) => {
+    const source = {
+      ...wireIr,
+      functions: ["one", "two"].map((functionKey) => ({
+        id: { deviceUid: "d", functionKey },
+      })),
+    };
+    const g = geometry({
+      devices: [{ deviceUid: "d" }],
+      texts: [text("See circuit views or packet coverage.")],
+      shapes: source.functions.map((f) => ({
+        deviceUid: f.id.deviceUid,
+        functionKey: f.id.functionKey,
+      })),
+    });
+    const authored = {
+      format: "schematic-view/0.2",
+      family,
+      title: "Rooted",
+      root: { by: "uid", value: "d" },
+    };
+    for (const kind of [family, "circuit"]) {
+      const sheet = {
+        number: 1,
+        view: { ...authored, root: { deviceUid: "d" }, kind },
+      };
+      const findings = dependencyFindings(
+        sheet,
+        { sheets: [sheet] },
+        g,
+        [g],
+        source,
+        { views: [authored] },
+      ).findings;
+      expect(findings[0]?.kind).toBe("printed-document-target-insufficient");
+      expect(findings[0]).toMatchObject({
+        need: "coverage",
+        reason: "no-sufficient-issued-circuit-view",
+        missingFunctions: source.functions.map((f) => f.id),
+      });
+      // Removing the planner root cannot make its forged kind authoritative.
+      const forged = { ...sheet, view: { title: "Rooted", kind: "circuit" } };
+      expect(
+        dependencyFindings(forged, { sheets: [forged] }, g, [g], source, {
+          views: [authored],
+        }).findings[0]?.kind,
+      ).toBe("printed-document-target-insufficient");
+    }
+  },
+);
 it("M3 assembly companion preserves unresolved pin maps rather than inventing cores", () => {
   const source = {
     devices: [
@@ -884,6 +1061,23 @@ it("polarity native ownership fails closed on missing or forged terminal owners"
       ir,
     )[0]?.kind,
   ).toBe("polarity-port-ownership-unavailable");
+});
+it("native DC port pairs cannot leave the population when both glyph locators are stripped", () => {
+  const g = polarity();
+  for (const shapes of [
+    g.shapes.map((s) => ({ ...s, qualifier: undefined, symbol: undefined })),
+    [],
+  ])
+    expect(
+      polarityFindings({ ...g, shapes }, ir).some(
+        (f) => f.kind === "polarity-primitive-not-upright",
+      ),
+    ).toBe(true);
+  const ac = {
+    ...ir,
+    terminals: ir.terminals.map((t) => ({ ...t, role: "ac_line" })),
+  };
+  expect(polarityFindings({ ...g, shapes: [] }, ac)).toEqual([]);
 });
 it("native load supply polarity requires its authored DC voltage class", () => {
   const source = {

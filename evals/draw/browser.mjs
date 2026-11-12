@@ -142,6 +142,7 @@ export function measureSheet(options = {}) {
   };
   const attr = (e, name) => e.closest(`[${name}]`)?.getAttribute(name);
   const all = Array.from(root.querySelectorAll("*"));
+  const orders = new Map(all.map((e, i) => [e, i]));
   const ids = new Map(
     all.map((e, i) => [e, `${e.tagName.toLowerCase()}-${i}`]),
   );
@@ -240,6 +241,7 @@ export function measureSheet(options = {}) {
     textContainer: ids.get(e.parentElement),
     authoredText: e.getAttribute("data-authored-text"),
     functionKey: attr(e, "data-function-key"),
+    circuitGroup: attr(e, "data-circuit-group"),
     communicationPort: attr(e, "data-communication-port"),
     circuitHeading: e.getAttribute("data-circuit-source-heading"),
     wire:
@@ -839,7 +841,7 @@ export function measureSheet(options = {}) {
             knockout = true;
             plate = {
               element: ids.get(prev),
-              order: all.indexOf(prev),
+              order: orders.get(prev),
               bbox: bounds(prev),
             };
           }
@@ -968,7 +970,7 @@ export function measureSheet(options = {}) {
           sourceTextKey,
           text: renderedString.trim(),
           renderedString,
-          order: all.indexOf(e),
+          order: orders.get(e),
           baseline: css.dominantBaseline + "/" + css.alignmentBaseline,
           baselineShiftMm: baselineShift * scaleY,
           bbox: v.b,
@@ -1369,7 +1371,7 @@ export function measureSheet(options = {}) {
             bbox: v.b,
             clips: [v.clip, ...clips],
             inverse: e.getScreenCTM().inverse(),
-            order: all.indexOf(e),
+            order: orders.get(e),
           },
         ];
       } catch {
@@ -1469,6 +1471,8 @@ export function measureSheet(options = {}) {
     const css = getComputedStyle(e),
       rgba = colour(css.stroke);
     let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+    // visible() already rejects display:none / visibility:hidden and zero boxes.
+    // Opacity is not inherited, so multiply it through the ancestor chain here.
     for (let node = e; node; node = node.parentElement)
       alpha *= Number(getComputedStyle(node).opacity);
     if (alpha < 0.2 || rgba?.slice(0, 3).every((c) => c === 255)) return [];
@@ -1490,7 +1494,8 @@ export function measureSheet(options = {}) {
     if (clips === null) return [];
     const intervals = [];
     let start, previous;
-    const covers = occluders.filter((o) => o.order > all.indexOf(e));
+    const order = orders.get(e);
+    const covers = occluders.filter((o) => o.order > order);
     for (let i = 0; i <= count; i++) {
       const local = e.getPointAtLength((length * i) / count),
         q = local.matrixTransform(matrix),

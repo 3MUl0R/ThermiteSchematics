@@ -1,6 +1,7 @@
 import { zoneAt } from "./checks.mjs";
 import { createHash } from "node:crypto";
 import { finding, painted, groupBy } from "./review-geometry.mjs";
+import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -366,7 +367,7 @@ function sufficient(row, fact) {
       c.peers.every((p) => containsFact(connections, p)),
   );
 }
-export function dependencyFindings(sheet, packet, g, geometries, ir) {
+export function dependencyFindings(sheet, packet, g, geometries, ir, request) {
   const dependencies = pointerDependencies(sheet, g, ir),
     issued = visibleDocumentRows(packet, geometries),
     findings = [],
@@ -400,7 +401,7 @@ export function dependencyFindings(sheet, packet, g, geometries, ir) {
     }
     if (dep.need === "coverage") {
       const circuit = packet.sheets.flatMap((s, i) =>
-        s.view.kind === "circuit" ? geometries[i].shapes : [],
+        authoredCircuitShapes(s, geometries[i], ir, request),
       );
       const requiredFunctions = (ir.functions ?? []).filter((f) =>
         dep.uids.includes(f.id.deviceUid),
@@ -420,7 +421,7 @@ export function dependencyFindings(sheet, packet, g, geometries, ir) {
             need: dep.need,
             missingDeviceUids: missing,
             missingFunctions: missingFunctions.map((f) => f.id),
-            reason: "no-sufficient-issued-circuit-or-printed-coverage",
+            reason: "no-sufficient-issued-circuit-view",
           }),
         );
       continue;

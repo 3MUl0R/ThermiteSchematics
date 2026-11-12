@@ -42,16 +42,17 @@ export function polarityFindings(g, ir) {
       (s) => s.symbolGroup === owner && !s.terminal,
     );
     const dc = ports.filter((t) => nativePolarity(ir, t));
-    // Qualifier ink and full DC glyph locators remain in the population even
-    // when terminal metadata is missing or forged. A locator never grants an
-    // exemption from native ownership reconciliation.
+    // Native DC port pairs remain in the population with both glyph locators
+    // stripped. Conversely, glyph locators retain missing/forged port owners
+    // for reconciliation; neither source grants an exemption from the other.
     if (
+      dc.length !== 2 &&
       !shapes.some(
         (s) => s.qualifier || /source-dc|dc-load/.test(s.symbol ?? ""),
       )
     )
       continue;
-    const expectedUid = shapes[0]?.deviceUid;
+    const expectedUid = shapes[0]?.deviceUid ?? ports[0]?.deviceUid;
     if (
       dc.length !== 2 ||
       !expectedUid ||

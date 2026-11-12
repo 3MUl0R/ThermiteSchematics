@@ -3,6 +3,7 @@ import { launchBrowser } from "../../packages/cli/test/helpers/pdf-raster.ts";
 import { drawingContextOptions, openSheet } from "./browser.mjs";
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
 import { loopRouteFindings, attachmentAudit } from "./routing-hygiene.mjs";
+import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
 let browser, context, page;
 beforeAll(async () => {
   browser = await launchBrowser();
@@ -39,6 +40,47 @@ const ir = {
   ],
   terminals: [],
 };
+it("issued circuit ink resolves measured group locators to authored native functions, not planner kind", async () => {
+  const request = {
+    views: [
+      {
+        format: "circuit-view-request/0.1",
+        title: "Circuit",
+        groups: [
+          {
+            id: "main",
+            functions: [{ device: { by: "uid", value: "d" }, key: "c" }],
+          },
+        ],
+      },
+    ],
+  };
+  const content = contact().replace(
+    '<g data-device-uid="d"',
+    '<g data-circuit-group="main" data-device-uid="d"',
+  );
+  const g = await openSheet(page, content);
+  const sheet = { view: { title: "Circuit", kind: "power" } };
+  expect(authoredCircuitShapes(sheet, g, ir, request).length).toBeGreaterThan(
+    0,
+  );
+  for (const bad of [
+    content.replace(
+      'data-circuit-group="main"',
+      'data-circuit-group="foreign"',
+    ),
+    content.replace('data-device-uid="d"', 'data-device-uid="foreign"'),
+    content.replace('data-function-key="c"', 'data-function-key="foreign"'),
+  ])
+    expect(
+      authoredCircuitShapes(
+        { view: { title: "Circuit", kind: "circuit" } },
+        await openSheet(page, bad),
+        ir,
+        request,
+      ),
+    ).toEqual([]);
+});
 it("actual dash intervals merge duplicated solid ink; hidden/overpainted dashes fail", async () => {
   const g = await openSheet(page, contact());
   expect(markFindings(g, ir)).toEqual([]);
@@ -96,6 +138,19 @@ it("actual polarity uses native port role and geometry, not orientation flags", 
   expect(polarityFindings(await openSheet(page, svg(body)), source)).toEqual(
     [],
   );
+  expect(
+    polarityFindings(
+      await openSheet(
+        page,
+        svg(
+          body
+            .replaceAll(' data-symbol-qualifier="polarity"', "")
+            .replace(' data-symbol-id="power-source-dc"', ""),
+        ),
+      ),
+      source,
+    ).some((f) => f.kind === "polarity-primitive-not-upright"),
+  ).toBe(true);
   expect(
     polarityFindings(
       await openSheet(

@@ -6,6 +6,7 @@ import {
   identityMatches,
 } from "./continuation-labels.mjs";
 import { finding, painted, extent } from "./review-geometry.mjs";
+import { printedZones } from "./printed-zones.mjs";
 export function continuationTypography(sheet, g, ir) {
   const findings = [],
     blocks = [],
@@ -64,6 +65,7 @@ export function continuationTypography(sheet, g, ir) {
       ),
     });
   }
+  const zones = printedZones(g);
   return {
     findings,
     measurements: blocks
@@ -89,26 +91,24 @@ export function continuationTypography(sheet, g, ir) {
       .filter((m) => m.gapMm < 10),
     zoneClearances: blocks
       .flatMap((b) =>
-        g.texts
-          .filter((t) => painted(t) && t.furniture && /^[A-D1-6]$/.test(t.text))
-          .map((t) => ({
-            element: b.element,
-            zoneElement: t.element,
-            zoneText: t.text,
-            gapMm: Math.hypot(
-              Math.max(
-                0,
-                b.bbox.x - t.bbox.x - t.bbox.w,
-                t.bbox.x - b.bbox.x - b.bbox.w,
-              ),
-              Math.max(
-                0,
-                b.bbox.y - t.bbox.y - t.bbox.h,
-                t.bbox.y - b.bbox.y - b.bbox.h,
-              ),
+        [...zones.numbers, ...zones.letters].filter(painted).map((t) => ({
+          element: b.element,
+          zoneElement: t.element,
+          zoneText: t.text,
+          gapMm: Math.hypot(
+            Math.max(
+              0,
+              b.bbox.x - t.bbox.x - t.bbox.w,
+              t.bbox.x - b.bbox.x - b.bbox.w,
             ),
-            assessment: "measured-threshold-pending",
-          })),
+            Math.max(
+              0,
+              b.bbox.y - t.bbox.y - t.bbox.h,
+              t.bbox.y - b.bbox.y - b.bbox.h,
+            ),
+          ),
+          assessment: "measured-threshold-pending",
+        })),
       )
       .filter((m) => m.gapMm < 10),
     sameSheetEnds: blocks.filter((b) => b.toSheet === sheet.number).length,
