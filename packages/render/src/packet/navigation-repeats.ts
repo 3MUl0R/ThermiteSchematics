@@ -32,7 +32,6 @@ interface LabelMember {
   owner: PlacedOccurrence;
   canonical: PlacedOccurrence;
   targets: PlacedOccurrence[];
-  count: number;
 }
 export function planRepeatNavigation(
   ir: Readonly<ElectricalIr>,
@@ -46,13 +45,18 @@ export function planRepeatNavigation(
       const key = JSON.stringify([o.source.deviceUid, o.source.functionKey]);
       byFunction.set(key, [...(byFunction.get(key) ?? []), o]);
     }
+  const capacities = new Map(
+    [...byFunction].map(
+      ([key, appearances]) => [key, appearances.length] as const,
+    ),
+  );
+  for (const [key, count] of maximumCounts) capacities.set(key, count);
   const groups: RepeatPlan["groups"][number][] = [],
     labels = new Map<string, LabelMember[]>();
-  for (const [key, appearances] of byFunction) {
+  for (const appearances of byFunction.values()) {
     if (appearances.length < 2) continue;
     const sorted = appearances.slice().sort(readingOrder),
       canonical = required(sorted[0], "Missing canonical occurrence");
-    const count = maximumCounts.get(key) ?? sorted.length;
     groups.push({
       source: canonical.source,
       canonical: canonical.id,
@@ -70,13 +74,12 @@ export function planRepeatNavigation(
           owner,
           canonical,
           targets: owner === canonical ? sorted.slice(1) : [canonical],
-          count,
         },
       ]);
     }
   }
   const planned = [...labels.values()].map((members) =>
-    groupedLabel(ir, members, maximumCounts, maximumMembers),
+    groupedLabel(ir, members, capacities, maximumMembers),
   );
   return {
     groups,
@@ -182,21 +185,15 @@ function maximumProfile(
     owner.source.deviceUid,
     owner.provenance.view.key,
   ]);
+  const multiplicity = (source: FunctionId) =>
+    required(
+      counts.get(JSON.stringify([source.deviceUid, source.functionKey])),
+      "Missing repeat capacity source",
+    );
   const selected = (
     candidates.get(key) ?? members.map((m) => m.owner.source)
-  ).filter(
-    (source) =>
-      (counts.get(JSON.stringify([source.deviceUid, source.functionKey])) ??
-        2) > 1,
-  );
-  const multiplicities = selected.map(
-    (source) =>
-      counts.get(JSON.stringify([source.deviceUid, source.functionKey])) ??
-      required(
-        members.find((m) => m.owner.source.functionKey === source.functionKey),
-        "Missing repeat capacity source",
-      ).count,
-  );
+  ).filter((source) => multiplicity(source) > 1);
+  const multiplicities = selected.map(multiplicity);
   const owners = selected.map((source) => ({ ...owner, source }));
   return {
     noun: repeatNoun(ir, owners),

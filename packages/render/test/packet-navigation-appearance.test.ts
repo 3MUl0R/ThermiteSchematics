@@ -97,8 +97,8 @@ it("prints one CB1, K1 and OL1 label per device appearance in the duplicate-M1 p
     expect(labels.map((a) => a.ownerOccurrences.length)).toEqual([3, 3]);
     if (tag === "CB1")
       expect(labels.map((a) => unwrapped(a.text))).toEqual([
-        "CB1: Also shown 03.B5, 03.C5",
-        "CB1: Repeat of 01.B5, 01.C5 (same functions)",
+        "CB1: Also shown 03.B4, 03.C4",
+        "CB1: Repeat of 01.B4, 01.C4 (same functions)",
       ]);
   }
 });

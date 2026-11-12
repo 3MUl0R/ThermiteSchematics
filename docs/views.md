@@ -526,12 +526,13 @@ Its label lists each distinct target sheet.zone once, in reading order, using
 exactly the per-function destinations in the reference report. Multiple repeated
 functions use `(same functions)`; one contact uses `(same contact)`. The local
 prefix is `TAG:`. Local slots are preferred: on the owner's sheet, at most 60 mm
-from the distinct-terminal centroid of the whole device appearance, with its own device
-frame strictly nearer than another device frame. Distances are from the label
+from the distinct-terminal centroid of the whole device appearance, with its own
+device frame strictly nearer than another device frame. Distances are from the label
 box to the centroid/frame. Otherwise the prefix is `TAG (ss.zone):`, where the
 location is the whole appearance's distinct-terminal centroid, including drawn
-functions that are not repeated. This self-location is measured
-from the final sheet; it is not one arbitrarily chosen member function's zone.
+functions that are not repeated and visible terminals of boundary fragments.
+This self-location is measured from the final sheet; it is not one arbitrarily
+chosen member function's zone.
 Each mode reserves both roles; the self-located mode also reserves the prefix.
 Frame ownership uses source UID, selected view and measured centroid, including
 drawings whose device frames and function glyphs occupy sibling SVG layers.
@@ -575,8 +576,9 @@ pre-selection multiplicity, and both canonical and secondary roles (including
 mixed groups). These dimensions never depend on the actual destination tokens.
 Only post-pagination vacancy and locality select the mode and shape; selected
 `shapeId`, envelope and maximum forms are exported with the reservation. If no
-shape fits, normal fit refusal applies. This cannot create a token sizing cycle. Whether a label exists, and its final
-membership, can depend on pagination and full/fragment status. Its envelope uses
+shape fits, normal fit refusal applies. This cannot create a token sizing cycle.
+Whether a label exists, and its final membership, can depend on pagination and
+full/fragment status. Its envelope uses
 the native pre-pagination function candidates and multiplicities for that device
 and selected view, including candidates that later become fragments. Pagination
 never changes that capacity profile.

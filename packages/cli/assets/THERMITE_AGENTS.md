@@ -317,35 +317,35 @@ cable inventories. Conduit implies no shield or protective bond.
 ## Function-based circuit drawings
 
 Packets accept `circuit-view-request/0.1` with `title`, `groups`, optional
-`flow`, `columns: 1|2` and `notes`. Each group has a unique `id`,
-optional `label` and `lineReference`, `conductors`, and `functions` selectors
-such as `{device: {by: "designation", value: "PLC1"}, key: "do0"}`. Use real
-function keys and conductor identities. Empty conductors show unconnected
-functions, not spares. Group order affects presentation; order functions by reading
-stage (PLC outputs, terminal points, interlocks, coils). A device's first appearance
-sets its display order.
+`flow`, `columns: 1|2` and `notes`. Each group has a unique `id`, optional
+`label` and `lineReference`, `conductors`, and `functions` selectors such as
+`{device: {by: "designation", value: "PLC1"}, key: "do0"}`. Use real function
+keys and conductor identities. Empty conductors show unconnected functions,
+not spares. Group order sets presentation; order functions by reading stage
+(PLC outputs, terminal points, interlocks, coils). First appearance sets
+device display order.
 
-Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.
-Selected functions retain terminals, wire numbers and references. A wire's
-`properties.label` is its printed number, separate from source identity; repeated
-labels never join nets. Boundary counts expose connections outside the selection;
-a circuit view is not a completeness audit. ELK owns placement/routing. Large
-groups split into numbered parts with whole conductors; R006 means a conductor,
-coupled symbol or label cannot fit. Narrow selection or use larger paper; never
-change topology to fit.
-References use kind/state and terminals; I/O address/terminals; ports key plus
-authored description. Cable headings use type description or state its absence.
-Function keys/type IDs stay in metadata/CSV.
+Tags: designation ≥2.7 mm; instance/else-type description and catalog part
+≥2.5 mm. Selected functions retain terminals, wire numbers and references.
+`properties.label` prints a wire's number, independent of source identity;
+repeated labels never join nets. Boundary counts show unselected connections;
+circuit views are not completeness audits. ELK owns placement/routing. Large
+groups split into numbered parts with whole conductors; R006 means a
+conductor, coupled symbol or label cannot fit. Narrow selection or use larger
+paper; never change topology to fit. References use kind/state and terminals;
+I/O address/terminals; ports key plus authored description. Cable headings use
+type description or state its absence. Function keys/type IDs stay in
+metadata/CSV.
 
 Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ. E206
 checks function existence, kind, terminal count and contact state.
-Read `thermite guide circuit-symbols` before selecting a disconnector profile.
-Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
-guess marks; check links/earth/DC ink in both flows. Marks do not create continuity
-or bonds.
+Read `thermite guide circuit-symbols` before disconnector selection.
+Also read `thermite guide circuit-views`; never guess marks; check
+links/earth/DC ink in both flows. Marks create no continuity or bonds.
 
 Reconstruction: record page/line provenance, separate aliases from verified
 pins, preserve conflicts for review, and assert critical endpoints and nets.
 
 One repeat per device/view/sheet; fixed local slots, else own sheet.zone.
-Keep 4 mm text gaps; centroids round half-up to 0.01 mm.
+Repeat text keeps 4 mm horizontally from overlapping text bands; centroids
+round half-up to 0.01 mm.
