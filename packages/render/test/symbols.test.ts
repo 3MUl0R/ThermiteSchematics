@@ -348,140 +348,45 @@ describe("D3 original symbol catalog", () => {
     expect([...kinds].sort()).toEqual(["circle", "line", "polyline", "rect"]);
   });
 
-  it("keeps B1 DC anchors with detached source enclosure strokes", () => {
-    expect(
-      SYMBOL_CATALOG.filter(
-        ({ id }) => id === "ais:power-source-dc" || id === "ais:dc-load",
-      ),
-    ).toEqual([
-      {
-        format: "ais-symbol/0.1",
-        id: "ais:power-source-dc",
-        size: { width: 36, height: 64 },
-        ports: [
-          { id: "positive", side: "east", offset: 1 / 8, order: 0 },
-          { id: "return", side: "east", offset: 7 / 8, order: 1 },
-        ],
-        primitives: [
-          {
-            kind: "line",
-            from: { x: 2, y: 1 },
-            to: { x: 2, y: 63 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 30, y: 1 },
-            to: { x: 30, y: 5 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 30, y: 11 },
-            to: { x: 30, y: 53 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 30, y: 59 },
-            to: { x: 30, y: 63 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 2, y: 1 },
-            to: { x: 30, y: 1 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 2, y: 63 },
-            to: { x: 30, y: 63 },
-            style: "enclosure",
-          },
-          {
-            kind: "line",
-            from: { x: 8, y: 8 },
-            to: { x: 36, y: 8 },
-            style: "body",
-          },
-          {
-            kind: "line",
-            from: { x: 8, y: 56 },
-            to: { x: 36, y: 56 },
-            style: "body",
-          },
-          {
-            kind: "line",
-            from: { x: 13, y: 8 },
-            to: { x: 21, y: 8 },
-            style: "annotation",
-          },
-          {
-            kind: "line",
-            from: { x: 17, y: 4 },
-            to: { x: 17, y: 12 },
-            style: "annotation",
-          },
-          {
-            kind: "line",
-            from: { x: 13, y: 56 },
-            to: { x: 21, y: 56 },
-            style: "annotation",
-          },
-        ],
-      },
-      {
-        format: "ais-symbol/0.1",
-        id: "ais:dc-load",
-        size: { width: 40, height: 64 },
-        ports: [
-          { id: "positive", side: "west", offset: 1 / 8, order: 0 },
-          { id: "return", side: "west", offset: 7 / 8, order: 1 },
-        ],
-        primitives: [
-          {
-            kind: "line",
-            from: { x: 0, y: 8 },
-            to: { x: 8, y: 8 },
-            style: "body",
-          },
-          {
-            kind: "line",
-            from: { x: 0, y: 56 },
-            to: { x: 8, y: 56 },
-            style: "body",
-          },
-          {
-            kind: "rect",
-            x: 8,
-            y: 4,
-            width: 24,
-            height: 56,
-            radius: 2,
-            style: "body",
-          },
-          {
-            kind: "line",
-            from: { x: 13, y: 8 },
-            to: { x: 19, y: 8 },
-            style: "annotation",
-          },
-          {
-            kind: "line",
-            from: { x: 16, y: 5 },
-            to: { x: 16, y: 11 },
-            style: "annotation",
-          },
-          {
-            kind: "line",
-            from: { x: 13, y: 56 },
-            to: { x: 19, y: 56 },
-            style: "annotation",
-          },
-        ],
-      },
-    ]);
+  it("keeps B1 DC anchors and reserves detached qualifier ink within the existing sizes", () => {
+    for (const [id, width, side] of [
+      ["ais:power-source-dc", 36, "east"],
+      ["ais:dc-load", 40, "west"],
+    ] as const) {
+      const definition = SYMBOL_CATALOG.find((s) => s.id === id)!;
+      expect(definition.size).toEqual({ width, height: 64 });
+      expect(definition.ports).toEqual([
+        { id: "positive", side, offset: 1 / 8, order: 0 },
+        { id: "return", side, offset: 7 / 8, order: 1 },
+      ]);
+      const leads = definition.primitives.filter(
+        (p) => p.kind === "line" && p.style === "body",
+      );
+      expect(leads).toEqual(
+        [8, 56].map((y) => ({
+          kind: "line",
+          from: { x: side === "east" ? 8 : 0, y },
+          to: { x: side === "east" ? 36 : 8, y },
+          style: "body",
+        })),
+      );
+      expect(
+        definition.primitives
+          .filter((p) => p.kind === "line" && p.qualifier)
+          .map(
+            (p) =>
+              p.kind === "line" && [p.qualifier!.polarity, p.qualifier!.portId],
+          ),
+      ).toEqual([
+        ["positive", "positive"],
+        ["positive", "positive"],
+        ["negative", "return"],
+      ]);
+      if (side === "east")
+        expect(
+          definition.primitives.filter((p) => p.style === "enclosure"),
+        ).toHaveLength(6);
+    }
   });
 
   it("connects every three-phase motor lead to the motor outline", () => {

@@ -134,6 +134,14 @@ link where the corridor is clear. Unmarked overload power poles use a stepped th
 element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
 
+Rooted DC source and load polarity qualifiers stay upright in both flows, with
+owned annotation ink reserved inside the symbol size and offset from the leads.
+Their SVG strokes export `data-symbol-qualifier="polarity"`, `data-polarity`
+(`positive` or `negative`) and `data-symbol-port-id`; the enclosing symbol owns
+the device/function identity. These marks follow the existing source/profile
+port bindings and preserve authored terminal names. They establish no new
+electrical facts or connectivity.
+
 Rooted drawings omit net-label ink when an identical terminal caption already
 names that conductor at the label's source landing in the same body appearance.
 Net labels anchor at the route source; a far-end caption cannot replace them. This avoids

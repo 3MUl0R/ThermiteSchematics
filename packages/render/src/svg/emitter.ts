@@ -147,6 +147,13 @@ function emitPrimitive(
     case "line":
       writer.element(indent, "line", {
         ...attributes,
+        ...(primitive.qualifier
+          ? {
+              "data-symbol-qualifier": "polarity",
+              "data-polarity": primitive.qualifier.polarity,
+              "data-symbol-port-id": primitive.qualifier.portId,
+            }
+          : {}),
         x1: primitive.from.x,
         y1: primitive.from.y,
         x2: primitive.to.x,

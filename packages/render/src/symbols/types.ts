@@ -15,12 +15,21 @@ export interface SymbolPortDefinition {
   readonly order: number;
 }
 
+/** Owned annotation ink. The centre follows the port's symbol orientation;
+ * stroke offsets about it remain in page axes, independently of conductor ink. */
+export interface SymbolPolarityQualifier {
+  readonly polarity: "positive" | "negative";
+  readonly portId: string;
+  readonly center: SymbolPoint;
+}
+
 export type SymbolPrimitive =
   | {
       readonly kind: "line";
       readonly from: SymbolPoint;
       readonly to: SymbolPoint;
       readonly style: SymbolStyle;
+      readonly qualifier?: SymbolPolarityQualifier;
     }
   | {
       readonly kind: "polyline";

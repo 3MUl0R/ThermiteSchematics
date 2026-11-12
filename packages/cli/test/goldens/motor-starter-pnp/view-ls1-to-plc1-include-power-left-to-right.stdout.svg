@@ -204,9 +204,9 @@
     <line class="symbol-enclosure" x1="2" y1="63" x2="30" y2="63" fill="none" stroke="#17212b" stroke-width="0.72" stroke-dasharray="2.4 2.4"/>
     <line class="symbol-body" x1="8" y1="8" x2="36" y2="8"/>
     <line class="symbol-body" x1="8" y1="56" x2="36" y2="56"/>
-    <line class="symbol-annotation" x1="13" y1="8" x2="21" y2="8"/>
-    <line class="symbol-annotation" x1="17" y1="4" x2="17" y2="12"/>
-    <line class="symbol-annotation" x1="13" y1="56" x2="21" y2="56"/>
+    <line class="symbol-annotation" x1="13" y1="18" x2="21" y2="18" data-symbol-port-id="positive" data-symbol-qualifier="polarity" data-polarity="positive"/>
+    <line class="symbol-annotation" x1="17" y1="14" x2="17" y2="22" data-symbol-port-id="positive" data-symbol-qualifier="polarity" data-polarity="positive"/>
+    <line class="symbol-annotation" x1="13" y1="46" x2="21" y2="46" data-symbol-port-id="return" data-symbol-qualifier="polarity" data-polarity="negative"/>
     <circle id="terminal-00330033006100310035003800360037002d0032003900360062002d0034003000650034002d0061003500360062002d003100350032003800320066003100330031006200340063--002b--0070006f007300690074006900760065" class="terminal-marker" cx="36" cy="8" r="2" data-device-uid="33a15867-296b-40e4-a56b-15282f131b4c" data-designation="PS1" data-terminal-key="+" data-member-function-key="dc_output" data-net-id="net:sha256:60daec479719f7fc2252598484071dd48b005f24259024b9a7a301876204e575"/>
     <circle id="terminal-00330033006100310035003800360037002d0032003900360062002d0034003000650034002d0061003500360062002d003100350032003800320066003100330031006200340063--002d--00720065007400750072006e" class="terminal-marker" cx="36" cy="56" r="2" data-device-uid="33a15867-296b-40e4-a56b-15282f131b4c" data-designation="PS1" data-terminal-key="-" data-member-function-key="dc_output" data-net-id="net:sha256:f30c622e6a4691dd7b963a0555123bb6b2e1a073e5ce7ba6e29280aeca525b49"/>
   </g>

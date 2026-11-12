@@ -348,8 +348,8 @@ Library `circuitSymbols` maps real function keys to explicit closed-catalog mark
 for example different marks for a device's main and auxiliary contacts. E206
 checks function existence, kind, terminal count and contact state.
 Read `thermite guide circuit-symbols` before selecting a disconnector profile.
-Follow `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
-infer a mark from a tag or part-number substring. Marks do not create continuity
+Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
+guess marks; check DC ink in both flows. Marks do not create continuity
 or bonds.
 
 Reconstruction: record page/line provenance, separate aliases from verified

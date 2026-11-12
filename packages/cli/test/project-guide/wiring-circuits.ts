@@ -816,8 +816,8 @@ const module: FactModule = {
       "Advice; the wiring view only points readers to the schedules.",
     ],
     [
-      "Follow `thermite guide circuit-symbols` and `thermite guide circuit-views`; never infer a mark from a tag or part-number substring.",
-      "Advice about which documents to follow and how to choose marks.",
+      "Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never guess marks; check DC ink in both flows.",
+      "Manual drawing review advice; geometry and mutations are checked in polarity-qualifiers.test.ts.",
     ],
   ]),
 };
