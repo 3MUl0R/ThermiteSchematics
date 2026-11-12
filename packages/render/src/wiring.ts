@@ -12,6 +12,10 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import type { CommunicationDrawing } from "./communication.js";
+import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
 import { layoutWiring } from "./layout/wiring-layout.js";
 
 /** A deliberate subset of physical wiring, never an inferred circuit or net short. */
@@ -215,6 +219,7 @@ export async function prepareWiringDrawing(
       if (width(label) > nodeWidth - 6)
         throw wiringWidthError(d.designation, t.terminalKey);
       const row = { key: t.terminalKey, label, side, y };
+      row.y = Math.round(y);
       y += 6;
       return row;
     });
@@ -261,7 +266,7 @@ export async function prepareWiringDrawing(
   for (const [i, edge] of (graph.edges ?? []).entries()) {
     if (!edge.sections?.length) throw new Error("Incomplete wiring route.");
     out.push(
-      `<g data-wiring-conductor="${attr(selected[i]!.id)}" data-endpoints="${attr(JSON.stringify(selected[i]!.ends))}"><title>${xml(selected[i]!.name + (selected[i]!.detail ? " / " + selected[i]!.detail : ""))}</title>`,
+      `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(selected[i]!.id)}" data-endpoints="${attr(JSON.stringify(selected[i]!.ends))}"><title>${xml(selected[i]!.name + (selected[i]!.detail ? " / " + selected[i]!.detail : ""))}</title>`,
     );
     for (const section of edge.sections) {
       const points = [
@@ -458,7 +463,7 @@ export async function prepareWiringDrawing(
       `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#f5f8fb" stroke="#344054" stroke-width=".3"/>`,
     );
     out.push(deviceHeaderSvg(tags.get(uid), labels.get(uid)!));
-    out.push(...wiringPortSvg(node, rows.get(uid)!));
+    out.push(...wiringPortSvg(node, rows.get(uid)!, ports, uid));
     out.push("</g>");
     references.push(drawingDeviceReference(node, d));
   }
@@ -497,16 +502,21 @@ function wiringPortSvg(
     side: "WEST" | "EAST";
     y: number;
   }[],
+  portIds: ReadonlyMap<string, string>,
+  deviceUid: string,
 ) {
   const result: string[] = [];
-  for (const p of ports)
+  for (const p of ports) {
+    const id = portIds.get(key({ deviceUid, terminalKey: p.key }));
+    if (!id) throw new Error("Missing declared wiring terminal.");
     result.push(
-      `<circle data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : node.width}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
+      `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
       text(
         p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
         p.y + 1,
         p.label,
       ),
     );
+  }
   return result;
 }

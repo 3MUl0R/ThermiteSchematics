@@ -1,4 +1,8 @@
 import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
+import {
   drawingDeviceTag,
   deviceHeaderSvg,
   deviceHeaderHeight,
@@ -321,7 +325,7 @@ async function layoutCommunicationDrawing(
       { deviceUid: link.toDeviceUid, portKey: link.connection.toPort },
     ];
     out.push(
-      `<g data-communication-link="${attr(link.uid)}" data-communication-endpoints="${attr(JSON.stringify(endpoints))}">`,
+      `<g ${routePortAttributes(edge)} data-communication-link="${attr(link.uid)}" data-communication-endpoints="${attr(JSON.stringify(endpoints))}">`,
     );
     for (const section of edge.sections) {
       const points = [
@@ -387,7 +391,7 @@ async function layoutCommunicationDrawing(
     for (const port of rows.get(uid)!) {
       const px = port.side === "WEST" ? 0 : node.width!;
       out.push(
-        `<g data-communication-port="${attr(port.key)}"><circle cx="${n(px)}" cy="${n(port.y)}" r="0.7" fill="white" stroke="#344054" stroke-width="0.3"/>`,
+        `<g ${terminalPortAttribute(portIds.get(JSON.stringify([uid, port.key]))!)} data-communication-port="${attr(port.key)}"><circle cx="${n(px)}" cy="${n(port.y)}" r="0.7" fill="white" stroke="#344054" stroke-width="0.3"/>`,
         text(
           port.side === "WEST" ? 2 : node.width! - 2 - textWidth(port.key),
           port.y + 1,

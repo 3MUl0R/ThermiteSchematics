@@ -62,6 +62,28 @@ The renderer retains reservations, routes and semantic names. A distinct name
 stays printed; all phases use the same source-end rule. Split bodies keep their
 own captions and names.
 
+V5.2 adds fail-closed DQ-14 endpoint coherence. A visible conductor endpoint
+must coincide with its owned terminal, junction or attachment anchor within
+**0.01 mm**, a numerical allowance for three-decimal SVG output and browser
+coordinate conversion. Missing, malformed or ambiguous ownership is a finding.
+Drawing-local layout-port keys resolve circuit, wiring, signal-loop,
+communication and connector anchors; rooted views use their semantic port and
+marker keys. Deliberate terminal attachment extensions own their outer landing.
+Clipped off-sheet endpoints are assessed on their visible appearance. Merged
+landing detection groups by the owned terminal appearance and reads its declared
+source/target route end, regardless of any endpoint gap. An offset cannot hide
+a shared final stroke. Historical wiring exports retain their ordered physical
+endpoint contract; proximity never establishes ownership.
+
+V5.3 removes the DQ-14 `not-implemented` fallback for conductor shapes without
+physical endpoint exports. Such a shape produces
+`endpoint-landing-ownership-unavailable` with reason
+`missing-physical-endpoint-exports`, and existing gap/ownership findings remain
+failures. Empty conductor-free documentation pages are still eligible for a
+clean observation. Relation landings retain the V5.2 drawing-local port check;
+adding an electrical identity cross-check for those relations remains separate
+work.
+
 DQ-16 retains `not-implemented` for an ineligible distance measurement and gives
 separate reason codes: `no-visible-conductor-labels` when there is nothing to
 measure, and `label-identity-unavailable` for declared visible conductor/net

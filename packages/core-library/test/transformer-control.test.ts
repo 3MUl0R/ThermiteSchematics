@@ -1,3 +1,4 @@
+import { withoutRouteOwnershipMetadata } from "../../render/test/helpers/route-ownership.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -64,12 +65,25 @@ it.each(transformerFlows)(
     expect(view.groups[0]!.coverage.conductorIds).toHaveLength(6);
     expect(view.groups[0]!.coverage.functionIds).toHaveLength(6);
     // Preserve the reviewed geometry/complete-ink hash across the intentional
-    // frame style change. The printable policy tests assert the new physical ink.
-    const originalOutlineInk = view.groups[0]!.content.replace(
-      /(<rect class="circuit-device-frame"[^>]*?)stroke="#667085" stroke-width="0.25"/gu,
-      '$1stroke="#17212b" stroke-width="0.4"',
+    // frame and attachment style changes. Physical ink is asserted separately.
+    const reviewedContent = withoutRouteOwnershipMetadata(
+      view.groups[0]!.content,
     );
-    expect(originalOutlineInk).not.toBe(view.groups[0]!.content);
+    expect(view.groups[0]!.content).toContain('data-layout-source-port="');
+    const originalOutlineInk = reviewedContent
+      .replace(
+        /(<rect class="circuit-device-frame"[^>]*?)stroke="#667085" stroke-width="0.25"/gu,
+        '$1stroke="#17212b" stroke-width="0.4"',
+      )
+      .replace(
+        /(<g data-terminal-attachment="[^"]*" data-attachment-from="[^"]*" data-attachment-to="[^"]*"><path [^>]*fill="none") stroke="#17212b" stroke-width="0.32"/gu,
+        '$1 stroke="#344054" stroke-width="0.3"',
+      );
+    if (flow === "left-to-right")
+      expect(reviewedContent).toMatch(
+        /data-terminal-attachment=[^>]+><path [^>]+stroke="#17212b" stroke-width="0.32"/u,
+      );
+    expect(originalOutlineInk).not.toBe(reviewedContent);
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
         ? "a7b671b133353676cbcfebd9f251a6f4381cabff488d2a9651786550fe047d90"

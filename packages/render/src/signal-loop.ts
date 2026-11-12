@@ -1,4 +1,8 @@
 import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "./layout/port-attributes.js";
+import {
   drawingDeviceTag,
   deviceHeaderSvg,
   deviceHeaderHeight,
@@ -13,7 +17,7 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
-import { createElkEngine } from "./layout/elk-runtime.js";
+import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
 import {
   validateSignalLoopRequest,
@@ -686,21 +690,9 @@ export async function prepareSignalLoopDrawing(
             : !p.assembly &&
               p.terminal === e.ends[side === "out" ? 0 : 1].terminalKey),
       )!.id;
-  const graph: ElkNode = await createElkEngine().layout({
-    id: "loop",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": vertical ? "DOWN" : "RIGHT",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "8",
-      "elk.spacing.edgeEdge": "6",
-      "elk.spacing.edgeNode": "5",
-      "elk.padding": "[top=6,left=6,bottom=6,right=6]",
-      "elk.randomSeed": "1",
-      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-    },
+  const graph = await layoutDirectLoop(
     children,
-    edges: edges.map((e, i) => ({
+    edges.map((e, i) => ({
       id: `e${i}`,
       sources: [portId(e, "out")],
       targets: [portId(e, "in")],
@@ -712,7 +704,8 @@ export async function prepareSignalLoopDrawing(
         },
       ],
     })),
-  });
+    vertical,
+  );
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
   checkLabels(graph);
@@ -729,11 +722,11 @@ export async function prepareSignalLoopDrawing(
       throw new Error("Incomplete signal loop route.");
     if (source.assembly)
       out.push(
-        `<g data-cable-assembly="${attr(source.cable!)}"><desc>${xml(JSON.stringify(source.assembly.members))}</desc>`,
+        `<g ${routePortAttributes(edge)} data-cable-assembly="${attr(source.cable!)}"><desc>${xml(JSON.stringify(source.assembly.members))}</desc>`,
       );
     else
       out.push(
-        `<g data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
+        `<g ${routePortAttributes(edge)} data-terminal-ends="${attr(JSON.stringify(source.ends))}" data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
       );
     for (const section of edge.sections) {
       const points = snappedPath([
@@ -801,13 +794,13 @@ export async function prepareSignalLoopDrawing(
     for (const p of list) {
       if (p.assembly) {
         out.push(
-          connectorPort(
+          `<g ${terminalPortAttribute(p.id)}>${connectorPort(
             p.x,
             p.y,
             vertical,
             p.side,
             p.assembly.assembly!.connector,
-          ),
+          )}</g>`,
         );
         continue;
       }
@@ -832,7 +825,7 @@ export async function prepareSignalLoopDrawing(
         continue;
       }
       out.push(
-        `<circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
+        `<circle ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key({ deviceUid: uid, terminalKey: p.terminal }))}" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
       );
       out.push(
         vertical

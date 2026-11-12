@@ -1,4 +1,8 @@
 import {
+  routePortAttributes,
+  terminalPortAttribute,
+} from "../layout/port-attributes.js";
+import {
   drawingDeviceTag,
   deviceHeaderSvg,
   deviceHeaderHeight,
@@ -478,7 +482,7 @@ function emitEdge(edge: ElkExtendedEdge, source: Conductor, label: string[]) {
           .join(""),
     )
     .join("");
-  return `<g data-loop-conductor="${attr(source.id)}" data-net-id="${attr(source.net)}" data-terminal-ends="${attr(JSON.stringify(source.ends))}">${paths}${labels}</g>`;
+  return `<g ${routePortAttributes(edge)} data-loop-conductor="${attr(source.id)}" data-net-id="${attr(source.net)}" data-terminal-ends="${attr(JSON.stringify(source.ends))}">${paths}${labels}</g>`;
 }
 
 function feedThroughLinks(info: ReturnType<typeof deviceNode>) {
@@ -529,7 +533,7 @@ function emitNode(
   const ports = info.ports
     .map(
       (p) =>
-        `<g data-loop-terminal="${attr(key(p.terminal))}"><circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${vertical ? text(p.x + 1.5, p.y === 0 ? 4 : h - 2, p.terminal.terminalKey, 2.7) : text(p.x === 0 ? 2 : w - 2, p.y - 1.5, p.terminal.terminalKey, 2.7, p.x === 0 ? "start" : "end")}</g>`,
+        `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${vertical ? text(p.x + 1.5, p.y === 0 ? 4 : h - 2, p.terminal.terminalKey, 2.7) : text(p.x === 0 ? 2 : w - 2, p.y - 1.5, p.terminal.terminalKey, 2.7, p.x === 0 ? "start" : "end")}</g>`,
     )
     .join("");
   return `<g data-device-uid="${attr(info.uid)}" data-body-width="${n(w)}" data-body-height="${n(h)}" transform="translate(${n(need(placed.x))} ${n(need(placed.y))})">${body}${mark}${caption}${feedThroughLinks(info)}${ports}</g>`;

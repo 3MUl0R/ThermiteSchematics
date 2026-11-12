@@ -15,7 +15,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "One caption per terminal appearance, nearest its body; keep all landings and split captions. Omit net ink only when its anchored terminal prints the same name.",
+        "One caption per terminal appearance, nearest its body; keep exact landings and split captions. Omit net ink only when its anchored terminal prints the same name.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -43,6 +43,18 @@ const module: FactModule = {
           );
           if (!svg.ok) throw Error(JSON.stringify(svg));
           const document = parseSvg(svg.value);
+          // Terminal placement and conductor ends share the owned layout port.
+          for (const edge of layout.edges.filter((e) => e.kind !== "boundary"))
+            for (const [id, point] of [
+              [edge.sourcePortId, edge.points[0]],
+              [edge.targetPortId, edge.points.at(-1)],
+            ] as const) {
+              const port = layout.ports.find((p) => p.id === id)!;
+              expect(point).toBeDefined();
+              expect(
+                Math.hypot(point!.x - port.x, point!.y - port.y),
+              ).toBeLessThan(0.001);
+            }
           let doubleLandings = 0;
           for (const node of graph.nodes) {
             if (node.kind === "junction") continue;
