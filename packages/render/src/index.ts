@@ -8,6 +8,7 @@ export type {
   PlacedOccurrence,
   OccurrenceRole,
   AnnotationReservation,
+  NavigationShape,
   NavigationAnnotation,
   NavigationExtension,
 } from "./packet/navigation-types.js";

@@ -347,5 +347,5 @@ or bonds.
 Reconstruction: record page/line provenance, separate aliases from verified
 pins, preserve conflicts for review, and assert critical endpoints and nets.
 
-Repeat labels use fixed sheet space and final terminal-centroid locations rounded
-to 0.01 mm; keep each appearance's connections.
+Per-symbol repeats: fixed slots, local shapes first, else own sheet.zone.
+Centroids round half-up to 0.01 mm; keep connections.

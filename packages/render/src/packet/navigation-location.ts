@@ -1,6 +1,16 @@
 import type { DrawingBounds } from "./types.js";
 export const navigationQuantumMm = 0.01;
-export const roundNavigation = (v: number) => Math.round(v * 100) / 100;
+function decimalShift(v: number, places: number) {
+  const [mantissa, exponent = "0"] = String(v).split("e");
+  return Number(`${mantissa}e${Number(exponent) + places}`);
+}
+/** Decimal half-up at Q: exact decimal ties round away from zero (1.005 → 1.01). */
+export const roundNavigation = (v: number) => {
+  if (!Number.isFinite(v)) return v;
+  return (
+    Math.sign(v) * decimalShift(Math.round(decimalShift(Math.abs(v), 2)), -2)
+  );
+};
 /** Quantize the anchor and field BEFORE half-open classification; the outer edge is closed. */
 export function navigationZone(
   x: number,

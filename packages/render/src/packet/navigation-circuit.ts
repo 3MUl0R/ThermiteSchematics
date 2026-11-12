@@ -86,6 +86,8 @@ export function seedCircuitNavigation(
     let index = 0;
     draft.content = draft.content.replace(/<(?![/? !])[^>]+>/g, (tag) => {
       const node = required(nodes[index++], "Missing circuit markup node");
+      if (/^<([^\s/>]+)/.exec(tag)?.[1] !== node.name)
+        throw Error("Circuit navigation start-tag/tree name mismatch");
       const before = required(
         original.get(node),
         "Missing circuit original attributes",
@@ -96,6 +98,8 @@ export function seedCircuitNavigation(
         .join("");
       return tag.replace(/\/?>(?=$)/, (end) => additions + end);
     });
+    if (index !== nodes.length)
+      throw Error("Circuit navigation start-tag/tree count mismatch");
     draft.navigationSeeds = seeds;
   }
   markCircuitBoundaryCopies(drafts);

@@ -265,6 +265,11 @@ export function fitLegendDrafts(
   for (let attempt = 0; attempt <= views.length; attempt++) {
     const rendered = legendSheets(ir, current, page);
     if (rendered.ok) return { ok: true, value: current };
+    if (
+      "details" in rendered.error &&
+      rendered.error.details?.navigationInvariant
+    )
+      return rendered;
     const index = required(
         current[required(rendered.failedSheet, "Missing legend geometry")],
         "Missing legend geometry",
@@ -291,6 +296,8 @@ export function fitLegendDrafts(
       if (bound || next.length > 100) continue;
       const trial = legendSheets(ir, next, page);
       if (trial.ok) return { ok: true, value: next };
+      if ("details" in trial.error && trial.error.details?.navigationInvariant)
+        return trial;
       if (failureCapacity(trial) > failureCapacity(bestFailure))
         bestFailure = trial;
       if (

@@ -42,35 +42,60 @@ export interface PlacedOccurrence {
   primitiveIds: readonly string[];
   terminalPrimitiveIds: readonly string[];
   provenance: {
+    /** Drawn device/symbol scope; a locator, never a completeness oracle. */
+    symbolKey: string;
     transform: Matrix;
     clipMm: Rect;
     bodyMm: Rect;
     view: NavigationView;
   };
 }
+export interface NavigationShape {
+  id: string;
+  mode: "local" | "self-located";
+  inkMm: Rect;
+  maximumForms: readonly string[];
+  wrapWidthMm: number;
+}
 export interface AnnotationReservation {
   id: string;
   ownerAppearance: string;
+  ownerOccurrence: string;
   profileId: string;
   space: "sheet-slot";
   inkMm: Rect;
   maximumForms: readonly string[];
-  allocatedMm?: { sheet: number; rect: Rect };
+  shapes?: readonly NavigationShape[];
+  allocatedMm?: {
+    sheet: number;
+    rect: Rect;
+    placement?: "local" | "self-located";
+    shapeId?: string;
+  };
 }
 export interface NavigationAnnotation {
   id: string;
   ownerOccurrence: string;
-  role: "canonical" | "repeat";
+  ownerOccurrences: readonly string[];
+  role: "canonical" | "repeat" | "mixed";
   targets: readonly string[];
   text: string;
   primitiveIds: readonly string[];
   reservationId: string;
+  locality?: {
+    mode: "local" | "self-located";
+    anchorMm: { x: number; y: number };
+    frameMm: Rect;
+    ownerLocation: { sheet: number; zone: string };
+    distanceMm: number;
+  };
 }
 export interface IssuedNavigation {
   format: "issued-navigation/0.1";
   snapshotDigest: string;
   anchorRule: "function-terminal-centroid/2";
   quantumMm: 0.01;
+  rounding: "decimal-half-up/1";
   seeds: readonly {
     source: FunctionId;
     appearance: string;
@@ -86,6 +111,7 @@ export interface IssuedNavigation {
     sheet: number;
     ownerId: string;
     kind: "occurrence" | "annotation";
+    basis: "catalog-box" | "adapter-box" | "reservation-box";
     rectMm: Rect;
   }[];
   occurrences: readonly PlacedOccurrence[];

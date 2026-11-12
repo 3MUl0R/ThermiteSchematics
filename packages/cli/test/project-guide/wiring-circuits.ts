@@ -372,7 +372,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Repeat labels use fixed sheet space and final terminal-centroid locations rounded to 0.01 mm; keep each appearance's connections.",
+        "Per-symbol repeats: fixed slots, local shapes first, else own sheet.zone. Centroids round half-up to 0.01 mm; keep connections.",
       async check() {
         const project = ctx.pristine.starter,
           view = {

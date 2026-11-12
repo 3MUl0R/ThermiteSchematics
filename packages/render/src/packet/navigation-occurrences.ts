@@ -60,7 +60,7 @@ function visibleTerminals(
   );
 }
 
-function terminalCentroid(
+export function terminalCentroid(
   keys: readonly string[],
   visible: readonly NavigationGeometry[],
 ) {
@@ -210,6 +210,10 @@ function locatedOccurrence(
       required(g.node.attrs.id, "Missing terminal primitive"),
     ),
     provenance: {
+      symbolKey: JSON.stringify([
+        view.key,
+        seed.terminalScopeId ?? seed.logicalKey,
+      ]),
       transform: geometry.matrix,
       clipMm: clip,
       bodyMm: body,

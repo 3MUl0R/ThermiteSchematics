@@ -200,46 +200,41 @@ it.each([
   "foreign-target",
   "second-canonical",
   "fake-boundary",
-])(
-  "kills issued-output mutation %s with an independent oracle",
-  async (mutation) => {
-    const source = await offViewFixture();
-    try {
-      const a = finalized(navigationFixture(source.ir)),
-        nav = structuredClone(a.navigation),
-        sheets = structuredClone(a.sheets);
-      const id = nav.annotations[1]!.id;
-      if (mutation === "delete-label")
-        sheets[1]!.svg = sheets[1]!.svg.replace(
-          new RegExp(
-            `<g id="[^"]*" data-navigation-annotation="${id}"[\\s\\S]*?</g>`,
-          ),
-          "",
-        );
-      if (mutation === "hide-label")
-        sheets[1]!.svg = sheets[1]!.svg.replace(
-          `data-navigation-annotation="${id}"`,
-          `display="none" data-navigation-annotation="${id}"`,
-        );
-      if (mutation === "foreign-owner")
-        sheets[1]!.svg = sheets[1]!.svg.replace(
-          `data-navigation-owner="${nav.occurrences[1]!.id}"`,
-          'data-navigation-owner="foreign"',
-        );
-      if (mutation === "wrong-zone")
-        nav.occurrences[1]!.destination.zone = "D6";
-      if (mutation === "foreign-target")
-        nav.annotations[1]!.targets = ["report-row"];
-      if (mutation === "second-canonical")
-        nav.annotations[1]!.role = "canonical";
-      if (mutation === "fake-boundary")
-        nav.occurrences[1]!.role = "boundary-fragment";
-      expect(() => auditSynthetic(nav, sheets)).toThrow();
-    } finally {
-      await source.dispose();
-    }
-  },
-);
+])("checks the issued-output auditor control %s", async (mutation) => {
+  const source = await offViewFixture();
+  try {
+    const a = finalized(navigationFixture(source.ir)),
+      nav = structuredClone(a.navigation),
+      sheets = structuredClone(a.sheets);
+    const id = nav.annotations[1]!.id;
+    if (mutation === "delete-label")
+      sheets[1]!.svg = sheets[1]!.svg.replace(
+        new RegExp(
+          `<g id="[^"]*" data-navigation-annotation="${id}"[\\s\\S]*?</g>`,
+        ),
+        "",
+      );
+    if (mutation === "hide-label")
+      sheets[1]!.svg = sheets[1]!.svg.replace(
+        `data-navigation-annotation="${id}"`,
+        `display="none" data-navigation-annotation="${id}"`,
+      );
+    if (mutation === "foreign-owner")
+      sheets[1]!.svg = sheets[1]!.svg.replace(
+        `data-navigation-owner="${nav.occurrences[1]!.id}"`,
+        'data-navigation-owner="foreign"',
+      );
+    if (mutation === "wrong-zone") nav.occurrences[1]!.destination.zone = "D6";
+    if (mutation === "foreign-target")
+      nav.annotations[1]!.targets = ["report-row"];
+    if (mutation === "second-canonical") nav.annotations[1]!.role = "canonical";
+    if (mutation === "fake-boundary")
+      nav.occurrences[1]!.role = "boundary-fragment";
+    expect(() => auditSynthetic(nav, sheets)).toThrow();
+  } finally {
+    await source.dispose();
+  }
+});
 
 it("rounds before half-open zone classification and refuses out-of-field anchors", () => {
   const b = { x: 0, y: 0, w: 120, h: 80 };
@@ -259,6 +254,7 @@ it("refuses an actually occupied sheet slot", () => {
           reservation: {
             id: "r",
             ownerAppearance: "owner",
+            ownerOccurrence: "owner",
             profileId: "test",
             space: "sheet-slot",
             inkMm: { x: 0, y: 0, w: 20, h: 6 },
@@ -447,6 +443,16 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     expect(
       second.querySelector('[data-off-view-terminal="PB1.12"]')!.textContent,
     ).toContain("W-CTL-006 → OL1.95");
+    const repeat = packet.navigation!.annotations.find(
+      (a) =>
+        a.role === "repeat" &&
+        appearances.some((o) => o.id === a.ownerOccurrence),
+    )!;
+    expect(repeat.text).toContain(
+      flow === "left-to-right"
+        ? "Repeat of 03.B6 (same contact)"
+        : "Repeat of 03.B3 (same contact)",
+    );
     const wireUid = ir.wires.find((w) => w.designation === "W-CTL-005")!.uid;
     for (const doc of [first, second])
       expect(
@@ -694,10 +700,19 @@ it("reserves maximum-role height for many selected views without splitting locat
       });
     }
     const a = finalized(f);
-    expect(a.navigation.annotations[0]!.text.split("\n")).toHaveLength(2);
-    expect(a.navigation.reservations.every((r) => r.inkMm.h > 6)).toBe(true);
-    expect(a.navigation.annotations[0]!.text).toContain("02.C3; 03.C3; 04.C3;");
-    expect(a.navigation.annotations[0]!.text).toContain("05.C3; 06.C3; 07.C3");
+    expect(a.navigation.annotations[0]!.text.replace(/\n/g, " ")).toBe(
+      "K1: Also shown 02.C3, 03.C3, 04.C3, 05.C3, 06.C3, 07.C3",
+    );
+    for (const r of a.navigation.reservations) {
+      expect(r.inkMm.h).toBe(
+        Math.max(...r.maximumForms.map((f) => f.split("\n").length)) * 4.8 + 1,
+      );
+      expect(r.maximumForms[0]!.replace(/\n/g, " ")).toBe(
+        "K1: Also shown 100.D1, 100.D1, 100.D1, 100.D1, 100.D1, 100.D1",
+      );
+    }
+    expect(a.navigation.annotations[0]!.text).toContain("02.C3, 03.C3, 04.C3,");
+    expect(a.navigation.annotations[0]!.text).toContain("05.C3, 06.C3, 07.C3");
   } finally {
     await source.dispose();
   }

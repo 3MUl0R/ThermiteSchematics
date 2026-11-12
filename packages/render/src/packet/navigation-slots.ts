@@ -1,26 +1,24 @@
 import { generatedSvgInk } from "../device-legend/svg-ink.js";
-import {
-  inside,
-  separated,
-  project,
-  type Rect,
-} from "../device-legend/geometry.js";
+import { project, type Rect } from "../device-legend/geometry.js";
 import { navigationGeometry } from "./navigation-walk.js";
-import type { AnnotationReservation } from "./navigation-types.js";
-export const NAVIGATION_CLEARANCE_MM = 1.5;
+import type { SymbolGeometry } from "./navigation-symbols.js";
+import type {
+  AnnotationReservation,
+  NavigationShape,
+} from "./navigation-types.js";
+import {
+  searchNavigationSlot,
+  NAVIGATION_CLEARANCE_MM,
+} from "./navigation-slot-search.js";
+export { NAVIGATION_CLEARANCE_MM } from "./navigation-slot-search.js";
 export interface SheetSlotRequest {
   reservation: AnnotationReservation;
   owner: Rect;
+  locality?: SymbolGeometry;
 }
-/** Vacant sheet-mm space after real continuation/legend ink. Never grows an ELK leaf. */
-export function allocateNavigationSlots(
-  requests: readonly SheetSlotRequest[],
-  area: Rect,
-  svg: string,
-  sheet: number,
-): AnnotationReservation[] {
+function navigationObstacles(svg: string): Rect[] {
   const measured = generatedSvgInk(svg);
-  const obstacles = [
+  return [
     ...measured.ink,
     ...measured.regions,
     ...navigationGeometry(svg).flatMap((g) => {
@@ -42,44 +40,47 @@ export function allocateNavigationSlots(
         : [];
     }),
   ];
-  return requests.map(({ reservation, owner }) => {
-    const { w, h } = reservation.inkMm;
-    const xs = [
-      ...new Set([
-        area.x,
-        area.x + area.w - w,
-        owner.x,
-        owner.x + owner.w - w,
-        ...obstacles.flatMap((b) => [b.x + b.w + 1.51, b.x - w - 1.51]),
-      ]),
-    ].filter((x) => x >= area.x && x + w <= area.x + area.w);
-    const ys = [
-      ...new Set([
-        area.y,
-        area.y + area.h - h,
-        owner.y - h - 1.51,
-        owner.y + owner.h + 1.51,
-        ...obstacles.flatMap((b) => [b.y + b.h + 1.51, b.y - h - 1.51]),
-      ]),
-    ].filter((y) => y >= area.y && y + h <= area.y + area.h);
-    const distance = (b: Rect) =>
-      Math.hypot(
-        Math.max(owner.x - b.x - b.w, b.x - owner.x - owner.w, 0),
-        Math.max(owner.y - b.y - b.h, b.y - owner.y - owner.h, 0),
-      );
-    const candidates = ys
-      .flatMap((y) => xs.map((x) => ({ x, y, w, h })))
-      .sort((a, b) => distance(a) - distance(b) || a.y - b.y || a.x - b.x);
-    const box = candidates.find(
-      (b) =>
-        inside(b, area) &&
-        obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)),
+}
+/** Vacant sheet-mm space after real continuation/legend ink. Never grows an ELK leaf. */
+export function allocateNavigationSlots(
+  requests: readonly SheetSlotRequest[],
+  area: Rect,
+  svg: string,
+  sheet: number,
+): AnnotationReservation[] {
+  const obstacles = navigationObstacles(svg);
+  return requests.map(({ reservation, owner, locality }) => {
+    const legacy: NavigationShape[] = (["local", "self-located"] as const).map(
+      (mode) => ({
+        id: mode,
+        mode,
+        inkMm: reservation.inkMm,
+        maximumForms: reservation.maximumForms,
+        wrapWidthMm: reservation.inkMm.w - 2,
+      }),
     );
-    if (!box)
+    const result = searchNavigationSlot(
+      reservation.shapes ?? legacy,
+      area,
+      owner,
+      obstacles,
+      locality,
+    );
+    if (!result)
       throw Error(
-        `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${w.toFixed(2)} × ${h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
+        `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
       );
-    obstacles.push(box);
-    return { ...reservation, allocatedMm: { sheet, rect: box } };
+    obstacles.push(result.box);
+    return {
+      ...reservation,
+      inkMm: result.shape.inkMm,
+      maximumForms: result.shape.maximumForms,
+      allocatedMm: {
+        sheet,
+        rect: result.box,
+        ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
+        ...(locality ? { placement: result.shape.mode } : {}),
+      },
+    };
   });
 }

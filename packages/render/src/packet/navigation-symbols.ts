@@ -1,0 +1,108 @@
+import type { PlacedOccurrence } from "./navigation-types.js";
+import type { DrawingBounds } from "./types.js";
+import {
+  navigationGeometry,
+  type NavigationGeometry,
+} from "./navigation-walk.js";
+import { descendants } from "../device-legend/svg-tree.js";
+import { inside, project, type Rect } from "../device-legend/geometry.js";
+import { unionInk } from "./rooted-ink.js";
+import { required } from "../presentation/util.js";
+import { terminalCentroid } from "./navigation-occurrences.js";
+import { navigationZone } from "./navigation-location.js";
+export interface SymbolGeometry {
+  anchorMm: { x: number; y: number };
+  frameMm: Rect;
+  framesMm: readonly Rect[];
+  ownerLocation: { sheet: number; zone: string };
+}
+function frameCandidates(all: readonly NavigationGeometry[]) {
+  return all.flatMap((g) => {
+    if (!g.visible || !g.node.attrs["data-device-uid"]) return [];
+    const rect = g.node.children.find(
+      (n) =>
+        n.name === "rect" &&
+        (/device-frame/.test(n.attrs.class ?? "") ||
+          g.node.attrs["data-layout-width"]),
+    );
+    const measured = rect && all.find((n) => n.node === rect);
+    if (!rect || !measured) return [];
+    return [
+      {
+        scope: g.node,
+        uid: g.node.attrs["data-device-uid"],
+        viewKey: g.viewKey,
+        rect: project(
+          {
+            x: Number(rect.attrs.x ?? 0),
+            y: Number(rect.attrs.y ?? 0),
+            w: Number(rect.attrs.width),
+            h: Number(rect.attrs.height),
+          },
+          measured.matrix,
+        ),
+      },
+    ];
+  });
+}
+export function symbolGeometry(
+  owner: PlacedOccurrence,
+  occurrences: readonly PlacedOccurrence[],
+  svg: string,
+  field: DrawingBounds,
+): SymbolGeometry {
+  const members = occurrences.filter(
+    (o) =>
+      o.role === "full-function" &&
+      o.source.deviceUid === owner.source.deviceUid &&
+      o.destination.sheet === owner.destination.sheet &&
+      o.provenance.symbolKey === owner.provenance.symbolKey,
+  );
+  const all = navigationGeometry(svg),
+    ids = new Set(members.flatMap((o) => o.terminalPrimitiveIds));
+  const markers = all.filter((g) => ids.has(g.node.attrs.id ?? ""));
+  const keys = [...new Set(members.flatMap((o) => o.terminalKeys))];
+  const anchorMm = terminalCentroid(keys, markers);
+  const primitives = new Set(members.flatMap((o) => o.primitiveIds));
+  const frames = frameCandidates(all);
+  const own = frames
+    .filter(
+      (f) =>
+        f.uid === owner.source.deviceUid &&
+        ([f.scope, ...descendants(f.scope)].some((n) =>
+          primitives.has(n.attrs.id ?? ""),
+        ) ||
+          (f.viewKey === owner.provenance.view.key &&
+            inside({ ...anchorMm, w: 0, h: 0 }, f.rect))),
+    )
+    .sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0];
+  const frameMm =
+    own?.rect ??
+    required(
+      unionInk(members.map((o) => o.provenance.bodyMm)),
+      "Missing symbol body",
+    );
+  return {
+    anchorMm,
+    frameMm,
+    framesMm: frames.filter((f) => f !== own).map((f) => f.rect),
+    ownerLocation: {
+      sheet: owner.destination.sheet,
+      zone: navigationZone(anchorMm.x, anchorMm.y, field),
+    },
+  };
+}
+export const boxDistance = (a: Rect, b: Rect) =>
+  Math.hypot(
+    Math.max(a.x - b.x - b.w, b.x - a.x - a.w, 0),
+    Math.max(a.y - b.y - b.h, b.y - a.y - a.h, 0),
+  );
+export const anchorDistance = (anchor: { x: number; y: number }, box: Rect) =>
+  boxDistance({ ...anchor, w: 0, h: 0 }, box);
+export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
+  const distance = boxDistance(box, symbol.frameMm);
+  return (
+    anchorDistance(symbol.anchorMm, box) <= 60 &&
+    symbol.framesMm.every((other) => distance < boxDistance(box, other) - 0.001)
+  );
+}

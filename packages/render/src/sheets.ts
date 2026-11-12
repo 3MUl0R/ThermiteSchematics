@@ -424,6 +424,7 @@ async function renderPacketWithAdvice(
     result.ok ||
     result.error.code !== "R006" ||
     result.error.reason !== "unprintable-layout" ||
+    result.error.details?.navigationInvariant ||
     request.layout === "compact" ||
     !compactAdviceView(request, result.error.details)
   )

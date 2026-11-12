@@ -59,7 +59,7 @@ it("uses direct authored identity, including parallel wires, jumpers and every s
   }
 });
 
-it("preserves both self-loop endpoint incidences with one source conductor identity", async () => {
+it("discloses one physical self-loop while NAV inventories both endpoint ordinals", async () => {
   const f = await offViewFixture();
   try {
     const ir = structuredClone(f.ir),
@@ -70,7 +70,7 @@ it("preserves both self-loop endpoint incidences with one source conductor ident
         terminalIdKey(wire.endpoints[0].terminal),
       ),
     ).filter((c) => c.designation === "W3");
-    expect(found).toHaveLength(2);
+    expect(found).toHaveLength(1);
     expect(new Set(found.map((c) => conductorKey(c.elementId)))).toEqual(
       new Set([conductorKey({ kind: "wire", uid: wire.uid })]),
     );

@@ -5,30 +5,17 @@ import type {
   NavigationAnnotation,
   IssuedNavigation,
 } from "./navigation-types.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
-import { destinationToken } from "./navigation-location.js";
 import { navigationHash } from "./navigation-identity.js";
 import { compareText } from "../ordering.js";
 import { required } from "../presentation/util.js";
-export const NAVIGATION_FONT_MM = 3.502;
-const measure = (s: string) => {
-  const m = printableTextMetrics(s, NAVIGATION_FONT_MM);
-  return Math.max(m.advance, m.right) - Math.min(m.left, 0);
-};
-// All 1–100 sheet tokens, including the widest zone glyph; never size to this pass's destinations.
-let widestToken: string | undefined;
-const maximumToken = () =>
-  (widestToken ??= Array.from({ length: 100 }, (_, i) =>
-    "ABCD"
-      .split("")
-      .flatMap((r) =>
-        Array.from({ length: 6 }, (_, c) =>
-          destinationToken({ sheet: i + 1, zone: `${r}${c + 1}` }),
-        ),
-      ),
-  )
-    .flat()
-    .reduce((a, b) => (measure(a) >= measure(b) ? a : b)));
+import {
+  distinctDestinations,
+  labelLines,
+  maximumRepeatForms,
+  maximumToken,
+  repeatNoun,
+} from "./navigation-labels.js";
+export { NAVIGATION_FONT_MM } from "./navigation-labels.js";
 export interface RepeatPlan {
   groups: IssuedNavigation["canonicalGroups"];
   reservations: AnnotationReservation[];
@@ -41,42 +28,12 @@ const readingOrder = (a: PlacedOccurrence, b: PlacedOccurrence) =>
   a.destination.anchorMm.y - b.destination.anchorMm.y ||
   a.destination.anchorMm.x - b.destination.anchorMm.x ||
   compareText(a.appearance, b.appearance);
-function maximumRepeatForms(
-  ir: Readonly<ElectricalIr>,
-  canonical: PlacedOccurrence,
-  count: number,
-  token: string,
-) {
-  const fn = required(
-    ir.functions.find(
-      (f) =>
-        f.id.deviceUid === canonical.source.deviceUid &&
-        f.id.functionKey === canonical.source.functionKey,
-    ),
-    "Missing repeat source",
-  );
-  const designation = required(
-    ir.devices.find((d) => d.uid === fn.id.deviceUid),
-    "Missing repeat device",
-  ).designation;
-  const noun = fn.kind === "contact" ? "contact" : "function";
-  // Ownership remains legible even when the nearest vacant slot lies beyond the frame.
-  const prefix = `${designation}: `;
-  const maxCanonical = canonicalLines(
-    prefix,
-    Array.from({ length: count - 1 }, () => token),
-  );
-  const maxRepeat = `${prefix}Repeat of ${token} (same ${noun})`;
-  const w =
-    Math.ceil(
-      Math.max(measure(maxRepeat), ...maxCanonical.map(measure)) * 1000,
-    ) /
-      1000 +
-    2;
-  const h = Math.max(1, maxCanonical.length) * 4.8 + 1;
-  return { prefix, noun, maxCanonical, maxRepeat, w, h };
+interface LabelMember {
+  owner: PlacedOccurrence;
+  canonical: PlacedOccurrence;
+  targets: PlacedOccurrence[];
+  count: number;
 }
-
 export function planRepeatNavigation(
   ir: Readonly<ElectricalIr>,
   occurrences: readonly PlacedOccurrence[],
@@ -89,69 +46,120 @@ export function planRepeatNavigation(
       byFunction.set(key, [...(byFunction.get(key) ?? []), o]);
     }
   const groups: RepeatPlan["groups"][number][] = [],
-    reservations: AnnotationReservation[] = [],
-    annotations: NavigationAnnotation[] = [];
-  if (![...byFunction.values()].some((g) => g.length > 1))
-    return { groups, reservations, annotations };
-  const token = maximumToken();
-  for (const appearances of byFunction.values()) {
+    labels = new Map<string, LabelMember[]>();
+  for (const [key, appearances] of byFunction) {
     if (appearances.length < 2) continue;
     const sorted = appearances.slice().sort(readingOrder),
       canonical = required(sorted[0], "Missing canonical occurrence");
-    const { prefix, noun, maxCanonical, maxRepeat, w, h } = maximumRepeatForms(
-      ir,
-      canonical,
-      maximumCounts.get(
-        JSON.stringify([
-          canonical.source.deviceUid,
-          canonical.source.functionKey,
-        ]),
-      ) ?? sorted.length,
-      token,
-    );
+    const count = maximumCounts.get(key) ?? sorted.length;
     groups.push({
       source: canonical.source,
       canonical: canonical.id,
       occurrences: sorted.map((o) => o.id),
     });
     for (const owner of sorted) {
-      const id = `navigation/1/${navigationHash(owner.id)}`;
-      const targets = owner === canonical ? sorted.slice(1) : [canonical];
-      const lines =
-        owner === canonical
-          ? canonicalLines(
-              prefix,
-              targets.map((o) => destinationToken(o.destination)),
-            )
-          : [
-              `${prefix}Repeat of ${destinationToken(canonical.destination)} (same ${noun})`,
-            ];
-      reservations.push({
-        id,
-        ownerAppearance: owner.appearance,
-        profileId: `repeat-max-roles/1/${sorted.length}`,
-        space: "sheet-slot",
-        inkMm: { x: 0, y: 0, w, h },
-        maximumForms: [maxCanonical.join("\n"), maxRepeat],
-      });
-      annotations.push({
-        id,
-        ownerOccurrence: owner.id,
-        role: owner === canonical ? "canonical" : "repeat",
-        targets: targets.map((o) => o.id),
-        text: lines.join("\n"),
-        primitiveIds: [`${id}/ink`],
-        reservationId: id,
-      });
+      const symbol = JSON.stringify([
+        owner.source.deviceUid,
+        owner.destination.sheet,
+        owner.provenance.symbolKey,
+      ]);
+      labels.set(symbol, [
+        ...(labels.get(symbol) ?? []),
+        {
+          owner,
+          canonical,
+          targets: owner === canonical ? sorted.slice(1) : [canonical],
+          count,
+        },
+      ]);
     }
   }
-  return { groups, reservations, annotations };
+  const planned = [...labels.values()].map((members) =>
+    groupedLabel(ir, members),
+  );
+  return {
+    groups,
+    reservations: planned.map((p) => p.reservation),
+    annotations: planned.map((p) => p.annotation),
+  };
+}
+function groupedLabel(ir: Readonly<ElectricalIr>, members: LabelMember[]) {
+  members.sort((a, b) =>
+    compareText(a.owner.source.functionKey, b.owner.source.functionKey),
+  );
+  const owner = required(members[0], "Missing symbol owner").owner;
+  const tag = required(
+    ir.devices.find((d) => d.uid === owner.source.deviceUid),
+    "Missing repeat device",
+  ).designation;
+  const noun = repeatNoun(
+    ir,
+    members.map((m) => m.owner),
+  );
+  const count = members.reduce((n, m) => n + m.count - 1, 0);
+  const token = maximumToken();
+  const maximum = maximumRepeatForms(
+    tag,
+    noun,
+    members.map((m) => m.count),
+    token,
+  );
+  const { also, repeats, lines } = groupedText(members, tag, noun);
+  const owners = members.map((m) => m.owner.id);
+  const id = `navigation/2/${navigationHash(owners)}`;
+  const reservation: AnnotationReservation = {
+    id,
+    ownerAppearance: owner.appearance,
+    ownerOccurrence: owner.id,
+    profileId: `repeat-max-roles/2/${count}/${members.length}`,
+    space: "sheet-slot",
+    inkMm: { x: 0, y: 0, w: maximum.w, h: maximum.h },
+    maximumForms: maximum.forms,
+    shapes: maximum.shapes,
+  };
+  const annotation: NavigationAnnotation = {
+    id,
+    ownerOccurrence: owner.id,
+    ownerOccurrences: owners,
+    role:
+      also.length && repeats.length
+        ? "mixed"
+        : also.length
+          ? "canonical"
+          : "repeat",
+    targets: [...new Set(members.flatMap((m) => m.targets.map((o) => o.id)))],
+    text: lines.join("\n"),
+    primitiveIds: [`${id}/ink`],
+    reservationId: id,
+  };
+  return { reservation, annotation };
 }
 
-function canonicalLines(prefix: string, tokens: readonly string[]) {
-  return Array.from(
-    { length: Math.ceil(tokens.length / 3) },
-    (_, i) =>
-      `${i === 0 ? `${prefix}Also shown ` : ""}${tokens.slice(i * 3, i * 3 + 3).join("; ")}${i * 3 + 3 < tokens.length ? ";" : ""}`,
-  );
+function groupedText(
+  members: readonly LabelMember[],
+  tag: string,
+  noun: string,
+) {
+  const also = members
+    .filter((m) => m.owner === m.canonical)
+    .flatMap((m) => m.targets);
+  const repeats = members
+    .filter((m) => m.owner !== m.canonical)
+    .flatMap((m) => m.targets);
+  const prefix = `${tag}: `,
+    lines: string[] = [];
+  if (also.length)
+    lines.push(
+      labelLines(prefix, "Also shown", distinctDestinations(also)).join(" "),
+    );
+  if (repeats.length)
+    lines.push(
+      labelLines(
+        also.length ? "" : prefix,
+        "Repeat of",
+        distinctDestinations(repeats),
+        ` (same ${noun})`,
+      ).join(" "),
+    );
+  return { also, repeats, lines };
 }
