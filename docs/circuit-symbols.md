@@ -144,9 +144,12 @@ electrical facts or connectivity.
 
 Pressure-switch and level-switch contacts keep the shared parallel-bar family.
 Their operator connects to the moving contact through a 4 mm dashed operating
-link: two 1.5 mm dashes separated by 1 mm. The full operator/link ink envelope is
-reserved before layout, including its stroke, and participates in caption
-clearance. These links stay inside their own authored function.
+link: two free-standing 1.5 mm dashes separated by 1 mm, with at least 0.5 mm
+of clear ink at both ends. Terminal markers export `data-symbol-port-id` so
+polarity qualifiers can be paired with their own electrical landing. The full
+operator/link ink envelope is reserved before layout, including its stroke, and
+participates in caption clearance. These links stay inside their own authored
+function.
 
 Earth marks remain upright in both flows. In left-to-right flow the original
 attachment lead turns once into a descending stem; all three decreasing bars sit

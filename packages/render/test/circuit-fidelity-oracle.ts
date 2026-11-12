@@ -1,6 +1,7 @@
 import { parseHTML } from "linkedom";
 import { expect } from "vitest";
 import { svgGeometry, type Point } from "./source-isolation.js";
+import { visibleLinkInk } from "./visible-link-ink.js";
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const near = (a: Point, b: Point) => expect(distance(a, b)).toBeLessThan(0.001);
@@ -48,41 +49,35 @@ export function auditOperatingLink(
   const [a, b] = link.ink.points;
   const length = distance(a!, b!);
   expect(length).toBeGreaterThanOrEqual(3);
-  near(b!, moving[0]!);
+  const direction = { x: (b!.x - a!.x) / length, y: (b!.y - a!.y) / length };
+  expect(
+    Math.abs(
+      (moving[0]!.x - b!.x) * direction.y - (moving[0]!.y - b!.y) * direction.x,
+    ),
+  ).toBeLessThan(0.001);
+  expect(distance(b!, moving[0]!)).toBeLessThan(1);
   const operators = role(owner, "operator").flatMap(
     (e) => paintedShape(root, e).points,
   );
-  expect(Math.min(...operators.map((p) => distance(p, a!)))).toBeLessThan(
-    0.001,
-  );
-  const local = link.element;
-  const localLength = Math.hypot(
-    Number(local.getAttribute("x2")) - Number(local.getAttribute("x1")),
-    Number(local.getAttribute("y2")) - Number(local.getAttribute("y1")),
-  );
-  const pattern = (local.getAttribute("stroke-dasharray") ?? "")
-    .split(/[ ,]+/)
-    .map(Number);
-  expect(pattern).toHaveLength(2);
-  const [dash, gap] = pattern.map((n) => (n * length) / localLength);
-  expect(dash!).toBeGreaterThanOrEqual(0.8);
-  expect(gap!).toBeGreaterThanOrEqual(0.5);
-  let visible = 0;
-  for (let at = 0; at < length - 0.001; at += dash! + gap!) {
-    expect(Math.min(dash!, length - at)).toBeGreaterThanOrEqual(0.8);
-    visible++;
-  }
-  expect(visible).toBeGreaterThanOrEqual(2);
+  expect(Math.min(...operators.map((p) => distance(p, a!)))).toBeLessThan(1);
+  visibleLinkInk(owner, a!, b!, (e) => paintedShape(root, e));
   const state = role(owner, "contact-state");
   expect(state).toHaveLength(closed ? 1 : 0);
   if (closed) {
     const slash = paintedShape(root, state[0]!).points;
-    const v = { x: slash[1]!.x - slash[0]!.x, y: slash[1]!.y - slash[0]!.y };
-    const m = {
-      x: moving[1]!.x - moving[0]!.x,
-      y: moving[1]!.y - moving[0]!.y,
-    };
-    expect(Math.abs(v.x * m.y - v.y * m.x)).toBeGreaterThan(1);
+    for (const bar of [moving, fixed]) {
+      const v = { x: slash[1]!.x - slash[0]!.x, y: slash[1]!.y - slash[0]!.y },
+        w = { x: bar[1]!.x - bar[0]!.x, y: bar[1]!.y - bar[0]!.y },
+        d = { x: bar[0]!.x - slash[0]!.x, y: bar[0]!.y - slash[0]!.y },
+        cross = v.x * w.y - v.y * w.x,
+        t = (d.x * w.y - d.y * w.x) / cross,
+        u = (d.x * v.y - d.y * v.x) / cross;
+      expect(Math.abs(cross)).toBeGreaterThan(1);
+      expect(t).toBeGreaterThan(0);
+      expect(t).toBeLessThan(1);
+      expect(u).toBeGreaterThan(0);
+      expect(u).toBeLessThan(1);
+    }
   }
   const leads = role(owner, "lead").map((e) => paintedShape(root, e).points);
   expect(leads).toHaveLength(2);

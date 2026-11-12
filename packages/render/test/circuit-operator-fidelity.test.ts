@@ -57,7 +57,39 @@ function auditFunctions(root: Element, source: ElectricalIr) {
       expect(
         fn.querySelectorAll('[data-circuit-role="operating-link"]'),
       ).toHaveLength(0);
-    if (fn.querySelector('[data-circuit-mark="earth"]')) auditEarth(root, fn);
+    if (fn.querySelector('[data-circuit-mark="earth"]')) {
+      const attachment = fn.querySelector("[data-terminal-attachment]")!;
+      expect(
+        JSON.parse(attachment.getAttribute("data-terminal-attachment")!),
+      ).toEqual([f.terminals[0]!.deviceUid, f.terminals[0]!.terminalKey]);
+      const path = attachment.querySelector('path[stroke="#17212b"]')!;
+      // Measure the actual attachment endpoint, rather than its claimed target.
+      const points = paintedShape(root, path).points;
+      const terminal = [
+        ...fn
+          .closest("[data-layout-width]")!
+          .querySelectorAll("[data-terminal-id]"),
+      ].find(
+        (e) =>
+          e.getAttribute("data-terminal-id") ===
+          attachment.getAttribute("data-terminal-attachment"),
+      )!;
+      const port = paintedShape(root, terminal.querySelector("circle")!).points;
+      const centre = {
+        x:
+          (Math.min(...port.map((p) => p.x)) +
+            Math.max(...port.map((p) => p.x))) /
+          2,
+        y:
+          (Math.min(...port.map((p) => p.y)) +
+            Math.max(...port.map((p) => p.y))) /
+          2,
+      };
+      expect(
+        Math.hypot(points[0]!.x - centre.x, points[0]!.y - centre.y),
+      ).toBeLessThan(0.001);
+      auditEarth(root, fn, points.at(-1)!);
+    }
   }
 }
 
@@ -126,6 +158,21 @@ describe("pressure/level operating links and upright earth", () => {
         const link = owner.querySelector(
           '[data-circuit-role="operating-link"]',
         )!;
+        // Commit 2's dash repeats merged into neighbouring collinear solids.
+        // Restore that whole geometry: visible-ink union must reject it.
+        const previous = owner.cloneNode(true) as Element;
+        previous
+          .querySelector('[data-circuit-role="operating-link"]')!
+          .setAttribute("transform", "translate(0 1)");
+        for (const operator of previous.querySelectorAll(
+          '[data-circuit-role="operator"]',
+        ))
+          operator.setAttribute("transform", "translate(0 2)");
+        owner.replaceWith(previous);
+        expect(() =>
+          auditOperatingLink(root, previous, mark.endsWith("-nc")),
+        ).toThrow();
+        previous.replaceWith(owner);
         link.remove();
         expect(() =>
           auditOperatingLink(root, owner, mark.endsWith("-nc")),
@@ -144,6 +191,13 @@ describe("pressure/level operating links and upright earth", () => {
         const state = owner.querySelector(
           '[data-circuit-role="contact-state"]',
         );
+        if (state) {
+          for (const transform of ["translate(20 20)", "translate(4 0)"]) {
+            state.setAttribute("transform", transform);
+            expect(() => auditOperatingLink(root, owner, true)).toThrow();
+          }
+          state.removeAttribute("transform");
+        }
         if (state) state.remove();
         else
           owner.append(
@@ -238,6 +292,14 @@ describe("pressure/level operating links and upright earth", () => {
         for (const sheet of result.value.sheets) {
           const root = parseHTML(sheet.svg).document.querySelector("svg")!;
           auditFunctions(root, source);
+          for (const earth of root.querySelectorAll(
+            '[data-circuit-mark="earth"]',
+          )) {
+            const lead = earth.querySelector('[data-circuit-role="lead"]')!;
+            lead.setAttribute("x1", "1");
+            expect(() => auditFunctions(root, source)).toThrow();
+            lead.setAttribute("x1", "0");
+          }
           for (const node of root.querySelectorAll("[data-layout-width]")) {
             const width = Number(node.getAttribute("data-layout-width")),
               height = Number(node.getAttribute("data-layout-height"));

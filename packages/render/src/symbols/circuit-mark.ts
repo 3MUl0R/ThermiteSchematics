@@ -105,43 +105,43 @@ const CONTACT: Primitive[] = [
   { ...line(4, 3, 4, 9), role: "contact-moving" },
   { ...line(8, 3, 8, 9), role: "contact-fixed" },
 ];
-// Four physical mm: two 1.5 mm dashes separated by a 1 mm gap. The
-// final dash lands on the moving element; this is never electrical continuity.
+// Four physical mm: two free-standing 1.5 mm dashes separated by 1 mm.
+// Leave >0.5 mm of painted clearance to both neighbouring solid strokes.
 const operatingLink: Primitive = {
-  ...line(4, -3, 4, 3),
+  ...line(4, -4, 4, 2),
   dash: [2.25, 1.5],
   role: "operating-link",
 };
 const closedState: Primitive = { ...line(2, 10, 10, 2), role: "contact-state" };
 const pressure: Primitive[] = [
-  { ...line(4, -5, 4, -3), role: "operator" },
+  { ...line(4, -7, 4, -5), role: "operator" },
   {
     kind: "polyline",
     role: "operator",
     points: [
-      [0, -5],
-      [1, -4],
-      [2, -5],
-      [3, -4],
-      [4, -5],
-      [5, -4],
-      [6, -5],
-      [7, -4],
-      [8, -5],
+      [0, -7],
+      [1, -6],
+      [2, -7],
+      [3, -6],
+      [4, -7],
+      [5, -6],
+      [6, -7],
+      [7, -6],
+      [8, -7],
     ],
   },
 ];
 const level: Primitive[] = [
-  { ...line(4, -4, 4, -3), role: "operator" },
+  { ...line(4, -6, 4, -5), role: "operator" },
   {
     kind: "polyline",
     role: "operator",
     points: [
+      [4, -8],
+      [2, -7],
       [4, -6],
-      [2, -5],
-      [4, -4],
-      [6, -5],
-      [4, -6],
+      [6, -7],
+      [4, -8],
     ],
   },
 ];

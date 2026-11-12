@@ -713,6 +713,7 @@ function terminalMarkerAttributes(
       port.symbolPortId,
     ]),
     class: "terminal-marker",
+    "data-symbol-port-id": port.symbolPortId,
     "data-device-uid": port.terminal.deviceUid,
     "data-designation": sourceValue(
       registry,

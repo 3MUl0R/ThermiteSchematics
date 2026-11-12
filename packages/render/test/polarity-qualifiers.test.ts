@@ -9,6 +9,7 @@ import { validateSymbolCatalog } from "../src/symbols/validate.js";
 import type { SchematicViewRequest } from "../src/types.js";
 import { contractProject } from "./rooted-profile-contracts.js";
 import { inkClearance, svgGeometry } from "./source-isolation.js";
+import { paintedShape } from "./circuit-fidelity-oracle.js";
 
 // This oracle reads emitted strokes and all nested SVG transforms. It never
 // reads the catalog's qualifier centre or an orientation claim from the emitter.
@@ -26,6 +27,21 @@ function audit(owner: Element, width: number, height: number) {
     expect(shapes).toHaveLength(1);
     return shapes[0]!;
   });
+  const terminals = [...local.querySelectorAll(".terminal-marker")].map((e) => {
+    const ink = paintedShape(local, e);
+    return {
+      port: e.getAttribute("data-symbol-port-id"),
+      x:
+        (Math.min(...ink.points.map((p) => p.x)) +
+          Math.max(...ink.points.map((p) => p.x))) /
+        2,
+      y:
+        (Math.min(...ink.points.map((p) => p.y)) +
+          Math.max(...ink.points.map((p) => p.y))) /
+        2,
+    };
+  });
+  expect(terminals.map((t) => t.port).sort()).toEqual(["positive", "return"]);
   for (const [i, q] of qualifiers.entries()) {
     const { points, stroke } = strokes[i]!;
     expect(points).toHaveLength(2);
@@ -38,6 +54,15 @@ function audit(owner: Element, width: number, height: number) {
       expect(dy).toBeLessThan(0.001);
       expect(q.getAttribute("data-symbol-port-id")).toBe("return");
     } else expect(q.getAttribute("data-symbol-port-id")).toBe("positive");
+    const centre = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 },
+      own = terminals.find(
+        (t) => t.port === q.getAttribute("data-symbol-port-id"),
+      )!,
+      opposite = terminals.find((t) => t !== own)!;
+    expect(
+      Math.hypot(centre.x - own.x, centre.y - own.y),
+      "owned polarity adjacency",
+    ).toBeLessThan(Math.hypot(centre.x - opposite.x, centre.y - opposite.y));
     for (const p of points) {
       expect(p.x - stroke / 2).toBeGreaterThanOrEqual(0);
       expect(p.x + stroke / 2).toBeLessThanOrEqual(width);
@@ -105,6 +130,30 @@ describe("owned DC polarity qualifier geometry", () => {
             flow,
           );
           audit(owner, definition.size.width, definition.size.height);
+          const swapped = owner.cloneNode(true) as Element;
+          const plus = [
+              ...swapped.querySelectorAll('[data-polarity="positive"]'),
+            ],
+            minus = swapped.querySelector('[data-polarity="negative"]')!;
+          const dx =
+              Number(minus.getAttribute("x1")) +
+              (Number(minus.getAttribute("x2")) -
+                Number(minus.getAttribute("x1"))) /
+                2 -
+              (Number(plus[0]!.getAttribute("x1")) +
+                Number(plus[0]!.getAttribute("x2"))) /
+                2,
+            dy =
+              Number(minus.getAttribute("y1")) -
+              (Number(plus[0]!.getAttribute("y1")) +
+                Number(plus[0]!.getAttribute("y2"))) /
+                2;
+          for (const q of plus)
+            q.setAttribute("transform", `translate(${dx} ${dy})`);
+          minus.setAttribute("transform", `translate(${-dx} ${-dy})`);
+          expect(() =>
+            audit(swapped, definition.size.width, definition.size.height),
+          ).toThrow(/owned polarity adjacency/);
           const q = owner.querySelector('[data-polarity="negative"]')!;
           const x =
             (Number(q.getAttribute("x1")) + Number(q.getAttribute("x2"))) / 2;
