@@ -349,7 +349,7 @@ for example different marks for a device's main and auxiliary contacts. E206
 checks function existence, kind, terminal count and contact state.
 Read `thermite guide circuit-symbols` before selecting a disconnector profile.
 Read `thermite guide circuit-symbols` and `thermite guide circuit-views`; never
-guess marks; check DC ink in both flows. Marks do not create continuity
+guess marks; check links/earth/DC ink in both flows. Marks do not create continuity
 or bonds.
 
 Reconstruction: record page/line provenance, separate aliases from verified
