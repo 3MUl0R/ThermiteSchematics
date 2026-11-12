@@ -1,6 +1,7 @@
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
+import { repairSearchJogs } from "./rooted-jog-repair.js";
 import { searchSettled } from "./rooted-settled.js";
 import { MAX_MIXED_LAYOUTS } from "./rooted-mixed.js";
 import { invariantCardConstraint } from "./rooted-constraint.js";
@@ -165,6 +166,8 @@ export async function searchRootedCandidates(
       : [undefined]) {
       await initial(ir, request, presentation, page, profile, run);
     }
+    validateEconomyCandidate(ir, run, page);
+    await repairSearchJogs(ir, run, page);
     validateEconomyCandidate(ir, run, page);
     if (searchSettled(run, page)) {
       run.earlyExit = true;

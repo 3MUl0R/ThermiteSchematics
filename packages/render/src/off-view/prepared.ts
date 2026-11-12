@@ -17,6 +17,7 @@ import { addOffViewCards, offViewLayoutFailure } from "./presentation.js";
 import { recoverCardLayout } from "./recover.js";
 import { required } from "../presentation/util.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
+import { reservePowerJogSpace } from "./power-jog-space.js";
 
 export interface DrawingContext {
   ir: Readonly<ElectricalIr>;
@@ -68,14 +69,20 @@ export async function initialCardLayout(
 export async function repositionDrawing(
   p: PreparedSchematicDrawing,
   choices: Readonly<Record<string, number>>,
+  jogSpace = 0,
+  powerTurnSpacing = 0,
 ): Promise<RenderOutcome<PreparedSchematicDrawing>> {
   const c = required(contexts.get(p), "Missing prepared source context");
-  const annotated = addOffViewCards(c.ir, nativeReservations(p.graph), choices);
+  const native = reservePowerJogSpace(nativeReservations(p.graph), jogSpace);
+  const annotated = addOffViewCards(c.ir, native, choices);
   if (!annotated.ok) return annotated;
   validatePresentationGraph(c.ir, c.selected, annotated.value, c.mappings);
   const preflight = preflightRenderText(annotated.value);
   if (!preflight.ok) return preflight;
-  const layout = await layoutPresentationGraph(annotated.value, c.options);
+  const layout = await layoutPresentationGraph(annotated.value, {
+    ...c.options,
+    powerTurnSpacing,
+  });
   if (!layout.ok)
     return {
       ok: false,
