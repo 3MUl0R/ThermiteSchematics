@@ -51,8 +51,9 @@ if it fits, otherwise the longest prefix of complete sentences, then whole words
 An overlong unbroken word or symbol sequence cuts only between grapheme clusters
 using `Intl.Segmenter`. The cap includes the omission ellipsis. Line boundaries
 are LF, U+2028 and U+2029. An ellipsis and a full-text note appear only when text
-was cut. Missing or whitespace-only type descriptions use the exact type ID and
-an applicable fallback note. Blank instance descriptions remain blank.
+was cut. Missing or whitespace-only type descriptions state that the description
+is not specified. CSV retains the exact type-ID fallback and its note. Blank
+instance descriptions remain blank.
 Instance descriptions and purchasing reasons are never abbreviated.
 Printed columns reserve the measured width of indivisible name segments and
 whole header words at the fixed report type size. Locations wrap at their own
@@ -90,8 +91,8 @@ Cable and connector-assembly instance descriptions also remain visible.
 Quantities include those instances and are not purchasable totals; no purchasable
 total is printed. The BOM does not estimate accessories or cable lengths.
 Blank order numbers require selection before procurement. Cable BOM and schedule
-rows use the cable type description, falling back to its ID only when absent
-(including a whitespace-only type description).
+rows use the cable type description. Missing or whitespace-only type descriptions
+print `Type description not specified`; CSV retains the type-ID fallback.
 
 Missing descriptive cells are blank in `bom`, `wires`, `cables`, `terminals`,
 `io`, `io-ports`, `network` and `assemblies`. Explicit text such as
@@ -106,8 +107,8 @@ printed/CSV report text; source, IR and query JSON preserve the authored text.
 
 `cable --json` and `buildCableSchedule` expose optional `description` only when
 the cable type authored it, including an explicit empty string. They never
-substitute a type ID into that field. ID fallback belongs to report tables (including CSV),
-whose notes explain it.
+substitute a type ID into that field. Only CSV retains the type-ID fallback;
+printed reports state the missing description explicitly.
 
 The query builders accept optional packet-owned endpoint references without
 changing request JSON: `buildDocumentation(ir, request, references)` accepts
@@ -120,6 +121,21 @@ they assert no electrical direction. The wire/core table appends `From sheet.zon
 and `To sheet.zone` only when at least one retained endpoint has a nonempty value.
 Absent entries are blank. No reference is assigned to an unterminated end. These
 APIs reserve support for X2; the renderer does not yet supply packet locations.
+
+Visible function-reference cells show function kind, authored normal state for
+contacts, and the bound terminal set (for example `NO contact 13–14` or
+`Coil A1–A2`). Keys and type names never establish main/auxiliary status.
+I/O Channel cells show the authored address, else bound terminal identities;
+missing bindings print `Channel identity not specified`. CSV keeps the channel
+selector and network endpoint keys for lookup. Row keys, IR, query metadata and
+request formats remain unchanged. Terminal-plan notes say “Terminals follow the
+authored order where specified.”
+
+Cable drawing headings use the full authored type description, else
+`Cable type description not specified`. Text must fit at readable size or the
+view returns R006. Transformer source windings use the semantic caption `source`,
+independent of the function selector. No projection supplies missing ratings or
+parts. Communication identities follow the [port caption policy](communication-ports.md).
 
 ## Report requests and CLI
 

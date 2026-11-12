@@ -334,15 +334,15 @@ functions, not spares. Group order affects presentation; order functions by read
 stage (PLC outputs, terminal points, interlocks, coils). A device's first appearance
 sets its display order.
 
-Tags: designation ≥2.7 mm, instance/else-type description and catalog part ≥2.5 mm.
-Selected functions retain terminal labels, wire numbers and references.
-A wire's `properties.label` is its
-printed number, separate from its source identity; repeated labels never join
-nets. Boundary counts expose connections outside the selection; a circuit view is
-not a completeness audit. ELK owns placement and routing. Large groups split into
-numbered parts with whole conductors; R006 means
-a conductor, coupled symbol or label cannot fit. Narrow the selection or
-use a larger sheet; never change topology to obtain a drawing.
+Tags: designation ≥2.7 mm; description/part ≥2.5 mm.
+Functions keep terminals, wire numbers and references. Wire
+`properties.label` is the printed number; repeated labels never join nets.
+Boundary counts show connections outside the selection, not completeness.
+ELK places/routes. Groups split with whole conductors; R006 means something
+cannot fit. Narrow selection or use larger paper; never change topology to fit.
+Visible references use kind/state and terminals; I/O address/terminals; ports
+authored description/connector. Cable headings use type description or state its
+absence. Keys stay in metadata/CSV.
 
 Library `circuitSymbols` maps real function keys to explicit closed-catalog marks,
 for example different marks for a device's main and auxiliary contacts. E206
