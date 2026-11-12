@@ -43,10 +43,12 @@ function fixture() {
     ok: true,
     value: [candidate],
   });
-  vi.spyOn(build, "materializeRootedCandidate").mockReturnValue({
-    ok: true,
-    value: candidate.drafts,
-  });
+  vi.spyOn(build, "materializeRootedCandidate").mockImplementation(
+    (_ir, c) => ({
+      ok: true,
+      value: c.drafts,
+    }),
+  );
   const check = vi.spyOn(fit, "compositionFits").mockReturnValue(true);
   vi.spyOn(compose, "composeRootedWinner").mockImplementation((_ir, c) => c);
   return { original, candidate, run, layout, check };
@@ -107,7 +109,9 @@ it.each(["pages", "composed-pages", "sparse", "worse-jog", "fit", "gang"])(
     if (failure === "fit") check.mockReturnValue(false);
     if (failure === "sparse") {
       run.standardEconomy = false;
-      vi.spyOn(score, "candidateUtilisation").mockReturnValue(0.399999);
+      vi.spyOn(score, "candidateUtilisation").mockImplementation((c) =>
+        c.prepared === original.prepared ? 0.5 : 0.399999,
+      );
     }
     if (failure === "gang")
       layout.mockResolvedValue({
@@ -123,5 +127,52 @@ it.each(["pages", "composed-pages", "sparse", "worse-jog", "fit", "gang"])(
       original,
     );
     expect(run.attempts).toBe(1);
+  },
+);
+
+it("does not spend a layout on an internal jog outside the printed fragment", async () => {
+  const { original, run, layout } = fixture();
+  original.drafts[0]!.rootedSections![0]!.viewport = {
+    x: 90,
+    y: 50,
+    w: 55,
+    h: 50,
+  };
+  expect(await repairRootedJogs(ir, original, original, sidePage, run)).toBe(
+    original,
+  );
+  expect(layout).not.toHaveBeenCalled();
+  expect(run.attempts).toBe(0);
+});
+
+it("requires the printed short turn to improve even if the internal count falls", async () => {
+  const { original, candidate, run } = fixture();
+  candidate.prepared.layout.edges[0]!.points = structuredClone(
+    original.prepared.layout.edges[0]!.points,
+  );
+  expect(await repairRootedJogs(ir, original, original, sidePage, run)).toBe(
+    original,
+  );
+});
+
+it.each([true, false])(
+  "keeps min(40%%, base) utilisation in standard economy=%s",
+  async (standardEconomy) => {
+    for (const [base, next, accepted] of [
+      [0.6, 0.399999, false],
+      [0.6, 0.4, true],
+      [0.3, 0.299999, false],
+      [0.3, 0.3, true],
+    ] as const) {
+      const { original, candidate, run } = fixture();
+      run.standardEconomy = standardEconomy;
+      vi.spyOn(score, "candidateUtilisation").mockImplementation((c) =>
+        c.prepared === original.prepared ? base : next,
+      );
+      expect(
+        await repairRootedJogs(ir, original, original, sidePage, run),
+      ).toBe(accepted ? candidate : original);
+      vi.restoreAllMocks();
+    }
   },
 );

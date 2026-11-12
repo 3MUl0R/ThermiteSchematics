@@ -404,12 +404,20 @@ a blank or conductor-only strip. Failed final ink, peer or page-cost checks
 retain the original. Empty grid rows may already have been omitted; composition
 uses the retained viewports and their remapped peer references.
 References use final physical sheet numbers and zones.
-A power view with a short interior jog may spend one remaining placement attempt
-on extra turn space beside captioned poles or a source phase port. The original stays selected unless
-the retry passes page fit, gang and ink checks, reduces jogs, preserves each
-conductor's route quality and card locality, and uses no additional pages.
-In compact mode the repaired composition must meet the existing useful
-utilisation threshold before it can replace ordinary placement recovery.
+A power view with a printed short interior jog may spend one remaining placement
+attempt on extra turn space beside captioned poles or a source phase port.
+Ordinary recovery runs first, holding one of the existing attempts for this
+retry when its initial layout has a jog. Clipped printed fragments use the same
+strict >0.05 and <3 mm definition as the drawing checker. The original stays
+selected unless the retry passes page fit, gang and ink checks, reduces printed
+jogs, preserves each conductor's raw and clipped defect budgets and card
+locality, and uses no additional pages. Both economies preserve utilisation of
+at least min(0.40, the original printed composition). There is no separate raw
+wire-length-growth allowance; the existing per-conductor detour criterion is
+2×Manhattan span +20 mm.
+Source turns reserve an additional half layout unit (0.125 mm at the minimum
+0.25 mm/unit print scale), rather than a serialization quantum. The complete
+page guard also applies to this margin; failed retries retain the original.
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
 strip extents; any partly painted location heading stays whole, while wholly

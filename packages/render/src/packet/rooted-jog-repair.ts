@@ -8,14 +8,14 @@ import {
 } from "./rooted-search.js";
 import type { PaperPage } from "./types.js";
 import { VERTICAL_POWER_EDGE_NODE_SPACING } from "../layout/adapter-ordering.js";
-import { fragmentDefects } from "./route-fragments.js";
+import { conductorKey } from "../presentation/util.js";
 import { actualChoices } from "../off-view/choices.js";
 import { repositionDrawing } from "../off-view/prepared.js";
 import {
   buildRootedCandidates,
   materializeRootedCandidate,
 } from "./rooted-build.js";
-import { routeGrowth } from "./rooted-clipped-routes.js";
+import { candidateRoutes, routeGrowth } from "./rooted-clipped-routes.js";
 import { candidateUtilisation } from "./rooted-score.js";
 import { USEFUL_UTILISATION } from "./rooted-order.js";
 import { localityRegression } from "./rooted-locality.js";
@@ -25,6 +25,7 @@ import { economyExhausted } from "./rooted-economy.js";
 
 const jogCount = (c: RootedCandidate) =>
   [...c.jogs.values()].reduce((a, b) => a + b, 0);
+const SOURCE_TURN_MARGIN_UNITS = 0.5;
 
 /** One page-aware ELK retry, charged to the existing placement budget.
  * Keep the original unless the complete printed candidate repairs a jog with
@@ -45,14 +46,18 @@ export async function repairRootedJogs(
     original.prepared.view.flow !== "top-to-bottom"
   )
     return original;
+  const before = printedComposition(ir, original, native, page);
+  // Reuse the checker's clipped-fragment, >0.05 and <3 mm semantics. A raw
+  // internal jog hidden by a cut cannot justify replacing the printed layout.
+  if (!before || !printedJogCount(before)) return original;
   run.attempts++;
   const minimum = 3 / original.scale;
-  const deficit = sourceJogDeficit(original);
+  const spacing = sourceTurnSpacing(before);
   const prepared = await repositionDrawing(
     original.prepared,
     actualChoices(original.prepared),
-    deficit ? 0 : minimum,
-    deficit ? Number(VERTICAL_POWER_EDGE_NODE_SPACING) + deficit + 0.001 : 0,
+    spacing ? 0 : minimum,
+    spacing,
   );
   if (!prepared.ok) return original;
   const built = buildRootedCandidates(
@@ -87,11 +92,30 @@ export async function repairRootedJogs(
   candidate.drafts = materialized.value;
   if (
     !compositionFits(candidate, native, page) ||
-    !preservesPrintedQuality(ir, original, candidate, native, page, run)
+    !preservesPrintedQuality(ir, before, candidate, native, page)
   )
     return original;
   candidate.printableDrafts = materialized.value;
   return candidate;
+}
+
+function printedComposition(
+  ir: Readonly<ElectricalIr>,
+  candidate: RootedCandidate,
+  native: RootedCandidate,
+  page: PaperPage,
+) {
+  const printed = candidate.printableDrafts
+    ? { ok: true as const, value: candidate.printableDrafts }
+    : materializeRootedCandidate(ir, candidate, page);
+  return printed.ok
+    ? composeRootedWinner(
+        ir,
+        { ...candidate, drafts: printed.value },
+        native,
+        page,
+      )
+    : undefined;
 }
 
 export async function repairSearchJogs(
@@ -117,36 +141,32 @@ export async function repairSearchJogs(
  * different physical page counts after a reservation changes the strip widths. */
 function preservesPrintedQuality(
   ir: Readonly<ElectricalIr>,
-  original: RootedCandidate,
+  before: RootedCandidate,
   candidate: RootedCandidate,
   native: RootedCandidate,
   page: PaperPage,
-  run: RootedSearch,
 ) {
-  const printed = original.printableDrafts
-    ? { ok: true as const, value: original.printableDrafts }
-    : materializeRootedCandidate(ir, original, page);
-  if (!printed.ok) return false;
-  const before = composeRootedWinner(
-    ir,
-    { ...original, drafts: printed.value },
-    native,
-    page,
-  );
   const after = composeRootedWinner(ir, candidate, native, page);
-  // A sparse repaired first layout must not settle compact recovery before
-  // it finds a useful placement. Use the existing economy threshold, measured
-  // after composition, without extending the recovery or retry budgets.
   return (
     after.drafts.length <= before.drafts.length &&
-    (run.standardEconomy !== false ||
-      candidateUtilisation(after, page) >= USEFUL_UTILISATION)
+    printedJogCount(after) < printedJogCount(before) &&
+    routeGrowth(after, before, false).every((n) => n === 0) &&
+    routeGrowth(after, before).every((n) => n === 0) &&
+    candidateUtilisation(after, page) >=
+      Math.min(USEFUL_UTILISATION, candidateUtilisation(before, page))
   );
 }
 
-/** Reserve only the measured source-side shortfall. One 0.001-unit coordinate
- * quantum prevents rounding from undoing the added physical turn clearance. */
-function sourceJogDeficit(c: RootedCandidate) {
+function printedJogCount(candidate: RootedCandidate) {
+  return [...candidateRoutes(candidate).values()].reduce(
+    (n, defects) => n + defects.jogs.length,
+    0,
+  );
+}
+
+/** Measure the source-side shortfall in layout units. The retry adds half a
+ * layout unit: 0.125 mm at the existing minimum 0.25 mm/unit print scale. */
+function sourceTurnSpacing(c: RootedCandidate) {
   const ports = new Set(
     c.prepared.graph.nodes.flatMap((node) =>
       node.kind === "symbol" && node.classification === "source"
@@ -154,21 +174,18 @@ function sourceJogDeficit(c: RootedCandidate) {
         : [],
     ),
   );
-  const edges = new Set(
-    c.prepared.graph.edges
-      .filter(
-        (e) =>
-          (c.jogs.get(e.id) ?? 0) > 0 &&
-          (ports.has(e.sourcePortId) || ports.has(e.targetPortId)),
-      )
-      .map((e) => e.id),
+  const routes = candidateRoutes(c);
+  const deficit = Math.max(
+    0,
+    ...c.prepared.graph.edges
+      .filter((e) => ports.has(e.sourcePortId) || ports.has(e.targetPortId))
+      .flatMap((e) =>
+        e.elementIds.flatMap((id) => routes.get(conductorKey(id))?.jogs ?? []),
+      ),
   );
-  return (
-    Math.max(
-      0,
-      ...c.prepared.layout.edges
-        .filter((e) => edges.has(e.id))
-        .flatMap((e) => fragmentDefects(e.points, c.scale).jogs),
-    ) / c.scale
-  );
+  return deficit
+    ? Number(VERTICAL_POWER_EDGE_NODE_SPACING) +
+        deficit / c.scale +
+        SOURCE_TURN_MARGIN_UNITS
+    : 0;
 }

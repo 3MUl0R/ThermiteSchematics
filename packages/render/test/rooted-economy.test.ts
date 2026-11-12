@@ -242,3 +242,15 @@ it.each(["resolve", "label"])(
     expect(run.economyStartedAt).toBeUndefined();
   },
 );
+it("holds one of the four economy attempts for the printed-jog retry", async () => {
+  const { run } = setup(true);
+  validateEconomyCandidate(ir, run, page);
+  run.jogRetryReserved = true;
+  vi.spyOn(build, "buildRootedCandidates").mockReturnValue(failure());
+  await placements(ir, request, undefined, page, run);
+  expect(prepared.repositionDrawing).toHaveBeenCalledTimes(3);
+  expect(run.attempts).toBe(3);
+  expect(economyExhausted(run)).toBe(true);
+  delete run.jogRetryReserved;
+  expect(economyExhausted(run)).toBe(false);
+});

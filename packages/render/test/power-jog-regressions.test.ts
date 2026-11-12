@@ -45,6 +45,13 @@ it.each([
     }
     for (const name of names) {
       const uid = c.ir.wires.find((w) => w.designation === name)!.uid;
+      const edge = p.graph.edges.find((e) =>
+        e.elementIds.some((id) => id.kind === "wire" && id.uid === uid),
+      )!;
+      const route = p.layout.edges.find((r) => r.id === edge.id)!;
+      expect(
+        Math.min(...lengths(route.points).slice(1, -1)) * 0.25,
+      ).toBeGreaterThanOrEqual(3.125);
       expect(
         p.graph.edges.some((e) =>
           e.elementIds.some((id) => id.kind === "wire" && id.uid === uid),
@@ -114,6 +121,14 @@ it.each([
     );
     if (!result.ok) throw Error(JSON.stringify(result));
     const p = result.value[0]!.rootedLegendSource!.prepared;
+    const wire = c.ir.wires.find((w) => w.designation === "W-PWR-003")!;
+    const edge = p.graph.edges.find((e) =>
+      e.elementIds.some((id) => id.kind === "wire" && id.uid === wire.uid),
+    )!;
+    const sourceRoute = p.layout.edges.find((r) => r.id === edge.id)!;
+    expect(
+      Math.min(...lengths(sourceRoute.points).slice(1, -1)) * 0.25,
+    ).toBeGreaterThanOrEqual(3.125);
     for (const edge of p.graph.edges.filter((e) => e.kind === "conductor")) {
       const route = p.layout.edges.find((r) => r.id === edge.id)!;
       expect(
