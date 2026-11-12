@@ -190,14 +190,6 @@ export function evaluateSheet(
     obs("DQ-14", checks.doubleLandings(g), {
       scope:
         "Owned conductor endpoints must coincide with their drawn terminal/attachment anchors within 0.01 mm. Distinct conductor IDs must approach separately; same-direction final strokes at the owned terminal are a merged landing.",
-      ...(!g.shapes.some((s) => s.conductor && s.endpoints?.length) &&
-      g.shapes.some((s) => s.conductor)
-        ? {
-            status: "not-implemented",
-            reason:
-              "Needs physical endpoint-to-path and terminal-anchor exports for this view family.",
-          }
-        : {}),
     }),
   );
   out.push(

@@ -1,7 +1,11 @@
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
+import {
+  assertTopologyIdentities,
+  assertTopologyRouteEndpoints,
+} from "./topology-conservation.js";
 import { createElkEngine } from "./elk-runtime.js";
 
-export function layoutWiring(
+export async function layoutWiring(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
 ): Promise<ElkNode> {
@@ -15,7 +19,9 @@ export function layoutWiring(
       e.targets.some((t) => owners.get(s) === owners.get(t)),
     ),
   );
-  return createElkEngine().layout({
+  // The caller declares whole-unit terminal rows before layout. In particular,
+  // NETWORK_SIMPLEX must not silently quantize a fractional fixed port here.
+  const input: ElkNode = {
     id: "wiring",
     layoutOptions: {
       "elk.algorithm": "layered",
@@ -38,5 +44,10 @@ export function layoutWiring(
     },
     children,
     edges,
-  });
+  };
+  const expected = structuredClone(input);
+  const graph = await createElkEngine().layout(input);
+  assertTopologyIdentities(graph, expected);
+  assertTopologyRouteEndpoints(graph);
+  return graph;
 }

@@ -32,6 +32,8 @@ it.each([false, true])(
           const port = doc.querySelector(
             `[data-layout-port="${route.getAttribute(`data-layout-${end}-port`)}"]`,
           )!;
+          const declaredY = Number(port.getAttribute("cy"));
+          expect(declaredY).toBe(Math.round(declaredY));
           const translation = port
             .parentElement!.getAttribute("transform")!
             .match(/translate\(([-\d.]+) ([-\d.]+)\)/)!;

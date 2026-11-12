@@ -17,7 +17,7 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
-import { createElkEngine } from "./layout/elk-runtime.js";
+import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
 import {
   validateSignalLoopRequest,
@@ -690,21 +690,9 @@ export async function prepareSignalLoopDrawing(
             : !p.assembly &&
               p.terminal === e.ends[side === "out" ? 0 : 1].terminalKey),
       )!.id;
-  const graph: ElkNode = await createElkEngine().layout({
-    id: "loop",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": vertical ? "DOWN" : "RIGHT",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "8",
-      "elk.spacing.edgeEdge": "6",
-      "elk.spacing.edgeNode": "5",
-      "elk.padding": "[top=6,left=6,bottom=6,right=6]",
-      "elk.randomSeed": "1",
-      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-    },
+  const graph = await layoutDirectLoop(
     children,
-    edges: edges.map((e, i) => ({
+    edges.map((e, i) => ({
       id: `e${i}`,
       sources: [portId(e, "out")],
       targets: [portId(e, "in")],
@@ -716,7 +704,8 @@ export async function prepareSignalLoopDrawing(
         },
       ],
     })),
-  });
+    vertical,
+  );
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
   checkLabels(graph);

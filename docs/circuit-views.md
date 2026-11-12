@@ -286,3 +286,8 @@ path.
 Packets also include a separate [`coverage.topology` inventory](topology-coverage.md)
 for connector assemblies, communication links and individually drawn ports.
 Its counts and unaudited sheets are independent of this circuit/wiring scope.
+
+Tag-lane attachment extensions use the heaviest drawn conductor incident on
+their terminal: 0.32 mm for ordinary conductors, or 0.55 mm if a jumper also
+lands there. A shared terminal keeps that weight on its extensions even when
+an ordinary wire also uses them, so the shared stroke never thins a jumper.

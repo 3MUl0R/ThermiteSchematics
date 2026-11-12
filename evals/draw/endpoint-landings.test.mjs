@@ -15,6 +15,10 @@ const terminal = {
 const wire = (id, offset = 0, x = 93) => ({
   wire: id,
   conductor: true,
+  endpoints: [
+    { deviceUid: "s", terminalKey: "PE" },
+    { deviceUid: "PE-HMI", terminalKey: "PE" },
+  ],
   element: id,
   points: [
     { x, y: anchor.y + offset },

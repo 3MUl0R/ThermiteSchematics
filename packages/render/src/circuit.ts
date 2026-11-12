@@ -1004,7 +1004,7 @@ function emitNode(
   omitDesignation = false,
 ): string {
   if (node.tagLane) {
-    const { body, plan, geometry: g } = node.tagLane;
+    const { body, plan, geometry: g } = node.tagLane; // Shared stubs use the heaviest incident conductor weight.
     const stems = body.pins
       .map((p, i) => {
         const end = node.pins[i]!;

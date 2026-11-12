@@ -17,7 +17,6 @@ import {
   terminalPortAttribute,
 } from "./layout/port-attributes.js";
 import { layoutWiring } from "./layout/wiring-layout.js";
-import { assertTopologyRouteEndpoints } from "./layout/topology-conservation.js";
 
 /** A deliberate subset of physical wiring, never an inferred circuit or net short. */
 export interface WiringViewRequest {
@@ -220,6 +219,7 @@ export async function prepareWiringDrawing(
       if (width(label) > nodeWidth - 6)
         throw wiringWidthError(d.designation, t.terminalKey);
       const row = { key: t.terminalKey, label, side, y };
+      row.y = Math.round(y);
       y += 6;
       return row;
     });
@@ -260,7 +260,6 @@ export async function prepareWiringDrawing(
   );
   if (![graph.width, graph.height].every(Number.isFinite))
     throw new Error("Invalid wiring layout bounds.");
-  assertTopologyRouteEndpoints(graph);
   const out: string[] = [];
   const nodes = graph.children ?? [];
   const routes: { index: number; points: { x: number; y: number }[] }[] = [];
@@ -508,19 +507,13 @@ function wiringPortSvg(
 ) {
   const result: string[] = [];
   for (const p of ports) {
-    // NETWORK_SIMPLEX rounds fixed port ordinates to integral layout units.
-    // The returned port owns both the route landing and its terminal marker;
-    // the pre-layout tag reservation is not the final terminal position.
-    const port = node.ports?.find(
-      (q) => q.id === portIds.get(key({ deviceUid, terminalKey: p.key })),
-    );
-    if (!port || ![port.x, port.y].every(Number.isFinite))
-      throw new Error("Missing wiring terminal layout.");
+    const id = portIds.get(key({ deviceUid, terminalKey: p.key }));
+    if (!id) throw new Error("Missing declared wiring terminal.");
     result.push(
-      `<circle ${terminalPortAttribute(port.id)} data-terminal-key="${attr(p.key)}" cx="${n(port.x!)}" cy="${n(port.y!)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
+      `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
       text(
         p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
-        port.y! + 1,
+        p.y + 1,
         p.label,
       ),
     );

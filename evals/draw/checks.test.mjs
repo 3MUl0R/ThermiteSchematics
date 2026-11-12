@@ -970,3 +970,75 @@ it("preserves query-defined null subfields without confusing visual line wraps",
     c.reports({ ...g, texts: g.texts.slice(0, 1) }, sheet, packet, table),
   ).toEqual([]);
 });
+
+describe("DQ-14 missing physical endpoint exports", () => {
+  const sheet = {
+    number: 1,
+    view: { format: "documentation-view/0.1", kind: "wiring" },
+    references: [],
+    continuations: [],
+  };
+  const evaluate = (shape) =>
+    evaluateSheet(
+      { id: "missing-endpoints", flow: "left-to-right" },
+      sheet,
+      { sheets: [sheet] },
+      geometry({ shapes: [shape] }),
+      ir,
+      [],
+      [],
+      [],
+    ).find((row) => row.dq === "DQ-14");
+  it.each([
+    { name: "absent", endpoints: undefined },
+    { name: "empty", endpoints: [] },
+    { name: "empty identity", endpoints: [{}] },
+    { name: "device only", endpoints: [{ deviceUid: "d" }] },
+    { name: "terminal only", endpoints: [{ terminalKey: "PE" }] },
+  ])("fails closed for $name physical endpoint exports", ({ endpoints }) => {
+    const row = evaluate(
+      primitive(
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        { conductor: true, wire: "w", endpoints },
+      ),
+    );
+    expect(row.status).toBe("fail");
+    expect(row.evidence.findings).toContainEqual(
+      expect.objectContaining({
+        kind: "endpoint-landing-ownership-unavailable",
+        reason: "missing-physical-endpoint-exports",
+      }),
+    );
+  });
+  it("retains a measured gap finding when physical exports are absent", () => {
+    const row = evaluate(
+      primitive(
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        {
+          conductor: true,
+          wire: "w",
+          ownedLandings: [
+            {
+              end: "target",
+              deviceUid: "d",
+              terminal: "PE",
+              endpoint: { x: 10, y: 0 },
+              anchor: { x: 10, y: 0.338 },
+            },
+          ],
+        },
+      ),
+    );
+    expect(row.status).toBe("fail");
+    expect(row.evidence.findings.map((f) => f.kind)).toEqual([
+      "endpoint-landing-ownership-unavailable",
+      "endpoint-off-owned-anchor",
+    ]);
+  });
+});

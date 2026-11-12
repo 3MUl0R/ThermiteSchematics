@@ -75,6 +75,15 @@ source/target route end, regardless of any endpoint gap. An offset cannot hide
 a shared final stroke. Historical wiring exports retain their ordered physical
 endpoint contract; proximity never establishes ownership.
 
+V5.3 removes the DQ-14 `not-implemented` fallback for conductor shapes without
+physical endpoint exports. Such a shape produces
+`endpoint-landing-ownership-unavailable` with reason
+`missing-physical-endpoint-exports`, and existing gap/ownership findings remain
+failures. Empty conductor-free documentation pages are still eligible for a
+clean observation. Relation landings retain the V5.2 drawing-local port check;
+adding an electrical identity cross-check for those relations remains separate
+work.
+
 DQ-16 retains `not-implemented` for an ineligible distance measurement and gives
 separate reason codes: `no-visible-conductor-labels` when there is nothing to
 measure, and `label-identity-unavailable` for declared visible conductor/net

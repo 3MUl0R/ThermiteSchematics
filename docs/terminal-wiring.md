@@ -54,7 +54,9 @@ and the network schedule. It does not create eight electrical wire cores, assert
 shield bonding, certify route suitability or add an electrical cable to the
 wire/core inventory. The communication schedule is the Ethernet cable inventory.
 
-Terminal circles and captions use the returned ELK port positions. The wiring
-placer may quantize a fractional fixed port after reserving tag ink; the route
-and its terminal must share that final anchor. Routes are never snapped after
-layout to repair a landing.
+Terminal row ordinates are rounded to whole layout units before ELK runs;
+measured tag/header reservations and device dimensions retain their original
+precision. Circles and captions use those declared rows. Fixed-port identity
+validation rejects any returned port displacement over 0.01 layout units on
+either axis, and route endpoints must also meet the declared ports. Routes are
+never snapped after layout to repair a landing.
