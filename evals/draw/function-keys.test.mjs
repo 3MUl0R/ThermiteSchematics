@@ -24,6 +24,56 @@ it.each(["AI1.ch0", "PT1.signal"])(
   },
 );
 
+it("reports both qualified keys and repeated occurrences in text order", () => {
+  expect(
+    findings("polarity not verified: AI1.ch0, PT1.signal.").map((f) => f.key),
+  ).toEqual(["AI1.ch0", "PT1.signal"]);
+  const note = "polarity not verified: AI1.ch0, PT1.signal, AI1.ch0.";
+  expect(findings(note).map(({ key, keyOffset }) => [key, keyOffset])).toEqual([
+    ["AI1.ch0", note.indexOf("AI1.ch0")],
+    ["PT1.signal", note.indexOf("PT1.signal")],
+    ["AI1.ch0", note.lastIndexOf("AI1.ch0")],
+  ]);
+});
+
+it("retains the authored-description exemption without exempting function captions", () => {
+  const text = "AI1.ch0, PT1.signal";
+  const data = {
+    ...ir,
+    devices: [{ ...ir.devices[0], description: text }, ir.devices[1]],
+  };
+  const measure = (role) =>
+    functionKeys(
+      { texts: [{ element: "description", text, deviceUid: "ai", role }] },
+      data,
+    );
+  expect(measure("")).toEqual([]);
+  expect(measure("label-function").map((f) => f.key)).toEqual([
+    "AI1.ch0",
+    "PT1.signal",
+  ]);
+});
+
+it("exempts only marked request-note text, keeping identical generated text measured", () => {
+  const text = "polarity not verified: AI1.ch0, PT1.signal.";
+  const result = functionKeys(
+    {
+      texts: [
+        { element: "authored", text, authoredText: "request-note" },
+        { element: "generated", text },
+        { element: "unrecognized-origin", text, authoredText: "engine-note" },
+      ],
+    },
+    ir,
+  );
+  expect(result.map(({ element, key }) => [element, key])).toEqual([
+    ["generated", "AI1.ch0"],
+    ["generated", "PT1.signal"],
+    ["unrecognized-origin", "AI1.ch0"],
+    ["unrecognized-origin", "PT1.signal"],
+  ]);
+});
+
 it("DQ-05 accepts terminal bindings and designation-only fallback", () => {
   for (const note of [
     "polarity not verified: AI1 terminals 9/13, PT1 terminals 1/2.",

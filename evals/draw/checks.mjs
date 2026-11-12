@@ -221,17 +221,11 @@ const facts = new Set([
   "common",
   "return",
 ]);
-export function functionKeys(g, ir) {
-  const keys = new Set(
-    ir.functions.map((f) => f.id.functionKey).filter((k) => !facts.has(k)),
-  );
-  // Aggregate IDs also belong to the engine's internal vocabulary.
-  for (const k of ["three-phase-source", "dc_output", "pnp-sensor"])
-    keys.add(k);
+function qualifiedFunctionPatterns(ir) {
   // Notes embed qualified selectors mid-sentence, including keys such as
   // "signal" that are harmless as standalone vocabulary. Resolve the owner;
   // an authored terminal with the same spelling remains a visible fact.
-  const qualified = ir.functions.flatMap((f) => {
+  return ir.functions.flatMap((f) => {
     const device = ir.devices.find((d) => d.uid === f.id.deviceUid);
     if (
       !device?.designation ||
@@ -249,18 +243,24 @@ export function functionKeys(g, ir) {
         value,
         pattern: new RegExp(
           `(^|[^\\p{L}\\p{N}_.-])${escaped}(?=$|[^\\p{L}\\p{N}_-])`,
-          "u",
+          "gu",
         ),
       },
     ];
   });
-  const printedKey = (t) =>
-    qualified.find((q) => q.pattern.test(t.text))?.value ??
-    [...keys].find((k) => t.text === k || t.text.startsWith(k + " "));
+}
+export function functionKeys(g, ir) {
+  const keys = new Set(
+    ir.functions.map((f) => f.id.functionKey).filter((k) => !facts.has(k)),
+  );
+  for (const k of ["three-phase-source", "dc_output", "pnp-sensor"])
+    keys.add(k);
+  const qualified = qualifiedFunctionPatterns(ir);
   return g.texts
     .filter(
       (t) =>
         !t.row &&
+        t.authoredText !== "request-note" &&
         !t.role?.includes("label-terminal") &&
         !ir.terminals?.some(
           (p) => p.id.deviceUid === t.deviceUid && p.id.terminalKey === t.text,
@@ -268,15 +268,31 @@ export function functionKeys(g, ir) {
         !(
           !/label-(function|aggregate)/.test(t.role ?? "") &&
           authoredDescription(ir, t.deviceUid)?.includes(t.text)
-        ) &&
-        printedKey(t),
+        ),
     )
-    .map((t) =>
-      issue("printed-function-key", t, {
-        text: t.text,
-        key: printedKey(t),
-      }),
-    );
+    .flatMap((t) => {
+      const matches = qualified
+        .flatMap((q) =>
+          [...t.text.matchAll(q.pattern)].map((m) => ({
+            key: q.value,
+            keyOffset: m.index + m[1].length,
+          })),
+        )
+        .sort(
+          (a, b) =>
+            a.keyOffset - b.keyOffset ||
+            (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+        );
+      if (!matches.length) {
+        const key = [...keys].find(
+          (k) => t.text === k || t.text.startsWith(k + " "),
+        );
+        if (key) matches.push({ key, keyOffset: 0 });
+      }
+      return matches.map((match) =>
+        issue("printed-function-key", t, { text: t.text, ...match }),
+      );
+    });
 }
 function authoredDescription(ir, uid) {
   const device = ir.devices.find((d) => d.uid === uid);

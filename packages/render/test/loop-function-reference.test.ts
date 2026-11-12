@@ -67,8 +67,56 @@ it("uses only bound terminals in authored order, falling back to the designation
       });
     expect(reference(["9", "13"])).toBe("AI1 terminals 9/13");
     expect(reference(["13", "9"])).toBe("AI1 terminals 13/9");
+    expect(reference(["3"])).toBe("AI1 terminal 3");
+    expect(reference(["3", "5", "7"])).toBe("AI1 terminals 3/5/7");
+    expect(reference(["1/2", "2/1"])).toBe("AI1 terminals 1/2, 2/1");
+    expect(reference(["1/2", "3"])).toBe("AI1 terminals 1/2, 3");
+    expect(reference(["1/2"])).toBe("AI1 terminal 1/2");
     expect(reference([])).toBe("AI1");
   } finally {
     await f.dispose();
   }
 });
+
+it.each(flows)(
+  "escapes special characters in authored terminal bindings in %s",
+  async (flow) => {
+    const terminal = '3<&>"';
+    const f = await directFixture((m) => {
+      roleFree(m);
+      for (const i of [1, 2]) {
+        const type = m.types[i];
+        type.terminals[terminal] = type.terminals.p;
+        delete type.terminals.p;
+        for (const fn of Object.values(type.functions) as {
+          terminals: string[];
+        }[])
+          fn.terminals = fn.terminals.map((t) => (t === "p" ? terminal : t));
+      }
+      for (const o of m.objects)
+        for (const endpoint of o.endpoints ?? [])
+          if (endpoint.terminal === "p") endpoint.terminal = terminal;
+    });
+    try {
+      const result = await renderSchematicPacket(
+        f.ir,
+        directPacket(directView({ flow })),
+      );
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      if (!result.ok) return;
+      const svg = result.value.sheets[0]!.svg;
+      const { document } = parseHTML(svg);
+      const note = `polarity not verified: AI1 terminals ${terminal}/n, TX1 terminals ${terminal}/n.`;
+      expect(document.querySelector("desc")!.textContent).toBe(note);
+      expect(
+        [...document.querySelectorAll("[data-engine-notes] text")]
+          .map((t) => t.textContent)
+          .join(" "),
+      ).toContain(note);
+      expect(svg).toContain('3&lt;&amp;&gt;"/n');
+      expect(svg).not.toContain(terminal);
+    } finally {
+      await f.dispose();
+    }
+  },
+);

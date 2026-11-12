@@ -29,7 +29,13 @@ import type { Draft, PaperPage } from "./types.js";
 import { failure } from "./errors.js";
 import { topologySelectionContext } from "./selection-context.js";
 import { bounds, zone } from "./page.js";
-import { n, text, wrapReport, assemblyNoteLines } from "./svg.js";
+import {
+  n,
+  text,
+  requestNoteText,
+  wrapReport,
+  assemblyNoteLines,
+} from "./svg.js";
 import { communicationPartLines } from "./continuations.js";
 
 type NotedDrawing = CommunicationDrawing & {
@@ -40,19 +46,31 @@ function topologyNoteLines(
   drawing: NotedDrawing,
   width: number,
   assembly: boolean,
+  request: { format: string; notes?: readonly string[] },
 ) {
-  return drawing.note
-    .split("\n")
-    .flatMap((line) =>
-      drawing.engineNotes
-        ? wrapText(line, width, 2.5)
-        : wrapReport(line, Math.floor(width / 1.6)),
-    )
-    .flatMap((line) => {
-      if (!assembly && !drawing.pagination) return [line];
-      const measured = assemblyNoteLines(line, width);
-      return measured.length > 1 ? measured : [line];
+  const authoredNotes = request.notes ?? [];
+  // Preparers append request.notes verbatim. Resolve that trailing source span,
+  // rather than exempting every occurrence of matching text in generated notes.
+  const suffix = "\n" + authoredNotes.join("\n");
+  const authoredStart =
+    authoredNotes.length && drawing.note.endsWith(suffix)
+      ? drawing.note.length - suffix.length + 1
+      : Infinity;
+  let offset = 0;
+  return drawing.note.split("\n").flatMap((line) => {
+    const authored = offset >= authoredStart;
+    offset += line.length + 1;
+    const lines = drawing.engineNotes
+      ? wrapText(line, width, 2.5)
+      : wrapReport(line, Math.floor(width / 1.6));
+    return lines.flatMap((line) => {
+      const measured =
+        assembly || drawing.pagination
+          ? assemblyNoteLines(line, width)
+          : [line];
+      return measured.map((text) => ({ text, authored }));
     });
+  });
 }
 function loopFitRefusal(
   page: PaperPage,
@@ -94,7 +112,7 @@ export async function topologyDrafts(
         : [drawing.title];
       const headingHeight = 9 + (headingLines.length - 1) * 4.8;
       const partLines = communicationPartLines(drawing, b.w);
-      const noteLines = topologyNoteLines(drawing, b.w, assembly);
+      const noteLines = topologyNoteLines(drawing, b.w, assembly, request);
       const noteHeight = (noteLines.length + partLines.length) * 3.5;
       let scale = Math.min(
         1,
@@ -147,10 +165,10 @@ export async function topologyDrafts(
         );
       const note = noteLines
         .map((v, i) =>
-          text(
+          (v.authored ? requestNoteText : text)(
             b.x,
             b.y + height - (partLines.length + noteLines.length - 1 - i) * 3.5,
-            v,
+            v.text,
             2.5,
           ),
         )

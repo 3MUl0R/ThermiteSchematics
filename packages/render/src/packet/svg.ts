@@ -13,6 +13,14 @@ export function text(
 ): string {
   return `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b"${literal ? ' xml:space="preserve" style="white-space:pre"' : ""}>${xml(value)}</text>`;
 }
+
+/** Provenance for request.notes only; generated notes must use text(). */
+export function requestNoteText(...args: Parameters<typeof text>): string {
+  return text(...args).replace(
+    "<text ",
+    '<text data-authored-text="request-note" ',
+  );
+}
 export function line(
   x1: number,
   y1: number,
