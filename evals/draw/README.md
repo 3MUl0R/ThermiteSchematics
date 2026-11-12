@@ -1246,6 +1246,8 @@ the causal link and sharing reason remain reviewer judgments.
 
 Every applied re-pin commits `evals/draw/repins/<pr>/`: original signed decisions,
 a gzip of the exact receipt, the crop index, one PNG per distinct drawing group and `record.json`.
+The applied chain is **92 → 61 → 84 → 154 → 202**. The latest
+[record 202](repins/202/record.json) retains agent sign-offs; no person countersign is claimed.
 The key is the issue or re-pin number: D1 uses **92**, although it merged as PR 104. `record.json` binds the base commit, original uncompressed signed/receipt/index
 hashes, registry before/after and each original payload file's hash. It excludes
 itself. `pathMap` resolves original crop paths without rewriting signed bytes.
