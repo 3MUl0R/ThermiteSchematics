@@ -1,6 +1,7 @@
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
+import { repairSearchJogs } from "./rooted-jog-repair.js";
 import { searchSettled } from "./rooted-settled.js";
 import { MAX_MIXED_LAYOUTS } from "./rooted-mixed.js";
 import { invariantCardConstraint } from "./rooted-constraint.js";
@@ -40,6 +41,7 @@ export interface RootedSearch {
   settled?: boolean;
   earlyExit?: boolean;
   standardEconomy?: boolean;
+  jogRetryReserved?: boolean;
   economyStartedAt?: number;
   validatedCandidate?: RootedCandidate;
   localityReference?: RootedCandidate;
@@ -168,11 +170,20 @@ export async function searchRootedCandidates(
     validateEconomyCandidate(ir, run, page);
     if (searchSettled(run, page)) {
       run.earlyExit = true;
-      return run;
+    } else {
+      // Hold one existing attempt for a physical jog left by ordinary recovery.
+      // Testing only the initial layout can pre-empt a jog-free recovered base.
+      const winner = rootedWinner(run, page);
+      run.jogRetryReserved =
+        winner?.prepared.view.family === "power" &&
+        winner.prepared.view.flow === "top-to-bottom" &&
+        [...(winner?.jogs.values() ?? [])].some((n) => n > 0);
+      await placements(ir, request, presentation, page, run);
+      if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
     }
-
-    await placements(ir, request, presentation, page, run);
-    if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
+    delete run.jogRetryReserved;
+    await repairSearchJogs(ir, run, page);
+    validateEconomyCandidate(ir, run, page);
     return run;
   });
 }

@@ -152,32 +152,39 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Standard spacing may use fewer sheets.",
+      claim: "Both flows may fold retained strips to save sheets.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
-        const r = await renderSchematicPacket(
-          c.ir,
-          {
-            format: "schematic-packet-request/0.1",
-            layout: "standard",
-            page: { size: "a3", orientation: "portrait" },
-            views: [
-              {
-                format: "schematic-view-request/0.1",
-                family: "power",
-                root: { by: "designation", value: "M1" },
-                flow: "left-to-right",
-              },
-            ],
-          },
-          c.presentation,
-        );
-        if (!r.ok) throw Error(JSON.stringify(r.error));
-        expect(r.value.sheets).toHaveLength(1);
-        expect(r.value.html).toContain("Folded circuit sections");
-        expect(continuationOracle(c.ir, r.value).sameSheet).toBeGreaterThan(0);
-        noteJson({ standardFoldedSheets: r.value.sheets.length });
+        for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+          const vertical = flow === "top-to-bottom";
+          const r = await renderSchematicPacket(
+            c.ir,
+            {
+              format: "schematic-packet-request/0.1",
+              layout: vertical ? "compact" : "standard",
+              page: vertical
+                ? { size: "tabloid", orientation: "landscape" }
+                : { size: "a3", orientation: "portrait" },
+              views: [
+                {
+                  format: "schematic-view-request/0.1",
+                  family: "power",
+                  root: { by: "designation", value: "M1" },
+                  flow,
+                },
+              ],
+            },
+            c.presentation,
+          );
+          if (!r.ok) throw Error(JSON.stringify(r.error));
+          expect(r.value.sheets).toHaveLength(1);
+          expect(r.value.html).toContain("Folded circuit sections");
+          expect(continuationOracle(c.ir, r.value).sameSheet).toBeGreaterThan(
+            0,
+          );
+          noteJson({ flow, foldedSheets: r.value.sheets.length });
+        }
       },
     },
 

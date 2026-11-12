@@ -6,6 +6,7 @@ import {
   verticalPowerLanes,
   VERTICAL_POWER_EDGE_NODE_SPACING,
 } from "./adapter-ordering.js";
+import { applyLayoutSpacing } from "./spacing.js";
 import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import { contextJunctionInk } from "./context-reference-ink.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
@@ -86,6 +87,7 @@ export interface ElkLayoutRequestOptions {
   readonly engine?: ElkApi;
   readonly selected?: Readonly<SelectedSubgraph>;
   readonly spacingProfile?: "compact" | "dense";
+  readonly powerTurnSpacing?: number;
 }
 
 interface OptionGroup {
@@ -855,26 +857,7 @@ export async function layoutPresentationGraph(
     const build = buildElkAdapterGraph(candidate, options.selected);
     await validateElkRuntimeOptions(build, engine);
     const input = structuredClone(build.graph);
-    if (options.spacingProfile) {
-      const dense = options.spacingProfile === "dense";
-      const compact = (node: ElkNode): void => {
-        if (node.children?.length) {
-          node.layoutOptions = {
-            ...node.layoutOptions,
-            [ELK_OPTIONS.nodeNodeSpacing]: dense ? "12" : "18",
-            [ELK_OPTIONS.nodeNodeBetweenLayersSpacing]: dense ? "20" : "40",
-            [ELK_OPTIONS.edgeNodeSpacing]: verticalPowerLanes(candidate)
-              ? VERTICAL_POWER_EDGE_NODE_SPACING
-              : dense
-                ? "10"
-                : "12",
-            [ELK_OPTIONS.componentComponentSpacing]: dense ? "16" : "24",
-          };
-          node.children.forEach(compact);
-        }
-      };
-      compact(input);
-    }
+    applyLayoutSpacing(input, candidate, options);
     const output = await engine.layout(input);
     return normalizeAndValidateLayout(candidate, build.graph, output, catalog);
   };

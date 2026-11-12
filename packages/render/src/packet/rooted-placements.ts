@@ -47,7 +47,7 @@ async function tryPlacement(
   if (
     run.settled ||
     economyExhausted(run) ||
-    run.attempts >= MAX_PLACEMENT_LAYOUTS ||
+    run.attempts + Number(!!run.jogRetryReserved) >= MAX_PLACEMENT_LAYOUTS ||
     run.tried.has(key)
   )
     return;

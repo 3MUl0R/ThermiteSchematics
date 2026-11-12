@@ -18,7 +18,8 @@ export const STANDARD_ECONOMY_ATTEMPTS = 4;
 export function economyExhausted(run: RootedSearch) {
   return (
     run.economyStartedAt !== undefined &&
-    run.attempts - run.economyStartedAt >= STANDARD_ECONOMY_ATTEMPTS
+    run.attempts - run.economyStartedAt + Number(!!run.jogRetryReserved) >=
+      STANDARD_ECONOMY_ATTEMPTS
   );
 }
 /** Printable means materialized emitter/ink/content/reciprocity checks passed

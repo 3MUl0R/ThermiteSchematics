@@ -1,3 +1,4 @@
+import { circuitRoutePitch } from "./symbols/circuit-route-pitch.js";
 import { circuitConductorFunctions } from "./symbols/circuit-pagination-functions.js";
 import { deviceTagFitDetails } from "./packet/device-tag-fit.js";
 import { deviceTagSvg } from "./device-tag-svg.js";
@@ -167,6 +168,7 @@ type DeviceNode = {
   height: number;
   rank: number;
   bodyHeight: number;
+  pitch: number;
   verticalOffsetX: number;
   verticalScaleX: number;
   relationLabels: string[];
@@ -182,7 +184,6 @@ type DeviceNode = {
     geometry: ReturnType<typeof circuitTagReservation>;
   };
 };
-const PITCH = 7;
 const n = (v: number) => String(Number(v.toFixed(3)));
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const fkey = (f: IrFunction) =>
@@ -407,6 +408,22 @@ function selectConductors(
   return result.sort((a, b) => compare(a.id, b.id));
 }
 
+function selectedSourceTerminals(
+  ir: Readonly<ElectricalIr>,
+  uid: string,
+  type: IrDeviceType,
+) {
+  return ir.functions
+    .filter(
+      (f) =>
+        f.id.deviceUid === uid &&
+        f.kind === "source" &&
+        type.symbol !== "thermite:transformer" &&
+        type.circuitSymbols?.[f.id.functionKey] !== "winding",
+    )
+    .flatMap((f) => f.terminals.map((t) => t.terminalKey));
+}
+
 function makeNodes(
   ir: Readonly<ElectricalIr>,
   fs: IrFunction[],
@@ -416,6 +433,10 @@ function makeNodes(
   appearances: Map<string, string[]>,
   distributed: boolean,
 ): DeviceNode[] {
+  const pitch = circuitRoutePitch(
+    conductors,
+    (c) => 3.8 + (conductorLabelLines(c).length - 1) * 3.1,
+  );
   const chosen = new Set(conductors.map((c) => c.id));
   const terminalSet = new Map(
     [
@@ -572,17 +593,17 @@ function makeNodes(
       const channelLines =
         f.kind === "channel" ? channelLabelLines(device, f, type) : undefined;
       const slots = Math.max(
-        Math.ceil(circuitLegendReservation(mark, vertical).row / PITCH),
+        Math.ceil(circuitLegendReservation(mark, vertical).row / pitch),
         mark === "sensor-3wire" && f.kind === "load" ? 3 : 1,
         oneSided ? f.terminals.length : 1,
-        channelRowSlots(channelLines, vertical, mark, PITCH),
+        channelRowSlots(channelLines, vertical, mark, pitch),
       );
       const winding =
         coupled &&
         mark === "winding" &&
         (f.kind === "load" || f.kind === "source");
       const start = winding ? windingSlots[f.kind as "load" | "source"] : slot;
-      const center = 6 + (start + slots / 2) * PITCH;
+      const center = 6 + (start + slots / 2) * pitch;
       rows.push({
         f,
         mark,
@@ -624,7 +645,7 @@ function makeNodes(
           terminal,
           x: 0,
           y: oneSided
-            ? center + (i - (f.terminals.length - 1) / 2) * PITCH
+            ? center + (i - (f.terminals.length - 1) / 2) * pitch
             : center,
           side,
           label:
@@ -667,7 +688,7 @@ function makeNodes(
         id: `n${index}p${pins.length}`,
         terminal,
         x: 0,
-        y: 6 + PITCH / 2 + slot++ * PITCH,
+        y: 6 + pitch / 2 + slot++ * pitch,
         side,
         label: terminal.terminalKey,
         outside,
@@ -716,7 +737,7 @@ function makeNodes(
       throw new Error(
         `Circuit terminal/device labels for ${device.designation} exceed readable block width.`,
       );
-    let bodyHeight = 6 + Math.max(1, slot) * PITCH;
+    let bodyHeight = 6 + Math.max(1, slot) * pitch;
     const relationGroups = new Map<string, string[]>(),
       relations: DeviceNode["relations"] = [];
     for (const relation of ir.internalRelations.filter(
@@ -794,7 +815,7 @@ function makeNodes(
               ),
             ) / 2
           : row.mark === "motor"
-            ? Math.max(5, (row.slots * PITCH * verticalScaleX) / 2 - 2)
+            ? Math.max(5, (row.slots * pitch * verticalScaleX) / 2 - 2)
             : 4;
         const center = (bodyHeight - row.center) * verticalScaleX;
         return { left: center - half, right: center + half };
@@ -836,7 +857,7 @@ function makeNodes(
           ),
           ...rows
             .filter((row) => row.mark === "motor")
-            .map((row) => row.slots * PITCH * verticalScaleX + 12),
+            .map((row) => row.slots * pitch * verticalScaleX + 12),
         ) +
         printableRelated.length * 3.1 +
         (boundary || printableRelated.length ? 5 : 0);
@@ -887,18 +908,11 @@ function makeNodes(
       height,
       rank,
       bodyHeight,
+      pitch,
       verticalOffsetX,
       verticalScaleX,
       relationLabels: printableRelated,
-      sourceTerminalKeys: ir.functions
-        .filter(
-          (f) =>
-            f.id.deviceUid === uid &&
-            f.kind === "source" &&
-            type.symbol !== "thermite:transformer" &&
-            type.circuitSymbols?.[f.id.functionKey] !== "winding",
-        )
-        .flatMap((f) => f.terminals.map((t) => t.terminalKey)),
+      sourceTerminalKeys: selectedSourceTerminals(ir, uid, type),
       relations,
       gangs,
     };
@@ -1246,7 +1260,7 @@ function emitNode(
             ? circuitMotorVertical(
                 cx,
                 cy,
-                row.slots * PITCH * node.verticalScaleX,
+                row.slots * node.pitch * node.verticalScaleX,
                 f.terminals.map(
                   (t) => node.pins.find((p) => key(p.terminal) === key(t))!.x,
                 ),
@@ -1254,8 +1268,8 @@ function emitNode(
               )
             : circuitMotor(
                 node.width,
-                row.center - (row.slots * PITCH) / 2,
-                row.slots * PITCH,
+                row.center - (row.slots * node.pitch) / 2,
+                row.slots * node.pitch,
                 f.terminals.map(
                   (t) => node.pins.find((p) => key(p.terminal) === key(t))!.y,
                 ),
@@ -1315,7 +1329,7 @@ function emitNode(
       } else {
         if (mark === "heater" && f.terminals.length === 3 && !vertical)
           out.push(
-            `<g transform="translate(0 ${n(row.center - (row.slots * PITCH) / 2)})">${circuitBlock(node.width, row.slots * PITCH)}</g>`,
+            `<g transform="translate(0 ${n(row.center - (row.slots * node.pitch) / 2)})">${circuitBlock(node.width, row.slots * node.pitch)}</g>`,
           );
         out.push(composedCircuitMark(mark, cx, cy, vertical));
       }

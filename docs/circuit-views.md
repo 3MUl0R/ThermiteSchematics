@@ -204,7 +204,9 @@ Explicit `circuitSymbols` marks include `contact-no`, `contact-nc`, `breaker`, `
 
 ## Layout and current limits
 
-ELK places device/function blocks and routes all selected physical conductors. The catalog supplies component marks and their terminal attachments. Circuit groups are measured at readable size and packed into one or two columns. A wide group may span both columns; multiple wide groups can share a page. A complete group is never clipped or reduced below the circuit text size to force it onto paper. View notes appear once in a measured block after the last group, using remaining column space when available.
+ELK places device/function blocks and routes all selected physical conductors.
+A terminal bank carrying a return loop reserves its measured inline label lane,
+preventing a tiny turn between closely spaced fixed terminals. The catalog supplies component marks and their terminal attachments. Circuit groups are measured at readable size and packed into one or two columns. A wide group may span both columns; multiple wide groups can share a page. A complete group is never clipped or reduced below the circuit text size to force it onto paper. View notes appear once in a measured block after the last group, using remaining column space when available.
 
 Each drawn device has an owned printing tag: bold designation, nonblank instance
 description (otherwise type description), and the exact catalog order number when
