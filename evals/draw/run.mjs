@@ -604,9 +604,16 @@ try {
               continue;
             }
             const box = canonical(cropBox(finding.bbox, g.width, g.height)),
+              duplicateMedium =
+                measured.filter(
+                  (r) =>
+                    r.status === "fail" &&
+                    r.dq === row.dq &&
+                    (r.medium ?? "svg") === (row.medium ?? "svg"),
+                ).length > 1,
               crop = join(
                 directory,
-                `${prefix}-${row.dq}${row === htmlRow ? "-html" : row.medium === "pdf" ? "-pdf" : ""}.png`,
+                `${prefix}-${row.dq}${row === htmlRow ? "-html" : row.medium === "pdf" ? "-pdf" : ""}${duplicateMedium ? "-" + hash(row.id).slice(0, 10) : ""}.png`,
               );
             if (
               row.dq === "DQ-01" &&

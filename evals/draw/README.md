@@ -131,6 +131,65 @@ never by a regex over all text. SVG/HTML geometry and PDF extraction/parity reta
 the same media obligations. Historical replay uses the new checker against the
 old engine before measuring the projection change. No defect pins are learned.
 
+Version 5.6 adds the drawing-review E1 measurements in dedicated modules:
+
+- DQ-10 measures native DC polarity primitive orientation, its nearest owned port
+  and lead-ink overlap. Adjacency also requires the mark centre within half the
+  measured positive/return port separation. Missing or foreign native port owners
+  are explicit findings. Native DC port pairs stay in the population even when
+  both qualifier and glyph-id locators disappear; missing glyph ink then fails.
+  The bounded radius prevents a distant mark from passing
+  solely because its own port is still nearest. DQ-04 separately measures upright earth bars, disjoint
+  pressure/level operating-link ink after collinear union, and a closed-state
+  slash crossing both contact bars. Native roles/state/profile select obligations;
+  renderer orientation flags do not prove geometry. Standard selection remains manual.
+- DQ-15 includes electrical signal-loop routes with the existing 3 mm numerical
+  tolerance and detour limit. Terminal-end exports recover a stripped loop marker;
+  unresolved/forged native ownership fails. Assembly bars stay excluded.
+- DQ-13 counts terminal attachment paths, including tag-lane extensions, in dot
+  incidence and compares their weight to actual incident native conductors with
+  a 0.01 mm measurement epsilon. Helm's E1 review decision requires attachment
+  and tag-lane rays to equal their incident conductor weight; the checker reports
+  rays exceeding that weight by more than the epsilon. The 0.35 mm versus 0.32 mm
+  instances are minor consistency findings, retained as honest fails until lane RT
+  fixes the renderer, not permanent pins. Rays with no selected incident conductor
+  are explicitly unassessed. This adopts no global symbol-weight convention.
+- DQ-08 requires one intact native conductor identity line, allowing adjacent font
+  fragments. Reciprocal same-sheet folds remain valid. Actual inter-block and
+  zone-ink gaps are recorded as **measured, threshold pending**; 3.5 mm has not
+  been adopted. No alignment or extra-bend aesthetic failure is invented without
+  a proven feasible alternative.
+- DQ-19 reconciles visible concrete pointer notes, source-derived dependency
+  facts, and actual issued painted rows and columns. Wrong-device, filtered,
+  missing, hidden and forged rows fail. DQ-09 separately reports missing exact
+  issued target locations. Legacy notes bootstrap their typed native scopes;
+  document kind/title, JSON coverage and hyperlinks alone cannot satisfy them.
+  A circuit-coverage promise requires actual issued function ink matched to an
+  authored `circuit-view-request/0.1` group and its native function selections.
+  Planner `view.kind` is not an oracle; rooted power/control sheets cannot count,
+  even if they draw every promised function or claim a circuit kind. The reason
+  `no-sufficient-issued-circuit-view` names that exact check. No printed coverage
+  document kind is currently issuable: `schematic-coverage/0.1` is packet JSON,
+  so the checker makes no claim to validate a printed coverage table.
+  Generic honest partial-view wording creates no companion promise. New inventory
+  locators, when supplied, must agree with native scope and source snapshot.
+- DQ-16 measures formerly label-free sheet fragments against a verified visible
+  native conductor identity on their continuation or another fragment of the
+  **same logical view**. A continuation must have a native source, visible owned
+  rows, a reciprocal peer, and a measured anchor at its own route endpoint.
+  Missing/foreign/cross-view names fail. Unowned legacy labels retain an explicit
+  measurement gap.
+
+Browser exports are additive: primitive ownership, port IDs, exact route vertices
+and transforms, and actual visible stroke intervals at 0.025 mm resolution. A
+0.05 mm ink-interval uncertainty is used only for dash union; orientation uses
+0.01 mm numerical axis tolerance. Native stroke hit tests, clipping, alpha and
+later opaque fills establish painted ink. The new primitive measurements concern
+SVG geometry; existing HTML/PDF label parity continues independently, and these
+predicates do not certify PDF primitive visibility. DQ-07 mirrors and M5 repeats
+remain unimplemented until E2's issued-navigation work. No expectations or re-pin
+records change with this version.
+
 ## Prerequisites and costs
 
 Bun 1.4.2 and R2's existing development dependencies are used:
@@ -237,8 +296,11 @@ per (font, medium), pending renderer/user adoption (DECISIONS-FOR-USER item 12).
 
 Frame/zone/title furniture has no documented primary-label minimum. Header and
 title regions come from the measured frame and full-width divider rules; the top
-zone strip ends at the measured ink bottom of the complete 1–6 zone row. The A–D
-border column is recognized separately. There is no fixed 35 mm body cutoff.
+zone strip ends at the measured ink bottom of a complete sequential numeric zone
+row starting at 1, including multi-digit columns. The sequential alphabetic border
+column is recognized separately, continuing beyond D and Z (AA, AB, ...).
+Both strips require measured alignment and unowned sheet text; there is no fixed
+35 mm body cutoff or fixed count of zones.
 Owned drawing labels and off-page continuation links are never furniture; bounds,
 overlap, distortion and ISO policy still apply to furniture. Secondary captions
 come from direct circuit-node roles, exported related-function/boundary metadata
