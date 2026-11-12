@@ -1,0 +1,275 @@
+import { expect, it } from "vitest";
+import { functionKeys, internalVocabulary } from "./checks.mjs";
+const uid = "device",
+  key = "arbitrary.nested_938";
+const ir = {
+  devices: [
+    {
+      uid,
+      designation: "K1",
+      typeId: "core:hidden_type",
+      io: { channels: { [key]: { address: "Q0.0" } } },
+    },
+  ],
+  deviceTypes: [
+    {
+      id: "core:hidden_type",
+      description: "coil core: user-authored prose",
+      ports: { hidden_port: { connector: "RJ45", medium: "ethernet" } },
+    },
+  ],
+  functions: [
+    {
+      id: { deviceUid: uid, functionKey: key },
+      kind: "contact",
+      normal_state: "open",
+      terminals: [
+        { deviceUid: uid, terminalKey: "13" },
+        { deviceUid: uid, terminalKey: "14" },
+      ],
+    },
+  ],
+  terminals: [],
+  relations: [],
+  cables: [],
+  cableTypes: [],
+};
+const text = (text, attrs = {}) => ({ element: "t", text, ...attrs });
+const measure = (texts, context = {}) => functionKeys({ texts }, ir, context);
+const row = JSON.stringify([uid, [key]]),
+  context = {
+    sheet: { view: { kind: "references" } },
+    packet: {
+      sheets: [{ references: [{ deviceUid: uid, functions: [key] }] }],
+    },
+  };
+it("measures combined reference cells from owned functions, independent of key vocabulary", () => {
+  expect(
+    measure([text("NO contact 13–14", { row, columnIndex: 1 })], context),
+  ).toEqual([]);
+  expect(measure([text(key, { row, columnIndex: 1 })], context)).toMatchObject([
+    { mechanism: "function-reference", expected: "NO contact 13–14" },
+  ]);
+  for (const marker of [
+    { authoredText: "request-note" },
+    { deviceUid: uid },
+    { tagField: "description", tagOwnerUid: uid, tagOwnershipValid: true },
+  ])
+    expect(
+      measure([text(key, { row, columnIndex: 1, ...marker })], context),
+    ).toHaveLength(1);
+});
+it("compares complete cell content across font runs and wrapping", () => {
+  expect(
+    measure(
+      [
+        text("NO contact", { row, columnIndex: 1 }),
+        text("13–14", { row, columnIndex: 1 }),
+      ],
+      context,
+    ),
+  ).toEqual([]);
+  expect(
+    measure(
+      [
+        text("prefix", { row, columnIndex: 1 }),
+        text(key.slice(0, 8), { row, columnIndex: 1 }),
+        text(key.slice(8), { row, columnIndex: 1 }),
+      ],
+      context,
+    ),
+  ).toHaveLength(1);
+});
+it("missing, unknown and forged note provenance grants no exemption", () => {
+  const note = `Nested note: K1.${key}, K1.${key}.`;
+  for (const attrs of [
+    {},
+    { authoredText: "request-note" },
+    { row: "forged", columnIndex: 1 },
+    { deviceUid: "foreign", tagField: "description" },
+  ])
+    expect(measure([text(note, attrs)])).toHaveLength(2);
+});
+it("literal semantic words and type-shaped authored descriptions remain source facts", () => {
+  expect(
+    measure([
+      text("coil core: user-authored prose", {
+        deviceUid: uid,
+        tagOwnerUid: uid,
+        tagField: "description",
+        tagOwnershipValid: true,
+      }),
+    ]),
+  ).toEqual([]);
+  expect(
+    internalVocabulary(
+      {
+        texts: [
+          text("coil core: user-authored prose", {
+            deviceUid: uid,
+            tagOwnerUid: uid,
+            tagField: "description",
+            tagOwnershipValid: true,
+          }),
+        ],
+      },
+      ir,
+    ),
+  ).toEqual([]);
+  const fn = {
+    ...ir.functions[0],
+    id: { deviceUid: uid, functionKey: "coil" },
+    kind: "coil",
+  };
+  expect(
+    functionKeys(
+      {
+        texts: [
+          text("coil", {
+            deviceUid: uid,
+            functionKey: "coil",
+            role: "label-function",
+          }),
+        ],
+      },
+      { ...ir, functions: [fn] },
+    ),
+  ).toEqual([]);
+  expect(
+    functionKeys(
+      {
+        texts: [
+          text("coil", {
+            row: JSON.stringify([uid, ["coil"]]),
+            columnIndex: 1,
+          }),
+        ],
+      },
+      { ...ir, functions: [fn] },
+      { sheet: { view: { kind: "references" } } },
+    ),
+  ).toHaveLength(1);
+});
+it("checks authored I/O identity rather than a selector and detects changed addresses", () => {
+  const data = {
+      ...ir,
+      functions: [{ ...ir.functions[0], kind: "channel", direction: "output" }],
+    },
+    c = { sheet: { view: { kind: "io" } } },
+    row = JSON.stringify([uid, key]);
+  expect(
+    functionKeys({ texts: [text("Q0.0", { row, columnIndex: 1 })] }, data, c),
+  ).toEqual([]);
+  for (const value of [key, "Q1.0", "DO 9"])
+    expect(
+      functionKeys({ texts: [text(value, { row, columnIndex: 1 })] }, data, c),
+    ).toHaveLength(1);
+});
+it("checks communication ownership in drawings and schedules without inventing connectors", () => {
+  expect(
+    measure([
+      text("RJ45", { deviceUid: uid, communicationPort: "hidden_port" }),
+    ]),
+  ).toEqual([]);
+  expect(
+    measure([
+      text("hidden_port", { deviceUid: uid, communicationPort: "hidden_port" }),
+    ]),
+  ).toHaveLength(1);
+  const row = JSON.stringify([uid, "hidden_port"]),
+    c = { sheet: { view: { kind: "network" } } };
+  expect(measure([text("K1: RJ45", { row, columnIndex: 2 })], c)).toEqual([]);
+  expect(
+    measure([text("K1.hidden_port", { row, columnIndex: 2 })], c),
+  ).toHaveLength(1);
+});
+it("measures schema vocabulary and latent type-ID fallbacks separately", () => {
+  const columnIndex = 5,
+    row = JSON.stringify(["core:hidden_type", "", null]);
+  const data = {
+    ...ir,
+    deviceTypes: [{ ...ir.deviceTypes[0], description: undefined }],
+  };
+  expect(
+    internalVocabulary(
+      { texts: [text("core:hidden_type", { row, columnIndex })] },
+      data,
+      { sheet: { view: { kind: "bom" } } },
+    ),
+  ).toMatchObject([{ mechanism: "type-description-fallback" }]);
+  expect(
+    internalVocabulary({ texts: [text("Rows follow terminalOrder.")] }, ir, {
+      sheet: { view: { kind: "terminals" } },
+    }),
+  ).toMatchObject([{ mechanism: "schema-identifier" }]);
+});
+it("reconciles adjacent independently positioned font runs before key matching", () => {
+  const texts = [
+    text("K1.", { anchor: { x: 5, y: 10 }, bbox: { x: 5, y: 8, w: 4, h: 2 } }),
+    text(key, {
+      element: "font-run",
+      anchor: { x: 9, y: 10 },
+      bbox: { x: 9, y: 8, w: 20, h: 2 },
+    }),
+  ];
+  expect(measure(texts)).toMatchObject([{ key: `K1.${key}` }]);
+});
+it("requires a validated description field and refuses copied real-note provenance", () => {
+  const literal = `K1.${key}`;
+  const data = { ...ir, devices: [{ ...ir.devices[0], description: literal }] };
+  for (const attrs of [
+    { deviceUid: uid },
+    {
+      deviceUid: uid,
+      tagField: "description",
+      tagOwnerUid: uid,
+      tagOwnershipValid: false,
+    },
+  ])
+    expect(functionKeys({ texts: [text(literal, attrs)] }, data)).toHaveLength(
+      1,
+    );
+  const c = {
+    sheet: { view: { title: "Authored", kind: "signal-loop" } },
+    request: {
+      views: [
+        {
+          title: "Authored",
+          format: "signal-loop-view-request/0.1",
+          notes: [literal],
+        },
+      ],
+    },
+  };
+  const legitimate = text(literal, { authoredText: "request-note" });
+  expect(measure([legitimate], c)).toEqual([]);
+  expect(
+    measure([legitimate, { ...legitimate, element: "forged" }], c),
+  ).toHaveLength(2);
+  expect(
+    measure([
+      text("hidden_port", {
+        deviceUid: "foreign",
+        communicationPort: "hidden_port",
+      }),
+    ]),
+  ).toHaveLength(1);
+});
+it("reconciles the owned terminal-order note, including unknown substituted schema identifiers", () => {
+  const c = { sheet: { view: { kind: "terminals" } } },
+    note =
+      "Terminals follow the authored order where specified. Location groups do not assert installation sides.";
+  expect(
+    internalVocabulary({ texts: [text(note, { reportNote: "1" })] }, ir, c),
+  ).toEqual([]);
+  expect(
+    internalVocabulary(
+      { texts: [text("Rows follow objectRefByUid.", { reportNote: "1" })] },
+      ir,
+      c,
+    ),
+  ).toMatchObject([{ mechanism: "schema-identifier", expected: note }]);
+  expect(
+    internalVocabulary({ texts: [text("Rows follow objectRefByUid.")] }, ir, c),
+  ).toMatchObject([{ mechanism: "missing-report-note-provenance" }]);
+});

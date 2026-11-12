@@ -99,6 +99,28 @@ wrapping retains that provenance. Generated engine notes stay measured even when
 a request note contains identical text. Marking a containing group does not
 exempt generated children. Report rows retain their existing separate policy.
 
+Version 5.5 resolves DQ-05 report cells and communication captions to their
+source owners and independently projects function kind/state and bound terminals,
+authored I/O addresses or terminals, and port descriptions or connector metadata.
+The report-row exemption is removed. A complete cell is reconciled across wrapped
+lines and font runs; ordinary words such as `coil` are allowed only as authored
+prose or facts derived from the owned function kind. Reference row keys, channel
+selectors, port keys, type IDs and CSV lookups remain machine identities.
+
+A sibling DQ-05 observation, `internal-vocabulary`, measures schema/type identifiers
+separately: cable type headings, missing-description type-ID fallbacks and the
+terminal-plan `terminalOrder` note. That generated note has required source-index
+provenance and is reconciled in full; substituting any internal field token or
+removing its provenance fails the independent expected-note check. Neither predicate guesses ratings, products,
+connector names, main/auxiliary status or polarity. Provenance is resolved against
+IR, packet references and request source; a missing owner or forged authored-text
+marker does not exempt generated text. Authored descriptions, addresses, signals,
+request notes and circuit group headings retain their source meaning, including
+literal `coil` or `core:` text. Source report fields are selected by kind/column,
+never by a regex over all text. SVG/HTML geometry and PDF extraction/parity retain
+the same media obligations. Historical replay uses the new checker against the
+old engine before measuring the projection change. No defect pins are learned.
+
 ## Prerequisites and costs
 
 Bun 1.4.2 and R2's existing development dependencies are used:

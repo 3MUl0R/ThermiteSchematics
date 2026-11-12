@@ -236,7 +236,11 @@ export function measureSheet(options = {}) {
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
     row: attr(e, "data-report-row"),
+    reportNote: e.getAttribute("data-report-note"),
     authoredText: e.getAttribute("data-authored-text"),
+    functionKey: attr(e, "data-function-key"),
+    communicationPort: attr(e, "data-communication-port"),
+    circuitHeading: e.getAttribute("data-circuit-source-heading"),
     wire:
       attr(e, "data-wire-label") ??
       attr(e, "data-wire-uid") ??
@@ -244,6 +248,51 @@ export function measureSheet(options = {}) {
       attr(e, "data-wiring-conductor"),
     net: attr(e, "data-net-id"),
   });
+  function terminalDescriptionOwner(e, uid) {
+    if (!uid || !e.matches("text")) return undefined;
+    // Vertical terminal legends precede their markers. Resolve the printed
+    // terminal prefix against an actual same-body marker, then against IR.
+    const terminals = [
+      ...e.parentElement.querySelectorAll("circle[data-loop-terminal]"),
+    ].flatMap((marker) => {
+      try {
+        const [owner, key] = JSON.parse(
+          marker.getAttribute("data-loop-terminal"),
+        );
+        return owner === uid ? [key] : [];
+      } catch {
+        return [];
+      }
+    });
+    for (
+      let line = e;
+      line?.matches("text");
+      line = line.previousElementSibling
+    ) {
+      const terminal = terminals.find((key) =>
+        line.textContent.startsWith(key + ": "),
+      );
+      if (terminal) return terminal;
+    }
+    for (
+      let previous = e.previousElementSibling;
+      previous;
+      previous = previous.previousElementSibling
+    ) {
+      if (previous.hasAttribute("data-loop-terminal")) {
+        try {
+          const [owner, key] = JSON.parse(
+            previous.getAttribute("data-loop-terminal"),
+          );
+          return owner === uid ? key : undefined;
+        } catch {
+          return undefined;
+        }
+      }
+      if (!previous.matches("text")) return undefined;
+    }
+    return undefined;
+  }
   // Per-character SVG positions expose tspan/dy breaks even when one parent
   // text node contains the entire identifier. These are measured line boxes.
   function reportRuns(e, rendered, matrix) {
@@ -789,6 +838,7 @@ export function measureSheet(options = {}) {
         }
       }
       const id = identity(e);
+      id.terminalDescriptionKey = terminalDescriptionOwner(e, id.deviceUid);
       const semantic = e
         .getAttribute("clip-path")
         ?.match(/(?:#|-)clip-([a-f0-9]+)\)/)?.[1];

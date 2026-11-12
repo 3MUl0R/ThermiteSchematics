@@ -160,11 +160,19 @@ describe("mandatory DQ mutation kills", () => {
       ...ir,
       functions: [
         { id: { functionKey: "pole1" } },
-        { id: { functionKey: "coil" } },
+        { id: { deviceUid: "d", functionKey: "coil" }, kind: "coil" },
       ],
     };
     expect(
-      c.functionKeys(geometry({ texts: [text("NO"), text("coil")] }), data),
+      c.functionKeys(
+        geometry({
+          texts: [
+            text("NO"),
+            text("coil", { deviceUid: "d", functionKey: "coil" }),
+          ],
+        }),
+        data,
+      ),
     ).toEqual([]);
     expect(
       c.functionKeys(geometry({ texts: [text("pole1 NC")] }), data)[0].key,
@@ -188,7 +196,16 @@ describe("mandatory DQ mutation kills", () => {
     };
     expect(
       c.functionKeys(
-        geometry({ texts: [text("buzzer", { deviceUid: "s" })] }),
+        geometry({
+          texts: [
+            text("buzzer", {
+              deviceUid: "s",
+              tagOwnerUid: "s",
+              tagField: "description",
+              tagOwnershipValid: true,
+            }),
+          ],
+        }),
         data,
       ),
     ).toEqual([]);
@@ -208,7 +225,12 @@ describe("mandatory DQ mutation kills", () => {
       deviceTypes: [{ id: "terminal", description: "command and power" }],
       functions: [{ id: { functionKey: "command" } }],
     };
-    const t = text("command and power", { deviceUid: "XT1" });
+    const t = text("command and power", {
+      deviceUid: "XT1",
+      tagOwnerUid: "XT1",
+      tagField: "description",
+      tagOwnershipValid: true,
+    });
     for (const description of [undefined, "", " \t "])
       expect(
         c.functionKeys(geometry({ texts: [t] }), {

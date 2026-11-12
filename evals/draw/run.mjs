@@ -511,6 +511,7 @@ try {
             symbolsFromGeometry(g, ir),
             tables,
             geometries,
+            request,
           );
           const parityRow = measured.find((r) => r.dq === "DQ-01");
           for (const t of g.texts.filter((t) => t.painted !== false)) {

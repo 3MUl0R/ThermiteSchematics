@@ -30,39 +30,37 @@ it.each(flows)(
       const note = "polarity not verified: AI1.input, TX1.signal.";
       const notes = [note, "W".repeat(218) + " AI1.input TX1.signal"];
       const view = directView({ flow, notes });
-      const result = await renderSchematicPacket(
-        f.ir,
-        directPacket(view, {
-          views: [
-            view,
-            {
-              format: "wiring-view-request/0.1",
-              title: "Synthetic authored wiring notes",
-              conductors: ["W10", "W11"],
-              notes,
-            },
-            {
-              format: "circuit-view-request/0.1",
-              title: "Synthetic authored notes",
-              flow,
-              notes,
-              groups: [
-                {
-                  id: "input",
-                  conductors: [],
-                  functions: [
-                    {
-                      device: { by: "designation", value: "AI1" },
-                      key: "input",
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-          index: false,
-        }),
-      );
+      const request = directPacket(view, {
+        views: [
+          view,
+          {
+            format: "wiring-view-request/0.1",
+            title: "Synthetic authored wiring notes",
+            conductors: ["W10", "W11"],
+            notes,
+          },
+          {
+            format: "circuit-view-request/0.1",
+            title: "Synthetic authored notes",
+            flow,
+            notes,
+            groups: [
+              {
+                id: "input",
+                conductors: [],
+                functions: [
+                  {
+                    device: { by: "designation", value: "AI1" },
+                    key: "input",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        index: false,
+      });
+      const result = await renderSchematicPacket(f.ir, request);
       expect(result.ok, JSON.stringify(result)).toBe(true);
       if (!result.ok) return;
       let wrapped = false;
@@ -74,7 +72,12 @@ it.each(flows)(
         expect(authored.length).toBeGreaterThanOrEqual(notes.length);
         wrapped ||= authored.length > notes.length;
         expect(authored.map((t) => t.text).join(" ")).toContain(note);
-        expect(functionKeys(geometry, f.ir)).toEqual([]);
+        expect(
+          functionKeys(geometry, f.ir, {
+            sheet,
+            request,
+          }),
+        ).toEqual([]);
       }
       expect(wrapped).toBe(true);
       const { document } = parseHTML(result.value.sheets[0].svg);
@@ -88,10 +91,12 @@ it.each(flows)(
       expect(generated).toBeDefined();
       generated.textContent = note; // Synthetic regression, identical to the authored note.
       const geometry = await openSheet(page, document.toString());
-      expect(functionKeys(geometry, f.ir).map((f) => f.key)).toEqual([
-        "AI1.input",
-        "TX1.signal",
-      ]);
+      expect(
+        functionKeys(geometry, f.ir, {
+          sheet: result.value.sheets[0],
+          request: { views: [view] },
+        }).map((f) => f.key),
+      ).toEqual(["AI1.input", "TX1.signal"]);
     } finally {
       await f.dispose();
     }
@@ -111,4 +116,30 @@ it("does not inherit an authored-note exemption from a containing group", async 
       terminals: [],
     }),
   ).toHaveLength(1);
+});
+
+it("rejects nested keys split across font spans and forged request-note markers", async () => {
+  const data = {
+    devices: [{ uid: "k", designation: "K1" }],
+    functions: [{ id: { deviceUid: "k", functionKey: "nested_key_923" } }],
+    terminals: [],
+  };
+  const geometry = await openSheet(
+    page,
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60"><g data-authored-text="request-note"><text x="5" y="10" font-size="2.5" data-authored-text="request-note">Generated <tspan>K1.nested_</tspan><tspan font-weight="700">key_923</tspan></text></g></svg>',
+  );
+  expect(
+    functionKeys(geometry, data, {
+      sheet: { view: { title: "Synthetic", kind: "signal-loop" } },
+      request: {
+        views: [
+          {
+            title: "Synthetic",
+            format: "signal-loop-view-request/0.1",
+            notes: ["Unrelated authored note"],
+          },
+        ],
+      },
+    }),
+  ).toMatchObject([{ key: "K1.nested_key_923" }]);
 });
