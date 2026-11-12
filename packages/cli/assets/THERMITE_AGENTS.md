@@ -16,11 +16,11 @@ thermite init ../cabinets --template cabinets
 supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
 two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Check issues, then report bugs, gaps or unclear docs at
+Check existing issues, then report runtime bugs, gaps or unclear docs at
 https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case,
-expected/actual behavior, minimal reproduction,
+expected/actual behavior, minimal repro,
 diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute
-paths. Without GitHub, draft the issue title/body. Never patch a downloaded runtime.
+paths. Without GitHub, draft an issue. Never patch a downloaded runtime.
 
 Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.
 Keep private data/credentials out of issues/PRs.
@@ -136,15 +136,15 @@ bind by `symbol` and function shape, not type ID, so cloned core types keep thei
 views. `--flow left-to-right|top-to-bottom`,
 `--paper letter|tabloid|a4|a3`, `--orientation landscape|portrait`,
 `--margin <mm>` (5-25), `--layout compact` and `--index` override project page
-settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a
-single sheet only (R006 otherwise).
+settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one
+sheet (R006 otherwise).
 
 Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
-Standard spacing may fold onto fewer sheets.
+Standard spacing may use fewer sheets.
 One caption per terminal appearance, nearest its body; keep all landings and split captions.
-Omit net ink identical to its own landing caption.
+Omit net ink only when its anchored terminal prints the same name.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:

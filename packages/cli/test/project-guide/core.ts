@@ -402,7 +402,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Include use case, expected/actual behavior, minimal reproduction, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
+        "Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
       async check() {
         // Why redaction is needed: these reports carry this machine's host
         // name and absolute paths.
@@ -1444,7 +1444,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for a single sheet only (R006 otherwise).",
+        "`-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one sheet (R006 otherwise).",
       async check() {
         const project = await freshProject("starter");
         await writeJson(join(project, "packet.json"), STARTER_PACKET);
@@ -1553,11 +1553,11 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "Check issues, then report bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
+      "Check existing issues, then report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub, draft the issue title/body.",
+      "Without GitHub, draft an issue.",
       "Contribution process; no runtime behavior.",
     ],
     [

@@ -47,7 +47,8 @@ const PROTECTION_MARKS = new Set<PrintableMark>([
 export const PRINTABLE_SYMBOL_POLICY = Object.freeze({
   enclosureStrokeMm: 0.18,
   conductorStrokeMm: 0.4,
-  // Device outlines remain subordinate to the thinnest circuit wire (0.32 mm).
+  // Device outlines are lighter than conductorStrokeMm (0.4 mm). DQ-13 uses
+  // the sheet's minimum measured wire stroke, including 0.32 mm circuit wires.
   deviceOutlineStrokeMm: 0.25,
   deviceOutlineColor: "#667085",
   enclosureDashMm: Object.freeze([0.6, 0.6] as const),

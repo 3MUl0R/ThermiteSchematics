@@ -15,7 +15,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "One caption per terminal appearance, nearest its body; keep all landings and split captions. Omit net ink identical to its own landing caption.",
+        "One caption per terminal appearance, nearest its body; keep all landings and split captions. Omit net ink only when its anchored terminal prints the same name.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -152,7 +152,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Standard spacing may fold onto fewer sheets.",
+      claim: "Standard spacing may use fewer sheets.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
