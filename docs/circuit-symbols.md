@@ -134,6 +134,17 @@ link where the corridor is clear. Unmarked overload power poles use a stepped th
 element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
 
+Rooted drawings omit net-label ink when an identical terminal caption already
+names that conductor at its own landing in the same body appearance. This avoids
+repeating a local connection name; distinct names remain printed. The rule applies
+equally to every phase and retains label reservations, routes and net identities.
+Captions on remote or split bodies cannot replace a name at this landing.
+
+Circuit device frames and solid mixed-source enclosure sides use a 0.25 mm grey
+outline, subordinate to the 0.32 mm conductors. Source-isolation sections retain
+their 0.18 mm dashed outline and terminal openings. These stroke styles distinguish
+enclosures without changing their geometry or electrical meaning.
+
 `thermite:disconnector` is a canonical profile with no alias. It draws an open
 blade, gap and fixed-contact disconnector bar in power, control and circuit
 views. Opting in asserts author-selected disconnector-function identity. Isolation
