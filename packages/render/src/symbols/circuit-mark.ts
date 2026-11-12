@@ -47,13 +47,28 @@ export type CircuitMark =
   | "sensor-3wire";
 
 type Point = readonly [number, number];
-type Primitive =
-  | { kind: "line"; a: Point; b: Point; dashed?: boolean }
+export type CircuitMarkRole =
+  | "operator"
+  | "operating-link"
+  | "contact-moving"
+  | "contact-fixed"
+  | "contact-state"
+  | "lead"
+  | "earth-stem"
+  | "earth-bar";
+type Primitive = (
+  | { kind: "line"; a: Point; b: Point; dash?: readonly [number, number] }
   | { kind: "polyline"; points: readonly Point[] }
   | { kind: "circle"; x: number; y: number; radius: number }
   | { kind: "rect"; x: number; y: number; width: number; height: number }
-  | { kind: "text"; x: number; y: number; text: string };
-const line = (x: number, y: number, a: number, b: number): Primitive => ({
+  | { kind: "text"; x: number; y: number; text: string }
+) & { readonly role?: CircuitMarkRole };
+const line = (
+  x: number,
+  y: number,
+  a: number,
+  b: number,
+): Extract<Primitive, { kind: "line" }> => ({
   kind: "line",
   a: [x, y],
   b: [a, b],
@@ -84,39 +99,49 @@ const zigzag: Primitive = {
     [12, 6],
   ],
 };
-const CONTACT = [
-  line(0, 6, 4, 6),
-  line(8, 6, 12, 6),
-  line(4, 3, 4, 9),
-  line(8, 3, 8, 9),
+const CONTACT: Primitive[] = [
+  { ...line(0, 6, 4, 6), role: "lead" },
+  { ...line(8, 6, 12, 6), role: "lead" },
+  { ...line(4, 3, 4, 9), role: "contact-moving" },
+  { ...line(8, 3, 8, 9), role: "contact-fixed" },
 ];
+// Four physical mm: two free-standing 1.5 mm dashes separated by 1 mm.
+// Leave >0.5 mm of painted clearance to both neighbouring solid strokes.
+const operatingLink: Primitive = {
+  ...line(4, -4, 4, 2),
+  dash: [2.25, 1.5],
+  role: "operating-link",
+};
+const closedState: Primitive = { ...line(2, 10, 10, 2), role: "contact-state" };
 const pressure: Primitive[] = [
-  line(6, 0, 6, 2),
+  { ...line(4, -7, 4, -5), role: "operator" },
   {
     kind: "polyline",
+    role: "operator",
     points: [
-      [2, 0],
-      [3, 1],
-      [4, 0],
-      [5, 1],
-      [6, 0],
-      [7, 1],
-      [8, 0],
-      [9, 1],
-      [10, 0],
+      [0, -7],
+      [1, -6],
+      [2, -7],
+      [3, -6],
+      [4, -7],
+      [5, -6],
+      [6, -7],
+      [7, -6],
+      [8, -7],
     ],
   },
 ];
 const level: Primitive[] = [
-  line(6, 0, 6, 2),
+  { ...line(4, -6, 4, -5), role: "operator" },
   {
     kind: "polyline",
+    role: "operator",
     points: [
-      [6, 0],
-      [4, 1],
-      [6, 2],
-      [8, 1],
-      [6, 0],
+      [4, -8],
+      [2, -7],
+      [4, -6],
+      [6, -7],
+      [4, -8],
     ],
   },
 ];
@@ -193,10 +218,10 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
     load: [rect(1, 1, 10, 10), label("PWR")],
     terminal: [circle(6, 6, 1.2), line(0, 6, 4.8, 6), line(7.2, 6, 12, 6)],
     earth: [
-      line(0, 6, 4, 6),
-      line(4, 2, 4, 10),
-      line(7, 3, 7, 9),
-      line(10, 4, 10, 8),
+      { ...line(0, 6, 4, 6), role: "lead" },
+      { ...line(4, 2, 4, 10), role: "earth-bar" },
+      { ...line(7, 3, 7, 9), role: "earth-bar" },
+      { ...line(10, 4, 10, 8), role: "earth-bar" },
     ],
     solenoid: [
       line(0, 6, 2, 6),
@@ -229,10 +254,10 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
       circle(10, 6, 0.7),
     ],
     interface: [rect(1, 1, 10, 10)],
-    "pressure-no": [...CONTACT, ...pressure],
-    "pressure-nc": [...CONTACT, ...pressure, line(2, 10, 10, 2)],
-    "level-no": [...CONTACT, ...level],
-    "level-nc": [...CONTACT, ...level, line(2, 10, 10, 2)],
+    "pressure-no": [...CONTACT, ...pressure, operatingLink],
+    "pressure-nc": [...CONTACT, ...pressure, operatingLink, closedState],
+    "level-no": [...CONTACT, ...level, operatingLink],
+    "level-nc": [...CONTACT, ...level, operatingLink, closedState],
     "level-sensor": [
       rect(1, 1, 10, 10),
       {
@@ -288,27 +313,45 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
   });
 const n = (v: number) => String(Number(v.toFixed(3)));
 
-// Keep the established 8 mm composition geometry; compensate only legend em.
+const EARTH_LTR: readonly Primitive[] = [
+  { ...line(0, 6, 6, 6), role: "lead" },
+  { ...line(6, 6, 6, 8), role: "earth-stem" },
+  { ...line(2, 8, 10, 8), role: "earth-bar" },
+  { ...line(3, 10, 9, 10), role: "earth-bar" },
+  { ...line(4, 12, 8, 12), role: "earth-bar" },
+];
+const markPrimitives = (mark: CircuitMark, vertical: boolean) =>
+  mark === "earth" && !vertical ? EARTH_LTR : MARKS[mark];
+const hasExtendedInk = (mark: CircuitMark, vertical: boolean) =>
+  mark.startsWith("pressure-") ||
+  mark === "level-no" ||
+  mark === "level-nc" ||
+  (mark === "earth" && !vertical);
+
+// Keep the established 8 mm electrical attachment frame. Operator ink can extend
+// outside it; its exact envelope is reserved before ELK and used by captions.
 const MARK_SCALE = 0.666667;
 const legendEm = (value: string, mmPerUnit: number) =>
   Math.ceil(Math.max(value.length > 1 ? 2.5 : 3.5, 2.5 / mmPerUnit) * 1000) /
   1000;
 
-/** Catalog geometry is 12 units. mmPerUnit includes every enclosing scale. */
+/** Attachment frame is 12 units. mmPerUnit includes every enclosing scale. */
 export function emitCircuitMark(
   mark: CircuitMark,
   vertical: boolean,
   mmPerUnit: number,
 ): string {
-  return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${MARKS[
-    mark
-  ]
+  return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${hasExtendedInk(mark, vertical) ? ' stroke-linecap="round" stroke-linejoin="round"' : ""}${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${markPrimitives(
+    mark,
+    vertical,
+  )
     .map((p) => {
+      const role = p.role ? ` data-circuit-role="${p.role}"` : "";
       switch (p.kind) {
         case "line":
-          return `<line x1="${n(p.a[0])}" y1="${n(p.a[1])}" x2="${n(p.b[0])}" y2="${n(p.b[1])}"/>`;
+          return `<line${role} x1="${n(p.a[0])}" y1="${n(p.a[1])}" x2="${n(p.b[0])}" y2="${n(p.b[1])}"${p.dash ? ` stroke-dasharray="${p.dash.map(n).join(" ")}" stroke-linecap="butt"` : ""}/>`;
         case "polyline":
-          return `<polyline points="${p.points.map((v) => `${n(v[0])},${n(v[1])}`).join(" ")}"/>`;
+          return `<polyline${role} points="${p.points.map((v) => `${n(v[0])},${n(v[1])}`).join(" ")}"/>`;
         case "circle":
           return `<circle cx="${n(p.x)}" cy="${n(p.y)}" r="${n(p.radius)}"/>`;
         case "rect":
@@ -353,9 +396,14 @@ export function circuitMarkLegendInk(
 }
 
 /** Guard row/block spans with 1 mm either side of the centred ink envelope.
- * Today's catalog fits its existing terminal rows and minimum block sizes. */
+ * Grow the revised operator and LTR earth owners before placement. */
 export function circuitLegendReservation(mark: CircuitMark, vertical: boolean) {
-  const ink = circuitMarkLegendInk(mark, 0, 0);
+  const ink = [
+    ...circuitMarkLegendInk(mark, 0, 0),
+    ...(hasExtendedInk(mark, vertical)
+      ? [circuitMarkInkBounds(mark, vertical)]
+      : []),
+  ];
   const x = Math.max(
     0,
     ...ink.flatMap((b) => [Math.abs(b.left), Math.abs(b.right)]),
@@ -367,7 +415,22 @@ export function circuitLegendReservation(mark: CircuitMark, vertical: boolean) {
   return { row: 2 * (vertical ? x : y) + 2, block: 2 * (vertical ? y : x) + 2 };
 }
 
-/** Segment obstacles from the exact catalog primitives, in the composed 8 mm box. */
+/** Exact painted envelope in page axes about the electrical mark centre. */
+export function circuitMarkInkBounds(mark: CircuitMark, vertical: boolean) {
+  const points = circuitMarkSegments(mark, 0, 0, vertical).flatMap((s) => [
+    ...s,
+  ]);
+  const halfStroke =
+    (PRINTABLE_SYMBOL_POLICY.conductorStrokeMm * MARK_SCALE) / 2;
+  return {
+    left: Math.min(...points.map((p) => p.x)) - halfStroke,
+    top: Math.min(...points.map((p) => p.y)) - halfStroke,
+    right: Math.max(...points.map((p) => p.x)) + halfStroke,
+    bottom: Math.max(...points.map((p) => p.y)) + halfStroke,
+  };
+}
+
+/** Segment obstacles from the emitted catalog primitives, including operator ink. */
 export function circuitMarkSegments(
   mark: CircuitMark,
   cx: number,
@@ -391,7 +454,7 @@ export function circuitMarkSegments(
     }
   };
   const chain = (ps: readonly Point[]) => append(ps.map(point));
-  for (const p of MARKS[mark]) {
+  for (const p of markPrimitives(mark, vertical)) {
     if (p.kind === "line") chain([p.a, p.b]);
     else if (p.kind === "polyline") chain(p.points);
     else if (p.kind === "rect")

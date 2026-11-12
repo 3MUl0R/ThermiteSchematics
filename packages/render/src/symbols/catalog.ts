@@ -8,6 +8,7 @@ import type {
   SymbolDefinition,
   SymbolOrientation,
   SymbolPoint,
+  SymbolPolarityQualifier,
   SymbolPortDefinition,
   SymbolPrimitive,
   SymbolSide,
@@ -41,7 +42,7 @@ function line(
   toX: number,
   toY: number,
   style: SymbolStyle,
-): SymbolPrimitive {
+): Extract<SymbolPrimitive, { kind: "line" }> {
   return {
     kind: "line",
     from: point(fromX, fromY),
@@ -59,6 +60,22 @@ function polyline(
     points: points.map(([x, y]) => point(x, y)),
     style,
   };
+}
+
+function polarityQualifier(
+  polarity: SymbolPolarityQualifier["polarity"],
+  portId: string,
+  x: number,
+  y: number,
+  radius: number,
+): SymbolPrimitive[] {
+  const qualifier = { polarity, portId, center: point(x, y) };
+  return [
+    { ...line(x - radius, y, x + radius, y, "annotation"), qualifier },
+    ...(polarity === "positive"
+      ? [{ ...line(x, y - radius, x, y + radius, "annotation"), qualifier }]
+      : []),
+  ];
 }
 
 function rect(
@@ -149,9 +166,10 @@ const CATALOG_DEFINITIONS = [
       ),
       line(8, 8, 36, 8, "body"),
       line(8, 56, 36, 56, "body"),
-      line(13, 8, 21, 8, "annotation"),
-      line(17, 4, 17, 12, "annotation"),
-      line(13, 56, 21, 56, "annotation"),
+      // Reserve qualifier ink inside the existing size, clear of both leads
+      // and the enclosure, including after its centre rotates for vertical flow.
+      ...polarityQualifier("positive", "positive", 17, 18, 4),
+      ...polarityQualifier("negative", "return", 17, 46, 4),
     ],
   ),
   symbol(
@@ -173,9 +191,8 @@ const CATALOG_DEFINITIONS = [
       line(0, 8, 8, 8, "body"),
       line(0, 56, 8, 56, "body"),
       rect(8, 4, 24, 56, "body", 2),
-      line(13, 8, 19, 8, "annotation"),
-      line(16, 5, 16, 11, "annotation"),
-      line(13, 56, 19, 56, "annotation"),
+      ...polarityQualifier("positive", "positive", 18, 16, 3),
+      ...polarityQualifier("negative", "return", 18, 48, 3),
     ],
   ),
   symbol(
@@ -540,13 +557,28 @@ function verticalPrimitive(
   const transform = (value: SymbolPoint) =>
     verticalPoint(value, sourceHeight, preserveLanes);
   switch (primitive.kind) {
-    case "line":
+    case "line": {
+      const qualifier = primitive.qualifier;
+      if (qualifier) {
+        const center = transform(qualifier.center);
+        const upright = (p: SymbolPoint) => ({
+          x: center.x + p.x - qualifier.center.x,
+          y: center.y + p.y - qualifier.center.y,
+        });
+        return {
+          ...primitive,
+          from: upright(primitive.from),
+          to: upright(primitive.to),
+          qualifier: { ...qualifier, center },
+        };
+      }
       return {
         kind: "line",
         from: transform(primitive.from),
         to: transform(primitive.to),
         style: primitive.style,
       };
+    }
     case "polyline":
       return {
         kind: "polyline",

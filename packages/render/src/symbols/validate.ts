@@ -104,6 +104,48 @@ function validatePoint(
   );
 }
 
+function validateLinePrimitive(
+  primitive: Extract<SymbolPrimitive, { kind: "line" }>,
+  width: number,
+  height: number,
+  context: string,
+): void {
+  assertCatalog(
+    hasExactKeys(primitive, [
+      "kind",
+      "from",
+      "to",
+      "style",
+      ...(primitive.qualifier === undefined ? [] : ["qualifier"]),
+    ]),
+    `${context} has unknown fields.`,
+  );
+  validatePoint(primitive.from, width, height, `${context}.from`);
+  validatePoint(primitive.to, width, height, `${context}.to`);
+  if (primitive.qualifier !== undefined) {
+    const q = primitive.qualifier;
+    assertCatalog(
+      primitive.style === "annotation" &&
+        isRecord(q) &&
+        hasExactKeys(q, ["polarity", "portId", "center"]),
+      `${context}.qualifier must be owned annotation geometry.`,
+    );
+    assertCatalog(
+      q.polarity === "positive" || q.polarity === "negative",
+      `${context}.qualifier has unknown polarity.`,
+    );
+    assertCatalog(
+      typeof q.portId === "string" && q.portId.length > 0,
+      `${context}.qualifier requires a port ID.`,
+    );
+    validatePoint(q.center, width, height, `${context}.qualifier.center`);
+  }
+  assertCatalog(
+    primitive.from.x !== primitive.to.x || primitive.from.y !== primitive.to.y,
+    `${context} must have distinct endpoints.`,
+  );
+}
+
 function validatePrimitive(
   primitive: SymbolPrimitive,
   width: number,
@@ -117,17 +159,7 @@ function validatePrimitive(
   );
   switch (primitive.kind) {
     case "line":
-      assertCatalog(
-        hasExactKeys(primitive, ["kind", "from", "to", "style"]),
-        `${context} has unknown fields.`,
-      );
-      validatePoint(primitive.from, width, height, `${context}.from`);
-      validatePoint(primitive.to, width, height, `${context}.to`);
-      assertCatalog(
-        primitive.from.x !== primitive.to.x ||
-          primitive.from.y !== primitive.to.y,
-        `${context} must have distinct endpoints.`,
-      );
+      validateLinePrimitive(primitive, width, height, context);
       return;
     case "polyline":
       assertCatalog(
@@ -233,6 +265,27 @@ function validatePrimitive(
   }
 }
 
+function validateCatalogPrimitives(
+  definition: SymbolDefinition,
+  portIds: ReadonlySet<string>,
+  context: string,
+): void {
+  definition.primitives.forEach((primitive, index) => {
+    validatePrimitive(
+      primitive,
+      definition.size.width,
+      definition.size.height,
+      `${context}.primitives[${index}]`,
+    );
+    if (primitive.kind === "line" && primitive.qualifier) {
+      assertCatalog(
+        portIds.has(primitive.qualifier.portId),
+        `${context} qualifier owns an unknown port.`,
+      );
+    }
+  });
+}
+
 export function validateSymbolCatalog(
   catalog: readonly SymbolDefinition[],
 ): readonly SymbolDefinition[] {
@@ -321,14 +374,7 @@ export function validateSymbolCatalog(
       );
       portOrders.add(port.order);
     });
-    definition.primitives.forEach((primitive, primitiveIndex) =>
-      validatePrimitive(
-        primitive,
-        definition.size.width,
-        definition.size.height,
-        `${context}.primitives[${primitiveIndex}]`,
-      ),
-    );
+    validateCatalogPrimitives(definition, portIds, context);
   });
   return catalog;
 }

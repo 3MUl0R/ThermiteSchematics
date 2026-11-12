@@ -134,6 +134,31 @@ link where the corridor is clear. Unmarked overload power poles use a stepped th
 element; their auxiliary contact uses its own authored normal state. Protection
 elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
 
+Rooted DC source and load polarity qualifiers stay upright in both flows, with
+owned annotation ink reserved inside the symbol size and offset from the leads.
+Their SVG strokes export `data-symbol-qualifier="polarity"`, `data-polarity`
+(`positive` or `negative`) and `data-symbol-port-id`; the enclosing symbol owns
+the device/function identity. These marks follow the existing source/profile
+port bindings and preserve authored terminal names. They establish no new
+electrical facts or connectivity.
+
+Pressure-switch and level-switch contacts keep the shared parallel-bar family.
+Their operator connects to the moving contact through a 4 mm dashed operating
+link: two free-standing 1.5 mm dashes separated by 1 mm, with at least 0.5 mm
+of clear ink at both ends. Terminal markers export `data-symbol-port-id` so
+polarity qualifiers can be paired with their own electrical landing. The full
+operator/link ink envelope is reserved before layout, including its stroke, and
+participates in caption clearance. These links stay inside their own authored
+function.
+
+Earth marks remain upright in both flows. In left-to-right flow the original
+attachment lead turns once into a descending stem; all three decreasing bars sit
+below the lead. Top-to-bottom earth geometry is unchanged. SVG primitives export
+`data-circuit-role` values `operator`, `operating-link`, `contact-moving`,
+`contact-fixed`, `contact-state`, `lead`, `earth-stem` and `earth-bar` where
+applicable. The enclosing `data-function-id` owns the mark; neither mechanical
+ink nor an earth glyph creates an electrical connection.
+
 Rooted drawings omit net-label ink when an identical terminal caption already
 names that conductor at the label's source landing in the same body appearance.
 Net labels anchor at the route source; a far-end caption cannot replace them. This avoids
