@@ -6,15 +6,23 @@ import {
 } from "./continuation-constraint.js";
 import type { Draft, PaperPage } from "./types.js";
 import type { ContinuationBank } from "./continuation-bank.js";
-import { continuationLabel } from "./continuation-label.js";
+import {
+  CONTINUATION_BLOCK_GAP,
+  continuationLabel,
+} from "./continuation-label.js";
 import { inkOverlaps, textInk } from "./rooted-caption.js";
 import { bounds } from "./page.js";
 import { rootedNoticeLines, rootedSheetView } from "../off-view/notice.js";
 import type { InkBox } from "./rooted-ink.js";
 
-const near = (a: InkBox, b: InkBox) =>
+const near = (a: InkBox, b: InkBox, gap = 1) =>
   inkOverlaps(
-    { x: a.x - 0.999, y: a.y - 0.999, w: a.w + 1.998, h: a.h + 1.998 },
+    {
+      x: a.x - gap + 0.001,
+      y: a.y - gap + 0.001,
+      w: a.w + 2 * (gap - 0.001),
+      h: a.h + 2 * (gap - 0.001),
+    },
     b,
   );
 function fixedInk(d: Draft, page: PaperPage, native: boolean): InkBox[] {
@@ -58,6 +66,9 @@ export function fitContinuations(
   for (const d of drafts) {
     for (const l of d.links)
       l.label = continuationLabel(l, bank.width, bank.headerWidth, bank.single);
+    const mixed = d.links.find((l) => l.label?.single !== bank.single);
+    if (mixed)
+      return `Continuation ${mixed.id} (${mixed.conductor}) needs the same form as its bank. Use a two-level bank for a descriptor, or another legal cut.`;
     if (!packContinuationLabels(d))
       return continuationPackingConstraint(d.links);
     const frame = page.marginMm + 1.2,
@@ -79,10 +90,10 @@ export function fitContinuations(
         required(l.label, "Missing continuation label").rows.some(
           (r) =>
             occupied.some((o) => near(r.ink, o)) ||
-            labels.some((o) => near(r.ink, o)),
+            labels.some((o) => near(r.ink, o, CONTINUATION_BLOCK_GAP)),
         )
       )
-        return `Continuation ${l.id} (${l.conductor}) cannot keep 1 mm clear ink at the ${l.side} cut (${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm), short by ${continuationShortfall(
+        return `Continuation ${l.id} (${l.conductor}) cannot keep clear ink at the ${l.side} cut (${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm): 1 mm to drawing content; ${CONTINUATION_BLOCK_GAP} mm between continuation blocks. The 1 mm clearance is short by ${continuationShortfall(
           required(l.label, "Missing label").rows.map((r) => r.ink),
           [...occupied, ...labels],
         ).toFixed(2)} mm. Use a larger sheet, landscape or another flow.`;

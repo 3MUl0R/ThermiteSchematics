@@ -7,7 +7,7 @@ import {
   continuationLabelSvg,
   continuationHeaderWidth,
 } from "../src/packet/continuation-label.js";
-import { labelRows } from "../src/packet/label-text.js";
+import { labelMetrics, labelRows } from "../src/packet/label-text.js";
 import { continuationOracle } from "./continuation-oracle.js";
 import type { PresentationEdge } from "../src/types.js";
 const wire = (label?: string) =>
@@ -87,7 +87,9 @@ it("reserves three-digit sheets and C1000 while retaining long ID characters", (
       .map((r) => r.text)
       .join(""),
   ).toBe(id);
-  expect(l.bounds.h).toBeGreaterThan(7);
+  expect(l.rows.map((r) => r.text)).toEqual(["C1000 / 100.D6", id]);
+  expect(l.bounds.w).toBeGreaterThanOrEqual(labelMetrics(id).width);
+  expect(l.bounds.h).toBeLessThan(7);
 });
 let ir: ElectricalIr;
 beforeAll(async () => {

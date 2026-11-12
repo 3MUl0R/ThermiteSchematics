@@ -1,3 +1,4 @@
+import { CONTINUATION_BLOCK_GAP } from "./continuation-label.js";
 import { required } from "../presentation/util.js";
 import { compareText } from "../ordering.js";
 import type { Draft, Link } from "./types.js";
@@ -17,7 +18,7 @@ function pack(links: Link[], axis: "x" | "y") {
     ).bounds;
     offsets.push(distance);
     blocks.push({ start: i, end: i, sum: b[axis] - distance, count: 1 });
-    distance += b[dimension] + 1;
+    distance += b[dimension] + CONTINUATION_BLOCK_GAP;
     while (blocks.length > 1) {
       const z = required(blocks.at(-1), "Missing packing block"),
         a = required(blocks.at(-2), "Missing packing block");

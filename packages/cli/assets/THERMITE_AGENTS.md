@@ -138,10 +138,10 @@ views. `--flow left-to-right|top-to-bottom`,
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one
 sheet (R006 otherwise).
 
-Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
-2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
+Cards name omissions. Continuations: intact ID + peer `sheet.zone`,
+2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form/bank, 2.5 mm gap. Audit with circuit/wiring views
 and packet coverage.
-Both flows may fold retained strips to save sheets.
+Flows may fold retained strips.
 One caption per terminal appearance, nearest its body; keep exact landings and split captions.
 Omit net ink only when its anchored terminal prints the same name.
 
