@@ -488,3 +488,33 @@ A standalone SVG whose embedded font subset exceeds 60 KiB returns `R007`
 instead. Packet HTML whose font block exceeds 500 KiB returns `R007`; export
 `.pdf` instead. The CLI writes no file on either refusal. JSON and agent results
 remain font-free.
+
+Packet navigation resolves function locations after sheet composition. Locations
+use the rounded centroid of each function's own visible terminals (0.01 mm,
+then half-open zone classification). The device/function report uses the same
+locations. A boundary context or a report row is not a full-function destination.
+
+When selected views repeat a full function, the earliest authored view is the
+canonical appearance; ties use final sheet and zone reading order. Local
+`Repeat of ss.zone` and `Also shown ss.zone` labels retain every appearance's
+connections and off-view disclosures. Repeated conductor drawings refer to one
+source conductor; they do not add wires or join nets.
+
+Navigation labels occupy measured vacant sheet space after legends and real
+continuation blocks. Each slot reserves the larger of both possible roles and
+the complete 1–100 sheet-token domain before canonical selection. Labels cannot
+grow electrical leaves, change routing or shrink type. If bounded composition
+cannot provide a clear slot, the packet returns R006.
+
+Packet JSON adds `navigation` (`issued-navigation/0.1`): native selection seeds,
+source UID/function occurrence identities, final anchors and transform/clip
+provenance, repeat targets, fixed reservations, primitive locators and millimetre
+page regions for SVG, HTML and PDF review. Canonical status and sheet numbers are
+not occurrence identity. Circuit pagination's source-endpoint-owned boundary
+copies remain separate from full repeats selected in independent views. A
+logical circuit placement keeps its full occurrence with its first native
+endpoint unit; other conductor-unit copies carry boundary provenance. This
+ownership follows source endpoints when pages are repacked. These
+locators support independent source/geometry checking; they do not establish
+visible ink or electrical completeness by themselves. Contact mirrors and
+companion inventory resolution are separate additions.

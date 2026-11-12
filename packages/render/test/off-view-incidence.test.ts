@@ -59,7 +59,7 @@ it("uses direct authored identity, including parallel wires, jumpers and every s
   }
 });
 
-it("preserves a self-loop's identity without duplicating its endpoint disclosure", async () => {
+it("preserves both self-loop endpoint incidences with one source conductor identity", async () => {
   const f = await offViewFixture();
   try {
     const ir = structuredClone(f.ir),
@@ -70,8 +70,12 @@ it("preserves a self-loop's identity without duplicating its endpoint disclosure
         terminalIdKey(wire.endpoints[0].terminal),
       ),
     ).filter((c) => c.designation === "W3");
-    expect(found).toHaveLength(1);
-    expect(required(found[0]).other).toEqual(wire.endpoints[0].terminal);
+    expect(found).toHaveLength(2);
+    expect(new Set(found.map((c) => conductorKey(c.elementId)))).toEqual(
+      new Set([conductorKey({ kind: "wire", uid: wire.uid })]),
+    );
+    for (const end of found)
+      expect(end.other).toEqual(wire.endpoints[0].terminal);
   } finally {
     await f.dispose();
   }

@@ -15,7 +15,10 @@ import { SECTION_GAP } from "./fold-stack.js";
 import { stackSections } from "./fold-stack.js";
 import { required } from "../presentation/util.js";
 import { legendBoundFailure } from "./legend-bound-failure.js";
+import { centroidReferences } from "./navigation-occurrences.js";
+import { finalizeNavigation } from "./navigation-finalize.js";
 export interface LegendViewDrafts {
+  navigationView?: import("./navigation-types.js").NavigationView;
   drafts: Draft[];
   viewIndex: number;
   context: PacketViewContext;
@@ -26,6 +29,7 @@ export function legendSheets(
   page: PaperPage,
 ): RenderOutcome<RenderedSheet[]> & {
   failedSheet?: number;
+  navigation?: import("./navigation-types.js").IssuedNavigation;
 } {
   const sheets = assembleSheets(ir, structuredClone(drafts), page);
   for (const [i, sheet] of sheets.entries()) {
@@ -53,7 +57,18 @@ export function legendSheets(
     if (!legend.ok) return { ...legend, failedSheet: i };
     sheets[i] = { ...sheet, svg: legend.value };
   }
-  return { ok: true, value: sheets };
+  const finalized = finalizeNavigation(ir, drafts, sheets);
+  if (!finalized.ok) return finalized;
+  const located = structuredClone(drafts);
+  centroidReferences(located, finalized.value.navigation.occurrences);
+  return {
+    ok: true,
+    value: finalized.value.sheets.map((sheet, i) => ({
+      ...sheet,
+      references: located[i]?.references ?? sheet.references,
+    })),
+    navigation: finalized.value.navigation,
+  };
 }
 function repartitions(drafts: readonly Draft[], page: PaperPage): Draft[][] {
   const axis = drafts.find((d) => d.rootedPartAxis)?.rootedPartAxis;
@@ -232,6 +247,7 @@ function rebuild(
       layout,
       reference,
       v.context,
+      v.navigationView,
     );
   return drafts;
 }

@@ -118,6 +118,23 @@ describe("whole-conductor circuit pagination", () => {
         const r = await renderSchematicPacket(ir, request);
         if (!r.ok) throw new Error(r.error.message);
         const packet = r.value;
+        // Native request selectors, not NAV's planner, define each logical full placement.
+        for (const group of view.groups)
+          for (const selection of group.functions) {
+            const uid = ir.devices.find((d) =>
+              selection.device.by === "uid"
+                ? d.uid === selection.device.value
+                : d.designation === selection.device.value,
+            )!.uid;
+            expect(
+              packet.navigation!.occurrences.filter(
+                (o) =>
+                  o.source.deviceUid === uid &&
+                  o.source.functionKey === selection.key &&
+                  o.role === "full-function",
+              ),
+            ).toHaveLength(2);
+          }
         expect(packet.coverage.counts.conductors).toEqual({
           total: 20,
           represented: 19,
@@ -266,7 +283,18 @@ describe("whole-conductor circuit pagination", () => {
       views: [request],
     });
     if (!r.ok) throw new Error(r.error.message);
-    expect(r.value.sheets[0]!.svg).toContain(original.content);
+    // Strip additive NAV locators; native fitting geometry/content is byte-preserved.
+    const native = r.value.sheets[0]!.svg.replace(/<[^>]+>/g, (tag) => {
+      const terminal = /id="(?:sheet-\d+-)?navigation-terminal-/.test(tag);
+      return tag
+        .replace(/ id="(?:sheet-\d+-)?navigation-[^"]*"/g, "")
+        .replace(/ data-navigation-native="[^"]*"/g, "")
+        .replace(
+          terminal ? / data-(?:device-uid|terminal-key)="[^"]*"/g : /$^/g,
+          "",
+        );
+    });
+    expect(native).toContain(original.content);
     expect(r.value.sheets[0]).not.toHaveProperty("circuitContinuations");
     expect(original).not.toHaveProperty("pagination");
   });

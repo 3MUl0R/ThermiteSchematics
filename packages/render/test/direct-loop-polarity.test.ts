@@ -15,6 +15,26 @@ const flows = ["left-to-right", "top-to-bottom"] as const;
 let root: string;
 const fixtures = new Map<boolean, ElectricalIr>();
 
+/** Remove only the new composition wrapper; preserve all reviewed native bytes. */
+function withoutViewWrapper(svg: string): string {
+  const start = svg.indexOf('<g data-navigation-view="');
+  if (start < 0) throw Error("Missing packet view wrapper");
+  const content = svg.indexOf(">", start) + 1;
+  let depth = 0;
+  for (const match of svg.slice(start).matchAll(/<\/?g\b[^>]*>/gu)) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) {
+      const end = start + match.index;
+      return (
+        svg.slice(0, start) +
+        svg.slice(content, end) +
+        svg.slice(end + match[0].length)
+      );
+    }
+  }
+  throw Error("Unclosed packet view wrapper");
+}
+
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "thermite-direct-polarity-85-"));
   await writeFile(
@@ -109,7 +129,9 @@ it.each(flows)(
       expect(svg).toContain('data-layout-source-port="');
       expect(svg).toContain('data-layout-port="');
       // Keep the reviewed hashes intact while allowing additive route ownership.
-      const reviewedSvg = withoutRouteOwnershipMetadata(svg);
+      const reviewedSvg = withoutRouteOwnershipMetadata(
+        withoutViewWrapper(svg),
+      );
       expect(result.value.sheets[0]!.svg).toContain("Two separate signal nets");
       expect(result.value.sheets[0]!.svg).not.toContain(
         "polarity not verified",

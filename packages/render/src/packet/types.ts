@@ -79,6 +79,8 @@ export interface NormalizedDocumentationView {
   readonly title: string;
 }
 export interface RenderedSheet {
+  readonly occurrenceIds?: readonly string[];
+  readonly annotationIds?: readonly string[];
   readonly number: number;
   readonly view: NormalizedSchematicView | NormalizedDocumentationView;
   readonly references: readonly SheetReference[];
@@ -114,6 +116,7 @@ export interface CircuitContinuation {
   readonly netId: string | null;
 }
 export interface RenderedPacket {
+  readonly navigation?: import("./navigation-types.js").IssuedNavigation;
   readonly format: "schematic-packet/0.1";
   readonly page: PaperPage;
   readonly sheets: readonly RenderedSheet[];
@@ -157,6 +160,9 @@ export interface RootedLegendSource {
   profile?: "compact" | "dense";
 }
 export interface Draft {
+  navigationInputs?: readonly import("./navigation-types.js").NavigationDraftInput[];
+  navigationSeeds?: readonly import("./navigation-types.js").NativeOccurrenceSeed[];
+  navigationView?: import("./navigation-types.js").NavigationView;
   /** The selected, already routed drawing: legend bands never rerun ELK. */
   rootedLegendSource?: RootedLegendSource;
   /** Validated source strips retained for legend-space pagination, without ELK. */

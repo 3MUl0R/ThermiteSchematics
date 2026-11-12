@@ -664,7 +664,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "The default `starter` template has PS1, a 24 VDC supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used, two spare cores).",
+        "`starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores).",
       async check() {
         // ctx.pristine.starter came from a bare `init`; the named template
         // must match it apart from UIDs.

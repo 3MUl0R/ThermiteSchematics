@@ -372,6 +372,51 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "Repeat labels use fixed sheet space and final terminal-centroid locations rounded to 0.01 mm; keep each appearance's connections.",
+      async check() {
+        const project = ctx.pristine.starter,
+          view = {
+            format: "schematic-view-request/0.2",
+            root: { by: "designation", value: "PS1" },
+            intent: { kind: "loads" },
+          };
+        const result = await packet(project, {
+          format: "schematic-packet-request/0.1",
+          views: [view, view],
+        });
+        expect(result.code, describeRun(result.args, result)).toBe(0);
+        const value = result.json,
+          nav = value.navigation;
+        expect(nav.quantumMm).toBe(0.01);
+        expect(nav.anchorRule).toBe("function-terminal-centroid/2");
+        expect(nav.annotations.length).toBeGreaterThan(0);
+        expect(
+          nav.reservations.every(
+            (r: any) => r.space === "sheet-slot" && r.maximumForms.length === 2,
+          ),
+        ).toBe(true);
+        const paths = (svg: string) =>
+          [...parseHTML(svg).document.querySelectorAll("[data-wire-uid]")].map(
+            (e) => [
+              e.getAttribute("data-wire-uid"),
+              e.getAttribute("data-net-id"),
+              e.getAttribute("d"),
+            ],
+          );
+        expect(paths(value.sheets[0].svg)).toEqual(paths(value.sheets[1].svg));
+        for (const o of nav.occurrences)
+          for (const n of Object.values(o.destination.anchorMm) as number[])
+            expect(Math.abs(n * 100 - Math.round(n * 100))).toBeLessThan(
+              0.000001,
+            );
+        for (const a of nav.annotations)
+          expect(value.sheets.some((s: any) => s.svg.includes(a.text))).toBe(
+            true,
+          );
+      },
+    },
+    {
+      claim:
         "References use kind/state and terminals; I/O address/terminals; ports key plus authored description.",
       async check() {
         const compiled = await compileProject(await base());
@@ -824,7 +869,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps real function keys to explicit closed-catalog marks, for example different marks for main and auxiliary contacts.",
+        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

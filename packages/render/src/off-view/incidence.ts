@@ -49,10 +49,8 @@ class IncidenceBuilder {
     ends: Ends,
     sources: readonly RenderTextSource[],
   ) {
-    const seen = new Set<string>();
     for (const [index, terminal] of ends.entries()) {
-      if (!terminal || seen.has(terminalIdKey(terminal))) continue;
-      seen.add(terminalIdKey(terminal));
+      if (!terminal) continue;
       const other = ends[index === 0 ? 1 : 0];
       const value: OffViewConnection = {
         elementId: { ...elementId },

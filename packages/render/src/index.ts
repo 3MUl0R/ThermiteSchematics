@@ -3,6 +3,14 @@ export {
   RENDERER_VERSION,
   SYMBOL_CATALOG_VERSION,
 } from "./types.js";
+export type {
+  IssuedNavigation,
+  PlacedOccurrence,
+  OccurrenceRole,
+  AnnotationReservation,
+  NavigationAnnotation,
+  NavigationExtension,
+} from "./packet/navigation-types.js";
 export { createSchematicRenderer, renderSchematic } from "./renderer.js";
 export {
   normalizePaperPage,
