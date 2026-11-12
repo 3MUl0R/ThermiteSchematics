@@ -51,7 +51,8 @@ export function repeatNoun(
   ir: Readonly<ElectricalIr>,
   members: readonly PlacedOccurrence[],
 ) {
-  if (members.length > 1) return "functions";
+  if (new Set(members.map((o) => JSON.stringify(o.source))).size > 1)
+    return "functions";
   const owner = required(members[0], "Missing label owner");
   const fn = required(
     ir.functions.find(
@@ -132,7 +133,7 @@ export function maximumRepeatForms(
     // Cover each possible mixed canonical/secondary role partition too.
     for (let n = 1; n < counts.length; n++)
       forms.push(
-        `${prefix}Also shown ${tokens(budgets.slice(0, n).reduce((a, b) => a + b, 0))}\nRepeat of ${tokens(counts.length - n)} (same ${noun})`,
+        `${prefix}Also shown ${tokens(budgets.slice(0, n).reduce((a, b) => a + b, 0))}\nRepeat of ${tokens(counts.length - n)} (same ${counts.length - n === 1 ? "function" : noun})`,
       );
     return envelopeShapes(mode, forms);
   });

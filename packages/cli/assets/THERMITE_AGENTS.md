@@ -347,5 +347,5 @@ or bonds.
 Reconstruction: record page/line provenance, separate aliases from verified
 pins, preserve conflicts for review, and assert critical endpoints and nets.
 
-Per-symbol repeats: fixed slots, local shapes first, else own sheet.zone.
-Centroids round half-up to 0.01 mm; keep connections.
+One repeat per device/view/sheet; fixed local slots, else own sheet.zone.
+Keep 4 mm text gaps; centroids round half-up to 0.01 mm.

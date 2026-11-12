@@ -1,4 +1,4 @@
-import type { ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr, FunctionId } from "@thermite/compiler";
 import { serializeIr } from "@thermite/compiler";
 import type { Draft, RenderedSheet } from "./types.js";
 import type {
@@ -111,10 +111,12 @@ function finalizeCheckedNavigation(
   sheets: readonly RenderedSheet[],
 ): ReturnType<typeof finalizeNavigation> {
   const occurrences = placeOccurrences(ir, drafts, sheets),
+    maximums = selectedAppearanceMaximums(drafts),
     plan = planRepeatNavigation(
       ir,
       occurrences,
-      selectedAppearanceCounts(drafts),
+      maximums.counts,
+      maximums.members,
     );
   validateAppearanceIncidence(ir, occurrences, sheets);
   const reservations: AnnotationReservation[] = [];
@@ -231,7 +233,8 @@ function allocateSheetRequests(
     return failed;
   }
 }
-function selectedAppearanceCounts(drafts: readonly Draft[]) {
+function selectedAppearanceMaximums(drafts: readonly Draft[]) {
+  const members = new Map<string, Map<string, FunctionId>>();
   const groups = new Map<string, Set<string>>();
   for (const input of navigationDraftInputs(drafts))
     for (const s of input.seeds) {
@@ -240,8 +243,15 @@ function selectedAppearanceCounts(drafts: readonly Draft[]) {
       const appearances = groups.get(key) ?? new Set<string>();
       appearances.add(JSON.stringify([input.view.key, s.logicalKey]));
       groups.set(key, appearances);
+      const appearance = JSON.stringify([s.source.deviceUid, input.view.key]);
+      const sources = members.get(appearance) ?? new Map<string, FunctionId>();
+      sources.set(JSON.stringify([s.source, s.logicalKey]), s.source);
+      members.set(appearance, sources);
     }
-  return new Map([...groups].map(([k, v]) => [k, v.size]));
+  return {
+    counts: new Map([...groups].map(([k, v]) => [k, v.size])),
+    members: new Map([...members].map(([k, v]) => [k, [...v.values()]])),
+  };
 }
 function issuedNavigation(
   ir: Readonly<ElectricalIr>,

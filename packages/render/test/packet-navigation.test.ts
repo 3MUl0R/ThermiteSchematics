@@ -849,6 +849,10 @@ it("keeps both selections and unique primitive locators through compact packing"
       [1, "C3", { x: 50, y: 120 }],
     ]);
     expect(nav.seeds).toHaveLength(2);
+    expect(nav.annotations.map((a) => a.text.replace(/\n/g, " "))).toEqual([
+      "K1: Also shown 01.C3",
+      "K1: Repeat of 01.A3 (same function)",
+    ]);
     expect(nav.canonicalGroups[0]!.canonical).toBe(nav.occurrences[0]!.id);
     const ids = [
       ...parseSvg(result.value.sheets[0]!.svg).querySelectorAll("[id]"),

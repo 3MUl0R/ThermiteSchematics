@@ -372,7 +372,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Per-symbol repeats: fixed slots, local shapes first, else own sheet.zone. Centroids round half-up to 0.01 mm; keep connections.",
+        "One repeat per device/view/sheet; fixed local slots, else own sheet.zone. Keep 4 mm text gaps; centroids round half-up to 0.01 mm.",
       async check() {
         const project = ctx.pristine.starter,
           view = {
@@ -392,7 +392,7 @@ const module: FactModule = {
         expect(nav.annotations.length).toBeGreaterThan(0);
         expect(
           nav.reservations.every(
-            (r: any) => r.space === "sheet-slot" && r.maximumForms.length === 2,
+            (r: any) => r.space === "sheet-slot" && r.maximumForms.length >= 2,
           ),
         ).toBe(true);
         const paths = (svg: string) =>

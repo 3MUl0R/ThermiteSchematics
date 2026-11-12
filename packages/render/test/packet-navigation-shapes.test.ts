@@ -105,7 +105,7 @@ it("reserves fixed maximum tokens and multiplicity in every mode and shape", () 
     expect(s.maximumForms.map((f) => f.replace(/\n/g, " "))).toEqual([
       prefix + "Also shown 100.D1, 100.D1, 100.D1",
       prefix + "Repeat of 100.D1, 100.D1 (same functions)",
-      prefix + "Also shown 100.D1, 100.D1 Repeat of 100.D1 (same functions)",
+      prefix + "Also shown 100.D1, 100.D1 Repeat of 100.D1 (same function)",
     ]);
     for (const form of s.maximumForms)
       for (const line of form.split("\n")) {

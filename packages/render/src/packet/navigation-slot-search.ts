@@ -7,12 +7,14 @@ import {
 } from "./navigation-symbols.js";
 import type { NavigationShape } from "./navigation-types.js";
 export const NAVIGATION_CLEARANCE_MM = 1.5;
+export const NAVIGATION_TEXT_CLEARANCE_MM = 4;
 function slotCandidates(
   size: Rect,
   area: Rect,
   owner: Rect,
   obstacles: readonly Rect[],
   locality?: SymbolGeometry,
+  texts: readonly Rect[] = [],
 ) {
   const { w, h } = size;
   const xs = [
@@ -21,6 +23,10 @@ function slotCandidates(
       area.x + area.w - w,
       owner.x,
       owner.x + owner.w - w,
+      ...texts.flatMap((b) => [
+        b.x + b.w + NAVIGATION_TEXT_CLEARANCE_MM + 0.01,
+        b.x - w - NAVIGATION_TEXT_CLEARANCE_MM - 0.01,
+      ]),
       ...obstacles.flatMap((b) => [b.x + b.w + 1.51, b.x - w - 1.51]),
     ]),
   ].filter((x) => x >= area.x && x + w <= area.x + area.w);
@@ -46,6 +52,7 @@ export function searchNavigationSlot(
   owner: Rect,
   obstacles: readonly Rect[],
   locality?: SymbolGeometry,
+  texts: readonly Rect[] = [],
 ) {
   const ordered = ["local", "self-located"].flatMap((mode) =>
     shapes.filter((s) => s.mode === mode),
@@ -57,11 +64,13 @@ export function searchNavigationSlot(
       owner,
       obstacles,
       locality,
+      texts,
     );
     const box = candidates.find(
       (b) =>
         inside(b, area) &&
         obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
+        texts.every((t) => textSeparated(b, t)) &&
         (shape.mode !== "local" ||
           !locality ||
           localNavigationSlot(b, locality)),
@@ -69,4 +78,14 @@ export function searchNavigationSlot(
     if (box) return { box, shape };
   }
   return undefined;
+}
+
+/** Protect the fixed text envelope horizontally where line bands overlap. */
+function textSeparated(label: Rect, other: Rect) {
+  return (
+    label.y + label.h <= other.y ||
+    other.y + other.h <= label.y ||
+    label.x + label.w + NAVIGATION_TEXT_CLEARANCE_MM <= other.x ||
+    other.x + other.w + NAVIGATION_TEXT_CLEARANCE_MM <= label.x
+  );
 }

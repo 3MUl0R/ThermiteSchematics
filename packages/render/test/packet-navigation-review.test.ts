@@ -132,6 +132,11 @@ it("selects canonical by sheet before zone within one authored view", async () =
     expect(
       r.value.navigation.occurrences.map((o) => o.destination.zone),
     ).toEqual(["C2", "A2"]);
+    expect(
+      r.value.navigation.annotations.map(
+        (a) => a.locality!.ownerLocation.sheet,
+      ),
+    ).toEqual([1, 2]);
     const first = r.value.navigation.occurrences.find(
       (o) => o.primitiveIds[0] === "native-0",
     )!;

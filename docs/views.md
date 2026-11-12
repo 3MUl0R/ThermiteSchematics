@@ -519,15 +519,18 @@ locators support independent source/geometry checking; they do not establish
 visible ink or electrical completeness by themselves. Contact mirrors and
 companion inventory resolution are separate additions.
 
-A drawn symbol gets one repeat label even when it contains several functions.
+A device appearance gets one repeat label even when its functions use separate
+glyphs (for example, gang poles). Group by device UID, selected view and sheet;
+glyph identity is only a locator.
 Its label lists each distinct target sheet.zone once, in reading order, using
 exactly the per-function destinations in the reference report. Multiple repeated
 functions use `(same functions)`; one contact uses `(same contact)`. The local
 prefix is `TAG:`. Local slots are preferred: on the owner's sheet, at most 60 mm
-from the distinct-terminal centroid of the whole symbol, with its own device
+from the distinct-terminal centroid of the whole device appearance, with its own device
 frame strictly nearer than another device frame. Distances are from the label
 box to the centroid/frame. Otherwise the prefix is `TAG (ss.zone):`, where the
-location is the whole symbol's terminal centroid. This self-location is measured
+location is the whole appearance's distinct-terminal centroid, including drawn
+functions that are not repeated. This self-location is measured
 from the final sheet; it is not one arbitrarily chosen member function's zone.
 Each mode reserves both roles; the self-located mode also reserves the prefix.
 Frame ownership uses source UID, selected view and measured centroid, including
@@ -572,4 +575,20 @@ pre-selection multiplicity, and both canonical and secondary roles (including
 mixed groups). These dimensions never depend on the actual destination tokens.
 Only post-pagination vacancy and locality select the mode and shape; selected
 `shapeId`, envelope and maximum forms are exported with the reservation. If no
-shape fits, normal fit refusal applies. This cannot create a token sizing cycle.
+shape fits, normal fit refusal applies. This cannot create a token sizing cycle. Whether a label exists, and its final
+membership, can depend on pagination and full/fragment status. Its envelope uses
+the native pre-pagination function candidates and multiplicities for that device
+and selected view, including candidates that later become fragments. Pagination
+never changes that capacity profile.
+
+Repeat-label locality intentionally has no zone adjacency condition: same sheet,
+≤60 mm from the appearance's terminal centroid and the owning device as nearest
+frame suffice. The "in or next to the zone" condition belongs to NAV2 mirror
+tables. Each Repeat heading's qualifier follows that heading's distinct source
+functions, not the total group size.
+
+Navigation text envelopes keep at least 4 mm horizontal clearance from other
+text when their line bands overlap vertically, including continuation/location
+headers and other navigation labels. Non-text ink retains 1.5 mm clearance.
+The allocator uses the protected maximum text envelopes; it never shrinks a
+reservation to the current destination text.

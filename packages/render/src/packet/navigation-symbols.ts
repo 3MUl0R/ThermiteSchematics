@@ -53,10 +53,10 @@ export function symbolGeometry(
 ): SymbolGeometry {
   const members = occurrences.filter(
     (o) =>
-      o.role === "full-function" &&
+      o.role !== "lookup-row" &&
       o.source.deviceUid === owner.source.deviceUid &&
       o.destination.sheet === owner.destination.sheet &&
-      o.provenance.symbolKey === owner.provenance.symbolKey,
+      o.provenance.view.key === owner.provenance.view.key,
   );
   const all = navigationGeometry(svg),
     ids = new Set(members.flatMap((o) => o.terminalPrimitiveIds));

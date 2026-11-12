@@ -1,4 +1,4 @@
-import type { ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr, FunctionId } from "@thermite/compiler";
 import type {
   AnnotationReservation,
   PlacedOccurrence,
@@ -38,6 +38,7 @@ export function planRepeatNavigation(
   ir: Readonly<ElectricalIr>,
   occurrences: readonly PlacedOccurrence[],
   maximumCounts: ReadonlyMap<string, number> = new Map(),
+  maximumMembers: ReadonlyMap<string, readonly FunctionId[]> = new Map(),
 ): RepeatPlan {
   const byFunction = new Map<string, PlacedOccurrence[]>();
   for (const o of occurrences)
@@ -61,7 +62,7 @@ export function planRepeatNavigation(
       const symbol = JSON.stringify([
         owner.source.deviceUid,
         owner.destination.sheet,
-        owner.provenance.symbolKey,
+        owner.provenance.view.key,
       ]);
       labels.set(symbol, [
         ...(labels.get(symbol) ?? []),
@@ -75,7 +76,7 @@ export function planRepeatNavigation(
     }
   }
   const planned = [...labels.values()].map((members) =>
-    groupedLabel(ir, members),
+    groupedLabel(ir, members, maximumCounts, maximumMembers),
   );
   return {
     groups,
@@ -83,7 +84,12 @@ export function planRepeatNavigation(
     annotations: planned.map((p) => p.annotation),
   };
 }
-function groupedLabel(ir: Readonly<ElectricalIr>, members: LabelMember[]) {
+function groupedLabel(
+  ir: Readonly<ElectricalIr>,
+  members: LabelMember[],
+  maximumCounts: ReadonlyMap<string, number>,
+  maximumMembers: ReadonlyMap<string, readonly FunctionId[]>,
+) {
   members.sort((a, b) =>
     compareText(a.owner.source.functionKey, b.owner.source.functionKey),
   );
@@ -92,26 +98,23 @@ function groupedLabel(ir: Readonly<ElectricalIr>, members: LabelMember[]) {
     ir.devices.find((d) => d.uid === owner.source.deviceUid),
     "Missing repeat device",
   ).designation;
-  const noun = repeatNoun(
+  const profile = maximumProfile(
     ir,
-    members.map((m) => m.owner),
+    owner,
+    members,
+    maximumCounts,
+    maximumMembers,
   );
-  const count = members.reduce((n, m) => n + m.count - 1, 0);
+  const { also, repeats, lines } = groupedText(ir, members, tag);
   const token = maximumToken();
-  const maximum = maximumRepeatForms(
-    tag,
-    noun,
-    members.map((m) => m.count),
-    token,
-  );
-  const { also, repeats, lines } = groupedText(members, tag, noun);
+  const maximum = maximumRepeatForms(tag, profile.noun, profile.counts, token);
   const owners = members.map((m) => m.owner.id);
   const id = `navigation/2/${navigationHash(owners)}`;
   const reservation: AnnotationReservation = {
     id,
     ownerAppearance: owner.appearance,
     ownerOccurrence: owner.id,
-    profileId: `repeat-max-roles/2/${count}/${members.length}`,
+    profileId: `repeat-max-roles/2/${profile.count}/${profile.counts.length}`,
     space: "sheet-slot",
     inkMm: { x: 0, y: 0, w: maximum.w, h: maximum.h },
     maximumForms: maximum.forms,
@@ -136,9 +139,9 @@ function groupedLabel(ir: Readonly<ElectricalIr>, members: LabelMember[]) {
 }
 
 function groupedText(
+  ir: Readonly<ElectricalIr>,
   members: readonly LabelMember[],
   tag: string,
-  noun: string,
 ) {
   const also = members
     .filter((m) => m.owner === m.canonical)
@@ -158,8 +161,46 @@ function groupedText(
         also.length ? "" : prefix,
         "Repeat of",
         distinctDestinations(repeats),
-        ` (same ${noun})`,
+        ` (same ${repeatNoun(
+          ir,
+          members.filter((m) => m.owner !== m.canonical).map((m) => m.owner),
+        )})`,
       ).join(" "),
     );
   return { also, repeats, lines };
+}
+
+/** Native pre-pagination candidates fix capacity even when final membership changes. */
+function maximumProfile(
+  ir: Readonly<ElectricalIr>,
+  owner: PlacedOccurrence,
+  members: readonly LabelMember[],
+  counts: ReadonlyMap<string, number>,
+  candidates: ReadonlyMap<string, readonly FunctionId[]>,
+) {
+  const key = JSON.stringify([
+    owner.source.deviceUid,
+    owner.provenance.view.key,
+  ]);
+  const selected = (
+    candidates.get(key) ?? members.map((m) => m.owner.source)
+  ).filter(
+    (source) =>
+      (counts.get(JSON.stringify([source.deviceUid, source.functionKey])) ??
+        2) > 1,
+  );
+  const multiplicities = selected.map(
+    (source) =>
+      counts.get(JSON.stringify([source.deviceUid, source.functionKey])) ??
+      required(
+        members.find((m) => m.owner.source.functionKey === source.functionKey),
+        "Missing repeat capacity source",
+      ).count,
+  );
+  const owners = selected.map((source) => ({ ...owner, source }));
+  return {
+    noun: repeatNoun(ir, owners),
+    counts: multiplicities,
+    count: multiplicities.reduce((n, c) => n + c - 1, 0),
+  };
 }

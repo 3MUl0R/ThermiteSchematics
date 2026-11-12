@@ -16,9 +16,9 @@ export interface SheetSlotRequest {
   owner: Rect;
   locality?: SymbolGeometry;
 }
-function navigationObstacles(svg: string): Rect[] {
+function navigationObstacles(svg: string) {
   const measured = generatedSvgInk(svg);
-  return [
+  const ink = [
     ...measured.ink,
     ...measured.regions,
     ...navigationGeometry(svg).flatMap((g) => {
@@ -40,6 +40,7 @@ function navigationObstacles(svg: string): Rect[] {
         : [];
     }),
   ];
+  return { ink, texts: measured.texts };
 }
 /** Vacant sheet-mm space after real continuation/legend ink. Never grows an ELK leaf. */
 export function allocateNavigationSlots(
@@ -48,7 +49,9 @@ export function allocateNavigationSlots(
   svg: string,
   sheet: number,
 ): AnnotationReservation[] {
-  const obstacles = navigationObstacles(svg);
+  const measured = navigationObstacles(svg),
+    obstacles = measured.ink,
+    texts = measured.texts;
   return requests.map(({ reservation, owner, locality }) => {
     const legacy: NavigationShape[] = (["local", "self-located"] as const).map(
       (mode) => ({
@@ -65,12 +68,14 @@ export function allocateNavigationSlots(
       owner,
       obstacles,
       locality,
+      texts,
     );
     if (!result)
       throw Error(
         `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
       );
     obstacles.push(result.box);
+    texts.push(result.box);
     return {
       ...reservation,
       inkMm: result.shape.inkMm,
