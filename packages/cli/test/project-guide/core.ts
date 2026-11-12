@@ -1553,7 +1553,7 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "Check existing issues, then report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
+      "Check issues, then report bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1565,11 +1565,11 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Fix the separate engine checkout; follow AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Keep private data and credentials out of issues/PRs.",
+      "Keep private data/credentials out of issues/PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [

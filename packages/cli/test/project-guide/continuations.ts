@@ -15,7 +15,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "One terminal caption per drawn appearance, nearest its body; keep all landings. Split/continuation appearances each keep theirs.",
+        "One caption per terminal appearance, nearest its body; keep all landings and split captions. Omit net ink identical to its own landing caption.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -77,6 +77,30 @@ const module: FactModule = {
                 ),
               ).not.toBeNull();
           }
+          const power = await prepareSchematicDrawing(c.ir, {
+            format: "schematic-view-request/0.1",
+            family: "power",
+            root: { by: "designation", value: "M1" },
+            flow,
+          });
+          if (!power.ok) throw Error(JSON.stringify(power));
+          const ink = emitSchematicSvg(
+            power.value.graph,
+            power.value.layout,
+            power.value.titleContext,
+            SYMBOL_CATALOG,
+            false,
+            undefined,
+            c.ir,
+          );
+          if (!ink.ok) throw Error(JSON.stringify(ink));
+          const powerDoc = parseSvg(ink.value);
+          expect(powerDoc.querySelectorAll("text.label-net")).toHaveLength(0);
+          const phaseCaptions = [
+            ...powerDoc.querySelectorAll("text.label-terminal"),
+          ].map((t) => t.textContent);
+          for (const phase of ["L1", "L2", "L3", "PE"])
+            expect(phaseCaptions).toContain(phase);
           expect(doubleLandings).toBeGreaterThan(0);
           noteJson({ flow, doubleLandings, captionsPerAppearance: 1 });
         }

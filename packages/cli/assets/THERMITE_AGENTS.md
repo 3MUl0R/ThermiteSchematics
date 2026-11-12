@@ -16,14 +16,14 @@ thermite init ../cabinets --template cabinets
 supply feeding PLC1; `cabinets` has TB1 and TB2 joined by cable CBL1 (two used,
 two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Check existing issues, then report runtime bugs, gaps or unclear docs at
+Check issues, then report bugs, gaps or unclear docs at
 https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case,
 expected/actual behavior, minimal reproduction,
 diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute
 paths. Without GitHub, draft the issue title/body. Never patch a downloaded runtime.
 
-Fix the separate engine checkout; follow AGENTS.md and CONTRIBUTING.md for PRs.
-Keep private data and credentials out of issues/PRs.
+Fix the separate engine checkout; follow the engine's AGENTS.md and CONTRIBUTING.md for PRs.
+Keep private data/credentials out of issues/PRs.
 The human must accept any CLA; an agent must not sign it.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
@@ -143,8 +143,8 @@ Cards name omissions. Continuations print wire ID + peer `sheet.zone` at
 2.5 mm; unnamed jumpers use `JUMPER` + full UID. Audit with circuit/wiring views
 and packet coverage.
 Standard spacing may fold onto fewer sheets.
-One terminal caption per drawn appearance, nearest its body; keep all landings.
-Split/continuation appearances each keep theirs.
+One caption per terminal appearance, nearest its body; keep all landings and split captions.
+Omit net ink identical to its own landing caption.
 
 Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:
