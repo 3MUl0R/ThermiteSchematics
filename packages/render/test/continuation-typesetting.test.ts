@@ -114,13 +114,13 @@ it("kills a mixed inline/two-level bank instead of accepting a descriptor except
 it("rejects a neighbour moved inside the gap even if packing is bypassed", () => {
   const a = link("W1"),
     height = continuationLabel(a, 18, bank.headerWidth).bounds.h;
-  const b = { ...link("W2", "C1000"), y: a.y + height + 0.5 };
+  const b = { ...link("W2", "C1000"), y: a.y + height + 2.0 };
   const pack = vi
     .spyOn(packing, "packContinuationLabels")
     .mockReturnValue(true);
   try {
     expect(fitContinuations([draft([a, b])], page, bank, true)).toContain(
-      "clear ink",
+      "2.5 mm between continuation blocks",
     );
   } finally {
     pack.mockRestore();

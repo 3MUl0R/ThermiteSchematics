@@ -93,7 +93,7 @@ export function fitContinuations(
             labels.some((o) => near(r.ink, o, CONTINUATION_BLOCK_GAP)),
         )
       )
-        return `Continuation ${l.id} (${l.conductor}) cannot keep 1 mm clear ink at the ${l.side} cut (${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm), short by ${continuationShortfall(
+        return `Continuation ${l.id} (${l.conductor}) cannot keep clear ink at the ${l.side} cut (${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm): 1 mm to drawing content; ${CONTINUATION_BLOCK_GAP} mm between continuation blocks. The 1 mm clearance is short by ${continuationShortfall(
           required(l.label, "Missing label").rows.map((r) => r.ink),
           [...occupied, ...labels],
         ).toFixed(2)} mm. Use a larger sheet, landscape or another flow.`;

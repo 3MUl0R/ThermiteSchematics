@@ -118,7 +118,8 @@ it("validates complete label ink after composition against drawing content", () 
     true,
   );
   expect(result).toContain("W1");
-  expect(result).toContain("1 mm");
+  expect(result).toContain("1 mm to drawing content");
+  expect(result).toContain("2.5 mm between continuation blocks");
   expect(result).toMatch(/short by [\d.]+ mm/u);
 });
 it("accepts exact frame clearance and refuses 0.1 mm less without shrinking", () => {
