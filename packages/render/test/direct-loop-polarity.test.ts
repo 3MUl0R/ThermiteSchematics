@@ -1,3 +1,4 @@
+import { withoutRouteOwnershipMetadata } from "./helpers/route-ownership.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,14 +105,17 @@ it.each(flows)(
     const result = await renderSchematicPacket(ir, packet(flow));
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (result.ok) {
+      const svg = result.value.sheets[0]!.svg;
+      expect(svg).toContain('data-layout-source-port="');
+      expect(svg).toContain('data-layout-port="');
+      // Keep the reviewed hashes intact while allowing additive route ownership.
+      const reviewedSvg = withoutRouteOwnershipMetadata(svg);
       expect(result.value.sheets[0]!.svg).toContain("Two separate signal nets");
       expect(result.value.sheets[0]!.svg).not.toContain(
         "polarity not verified",
       );
       // Pin the reviewed direct-loop output, including its semantic channel caption.
-      expect(
-        createHash("sha256").update(result.value.sheets[0]!.svg).digest("hex"),
-      ).toBe(
+      expect(createHash("sha256").update(reviewedSvg).digest("hex")).toBe(
         flow === "left-to-right"
           ? "62ca4c1e14ada419eabff3207ce9b12cd8cac11e2cfef1787149b8cd0eb0d888"
           : "116e6df6c8d2e7636f3a4a15e71619a373cc44c742244e0b72fb5e59422295e6",
@@ -119,12 +123,7 @@ it.each(flows)(
       // Pin the complete measured-tag drawing independently of ownership metadata.
       expect(
         createHash("sha256")
-          .update(
-            result.value.sheets[0]!.svg.replace(
-              / data-tag-[a-z-]+="[^"]*"/gu,
-              "",
-            ),
-          )
+          .update(reviewedSvg.replace(/ data-tag-[a-z-]+="[^"]*"/gu, ""))
           .digest("hex"),
       ).toBe(
         flow === "left-to-right"
