@@ -52,7 +52,9 @@ export async function cableDrafts(
   if (!preparedTitle.ok) return preparedTitle;
   const title = preparedTitle.value,
     b = bounds(title, page, view);
-  const sources = cableLabelSources(schedule);
+  const typeCaption =
+    schedule.description?.trim() || "Cable type description not specified";
+  const sources = cableLabelSources(schedule, typeCaption);
   const preflight = preflightTitleRenderText(
     view,
     sources.map((value) => ({
@@ -89,7 +91,7 @@ export async function cableDrafts(
     refs = [];
     content = [
       text(left, b.y + 4, `CABLE ${schedule.designation}`, 4, "start", 700),
-      text(left, b.y + 10, schedule.typeId, 2.6),
+      text(left, b.y + 10, typeCaption, 2.6),
       text(
         left,
         b.y + 16,
@@ -102,7 +104,7 @@ export async function cableDrafts(
     if (
       a.length > maxEnd ||
       z.length > maxEnd ||
-      schedule.typeId.length * 1.5 > b.w
+      typeCaption.length * 1.5 > b.w
     )
       return false;
     content.push(
@@ -222,6 +224,7 @@ export async function cableDrafts(
 
 function cableLabelSources(
   schedule: ReturnType<typeof buildCableSchedule>,
+  typeCaption: string,
 ): string[] {
   return schedule.cores
     .flatMap((core) => [
@@ -235,6 +238,6 @@ function cableLabelSources(
     .concat(
       schedule.fromLocation ?? "",
       schedule.toLocation ?? "",
-      schedule.typeId,
+      typeCaption,
     );
 }

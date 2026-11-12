@@ -1,3 +1,4 @@
+import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { deviceTagFitDetails } from "./device-tag-fit.js";
 import {
   CircuitRenderError,
@@ -181,7 +182,7 @@ export async function circuitDrafts(
         y = b.y + headerHeight + offset;
       draft.content +=
         headings
-          .map((s, i) => text(x, y + 2.7 + i * 3.5, s, 2.7, "start", 700))
+          .map((s, i) => groupHeading(x, y + 2.7 + i * 3.5, s, group.id))
           .join("") +
         `<g transform="translate(${n(x)} ${n(y + headHeight)})">${group.content}</g>`;
       if (group.pagination) {
@@ -328,4 +329,11 @@ interface CircuitNoteLayout {
   cursors: readonly number[];
   available: number;
   gap: number;
+}
+
+function groupHeading(x: number, y: number, label: string, id: string): string {
+  return text(x, y, label, 2.7, "start", 700).replace(
+    "<text ",
+    `<text data-circuit-source-heading="${attr(id)}" `,
+  );
 }

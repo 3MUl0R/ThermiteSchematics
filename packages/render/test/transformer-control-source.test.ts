@@ -129,11 +129,7 @@ for (const mode of ["normal", "reversed", "array-reversed", "renamed"])
         )!;
         expect(source).toBeDefined();
         expect(
-          source.labels.some(
-            (label) =>
-              label.printableText ===
-              (mode === "renamed" ? "output" : "secondary"),
-          ),
+          source.labels.some((label) => label.printableText === "source"),
         ).toBe(true);
         const input =
             mode === "renamed" ? "P" : mode === "reversed" ? "X2" : "X1",

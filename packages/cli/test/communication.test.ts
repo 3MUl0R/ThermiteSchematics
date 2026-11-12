@@ -240,7 +240,7 @@ describe("typed communication ports", () => {
     for (const r of drawing.references)
       expect(r.yMm).toBeLessThan(packet.value.page.heightMm - 30);
   });
-  it("fails unsupported text and overlong port names instead of emitting clipped or invalid SVG", async () => {
+  it("validates printed port text while keeping arbitrarily long lookup keys invisible", async () => {
     const f = await fixture(),
       c = await compiled(f.p);
     const request = {
@@ -259,9 +259,23 @@ describe("typed communication ports", () => {
     await f.write("lib/types.json", f.types);
     await f.write("source.json", f.source);
     expect((await lockProject(f.p)).ok).toBe(true);
-    expect(
-      (await renderSchematicPacket((await compiled(f.p)).ir, request)).ok,
-    ).toBe(false);
+    const projected = await renderSchematicPacket(
+      (await compiled(f.p)).ir,
+      request,
+    );
+    expect(projected.ok, JSON.stringify(projected)).toBe(true);
+    if (projected.ok) {
+      const text = projected.value.sheets
+        .map((s) => s.svg.replace(/<[^>]*>/gu, " "))
+        .join(" ");
+      expect(text).toContain("RJ45");
+      expect(text).not.toContain(long);
+    }
+    const tooLong = structuredClone((await compiled(f.p)).ir);
+    tooLong.deviceTypes[0]!.ports![long]!.description = "W".repeat(2000);
+    const refused = await renderSchematicPacket(tooLong, request);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.error.code).toBe("R006");
   });
 });
 

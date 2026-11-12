@@ -163,8 +163,6 @@ export function printableCaption(
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "function": {
-      if (caption.mark === "ais:source-winding")
-        return caption.fn.id.functionKey;
       if (PROTECTION_MARKS.has(caption.mark)) return "";
       if (caption.mark === "ais:motor") return "";
       const word = functionWord(caption.fn, caption.type);

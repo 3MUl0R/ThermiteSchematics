@@ -57,7 +57,7 @@ describe("connector I/O schedules", () => {
       expect(channels.rows).toHaveLength(1);
       expect(channels.rows[0]!.cells.slice(0, 6)).toEqual([
         "PLC1",
-        "di1",
+        "%I0.0",
         "input",
         "PLC1",
         "%I0.0",
@@ -152,7 +152,7 @@ describe("connector I/O schedules", () => {
         kind: "io",
       });
       for (const key of inherited) {
-        const row = channels.rows.find((r) => r.cells[1] === key)!;
+        const row = channels.rows.find((r) => JSON.parse(r.key)[1] === key)!;
         expect(row.cells.slice(3, 6)).toEqual(["PLC1", "", ""]);
         expect(row.cells[8]).toMatch(/^Unspecified; /u);
       }
