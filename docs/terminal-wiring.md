@@ -3,6 +3,8 @@
 A packet can include `wiring-view-request/0.1` to draw a selected set of actual
 wires, jumpers and fully terminated cable cores, including branching power
 and relay wiring. ELK places terminal blocks and routes orthogonal paths.
+Its network-simplex placement keeps long branches economical when device-tag
+headers have different heights; fixed terminal sides and route validation apply.
 The original symbol renderer and six guarded agent commands remain unchanged.
 
 ```json

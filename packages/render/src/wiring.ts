@@ -12,7 +12,7 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import type { CommunicationDrawing } from "./communication.js";
-import { createElkEngine } from "./layout/elk-runtime.js";
+import { layoutWiring } from "./layout/wiring-layout.js";
 
 /** A deliberate subset of physical wiring, never an inferred circuit or net short. */
 export interface WiringViewRequest {
@@ -238,23 +238,9 @@ export async function prepareWiringDrawing(
       }),
     };
   });
-  const graph: ElkNode = await createElkEngine().layout({
-    id: "wiring",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": "RIGHT",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.spacing.nodeNode": "10",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "14",
-      "elk.spacing.edgeNode": "5",
-      "elk.spacing.edgeEdge": "5",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "5",
-      "elk.padding": "[top=5,left=5,bottom=5,right=5]",
-      "elk.randomSeed": "1",
-      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-    },
+  const graph = await layoutWiring(
     children,
-    edges: selected.map((w, i) => ({
+    selected.map((w, i) => ({
       id: `e${i}`,
       sources: [ports.get(key(w.ends[0]!))!],
       targets: [ports.get(key(w.ends[1]!))!],
@@ -266,7 +252,7 @@ export async function prepareWiringDrawing(
         },
       ],
     })),
-  });
+  );
   if (![graph.width, graph.height].every(Number.isFinite))
     throw new Error("Invalid wiring layout bounds.");
   const out: string[] = [];
