@@ -1,67 +1,19 @@
-// TB1 staging model. Imported by tests only; do not export from the runtime API.
-import type {
-  SchematicPacketRequest,
-  PageSettings,
-} from "../../packet/types.js";
-import type { Diagnostic } from "@thermite/schema";
-
-export const slots = [
-  "project",
-  "sheetTitle",
-  "drawingNumber",
-  "customer",
-  "drawnBy",
-  "date",
-  "checkedBy",
-  "approvedBy",
-  "revision",
-  "sheetNumber",
-] as const;
-export type Slot = (typeof slots)[number];
-export const bindings = {
-  project: "project.name",
-  sheetTitle: "sheet.title",
-  revision: "sheet.revision",
-  sheetNumber: "sheet.numberOfTotal",
-} as const;
-export type Binding = (typeof bindings)[keyof typeof bindings];
-export interface Field {
-  readonly slot: Slot;
-  readonly label: string;
-  readonly value?: string | null;
-  readonly bind?: Binding;
-  readonly pattern?: string;
-  readonly missing?: "blank";
-}
-export interface Grid {
-  readonly columns: 6;
-  readonly rows: 4;
-}
-export interface Presentation {
-  readonly format: "project-presentation/0.3";
-  readonly $schema?: string;
-  readonly revision?: string;
-  readonly backgroundColor?: string;
-  readonly page?: PageSettings;
-  readonly frame?: {
-    readonly zones?: {
-      readonly default?: Grid;
-      readonly byPaper?: Partial<
-        Record<
-          NonNullable<PageSettings["size"]>,
-          Partial<Record<NonNullable<PageSettings["orientation"]>, Grid>>
-        >
-      >;
-    };
-    readonly header?: { readonly text: string | null };
-    readonly generatorStamp?: "title" | "border" | "metadata";
-  };
-  readonly titleBlock?: {
-    readonly profile?: "compact";
-    readonly lines?: readonly string[];
-    readonly fields?: Readonly<Record<string, Field>>;
-  };
-}
+// Hidden packet/resolver model. Structural presentation types live below render.
+import type { SchematicPacketRequest } from "../../packet/types.js";
+import type { Slot } from "../../../../schema/dist/internal/title-data/model.js";
+export {
+  slots,
+  bindings,
+  type Slot,
+  type Binding,
+  type Field,
+  type Grid,
+  type Presentation,
+} from "../../../../schema/dist/internal/title-data/model.js";
+export type {
+  TitleDiagnostic,
+  Result,
+} from "../../../../schema/dist/internal/title-data/diagnostics.js";
 export interface RevisionRow {
   readonly version: string;
   readonly comment?: string;
@@ -83,18 +35,6 @@ export interface PacketRequest extends Omit<SchematicPacketRequest, "format"> {
   readonly format: "schematic-packet-request/0.2";
   readonly titleData?: TitleData;
 }
-export interface TitleDiagnostic extends Omit<Diagnostic, "code"> {
-  readonly code: Diagnostic["code"] | "R005" | "R006";
-  readonly reason?: string;
-  readonly ownerKind?: "title-field";
-  readonly ownerId?: string;
-  readonly field?: string;
-  readonly details?: Readonly<Record<string, unknown>>;
-}
-export interface Result<T> {
-  readonly value?: T;
-  readonly diagnostics: readonly TitleDiagnostic[];
-}
 /** These identities come from native producers, never from titles/page numbers. */
 export type SheetIdentity =
   | { readonly kind: "view"; readonly viewKey: string }
@@ -108,6 +48,9 @@ export interface FinalSheet {
   readonly partTotal: number;
   /** One-based authored view; absent on independent index/reference documents. */
   readonly viewIndex?: number;
+  /** Native companion ownership, never inferred from titles or packet order.
+   * A singleton inherits byView metadata; multiple owners use defaults only. */
+  readonly ownerViewIndexes?: readonly number[];
   readonly title: string;
 }
 export type Source =

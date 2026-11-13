@@ -5,6 +5,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { auditTitleDataSurface } from "./title-data-surface.js";
 import * as schemaApi from "@thermite/schema";
 import * as renderApi from "@thermite/render";
 import { compileProject } from "@thermite/compiler";
@@ -45,49 +46,31 @@ describe("TB1 S5 public release gate", () => {
     for (const api of [schemaApi, renderApi])
       expect(
         Object.keys(api).filter((k) =>
-          /InternalPresentation|InternalPacket|resolveTitles|sheetKey|titleDataSchema|presentationSettings/.test(
+          /InternalPresentation|InternalPacket|parsePresentationStructure|presentationSchema|resolveTitles|sheetKey|titleDataSchema|presentationSettings/.test(
             k,
           ),
         ),
       ).toEqual([]);
-    for (const pkg of ["schema", "render", "compiler", "cli", "agent-tools"]) {
-      const base = `packages/${pkg}/src`;
-      const files = (await readdir(base, { recursive: true })).filter(
-        (f) =>
-          f.endsWith(".ts") &&
-          !schemaApi.normalizeDiagnosticFile(f).startsWith("internal/"),
-      );
-      for (const file of files)
-        expect(
-          await readFile(join(base, file), "utf8"),
-          `${pkg}/${file}`,
-        ).not.toMatch(/(?:from|import)\s*["'][^"']*internal\/title-data/);
-    }
-    for (const pkg of ["schema", "render", "compiler", "cli", "agent-tools"]) {
-      const base = `packages/${pkg}/src`;
-      for (const file of (await readdir(base, { recursive: true })).filter(
-        (f) =>
-          f.endsWith(".ts") &&
-          !schemaApi.normalizeDiagnosticFile(f).startsWith("internal/"),
-      )) {
-        expect(
-          await readFile(join(base, file), "utf8"),
-          `${pkg}/${file}`,
-        ).not.toMatch(
-          /project-presentation\/0\.3|schematic-packet-request\/0\.2/,
-        );
-      }
-    }
-    const internal = (
-      await readdir("packages/render/src/internal/title-data")
-    ).filter((f) => f.endsWith(".ts"));
-    for (const file of internal)
-      expect(
-        await readFile(
-          `packages/render/src/internal/title-data/${file}`,
-          "utf8",
-        ),
-      ).not.toMatch(/process\.env|import\.meta\.env/);
+    const files = new Map<string, string>();
+    await Promise.all(
+      ["schema", "render", "compiler", "query", "cli", "agent-tools"].map(
+        async (pkg) => {
+          const base = `packages/${pkg}/src`;
+          const paths = (await readdir(base, { recursive: true })).filter(
+            (path) => path.endsWith(".ts"),
+          );
+          await Promise.all(
+            paths.map(async (path) =>
+              files.set(
+                schemaApi.normalizeDiagnosticFile(join(base, path)),
+                await readFile(join(base, path), "utf8"),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    expect(auditTitleDataSurface(files)).toEqual([]);
   });
   it("rejects 0.3 in the public registry with the legacy E014 diagnostic", () => {
     const registry = schemaApi.createInMemoryCanonicalSchemaRegistry();

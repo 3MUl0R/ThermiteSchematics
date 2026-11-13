@@ -4,10 +4,11 @@ import {
   validateJsonValue,
   type JsonValue,
 } from "@thermite/schema";
-import { packetSchema, presentationSchema } from "./schema.js";
+import { packetSchema } from "./schema.js";
+import { parsePresentationStructure } from "../../../../schema/dist/internal/title-data/presentation.js";
+export { PRESENTATION_BYTE_LIMIT } from "../../../../schema/dist/internal/title-data/presentation.js";
 import {
   Issues,
-  checkPresentation,
   checkStrings,
   checkTitleData,
   isObject,
@@ -16,9 +17,7 @@ import type { PacketRequest, Presentation, Result } from "./model.js";
 
 const ajv = createAjv2020();
 ajv.opts.allowUnionTypes = true;
-const validatePresentation = ajv.compile(presentationSchema);
 const validatePacket = ajv.compile(packetSchema);
-export const PRESENTATION_BYTE_LIMIT = 64 * 1024;
 function decode(
   input: string | Uint8Array,
   issues: Issues,
@@ -33,20 +32,8 @@ function decode(
     return undefined;
   }
 }
-function parse<T>(
-  input: string | Uint8Array,
-  file: string,
-  presentation: boolean,
-): Result<T> {
+function parse<T>(input: string | Uint8Array, file: string): Result<T> {
   const initial = new Issues(file);
-  const bytes =
-    typeof input === "string"
-      ? Buffer.byteLength(input, "utf8")
-      : input.byteLength;
-  if (presentation && bytes > PRESENTATION_BYTE_LIMIT) {
-    initial.add("E015", "", "Presentation exceeds 64 KiB.");
-    return { diagnostics: initial.sorted() };
-  }
   const text = decode(input, initial);
   if (text === undefined) return { diagnostics: initial.sorted() };
   const parsed = parseJson(text, file);
@@ -54,28 +41,22 @@ function parse<T>(
     return { diagnostics: parsed.diagnostics };
   const issues = new Issues(file, parsed.nodes);
   issues.diagnostics.push(
-    ...validateJsonValue(
-      presentation ? validatePresentation : validatePacket,
-      parsed.value,
-      { file, nodes: parsed.nodes },
-    ),
+    ...validateJsonValue(validatePacket, parsed.value, {
+      file,
+      nodes: parsed.nodes,
+    }),
   );
   if (isObject(parsed.value)) {
-    if (presentation) {
-      checkStrings(parsed.value, "", issues);
-      checkPresentation(parsed.value, issues);
-    } else {
-      // Existing per-view selection/validation remains owned by the dispatcher.
-      // This internal parser only adds a strict packet envelope and title data.
-      checkPacketEnvelope(parsed.value, issues);
-      if (isObject(parsed.value.titleData)) {
-        checkStrings(parsed.value.titleData, "/titleData", issues);
-        checkTitleData(
-          parsed.value.titleData,
-          Array.isArray(parsed.value.views) ? parsed.value.views.length : 0,
-          issues,
-        );
-      }
+    checkPacketEnvelope(parsed.value, issues);
+    if (Array.isArray(parsed.value.views))
+      checkStrings(parsed.value.views, "/views", issues);
+    if (isObject(parsed.value.titleData)) {
+      checkStrings(parsed.value.titleData, "/titleData", issues);
+      checkTitleData(
+        parsed.value.titleData,
+        Array.isArray(parsed.value.views) ? parsed.value.views.length : 0,
+        issues,
+      );
     }
   }
   const diagnostics = issues.sorted();
@@ -120,11 +101,17 @@ export function parseInternalPresentation(
   input: string | Uint8Array,
   file = "presentation.json",
 ): Result<Presentation> {
-  return parse(input, file, true);
+  const result = parsePresentationStructure(input, file);
+  if (result.value === undefined) return { diagnostics: result.diagnostics };
+  const issues = new Issues(file, result.nodes);
+  checkStrings(result.value as unknown as JsonValue, "", issues);
+  return issues.diagnostics.length
+    ? { diagnostics: issues.sorted() }
+    : { value: result.value, diagnostics: [] };
 }
 export function parseInternalPacket(
   input: string | Uint8Array,
   file = "packet.json",
 ): Result<PacketRequest> {
-  return parse(input, file, false);
+  return parse(input, file);
 }

@@ -70,7 +70,7 @@ describe("TB1 internal strict presentation schema", () => {
           lines: ["Source supplied note"],
         },
         frame: {
-          header: { text: null },
+          header: { text: "Custom header" },
           generatorStamp: "metadata",
           zones: {
             default: { columns: 6, rows: 4 },
@@ -159,10 +159,6 @@ describe("TB1 internal strict presentation schema", () => {
     [{ page: { size: "legal" } }, "/page/size"],
     [{ page: { orientation: "diagonal" } }, "/page/orientation"],
     [{ frame: { generatorStamp: "off" } }, "/frame/generatorStamp"],
-    [
-      field("customer", { missing: "omit" }),
-      "/titleBlock/fields/customer/missing",
-    ],
     [
       field("customer", { bind: "system.user" }),
       "/titleBlock/fields/customer/bind",
@@ -287,10 +283,6 @@ describe("TB1 internal strict presentation schema", () => {
       "/titleBlock/fields/customer/bind",
     ],
     [field("drawnBy", { pattern: "x" }), "/titleBlock/fields/drawnBy/pattern"],
-    [
-      field("revision", { bind: "sheet.revision", missing: "blank" }),
-      "/titleBlock/fields/revision/missing",
-    ],
     [field("customer", { value: "  " }), "/titleBlock/fields/customer/value"],
     [field("customer", { label: "  " }), "/titleBlock/fields/customer/label"],
     [
@@ -824,3 +816,80 @@ it("rejects two otherwise valid DWG value mechanisms", () =>
     "E013",
     "/titleBlock/fields/drawingNumber",
   ));
+
+it.each(slots)("rejects every missing policy on built-in %s", (slot) => {
+  for (const missing of ["blank", "unspecified", "omit"]) {
+    const bind = bindings[slot as keyof typeof bindings];
+    rejected(
+      pp(field(slot, { ...(bind ? { bind } : {}), missing })),
+      "E012",
+      `/titleBlock/fields/${slot}/missing`,
+    );
+  }
+});
+it("gates null headers and bounds nonblank header text at 160/+1", () => {
+  for (const text of ["Header", "é".repeat(160)])
+    expect(pp({ frame: { header: { text } } }).diagnostics).toEqual([]);
+  rejected(
+    pp({ frame: { header: { text: null } } }),
+    "E011",
+    "/frame/header/text",
+  );
+  for (const text of ["", "  ", "é".repeat(161), "X".repeat(5000)])
+    rejected(pp({ frame: { header: { text } } }), "E013", "/frame/header/text");
+});
+it.each(["\u00ad", "\u2060", "\u200b", "\u200c", "\u200d", "\ufeff", "\u202e"])(
+  "rejects Cf format character %j in all title sources",
+  (ch) => {
+    rejected(pp({ revision: `A${ch}B` }), "R005", "/revision");
+    rejected(
+      pp({ frame: { header: { text: `A${ch}B` } } }),
+      "R005",
+      "/frame/header/text",
+    );
+    rejected(
+      qp({ titleData: { defaults: { values: { drawnBy: `A${ch}B` } } } }),
+      "R005",
+      "/titleData/defaults/values/drawnBy",
+    );
+  },
+);
+it.each(["A<B and C>D", "x < y and z > w", "R<5 ohm"])(
+  "accepts literal comparisons %s",
+  (value) => expect(pp(field("customer", { value })).diagnostics).toEqual([]),
+);
+it.each([
+  "<b>name</b>",
+  '<g id="test"/>',
+  "<input disabled>",
+  "<script>alert(1)</script>",
+])("rejects tag syntax %s", (value) =>
+  rejected(
+    pp(field("customer", { value })),
+    "E013",
+    "/titleBlock/fields/customer/value",
+  ),
+);
+it("keeps structural presentation validation below render and glyph coverage in render", async () => {
+  const { parsePresentationStructure } =
+    await import("../../schema/src/internal/title-data/presentation.js");
+  const input = JSON.stringify(p(field("customer", { value: "中" })));
+  expect(parsePresentationStructure(input).diagnostics).toEqual([]);
+  rejected(
+    parseInternalPresentation(input),
+    "R005",
+    "/titleBlock/fields/customer/value",
+  );
+});
+
+it("preserves source locations across the structural/font validation split", () => {
+  const input = '{\n "format":"project-presentation/0.3",\n "revision":"中"\n}';
+  expect(parseInternalPresentation(input).diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "R005",
+      jsonPointer: "/revision",
+      line: 3,
+      column: 13,
+    }),
+  );
+});

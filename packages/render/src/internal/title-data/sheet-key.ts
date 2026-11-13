@@ -13,6 +13,10 @@ function identityTuple(identity: SheetIdentity): readonly string[] {
       return [identity.kind];
   }
 }
+/** Shared native identity grouping; pagination stays outside this tuple. */
+export function sheetIdentityKey(identity: SheetIdentity): string {
+  return JSON.stringify(identityTuple(identity));
+}
 export function sheetKey(
   sheet: Pick<FinalSheet, "identity" | "partIndex" | "partTotal">,
 ): string {

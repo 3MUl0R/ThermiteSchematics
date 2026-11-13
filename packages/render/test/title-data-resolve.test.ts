@@ -608,7 +608,7 @@ describe("TB1 default frame settings", () => {
           backgroundColor: "#abcdef",
           page: { size: "a4", orientation: "portrait", marginMm: 25 },
           frame: {
-            header: { text: null },
+            header: { text: "Custom header" },
             generatorStamp: "title",
             zones: { byPaper: { a4: { portrait: { columns: 6, rows: 4 } } } },
           },
@@ -621,7 +621,7 @@ describe("TB1 default frame settings", () => {
       profile: "compact",
       lines: ["Authored note"],
       zones: { byPaper: { a4: { portrait: { columns: 6, rows: 4 } } } },
-      header: { text: null },
+      header: { text: "Custom header" },
       generatorStamp: "title",
     });
   });
@@ -707,3 +707,181 @@ it("does not inherit a circuit short title on automatic companion documents", ()
   expect(lookup(result[0]!, "sheetTitle").text).toBe("Circuit short title");
   expect(lookup(result[1]!, "sheetTitle").text).toBe("Native companion title");
 });
+
+it("separates a document and companion with the same native documentId", () => {
+  const doc: FinalSheet = {
+    identity: { kind: "document", documentId: "shared-id" },
+    partIndex: 1,
+    partTotal: 1,
+    viewIndex: 1,
+    title: "Report",
+  };
+  const comp: FinalSheet = {
+    ...doc,
+    identity: { kind: "companion", documentId: "shared-id" },
+    title: "Companion",
+  };
+  expect(sheetKey(doc)).not.toBe(sheetKey(comp));
+  const result = resolve(
+    presentation(),
+    packet({
+      bySheet: [
+        { sheetKey: sheetKey(doc), revision: "REPORT" },
+        { sheetKey: sheetKey(comp), revision: "COMPANION" },
+      ],
+    }),
+    [doc, comp],
+  );
+  expect(result.map((t) => lookup(t, "revision").text)).toEqual([
+    "REPORT",
+    "COMPANION",
+  ]);
+});
+it("rejects inconsistent totals for one native identity", () => {
+  const sheets = [
+    { ...drawing, partIndex: 1, partTotal: 2 },
+    { ...drawing, partIndex: 2, partTotal: 3 },
+  ];
+  const result = resolveTitles(presentation(), packet(), "Project", sheets);
+  expect(result.value).toBeUndefined();
+  expect(result.diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "R006",
+      reason: "invalid-packet",
+      details: { reason: "unresolved-sheet-key" },
+    }),
+  );
+});
+it("inherits a sole owner's metadata on companions, keeping their own title", () => {
+  const comp: FinalSheet = {
+    identity: { kind: "companion", documentId: "one-owner" },
+    partIndex: 1,
+    partTotal: 1,
+    ownerViewIndexes: [1],
+    title: "Native companion",
+  };
+  const data = {
+    defaults: {
+      values: { customer: "DEFAULT", drawnBy: "Default author" },
+      revision: "D",
+      revisionRows: [{ version: "D" }],
+    },
+    byView: [
+      {
+        viewIndex: 1,
+        sheetTitle: "Circuit short",
+        values: { customer: "VIEW", drawnBy: null },
+        revision: null,
+        revisionRows: [{ version: "V" }],
+      },
+    ],
+  };
+  const result = resolve(presentation(), packet(data), [drawing, comp]);
+  expect(lookup(result[1]!, "customer")).toMatchObject({
+    text: "VIEW",
+    fact: { source: "request-view" },
+  });
+  expect(lookup(result[1]!, "drawnBy")).toMatchObject({
+    text: "",
+    fact: { known: false, source: "request-view" },
+  });
+  expect(lookup(result[1]!, "revision")).toMatchObject({
+    text: "UNSPECIFIED",
+    fact: { known: false, source: "request-view" },
+  });
+  expect(result[1]!.revisionRows.value).toEqual([{ version: "V" }]);
+  expect(lookup(result[1]!, "sheetTitle").text).toBe("Native companion");
+});
+it("uses defaults for shared companions and applies exact sheet metadata to their own key", () => {
+  const comp: FinalSheet = {
+    identity: { kind: "companion", documentId: "many-owners" },
+    partIndex: 1,
+    partTotal: 1,
+    ownerViewIndexes: [1, 2],
+    title: "Shared native title",
+  };
+  const second: FinalSheet = {
+    ...drawing,
+    identity: { kind: "view", viewKey: "view-two" },
+    viewIndex: 2,
+    title: "Second",
+  };
+  const data = {
+    defaults: {
+      values: { customer: "DEFAULT" },
+      revision: "D",
+      revisionRows: [{ version: "D" }],
+    },
+    byView: [
+      { viewIndex: 1, values: { customer: "ONE" }, revision: "ONE" },
+      { viewIndex: 2, values: { customer: "TWO" }, revision: "TWO" },
+    ],
+  };
+  const sheets = [drawing, second, comp];
+  const base = resolve(presentation(), packet(data, 2), sheets)[2]!;
+  expect(lookup(base, "customer").text).toBe("DEFAULT");
+  expect(lookup(base, "revision").text).toBe("D");
+  expect(base.revisionRows.value).toEqual([{ version: "D" }]);
+  expect(lookup(base, "sheetTitle").text).toBe("Shared native title");
+  const exact = resolve(
+    presentation(),
+    packet(
+      {
+        ...data,
+        bySheet: [
+          {
+            sheetKey: sheetKey(comp),
+            values: { customer: "EXACT" },
+            revision: "S",
+            sheetTitle: "Exact companion",
+          },
+        ],
+      },
+      2,
+    ),
+    sheets,
+  )[2]!;
+  expect(lookup(exact, "customer").text).toBe("EXACT");
+  expect(lookup(exact, "revision").text).toBe("S");
+  expect(lookup(exact, "sheetTitle").text).toBe("Exact companion");
+});
+it.each(["project", "sheetTitle"] as const)(
+  "reports derived %s overflow as R006 capacity on the correct sheet",
+  (field) => {
+    const long = "T".repeat(161);
+    const result = resolveTitles(
+      presentation(),
+      packet(),
+      field === "project" ? long : "Project",
+      [{ ...drawing, title: field === "sheetTitle" ? long : drawing.title }],
+    );
+    expect(result.value).toBeUndefined();
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "R006",
+        reason: "unprintable-layout",
+        details: expect.objectContaining({
+          sheet: 1,
+          field,
+          requiredCodePoints: 161,
+          availableCodePoints: 160,
+        }),
+      }),
+    );
+    expect(result.diagnostics.some((d) => d.code === "E013")).toBe(false);
+    expect(result.diagnostics[0]?.jsonPointer).not.toContain("/titleBlock/");
+    expect(result.diagnostics[0]?.message).toContain(`Sheet 1 field ${field}`);
+    const bound = resolveTitles(
+      presentation(),
+      packet(),
+      field === "project" ? "T".repeat(160) : "Project",
+      [
+        {
+          ...drawing,
+          title: field === "sheetTitle" ? "T".repeat(160) : drawing.title,
+        },
+      ],
+    );
+    expect(bound.diagnostics).toEqual([]);
+  },
+);

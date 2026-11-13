@@ -16,7 +16,7 @@ import {
   type TitleRecord,
 } from "./model.js";
 import { expandPattern, parsePattern } from "./pattern.js";
-import { sheetKey } from "./sheet-key.js";
+import { sheetKey, sheetIdentityKey } from "./sheet-key.js";
 import { Issues, checkLiteral, checkText } from "./validation.js";
 
 const labels: Record<Slot, string> = {
@@ -67,6 +67,7 @@ function overlay(
   record: TitleRecord | undefined,
   source: Source,
   pointer: string,
+  includeTitle = true,
 ): void {
   if (!record) return;
   for (const [k, v] of Object.entries(record.values ?? {}))
@@ -74,7 +75,7 @@ function overlay(
       k,
       fact(v, source, appendJsonPointer(`${pointer}/values`, k)),
     );
-  if (record.sheetTitle !== undefined)
+  if (record.sheetTitle !== undefined && includeTitle)
     state.title = fact(record.sheetTitle, source, `${pointer}/sheetTitle`);
   if (record.revision !== undefined)
     state.revision = fact(record.revision, source, `${pointer}/revision`);
@@ -144,11 +145,14 @@ function resolveField(
   }
   if (key === "revision" && result.value === "UNSPECIFIED")
     result = { ...result, known: false };
-  if (result.value !== null) {
-    checkText(result.value, `${pointer}/resolved`, issues);
-    if (field.pattern === undefined || state.values.has(key))
-      checkLiteral(result.value, key, `${pointer}/resolved`, issues);
-  }
+  validateResolved(
+    result,
+    key,
+    number,
+    sheet,
+    issues,
+    field.pattern !== undefined && !state.values.has(key),
+  );
   return {
     key,
     slot: field.slot,
@@ -161,7 +165,51 @@ function resolveField(
         : "",
   };
 }
+function validateResolved(
+  result: Fact<string>,
+  key: string,
+  number: number,
+  sheet: FinalSheet,
+  issues: Issues,
+  pattern: boolean,
+): void {
+  if (result.value === null) return;
+  const derived = result.source === "project" || result.source === "title";
+  const pointer =
+    result.source === "project"
+      ? "/project/name"
+      : result.source === "title"
+        ? `/sheets/${number - 1}/title`
+        : (result.pointer ?? `/sheets/${number - 1}/fields/${key}`);
+  const local = new Issues(
+    result.source === "presentation" ? "presentation.json" : "packet.json",
+  );
+  checkText(result.value, pointer, local);
+  if (derived && [...result.value].length > 160) {
+    local.add(
+      "R006",
+      pointer,
+      `Sheet ${number} field ${key} requires ${[...result.value].length} code points; 160 are available. Use a shorter supplied title or a larger paper/profile.`,
+      "unprintable-layout",
+      {
+        sheet: number,
+        sheetKey: sheetKey(sheet),
+        field: key,
+        requiredCodePoints: [...result.value].length,
+        availableCodePoints: 160,
+      },
+    );
+  } else if (!derived && !pattern)
+    checkLiteral(result.value, key, pointer, local);
+  issues.diagnostics.push(...local.diagnostics);
+}
 function authoredViewIndex(sheet: FinalSheet): number | undefined {
+  if (sheet.identity.kind === "companion") {
+    const owners =
+      sheet.ownerViewIndexes ??
+      (sheet.viewIndex === undefined ? [] : [sheet.viewIndex]);
+    return owners.length === 1 ? owners[0] : undefined;
+  }
   return sheet.identity.kind === "view" || sheet.identity.kind === "document"
     ? sheet.viewIndex
     : undefined;
@@ -179,6 +227,7 @@ function validateSheets(
       "invalid-packet",
     );
   const keys = new Set<string>();
+  const totals = new Map<string, number>();
   for (const sheet of sheets) {
     if (
       !Number.isInteger(sheet.partIndex) ||
@@ -193,6 +242,16 @@ function validateSheets(
         "Invalid final-sheet part index/total.",
         "unresolved-sheet-key",
       );
+    const identity = sheetIdentityKey(sheet.identity);
+    const previous = totals.get(identity);
+    if (previous !== undefined && previous !== sheet.partTotal)
+      issues.add(
+        "R006",
+        "",
+        "Inconsistent part totals for one native sheet identity.",
+        "unresolved-sheet-key",
+      );
+    totals.set(identity, sheet.partTotal);
     const key = sheetKey(sheet);
     if (keys.has(key))
       issues.add(
@@ -271,6 +330,7 @@ export function resolveTitles(
       viewIndex < 0 ? undefined : request.titleData?.byView?.[viewIndex],
       "request-view",
       `/titleData/byView/${viewIndex}`,
+      sheet.identity.kind !== "companion",
     );
     const key = sheetKey(sheet);
     const exactIndex =
