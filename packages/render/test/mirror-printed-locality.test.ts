@@ -187,17 +187,17 @@ it("ranks accepted local candidates by printed ink rather than blank capacity", 
   expect(result!.box).toEqual({ x: 90, y: 61.51, w: 50, h: 10 });
 });
 
-it("rejects a nearest-frame advantage inside the 0.01 mm ambiguity band", () => {
+it("rejects a nearest-frame advantage inside the 0.02 mm browser-safe ambiguity band", () => {
   const geometry: SymbolGeometry = {
     anchorMm: { x: 30, y: 25 },
     frameMm: { x: 20, y: 20, w: 20, h: 10 },
-    framesMm: [{ x: 70.005, y: 20, w: 10, h: 10 }],
+    framesMm: [{ x: 70.015, y: 20, w: 10, h: 10 }],
     ownerLocation: { sheet: 1, zone: "A1" },
   };
   expect(localNavigationSlot({ x: 50, y: 20, w: 10, h: 10 }, geometry)).toBe(
     false,
   );
-  geometry.framesMm = [{ x: 70.02, y: 20, w: 10, h: 10 }];
+  geometry.framesMm = [{ x: 70.03, y: 20, w: 10, h: 10 }];
   expect(localNavigationSlot({ x: 50, y: 20, w: 10, h: 10 }, geometry)).toBe(
     true,
   );

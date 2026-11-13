@@ -120,6 +120,8 @@ export const boxDistance = (a: Rect, b: Rect) =>
   );
 export const anchorDistance = (anchor: { x: number; y: number }, box: Rect) =>
   boxDistance({ ...anchor, w: 0, h: 0 }, box);
+// Checker ambiguity (0.01 mm) plus 0.01 mm for metric/browser distance error.
+const NEAREST_FRAME_MARGIN_MM = 0.02;
 export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
   const distance = boxDistance(box, symbol.frameMm);
   return (
@@ -129,6 +131,8 @@ export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
         box.x + box.w >= symbol.localBandMm.x &&
         box.y <= symbol.localBandMm.y + symbol.localBandMm.h &&
         box.y + box.h >= symbol.localBandMm.y)) &&
-    symbol.framesMm.every((other) => distance < boxDistance(box, other) - 0.01)
+    symbol.framesMm.every(
+      (other) => distance < boxDistance(box, other) - NEAREST_FRAME_MARGIN_MM,
+    )
   );
 }

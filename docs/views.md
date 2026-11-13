@@ -645,7 +645,7 @@ heading glyphs, table rows and rule, including the actual destination tokens. Th
 maximum reservation still protects fit and clearances; its blank padding cannot
 establish locality. A local table shares the coil's sheet, lies within 60 mm of
 its own function-terminal centroid, intersects that zone or one of its eight
-neighbours, and has the coil as its strictly nearest device frame (more than 0.01 mm nearer). Circuit comparisons use
+neighbours, and has the coil as its strictly nearest device frame (more than 0.02 mm nearer: the checker's 0.01 mm ambiguity band plus a 0.01 mm renderer/browser measurement budget). Circuit comparisons use
 the measured per-function adapter frames, excluding bodies of the coil's own device; an absent enclosing rectangle never exempts foreign visible frames. Otherwise
 its heading prints the coil's own `/ss.zone`; the renderer verifies that token
 against the measured coil location. Same-sheet ownership remains mandatory.
@@ -660,7 +660,7 @@ required coil target, native relation origins and optional authored `gangId`.
 Reservations and page regions cover their fixed ink in SVG, HTML and PDF.
 Mirror reservations also expose `allocatedMm.family` and
 `familyRule: approach-or-outer-zone-row/1`. A legal local approach is classified
-as `beside`, `below` or `below-right` from the measured coil frame and box.
+as `beside`, `below` or `below-right` from the measured coil frame and printed ink. The beside/below search preference uses that same ink, while fit and clearance retain the reservation.
 Other placements wholly inside the top or bottom zone row are `margin-band`;
 remaining vacant-column positions are `zone-column`. This family is independent
 of local/self-located mode and never decides the heading. A failed slot reports
