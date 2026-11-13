@@ -13,10 +13,10 @@ export type {
   NavigationExtension,
 } from "./packet/navigation-types.js";
 export { createSchematicRenderer, renderSchematic } from "./renderer.js";
+export { renderSchematicPacket } from "./layout/circuit-packet-entry.js";
 export {
   normalizePaperPage,
   printPacketHtml,
-  renderSchematicPacket,
   renderSchematicSheets,
   type PageSettings,
   type PaperPage,

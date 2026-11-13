@@ -18,6 +18,10 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
+import {
+  InlineLabelFitError,
+  InlineLabelCollisionError as Collision,
+} from "./layout/inline-label-error.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
 import {
   validateSignalLoopRequest,
@@ -115,7 +119,7 @@ export function checkLabels(graph: ElkNode) {
       box.x + box.width > graph.width! + 0.01 ||
       box.y + box.height > graph.height! + 0.01
     )
-      throw new Error(
+      throw new InlineLabelFitError(
         "Signal loop contains unplaced or out-of-bounds content.",
       );
   }
@@ -124,7 +128,7 @@ export function checkLabels(graph: ElkNode) {
       boxes.some((box) => overlap(label, box)) ||
       labels.slice(index + 1).some((other) => overlap(label, other))
     )
-      throw new Error("Signal loop labels overlap other drawing content.");
+      throw new Collision("Signal loop labels overlap other drawing content.");
     for (const edge of graph.edges ?? []) {
       if (edge.id === label.edge) continue;
       for (const section of edge.sections ?? []) {
@@ -144,7 +148,9 @@ export function checkLabels(graph: ElkNode) {
               height: Math.abs(a.y - b.y),
             })
           )
-            throw new Error("A signal loop label conceals another conductor.");
+            throw new Collision(
+              "A signal loop label conceals another conductor.",
+            );
         }
       }
     }

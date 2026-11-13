@@ -136,7 +136,7 @@
     "packages/render/src/layout/validate-output.ts#validateRouteInteractions": 71,
     "packages/render/src/packet/assembly.ts#assembleSheets": 72,
     "packages/render/src/packet/cable.ts#cableDrafts": 198,
-    "packages/render/src/packet/circuit.ts#circuitDrafts": 211,
+    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 192,
     "packages/render/src/packet/continuations.ts#drawingContinuations": 110,
     "packages/render/src/packet/errors.ts#packetViewContext": 72,
     "packages/render/src/packet/folding.ts#foldDrawingDrafts": 121,

@@ -1,5 +1,6 @@
 import type { ElkExtendedEdge, ElkLabel, ElkNode } from "elkjs/lib/elk-api.js";
 import { required } from "../presentation/util.js";
+import { InlineLabelFitError } from "./inline-label-error.js";
 
 /** Remove inline labels from ELK's transverse lane demand, not from the drawing. */
 export function detachLoopLabels(
@@ -44,12 +45,16 @@ export function placeLoopLabels(
     });
     const segment = segments.sort((a, b) => b.length - a.length)[0];
     if (!segment)
-      throw new Error("No vertical segment fits the output loop wire label.");
+      throw new InlineLabelFitError(
+        "No vertical segment fits the output loop wire label.",
+      );
     edge.labels = inline.map((label) => {
       const width = required(label.width, "Missing loop label width");
       const height = required(label.height, "Missing loop label height");
       if (height > segment.length)
-        throw new Error("No vertical segment fits the output loop wire label.");
+        throw new InlineLabelFitError(
+          "No vertical segment fits the output loop wire label.",
+        );
       return { ...label, x: segment.x - width / 2, y: segment.y - height / 2 };
     });
   }

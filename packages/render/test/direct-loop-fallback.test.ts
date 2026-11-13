@@ -14,6 +14,18 @@ afterEach(async () => {
   await removeFixtures();
 });
 
+it("rethrows unexpected inline-label failures without a fallback layout", async () => {
+  const { children, edges } = structuredClone(graphFixture);
+  const failure = new TypeError("synthetic label programming error");
+  const create = vi.spyOn(runtime, "createElkEngine");
+  await expect(
+    layouts.layoutDirectLoop(children, edges, true, [edges[0]!.id], () => {
+      throw failure;
+    }),
+  ).rejects.toBe(failure);
+  expect(create).toHaveBeenCalledTimes(1);
+});
+
 // Independent reference: pre-RT1 dev 7bbe4f7's native layout options.
 async function nativeDev(
   children: ElkNode[],

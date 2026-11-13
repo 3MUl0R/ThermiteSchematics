@@ -208,6 +208,37 @@ ELK places device/function blocks and routes all selected physical conductors.
 A terminal bank carrying a return loop reserves its measured inline label lane,
 preventing a tiny turn between closely spaced fixed terminals. The catalog supplies component marks and their terminal attachments. Circuit groups are measured at readable size and packed into one or two columns. A wide group may span both columns; multiple wide groups can share a page. A complete group is never clipped or reduced below the circuit text size to force it onto paper. View notes appear once in a measured block after the last group, using remaining column space when available.
 
+
+For a circuit view with measured sub-3 mm internal jogs, the renderer may try one
+native ELK alternative per parallel fixed-port group. Labels take no ELK lane
+space in that alternative. Their complete measured boxes sit on native route
+segments, with the existing 1 mm caption clearance from device reservations,
+foreign labels and conductor strokes. The layer gap is the along-segment label
+dimension plus two 1 mm visible stubs and the original edge/node clearances at
+both ends; there are no flow-specific gap floors. Transversely wide labels and
+multiple lines can still fail to fit the fixed lanes.
+
+A group then retains its exact original all-label ELK layout. An unaffected view
+retains its original output. A repair must reduce that group's own jog-bearing
+routes without worsening any conductor's jog/detour severity or bend count. An
+unrepaired conductor may grow by at most `max(10 mm, 25%)` in visible length;
+each cable core has its own identity. The complete packet must also preserve
+printability, packet and view page counts, annotations, cards and their locality
+against the original printable reference. Rejected alternatives retain honest
+native jogs. Only labels move after routing; routes, endpoints and text sizes do
+not. Recovery runs first; extra layouts share the 48-placement ceiling and four
+quality attempts. The three label-slot assignments require no extra ELK calls.
+Identical ELK inputs are reused during final packet comparison.
+
+The packet comparison runs after NAV finalizes its annotations. It conserves
+mirror source rows and painted rows, reciprocal return owners, and the contact
+notice's complete text (wrapping may change). Mirror and repeat comparisons use
+NAV's final printed-ink locality mode and distance; returns compare every owner's
+final measured distance. A local annotation cannot become self-located, and no
+measured owner distance may grow beyond floating-point tolerance. Reservation
+families and blank capacity do not decide locality; NAV retains its printed-frame
+margin and heading policy.
+
 Each drawn device has an owned printing tag: bold designation, nonblank instance
 description (otherwise type description), and the exact catalog order number when
 authored. Description and part occupy separate rows; empty fields have no row.
@@ -287,7 +318,7 @@ Packets also include a separate [`coverage.topology` inventory](topology-coverag
 for connector assemblies, communication links and individually drawn ports.
 Its counts and unaudited sheets are independent of this circuit/wiring scope.
 
-Tag-lane attachment extensions use the heaviest drawn conductor incident on
-their terminal: 0.32 mm for ordinary conductors, or 0.55 mm if a jumper also
-lands there. A shared terminal keeps that weight on its extensions even when
-an ordinary wire also uses them, so the shared stroke never thins a jumper.
+Tag-lane attachment extensions use the lightest drawn conductor incident on
+their terminal: 0.32 mm when an ordinary conductor participates, or 0.55 mm for
+a jumper alone. A shared wire/jumper terminal follows the lighter conductor;
+unused faces retain the 0.35 mm symbol attachment weight.

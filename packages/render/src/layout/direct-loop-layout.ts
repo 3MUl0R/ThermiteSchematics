@@ -2,6 +2,7 @@ import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import { createElkEngine } from "./elk-runtime.js";
 import { assertTopologyIdentities } from "./topology-conservation.js";
 import { detachLoopLabels, placeLoopLabels } from "./direct-loop-labels.js";
+import { isInlineLabelFailure } from "./inline-label-error.js";
 
 /** The direct loop's declared fixed ports survive placement unchanged. */
 export async function layoutDirectLoop(
@@ -36,7 +37,8 @@ export async function layoutDirectLoop(
     placeLoopLabels(graph, labels);
     validateLabels(graph);
     return graph;
-  } catch {
+  } catch (error) {
+    if (!isInlineLabelFailure(error)) throw error;
     // Retry the whole loop from its original graph, with every label in ELK.
     // Native paths from either attempt are never edited or mixed together.
     const fallback = await createElkEngine().layout(structuredClone(expected));

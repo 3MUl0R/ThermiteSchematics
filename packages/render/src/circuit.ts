@@ -62,7 +62,13 @@ import {
   coilQualifier,
   motorIsThreePhase,
 } from "./symbols/printable-policy.js";
-import { createElkEngine } from "./layout/elk-runtime.js";
+import { InlineLabelCollisionError } from "./layout/inline-label-error.js";
+import { circuitPortGroups } from "./layout/circuit-port-order.js";
+import { circuitInlineContext } from "./layout/circuit-inline-context.js";
+import {
+  layoutCircuitGroup,
+  type CircuitLayoutRun,
+} from "./layout/circuit-inline.js";
 import {
   circuitMarkSegments,
   circuitTransformerCore,
@@ -1430,9 +1436,11 @@ function emitNode(
 async function layoutGroup(
   ...args: Parameters<typeof layoutGroupUnchecked>
 ): Promise<CircuitDrawing> {
+  args[8] ??= circuitInlineContext.getStore()?.currentRun;
   try {
     return await layoutGroupUnchecked(...args);
   } catch (error) {
+    if (args[8]?.quality) throw error;
     if (error instanceof CircuitRenderError) throw error;
     const [ir, group, fs, cs] = args;
     const functionKeys = fs.map(
@@ -1461,6 +1469,7 @@ async function layoutGroupUnchecked(
   vertical: boolean,
   appearances: Map<string, string[]>,
   distributed: boolean,
+  run?: CircuitLayoutRun,
 ): Promise<CircuitDrawing> {
   const nodes = makeNodes(ir, fs, cs, all, vertical, appearances, distributed),
     pins = new Map<string, { node: DeviceNode; pins: Pin[] }>();
@@ -1513,7 +1522,7 @@ async function layoutGroupUnchecked(
       ],
     };
   });
-  const graph: ElkNode = await createElkEngine().layout({
+  const input: ElkNode = {
     id: "circuit",
     layoutOptions: {
       "elk.algorithm": "layered",
@@ -1553,7 +1562,13 @@ async function layoutGroupUnchecked(
     },
     children,
     edges,
-  });
+  };
+  const graph = await layoutCircuitGroup(
+    input,
+    run,
+    new Map(cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32])),
+    circuitPortGroups(nodes),
+  );
   if (
     ![graph.width, graph.height].every(Number.isFinite) ||
     graph.width! <= 0 ||
@@ -1614,7 +1629,7 @@ async function layoutGroupUnchecked(
             Math.max(a.x, b.x) > left &&
             Math.min(a.x, b.x) < right)
         )
-          throw new Error(
+          throw new InlineLabelCollisionError(
             `Circuit ${group.id}: conductor ${c.name} (${c.id}) crosses device ${nodes.find((node) => node.id === d.id)!.device.designation}.`,
           );
       }
@@ -1684,7 +1699,7 @@ async function layoutGroupUnchecked(
           ) >
         1e-7;
       if ((v && overlap("y")) || (h && overlap("x")))
-        throw new Error(
+        throw new InlineLabelCollisionError(
           `Circuit ${group.id}: unrelated conductors ${cs[t.index]!.name} (${cs[t.index]!.id}) and ${cs[s.index]!.name} (${cs[s.index]!.id}) overlap.`,
         );
     }
@@ -1706,7 +1721,7 @@ async function layoutGroupUnchecked(
       );
       if (directions.size >= 3) {
         if (segments.some((s) => !common(s.index, r.index) && on(p, s.a, s.b)))
-          throw new Error(
+          throw new InlineLabelCollisionError(
             `Circuit ${group.id}: unrelated wire touches a source-terminal junction.`,
           );
         dots.set(`${n(p.x)},${n(p.y)}`, p);
@@ -1784,7 +1799,7 @@ async function layoutGroupUnchecked(
         !labelObstructed(candidate),
     );
     if (!free)
-      throw new Error(
+      throw new InlineLabelCollisionError(
         `Circuit ${group.id}: a self-loop wire label cannot fit beside its route without obscuring other drawing content.`,
       );
     label.x = free.x;
@@ -1808,7 +1823,7 @@ async function layoutGroupUnchecked(
           }),
       )
     )
-      throw new Error(
+      throw new InlineLabelCollisionError(
         `Circuit ${group.id}: a wire label overlaps other drawing content.`,
       );
   }
