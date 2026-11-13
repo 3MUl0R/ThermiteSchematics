@@ -211,3 +211,45 @@ it("refuses nonempty compact output that leaves part of the scope unresolved", (
     compactDocumentCaption(ir, need, p.navigation.documents!),
   ).toThrow("unresolved facts");
 });
+
+it("uses assembly/assemblies for compact native assembly groups", async () => {
+  const { documentLoopFixture } = await import("./document-loop-fixture.js");
+  const source = await documentLoopFixture();
+  try {
+    const { documentIdentity } =
+      await import("../src/packet/document-facts.js");
+    const { issuedDocuments } =
+      await import("../src/packet/document-registry.js");
+    const { reportFixture } = await import("./document-fixture.js");
+    const drafts = reportFixture(source.ir, {
+      format: "documentation-view-request/0.1",
+      kind: "assemblies",
+    });
+    const docs = issuedDocuments(
+      source.ir,
+      drafts,
+      fixtureSheets(source.ir, drafts),
+      documentPaper(),
+    );
+    const relation = source.ir.relations.find((r) => !!r.assembly)!;
+    const need: DocumentDependency = {
+      ...documentIdentity(source.ir),
+      id: "need",
+      noteId: "assembly",
+      need: "assembly-pin-map",
+      subject: "Assembly",
+      requiredFacts: [{ kind: "assembly-pin-map", relationUid: relation.uid }],
+      requiredColumns: ["identity", "endpoints", "status", "pin-map"],
+      owner: { viewKey: "view", noteId: "assembly", sheet: 1 },
+      resolution: [{ documentId: docs[0]!.id, rows: [docs[0]!.rows[0]!.id] }],
+    };
+    expect(
+      compactDocumentCaption(source.ir, need, docs).tokens.join(" "),
+    ).toContain("(TX1: 1 assembly)");
+    expect(
+      compactDocumentCaption(source.ir, need, docs).tokens.join(" "),
+    ).not.toContain("assemblie)");
+  } finally {
+    await source.dispose();
+  }
+});

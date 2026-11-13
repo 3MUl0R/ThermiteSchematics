@@ -1,3 +1,4 @@
+import { renumberedDocumentPackets } from "./circuit-document-renumber.js";
 import type { RenderedPacket } from "../packet/types.js";
 import { navigationGeometry } from "../packet/navigation-walk.js";
 import { descendants } from "../device-legend/svg-tree.js";
@@ -98,6 +99,14 @@ export function circuitDocumentGuard(
   candidate: RenderedPacket,
   original: RenderedPacket,
 ) {
+  const packets = renumberedDocumentPackets(
+    candidate,
+    original,
+    documents(original),
+    documents(candidate),
+  );
+  if (!packets) return false;
+  [candidate, original] = packets;
   const same = (a: unknown, b: unknown) =>
     JSON.stringify(a) === JSON.stringify(b);
   return (

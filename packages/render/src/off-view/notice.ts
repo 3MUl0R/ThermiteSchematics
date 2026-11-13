@@ -49,12 +49,18 @@ export function rootedNoticeSvg(
     width,
     size,
   );
-  let bodyLine = 0;
+  const reserved = rootedNoticeLines(view, width, size);
+  if (body.length > reserved.filter((line) => !line.bold).length)
+    throw new Error("Generic notice exceeds its fixed reservation");
+  const lines = [
+    ...reserved.filter((line) => line.bold),
+    ...body.map((text) => ({ text, bold: false })),
+  ];
   writer.open(1, "g", {
     class: "selected-view-notice",
     "data-selected-view-notice": "true",
   });
-  rootedNoticeLines(view, width, size).forEach((line, index) =>
+  lines.forEach((line, index) =>
     writer.element(
       2,
       "text",
@@ -66,7 +72,7 @@ export function rootedNoticeSvg(
         ...(line.bold ? { "font-weight": "700" } : {}),
         fill: "#18212b",
       },
-      line.bold ? line.text : (body[bodyLine++] ?? ""),
+      line.text,
     ),
   );
   writer.close(1, "g");

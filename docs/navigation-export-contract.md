@@ -126,6 +126,8 @@ half-open zone classification; the final outer edge is closed. Thus the location
 belongs to the complete row region, not whichever text cell a browser enumerates
 first. Multiple rows may share a zone; captions retain their individual readable
 identities, and list each distinct sheet.zone with the corresponding rows.
+E3 accepts any named zone spanned by the row region; the half-open centre rule
+is only the canonical tie-break, not a requirement to name one particular cell.
 
 The registry admits actual printed native headers, column names, body cell text
 and row regions. Source-mismatched, stale, hidden, clipped, occluded, masked,
@@ -189,7 +191,11 @@ Circuit recomposition conserves this M3 output against the original printable
 packet: dependency and resolved-document metadata, resolutions and automatic origins;
 painted captions and native rows; complete companion pages; and fixed caption
 geometry plus owning-view placement. Paint includes inherited styles, transforms
-and clips, independently of exported rectangles. Both directions are compared.
-Unchanged companions do not add a separate circuit page-count restriction. This
+and clips, independently of exported rectangles. Both directions are compared
+after one consistent, order-preserving old-to-new page map. All companion pages
+share one uniform offset; captions, row locations, generated sheet ids and frame
+page numbers follow that same map. Native cells, identities, zones, resolutions
+and all other content stay exact. Unchanged companions therefore do not block a
+circuit-page reduction before them. This
 renderer guard conserves an already printable result; it does not replace E3's
 independent source reconstruction or establish electrical completeness.

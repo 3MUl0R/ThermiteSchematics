@@ -247,8 +247,11 @@ The same comparison conserves M3 dependency captions, resolutions, referenced is
 rows and automatic inventories in both directions. Caption text is checked in the
 painted SVG independently of its metadata. Final caption geometry, inherited
 visibility, transforms, clips and owning-view placement stay unchanged, as do
-companion pages. Unchanged companions impose no additional page-count limit on
-a circuit improvement. A rejected candidate keeps the original printable packet.
+companion content. A uniform, consistent companion-page renumbering is allowed
+when circuit pages before the companions disappear: captions, row locations and
+printed page locators must all follow the same map. Dropped or altered content
+is rejected. Unchanged companions impose no additional page-count limit on a
+circuit improvement. A rejected candidate keeps the original printable packet.
 
 Each drawn device has an owned printing tag: bold designation, nonblank instance
 description (otherwise type description), and the exact catalog order number when

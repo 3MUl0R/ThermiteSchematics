@@ -13,12 +13,12 @@ import { required } from "../presentation/util.js";
 import { documentCaptionLead } from "./document-caption-text.js";
 
 const units = {
-  "conductor-incidence": "physical connections",
-  "terminal-inventory": "terminals",
-  "port-link-status": "ports",
-  "core-inventory": "cores",
-  "assembly-pin-map": "assemblies",
-};
+  "conductor-incidence": ["physical connection", "physical connections"],
+  "terminal-inventory": ["terminal", "terminals"],
+  "port-link-status": ["port", "ports"],
+  "core-inventory": ["core", "cores"],
+  "assembly-pin-map": ["assembly", "assemblies"],
+} as const;
 function factOwner(
   ir: Readonly<ElectricalIr>,
   fact: DocumentFact,
@@ -107,7 +107,7 @@ function addRow(
       zone: row.zone,
       owner,
       count: 0,
-      unit: units[fact.kind],
+      unit: units[fact.kind][1],
       factKeys: [],
     };
     if (!group.rows.includes(row.id)) group.rows.push(row.id);
@@ -156,7 +156,8 @@ export function compactDocumentCaption(
           "Missing compact document",
         ).label.split(" "),
       );
-    const unit = group.count === 1 ? group.unit.replace(/s$/, "") : group.unit;
+    const forms = units[need.need];
+    const unit = forms[group.count === 1 ? 0 : 1];
     tokens.push(
       destinationToken(group),
       `(${ownerName(ir, group.owner)}: ${group.count} ${unit})`,

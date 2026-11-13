@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { RenderedPacket } from "../src/packet/types.js";
 import { circuitPacketGuard } from "../src/layout/circuit-packet-guard.js";
 
-function packet(): RenderedPacket {
+function packet(companionSheet = 3): RenderedPacket {
   const fact = {
     kind: "port-link-status" as const,
     deviceUid: "device-n01",
@@ -14,8 +14,8 @@ function packet(): RenderedPacket {
     displayName: "N01: B1",
     facts: [fact],
     columns: ["identity", "status"] as const,
-    primitiveId: "sheet-3-row-b1",
-    sheet: 3,
+    primitiveId: `sheet-${companionSheet}-row-b1`,
+    sheet: companionSheet,
     zone: "A1",
     rectMm: { x: 10, y: 30, w: 80, h: 10 },
     anchorMm: { x: 50, y: 35 },
@@ -33,7 +33,15 @@ function packet(): RenderedPacket {
       kind: "circuit" as const,
       title: "Circuit",
     },
-    svg,
+    svg: svg
+      .replace(
+        "<svg>",
+        `<svg aria-label="Circuit, sheet ${number} of ${companionSheet}" data-sheet="${number}" data-total-sheets="${companionSheet}"><title>Circuit - Sheet ${number} of ${companionSheet}</title><text x="406" y="15" font-size="2.6" text-anchor="end">SHEET ${String(number).padStart(2, "0")} / ${String(companionSheet).padStart(2, "0")}</text>`,
+      )
+      .replace(
+        "</svg>",
+        `<text x="348" y="284.5" font-size="2.4">SHEET ${number} OF ${companionSheet}</text></svg>`,
+      ),
     references: [],
     continuations: [],
   });
@@ -49,13 +57,15 @@ function packet(): RenderedPacket {
     sheets: [
       sheet(
         1,
-        '<svg><g data-navigation-view="view"/><g id="caption-ink" data-document-dependency="dependency" data-document-note-id="note" data-document-caption-form="identities"><text x="11" y="103" font-size="2.5">Ports: network inventory 03.A1 (N01: B1).</text></g></svg>',
+        `<svg><g data-navigation-view="view"/><g id="caption-ink" data-document-dependency="dependency" data-document-note-id="note" data-document-caption-form="identities"><text x="11" y="103" font-size="2.5">Ports: network inventory ${String(companionSheet).padStart(2, "0")}.A1 (N01: B1).</text></g></svg>`,
       ),
-      sheet(2, '<svg><g data-navigation-view="view"/></svg>'),
+      ...Array.from({ length: companionSheet - 2 }, (_, i) =>
+        sheet(i + 2, '<svg><g data-navigation-view="view"/></svg>'),
+      ),
       {
         ...sheet(
-          3,
-          '<svg><g data-document-id="inventory" data-document-origin="auto"><text x="10" y="20" font-size="2.5">network inventory</text><g id="sheet-3-row-b1" data-report-row="port/b1"><text x="10" y="35" font-size="2.5">N01: B1</text><text x="60" y="35" font-size="2.5">unconnected</text></g></g></svg>',
+          companionSheet,
+          `<svg><g data-document-id="inventory" data-document-origin="auto"><text x="10" y="20" font-size="2.5">network inventory</text><g id="sheet-${companionSheet}-row-b1" data-report-row="port/b1"><text x="10" y="35" font-size="2.5">N01: B1</text><text x="60" y="35" font-size="2.5">unconnected</text><text x="10" y="50" font-size="2.5">Authored 04.A1</text></g></g></svg>`,
         ),
         view: {
           format: "documentation-view/0.1",
@@ -63,7 +73,6 @@ function packet(): RenderedPacket {
           title: "Network",
         },
       },
-      sheet(4, '<svg><g data-navigation-view="view"/></svg>'),
     ],
     html: "",
     coverage: {} as RenderedPacket["coverage"],
@@ -103,7 +112,7 @@ function packet(): RenderedPacket {
           owner: { viewKey: "view", noteId: "note", sheet: 1 },
           resolution: [{ documentId: "inventory", rows: [row.id] }],
           caption: {
-            text: "Ports: network inventory 03.A1 (N01: B1).",
+            text: `Ports: network inventory ${String(companionSheet).padStart(2, "0")}.A1 (N01: B1).`,
             primitiveId: "caption-ink",
             rectMm: { x: 10, y: 100, w: 100, h: 6 },
             form: "identities",
@@ -114,18 +123,19 @@ function packet(): RenderedPacket {
         {
           documentId: "inventory",
           dependencyIds: ["dependency"],
-          sheets: [3],
+          sheets: [companionSheet],
         },
       ],
     },
   };
 }
 
-it("allows a legitimate circuit reduction with unchanged companion pages", () => {
-  const before = packet(),
-    after = structuredClone(before);
-  after.sheets.pop();
+it("allows removal before a companion with consistent page renumbering", () => {
+  const before = packet(4),
+    after = packet(3);
+  const bytes = JSON.stringify([before, after]);
   expect(circuitPacketGuard(after, before)).toBe(true);
+  expect(JSON.stringify([before, after])).toBe(bytes);
   expect(circuitPacketGuard(before, structuredClone(before))).toBe(true);
 });
 
@@ -205,8 +215,8 @@ it("rejects disappearing caption ink and inherited styles that hide it", () => {
   expect(circuitPacketGuard(after, before)).toBe(false);
   const hidden = structuredClone(before);
   hidden.sheets[0]!.svg = hidden.sheets[0]!.svg.replace(
-    "<svg>",
-    '<svg visibility="hidden">',
+    "<svg ",
+    '<svg visibility="hidden" ',
   );
   expect(circuitPacketGuard(hidden, before)).toBe(false);
 });
@@ -273,7 +283,7 @@ it("leaves unrelated requested reports to RT2a's existing pagination policy", ()
 it("rejects unregistered companion paint replacing a circuit page", () => {
   const before = packet(),
     after = structuredClone(before);
-  after.sheets[3]!.svg =
+  after.sheets[1]!.svg =
     '<svg><g data-document-origin="auto" data-document-id="unregistered"><text font-size="2.5" x="10" y="30">Extra inventory</text></g></svg>';
   expect(circuitPacketGuard(after, before)).toBe(false);
 });
@@ -288,8 +298,8 @@ it("rejects added unregistered rows inside a reused authored inventory", () => {
   );
   const after = structuredClone(before);
   after.sheets[2]!.svg = after.sheets[2]!.svg.replace(
-    "</g></svg>",
-    '<g data-report-row="extra"><text font-size="2.5" x="10" y="50">N01: B2</text></g></g></svg>',
+    "</g></g>",
+    '</g><g data-report-row="extra"><text font-size="2.5" x="10" y="50">N01: B2</text></g></g>',
   );
   expect(circuitPacketGuard(after, before)).toBe(false);
 });
@@ -303,4 +313,86 @@ it("conserves companion page ink outside the inventory wrapper", () => {
   const after = structuredClone(before);
   after.sheets[2]!.svg = after.sheets[2]!.svg.replace("Sheet 3", "Sheet 9");
   expect(circuitPacketGuard(after, before)).toBe(false);
+});
+
+it.each([
+  "origin",
+  "caption metadata",
+  "caption paint",
+  "zone",
+  "row content",
+  "authored text",
+] as const)("rejects inconsistent renumbering or altered %s", (change) => {
+  const before = packet(4),
+    after = packet(3);
+  if (change === "origin") after.navigation!.autoDocuments![0]!.sheets = [4];
+  if (change === "caption metadata")
+    after.navigation!.dependencies![0]!.caption!.text =
+      "Ports: network inventory 04.A1 (N01: B1).";
+  if (change === "caption paint")
+    after.sheets[0]!.svg = after.sheets[0]!.svg.replace("03.A1", "04.A1");
+  if (change === "zone") after.navigation!.documents![0]!.rows[0]!.zone = "A2";
+  if (change === "row content")
+    after.sheets[2]!.svg = after.sheets[2]!.svg.replace("N01: B1", "N01: B2");
+  if (change === "authored text")
+    after.sheets[2]!.svg = after.sheets[2]!.svg.replace(
+      "Authored 04.A1",
+      "Authored 03.A1",
+    );
+  expect(circuitPacketGuard(after, before)).toBe(false);
+});
+
+function twoPageInventory(first: number, last: number) {
+  const p = packet(first),
+    base = p.sheets.at(-1)!;
+  const second = structuredClone(base);
+  second.number = last;
+  second.svg = second.svg
+    .replaceAll(`sheet-${first}-`, `sheet-${last}-`)
+    .replace('data-report-row="port/b1"', 'data-report-row="port/b2"')
+    .replace("N01: B1", "N01: B2");
+  const oldRow = p.navigation!.documents![0]!.rows[0]!;
+  p.navigation!.documents![0]!.rows = [
+    oldRow,
+    {
+      ...oldRow,
+      id: "inventory/row/b2",
+      nativeKey: "port/b2",
+      displayName: "N01: B2",
+      primitiveId: `sheet-${last}-row-b1`,
+      sheet: last,
+    },
+  ];
+  p.navigation!.autoDocuments![0]!.sheets = [first, last];
+  const d = p.navigation!.dependencies![0]!;
+  d.resolution = [
+    { documentId: "inventory", rows: [oldRow.id, "inventory/row/b2"] },
+  ];
+  const caption = `Ports: network inventory ${String(first).padStart(2, "0")}.A1 (N01: B1); ${String(last).padStart(2, "0")}.A1 (N01: B2).`;
+  p.sheets[0]!.svg = p.sheets[0]!.svg.replace(d.caption!.text, caption);
+  d.caption!.text = caption;
+  for (let number = first + 1; number < last; number++)
+    p.sheets.push({ ...structuredClone(p.sheets[1]!), number });
+  p.sheets.push(second);
+  for (const s of p.sheets) {
+    s.svg = s.svg
+      .replace(/, sheet \d+ of \d+"/, `, sheet ${s.number} of ${last}"`)
+      .replace(/data-sheet="\d+"/, `data-sheet="${s.number}"`)
+      .replace(/data-total-sheets="\d+"/, `data-total-sheets="${last}"`)
+      .replace(
+        / - Sheet \d+ of \d+<\/title>/,
+        ` - Sheet ${s.number} of ${last}</title>`,
+      )
+      .replace(
+        /SHEET \d+ \/ \d+/,
+        `SHEET ${String(s.number).padStart(2, "0")} / ${String(last).padStart(2, "0")}`,
+      )
+      .replace(/SHEET \d+ OF \d+/, `SHEET ${s.number} OF ${last}`);
+  }
+  return p;
+}
+it("uses one uniform companion offset across every inventory page", () => {
+  const before = twoPageInventory(4, 5);
+  expect(circuitPacketGuard(twoPageInventory(3, 4), before)).toBe(true);
+  expect(circuitPacketGuard(twoPageInventory(3, 5), before)).toBe(false);
 });
