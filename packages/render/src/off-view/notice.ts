@@ -42,6 +42,14 @@ export function rootedNoticeSvg(
   pitch: number,
 ) {
   const writer = new SvgWriter();
+  // Retain the established reservation and native drawing transforms. The
+  // generic partial-view warning does not promise a printed coverage document.
+  const body = wrapText(
+    "Selected path only; other authored connections may be outside this view.",
+    width,
+    size,
+  );
+  let bodyLine = 0;
   writer.open(1, "g", {
     class: "selected-view-notice",
     "data-selected-view-notice": "true",
@@ -58,7 +66,7 @@ export function rootedNoticeSvg(
         ...(line.bold ? { "font-weight": "700" } : {}),
         fill: "#18212b",
       },
-      line.text,
+      line.bold ? line.text : (body[bodyLine++] ?? ""),
     ),
   );
   writer.close(1, "g");

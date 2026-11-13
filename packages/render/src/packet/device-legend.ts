@@ -28,6 +28,11 @@ export function legendSheets(
   drafts: Draft[],
   page: PaperPage,
   includeNotice = false,
+  documents?: {
+    presentation:
+      import("@thermite/compiler").CompiledProjectPresentation | undefined;
+    standalone: boolean;
+  },
 ): RenderOutcome<RenderedSheet[]> & {
   failedSheet?: number;
   navigation?: import("./navigation-types.js").IssuedNavigation;
@@ -61,6 +66,7 @@ export function legendSheets(
   const finalized = finalizeNavigation(ir, drafts, sheets, {
     notice: includeNotice,
     page,
+    ...(documents ? { documents } : {}),
   });
   if (!finalized.ok) return finalized;
   const located = structuredClone(drafts);

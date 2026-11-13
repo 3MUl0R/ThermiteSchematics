@@ -120,7 +120,7 @@ it.each(flows)(
       .join(" ")
       .replace(/\s+/gu, " ");
     expect(text).toContain(
-      "Other authored connections may be outside this view.",
+      "Selected path only; other authored connections may be outside this view.",
     );
     expect(text).not.toContain("primary and parallel");
   },

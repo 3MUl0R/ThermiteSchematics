@@ -328,7 +328,13 @@ describe("functional symbol conveyance", () => {
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.coverage.counts.conductors.represented).toBe(2);
     expect(result.value.coverage.counts.functions.represented).toBe(0);
-    expect(result.value.coverage.unauditedSheets).toEqual([]);
+    expect(result.value.coverage.unauditedSheets).toEqual(
+      result.value.sheets
+        .filter((s) =>
+          parseHTML(s.svg).document.querySelector("[data-report-row]"),
+        )
+        .map((s) => s.number),
+    );
     const doc = parseHTML(result.value.html).document;
     for (const c of result.value.coverage.conductors.filter(
       (c) => c.appearances.length,

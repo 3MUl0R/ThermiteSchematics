@@ -63,7 +63,7 @@ it.each(flows)(
         );
         expect(notice).toHaveLength(1);
         expect(notice[0]?.textContent).toContain(
-          "See circuit views or packet coverage.",
+          "Selected path only; other authored connections may be outside this view.",
         );
       }
     } finally {

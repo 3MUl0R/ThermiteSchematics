@@ -41,6 +41,7 @@
 - [Electrical drawing comparison protocol](reference-parity.md)
 - [Formats and compatibility](formats-and-compatibility.md)
 - [Founding Vision](founding-vision.md)
+- [Issued document navigation export, version 1](navigation-export-contract.md)
 - [Machine demonstration and first-project pilot](machine-demo.md)
 - [Platform checks](platforms.md)
 - [Ratings, potentials and validation coverage](validation.md)

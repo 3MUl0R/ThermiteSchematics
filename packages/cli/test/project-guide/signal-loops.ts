@@ -630,7 +630,13 @@ const module: FactModule = {
         ).toHaveLength(8);
         for (const label of ["CB1/A", "Brown", "Black / spare"])
           expect(plain.text).toContain(label);
-        expect(grouped.visible).not.toContain("Brown");
+        // Color stays in the appended inventory; the consolidated diagram omits it.
+        const labels = [
+          ...grouped.document.querySelectorAll("svg:first-of-type text"),
+        ]
+          .map((text) => text.textContent)
+          .join(" ");
+        expect(labels).not.toContain("Brown");
       },
     },
     {

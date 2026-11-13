@@ -92,7 +92,9 @@ describe("topology coverage", () => {
       ).toEqual([]);
       expect(t.unauditedSheets).toEqual(
         packet.sheets
-          .filter((s) => s.view.kind === "assemblies")
+          .filter((s) =>
+            parseHTML(s.svg).document.querySelector("[data-report-row]"),
+          )
           .map((s) => s.number),
       );
       for (const [entries, attribute, endpoints] of [

@@ -21,6 +21,7 @@ export interface NavigationGeometry {
   clip: Rect;
   visible: boolean;
   viewKey: string;
+  style?: Readonly<Record<string, string>>;
 }
 function viewportGeometry(node: SvgNode, matrix: Matrix, clip: Rect) {
   const a = node.attrs;
@@ -113,6 +114,7 @@ export function navigationGeometry(svg: string): NavigationGeometry[] {
       matrix,
       clip,
       viewKey: a["data-navigation-view"] ?? parent.viewKey,
+      style: css,
       visible:
         parent.visible &&
         css.display !== "none" &&

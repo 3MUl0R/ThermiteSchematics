@@ -23,6 +23,8 @@ import type {
 import { failure } from "./errors.js";
 import { bounds, zone } from "./page.js";
 import { n, text, wrap } from "./svg.js";
+import { reportDocumentContext } from "./document-report.js";
+import type { DocumentRowDraft } from "./document-types.js";
 
 export function documentationDrafts(
   ir: Readonly<ElectricalIr>,
@@ -105,6 +107,14 @@ export function tableDrafts(
     return failure("unprintable-layout", (error as Error).message);
   }
   const headerH = geometry(header, true).height;
+  const documents = reportDocumentContext(
+    ir,
+    table,
+    presentation,
+    b,
+    header,
+    headerH,
+  );
   const notes = reportNotes(table, b.w);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
   if (headerH + 9 > bottom - b.y) {
@@ -118,6 +128,7 @@ export function tableDrafts(
     );
   }
   let content: string[] = [],
+    documentRows: DocumentRowDraft[] = [],
     refs: SheetReference[] = [],
     y = 0,
     first = 0;
@@ -137,10 +148,13 @@ export function tableDrafts(
     y += height;
   }
   function start() {
-    content = [text(b.x, b.y + 3, table.title, 4, "start", 700)];
+    content = [documents.titleSvg()];
+    documentRows = [];
     refs = [];
     y = b.y + 9;
+    content.push('<g id="document-header">');
     row(header, headerH, true);
+    content.push("</g>");
   }
   function finish(end: number) {
     content.push(...reportNoteSvg(notes, b));
@@ -154,6 +168,7 @@ export function tableDrafts(
         ? `Rows ${first + 1}-${end} of ${table.rows.length}`
         : "No matching records",
       documentationTable: true,
+      ...documents.metadata(documentRows),
       ...(table.selection ? { documentationSelection: table.selection } : {}),
     });
   }
@@ -183,19 +198,11 @@ export function tableDrafts(
       first = i;
       start();
     }
-    for (const uid of new Set(source.deviceUids)) {
-      const d = ir.devices.find((d) => d.uid === uid);
-      if (d)
-        refs.push({
-          deviceUid: uid,
-          designation: d.designation,
-          functions: [],
-          zone: zone(b.x + b.w / 2, y + height / 2, b),
-        });
-    }
+    refs.push(...documents.references(i, y, height));
     content.push(
-      `<g data-report-row="${attr(source.key)}" data-row-designation="${attr(rowDesignation(i))}">`,
+      `<g id="document-row-${i}" data-report-row="${attr(source.key)}" data-row-designation="${attr(rowDesignation(i))}">`,
     );
+    documentRows.push(documents.row(i, cells, y, height, rowDesignation(i)));
     row(cells, height);
     content.push("</g>");
     if (drafts.length > 100)

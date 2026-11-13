@@ -118,6 +118,14 @@ export interface NavigationAnnotation {
   };
 }
 export interface IssuedNavigation {
+  documentFormat?: "issued-documents/1";
+  documents?: readonly import("./document-types.js").IssuedDocument[];
+  dependencies?: readonly import("./document-types.js").DocumentDependency[];
+  autoDocuments?: readonly {
+    documentId: string;
+    dependencyIds: readonly string[];
+    sheets: readonly number[];
+  }[];
   format: "issued-navigation/0.1";
   snapshotDigest: string;
   anchorRule: "function-terminal-centroid/2";

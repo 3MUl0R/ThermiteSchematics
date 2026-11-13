@@ -116,7 +116,7 @@
   <rect width="1850.2" height="768" class="canvas-background" x="0" y="0" fill="#ffffff"/>
   <g class="selected-view-notice" data-selected-view-notice="true">
     <text x="16" y="16" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12" font-weight="700">SELECTED PATH VIEW — LS1 / trace to PLC1.</text>
-    <text x="16" y="32" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12">Other authored connections may be outside this view. See circuit views or packet coverage.</text>
+    <text x="16" y="32" fill="#18212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="12">Selected path only; other authored connections may be outside this view.</text>
   </g>
   <g transform="translate(0 48)">
   <g id="location-0061007500740068006f007200650064--004600490045004c0044" class="location-group" data-location="FIELD">

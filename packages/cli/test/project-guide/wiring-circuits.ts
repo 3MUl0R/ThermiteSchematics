@@ -667,9 +667,7 @@ const module: FactModule = {
         expect(text.filter((s) => /^\S+ \[ \+\d+ \]$/.test(s))).toEqual([
           "1 [ +1 ]",
         ]);
-        expect(
-          text.filter((s) => s === "7 other terminals: schedule"),
-        ).toHaveLength(2);
+        expect(text.filter((s) => s === "7 other terminals")).toHaveLength(2);
         // There is no flow option: the layout is always horizontal.
         await refused(
           await base(),
@@ -1019,7 +1017,7 @@ const module: FactModule = {
   unexecuted: new Map([
     [
       "Add terminal/wire schedules for complete detail.",
-      "Advice; the wiring view only points readers to the schedules.",
+      "Advice for explicit full inventories; required companions cover only the concrete hidden-detail scope.",
     ],
     [
       "Also read `thermite guide circuit-views`; never guess marks; check links/earth/DC ink in both flows.",

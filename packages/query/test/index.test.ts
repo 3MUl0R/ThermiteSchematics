@@ -18,6 +18,7 @@ describe("query public API", () => {
       "formatTerminalSet",
       "parseProjectSnapshot",
       "printedPort",
+      "printedPortEndpoint",
       "resolveDeviceFilter",
       "reviewProject",
       "serializeQueryResult",

@@ -115,7 +115,8 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     expect(await renderSchematicPacket(ir, request)).toEqual(result);
     expect(ir).toEqual(before);
     if (!result.ok) return;
-    expect(result.value.sheets).toHaveLength(1);
+    expect(result.value.sheets).toHaveLength(2);
+    expect(result.value.sheets[1]!.view.kind).toBe("wires");
     const { document } = parseHTML(result.value.sheets[0]!.svg);
     const cable = document.querySelector("[data-cable-assembly]")!;
     expect(document.querySelectorAll("[data-cable-assembly]")).toHaveLength(1);

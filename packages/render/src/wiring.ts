@@ -17,6 +17,10 @@ import {
   terminalPortAttribute,
 } from "./layout/port-attributes.js";
 import { layoutWiring } from "./layout/wiring-layout.js";
+import {
+  wiringHiddenIncidences,
+  omittedTerminalNeed,
+} from "./packet/document-producers.js";
 
 /** A deliberate subset of physical wiring, never an inferred circuit or net short. */
 export interface WiringViewRequest {
@@ -175,12 +179,10 @@ export async function prepareWiringDrawing(
       conductor.ends.reverse();
   if (ordered.length > 30)
     throw new Error("Wiring view exceeds 30 devices; select a smaller view.");
-  const boundary = new Map(
-    [...terminalIds].map(([k]) => [
-      k,
-      all.filter((w) => !chosen.has(w.id) && w.ends.some((t) => key(t) === k))
-        .length,
-    ]),
+  const { needs: documentNeeds, boundary } = wiringHiddenIncidences(
+    ir,
+    chosen,
+    terminalIds,
   );
   const ids = new Map(ordered.map((uid, i) => [uid, `d${i}`]));
   const ports = new Map<string, string>();
@@ -207,8 +209,15 @@ export async function prepareWiringDrawing(
             (type.terminalOrder?.indexOf(b.terminalKey) ?? -1) ||
           (a.terminalKey < b.terminalKey ? -1 : 1),
       );
-    const omitted = Object.keys(type.terminals).length - pins.length;
-    if (omitted) caption.push(`${omitted} other terminals: schedule`);
+    const omitted = omittedTerminalNeed(
+      ir,
+      uid,
+      pins.map((p) => p.terminalKey),
+    );
+    if (omitted) {
+      caption.push(`${omitted.count} other terminals`);
+      documentNeeds.push(omitted);
+    }
     labels.set(uid, caption);
     let y = deviceHeaderHeight(tag, caption) + 6;
     const list = pins.map((t) => {
@@ -468,6 +477,7 @@ export async function prepareWiringDrawing(
     references.push(drawingDeviceReference(node, d));
   }
   return {
+    documentNeeds,
     title: request.title,
     content: out.join("\n"),
     width: graph.width!,

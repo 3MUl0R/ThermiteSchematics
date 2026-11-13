@@ -101,7 +101,7 @@ describe("operator console wiring", () => {
     const rendered = await renderSchematicPacket(c.ir, request);
     expect(rendered.ok).toBe(true);
     if (!rendered.ok) return;
-    expect(rendered.value.sheets).toHaveLength(11);
+    expect(rendered.value.sheets).toHaveLength(16);
     for (const [i, sheet] of rendered.value.sheets.entries()) {
       const view = request.views[i]!;
       if (!view || view.format !== "wiring-view-request/0.1") continue;

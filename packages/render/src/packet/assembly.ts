@@ -26,8 +26,20 @@ function markViewDrafts(
   navigationView: import("./navigation-types.js").NavigationView | undefined,
 ) {
   for (const draft of incoming) {
+    if (draft.issuedDocument) {
+      draft.issuedDocument = {
+        ...draft.issuedDocument,
+        id: `${draft.issuedDocument.id}/${navigationView?.key ?? viewIndex}`,
+      };
+      draft.content = `<g data-document-id="${escapeXmlAttribute(draft.issuedDocument.id)}">${draft.content}</g>`;
+    }
     draft.views = [context ?? { viewIndex, title: sheetLabel(draft.view) }];
     if (navigationView) {
+      if (draft.documentNeeds)
+        draft.documentNeeds = draft.documentNeeds.map((need) => ({
+          ...need,
+          viewKey: navigationView.key,
+        }));
       draft.navigationView = navigationView;
       draft.navigationInputs = [
         { view: navigationView, seeds: draft.navigationSeeds ?? [] },
@@ -178,6 +190,10 @@ export function assembleSheets(
 }
 
 function mergeNavigationInputs(previous: Draft, draft: Draft) {
+  previous.documentNeeds = [
+    ...(previous.documentNeeds ?? []),
+    ...(draft.documentNeeds ?? []),
+  ];
   previous.navigationInputs = [
     ...navigationDraftInputs([previous]),
     ...navigationDraftInputs([draft]),

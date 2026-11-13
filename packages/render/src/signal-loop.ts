@@ -1,3 +1,4 @@
+import { directLoopDocumentNeeds } from "./packet/document-producers.js";
 import {
   routePortAttributes,
   terminalPortAttribute,
@@ -704,6 +705,7 @@ export async function prepareSignalLoopDrawing(
             : !p.assembly &&
               p.terminal === e.ends[side === "out" ? 0 : 1].terminalKey),
       )!.id;
+  const documentNeeds = directLoopDocumentNeeds(ir, assembledCables, stages);
   const graph = await layoutDirectLoop(
     children,
     edges.map((e, i) => ({
@@ -959,6 +961,7 @@ export async function prepareSignalLoopDrawing(
       height: enclosure.height,
       references,
       deviceTags: [...tags.values()],
+      documentNeeds,
     },
     selected,
     request,

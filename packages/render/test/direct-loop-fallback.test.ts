@@ -167,7 +167,8 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           attempts.at(-1)!.edges!.some((edge) => edge.labels!.length === 0);
         modes.add(after.ok ? (inline ? "inline" : "native") : "refuse");
         if (after.ok) {
-          expect(after.value.sheets).toHaveLength(1);
+          expect(after.value.sheets).toHaveLength(2);
+          expect(after.value.sheets[1]!.view.kind).toBe("wires");
           const routes = parseHTML(
             after.value.sheets[0]!.svg,
           ).document.querySelectorAll("[data-loop-conductor]");

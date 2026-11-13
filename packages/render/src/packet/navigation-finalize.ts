@@ -45,6 +45,8 @@ import {
 } from "./mirror-ink.js";
 import { placeContactNotice } from "./mirror-notice.js";
 import { validateAppearanceIncidence } from "./navigation-incidence.js";
+import { finalizeDocuments } from "./document-captions.js";
+import { DocumentDependencyError } from "./document-error.js";
 
 function annotationSvg(
   annotation: NavigationAnnotation,
@@ -114,6 +116,11 @@ function emitSheetNavigation(
 interface FinalizationOptions {
   notice?: boolean;
   page?: PaperPage;
+  documents?: {
+    presentation:
+      import("@thermite/compiler").CompiledProjectPresentation | undefined;
+    standalone: boolean;
+  };
 }
 
 /** Pure finalization over immutable native drafts. Calling it twice produces the same bytes. */
@@ -131,7 +138,10 @@ export function finalizeNavigation(
     return failure(
       "unprintable-layout",
       `Navigation invariant: ${error instanceof Error ? error.message : String(error)}`,
-      { navigationInvariant: true },
+      {
+        navigationInvariant: true,
+        ...(error instanceof DocumentDependencyError ? error.details : {}),
+      },
     );
   }
 }
@@ -216,7 +226,29 @@ function finalizeMirrorCandidate(
     plan,
     reservations,
   );
-  return { ok: true, value: { sheets: result, navigation } };
+  return documentExtension(ir, drafts, result, navigation, options);
+}
+function documentExtension(
+  ir: Readonly<ElectricalIr>,
+  drafts: readonly Draft[],
+  sheets: RenderedSheet[],
+  navigation: IssuedNavigation,
+  options: FinalizationOptions,
+): ReturnType<typeof finalizeNavigation> {
+  return {
+    ok: true,
+    value: options.documents
+      ? finalizeDocuments(
+          ir,
+          drafts,
+          sheets,
+          required(options.page, "Missing document page"),
+          navigation,
+          options.documents.standalone,
+          options.documents.presentation,
+        )
+      : { sheets, navigation },
+  };
 }
 
 function resolveAnnotations(

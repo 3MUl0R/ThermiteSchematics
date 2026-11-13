@@ -671,3 +671,56 @@ geometry remain the independent checker's oracle. One mirror-block observation
 belongs to each full coil; one reciprocal observation belongs to each full
 contact, including members of a shared caption. NAV2 does not implement the
 evaluation predicate or add companion inventories.
+
+### Hidden-detail companion inventories
+
+A packet resolves its concrete hidden-detail notes against visible issued report
+rows, with the same compiled-source snapshot and presentation revision. A report's
+kind or title alone cannot satisfy a promise. Unknown revision remains
+`UNSPECIFIED`. A sufficient requested document is reused first; otherwise the
+resolver uses a sufficient union, preferring exact scope, smaller supersets and
+authored order. Captions name the exact final row regions, for example
+`[+2] other physical connections: wire inventory 12.B2 (PB1.12; W7, W8)`.
+Each short inventory label is defined in that document's printed header.
+
+Missing facts are unioned into the smallest native row selection, keeping both
+endpoints and authored statuses. Non-strip terminal inventories use explicit
+device identities. Automatic documents follow requested content and precede
+indexes and function references. They have a separate origin; they do not rewrite
+requested filters or consume fictitious positions in the 1–40 authored-view
+request. Every issued page still counts toward the 100-sheet limit. A generated
+inventory creates no further promises. Unprintable or insufficient closure,
+unsupported facts, a cycle, caption capacity or the final page cap refuse the
+whole packet with contextual R006. No source is repaired automatically.
+
+Hidden physical-connection counts are endpoint incidences at each selected
+appearance, including explicit jumpers and singly terminated cable cores.
+Omitted-terminal counts instead subtract drawn terminal identities from the
+native device terminal set. These units differ. Network inventories include the
+scoped links and omitted/unconnected ports. Direct-loop companions retain native
+core details and any incident relation-backed assembly pin-map status; unresolved
+mapping stays unresolved. Tables describe source facts, not safety, suitability or
+completeness of manufacturer data.
+
+`renderSchematicSheets` accepts the same individual view discriminants as a packet.
+A standalone view remains partial: its captions explicitly say that no companion
+inventory is included. A generic selected-path warning promises no document.
+The established notice reservation is retained so rewording does not change native
+drawing transforms. Caption wrapping keeps sheet.zone, terminal, conductor and
+port identity tokens indivisible, including authored spaces inside an identity.
+Port captions use the same shared reader-facing formatter as their network row,
+with its identity projection, for example `N01: B1`. Descriptions stay in the row
+and never enter captions. The internal dotted port selector never prints.
+Terminals retain `DEV.TERM`.
+
+The allocator tries per-identity captions first. If none fits, a compact form
+groups scoped native facts by destination row region and printed device, for
+example `network inventory 13.A4 (N01: 5 ports)`. Counts exclude unrelated peer
+facts and repeated resolution rows. Every named device is printed in the target
+rows. Exact group row locators remain in the additive export. Only failure of
+both forms causes caption-capacity R006; neither form changes native geometry.
+
+The additive M3 locators and row-region anchor are specified in the
+[navigation export contract](navigation-export-contract.md). They are locators,
+not an electrical or visibility oracle. Checker 5.8 cannot measure these new
+contracts; NAV3 must not reach release before the independent E3 checker is green.
