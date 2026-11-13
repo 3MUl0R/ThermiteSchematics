@@ -6,9 +6,10 @@ export const criteria = {
   "DQ-04": "Glyphs and qualifiers match the selected standard",
   "DQ-05": "No IR function key printed by default",
   "DQ-06": "Device designation, description and authored rating/part",
-  "DQ-07": "Coil mirrors and contact-to-coil sheet.zone match IR",
+  "DQ-07":
+    "Full-repeat navigation, coil mirrors and contact-to-coil sheet.zone match IR",
   "DQ-08":
-    "Reciprocal ordered off-page sheet.zone and intact conductor identities",
+    "Reciprocal ordered off-page sheet.zone, intact conductor identities and 2.5 mm block gaps",
   "DQ-09": "Four-side zones and all references resolve",
   "DQ-10": "Monotone L1-L2-L3(-PE), U-V-W and upright qualifiers",
   "DQ-11":

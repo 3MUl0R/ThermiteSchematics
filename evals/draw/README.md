@@ -186,9 +186,54 @@ and transforms, and actual visible stroke intervals at 0.025 mm resolution. A
 0.01 mm numerical axis tolerance. Native stroke hit tests, clipping, alpha and
 later opaque fills establish painted ink. The new primitive measurements concern
 SVG geometry; existing HTML/PDF label parity continues independently, and these
-predicates do not certify PDF primitive visibility. DQ-07 mirrors and M5 repeats
-remain unimplemented until E2's issued-navigation work. No expectations or re-pin
+predicates do not certify PDF primitive visibility. Version 5.7 adds M5 below;
+DQ-07 mirrors and returns remain unimplemented until E2b. No expectations or re-pin
 records change with this version.
+
+Version 5.7 adds E2a's independent repeat and hardening predicates:
+
+- DQ-07 M5 reconstructs native full-function membership from painted body and
+  complete terminal sets, including multi-function aggregates. It groups by
+  device UID, selected view and issued sheet, never glyph. Distinct visible view
+  wrappers locate authored selections in issued order; unique rooted/title
+  matches support old captures. Navigation occurrence/annotation exports locate
+  printed labels only. Claimed roles, targets, zones, canonical groups, label
+  strings and locality flags never supply expected facts. Missing or forged
+  locators cannot remove native/geometry obligations. One label covers each
+  repeated appearance. Printed destinations equal the other measured function
+  anchors, quantized to 0.01 mm before half-open zone classification; canonical
+  is the first authored selection, then sheet. Each semantic Repeat line uses
+  `same function`, native single-contact `same contact`, or `same functions`
+  for the functions on that line, including mixed canonical/repeat blocks.
+- Repeat locality requires the same sheet, distance at most 60 mm from the
+  distinct-terminal centroid to the label ink, and the nearest device frame
+  belonging to its owner, comparing the gap between actual label-ink and frame
+  boxes (not their centres or reservation envelopes). A nonlocal label needs its correct measured
+  `(ss.zone)` prefix. Repeat labels have no mirror zone-adjacency rule.
+  Measured text line bands require 4 mm horizontal clearance (0.01 mm numerical
+  epsilon); non-text ink requires 1.5 mm (0.05 mm sampling epsilon). Actual
+  clipped, unoccluded painted path segments are sampled at 0.2 mm for these
+  clearances; bent routes never become endpoint chords. Existing SVG/HTML/PDF
+  visible label parity remains separate; this predicate measures SVG geometry.
+- DQ-08 continuation blocks require at least **2.5 mm minus the established
+  0.17 mm measurement epsilon**, per CT's adopted gap. Zone-ink clearance remains
+  **measured, threshold pending**. Per-character measured baseline runs, including
+  positioned `<tspan>`, make native conductor identities indivisible. Adjacent
+  font spans remain legal; PDF rows keep their independent PDF measurements.
+- DQ-18 accepts painted labelled fields only inside the measured title panel:
+  `Drawn:` / `Drawn by:`, `Checked:`, `Approved:`, drawing number and customer/site
+  labels. A NAV table's `not drawn` above the title rule cannot credit a field.
+- #238 L1/L2 pin rooted-sheet rejection with genuine matching circuit ink, and
+  ambiguous native designation rejection. L3 remains documented: no general
+  authored view index exists on `RenderedSheet`; occurrence provenance is not a
+  complete index for every circuit sheet, so duplicate-title pooling remains.
+  The DQ-13 lightest-incident comparison is unchanged and matches RT1 policy.
+
+These modules import no renderer navigation planner. Native IR supplies identity,
+terminal membership and function kind; authored requests supply selections;
+browser measurements supply painted text, baselines, frames, clips and locations.
+The typed `MirrorReturnAudit` seam is inactive: DQ-07 mirrors/returns receive no
+pass credit before E2b. Expectations and repins are unchanged.
 
 ## Prerequisites and costs
 

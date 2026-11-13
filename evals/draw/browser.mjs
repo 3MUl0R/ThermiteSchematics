@@ -230,9 +230,25 @@ export function measureSheet(options = {}) {
                   !parent)),
     };
   };
+  function ancestors(e) {
+    const result = [];
+    for (let p = e.parentElement; p && p !== root; p = p.parentElement)
+      result.push(p);
+    return result;
+  }
   const identity = (e) => ({
     element: ids.get(e),
     appearanceScope: ids.get(e.closest("svg")),
+    primitiveIds: [e, ...ancestors(e)].map((n) => n.id).filter(Boolean),
+    navigationView: attr(e, "data-navigation-view"),
+    navigationAnnotation: attr(e, "data-navigation-annotation"),
+    navigationOwner: attr(e, "data-navigation-owner"),
+    glyphBody: !!e.closest(".symbol"),
+    functionScope: ids.get(
+      e.closest(
+        "[data-symbol-id],[data-function-key],[data-aggregate-key],.symbol,[data-circuit-functions]",
+      ),
+    ),
     deviceUid: attr(e, "data-device-uid"),
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
@@ -331,7 +347,8 @@ export function measureSheet(options = {}) {
   // Per-character SVG positions expose tspan/dy breaks even when one parent
   // text node contains the entire identifier. These are measured line boxes.
   function reportRuns(e, rendered, matrix) {
-    if (!e.closest("[data-report-row]")) return undefined;
+    if (!e.closest("[data-report-row]") && !continuationOwner(e))
+      return undefined;
     const count = e.getNumberOfChars(),
       points = Array.from(rendered);
     const utf16 = count === rendered.length;
@@ -989,7 +1006,12 @@ export function measureSheet(options = {}) {
           viewport: v.clip,
           cell,
           columnIndex,
-          reportRuns: reportRuns(e, renderedString, m),
+          reportRuns: e.closest("[data-report-row]")
+            ? reportRuns(e, renderedString, m)
+            : undefined,
+          continuationRuns: continuationOwner(e)
+            ? reportRuns(e, renderedString, m)
+            : undefined,
           knockout,
           plate,
           wireBlock: e.closest("[data-wire-label]")
@@ -1466,7 +1488,7 @@ export function measureSheet(options = {}) {
   }
   // Native stroke hit tests recover actual dash intervals, including overlapping
   // collinear paths. Sampling resolution is 0.025 mm; comparisons allow 0.05 mm.
-  const strokeInk = (e, clip, matrix) => {
+  const strokeInk = (e, clip, matrix, subdivide = false) => {
     if (typeof e.getTotalLength !== "function") return [];
     const css = getComputedStyle(e),
       rgba = colour(css.stroke);
@@ -1475,7 +1497,11 @@ export function measureSheet(options = {}) {
     // Opacity is not inherited, so multiply it through the ancestor chain here.
     for (let node = e; node; node = node.parentElement)
       alpha *= Number(getComputedStyle(node).opacity);
-    if (alpha < 0.2 || rgba?.slice(0, 3).every((c) => c === 255)) return [];
+    const strokePainted =
+      alpha >= 0.2 && !rgba?.slice(0, 3).every((c) => c === 255);
+    const fill = subdivide ? fillPaint(e) : null;
+    const filled = fill && fill.alpha >= 0.2 && !fill.background;
+    if (!strokePainted && !filled) return [];
     const length = e.getTotalLength(),
       scale = Math.max(
         Math.hypot(matrix.a * sx, matrix.b * sy),
@@ -1483,7 +1509,7 @@ export function measureSheet(options = {}) {
       );
     const count = Math.min(
       20000,
-      Math.max(1, Math.ceil((length * scale) / 0.025)),
+      Math.max(1, Math.ceil((length * scale) / (subdivide ? 0.2 : 0.025))),
     );
     let clips;
     try {
@@ -1492,8 +1518,11 @@ export function measureSheet(options = {}) {
       return [];
     }
     if (clips === null) return [];
-    const intervals = [];
-    let start, previous;
+    const intervals = [],
+      pieces = [];
+    let start,
+      previous,
+      previousPainted = false;
     const order = orders.get(e);
     const covers = occluders.filter((o) => o.order > order);
     for (let i = 0; i <= count; i++) {
@@ -1501,7 +1530,8 @@ export function measureSheet(options = {}) {
         q = local.matrixTransform(matrix),
         p = point(q.x, q.y);
       const painted =
-        e.isPointInStroke(local) &&
+        ((strokePainted && e.isPointInStroke(local)) ||
+          (filled && e.isPointInFill(local))) &&
         [clip, ...clips].every((b) => contains(b, p)) &&
         !covers.some(
           (o) =>
@@ -1511,6 +1541,8 @@ export function measureSheet(options = {}) {
               new DOMPoint(q.x, q.y).matrixTransform(o.inverse),
             ),
         );
+      if (subdivide && painted && previousPainted) pieces.push([previous, p]);
+      previousPainted = painted;
       if (painted && !start) start = p;
       if ((!painted || i === count) && start) {
         intervals.push([start, painted ? p : previous]);
@@ -1518,7 +1550,7 @@ export function measureSheet(options = {}) {
       }
       previous = p;
     }
-    return intervals;
+    return subdivide ? pieces : intervals;
   };
   const deviceReferences = texts
     .filter((t) => t.tagTerminalDeclared && t.painted)
@@ -1541,6 +1573,9 @@ export function measureSheet(options = {}) {
         ) === i,
     );
   const utilisationErrors = [];
+  const hasRepeatLabels = texts.some((t) =>
+    /Also shown|Repeat of/.test(t.text),
+  );
   const shapes = Array.from(
     options.textOnly
       ? []
@@ -1596,6 +1631,8 @@ export function measureSheet(options = {}) {
       !symbol &&
       !mark &&
       !id.terminal &&
+      !id.glyphBody &&
+      !hasRepeatLabels &&
       !cls.includes("junction-dot") &&
       !e.hasAttribute("data-wiring-junction")
     )
@@ -1676,6 +1713,9 @@ export function measureSheet(options = {}) {
           symbol || mark || id.attachment || id.attachmentCandidate
             ? strokeInk(e, v.clip, m)
             : undefined,
+        navigationInkSegments: hasRepeatLabels
+          ? strokeInk(e, v.clip, m, true)
+          : undefined,
         routePath:
           conductor ||
           id.loopConductor ||
@@ -1747,6 +1787,13 @@ export function measureSheet(options = {}) {
   return {
     width: vb.width,
     height: vb.height,
+    navigationViews: [
+      ...new Set(
+        all
+          .filter((e) => e.hasAttribute("data-navigation-view"))
+          .map((e) => e.getAttribute("data-navigation-view")),
+      ),
+    ],
     viewFormat: root.getAttribute("data-view-format"),
     viewFamily: root.getAttribute("data-view-family"),
     texts,

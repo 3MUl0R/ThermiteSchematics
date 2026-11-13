@@ -7,6 +7,8 @@ import {
 } from "./continuation-labels.mjs";
 import { finding, painted, extent } from "./review-geometry.mjs";
 import { printedZones } from "./printed-zones.mjs";
+export const CONTINUATION_BLOCK_GAP_MM = 2.5;
+export const MEASUREMENT_EPSILON_MM = 0.17;
 export function continuationTypography(sheet, g, ir) {
   const findings = [],
     blocks = [],
@@ -66,29 +68,37 @@ export function continuationTypography(sheet, g, ir) {
     });
   }
   const zones = printedZones(g);
+  const measurements = blocks
+    .flatMap((a, i) =>
+      blocks.slice(i + 1).map((b) => {
+        const dx = Math.max(
+            0,
+            a.bbox.x - b.bbox.x - b.bbox.w,
+            b.bbox.x - a.bbox.x - a.bbox.w,
+          ),
+          dy = Math.max(
+            0,
+            a.bbox.y - b.bbox.y - b.bbox.h,
+            b.bbox.y - a.bbox.y - a.bbox.h,
+          );
+        return {
+          elements: [a.element, b.element],
+          gapMm: Math.hypot(dx, dy),
+          assessment: "measured",
+          minimumMm: CONTINUATION_BLOCK_GAP_MM,
+          epsilonMm: MEASUREMENT_EPSILON_MM,
+        };
+      }),
+    )
+    .filter((m) => m.gapMm < 10);
+  for (const m of measurements)
+    if (m.gapMm < CONTINUATION_BLOCK_GAP_MM - MEASUREMENT_EPSILON_MM) {
+      const a = blocks.find((b) => b.element === m.elements[0]);
+      findings.push(finding("continuation-block-gap", a, m));
+    }
   return {
     findings,
-    measurements: blocks
-      .flatMap((a, i) =>
-        blocks.slice(i + 1).map((b) => {
-          const dx = Math.max(
-              0,
-              a.bbox.x - b.bbox.x - b.bbox.w,
-              b.bbox.x - a.bbox.x - a.bbox.w,
-            ),
-            dy = Math.max(
-              0,
-              a.bbox.y - b.bbox.y - b.bbox.h,
-              b.bbox.y - a.bbox.y - a.bbox.h,
-            );
-          return {
-            elements: [a.element, b.element],
-            gapMm: Math.hypot(dx, dy),
-            assessment: "measured-threshold-pending",
-          };
-        }),
-      )
-      .filter((m) => m.gapMm < 10),
+    measurements,
     zoneClearances: blocks
       .flatMap((b) =>
         [...zones.numbers, ...zones.letters].filter(painted).map((t) => ({

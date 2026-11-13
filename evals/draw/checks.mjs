@@ -456,25 +456,7 @@ export function netLabelRepetition(g) {
   }
   return out;
 }
-export function titleFields(g) {
-  const title = g.texts
-    .filter((t) => t.bbox.y > g.height * 0.7)
-    .map((t) => t.text)
-    .join(" ");
-  const fields = {
-    drawingNumber: /drawing\s*(no\.?|number)|dwg\s*no/i,
-    drawn: /drawn/i,
-    checked: /checked/i,
-    approved: /approved/i,
-    customerOrSite: /customer|site|company/i,
-    revision: /\bREV\b(?!\s+UNSPECIFIED)/,
-    revisionHistory: /revision\s+(history|table)|rev\s+date/i,
-  };
-  const missing = Object.keys(fields).filter((k) => !fields[k].test(title));
-  return missing.length
-    ? [issue("incomplete-title-block", {}, { missing })]
-    : [];
-}
+export { titleFields } from "./title-fields.mjs";
 export function packetStyle(geometries) {
   const fonts = [
       ...new Set(geometries.flatMap((g) => g.texts.map((t) => t.font))),

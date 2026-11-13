@@ -1,0 +1,138 @@
+import { expect, it } from "vitest";
+import { titleFields } from "./title-fields.mjs";
+import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
+import { continuationTypography } from "./continuation-typography.mjs";
+const panel = { x: 10, y: 80, w: 180, h: 20 };
+const t = (text, y = 85) => ({
+  text,
+  element: text,
+  bbox: { x: 15, y, w: 100, h: 2 },
+  anchor: { x: 15, y },
+});
+const title =
+  "Drawing number: 1 Drawn by: A Checked: B Approved by: C Customer: D REV A Revision history";
+it("DQ-18 only painted labelled fields in the measured title panel count", () => {
+  const g = { height: 100, titleBlock: panel, texts: [t(title)] };
+  expect(titleFields(g)).toEqual([]);
+  g.texts = [t(title.replace("Drawn by: A ", "")), t("not drawn", 75)];
+  expect(titleFields(g)).toEqual([
+    expect.objectContaining({ missing: ["drawn"] }),
+  ]);
+  g.texts.push(t("Drawn by: forged", 75));
+  expect(titleFields(g)).toEqual([
+    expect.objectContaining({ missing: ["drawn"] }),
+  ]);
+  g.texts[0].text += " not drawn";
+  expect(titleFields(g)).toEqual([
+    expect.objectContaining({ missing: ["drawn"] }),
+  ]);
+  g.texts = [t(title, 75)];
+  expect(titleFields(g)[0].missing.length).toBe(7);
+  g.texts = [{ ...t(title), reviewPainted: false }];
+  expect(titleFields(g)[0].missing.length).toBe(7);
+  delete g.titleBlock;
+  expect(titleFields(g)[0].missing.length).toBe(7);
+});
+it("#238 L1 rejects genuine authored circuit ink on a rooted sheet with the matching circuit title", () => {
+  const ir = {
+    devices: [{ uid: "d", designation: "D" }],
+    functions: [{ id: { deviceUid: "d", functionKey: "f" } }],
+  };
+  const request = {
+    views: [
+      {
+        format: "circuit-view-request/0.1",
+        title: "Circuit",
+        groups: [
+          {
+            id: "main",
+            functions: [
+              { device: { by: "designation", value: "D" }, key: "f" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const sheet = { view: { title: "Circuit" } },
+    g = {
+      shapes: [{ circuitGroup: "main", deviceUid: "d", functionKey: "f" }],
+    };
+  expect(authoredCircuitShapes(sheet, g, ir, request)).toHaveLength(1);
+  expect(
+    authoredCircuitShapes(
+      { view: { ...sheet.view, root: { deviceUid: "d" } } },
+      g,
+      ir,
+      request,
+    ),
+  ).toEqual([]);
+});
+it("#238 L2 rejects ambiguous native designation selectors", () => {
+  const ir = {
+    devices: [{ uid: "d", designation: "D" }],
+    functions: [{ id: { deviceUid: "d", functionKey: "f" } }],
+  };
+  const request = {
+    views: [
+      {
+        format: "circuit-view-request/0.1",
+        title: "Circuit",
+        groups: [
+          {
+            id: "main",
+            functions: [
+              { device: { by: "designation", value: "D" }, key: "f" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const sheet = { view: { title: "Circuit" } },
+    g = {
+      shapes: [{ circuitGroup: "main", deviceUid: "d", functionKey: "f" }],
+    };
+  expect(authoredCircuitShapes(sheet, g, ir, request)).toHaveLength(1);
+  ir.devices.push({ uid: "other", designation: "D" });
+  expect(authoredCircuitShapes(sheet, g, ir, request)).toEqual([]);
+});
+function blocks(gap) {
+  const cs = [1, 2].map((n) => ({
+    id: "C00" + n,
+    toSheet: 2,
+    conductor: "W" + n,
+    sourceElement: { kind: "wire", uid: "w" + n },
+  }));
+  const rows = cs.map((c, i) => ({
+    ...t(c.id + " / 02.A1 / " + c.conductor, 40),
+    continuationLink: "a" + i,
+    bbox: { x: 30 + i * (20 + gap), y: 40, w: 20, h: 2 },
+  }));
+  return continuationTypography(
+    { number: 1, continuations: cs },
+    {
+      texts: rows,
+      connectors: cs.map((c, i) => ({ ...c, element: "a" + i })),
+      shapes: [],
+    },
+    {
+      wires: cs.map((c, i) => ({
+        uid: "w" + (i + 1),
+        designation: c.conductor,
+      })),
+    },
+  );
+}
+it("CT block gap enforces 2.5 mm minus the established 0.17 mm measurement epsilon", () => {
+  expect(blocks(2.5).findings).toEqual([]);
+  expect(blocks(2.331).findings).toEqual([]);
+  expect(blocks(2.329).findings.map((f) => f.kind)).toContain(
+    "continuation-block-gap",
+  );
+  expect(blocks(1).measurements[0]).toMatchObject({
+    minimumMm: 2.5,
+    epsilonMm: 0.17,
+    assessment: "measured",
+  });
+});
