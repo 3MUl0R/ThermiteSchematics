@@ -186,9 +186,8 @@ and transforms, and actual visible stroke intervals at 0.025 mm resolution. A
 0.01 mm numerical axis tolerance. Native stroke hit tests, clipping, alpha and
 later opaque fills establish painted ink. The new primitive measurements concern
 SVG geometry; existing HTML/PDF label parity continues independently, and these
-predicates do not certify PDF primitive visibility. Version 5.7 adds M5 below;
-DQ-07 mirrors and returns remain unimplemented until E2b. No expectations or re-pin
-records change with this version.
+predicates do not certify PDF primitive visibility. Version 5.7 adds M5 below; version 5.8 adds the mirror/return checks.
+No expectations or re-pin records change with these versions.
 
 Version 5.7 adds E2a's independent repeat and hardening predicates:
 
@@ -232,8 +231,71 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
-The typed `MirrorReturnAudit` seam is inactive: DQ-07 mirrors/returns receive no
-pass credit before E2b. Expectations and repins are unchanged.
+Version **5.8** adds E2b's independent NAV2 checks and E2a follow-ups:
+
+- M5 collects whole canonical/repeat/mixed ink blocks by their printed repeat
+  wording. M2 mirrors, returns and notices never enter the M5 population;
+  forged role flags confer no exemption. Wrapped qualifier rows stay in the block.
+- DQ-07 reconstructs direct same-device coil → contact `actuates` relations from
+  compiled, byte-locked IR. One observation is emitted per full coil and contact
+  appearance. Painted complete native bodies and terminal membership establish
+  full appearances, including circuit interfaces outside the glyph group. Whole-wire
+  circuit boundary copies are reconstructed from the authored conductor selection,
+  the stable native endpoint unit and actual landed native route geometry; an
+  export's boundary flag alone never removes an obligation. Primitive locators
+  distinguish separate placements of the same function on the same sheet. Native
+  authored circuit selections, visible appearances and exported occurrences/seeds
+  are reconciled; missing/forged locators fail rather than remove obligations.
+  Every row must match the authored NO/NC state, terminal set and all independently
+  measured full target destinations, or explicit `not drawn`. Reports and boundary
+  contexts never count as full destinations. Exported strings/state/targets are
+  never the oracle. The checker imports no renderer planner or query formatter.
+- `Contact associations unspecified` is valid only when the coil's own device has
+  contacts and no eligible direct relation. Coil-only devices get no mirror.
+  Reciprocal captions name every related coil destination (or `not drawn`);
+  shared gang captions need native group membership, painted mechanical links,
+  the same coil set and the same issued sheet/view fragment. Unspecified and
+  out-of-scope associations disclose their machine assessment without automatic
+  pass credit. Drawings must never print `not assessed`.
+- Mirror locality uses the coil's terminal centroid rounded to 0.01 mm, measured
+  printed table ink, the same sheet, ≤60 mm, intersection with its own or an
+  adjacent printed zone, and nearest-owner box-to-box distance against visible,
+  clipped, nested frames. Frameless owners use their native body box. A foreign
+  frame tie within 0.01 mm is ambiguous. A nonlocal table needs a verified
+  `K1 /ss.zone` heading. Repeat locality shares the body fallback and tolerance;
+  it has no zone-adjacency clause. Returns report distance without any threshold.
+  SVG semantics and locality are measured here; independent SVG/HTML/PDF text
+  visibility, clipping and type checks continue separately.
+- DQ-05 independently implements the approved S2 terminal separator: exactly two
+  names use en dash unless either contains `-`, `–`, `−` or `+`; otherwise use
+  `/`, falling back to `, ` when a name contains `/`. No renderer formatter is
+  imported. Sign/dash and comma branches have separate controls.
+- E2a controls pin single-contact `same contact`, intact continuation rows whose
+  ink/em boxes straddle the gap, frameless ownership, frame ties, title-panel
+  right/bottom edges and half-stroke clearance. The gap epsilon imports
+  `INK_ACCURACY_MM`. Title-panel detection currently assumes a **single row**:
+  the last full-width rule is its top. Full-width internal rules in a future
+  multi-row title block are unsupported, explicitly tested, and require a native
+  panel boundary before they can receive title-field credit.
+- Capture displays already measured sheets without measuring their geometry a
+  second time. The same source bytes/fonts and frozen measured geometry remain
+  in use for observations and crops.
+
+Q5 supplies a separate **report-only** per-conductor reference comparison:
+
+```sh
+bun evals/draw/route-report.mjs --current evals/out/draw/CURRENT --reference evals/out/draw/REFERENCE --output route-lengths.json
+```
+
+It reports each native wire/jumper/core by authored view: clipped route-centerline
+length in mm, bend count, reference length/bends and both deltas. Tiled copies of
+one path are unioned; unsupported paths/clips and unresolved owners are disclosed
+as measurement gaps. Plate occlusion is excluded. Added and removed conductors
+are explicit. No length or bend change sets a fail status or changes expectations.
+The reference and current captures must be retained checkpoints. RT2 consumes
+this report; it does not implement the renderer's candidate rejection policy.
+
+Expectations and repins are unchanged.
 
 ## Prerequisites and costs
 
@@ -437,7 +499,7 @@ Detour geometry/length is clipped to sheet and viewport before thresholding.
 | 04  | Selected-standard glyph/qualifier reviewer form.                                                                                                                                |
 | 05  | Default IR function keys/aggregate vocabulary, preserving authored terminal identifiers/descriptions.                                                                           |
 | 06  | Owned painted tag per UID/sheet; instance/type description, catalog part, qualified local references and explicit string rating/part only.                                      |
-| 07  | Needs printed mirror identities, coil associations and destination exports.                                                                                                     |
+| 07  | Native full repeats, direct coil/contact mirrors and reciprocal returns; measured destinations/locality and occurrence/seed reconciliation.                                     |
 | 08  | Reciprocal continuations, source-derived printed conductor and peer sheet.zone; associated rows across SVG/HTML/PDF. Ordered ports need an export.                              |
 | 09  | Four borders and independently derived grid zones versus unique printed target references. Ambiguous repeated/spanning appearance anchors are a gap.                            |
 | 10  | Measured phase/terminal order in both flows and upright qualifiers.                                                                                                             |

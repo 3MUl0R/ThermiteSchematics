@@ -36,6 +36,7 @@ import { expectations } from "./expectations.mjs";
 import {
   launch,
   openSheet,
+  displaySheet,
   cropBox,
   screenshotCrop,
   measureSheet,
@@ -422,7 +423,7 @@ try {
           const prefix = `sheet-${String(s.number).padStart(3, "0")}`,
             svgPath = join(directory, `${prefix}.svg`);
           await writeFile(svgPath, s.svg);
-          await openSheet(page, s.svg);
+          await displaySheet(page, s.svg);
           const g = geometries[s.number - 1];
           requireReportCells(g);
           requireReportCells(htmlGeometry[s.number - 1]);
@@ -702,7 +703,7 @@ try {
           (r) => r.status === "fail" && r.evidence.findings[0]?.bbox,
         )) {
           const s = packet.sheets.find((s) => s.number === row.sheet);
-          await openSheet(page, s.svg);
+          await displaySheet(page, s.svg);
           const box = canonical(
               cropBox(
                 row.evidence.findings[0].bbox,

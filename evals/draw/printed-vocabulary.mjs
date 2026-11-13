@@ -17,12 +17,14 @@ const parts = (key) => {
     return [];
   }
 };
-function terminalSet(names) {
-  return names.join(
-    names.length === 2 && names.every((s) => /^[A-Za-z0-9]+$/u.test(s))
+export function terminalSet(names) {
+  const separator =
+    names.length === 2 && !names.some((s) => /[-–−+]/u.test(s))
       ? "–"
-      : " / ",
-  );
+      : names.some((s) => s.includes("/"))
+        ? ", "
+        : " / ";
+  return names.join(separator);
 }
 function functionCaption(fn) {
   const kind =

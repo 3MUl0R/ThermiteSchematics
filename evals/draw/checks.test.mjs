@@ -865,7 +865,7 @@ describe("corpus and sweep inventory", () => {
     expect(new Set(cases().map((c) => c.id)).size).toBe(cases().length);
     expect(cases(true).some((c) => c.id.startsWith("ea-f3"))).toBe(true);
   });
-  it("covers every DQ even when a check needs a missing export", () => {
+  it("keeps checklist summary coverage without inventing function-free DQ-07 observations", () => {
     const spec = { id: "test", flow: "left-to-right" },
       sheet = {
         number: 1,
@@ -885,7 +885,8 @@ describe("corpus and sweep inventory", () => {
     );
     const dqs = new Set(rows.map((r) => r.dq));
     expect(dqs.has("DQ-20")).toBe(false); // packet-level check
-    expect(dqs.size).toBe(23);
+    expect(dqs.has("DQ-07")).toBe(false); // no native function appearances
+    expect(dqs.size).toBe(22);
     expect(Object.keys(summary(rows))).toHaveLength(24);
     expect(Object.keys(criteria)).toEqual(Object.keys(summary(rows)));
   });

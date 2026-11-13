@@ -136,3 +136,56 @@ it("CT block gap enforces 2.5 mm minus the established 0.17 mm measurement epsil
     assessment: "measured",
   });
 });
+it("DQ-18 panel right and bottom edges require full ink containment", () => {
+  for (const edge of ["right", "bottom"]) {
+    const row = t(title);
+    if (edge === "right") row.bbox.x = panel.x + panel.w - row.bbox.w;
+    else row.bbox.y = panel.y + panel.h - row.bbox.h;
+    const g = { titleBlock: panel, texts: [row] };
+    expect(titleFields(g)).toEqual([]);
+    row.bbox[edge === "right" ? "x" : "y"] += 0.002;
+    expect(titleFields(g)).toHaveLength(1);
+    expect(titleFields(g)[0].missing).toHaveLength(7);
+  }
+});
+it("CT intact per-glyph rows retain ink bounds when em bounds straddle the gap", () => {
+  const cs = [1, 2].map((n) => ({
+    id: "C00" + n,
+    toSheet: 2,
+    conductor: "W" + n,
+    sourceElement: { kind: "wire", uid: "w" + n },
+  }));
+  const rows = cs.map((c, i) => ({
+    ...t(`${c.id} / 02.A1 / ${c.conductor}`, 40),
+    continuationLink: "a" + i,
+    bbox: { x: 30 + i * 22.4, y: 40, w: 20, h: 2 },
+    continuationRuns: [
+      {
+        text: `${c.id} / 02.A1 / ${c.conductor}`,
+        anchor: { x: 30 + i * 22.4, y: 40 },
+        bbox: { x: 30 + i * 22.4, y: 39, w: 20.4, h: 4 },
+      },
+    ],
+  }));
+  const check = () =>
+    continuationTypography(
+      { number: 1, continuations: cs },
+      {
+        texts: rows,
+        connectors: cs.map((c, i) => ({ ...c, element: "a" + i })),
+        shapes: [],
+      },
+      {
+        wires: cs.map((c, i) => ({
+          uid: "w" + (i + 1),
+          designation: c.conductor,
+        })),
+      },
+    );
+  expect(check().findings).toEqual([]);
+  expect(check().measurements[0].gapMm).toBeCloseTo(2.4);
+  rows[1].bbox.x -= 0.1;
+  expect(check().findings.map((f) => f.kind)).toContain(
+    "continuation-block-gap",
+  );
+});

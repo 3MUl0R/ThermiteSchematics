@@ -205,7 +205,7 @@ it("M5 stripping symbol/function locators cannot erase the native repeated appea
   expect(result.findings.map((f) => f.kind)).toContain("repeat-label-count");
 });
 
-it("M5 production results belong to DQ-07 while mirror and return scope stays unimplemented", async () => {
+it("M5 production results belong to DQ-07 alongside independently measured mirror scope", async () => {
   const gs = [await measure(repeatBody(0)), await measure(repeatBody(1))];
   const pk = {
     ...packet,
@@ -242,9 +242,21 @@ it("M5 production results belong to DQ-07 while mirror and return scope stays un
   expect(
     rows.find((r) => r.id === "native-repeat/DQ-07/repeats-1"),
   ).toMatchObject({ dq: "DQ-07", status: "pass" });
-  expect(rows.filter((r) => r.dq === "DQ-07")).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ status: "not-implemented" }),
-    ]),
+  expect(
+    rows
+      .filter((r) => r.dq === "DQ-07")
+      .some((r) => r.status === "not-implemented"),
+  ).toBe(false);
+});
+it("DQ-18 title-panel geometry explicitly assumes one full-width title row", async () => {
+  // Until a native title-panel boundary exists, the last full-width rule is the
+  // panel top. Multi-row layouts with full-width internals are not supported.
+  const frame =
+    '<rect x="10" y="10" width="180" height="180" fill="none" stroke="black"/><path d="M10 25 H190" stroke="black"/><path d="M10 170 H190" stroke="black"/><path d="M10 180 H190" stroke="black"/>';
+  const g = await measure(
+    frame +
+      '<text x="15" y="177" font-size="2.5">Drawn by: A</text><text x="15" y="187" font-size="2.5">Revision history</text>',
   );
+  expect(g.titleBlock.y).toBeCloseTo(180);
+  expect(titleFields(g)[0].missing).toContain("drawn");
 });

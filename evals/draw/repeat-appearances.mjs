@@ -1,3 +1,4 @@
+import { fullCircuitAppearances } from "./circuit-appearances.mjs";
 import { painted, extent, groupBy } from "./review-geometry.mjs";
 
 // Quantize measured coordinates to Q=0.01 mm BEFORE half-open grid lookup.
@@ -63,7 +64,7 @@ const complete = (s) => {
 // Source terminal membership, not glyph keys, decides which native functions
 // a painted aggregate or individual symbol represents. Single terminal context
 // and clipped fragments cannot discharge a full-function obligation.
-export function repeatAppearances(packet, geometries, ir, request) {
+export function fullFunctionAppearances(packet, geometries, ir, request) {
   const appearances = [];
   const issuedViews = [
     ...new Set(
@@ -79,7 +80,7 @@ export function repeatAppearances(packet, geometries, ir, request) {
     if (!g) continue;
     const bodies = (g.shapes ?? []).filter(
       (s) =>
-        s.functionScope &&
+        (s.nativeFunctionScope || s.functionScope) &&
         !s.terminal &&
         !s.conductor &&
         !s.attachment &&
@@ -87,14 +88,21 @@ export function repeatAppearances(packet, geometries, ir, request) {
           s.symbol ||
           s.circuitFunctions?.length ||
           s.functionKey) &&
+        s.nativeBodyPainted !== false &&
         (s.inkSegments?.length ||
           s.stroke > 0 ||
           !["none", "white", "rgb(255, 255, 255)"].includes(s.fill ?? "none")),
     );
-    for (const [scope, shapes] of groupBy(bodies, (s) => s.functionScope)) {
+    for (const [scope, shapes] of groupBy(
+      bodies,
+      (s) => s.nativeFunctionScope ?? s.functionScope,
+    )) {
       if (!shapes.every(complete)) continue;
       const ports = (g.terminals ?? []).filter(
-        (t) => t.functionScope === scope && painted(t) && complete(t),
+        (t) =>
+          (t.nativeFunctionScope ?? t.functionScope) === scope &&
+          painted(t) &&
+          complete({ ...t, bbox: { ...t.point, w: 0, h: 0 } }),
       );
       const uid = shapes[0].deviceUid;
       if (!uid || !ir.devices?.some((d) => d.uid === uid)) continue;
@@ -137,6 +145,11 @@ export function repeatAppearances(packet, geometries, ir, request) {
         const anchor = centroid(terminals);
         appearances.push({
           uid,
+          geometryIndex: i,
+          circuitGroup: shapes[0].circuitGroup,
+          primitiveIds: [
+            ...new Set(shapes.flatMap((s) => s.primitiveIds ?? [])),
+          ],
           functionKey: fn.id.functionKey,
           kind: fn.kind,
           view: selected ?? view,
@@ -153,6 +166,10 @@ export function repeatAppearances(packet, geometries, ir, request) {
       }
     }
   }
+  return fullCircuitAppearances(appearances, geometries, ir, request);
+}
+export function repeatAppearances(packet, geometries, ir, request) {
+  const appearances = fullFunctionAppearances(packet, geometries, ir, request);
   // The appearance unit is UID + selected view + sheet, never glyph.
   return [
     ...groupBy(appearances, (a) => JSON.stringify([a.uid, a.view, a.sheet])),

@@ -1,3 +1,5 @@
+import { mirrorReturns } from "./mirror-returns.mjs";
+const mirrorAudits = new WeakMap();
 import { repeatNavigation } from "./repeat-navigation.mjs";
 const repeatAudits = new WeakMap();
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
@@ -16,8 +18,6 @@ import * as checks from "./checks.mjs";
 import { identifierFindings } from "./identifier-checks.mjs";
 import { identifierTable } from "./identifier-tables.mjs";
 const reasons = {
-  "DQ-07":
-    "Needs exported printed contact-mirror identities, their sheet.zone destinations and coil associations; related-function metadata alone does not identify the printed mirror.",
   "DQ-24":
     "Needs exported configured wire-numbering policy and number-to-conductor assignments; authored connection labels are not a numbering policy.",
 };
@@ -210,8 +210,43 @@ export function evaluateSheet(
             repeatCount: repeats.repeatCount,
           },
           scope:
-            "M5 full repeats: native terminal membership and measured geometry; one label per device/view/sheet, measured targets, qualifier, locality and clearance. DQ-07 mirrors/returns remain unimplemented for E2b.",
+            "M5 full repeats: native terminal membership and measured geometry; one label per device/view/sheet, measured targets, qualifier, locality and clearance. M2 mirror/return observations are separate.",
         },
+      ),
+    );
+  if (!mirrorAudits.has(packet))
+    mirrorAudits.set(packet, mirrorReturns(packet, geometries, ir, request));
+  const mirrors = mirrorAudits.get(packet);
+  for (const [index, r] of mirrors.records
+    .filter((r) => r.sheet === s.number)
+    .entries()) {
+    out.push(
+      obs("DQ-07", r.findings, {
+        id: `${c.id}/DQ-07/${r.kind === "coil" ? "mirror" : "return"}-${s.number}-${index}`,
+        status: r.findings.length
+          ? "fail"
+          : r.assessment === "direct-actuation"
+            ? "pass"
+            : "manual",
+        evidence: {
+          findingCount: r.findings.length,
+          findings: r.findings,
+          measurements: r.measurements,
+          source: { deviceUid: r.uid, functionKey: r.functionKey },
+          view: r.view,
+          assessment: r.assessment,
+        },
+        scope:
+          "One full native coil/contact appearance; direct same-device actuation, authored state/terminals, all measured destinations or not drawn. Mirror locality uses visible ink and frames; reciprocal distance measured without a threshold.",
+      }),
+    );
+  }
+  if (mirrors.extra.some((f) => f.sheet === s.number))
+    out.push(
+      obs(
+        "DQ-07",
+        mirrors.extra.filter((f) => f.sheet === s.number),
+        { id: `${c.id}/DQ-07/reconciliation-${s.number}` },
       ),
     );
   const typography = continuationTypography(s, g, ir);
