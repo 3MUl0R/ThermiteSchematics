@@ -280,3 +280,95 @@ it("M5 nearest-frame ownership uses ink-box gaps, so a wide label is not judged 
   // Now foreign is 10 mm away, while own remains 15 mm away.
   expect(kinds(f)).toContain("repeat-locality");
 });
+it("M5 excludes M2 mirror, return and notice ink even with forged M5 export roles", () => {
+  const f = fixture();
+  for (const [i, wording] of [
+    "K1 NO 13–14 not drawn",
+    "K1 /01.A1",
+    "Contact tables list device data; contacts not drawn in this packet are marked.",
+  ].entries()) {
+    f.geometries[0].texts.push(
+      text(wording, 150, 150, {
+        navigationAnnotation: "m2-" + i,
+        navigationRole: "canonical",
+      }),
+    );
+    f.packet.navigation.annotations.push({
+      id: "m2-" + i,
+      role: "canonical",
+      ownerOccurrence: "forged",
+    });
+  }
+  expect(audit(f).findings).toEqual([]);
+  f.geometries[0].texts.push(
+    text("D: Also shown 99.D6", 150, 150, {
+      navigationAnnotation: "bad-m5",
+      navigationRole: "mirror",
+    }),
+  );
+  expect(kinds(f)).toContain("repeat-label-count");
+});
+it("M5 single contact uses same contact and rejects same function", () => {
+  const f = fixture(1);
+  f.ir.functions[0].kind = "contact";
+  const label = f.geometries[1].texts.at(-1);
+  label.text = "D: Repeat of 01.A1 (same contact)";
+  expect(audit(f).findings).toEqual([]);
+  label.text = label.text.replace("same contact", "same function");
+  expect(kinds(f)).toContain("repeat-qualifier");
+});
+it("M5 frameless owner uses native body, and foreign frame ties within 0.01 mm are ambiguous", () => {
+  const f = fixture(1),
+    g = f.geometries[1];
+  g.shapes = g.shapes.filter((s) => !s.outline);
+  expect(audit(f).findings).toEqual([]);
+  const foreign = {
+    outline: true,
+    deviceUid: "foreign",
+    bbox: bbox(30, 90.02, 20, 10),
+  };
+  g.shapes.push(foreign);
+  // Body ends at 40, label starts at 70; this foreign is closer.
+  expect(kinds(f)).toContain("repeat-locality");
+  foreign.bbox.y = 102.02;
+  expect(audit(f).findings).toEqual([]);
+  foreign.bbox.y = 102.005;
+  expect(kinds(f)).toContain("repeat-locality");
+});
+it("M5 non-text clearance includes the half stroke", () => {
+  const f = fixture(),
+    g = f.geometries[1];
+  const ink = {
+    element: "thick",
+    stroke: 0.4,
+    bbox: bbox(51.7, 69, 0, 4),
+    inkSegments: [
+      [
+        { x: 51.7, y: 69 },
+        { x: 51.7, y: 73 },
+      ],
+    ],
+  };
+  g.shapes.push(ink);
+  expect(audit(f).findings).toEqual([]);
+  ink.inkSegments = [
+    [
+      { x: 51.6, y: 69 },
+      { x: 51.6, y: 73 },
+    ],
+  ];
+  expect(kinds(f)).toContain("repeat-ink-clearance");
+});
+it("M5 wrapped annotation keeps its qualifier row while excluding M2 blocks", () => {
+  const f = fixture(1),
+    g = f.geometries[1],
+    label = g.texts.at(-1);
+  label.text = "D: Repeat of 01.A1";
+  g.texts.push({
+    ...label,
+    text: "(same function)",
+    bbox: bbox(30, 75),
+    anchor: { x: 30, y: 75 },
+  });
+  expect(audit(f).findings).toEqual([]);
+});

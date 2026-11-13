@@ -243,7 +243,14 @@ export function measureSheet(options = {}) {
     navigationView: attr(e, "data-navigation-view"),
     navigationAnnotation: attr(e, "data-navigation-annotation"),
     navigationOwner: attr(e, "data-navigation-owner"),
+    navigationRole: attr(e, "data-navigation-role"),
+    navigationContainer: ids.get(e.closest("[data-navigation-role]")),
+    mirrorRow: attr(e, "data-navigation-mirror-row"),
+    mirrorRowScope: ids.get(e.closest("[data-navigation-mirror-row]")),
+    gangedFunctions: attr(e, "data-ganged-functions"),
+    mechanicalAssociation: attr(e, "data-mechanical-association"),
     glyphBody: !!e.closest(".symbol"),
+    nativeFunctionScope: ids.get(e.closest("[data-circuit-functions]")),
     functionScope: ids.get(
       e.closest(
         "[data-symbol-id],[data-function-key],[data-aggregate-key],.symbol,[data-circuit-functions]",
@@ -378,6 +385,139 @@ export function measureSheet(options = {}) {
     }
     return runs;
   }
+  const shapeClips = (e) => {
+    const clips = [];
+    for (let owner = e; owner; owner = owner.parentElement) {
+      const css = getComputedStyle(owner);
+      if (
+        css.display === "none" ||
+        css.visibility === "hidden" ||
+        Number(css.opacity) === 0
+      )
+        return null;
+      if (css.maskImage && css.maskImage !== "none")
+        throw Error("DQ-12 unsupported mask: " + css.maskImage);
+      const ref = css.clipPath;
+      if (ref && ref !== "none") {
+        const id = ref.match(/url\(["']?(?:[^#]*#)([^"')]+)["']?\)/)?.[1],
+          clip = id && root.querySelector(`#${CSS.escape(id)}`),
+          rect = clip?.children[0];
+        if (
+          typeof owner.getScreenCTM !== "function" ||
+          clip?.tagName.toLowerCase() !== "clippath" ||
+          clip.children.length !== 1 ||
+          rect?.tagName.toLowerCase() !== "rect" ||
+          rect.rx.baseVal.value ||
+          rect.ry.baseVal.value ||
+          getComputedStyle(clip).clipPath !== "none"
+        )
+          throw Error("DQ-12 unsupported clip path: " + ref);
+        let matrix = owner.getScreenCTM();
+        if (clip.clipPathUnits.baseVal === 2) {
+          const box = owner.getBBox();
+          matrix = new DOMMatrix([
+            matrix.a,
+            matrix.b,
+            matrix.c,
+            matrix.d,
+            matrix.e,
+            matrix.f,
+          ])
+            .translate(box.x, box.y)
+            .scale(box.width, box.height);
+        }
+        for (const node of [clip, rect]) {
+          const transform = node.transform.baseVal.consolidate();
+          if (transform) matrix = matrix.multiply(transform.matrix);
+        }
+        if (matrix.b !== 0 || matrix.c !== 0)
+          throw Error("DQ-12 unsupported rotated clip path: " + ref);
+        const length = (name) => {
+          const value = rect[name].baseVal;
+          return clip.clipPathUnits.baseVal === 2 && value.unitType === 2
+            ? value.valueInSpecifiedUnits / 100
+            : value.value;
+        };
+        const a = new DOMPoint(length("x"), length("y")).matrixTransform(
+            matrix,
+          ),
+          b = new DOMPoint(
+            length("x") + length("width"),
+            length("y") + length("height"),
+          ).matrixTransform(matrix),
+          aa = point(a.x, a.y),
+          bb = point(b.x, b.y);
+        clips.push({
+          x: Math.min(aa.x, bb.x),
+          y: Math.min(aa.y, bb.y),
+          w: Math.abs(aa.x - bb.x),
+          h: Math.abs(aa.y - bb.y),
+        });
+      }
+    }
+    return clips;
+  };
+  // Q5 capture avoids unrelated text/glyph raster work. It still uses native
+  // browser transforms, viewport clips and the same rectangular clip reader.
+  if (options.routesOnly)
+    return {
+      width: vb.width,
+      height: vb.height,
+      shapes: [...root.querySelectorAll("path,line,polyline")].flatMap((e) => {
+        const id = identity(e),
+          v = visible(e),
+          css = getComputedStyle(e);
+        if (
+          !v ||
+          !(id.wire || id.loopConductor || attr(e, "data-edge-key")) ||
+          ["none", "rgb(255, 255, 255)"].includes(css.stroke)
+        )
+          return [];
+        const m = e.getScreenCTM();
+        let clips, clipError;
+        try {
+          clips = shapeClips(e);
+        } catch (error) {
+          clipError = error.message;
+        }
+        let points;
+        if (e.matches("line"))
+          points = [
+            [e.x1.baseVal.value, e.y1.baseVal.value],
+            [e.x2.baseVal.value, e.y2.baseVal.value],
+          ].map(([x, y]) => {
+            const p = new DOMPoint(x, y).matrixTransform(m);
+            return point(p.x, p.y);
+          });
+        if (e.matches("polyline"))
+          points = Array.from({ length: e.points.numberOfItems }, (_, i) => {
+            const p = e.points.getItem(i).matrixTransform(m);
+            return point(p.x, p.y);
+          });
+        return [
+          {
+            ...id,
+            conductor: true,
+            routePath: e.getAttribute("d"),
+            points,
+            routeMatrix: [
+              m.a * sx,
+              m.b * sy,
+              m.c * sx,
+              m.d * sy,
+              (m.e - rr.x) * sx,
+              (m.f - rr.y) * sy,
+            ],
+            viewport: v.clip,
+            clips,
+            clipError,
+            edgeOwnerKey: attr(e, "data-edge-key")
+              ? ownerKey(attr(e, "data-edge-key"), "edge")
+              : undefined,
+          },
+        ];
+      }),
+    };
   const terminals = Array.from(
     root.querySelectorAll(
       "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key]",
@@ -392,6 +532,13 @@ export function measureSheet(options = {}) {
       {
         ...identity(e),
         bbox: b,
+        viewport: v.clip,
+        painted: (() => {
+          let alpha = 1;
+          for (let n = e; n; n = n.parentElement)
+            alpha *= Number(getComputedStyle(n).opacity);
+          return alpha >= 0.2;
+        })(),
         point: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
         fill: getComputedStyle(e).fill,
       },
@@ -1119,78 +1266,6 @@ export function measureSheet(options = {}) {
   // Other predicates keep their original geometry. Generated clip paths are
   // axis-aligned rectangles. Refuse
   // unsupported masks instead of using their unclipped bounds.
-  const shapeClips = (e) => {
-    const clips = [];
-    for (let owner = e; owner; owner = owner.parentElement) {
-      const css = getComputedStyle(owner);
-      if (
-        css.display === "none" ||
-        css.visibility === "hidden" ||
-        Number(css.opacity) === 0
-      )
-        return null;
-      if (css.maskImage && css.maskImage !== "none")
-        throw Error("DQ-12 unsupported mask: " + css.maskImage);
-      const ref = css.clipPath;
-      if (ref && ref !== "none") {
-        const id = ref.match(/url\(["']?(?:[^#]*#)([^"')]+)["']?\)/)?.[1],
-          clip = id && root.querySelector(`#${CSS.escape(id)}`),
-          rect = clip?.children[0];
-        if (
-          typeof owner.getScreenCTM !== "function" ||
-          clip?.tagName.toLowerCase() !== "clippath" ||
-          clip.children.length !== 1 ||
-          rect?.tagName.toLowerCase() !== "rect" ||
-          rect.rx.baseVal.value ||
-          rect.ry.baseVal.value ||
-          getComputedStyle(clip).clipPath !== "none"
-        )
-          throw Error("DQ-12 unsupported clip path: " + ref);
-        let matrix = owner.getScreenCTM();
-        if (clip.clipPathUnits.baseVal === 2) {
-          const box = owner.getBBox();
-          matrix = new DOMMatrix([
-            matrix.a,
-            matrix.b,
-            matrix.c,
-            matrix.d,
-            matrix.e,
-            matrix.f,
-          ])
-            .translate(box.x, box.y)
-            .scale(box.width, box.height);
-        }
-        for (const node of [clip, rect]) {
-          const transform = node.transform.baseVal.consolidate();
-          if (transform) matrix = matrix.multiply(transform.matrix);
-        }
-        if (matrix.b !== 0 || matrix.c !== 0)
-          throw Error("DQ-12 unsupported rotated clip path: " + ref);
-        const length = (name) => {
-          const value = rect[name].baseVal;
-          return clip.clipPathUnits.baseVal === 2 && value.unitType === 2
-            ? value.valueInSpecifiedUnits / 100
-            : value.value;
-        };
-        const a = new DOMPoint(length("x"), length("y")).matrixTransform(
-            matrix,
-          ),
-          b = new DOMPoint(
-            length("x") + length("width"),
-            length("y") + length("height"),
-          ).matrixTransform(matrix),
-          aa = point(a.x, a.y),
-          bb = point(b.x, b.y);
-        clips.push({
-          x: Math.min(aa.x, bb.x),
-          y: Math.min(aa.y, bb.y),
-          w: Math.abs(aa.x - bb.x),
-          h: Math.abs(aa.y - bb.y),
-        });
-      }
-    }
-    return clips;
-  };
   const paintedShapeBounds = (
     e,
     bbox,
@@ -1633,6 +1708,8 @@ export function measureSheet(options = {}) {
       !id.terminal &&
       !id.glyphBody &&
       !hasRepeatLabels &&
+      !id.navigationAnnotation &&
+      !id.mechanicalAssociation &&
       !cls.includes("junction-dot") &&
       !e.hasAttribute("data-wiring-junction")
     )
@@ -1693,6 +1770,20 @@ export function measureSheet(options = {}) {
           ? ["wire", id.wire]
           : undefined;
     } catch {}
+    const nativeBody =
+      !conductor &&
+      !outline &&
+      !id.terminal &&
+      (symbol || id.functionKey || id.circuitFunctions?.length);
+    const inkSegments =
+      symbol ||
+      mark ||
+      nativeBody ||
+      id.mechanicalAssociation ||
+      id.attachment ||
+      id.attachmentCandidate
+        ? strokeInk(e, v.clip, m, !!nativeBody && css.stroke === "none")
+        : undefined;
     return [
       {
         ...id,
@@ -1705,17 +1796,20 @@ export function measureSheet(options = {}) {
         conductor,
         lead,
         outline,
+        navigationFrame: /(?:^|\s)(?:circuit-)?device-frame(?:\s|$)/.test(cls),
         stroke: css.stroke === "none" ? 0 : stroke,
         fill: css.fill,
+        strokeColour: css.stroke,
         dash: css.strokeDasharray,
         points,
-        inkSegments:
-          symbol || mark || id.attachment || id.attachmentCandidate
-            ? strokeInk(e, v.clip, m)
+        inkSegments,
+        nativeBodyPainted: nativeBody ? inkSegments.length > 0 : undefined,
+        navigationInkSegments:
+          hasRepeatLabels ||
+          /(?:^|\s)(?:circuit-)?device-frame(?:\s|$)/.test(cls) ||
+          id.navigationAnnotation
+            ? strokeInk(e, v.clip, m, true)
             : undefined,
-        navigationInkSegments: hasRepeatLabels
-          ? strokeInk(e, v.clip, m, true)
-          : undefined,
         routePath:
           conductor ||
           id.loopConductor ||
@@ -1876,11 +1970,14 @@ export function measureSheet(options = {}) {
     ),
   };
 }
-export async function openSheet(page, svg) {
+export async function displaySheet(page, svg) {
   await page.setContent(
     `<html><head><style>*{box-sizing:border-box}html,body{margin:0;background:white}body>svg{display:block;max-width:none}</style></head><body>${svg.replace(/^<\?xml[^>]*>/, "")}</body></html>`,
   );
   await page.evaluate(() => document.fonts.ready);
+}
+export async function openSheet(page, svg) {
+  await displaySheet(page, svg);
   return classifyTextGeometry(await page.evaluate(measureSheet));
 }
 export function cropBox(b, width, height, padding = 3) {

@@ -15,19 +15,11 @@ const unique = (xs) =>
 const equal = (a, b) =>
   JSON.stringify(unique(a)) === JSON.stringify(unique(b)) &&
   a.length === unique(a).length;
-const gap = (a, b) => ({
-  x: Math.max(0, a.x - b.x - b.w, b.x - a.x - a.w),
-  y: Math.max(0, a.y - b.y - b.h, b.y - a.y - a.h),
-});
-const boxDistance = (p, b) =>
-  Math.hypot(
-    Math.max(b.x - p.x, 0, p.x - b.x - b.w),
-    Math.max(b.y - p.y, 0, p.y - b.y - b.h),
-  );
-function frameDistance(label, frame) {
-  const separation = gap(label, frame);
-  return Math.hypot(separation.x, separation.y);
-}
+import {
+  boxGap as gap,
+  anchorDistance as boxDistance,
+  nearestOwner,
+} from "./navigation-geometry.mjs";
 function labels(g) {
   // Marker/export disappearance never exempts visible repeat wording.
   return [
@@ -35,20 +27,19 @@ function labels(g) {
       g.texts.filter(
         (t) =>
           painted(t) &&
-          (t.navigationAnnotation ||
-            /Also shown|Repeat of|\(same (?:function|functions|contact)\)/.test(
-              t.text,
-            )),
+          (t.navigationAnnotation || /Also shown|Repeat of/.test(t.text)),
       ),
       (t) => t.navigationAnnotation ?? t.textContainer ?? t.element,
     ),
-  ].map(([id, rows]) => ({
-    id,
-    rows,
-    bbox: boxExtent(rows),
-    element: rows[0].element,
-    text: rows.map((t) => t.text).join(" "),
-  }));
+  ]
+    .filter(([, rows]) => rows.some((t) => /Also shown|Repeat of/.test(t.text)))
+    .map(([id, rows]) => ({
+      id,
+      rows,
+      bbox: boxExtent(rows),
+      element: rows[0].element,
+      text: rows.map((t) => t.text).join(" "),
+    }));
 }
 /** @returns {import('./navigation-contracts').RepeatAudit} */
 export function repeatNavigation(packet, geometries, ir, request) {
@@ -213,43 +204,23 @@ export function repeatNavigation(packet, geometries, ir, request) {
       }
       const anchor = centroid(a.ports),
         ownZone = measuredZone(g, anchor);
-      const frames = g.shapes
-        .filter(
-          (s) =>
-            s.outline &&
-            s.deviceUid &&
-            (!s.navigationInkSegments || s.navigationInkSegments.length),
-        )
-        .map((s) => ({
-          ...s,
-          bbox: s.navigationInkSegments?.length
-            ? boxExtent(
-                s.navigationInkSegments.flatMap((pair) =>
-                  pair.map((p) => ({ bbox: { x: p.x, y: p.y, w: 0, h: 0 } })),
-                ),
-              )
-            : s.bbox,
-        }));
-      const nearest = frames
-        .map((s) => ({ s, d: frameDistance(label.bbox, s.bbox) }))
-        .sort((x, y) => x.d - y.d);
+      const {
+        ownerNearest,
+        nearestDeviceUid,
+        nearestFrameGapMm,
+        ownerFrameGapMm,
+      } = nearestOwner(g, a, label.bbox);
       const distanceMm = boxDistance(anchor, label.bbox);
-      const ownerNearest =
-        nearest.length > 0 &&
-        nearest[0].s.deviceUid === a.uid &&
-        !nearest.some(
-          (n) => n.s.deviceUid !== a.uid && n.d <= nearest[0].d + 0.001,
-        );
-      const localLabel = distanceMm <= 60 + EPS && ownerNearest;
+      const localLabel = distanceMm <= 60 + EPS + 1e-9 && ownerNearest;
       const prefix = label.text.match(/^.*?\((\d+)\.([A-Z]+\d+)\):/);
       const selfLocated =
         prefix && Number(prefix[1]) === a.sheet && prefix[2] === ownZone;
       if ((!localLabel && !selfLocated) || (prefix && !selfLocated))
         emit("repeat-locality", label, {
           distanceMm,
-          nearestDeviceUid: nearest[0]?.s.deviceUid,
-          nearestFrameGapMm: nearest[0]?.d,
-          ownerFrameGapMm: nearest.find((n) => n.s.deviceUid === a.uid)?.d,
+          nearestDeviceUid,
+          nearestFrameGapMm,
+          ownerFrameGapMm,
           expectedPrefix: token({ sheet: a.sheet, zone: ownZone }),
         });
       measurements.push({
@@ -261,8 +232,8 @@ export function repeatNavigation(packet, geometries, ir, request) {
         zone: ownZone,
         distanceMm,
         ownerNearest,
-        nearestFrameGapMm: nearest[0]?.d,
-        ownerFrameGapMm: nearest.find((n) => n.s.deviceUid === a.uid)?.d,
+        nearestFrameGapMm,
+        ownerFrameGapMm,
         selfLocated: !!selfLocated,
         bbox: label.bbox,
       });

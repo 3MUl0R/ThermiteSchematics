@@ -1,24 +1,25 @@
-/** Independent measured repeat audit. DQ-07 mirrors/returns are E2b. */
+/** Independent measured repeat audit. */
 export interface RepeatAudit {
   findings: { sheet: number; kind: string; [key: string]: unknown }[];
   measurements: { sheet: number; [key: string]: unknown }[];
   appearanceCount: number;
   repeatCount: number;
 }
-/** Inactive seam: no mirror/return pass credit before native/ink reconciliation. */
+/** Native full appearances reconciled with printed mirror/return ink. */
+export interface MirrorReturnRecord {
+  uid: string;
+  functionKey: string;
+  kind: string;
+  sheet: number;
+  view: number | string;
+  assessment: string;
+  findings: { kind: string; sheet: number; [key: string]: unknown }[];
+  measurements: { [key: string]: unknown }[];
+}
 export interface MirrorReturnAudit {
-  status: "not-implemented" | "measured";
-  coilAppearances: readonly {
-    deviceUid: string;
-    functionKey: string;
-    sheet: number;
-    view: number;
-  }[];
-  contactAppearances: readonly {
-    deviceUid: string;
-    functionKey: string;
-    sheet: number;
-    view: number;
-  }[];
+  records: readonly MirrorReturnRecord[];
+  coilAppearances: readonly MirrorReturnRecord[];
+  contactAppearances: readonly MirrorReturnRecord[];
   findings: readonly { kind: string; sheet: number; [key: string]: unknown }[];
+  extra: readonly { kind: string; sheet: number; [key: string]: unknown }[];
 }

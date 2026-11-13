@@ -8,7 +8,8 @@ import {
 import { finding, painted, extent } from "./review-geometry.mjs";
 import { printedZones } from "./printed-zones.mjs";
 export const CONTINUATION_BLOCK_GAP_MM = 2.5;
-export const MEASUREMENT_EPSILON_MM = 0.17;
+import { INK_ACCURACY_MM } from "./checks.mjs";
+export const MEASUREMENT_EPSILON_MM = INK_ACCURACY_MM;
 export function continuationTypography(sheet, g, ir) {
   const findings = [],
     blocks = [],
