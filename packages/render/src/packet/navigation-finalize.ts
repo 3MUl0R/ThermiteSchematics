@@ -1,6 +1,6 @@
 import type { ElectricalIr, FunctionId } from "@thermite/compiler";
 import { serializeIr } from "@thermite/compiler";
-import type { Draft, RenderedSheet } from "./types.js";
+import type { Draft, RenderedSheet, PaperPage } from "./types.js";
 import type {
   IssuedNavigation,
   AnnotationReservation,
@@ -12,12 +12,16 @@ import {
   planRepeatNavigation,
   NAVIGATION_FONT_MM,
 } from "./navigation-repeats.js";
-import { allocateNavigationSlots } from "./navigation-slots.js";
+import {
+  allocateNavigationSlots,
+  NavigationSlotFailure,
+} from "./navigation-slots.js";
 import { navigationDraftInputs } from "./navigation-seeds.js";
 import { navigationHash } from "./navigation-identity.js";
 import { text } from "./svg.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
+import { unionInk } from "./rooted-ink.js";
 import { inside } from "../device-legend/geometry.js";
 import { required } from "../presentation/util.js";
 import type { RenderOutcome } from "../types.js";
@@ -26,12 +30,29 @@ import type { SheetSlotRequest } from "./navigation-slots.js";
 import type { RepeatPlan } from "./navigation-repeats.js";
 import { symbolGeometry, type SymbolGeometry } from "./navigation-symbols.js";
 import { resolveLabelLocality } from "./navigation-locality.js";
+import {
+  wrapNavigationText,
+  NAVIGATION_FONT_MM as MIRROR_EM,
+} from "./navigation-labels.js";
+import { planMirrors } from "./mirror-plan.js";
+import {
+  mirrorAnnotationSvg,
+  resolveMirrorLocality,
+  mirrorLocalBand,
+} from "./mirror-ink.js";
+import { placeContactNotice } from "./mirror-notice.js";
 import { validateAppearanceIncidence } from "./navigation-incidence.js";
 
 function annotationSvg(
   annotation: NavigationAnnotation,
   reservation: AnnotationReservation,
 ): string {
+  if (
+    ["mirror", "return", "association-unspecified", "contact-notice"].includes(
+      annotation.role,
+    )
+  )
+    return mirrorAnnotationSvg(annotation, reservation);
   const box = required(
     reservation.allocatedMm,
     "Unallocated navigation reservation",
@@ -87,16 +108,22 @@ function emitSheetNavigation(
   };
 }
 
+interface FinalizationOptions {
+  notice?: boolean;
+  page?: PaperPage;
+}
+
 /** Pure finalization over immutable native drafts. Calling it twice produces the same bytes. */
 export function finalizeNavigation(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
   sheets: readonly RenderedSheet[],
+  options: FinalizationOptions = {},
 ): RenderOutcome<{ sheets: RenderedSheet[]; navigation: IssuedNavigation }> & {
   failedSheet?: number;
 } {
   try {
-    return finalizeCheckedNavigation(ir, drafts, sheets);
+    return finalizeCheckedNavigation(ir, drafts, sheets, options);
   } catch (error) {
     return failure(
       "unprintable-layout",
@@ -109,6 +136,22 @@ function finalizeCheckedNavigation(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
   sheets: readonly RenderedSheet[],
+  options: FinalizationOptions,
+): ReturnType<typeof finalizeNavigation> {
+  const whole = finalizeMirrorCandidate(ir, drafts, sheets, false, options);
+  if (
+    whole.ok ||
+    ("details" in whole.error && whole.error.details?.navigationInvariant)
+  )
+    return whole;
+  return finalizeMirrorCandidate(ir, drafts, sheets, true, options);
+}
+function finalizeMirrorCandidate(
+  ir: Readonly<ElectricalIr>,
+  drafts: readonly Draft[],
+  sheets: readonly RenderedSheet[],
+  split: boolean,
+  options: FinalizationOptions,
 ): ReturnType<typeof finalizeNavigation> {
   const occurrences = placeOccurrences(ir, drafts, sheets),
     maximums = selectedAppearanceMaximums(drafts),
@@ -118,6 +161,9 @@ function finalizeCheckedNavigation(
       maximums.counts,
       maximums.members,
     );
+  const mirrors = planMirrors(ir, occurrences, sheets, maximums.counts, split);
+  plan.annotations = [...mirrors.annotations, ...plan.annotations];
+  plan.reservations = [...mirrors.reservations, ...plan.reservations];
   validateAppearanceIncidence(ir, occurrences, sheets);
   const reservations: AnnotationReservation[] = [];
   const result: RenderedSheet[] = [];
@@ -133,34 +179,31 @@ function finalizeCheckedNavigation(
       sheet,
       draft,
       drafts.length,
+      split,
     );
     if (!allocation.ok) return { ...allocation, failedSheet: i };
     const allocated = allocation.value;
-    const annotations = plan.annotations.map((a) => {
-      const slot = allocated.find((r) => r.id === a.reservationId);
-      if (!slot) return a;
-      const request = required(
-        requests.find((r) => r.reservation.id === slot.id),
-        "Missing navigation request",
-      );
-      const owner = required(
-        owners.find((o) => o.id === a.ownerOccurrence),
-        "Missing label owner",
-      );
-      return resolveLabelLocality(
-        ir,
-        a,
-        slot,
-        request.locality,
-        owner.source.deviceUid,
-      );
-    });
-    plan.annotations = annotations;
+    plan.annotations = resolveAnnotations(
+      ir,
+      plan.annotations,
+      allocated,
+      requests,
+      owners,
+      draft,
+    );
     reservations.push(...allocated);
     result.push(
       emitSheetNavigation(sheet, owners, plan.annotations, allocated),
     );
   }
+  if (options.notice !== false)
+    placeContactNotice(
+      plan.annotations,
+      reservations,
+      drafts,
+      result,
+      options.page,
+    );
   if (new Set(reservations.map((r) => r.id)).size !== reservations.length)
     throw Error("Duplicate navigation reservation identity");
   const navigation = issuedNavigation(
@@ -173,7 +216,54 @@ function finalizeCheckedNavigation(
   return { ok: true, value: { sheets: result, navigation } };
 }
 
-type NavigationRequest = SheetSlotRequest & { locality: SymbolGeometry };
+function resolveAnnotations(
+  ir: Readonly<ElectricalIr>,
+  annotations: readonly NavigationAnnotation[],
+  allocated: readonly AnnotationReservation[],
+  requests: readonly NavigationRequest[],
+  owners: readonly PlacedOccurrence[],
+  draft: Draft,
+): NavigationAnnotation[] {
+  return annotations.map((a) => {
+    const slot = allocated.find((r) => r.id === a.reservationId);
+    if (!slot) return a;
+    const request = required(
+      requests.find((r) => r.reservation.id === slot.id),
+      "Missing navigation request",
+    );
+    const owner = required(
+      owners.find((o) => o.id === a.ownerOccurrence),
+      "Missing label owner",
+    );
+    if (a.role === "mirror")
+      return resolveMirrorLocality(
+        ir,
+        a,
+        slot,
+        request.localityGeometry,
+        required(draft.drawingBounds, "Missing mirror field"),
+      );
+    if (a.role === "contact-notice")
+      return {
+        ...a,
+        text: wrapNavigationText(
+          a.text,
+          ((slot.inkMm.w - 2) * MIRROR_EM) / 2.7,
+        ),
+      };
+    if (["return", "association-unspecified"].includes(a.role)) return a;
+    return resolveLabelLocality(
+      ir,
+      a,
+      slot,
+      request.localityGeometry,
+      owner.source.deviceUid,
+    );
+  });
+}
+type NavigationRequest = SheetSlotRequest & {
+  localityGeometry: SymbolGeometry;
+};
 function sheetRequests(
   plan: RepeatPlan,
   owners: readonly PlacedOccurrence[],
@@ -186,13 +276,62 @@ function sheetRequests(
       (o) => o.id === reservation.ownerOccurrence && o.role === "full-function",
     );
     if (!owner) return [];
+    const annotation = required(
+      plan.annotations.find((a) => a.reservationId === reservation.id),
+      "Missing navigation annotation",
+    );
+    const mirrorService = [
+      "mirror",
+      "return",
+      "association-unspecified",
+    ].includes(annotation.role);
     const locality = symbolGeometry(
       owner,
-      occurrences,
+      mirrorService
+        ? occurrences.filter((o) => annotation.ownerOccurrences.includes(o.id))
+        : occurrences,
       sheet.svg,
       required(draft.drawingBounds, "Missing navigation field"),
+      occurrences,
     );
-    return [{ reservation, owner: locality.frameMm, locality }];
+    if (annotation.role === "return" && annotation.ownerOccurrences.length > 1)
+      locality.frameMm = required(
+        unionInk(
+          occurrences
+            .filter((o) => annotation.ownerOccurrences.includes(o.id))
+            .map(
+              (o) =>
+                symbolGeometry(
+                  o,
+                  [o],
+                  sheet.svg,
+                  required(draft.drawingBounds, "Missing gang field"),
+                ).frameMm,
+            ),
+        ),
+        "Missing gang frames",
+      );
+    if (mirrorService) {
+      locality.anchorMm = owner.destination.anchorMm;
+      locality.ownerLocation = {
+        sheet: owner.destination.sheet,
+        zone: owner.destination.zone,
+      };
+    }
+    if (annotation.role === "mirror")
+      locality.localBandMm = mirrorLocalBand(
+        locality,
+        required(draft.drawingBounds, "Missing mirror field"),
+      );
+    return [
+      {
+        reservation,
+        owner: locality.frameMm,
+        ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
+        preferBesideBelow: annotation.role === "mirror",
+        localityGeometry: locality,
+      },
+    ];
   });
 }
 function allocateSheetRequests(
@@ -201,6 +340,7 @@ function allocateSheetRequests(
   sheet: RenderedSheet,
   draft: Draft,
   pageCount: number,
+  split: boolean,
 ): RenderOutcome<AnnotationReservation[]> {
   try {
     const allocated = requests.length
@@ -217,7 +357,11 @@ function allocateSheetRequests(
       "unprintable-layout",
       error instanceof Error ? error.message : "Navigation slot unavailable",
       {
+        ...(error instanceof NavigationSlotFailure
+          ? { placementSearch: error.search }
+          : {}),
         sheet: sheet.number,
+        mirrorForm: split ? "four-row-fragments" : "whole",
         profiles: requests.map((r) => r.reservation.profileId),
         requiredMm: requests.map((r) => r.reservation.inkMm),
         actualScaleMmPerUnit: owners.map((o) =>

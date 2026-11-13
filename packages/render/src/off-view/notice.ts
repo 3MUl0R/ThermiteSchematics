@@ -2,6 +2,9 @@ import type { NormalizedSchematicView } from "../types.js";
 import { wrapText } from "../text-metrics.js";
 import { SvgWriter } from "../svg/writer.js";
 
+export const CONTACT_TABLE_NOTICE =
+  "Contact tables list device data; contacts not drawn in this packet are marked.";
+
 export function rootedViewTitle(view: NormalizedSchematicView) {
   const intent =
     view.format === "schematic-view/0.1"

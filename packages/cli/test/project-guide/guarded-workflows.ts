@@ -210,7 +210,7 @@ export const guardedWorkflows: FactModule["facts"] = [
   },
   {
     claim:
-      "Re-inspect and rebuild the patch after another edit; do not just copy a new integrity into an old request.",
+      "After other edits, re-inspect/rebuild the patch; never just replace an old request's integrity.",
     async check() {
       const project = await freshProject("starter");
       const plc = (await starterPlc()).object.source;
@@ -536,7 +536,7 @@ export const guardedWorkflows: FactModule["facts"] = [
   },
   {
     claim:
-      "When compilation fails (no guards returned), hash the raw source bytes and guard a schema or semantic repair with UID tests; see `thermite guide agent-requests`. Invalid JSON needs an ordinary edit, then validation.",
+      "If compilation returns no guards, hash raw source bytes and UID-test a schema/semantic repair; see `thermite guide agent-requests`. Invalid JSON needs an ordinary edit, then validation.",
     async check() {
       const project = await freshProject("starter");
       // A wire to a missing device: the sources load but do not compile.

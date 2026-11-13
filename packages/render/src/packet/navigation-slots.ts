@@ -10,11 +10,26 @@ import {
   searchNavigationSlot,
   NAVIGATION_CLEARANCE_MM,
 } from "./navigation-slot-search.js";
+import {
+  navigationPlacementFamily,
+  type NavigationPlacementFamily,
+} from "./navigation-placement.js";
+import { measureNavigationVacancy } from "./navigation-vacancy.js";
 export { NAVIGATION_CLEARANCE_MM } from "./navigation-slot-search.js";
 export interface SheetSlotRequest {
   reservation: AnnotationReservation;
   owner: Rect;
   locality?: SymbolGeometry;
+  preferBesideBelow?: boolean;
+  families?: readonly NavigationPlacementFamily[];
+}
+export class NavigationSlotFailure extends Error {
+  constructor(
+    message: string,
+    readonly search: unknown,
+  ) {
+    super(message);
+  }
 }
 function navigationObstacles(svg: string) {
   const measured = generatedSvgInk(svg);
@@ -23,8 +38,20 @@ function navigationObstacles(svg: string) {
     ...measured.regions,
     ...navigationGeometry(svg).flatMap((g) => {
       const a = g.node.attrs;
-      return g.visible &&
-        g.node.name === "rect" &&
+      if (!g.visible) return [];
+      if (g.node.name === "g" && a["data-report-column"])
+        return [
+          project(
+            {
+              x: Number(a["data-cell-x"]),
+              y: Number(a["data-cell-y"]),
+              w: Number(a["data-cell-width"]),
+              h: Number(a["data-cell-height"]),
+            },
+            g.matrix,
+          ),
+        ];
+      return g.node.name === "rect" &&
         /device-frame|off-view-card|device-legend-frame/.test(a.class ?? "")
         ? [
             project(
@@ -48,44 +75,77 @@ export function allocateNavigationSlots(
   area: Rect,
   svg: string,
   sheet: number,
+  reservedBoxes: readonly Rect[] = [],
 ): AnnotationReservation[] {
   const measured = navigationObstacles(svg),
     obstacles = measured.ink,
     texts = measured.texts;
-  return requests.map(({ reservation, owner, locality }) => {
-    const legacy: NavigationShape[] = (["local", "self-located"] as const).map(
-      (mode) => ({
-        id: mode,
-        mode,
-        inkMm: reservation.inkMm,
-        maximumForms: reservation.maximumForms,
-        wrapWidthMm: reservation.inkMm.w - 2,
-      }),
-    );
-    const result = searchNavigationSlot(
-      reservation.shapes ?? legacy,
-      area,
-      owner,
-      obstacles,
-      locality,
-      texts,
-    );
-    if (!result)
-      throw Error(
-        `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
+  obstacles.push(...reservedBoxes);
+  texts.push(...reservedBoxes);
+  return requests.map(
+    ({ reservation, owner, locality, preferBesideBelow, families }) => {
+      const legacy = legacyShapes(reservation);
+      const result = searchNavigationSlot(
+        reservation.shapes ?? legacy,
+        area,
+        owner,
+        obstacles,
+        locality,
+        texts,
+        preferBesideBelow,
+        families,
       );
-    obstacles.push(result.box);
-    texts.push(result.box);
-    return {
-      ...reservation,
-      inkMm: result.shape.inkMm,
-      maximumForms: result.shape.maximumForms,
-      allocatedMm: {
-        sheet,
-        rect: result.box,
-        ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
-        ...(locality ? { placement: result.shape.mode } : {}),
-      },
-    };
-  });
+      if (!result)
+        throw new NavigationSlotFailure(
+          `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
+          {
+            fieldMm: area,
+            ownerMm: owner,
+            requiredMm: reservation.inkMm,
+            families: measureNavigationVacancy(
+              reservation.inkMm,
+              area,
+              owner,
+              obstacles,
+              texts,
+              locality,
+            ),
+          },
+        );
+      obstacles.push(result.box);
+      texts.push(result.box);
+      return {
+        ...reservation,
+        inkMm: result.shape.inkMm,
+        maximumForms: result.shape.maximumForms,
+        allocatedMm: {
+          sheet,
+          rect: result.box,
+          ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
+          ...(locality ? { placement: result.shape.mode } : {}),
+          ...(preferBesideBelow
+            ? {
+                family: navigationPlacementFamily(
+                  result.box,
+                  area,
+                  owner,
+                  locality,
+                ),
+                familyRule: "approach-or-outer-zone-row/1" as const,
+              }
+            : {}),
+        },
+      };
+    },
+  );
+}
+
+function legacyShapes(reservation: AnnotationReservation): NavigationShape[] {
+  return (["local", "self-located"] as const).map((mode) => ({
+    id: mode,
+    mode,
+    inkMm: reservation.inkMm,
+    maximumForms: reservation.maximumForms,
+    wrapWidthMm: reservation.inkMm.w - 2,
+  }));
 }

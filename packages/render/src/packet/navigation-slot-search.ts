@@ -6,6 +6,10 @@ import {
   type SymbolGeometry,
 } from "./navigation-symbols.js";
 import type { NavigationShape } from "./navigation-types.js";
+import {
+  navigationPlacementFamily,
+  type NavigationPlacementFamily,
+} from "./navigation-placement.js";
 export const NAVIGATION_CLEARANCE_MM = 1.5;
 export const NAVIGATION_TEXT_CLEARANCE_MM = 4;
 function slotCandidates(
@@ -53,6 +57,8 @@ export function searchNavigationSlot(
   obstacles: readonly Rect[],
   locality?: SymbolGeometry,
   texts: readonly Rect[] = [],
+  preferBesideBelow = false,
+  families?: readonly NavigationPlacementFamily[],
 ) {
   const ordered = ["local", "self-located"].flatMap((mode) =>
     shapes.filter((s) => s.mode === mode),
@@ -66,8 +72,17 @@ export function searchNavigationSlot(
       locality,
       texts,
     );
+    if (preferBesideBelow && shape.mode === "local")
+      candidates.sort(
+        (a, b) =>
+          Number(!besideBelow(a, owner)) - Number(!besideBelow(b, owner)),
+      );
     const box = candidates.find(
       (b) =>
+        (!families ||
+          families.includes(
+            navigationPlacementFamily(b, area, owner, locality),
+          )) &&
         inside(b, area) &&
         obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
         texts.every((t) => textSeparated(b, t)) &&
@@ -87,5 +102,13 @@ function textSeparated(label: Rect, other: Rect) {
     other.y + other.h <= label.y ||
     label.x + label.w + NAVIGATION_TEXT_CLEARANCE_MM <= other.x ||
     other.x + other.w + NAVIGATION_TEXT_CLEARANCE_MM <= label.x
+  );
+}
+
+function besideBelow(box: Rect, owner: Rect) {
+  return (
+    box.y >= owner.y + owner.h ||
+    box.x >= owner.x + owner.w ||
+    box.x + box.w <= owner.x
   );
 }

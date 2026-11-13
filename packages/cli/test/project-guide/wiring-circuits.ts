@@ -4,6 +4,7 @@ import {
   printedPort,
   formatTerminalSet,
 } from "@thermite/query";
+import { renderSchematicPacket } from "../../../render/src/sheets.js";
 import { printedFunction } from "../../../render/src/print-projection.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
@@ -372,6 +373,73 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "Mirrors: direct same-device coil `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c));
+        const views = ["M1", "K1"].map((value) => ({
+          format: "schematic-view-request/0.1" as const,
+          root: { by: "designation" as const, value },
+          family: value === "M1" ? ("power" as const) : ("control" as const),
+        }));
+        const r = await renderSchematicPacket(c.ir, {
+          format: "schematic-packet-request/0.1",
+          views,
+        });
+        if (!r.ok) throw Error(JSON.stringify(r.error));
+        expect(r.value.sheets).toHaveLength(3);
+        const nav = r.value.navigation!;
+        const coil = c.ir.functions.find((f) => f.kind === "coil")!;
+        const expected = c.ir.internalRelations
+          .filter(
+            (rel) =>
+              rel.verb === "actuates" &&
+              rel.deviceUid === coil.id.deviceUid &&
+              rel.from.functionKey === coil.id.functionKey,
+          )
+          .map((rel) =>
+            c.ir.functions.find(
+              (f) =>
+                f.id.deviceUid === rel.to.deviceUid &&
+                f.id.functionKey === rel.to.functionKey,
+            )!,
+          );
+        const table = nav.annotations.find((a) => a.role === "mirror")!;
+        const sheet = r.value.sheets.find((s) =>
+          s.occurrenceIds?.includes(table.ownerOccurrence),
+        )!;
+        const dom = parseHTML(sheet.svg).document;
+        const rows = [...dom.querySelectorAll("[data-navigation-mirror-row]")];
+        expect(rows).toHaveLength(expected.length);
+        for (const fn of expected) {
+          expect(fn.kind).toBe("contact");
+          const row = rows.find(
+            (n) =>
+              n.getAttribute("data-navigation-mirror-row") ===
+              JSON.stringify(fn.id),
+          )!;
+          expect(row.textContent).toContain(
+            `${fn.kind === "contact" && fn.normal_state === "open" ? "NO" : "NC"}${formatTerminalSet(fn.terminals.map((t) => t.terminalKey))}`,
+          );
+        }
+        expect(
+          [
+            ...dom.querySelectorAll('[data-navigation-role="mirror"] text'),
+          ].every((t) =>
+            ["3.502", "3.782"].includes(t.getAttribute("font-size")!),
+          ),
+        ).toBe(true);
+        expect(nav.reservations.every((r) => r.space === "sheet-slot")).toBe(
+          true,
+        );
+        const returns = nav.annotations.filter((a) => a.role === "return");
+        expect(returns).toHaveLength(1);
+        expect(returns[0]!.ownerOccurrences).toHaveLength(3);
+        expect(returns[0]!.text).toMatch(/^K1 \/[0-9]{2}\.[A-D][1-6]$/);
+      },
+    },
+    {
+      claim:
         "One repeat per device/view/sheet; fixed local slots, else own sheet.zone. Repeat text keeps 4 mm horizontally from overlapping text bands; centroids round half-up to 0.01 mm.",
       async check() {
         const project = ctx.pristine.starter,
@@ -499,7 +567,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.",
+        "Tags: designation ≥2.7 mm; instance/else-type description/catalog part ≥2.5 mm.",
       async check() {
         const doc = parseHTML((await multi()).svg).document;
         const texts = [...doc.querySelectorAll("svg")].flatMap((svg) =>
@@ -719,7 +787,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Empty conductors show unconnected functions, not spares.",
+      claim: "Empty conductors mean unconnected functions, not spares.",
       async check() {
         const { svg } = await multi();
         // An open (white) terminal mark has no selected wiring.
@@ -740,7 +808,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Group order sets presentation; order functions by reading stage (PLC outputs, terminal points, interlocks, coils). First appearance sets device display order.",
+        "Group order sets presentation; order functions by reading stage (PLC outputs, terminals, interlocks, coils). First appearance sets device order.",
       async check() {
         const [drawing, { tb1, tb2 }] = await Promise.all([accepted(), ids()]);
         const forward = sheet(drawing, "Forward").svg;
@@ -869,7 +937,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ.",
+        "Library `circuitSymbols` maps keys to closed-catalog marks; main/auxiliary contacts may differ.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

@@ -15,6 +15,7 @@ export interface SymbolGeometry {
   frameMm: Rect;
   framesMm: readonly Rect[];
   ownerLocation: { sheet: number; zone: string };
+  localBandMm?: Rect;
 }
 function frameCandidates(all: readonly NavigationGeometry[]) {
   return all.flatMap((g) => {
@@ -50,6 +51,7 @@ export function symbolGeometry(
   occurrences: readonly PlacedOccurrence[],
   svg: string,
   field: DrawingBounds,
+  frameOccurrences: readonly PlacedOccurrence[] = occurrences,
 ): SymbolGeometry {
   const members = occurrences.filter(
     (o) =>
@@ -85,7 +87,18 @@ export function symbolGeometry(
   return {
     anchorMm,
     frameMm,
-    framesMm: frames.filter((f) => f !== own).map((f) => f.rect),
+    framesMm: [
+      ...frames.filter((f) => f !== own).map((f) => f.rect),
+      ...frameOccurrences
+        .filter(
+          (o) =>
+            o.role === "full-function" &&
+            o.representation === "circuit" &&
+            o.destination.sheet === owner.destination.sheet &&
+            !members.some((m) => m.id === o.id),
+        )
+        .map((o) => o.provenance.bodyMm),
+    ],
     ownerLocation: {
       sheet: owner.destination.sheet,
       zone: navigationZone(anchorMm.x, anchorMm.y, field),
@@ -103,6 +116,11 @@ export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
   const distance = boxDistance(box, symbol.frameMm);
   return (
     anchorDistance(symbol.anchorMm, box) <= 60 &&
+    (!symbol.localBandMm ||
+      (box.x <= symbol.localBandMm.x + symbol.localBandMm.w &&
+        box.x + box.w >= symbol.localBandMm.x &&
+        box.y <= symbol.localBandMm.y + symbol.localBandMm.h &&
+        box.y + box.h >= symbol.localBandMm.y)) &&
     symbol.framesMm.every((other) => distance < boxDistance(box, other) - 0.001)
   );
 }

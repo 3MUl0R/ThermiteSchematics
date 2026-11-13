@@ -90,8 +90,10 @@ it("prints one CB1, K1 and OL1 label per device appearance in the duplicate-M1 p
         .navigation!.occurrences.filter((o) => o.source.deviceUid === uid)
         .map((o) => o.id),
     );
-    const labels = r.value.navigation!.annotations.filter((a) =>
-      ids.has(a.ownerOccurrence),
+    const labels = r.value.navigation!.annotations.filter(
+      (a) =>
+        ids.has(a.ownerOccurrence) &&
+        ["canonical", "repeat", "mixed"].includes(a.role),
     );
     expect(labels).toHaveLength(2);
     expect(labels.map((a) => a.ownerOccurrences.length)).toEqual([3, 3]);

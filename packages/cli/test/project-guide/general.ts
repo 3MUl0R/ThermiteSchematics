@@ -722,7 +722,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Device functions do not automatically join physical nets.",
+      claim: "Functions never automatically join physical nets.",
       async check() {
         const [types, run] = await Promise.all([
           coreTypes(),
@@ -742,7 +742,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Each request has `"format": "agent-tool-request/0.1"` and `"project": "."`.',
+        'Requests have `"format": "agent-tool-request/0.1"` and `"project": "."`.',
       async check() {
         const [wrong, parent, valid] = await Promise.all([
           agent(
@@ -786,7 +786,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "stdout carries the result, on success only; stderr always carries the report (diagnostics and error).",
+        "stdout: success result only; stderr: report (diagnostics/error), always.",
       async check() {
         // `agent` itself requires a report on stderr and an empty stdout on
         // every failure; these add a success, an expected failure and a tool
@@ -858,7 +858,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Diagnostics may carry `allowed`, `allowedCount`, `allowedLookup` (where to read the full list) and `pattern`.",
+        "Diagnostics: `allowed`, `allowedCount`, `allowedLookup` (full-list lookup), `pattern`.",
       async check() {
         const project = await freshProject("starter");
         await editJson(join(project, EQUIPMENT), (file) =>
@@ -914,7 +914,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Per-file atomicity and snapshot guards apply.",
+      claim: "Per-file atomicity/snapshot guards apply.",
       async check() {
         // A stale second file leaves the first file unwritten too.
         const project = await copyProject(await plant(), "general-stale");
@@ -2006,7 +2006,7 @@ const module: FactModule = {
       "Review advice; packet coverage tests pin the explicit circuit/wiring scope.",
     ],
     [
-      "Keep streams separate.",
+      "Split streams.",
       "Advice to callers; the stream split itself is checked with the previous sentence.",
     ],
     [

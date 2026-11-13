@@ -71,13 +71,31 @@ export interface AnnotationReservation {
     rect: Rect;
     placement?: "local" | "self-located";
     shapeId?: string;
+    family?: import("./navigation-placement.js").NavigationPlacementFamily;
+    familyRule?: "approach-or-outer-zone-row/1";
   };
 }
 export interface NavigationAnnotation {
   id: string;
   ownerOccurrence: string;
   ownerOccurrences: readonly string[];
-  role: "canonical" | "repeat" | "mixed";
+  role:
+    | "canonical"
+    | "repeat"
+    | "mixed"
+    | "mirror"
+    | "return"
+    | "association-unspecified"
+    | "contact-notice";
+  mirror?: {
+    coil: FunctionId;
+    rows: readonly MirrorRow[];
+    heading: string;
+    part?: number;
+    parts?: number;
+  };
+  gangId?: string;
+  sourceOrigins?: readonly SourceRef[];
   targets: readonly string[];
   text: string;
   primitiveIds: readonly string[];
@@ -137,4 +155,15 @@ export interface IssuedDocumentLocation {
   sourceKeys: readonly string[];
   sheet: number;
   rectMm: Rect;
+}
+
+/** Additive DQ-07 locators; native definitions and visible geometry remain the oracle. */
+export interface MirrorRow {
+  source: FunctionId;
+  state: "NO" | "NC";
+  terminals: readonly string[];
+  targets: readonly string[];
+  destinations: readonly string[];
+  sourceOrigins: readonly SourceRef[];
+  primitiveId: string;
 }

@@ -309,7 +309,7 @@ function assemblePacket(
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
   try {
-    const rendered = legendSheets(ir, drafts, page);
+    const rendered = legendSheets(ir, drafts, page, true);
     if (!rendered.ok)
       return {
         ok: false,

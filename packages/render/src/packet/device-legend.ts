@@ -27,6 +27,7 @@ export function legendSheets(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
   page: PaperPage,
+  includeNotice = false,
 ): RenderOutcome<RenderedSheet[]> & {
   failedSheet?: number;
   navigation?: import("./navigation-types.js").IssuedNavigation;
@@ -57,7 +58,10 @@ export function legendSheets(
     if (!legend.ok) return { ...legend, failedSheet: i };
     sheets[i] = { ...sheet, svg: legend.value };
   }
-  const finalized = finalizeNavigation(ir, drafts, sheets);
+  const finalized = finalizeNavigation(ir, drafts, sheets, {
+    notice: includeNotice,
+    page,
+  });
   if (!finalized.ok) return finalized;
   const located = structuredClone(drafts);
   centroidReferences(located, finalized.value.navigation.occurrences);
