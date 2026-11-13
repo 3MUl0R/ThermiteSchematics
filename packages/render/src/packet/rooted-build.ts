@@ -12,13 +12,13 @@ import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { RenderOutcome, RenderFailure } from "../types.js";
-import type { Draft, PaperPage } from "./types.js";
+import type { Draft, DrawingBounds, PaperPage } from "./types.js";
 import { continuationGridConstraint } from "./continuation-constraint.js";
 import type {
   RootedConstraint,
   RootedDiagnostic,
 } from "./rooted-constraint.js";
-import { bounds } from "./page.js";
+import { bounds, zone } from "./page.js";
 import { gridLinks, type RootedGrid } from "./rooted-plans.js";
 import { rootedBankGrids } from "./rooted-bank-grids.js";
 import { rootedDraft } from "./rooted-draft.js";
@@ -125,6 +125,7 @@ function makeDrafts(
           { prepared: p, inner, ...(profile ? { profile } : {}) },
         )
       : drafts;
+  applyFinalBankBounds(pages, b, bank);
   const visible = contentPages(pages);
   if (typeof visible === "string") return visible;
   const failure =
@@ -139,6 +140,25 @@ function makeDrafts(
     : (fitContinuations(fallback, page, bank, native) ??
         postTrimCaptionConstraint(fallback, page, native) ??
         fallback);
+}
+
+/** Folding combines virtual cells; final sheet cuts decide reservations. */
+function applyFinalBankBounds(
+  drafts: Draft[],
+  b: DrawingBounds,
+  bank: ContinuationBank,
+) {
+  if (!bank.extra) return;
+  for (const d of drafts) {
+    const area = perSideBankBounds(b, bank, d);
+    d.drawingBounds = area;
+    if (d.references)
+      d.references = d.references.map((r) =>
+        r.xMm === undefined || r.yMm === undefined
+          ? r
+          : { ...r, zone: zone(r.xMm, r.yMm, area) },
+      );
+  }
 }
 
 /** Release a fallback reservation on each cut-free side before constructing

@@ -1,3 +1,4 @@
+import { fitContinuations } from "../src/packet/continuation-fit.js";
 import { navigationZone } from "../src/packet/navigation-location.js";
 import { perSideBankBounds } from "../src/packet/rooted-build.js";
 import { expect, it } from "vitest";
@@ -124,7 +125,11 @@ function link(side: Link["side"] = "right", y = 80): Link {
 it("keeps a complete fitting bank unchanged despite oversized reservations", () => {
   const d = draft();
   d.links = [link(), link("right", 95)];
-  for (const l of d.links) if (l.label) l.label.bounds.w = 1000;
+  for (const l of d.links)
+    if (l.label) {
+      l.label.bounds.w = 1000;
+      for (const row of l.label.rows) row.ink.w = 1000;
+    }
   const before = structuredClone(d.links);
   admitFinalBanks(d, compactFramePlan(d.title, page));
   expect(d.links).toEqual(before);
@@ -214,6 +219,25 @@ it("extends outer grid cells over the legal service bands, rejecting the zone la
   );
   expect(() => navigationZone(s.x - 1, s.y, area)).toThrow();
 });
+it("classifies anchors just before, on and after printed zone boundaries", () => {
+  const area = {
+    x: 28,
+    y: 31,
+    w: 120,
+    h: 100,
+    frameService: { x: 12.9, y: 23.3, w: 184.2, h: 232.4 },
+  };
+  expect([47.99, 48, 48.01].map((x) => navigationZone(x, 40, area))).toEqual([
+    "A1",
+    "A2",
+    "A2",
+  ]);
+  expect([55.99, 56, 56.01].map((y) => navigationZone(35, y, area))).toEqual([
+    "A1",
+    "B1",
+    "B1",
+  ]);
+});
 it.each([1.7, 3.5])(
   "releases the %s mm fallback independently on sides without cuts",
   (extra) => {
@@ -276,15 +300,18 @@ it("repairs the real 3.1495 mm serialization case even when unrounded geometry p
 });
 it("keeps value descenders clear of the next right-cell rule", () => {
   const d = draft();
-  d.title = { ...d.title, revision: "gjpqy" };
+  d.title = { ...d.title, revision: "gjpqy gjpqy gjpqy" };
   const svg = compactFrame(d, page, 1, 1);
-  const value = /<text[^>]* y="([^"]+)"[^>]*>gjpqy<\/text>/.exec(svg);
+  const value = /<text[^>]* y="([^"]+)"[^>]*>gjpqy gjpqy gjpqy<\/text>/.exec(
+    svg,
+  );
   if (!value) throw Error("Missing supplied revision paint");
   const plan = compactFramePlan(d.title, page),
     nextRule = plan.title.top + (3 * plan.title.height) / 4;
   expect(
     nextRule -
-      (Number(value[1]) - printableTextMetrics("gjpqy", 2.7).bottom) -
+      (Number(value[1]) -
+        printableTextMetrics("gjpqy gjpqy gjpqy", 2.7).bottom) -
       0.125,
   ).toBeGreaterThanOrEqual(1.5);
   expect(svg).toContain('x="10.6"');
@@ -318,3 +345,73 @@ it("refuses wide title glyphs that would strike the neighbouring column", () => 
     /field project requires .* mm; .* mm are available/,
   );
 });
+
+it("checks continuous zone lanes after isotonic packing, even if both labels initially fit", () => {
+  const p = { ...page };
+  useCompactFrame(p);
+  const d = draft();
+  d.links = [link("right", 25), link("right", 25.1)];
+  d.links[1]!.id = "C010";
+  const bank = {
+    width: 60,
+    headerWidth: continuationHeaderWidth(11),
+    single: true,
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+  const failure = fitContinuations([d], p, bank);
+  expect(typeof failure).toBe("string");
+  expect(failure).toMatch(/sheet clearance is short/);
+});
+it("keeps every row and member in order through a rigid quantization correction", () => {
+  const d = draft(),
+    l = link("bottom", 100.0005);
+  l.descriptor = "JUMPER";
+  l.label = continuationLabel(l, 60, continuationHeaderWidth(11), false);
+  d.links = [l];
+  const before = structuredClone(l.label.rows);
+  admitFinalBanks(d, compactFramePlan(d.title, page));
+  expect(l.label.rows.map((r) => r.text)).toEqual(before.map((r) => r.text));
+  l.label.rows.forEach((r, i) => {
+    expect(r.x).toBe(before[i]!.x);
+    expect(r.y - before[i]!.y).toBeCloseTo(0.001, 8);
+  });
+});
+
+it.each(["a4", "letter"] as const)(
+  "keeps literal four/five-line descenders clear in both %s portrait flows",
+  (size) => {
+    for (const flow of ["left-to-right", "top-to-bottom"] as const)
+      for (const notes of [2, 3]) {
+        const normalized = normalizePaperPage({
+          size,
+          orientation: "portrait",
+          marginMm: 25,
+        });
+        if (!normalized.ok) throw Error("Synthetic portrait page failed");
+        const p = normalized.value,
+          d = draft(Array.from({ length: notes }, () => "gjpqy"));
+        d.view = {
+          format: "schematic-view/0.1",
+          root: { deviceUid: "synthetic-portrait", designation: "X1" },
+          family: "control",
+          flow,
+        };
+        const plan = compactFramePlan(d.title, p, d.view),
+          svg = compactFrame(d, p, 1, 1);
+        expect(plan.title.rows).toHaveLength(notes + 2);
+        expect(plan.title.headerRecovery).toBe(2);
+        expect(svg.match(/>gjpqy<\/text>/g)).toHaveLength(notes);
+        const lastBaseline = plan.title.top + 5 + 4 * (notes + 1);
+        expect(
+          p.heightMm -
+            p.marginMm -
+            13 -
+            0.125 -
+            (lastBaseline - printableTextMetrics("gjpqy", 2.5).bottom),
+        ).toBeGreaterThanOrEqual(1);
+      }
+  },
+);

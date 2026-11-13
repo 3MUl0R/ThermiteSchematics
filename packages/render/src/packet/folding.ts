@@ -43,7 +43,7 @@ export function foldDrawingDrafts(
         },
         0,
         0,
-        b,
+        source.drawingBounds ?? b,
         scale,
         context.inner,
         context.profile,
