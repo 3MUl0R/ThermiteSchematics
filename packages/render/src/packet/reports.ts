@@ -1,4 +1,5 @@
 import { reportCells, emitReportRow } from "./report-cells.js";
+import { paginatedReportCells } from "./report-layout.js";
 
 import type {
   CompiledProjectPresentation,
@@ -47,6 +48,7 @@ export function tableDrafts(
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
 ): RenderOutcome<Draft[]> {
+  table = reserveWireLocations(table);
   if (unprintableReportText(ir, table, presentation))
     return failure(
       "unprintable-layout",
@@ -86,7 +88,7 @@ export function tableDrafts(
     );
   let measured: ReturnType<typeof reportCells>;
   try {
-    measured = reportCells(ir, table, b.w, page);
+    measured = paginatedReportCells(ir, table, b.w, b.h, page);
   } catch (error) {
     return failure("unprintable-layout", (error as Error).message);
   }
@@ -99,6 +101,7 @@ export function tableDrafts(
     context,
     split,
     geometry,
+    inlineLocations,
   } = measured;
   let header: string[][];
   try {
@@ -143,6 +146,7 @@ export function tableDrafts(
         y,
         geometry,
         heading,
+        inlineLocations,
       ),
     );
     y += height;
@@ -215,6 +219,21 @@ export function tableDrafts(
     content.push(text(b.x + 2, y + 7, "No matching records", 3));
   finish(table.rows.length);
   return { ok: true, value: drafts };
+}
+
+/** Native query tables have no packet geometry; reserve endpoint cells here. */
+function reserveWireLocations(table: DocumentationTable): DocumentationTable {
+  if (table.kind !== "wires" || table.columns.includes("From sheet.zone"))
+    return table;
+  return {
+    ...table,
+    columns: [...table.columns, "From sheet.zone", "To sheet.zone"],
+    widths: [0.12, 0.18, 0.18, 0.14, 0.16, 0.11, 0.11],
+    rows: table.rows.map((row) => ({
+      ...row,
+      cells: [...row.cells, "not drawn", "not drawn"],
+    })),
+  };
 }
 
 function unprintableReportText(

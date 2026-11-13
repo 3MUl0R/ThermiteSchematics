@@ -50,7 +50,7 @@ async function checked(input: ElectricalIr) {
     rendered = await renderSchematicPacket(input, request);
   if (!rendered.ok) throw Error(rendered.error.message);
   expect(JSON.stringify(input)).toBe(before);
-  const table = buildDocumentation(input, request.views[0]!),
+  const table = buildDocumentation(input, request.views[0]!, {}),
     expected = new Map(table.rows.map((row) => [row.key, row.cells])),
     seen = new Set<string>();
   for (const sheet of rendered.value.sheets) {

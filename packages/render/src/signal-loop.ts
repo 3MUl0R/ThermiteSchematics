@@ -1,3 +1,4 @@
+import { appendPinRows, pinLegend } from "./signal-loop/pin-rows.js";
 import { directLoopDocumentNeeds } from "./packet/document-producers.js";
 import {
   routePortAttributes,
@@ -500,6 +501,7 @@ export async function prepareSignalLoopDrawing(
     ...assemblies,
   ];
   const tags = new Map<string, DeviceTagPlan>();
+  const pinRows = new Map<string, ReadonlyMap<number, string>>();
   const captions = new Map<string, string[]>(),
     ports = new Map<
       string,
@@ -575,13 +577,10 @@ export async function prepareSignalLoopDrawing(
     });
     if (vertical) w += Math.max(66, ordered.length * 14 + 10);
     if (vertical && (index === 0 || index === stages.length - 1))
-      for (const terminal of ordered) {
-        const role = type.terminals.find(
-          (t) => t.key === terminal,
-        )?.description;
-        if (role)
-          caption.push(...wrap(`${terminal}: ${role}`, captionWidth - 6));
-      }
+      pinRows.set(
+        uid,
+        appendPinRows(caption, type, ordered, uid, captionWidth - 6),
+      );
     const header =
       (index === 0 && type.symbol === "thermite:pressure-transmitter"
         ? 26
@@ -808,6 +807,7 @@ export async function prepareSignalLoopDrawing(
         tags.get(uid),
         captions.get(uid)!,
         index === 0 && type.symbol === "thermite:pressure-transmitter" ? 21 : 0,
+        pinRows.get(uid),
       ),
     );
     const list = ports.get(uid)!;
@@ -832,14 +832,15 @@ export async function prepareSignalLoopDrawing(
             .assembly!.assembly!.connector;
           const clearance = 7 + width(connector);
           const legendX = p.side === "in" ? clearance : 3;
-          const lines = wrap(
-            `${p.terminal}  ${role}`,
-            Math.min(node.width! - 18, node.width! - clearance - 3),
-          );
-          if (lines.length > 2)
-            throw new Error("Pin legend is too long for the assembly symbol.");
-          lines.forEach((line, i) =>
-            out.push(text(legendX, p.y + 1 + i * 3.3, line)),
+          out.push(
+            ...pinLegend(
+              uid,
+              p.terminal,
+              role,
+              Math.min(node.width! - 18, node.width! - clearance - 3),
+              legendX,
+              p.y + 1,
+            ),
           );
         }
         continue;

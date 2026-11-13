@@ -11,6 +11,7 @@ import type {
   DocumentationRequest,
   DocumentationTable,
   DocumentationSelection,
+  ScheduleReferences,
   DeviceFilter,
 } from "@thermite/query";
 
@@ -210,6 +211,7 @@ export interface Draft {
   communicationBlock?: CommunicationContinuationBlock;
   documentationTable?: boolean;
   documentationSelection?: DocumentationSelection;
+  scheduleReferences?: ScheduleReferences;
 }
 export interface CommunicationContinuationBlock {
   view: number;

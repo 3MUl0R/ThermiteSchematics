@@ -1,3 +1,4 @@
+import { escapeXmlAttribute as attr } from "./svg/escape.js";
 import type { IrDevice, IrDeviceType } from "@thermite/compiler";
 import { planDeviceTag, type DeviceTagPlan } from "./device-tags.js";
 import { ownedTagText, tagRowAttributes } from "./device-tag-ownership.js";
@@ -71,12 +72,19 @@ export function deviceHeaderSvg(
   plan: DeviceTagPlan | undefined,
   context: readonly string[],
   y = 0,
+  pinRows: ReadonlyMap<number, string> = new Map(),
 ): string {
   if (!plan) throw new Error("Missing measured device tag.");
   return (
     deviceTagSvg(plan, 0, y) +
     context
-      .map((s, i) => text(3, y + plan.heightMm + 2.7 + i * 3.7, s, 2.7))
+      .map((s, i) => {
+        const pin = pinRows.get(i);
+        return text(3, y + plan.heightMm + 2.7 + i * 3.7, s, 2.7).replace(
+          "<text ",
+          pin ? `<text data-pin-terminal="${attr(pin)}" ` : "<text ",
+        );
+      })
       .join("")
   );
 }

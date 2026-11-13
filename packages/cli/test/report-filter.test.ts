@@ -64,11 +64,12 @@ describe("CLI report filter requests", () => {
         transport === "stdin" ? JSON.stringify(filter) : undefined,
       );
       expect(r.code).toBe(0);
-      const table = buildDocumentation(ir, {
-        format: "documentation-view-request/0.1",
-        kind: "wires",
-        filter,
-      });
+      const table = buildDocumentation(
+        ir,
+        { format: "documentation-view-request/0.1", kind: "wires", filter },
+        undefined,
+        { output: "csv" },
+      );
       expect(await readFile(out, "utf8")).toBe(documentationCsv(table));
       const report = JSON.parse(r.stderr);
       expect(report.selection).toEqual(table.selection);

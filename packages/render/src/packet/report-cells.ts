@@ -15,6 +15,10 @@ import {
   type ReportIdentifiers,
 } from "./report-identifiers.js";
 import { wrapReportCell } from "./report-wrapping.js";
+import {
+  wireReportColumns,
+  type WireColumnAllocation,
+} from "./wire-report-columns.js";
 
 const REPORT_CELL_SIZES = [2.6, 2.5] as const;
 
@@ -24,14 +28,29 @@ export function reportCells(
   table: DocumentationTable,
   width: number,
   page?: PaperPage,
+  wireMode?: "columns" | "legacy",
 ) {
   const identifiers = reportIdentifiers(ir, table);
   const names = reportNames(ir);
   let cellSize: number = REPORT_CELL_SIZES[0];
-  let allocation = reportColumns(table, width, cellSize, names, identifiers);
-  if (allocation.error) {
+  let allocation = wireReportColumns(
+    table,
+    width,
+    cellSize,
+    names,
+    identifiers,
+    wireMode,
+  );
+  if (allocation.error && !allocation.nativeFits) {
     cellSize = REPORT_CELL_SIZES[1];
-    allocation = reportColumns(table, width, cellSize, names, identifiers);
+    allocation = wireReportColumns(
+      table,
+      width,
+      cellSize,
+      names,
+      identifiers,
+      wireMode,
+    );
   }
   const standard = measuredCells(
     ir,
@@ -90,7 +109,7 @@ function preferredHeader(
   size: number,
   names: ReportName[],
   identifiers: ReportIdentifiers,
-  allocation: ReturnType<typeof reportColumns>,
+  allocation: WireColumnAllocation,
   standard: ReturnType<typeof measuredCells>,
 ) {
   if (
@@ -143,7 +162,7 @@ function measuredCells(
   cellSize: number,
   names: ReportName[],
   identifiers: ReportIdentifiers,
-  allocation: ReturnType<typeof reportColumns>,
+  allocation: WireColumnAllocation,
 ) {
   const { widths, padding } = allocation;
   const headerNote = reportHeaderNote(allocation, page);
@@ -182,8 +201,22 @@ function measuredCells(
   const split = (cells: readonly string[], row: string, key?: string) =>
     splitCells(policy, cells, row, key);
   const geometry = (cells: string[][], heading = false) =>
-    reportGeometry(cells, heading, cellSize, padding, insets, headerNote);
-  return { widths, cellSize, ...diagnostics, split, geometry };
+    reportGeometry(
+      allocation.inlineLocations ? endpointLocationLines(cells) : cells,
+      heading,
+      cellSize,
+      padding,
+      insets,
+      headerNote,
+    );
+  return {
+    widths,
+    cellSize,
+    ...diagnostics,
+    split,
+    geometry,
+    inlineLocations: !!allocation.inlineLocations,
+  };
 }
 
 type HeaderWrapper = (value: string, width: number, column: number) => string[];
@@ -194,10 +227,7 @@ type CellWrapper = (
   key?: string,
 ) => string[];
 
-function reportHeaderNote(
-  allocation: ReturnType<typeof reportColumns>,
-  page?: PaperPage,
-) {
+function reportHeaderNote(allocation: WireColumnAllocation, page?: PaperPage) {
   const margin = page
     ? Math.floor((page.widthMm - 36 - allocation.wholeWidth) * 500) / 1000
     : undefined;
@@ -337,7 +367,7 @@ type CellPolicy = ReturnType<typeof reportDiagnostics> & {
   width: number;
   page: PaperPage | undefined;
   cellSize: number;
-  allocation: ReturnType<typeof reportColumns>;
+  allocation: WireColumnAllocation;
   widths: number[];
   insets: number[];
   wrapHeader: HeaderWrapper;
@@ -403,6 +433,14 @@ function splitCells(
     }
   });
 }
+function endpointLocationLines(cells: string[][]) {
+  return cells
+    .slice(0, 5)
+    .map((lines, i) =>
+      i === 1 || i === 2 ? [...lines, ...cells[i + 4]!] : lines,
+    );
+}
+
 function reportGeometry(
   cells: string[][],
   heading: boolean,
@@ -421,6 +459,7 @@ function reportGeometry(
     cellSize,
     padding,
     insets,
+    descent,
     headerNote: heading ? headerNote : undefined,
     noteHeight: heading && headerNote ? 4 : 0,
     baseline,
@@ -443,28 +482,35 @@ export function emitReportRow(
   y: number,
   geometry: ReturnType<typeof reportCells>["geometry"],
   heading = false,
+  inlineLocations = false,
 ): string[] {
   const content: string[] = [];
   const { cellSize, baseline, lineHeight, insets, noteHeight, headerNote } =
     geometry(cells, heading);
-  let x = left;
-  // Paint the entire row before any text, so no later background can erase it.
-  cells.forEach((_, i) => {
+  const regions = reportCellRegions(
+    cells,
+    widths,
+    left,
+    y,
+    height,
+    geometry(cells, heading),
+    inlineLocations,
+  );
+  // Paint every semantic field before text so no background erases another field.
+  for (const r of regions)
     content.push(
-      `<rect x="${n(x)}" y="${n(y)}" width="${n(widths[i]!)}" height="${n(height - noteHeight)}" fill="${heading ? "#e9eef4" : "white"}" stroke="#9ba6b4" stroke-width="0.2"/>`,
+      `<rect x="${n(r.x)}" y="${n(r.y)}" width="${n(r.w)}" height="${n(r.h)}" fill="${heading ? "#e9eef4" : "white"}" stroke="#9ba6b4" stroke-width="0.2"/>`,
     );
-    x += widths[i]!;
-  });
-  x = left;
   cells.forEach((lines, i) => {
+    const region = regions[i]!;
     content.push(
-      `<g data-report-column="${i + 1}" data-column-name="${attr(columns[i]!)}" data-cell-x="${n(x)}" data-cell-y="${n(y)}" data-cell-width="${n(widths[i]!)}" data-cell-height="${n(height - noteHeight)}">`,
+      `<g data-report-column="${i + 1}" data-column-name="${attr(columns[i]!)}" data-cell-x="${n(region.x)}" data-cell-y="${n(region.y)}" data-cell-width="${n(region.w)}" data-cell-height="${n(region.h)}">`,
     );
     lines.forEach((value, j) =>
       content.push(
         text(
-          x + insets[i]!,
-          y + baseline + j * lineHeight,
+          region.x + insets[i]!,
+          region.y + baseline + j * lineHeight,
           value.trim(),
           cellSize,
           "start",
@@ -473,11 +519,37 @@ export function emitReportRow(
       ),
     );
     content.push("</g>");
-    x += widths[i]!;
   });
   if (headerNote)
     content.push(
       `<g data-report-header-note="true">${text(left, y + height - 0.8, headerNote, 2.5)}</g>`,
     );
   return content;
+}
+
+/** The endpoint and its locator partition one column into two painted fields. */
+function reportCellRegions(
+  cells: string[][],
+  widths: readonly number[],
+  left: number,
+  y: number,
+  height: number,
+  metrics: ReturnType<ReturnType<typeof reportCells>["geometry"]>,
+  stacked: boolean,
+) {
+  const { noteHeight, baseline, lineHeight, descent } = metrics;
+  const footerHeight = (column: number) =>
+    baseline + (cells[column]!.length - 1) * lineHeight + descent + 0.5;
+  return cells.map((_, i) => {
+    const footer = stacked && i >= 5;
+    const x =
+      left + widths.slice(0, footer ? i - 4 : i).reduce((sum, w) => sum + w, 0);
+    const bottom = y + height - noteHeight;
+    const top = footer ? bottom - footerHeight(i) : y;
+    const h =
+      stacked && (i === 1 || i === 2)
+        ? bottom - top - footerHeight(i + 4)
+        : bottom - top;
+    return { x, y: top, w: widths[i]!, h };
+  });
 }

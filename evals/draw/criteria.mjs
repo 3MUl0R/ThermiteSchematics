@@ -24,7 +24,7 @@ export const criteria = {
   "DQ-17": "No duplicate/overlapping terminal text",
   "DQ-18": "Title-block fields and revision table present",
   "DQ-19":
-    "Report bounds, blank nulls, endpoint sheet.zone, complete index and sufficient printed document dependencies",
+    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index and sufficient printed document dependencies",
   "DQ-20": "One font family and one symbol catalog per packet",
   "DQ-21": "PDF and SVG font metrics identical",
   "DQ-22": "Two blind independent drafter reviews, material/minor red-lines",

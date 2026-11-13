@@ -21,6 +21,7 @@ export interface NavigationGeometry {
   clip: Rect;
   visible: boolean;
   viewKey: string;
+  deviceUid?: string;
   style?: Readonly<Record<string, string>>;
 }
 function viewportGeometry(node: SvgNode, matrix: Matrix, clip: Rect) {
@@ -109,11 +110,13 @@ export function navigationGeometry(svg: string): NavigationGeometry[] {
       clip = parent.clip;
     ({ matrix, clip } = viewportGeometry(node, matrix, clip));
     clip = labelClip(a, matrix, clip, clips);
+    const deviceUid = a["data-device-uid"] ?? parent.deviceUid;
     const state = {
       node,
       matrix,
       clip,
       viewKey: a["data-navigation-view"] ?? parent.viewKey,
+      ...(deviceUid ? { deviceUid } : {}),
       style: css,
       visible:
         parent.visible &&

@@ -119,7 +119,15 @@ it("uses native conveyor SRC1’s all-terminal zone for local and self-located f
   };
   const r = await renderSchematicPacket(c.ir, request, c.presentation);
   if (!r.ok) throw Error(JSON.stringify(r.error));
+  // Location lines preserve this narrow packet’s capacity; native drawing
+  // placement and the all-terminal anchor below remain exact.
   expect(r.value.sheets).toHaveLength(19);
+  expect(
+    r.value.sheets.filter((s) => s.view.format.startsWith("schematic-view/")),
+  ).toHaveLength(9);
+  expect(
+    r.value.sheets.filter((s) => "kind" in s.view && s.view.kind === "wires"),
+  ).toHaveLength(4);
   const uid = c.ir.devices.find((d) => d.designation === "SRC1")!.uid;
   const owner = r.value.navigation!.occurrences.find(
     (o) =>

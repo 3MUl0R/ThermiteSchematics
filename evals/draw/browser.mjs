@@ -259,6 +259,7 @@ export function measureSheet(options = {}) {
     deviceUid: attr(e, "data-device-uid"),
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
+    pinTerminal: attr(e, "data-pin-terminal"),
     row: attr(e, "data-report-row"),
     documentId: attr(e, "data-document-id"),
     documentOrigin: attr(e, "data-document-origin"),
@@ -545,6 +546,60 @@ export function measureSheet(options = {}) {
         })(),
         point: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
         fill: getComputedStyle(e).fill,
+      },
+    ];
+  });
+  // Physical marker ink only; native endpoint slots are reconstructed outside
+  // Chromium. Pin-list text is independently reconciled with the native type.
+  const wireTerminals = Array.from(
+    root.querySelectorAll(
+      "circle[data-terminal-key],circle[data-loop-terminal],g[data-cable-uid][data-conductor-id] > circle",
+    ),
+  ).flatMap((e) => {
+    const v = visible(e),
+      css = getComputedStyle(e);
+    let alpha = Number(css.strokeOpacity);
+    for (let p = e; p; p = p.parentElement)
+      alpha *= Number(getComputedStyle(p).opacity);
+    if (!v || alpha < 0.2 || css.stroke === "none") return [];
+    const clips = shapeClips(e);
+    if (
+      clips === null ||
+      [v.clip, ...clips].some(
+        (c) =>
+          v.b.x < c.x - 0.002 ||
+          v.b.y < c.y - 0.002 ||
+          v.b.x + v.b.w > c.x + c.w + 0.002 ||
+          v.b.y + v.b.h > c.y + c.h + 0.002,
+      )
+    )
+      return [];
+    let terminal;
+    if (e.hasAttribute("data-loop-terminal")) {
+      try {
+        terminal = JSON.parse(e.getAttribute("data-loop-terminal"));
+      } catch {
+        return [];
+      }
+    } else if (e.hasAttribute("data-terminal-key"))
+      terminal = [
+        attr(e, "data-device-uid"),
+        e.getAttribute("data-terminal-key"),
+      ];
+    const cable = e.parentElement;
+    const circles = Array.from(cable.children).filter(
+      (n) => n.tagName.toLowerCase() === "circle",
+    );
+    return [
+      {
+        ...identity(e),
+        terminal,
+        bbox: v.b,
+        point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
+        cableUid: cable.getAttribute("data-cable-uid"),
+        conductorId: cable.getAttribute("data-conductor-id"),
+        slot: circles.indexOf(e),
+        markerCount: circles.length,
       },
     ];
   });
@@ -844,6 +899,142 @@ export function measureSheet(options = {}) {
   };
   const textCanvas = document.createElement("canvas").getContext("2d");
   const continuationErrors = new Map();
+  const tableRectangles = (parent) =>
+    Array.from(parent.children).filter(
+      (e) =>
+        e.tagName.toLowerCase() === "rect" &&
+        e.getAttribute("stroke") === "#9ba6b4",
+    );
+  const close = (a, b) => Math.abs(a - b) <= 0.02;
+  const reportContains = (a, b) =>
+    b.x >= a.x - 0.02 &&
+    b.y >= a.y - 0.02 &&
+    b.x + b.w <= a.x + a.w + 0.02 &&
+    b.y + b.h <= a.y + a.h + 0.02;
+  const stackedCache = new WeakMap();
+  // Only painted topology identifies stacked fields. Ordinary tables retain
+  // their existing rectangle-per-column contract and positional association.
+  const stackedTopology = (parent) => {
+    const rects = tableRectangles(parent).map((e) => ({ e, b: bounds(e) }));
+    if (
+      !rects.length ||
+      rects.every(
+        ({ b }) => close(b.y, rects[0].b.y) && close(b.h, rects[0].b.h),
+      )
+    )
+      return;
+    if (rects.length !== 7)
+      throw Error("Stacked report: missing painted sub-cell");
+    const slots = [];
+    for (const r of rects.sort((a, b) => a.b.x - b.b.x || a.b.y - b.b.y)) {
+      let slot = slots.find((v) => close(v[0].b.x, r.b.x));
+      if (!slot) slots.push((slot = []));
+      slot.push(r);
+    }
+    if (
+      slots.length !== 5 ||
+      slots.some((v, i) => v.length !== (i === 1 || i === 2 ? 2 : 1))
+    )
+      throw Error("Stacked report: invalid painted partition");
+    const top = slots[0][0].b.y,
+      bottom = top + slots[0][0].b.h;
+    for (const [i, slot] of slots.entries()) {
+      if (
+        !close(slot[0].b.y, top) ||
+        !close(slot.at(-1).b.y + slot.at(-1).b.h, bottom) ||
+        slot.some(
+          (r) => !close(r.b.w, slot[0].b.w) || r.b.h <= 0 || !visible(r.e),
+        ) ||
+        (slot.length === 2 && !close(slot[0].b.y + slot[0].b.h, slot[1].b.y)) ||
+        (i > 0 &&
+          !close(slots[i - 1][0].b.x + slots[i - 1][0].b.w, slot[0].b.x))
+      )
+        throw Error("Stacked report: invalid painted sub-cell boundary");
+    }
+    return [...slots.map((v) => v[0]), slots[1][1], slots[2][1]];
+  };
+  const reportTextPainted = (e) => {
+    let alpha = Number(getComputedStyle(e).fillOpacity);
+    for (let p = e; p; p = p.parentElement)
+      alpha *= Number(getComputedStyle(p).opacity);
+    return alpha >= 0.2 && getComputedStyle(e).fill !== "none" && !!visible(e);
+  };
+  const measuredReportText = new Map();
+  const paintedCellText = (parent, cell) =>
+    Array.from(parent.querySelectorAll("text"))
+      .filter(reportTextPainted)
+      .map((t) => measuredReportText.get(ids.get(t)))
+      .filter((t) => t?.painted && reportContains(cell.b, t.bbox))
+      .map((t) => t.text)
+      .join(" ")
+      .replace(/\s+/gu, " ")
+      .trim();
+  const stackedReportCells = (parent) => {
+    if (stackedCache.has(parent)) return stackedCache.get(parent);
+    const cells = stackedTopology(parent);
+    if (!cells) {
+      stackedCache.set(parent, undefined);
+      return;
+    }
+    const labels = [
+      "Conductor / label",
+      "End A / first endpoint",
+      "End B / second endpoint",
+      "Color / size",
+      "Assignment",
+      "From sheet.zone",
+      "To sheet.zone",
+    ];
+    const row = parent.hasAttribute("data-report-row");
+    const candidates = row
+      ? all.filter(
+          (e) =>
+            e.tagName.toLowerCase() === "g" &&
+            tableRectangles(e).length === 7 &&
+            !e.hasAttribute("data-report-row") &&
+            bounds(e).y < cells[0].b.y,
+        )
+      : [parent];
+    const header = candidates
+      .map((e) => ({ e, cells: stackedTopology(e) }))
+      .filter(
+        (h) =>
+          h.cells &&
+          h.cells.every(
+            (r, i) => close(r.b.x, cells[i].b.x) && close(r.b.w, cells[i].b.w),
+          ) &&
+          h.cells.every((r, i) => paintedCellText(h.e, r) === labels[i]),
+      )
+      .sort((a, b) => bounds(b.e).y - bounds(a.e).y)[0];
+    if (!header)
+      throw Error("Stacked report: mismatched painted header sub-cell");
+    if (
+      row &&
+      cells
+        .slice(5)
+        .some(
+          (r) =>
+            !/^(?:[0-9]{2,3}\.[A-D][1-6]|not drawn)$/u.test(
+              paintedCellText(parent, r),
+            ),
+        )
+    )
+      throw Error(
+        "Stacked report: location missing or in wrong painted sub-cell",
+      );
+    stackedCache.set(parent, cells);
+    return cells;
+  };
+  const reportTextCell = (column, ink) => {
+    const cells = stackedTopology(column.parentElement);
+    if (!cells) return;
+    const hits = cells
+      .map((r, index) => ({ ...r, index }))
+      .filter((r) => reportContains(r.b, ink));
+    if (hits.length !== 1)
+      throw Error("Stacked report: text outside its painted row sub-cell");
+    return hits[0];
+  };
   const textCandidates = Array.from(root.querySelectorAll("text"))
     .flatMap((e) => {
       if (!continuationOwner(e) || !e.querySelector("tspan")) return [e];
@@ -966,16 +1157,13 @@ export function measureSheet(options = {}) {
         knockout = false;
       const reportColumn = e.closest("[data-report-column]");
       if (reportColumn) {
+        const stacked = reportTextCell(reportColumn, v.b);
         columnIndex =
+          stacked?.index ??
           Number(reportColumn.getAttribute("data-report-column")) - 1;
-        const rectangles = Array.from(
-          reportColumn.parentElement.children,
-        ).filter(
-          (r) =>
-            r.tagName.toLowerCase() === "rect" &&
-            r.getAttribute("stroke") === "#9ba6b4",
-        );
-        const rectangle = rectangles[columnIndex];
+        const rectangle =
+          stacked?.e ??
+          tableRectangles(reportColumn.parentElement)[columnIndex];
         if (!rectangle)
           throw Error(
             "Report column has no independently measurable SVG cell rectangle",
@@ -1212,6 +1400,13 @@ export function measureSheet(options = {}) {
         },
       ];
     });
+  for (const t of textCandidates) measuredReportText.set(t.element, t);
+  for (const parent of new Set(
+    Array.from(root.querySelectorAll("[data-report-column]")).map(
+      (c) => c.parentElement,
+    ),
+  ))
+    stackedReportCells(parent);
   const texts = textCandidates.filter((t) => t.painted);
   const hiddenTexts = textCandidates.filter((t) => !t.painted);
   const frameElement = [...root.children].find(
@@ -1902,6 +2097,7 @@ export function measureSheet(options = {}) {
     headerRule,
     connectors,
     terminals,
+    wireTerminals,
     relationLandings,
     communicationRoutes: all
       .filter((e) => e.hasAttribute("data-communication-link"))
@@ -1951,50 +2147,63 @@ export function measureSheet(options = {}) {
       ...(root.querySelector("[data-symbol-id]") ? ["ais"] : []),
       ...(root.querySelector("[data-circuit-mark]") ? ["circuit"] : []),
     ],
-    reportCells: Array.from(
-      root.querySelectorAll("[data-report-row] [data-report-column]"),
-    ).map((column) => {
-      const columnIndex = Number(column.getAttribute("data-report-column")) - 1;
-      const rect = Array.from(column.parentElement.children).filter(
-        (e) =>
-          e.tagName.toLowerCase() === "rect" &&
-          e.getAttribute("stroke") === "#9ba6b4",
-      )[columnIndex];
-      if (!rect)
-        throw Error("Identifier measurement: report cell rectangle missing");
-      return {
-        row: attr(column, "data-report-row"),
-        documentId: attr(column, "data-document-id"),
-        documentOrigin: attr(column, "data-document-origin"),
-        primitiveIds: [column, ...ancestors(column)]
-          .map((n) => n.id)
-          .filter(Boolean),
-        reportRowScope: ids.get(column.closest("[data-report-row]")),
-        columnIndex,
-        element: ids.get(column),
-        bbox: bounds(rect),
-        regionVisible: (() => {
-          try {
-            const b = bounds(rect),
-              v = visible(rect),
-              clips = shapeClips(rect);
-            return (
-              !!v &&
-              clips !== null &&
-              [v.clip, ...(clips ?? [])].every(
-                (c) =>
-                  b.x >= c.x - 0.001 &&
-                  b.y >= c.y - 0.001 &&
-                  b.x + b.w <= c.x + c.w + 0.001 &&
-                  b.y + b.h <= c.y + c.h + 0.001,
-              )
+    reportCells: Array.from(root.querySelectorAll("[data-report-row]"))
+      .flatMap((row) => {
+        const stacked = stackedReportCells(row);
+        return stacked
+          ? stacked.map((r, columnIndex) => ({
+              column: row,
+              rect: r.e,
+              columnIndex,
+            }))
+          : Array.from(row.querySelectorAll("[data-report-column]")).map(
+              (column) => {
+                const columnIndex =
+                  Number(column.getAttribute("data-report-column")) - 1;
+                return {
+                  column,
+                  columnIndex,
+                  rect: tableRectangles(column.parentElement)[columnIndex],
+                };
+              },
             );
-          } catch {
-            return false;
-          }
-        })(),
-      };
-    }),
+      })
+      .map(({ column, columnIndex, rect }) => {
+        if (!rect)
+          throw Error("Identifier measurement: report cell rectangle missing");
+        return {
+          row: attr(column, "data-report-row"),
+          documentId: attr(column, "data-document-id"),
+          documentOrigin: attr(column, "data-document-origin"),
+          primitiveIds: [column, ...ancestors(column)]
+            .map((n) => n.id)
+            .filter(Boolean),
+          reportRowScope: ids.get(column.closest("[data-report-row]")),
+          columnIndex,
+          element: ids.get(column),
+          bbox: bounds(rect),
+          regionVisible: (() => {
+            try {
+              const b = bounds(rect),
+                v = visible(rect),
+                clips = shapeClips(rect);
+              return (
+                !!v &&
+                clips !== null &&
+                [v.clip, ...(clips ?? [])].every(
+                  (c) =>
+                    b.x >= c.x - 0.001 &&
+                    b.y >= c.y - 0.001 &&
+                    b.x + b.w <= c.x + c.w + 0.001 &&
+                    b.y + b.h <= c.y + c.h + 0.001,
+                )
+              );
+            } catch {
+              return false;
+            }
+          })(),
+        };
+      }),
     reportRows: Array.from(root.querySelectorAll("[data-report-row]")).map(
       (e) => e.getAttribute("data-report-row"),
     ),
