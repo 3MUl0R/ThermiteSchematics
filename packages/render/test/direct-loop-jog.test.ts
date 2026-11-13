@@ -25,7 +25,7 @@ it("routes fixed loop ports without sub-3 mm internal segments", async () => {
     children,
     edges as ElkExtendedEdge[],
     true,
-    true,
+    edges.filter((e) => e.id !== "e6").map((e) => e.id),
   );
   expect(JSON.stringify(graph.children!.map((n) => n.ports))).toBe(
     JSON.stringify(expected.map((n) => n.ports)),

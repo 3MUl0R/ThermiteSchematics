@@ -334,7 +334,7 @@ paper; never change topology to fit. References use kind/state and terminals;
 I/O address/terminals; ports key plus authored description. Cable headings use
 type description or state its absence. Function keys/type IDs stay in
 metadata/CSV.
-Attachment/tag-lane rays: incident ink; unselected: 0.35 mm.
+Attachment/tag-lane rays: lightest incident ink; unused faces: 0.35 mm.
 
 Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ. E206
 checks function existence, kind, terminal count and contact state.

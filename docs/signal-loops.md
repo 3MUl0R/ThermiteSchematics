@@ -392,7 +392,11 @@ appear in device references. Intermediate schematic contacts may be ordered to
 match the actuator connector and reduce crossings. Actual terminal identities
 and net IDs are preserved; the drawing is not a physical terminal-strip layout.
 ELK still owns all device placement and orthogonal routing. Top-to-bottom
-output loops use 3 mm edge spacing within the fixed 14 mm terminal lanes,
-leaving room for wire labels without forcing short sideways jogs. Terminal
-identities, port positions within each device and the authored connector order
-are preserved.
+output wire labels do not reserve transverse space in ELK's fixed 14 mm lanes.
+After layout, each label is centered on its own vertical route segment, with a
+white background for legibility; no route point moves. Cable-core and cable-assembly labels,
+left-to-right loops and input loops retain their existing ELK placement.
+If no vertical segment fits a wire label, or a placed label overlaps another
+label, device body or conductor, the view refuses with R006. Wide labels are
+never made to fit by stretching endpoints, shrinking text or editing routes.
+Terminal identities, fixed ports and authored connector order are preserved.

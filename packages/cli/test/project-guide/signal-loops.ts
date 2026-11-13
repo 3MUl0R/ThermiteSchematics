@@ -957,7 +957,8 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Attachment/tag-lane rays: incident ink; unselected: 0.35 mm.",
+      claim:
+        "Attachment/tag-lane rays: lightest incident ink; unused faces: 0.35 mm.",
       async check() {
         for (const flow of ["left-to-right", "top-to-bottom"] as const)
           await assertAttachmentWeights(flow);

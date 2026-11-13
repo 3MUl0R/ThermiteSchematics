@@ -705,7 +705,9 @@ export async function prepareSignalLoopDrawing(
       ],
     })),
     vertical,
-    selected.output,
+    vertical && selected.output
+      ? edges.flatMap((e, i) => (e.cable || e.assembly ? [] : [`e${i}`]))
+      : [],
   );
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
