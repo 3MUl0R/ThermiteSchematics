@@ -1,3 +1,5 @@
+import { wireLocatorAudit } from "./wire-locators.mjs";
+const wireLocatorAudits = new WeakMap();
 import {
   tableForSheet,
   documentInventory,
@@ -412,9 +414,14 @@ export function evaluateSheet(
     ),
   );
   out.push(obs("DQ-18", checks.titleFields(g)));
+  if (!wireLocatorAudits.has(packet))
+    wireLocatorAudits.set(packet, wireLocatorAudit(packet, geometries, ir));
   const identifierSource = identifierTable(s, packet, g, ir, tables);
   out.push(
     obs("DQ-19", [
+      ...wireLocatorAudits
+        .get(packet)
+        .findings.filter((f) => f.sheet === s.number),
       ...(identifierSource
         ? identifierFindings(
             g,

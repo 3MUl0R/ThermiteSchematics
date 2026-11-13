@@ -253,3 +253,31 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     }
   },
 );
+
+it("locates a terminal drawn only as a keyed pin-list row", () => {
+  const row =
+    '<g data-device-uid="a"><text data-pin-terminal="[&quot;a&quot;,&quot;T&quot;]" x="3" y="10" font-size="2.7">T pin</text></g>';
+  expect(locations(row + marker("b", 110, 70)).get("w")).toEqual([
+    "07.A1",
+    "07.D6",
+  ]);
+  expect(locations(`<g display="none">${row}</g>`).has("w")).toBe(false);
+});
+it("first issued sheet wins, then the first painted appearance in SVG order", () => {
+  const page = normalizePaperPage();
+  if (!page.ok) throw Error("paper");
+  const first = svg(
+    marker("a", 10, 10) + marker("a", 100, 70) + marker("b", 110, 70),
+  );
+  const later = svg(marker("a", 100, 70) + marker("b", 10, 10));
+  const result = wireScheduleLocations(
+    native(),
+    [draft, draft],
+    [
+      { number: 2, svg: first },
+      { number: 9, svg: later },
+    ] as RenderedSheet[],
+    page.value,
+  );
+  expect(result.get("w")).toEqual(["02.A1", "02.D6"]);
+});

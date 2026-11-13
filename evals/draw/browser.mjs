@@ -259,6 +259,7 @@ export function measureSheet(options = {}) {
     deviceUid: attr(e, "data-device-uid"),
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
+    pinTerminal: attr(e, "data-pin-terminal"),
     row: attr(e, "data-report-row"),
     documentId: attr(e, "data-document-id"),
     documentOrigin: attr(e, "data-document-origin"),
@@ -545,6 +546,60 @@ export function measureSheet(options = {}) {
         })(),
         point: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
         fill: getComputedStyle(e).fill,
+      },
+    ];
+  });
+  // Physical marker ink only; native endpoint slots are reconstructed outside
+  // Chromium. Pin-list text is independently reconciled with the native type.
+  const wireTerminals = Array.from(
+    root.querySelectorAll(
+      "circle[data-terminal-key],circle[data-loop-terminal],g[data-cable-uid][data-conductor-id] > circle",
+    ),
+  ).flatMap((e) => {
+    const v = visible(e),
+      css = getComputedStyle(e);
+    let alpha = Number(css.strokeOpacity);
+    for (let p = e; p; p = p.parentElement)
+      alpha *= Number(getComputedStyle(p).opacity);
+    if (!v || alpha < 0.2 || css.stroke === "none") return [];
+    const clips = shapeClips(e);
+    if (
+      clips === null ||
+      [v.clip, ...clips].some(
+        (c) =>
+          v.b.x < c.x - 0.002 ||
+          v.b.y < c.y - 0.002 ||
+          v.b.x + v.b.w > c.x + c.w + 0.002 ||
+          v.b.y + v.b.h > c.y + c.h + 0.002,
+      )
+    )
+      return [];
+    let terminal;
+    if (e.hasAttribute("data-loop-terminal")) {
+      try {
+        terminal = JSON.parse(e.getAttribute("data-loop-terminal"));
+      } catch {
+        return [];
+      }
+    } else if (e.hasAttribute("data-terminal-key"))
+      terminal = [
+        attr(e, "data-device-uid"),
+        e.getAttribute("data-terminal-key"),
+      ];
+    const cable = e.parentElement;
+    const circles = Array.from(cable.children).filter(
+      (n) => n.tagName.toLowerCase() === "circle",
+    );
+    return [
+      {
+        ...identity(e),
+        terminal,
+        bbox: v.b,
+        point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
+        cableUid: cable.getAttribute("data-cable-uid"),
+        conductorId: cable.getAttribute("data-conductor-id"),
+        slot: circles.indexOf(e),
+        markerCount: circles.length,
       },
     ];
   });
@@ -2042,6 +2097,7 @@ export function measureSheet(options = {}) {
     headerRule,
     connectors,
     terminals,
+    wireTerminals,
     relationLandings,
     communicationRoutes: all
       .filter((e) => e.hasAttribute("data-communication-link"))

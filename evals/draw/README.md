@@ -243,6 +243,14 @@ partitions and visible native headers, independently of column flags or rectangl
 order. Seven fields, complete header sub-cells, contained locator ink and the
 ordinary one-rectangle-per-column contract have negative browser controls.
 
+Checker **5.10** independently compares every printed wire From/To locator
+with native endpoint appearances measured across issued drawing sheets. Native
+marker/core identities and painted pin-list text supply appearances; pin rows
+are reconciled with native keys and descriptions, including in old unkeyed output.
+Zones use painted label anchors and accept any spanned zone. Wrong sheets/zones,
+missing values, and `not drawn` for a drawn endpoint fail in ordinary and stacked
+tables. Report pages, hidden/clipped ink and native peers supply no landing.
+
 Version **5.9** adds M3 companion delivery against `issued-documents/1`:
 
 - Native IR supplies typed endpoint incidences (including endpoint ordinals),

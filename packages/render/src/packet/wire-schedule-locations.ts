@@ -1,3 +1,5 @@
+import { measureText } from "../text-metrics.js";
+import type { NavigationGeometry } from "./navigation-walk.js";
 import type { ElectricalIr, ConductiveElementId } from "@thermite/compiler";
 import type { ScheduleReferences, EndpointSheetZones } from "@thermite/query";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
@@ -39,11 +41,7 @@ export function wireScheduleLocations(
     for (const g of geometry) {
       const key = keys.get(g.node);
       if (!g.visible || key === undefined || !needed.has(key)) continue;
-      const a = g.node.attrs;
-      const point = project(
-        { x: Number(a.cx), y: Number(a.cy), w: 0, h: 0 },
-        g.matrix,
-      );
+      const point = drawnTerminalAnchor(g);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
         throw Error("Invalid drawn endpoint landing");
       if (!inside(point, expand(g.clip, 0.002))) continue;
@@ -76,6 +74,23 @@ export function wireScheduleLocations(
     result.set(key, ends);
   }
   return result;
+}
+
+/** Pin rows use the measured ink center of their first painted line. */
+function drawnTerminalAnchor(g: NavigationGeometry) {
+  const a = g.node.attrs;
+  if (g.node.name === "circle")
+    return project({ x: Number(a.cx), y: Number(a.cy), w: 0, h: 0 }, g.matrix);
+  const size = Number(g.style?.["font-size"] ?? a["font-size"]);
+  const metrics = measureText(g.node.text, size);
+  const anchor = g.style?.["text-anchor"] ?? a["text-anchor"];
+  const x =
+    Number(a.x) +
+    metrics.width * (anchor === "middle" ? 0 : anchor === "end" ? -0.5 : 0.5);
+  return project(
+    { x, y: Number(a.y) + (metrics.descent - metrics.ascent) / 2, w: 0, h: 0 },
+    g.matrix,
+  );
 }
 
 function scheduleReferences(

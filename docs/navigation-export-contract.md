@@ -232,15 +232,17 @@ Wire and core schedules always reserve `From sheet.zone` and `To sheet.zone`,
 including requested, filtered and automatic inventories. Each cell locates that
 native endpoint's actual terminal landing in the finalized packet, using the
 same decimal half-up quantization, half-open zone grid and zero-padded
-`sheet.zone` formatter as navigation. Repeated appearances use the first resolved
-landing in sheet and SVG order. Any zone spanned by that landing is acceptable.
+`sheet.zone` formatter as navigation. For multiply-drawn terminals, **the first issued sheet wins** (issued sheet
+order); within it, the first painted appearance in SVG document order wins.
+Later appearances never overwrite that choice. Any zone spanned by that landing is acceptable.
 The native endpoint slot determines the column, even when the path is reversed.
 
 The explicit unresolved form is `not drawn`: it may print only when that native
 endpoint has no drawn landing on any issued sheet. A drawn endpoint whose locator
 cannot be resolved is a renderer error, never an empty state. The exact native
-terminal marker supplies the landing, including when a selected view omits this
-wire but draws the same physical terminal through another conductor. A nearby
+terminal marker or painted native pin-list row supplies the landing, including when a selected view omits this
+wire but draws the same physical terminal through another conductor. A pin-list row is a drawn terminal even if no circle is painted; its anchor is
+the measured ink center of its first printed line. A nearby
 device, a different same-net terminal, an inventory row, hidden ink or a clipped
 marker supplies no location. This does not imply an absent electrical connection.
 Singly terminated, spare and unassigned cores retain their native endpoint slots.

@@ -13,9 +13,22 @@ export function wireScheduleTerminalKeys(
 ): ReadonlyMap<SvgNode, string> {
   const keys = new Map<SvgNode, string>();
   for (const g of geometry) {
-    if (g.node.name !== "circle") continue;
+    if (
+      g.node.name !== "circle" &&
+      !(g.node.name === "text" && g.node.attrs["data-pin-terminal"])
+    )
+      continue;
     const a = g.node.attrs;
-    if (a["data-loop-terminal"]) {
+    if (a["data-pin-terminal"]) {
+      const terminal: unknown = JSON.parse(a["data-pin-terminal"]);
+      if (
+        !Array.isArray(terminal) ||
+        terminal.length !== 2 ||
+        terminal.some((s) => typeof s !== "string")
+      )
+        throw Error("Invalid native pin-list terminal identity");
+      keys.set(g.node, JSON.stringify(terminal));
+    } else if (a["data-loop-terminal"]) {
       const terminal: unknown = JSON.parse(a["data-loop-terminal"]);
       if (
         !Array.isArray(terminal) ||
