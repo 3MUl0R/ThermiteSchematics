@@ -69,8 +69,8 @@ const guidePath = join(
 );
 const guideBytes = readFileSync(guidePath);
 const live = guideModel(guideBytes.toString("utf8"));
-/** The G1 budget; G6 compacts the guide further. */
-const GUIDE_BYTE_BUDGET = 19_500;
+/** Interim ceiling until G6, per the 2026-11-13 helm ruling. */
+const GUIDE_BYTE_BUDGET = 20_500;
 /** Concrete inline commands checked against the CLI tree but not executed. */
 const INLINE_NOT_RUN = new Map<string, string>([
   [

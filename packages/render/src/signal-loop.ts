@@ -18,6 +18,10 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
+import {
+  InlineLabelFitError,
+  InlineLabelCollisionError as Collision,
+} from "./layout/inline-label-error.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
 import {
   validateSignalLoopRequest,
@@ -81,6 +85,27 @@ const text = (
   `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
 const width = (value: string) => measureText(value, 2.7).width;
 const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
+function checkLabelGeometry(
+  box: { x: number; y: number; width: number; height: number },
+  graph: ElkNode,
+) {
+  if (
+    ![box.x, box.y, box.width, box.height].every(Number.isFinite) ||
+    box.width <= 0 ||
+    box.height <= 0
+  )
+    throw new Error("Signal loop contains invalid content geometry.");
+  if (
+    box.x < 0 ||
+    box.y < 0 ||
+    box.x + box.width > graph.width! + 0.01 ||
+    box.y + box.height > graph.height! + 0.01
+  )
+    throw new InlineLabelFitError(
+      "Signal loop contains unplaced or out-of-bounds content.",
+    );
+}
+
 // Check ELK's placed labels as well as its routes: a white label background
 // must never erase another conductor or a device body.
 export function checkLabels(graph: ElkNode) {
@@ -105,26 +130,13 @@ export function checkLabels(graph: ElkNode) {
     b.x < a.x + a.width - 0.01 &&
     a.y < b.y + b.height - 0.01 &&
     b.y < a.y + a.height - 0.01;
-  for (const box of [...boxes, ...labels]) {
-    if (
-      ![box.x, box.y, box.width, box.height].every(Number.isFinite) ||
-      box.x < 0 ||
-      box.y < 0 ||
-      box.width <= 0 ||
-      box.height <= 0 ||
-      box.x + box.width > graph.width! + 0.01 ||
-      box.y + box.height > graph.height! + 0.01
-    )
-      throw new Error(
-        "Signal loop contains unplaced or out-of-bounds content.",
-      );
-  }
+  for (const box of [...boxes, ...labels]) checkLabelGeometry(box, graph);
   for (const [index, label] of labels.entries()) {
     if (
       boxes.some((box) => overlap(label, box)) ||
       labels.slice(index + 1).some((other) => overlap(label, other))
     )
-      throw new Error("Signal loop labels overlap other drawing content.");
+      throw new Collision("Signal loop labels overlap other drawing content.");
     for (const edge of graph.edges ?? []) {
       if (edge.id === label.edge) continue;
       for (const section of edge.sections ?? []) {
@@ -144,7 +156,9 @@ export function checkLabels(graph: ElkNode) {
               height: Math.abs(a.y - b.y),
             })
           )
-            throw new Error("A signal loop label conceals another conductor.");
+            throw new Collision(
+              "A signal loop label conceals another conductor.",
+            );
         }
       }
     }

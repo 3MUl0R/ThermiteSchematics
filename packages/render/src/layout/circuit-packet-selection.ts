@@ -1,0 +1,70 @@
+import type { SchematicPacketRequest } from "../packet/types.js";
+import type { RenderedPacket } from "../packet/types.js";
+import type { RenderOutcome } from "../types.js";
+import {
+  circuitInlineContext,
+  circuitInlineTrace,
+  type CircuitInlineContext,
+} from "./circuit-inline-context.js";
+import { circuitHasJogs } from "./circuit-route-quality.js";
+import { circuitPacketGuard } from "./circuit-packet-guard.js";
+import { required } from "../presentation/util.js";
+
+/** The saved printable reference predates all routing alternatives. Each logical
+ * circuit view must repair its own jogs; packet/page/navigation guards compare
+ * against that original reference, never a newly generated easier baseline. */
+export function selectCircuitPacket(
+  request: SchematicPacketRequest,
+  render: () => Promise<RenderOutcome<RenderedPacket>>,
+) {
+  if (
+    !Array.isArray(request?.views) ||
+    !request.views.some((v) => v?.format === "circuit-view-request/0.1")
+  )
+    return render();
+  const context: CircuitInlineContext = {
+    cursor: 0,
+    runs: [],
+    selected: new Set(),
+    layouts: new Map(),
+    qualityPhase: false,
+    permittedInputs: new Set(),
+    viewDecisions: [],
+  };
+  return circuitInlineContext.run(context, async () => {
+    circuitInlineTrace.getStore()?.push(context);
+    const original = await render();
+    if (!original.ok) return original;
+    context.qualityPhase = true;
+    let selected = original;
+    for (const [index, run] of context.runs.entries()) {
+      if (
+        ![...run.printed].some((key) =>
+          circuitHasJogs(
+            required(run.baseline.get(key), "Missing printed circuit baseline"),
+          ),
+        )
+      )
+        continue;
+      context.selected.add(index);
+      context.cursor = 0;
+      const candidate = await render();
+      if (!candidate.ok && candidate.error.code !== "R006")
+        throw new Error(
+          `Unexpected circuit candidate failure: ${candidate.error.message}`,
+        );
+      if (candidate.ok && circuitPacketGuard(candidate.value, original.value))
+        selected = candidate;
+      else context.selected.delete(index);
+      context.viewDecisions.push({
+        view: index,
+        reason: candidate.ok
+          ? context.selected.has(index)
+            ? "accepted"
+            : "packet/view growth or annotation/card conservation/locality"
+          : "composition fit",
+      });
+    }
+    return selected;
+  });
+}
