@@ -519,7 +519,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Run `thermite diagnostics --json` for all declared terminals/ports, required connections, incomplete models and review dispositions.",
+        "`thermite diagnostics --json`: all declared terminals/ports, required connections, incomplete models and review dispositions.",
       async check() {
         const { report } = await auditReport();
         expect(report.format).toBe("electrical-completeness/0.1");
@@ -552,7 +552,7 @@ const module: FactModule = {
     },
     {
       claim:
-        '`--device HMI1` or `--location "HMI console"` focuses it; `-o audit.csv` writes the full connection table.',
+        '`--device HMI1`/`--location "HMI console"` scopes it; `-o audit.csv`: full connection table.',
       async check() {
         const project = await copyProject(await audit(), "completeness-csv");
         const [byDevice, byLocation, file, { report }] = await Promise.all([
@@ -614,7 +614,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Compiler diagnostics remain on stderr.",
+      claim: "Compiler diagnostics: stderr.",
       async check() {
         const [filtered, { report, compiler }] = await Promise.all([
           auditFocus("--device", "HMI1"),
@@ -636,7 +636,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Library terminals and ports can declare `required: true`.",
+      claim: "Library terminals/ports may declare `required: true`.",
       async check() {
         const types = await schema("device-type");
         expect(types.$defs.terminal.properties.required.type).toBe("boolean");

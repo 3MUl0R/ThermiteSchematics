@@ -573,7 +573,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'For a molded cordset overview, add `cableAssemblies: [{cable: "CB1", connector: "M12", description: "4-pole molded cordset (proposed)"}]`: one jacket line with connector ends and the actual pin map, never merging nets.',
+        'Molded cordset overview: add `cableAssemblies: [{cable: "CB1", connector: "M12", description: "4-pole molded cordset (proposed)"}]`: one jacket line with connector ends and the actual pin map, never merging nets.',
       async check() {
         const d = await shared.grouped();
         const jackets = d.document.querySelectorAll("[data-cable-assembly]");
@@ -748,7 +748,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "The optional wall device must be the first or last member, have a bulkhead profile and accompany interior devices.",
+        "An optional wall device must be first/last, have a bulkhead profile and accompany interior devices.",
       async check() {
         const [{ project }, inside, exit, output] = await Promise.all([
           loop(),
@@ -794,7 +794,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "For a powered analog actuator, `from` may be a two-terminal output channel and `to` a two-terminal function on a `thermite:analog-actuator` profile.",
+        "For powered analog actuators, `from` may be a two-terminal output channel and `to` a two-terminal function on a `thermite:analog-actuator` profile.",
       async check() {
         const [output, request, d] = await Promise.all([
           analog(),

@@ -722,7 +722,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Functions never join physical nets.",
+      claim: "Functions never automatically join physical nets.",
       async check() {
         const [types, run] = await Promise.all([
           coreTypes(),
@@ -858,7 +858,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Diagnostics: `allowed`, `allowedCount`, `allowedLookup` (full-list lookup), `pattern`.",
+        "Diagnostics may carry `allowed`, `allowedCount`, `allowedLookup` (full-list lookup) and `pattern`.",
       async check() {
         const project = await freshProject("starter");
         await editJson(join(project, EQUIPMENT), (file) =>
@@ -978,7 +978,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "New files, `system.json` and libraries are ordinary file edits; list new source files in `system.json` `sources`, then validate.",
+        "Edit new files, `system.json` and libraries directly; list new source files in `system.json` `sources`, then validate.",
       async check() {
         const project = await plant();
         const [manifest, unlisted, valid, linked, schema] = await Promise.all([
@@ -1844,7 +1844,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs one second after work finishes; failures preserve the previous packet.",
+        "`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs 1 s after work finishes; failures retain the previous packet.",
       async check() {
         const project = await freshProject("starter");
         const bom = {

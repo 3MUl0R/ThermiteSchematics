@@ -373,7 +373,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
+        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -571,7 +571,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Tags: designation ≥2.7 mm; instance/else-type description/catalog part ≥2.5 mm.",
+        "Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.",
       async check() {
         const doc = parseHTML((await multi()).svg).document;
         const texts = [...doc.querySelectorAll("svg")].flatMap((svg) =>
@@ -733,7 +733,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Each group has a unique `id`, optional `label` and `lineReference`, `conductors`, and `functions` selectors such as `{device: {by: "designation", value: "PLC1"}, key: "do0"}`.',
+        'Groups have unique `id`, optional `label`/`lineReference`, `conductors` and `functions` selectors, e.g. `{device: {by: "designation", value: "PLC1"}, key: "do0"}`.',
       async check() {
         const { svg, text } = sheet(await accepted(), "Groups");
         expect(svg).toContain(
@@ -791,7 +791,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Empty conductors mean unconnected functions, not spares.",
+      claim: "Empty conductors show unconnected functions, not spares.",
       async check() {
         const { svg } = await multi();
         // An open (white) terminal mark has no selected wiring.
@@ -812,7 +812,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Group order sets presentation; order functions by reading stage (PLC outputs, terminals, interlocks, coils). First appearance sets device order.",
+        "Group order sets presentation; order functions by reading stage (PLC outputs, terminal points, interlocks, coils). First appearance sets device display order.",
       async check() {
         const [drawing, { tb1, tb2 }] = await Promise.all([accepted(), ids()]);
         const forward = sheet(drawing, "Forward").svg;
@@ -941,7 +941,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps keys to closed-catalog marks; main/auxiliary contacts may differ.",
+        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks may differ.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

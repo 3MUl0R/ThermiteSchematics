@@ -5,7 +5,12 @@ import {
   type NavigationGeometry,
 } from "./navigation-walk.js";
 import { descendants } from "../device-legend/svg-tree.js";
-import { inside, project, type Rect } from "../device-legend/geometry.js";
+import {
+  inside,
+  intersection,
+  project,
+  type Rect,
+} from "../device-legend/geometry.js";
 import { unionInk } from "./rooted-ink.js";
 import { required } from "../presentation/util.js";
 import { terminalCentroid } from "./navigation-occurrences.js";
@@ -27,21 +32,26 @@ function frameCandidates(all: readonly NavigationGeometry[]) {
           g.node.attrs["data-layout-width"]),
     );
     const measured = rect && all.find((n) => n.node === rect);
-    if (!rect || !measured) return [];
+    if (!rect || !measured?.visible) return [];
+    const visible = intersection(
+      project(
+        {
+          x: Number(rect.attrs.x ?? 0),
+          y: Number(rect.attrs.y ?? 0),
+          w: Number(rect.attrs.width),
+          h: Number(rect.attrs.height),
+        },
+        measured.matrix,
+      ),
+      measured.clip,
+    );
+    if (!visible || visible.w <= 0 || visible.h <= 0) return [];
     return [
       {
         scope: g.node,
         uid: g.node.attrs["data-device-uid"],
         viewKey: g.viewKey,
-        rect: project(
-          {
-            x: Number(rect.attrs.x ?? 0),
-            y: Number(rect.attrs.y ?? 0),
-            w: Number(rect.attrs.width),
-            h: Number(rect.attrs.height),
-          },
-          measured.matrix,
-        ),
+        rect: visible,
       },
     ];
   });

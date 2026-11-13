@@ -16,7 +16,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "One caption per terminal appearance, nearest its body; keep exact landings and split captions. Omit net ink only when its anchored terminal prints the same name.",
+        "One caption/terminal appearance, nearest its body; keep exact landings and split captions. Omit net ink only when its anchored terminal prints the same name.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));

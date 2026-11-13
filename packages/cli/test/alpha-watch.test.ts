@@ -122,9 +122,7 @@ it("keeps guide and review watch claims portable and tied to finished work", () 
   )
     .split("## Watch")[1]!
     .replace(/\s+/g, " ");
-  expect(guide).toContain(
-    "polls declared inputs one second after work finishes",
-  );
+  expect(guide).toContain("polls declared inputs 1 s after work finishes");
   expect(guide).not.toContain("(macOS)");
   expect(review).toContain(
     "one second after the previous load/rebuild finishes",

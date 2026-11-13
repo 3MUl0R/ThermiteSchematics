@@ -35,6 +35,21 @@ it.each([
       );
       expect(result[0]!.allocatedMm!.rect).toMatchObject({ w: 55, h: 25 });
       expect(result[0]!.allocatedMm!.rect.y).toBeGreaterThanOrEqual(12);
+      if (y === 0) {
+        // Its visible 0..30 mm portion leaves less than the required 25 mm
+        // below it. Partial obstacles must reserve their visible area.
+        expect(() =>
+          allocateNavigationSlots(
+            [request],
+            { x: 0, y: 12, w: 80, h: 38 },
+            svg.replace(
+              'height="10" viewBox="0 0 80 10"',
+              'height="30" viewBox="0 0 80 30"',
+            ),
+            1,
+          ),
+        ).toThrow(/cannot fit/);
+      }
       // The exact same obstacle, fully visible, must still block the request.
       expect(() =>
         allocateNavigationSlots(
