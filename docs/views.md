@@ -640,9 +640,12 @@ Its reservation's source owner can be on another sheet; its printed location is
 `allocatedMm.sheet`, including documentation-page fallback.
 
 Mirror locality is measured from final geometry, independently of the chosen
-placement family. A local table shares the coil's sheet, lies within 60 mm of
+placement family. Search, candidate ranking and the final self-check use the printed
+heading glyphs, table rows and rule, including the actual destination tokens. The
+maximum reservation still protects fit and clearances; its blank padding cannot
+establish locality. A local table shares the coil's sheet, lies within 60 mm of
 its own function-terminal centroid, intersects that zone or one of its eight
-neighbours, and has the coil as its strictly nearest device frame. Circuit comparisons use
+neighbours, and has the coil as its strictly nearest device frame (more than 0.01 mm nearer). Circuit comparisons use
 the measured per-function adapter frames, excluding bodies of the coil's own device; an absent enclosing rectangle never exempts foreign visible frames. Otherwise
 its heading prints the coil's own `/ss.zone`; the renderer verifies that token
 against the measured coil location. Same-sheet ownership remains mandatory.

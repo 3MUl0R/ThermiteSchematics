@@ -19,6 +19,7 @@ function slotCandidates(
   obstacles: readonly Rect[],
   locality?: SymbolGeometry,
   texts: readonly Rect[] = [],
+  ink?: Rect,
 ) {
   const { w, h } = size;
   const xs = [
@@ -44,7 +45,12 @@ function slotCandidates(
     ]),
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
   const distance = (b: Rect) =>
-    locality ? anchorDistance(locality.anchorMm, b) : boxDistance(owner, b);
+    locality
+      ? anchorDistance(
+          locality.anchorMm,
+          ink ? { ...ink, x: b.x + ink.x, y: b.y + ink.y } : b,
+        )
+      : boxDistance(owner, b);
   return ys
     .flatMap((y) => xs.map((x) => ({ x, y, w, h })))
     .sort((a, b) => distance(a) - distance(b) || a.y - b.y || a.x - b.x);
@@ -65,6 +71,7 @@ export function searchNavigationSlot(
     shapes.filter((s) => s.mode === mode),
   );
   for (const shape of ordered) {
+    const ink = localityInkMm?.get(shape.id);
     const candidates = slotCandidates(
       shape.inkMm,
       area,
@@ -72,13 +79,13 @@ export function searchNavigationSlot(
       obstacles,
       locality,
       texts,
+      ink,
     );
     if (preferBesideBelow && shape.mode === "local")
       candidates.sort(
         (a, b) =>
           Number(!besideBelow(a, owner)) - Number(!besideBelow(b, owner)),
       );
-    const ink = localityInkMm?.get(shape.id);
     const box = candidates.find(
       (b) =>
         (!families ||

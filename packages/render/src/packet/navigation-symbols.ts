@@ -129,6 +129,6 @@ export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
         box.x + box.w >= symbol.localBandMm.x &&
         box.y <= symbol.localBandMm.y + symbol.localBandMm.h &&
         box.y + box.h >= symbol.localBandMm.y)) &&
-    symbol.framesMm.every((other) => distance < boxDistance(box, other) - 0.001)
+    symbol.framesMm.every((other) => distance < boxDistance(box, other) - 0.01)
   );
 }

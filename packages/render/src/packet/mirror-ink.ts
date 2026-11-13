@@ -1,5 +1,4 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import { formatTerminalSet } from "@thermite/query";
 import type {
   NavigationAnnotation,
   AnnotationReservation,
@@ -16,11 +15,7 @@ import { inside, type Rect } from "../device-legend/geometry.js";
 import { required } from "../presentation/util.js";
 import { text, line } from "./svg.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
-import { MIRROR_ROW_MM, MIRROR_HEADING_MM } from "./mirror-plan.js";
-import {
-  measureNavigationText,
-  wrapNavigationText,
-} from "./navigation-labels.js";
+import { mirrorInk, mirrorTextRuns } from "./mirror-layout.js";
 import { mirrorTag } from "./mirror-facts.js";
 
 export function mirrorIsLocal(
@@ -65,7 +60,11 @@ export function resolveMirrorLocality(
   const allocated = required(slot.allocatedMm, "Missing mirror slot");
   if (allocated.sheet !== geometry.ownerLocation.sheet)
     throw Error("Mirror locality: coil and mirror must share a sheet");
-  const local = mirrorIsLocal(allocated.rect, geometry, field);
+  const local = mirrorIsLocal(
+    mirrorInk(annotation, allocated.rect),
+    geometry,
+    field,
+  );
   const mirror = required(annotation.mirror, "Missing mirror rows");
   const heading = `${annotation.text}${local ? "" : ` /${destinationToken(geometry.ownerLocation)}`}`;
   const result = {
@@ -75,7 +74,13 @@ export function resolveMirrorLocality(
     locality: {
       mode: local ? ("local" as const) : ("self-located" as const),
       ...geometry,
-      distanceMm: anchorDistance(geometry.anchorMm, allocated.rect),
+      distanceMm: anchorDistance(
+        geometry.anchorMm,
+        mirrorInk(
+          { ...annotation, mirror: { ...mirror, heading } },
+          allocated.rect,
+        ),
+      ),
     },
   };
   validateMirrorLocality(ir, result, slot, geometry, field);
@@ -95,7 +100,7 @@ export function validateMirrorLocality(
   const located = `${own} /${destinationToken(geometry.ownerLocation)}`;
   if (
     allocated.sheet !== geometry.ownerLocation.sheet ||
-    (mirrorIsLocal(allocated.rect, geometry, field)
+    (mirrorIsLocal(mirrorInk(annotation, allocated.rect), geometry, field)
       ? ![own, located].includes(mirror.heading)
       : mirror.heading !== located)
   )
@@ -124,42 +129,21 @@ export function mirrorAnnotationSvg(
     return text(x, y, s, size);
   };
   const mirror = annotation.mirror;
+  const textRuns = mirrorTextRuns(annotation, box);
+  runs.push(
+    ...textRuns
+      .filter((r) => !r.row)
+      .map((r) => put(r.x, r.y, r.value, r.size)),
+  );
   if (mirror) {
-    runs.push(put(box.x + 1.5, box.y + 4.3, mirror.heading, MIRROR_HEADING_MM));
     runs.push(line(box.x + 1, box.y + 6, box.x + box.w - 1, box.y + 6));
-    let y = box.y + 10;
-    const terminalsWidth = Math.max(
-      23.5,
-      ...mirror.rows.map(
-        (r) => measureNavigationText(formatTerminalSet(r.terminals)) + 2,
-      ),
-    );
-    for (const row of mirror.rows) {
-      const destinations = row.destinations.length
-        ? row.destinations
-        : ["not drawn"];
+    for (const row of mirror.rows)
       runs.push(
-        `<g id="${attr(row.primitiveId)}" data-navigation-mirror-row="${attr(JSON.stringify(row.source))}">${put(box.x + 1.5, y, row.state, MIRROR_ROW_MM)}${put(box.x + 10, y, formatTerminalSet(row.terminals), MIRROR_ROW_MM)}${destinations.map((d, i) => put(box.x + 10 + terminalsWidth, y + i * 4.5, d, MIRROR_ROW_MM)).join("")}</g>`,
+        `<g id="${attr(row.primitiveId)}" data-navigation-mirror-row="${attr(JSON.stringify(row.source))}">${textRuns
+          .filter((r) => r.row === row.primitiveId)
+          .map((r) => put(r.x, r.y, r.value, r.size))
+          .join("")}</g>`,
       );
-      y += 4.5 * destinations.length;
-    }
-    if (!mirror.rows.length)
-      for (const s of wrapNavigationText(
-        "Contact associations unspecified",
-        box.w - 3,
-      ).split("\n")) {
-        runs.push(put(box.x + 1.5, y, s, MIRROR_ROW_MM));
-        y += 4.5;
-      }
-  } else
-    for (const [i, s] of annotation.text.split("\n").entries())
-      runs.push(
-        put(
-          box.x + 1,
-          box.y + 3.7 + i * 4.5,
-          s,
-          annotation.role === "contact-notice" ? 2.7 : MIRROR_ROW_MM,
-        ),
-      );
+  }
   return `<g id="${attr(required(annotation.primitiveIds[0], "Missing mirror primitive"))}" data-navigation-annotation="${attr(annotation.id)}" data-navigation-owner="${attr(annotation.ownerOccurrence)}" data-navigation-role="${annotation.role}">${runs.join("")}</g>`;
 }
