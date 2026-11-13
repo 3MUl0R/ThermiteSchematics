@@ -184,3 +184,12 @@ The authored-note browser test population excludes automatic inventory pages:
 generated inventories do not inherit requested view notes. Only that test's page
 population changes; the vocabulary predicate stays unchanged. E3 must continue
 checking generated inventory captions and rows using their native origins.
+
+Circuit recomposition conserves this M3 output against the original printable
+packet: dependency and resolved-document metadata, resolutions and automatic origins;
+painted captions and native rows; complete companion pages; and fixed caption
+geometry plus owning-view placement. Paint includes inherited styles, transforms
+and clips, independently of exported rectangles. Both directions are compared.
+Unchanged companions do not add a separate circuit page-count restriction. This
+renderer guard conserves an already printable result; it does not replace E3's
+independent source reconstruction or establish electrical completeness.

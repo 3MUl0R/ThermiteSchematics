@@ -243,6 +243,13 @@ measured owner distance may grow beyond floating-point tolerance. Reservation
 families and blank capacity do not decide locality; NAV retains its printed-frame
 margin and heading policy.
 
+The same comparison conserves M3 dependency captions, resolutions, referenced issued
+rows and automatic inventories in both directions. Caption text is checked in the
+painted SVG independently of its metadata. Final caption geometry, inherited
+visibility, transforms, clips and owning-view placement stay unchanged, as do
+companion pages. Unchanged companions impose no additional page-count limit on
+a circuit improvement. A rejected candidate keeps the original printable packet.
+
 Each drawn device has an owned printing tag: bold designation, nonblank instance
 description (otherwise type description), and the exact catalog order number when
 authored. Description and part occupy separate rows; empty fields have no row.
