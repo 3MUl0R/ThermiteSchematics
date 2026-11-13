@@ -5,14 +5,13 @@ export function formatTerminalSet(
   terminals: readonly string[],
   label: (terminal: string) => string = (terminal) => terminal,
 ): string {
-  return terminals
-    .map(label)
-    .join(
-      terminals.length === 2 &&
-        terminals.every((t) => /^[A-Za-z0-9]+$/u.test(t))
-        ? "–"
-        : " / ",
-    );
+  const separator =
+    terminals.length === 2 && terminals.every((t) => !/[-–−+]/u.test(t))
+      ? "–"
+      : terminals.some((t) => t.includes("/"))
+        ? ", "
+        : " / ";
+  return terminals.map(label).join(separator);
 }
 
 /** Port keys are authored markings. Descriptions supplement, never replace, them. */

@@ -4,6 +4,7 @@ import {
   printedPort,
   formatTerminalSet,
 } from "@thermite/query";
+import { renderSchematicPacket } from "../../../render/src/sheets.js";
 import { printedFunction } from "../../../render/src/print-projection.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
@@ -372,6 +373,77 @@ const module: FactModule = {
   facts: [
     {
       claim:
+        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
+      async check() {
+        const c = await compileProject("examples/motor-starter");
+        if (!c.ok) throw Error(JSON.stringify(c));
+        const views = ["M1", "K1"].map((value) => ({
+          format: "schematic-view-request/0.1" as const,
+          root: { by: "designation" as const, value },
+          family: value === "M1" ? ("power" as const) : ("control" as const),
+        }));
+        const r = await renderSchematicPacket(c.ir, {
+          format: "schematic-packet-request/0.1",
+          views,
+        });
+        if (!r.ok) throw Error(JSON.stringify(r.error));
+        expect(r.value.sheets).toHaveLength(3);
+        const nav = r.value.navigation!;
+        const coil = c.ir.functions.find((f) => f.kind === "coil")!;
+        const expected = c.ir.internalRelations
+          .filter(
+            (rel) =>
+              rel.verb === "actuates" &&
+              rel.deviceUid === coil.id.deviceUid &&
+              rel.from.functionKey === coil.id.functionKey,
+          )
+          .map((rel) =>
+            c.ir.functions.find(
+              (f) =>
+                f.id.deviceUid === rel.to.deviceUid &&
+                f.id.functionKey === rel.to.functionKey,
+            )!,
+          );
+        const table = nav.annotations.find((a) => a.role === "mirror")!;
+        const sheet = r.value.sheets.find((s) =>
+          s.occurrenceIds?.includes(table.ownerOccurrence),
+        )!;
+        const dom = parseHTML(sheet.svg).document;
+        const rows = [...dom.querySelectorAll("[data-navigation-mirror-row]")];
+        expect(rows).toHaveLength(expected.length);
+        for (const fn of expected) {
+          expect(fn.kind).toBe("contact");
+          const row = rows.find(
+            (n) =>
+              n.getAttribute("data-navigation-mirror-row") ===
+              JSON.stringify(fn.id),
+          )!;
+          expect(row.textContent).toContain(
+            `${fn.kind === "contact" && fn.normal_state === "open" ? "NO" : "NC"}${formatTerminalSet(fn.terminals.map((t) => t.terminalKey))}`,
+          );
+        }
+        expect(
+          [
+            ...dom.querySelectorAll('[data-navigation-role="mirror"] text'),
+          ].every((t) =>
+            ["3.502", "3.782"].includes(t.getAttribute("font-size")!),
+          ),
+        ).toBe(true);
+        expect(nav.reservations.every((r) => r.space === "sheet-slot")).toBe(
+          true,
+        );
+        const returns = nav.annotations.filter((a) => a.role === "return");
+        expect(returns).toHaveLength(1);
+        expect(returns[0]!.ownerOccurrences).toHaveLength(3);
+        expect(returns[0]!.text).toMatch(/^K1 \/[0-9]{2}\.[A-D][1-6]$/);
+        expect(returns[0]!.returnLocality!.owners).toHaveLength(3);
+        expect(formatTerminalSet(["1/L1", "2/T1"])).toBe("1/L1–2/T1");
+        expect(formatTerminalSet(["L+", "M"])).toBe("L+ / M");
+        expect(formatTerminalSet(["a-b", "c/d"])).toBe("a-b, c/d");
+      },
+    },
+    {
+      claim:
         "One repeat per device/view/sheet; fixed local slots, else own sheet.zone. Repeat text keeps 4 mm horizontally from overlapping text bands; centroids round half-up to 0.01 mm.",
       async check() {
         const project = ctx.pristine.starter,
@@ -661,7 +733,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Each group has a unique `id`, optional `label` and `lineReference`, `conductors`, and `functions` selectors such as `{device: {by: "designation", value: "PLC1"}, key: "do0"}`.',
+        'Groups have unique `id`, optional `label`/`lineReference`, `conductors` and `functions` selectors, e.g. `{device: {by: "designation", value: "PLC1"}, key: "do0"}`.',
       async check() {
         const { svg, text } = sheet(await accepted(), "Groups");
         expect(svg).toContain(
@@ -869,7 +941,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ.",
+        "Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks may differ.",
       async check() {
         const [drawing, after] = await Promise.all([accepted(), mapped()]);
         expect(marks(sheet(drawing, "Overload").svg)).toMatchObject({

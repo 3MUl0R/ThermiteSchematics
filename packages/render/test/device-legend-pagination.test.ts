@@ -44,8 +44,32 @@ const request = (flow: "left-to-right" | "top-to-bottom") => ({
     },
   ],
 });
-const identity = (c: any) =>
-  JSON.stringify([c.provenance, c.netId, c.conductor, c.designation]);
+/** Read native source incidence, including paths that become whole after a
+ * different legal cut. Continuation identities alone depend on composition. */
+const sourceIncidences = (sheets: readonly { svg: string }[]) =>
+  [
+    ...new Set(
+      sheets.flatMap(({ svg }) =>
+        [...parseHTML(svg).document.querySelectorAll("path.net-path")].map(
+          (p) =>
+            JSON.stringify(
+              [
+                "data-wire-uid",
+                "data-jumper-uid",
+                "data-cable-uid",
+                "data-conductor-id",
+                "data-designation",
+                "data-net-id",
+                "data-source-device-uid",
+                "data-source-terminal-key",
+                "data-target-device-uid",
+                "data-target-terminal-key",
+              ].map((key) => p.getAttribute(key)),
+            ),
+        ),
+      ),
+    ),
+  ].sort();
 it.each(["left-to-right", "top-to-bottom"] as const)(
   "reserves readable same-sheet tags for about 300 and 765 authored characters in %s without new electrical identities",
   async (flow) => {
@@ -55,9 +79,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       compiled.presentation,
     );
     if (!native.ok) throw native;
-    const originalContinuations = new Set(
-      native.value.sheets.flatMap((s) => s.continuations.map(identity)),
-    );
+    const originalIncidences = sourceIncidences(native.value.sheets);
     const bodyUids = new Set<string>();
     for (const sheet of native.value.sheets) {
       const measured = await openSheet(page, sheet.svg);
@@ -93,11 +115,9 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       expect(rendered.value.coverage.functions).toEqual(
         native.value.coverage.functions,
       );
-      const retained = new Set(
-        rendered.value.sheets.flatMap((s) => s.continuations.map(identity)),
+      expect(sourceIncidences(rendered.value.sheets)).toEqual(
+        originalIncidences,
       );
-      for (const original of originalContinuations)
-        expect(retained.has(original)).toBe(true);
       expect(continuationOracle(ir, rendered.value).ends).toBeGreaterThan(0);
       for (const sheet of rendered.value.sheets) {
         const doc = parseHTML(sheet.svg).document,

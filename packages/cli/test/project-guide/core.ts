@@ -454,7 +454,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "The six stateless tools run as `thermite agent <tool> --input <file|->`.",
+        "The six stateless tools: `thermite agent <tool> --input <file|->`.",
       async check() {
         expect(ctx.tree.tools.size).toBe(6);
         for (const [name, spec] of ctx.tree.tools)
@@ -656,7 +656,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Only existing referenced source and presentation files qualify (A003 otherwise): not `system.json`, the library lock, libraries or this guide.",
+        "Only existing referenced source/presentation files qualify (else A003): not `system.json`, library lock, libraries or this guide.",
       async check() {
         const project = ctx.pristine.starter;
         await parallel(
@@ -690,7 +690,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`create-view`: `spec`, one schematic view request without `page`. It returns the original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use printing commands below.",
+        "`create-view`: `spec`, one schematic view request without `page`. Returns original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use printing commands below.",
       async check() {
         const svg = /^(<\?xml[^>]*>\s*)?<svg[\s>]/;
         expect((await createViewLoads()).result.value.svg).toMatch(svg);
@@ -751,7 +751,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Applies (not dry runs) reserve `.thermite-schematics-write.lock` in the canonical project root through revalidation, commit and rollback; it is not the library lock. Never commit it (alpha `init` adds it to `.gitignore`). A005/exit 1 contention reports the exact path, owner PID/hostname/version, creation time and age. Wait for a live owner. A dead PID on the recorded host indicates abandonment: confirm all writers are stopped, then remove exactly that path. Check the host of an unknown/other-host owner; age alone is insufficient.",
+        "Applies (not dry runs) reserve `.thermite-schematics-write.lock` at canonical project root through revalidation/commit/rollback; distinct from library lock. Never commit it (alpha `init` gitignores it). A005/exit 1 contention: exact path, owner PID/hostname/version, creation time, age. Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices.",
       async check() {
         const { project, lockPath, owner, before, dry, apply, after } =
           await aliveContention();
@@ -871,7 +871,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Failed applies also name any leftover path.",
+      claim: "Failed applies name leftover paths too.",
       async check() {
         // An engine fixture whose write and then release both fail.
         const { run, lockPath } = await (await engine()).leftoverReservation();
@@ -1131,7 +1131,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "The starter declares only +24VDC and 0VDC at PS1; declare potentials at the sources you add.",
+        "The starter declares only +24VDC and 0VDC at PS1; declare potentials at added sources.",
       async check() {
         const potentials = (
           await readJson(
@@ -1146,7 +1146,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Write large outputs to files: `create-view` returns tens of KB and `inspect` several KB; `view`, `packet` or `report` without `-o` print a whole HTML document.",
+        "Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.",
       async check() {
         const project = ctx.pristine.starter;
         expect((await createViewLoads()).stdout.length).toBeGreaterThanOrEqual(
@@ -1308,7 +1308,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Roots bind by `symbol` and function shape, not type ID, so cloned core types keep their views.",
+        "Roots bind by `symbol` and function shape, not type ID; cloned core types keep their views.",
       async check() {
         const project = await viewRoots();
         // Each clone, under its own type ID, gets its original's outcome and
@@ -1565,23 +1565,23 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub, draft an issue.",
+      "No GitHub: draft an issue.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Never patch a downloaded runtime.",
+      "Never patch downloaded runtimes.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Fix a separate engine checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Fix a separate engine checkout; follow its AGENTS.md/CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Keep private data/credentials out of issues/PRs.",
+      "No private data/credentials in issues/PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Humans accept the CLA; agents must not sign it.",
+      "Humans accept the CLA; agents never sign it.",
       "Contribution policy; no runtime behavior.",
     ],
     [
@@ -1593,11 +1593,11 @@ const module: FactModule = {
       "Authoring principle; no runtime behavior.",
     ],
     [
-      "PDF, SVG and HTML are generated outputs.",
+      "PDF/SVG/HTML are generated.",
       "Authoring principle; the printing facts show these are generated.",
     ],
     [
-      "Never hand-author schematic geometry, infer an engineering repair, or suppress compiler diagnostics.",
+      "Never hand-author schematic geometry, infer engineering repairs or suppress compiler diagnostics.",
       "Authoring prohibition; no runtime behavior.",
     ],
     [
@@ -1613,7 +1613,7 @@ const module: FactModule = {
       "Printing advice for a browser; the PDF page-size facts cover paper sizes.",
     ],
     [
-      "Reconstruction: record page/line provenance, separate aliases from verified pins, preserve conflicts for review, and assert critical endpoints and nets.",
+      "Reconstruction: record page/line provenance, separate aliases from verified pins, retain conflicts for review, assert critical endpoints/nets.",
       "Reconstruction practice for a human source drawing; continuity checks are executed in their own fact.",
     ],
   ]),

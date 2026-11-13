@@ -722,7 +722,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Device functions do not automatically join physical nets.",
+      claim: "Functions never automatically join physical nets.",
       async check() {
         const [types, run] = await Promise.all([
           coreTypes(),
@@ -742,7 +742,7 @@ const module: FactModule = {
     },
     {
       claim:
-        'Each request has `"format": "agent-tool-request/0.1"` and `"project": "."`.',
+        'Requests have `"format": "agent-tool-request/0.1"` and `"project": "."`.',
       async check() {
         const [wrong, parent, valid] = await Promise.all([
           agent(
@@ -786,7 +786,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "stdout carries the result, on success only; stderr always carries the report (diagnostics and error).",
+        "stdout: success result only; stderr: report (diagnostics/error), always.",
       async check() {
         // `agent` itself requires a report on stderr and an empty stdout on
         // every failure; these add a success, an expected failure and a tool
@@ -858,7 +858,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Diagnostics may carry `allowed`, `allowedCount`, `allowedLookup` (where to read the full list) and `pattern`.",
+        "Diagnostics may carry `allowed`, `allowedCount`, `allowedLookup` (full-list lookup) and `pattern`.",
       async check() {
         const project = await freshProject("starter");
         await editJson(join(project, EQUIPMENT), (file) =>
@@ -914,7 +914,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Per-file atomicity and snapshot guards apply.",
+      claim: "Per-file atomicity/snapshot guards apply.",
       async check() {
         // A stale second file leaves the first file unwritten too.
         const project = await copyProject(await plant(), "general-stale");
@@ -978,7 +978,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "New files, `system.json` and libraries are ordinary file edits; list new source files in `system.json` `sources`, then validate.",
+        "Edit new files, `system.json` and libraries directly; list new source files in `system.json` `sources`, then validate.",
       async check() {
         const project = await plant();
         const [manifest, unlisted, valid, linked, schema] = await Promise.all([
@@ -1844,7 +1844,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs one second after work finishes; failures preserve the previous packet.",
+        "`thermite watch --input packet.json -o drawings/packet.html` polls declared inputs 1 s after work finishes; failures retain the previous packet.",
       async check() {
         const project = await freshProject("starter");
         const bom = {
@@ -2006,7 +2006,7 @@ const module: FactModule = {
       "Review advice; packet coverage tests pin the explicit circuit/wiring scope.",
     ],
     [
-      "Keep streams separate.",
+      "Split streams.",
       "Advice to callers; the stream split itself is checked with the previous sentence.",
     ],
     [

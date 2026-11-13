@@ -527,15 +527,14 @@ exactly the per-function destinations in the reference report. Multiple repeated
 functions use `(same functions)`; one contact uses `(same contact)`. The local
 prefix is `TAG:`. Local slots are preferred: on the owner's sheet, at most 60 mm
 from the distinct-terminal centroid of the whole device appearance, with its own
-device frame strictly nearer than another device frame. Distances are from the label
-box to the centroid/frame. Otherwise the prefix is `TAG (ss.zone):`, where the
+device frame strictly nearer than another device frame. Distances use the printed label ink box against the centroid/frame. The larger all-role envelope still protects fit and clearances; its blank capacity cannot establish locality. Otherwise the prefix is `TAG (ss.zone):`, where the
 location is the whole appearance's distinct-terminal centroid, including drawn
 functions that are not repeated and visible terminals of boundary fragments.
 This self-location is measured from the final sheet; it is not one arbitrarily
 chosen member function's zone.
 Each mode reserves both roles; the self-located mode also reserves the prefix.
 Frame ownership uses source UID, selected view and measured centroid, including
-drawings whose device frames and function glyphs occupy sibling SVG layers.
+drawings whose device frames and function glyphs occupy sibling SVG layers. Device frames are resolved through nested SVG groups and intersected with the visible section clip. If an owner has no visible frame, its measured body box is the fallback.
 
 For lane E, `snapshotDigest` is SHA-256 of the UTF-8 bytes of
 `JSON.stringify(serializeIr(ir))`, including the JSON string quoting/escaping;
@@ -592,5 +591,80 @@ functions, not the total group size.
 Navigation text envelopes keep at least 4 mm horizontal clearance from other
 text when their line bands overlap vertically, including continuation/location
 headers and other navigation labels. Non-text ink retains 1.5 mm clearance.
+Obstacles are intersected with their section's visible clip, including frames, cards and report cells; empty intersections reserve no space. Exhaustion evidence must independently scan rendered visible ink and count distinct geometries, not identical retries.
 The allocator uses the protected maximum text envelopes; it never shrinks a
 reservation to the current destination text.
+
+Packet contact mirrors use only direct internal `actuates` relations from a coil
+function to a contact on that same device UID. Tags, gangs, terminal numbers,
+descriptions, transitive paths and device-level relations never create rows.
+Each full coil gets every eligible authored contact, with its NO/NC state,
+M1's shared terminal-set formatting and all full issued destinations. Exactly two names use an en dash unless a name contains `-`, `–`, `−` or `+`; otherwise (including three or more names), use ` / `, replaced by `, ` when a name contains `/`. A report
+row, terminal context or boundary fragment is not a full destination: an absent
+full target prints `not drawn`. Changeover contacts retain their separate NC/NO
+functions and shared common. A coil-only device gets no mirror table. When its own device has contact functions but no eligible rows, the coil prints `Contact associations unspecified`, never a guessed count. A contact without a targeting
+actuator gets `Actuating coil not specified in device data` only if its own
+device contains a coil; non-coil actuation/tripping suppresses that note.
+Drawings never print `not assessed`.
+
+Each related contact returns every required coil destination as `K1 /02.C2`;
+an undrawn coil is marked `not drawn`. Only an explicit native gang with equal
+coil target sets and a visible mechanical association shares a caption. Its
+owners are the visible native members on that issued sheet and selected view;
+every split fragment has its own caption. Mirror rows remain individual. The renderer checks each return against all contact owners on the same sheet and records their measured centroid-to-caption distances in `returnLocality`; no distance threshold is adopted for returns.
+
+The compact table is 55 mm wide, 25 mm high for four single-destination rows,
+with 4.5 mm row pitch, 3.502 mm row em and 3.782 mm heading em (physical capital
+heights at least 2.5/2.7 mm). Whole eight-row tables measure 55 × 43 mm; if tall
+space is blocked, the same immutable candidate can try premeasured four-row
+fragments, each repeating its heading, on the coil's sheet. All rows survive.
+Long terminal identities enlarge a measured profile; multiple destinations wrap
+only between whole tokens. Text never shrinks to fit.
+
+Mirrors and returns use NAV1's fixed sheet-mm slot allocator after native scale,
+continuations and legend measurement. Prefer the nearest legal beside, below or
+below-right region around the actual coil frame, then vacant zone-column or
+margin-band space inside the drawing field. Failed allocation enters the same
+bounded composition search with unchanged envelopes, native routes and page
+budgets; it never grows electrical leaves or feeds scale back into measurement.
+The one packet notice, `Contact tables list device data; contacts not drawn in
+this packet are marked.`, uses 2.7 mm note text and premeasured wrap profiles.
+It is allocated after electrical composition and other navigation, across existing
+packet sheets: first mirror sheets, then sheets with an off-view notice, other
+drawings, and finally existing documentation pages. It cannot enter pagination
+or scale selection. If no measured vacancy exists, the packet is refused rather
+than adding a page. NAV owns this text alongside the existing off-view notice.
+It protects every other annotation's full measured reservation and every report
+cell, including blank space, rather than reusing unused text capacity.
+Its reservation's source owner can be on another sheet; its printed location is
+`allocatedMm.sheet`, including documentation-page fallback.
+
+Mirror locality is measured from final geometry, independently of the chosen
+placement family. A local table shares the coil's sheet, lies within 60 mm of
+its own function-terminal centroid, intersects that zone or one of its eight
+neighbours, and has the coil as its strictly nearest device frame. Circuit comparisons use
+the measured per-function adapter frames, excluding bodies of the coil's own device; an absent enclosing rectangle never exempts foreign visible frames. Otherwise
+its heading prints the coil's own `/ss.zone`; the renderer verifies that token
+against the measured coil location. Same-sheet ownership remains mandatory.
+Repeat labels keep NAV1's device-appearance anchor and have no zone-adjacency
+condition.
+
+The additive issued-navigation annotations now include `mirror`, `return`,
+`association-unspecified` and `contact-notice` roles. Mirrors expose their coil,
+row source/state/terminal sets, relation origins, individual full target IDs,
+destinations and row primitive IDs. Returns expose every covered owner and
+required coil target, native relation origins and optional authored `gangId`.
+Reservations and page regions cover their fixed ink in SVG, HTML and PDF.
+Mirror reservations also expose `allocatedMm.family` and
+`familyRule: approach-or-outer-zone-row/1`. A legal local approach is classified
+as `beside`, `below` or `below-right` from the measured coil frame and box.
+Other placements wholly inside the top or bottom zone row are `margin-band`;
+remaining vacant-column positions are `zone-column`. This family is independent
+of local/self-located mode and never decides the heading. A failed slot reports
+measured clear widths at the required height and clear heights at the required
+width for all five families, using the same ink and text clearances.
+These are DQ-07 locators: native source, byte-locked definitions and actual final
+geometry remain the independent checker's oracle. One mirror-block observation
+belongs to each full coil; one reciprocal observation belongs to each full
+contact, including members of a shared caption. NAV2 does not implement the
+evaluation predicate or add companion inventories.

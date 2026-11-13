@@ -3,7 +3,7 @@ import type { Draft, RenderedSheet } from "../src/packet/types.js";
 import type { NativeOccurrenceSeed } from "../src/packet/navigation-types.js";
 export const coilUid = "84000000-0000-4000-8000-000000000002";
 /** Explicit native geometry, unrelated to the production planner or ELK. */
-export function navigationFixture(ir: ElectricalIr) {
+export function navigationFixture(ir: ElectricalIr, coilMirror = false) {
   const source = { deviceUid: coilUid, functionKey: "coil" };
   const seed: NativeOccurrenceSeed = {
     source,
@@ -52,6 +52,12 @@ export function navigationFixture(ir: ElectricalIr) {
   return {
     ir: {
       ...structuredClone(ir),
+      // The M5 slot plate uses an arbitrary function key, "coil", with kind other.
+      // Its 120×80 field deliberately tests repeat-only capacity. M2 opts into
+      // the real coil and supplies a larger independent print plate.
+      functions: structuredClone(ir.functions).map((f) =>
+        !coilMirror && f.kind === "coil" ? { ...f, kind: "other" as const } : f,
+      ),
       wires: [],
       jumpers: [],
       cables: [],

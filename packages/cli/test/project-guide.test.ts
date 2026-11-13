@@ -101,7 +101,7 @@ const VERIFIED_BY_BLOCKS = new Map<string, readonly string[]>([
     "This packet puts every starter device on a schematic sheet; for `cabinets`, use root `CBL1` and intent `conductors`.",
     ["packet-starter", "packet-cabinets"],
   ],
-  ["Make UUIDs with the second line:", ["uuid"]],
+  ["UUIDs: second line:", ["uuid"]],
 ]);
 /** Documented words no run observes, each with a reason. */
 const VOCABULARY_EXEMPT = new Map<string, string>([
@@ -134,7 +134,7 @@ const FLAG_BINDINGS: readonly {
   },
   {
     sentence:
-      "Write large outputs to files: `create-view` returns tens of KB and `inspect` several KB; `view`, `packet` or `report` without `-o` print a whole HTML document.",
+      "Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.",
     fragment: "-o",
     commands: () => ["view", "packet", "report"],
   },
@@ -864,7 +864,7 @@ describe("self-tests: the checks reject broken guides", () => {
   });
 
   it("fails a block that applies to no template", async () => {
-    const sentence = "and exits 1 when a declared path is not modeled.";
+    const sentence = "and exits 1 for unmodeled declared paths.";
     const broken = mutate(
       sentence,
       `${sentence}\n\n\`\`\`json\n{"format":"continuity-check-request/0.1","checks":[],"note":["PS1","TB1"]}\n\`\`\``,
