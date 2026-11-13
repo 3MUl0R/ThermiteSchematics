@@ -100,6 +100,16 @@ it.each(
             .getAttribute("d")!
             .matchAll(/[ML] ([-.\d]+) ([-.\d]+)/g),
         ].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
+        if (
+          flow === "top-to-bottom" &&
+          wire.endpoints.every((e) =>
+            ["XT1", "XP1"].includes(
+              ir.devices.find((d) => d.uid === e.terminal.deviceUid)!
+                .designation,
+            ),
+          )
+        )
+          expect(points).toHaveLength(2);
         expect(
           routeQuality({
             width: 1000,
@@ -146,7 +156,7 @@ it.each(
       if (flow === "top-to-bottom" && names === "W") {
         const wide = structuredClone(ir);
         for (const w of wide.wires)
-          w.designation = `W-AO-0123456789-${w.designation}`;
+          w.designation = `W-AO-${w.designation!.slice(1).padStart(2, "0")}`;
         for (const entry of wide.indexes.objectRefByDesignation) {
           const wire = wide.wires.find((w) => w.uid === entry.value.uid);
           if (wire) entry.key = wire.designation!;
@@ -154,23 +164,22 @@ it.each(
         wide.indexes.objectRefByDesignation.sort((a, b) =>
           a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
         );
-        await expect(prepareSignalLoopDrawing(wide, request)).rejects.toThrow(
-          "A signal loop label conceals another conductor.",
-        );
-        const refused = await renderSchematicPacket(wide, {
+        const wideDrawing = await prepareSignalLoopDrawing(wide, request);
+        expect(
+          parseHTML(wideDrawing.content).document.querySelectorAll(
+            "[data-loop-conductor]",
+          ),
+        ).toHaveLength(6);
+        // The entire graph, including all six wire labels, returns to ELK.
+        expect(input!.edges!.every((e) => e.labels!.length === 1)).toBe(true);
+        expect(input!.layoutOptions!["elk.spacing.edgeEdge"]).toBe("6");
+        const fallback = await renderSchematicPacket(wide, {
           ...packet,
           views: [request],
+          page: { ...packet.page, orientation: "portrait" },
         });
-        expect(refused).toMatchObject({
-          ok: false,
-          error: {
-            code: "R006",
-            message: expect.stringContaining(
-              "A signal loop label conceals another conductor.",
-            ),
-          },
-        });
-        expect(refused).not.toHaveProperty("value");
+        expect(fallback.ok, JSON.stringify(fallback)).toBe(true);
+        if (fallback.ok) expect(fallback.value.sheets).toHaveLength(1);
       }
     } finally {
       await rm(dir, { recursive: true, force: true });

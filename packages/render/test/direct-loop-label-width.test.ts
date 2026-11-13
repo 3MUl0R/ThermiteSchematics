@@ -4,7 +4,7 @@ import * as runtime from "../src/layout/elk-runtime.js";
 import { layoutDirectLoop } from "../src/layout/direct-loop-layout.js";
 import fixture from "./direct-loop-jog.fixture.json";
 import { flows, directFixture, directView } from "./direct-loop-fixture.js";
-import { prepareSignalLoopDrawing } from "../src/signal-loop.js";
+import { checkLabels, prepareSignalLoopDrawing } from "../src/signal-loop.js";
 import { routeQuality } from "../../../evals/draw/checks.mjs";
 import { placeLoopLabels } from "../src/layout/direct-loop-labels.js";
 
@@ -65,8 +65,15 @@ it.each(flows)(
           edges,
           flow === "top-to-bottom",
           flow === "top-to-bottom" ? wireIds : [],
+          checkLabels,
         );
+        checkLabels(graph);
         const { input, native } = captured();
+        const inline =
+          flow === "top-to-bottom" &&
+          input
+            .edges!.filter((e) => wireIds.includes(e.id))
+            .every((e) => e.labels!.length === 0);
         expect(routes(graph)).toEqual(routes(native));
         expect(graph.children).toEqual(native.children);
         for (const edge of graph.edges!) {
@@ -78,9 +85,9 @@ it.each(flows)(
               height,
             })),
           ).toEqual(original.labels);
-          // Horizontal loops retain their native routing, including any
-          // pre-existing synthetic jogs at extreme widths (compared above).
-          for (const s of flow === "top-to-bottom" ? edge.sections! : []) {
+          // Fallback and horizontal routes retain native ELK geometry and any
+          // honest jogs; accepted inline routes must remain straight.
+          for (const s of inline ? edge.sections! : []) {
             const points = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
             expect(
               routeQuality({
@@ -91,7 +98,7 @@ it.each(flows)(
             ).toEqual([]);
           }
         }
-        if (flow === "top-to-bottom") {
+        if (inline) {
           expect(
             input
               .edges!.filter((e) => wireIds.includes(e.id))
@@ -126,7 +133,7 @@ it.each(flows)(
   },
 );
 
-it("refuses a label with no sufficiently long vertical segment", () => {
+it("rejects an inline candidate with no sufficiently long vertical segment", () => {
   const graph: ElkNode = {
     id: "short",
     edges: [

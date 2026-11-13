@@ -397,6 +397,11 @@ After layout, each label is centered on its own vertical route segment, with a
 white background for legibility; no route point moves. Cable-core and cable-assembly labels,
 left-to-right loops and input loops retain their existing ELK placement.
 If no vertical segment fits a wire label, or a placed label overlaps another
-label, device body or conductor, the view refuses with R006. Wide labels are
-never made to fit by stretching endpoints, shrinking text or editing routes.
+label, device body or conductor, the entire loop returns to ELK with every
+original label restored at 6 mm edge spacing. This may produce honest jogs,
+which the checker still reports. If the complete view still cannot print,
+the renderer retries the literal Round 2 layout (ELK label demand at 3 mm),
+preserving its acceptance boundary. R006 remains the outcome if that legacy
+layout also cannot print. Each attempt routes the whole loop; labels are never
+made to fit by stretching endpoints, shrinking text or editing routes.
 Terminal identities, fixed ports and authored connector order are preserved.

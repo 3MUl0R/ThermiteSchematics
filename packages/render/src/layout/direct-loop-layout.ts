@@ -9,6 +9,8 @@ export async function layoutDirectLoop(
   edges: ElkExtendedEdge[],
   vertical: boolean,
   inlineEdgeIds: readonly string[] = [],
+  validateLabels: (graph: ElkNode) => void = () => {},
+  edgeSpacing: "3" | "6" = "6",
 ): Promise<ElkNode> {
   const input: ElkNode = {
     id: "loop",
@@ -17,7 +19,7 @@ export async function layoutDirectLoop(
       "elk.direction": vertical ? "DOWN" : "RIGHT",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.spacing.nodeNodeBetweenLayers": "8",
-      "elk.spacing.edgeEdge": "6",
+      "elk.spacing.edgeEdge": edgeSpacing,
       "elk.spacing.edgeNode": "5",
       "elk.padding": "[top=6,left=6,bottom=6,right=6]",
       "elk.randomSeed": "1",
@@ -30,6 +32,16 @@ export async function layoutDirectLoop(
   const labels = detachLoopLabels(input.edges ?? [], inlineEdgeIds);
   const graph = await createElkEngine().layout(input);
   assertTopologyIdentities(graph, expected);
-  placeLoopLabels(graph, labels);
-  return graph;
+  if (inlineEdgeIds.length === 0) return graph;
+  try {
+    placeLoopLabels(graph, labels);
+    validateLabels(graph);
+    return graph;
+  } catch {
+    // Retry the whole loop from its original graph, with every label in ELK.
+    // Native paths from either attempt are never edited or mixed together.
+    const fallback = await createElkEngine().layout(structuredClone(expected));
+    assertTopologyIdentities(fallback, expected);
+    return fallback;
+  }
 }
