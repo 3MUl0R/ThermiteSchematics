@@ -1,4 +1,5 @@
 import { withoutRouteOwnershipMetadata } from "../../render/test/helpers/route-ownership.js";
+import { assertRayWeights } from "../../render/test/helpers/attachment-weights.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -70,7 +71,14 @@ it.each(transformerFlows)(
       view.groups[0]!.content,
     );
     expect(view.groups[0]!.content).toContain('data-layout-source-port="');
+    // Catalog attachment ink follows selected ports now; retain the original
+    // reviewed geometry hash while independently requiring incident wire ink.
+    assertRayWeights(view.groups[0]!.content);
     const originalOutlineInk = reviewedContent
+      .replace(
+        /(<g data-terminal-attachment="[^"]*" data-attachment-from="[^"]*" data-attachment-to="[^"]*"><path [^>]+stroke="white"[^>]*\/><path [^>]+stroke="#17212b" stroke-width=")[^"]+(?=")/gu,
+        "$1.35",
+      )
       .replace(
         /(<rect class="circuit-device-frame"[^>]*?)stroke="#667085" stroke-width="0.25"/gu,
         '$1stroke="#17212b" stroke-width="0.4"',
@@ -78,10 +86,6 @@ it.each(transformerFlows)(
       .replace(
         /(<g data-terminal-attachment="[^"]*" data-attachment-from="[^"]*" data-attachment-to="[^"]*"><path [^>]*fill="none") stroke="#17212b" stroke-width="0.32"/gu,
         '$1 stroke="#344054" stroke-width="0.3"',
-      );
-    if (flow === "left-to-right")
-      expect(reviewedContent).toMatch(
-        /data-terminal-attachment=[^>]+><path [^>]+stroke="#17212b" stroke-width="0.32"/u,
       );
     expect(originalOutlineInk).not.toBe(reviewedContent);
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(

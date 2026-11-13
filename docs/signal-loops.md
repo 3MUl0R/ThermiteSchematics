@@ -391,4 +391,16 @@ supply circuit. Their labels say `feed TBD`; selected auxiliary functions also
 appear in device references. Intermediate schematic contacts may be ordered to
 match the actuator connector and reduce crossings. Actual terminal identities
 and net IDs are preserved; the drawing is not a physical terminal-strip layout.
-ELK still owns all device placement and orthogonal routing.
+ELK still owns all device placement and orthogonal routing. Top-to-bottom
+output wire labels do not reserve transverse space in ELK's fixed 14 mm lanes.
+After layout, each label is centered on its own vertical route segment, with a
+white background for legibility; no route point moves. Cable-core and cable-assembly labels,
+left-to-right loops and input loops retain their existing ELK placement.
+If no vertical segment fits a wire label, or a placed label overlaps another
+label, device body or conductor, the entire loop returns to ELK with every
+original label restored at 6 mm edge spacing. This may produce honest jogs,
+which the checker still reports. If that fallback cannot print, the renderer
+returns R006, as the native 6 mm layout did before the inline-label change.
+Each attempt routes the whole loop; labels are never
+made to fit by stretching endpoints, shrinking text or editing routes.
+Terminal identities, fixed ports and authored connector order are preserved.

@@ -241,8 +241,7 @@ Packets accept `signal-loop-view-request/0.1` with
 `from: {device: "PT1", function: "signal"}`, `to: {device: "AI1", function:
 "ch0"}`, optional `flow` and up to six short `notes`: a two-wire transmitter,
 authored cordset, continuous bulkhead contacts, optional feed-through terminals
-and the input channel. The opt-in `field-interfaces` library offers proposed
-M12 profiles. See `thermite guide signal-loops` for series power.
+and the input channel. Opt-in `field-interfaces` offers proposed M12 profiles. See `thermite guide signal-loops` for series power.
 Channels: address or proven AI/AO/DI/DO/IN/OUT; notes: tag/terminals, no keys.
 
 Both paths must be complete and unbranched, with every traversed cable core
@@ -250,8 +249,7 @@ represented; extra cores must be explicitly spare and terminated at both ends.
 Loose cores, active cores outside explicit auxiliary pairs or hidden branches
 fail R006: inspect them in a conductor view, and never change connectivity just
 to obtain a drawing. A bulkhead pin is one continuous terminal with front/rear
-access, not a function that shorts contacts. Numbered symbols are not connector
-face views; sensor/cordset pin assignments remain subject to part review.
+access, not a function that shorts contacts. Symbols are not connector face views; verify sensor/cordset pins for the part.
 
 For a molded cordset overview, add `cableAssemblies: [{cable: "CB1", connector:
 "M12", description: "4-pole molded cordset (proposed)"}]`: one jacket line with
@@ -336,6 +334,7 @@ paper; never change topology to fit. References use kind/state and terminals;
 I/O address/terminals; ports key plus authored description. Cable headings use
 type description or state its absence. Function keys/type IDs stay in
 metadata/CSV.
+Attachment/tag-lane rays: lightest incident ink; unused faces: 0.35 mm.
 
 Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks can differ. E206
 checks function existence, kind, terminal count and contact state.

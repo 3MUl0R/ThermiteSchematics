@@ -83,7 +83,7 @@ const width = (value: string) => measureText(value, 2.7).width;
 const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
 // Check ELK's placed labels as well as its routes: a white label background
 // must never erase another conductor or a device body.
-function checkLabels(graph: ElkNode) {
+export function checkLabels(graph: ElkNode) {
   type Box = { x: number; y: number; width: number; height: number };
   const boxes = (graph.children ?? []).map((node) => ({
     x: node.x!,
@@ -705,6 +705,10 @@ export async function prepareSignalLoopDrawing(
       ],
     })),
     vertical,
+    vertical && selected.output
+      ? edges.flatMap((e, i) => (e.cable || e.assembly ? [] : [`e${i}`]))
+      : [],
+    checkLabels,
   );
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
