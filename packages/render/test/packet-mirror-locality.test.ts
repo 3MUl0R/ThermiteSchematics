@@ -179,48 +179,65 @@ it("enforces 60 mm even inside a neighbouring zone with the coil still nearest",
   );
 });
 
-it("self-locates a circuit mirror when a different function's measured adapter frame is nearer", async () => {
-  const source = await offViewFixture(),
-    allocate = slots.allocateNavigationSlots;
-  const spy = vi
-    .spyOn(slots, "allocateNavigationSlots")
-    .mockImplementation((requests, area, svg, sheet) =>
-      allocate(requests, area, svg, sheet).map((r) =>
-        r.profileId.startsWith("mirror-")
-          ? {
-              ...r,
-              allocatedMm: {
-                ...r.allocatedMm!,
-                rect: { x: 160, y: 100, w: r.inkMm.w, h: r.inkMm.h },
-              },
-            }
-          : r,
-      ),
-    );
-  try {
-    const f = mirrorFixture(source.ir, [
-      [
-        { uid: coilUid, key: "coil", x: 100, y: 100 },
-        { uid: coilUid, key: "pole1", x: 220, y: 100 },
-      ],
-    ]);
-    f.drafts[0]!.navigationSeeds = f.drafts[0]!.navigationSeeds!.map((s) => ({
-      ...s,
-      representation: "circuit",
-    }));
-    f.sheets[0]!.svg = f.sheets[0]!.svg.replace(
-      /(<g [^>]*class="symbol function-symbol"[^>]*?) data-device-uid="[^"]*"/g,
-      "$1",
-    );
-    const r = finalizeNavigation(f.ir, f.drafts, f.sheets);
-    if (!r.ok) throw Error(JSON.stringify(r.error));
-    // Coil frame is x=100..120; the table ends at 215, 5 mm from the contact's x=220 frame.
-    expect(
-      r.value.navigation.annotations.find((a) => a.role === "mirror")!.mirror!
-        .heading,
-    ).toBe("K1 /01.B2");
-  } finally {
-    spy.mockRestore();
-    await source.dispose();
-  }
-});
+it.each(["same-device", "foreign-device"])(
+  "compares a %s circuit body by device ownership",
+  async (kind) => {
+    const source = await offViewFixture(),
+      allocate = slots.allocateNavigationSlots;
+    const spy = vi
+      .spyOn(slots, "allocateNavigationSlots")
+      .mockImplementation((requests, area, svg, sheet) =>
+        allocate(requests, area, svg, sheet).map((r) =>
+          r.profileId.startsWith("mirror-")
+            ? {
+                ...r,
+                allocatedMm: {
+                  ...r.allocatedMm!,
+                  rect: { x: 160, y: 100, w: r.inkMm.w, h: r.inkMm.h },
+                },
+              }
+            : r,
+        ),
+      );
+    try {
+      const ir = structuredClone(source.ir);
+      const uid =
+        kind === "same-device"
+          ? coilUid
+          : ir.devices.find((d) => d.uid !== coilUid)!.uid;
+      if (kind === "foreign-device") {
+        const contact = structuredClone(
+          ir.functions.find(
+            (f) => f.id.deviceUid === coilUid && f.id.functionKey === "pole1",
+          )!,
+        );
+        contact.id.deviceUid = uid;
+        ir.functions.push(contact);
+      }
+      const f = mirrorFixture(ir, [
+        [
+          { uid: coilUid, key: "coil", x: 100, y: 100 },
+          { uid, key: "pole1", x: 220, y: 100 },
+        ],
+      ]);
+      f.drafts[0]!.navigationSeeds = f.drafts[0]!.navigationSeeds!.map((s) => ({
+        ...s,
+        representation: "circuit",
+      }));
+      f.sheets[0]!.svg = f.sheets[0]!.svg.replace(
+        /(<g [^>]*class="symbol function-symbol"[^>]*?) data-device-uid="[^"]*"/g,
+        "$1",
+      );
+      const r = finalizeNavigation(f.ir, f.drafts, f.sheets);
+      if (!r.ok) throw Error(JSON.stringify(r.error));
+      // Coil frame is x=100..120; the table ends at 215, 5 mm from the contact's x=220 frame.
+      expect(
+        r.value.navigation.annotations.find((a) => a.role === "mirror")!.mirror!
+          .heading,
+      ).toBe(kind === "same-device" ? "K1" : "K1 /01.B2");
+    } finally {
+      spy.mockRestore();
+      await source.dispose();
+    }
+  },
+);

@@ -42,7 +42,14 @@ export function planMirrors(
   const plan: MirrorPlan = { annotations: [], reservations: [] };
   for (const owner of all.filter((o) => o.role === "full-function")) {
     const fn = ir.functions.find((f) => sameFunction(f.id, owner.source));
-    if (fn?.kind === "coil") addMirror(plan, ir, owner, all, counts, split);
+    if (
+      fn?.kind === "coil" &&
+      ir.functions.some(
+        (f) =>
+          f.kind === "contact" && f.id.deviceUid === owner.source.deviceUid,
+      )
+    )
+      addMirror(plan, ir, owner, all, counts, split);
   }
   addContacts(plan, ir, all, sheets, counts);
   return plan;

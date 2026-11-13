@@ -31,6 +31,21 @@ const finish = (f: ReturnType<typeof mirrorFixture>) => {
 const mirror = (r: ReturnType<typeof finish>) =>
   r.navigation.annotations.filter((a) => a.role === "mirror");
 
+it("omits tables and the contact-table notice for a coil-only device", () => {
+  const f = mirrorFixture(source.ir, [[placement("coil")]]);
+  f.ir.functions = f.ir.functions.filter(
+    (fn) => fn.id.deviceUid !== coilUid || fn.kind !== "contact",
+  );
+  f.ir.internalRelations = f.ir.internalRelations.filter(
+    (r) => r.deviceUid !== coilUid,
+  );
+  const r = finish(f);
+  expect(
+    r.navigation.occurrences.filter((o) => o.role === "full-function"),
+  ).toHaveLength(1);
+  expect(r.navigation.annotations).toEqual([]);
+});
+
 it("retains authored NC and changeover common-terminal sets", async () => {
   const relay = await parallelCircuitFixture();
   try {
@@ -413,7 +428,7 @@ it("supports arbitrary function, terminal and tag identities without inferring s
       "[data-navigation-mirror-row]",
     ),
   ];
-  expect(rows[0]!.textContent).toBe("NO+ / - / S/Ω01.C4");
+  expect(rows[0]!.textContent).toBe("NO+, -, S/Ω01.C4");
   expect(mirror(r)[0]!.mirror!.heading).toContain('K "<& Ω');
 });
 
@@ -567,5 +582,23 @@ it("keeps each same-authored-view cut gang caption on its own issued fragment", 
       ),
     ).toBe(true);
     expect(a.text).toBe("K1 /01.A2");
+    expect(a.returnLocality!.sheet).toBe(sheet);
+    expect(a.returnLocality!.owners.map((o) => o.occurrenceId)).toEqual(
+      a.ownerOccurrences,
+    );
+    for (const measured of a.returnLocality!.owners) {
+      const anchor = contacts.find((o) => o.id === measured.occurrenceId)!
+        .destination.anchorMm;
+      const box = r.navigation.reservations.find(
+        (s) => s.id === a.reservationId,
+      )!.allocatedMm!.rect;
+      expect(measured.anchorMm).toEqual(anchor);
+      expect(measured.distanceMm).toBe(
+        Math.hypot(
+          Math.max(box.x - anchor.x, anchor.x - box.x - box.w, 0),
+          Math.max(box.y - anchor.y, anchor.y - box.y - box.h, 0),
+        ),
+      );
+    }
   }
 });

@@ -14,17 +14,17 @@ thermite init ../cabinets --template cabinets
 
 `init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Check issues; report runtime bugs, gaps or unclear docs at
-https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual behavior, repro, diagnostics, Thermite/Bun/OS versions; redact A005/W801 hosts and absolute paths. Without GitHub, draft an issue. Never patch downloaded runtimes.
+Report bugs, gaps or unclear docs at
+https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual, repro, diagnostics, Thermite/Bun/OS versions; redact A005/W801 hosts and absolute paths. No GitHub: draft an issue. Never patch downloaded runtimes.
 
-Fix a separate engine checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.
+Use a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md for PRs.
 No private data/credentials in issues/PRs.
-Humans accept the CLA; agents must not sign it.
+Humans accept the CLA; agents never sign.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
 ## Authority and workflow
 
-Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author schematic geometry, infer repairs or suppress compiler diagnostics. Functions never automatically join physical nets.
+Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer repairs or suppress diagnostics. Functions never join physical nets.
 
 To edit existing source/presentation files:
 
@@ -317,10 +317,10 @@ Read `thermite guide circuit-symbols` before disconnector selection.
 Also read `thermite guide circuit-views`; never guess marks; check
 links/earth/DC ink in both flows. Marks create no continuity or bonds.
 
-Reconstruction: record page/line provenance, separate aliases/verified pins, retain conflicts for review, assert critical endpoints/nets.
+Reconstruction: record page/line provenance, separate aliases/verified pins, retain conflicts, assert critical endpoints/nets.
 
 One repeat per device/view/sheet; fixed local slots, else own sheet.zone.
 Repeat text keeps 4 mm horizontally from overlapping text bands; centroids
 round half-up to 0.01 mm.
 
-Mirrors: direct same-device coil `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages.
+Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.

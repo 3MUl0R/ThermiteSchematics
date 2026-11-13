@@ -26,9 +26,9 @@ it("prints every native contact at each full coil, with explicit undrawn status"
       ).toEqual(["3.782", ...Array(12).fill("3.502")]);
       const rows = [...dom.querySelectorAll("[data-navigation-mirror-row]")];
       expect(rows.map((row) => row.textContent)).toEqual([
-        "NO1/L1 / 2/T1not drawn",
-        "NO3/L2 / 4/T2not drawn",
-        "NO5/L3 / 6/T3not drawn",
+        "NO1/L1–2/T1not drawn",
+        "NO3/L2–4/T2not drawn",
+        "NO5/L3–6/T3not drawn",
         "NO13–14not drawn",
       ]);
       expect(

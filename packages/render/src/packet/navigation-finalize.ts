@@ -1,4 +1,5 @@
 import type { ElectricalIr, FunctionId } from "@thermite/compiler";
+import { resolveReturnLocality } from "./return-locality.js";
 import { serializeIr } from "@thermite/compiler";
 import type { Draft, RenderedSheet, PaperPage } from "./types.js";
 import type {
@@ -251,7 +252,8 @@ function resolveAnnotations(
           ((slot.inkMm.w - 2) * MIRROR_EM) / 2.7,
         ),
       };
-    if (["return", "association-unspecified"].includes(a.role)) return a;
+    if (a.role === "return") return resolveReturnLocality(a, slot, owners);
+    if (a.role === "association-unspecified") return a;
     return resolveLabelLocality(
       ir,
       a,

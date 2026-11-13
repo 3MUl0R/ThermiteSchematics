@@ -94,6 +94,7 @@ export function symbolGeometry(
           (o) =>
             o.role === "full-function" &&
             o.representation === "circuit" &&
+            o.source.deviceUid !== owner.source.deviceUid &&
             o.destination.sheet === owner.destination.sheet &&
             !members.some((m) => m.id === o.id),
         )

@@ -402,7 +402,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Include use case, expected/actual behavior, repro, diagnostics, Thermite/Bun/OS versions; redact A005/W801 hosts and absolute paths.",
+        "Include use case, expected/actual, repro, diagnostics, Thermite/Bun/OS versions; redact A005/W801 hosts and absolute paths.",
       async check() {
         // Why redaction is needed: these reports carry this machine's host
         // name and absolute paths.
@@ -1561,11 +1561,11 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "Check issues; report runtime bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
+      "Report bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Without GitHub, draft an issue.",
+      "No GitHub: draft an issue.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1573,7 +1573,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Fix a separate engine checkout; follow its AGENTS.md and CONTRIBUTING.md for PRs.",
+      "Use a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md for PRs.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1581,7 +1581,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Humans accept the CLA; agents must not sign it.",
+      "Humans accept the CLA; agents never sign.",
       "Contribution policy; no runtime behavior.",
     ],
     [
@@ -1597,7 +1597,7 @@ const module: FactModule = {
       "Authoring principle; the printing facts show these are generated.",
     ],
     [
-      "Never hand-author schematic geometry, infer repairs or suppress compiler diagnostics.",
+      "Never hand-author geometry, infer repairs or suppress diagnostics.",
       "Authoring prohibition; no runtime behavior.",
     ],
     [
@@ -1613,7 +1613,7 @@ const module: FactModule = {
       "Printing advice for a browser; the PDF page-size facts cover paper sizes.",
     ],
     [
-      "Reconstruction: record page/line provenance, separate aliases/verified pins, retain conflicts for review, assert critical endpoints/nets.",
+      "Reconstruction: record page/line provenance, separate aliases/verified pins, retain conflicts, assert critical endpoints/nets.",
       "Reconstruction practice for a human source drawing; continuity checks are executed in their own fact.",
     ],
   ]),

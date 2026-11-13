@@ -4,6 +4,32 @@ import { mirrorFixture } from "./packet-mirror-fixture.js";
 import { coilUid } from "./packet-navigation-fixture.js";
 import { finalizeNavigation } from "../src/packet/navigation-finalize.js";
 
+it("returns R006 without pagination or mutation when every existing sheet is full", async () => {
+  const source = await offViewFixture();
+  try {
+    const f = mirrorFixture(source.ir, [
+      [{ uid: coilUid, key: "coil", x: 170, y: 100 }],
+    ]);
+    // One exact mirror vacancy; every other pixel is occupied and no documentation sheet exists.
+    f.sheets[0]!.svg = f.sheets[0]!.svg.replace(
+      "</svg>",
+      '<rect width="360" height="90"/><rect y="120" width="360" height="120"/><rect y="90" width="105" height="30"/><rect x="165" y="90" width="5" height="30"/><rect x="190" y="90" width="170" height="30"/></svg>',
+    );
+    const before = JSON.stringify(f);
+    expect(
+      finalizeNavigation(f.ir, f.drafts, f.sheets, { notice: false }).ok,
+    ).toBe(true);
+    expect(finalizeNavigation(f.ir, f.drafts, f.sheets)).toMatchObject({
+      ok: false,
+      error: { code: "R006", details: { navigationInvariant: true } },
+    });
+    expect(JSON.stringify(f)).toBe(before);
+    expect(f.sheets).toHaveLength(1);
+  } finally {
+    await source.dispose();
+  }
+});
+
 it("places the one packet notice in a vacant existing documentation sheet without repacking the coil", async () => {
   const source = await offViewFixture();
   try {

@@ -1,5 +1,5 @@
 import { generatedSvgInk } from "../device-legend/svg-ink.js";
-import { project, type Rect } from "../device-legend/geometry.js";
+import { intersection, project, type Rect } from "../device-legend/geometry.js";
 import { navigationGeometry } from "./navigation-walk.js";
 import type { SymbolGeometry } from "./navigation-symbols.js";
 import type {
@@ -39,32 +39,27 @@ function navigationObstacles(svg: string) {
     ...navigationGeometry(svg).flatMap((g) => {
       const a = g.node.attrs;
       if (!g.visible) return [];
-      if (g.node.name === "g" && a["data-report-column"])
-        return [
-          project(
-            {
+      const rect =
+        g.node.name === "g" && a["data-report-column"]
+          ? {
               x: Number(a["data-cell-x"]),
               y: Number(a["data-cell-y"]),
               w: Number(a["data-cell-width"]),
               h: Number(a["data-cell-height"]),
-            },
-            g.matrix,
-          ),
-        ];
-      return g.node.name === "rect" &&
-        /device-frame|off-view-card|device-legend-frame/.test(a.class ?? "")
-        ? [
-            project(
-              {
+            }
+          : g.node.name === "rect" &&
+              /device-frame|off-view-card|device-legend-frame/.test(
+                a.class ?? "",
+              )
+            ? {
                 x: Number(a.x ?? 0),
                 y: Number(a.y ?? 0),
                 w: Number(a.width),
                 h: Number(a.height),
-              },
-              g.matrix,
-            ),
-          ]
-        : [];
+              }
+            : undefined;
+      const visible = rect && intersection(project(rect, g.matrix), g.clip);
+      return visible && visible.w > 0 && visible.h > 0 ? [visible] : [];
     }),
   ];
   return { ink, texts: measured.texts };

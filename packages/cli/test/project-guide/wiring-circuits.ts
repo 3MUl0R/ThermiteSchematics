@@ -373,7 +373,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Mirrors: direct same-device coil `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages.",
+        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -436,6 +436,10 @@ const module: FactModule = {
         expect(returns).toHaveLength(1);
         expect(returns[0]!.ownerOccurrences).toHaveLength(3);
         expect(returns[0]!.text).toMatch(/^K1 \/[0-9]{2}\.[A-D][1-6]$/);
+        expect(returns[0]!.returnLocality!.owners).toHaveLength(3);
+        expect(formatTerminalSet(["1/L1", "2/T1"])).toBe("1/L1–2/T1");
+        expect(formatTerminalSet(["L+", "M"])).toBe("L+ / M");
+        expect(formatTerminalSet(["a-b", "c/d"])).toBe("a-b, c/d");
       },
     },
     {

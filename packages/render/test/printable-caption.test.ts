@@ -81,7 +81,7 @@ describe("printable function facts", () => {
       );
       expect(labels.join(" ")).toContain("300");
       expect(
-        labels.filter((s) => s.includes("1/L1 / 2/T1")).length,
+        labels.filter((s) => s.includes("1/L1–2/T1")).length,
       ).toBeGreaterThan(1);
       for (const label of labels)
         expect(
@@ -91,8 +91,8 @@ describe("printable function facts", () => {
             2.3,
           ),
         ).toEqual([label]);
-      // Spaced terminal sets widen this fixture by 4.439 mm (103.633 mm when
-      // rotated). Keep its bound tight and retain the line-fit guard.
+      // Whole authored terminal sets retain their measured caption width.
+      // Keep this bound tight and retain the line-fit guard.
       expect(
         Number(coil.getAttribute("data-circuit-body-width")),
       ).toBeLessThanOrEqual(flow === "top-to-bottom" ? 104 : 100);
@@ -318,7 +318,7 @@ describe("printable function facts", () => {
         (e) => e.textContent,
       );
       expect(printed).toContain("13–14: 300");
-      expect(printed).toContain("1/L1 / 2/T1, 3/L2 / 4/T2, 5/L3 / 6/T3: 100");
+      expect(printed).toContain("1/L1–2/T1, 3/L2–4/T2, 5/L3–6/T3: 100");
       expect(printed).not.toContain("300");
       expect(printed).not.toContain("aux13: 300");
       if (flow === "top-to-bottom") {

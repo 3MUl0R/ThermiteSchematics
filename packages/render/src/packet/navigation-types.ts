@@ -100,6 +100,15 @@ export interface NavigationAnnotation {
   text: string;
   primitiveIds: readonly string[];
   reservationId: string;
+  /** Contact-owner distances only; no locality threshold is adopted for returns. */
+  returnLocality?: {
+    sheet: number;
+    owners: readonly {
+      occurrenceId: string;
+      anchorMm: { x: number; y: number };
+      distanceMm: number;
+    }[];
+  };
   locality?: {
     mode: "local" | "self-located";
     anchorMm: { x: number; y: number };

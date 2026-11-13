@@ -592,6 +592,7 @@ functions, not the total group size.
 Navigation text envelopes keep at least 4 mm horizontal clearance from other
 text when their line bands overlap vertically, including continuation/location
 headers and other navigation labels. Non-text ink retains 1.5 mm clearance.
+Obstacles are intersected with their section's visible clip, including frames, cards and report cells; empty intersections reserve no space. Exhaustion evidence must independently scan rendered visible ink and count distinct geometries, not identical retries.
 The allocator uses the protected maximum text envelopes; it never shrinks a
 reservation to the current destination text.
 
@@ -599,11 +600,10 @@ Packet contact mirrors use only direct internal `actuates` relations from a coil
 function to a contact on that same device UID. Tags, gangs, terminal numbers,
 descriptions, transitive paths and device-level relations never create rows.
 Each full coil gets every eligible authored contact, with its NO/NC state,
-M1's shared terminal-set formatting and all full issued destinations. A report
+M1's shared terminal-set formatting and all full issued destinations. Exactly two names use an en dash unless a name contains `-`, `–`, `−` or `+`; otherwise (including three or more names), use ` / `, replaced by `, ` when a name contains `/`. A report
 row, terminal context or boundary fragment is not a full destination: an absent
 full target prints `not drawn`. Changeover contacts retain their separate NC/NO
-functions and shared common. A coil with no eligible rows prints `Contact
-associations unspecified`, never a guessed count. A contact without a targeting
+functions and shared common. A coil-only device gets no mirror table. When its own device has contact functions but no eligible rows, the coil prints `Contact associations unspecified`, never a guessed count. A contact without a targeting
 actuator gets `Actuating coil not specified in device data` only if its own
 device contains a coil; non-coil actuation/tripping suppresses that note.
 Drawings never print `not assessed`.
@@ -612,7 +612,7 @@ Each related contact returns every required coil destination as `K1 /02.C2`;
 an undrawn coil is marked `not drawn`. Only an explicit native gang with equal
 coil target sets and a visible mechanical association shares a caption. Its
 owners are the visible native members on that issued sheet and selected view;
-every split fragment has its own caption. Mirror rows remain individual.
+every split fragment has its own caption. Mirror rows remain individual. The renderer checks each return against all contact owners on the same sheet and records their measured centroid-to-caption distances in `returnLocality`; no distance threshold is adopted for returns.
 
 The compact table is 55 mm wide, 25 mm high for four single-destination rows,
 with 4.5 mm row pitch, 3.502 mm row em and 3.782 mm heading em (physical capital
@@ -644,8 +644,7 @@ Mirror locality is measured from final geometry, independently of the chosen
 placement family. A local table shares the coil's sheet, lies within 60 mm of
 its own function-terminal centroid, intersects that zone or one of its eight
 neighbours, and has the coil as its strictly nearest device frame. Circuit comparisons use
-the measured per-function adapter frames, including other functions on the same
-device; an absent enclosing rectangle never exempts those visible frames. Otherwise
+the measured per-function adapter frames, excluding bodies of the coil's own device; an absent enclosing rectangle never exempts foreign visible frames. Otherwise
 its heading prints the coil's own `/ss.zone`; the renderer verifies that token
 against the measured coil location. Same-sheet ownership remains mandatory.
 Repeat labels keep NAV1's device-appearance anchor and have no zone-adjacency

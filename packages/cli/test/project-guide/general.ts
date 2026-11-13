@@ -722,7 +722,7 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Functions never automatically join physical nets.",
+      claim: "Functions never join physical nets.",
       async check() {
         const [types, run] = await Promise.all([
           coreTypes(),
