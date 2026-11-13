@@ -76,6 +76,32 @@ facts remain typed objects. Unconnected, unterminated, unassigned, unspecified,
 spare and unresolved states remain in native report cells; none is promoted to
 resolved, safe or complete.
 
+## Explicit native empty states (native-empty-state/1)
+
+M3 verifies an absent native connection or value, rather than requiring a null
+placeholder spelling. The shared checker vocabulary is
+`evals/draw/native-empty-state.mjs`, used by M3 delivery and DQ-19 report null
+policy. The accepted explicit forms are:
+
+- No same-location connections: `No connections` or `No same-location connections`.
+- No other/unspecified-location connections: `No connections` or
+  `No other / unspecified location connections`.
+- Unspecified status: `Not specified` or `Status not specified`.
+- Unspecified protocol/medium: `Not specified` or `Protocol / medium not specified`.
+
+Comparison normalizes NFC, case and whitespace/line wrapping for these state
+phrases. The native column establishes the scope of `No connections` and
+`Not specified`. An assembly status may precede its independently required pin-map
+status and source reason; those remaining facts must still match exactly.
+These forms are accepted by both rules. For compatibility, M3 additionally
+accepts the existing `None` for no connections and `Unspecified` for an absent
+status/medium. DQ-19 continues to reject those literal placeholders under its
+existing report policy; this change does not repair or waive that defect.
+A blank, missing field, dash, invented peer, asserted value or wrong state does
+not establish the required explicit native empty state. Known source connections,
+protocols, statuses and unresolved pin maps retain their existing requirements.
+No connection or value may be inferred from an empty state.
+
 ## Issued documents, resolutions and row anchor
 
 `documents[]` contains `id`, `kind`, short printed `label`, source binding,

@@ -260,6 +260,10 @@ export function measureSheet(options = {}) {
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
     row: attr(e, "data-report-row"),
+    documentId: attr(e, "data-document-id"),
+    documentOrigin: attr(e, "data-document-origin"),
+    columnName: attr(e, "data-column-name"),
+    reportRowScope: ids.get(e.closest("[data-report-row]")),
     reportNote: e.getAttribute("data-report-note"),
     textContainer: ids.get(e.parentElement),
     authoredText: e.getAttribute("data-authored-text"),
@@ -1960,9 +1964,35 @@ export function measureSheet(options = {}) {
         throw Error("Identifier measurement: report cell rectangle missing");
       return {
         row: attr(column, "data-report-row"),
+        documentId: attr(column, "data-document-id"),
+        documentOrigin: attr(column, "data-document-origin"),
+        primitiveIds: [column, ...ancestors(column)]
+          .map((n) => n.id)
+          .filter(Boolean),
+        reportRowScope: ids.get(column.closest("[data-report-row]")),
         columnIndex,
         element: ids.get(column),
         bbox: bounds(rect),
+        regionVisible: (() => {
+          try {
+            const b = bounds(rect),
+              v = visible(rect),
+              clips = shapeClips(rect);
+            return (
+              !!v &&
+              clips !== null &&
+              [v.clip, ...(clips ?? [])].every(
+                (c) =>
+                  b.x >= c.x - 0.001 &&
+                  b.y >= c.y - 0.001 &&
+                  b.x + b.w <= c.x + c.w + 0.001 &&
+                  b.y + b.h <= c.y + c.h + 0.001,
+              )
+            );
+          } catch {
+            return false;
+          }
+        })(),
       };
     }),
     reportRows: Array.from(root.querySelectorAll("[data-report-row]")).map(

@@ -1,3 +1,4 @@
+import { tableForSheet } from "./m3-documents.mjs";
 // Index/reference tables are packet-owned; public query tables cover all other
 // reports. Values below come from packet references and IR, never printed text.
 // Keep this explicit: normalized documentation views also include diagrams.
@@ -39,7 +40,7 @@ function referenceContent(packet, content) {
 
 export function identifierTable(sheet, packet, g, ir, tables) {
   const kind = sheet.view.kind;
-  const table = tables.find((table) => table.kind === kind);
+  const table = tableForSheet(sheet, g, tables);
   if (table) return table;
   if (!["index", "references"].includes(kind)) {
     if (g.reportRows.length)

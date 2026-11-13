@@ -1,4 +1,8 @@
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
+import {
+  isExplicitEmptyState,
+  isNullPlaceholder,
+} from "./native-empty-state.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { minimumTextEmMm } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
@@ -851,7 +855,8 @@ export function reports(g, sheet, packet, table) {
       .map((t) => t.text)
       .join(" ")
       .trim();
-    const literal = /^(None|Unspecified|null)$/i;
+    // Explicit native empty states are meaningful ink, not null placeholders.
+    if (isExplicitEmptyState(text)) continue;
     const sourceCell = table?.rows.find((r) => r.key === fragments[0].row)
       ?.cells[fragments[0].columnIndex];
     // Query newlines are semantic field boundaries; SVG line wraps are not.
@@ -859,13 +864,13 @@ export function reports(g, sheet, packet, table) {
     // such as "No assembly; mapping unspecified" is not a null field.
     const placeholders =
       sourceCell === undefined
-        ? literal.test(text)
+        ? isNullPlaceholder(text)
           ? [text]
           : []
         : sourceCell
             .split("\n")
             .map((s) => s.trim())
-            .filter((s) => literal.test(s));
+            .filter(isNullPlaceholder);
     for (const placeholder of placeholders)
       if (
         text
@@ -876,7 +881,7 @@ export function reports(g, sheet, packet, table) {
         out.push(
           issue(
             "report-null-placeholder",
-            fragments.find((t) => literal.test(t.text)) ?? fragments[0],
+            fragments.find((t) => isNullPlaceholder(t.text)) ?? fragments[0],
             { text, placeholder, columnIndex: fragments[0].columnIndex },
           ),
         );
