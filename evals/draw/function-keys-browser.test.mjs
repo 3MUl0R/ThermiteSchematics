@@ -64,7 +64,12 @@ it.each(flows)(
       expect(result.ok, JSON.stringify(result)).toBe(true);
       if (!result.ok) return;
       let wrapped = false;
-      for (const sheet of result.value.sheets) {
+      const autoPages = new Set(
+        result.value.navigation.autoDocuments.flatMap((d) => d.sheets),
+      );
+      for (const sheet of result.value.sheets.filter(
+        (s) => !autoPages.has(s.number),
+      )) {
         const geometry = await openSheet(page, sheet.svg);
         const authored = geometry.texts.filter(
           (t) => t.authoredText === "request-note",

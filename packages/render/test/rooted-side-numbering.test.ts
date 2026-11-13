@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { compileProject } from "@thermite/compiler";
+import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { Draft, Link } from "../src/packet/types.js";
 import { stackSections } from "../src/packet/fold-stack.js";
 import {
@@ -11,13 +11,18 @@ import { referenceTables } from "../src/packet/references.js";
 import { tableDrafts } from "../src/packet/reports.js";
 import { continuationOracle } from "./continuation-oracle.js";
 import { sideCandidate, sidePage } from "./helpers/side-candidate.js";
-function pair(end: 0 | 1, id: number, to: number): Link {
+function pair(
+  end: 0 | 1,
+  id: number,
+  to: number,
+  wire: ElectricalIr["wires"][number],
+): Link {
   const l: Link = {
     id: `C00${id}`,
-    conductor: `W${id}`,
-    designation: `W${id}`,
+    conductor: wire.properties?.label ?? wire.designation,
+    designation: wire.designation,
     netId: `N${id}`,
-    provenance: { kind: "wire", uid: `w${id}` },
+    provenance: { kind: "wire", uid: wire.uid },
     end,
     to,
     x: 80 + id * 40,
@@ -32,18 +37,19 @@ it("prints right-hand device references and C999/C1000 peers on final sheets 99/
   const compiled = await compileProject("examples/motor-starter");
   if (!compiled.ok) throw Error(JSON.stringify(compiled));
   const motor = compiled.ir.devices.find((d) => d.designation === "M1")!;
+  const wires = compiled.ir.wires;
   const base = sideCandidate(3).drafts[0]!;
   const b = { x: 20, y: 40, w: 240, h: 160 };
   const a: Draft = {
     ...base,
     drawingBounds: b,
-    links: [pair(0, 1, 3)],
+    links: [pair(0, 1, 3, wires[0]!)],
     references: [],
   };
   const right: Draft = {
     ...base,
     drawingBounds: b,
-    links: [pair(0, 2, 3)],
+    links: [pair(0, 2, 3, wires[1]!)],
     content: `<rect data-device-uid="${motor.uid}" x="75" y="45" width="10" height="10"/>`,
     references: [
       {
@@ -59,7 +65,7 @@ it("prints right-hand device references and C999/C1000 peers on final sheets 99/
   const last: Draft = {
     ...base,
     drawingBounds: b,
-    links: [pair(1, 1, 1), pair(1, 2, 2)],
+    links: [pair(1, 1, 1, wires[0]!), pair(1, 2, 2, wires[1]!)],
     references: [],
   };
   const incoming = stackSections(
@@ -87,10 +93,7 @@ it("prints right-hand device references and C999/C1000 peers on final sheets 99/
     },
   }));
   expect(appendViewDrafts(prior, incoming, 0, "standard", 998)).toBe(1000);
-  const ir = {
-    ...compiled.ir,
-    wires: [1, 2].map((i) => ({ uid: `w${i}`, designation: `W${i}` })),
-  } as unknown as typeof compiled.ir;
+  const ir = compiled.ir;
   const table = referenceTables(
     ir,
     prior,

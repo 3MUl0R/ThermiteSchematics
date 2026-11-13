@@ -83,4 +83,8 @@ export {
 } from "./continuity.js";
 
 // Shared print projection for query reports and renderer captions.
-export { formatTerminalSet, printedPort } from "./print-projection.js";
+export {
+  formatTerminalSet,
+  printedPort,
+  printedPortEndpoint,
+} from "./print-projection.js";

@@ -42,11 +42,25 @@ export function rootedNoticeSvg(
   pitch: number,
 ) {
   const writer = new SvgWriter();
+  // Retain the established reservation and native drawing transforms. The
+  // generic partial-view warning does not promise a printed coverage document.
+  const body = wrapText(
+    "Selected path only; other authored connections may be outside this view.",
+    width,
+    size,
+  );
+  const reserved = rootedNoticeLines(view, width, size);
+  if (body.length > reserved.filter((line) => !line.bold).length)
+    throw new Error("Generic notice exceeds its fixed reservation");
+  const lines = [
+    ...reserved.filter((line) => line.bold),
+    ...body.map((text) => ({ text, bold: false })),
+  ];
   writer.open(1, "g", {
     class: "selected-view-notice",
     "data-selected-view-notice": "true",
   });
-  rootedNoticeLines(view, width, size).forEach((line, index) =>
+  lines.forEach((line, index) =>
     writer.element(
       2,
       "text",

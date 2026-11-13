@@ -1,6 +1,7 @@
 import { required } from "../presentation/util.js";
 import { circuitCardGuard } from "./circuit-packet-cards.js";
 import { circuitAnnotationGuard } from "./circuit-annotation-guard.js";
+import { circuitDocumentGuard } from "./circuit-document-guard.js";
 import type { RenderedPacket } from "../packet/types.js";
 import { descendants, svgTree } from "../device-legend/svg-tree.js";
 
@@ -52,6 +53,7 @@ export function circuitPacketGuard(
     return false;
   if (
     !circuitCardGuard(candidate, original) ||
+    !circuitDocumentGuard(candidate, original) ||
     JSON.stringify(paintedAnnotations(candidate)) !==
       JSON.stringify(paintedAnnotations(original))
   )

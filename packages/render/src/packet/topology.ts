@@ -1,4 +1,5 @@
 import { deviceTagFitDetails } from "./device-tag-fit.js";
+import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { CircuitRenderError } from "../render-error-context.js";
 import { wrapText } from "../text-metrics.js";
 import { prepareWiringDrawing, type WiringViewRequest } from "../wiring.js";
@@ -60,17 +61,48 @@ function topologyNoteLines(
   return drawing.note.split("\n").flatMap((line) => {
     const authored = offset >= authoredStart;
     offset += line.length + 1;
-    const lines = drawing.engineNotes
-      ? wrapText(line, width, 2.5)
-      : wrapReport(line, Math.floor(width / 1.6));
-    return lines.flatMap((line) => {
-      const measured =
+    const split = (value: string) => {
+      const lines = drawing.engineNotes
+        ? wrapText(value, width, 2.5)
+        : wrapReport(value, Math.floor(width / 1.6));
+      return lines.flatMap((line) =>
         assembly || drawing.pagination
           ? assemblyNoteLines(line, width)
-          : [line];
-      return measured.map((text) => ({ text, authored }));
-    });
+          : [line],
+      );
+    };
+    const replacement =
+      !authored && drawing.documentNeeds?.length
+        ? line
+            .replace("; see wire schedule.", ".")
+            .replace(
+              "see communication schedule for status and unconnected ports.",
+              "Other port details may be outside this view.",
+            )
+            .replace(
+              "core details remain in the conductor view.",
+              "other core details are outside this view.",
+            )
+        : line;
+    const changed = replacement !== line ? split(replacement) : undefined;
+    return split(line).map((text, i) => ({
+      text,
+      authored,
+      ...(changed ? { replacement: changed[i] ?? "" } : {}),
+    }));
   });
+}
+function topologyNoteSvg(
+  v: { authored: boolean; text: string; replacement?: string },
+  x: number,
+  y: number,
+) {
+  return (v.authored ? requestNoteText : text)(x, y, v.text, 2.5).replace(
+    "<text ",
+    v.replacement === undefined
+      ? "<text "
+      : `<text data-document-note-replacement="${attr(v.replacement)}" `,
+  );
 }
 function loopFitRefusal(
   page: PaperPage,
@@ -165,11 +197,10 @@ export async function topologyDrafts(
         );
       const note = noteLines
         .map((v, i) =>
-          (v.authored ? requestNoteText : text)(
+          topologyNoteSvg(
+            v,
             b.x,
             b.y + height - (partLines.length + noteLines.length - 1 - i) * 3.5,
-            v.text,
-            2.5,
           ),
         )
         .join("\n");
@@ -188,6 +219,7 @@ export async function topologyDrafts(
             title: drawing.title,
           },
           title,
+          documentNeeds: drawing.documentNeeds ?? [],
           drawingBounds: b,
           // Keep complete series notes with their view through compact packing.
           ...(drawing.engineNotes ? {} : { communicationHeight: height }),
@@ -213,14 +245,14 @@ export async function topologyDrafts(
             : {}),
           links: [],
           note: wiring
-            ? "Selected physical wiring - terminal details and other connections in schedules"
+            ? "Selected physical wiring - device internals are not shown"
             : signalLoop
               ? "Field-device hookup - verify selected connector pinout before construction"
               : assembly
                 ? drawing.paginated
                   ? "Protective caps - pin mapping not applicable; no inferred electrical continuity"
                   : "Connector assemblies only - unresolved pin mapping; no inferred electrical continuity"
-                : "Port connections - see link schedule for protocol and status",
+                : "Selected port connections - diagram is partial",
           coverage:
             "coverage" in drawing && drawing.coverage ? [drawing.coverage] : [],
           topologyCoverage: drawing.topologyCoverage

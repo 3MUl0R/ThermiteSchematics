@@ -13,6 +13,7 @@ import { appendViewDrafts } from "./packet/assembly.js";
 import { navigationViewKey } from "./packet/navigation-identity.js";
 import { centroidReferences } from "./packet/navigation-occurrences.js";
 import { seedCircuitNavigation } from "./packet/navigation-circuit.js";
+import { appendDocumentCompanions } from "./packet/document-companions.js";
 
 import {
   circuitFunctionAppearances,
@@ -241,15 +242,18 @@ async function renderPacket(
       ),
     };
   drafts = legendFit.value;
-  const pageCostFailure = rootedPageCostFailure(drafts);
-  if (pageCostFailure)
-    return {
-      ok: false,
-      error: contextError(
-        pageCostFailure,
-        drafts.flatMap((d) => d.views ?? []),
-      ),
-    };
+  const pageCost = checkedPageCost(drafts, contextError);
+  if (!pageCost.ok) return pageCost;
+  const companions = packetCompanions(
+    ir,
+    drafts,
+    paper.value,
+    presentation,
+    explicitPacket,
+    contextError,
+  );
+  if (!companions.ok) return companions;
+  drafts = companions.value;
   if (request.index) {
     const located = legendSheets(ir, drafts, paper.value);
     if (!located.ok) return located;
@@ -280,7 +284,44 @@ async function renderPacket(
     explicitPacket,
     documentationSelections,
     referenceSelection,
+    presentation,
   );
+}
+function checkedPageCost(
+  drafts: Draft[],
+  contextError: typeof withPacketViews,
+): RenderOutcome<Draft[]> {
+  const error = rootedPageCostFailure(drafts);
+  return error
+    ? {
+        ok: false,
+        error: contextError(
+          error,
+          drafts.flatMap((d) => d.views ?? []),
+        ),
+      }
+    : { ok: true, value: drafts };
+}
+function packetCompanions(
+  ir: Readonly<ElectricalIr>,
+  drafts: Draft[],
+  page: import("./packet/types.js").PaperPage,
+  presentation: CompiledProjectPresentation | undefined,
+  explicit: boolean,
+  contextError: typeof withPacketViews,
+): RenderOutcome<Draft[]> {
+  const result = explicit
+    ? appendDocumentCompanions(ir, drafts, page, presentation)
+    : { ok: true as const, value: drafts };
+  return result.ok
+    ? result
+    : {
+        ok: false,
+        error: contextError(
+          result.error,
+          drafts.flatMap((d) => d.views ?? []),
+        ),
+      };
 }
 function fitPacketLegends(
   ir: Readonly<ElectricalIr>,
@@ -305,11 +346,15 @@ function assemblePacket(
     view: number;
   })[],
   referenceSelection: ReferenceSelection | undefined,
+  presentation: CompiledProjectPresentation | undefined,
 ): RenderOutcome<RenderedPacket> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
   try {
-    const rendered = legendSheets(ir, drafts, page, true);
+    const rendered = legendSheets(ir, drafts, page, true, {
+      presentation,
+      standalone: !explicitPacket,
+    });
     if (!rendered.ok)
       return {
         ok: false,
@@ -464,7 +509,7 @@ export function renderSchematicPacket(
 }
 export function renderSchematicSheets(
   ir: Readonly<ElectricalIr>,
-  view: SchematicViewRequest | import("@thermite/query").DocumentationRequest,
+  view: SchematicPacketRequest["views"][number],
   presentation?: Readonly<CompiledProjectPresentation>,
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},

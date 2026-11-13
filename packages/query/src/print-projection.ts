@@ -27,10 +27,11 @@ export function printedPortEndpoint(
   ir: Readonly<ElectricalIr>,
   uid: string,
   key: string,
+  projection: "described" | "identity" = "described",
 ): string {
   const device = ir.devices.find((d) => d.uid === uid);
   const type = ir.deviceTypes.find((t) => t.id === device?.typeId);
-  return `${device?.designation ?? "Device unspecified"}: ${printedPort(type, key)}`;
+  return `${device?.designation ?? "Device unspecified"}: ${projection === "identity" ? key : printedPort(type, key)}`;
 }
 
 // Explicit locale keeps segmentation independent of the host's default locale.

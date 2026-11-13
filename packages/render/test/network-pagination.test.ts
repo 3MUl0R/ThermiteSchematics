@@ -231,7 +231,7 @@ describe("bounded communication packets", () => {
       expect(r.value.sheets.some((s) => s.view.kind === "network")).toBe(true);
     },
   );
-  it("retains a fitting view and its single-drawing API exactly", async () => {
+  it("retains a fitting diagram and its single-drawing API when a companion is appended", async () => {
     const request = { ...view(), devices: ["N01"] };
     const drawing = await prepareCommunicationDrawing(ir, request);
     expect(drawing.pagination).toBeUndefined();
@@ -240,7 +240,8 @@ describe("bounded communication packets", () => {
       views: [request],
     });
     if (!r.ok) throw new Error(r.error.message);
-    expect(r.value.sheets).toHaveLength(1);
+    expect(r.value.sheets).toHaveLength(2);
+    expect(r.value.sheets[1]!.view.kind).toBe("network");
     expect(r.value.sheets[0]!.svg).toContain(drawing.content);
     expect(r.value.sheets[0]!.communicationContinuations).toBeUndefined();
     expect(r.value.sheets[0]!.view.title).not.toContain("Part ");

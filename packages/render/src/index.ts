@@ -12,6 +12,15 @@ export type {
   NavigationAnnotation,
   NavigationExtension,
 } from "./packet/navigation-types.js";
+export type {
+  DocumentFact,
+  DocumentNeed,
+  DocumentDependency,
+  DocumentCaptionGroup,
+  DocumentResolution,
+  IssuedDocument,
+  IssuedDocumentRow,
+} from "./packet/document-types.js";
 export { createSchematicRenderer, renderSchematic } from "./renderer.js";
 export { renderSchematicPacket } from "./layout/circuit-packet-entry.js";
 export {

@@ -1,3 +1,4 @@
+import { communicationDocumentNeeds } from "./packet/document-producers.js";
 import { printedPort } from "@thermite/query";
 import {
   routePortAttributes,
@@ -31,6 +32,7 @@ export interface CommunicationViewRequest {
   readonly devices?: readonly string[];
 }
 export interface CommunicationDrawing {
+  documentNeeds?: readonly import("./packet/document-types.js").DocumentNeedSeed[];
   title: string;
   content: string;
   width: number;
@@ -267,6 +269,12 @@ async function layoutCommunicationDrawing(
     };
   });
   const elk = createElkEngine();
+  const documentNeeds = communicationDocumentNeeds(
+    ir,
+    ordered,
+    request.medium,
+    links.map((l) => l.uid),
+  );
   const input: ElkNode = {
     id: "communication",
     layoutOptions: {
@@ -414,6 +422,8 @@ async function layoutCommunicationDrawing(
         (rows.get(deviceUid) ?? []).map((p) => ({ deviceUid, portKey: p.key })),
       ),
     },
+    documentNeeds,
+
     title:
       (request.medium === "ethernet"
         ? "Ethernet connections"

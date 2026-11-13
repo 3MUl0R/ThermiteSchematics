@@ -129,7 +129,8 @@ it.each(
         },
       });
       if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
-      expect(rendered.value.sheets).toHaveLength(1);
+      expect(rendered.value.sheets).toHaveLength(2);
+      expect(rendered.value.sheets[1]!.view.kind).toBe("wires");
       expect(JSON.stringify(ir)).toBe(before);
       if (flow === "top-to-bottom") {
         const detailRequest = { ...request };
@@ -179,7 +180,7 @@ it.each(
           page: { ...packet.page, orientation: "portrait" },
         });
         expect(fallback.ok, JSON.stringify(fallback)).toBe(true);
-        if (fallback.ok) expect(fallback.value.sheets).toHaveLength(1);
+        if (fallback.ok) expect(fallback.value.sheets).toHaveLength(2);
       }
     } finally {
       await rm(dir, { recursive: true, force: true });

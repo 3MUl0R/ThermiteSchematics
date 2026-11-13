@@ -159,6 +159,9 @@ See `thermite guide libraries` for optional-library limits.
 
 ## Reports/review
 
+Packets may append required companion inventories; requested filters stay unchanged.
+Include appended sheets when reviewing page counts.
+
 ```sh
 thermite report <bom|wires|cables|terminals|io|io-ports|network|assemblies> -o drawings/report.csv
 ```

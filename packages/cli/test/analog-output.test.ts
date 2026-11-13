@@ -36,7 +36,8 @@ it.each(["left-to-right", "top-to-bottom"])(
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(await renderSchematicPacket(ir, f.packet)).toEqual(result);
     if (!result.ok) return;
-    expect(result.value.sheets).toHaveLength(1);
+    expect(result.value.sheets).toHaveLength(2);
+    expect(result.value.sheets[1]!.view.kind).toBe("wires");
     const svg = result.value.sheets[0]!.svg;
     const { document } = parseHTML(svg);
     const jacket = document.querySelector("[data-cable-assembly]")!;

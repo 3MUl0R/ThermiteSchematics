@@ -160,6 +160,11 @@ export interface RootedLegendSource {
   profile?: "compact" | "dense";
 }
 export interface Draft {
+  documentNeeds?: readonly import("./document-types.js").DocumentNeedSeed[];
+  issuedDocument?: import("./document-types.js").DocumentIdentity;
+  documentRows?: readonly import("./document-types.js").DocumentRowDraft[];
+  documentHeader?: import("./document-types.js").DocumentHeaderDraft;
+  autoDocumentOrigin?: { dependencyIds: readonly string[] };
   navigationInputs?: readonly import("./navigation-types.js").NavigationDraftInput[];
   navigationSeeds?: readonly import("./navigation-types.js").NativeOccurrenceSeed[];
   navigationView?: import("./navigation-types.js").NavigationView;

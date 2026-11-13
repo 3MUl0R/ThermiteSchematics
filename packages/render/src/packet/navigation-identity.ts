@@ -9,6 +9,12 @@ export function navigationViewKey(
   duplicateOrdinal: number,
 ): string {
   const clean = (v: unknown, field = ""): unknown => {
+    if (typeof v === "string" && field === "conductors")
+      return conductorSelectionId(ir, v);
+    if (typeof v === "string" && field === "cable")
+      return (
+        ir.cables.find((c) => c.uid === v || c.designation === v)?.uid ?? v
+      );
     if (typeof v === "string" && ["device", "devices"].includes(field))
       return (
         ir.devices.find((d) => d.uid === v || d.designation === v)?.uid ?? v
@@ -41,4 +47,26 @@ export function navigationViewKey(
     );
   };
   return `view/1/${navigationHash([clean(selection), duplicateOrdinal])}`;
+}
+
+function conductorSelectionId(
+  ir: Readonly<ElectricalIr>,
+  value: string,
+): string {
+  const wire = [...ir.wires, ...ir.jumpers].find(
+    (w) => w.uid === value || w.designation === value,
+  );
+  if (wire) return wire.uid;
+  const core = ir.cableConductors.find(
+    (c) =>
+      JSON.stringify(c.id) === value ||
+      `${ir.cables.find((cable) => cable.uid === c.cableUid)?.designation}/${c.id.conductorId}` ===
+        value,
+  );
+  return core
+    ? JSON.stringify({
+        cableUid: core.cableUid,
+        conductorId: core.id.conductorId,
+      })
+    : value;
 }

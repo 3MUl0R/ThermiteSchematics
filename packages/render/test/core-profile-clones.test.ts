@@ -3,6 +3,7 @@ import { CORE_SYMBOL_BINDINGS } from "@thermite/schema";
 import {
   compileProject,
   lockProject,
+  serializeIr,
   type ElectricalIr,
 } from "@thermite/compiler";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -17,6 +18,54 @@ import {
   CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   projectDeviceTypeSymbolMappings,
 } from "../src/symbols/mappings.js";
+import { createHash } from "node:crypto";
+
+function renderingWithoutSnapshot(
+  result: Awaited<ReturnType<typeof renderSchematicPacket>>,
+  source: ElectricalIr,
+) {
+  if (!result.ok) return result;
+  const navigation = result.value.navigation!;
+  const snapshot = createHash("sha256")
+    .update(JSON.stringify(serializeIr(source)))
+    .digest("hex");
+  const unbind = <T extends { snapshotDigest: string }>(record: T) => {
+    expect(record.snapshotDigest).toBe(snapshot);
+    return { ...record, snapshotDigest: undefined };
+  };
+  const normalized = {
+    ...result,
+    value: {
+      ...result.value,
+      navigation: {
+        ...unbind(navigation),
+        documents: navigation.documents?.map(unbind),
+        dependencies: navigation.dependencies?.map(unbind),
+      },
+    },
+  };
+  // BOM row identities contain type IDs. Verify their native-key hash before
+  // normalizing only that document prefix in the SVG, HTML and locators.
+  const bom = buildDocumentation(source, {
+    format: "documentation-view-request/0.1",
+    kind: "bom",
+  });
+  const prefix = `document/1/${createHash("sha256")
+    .update(
+      JSON.stringify([
+        bom.kind,
+        bom.rows.map((r) => r.key),
+        bom.selection ?? null,
+      ]),
+    )
+    .digest("hex")}/`;
+  const documents = navigation.documents!.filter((d) => d.kind === "bom");
+  expect(documents).toHaveLength(1);
+  expect(documents[0]!.id.startsWith(prefix)).toBe(true);
+  return JSON.parse(
+    JSON.stringify(normalized).replaceAll(prefix, "document/1/type-clone-bom/"),
+  );
+}
 let core: ElectricalIr;
 let core02: ElectricalIr;
 let core02Root: string;
@@ -286,26 +335,15 @@ describe("automatic terminal-plan profile clones", () => {
         expect(after.value.navigation!.snapshotDigest).not.toBe(
           before.value.navigation!.snapshotDigest,
         );
-      const rendering = (r: typeof before) =>
-        r.ok
-          ? {
-              ...r,
-              value: {
-                ...r.value,
-                navigation: {
-                  ...r.value.navigation,
-                  snapshotDigest: undefined,
-                },
-              },
-            }
-          : r;
       const normalized = CORE_SYMBOL_BINDINGS.reduce(
         (json, b) =>
           json.replaceAll(b.typeId.replace("core:", "local:"), b.typeId),
-        JSON.stringify(rendering(after)),
+        JSON.stringify(renderingWithoutSnapshot(after, changed)),
       );
       // A boolean comparison keeps a failure from dumping the entire packet.
-      expect(normalized === JSON.stringify(rendering(before))).toBe(true);
+      expect(
+        normalized === JSON.stringify(renderingWithoutSnapshot(before, c.ir)),
+      ).toBe(true);
     },
     30000,
   );

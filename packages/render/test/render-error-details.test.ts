@@ -473,7 +473,9 @@ describe("render error details", () => {
     const rendered = await renderSchematicPacket(c.ir, request, c.presentation);
     expect(rendered.ok, JSON.stringify(rendered)).toBe(true);
     if (!rendered.ok) return;
-    expect(rendered.value.sheets).toHaveLength(1);
+    expect(
+      rendered.value.sheets.filter((s) => s.view.kind === "communication"),
+    ).toHaveLength(1);
     const title = rendered.value.sheets[0]!.view;
     if (title.format !== "documentation-view/0.1")
       throw Error("expected topology");

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { cp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { parseHTML } from "linkedom";
 import {
   copyProject,
   ctx,
@@ -450,13 +451,16 @@ const module: FactModule = {
             views: [{ format: "communication-view-request/0.1", ...view }],
           });
           expect(run.code, describeRun(run.args, run)).toBe(0);
-          const svg = run.json.sheets.map((s: any) => s.svg).join("\n");
+          const drawings = run.json.sheets.filter(
+            (s: any) => s.view.kind === "communication",
+          );
+          const svg = drawings.map((s: any) => s.svg).join("\n");
           return {
             json: run.json,
-            titles: run.json.sheets.map((s: any) => s.view.title),
+            titles: drawings.map((s: any) => s.view.title),
             devices: [
               ...new Set(
-                run.json.sheets.flatMap((s: any) =>
+                drawings.flatMap((s: any) =>
                   s.references.map((r: any) => r.designation),
                 ),
               ),
@@ -481,7 +485,13 @@ const module: FactModule = {
         expect(focused.devices).toEqual(["PLC1", "RIO1", "SW1"]);
         expect(focused.links).toEqual(["NET1", "NET2"].map(uid).sort());
         expect(focused.boundaries).toBe(1);
-        expect(focused.svg).not.toContain("NET3");
+        // Companion pointers may name NET3; its route stays outside this graph.
+        const drawing = parseHTML(focused.svg).document;
+        for (const caption of drawing.querySelectorAll(
+          "[data-document-dependency]",
+        ))
+          caption.remove();
+        expect(drawing.documentElement.textContent).not.toContain("NET3");
         const net3 = focused.json.coverage.topology.communicationLinks.find(
           (l: any) => l.designation === "NET3",
         );

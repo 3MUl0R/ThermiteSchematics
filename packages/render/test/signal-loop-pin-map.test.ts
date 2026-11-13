@@ -53,7 +53,10 @@ for (const series of [false, true])
         views: [view],
       });
       expect(result.ok, JSON.stringify(result)).toBe(true);
-      if (result.ok) expect(result.value.sheets).toHaveLength(1);
+      if (result.ok) {
+        expect(result.value.sheets).toHaveLength(series ? 1 : 2);
+        if (!series) expect(result.value.sheets[1]!.view.kind).toBe("wires");
+      }
       expect(JSON.stringify(c.ir)).toBe(before);
     },
   );
