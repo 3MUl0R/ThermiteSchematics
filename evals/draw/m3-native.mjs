@@ -2,6 +2,7 @@
 // appearances enter this module; exported facts and planner code never do.
 import { createHash } from "node:crypto";
 import { painted } from "./review-geometry.mjs";
+import { nativeEmptyState } from "./native-empty-state.mjs";
 export const M3_FORMAT = "issued-documents/1";
 export const sha = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -209,7 +210,8 @@ export function nativeRows(ir) {
       ps
         .map((p) => `${p.name} -> ${endName(ir, p.peer)}`)
         .sort()
-        .join("; ") || "None";
+        .join("; ");
+    const other = peers.filter((p) => !local.includes(p));
     rows.push({
       kind: "terminals",
       key: terminalKey(id),
@@ -218,8 +220,16 @@ export function nativeRows(ir) {
       required: {
         0: [device(ir, id.deviceUid)?.designation],
         2: [id.terminalKey],
-        4: [connectionText(local)],
-        5: [connectionText(peers.filter((p) => !local.includes(p)))],
+        4: [
+          local.length
+            ? connectionText(local)
+            : nativeEmptyState("no-same-location-connections"),
+        ],
+        5: [
+          other.length
+            ? connectionText(other)
+            : nativeEmptyState("no-other-location-connections"),
+        ],
         6: [connections.length ? "Terminated" : "Unconnected"],
       },
       exactColumns: [0, 2, 4, 5, 6],
@@ -263,8 +273,13 @@ export function nativeRows(ir) {
         3: [nativePortText(ir, r.toDeviceUid, c.toPort, network)],
         4: [
           network
-            ? (c.status ?? "Unspecified")
-            : `${c.status ?? "Unspecified"}\nPin mapping: ${c.pinMapping?.status}\n${c.pinMapping?.reason}`,
+            ? (c.status ?? nativeEmptyState("unspecified-status"))
+            : c.status === undefined
+              ? nativeEmptyState(
+                  "unspecified-status",
+                  `\nPin mapping: ${c.pinMapping?.status}\n${c.pinMapping?.reason}`,
+                )
+              : `${c.status}\nPin mapping: ${c.pinMapping?.status}\n${c.pinMapping?.reason}`,
         ],
       },
       exactColumns: network ? [0, 1, 2, 3, 4] : [0, 2, 3, 4],
@@ -303,10 +318,10 @@ export function nativeRows(ir) {
         facts: [port(d.uid, key)],
         required: {
           0: ["--"],
-          1: [p.medium ?? "Unspecified"],
+          1: [p.medium ?? nativeEmptyState("unspecified-medium")],
           2: [nativePortText(ir, d.uid, key)],
           3: ["Unconnected"],
-          4: ["Unspecified"],
+          4: [nativeEmptyState("unspecified-status")],
         },
         exactColumns: [0, 1, 2, 3, 4],
         ports: [{ column: 2, designation: d.designation, key }],

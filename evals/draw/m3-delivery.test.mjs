@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 const hashForTest = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
 import { expect, it } from "vitest";
+import { reports } from "./checks.mjs";
+import { sufficient } from "./document-dependencies.mjs";
 import { nativeRows, nativeNeeds, factKey, factKeys } from "./m3-native.mjs";
 import { m3Delivery } from "./m3-delivery.mjs";
 import {
@@ -488,7 +490,7 @@ it("dotted selectors remain a specific caption finding", () => {
     errors(f).some((x) => x.kind === "document-caption-dotted-port-selector"),
   ).toBe(true);
 });
-it("delivers omitted native terminals and rejects invented unconnected-terminal connections", () => {
+function terminalFixture() {
   const f = fixture(),
     dep = f.packet.navigation.dependencies[0],
     doc = f.packet.navigation.documents[0],
@@ -545,6 +547,10 @@ it("delivers omitted native terminals and rejects invented unconnected-terminal 
     bbox: { x: 25 + (i * 130) / 7, y: 40, w: 130 / 7, h: 10 },
   }));
   f.tables = [];
+  return f;
+}
+it("delivers omitted native terminals and rejects invented unconnected-terminal connections", () => {
+  const f = terminalFixture();
   expect(errors(f)).toEqual([]);
   f.report.texts.find((t) => t.row && t.columnIndex === 4).text =
     "INVENTED -> B.T";
@@ -804,6 +810,30 @@ it("assembly delivery preserves unresolved native pin-map state and singular com
     "assembly inventory";
   f.tables = [];
   expect(errors(f)).toEqual([]);
+  const unspecified = clone(f);
+  delete unspecified.ir.relations[0].assembly.status;
+  for (const status of [
+    "Unspecified",
+    "Not specified",
+    "Status not specified",
+  ]) {
+    unspecified.report.texts.find((t) => t.row && t.columnIndex === 4).text =
+      `${status} Pin mapping: unresolved Native mapping unknown`;
+    expect(errors(unspecified)).toEqual([]);
+  }
+  for (const status of [
+    "",
+    "verified",
+    "Status not specified Pin mapping: resolved",
+  ]) {
+    unspecified.report.texts.find((t) => t.row && t.columnIndex === 4).text =
+      status;
+    expect(
+      errors(unspecified).some(
+        (x) => x.kind === "printed-document-target-insufficient",
+      ),
+    ).toBe(true);
+  }
   const stale = clone(f);
   stale.report.texts.find((t) => t.row && t.columnIndex === 4).text +=
     " resolved";
@@ -1051,4 +1081,199 @@ it("a complete native row for a foreign component cannot replace the authored co
   ]);
   f.request.views[0].devices = ["C"];
   expect(errors(f)).toEqual([]);
+});
+
+// Literal native IR and measured ink are the oracle; no renderer/query formatter.
+function nullFindings(f, sourceCells) {
+  const g = {
+    ...f.report,
+    texts: f.report.texts.map((t) => ({
+      ...t,
+      cell: t.row ? { column: t.columnIndex } : undefined,
+    })),
+  };
+  const key = f.report.texts.find((t) => t.row).row;
+  return reports(
+    g,
+    f.packet.sheets[1],
+    f.packet,
+    sourceCells && {
+      rows: [{ key, cells: sourceCells }],
+    },
+  ).filter((x) => x.kind === "report-null-placeholder");
+}
+it.each([
+  ["no-same-location-connections", "No connections"],
+  ["no-same-location-connections", "No same-location connections"],
+  ["no-other-location-connections", "No connections"],
+  [
+    "no-other-location-connections",
+    "No other / unspecified location connections",
+  ],
+  ["unspecified-status", "Not specified"],
+  ["unspecified-status", "Status not specified"],
+  ["unspecified-medium", "Not specified"],
+  ["unspecified-medium", "Protocol / medium not specified"],
+])("M3 and null policy accept explicit native %s: %s", (state, form) => {
+  const terminal = state.startsWith("no-"),
+    f = terminal ? terminalFixture() : fixture();
+  const column =
+    state === "no-same-location-connections"
+      ? 4
+      : state === "no-other-location-connections"
+        ? 5
+        : state === "unspecified-medium"
+          ? 1
+          : 4;
+  if (state === "unspecified-medium") delete f.ir.deviceTypes[0].ports.P.medium;
+  // Keep the source query's old placeholders to check the rules' shared policy
+  // even when only the visible rendering has changed.
+  const sourceCells = terminal
+    ? ["A", "", "U", "", "None", "None", "Unconnected"]
+    : [
+        "--",
+        state === "unspecified-medium" ? "Unspecified" : "ethernet",
+        "A: P",
+        "Unconnected",
+        "Unspecified",
+      ];
+  for (const t of f.report.texts.filter((t) => t.row)) {
+    if (terminal && [4, 5].includes(t.columnIndex)) t.text = "No connections";
+    if (!terminal && t.columnIndex === 4) t.text = "Status not specified";
+    if (t.columnIndex === column) t.text = form;
+  }
+  expect(errors(f)).toEqual([]);
+  expect(nullFindings(f, sourceCells)).toEqual([]);
+  for (const wrong of ["", "INVENTED -> B.T", "verified", "ethernet"]) {
+    const bad = clone(f);
+    bad.report.texts.find((t) => t.row && t.columnIndex === column).text =
+      wrong;
+    expect(
+      errors(bad).some(
+        (x) => x.kind === "printed-document-target-insufficient",
+      ),
+    ).toBe(true);
+  }
+});
+it("legacy placeholders still deliver native states while retaining the null-policy defect", () => {
+  for (const f of [terminalFixture(), fixture()]) {
+    expect(errors(f)).toEqual([]);
+    expect(nullFindings(f).length).toBeGreaterThan(0);
+  }
+});
+it("an exported dependency with no native need is rejected independently", () => {
+  const f = fixture();
+  expect(errors(f)).toEqual([]);
+  const extra = clone(f.packet.navigation.dependencies[0]);
+  extra.owner.noteId = "not-a-native-note";
+  extra.id = `dependency/1/${hashForTest([extra.owner.viewKey, extra.owner.noteId])}`;
+  f.packet.navigation.dependencies.push(extra);
+  expect(errors(f).map((x) => x.kind)).toEqual([
+    "document-dependency-without-native-need",
+  ]);
+});
+it("a second painted caption without a native need is rejected independently", () => {
+  const f = fixture();
+  expect(errors(f)).toEqual([]);
+  f.source.texts.push(
+    ink("network inventory 02.A3 (A: P).", {
+      element: "orphan-caption",
+      bbox: { x: 30, y: 120, w: 80, h: 3 },
+      anchor: point(30, 123),
+    }),
+  );
+  expect(errors(f).map((x) => x.kind)).toEqual([
+    "document-visible-caption-without-native-need",
+  ]);
+});
+it("an extra bare location beside a sufficient caption is rejected independently", () => {
+  const f = fixture();
+  expect(errors(f)).toEqual([]);
+  f.packet.navigation.dependencies[0].caption.text = f.source.texts[0].text +=
+    " Also 99.D6.";
+  expect(errors(f).map((x) => x.kind)).toEqual([
+    "document-caption-extra-location",
+  ]);
+});
+it("an authored request note cannot satisfy a native caption obligation", () => {
+  const f = fixture();
+  expect(errors(f)).toEqual([]);
+  f.request.views[0].notes = [f.source.texts[0].text];
+  f.source.texts[0].authoredText = "request-note";
+  expect(errors(f).map((x) => x.kind)).toEqual([
+    "document-caption-native-scope-mismatch",
+  ]);
+});
+
+it("empty-state wording cannot replace a known native connection or protocol", () => {
+  const ir = {
+    devices: [
+      { uid: "a", designation: "A", location: "L" },
+      { uid: "b", designation: "B", location: "L" },
+    ],
+    terminals: [{ id: { deviceUid: "a", terminalKey: "U" } }],
+    wires: [
+      {
+        uid: "w",
+        designation: "W",
+        endpoints: [
+          { terminal: { deviceUid: "a", terminalKey: "U" } },
+          { terminal: { deviceUid: "b", terminalKey: "T" } },
+        ],
+      },
+    ],
+    relations: [
+      {
+        uid: "link",
+        designation: "NET",
+        fromDeviceUid: "a",
+        toDeviceUid: "b",
+        connection: { fromPort: "P", toPort: "Q", protocol: "EtherNet/IP" },
+      },
+    ],
+  };
+  const catalog = nativeRows(ir),
+    terminal = catalog.find((r) => r.kind === "terminals"),
+    row = {
+      kind: "terminals",
+      key: '["a","U"]',
+      cells: {
+        0: "A",
+        2: "U",
+        4: "W -> B.T",
+        5: "No connections",
+        6: "Terminated",
+      },
+    };
+  expect(sufficient(row, terminal)).toBe(true);
+  for (const falseEmpty of ["", "None", "No connections", "W -> B.WRONG"]) {
+    expect(
+      sufficient({ ...row, cells: { ...row.cells, 4: falseEmpty } }, terminal),
+    ).toBe(false);
+  }
+  const link = catalog.find((r) => r.key === "link"),
+    network = {
+      kind: "network",
+      key: "link",
+      cells: {
+        0: "NET",
+        1: "EtherNet/IP",
+        2: "A: P L",
+        3: "B: Q L",
+        4: "Status not specified",
+      },
+    };
+  expect(sufficient(network, link)).toBe(true);
+  expect(
+    sufficient(
+      { ...network, cells: { ...network.cells, 1: "Not specified" } },
+      link,
+    ),
+  ).toBe(false);
+  expect(
+    sufficient(
+      { ...network, cells: { ...network.cells, 4: "verified" } },
+      link,
+    ),
+  ).toBe(false);
 });

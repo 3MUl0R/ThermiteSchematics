@@ -3,6 +3,7 @@ import { zoneAt } from "./checks.mjs";
 import { createHash } from "node:crypto";
 import { finding, painted, groupBy } from "./review-geometry.mjs";
 import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
+import { matchesNativeEmptyState } from "./native-empty-state.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -343,9 +344,11 @@ export function sufficient(row, fact) {
     const value = compact(row.cells[column]);
     if (
       !values.every((s) =>
-        fact.exactColumns?.includes(Number(column))
-          ? value === compact(s)
-          : containsFact(row.cells[column], s),
+        s?.nativeEmptyState
+          ? matchesNativeEmptyState(row.cells[column], s)
+          : fact.exactColumns?.includes(Number(column))
+            ? value === compact(s)
+            : containsFact(row.cells[column], s),
       )
     )
       return false;

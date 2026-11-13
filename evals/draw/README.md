@@ -236,6 +236,9 @@ Version **5.9** adds M3 companion delivery against `issued-documents/1`:
 - Native IR supplies typed endpoint incidences (including endpoint ordinals),
   terminal, port, core and assembly identities, persistent note ids and states.
   Exports locate ink and are reconciled against that independent reconstruction.
+  Native empty states accept the explicit `native-empty-state/1` vocabulary shared
+  with DQ-19 null policy; legacy placeholders still deliver facts and still fail
+  that separate report policy.
   Missing versioned exports remain a failing measurement gap, even when native
   ink appears complete.
 - Automatic inventory identifier sources come from native report universes and
