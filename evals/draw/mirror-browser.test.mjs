@@ -134,3 +134,42 @@ it("DQ-07 frames are visible native frame ink; unclassed decorations and clipped
     "mirror-locality",
   );
 });
+it("S1c actual role-stripped table ink remains discoverable on both needed and unneeded coils", async () => {
+  const f = mirrorFixture();
+  delete f.packet.navigation.annotations[0].role;
+  const ink = mirror.replace('data-navigation-role="mirror"', "");
+  const first = await openSheet(page, svg(body(0) + ink));
+  const second = await openSheet(page, svg(body(1) + ret));
+  const rows = first.texts.filter((t) => t.navigationAnnotation === "a0");
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows.every((t) => t.navigationRole === undefined)).toBe(true);
+  expect(rows.some((t) => t.mirrorRow)).toBe(true);
+  expect(
+    mirrorReturns(f.packet, [first, second], f.ir, f.request).findings,
+  ).toEqual([]);
+  f.ir.functions = f.ir.functions.filter((fn) => fn.kind !== "contact");
+  f.ir.internalRelations = [];
+  f.packet.navigation.occurrences = f.packet.navigation.occurrences.filter(
+    (o) => o.id === "o0",
+  );
+  f.packet.navigation.seeds = f.packet.navigation.seeds.filter(
+    (s) => s.source.functionKey === "coil",
+  );
+  f.packet.navigation.annotations = f.packet.navigation.annotations.filter(
+    (a) => a.id === "a0",
+  );
+  const empty = await openSheet(page, svg(""));
+  const clean = await openSheet(page, svg(body(0)));
+  expect(
+    mirrorReturns(f.packet, [clean, empty], f.ir, f.request).findings,
+  ).toEqual([]);
+  expect(
+    mirrorReturns(f.packet, [first, empty], f.ir, f.request).findings,
+  ).toContainEqual(
+    expect.objectContaining({
+      kind: "mirror-block-count",
+      expected: 0,
+      actual: 1,
+    }),
+  );
+});

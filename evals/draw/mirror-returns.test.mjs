@@ -408,3 +408,212 @@ it("DQ-07 primitive locators distinguish same-function full placements on one sh
   f.packet.navigation.occurrences[1].primitiveIds = ["forged"];
   expect(kinds(f)).toContain("navigation-appearance-reconciliation");
 });
+
+function outOfScopeContactFixture(trips) {
+  const f = mirrorFixture();
+  f.ir.devices[0].designation = "PB1";
+  f.ir.functions = f.ir.functions.filter((fn) => fn.kind !== "coil");
+  f.ir.internalRelations = trips
+    ? [
+        {
+          deviceUid: "k",
+          verb: "trips",
+          from: { deviceUid: "k", functionKey: "other" },
+          to: { deviceUid: "k", functionKey: "no" },
+        },
+      ]
+    : [];
+  f.packet.navigation.occurrences = f.packet.navigation.occurrences.filter(
+    (o) => o.id === "o1",
+  );
+  f.packet.navigation.seeds = f.packet.navigation.seeds.filter(
+    (s) => s.source.functionKey === "no",
+  );
+  f.packet.navigation.annotations = [];
+  f.geometries[0].shapes = [];
+  f.geometries[0].terminals = [];
+  for (const g of f.geometries)
+    g.texts = g.texts.filter((t) => !t.navigationAnnotation);
+  return f;
+}
+function addContactCaption(f, caption, role = "return") {
+  f.packet.navigation.annotations.push({
+    id: "contact-caption",
+    role,
+    ownerOccurrence: "o1",
+    ownerOccurrences: ["o1"],
+  });
+  f.geometries[1].texts.push(
+    text(caption, 30, 70, {
+      navigationAnnotation: "contact-caption",
+      navigationRole: role,
+    }),
+  );
+}
+it.each([false, true])(
+  "S1 out-of-scope contact permits no return caption (trips-only: %s)",
+  (trips) => {
+    const f = outOfScopeContactFixture(trips);
+    expect(audit(f).findings).toEqual([]);
+    expect(audit(f).contactAppearances).toMatchObject([
+      { assessment: "outside-direct-actuation-scope", measurements: [] },
+    ]);
+    addContactCaption(f, "K1 /02.B3");
+    // The zero-caption rule must fire, independently of caption text checks.
+    expect(audit(f).findings).toContainEqual(
+      expect.objectContaining({
+        kind: "return-caption-count",
+        deviceUid: "k",
+        functionKey: "no",
+        expected: 0,
+        actual: 1,
+      }),
+    );
+  },
+);
+it("S1b a local mirror heading must name its native coil", () => {
+  const f = mirrorFixture();
+  expect(audit(f).findings).toEqual([]);
+  expect(audit(f).coilAppearances[0].measurements[0]).toMatchObject({
+    ownerNearest: true,
+    selfLocated: false,
+  });
+  f.geometries[0].texts.at(-3).text = "K2";
+  expect(audit(f).findings).toContainEqual(
+    expect.objectContaining({
+      kind: "mirror-locality",
+      deviceUid: "k",
+      functionKey: "coil",
+      actual: "K2",
+      expectedHeading: "K1 /01.A1",
+    }),
+  );
+});
+function unspecifiedFixture() {
+  const f = mirrorFixture();
+  f.ir.internalRelations = [];
+  f.geometries[0].texts = f.geometries[0].texts.filter((t) => !t.mirrorRow);
+  f.geometries[0].texts.push(
+    text("Contact associations unspecified", 30, 76, {
+      navigationAnnotation: "a0",
+      navigationRole: "mirror",
+    }),
+  );
+  f.geometries[1].texts.at(-1).text =
+    "Actuating coil not specified in device data";
+  return f;
+}
+function stripMirrorRoles(f) {
+  delete f.packet.navigation.annotations.find((a) => a.id === "a0").role;
+  for (const t of f.geometries[0].texts)
+    if (t.navigationAnnotation === "a0") delete t.navigationRole;
+}
+it.each(["native row locator", "unspecified wording"])(
+  "S1c valid role-stripped mirror is discovered through %s",
+  (discovery) => {
+    const f =
+      discovery === "native row locator"
+        ? mirrorFixture()
+        : unspecifiedFixture();
+    stripMirrorRoles(f);
+    expect(audit(f).findings).toEqual([]);
+    expect(audit(f).coilAppearances[0].blocks).toHaveLength(1);
+  },
+);
+it.each(["native row locator", "unspecified wording"])(
+  "S1c role-stripped stray mirror cannot disappear (%s)",
+  (discovery) => {
+    const f =
+      discovery === "native row locator"
+        ? mirrorFixture()
+        : unspecifiedFixture();
+    f.ir.functions = f.ir.functions.filter((fn) => fn.kind !== "contact");
+    f.ir.internalRelations = [];
+    f.geometries[1].shapes = [];
+    f.geometries[1].terminals = [];
+    f.geometries[1].texts = f.geometries[1].texts.filter(
+      (t) => !t.navigationAnnotation,
+    );
+    f.packet.navigation.occurrences = f.packet.navigation.occurrences.filter(
+      (o) => o.id === "o0",
+    );
+    f.packet.navigation.seeds = f.packet.navigation.seeds.filter(
+      (s) => s.source.functionKey === "coil",
+    );
+    f.packet.navigation.annotations = f.packet.navigation.annotations.filter(
+      (a) => a.id === "a0",
+    );
+    stripMirrorRoles(f);
+    const stray = f.geometries[0].texts.filter((t) => t.navigationAnnotation);
+    f.geometries[0].texts = f.geometries[0].texts.filter(
+      (t) => !t.navigationAnnotation,
+    );
+    expect(audit(f).findings).toEqual([]);
+    f.geometries[0].texts.push(...stray);
+    expect(audit(f).findings).toContainEqual(
+      expect.objectContaining({
+        kind: "mirror-block-count",
+        expected: 0,
+        actual: 1,
+      }),
+    );
+  },
+);
+function tripsContactWithCoilFixture() {
+  const f = unspecifiedFixture();
+  f.ir.internalRelations = [
+    {
+      deviceUid: "k",
+      verb: "trips",
+      from: { deviceUid: "k", functionKey: "other" },
+      to: { deviceUid: "k", functionKey: "no" },
+    },
+  ];
+  f.geometries[1].texts = f.geometries[1].texts.filter(
+    (t) => !t.navigationAnnotation,
+  );
+  f.packet.navigation.annotations = f.packet.navigation.annotations.filter(
+    (a) => a.id === "a0",
+  );
+  return f;
+}
+it("L2 trips suppresses unspecified for a contact whose own device has a coil", () => {
+  const f = tripsContactWithCoilFixture();
+  expect(audit(f).findings).toEqual([]);
+  expect(audit(f).contactAppearances[0]).toMatchObject({
+    assessment: "outside-direct-actuation-scope",
+    blocks: [],
+  });
+});
+it("L2 a trips contact must reject an unspecified-coil caption", () => {
+  const f = tripsContactWithCoilFixture();
+  addContactCaption(
+    f,
+    "Actuating coil not specified in device data",
+    "association-unspecified",
+  );
+  expect(audit(f).findings).toContainEqual(
+    expect.objectContaining({
+      kind: "return-caption-count",
+      expected: 0,
+      actual: 1,
+    }),
+  );
+});
+it("L2 removing the trips relation restores the unspecified-coil obligation", () => {
+  const f = tripsContactWithCoilFixture();
+  f.ir.internalRelations = [];
+  expect(audit(f).findings).toContainEqual(
+    expect.objectContaining({
+      kind: "return-caption-count",
+      expected: 1,
+      actual: 0,
+    }),
+  );
+  addContactCaption(
+    f,
+    "Actuating coil not specified in device data",
+    "association-unspecified",
+  );
+  expect(audit(f).findings).toEqual([]);
+});
