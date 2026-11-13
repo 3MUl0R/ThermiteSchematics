@@ -63,6 +63,81 @@ export function locatorFixture(stacked = false) {
 }
 const audit = (f) => wireLocatorAudit(f.packet, f.geometries, f.ir);
 const cell = (f, end) => f.report.texts.find((t) => t.columnIndex === end + 5);
+it.each(["no rows", "other report"])(
+  "does not read native conductors without issued wire rows (%s)",
+  (scope) => {
+    const f = locatorFixture();
+    if (scope === "no rows") f.report.texts = [];
+    else f.packet.sheets[1].view.kind = "bom";
+    let reads = 0;
+    Object.defineProperty(f.ir, "wires", {
+      get() {
+        reads++;
+        throw Error("Endpoint reconstruction must not run");
+      },
+    });
+    expect(audit(f)).toEqual({ findings: [], measurements: [] });
+    expect(reads).toBe(0);
+  },
+);
+it.each([false, true])(
+  "audits issued requested and automatic wire inventories even without source endpoints (%s)",
+  (auto) => {
+    const f = locatorFixture();
+    for (const t of f.report.texts)
+      t.documentOrigin = auto ? "auto" : "requested";
+    delete f.ir.wires[0].endpoints;
+    const result = audit(f);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]).toMatchObject({
+      kind: "wire-locator-measurement-gap",
+      row: "w",
+      sheet: 2,
+      reason: "Native conductor w has incomplete endpoints",
+    });
+    expect(result.measurements).toEqual([]);
+  },
+);
+it.each(
+  [null, [], Array(2), [{}], [{ terminal: {} }, { terminal: {} }]].map(
+    (endpoints) => ({ endpoints }),
+  ),
+)(
+  "fails closed for malformed native endpoint data ($endpoints)",
+  ({ endpoints }) => {
+    const f = locatorFixture();
+    f.ir.wires[0].endpoints = endpoints;
+    expect(audit(f).findings.map((r) => r.kind)).toEqual([
+      "wire-locator-measurement-gap",
+    ]);
+  },
+);
+it("fails closed for missing jumper endpoints and incomplete cable terminal identities", () => {
+  const f = locatorFixture();
+  f.ir.jumpers = f.ir.wires;
+  f.ir.wires = [];
+  delete f.ir.jumpers[0].endpoints;
+  expect(audit(f).findings[0].kind).toBe("wire-locator-measurement-gap");
+  f.ir.jumpers = [];
+  f.ir.cables = [
+    {
+      uid: "c",
+      designation: "C",
+      typeId: "core",
+      assignments: [{ id: "1", endpoints: [{ terminal: {} }, null] }],
+    },
+  ];
+  f.ir.cableTypes = [{ id: "core", conductors: [{ id: "1" }] }];
+  for (const t of [...f.report.texts, ...f.report.reportCells])
+    t.row = '["c","1"]';
+  expect(audit(f).findings[0].kind).toBe("wire-locator-measurement-gap");
+});
+it("fails closed when an issued wire row has no native source", () => {
+  const f = locatorFixture();
+  f.ir.wires = [];
+  expect(audit(f).findings).toHaveLength(1);
+  expect(audit(f).findings[0].kind).toBe("wire-locator-measurement-gap");
+});
 it.each([false, true])(
   "checks every printed locator in ordinary and stacked geometry (%s)",
   (stacked) => {

@@ -250,6 +250,9 @@ are reconciled with native keys and descriptions, including in old unkeyed outpu
 Zones use painted label anchors and accept any spanned zone. Wrong sheets/zones,
 missing values, and `not drawn` for a drawn endpoint fail in ordinary and stacked
 tables. Report pages, hidden/clipped ink and native peers supply no landing.
+The locator audit reconstructs endpoints only when measured issued wire rows
+exist. Missing or incomplete native endpoint sources for an issued inventory
+produce a `wire-locator-measurement-gap` failure rather than an exception or pass.
 
 Version **5.9** adds M3 companion delivery against `issued-documents/1`:
 

@@ -127,16 +127,51 @@ export function measuredWireAppearances(packet, geometries, ir, rows) {
 }
 
 export function wireLocatorAudit(packet, geometries, ir) {
-  const native = nativeRows(ir).filter((r) => r.kind === "wires");
+  const inventory = issuedRows(packet, geometries).filter(
+    (r) => r.kind === "wires",
+  );
+  // Continuation-only and other non-inventory evaluations may contain only
+  // conductor identities. They do not require native endpoint reconstruction.
+  if (!inventory.length) return { findings: [], measurements: [] };
+  const gap = (row, reason) =>
+    finding("wire-locator-measurement-gap", row.texts[0], {
+      sheet: row.sheet,
+      row: row.key,
+      reason,
+    });
+  const terminal = (t) =>
+    typeof t?.deviceUid === "string" &&
+    t.deviceUid.length > 0 &&
+    typeof t?.terminalKey === "string" &&
+    t.terminalKey.length > 0;
+  let native;
+  try {
+    for (const w of [...(ir.wires ?? []), ...(ir.jumpers ?? [])])
+      if (
+        !Array.isArray(w.endpoints) ||
+        w.endpoints.length !== 2 ||
+        ![0, 1].every((i) => terminal(w.endpoints[i]?.terminal))
+      )
+        throw Error(`Native conductor ${w.uid} has incomplete endpoints`);
+    native = nativeRows(ir).filter((r) => r.kind === "wires");
+    if (native.some((r) => r.ends.some((t) => t != null && !terminal(t))))
+      throw Error("Native conductor has incomplete terminal identity");
+  } catch (error) {
+    return {
+      findings: inventory.map((row) => gap(row, error.message)),
+      measurements: [],
+    };
+  }
   const rows = new Map(native.map((r) => [r.key, r]));
   const drawn = measuredWireAppearances(packet, geometries, ir, native);
   const findings = [],
     measurements = [];
-  for (const row of issuedRows(packet, geometries).filter(
-    (r) => r.kind === "wires",
-  )) {
+  for (const row of inventory) {
     const source = rows.get(row.key);
-    if (!source) continue;
+    if (!source) {
+      findings.push(gap(row, "Issued wire row has no native endpoint source"));
+      continue;
+    }
     for (const end of [0, 1]) {
       const endpoint = source.ends[end],
         appearances = endpoint ? (drawn.get(terminalKey(endpoint)) ?? []) : [];

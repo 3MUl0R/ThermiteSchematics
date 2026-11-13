@@ -140,51 +140,61 @@ it.each([false, true])(
   },
 );
 
-it("connects measured locator failures to the DQ-19 sheet verdict", async () => {
-  const { evaluateSheet } = await import("./evaluate.mjs");
-  const ir = native();
-  Object.assign(ir, { functions: [], nets: [] });
-  const p = structuredClone(packet);
-  for (const s of p.sheets)
-    Object.assign(s, { references: [], continuations: [] });
-  const source = await openSheet(page, drawing()),
-    report = await openSheet(page, schedule(false, "not drawn"));
-  const table = {
-    kind: "wires",
-    documentId: "doc",
-    columns: [
-      "Conductor / label",
-      "End A / first endpoint",
-      "End B / second endpoint",
-      "Color / size",
-      "Assignment",
-      "From sheet.zone",
-      "To sheet.zone",
-    ],
-    rows: [
-      {
-        key: "w",
-        cells: ["W1", "A.1", "B.1", "Blue", "Connected", "01.A1", "01.B3"],
-      },
-    ],
-  };
-  const results = evaluateSheet(
-    { id: "native-locator", flow: "left-to-right" },
-    p.sheets[1],
-    p,
-    report,
-    ir,
-    [],
-    [],
-    [],
-    [table],
-    [source, report],
-    { views: [] },
-  );
-  expect(
-    results
-      .filter((r) => r.dq === "DQ-19")
-      .flatMap((r) => r.evidence.findings)
-      .some((f) => f.kind === "wire-locator-undrawn-claim"),
-  ).toBe(true);
-});
+it.each([false, true])(
+  "connects measured locator failures and native data gaps to the DQ-19 sheet verdict (%s)",
+  async (missingNative) => {
+    const { evaluateSheet } = await import("./evaluate.mjs");
+    const ir = native();
+    Object.assign(ir, { functions: [], nets: [] });
+    const p = structuredClone(packet);
+    for (const s of p.sheets)
+      Object.assign(s, { references: [], continuations: [] });
+    const source = await openSheet(page, drawing()),
+      report = await openSheet(page, schedule(false, "not drawn"));
+    const table = {
+      kind: "wires",
+      documentId: "doc",
+      columns: [
+        "Conductor / label",
+        "End A / first endpoint",
+        "End B / second endpoint",
+        "Color / size",
+        "Assignment",
+        "From sheet.zone",
+        "To sheet.zone",
+      ],
+      rows: [
+        {
+          key: "w",
+          cells: ["W1", "A.1", "B.1", "Blue", "Connected", "01.A1", "01.B3"],
+        },
+      ],
+    };
+    if (missingNative) delete ir.wires[0].endpoints;
+    const results = evaluateSheet(
+      { id: "native-locator", flow: "left-to-right" },
+      p.sheets[1],
+      p,
+      report,
+      ir,
+      [],
+      [],
+      [],
+      [table],
+      [source, report],
+      missingNative ? undefined : { views: [] },
+    );
+    expect(
+      results
+        .filter((r) => r.dq === "DQ-19")
+        .flatMap((r) => r.evidence.findings)
+        .some(
+          (f) =>
+            f.kind ===
+            (missingNative
+              ? "wire-locator-measurement-gap"
+              : "wire-locator-undrawn-claim"),
+        ),
+    ).toBe(true);
+  },
+);
