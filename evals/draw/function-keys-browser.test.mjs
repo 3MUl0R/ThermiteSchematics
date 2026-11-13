@@ -84,6 +84,15 @@ it.each(flows)(
           }),
         ).toEqual([]);
       }
+      for (const sheet of result.value.sheets.filter((s) =>
+        autoPages.has(s.number),
+      )) {
+        const geometry = await openSheet(page, sheet.svg);
+        expect(
+          geometry.texts.filter((t) => t.authoredText === "request-note"),
+        ).toEqual([]);
+        expect(functionKeys(geometry, f.ir, { sheet, request })).toEqual([]);
+      }
       expect(wrapped).toBe(true);
       const { document } = parseHTML(result.value.sheets[0].svg);
       const generated = [

@@ -1,3 +1,4 @@
+import { m3Delivery } from "./m3-delivery.mjs";
 import { zoneAt } from "./checks.mjs";
 import { createHash } from "node:crypto";
 import { finding, painted, groupBy } from "./review-geometry.mjs";
@@ -185,7 +186,7 @@ function coreFacts(ir, uids) {
   }
   return facts;
 }
-function logicalPointerNotes(texts) {
+export function logicalPointerNotes(texts) {
   const result = [];
   for (const t of texts.filter((t) => painted(t) && !t.row)) {
     const last = result.at(-1),
@@ -336,7 +337,7 @@ function containsFact(value, source) {
     "u",
   ).test(String(value ?? "").normalize("NFC"));
 }
-function sufficient(row, fact) {
+export function sufficient(row, fact) {
   if (row.kind !== fact.kind || row.key !== fact.key) return false;
   for (const [column, values] of Object.entries(fact.required)) {
     const value = compact(row.cells[column]);
@@ -367,7 +368,14 @@ function sufficient(row, fact) {
       c.peers.every((p) => containsFact(connections, p)),
   );
 }
-export function dependencyFindings(sheet, packet, g, geometries, ir, request) {
+export function legacyDependencyFindings(
+  sheet,
+  packet,
+  g,
+  geometries,
+  ir,
+  request,
+) {
   const dependencies = pointerDependencies(sheet, g, ir),
     issued = visibleDocumentRows(packet, geometries),
     findings = [],
@@ -502,4 +510,18 @@ export function dependencyFindings(sheet, packet, g, geometries, ir, request) {
       inventory: inventory ? "reconciled" : "legacy-native-reconstruction",
     },
   };
+}
+
+export function dependencyFindings(
+  sheet,
+  packet,
+  g,
+  geometries,
+  ir,
+  request,
+  context,
+) {
+  return request || packet.navigation?.documentFormat
+    ? m3Delivery(sheet, packet, g, geometries, ir, request, context)
+    : legacyDependencyFindings(sheet, packet, g, geometries, ir, request);
 }

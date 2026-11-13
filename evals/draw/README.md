@@ -231,6 +231,32 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version **5.9** adds M3 companion delivery against `issued-documents/1`:
+
+- Native IR supplies typed endpoint incidences (including endpoint ordinals),
+  terminal, port, core and assembly identities, persistent note ids and states.
+  Exports locate ink and are reconciled against that independent reconstruction.
+  Missing versioned exports remain a failing measurement gap, even when native
+  ink appears complete.
+- Automatic inventory identifier sources come from native report universes and
+  unresolved native needs. Requested filters and the 1–40 authored views retain
+  their own scope; automatic documents have a separate origin.
+- DQ-19 checks each issued document independently, visible rows, semantic headers,
+  native source/presentation bindings, dependency resolutions and caption delivery.
+  Missing, extra, foreign, stale, hidden, clipped or JSON-only content fails.
+- DQ-09 measures the final center of the complete row region from all measured
+  cell rectangles, rounds to 0.01 mm, and checks every captioned sheet.zone.
+  Per NAV3 review L4, any zone spanned by that region is valid; the center is
+  canonical when choosing among valid locations.
+  Identity and compact-count captions are checked against the native fact
+  partition, including the leading omission count on identity captions.
+  Dotted port selectors fail. Standalone partial-view wording does
+  not erase a concrete native need; generic partial warnings promise none.
+- The existing four-side-grid and title predicates continue to check automatic
+  pages. Automatic terminal inventories do not become requested graphical
+  terminal plans (DQ-23). Authored notes belong only to authored pages; generated inventory ink
+  receives no authored-note exemption. No expectation or re-pin changes.
+
 Version **5.8** adds E2b's independent NAV2 checks and E2a follow-ups:
 
 - M5 collects whole canonical/repeat/mixed ink blocks by their printed repeat

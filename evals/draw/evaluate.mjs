@@ -1,3 +1,8 @@
+import {
+  tableForSheet,
+  documentInventory,
+  requestedTerminalPlan,
+} from "./m3-documents.mjs";
 import { mirrorReturns } from "./mirror-returns.mjs";
 const mirrorAudits = new WeakMap();
 import { repeatNavigation } from "./repeat-navigation.mjs";
@@ -366,6 +371,7 @@ export function evaluateSheet(
     geometries,
     ir,
     request,
+    { binding: tables.binding, tables },
   );
   out.push(
     obs("DQ-09", dependencies.targetFindings, {
@@ -388,7 +394,7 @@ export function evaluateSheet(
   out.push(
     obs(
       "DQ-23",
-      s.view.kind === "terminals" && g.reportRows.length
+      requestedTerminalPlan(s, g, tables) && g.reportRows.length
         ? [
             {
               kind: "terminal-plan-is-table",
@@ -423,12 +429,7 @@ export function evaluateSheet(
         .textBounds({ ...g, texts: g.texts.filter((t) => t.row) })
         .filter((x) => x.kind === "text-outside-cell"),
       ...cohort(
-        checks.reports(
-          g,
-          s,
-          packet,
-          tables.find((t) => t.kind === s.view.kind),
-        ),
+        checks.reports(g, s, packet, tableForSheet(s, g, tables)),
         (f) =>
           f.kind === "report-null-placeholder"
             ? [f.kind, f.columnIndex]
@@ -520,31 +521,27 @@ export function evaluatePacket(c, packet, geometries, tables = []) {
       });
     }
   }
-  for (const table of tables.filter(
-    (t, i) => tables.findIndex((x) => x.kind === t.kind) === i,
-  )) {
+  const kindCounts = new Map();
+  for (const table of tables) {
+    const ordinal = kindCounts.get(table.kind) ?? 0;
+    kindCounts.set(table.kind, ordinal + 1);
     const sheet =
-      packet.sheets.find((s) => s.view.kind === table.kind) ?? first;
+      packet.sheets.find(
+        (s, i) =>
+          s.view.kind === table.kind &&
+          (!table.documentId ||
+            geometries[i].texts.some((t) => t.documentId === table.documentId)),
+      ) ?? first;
     out.push({
       ...observation(
         c,
         sheet,
         "DQ-19",
-        tables.filter((t) => t.kind === table.kind).length === 1
-          ? checks.reportInventory(table, packet, geometries)
-          : [],
+        documentInventory(table, packet, geometries),
       ),
-      id: `${c.id}/DQ-19/query-${table.kind}`,
-      ...(tables.filter((t) => t.kind === table.kind).length > 1
-        ? {
-            status: "not-implemented",
-            reason:
-              "Needs source request/view index on report sheets to distinguish multiple reports of the same kind.",
-          }
-        : {
-            scope:
-              "Exact source-row identities and multiplicities from the built public query API versus actual DOM report rows.",
-          }),
+      id: `${c.id}/DQ-19/query-${table.kind}${ordinal ? `-${table.origin ?? "requested"}-${ordinal}` : ""}`,
+      scope:
+        "Each actual issued document is reconciled independently against native source and its requested or automatic scope.",
     });
   }
   const indexes = packet.sheets.filter((s) => s.view.kind === "index");

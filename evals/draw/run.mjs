@@ -67,6 +67,7 @@ import { criteria } from "./criteria.mjs";
 import { requireReportCells } from "./checks.mjs";
 import { identifierFindings } from "./identifier-checks.mjs";
 import { identifierTable } from "./identifier-tables.mjs";
+import { buildSourceTables, scopeTables } from "./m3-documents.mjs";
 import { pdfIdentifierRuns } from "./identifier-pdf.mjs";
 import { gallery } from "./gallery.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url)),
@@ -174,6 +175,9 @@ try {
   await access(join(engine, "packages/cli/dist/alpha.js"));
   browser = await launch();
   const native = values.pdfkit ? await nativeTool(root) : null;
+  const compiler = await import(
+    pathToFileURL(join(engine, "packages/compiler/dist/index.js")).href
+  );
   const query = await import(
     pathToFileURL(join(engine, "packages/query/dist/index.js")).href
   );
@@ -355,9 +359,14 @@ try {
         if (compiled.code !== 0)
           throw Error(`Compile failed: ${compiled.stderr}`);
         const ir = await readJson(join(directory, "ir.json"));
-        const tables = request.views
-          .filter((v) => v.format === "documentation-view-request/0.1")
-          .map((v) => query.buildDocumentation(ir, v));
+        const source = await compiler.compileProject(project);
+        if (!source.ok) throw Error("Native source binding compilation failed");
+        const binding = {
+          snapshotDigest: hash(JSON.stringify(compiler.serializeIr(source.ir))),
+          presentationDigest: hash(JSON.stringify(source.presentation ?? null)),
+          revision: source.presentation?.revision ?? "UNSPECIFIED",
+        };
+        let tables = buildSourceTables(ir, request, query.buildDocumentation);
         await writeFile(join(directory, "query-reports.json"), json(tables));
         // Produce each public artifact through the built CLI, not a renderer import.
         const pdfPath = join(directory, "packet.pdf"),
@@ -419,6 +428,8 @@ try {
           geometries,
           packet.sheets.map((s) => viewKey(s.view)),
         );
+        tables = scopeTables(packet, geometries, ir, tables, request);
+        tables.binding = binding;
         for (const s of packet.sheets) {
           const prefix = `sheet-${String(s.number).padStart(3, "0")}`,
             svgPath = join(directory, `${prefix}.svg`);
