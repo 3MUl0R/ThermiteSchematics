@@ -747,7 +747,7 @@ it("discovers a requested document with zero body rows from its actual header an
     { key: '["a","P"]' },
   ]);
 });
-it("assembly delivery preserves unresolved native pin-map state and singular compact counts", () => {
+function assemblyFixture() {
   const f = fixture(),
     dep = f.packet.navigation.dependencies[0],
     doc = f.packet.navigation.documents[0],
@@ -809,6 +809,13 @@ it("assembly delivery preserves unresolved native pin-map state and singular com
   f.report.texts.find((t) => t.text === "network inventory").text =
     "assembly inventory";
   f.tables = [];
+  return f;
+}
+it("assembly delivery preserves unresolved native pin-map state and singular compact counts", () => {
+  const f = assemblyFixture(),
+    dep = f.packet.navigation.dependencies[0],
+    doc = f.packet.navigation.documents[0],
+    row = doc.rows[0];
   expect(errors(f)).toEqual([]);
   const unspecified = clone(f);
   delete unspecified.ir.relations[0].assembly.status;
@@ -1098,6 +1105,9 @@ function nullFindings(f, sourceCells) {
     f.packet.sheets[1],
     f.packet,
     sourceCells && {
+      kind: f.ir.relations?.some((r) => r.uid === key && r.assembly)
+        ? "assemblies"
+        : undefined,
       rows: [{ key, cells: sourceCells }],
     },
   ).filter((x) => x.kind === "report-null-placeholder");
@@ -1114,9 +1124,15 @@ it.each([
   ["unspecified-status", "Status not specified"],
   ["unspecified-medium", "Not specified"],
   ["unspecified-medium", "Protocol / medium not specified"],
+  ["assembly-status", "Not specified"],
+  ["assembly-status", "Status not specified"],
 ])("M3 and null policy accept explicit native %s: %s", (state, form) => {
   const terminal = state.startsWith("no-"),
-    f = terminal ? terminalFixture() : fixture();
+    f = terminal
+      ? terminalFixture()
+      : state === "assembly-status"
+        ? assemblyFixture()
+        : fixture();
   const column =
     state === "no-same-location-connections"
       ? 4
@@ -1126,21 +1142,39 @@ it.each([
           ? 1
           : 4;
   if (state === "unspecified-medium") delete f.ir.deviceTypes[0].ports.P.medium;
+  if (state === "assembly-status") {
+    delete f.ir.relations[0].assembly.status;
+    f.ir.relations[0].assembly.pinMapping.reason =
+      "Vendor pinout unspecified; None is a source word (null)";
+  }
   // Keep the source query's old placeholders to check the rules' shared policy
   // even when only the visible rendering has changed.
-  const sourceCells = terminal
-    ? ["A", "", "U", "", "None", "None", "Unconnected"]
-    : [
-        "--",
-        state === "unspecified-medium" ? "Unspecified" : "ethernet",
-        "A: P",
-        "Unconnected",
-        "Unspecified",
-      ];
+  const sourceCells =
+    state === "assembly-status"
+      ? [
+          "CB",
+          "cordset",
+          "A.J",
+          "B.J",
+          `Unspecified\nPin mapping: unresolved\n${f.ir.relations[0].assembly.pinMapping.reason}`,
+        ]
+      : terminal
+        ? ["A", "", "U", "", "None", "None", "Unconnected"]
+        : [
+            "--",
+            state === "unspecified-medium" ? "Unspecified" : "ethernet",
+            "A: P",
+            "Unconnected",
+            "Unspecified",
+          ];
   for (const t of f.report.texts.filter((t) => t.row)) {
     if (terminal && [4, 5].includes(t.columnIndex)) t.text = "No connections";
     if (!terminal && t.columnIndex === 4) t.text = "Status not specified";
-    if (t.columnIndex === column) t.text = form;
+    if (t.columnIndex === column)
+      t.text =
+        state === "assembly-status"
+          ? `${form} Pin mapping: unresolved ${f.ir.relations[0].assembly.pinMapping.reason}`
+          : form;
   }
   expect(errors(f)).toEqual([]);
   expect(nullFindings(f, sourceCells)).toEqual([]);
@@ -1155,6 +1189,31 @@ it.each([
     ).toBe(true);
   }
 });
+it.each(["None", "Unspecified", "null", "None\nUnspecified\nnull"])(
+  "native assembly reason %s is authored text, never a null field",
+  (reason) => {
+    const f = assemblyFixture();
+    const assembly = f.ir.relations[0].assembly;
+    delete assembly.status;
+    assembly.pinMapping.reason = reason;
+    const suffix = `Pin mapping: unresolved\n${reason}`;
+    const source = ["CB", "cordset", "A.J", "B.J", `Unspecified\n${suffix}`];
+    const ink = f.report.texts.find((t) => t.row && t.columnIndex === 4);
+    ink.text = `Status not specified\n${suffix}`;
+    expect(errors(f)).toEqual([]);
+    expect(nullFindings(f, source)).toEqual([]);
+    ink.text = `Unspecified\n${suffix}`;
+    expect(nullFindings(f, source)).toHaveLength(1);
+    assembly.status = "planned";
+    ink.text = source[4] = `planned\n${suffix}`;
+    expect(errors(f)).toEqual([]);
+    expect(nullFindings(f, source)).toEqual([]);
+    ink.text = `planned\nPin mapping: unresolved\n${reason} altered`;
+    expect(
+      errors(f).some((x) => x.kind === "printed-document-target-insufficient"),
+    ).toBe(true);
+  },
+);
 it("legacy placeholders still deliver native states while retaining the null-policy defect", () => {
   for (const f of [terminalFixture(), fixture()]) {
     expect(errors(f)).toEqual([]);

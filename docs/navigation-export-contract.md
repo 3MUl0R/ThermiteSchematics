@@ -225,3 +225,34 @@ and all other content stay exact. Unchanged companions therefore do not block a
 circuit-page reduction before them. This
 renderer guard conserves an already printable result; it does not replace E3's
 independent source reconstruction or establish electrical completeness.
+
+## Wire schedule endpoint locations
+
+Wire and core schedules always reserve `From sheet.zone` and `To sheet.zone`,
+including requested, filtered and automatic inventories. Each cell locates that
+native endpoint's actual terminal landing in the finalized packet, using the
+same decimal half-up quantization, half-open zone grid and zero-padded
+`sheet.zone` formatter as navigation. Repeated appearances use the first resolved
+landing in sheet and SVG order. Any zone spanned by that landing is acceptable.
+The native endpoint slot determines the column, even when the path is reversed.
+
+The explicit unresolved form is `not drawn`: it may print only when that native
+endpoint has no drawn landing on any issued sheet. A drawn endpoint whose locator
+cannot be resolved is a renderer error, never an empty state. The exact native
+terminal marker supplies the landing, including when a selected view omits this
+wire but draws the same physical terminal through another conductor. A nearby
+device, a different same-net terminal, an inventory row, hidden ink or a clipped
+marker supplies no location. This does not imply an absent electrical connection.
+Singly terminated, spare and unassigned cores retain their native endpoint slots.
+Location columns reserve the widest printed locator, including `not drawn`, with
+2 mm cell insets. Allocation first tries seven real columns with the native line-count capacity.
+If they cannot fit, seven real columns may add native wraps only when measured
+pagination stays at the native packet capacity. Only if that would add pages do
+the two location fields stack beneath their respective endpoints. Stacked fields
+retain separate painted rectangles and painted header sub-cells, with explicit
+`From sheet.zone` / `To sheet.zone` labels. Native text and location ink each stay
+inside their own sub-cell; ordinary tables retain one rectangle per column.
+No tier shrinks the font or drops text. Final location filling cannot move rows or add pages. CSV reports have no packet geometry and
+print `not drawn` unless the caller supplies endpoint references. Raw native query
+tables retain their optional location projection; renderers reserve it before
+layout.

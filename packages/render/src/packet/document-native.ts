@@ -1,5 +1,9 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import { buildDocumentation, type DocumentationTable } from "@thermite/query";
+import {
+  buildDocumentation,
+  type DocumentationTable,
+  type ScheduleReferences,
+} from "@thermite/query";
 import type { DocumentNeedSeed } from "./document-types.js";
 import {
   factKey,
@@ -13,6 +17,7 @@ export function nativeDocumentTable(
   ir: Readonly<ElectricalIr>,
   kind: string,
   rowKey: string,
+  references?: ScheduleReferences,
 ): DocumentationTable | undefined {
   if (!["wires", "terminals", "network", "assemblies"].includes(kind))
     return undefined;
@@ -31,11 +36,15 @@ export function nativeDocumentTable(
       return undefined;
     }
   }
-  return buildDocumentation(ir, {
-    format: "documentation-view-request/0.1",
-    kind: kind as "wires" | "terminals" | "network" | "assemblies",
-    ...(device ? { device } : {}),
-  });
+  return buildDocumentation(
+    ir,
+    {
+      format: "documentation-view-request/0.1",
+      kind: kind as "wires" | "terminals" | "network" | "assemblies",
+      ...(device ? { device } : {}),
+    },
+    kind === "wires" ? (references ?? {}) : undefined,
+  );
 }
 const keys = (value: object) => Object.keys(value).sort().join(",");
 function factShape(fact: DocumentNeedSeed["requiredFacts"][number]) {

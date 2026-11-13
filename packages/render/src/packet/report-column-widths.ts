@@ -128,6 +128,7 @@ export function reportColumns(
   projectNames: readonly (ReportName | string)[],
   identifiers: ReportIdentifiers = new Map(),
   wholeHeaders: readonly number[] = [],
+  padding = table.kind === "wires" ? 2 : 1,
 ) {
   const names = projectNames
     .map((name) =>
@@ -205,7 +206,7 @@ export function reportColumns(
   const required = headers.map((words, i) =>
     largest([...words, ...body[i]!], empty),
   );
-  const wholeMinimum = required.map((v) => v.width + 2.02);
+  const wholeMinimum = required.map((v) => v.width + 2 * padding + 0.02);
   const wholeWidth = wholeMinimum.reduce((a, b) => a + b, 0);
   const relaxed = headers.map(
     (words, i) =>
@@ -213,7 +214,9 @@ export function reportColumns(
         0,
         ...words.map((v) => headerMinimum(v.token, size)),
         ...body[i]!.map((v) => v.width),
-      ) + 2.02,
+      ) +
+      2 * padding +
+      0.02,
   );
   const hyphenatedColumns = table.columns.map(() => false);
   const minimum = [...wholeMinimum];
@@ -248,7 +251,7 @@ export function reportColumns(
     .filter((v) => v.token)
     .sort((a, b) => b.width - a.width || a.column - b.column)[0];
   const common = {
-    padding: 1,
+    padding,
     hyphenate,
     hyphenatedColumns,
     wholeWidth,

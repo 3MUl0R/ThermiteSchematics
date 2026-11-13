@@ -283,7 +283,7 @@ describe("documentation preserves authored meaning", () => {
     const io = report("io");
     expect(row(io, "B1").cells.slice(3, 6)).toEqual(["", "", ""]);
     expect(row(io, "PLC1").cells.at(-1)).toContain("spare;");
-    expect(row(io, "B1").cells.at(-1)).toContain("Unspecified;");
+    expect(row(io, "B1").cells.at(-1)).toContain("Not specified;");
     const explicit = structuredClone(ir);
     explicit.devices[0]!.location = "Unspecified";
     explicit.deviceTypes[0]!.catalog = {
@@ -337,13 +337,21 @@ describe("documentation preserves authored meaning", () => {
     expect(row(table, "B1").cells.slice(0, 3)).toEqual(["B1", "T", "output"]);
     expect(table.title).toBe("I/O schedule");
   });
-  it("reserves endpoint sheet.zone columns until injected values exist, including cable cores", () => {
+  it("always reserves endpoint sheet.zone columns with explicit unresolved locations, including cable cores", () => {
     const request = {
       format: "documentation-view-request/0.1" as const,
       kind: "wires" as const,
     };
-    const empty = buildDocumentation(ir, request);
-    expect(empty.columns).not.toContain("From sheet.zone");
+    const empty = buildDocumentation(ir, request, {});
+    expect(empty.columns.slice(-2)).toEqual([
+      "From sheet.zone",
+      "To sheet.zone",
+    ]);
+    expect(
+      empty.rows.every((r) =>
+        r.cells.slice(-2).every((v) => v === "not drawn"),
+      ),
+    ).toBe(true);
     const cable = ir.cables.find((c) => c.designation === "CBL1")!;
     const context = {
       conductors: new Map<string, EndpointSheetZones>([
@@ -359,10 +367,13 @@ describe("documentation preserves authored meaning", () => {
       "From sheet.zone",
       "To sheet.zone",
     ]);
-    expect(row(table, "W1").cells.slice(-2)).toEqual(["2.B3", ""]);
+    expect(row(table, "W1").cells.slice(-2)).toEqual(["2.B3", "not drawn"]);
     expect(row(table, "CBL1/1").cells.slice(-2)).toEqual(["3.C2", "4.A1"]);
-    expect(row(table, "CBL1/2").cells.slice(-2)).toEqual(["", ""]);
-    expect(row(table, "J1").cells.slice(-2)).toEqual(["5.A1", ""]);
+    expect(row(table, "CBL1/2").cells.slice(-2)).toEqual([
+      "not drawn",
+      "not drawn",
+    ]);
+    expect(row(table, "J1").cells.slice(-2)).toEqual(["5.A1", "not drawn"]);
     const schedule = buildCableSchedule(
       ir,
       cable.uid,
@@ -386,7 +397,7 @@ describe("documentation preserves authored meaning", () => {
         { ...request, filter: { devices: ["B1"] } },
         { conductors: context.conductors },
       ).columns,
-    ).not.toContain("From sheet.zone");
+    ).toContain("From sheet.zone");
     expect(
       buildDocumentation(ir, request, {
         cableCores: new Map([[cable.uid, new Map([["2", ["9.D6", "9.D6"]]])]]),

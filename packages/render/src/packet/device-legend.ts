@@ -17,6 +17,7 @@ import { required } from "../presentation/util.js";
 import { legendBoundFailure } from "./legend-bound-failure.js";
 import { centroidReferences } from "./navigation-occurrences.js";
 import { finalizeNavigation } from "./navigation-finalize.js";
+import { finalizeWireSchedules } from "./wire-schedule-locations.js";
 export interface LegendViewDrafts {
   navigationView?: import("./navigation-types.js").NavigationView;
   drafts: Draft[];
@@ -63,7 +64,9 @@ export function legendSheets(
     if (!legend.ok) return { ...legend, failedSheet: i };
     sheets[i] = { ...sheet, svg: legend.value };
   }
-  const finalized = finalizeNavigation(ir, drafts, sheets, {
+  const finalizedDrafts = structuredClone(drafts);
+  finalizeWireSchedules(ir, finalizedDrafts, sheets, page);
+  const finalized = finalizeNavigation(ir, finalizedDrafts, sheets, {
     notice: includeNotice,
     page,
     ...(documents ? { documents } : {}),

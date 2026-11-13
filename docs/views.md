@@ -443,6 +443,17 @@ placement attempts only after an emitter/ink/page-cost validated candidate
 exists; ordinary recovery retains its existing budget. Exhaustion keeps the
 validated candidate and does not declare the search settled.
 
+Report cells describe absent native facts explicitly: terminal columns print
+`No same-location connections` or `No other / unspecified location connections`,
+and absent statuses print `Status not specified`. Known connections, protocols,
+statuses and authored pin-map reasons keep their source text. I/O net endpoint
+columns use `No connections`; missing usage uses `Not specified`.
+Wire schedules always include endpoint `From sheet.zone` and `To sheet.zone`
+columns. Locations resolve from the final native terminal landings; `not drawn`
+means that endpoint has no drawn landing on any issued sheet. Narrow schedules
+may place each location beneath its endpoint. See the
+[navigation export contract](navigation-export-contract.md#wire-schedule-endpoint-locations).
+
 Each sheet includes references identifying the visible device/function and its
 A-D / 1-6 zone. Cable endpoints and schedule rows also contribute references.
 `index: true` appends an index of content sheets and a device/function reference

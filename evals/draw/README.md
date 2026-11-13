@@ -231,6 +231,18 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version **5.10** compares DQ-19 null placeholders by semantic source line, so an
+assembly's authored pin-map reason cannot impersonate its absent status. The
+DQ-19/M3 agreement tests include assembly status and preserve the exact reason.
+Native assembly reason lines are authored text even when exactly `None`,
+`Unspecified` or `null`; the native status line retains its null-policy check.
+The DQ-19 criterion now says explicit native empty states, rather than blank nulls.
+
+Checker **5.10** also measures stacked wire-location fields from their painted
+partitions and visible native headers, independently of column flags or rectangle
+order. Seven fields, complete header sub-cells, contained locator ink and the
+ordinary one-rectangle-per-column contract have negative browser controls.
+
 Version **5.9** adds M3 companion delivery against `issued-documents/1`:
 
 - Native IR supplies typed endpoint incidences (including endpoint ordinals),

@@ -514,7 +514,12 @@ const module: FactModule = {
           rows.filter((r) => r[0] === link).map((r) => r[4]);
         expect(
           ["NET1", "NET2", "NET3", "NET4"].map((link) => status(link)),
-        ).toEqual([["planned"], ["verified"], ["Unspecified"], ["verified"]]);
+        ).toEqual([
+          ["planned"],
+          ["verified"],
+          ["Status not specified"],
+          ["verified"],
+        ]);
         const unconnected = rows.filter((r) => r[3] === "Unconnected");
         expect(unconnected.map((r) => r[2]!.split("\n")[0]).sort()).toEqual([
           "HMI1.BUS",
@@ -523,7 +528,9 @@ const module: FactModule = {
           "SW1.BUS",
         ]);
         // PLC1.ETH2 is even reviewed as intentionally unused.
-        expect(unconnected.every((r) => r[4] === "Unspecified")).toBe(true);
+        expect(unconnected.every((r) => r[4] === "Status not specified")).toBe(
+          true,
+        );
         expect(rows.flat().join(" ")).not.toMatch(/spare/i);
       },
     },

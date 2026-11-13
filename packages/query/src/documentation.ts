@@ -311,18 +311,18 @@ function buildDocumentationTable(
           [device.connectorIo!.addressSpace, assignment?.address]
             .filter(Boolean)
             .join("\n"),
-          [assignment?.signal, `Usage: ${assignment?.usage ?? "Unspecified"}`]
+          [assignment?.signal, `Usage: ${assignment?.usage ?? "Not specified"}`]
             .filter(Boolean)
             .join("\n"),
           relation
-            ? `${relation.designation ?? relation.uid} (${assembly!.kind}; ${assembly!.status ?? "Unspecified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
+            ? `${relation.designation ?? relation.uid} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
             : "Unoccupied",
           assembly
             ? `${assembly.pinMapping.status}\n${assembly.pinMapping.reason}`
             : "No assembly; mapping unspecified",
           review
             ? `${review.status === "intentionally-unused" ? "Intentionally unused" : review.status}\n${review.reason}`
-            : "Unspecified",
+            : "Status not specified",
         ],
       });
     }
@@ -379,7 +379,7 @@ function buildDocumentationTable(
           [`${to.designation}.${a.toPort}`, to.location]
             .filter(Boolean)
             .join("\n"),
-          `${a.status ?? "Unspecified"}\nPin mapping: ${a.pinMapping.status}\n${a.pinMapping.reason}`,
+          `${a.status ?? "Status not specified"}\nPin mapping: ${a.pinMapping.status}\n${a.pinMapping.reason}`,
         ],
       });
     }
@@ -450,7 +450,7 @@ function buildDocumentationTable(
           ]
             .filter(Boolean)
             .join("\n"),
-          c.status ?? "Unspecified",
+          c.status ?? "Status not specified",
         ],
         deviceUids: [a.uid, b.uid],
       });
@@ -462,7 +462,7 @@ function buildDocumentationTable(
         key: JSON.stringify([port.deviceUid, port.key]),
         cells: [
           "--",
-          port.definition.medium,
+          port.definition.medium ?? "Protocol / medium not specified",
           [
             options?.output === "csv"
               ? `${port.designation}.${port.key}`
@@ -472,7 +472,7 @@ function buildDocumentationTable(
             .filter(Boolean)
             .join("\n"),
           "Unconnected",
-          "Unspecified",
+          "Status not specified",
         ],
         deviceUids: [port.deviceUid],
       });
@@ -672,10 +672,10 @@ function buildDocumentationTable(
           ),
         });
       }
-    const hasZones = zones.some((ends) => ends.some(Boolean));
+    const hasZones = references !== undefined || options?.output === "csv";
     if (hasZones)
       rows.forEach((row, i) =>
-        row.cells.push(...zones[i]!.map((z) => z ?? "")),
+        row.cells.push(...zones[i]!.map((z) => z || "not drawn")),
       );
     return table(
       "Wire and core schedule",
@@ -693,6 +693,7 @@ function buildDocumentationTable(
       [
         "Wire endpoints are canonical, not a routing or installation order. Cable end order follows the source where annotated.",
         "Unterminated and unassigned cores do not imply a de-energized circuit.",
+        "Sheet.zone locates the native endpoint in this packet; not drawn means it has no drawn landing on any issued sheet.",
       ],
     );
   }
@@ -754,14 +755,14 @@ function buildDocumentationTable(
       for (const key of keys) {
         const terminal = { deviceUid: d.uid, terminalKey: key },
           peers = connections.get(tid(terminal)) ?? [];
-        const display = (items: typeof peers) =>
+        const display = (items: typeof peers, emptyState: string) =>
           items
             .map(
               (p) =>
                 `${p.conductor} -> ${p.peer ? label(p.peer) : "Unterminated"}`,
             )
             .sort(compare)
-            .join("; ") || "None";
+            .join("; ") || emptyState;
         const local = peers.filter(
           (p) =>
             p.peer &&
@@ -778,8 +779,8 @@ function buildDocumentationTable(
             reportDescription(
               type.terminals.find((t) => t.key === key)?.description,
             ) ?? "",
-            display(local),
-            display(remote),
+            display(local, "No same-location connections"),
+            display(remote, "No other / unspecified location connections"),
             peers.length ? "Terminated" : "Unconnected",
           ],
           deviceUids: [
@@ -841,8 +842,8 @@ function buildDocumentationTable(
           options?.output === "csv"
             ? f.terminals.map(label).join(", ")
             : formatTerminalSet(terminalKeys, (t) => `${d.designation}.${t}`),
-          peers.map(label).join("; ") || "None",
-          `${assignment?.usage ?? "Unspecified"}; ${f.terminals.some((t) => (connections.get(tid(t)) ?? []).length) ? "terminated" : "unconnected"}`,
+          peers.map(label).join("; ") || "No connections",
+          `${assignment?.usage ?? "Not specified"}; ${f.terminals.some((t) => (connections.get(tid(t)) ?? []).length) ? "terminated" : "unconnected"}`,
         ],
         deviceUids: [d.uid, ...peers.map((t) => t.deviceUid)],
       });

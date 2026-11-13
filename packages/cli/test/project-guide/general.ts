@@ -1566,6 +1566,8 @@ const module: FactModule = {
           expect(r.slice(3)).toEqual([
             expect.stringMatching(/ \/ 18AWG$/),
             "unspecified; connected",
+            "not drawn",
+            "not drawn",
           ]);
         expect(wiresReport.csv).toContain(
           '"CBL4/2+","Unterminated","Unterminated","red / 18AWG","unassigned; unassigned"',
@@ -1732,11 +1734,11 @@ const module: FactModule = {
           '"PLC1","di0","input","PLC1","%I0.0","Start","PLC1.X1.0","LS1.14","in-use; terminated"',
         );
         expect(csv).toContain(
-          '"PLC1","di1","input","PLC1","","","PLC1.X1.1","None","spare; unconnected"',
+          '"PLC1","di1","input","PLC1","","","PLC1.X1.1","No connections","spare; unconnected"',
         );
         // do1 has no io entry and no connection: unspecified, not spare.
         expect(csv).toContain(
-          '"PLC1","do1","output","PLC1","","","PLC1.X2.1","None","Unspecified; unconnected"',
+          '"PLC1","do1","output","PLC1","","","PLC1.X2.1","No connections","Not specified; unconnected"',
         );
         expect(csv.match(/spare/g)).toHaveLength(1);
       },

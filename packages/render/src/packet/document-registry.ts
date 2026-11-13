@@ -54,7 +54,10 @@ function printedRows(
           )
         : kind;
     if (!tables.has(cacheKey))
-      tables.set(cacheKey, nativeDocumentTable(ir, kind, r.nativeKey));
+      tables.set(
+        cacheKey,
+        nativeDocumentTable(ir, kind, r.nativeKey, draft.scheduleReferences),
+      );
     const table = tables.get(cacheKey),
       native = table?.rows.find((row) => row.key === r.nativeKey);
     if (
