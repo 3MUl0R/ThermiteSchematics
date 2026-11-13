@@ -406,7 +406,7 @@ a blank or conductor-only strip. Failed final ink, peer or page-cost checks
 retain the original. Empty grid rows may already have been omitted; composition
 uses the retained viewports and their remapped peer references.
 References use final physical sheet numbers and zones.
-A power view with a printed short interior jog may spend one remaining placement
+A top-to-bottom power view with a printed short interior jog may spend one remaining placement
 attempt on extra turn space beside captioned poles or a source phase port.
 Ordinary recovery runs first, holding one of the existing attempts for this
 retry when its initial layout has a jog. Clipped printed fragments use the same
@@ -420,6 +420,29 @@ wire-length-growth allowance; the existing per-conductor detour criterion is
 Source turns reserve an additional half layout unit (0.125 mm at the minimum
 0.25 mm/unit print scale), rather than a serialization quantum. The complete
 page guard also applies to this margin; failed retries retain the original.
+
+After a complete printable packet exists, a left-to-right power view with a
+jog in its final printed groups may try one recursive ELK network-simplex
+placement. It retains the selected hierarchy, reservations, fixed ports, phase
+order and labels. Ordinary recovery has priority: the alternative consumes a
+remaining actual ELK layout in the same 48-placement pool and a remaining
+attempt in the four-attempt standard economy, with no additional recovery
+search. Exact-input cache hits consume no placement. Each rooted search asserts
+the actual ELK call ceiling deterministically. Exhaustion keeps the original.
+Exact ELK inputs share the circuit alternative's packet cache; recomposition
+does not spend another routing pool. A view without a printed jog is unchanged.
+Unchanged view drafts may be reused before assembly, keyed by their exact inputs
+and routing selection. Each assembly receives a private copy; final sheet
+measurement, navigation finalization and the whole-packet guard still run.
+
+The candidate must reduce jog-bearing conductors without increasing any
+conductor's bends, raw or clipped defects, or unrepaired clipped length beyond
+max(10 mm, 25%). Cable cores are compared individually. The final packet uses
+the circuit alternative's original-reference guard: no packet or view growth,
+lost annotation or card, local-to-self-located change, or increase in NAV's final
+printed-ink locality distance. The existing 0.1 mm card comparison remains.
+Top-to-bottom placement, source turns and their existing retry are unchanged.
+
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine
 strip extents; any partly painted location heading stays whole, while wholly

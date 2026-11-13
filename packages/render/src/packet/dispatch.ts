@@ -16,6 +16,7 @@ import { topologyDrafts } from "./topology.js";
 import { cableDrafts } from "./cable.js";
 import { drawingDrafts } from "./rooted.js";
 import { documentationDrafts } from "./reports.js";
+import { cachedCircuitView } from "../layout/circuit-view-cache.js";
 
 /** Dispatch one authored view without changing family-specific failure boundaries. */
 export async function viewDrafts(
@@ -26,6 +27,32 @@ export async function viewDrafts(
   layout: SchematicPacketRequest["layout"],
   circuitAppearances: Map<string, string[]>,
   referenceOffset = 0,
+): Promise<RenderOutcome<Draft[]>> {
+  return cachedCircuitView(
+    ir,
+    presentation,
+    [view, page, layout, [...circuitAppearances], referenceOffset],
+    () =>
+      dispatchView(
+        ir,
+        view,
+        presentation,
+        page,
+        layout,
+        circuitAppearances,
+        referenceOffset,
+      ),
+  );
+}
+
+async function dispatchView(
+  ir: Readonly<ElectricalIr>,
+  view: unknown,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  layout: SchematicPacketRequest["layout"],
+  circuitAppearances: Map<string, string[]>,
+  referenceOffset: number,
 ): Promise<RenderOutcome<Draft[]>> {
   return record(view) && view.format === "circuit-view-request/0.1"
     ? await circuitDrafts(

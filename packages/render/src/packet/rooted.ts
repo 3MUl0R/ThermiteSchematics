@@ -24,6 +24,12 @@ import {
   rootedWinner,
   nativeWinner,
 } from "./rooted-search.js";
+import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
+import {
+  rememberPowerPlacement,
+  selectPowerPlacement,
+} from "../layout/power-placement.js";
+import type { RootedCandidate } from "./rooted-build.js";
 export { cuts } from "./rooted-cuts.js";
 
 /** The legacy path is unchanged; compact planning owns a separate reference page. */
@@ -135,6 +141,16 @@ async function selectedDrawingDrafts(
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
 ): Promise<RenderOutcome<Draft[]>> {
+  const qualityRun =
+    request.format === "schematic-view-request/0.1" &&
+    request.family === "power" &&
+    request.flow === "left-to-right"
+      ? nextCircuitLayoutRun()
+      : undefined;
+  if (qualityRun?.power) {
+    const selected = await selectPowerPlacement(ir, qualityRun, page);
+    return drawingResult(selected, qualityRun.power.native);
+  }
   const run = await searchRootedCandidates(
     ir,
     request,
@@ -163,6 +179,14 @@ async function selectedDrawingDrafts(
   const composed = composeRootedWinner(ir, winner, native, page);
   const selected =
     frameBudgetOrder(composed, winner, page) <= 0 ? composed : winner;
+  rememberPowerPlacement(qualityRun, selected, native, run);
+  return drawingResult(selected, native);
+}
+
+function drawingResult(
+  selected: RootedCandidate,
+  native: RootedCandidate,
+): RenderOutcome<Draft[]> {
   const context = graphCardContext(selected.prepared.graph);
   selected.drafts[0]!.rootedFit = {
     basePages: native.drafts.length,

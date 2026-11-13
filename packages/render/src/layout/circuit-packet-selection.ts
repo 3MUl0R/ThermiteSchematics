@@ -4,14 +4,15 @@ import type { RenderOutcome } from "../types.js";
 import {
   circuitInlineContext,
   circuitInlineTrace,
-  type CircuitInlineContext,
+  circuitLayoutContext,
 } from "./circuit-inline-context.js";
 import { circuitHasJogs } from "./circuit-route-quality.js";
 import { circuitPacketGuard } from "./circuit-packet-guard.js";
 import { required } from "../presentation/util.js";
+import { powerPlacementAvailable } from "./power-placement.js";
 
 /** The saved printable reference predates all routing alternatives. Each logical
- * circuit view must repair its own jogs; packet/page/navigation guards compare
+ * circuit or LTR power view must repair its own printed jogs; guards compare
  * against that original reference, never a newly generated easier baseline. */
 export function selectCircuitPacket(
   request: SchematicPacketRequest,
@@ -19,21 +20,20 @@ export function selectCircuitPacket(
 ) {
   if (
     !Array.isArray(request?.views) ||
-    !request.views.some((v) => v?.format === "circuit-view-request/0.1")
+    !request.views.some(
+      (v) =>
+        v?.format === "circuit-view-request/0.1" ||
+        (v?.format === "schematic-view-request/0.1" &&
+          v.family === "power" &&
+          v.flow === "left-to-right"),
+    )
   )
     return render();
-  const context: CircuitInlineContext = {
-    cursor: 0,
-    runs: [],
-    selected: new Set(),
-    layouts: new Map(),
-    qualityPhase: false,
-    permittedInputs: new Set(),
-    viewDecisions: [],
-  };
+  const context = circuitLayoutContext();
   return circuitInlineContext.run(context, async () => {
     circuitInlineTrace.getStore()?.push(context);
     const original = await render();
+    context.baselineLayouts = context.layouts.size;
     if (!original.ok) return original;
     context.qualityPhase = true;
     let selected = original;
@@ -46,6 +46,13 @@ export function selectCircuitPacket(
         )
       )
         continue;
+      if (!powerPlacementAvailable(run)) {
+        run.decisions.set(
+          "printed-power",
+          "placement/economy budget exhausted",
+        );
+        continue;
+      }
       context.selected.add(index);
       context.cursor = 0;
       const candidate = await render();
