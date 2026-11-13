@@ -613,13 +613,18 @@ describe("mandatory DQ mutation kills", () => {
   );
   it("DQ-18 kills a missing revision table", () => {
     const t = text(
-      "DWG No 1 Drawn Checked Approved Customer REV A Revision history",
+      "DWG No: 1 Drawn: A Checked: B Approved: C Customer: D REV A Revision history",
       { bbox: { x: 20, y: 245, w: 350, h: 3 } },
     );
-    expect(c.titleFields(geometry({ texts: [t] }))).toEqual([]);
+    expect(
+      c.titleFields(
+        geometry({ titleBlock: { x: 10, y: 240, w: 380, h: 30 }, texts: [t] }),
+      ),
+    ).toEqual([]);
     expect(
       c.titleFields(
         geometry({
+          titleBlock: { x: 10, y: 240, w: 380, h: 30 },
           texts: [{ ...t, text: t.text.replace("Revision history", "") }],
         }),
       )[0].missing,

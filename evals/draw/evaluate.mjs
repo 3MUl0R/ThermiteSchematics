@@ -1,3 +1,5 @@
+import { repeatNavigation } from "./repeat-navigation.mjs";
+const repeatAudits = new WeakMap();
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
 import { continuationTypography } from "./continuation-typography.mjs";
 import {
@@ -184,6 +186,34 @@ export function evaluateSheet(
           "Needs ordered physical terminal/port identities on off-page connectors to prove conductor order. Reciprocal connector anchors and destination zones are measured independently where identifiable; current exports associate labels and net IDs.",
       }),
     );
+  if (!repeatAudits.has(packet))
+    repeatAudits.set(packet, repeatNavigation(packet, geometries, ir, request));
+  const repeats = repeatAudits.get(packet);
+  if (
+    repeats.measurements.some((m) => m.sheet === s.number) ||
+    repeats.findings.some((f) => f.sheet === s.number)
+  )
+    out.push(
+      obs(
+        "DQ-07",
+        repeats.findings.filter((f) => f.sheet === s.number),
+        {
+          id: `${c.id}/DQ-07/repeats-${s.number}`,
+          evidence: {
+            findings: repeats.findings.filter((f) => f.sheet === s.number),
+            findingCount: repeats.findings.filter((f) => f.sheet === s.number)
+              .length,
+            measurements: repeats.measurements.filter(
+              (m) => m.sheet === s.number,
+            ),
+            appearanceCount: repeats.appearanceCount,
+            repeatCount: repeats.repeatCount,
+          },
+          scope:
+            "M5 full repeats: native terminal membership and measured geometry; one label per device/view/sheet, measured targets, qualifier, locality and clearance. DQ-07 mirrors/returns remain unimplemented for E2b.",
+        },
+      ),
+    );
   const typography = continuationTypography(s, g, ir);
   out.push(
     obs("DQ-08", typography.findings, {
@@ -196,7 +226,7 @@ export function evaluateSheet(
         sameSheetEnds: typography.sameSheetEnds,
       },
       scope:
-        "Native conductor identity is one line unit; valid same-sheet peers remain allowed. Gap threshold pending print calibration.",
+        "Native conductor identity is one line unit; valid same-sheet peers remain allowed. Block gap >=2.5 mm minus 0.17 mm measurement epsilon; zone clearance measured, threshold pending.",
     }),
   );
   out.push(obs("DQ-09", checks.zones(g, s.references)));

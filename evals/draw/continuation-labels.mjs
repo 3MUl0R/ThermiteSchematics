@@ -46,6 +46,19 @@ export function printedConductor(c, ir = {}) {
 // Semantic rows combine adjacent font runs; the individual runs remain intact
 // for size/ink checks. Baselines use the existing geometry uncertainty.
 export function labelRows(texts) {
+  // Per-glyph baseline runs defeat positioned tspans hidden inside one text node.
+  texts = texts.flatMap((t) =>
+    t.medium !== "pdf" && t.continuationRuns?.length
+      ? t.continuationRuns.map((run) => ({
+          ...t,
+          ...run,
+          renderedString: run.text,
+          // Preserve actual ink for an intact row; glyph extents are em boxes.
+          bbox: t.continuationRuns.length === 1 ? t.bbox : run.bbox,
+          emBbox: run.bbox,
+        }))
+      : [t],
+  );
   const rows = [];
   const order = new Map();
   for (const t of texts)
