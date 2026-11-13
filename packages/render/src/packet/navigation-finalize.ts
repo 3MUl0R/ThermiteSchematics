@@ -30,6 +30,7 @@ import { failure } from "./errors.js";
 import type { SheetSlotRequest } from "./navigation-slots.js";
 import type { RepeatPlan } from "./navigation-repeats.js";
 import { repeatLocalityInk } from "./navigation-label-ink.js";
+import { mirrorLocalityInk } from "./mirror-layout.js";
 import { symbolGeometry, type SymbolGeometry } from "./navigation-symbols.js";
 import { resolveLabelLocality } from "./navigation-locality.js";
 import {
@@ -343,7 +344,10 @@ function navigationRequest(
     ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
     preferBesideBelow: annotation.role === "mirror",
     localityGeometry: locality,
-    localityInkMm: repeatLocalityInk(annotation, reservation),
+    localityInkMm:
+      annotation.role === "mirror"
+        ? mirrorLocalityInk(annotation, reservation)
+        : repeatLocalityInk(annotation, reservation),
   };
 }
 function allocateSheetRequests(

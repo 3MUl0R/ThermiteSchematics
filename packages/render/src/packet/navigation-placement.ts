@@ -5,6 +5,10 @@ import {
 } from "./navigation-symbols.js";
 export type NavigationPlacementFamily =
   "beside" | "below" | "below-right" | "zone-column" | "margin-band";
+/** Project a shape's relative printed ink without changing its fit reservation. */
+export function navigationPlacementInk(box: Rect, ink?: Rect): Rect {
+  return ink ? { ...ink, x: box.x + ink.x, y: box.y + ink.y } : box;
+}
 /** Locator policy /1. Local approaches precede the outer-row and vacant-column fallbacks. */
 export function navigationPlacementFamily(
   box: Rect,

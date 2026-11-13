@@ -373,7 +373,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading prints /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
+        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));

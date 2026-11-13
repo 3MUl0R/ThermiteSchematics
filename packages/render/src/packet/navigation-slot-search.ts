@@ -8,6 +8,7 @@ import {
 import type { NavigationShape } from "./navigation-types.js";
 import {
   navigationPlacementFamily,
+  navigationPlacementInk,
   type NavigationPlacementFamily,
 } from "./navigation-placement.js";
 export const NAVIGATION_CLEARANCE_MM = 1.5;
@@ -19,6 +20,7 @@ function slotCandidates(
   obstacles: readonly Rect[],
   locality?: SymbolGeometry,
   texts: readonly Rect[] = [],
+  ink?: Rect,
 ) {
   const { w, h } = size;
   const xs = [
@@ -44,7 +46,9 @@ function slotCandidates(
     ]),
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
   const distance = (b: Rect) =>
-    locality ? anchorDistance(locality.anchorMm, b) : boxDistance(owner, b);
+    locality
+      ? anchorDistance(locality.anchorMm, navigationPlacementInk(b, ink))
+      : boxDistance(owner, b);
   return ys
     .flatMap((y) => xs.map((x) => ({ x, y, w, h })))
     .sort((a, b) => distance(a) - distance(b) || a.y - b.y || a.x - b.x);
@@ -65,6 +69,7 @@ export function searchNavigationSlot(
     shapes.filter((s) => s.mode === mode),
   );
   for (const shape of ordered) {
+    const ink = localityInkMm?.get(shape.id);
     const candidates = slotCandidates(
       shape.inkMm,
       area,
@@ -72,28 +77,31 @@ export function searchNavigationSlot(
       obstacles,
       locality,
       texts,
+      ink,
     );
     if (preferBesideBelow && shape.mode === "local")
       candidates.sort(
         (a, b) =>
-          Number(!besideBelow(a, owner)) - Number(!besideBelow(b, owner)),
+          Number(!besideBelow(navigationPlacementInk(a, ink), owner)) -
+          Number(!besideBelow(navigationPlacementInk(b, ink), owner)),
       );
-    const ink = localityInkMm?.get(shape.id);
     const box = candidates.find(
       (b) =>
         (!families ||
           families.includes(
-            navigationPlacementFamily(b, area, owner, locality),
+            navigationPlacementFamily(
+              navigationPlacementInk(b, ink),
+              area,
+              owner,
+              locality,
+            ),
           )) &&
         inside(b, area) &&
         obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
         texts.every((t) => textSeparated(b, t)) &&
         (shape.mode !== "local" ||
           !locality ||
-          localNavigationSlot(
-            ink ? { ...ink, x: b.x + ink.x, y: b.y + ink.y } : b,
-            locality,
-          )),
+          localNavigationSlot(navigationPlacementInk(b, ink), locality)),
     );
     if (box) return { box, shape };
   }

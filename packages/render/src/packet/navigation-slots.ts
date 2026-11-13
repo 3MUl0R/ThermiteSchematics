@@ -12,6 +12,7 @@ import {
 } from "./navigation-slot-search.js";
 import {
   navigationPlacementFamily,
+  navigationPlacementInk,
   type NavigationPlacementFamily,
 } from "./navigation-placement.js";
 import { measureNavigationVacancy } from "./navigation-vacancy.js";
@@ -108,6 +109,7 @@ export function allocateNavigationSlots(
           ),
         },
       );
+    const placedInk = options.localityInkMm?.get(result.shape.id);
     obstacles.push(result.box);
     texts.push(result.box);
     return {
@@ -122,7 +124,7 @@ export function allocateNavigationSlots(
         ...(options.preferBesideBelow
           ? {
               family: navigationPlacementFamily(
-                result.box,
+                navigationPlacementInk(result.box, placedInk),
                 area,
                 owner,
                 locality,
