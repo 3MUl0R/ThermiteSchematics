@@ -22,6 +22,7 @@ export interface SheetSlotRequest {
   locality?: SymbolGeometry;
   preferBesideBelow?: boolean;
   families?: readonly NavigationPlacementFamily[];
+  localityInkMm?: ReadonlyMap<string, Rect> | undefined;
 }
 export class NavigationSlotFailure extends Error {
   constructor(
@@ -77,62 +78,61 @@ export function allocateNavigationSlots(
     texts = measured.texts;
   obstacles.push(...reservedBoxes);
   texts.push(...reservedBoxes);
-  return requests.map(
-    ({ reservation, owner, locality, preferBesideBelow, families }) => {
-      const legacy = legacyShapes(reservation);
-      const result = searchNavigationSlot(
-        reservation.shapes ?? legacy,
-        area,
-        owner,
-        obstacles,
-        locality,
-        texts,
-        preferBesideBelow,
-        families,
-      );
-      if (!result)
-        throw new NavigationSlotFailure(
-          `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
-          {
-            fieldMm: area,
-            ownerMm: owner,
-            requiredMm: reservation.inkMm,
-            families: measureNavigationVacancy(
-              reservation.inkMm,
-              area,
-              owner,
-              obstacles,
-              texts,
-              locality,
-            ),
-          },
-        );
-      obstacles.push(result.box);
-      texts.push(result.box);
-      return {
-        ...reservation,
-        inkMm: result.shape.inkMm,
-        maximumForms: result.shape.maximumForms,
-        allocatedMm: {
-          sheet,
-          rect: result.box,
-          ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
-          ...(locality ? { placement: result.shape.mode } : {}),
-          ...(preferBesideBelow
-            ? {
-                family: navigationPlacementFamily(
-                  result.box,
-                  area,
-                  owner,
-                  locality,
-                ),
-                familyRule: "approach-or-outer-zone-row/1" as const,
-              }
-            : {}),
+  return requests.map(({ reservation, owner, locality, ...options }) => {
+    const legacy = legacyShapes(reservation);
+    const result = searchNavigationSlot(
+      reservation.shapes ?? legacy,
+      area,
+      owner,
+      obstacles,
+      locality,
+      texts,
+      options.preferBesideBelow,
+      options.families,
+      options.localityInkMm,
+    );
+    if (!result)
+      throw new NavigationSlotFailure(
+        `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
+        {
+          fieldMm: area,
+          ownerMm: owner,
+          requiredMm: reservation.inkMm,
+          families: measureNavigationVacancy(
+            reservation.inkMm,
+            area,
+            owner,
+            obstacles,
+            texts,
+            locality,
+          ),
         },
-      };
-    },
-  );
+      );
+    obstacles.push(result.box);
+    texts.push(result.box);
+    return {
+      ...reservation,
+      inkMm: result.shape.inkMm,
+      maximumForms: result.shape.maximumForms,
+      allocatedMm: {
+        sheet,
+        rect: result.box,
+        ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
+        ...(locality ? { placement: result.shape.mode } : {}),
+        ...(options.preferBesideBelow
+          ? {
+              family: navigationPlacementFamily(
+                result.box,
+                area,
+                owner,
+                locality,
+              ),
+              familyRule: "approach-or-outer-zone-row/1" as const,
+            }
+          : {}),
+      },
+    };
+  });
 }
 
 function legacyShapes(reservation: AnnotationReservation): NavigationShape[] {

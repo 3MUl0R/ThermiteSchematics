@@ -29,6 +29,7 @@ import type { RenderOutcome } from "../types.js";
 import { failure } from "./errors.js";
 import type { SheetSlotRequest } from "./navigation-slots.js";
 import type { RepeatPlan } from "./navigation-repeats.js";
+import { repeatLocalityInk } from "./navigation-label-ink.js";
 import { symbolGeometry, type SymbolGeometry } from "./navigation-symbols.js";
 import { resolveLabelLocality } from "./navigation-locality.js";
 import {
@@ -326,15 +327,24 @@ function sheetRequests(
         required(draft.drawingBounds, "Missing mirror field"),
       );
     return [
-      {
-        reservation,
-        owner: locality.frameMm,
-        ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
-        preferBesideBelow: annotation.role === "mirror",
-        localityGeometry: locality,
-      },
+      navigationRequest(reservation, annotation, locality, mirrorService),
     ];
   });
+}
+function navigationRequest(
+  reservation: AnnotationReservation,
+  annotation: NavigationAnnotation,
+  locality: SymbolGeometry,
+  mirrorService: boolean,
+): NavigationRequest {
+  return {
+    reservation,
+    owner: locality.frameMm,
+    ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
+    preferBesideBelow: annotation.role === "mirror",
+    localityGeometry: locality,
+    localityInkMm: repeatLocalityInk(annotation, reservation),
+  };
 }
 function allocateSheetRequests(
   requests: readonly NavigationRequest[],

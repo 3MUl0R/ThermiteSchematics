@@ -10,6 +10,7 @@ import {
 } from "./navigation-symbols.js";
 import { destinationToken } from "./navigation-location.js";
 import { wrapNavigationText } from "./navigation-labels.js";
+import { navigationLabelInk } from "./navigation-label-ink.js";
 import { required } from "../presentation/util.js";
 export function resolveLabelLocality(
   ir: Readonly<ElectricalIr>,
@@ -36,10 +37,11 @@ export function resolveLabelLocality(
   const text = shape
     ? wrapNavigationText(unwrapped, shape.wrapWidthMm)
     : unwrapped;
+  const ink = navigationLabelInk(text, allocated.rect);
   if (
     allocated.sheet !== symbol.ownerLocation.sheet ||
     (mode === "local"
-      ? !localNavigationSlot(allocated.rect, symbol)
+      ? !localNavigationSlot(ink, symbol)
       : !unwrapped.startsWith(selfPrefix))
   )
     throw Error("Navigation locality: label is neither local nor self-located");
@@ -51,7 +53,7 @@ export function resolveLabelLocality(
       anchorMm: symbol.anchorMm,
       frameMm: symbol.frameMm,
       ownerLocation: symbol.ownerLocation,
-      distanceMm: anchorDistance(symbol.anchorMm, allocated.rect),
+      distanceMm: anchorDistance(symbol.anchorMm, ink),
     },
   };
 }

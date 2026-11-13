@@ -59,6 +59,7 @@ export function searchNavigationSlot(
   texts: readonly Rect[] = [],
   preferBesideBelow = false,
   families?: readonly NavigationPlacementFamily[],
+  localityInkMm?: ReadonlyMap<string, Rect>,
 ) {
   const ordered = ["local", "self-located"].flatMap((mode) =>
     shapes.filter((s) => s.mode === mode),
@@ -77,6 +78,7 @@ export function searchNavigationSlot(
         (a, b) =>
           Number(!besideBelow(a, owner)) - Number(!besideBelow(b, owner)),
       );
+    const ink = localityInkMm?.get(shape.id);
     const box = candidates.find(
       (b) =>
         (!families ||
@@ -88,7 +90,10 @@ export function searchNavigationSlot(
         texts.every((t) => textSeparated(b, t)) &&
         (shape.mode !== "local" ||
           !locality ||
-          localNavigationSlot(b, locality)),
+          localNavigationSlot(
+            ink ? { ...ink, x: b.x + ink.x, y: b.y + ink.y } : b,
+            locality,
+          )),
     );
     if (box) return { box, shape };
   }

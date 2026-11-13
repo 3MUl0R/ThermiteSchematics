@@ -25,11 +25,8 @@ export interface SymbolGeometry {
 function frameCandidates(all: readonly NavigationGeometry[]) {
   return all.flatMap((g) => {
     if (!g.visible || !g.node.attrs["data-device-uid"]) return [];
-    const rect = g.node.children.find(
-      (n) =>
-        n.name === "rect" &&
-        (/device-frame/.test(n.attrs.class ?? "") ||
-          g.node.attrs["data-layout-width"]),
+    const rect = descendants(g.node).find(
+      (n) => n.name === "rect" && /device-frame/.test(n.attrs.class ?? ""),
     );
     const measured = rect && all.find((n) => n.node === rect);
     if (!rect || !measured?.visible) return [];

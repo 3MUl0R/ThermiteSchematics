@@ -527,15 +527,14 @@ exactly the per-function destinations in the reference report. Multiple repeated
 functions use `(same functions)`; one contact uses `(same contact)`. The local
 prefix is `TAG:`. Local slots are preferred: on the owner's sheet, at most 60 mm
 from the distinct-terminal centroid of the whole device appearance, with its own
-device frame strictly nearer than another device frame. Distances are from the label
-box to the centroid/frame. Otherwise the prefix is `TAG (ss.zone):`, where the
+device frame strictly nearer than another device frame. Distances use the printed label ink box against the centroid/frame. The larger all-role envelope still protects fit and clearances; its blank capacity cannot establish locality. Otherwise the prefix is `TAG (ss.zone):`, where the
 location is the whole appearance's distinct-terminal centroid, including drawn
 functions that are not repeated and visible terminals of boundary fragments.
 This self-location is measured from the final sheet; it is not one arbitrarily
 chosen member function's zone.
 Each mode reserves both roles; the self-located mode also reserves the prefix.
 Frame ownership uses source UID, selected view and measured centroid, including
-drawings whose device frames and function glyphs occupy sibling SVG layers.
+drawings whose device frames and function glyphs occupy sibling SVG layers. Device frames are resolved through nested SVG groups and intersected with the visible section clip. If an owner has no visible frame, its measured body box is the fallback.
 
 For lane E, `snapshotDigest` is SHA-256 of the UTF-8 bytes of
 `JSON.stringify(serializeIr(ir))`, including the JSON string quoting/escaping;

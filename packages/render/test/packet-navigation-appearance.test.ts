@@ -108,7 +108,8 @@ it("prints one CB1, K1 and OL1 label per device appearance in the duplicate-M1 p
 import { conveyorRequest } from "./packet-navigation-review-fixture.js";
 import { printableTextMetrics } from "../src/symbols/printable-font.js";
 import { symbolGeometry } from "../src/packet/navigation-symbols.js";
-it("self-locates native conveyor SRC1 at the all-terminal 01.B4 zone, not owner-function 01.A4", async () => {
+import { resolveLabelLocality } from "../src/packet/navigation-locality.js";
+it("uses native conveyor SRC1’s all-terminal zone for local and self-located forms", async () => {
   const c = await compileProject("examples/conveyor-line");
   if (!c.ok) throw Error(JSON.stringify(c));
   const request = {
@@ -141,7 +142,29 @@ it("self-locates native conveyor SRC1 at the all-terminal 01.B4 zone, not owner-
   )!;
   expect(a.locality!.anchorMm).toEqual({ x: 134, y: 95.19 });
   expect(a.locality!.ownerLocation).toEqual({ sheet: 1, zone: "B4" });
-  expect(unwrapped(a.text)).toBe("SRC1 (01.B4): Also shown 04.A4, 04.B4");
+  expect(unwrapped(a.text)).toBe("SRC1: Also shown 04.A4, 04.B4");
+  const slot = r.value.navigation!.reservations.find(
+    (s) => s.id === a.reservationId,
+  )!;
+  const shape = slot.shapes!.find((s) => s.mode === "self-located")!;
+  // Exercise the self-located form explicitly: this native appearance now has
+  // a legal local slot when measured from its actual ink.
+  const self = resolveLabelLocality(
+    c.ir,
+    { ...a, text: unwrapped(a.text) },
+    {
+      ...slot,
+      allocatedMm: {
+        sheet: 1,
+        rect: { ...slot.allocatedMm!.rect, w: shape.inkMm.w, h: shape.inkMm.h },
+        shapeId: shape.id,
+        placement: "self-located",
+      },
+    },
+    geometry,
+    uid,
+  );
+  expect(unwrapped(self.text)).toBe("SRC1 (01.B4): Also shown 04.A4, 04.B4");
 });
 it("fixes the envelope to native candidates when pagination removes a repeated member", async () => {
   const source = await offViewFixture();
