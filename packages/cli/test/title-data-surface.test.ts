@@ -115,3 +115,42 @@ it("keeps structural schema dependencies below render", () => {
     ),
   ).not.toEqual([]);
 });
+
+it.each([
+  "/private/scratch/packages/render/dist/internal/title-data/parse.js",
+  "C:\\scratch\\packages\\render\\dist\\internal\\title-data\\parse.js",
+  "file:///private/scratch/packages/schema/dist/internal/title-data/presentation.js",
+  "file:///private/scratch/packages/render/dist/internal/title%2Ddata/parse.js",
+])("refuses hidden absolute and file URL imports %s", (path) => {
+  expect(
+    auditTitleDataSurface(
+      fixture(
+        "packages/render/src/index.ts",
+        `if(process.env.TB) import(${JSON.stringify(path)});`,
+      ),
+    ),
+  ).not.toEqual([]);
+});
+it.each([
+  "const load=require; load(process.env.TB_MODULE);",
+  'import {createRequire as makeLoader} from "node:module"; const load=makeLoader(import.meta.url); load(process.env.TB_MODULE);',
+])("refuses indirect require env loaders %s", (source) =>
+  expect(
+    auditTitleDataSurface(fixture("packages/render/src/index.ts", source)),
+  ).not.toEqual([]),
+);
+
+it("permits existing closed createRequire forms without exempting their files", () => {
+  const source =
+    'import {createRequire} from "node:module"; const WORKER="elkjs/lib/elk-worker.min.js"; const {deflate}=createRequire(import.meta.url)("pako"); createRequire(import.meta.url).resolve(WORKER);';
+  expect(
+    auditTitleDataSurface(fixture("packages/render/src/index.ts", source)),
+  ).toEqual([]);
+});
+it("audits hidden references even behind an aliased loader", () => {
+  const source =
+    'const load = makeLoader(); if(process.env.TB) load("./internal/title-data/parse.js");';
+  expect(
+    auditTitleDataSurface(fixture("packages/render/src/index.ts", source)),
+  ).not.toEqual([]);
+});

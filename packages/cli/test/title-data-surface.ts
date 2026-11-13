@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { posix } from "node:path";
+import { fileURLToPath } from "node:url";
 const normal = (path: string) => posix.normalize(path.replaceAll("\\", "/"));
 const hidden = (path: string) =>
   /^packages\/(?:schema|render)\/src\/internal\/title-data\//u.test(path);
@@ -32,12 +33,29 @@ function targetPath(
   specifier: string,
   files: Map<string, string>,
 ): string | undefined {
+  let literal = specifier.replaceAll("\\", "/");
+  if (/^file:/iu.test(literal)) {
+    try {
+      const url = new URL(literal);
+      literal = fileURLToPath(url, {
+        windows: !!url.hostname && url.hostname !== "localhost",
+      }).replaceAll("\\", "/");
+    } catch {
+      return;
+    }
+  }
+  const absoluteHidden =
+    /(?:^|\/)(packages\/(?:schema|render)\/(?:src|dist)\/internal\/title-data\/.+)$/u.exec(
+      literal,
+    );
   const scoped = /^@thermite\/([^/]+)(?:\/(.*))?$/u.exec(specifier);
-  let path = scoped
-    ? `packages/${scoped[1]}/src/${scoped[2] ?? "index"}`
-    : specifier.startsWith(".")
-      ? posix.join(posix.dirname(file), specifier)
-      : undefined;
+  let path = absoluteHidden
+    ? absoluteHidden[1]
+    : scoped
+      ? `packages/${scoped[1]}/src/${scoped[2] ?? "index"}`
+      : specifier.startsWith(".")
+        ? posix.join(posix.dirname(file), specifier)
+        : undefined;
   if (!path) return;
   path = normal(path)
     .replace("/dist/", "/src/")
@@ -57,6 +75,55 @@ export function auditTitleDataSurface(
     env = new Set<string>();
   for (const [file, text] of files) {
     const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const factories = new Set(["createRequire"]);
+    const constants = new Map<string, ts.Expression>();
+    const declarations = new Map<string, number>();
+    for (const statement of tree.statements) {
+      if (
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteralLike(statement.moduleSpecifier) &&
+        ["node:module", "module"].includes(statement.moduleSpecifier.text)
+      ) {
+        const binding = statement.importClause?.namedBindings;
+        if (binding && ts.isNamedImports(binding))
+          for (const item of binding.elements)
+            if ((item.propertyName?.text ?? item.name.text) === "createRequire")
+              factories.add(item.name.text);
+      }
+      if (
+        ts.isVariableStatement(statement) &&
+        statement.declarationList.flags & ts.NodeFlags.Const
+      )
+        for (const item of statement.declarationList.declarations)
+          if (ts.isIdentifier(item.name) && item.initializer)
+            constants.set(item.name.text, item.initializer);
+    }
+    const count = (node: ts.Node) => {
+      if (
+        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+        ts.isIdentifier(node.name)
+      )
+        declarations.set(
+          node.name.text,
+          (declarations.get(node.name.text) ?? 0) + 1,
+        );
+      ts.forEachChild(node, count);
+    };
+    count(tree);
+    const closedText = (node: ts.Expression | undefined) =>
+      node &&
+      ts.isIdentifier(node) &&
+      declarations.get(node.text) === 1 &&
+      constants.has(node.text)
+        ? constantText(constants.get(node.text) as ts.Expression)
+        : node
+          ? constantText(node)
+          : undefined;
+    const factoryCall = (node: ts.Node): node is ts.CallExpression =>
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      factories.has(node.expression.text);
+
     if (envAccess.test(text)) env.add(file);
     if (
       !hidden(file) &&
@@ -95,15 +162,66 @@ export function auditTitleDataSurface(
       )
         add(node.argument.literal.text);
       if (
-        ts.isCallExpression(node) &&
-        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-          (ts.isIdentifier(node.expression) &&
-            node.expression.text === "require"))
+        ts.isStringLiteralLike(node) ||
+        ts.isBinaryExpression(node) ||
+        ts.isTemplateExpression(node)
+      ) {
+        const value = ts.isStringLiteralLike(node)
+          ? node.text
+          : constantText(node as ts.Expression);
+        const target =
+          value === undefined ? undefined : targetPath(file, value, files);
+        if (target && hidden(target)) dependencies.push(target);
+      }
+      if (
+        ts.isIdentifier(node) &&
+        (node.text === "require" || factories.has(node.text)) &&
+        !ts.isImportSpecifier(node.parent) &&
+        !(ts.isCallExpression(node.parent) && node.parent.expression === node)
       )
-        add(
-          node.arguments[0] ? constantText(node.arguments[0]) : undefined,
-          true,
+        issues.push(
+          `${file}: indirect require/createRequire cannot be audited for hidden access`,
         );
+      if (factoryCall(node)) {
+        const arg = node.arguments[0];
+        const localBase =
+          arg &&
+          ts.isPropertyAccessExpression(arg) &&
+          arg.name.text === "url" &&
+          ts.isMetaProperty(arg.expression) &&
+          arg.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
+        const parent = node.parent;
+        if (
+          !localBase ||
+          !(
+            (ts.isCallExpression(parent) && parent.expression === node) ||
+            (ts.isPropertyAccessExpression(parent) &&
+              parent.expression === node &&
+              parent.name.text === "resolve")
+          )
+        )
+          issues.push(
+            `${file}: unresolved createRequire loader could expose title-data`,
+          );
+      }
+      if (ts.isCallExpression(node)) {
+        if (
+          node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+          (ts.isIdentifier(node.expression) &&
+            node.expression.text === "require") ||
+          factoryCall(node.expression)
+        )
+          add(
+            node.arguments[0] ? constantText(node.arguments[0]) : undefined,
+            true,
+          );
+        if (
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "resolve" &&
+          factoryCall(node.expression.expression)
+        )
+          add(closedText(node.arguments[0]), true);
+      }
       ts.forEachChild(node, visit);
     };
     visit(tree);
