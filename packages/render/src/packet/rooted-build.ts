@@ -1,3 +1,4 @@
+import { hasCompactFrame } from "./frame-profile.js";
 import { cardDistances, CARD_LOCALITY_AIM_MM } from "./rooted-locality.js";
 import {
   continuationBanks,
@@ -84,6 +85,9 @@ function makeDrafts(
   const original = rootedSpace(p, page, compact, native).b;
   const b = bankBounds(original, bank);
   const drafts: Draft[] = [];
+  const probes = bank.extra ? gridProbeDrafts(grid) : undefined;
+  if (probes && !gridLinks(p, grid, b, scale, probes))
+    return "Continuation spacing does not fit this grid.";
   for (let row = 0; row < grid.ys.length - 1; row++)
     for (let col = 0; col < grid.xs.length - 1; col++)
       drafts.push(
@@ -92,7 +96,11 @@ function makeDrafts(
           grid,
           col,
           row,
-          b,
+          perSideBankBounds(
+            b,
+            bank,
+            probes?.[row * (grid.xs.length - 1) + col],
+          ),
           scale,
           inner,
           profile,
@@ -133,6 +141,20 @@ function makeDrafts(
         fallback);
 }
 
+/** Release a fallback reservation on each cut-free side before constructing
+ * the viewport and its endpoints. No emitted route or packed label is moved. */
+export function perSideBankBounds(
+  b: import("./types.js").DrawingBounds,
+  bank: ContinuationBank,
+  probe: Draft | undefined,
+) {
+  if (!bank.extra || !probe) return b;
+  const sides = new Set(probe.links.map((l) => l.side));
+  const left = sides.has("left") ? 0 : bank.extra.left;
+  const right = sides.has("right") ? 0 : bank.extra.right;
+  return { ...b, x: b.x - left, w: b.w + left + right };
+}
+
 export function buildRootedCandidates(
   ir: Readonly<ElectricalIr>,
   p: PreparedSchematicDrawing,
@@ -141,6 +163,7 @@ export function buildRootedCandidates(
   native = false,
   explore = false,
   offset = 0,
+  extraReservations = false,
 ): RootedBuildResult {
   const { b, scale } = rootedSpace(p, page, !!profile, native);
   if (b.w < 60 || b.h < 50)
@@ -149,7 +172,7 @@ export function buildRootedCandidates(
       "unprintable-layout",
       "Title information leaves insufficient drawing space. Use a larger sheet or landscape.",
     );
-  const banks = continuationBanks(p, b, scale, offset);
+  const banks = continuationBanks(p, b, scale, offset, extraReservations);
   const inner = "";
   const distances = cardDistances(p, scale);
   const constraint = continuationGridConstraint(
@@ -175,28 +198,31 @@ export function buildRootedCandidates(
       captionFailure = drafts;
       return [];
     }
-    return [
-      {
-        drafts,
-        bank,
-        grid: g,
-        ...(profile ? { profile } : {}),
-        prepared: p,
-        scale,
-        jogs: interiorJogs(p, scale),
-        detours: routeDetours(p, scale),
-        greedy: g.greedy === true,
-        proximity: distances.reduce((sum, n) => sum + n, 0),
-        localityExcess: distances.reduce(
-          (sum, n) => sum + Math.max(0, n - CARD_LOCALITY_AIM_MM),
-          0,
-        ),
-      },
-    ];
+    return [rootedCandidate(drafts, bank, g, p, scale, profile, distances)];
   });
   if (!candidates.length && !explore)
-    return buildRootedCandidates(ir, p, page, profile, native, true, offset);
+    return buildRootedCandidates(
+      ir,
+      p,
+      page,
+      profile,
+      native,
+      true,
+      offset,
+      extraReservations,
+    );
   if (candidates.length) return { ok: true, value: candidates, constraint };
+  if (hasCompactFrame(page) && !extraReservations)
+    return buildRootedCandidates(
+      ir,
+      p,
+      page,
+      profile,
+      native,
+      true,
+      offset,
+      true,
+    );
   return failedBuild(p, constraint, captionFailure, search.identityFailure);
 }
 
@@ -256,4 +282,37 @@ export function materializeRootedCandidate(
   return typeof drafts === "string"
     ? offViewPacketFailure(p.graph, "unprintable-layout", drafts)
     : { ok: true, value: drafts };
+}
+
+function gridProbeDrafts(grid: RootedGrid): Draft[] {
+  return Array.from(
+    { length: (grid.xs.length - 1) * (grid.ys.length - 1) },
+    () => ({ links: [] }) as unknown as Draft,
+  );
+}
+function rootedCandidate(
+  drafts: Draft[],
+  bank: ContinuationBank,
+  g: RootedGrid,
+  p: PreparedSchematicDrawing,
+  scale: number,
+  profile: "compact" | "dense" | undefined,
+  distances: number[],
+): RootedCandidate {
+  return {
+    drafts,
+    bank,
+    grid: g,
+    ...(profile ? { profile } : {}),
+    prepared: p,
+    scale,
+    jogs: interiorJogs(p, scale),
+    detours: routeDetours(p, scale),
+    greedy: g.greedy === true,
+    proximity: distances.reduce((sum, n) => sum + n, 0),
+    localityExcess: distances.reduce(
+      (sum, n) => sum + Math.max(0, n - CARD_LOCALITY_AIM_MM),
+      0,
+    ),
+  };
 }

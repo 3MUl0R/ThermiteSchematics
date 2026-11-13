@@ -1,3 +1,6 @@
+import { hasCompactFrame } from "./frame-profile.js";
+import { compactFramePlan } from "./frame-plan.js";
+import { compactFrame } from "./frame-compact.js";
 import { rootedLegendView } from "../device-legend.js";
 import { continuationLabelSvg } from "./continuation-label.js";
 import { circuitTextLines } from "../circuit.js";
@@ -112,6 +115,10 @@ export function bounds(
   page: PaperPage,
   rooted?: NormalizedSchematicView,
 ): DrawingBounds {
+  if (hasCompactFrame(page)) {
+    const plan = compactFramePlan(title, page, rooted);
+    return { ...plan.drawing, frameService: plan.service };
+  }
   const m = page.marginMm;
   const noticeHeight = rooted
     ? rootedNoticeLines(rooted, page.widthMm - 2 * m - 36, 2.7).length * 4 + 4
@@ -136,6 +143,7 @@ export function frame(
   number: number,
   total: number,
 ): string {
+  if (hasCompactFrame(page)) return compactFrame(draft, page, number, total);
   const m = page.marginMm,
     w = page.widthMm - 2 * m,
     bottom = page.heightMm - m;

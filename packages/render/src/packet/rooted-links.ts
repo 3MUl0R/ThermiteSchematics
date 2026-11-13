@@ -47,13 +47,13 @@ export function drawingContinuations(
         ...common,
         end: 0,
         to: c.to + 1,
-        ...c.a,
+        ...sheetEndpoint(c.a, drafts[c.from], b),
       });
       required(drafts[c.to], "Missing peer section").links.push({
         ...common,
         end: 1,
         to: c.from + 1,
-        ...c.z,
+        ...sheetEndpoint(c.z, drafts[c.to], b),
       });
     }
   }
@@ -74,4 +74,20 @@ export function drawingContinuations(
           );
       }
   return { ok: true, value: undefined };
+}
+
+/** Each fallback sheet can release a cut-free side reservation. Construct its
+ * route-end anchor in that sheet's viewport coordinate system. */
+function sheetEndpoint<T extends { x: number; y: number }>(
+  endpoint: T,
+  draft: Draft | undefined,
+  base: DrawingBounds,
+): T {
+  const area = draft?.drawingBounds ?? base;
+  if (area.x === base.x && area.y === base.y) return endpoint;
+  return {
+    ...endpoint,
+    x: endpoint.x + area.x - base.x,
+    y: endpoint.y + area.y - base.y,
+  };
 }

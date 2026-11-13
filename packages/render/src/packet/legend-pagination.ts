@@ -1,3 +1,5 @@
+import { hasCompactFrame } from "./frame-profile.js";
+import { compactFramePlan, compactLegendBounds } from "./frame-plan.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { addDeviceLegend } from "../device-legend.js";
 import { invariant, required } from "../presentation/util.js";
@@ -83,11 +85,17 @@ function legendSpan(c: BandContext, start: number, end: number) {
     const result = addDeviceLegend(
       c.ir,
       frame(d, c.page, 99, 100),
-      {
-        ...area,
-        w: c.page.widthMm - c.page.marginMm - 3.34 - area.x,
-        h: area.h + 10.66,
-      },
+      hasCompactFrame(c.page)
+        ? compactLegendBounds(
+            area,
+            compactFramePlan(p.titleContext, c.page, p.view),
+            c.page,
+          )
+        : {
+            ...area,
+            w: c.page.widthMm - c.page.marginMm - 3.34 - area.x,
+            h: area.h + 10.66,
+          },
       1,
       false,
       p.view,

@@ -1,0 +1,22 @@
+import { selectCircuitPacket } from "../../layout/circuit-packet-selection.js";
+// Hidden, source-only entry for TB2a. Not exported by @thermite/render.
+import type {
+  CompiledProjectPresentation,
+  ElectricalIr,
+} from "@thermite/compiler";
+import { renderPacketWithAdvice } from "../../sheets.js";
+import { useCompactFrame } from "../../packet/frame-profile.js";
+import type { SchematicPacketRequest } from "../../packet/types.js";
+import { withFontMetricCache } from "../../symbols/font-metric-cache.js";
+
+export function renderCompactBenchmark(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicPacketRequest,
+  presentation?: Readonly<CompiledProjectPresentation>,
+) {
+  return withFontMetricCache(() =>
+    selectCircuitPacket(request, () =>
+      renderPacketWithAdvice(ir, request, presentation, true, useCompactFrame),
+    ),
+  );
+}

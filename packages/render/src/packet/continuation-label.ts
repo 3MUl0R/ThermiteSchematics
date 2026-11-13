@@ -9,7 +9,7 @@ export const CONTINUATION_PITCH = 3.5;
 export const CONTINUATION_CLEARANCE = 1;
 // Adopted inter-block ink gap. Zone clearance remains measured separately.
 export const CONTINUATION_BLOCK_GAP = 2.5;
-const STROKE_GAP = 3.15;
+export const STROKE_GAP = 3.15;
 export interface ContinuationRow {
   text: string;
   x: number;
