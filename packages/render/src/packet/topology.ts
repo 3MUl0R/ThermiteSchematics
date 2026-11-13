@@ -12,8 +12,10 @@ import {
   prepareConnectorAssemblyPages,
   type ConnectorAssemblyViewRequest,
 } from "../connector-assembly.js";
-import type { SignalLoopViewRequest } from "../signal-loop.js";
-import { preparePrintableSignalLoop } from "../signal-loop/output-label-fallback.js";
+import {
+  prepareSignalLoopDrawing,
+  type SignalLoopViewRequest,
+} from "../signal-loop.js";
 
 import type {
   CompiledProjectPresentation,
@@ -242,7 +244,7 @@ export async function topologyDrafts(
     const drawings = wiring
       ? [await prepareWiringDrawing(ir, request)]
       : signalLoop
-        ? [await preparePrintableSignalLoop(ir, request, fits)]
+        ? [await prepareSignalLoopDrawing(ir, request)]
         : assembly
           ? await prepareConnectorAssemblyPages(ir, request, fits, unfit)
           : await prepareCommunicationPages(ir, request, fits, unfit);

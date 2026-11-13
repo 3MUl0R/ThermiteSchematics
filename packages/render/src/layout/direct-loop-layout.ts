@@ -10,7 +10,6 @@ export async function layoutDirectLoop(
   vertical: boolean,
   inlineEdgeIds: readonly string[] = [],
   validateLabels: (graph: ElkNode) => void = () => {},
-  edgeSpacing: "3" | "6" = "6",
 ): Promise<ElkNode> {
   const input: ElkNode = {
     id: "loop",
@@ -19,7 +18,7 @@ export async function layoutDirectLoop(
       "elk.direction": vertical ? "DOWN" : "RIGHT",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.spacing.nodeNodeBetweenLayers": "8",
-      "elk.spacing.edgeEdge": edgeSpacing,
+      "elk.spacing.edgeEdge": "6",
       "elk.spacing.edgeNode": "5",
       "elk.padding": "[top=6,left=6,bottom=6,right=6]",
       "elk.randomSeed": "1",

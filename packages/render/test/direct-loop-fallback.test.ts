@@ -14,8 +14,8 @@ afterEach(async () => {
   await removeFixtures();
 });
 
-// Independent pre-inline reference: the exact Round 2 layout options.
-async function round2(
+// Independent reference: pre-RT1 dev 7bbe4f7's native layout options.
+async function nativeDev(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
   vertical: boolean,
@@ -27,7 +27,7 @@ async function round2(
       "elk.direction": vertical ? "DOWN" : "RIGHT",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.spacing.nodeNodeBetweenLayers": "8",
-      "elk.spacing.edgeEdge": vertical ? "3" : "6",
+      "elk.spacing.edgeEdge": "6",
       "elk.spacing.edgeNode": "5",
       "elk.padding": "[top=6,left=6,bottom=6,right=6]",
       "elk.randomSeed": "1",
@@ -39,7 +39,7 @@ async function round2(
 }
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
-  "preserves Round 2 refusal outcomes across uniform and mixed wire widths in %s",
+  "matches dev refusals and native fallback SVGs across uniform and mixed wire widths in %s",
   async (flow) => {
     const f = await fixture(),
       ir = await f.compile();
@@ -52,7 +52,8 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         (n) => (i: number) => `W${"A".repeat(n)}${i}`,
       ),
     ];
-    const outcomes: boolean[] = [];
+    const outcomes: boolean[] = [],
+      modes = new Set<string>();
     for (const label of names)
       for (const mixed of [false, true]) {
         const input = structuredClone(ir);
@@ -75,10 +76,23 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         };
         const mock = vi
           .spyOn(layouts, "layoutDirectLoop")
-          .mockImplementation(round2);
+          .mockImplementation(nativeDev);
         const before = await renderSchematicPacket(input, request);
         mock.mockRestore();
+        const attempts: ElkNode[] = [];
+        const capture = vi
+          .spyOn(runtime, "createElkEngine")
+          .mockImplementation(() => {
+            const engine = factory();
+            return {
+              layout: async (graph: ElkNode) => {
+                attempts.push(structuredClone(graph));
+                return engine.layout(graph);
+              },
+            } as ReturnType<typeof factory>;
+          });
         const after = await renderSchematicPacket(input, request);
+        capture.mockRestore();
         expect(
           after.ok,
           JSON.stringify({
@@ -90,28 +104,56 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           }),
         ).toBe(before.ok);
         outcomes.push(before.ok);
+        for (const attempt of attempts)
+          expect(attempt.layoutOptions!["elk.spacing.edgeEdge"]).toBe("6");
+        const inline =
+          flow === "top-to-bottom" &&
+          attempts.at(-1)!.edges!.some((edge) => edge.labels!.length === 0);
+        modes.add(after.ok ? (inline ? "inline" : "native") : "refuse");
         if (after.ok) {
           expect(after.value.sheets).toHaveLength(1);
-          expect(
-            parseHTML(after.value.sheets[0]!.svg).document.querySelectorAll(
-              "[data-loop-conductor]",
-            ),
-          ).toHaveLength(6);
-          // At this measured boundary 6 mm cannot fit the page, so the complete
-          // legacy result must be reproduced, rather than mixing label modes.
-          if (
-            flow === "top-to-bottom" &&
-            !mixed &&
-            /^WA{20,21}\d$/.test(input.wires[0]!.designation!) &&
-            before.ok
-          )
+          const routes = parseHTML(
+            after.value.sheets[0]!.svg,
+          ).document.querySelectorAll("[data-loop-conductor]");
+          expect(routes).toHaveLength(6);
+          if (inline) {
+            // The four wires between fixed-pitch terminal/connector lanes must
+            // print straight. Source/destination approaches keep native bends.
+            let straight = 0;
+            for (const route of routes) {
+              const wire = input.wires.find(
+                (w) => w.uid === route.getAttribute("data-loop-conductor"),
+              )!;
+              if (
+                wire.endpoints.every((end) =>
+                  ["XT1", "XP1"].includes(
+                    input.devices.find((d) => d.uid === end.terminal.deviceUid)!
+                      .designation,
+                  ),
+                )
+              ) {
+                const points = [
+                  ...route
+                    .querySelector("path")!
+                    .getAttribute("d")!
+                    .matchAll(/[ML] ([-.\d]+) ([-.\d]+)/g),
+                ];
+                expect(points).toHaveLength(2);
+                expect(points[0]![1]).toBe(points[1]![1]);
+                straight++;
+              }
+            }
+            expect(straight).toBe(4);
+          } else if (before.ok)
             expect(after.value.sheets[0]!.svg).toBe(
               before.value.sheets[0]!.svg,
             );
-        }
+        } else if (!before.ok) expect(after.error).toEqual(before.error);
       }
     expect(outcomes).toContain(true);
     expect(outcomes).toContain(false);
+    expect(modes).toContain("native");
+    if (flow === "top-to-bottom") expect(modes).toContain("inline");
   },
 );
 
