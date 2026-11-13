@@ -6,9 +6,9 @@ import {
 import { withFontMetricCache } from "./symbols/font-metric-cache.js";
 import {
   fitLegendDrafts,
-  legendSheets,
   type LegendViewDrafts,
 } from "./packet/device-legend.js";
+import { circuitPreviewSheets as legendSheets } from "./layout/circuit-preview-cache.js";
 import { rootedPageCostFailure } from "./packet/rooted-bound.js";
 import { renderErrorContext } from "./render-error-context.js";
 import { referenceTables } from "./packet/references.js";
@@ -338,7 +338,7 @@ function fitPacketLegends(
   contextError: typeof withPacketViews,
 ): RenderOutcome<Draft[]> {
   try {
-    return fitLegendDrafts(ir, drafts, views, page, layout);
+    return fitLegendDrafts(ir, drafts, views, page, layout, legendSheets);
   } catch (error) {
     return assemblyError(error, drafts, contextError);
   }

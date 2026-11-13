@@ -434,6 +434,9 @@ does not spend another routing pool. A view without a printed jog is unchanged.
 Unchanged view drafts may be reused before assembly, keyed by their exact inputs
 and routing selection. Each assembly receives a private copy; final sheet
 measurement, navigation finalization and the whole-packet guard still run.
+Identical legend-fitting and index previews may also reuse privately copied
+measurements within the same search. Final notice/document finalization runs
+fresh; every routing candidate still receives the whole-packet guard.
 
 The candidate must reduce jog-bearing conductors without increasing any
 conductor's bends, raw or clipped defects, or unrepaired clipped length beyond
