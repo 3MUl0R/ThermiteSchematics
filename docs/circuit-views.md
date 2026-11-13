@@ -209,7 +209,8 @@ A terminal bank carrying a return loop reserves its measured inline label lane,
 preventing a tiny turn between closely spaced fixed terminals. The catalog supplies component marks and their terminal attachments. Circuit groups are measured at readable size and packed into one or two columns. A wide group may span both columns; multiple wide groups can share a page. A complete group is never clipped or reduced below the circuit text size to force it onto paper. View notes appear once in a measured block after the last group, using remaining column space when available.
 
 
-For a circuit view with measured sub-3 mm internal jogs, the renderer may try one
+For a circuit view with measured sub-3 mm internal jogs in groups actually printed
+in its original printable drafts, the renderer may try one
 native ELK alternative per parallel fixed-port group. Labels take no ELK lane
 space in that alternative. Their complete measured boxes sit on native route
 segments, with the existing 1 mm caption clearance from device reservations,
@@ -217,6 +218,9 @@ foreign labels and conductor strokes. The layer gap is the along-segment label
 dimension plus two 1 mm visible stubs and the original edge/node clearances at
 both ends; there are no flow-specific gap floors. Transversely wide labels and
 multiple lines can still fail to fit the fixed lanes.
+Discarded whole-group layouts and pagination probes do not establish an affected
+view. Both layered edge/node and node/node clearances are required explicitly by
+the circuit graph constructor; missing or invalid values are programming errors.
 
 A group then retains its exact original all-label ELK layout. An unaffected view
 retains its original output. A repair must reduce that group's own jog-bearing

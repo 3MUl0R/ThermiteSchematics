@@ -8,6 +8,7 @@ import {
 } from "./circuit-inline-context.js";
 import { circuitHasJogs } from "./circuit-route-quality.js";
 import { circuitPacketGuard } from "./circuit-packet-guard.js";
+import { required } from "../presentation/util.js";
 
 /** The saved printable reference predates all routing alternatives. Each logical
  * circuit view must repair its own jogs; packet/page/navigation guards compare
@@ -37,7 +38,14 @@ export function selectCircuitPacket(
     context.qualityPhase = true;
     let selected = original;
     for (const [index, run] of context.runs.entries()) {
-      if (![...run.baseline.values()].some(circuitHasJogs)) continue;
+      if (
+        ![...run.printed].some((key) =>
+          circuitHasJogs(
+            required(run.baseline.get(key), "Missing printed circuit baseline"),
+          ),
+        )
+      )
+        continue;
       context.selected.add(index);
       context.cursor = 0;
       const candidate = await render();

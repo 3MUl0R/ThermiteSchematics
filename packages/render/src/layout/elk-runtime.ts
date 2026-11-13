@@ -74,6 +74,6 @@ export function createElkEngine(): ElkApi {
   if (!circuitInlineContext.getStore()) return engine;
   const native = engine.layout.bind(engine);
   engine.layout = (input, options) =>
-    cachedCircuitLayout(input, () => native(input, options));
+    cachedCircuitLayout(input, (copy) => native(copy, options), options);
   return engine;
 }

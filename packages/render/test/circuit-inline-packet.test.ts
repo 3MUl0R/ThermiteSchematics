@@ -27,9 +27,11 @@ afterEach(() => vi.restoreAllMocks());
 async function native(q: SchematicPacketRequest) {
   const spy = vi
     .spyOn(inline, "layoutCircuitGroup")
-    .mockImplementation((input) =>
-      createElkEngine().layout(structuredClone(input)),
-    );
+    .mockImplementation(async (input, run) => {
+      const graph = await createElkEngine().layout(structuredClone(input));
+      run?.baseline.set(JSON.stringify(input), structuredClone(graph));
+      return graph;
+    });
   try {
     return await renderSchematicPacket(ir, q);
   } finally {
@@ -156,3 +158,46 @@ it("rejects dropped cards and card distance growth on circuit sheets, including 
   ).toBe(false);
   expect(circuitPacketGuard(structuredClone(before), before)).toBe(true);
 });
+
+it.each([false, true])(
+  "detects affected views from printed groups only (printed defect=%s)",
+  async (printedDefect) => {
+    const { parallelLabelGraph } = await import("./circuit-inline.fixture.js");
+    const { nextCircuitLayoutRun } =
+      await import("../src/layout/circuit-inline.js");
+    const { rememberCircuitDrawing, recordPrintedCircuitDrawing } =
+      await import("../src/layout/circuit-printed-layouts.js");
+    const { selectCircuitPacket } =
+      await import("../src/layout/circuit-packet-selection.js");
+    const discarded = parallelLabelGraph();
+    discarded.id = "discarded pagination probe";
+    const printed = parallelLabelGraph();
+    if (!printedDefect)
+      for (const child of printed.children!) {
+        child.ports!.forEach((port, i) => (port.y = 8 + i * 15));
+        child.height = 50;
+      }
+    let renders = 0;
+    const traces: NonNullable<Parameters<typeof circuitInlineTrace.run>[0]> =
+      [];
+    const result = await circuitInlineTrace.run(traces, () =>
+      selectCircuitPacket(request, async () => {
+        renders++;
+        const run = nextCircuitLayoutRun()!;
+        await inline.layoutCircuitGroup(discarded, run);
+        await inline.layoutCircuitGroup(printed, run);
+        recordPrintedCircuitDrawing(rememberCircuitDrawing({}, printed, run));
+        return {
+          ok: true,
+          value: packet('<svg><g data-navigation-view="view"/></svg>'),
+        };
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(renders).toBe(printedDefect ? 2 : 1);
+    const run = traces[0]!.runs[0]!;
+    expect(run.baseline.size).toBe(2);
+    expect([...run.printed]).toEqual([JSON.stringify(printed)]);
+    expect(run.qualityAttempts).toBe(printedDefect ? 2 : 0);
+  },
+);

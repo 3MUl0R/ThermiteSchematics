@@ -1,7 +1,10 @@
 import { circuitPortOrderGuard } from "./circuit-port-order.js";
 import { required } from "../presentation/util.js";
 import type { ElkLabel, ElkNode } from "elkjs/lib/elk-api.js";
-import { circuitInlineContext } from "./circuit-inline-context.js";
+import {
+  circuitInlineContext,
+  circuitLayoutCacheKey,
+} from "./circuit-inline-context.js";
 import { createElkEngine } from "./elk-runtime.js";
 import { placeCircuitInlineLabels } from "./circuit-inline-slots.js";
 import {
@@ -27,6 +30,8 @@ export interface CircuitLayoutRun {
   attempts: number;
   qualityAttempts: number;
   baseline: Map<string, ElkNode>;
+  drawings: WeakMap<object, string>;
+  printed: Set<string>;
   alternatives: Map<string, ElkNode>;
   decisions: Map<string, string>;
   routed: Map<string, ElkNode>;
@@ -38,6 +43,8 @@ export function circuitLayoutRun(): CircuitLayoutRun {
     attempts: 0,
     qualityAttempts: 0,
     baseline: new Map(),
+    drawings: new WeakMap(),
+    printed: new Set(),
     alternatives: new Map(),
     decisions: new Map(),
     routed: new Map(),
@@ -86,15 +93,22 @@ export function circuitInlineGap(
   labels: ReadonlyMap<string, ElkLabel[]>,
 ) {
   const vertical = input.layoutOptions?.["elk.direction"] === "DOWN";
-  const clearance = Number(
-    input.layoutOptions?.["elk.layered.spacing.edgeNodeBetweenLayers"] ??
-      input.layoutOptions?.["elk.spacing.edgeNode"] ??
-      0,
-  );
+  // layoutGroupUnchecked in circuit.ts supplies both layered clearances.
+  // They are required here; ELK's implicit defaults are not this contract.
+  const spacing = (option: string) => {
+    const value = Number(
+      required(
+        input.layoutOptions?.[option],
+        `Missing required circuit clearance option ${option}`,
+      ),
+    );
+    if (!Number.isFinite(value) || value < 0)
+      throw new Error(`Invalid circuit clearance option ${option}`);
+    return value;
+  };
+  const clearance = spacing("elk.layered.spacing.edgeNodeBetweenLayers");
   return Math.max(
-    Number(
-      input.layoutOptions?.["elk.layered.spacing.nodeNodeBetweenLayers"] ?? 0,
-    ),
+    spacing("elk.layered.spacing.nodeNodeBetweenLayers"),
     ...[...labels.values()]
       .flat()
       .map(
@@ -174,7 +188,7 @@ async function routingCandidate(
   run.qualityAttempts++;
   circuitInlineContext
     .getStore()
-    ?.permittedInputs.add(JSON.stringify(candidateInput));
+    ?.permittedInputs.add(circuitLayoutCacheKey(candidateInput));
   const candidate = await createElkEngine().layout(candidateInput);
   run.routed.set(key, structuredClone(candidate));
   return candidate;

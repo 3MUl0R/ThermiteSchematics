@@ -3,6 +3,7 @@ import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import { parseHTML } from "linkedom";
 import * as layouts from "../src/layout/direct-loop-layout.js";
 import * as runtime from "../src/layout/elk-runtime.js";
+import { InlineLabelFitError } from "../src/layout/inline-label-error.js";
 import { checkLabels } from "../src/signal-loop.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { fixture, removeFixtures } from "../../cli/test/analog-output.cases.js";
@@ -24,6 +25,49 @@ it("rethrows unexpected inline-label failures without a fallback layout", async 
     }),
   ).rejects.toBe(failure);
   expect(create).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ["x", NaN],
+  ["y", Infinity],
+  ["width", 0],
+  ["height", -1],
+] as const)(
+  "propagates malformed inline label geometry (%s=%s) without fallback",
+  async (field, value) => {
+    const { children, edges } = structuredClone(graphFixture);
+    const create = vi.spyOn(runtime, "createElkEngine");
+    const failure = await layouts
+      .layoutDirectLoop(children, edges, true, [edges[0]!.id], (graph) => {
+        graph.edges![0]!.labels![0]![field] = value;
+        checkLabels(graph);
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect((failure as Error | undefined)?.constructor).toBe(Error);
+    expect((failure as Error).message).toContain("invalid content geometry");
+    expect(create).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("keeps finite out-of-bounds label geometry as a recoverable fit error", () => {
+  expect(() =>
+    checkLabels({
+      id: "out-of-bounds",
+      width: 10,
+      height: 10,
+      edges: [
+        {
+          id: "e",
+          sources: [],
+          targets: [],
+          labels: [{ x: -1, y: 1, width: 2, height: 2 }],
+        },
+      ],
+    }),
+  ).toThrow(InlineLabelFitError);
 });
 
 // Independent reference: pre-RT1 dev 7bbe4f7's native layout options.

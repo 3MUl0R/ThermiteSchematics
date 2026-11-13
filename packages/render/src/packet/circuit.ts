@@ -1,6 +1,7 @@
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { deviceTagFitDetails } from "./device-tag-fit.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
+import { recordPrintedCircuitDrawing } from "../layout/circuit-printed-layouts.js";
 import { isInlineLabelFailure } from "../layout/inline-label-error.js";
 import {
   CircuitRenderError,
@@ -135,12 +136,7 @@ async function circuitDraftsUnchecked(
   drafts.push(newDraft());
   const fits = (group: CircuitDrawing) => {
     const width = group.width > columnWidth + 0.001 ? b.w : columnWidth;
-    const heading = [
-      group.lineReference ? `Ref. ${group.lineReference}` : undefined,
-      group.label,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const heading = circuitGroupLabel(group);
     return (
       group.width <= width + 0.001 &&
       circuitTextLines(heading, width, 2.7).length * 3.5 +
@@ -177,12 +173,7 @@ async function circuitDraftsUnchecked(
           ...deviceTagFitDetails(group, width, available),
         },
       );
-    const heading = [
-      group.lineReference ? `Ref. ${group.lineReference}` : undefined,
-      group.label,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const heading = circuitGroupLabel(group);
     const headings = circuitTextLines(heading, width, 2.7);
     const headHeight = headings.length * 3.5 + 1;
     const height =
@@ -228,6 +219,7 @@ async function circuitDraftsUnchecked(
         .map((s, i) => groupHeading(x, y + 2.7 + i * 3.5, s, group.id))
         .join("") +
       `<g transform="translate(${n(x)} ${n(y + headHeight)})">${group.content}</g>`;
+    recordPrintedCircuitDrawing(group);
     if (group.pagination) {
       draft.note =
         "Circuit parts · [+N]: outside part · P/S: repeated physical terminal · full wires retained";
@@ -354,6 +346,15 @@ interface CircuitNoteLayout {
   cursors: readonly number[];
   available: number;
   gap: number;
+}
+
+function circuitGroupLabel(group: CircuitDrawing) {
+  return [
+    group.lineReference ? `Ref. ${group.lineReference}` : undefined,
+    group.label,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function groupHeading(x: number, y: number, label: string, id: string): string {

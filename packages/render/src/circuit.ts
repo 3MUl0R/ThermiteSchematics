@@ -65,6 +65,7 @@ import {
 import { InlineLabelCollisionError } from "./layout/inline-label-error.js";
 import { circuitPortGroups } from "./layout/circuit-port-order.js";
 import { circuitInlineContext } from "./layout/circuit-inline-context.js";
+import { rememberCircuitDrawing } from "./layout/circuit-printed-layouts.js";
 import {
   layoutCircuitGroup,
   type CircuitLayoutRun,
@@ -1859,7 +1860,7 @@ async function layoutGroupUnchecked(
       return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
     }),
   ].join("");
-  return {
+  const drawing: CircuitDrawing = {
     id: group.id,
     label: group.label ?? group.id,
     ...(diagnostics.length ? { diagnostics } : {}),
@@ -1896,6 +1897,7 @@ async function layoutGroupUnchecked(
         .sort(compare),
     },
   };
+  return rememberCircuitDrawing(drawing, input, run);
 }
 
 /** All geometry is derived from compiled source and closed catalog profiles; no source mutation. */

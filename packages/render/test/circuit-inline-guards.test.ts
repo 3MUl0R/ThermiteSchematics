@@ -29,6 +29,29 @@ it("derives the gap from the along label box, both stubs and original edge/node 
         );
       }
 });
+it.each([
+  "elk.layered.spacing.edgeNodeBetweenLayers",
+  "elk.layered.spacing.nodeNodeBetweenLayers",
+])(
+  "requires the clearance option %s instead of defaulting to zero",
+  (option) => {
+    const input = parallelLabelGraph();
+    delete input.layoutOptions![option];
+    expect(() =>
+      circuitInlineGap(input, new Map([["e0", [{ width: 6, height: 3.8 }]]])),
+    ).toThrow(`Missing required circuit clearance option ${option}`);
+  },
+);
+it.each(["NaN", "Infinity", "-1"])(
+  "rejects invalid clearance option %s",
+  (value) => {
+    const input = parallelLabelGraph();
+    input.layoutOptions!["elk.layered.spacing.edgeNodeBetweenLayers"] = value;
+    expect(() => circuitInlineGap(input, new Map())).toThrow(
+      "Invalid circuit clearance option",
+    );
+  },
+);
 it("keeps an unaffected parallel view byte-identical with no extra ELK run", async () => {
   const input = parallelLabelGraph();
   input.children![1]!.ports!.forEach((p, i) => (p.y = 8 + i * 15));
