@@ -36,6 +36,8 @@ import {
   verifyArchiveIdentity,
 } from "./common.mjs";
 
+export const RUNTIME_PROJECT_GUIDE_PATTERN = /runtime package/;
+
 export async function verifyRuntimeArchive(
   archivePath,
   { sourceCli, allowPreview = false } = {},
@@ -405,7 +407,7 @@ export async function verifyRuntimeArchive(
     );
     assert.match(
       await readFile(join(project, "AGENTS.md"), "utf8"),
-      /runtime package/,
+      RUNTIME_PROJECT_GUIDE_PATTERN,
     );
     for (const notice of ["LICENSE", "NOTICE"])
       assert.deepEqual(

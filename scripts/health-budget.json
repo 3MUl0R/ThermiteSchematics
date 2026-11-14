@@ -123,7 +123,7 @@
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580",
-      "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": "beb8704db1326f8382836d22ea2b02a468500ad892b31911ff2e70dfaf53c4b5"
+      "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": "4453191a76ab8d777b193f48fd8d9c1b0ccd459c46c360e58ded17b164c77ff2"
     }
   },
   "functions": {

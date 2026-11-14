@@ -14,7 +14,7 @@ thermite init ../cabinets --template cabinets
 
 `init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
-Check issues; report runtime bugs, gaps or unclear docs at
+When using a runtime package, check issues; report bugs, gaps or unclear docs at
 https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths. No GitHub: draft an issue. Never patch downloaded runtimes.
 
 Fix a separate engine checkout; follow its AGENTS.md/CONTRIBUTING.md for PRs.
@@ -316,7 +316,7 @@ round half-up to 0.01 mm.
 
 Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.
 
-For packet frames, use presentation 0.3 named slots; see `docs/drawing-frames.md`.
+For packet frames, use presentation 0.3 named slots; see `thermite guide drawing-frames`.
 Enter only supplied title/revision data. Unknown fields stay labelled blank;
 unknown revision stays `UNSPECIFIED` and remains unmet at issue review.
 Preview the whole packet after frame changes; handle R006 honestly.
