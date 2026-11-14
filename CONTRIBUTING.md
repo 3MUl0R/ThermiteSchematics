@@ -266,10 +266,11 @@ to silence a failure. Rendering changes also need print-size review in both flow
 `bun run check:health` runs the deterministic AST ratchet in `bun run check`.
 Global ceilings are 3,000 physical lines per file and 300 per function. They,
 and the total non-null assertion and test suppression ceilings, never rise.
-The outlier thresholds remain 850 file lines and 70 function lines: crossing a
-threshold or growing an entry fails until explicitly reviewed. Entries below
-the global ceilings may be raised with a reason; active grandfathered over-cap
-items only fall. `health:accept` cannot waive ceilings.
+The outlier thresholds remain 850 file lines and 70 function lines. Against dev,
+crossing a threshold or growing an entry requires an exact reviewed reason.
+Release targets enforce the hard invariants without recomposing per-item reasons
+from earlier dev PRs. Active grandfathered over-cap items only fall under content
+continuity. `health:accept` cannot waive hard invariants against either target.
 
 Coverage defaults to **all tracked code** (`js/mjs/cjs/jsx`, `ts/mts/cts/tsx`,
 Python, shell and PowerShell), including package fixtures, generators, examples
@@ -294,18 +295,24 @@ anonymous callbacks also use occurrence order. Shell/Python/PowerShell have file
 line budgets; JavaScript/TypeScript also have function/AST metrics.
 
 The checker compares against the merge-base with the fetched PR target
-(`GITHUB_BASE_REF`) first, otherwise the newer of `origin/dev` and local `dev`
+(`GITHUB_BASE_REF`, restricted to `dev` or `release`) first, otherwise the newer of `origin/dev` and local `dev`
 (whichever contains the other). Missing or divergent baseline refs fail closed;
 fetch full history and reconcile them. CI uses `fetch-depth: 0` and verifies the
 base ref. Only synthetic test repositories may explicitly opt in with
-`THERMITE_HEALTH_ALLOW_NO_BASE=1`; with no baseline ref they compare against HEAD
-if it exists. The v2 migration seeds from authenticated base source. Version 4
+`THERMITE_HEALTH_ALLOW_NO_BASE=1`; it is ignored whenever `CI` or `GITHUB_ACTIONS`
+is set, including empty/false values. With no baseline ref the local opt-in
+compares against HEAD if it exists. A missing committed base budget, like a v2
+migration, seeds from authenticated base source rather than the working tree. Version 4
 retires old sub-cap records and ignores legacy string reasons.
 
 A grandfathered allowance follows content within its file, not a name or callback
-position. The matcher hashes substantive AST-token lines without trivia and uses
-multiset Dice overlap (`2 * common / (base lines + current lines)`) of at least
-0.5. Matches are one-to-one, highest similarity first, with deterministic ties.
+position. The matcher hashes substantive AST-token lines without trivia and
+counts **added lines = current lines minus common lines**, consuming repeated
+base lines once per occurrence. At most 70 added lines are allowed, even with a
+reason; pure shrinks always qualify. Matches are one-to-one: fewest added lines
+first, then most common lines, exact hashes, unchanged identities and lexical
+IDs as deterministic tie-breakers. Over-cap files use the same 70-line bound
+with trimmed nonempty file lines. Matching cannot waive the decreasing size limit.
 Base fingerprints authenticate stored locators; current fingerprints are refreshed
 by `health:lower`. Unmatched bodies are new and face the global cap. A record
 retires when its matched value reaches the cap or below, or its content is deleted;
@@ -323,6 +330,9 @@ A move proof transfers one identity once. A grandfathered allowance transfers at
 equal or lower value; the old location leaves no tombstone. Cross-file under-cap
 outlier moves also need proof. Same-file grandfathered callback shifts use content
 matching. Normalized hashes preserve identifiers, strings, templates and regex
-contents while dropping trivia. A reason from an earlier raise cannot authorize
-later growth: its exact base/current values must match. Ratchet tests are in
-`packages/cli/test/health-{ratchet,history,baseline,continuity,scope}.test.ts`.
+contents while dropping trivia. A copy plus an edit is not a move: the source
+identity must be absent. Against dev, a reason from an earlier raise cannot
+authorize later growth: its exact base/current values must match. Release
+targets check ceilings, continuity, grandfathering and move validity without
+per-item reason composition. Ratchet tests are in
+`packages/cli/test/health-{ratchet,history,baseline,continuity,scope,release}.test.ts`.
