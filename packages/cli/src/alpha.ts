@@ -585,7 +585,7 @@ function registerAlphaPacket(command: Command, produce: Produce) {
     )
     .requiredOption(
       "--input <file>",
-      "schematic-packet-request/0.1 or schematic-packet-request/0.2 JSON file (titleData needs presentation 0.3), or - for stdin",
+      "schematic-packet-request/0.1 or schematic-packet-request/0.2 JSON file (titleData uses fixed slots and needs presentation 0.3), or - for stdin",
     )
     .action(async (flags: Flags) => produce(flags));
 }

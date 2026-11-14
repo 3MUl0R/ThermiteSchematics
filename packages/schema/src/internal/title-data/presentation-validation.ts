@@ -65,11 +65,11 @@ export function checkPresentation(
       checkLiteral(v, "line", `/titleBlock/lines/${i}`, issues),
     );
   if (!isObject(tb.fields)) return;
-  if (Object.keys(tb.fields).length > 14)
+  if (Object.keys(tb.fields).length > slots.length)
     issues.add(
       "E015",
       "/titleBlock/fields",
-      "At most 14 title fields are allowed.",
+      "Compact has at most ten fixed title fields.",
     );
   const used = new Set<JsonValue>();
   for (const [key, field] of Object.entries(tb.fields))

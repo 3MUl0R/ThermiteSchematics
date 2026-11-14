@@ -1,4 +1,4 @@
-// Test-internal until TB2 publishes an atomic schema/compiler/render pipeline.
+// Private structural parser shared by the public compact validation path.
 // No font or render dependency is allowed in this structural parser.
 import { createAjv2020, validateJsonValue } from "../../ajv-validation.js";
 import {

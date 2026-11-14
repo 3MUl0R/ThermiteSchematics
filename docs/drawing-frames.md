@@ -41,8 +41,9 @@ bands have destinations in the outer cells; they do not create extra zones.
 ## Fields and unknowns
 
 The ten slots are `project`, `sheetTitle`, `drawingNumber`, `customer`, `drawnBy`,
-`date`, `checkedBy`, `approvedBy`, `revision` and `sheetNumber`. A fields map
-changes one built-in at a time. Each key must match its `slot`; specify a label
+`date`, `checkedBy`, `approvedBy`, `revision` and `sheetNumber`. The `fields` object is closed: its optional keys are exactly these ten slots,
+with at most one field per slot and no user-chosen keys. Each value is a closed
+field object; its key must match its `slot`. Specify a label
 and at most one of `value`, `bind` or `pattern`. Project, sheet title, revision and
 sheet number require their respective bindings `project.name`, `sheet.title`,
 `sheet.revision` and `sheet.numberOfTotal` when explicitly configured. Other

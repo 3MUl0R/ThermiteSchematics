@@ -1728,52 +1728,38 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
                 },
                 fields: {
                   type: "object",
-                  propertyNames: {
-                    pattern: "^[a-z][A-Za-z0-9_]{0,31}$",
-                  },
-                  additionalProperties: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      slot: {
-                        enum: [
-                          "project",
-                          "sheetTitle",
-                          "drawingNumber",
-                          "customer",
-                          "drawnBy",
-                          "date",
-                          "checkedBy",
-                          "approvedBy",
-                          "revision",
-                          "sheetNumber",
-                        ],
-                      },
-                      label: {
-                        type: "string",
-                        minLength: 1,
-                        maxLength: 40,
-                      },
-                      value: {
-                        type: ["string", "null"],
-                        minLength: 1,
-                        maxLength: 160,
-                      },
-                      bind: {
-                        enum: [
-                          "project.name",
-                          "sheet.title",
-                          "sheet.revision",
-                          "sheet.numberOfTotal",
-                        ],
-                      },
-                      pattern: {
-                        type: "string",
-                        minLength: 1,
-                        maxLength: 160,
-                      },
+                  additionalProperties: false,
+                  properties: {
+                    project: {
+                      $ref: "#/$defs/titleField",
                     },
-                    required: ["slot", "label"],
+                    sheetTitle: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    drawingNumber: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    customer: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    drawnBy: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    date: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    checkedBy: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    approvedBy: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    revision: {
+                      $ref: "#/$defs/titleField",
+                    },
+                    sheetNumber: {
+                      $ref: "#/$defs/titleField",
+                    },
                   },
                 },
               },
@@ -1782,6 +1768,51 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
           },
           required: ["format"],
           title: "CompactProjectPresentationFile",
+        },
+        titleField: {
+          title: "CompactTitleField",
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slot: {
+              enum: [
+                "project",
+                "sheetTitle",
+                "drawingNumber",
+                "customer",
+                "drawnBy",
+                "date",
+                "checkedBy",
+                "approvedBy",
+                "revision",
+                "sheetNumber",
+              ],
+            },
+            label: {
+              type: "string",
+              minLength: 1,
+              maxLength: 40,
+            },
+            value: {
+              type: ["string", "null"],
+              minLength: 1,
+              maxLength: 160,
+            },
+            bind: {
+              enum: [
+                "project.name",
+                "sheet.title",
+                "sheet.revision",
+                "sheet.numberOfTotal",
+              ],
+            },
+            pattern: {
+              type: "string",
+              minLength: 1,
+              maxLength: 160,
+            },
+          },
+          required: ["slot", "label"],
         },
       },
     },

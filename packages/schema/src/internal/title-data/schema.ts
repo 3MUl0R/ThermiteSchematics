@@ -26,6 +26,7 @@ export const key = { pattern: "^[a-z][A-Za-z0-9_]{0,31}$" };
 const canonical = IN_MEMORY_CANONICAL_SCHEMAS.find(
   (s) => s.fileName === "project-presentation.schema.json",
 );
-export const presentationSchema = (
-  canonical?.schema as { $defs: { compact: object } }
-).$defs.compact;
+export const presentationSchema = {
+  $ref: "#/$defs/compact",
+  $defs: (canonical?.schema as { $defs: Record<string, object> }).$defs,
+};

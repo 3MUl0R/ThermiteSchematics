@@ -10,6 +10,10 @@ const CONTAINED_RELATIVE_PATH =
  */
 const SCHEMA_PATTERN_DESCRIPTIONS: ReadonlyMap<string, string> = new Map([
   [
+    "^[a-z][A-Za-z0-9_]{0,31}$",
+    "a lowercase ASCII letter followed by up to 31 ASCII letters, digits or underscores",
+  ],
+  [
     "^[EIW][0-9]{3}$",
     'a diagnostic code beginning with "E", "I" or "W", followed by three digits',
   ],

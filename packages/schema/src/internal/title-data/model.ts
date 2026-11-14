@@ -57,6 +57,6 @@ export interface Presentation {
   readonly titleBlock?: {
     readonly profile?: "compact";
     readonly lines?: readonly string[];
-    readonly fields?: Readonly<Record<string, Field>>;
+    readonly fields?: Readonly<Partial<Record<Slot, Field>>>;
   };
 }

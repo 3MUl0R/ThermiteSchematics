@@ -104,29 +104,34 @@ export interface CompactProjectPresentationFile {
       | [string, string, string]
       | [string, string, string, string];
     fields?: {
-      [k: string]:
-        | {
-            slot:
-              | "project"
-              | "sheetTitle"
-              | "drawingNumber"
-              | "customer"
-              | "drawnBy"
-              | "date"
-              | "checkedBy"
-              | "approvedBy"
-              | "revision"
-              | "sheetNumber";
-            label: string;
-            value?: string | null;
-            bind?:
-              | "project.name"
-              | "sheet.title"
-              | "sheet.revision"
-              | "sheet.numberOfTotal";
-            pattern?: string;
-          }
-        | undefined;
+      project?: CompactTitleField;
+      sheetTitle?: CompactTitleField;
+      drawingNumber?: CompactTitleField;
+      customer?: CompactTitleField;
+      drawnBy?: CompactTitleField;
+      date?: CompactTitleField;
+      checkedBy?: CompactTitleField;
+      approvedBy?: CompactTitleField;
+      revision?: CompactTitleField;
+      sheetNumber?: CompactTitleField;
     };
   };
+}
+export interface CompactTitleField {
+  slot:
+    | "project"
+    | "sheetTitle"
+    | "drawingNumber"
+    | "customer"
+    | "drawnBy"
+    | "date"
+    | "checkedBy"
+    | "approvedBy"
+    | "revision"
+    | "sheetNumber";
+  label: string;
+  value?: string | null;
+  bind?:
+    "project.name" | "sheet.title" | "sheet.revision" | "sheet.numberOfTotal";
+  pattern?: string;
 }

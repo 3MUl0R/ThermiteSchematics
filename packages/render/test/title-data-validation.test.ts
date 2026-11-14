@@ -239,24 +239,42 @@ describe("TB1 internal strict presentation schema", () => {
       },
     });
     for (const [count, failed] of [
-      [14, false],
-      [15, true],
+      [10, false],
+      [11, true],
     ] as const) {
       const issues = new Issues("presentation.json");
       checkPresentation(make(count), issues);
       expect(issues.diagnostics.some((d) => d.code === "E015")).toBe(failed);
     }
   });
-  it("counts field-key code points and checks its closed grammar in the schema", () => {
-    for (const key of ["a", "a".repeat(32), "aUpper_01"])
+  it("accepts only the ten fixed slot keys in the closed schema", () => {
+    for (const key of [
+      "project",
+      "sheetTitle",
+      "drawingNumber",
+      "customer",
+      "drawnBy",
+      "date",
+      "checkedBy",
+      "approvedBy",
+      "revision",
+      "sheetNumber",
+    ])
       expect(
         schemaP(
-          p({
-            titleBlock: { fields: { [key]: { slot: "customer", label: "X" } } },
-          }),
+          p({ titleBlock: { fields: { [key]: { slot: key, label: "X" } } } }),
         ),
       ).toBe(true);
-    for (const key of ["", "a".repeat(33), "A", "a-b", "é", "a/0"]) {
+    for (const key of [
+      "custom",
+      "",
+      "a".repeat(32),
+      "aUpper_01",
+      "A",
+      "a-b",
+      "é",
+      "a/0",
+    ]) {
       expect(
         schemaP(
           p({
@@ -264,7 +282,9 @@ describe("TB1 internal strict presentation schema", () => {
           }),
         ),
       ).toBe(false);
-      expect(schemaP.errors?.some((e) => e.keyword === "pattern")).toBe(true);
+      expect(
+        schemaP.errors?.some((e) => e.keyword === "additionalProperties"),
+      ).toBe(true);
     }
   });
   it.each([
