@@ -268,45 +268,61 @@ Global ceilings are 3,000 physical lines per file and 300 per function. They,
 and the total non-null assertion and test suppression ceilings, never rise.
 The outlier thresholds remain 850 file lines and 70 function lines: crossing a
 threshold or growing an entry fails until explicitly reviewed. Entries below
-the global ceilings may be raised with a reason; grandfathered over-cap items
-only fall, even after deletion or a move. `health:accept` cannot waive ceilings.
+the global ceilings may be raised with a reason; active grandfathered over-cap
+items only fall. `health:accept` cannot waive ceilings.
 
-Coverage is hand-written code in `packages/*/src`, `packages/*/test`, `evals/**`
-and `scripts/**`, including code fixtures. Generated schema/text metrics,
-JSON/data, pure-data fixtures, goldens, snapshots and signed repin evidence are
-excluded. `evals/agent` is frozen to E2's harness: its existing tracked-test
-suppression scan stays, but its sizes are excluded pending a separate versioned
-harness-equivalence change. Other tracked tests outside this scope likewise keep
-suppression-only treatment. Test sizes count; `describe`/`suite` callbacks are
-excluded as grouping. Their nested `it`/`test` bodies, hooks and helpers count.
-This is the code-health scorecard measurement method. Non-null/duplicate counts
-retain their production/script treatment; tests count suppressions, not assertions
+Coverage defaults to **all tracked code** (`js/mjs/cjs/jsx`, `ts/mts/cts/tsx`,
+Python, shell and PowerShell), including package fixtures, generators, examples
+and new directories. The explicit generated-code exclusions are
+`packages/schema/src/generated/**` and `packages/render/src/text-metrics-data.ts`.
+JSON/data and signed evidence are not code; pure literal-data modules in
+fixtures/goldens/snapshots are excluded by AST inspection. Directory names alone
+do not exclude code helpers. `evals/agent` is frozen to E2's harness: its existing
+tracked-test suppression scan stays, but its sizes are excluded pending a separate
+versioned harness-equivalence change. Test sizes count; only direct
+`describe`/`suite` grouping callbacks in test files are excluded (including
+`.only`, `.each(...)` and other suite modifiers, not arbitrary chained calls).
+Their nested `it`/`test` bodies, hooks and helpers count. Non-null/duplicate counts
+cover production/scripts; tests and fixture code count suppressions, not assertions
 or duplicate bodies. Duplicate bodies count at 50 normalized AST tokens.
 
 Only Git-tracked files are scanned; run at the checkout root. Use `git add -N`
-for new files; omitted untracked code produces a warning. CRLF/LF measurements
-and identity hashes agree. Source spans include signatures and internal
+for new files; omitted untracked code produces a warning. Lines split on CRLF,
+CR, LF, U+2028 and U+2029. Source spans include signatures and internal
 comments/blanks, excluding preceding trivia. Named functions use lexical names;
 anonymous callbacks also use occurrence order. Shell/Python/PowerShell have file
 line budgets; JavaScript/TypeScript also have function/AST metrics.
 
-The checker compares budgets against the merge-base with local `dev` (or
-`origin/dev`; standalone repositories use HEAD). The v2 scope migration is seeded
-from that base's source, not the working tree. Empty synthetic test repositories
-have no historical comparison. Do not delete grandfathered entries: `--lower`
-retains zero tombstones for removed identities, preventing reset by deletion.
+The checker compares against the merge-base with the fetched PR target
+(`GITHUB_BASE_REF`) first, otherwise the newer of `origin/dev` and local `dev`
+(whichever contains the other). Missing or divergent baseline refs fail closed;
+fetch full history and reconcile them. CI uses `fetch-depth: 0` and verifies the
+base ref. Only synthetic test repositories may explicitly opt in with
+`THERMITE_HEALTH_ALLOW_NO_BASE=1`; with no baseline ref they compare against HEAD
+if it exists. The v2 migration seeds from authenticated base source. Version 4
+retires old sub-cap records and ignores legacy string reasons.
+
+A grandfathered allowance follows content within its file, not a name or callback
+position. The matcher hashes substantive AST-token lines without trivia and uses
+multiset Dice overlap (`2 * common / (base lines + current lines)`) of at least
+0.5. Matches are one-to-one, highest similarity first, with deterministic ties.
+Base fingerprints authenticate stored locators; current fingerprints are refreshed
+by `health:lower`. Unmatched bodies are new and face the global cap. A record
+retires when its matched value reaches the cap or below, or its content is deleted;
+`health:lower` removes it without a tombstone. Subsequent growth follows ordinary
+per-item policy. A recreated body must also stay under the global cap.
 
 | Action                 | Command / rule                                                                                                                                                                                                                                     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Check                  | `bun run check:health`                                                                                                                                                                                                                             |
-| Bank reductions        | `bun run health:lower`; refuses regressions, lowers counters/entries and retains grandfathered tombstones                                                                                                                                          |
-| Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only below ceilings, records/prints each raise and reason; list each in the PR                                                                                                                 |
+| Bank reductions        | `bun run health:lower`; refuses regressions, lowers counters/entries, refreshes content fingerprints and retires deleted/sub-cap allowances                                                                                                        |
+| Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only under ceilings; records `{identity, from, to, reason}`, with `from` equal to the base budget and `to` equal to the current value and budget; list each raise in the PR                    |
 | Move an allowance      | Add `moves[newIdentity] = {section, from, sha256}` in health-budget.json; section is `files` or `functions`, hash comes from `measure().fileHashes` or `bodyHashes` on the base; old identity must be absent, new bytes/normalized body must match |
 
-A move proof transfers one identity once. A grandfathered allowance transfers at equal or lower value,
-with the old identity retained as a tombstone. Under-cap outlier moves also need
-proof, not a new allowance. Normalized hashes preserve identifiers, string,
-template and regex contents while dropping trivia. Extractions that change a
-body must stay below the global cap and have reviewed budget reasons.
-`bun run test -- packages/cli/test/health-ratchet.test.ts packages/cli/test/health-history.test.ts`
-covers cap, history, reset, move, suppression, CRLF and acceptance negatives.
+A move proof transfers one identity once. A grandfathered allowance transfers at
+equal or lower value; the old location leaves no tombstone. Cross-file under-cap
+outlier moves also need proof. Same-file grandfathered callback shifts use content
+matching. Normalized hashes preserve identifiers, strings, templates and regex
+contents while dropping trivia. A reason from an earlier raise cannot authorize
+later growth: its exact base/current values must match. Ratchet tests are in
+`packages/cli/test/health-{ratchet,history,baseline,continuity,scope}.test.ts`.
