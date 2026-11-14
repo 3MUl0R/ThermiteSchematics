@@ -269,8 +269,9 @@ and the total non-null assertion and test suppression ceilings, never rise.
 The outlier thresholds remain 850 file lines and 70 function lines. Against dev,
 crossing a threshold or growing an entry requires an exact reviewed reason.
 Release targets enforce the hard invariants without recomposing per-item reasons
-from earlier dev PRs. Active grandfathered over-cap items only fall under content
-continuity. `health:accept` cannot waive hard invariants against either target.
+from earlier dev PRs. Active grandfathered over-cap entries only fall. Dev checks
+content continuity per PR; release compares the admitted entries by value without
+re-deriving cumulative continuity. `health:accept` cannot waive hard invariants.
 
 Coverage defaults to **all tracked code** (`js/mjs/cjs/jsx`, `ts/mts/cts/tsx`,
 Python, shell and PowerShell), including package fixtures, generators, examples
@@ -311,19 +312,26 @@ Once release has a committed budget, comparison uses that release base normally.
 Existing committed v2/v3 budgets on the normal path retain their migration rules.
 Version 4 retires old sub-cap records and ignores legacy string reasons.
 
-A grandfathered allowance follows content within its file, not a name or callback
+A grandfathered allowance on dev follows content within its file, not a name or callback
 position. The matcher hashes substantive AST-token lines without trivia and
 counts **added lines = current lines minus common lines**, consuming repeated
 base lines once per occurrence. At most 70 added lines are allowed, even with a
-reason; pure shrinks always qualify. Matches are one-to-one: fewest added lines
-first, then most common lines, exact hashes, unchanged identities and lexical
-IDs as deterministic tie-breakers. Over-cap files use the same 70-line bound
+reason; pure shrinks qualify. Matches are one-to-one: most common lines first,
+then fewest added lines, exact hashes, unchanged identities and lexical IDs as
+deterministic tie-breakers. A candidate nested inside another available candidate
+for the same base body is excluded; consumed bodies no longer compete. AST source
+ranges establish nesting, including same-line bodies. Over-cap files use the same 70-line bound
 with trimmed nonempty file lines. Matching cannot waive the decreasing size limit.
 Base fingerprints authenticate stored locators; current fingerprints are refreshed
 by `health:lower`. Unmatched bodies are new and face the global cap. A record
 retires when its matched value reaches the cap or below, or its content is deleted;
 `health:lower` removes it without a tombstone. Subsequent growth follows ordinary
-per-item policy. A recreated body must also stay under the global cap.
+per-item policy. A recreated body must also stay under the global cap. On release,
+each over-cap body/file still needs an active entry whose value does not exceed
+the base entry. Its current fingerprint and location must be valid, and cross-file
+moves still need proof; reviewed dev swaps are not cumulatively limited to 70.
+`health:accept` automatically banks stale allowances downward before authorizing
+raises, including reductions inherited from a rebase. Lowering needs no reason.
 
 | Action                 | Command / rule                                                                                                                                                                                                                                     |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -339,6 +347,6 @@ matching. Normalized hashes preserve identifiers, strings, templates and regex
 contents while dropping trivia. A copy plus an edit is not a move: the source
 identity must be absent. Against dev, a reason from an earlier raise cannot
 authorize later growth: its exact base/current values must match. Release
-targets check ceilings, continuity, grandfathering and move validity without
+targets check ceilings, grandfathered values and move validity without
 per-item reason composition. Ratchet tests are in
-`packages/cli/test/health-{ratchet,history,baseline,continuity,scope,release}.test.ts`.
+`packages/cli/test/health-*.test.ts`, including real-body 70/71-line headroom probes.

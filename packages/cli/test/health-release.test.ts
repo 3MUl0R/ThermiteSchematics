@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { createBudget } from "../../../scripts/health-ratchet.mjs";
+import {
+  createBudget,
+  historyRegressions,
+} from "../../../scripts/health-ratchet.mjs";
+import { lineAdditions } from "../../../scripts/health-continuity.mjs";
 import { readHistory } from "../../../scripts/health-history.mjs";
 import {
   repo,
@@ -13,6 +17,72 @@ import {
   fn,
 } from "./health-fixture.js";
 const path = "packages/cli/src/alpha.ts";
+it("compares grandfathered values across two reviewed 65-line dev swaps against a v4 release", () => {
+  const root = repo(),
+    id = `${path}#prepareWiringDrawing`;
+  const original = `function prepareWiringDrawing() {\n${Array.from({ length: 424 }, (_, n) => `void "original ${n}";\n`).join("")}}\n`;
+  put(root, path, original);
+  const releaseMetrics = metrics(root),
+    releaseBudget = createBudget(releaseMetrics);
+  save(root, releaseBudget);
+  const release = commit(root, "v4 release");
+  git(root, "update-ref", "refs/remotes/origin/release", release);
+  git(root, "update-ref", "refs/remotes/origin/dev", release);
+  let text = original,
+    previous = releaseMetrics;
+  for (const round of [0, 1]) {
+    for (let n = round * 65; n < (round + 1) * 65; n++)
+      text = text.replace(`"original ${n}"`, `"reviewed swap ${n}"`);
+    put(root, path, text);
+    const current = metrics(root);
+    expect(
+      lineAdditions(previous.bodyLines[id], current.bodyLines[id]).added,
+    ).toBe(65);
+    const result = run(root, ["--lower"], { GITHUB_BASE_REF: "dev" });
+    expect(result.status, result.stderr).toBe(0);
+    const sha = commit(root, `reviewed dev swap ${round}`);
+    git(root, "update-ref", "refs/remotes/origin/dev", sha);
+    previous = current;
+  }
+  const current = metrics(root),
+    budget = JSON.parse(
+      readFileSync(root + "/scripts/health-budget.json", "utf8"),
+    );
+  expect(
+    lineAdditions(releaseMetrics.bodyLines[id], current.bodyLines[id]).added,
+  ).toBe(130);
+  const result = run(root, [], { GITHUB_BASE_REF: "release" });
+  expect(result.status, result.stderr).toBe(0);
+  const missing = structuredClone(budget);
+  delete missing.grandfathered.functions[id];
+  expect(
+    historyRegressions(
+      current,
+      missing,
+      releaseBudget,
+      releaseMetrics,
+      "release",
+    ).join("\n"),
+  ).toContain("ceiling 300 -> 426");
+  const raised = structuredClone(budget);
+  raised.grandfathered.functions[id]++;
+  expect(
+    historyRegressions(
+      current,
+      raised,
+      releaseBudget,
+      releaseMetrics,
+      "release",
+    ).join("\n"),
+  ).toContain("cannot rise or be forged");
+  put(root, "tools/brand-new.ts", fn(301, "newBody"));
+  metrics(root);
+  const attack = run(root, [], { GITHUB_BASE_REF: "release" });
+  expect(attack.status).toBe(1);
+  expect(attack.stderr).toContain(
+    "ceiling 300 -> 301 (new or unmatched content)",
+  );
+});
 it("uses a committed release budget normally without requiring origin/dev", () => {
   const root = repo();
   put(root, path, fn(90));

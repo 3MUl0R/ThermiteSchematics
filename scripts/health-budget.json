@@ -641,7 +641,7 @@
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~11": 133,
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~12": 143,
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~21": 72,
-    "scripts/health-measure.mjs#measureSources": 85,
+    "scripts/health-measure.mjs#measureSources": 88,
     "scripts/library-batch/promote.check.mjs#setup": 142,
     "scripts/library-batch/promote.check.mjs#test callback": 83,
     "scripts/library-batch/promote.mjs#promoteJob": 257,
@@ -886,8 +886,8 @@
     "functions:scripts/health-measure.mjs#measureSources": {
       "identity": "functions:scripts/health-measure.mjs#measureSources",
       "from": 70,
-      "to": 85,
-      "reason": "AST content continuity adds normalized per-body line hashes and separates size coverage from assertion/suppression treatment."
+      "to": 88,
+      "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
     }
   },
   "skippedTests": {

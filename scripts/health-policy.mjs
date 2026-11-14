@@ -144,12 +144,24 @@ function authorizationRows(current, budget, reference) {
 export function acceptBudget(current, budget, reason, reference) {
   const errors = ceilingRegressions(current, budget, reference);
   if (errors.length) throw Error(errors.join("\n"));
-  const accepted = structuredClone(budget),
-    rows = changes(current, budget, reference);
-  const pending = authorizationRows(current, budget, reference).filter(
+  const accepted = structuredClone(budget);
+  // Rebase reductions need no authorization. Bank them before finding raises,
+  // so an allowance above both actual and base cannot deadlock accept/lower.
+  for (const section of SECTIONS) {
+    const values = valuesOf(current, section);
+    for (const [key, limit] of Object.entries(accepted[section])) {
+      const value = values[key] ?? 0;
+      if (value >= limit) continue;
+      if (value <= fallbackOf(accepted, section)) delete accepted[section][key];
+      else accepted[section][key] = value;
+    }
+  }
+  bankReasons(current, budget, accepted, reference);
+  const rows = changes(current, accepted, reference);
+  const pending = authorizationRows(current, accepted, reference).filter(
     (r) =>
       !reasonMatches(
-        budget.reasons[`${r.section}:${r.key}`],
+        accepted.reasons[`${r.section}:${r.key}`],
         `${r.section}:${r.key}`,
         r.from,
         r.actual,

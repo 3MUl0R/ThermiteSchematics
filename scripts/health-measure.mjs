@@ -267,6 +267,7 @@ export function measureSources(paths, read) {
     bodies = new Map(),
     bodyTokens = {},
     bodyHashes = {},
+    bodyRanges = {},
     fileHashes = {},
     bodyLines = {},
     fileLines = {};
@@ -304,6 +305,7 @@ export function measureSources(paths, read) {
           return;
         }
         functions[identity] = end - start + 1;
+        bodyRanges[identity] = [node.getStart(source), node.end];
         const { hash, tokens } = normalizedBody(node.body, source);
         bodyTokens[identity] = tokens;
         bodyHashes[identity] = hash;
@@ -341,6 +343,7 @@ export function measureSources(paths, read) {
     duplicates,
     bodyTokens,
     bodyHashes,
+    bodyRanges,
     fileHashes,
     bodyLines,
     fileLines,

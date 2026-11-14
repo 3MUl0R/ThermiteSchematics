@@ -74,13 +74,53 @@ function candidates(section, current, budget, reference) {
   }
   return rows.sort(
     (a, b) =>
-      a.added - b.added ||
       b.common - a.common ||
+      a.added - b.added ||
       Number(b.exact) - Number(a.exact) ||
       Number(b.key === b.from) - Number(a.key === a.from) ||
       compare(a.id, b.id) ||
       compare(a.key, b.key),
   );
+}
+function nestedCandidate(row, other, current) {
+  if (other.id !== row.id || other.key === row.key) return false;
+  const inner = current.bodyRanges?.[row.key],
+    outer = current.bodyRanges?.[other.key];
+  return (
+    fileOf(row.key) === fileOf(other.key) &&
+    inner &&
+    outer &&
+    outer[0] <= inner[0] &&
+    outer[1] >= inner[1]
+  );
+}
+function releaseMatches(section, current, budget, reference) {
+  const result = {},
+    values = valuesOf(current, section),
+    before = reference.budget;
+  for (const [id, limit] of Object.entries(before.grandfathered[section])) {
+    const key = budget.locations[section][id],
+      from = before.locations[section][id];
+    if (
+      limit <= budget.ceilings[sizeKey(section)] ||
+      !Object.hasOwn(budget.grandfathered[section], id) ||
+      !Object.hasOwn(values, key) ||
+      result[key]
+    )
+      continue;
+    // Release compares the admitted entry's value, not cumulative dev edits.
+    // Moving that entry across files still requires the existing exact proof.
+    if (
+      (section === "files" ? key !== from : fileOf(key) !== fileOf(from)) &&
+      !(
+        exactMove(section, key, budget, reference.metrics, current) &&
+        budget.moves[key].from === from
+      )
+    )
+      continue;
+    result[key] = { id, key, from, limit };
+  }
+  return result;
 }
 export function allowanceMatches(current, budget, reference) {
   const result = { files: {}, functions: {} };
@@ -97,9 +137,24 @@ export function allowanceMatches(current, budget, reference) {
           };
       continue;
     }
-    const used = new Set();
-    for (const row of candidates(section, current, budget, reference)) {
+    if (reference.target === "release") {
+      result[section] = releaseMatches(section, current, budget, reference);
+      continue;
+    }
+    const used = new Set(),
+      rows = candidates(section, current, budget, reference);
+    for (const row of rows) {
       if (used.has(row.id) || result[section][row.key]) continue;
+      // Already consumed bodies are no longer candidates. This preserves a
+      // grandfathered inner body's own row once its outer body is matched.
+      if (
+        section === "functions" &&
+        rows.some(
+          (other) =>
+            !result[section][other.key] && nestedCandidate(row, other, current),
+        )
+      )
+        continue;
       used.add(row.id);
       result[section][row.key] = row;
     }
