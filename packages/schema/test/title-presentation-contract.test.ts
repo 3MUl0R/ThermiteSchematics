@@ -44,7 +44,7 @@ it("closes the fixed slot object and every field record in the public schema", a
 it("keeps missing/wrong format and malformed compact diagnostics located and specific", () => {
   const registry = createInMemoryCanonicalSchemaRegistry();
   for (const [source, pointer, code, line] of [
-    ['{\n "revision":"A","backgroundColor":"#ffffff"\n}', "/format", "E010", 1],
+    ['{\n "revision":"A","backgroundColor":"#ffffff"\n}', "/format", "E014", 1],
     [
       '{\n "format":"project-presentation/0.4","revision":"A","backgroundColor":"#ffffff"\n}',
       "/format",

@@ -39,6 +39,7 @@ export const AJV_KEYWORD_TO_CODE = {
   maxLength: "E013",
   enum: "E014",
   const: "E014",
+  anyOf: "E014",
   minItems: "E015",
   maxItems: "E015",
   minimum: "E015",
@@ -112,6 +113,15 @@ function propertyNameFromError(error: ErrorObject): string | undefined {
 }
 
 function targetForError(error: ErrorObject): ErrorTarget {
+  const discriminator = stringParameter(error, "discriminator");
+  if (error.keyword === "anyOf" && discriminator !== undefined) {
+    return {
+      pointer: appendJsonPointer(error.instancePath, discriminator),
+      anchor: "key",
+      fallbackPointer: error.instancePath,
+    };
+  }
+
   if (error.keyword === "required") {
     const missingProperty = stringParameter(error, "missingProperty") ?? "";
     return {
@@ -216,7 +226,7 @@ function alternativesForError(
 ): DiagnosticAlternatives | undefined {
   const params = error.params as Record<string, unknown>;
   const values =
-    keyword === "enum"
+    keyword === "enum" || keyword === "anyOf"
       ? params.allowedValues
       : keyword === "const"
         ? [params.allowedValue]
@@ -275,6 +285,10 @@ function messageForError(
       return alternatives === undefined
         ? "Value is not one of the allowed values."
         : `Value is not one of the allowed values: ${formatAllowedValues(alternatives)}.`;
+    case "anyOf":
+      return alternatives === undefined
+        ? "Value must match an accepted schema alternative."
+        : `Expected ${JSON.stringify(stringParameter(error, "discriminator") ?? "value")} to be one of: ${formatAllowedValues(alternatives)}.`;
     case "const":
       return alternatives === undefined
         ? "Value does not equal the required constant."

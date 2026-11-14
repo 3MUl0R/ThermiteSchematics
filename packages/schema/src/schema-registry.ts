@@ -1,3 +1,4 @@
+import { validatePresentationDiscriminator } from "./presentation-diagnostics.js";
 import { validatePresentationStructure } from "./internal/title-data/presentation.js";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
@@ -530,6 +531,18 @@ export class SchemaRegistry {
           delete publicDiagnostic[key];
         return publicDiagnostic;
       });
+    if (
+      entity === "project-presentation" &&
+      (!isJsonObject(value) ||
+        (value.format !== "project-presentation/0.1" &&
+          value.format !== "project-presentation/0.2"))
+    ) {
+      const root = this.ajv.getSchema(
+        "https://thermiteschematics.com/schemas/0.1/project-presentation.schema.json",
+      );
+      if (root === undefined) throw new Error("Missing presentation schema.");
+      return validatePresentationDiscriminator(root, value, context);
+    }
     const validate = this.#entityValidators.get(entity);
 
     if (validate === undefined) {
