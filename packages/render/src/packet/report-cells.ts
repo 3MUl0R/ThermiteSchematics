@@ -22,6 +22,63 @@ import {
 
 const REPORT_CELL_SIZES = [2.6, 2.5] as const;
 
+interface ProbeCache {
+  wraps: Map<string, string[]>;
+  metrics: Map<string, ReturnType<typeof measureText>>;
+}
+
+/** Reuse native names, identifiers and exact wraps across a bounded width grid.
+ * The ordinary cell splitter and geometry remain the measurement authority. */
+export function wireColumnProbe(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  width: number,
+  page: PaperPage,
+  size: number,
+) {
+  const names = reportNames(ir),
+    identifiers = reportIdentifiers(ir, table),
+    allocation = wireReportColumns(
+      table,
+      width,
+      size,
+      names,
+      identifiers,
+      "columns",
+    ),
+    cache: ProbeCache = { wraps: new Map(), metrics: new Map() };
+  return {
+    widths: allocation.widths,
+    minimums: allocation.minimums,
+    measure(widths: number[]) {
+      if (
+        widths.length !== 7 ||
+        widths.some((w) => !Number.isFinite(w) || w <= 4) ||
+        Math.abs(widths.reduce((sum, w) => sum + w, 0) - width) > 1e-6
+      )
+        throw Error(
+          "Wire column candidate does not fill seven physical columns",
+        );
+      return measuredCells(
+        ir,
+        table,
+        width,
+        page,
+        size,
+        names,
+        identifiers,
+        {
+          ...allocation,
+          widths,
+          padding: 2,
+          inlineLocations: false,
+        },
+        cache,
+      );
+    },
+  };
+}
+
 /** Measured identifier minima, then the allowed smaller em, then a refusal. */
 export function reportCells(
   ir: Readonly<ElectricalIr>,
@@ -163,19 +220,17 @@ function measuredCells(
   names: ReportName[],
   identifiers: ReportIdentifiers,
   allocation: WireColumnAllocation,
+  cache?: ProbeCache,
 ) {
   const { widths, padding } = allocation;
   const headerNote = reportHeaderNote(allocation, page);
-  const wrapHeader: HeaderWrapper = (value, w, column) =>
-    wrapReportHeader(value, w, column, cellSize, allocation.hyphenatedColumns);
-  const wrapCell: CellWrapper = (value, w, column, key) =>
-    wrapReportCell(
-      value,
-      w,
-      cellSize,
-      names,
-      identifiers.get(key ?? "")?.[column],
-    );
+  const { wrapHeader, wrapCell } = cellWrappers(
+    cellSize,
+    names,
+    identifiers,
+    allocation,
+    cache,
+  );
   const insets = reportInsets(
     table,
     widths,
@@ -208,6 +263,7 @@ function measuredCells(
       padding,
       insets,
       headerNote,
+      cache?.metrics,
     );
   return {
     widths,
@@ -217,6 +273,41 @@ function measuredCells(
     geometry,
     inlineLocations: !!allocation.inlineLocations,
   };
+}
+
+function cellWrappers(
+  cellSize: number,
+  names: ReportName[],
+  identifiers: ReportIdentifiers,
+  allocation: WireColumnAllocation,
+  cache?: ProbeCache,
+) {
+  const cached = (key: string, run: () => string[]) => {
+    const hit = cache?.wraps.get(key);
+    if (hit) return hit;
+    const lines = run();
+    cache?.wraps.set(key, lines);
+    return lines;
+  };
+  let wrapHeader: HeaderWrapper = (value, w, column) =>
+    wrapReportHeader(value, w, column, cellSize, allocation.hyphenatedColumns);
+  let wrapCell: CellWrapper = (value, w, column, key) =>
+    wrapReportCell(
+      value,
+      w,
+      cellSize,
+      names,
+      identifiers.get(key ?? "")?.[column],
+    );
+  if (cache) {
+    const header = wrapHeader,
+      body = wrapCell;
+    wrapHeader = (...args) =>
+      cached(JSON.stringify(["header", ...args]), () => header(...args));
+    wrapCell = (...args) =>
+      cached(JSON.stringify(["body", ...args]), () => body(...args));
+  }
+  return { wrapHeader, wrapCell };
 }
 
 type HeaderWrapper = (value: string, width: number, column: number) => string[];
@@ -448,8 +539,15 @@ function reportGeometry(
   padding: number,
   insets: number[],
   headerNote?: string,
+  cache?: ProbeCache["metrics"],
 ) {
-  const metrics = cells.flat().map((value) => measureText(value, cellSize)),
+  const metrics = cells.flat().map((value) => {
+      const hit = cache?.get(value);
+      if (hit) return hit;
+      const measured = measureText(value, cellSize);
+      cache?.set(value, measured);
+      return measured;
+    }),
     ascent = Math.max(0, ...metrics.map((m) => m.ascent)),
     descent = Math.max(0, ...metrics.map((m) => m.descent)),
     lineHeight = Math.max(3.6, ascent + descent + 0.6),

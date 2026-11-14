@@ -1,5 +1,6 @@
 import { reportCells, emitReportRow } from "./report-cells.js";
 import { paginatedReportCells } from "./report-layout.js";
+import { reportPaginator } from "./report-paginator.js";
 
 import type {
   CompiledProjectPresentation,
@@ -86,9 +87,10 @@ export function tableDrafts(
       "unprintable-layout",
       "Insufficient report area. Shorten title lines or select a larger sheet.",
     );
-  let measured: ReturnType<typeof reportCells>;
+  let measured: ReturnType<typeof reportCells>, header: string[][];
   try {
-    measured = paginatedReportCells(ir, table, b.w, b.h, page);
+    measured = paginatedReportCells(ir, table, b.w, b.h, page, b.y);
+    header = measured.split(table.columns, "header");
   } catch (error) {
     return failure("unprintable-layout", (error as Error).message);
   }
@@ -103,12 +105,6 @@ export function tableDrafts(
     geometry,
     inlineLocations,
   } = measured;
-  let header: string[][];
-  try {
-    header = split(table.columns, "header");
-  } catch (error) {
-    return failure("unprintable-layout", (error as Error).message);
-  }
   const headerH = geometry(header, true).height;
   const documents = reportDocumentContext(
     ir,
@@ -120,7 +116,8 @@ export function tableDrafts(
   );
   const notes = reportNotes(table, b.w);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
-  if (headerH + 9 > bottom - b.y) {
+  const paginator = reportPaginator(b.y, b.h, headerH, notes.length);
+  if (!paginator.headerFits) {
     const column = header.reduce(
       (best, lines, i) => (lines.length > header[best]!.length ? i : best),
       0,
@@ -186,7 +183,8 @@ export function tableDrafts(
       return failure("unprintable-layout", (error as Error).message);
     }
     const height = geometry(cells).height;
-    if (height + headerH + 9 > bottom - b.y) {
+    const placement = paginator.place(height);
+    if (placement.kind === "overflow") {
       const column = cells.reduce(
         (best, value, index) =>
           value.length > cells[best]!.length ? index : best,
@@ -197,7 +195,7 @@ export function tableDrafts(
         `${context(rowName(i), column)}: ${cells[column]!.length} lines need ${n(height)} mm; only ${n(bottom - b.y - headerH - 9)} mm is available on a fresh sheet at the fixed ${cellSize} mm text size (minimum 2.5 mm).${unknownReason(source.cells[column]!)} ${page.orientation === "landscape" ? "Use larger paper or shorter authored text." : "Use larger paper, landscape, or shorter authored text."}`,
       );
     }
-    if (y + height > bottom) {
+    if (placement.kind === "new-page") {
       finish(i);
       first = i;
       start();

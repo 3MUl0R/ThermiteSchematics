@@ -94,50 +94,63 @@ it("ordinary tables still require one painted rectangle per column", async () =>
   );
 });
 
-it("independently measures all stacked fields in the issued narrow conveyor packet", async () => {
-  const { compileProject } = await import("@thermite/compiler");
-  const { renderSchematicPacket } =
-    await import("../../packages/render/dist/sheets.js");
-  const { conveyorRequest } =
-    await import("../../packages/render/test/packet-navigation-review-fixture.js");
-  const c = await compileProject("examples/conveyor-line");
-  if (!c.ok) throw Error(JSON.stringify(c));
-  const rendered = await renderSchematicPacket(
-    c.ir,
-    {
-      ...conveyorRequest(),
+it.each([
+  { project: "conveyor-line", stacked: false, pages: 19, wireParts: 4 },
+  { project: "machine-demo", stacked: true, pages: 36, wireParts: 5 },
+])(
+  "independently measures the issued $project wire fields (stacked=$stacked)",
+  async ({ project, stacked, pages, wireParts }) => {
+    const { compileProject } = await import("@thermite/compiler");
+    const { renderSchematicPacket } =
+      await import("../../packages/render/dist/sheets.js");
+    const { conveyorRequest } =
+      await import("../../packages/render/test/packet-navigation-review-fixture.js");
+    const { repeatRequest, wireAllocationFixture } =
+      await import("../../packages/render/test/wire-column-search-fixture.js");
+    const c = await compileProject(`examples/${project}`);
+    if (!c.ok) throw Error(JSON.stringify(c));
+    const request = {
+      ...(stacked ? repeatRequest("left-to-right") : conveyorRequest()),
       layout: "standard",
       page: { size: "letter", orientation: "portrait" },
-    },
-    c.presentation,
-  );
-  if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
-  expect(rendered.value.sheets).toHaveLength(19);
-  const wires = rendered.value.sheets.filter((s) => s.view.kind === "wires");
-  expect(wires).toHaveLength(4);
-  for (const sheet of wires) {
-    const g = await openSheet(page, embedPrintableFont(sheet.svg));
-    for (const t of g.texts.filter((t) => t.row)) {
-      expect(t.bbox.x).toBeGreaterThanOrEqual(t.cell.x - 0.02);
-      expect(t.bbox.y).toBeGreaterThanOrEqual(t.cell.y - 0.02);
-      expect(t.bbox.x + t.bbox.w).toBeLessThanOrEqual(
-        t.cell.x + t.cell.w + 0.02,
-      );
-      expect(t.bbox.y + t.bbox.h).toBeLessThanOrEqual(
-        t.cell.y + t.cell.h + 0.02,
-      );
-    }
-    const rows = new Set(g.reportCells.map((c) => c.row));
-    expect(g.reportCells).toHaveLength(rows.size * 7);
-    expect(
-      g.reportCells
-        .filter((c) => c.columnIndex === 5)
-        .every(
-          (c) =>
-            c.bbox.y >
-            g.reportCells.find((p) => p.row === c.row && p.columnIndex === 1)
-              .bbox.y,
+    };
+    const control = wireAllocationFixture(c.ir, c.presentation, request.page);
+    expect(control.receipt?.tier).toBe(stacked ? "c" : "b");
+    if (stacked) {
+      expect(control.receipt.selected).toBeNull();
+      expect(
+        control.receipt.candidates.every(
+          (a) => a.pages === null || a.pages > control.receipt.nativePages,
         ),
-    ).toBe(true);
-  }
-});
+      ).toBe(true);
+    }
+    expect(control.pages).toBe(wireParts);
+    const rendered = await renderSchematicPacket(c.ir, request, c.presentation);
+    if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
+    expect(rendered.value.sheets).toHaveLength(pages);
+    const wires = rendered.value.sheets.filter((s) => s.view.kind === "wires");
+    expect(wires).toHaveLength(wireParts);
+    for (const sheet of wires) {
+      const g = await openSheet(page, embedPrintableFont(sheet.svg));
+      for (const t of g.texts.filter((t) => t.row)) {
+        expect(t.bbox.x).toBeGreaterThanOrEqual(t.cell.x - 0.02);
+        expect(t.bbox.y).toBeGreaterThanOrEqual(t.cell.y - 0.02);
+        expect(t.bbox.x + t.bbox.w).toBeLessThanOrEqual(
+          t.cell.x + t.cell.w + 0.02,
+        );
+        expect(t.bbox.y + t.bbox.h).toBeLessThanOrEqual(
+          t.cell.y + t.cell.h + 0.02,
+        );
+      }
+      const rows = new Set(g.reportCells.map((c) => c.row));
+      expect(g.reportCells).toHaveLength(rows.size * 7);
+      for (const location of g.reportCells.filter((c) => c.columnIndex === 5)) {
+        const endpoint = g.reportCells.find(
+          (p) => p.row === location.row && p.columnIndex === 1,
+        );
+        if (stacked) expect(location.bbox.y).toBeGreaterThan(endpoint.bbox.y);
+        else expect(location.bbox.y).toBeCloseTo(endpoint.bbox.y, 6);
+      }
+    }
+  },
+);
