@@ -857,14 +857,19 @@ for (const row of rows.filter((r) => r.status === "infrastructure-error"))
 let code = exitCode(rows, values["report-only"]);
 const counts = summary(rows);
 const policyCounts = Object.fromEntries(
-  ["pass", "xfail", "fail", "xpass", "manual", "not-implemented"].map(
-    (status) => [
-      status,
-      rows.filter(
-        (r) => r.classification === "policy-gap" && r.status === status,
-      ).length,
-    ],
-  ),
+  [
+    "pass",
+    "xfail",
+    "fail",
+    "xpass",
+    "manual",
+    "not-applicable",
+    "not-implemented",
+  ].map((status) => [
+    status,
+    rows.filter((r) => r.classification === "policy-gap" && r.status === status)
+      .length,
+  ]),
 );
 const report = {
   ...metadata,
@@ -890,11 +895,11 @@ await writeFile(
     "",
     `Mode: ${values["report-only"] ? "report-only" : "strict"}; exit ${code}. Full findings and rounded measurements: [JSON](summary.json). [Gallery](gallery.html). [Reviewer form](reviewer-form.json).`,
     "",
-    "| DQ | Pass | Fail | Xfail | Xpass | Manual | Not implemented |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| DQ | Pass | Fail | Xfail | Xpass | Manual | Not applicable | Not implemented |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...Object.entries(counts).map(
       ([dq, c]) =>
-        `| ${dq} | ${c.pass} | ${c.fail} | ${c.xfail} | ${c.xpass} | ${c.manual} | ${c["not-implemented"]} |`,
+        `| ${dq} | ${c.pass} | ${c.fail} | ${c.xfail} | ${c.xpass} | ${c.manual} | ${c["not-applicable"]} | ${c["not-implemented"]} |`,
     ),
     "",
     "## Drift within marker bands",
@@ -911,7 +916,12 @@ await writeFile(
     "## Observations",
     "",
     ...rows
-      .filter((r) => !["pass", "manual", "not-implemented"].includes(r.status))
+      .filter(
+        (r) =>
+          !["pass", "manual", "not-applicable", "not-implemented"].includes(
+            r.status,
+          ),
+      )
       .map(
         (r) =>
           `- ${r.id}: **${r.status}** ${r.reason ?? r.evidence?.findings?.[0]?.kind ?? ""}${r.evidence?.crop ? ` ([300 dpi crop](${r.evidence.crop}))` : ""}`,

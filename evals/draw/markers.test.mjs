@@ -139,7 +139,7 @@ describe("defect identity matching", () => {
     expect(exitCode(failed, true)).toBe(2);
   });
   it("does not reinterpret a manual/unimplemented observation as fixed", () => {
-    for (const status of ["manual", "not-implemented"]) {
+    for (const status of ["manual", "not-applicable", "not-implemented"]) {
       const rows = [row({ status })];
       assess(rows, registry(), selected());
       expect(rows.some((r) => r.status === "fail")).toBe(true);

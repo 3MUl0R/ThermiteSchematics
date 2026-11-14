@@ -417,7 +417,7 @@ it("wire delivery checks both native endpoints and status, not just the promised
   }
   f.report.texts.find((t) => t.text === "network inventory").text =
     "wire inventory";
-  f.tables = [];
+  f.tables = [{ kind: doc.kind, documentId: doc.id, columns: [] }];
   expect(errors(f)).toEqual([]);
   const wrongCount = clone(f);
   wrongCount.packet.navigation.dependencies[0].caption.text =
@@ -546,7 +546,7 @@ function terminalFixture() {
     reportRowScope: "row",
     bbox: { x: 25 + (i * 130) / 7, y: 40, w: 130 / 7, h: 10 },
   }));
-  f.tables = [];
+  f.tables = [{ kind: doc.kind, documentId: doc.id, columns: [] }];
   return f;
 }
 it("delivers omitted native terminals and rejects invented unconnected-terminal connections", () => {
@@ -808,7 +808,7 @@ function assemblyFixture() {
   for (const c of f.report.reportCells) c.row = "rel";
   f.report.texts.find((t) => t.text === "network inventory").text =
     "assembly inventory";
-  f.tables = [];
+  f.tables = [{ kind: doc.kind, documentId: doc.id, columns: [] }];
   return f;
 }
 it("assembly delivery preserves unresolved native pin-map state and singular compact counts", () => {
@@ -1050,7 +1050,8 @@ it("native unoccupied connector rows have no assembly fact and cannot invent a p
   }
   f.report.texts.find((t) => t.text === "network inventory").text =
     "assembly inventory";
-  f.tables = [];
+  f.tables = [{ kind: doc.kind, documentId: doc.id, columns: [] }];
+  f.tables[0].authoredOrder = 0;
   expect(nativeRows(f.ir).map((r) => r.facts)).toEqual([[]]);
   expect(errors(f)).toEqual([]);
   row.facts = [{ kind: "assembly-pin-map", relationUid: "invented" }];
@@ -1335,4 +1336,52 @@ it("empty-state wording cannot replace a known native connection or protocol", (
       link,
     ),
   ).toBe(false);
+});
+
+it("L5 Z5 rejects a complete foreign native resolution row specifically", () => {
+  const f = fixture(),
+    doc = f.packet.navigation.documents[0];
+  f.ir.devices.push({ uid: "foreign", designation: "Foreign", typeId: "t" });
+  const key = '["foreign","P"]';
+  for (const t of [...f.report.texts, ...f.report.reportCells])
+    if (t.row) t.row = key;
+  f.report.texts.find((t) => t.columnIndex === 2 && t.row).text = "Foreign: P";
+  doc.rows[0].nativeKey = key;
+  doc.rows[0].displayName = "Foreign: P";
+  doc.rows[0].facts = [
+    { kind: "port-link-status", deviceUid: "foreign", portKey: "P" },
+  ];
+  expect(check(f).findings.map((f) => f.kind)).toContain(
+    "document-resolution-row-mismatch",
+  );
+});
+it("L5 Z6 refuses an exported zone claim even when delivery and caption are correct", () => {
+  const f = fixture();
+  f.packet.navigation.documents[0].rows[0].zone = "D6";
+  expect(check(f).findings.map((f) => f.kind)).toContain(
+    "document-row-locator-mismatch",
+  );
+});
+it("L5 Z10 resolution binding is enforced independently of registry binding", () => {
+  const f = fixture();
+  f.packet.navigation.documents[0].snapshotDigest = "stale";
+  expect(check(f).findings.map((f) => f.kind)).toContain(
+    "document-resolution-source-mismatch",
+  );
+});
+it("R2-L2 an orphan authored inventory note is excluded by native request text, not its flag", () => {
+  const f = fixture(),
+    note = "See network inventory 09.A1 (Historical note).";
+  f.request.views[0].notes = [note];
+  f.source.texts.push(
+    ink(note, { element: "authored", authoredText: "request-note" }),
+  );
+  expect(errors(f)).toEqual([]);
+  delete f.source.texts.at(-1).authoredText;
+  expect(errors(f)).toEqual([]);
+  f.request.views[0].notes = [];
+  f.source.texts.at(-1).authoredText = "request-note";
+  expect(errors(f).map((f) => f.kind)).toContain(
+    "document-visible-caption-without-native-need",
+  );
 });

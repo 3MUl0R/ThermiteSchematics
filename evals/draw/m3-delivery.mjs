@@ -1,5 +1,5 @@
 import { registryFindings } from "./m3-registry.mjs";
-import { finding, painted, groupBy } from "./review-geometry.mjs";
+import { finding, groupBy } from "./review-geometry.mjs";
 import {
   M3_FORMAT,
   sha,
@@ -31,7 +31,7 @@ const bindingsMatch = (record, binding) =>
   );
 const loc = (r) => `${String(r.sheet).padStart(2, "0")}.${r.zone}`;
 function pointerMatches(n, t) {
-  if (t.authoredText === "request-note" || t.row) return false;
+  if (t.nativeRequestNote || t.row) return false;
   if (n.need === "conductor-incidence")
     return (
       /other physical connections|see wire schedule/i.test(t.text) &&
@@ -218,7 +218,15 @@ export function m3Delivery(
   const catalog = nativeRows(ir),
     needs = nativeNeeds(sheet, g, ir, catalog, scopedRequest),
     rows = issuedRows(packet, geometries),
-    notes = logicalPointerNotes(g.texts ?? []),
+    notes = logicalPointerNotes(g.texts ?? []).map((t) => ({
+      ...t,
+      // Provenance flags can locate a row, but only authored source content
+      // excludes it from generated dependency captions.
+      nativeRequestNote: (scopedRequest?.views?.length === 1
+        ? (scopedRequest.views[0].notes ?? [])
+        : (scopedRequest?.notes ?? [])
+      ).some((n) => compact(n) === compact(t.text)),
+    })),
     nav = packet.navigation,
     versioned = nav?.documentFormat === M3_FORMAT,
     exports = nav?.dependencies ?? [],
@@ -316,8 +324,7 @@ export function m3Delivery(
         !(g.navigationViews ?? []).includes(record.owner?.viewKey))
     )
       fail("document-caption-locator-mismatch");
-    if (!matches.length || !painted(note))
-      fail("document-native-need-without-visible-caption");
+    if (!matches.length) fail("document-native-need-without-visible-caption");
     if (record && !pointerMatches(need, note))
       fail("document-caption-native-scope-mismatch");
     if (need.scopeMismatch?.length)
@@ -575,7 +582,7 @@ export function m3Delivery(
     (t) =>
       !used.has(t.element) &&
       !t.row &&
-      t.authoredText !== "request-note" &&
+      !t.nativeRequestNote &&
       /(?:wire|terminal|network|assembly) inventory\s+\d+\.[A-Z]+\d+/u.test(
         t.text,
       ),

@@ -20,29 +20,30 @@ export function nearestOwner(g, owner, box) {
     .filter((s) => (s.navigationFrame ?? s.outline) && s.deviceUid)
     .flatMap((s) => {
       if (s.navigationInkSegments && !s.navigationInkSegments.length) return [];
-      let b = s.navigationInkSegments?.length
+      const b = s.navigationInkSegments?.length
         ? boxExtent(
             s.navigationInkSegments.flatMap((pair) =>
               pair.map((p) => ({ bbox: { ...p, w: 0, h: 0 } })),
             ),
           )
         : s.bbox;
-      if (s.viewport) {
-        const v = s.viewport,
-          x = Math.max(b.x, v.x),
-          y = Math.max(b.y, v.y);
-        b = {
-          x,
-          y,
-          w: Math.min(b.x + b.w, v.x + v.w) - x,
-          h: Math.min(b.y + b.h, v.y + v.h) - y,
-        };
-      }
       return b.w > 0 && b.h > 0 ? [{ uid: s.deviceUid, bbox: b }] : [];
     });
-  if (!frames.some((f) => f.uid === owner.uid))
-    frames.push({ uid: owner.uid, bbox: owner.bbox });
-  const distances = frames
+  // Only frames enclosing this appearance own it. A framed copy elsewhere
+  // cannot borrow ownership from the same native device UID.
+  const encloses = (outer, inner) =>
+    outer.x <= inner.x + NAVIGATION_EPS_MM &&
+    outer.y <= inner.y + NAVIGATION_EPS_MM &&
+    outer.x + outer.w >= inner.x + inner.w - NAVIGATION_EPS_MM &&
+    outer.y + outer.h >= inner.y + inner.h - NAVIGATION_EPS_MM;
+  const owners = frames.filter(
+    (f) => f.uid === owner.uid && encloses(f.bbox, owner.bbox),
+  );
+  const localFrames = frames.filter((f) => f.uid !== owner.uid);
+  localFrames.push(
+    ...(owners.length ? owners : [{ uid: owner.uid, bbox: owner.bbox }]),
+  );
+  const distances = localFrames
     .map((f) => ({ ...f, d: frameDistance(box, f.bbox) }))
     .sort((a, b) => a.d - b.d);
   const own = distances.find((f) => f.uid === owner.uid);

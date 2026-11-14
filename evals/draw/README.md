@@ -231,6 +231,44 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version **5.11** hardens the checker only (#256, #250, #206, #238):
+
+- M3 headers require a matching native source table. Requested documents use
+  their authored request identity (`authoredOrder`), never issued page order;
+  that locator receives credit only after headers and native row ink agree.
+  Multiple automatic documents share one complete native inventory census,
+  including duplicate and missing rows across the union.
+- Caption notes are excluded only when their measured content matches the
+  scoped native request's notes. A `request-note` flag alone cannot suppress a
+  generated caption. Resolution source/fact/zone claims have direct controls.
+- Mirror ownership uses a frame enclosing this symbol's body, with a body
+  fallback for each frameless symbol. Other copies of the same device cannot
+  establish ownership. Browser-clipped frame segments already define the visible
+  frame bounds; the duplicate viewport clipping step is removed.
+- Fully checked mirror/return absences report `not-applicable`, counted separately
+  from `manual`; any finding still fails. Reference tag rows use the existing
+  2.3 mm reference vertical floor. Horizontal transforms and `textLength`
+  adjustments have a separate compression-only factor check.
+- Wire locators measure actual endpoint ink even on a sheet labelled as a report.
+  Cable circles use nearby painted native endpoint identities, independent of
+  circle order. Explicitly absent cable ends retain truthful `not drawn`; missing
+  wire/jumper endpoint data still fails closed. Wrong described pin rows do not
+  establish an appearance.
+- #238's rooted and ambiguous-designation controls remain enforced. Inspection of
+  `RenderedSheet` at dev 4e8c997 confirms that no stable general authored view index
+  is exported. Internal draft `views[].viewIndex` and occurrence provenance do
+  not supply one for every issued circuit sheet; title matching remains documented.
+
+The historical #256 R2-L3 classification is **six automatic terminal exemptions**
+(operator-console 013–015 in both flows), plus **eight not-applicable pages**
+(six wire pages and two network pages, including operator-console 016).
+DQ-19's explicit-state criterion and source-line/assembly-reason agreement tests
+were already corrected in 5.10 (#256 R2-L1/L4). Prefer the column-scoped long forms
+`No same-location connections`, `No other / unspecified location connections`,
+`Status not specified` and `Protocol / medium not specified` when authoring empty
+states; the shorter truthful forms remain backward compatible. No engine wording
+or historical evidence is rewritten by this checker change.
+
 Version **5.10** compares DQ-19 null placeholders by semantic source line, so an
 assembly's authored pin-map reason cannot impersonate its absent status. The
 DQ-19/M3 agreement tests include assembly status and preserve the exact reason.
@@ -439,6 +477,7 @@ an actual content change. Other workstreams need not reseal.
 | xfail                | A pinned defect remains within its band; still a defect.            |
 | xpass                | A pinned defect/scope disappeared; review and retire it.            |
 | manual               | Reviewer form, including DQ-03 visual, DQ-04 and DQ-22.             |
+| not-applicable       | Fully determined absence checked; no human assessment remains.      |
 | not-implemented      | Explicit missing export or unmeasured portion; no credit.           |
 | infrastructure-error | Measurement failed; always exit 2.                                  |
 
@@ -633,20 +672,28 @@ partially clipped, title-only and wrong-owner evidence. Text inside `defs`,
 through `use` is unsupported; the 653-sheet C1 corpus contains no text in these
 containers and no `use` elements.
 
-DQ-06 accepts filled text only when its CSS colour alpha multiplied by
-`fill-opacity` and every ancestor `opacity` is at least 0.2. Chromium parses
-all supported CSS colour forms. The 0.2 cutoff excludes near-invisible evidence
-(less than 20% ink contribution), without claiming a full contrast-ratio test.
-White paint is excluded against the capture's white sheet background, using the
-same white exclusion as conductor detection. The physical text size uses the
-existing DQ-13 floor: 2.5 mm em, or 2.3 mm for secondary references, with its
-0.03 mm measurement tolerance. No new physical size threshold is introduced.
-Rows covered at more than half of 45 interior ink-box samples by later filled
-shapes with effective alpha at least 0.95 are excluded. Native fill geometry,
-transforms and rectangular clips determine coverage, including shapes with
-`pointer-events:none`; strokes and small crossings do not count as occlusion.
-Checker 4.4 hardens these rules and body/reference selection. Findings exposed
-by the checker are not fixes of drawing defects.
+DQ-06 accepts plain filled text only when its effective colour alpha, including
+`fill-opacity` and all ancestor opacities, is at least 0.2. Checker 5.11 also
+requires a **3:1 sRGB luminance contrast** at a majority of sampled actual glyph
+ink points against the paint stack beneath it (white sheet by default). White
+lettering on a dark band can pass; pale lettering and black on black cannot.
+Native fill/stroke hit tests honour geometry, transforms and rectangular clips.
+Glyph masks distinguish overprinted text from empty parts of its bounding box;
+wide strokes, later text, images and foreignObjects can cover a row. Images and
+foreignObjects use their full bounding boxes conservatively. Non-plain fills,
+unknown backgrounds and any filter on a row or ancestor fail closed. This is a
+conservative lettering predicate, not a general SVG compositor or accessibility
+certification. The size floor is vertical: it retains the 0.03 mm tolerance and
+existing 2.5/2.7 mm primary and 2.3 mm reference thresholds. Per the E4 helm ruling,
+the effective horizontal factor must be in **[1/1.10, 1.0]**: compression within
+standing policy is allowed; stretching is not. The factor multiplies the x/y
+screen-CTM transform ratio (isotropic CSS pixels, without viewport rounding)
+by the adjusted SVG advance divided by a native SVG advance
+measured in the same resolved face with `textLength` removed. Embedded faces and
+host fallbacks both use the actual face in use. A **1e-6** dimensionless allowance
+covers the browser's float projections; 0.909 still fails, while 0.9091 and the
+renderer's 0.91 pass. This does not apply a 2.5 mm floor to horizontal width. DQ-06 changes do not alter the separate
+legacy review-paint or conductor predicates.
 
 DQ-08 resolves the other endpoint of a reciprocal continuation pair, excluding
 the source even when both ends share a sheet. The expected destination zone is
