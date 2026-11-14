@@ -1,3 +1,8 @@
+import { finalizeTitleData } from "./internal/title-data/finalize.js";
+import {
+  packetFrameMetadata,
+  authoredTitlePresentation,
+} from "./internal/title-data/frame-context.js";
 import { withFontMetricCache } from "./symbols/font-metric-cache.js";
 import {
   fitLegendDrafts,
@@ -172,7 +177,12 @@ async function renderPacket(
     const result = await viewDrafts(
       ir,
       view,
-      presentation,
+      authoredTitlePresentation(
+        presentation,
+        paper.value,
+        viewIndex,
+        drafts.length + 1,
+      ),
       paper.value,
       request.layout,
       circuitAppearances,
@@ -346,6 +356,8 @@ function assemblePacket(
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
   try {
+    const titles = finalizeTitleData(ir, drafts, page, presentation);
+    if (!titles.ok) return titles;
     const rendered = legendSheets(ir, drafts, page, true, {
       presentation,
       standalone: !explicitPacket,
@@ -374,6 +386,7 @@ function assemblePacket(
       ok: true,
       value: {
         format: "schematic-packet/0.1",
+        ...packetFrameMetadata(page),
         page: page,
         sheets,
         html: printPacketHtml(sheets, page, ir.project.name),

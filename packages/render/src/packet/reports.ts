@@ -1,3 +1,7 @@
+import {
+  plannedTitleContext,
+  headingCapacity,
+} from "../internal/title-data/headings.js";
 import { reportCells, emitReportRow } from "./report-cells.js";
 import { paginatedReportCells } from "./report-layout.js";
 import { reportPaginator } from "./report-paginator.js";
@@ -43,6 +47,35 @@ export function documentationDrafts(
     );
   }
 }
+function reportTitle(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  presentation: CompiledProjectPresentation | undefined,
+): SchematicTitleContext {
+  return plannedTitleContext(
+    {
+      projectName: ir.project.name,
+      revision: presentation?.revision ?? "UNSPECIFIED",
+      backgroundColor: "#ffffff",
+      toolVersion: "0.3.0-alpha.2",
+      lines: [
+        {
+          ownerKind: "view",
+          ownerId: "report",
+          field: "title.view-line",
+          value: table.title,
+        },
+        ...(presentation?.titleBlockLines ?? []).map((value) => ({
+          ownerKind: "presentation" as const,
+          ownerId: "presentation",
+          field: "title.authored-line" as const,
+          value,
+        })),
+      ],
+    },
+    presentation,
+  );
+}
 export function tableDrafts(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
@@ -60,26 +93,9 @@ export function tableDrafts(
     kind: table.kind,
     title: table.title,
   };
-  const title: SchematicTitleContext = {
-    projectName: ir.project.name,
-    revision: presentation?.revision ?? "UNSPECIFIED",
-    backgroundColor: "#ffffff",
-    toolVersion: "0.3.0-alpha.2",
-    lines: [
-      {
-        ownerKind: "view",
-        ownerId: "report",
-        field: "title.view-line",
-        value: table.title,
-      },
-      ...(presentation?.titleBlockLines ?? []).map((value) => ({
-        ownerKind: "presentation" as const,
-        ownerId: "presentation",
-        field: "title.authored-line" as const,
-        value,
-      })),
-    ],
-  };
+  const title = reportTitle(ir, table, presentation);
+  const capacity = headingCapacity(title, presentation);
+  if (capacity) return capacity;
   const b = bounds(title, page),
     drafts: Draft[] = [];
   if (b.w < 60 || b.h < 50)

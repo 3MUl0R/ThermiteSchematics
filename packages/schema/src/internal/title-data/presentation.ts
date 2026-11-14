@@ -1,11 +1,11 @@
 // Test-internal until TB2 publishes an atomic schema/compiler/render pipeline.
 // No font or render dependency is allowed in this structural parser.
+import { createAjv2020, validateJsonValue } from "../../ajv-validation.js";
 import {
-  createAjv2020,
   parseJson,
-  validateJsonValue,
   type JsonPointerNodeMap,
-} from "../../index.js";
+  type JsonValue,
+} from "../../parser.js";
 import type { Result } from "./diagnostics.js";
 import type { Presentation } from "./model.js";
 import { presentationSchema } from "./schema.js";
@@ -47,23 +47,34 @@ export function parsePresentationStructure(
   const parsed = parseJson(text, file);
   if (parsed.diagnostics.length || parsed.value === undefined)
     return { diagnostics: parsed.diagnostics, nodes: parsed.nodes };
-  const located = new Issues(file, parsed.nodes);
+  return {
+    ...validatePresentationStructure(parsed.value, file, parsed.nodes),
+    nodes: parsed.nodes,
+  };
+}
+/** Structural value validation shared with the public registry and renderer. */
+export function validatePresentationStructure(
+  value: JsonValue,
+  file = "presentation.json",
+  nodes: JsonPointerNodeMap = new Map(),
+): ParsedPresentationStructure {
+  const located = new Issues(file, nodes);
   located.diagnostics.push(
-    ...validateJsonValue(validatePresentation, parsed.value, {
+    ...validateJsonValue(validatePresentation, value, {
       file,
-      nodes: parsed.nodes,
+      nodes: nodes,
     }),
   );
-  visitStrings(parsed.value, "", (value, pointer) =>
+  visitStrings(value, "", (value, pointer) =>
     checkPlainText(value, pointer, located),
   );
-  if (isObject(parsed.value)) checkPresentation(parsed.value, located);
+  if (isObject(value)) checkPresentation(value, located);
   const diagnostics = located.sorted();
   return diagnostics.length
-    ? { diagnostics, nodes: parsed.nodes }
+    ? { diagnostics, nodes: nodes }
     : {
-        value: parsed.value as unknown as Presentation,
+        value: value as unknown as Presentation,
         diagnostics,
-        nodes: parsed.nodes,
+        nodes: nodes,
       };
 }

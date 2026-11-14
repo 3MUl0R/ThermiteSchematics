@@ -5,8 +5,8 @@ import {
   object,
   key,
   pageSchema,
-} from "../../../../schema/dist/internal/title-data/schema.js";
-export { presentationSchema } from "../../../../schema/dist/internal/title-data/schema.js";
+} from "#title-schema/schema";
+export { presentationSchema } from "#title-schema/schema";
 const row = object(
   {
     version: string(32),

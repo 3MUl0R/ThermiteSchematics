@@ -237,12 +237,21 @@ export interface InvalidRenderTextError extends RenderErrorBase {
   readonly reason: RenderTextReason;
 }
 
+export interface InvalidTitleTextError extends RenderErrorBase {
+  readonly code: "R005";
+  readonly ownerKind: "title-field";
+  readonly ownerId: string;
+  readonly field: string;
+  readonly reason: string;
+}
+
 export type RenderError =
   | InvalidViewRequestError
   | IncompletePathError
   | UnsupportedSymbolMappingError
   | InvalidLayoutError
   | InvalidRenderTextError
+  | InvalidTitleTextError
   | InvalidSheetError
   // CLI font delivery can refuse an otherwise valid render without changing it.
   | (RenderErrorBase & { readonly code: "R007" });

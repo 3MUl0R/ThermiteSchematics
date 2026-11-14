@@ -141,6 +141,7 @@ export function assembleSheets(
       );
   resolveRootedContinuations(drafts, page);
   const sheets = drafts.map((draft, index) => ({
+    ...(draft.resolvedTitle ? { sheetKey: draft.resolvedTitle.sheetKey } : {}),
     number: index + 1,
     view: draft.view,
     references: draft.references ?? [],

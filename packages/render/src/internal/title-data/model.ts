@@ -1,6 +1,6 @@
 // Hidden packet/resolver model. Structural presentation types live below render.
 import type { SchematicPacketRequest } from "../../packet/types.js";
-import type { Slot } from "../../../../schema/dist/internal/title-data/model.js";
+import type { Slot } from "#title-schema/model";
 export {
   slots,
   bindings,
@@ -9,11 +9,8 @@ export {
   type Field,
   type Grid,
   type Presentation,
-} from "../../../../schema/dist/internal/title-data/model.js";
-export type {
-  TitleDiagnostic,
-  Result,
-} from "../../../../schema/dist/internal/title-data/diagnostics.js";
+} from "#title-schema/model";
+export type { TitleDiagnostic, Result } from "#title-schema/diagnostics";
 export interface RevisionRow {
   readonly version: string;
   readonly comment?: string;

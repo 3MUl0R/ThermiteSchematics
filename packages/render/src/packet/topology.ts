@@ -1,3 +1,7 @@
+import {
+  plannedTitleContext,
+  headingCapacity,
+} from "../internal/title-data/headings.js";
 import { deviceTagFitDetails } from "./device-tag-fit.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { CircuitRenderError } from "../render-error-context.js";
@@ -138,6 +142,8 @@ export async function topologyDrafts(
         assembly,
         presentation,
       );
+      const capacity = headingCapacity(title, presentation);
+      if (capacity) return capacity;
       const b = bounds(title, page);
       const headingLines = assembly
         ? circuitTextLines(drawing.title, b.w, 4)
@@ -371,30 +377,33 @@ function topologyTitle(
   assembly: boolean,
   presentation: CompiledProjectPresentation | undefined,
 ): SchematicTitleContext {
-  return {
-    projectName: projectName,
-    revision: presentation?.revision ?? "UNSPECIFIED",
-    backgroundColor: "#ffffff",
-    toolVersion: "0.3.0-alpha.2",
-    lines: [
-      {
-        ownerKind: "view",
-        ownerId: wiring
-          ? "wiring"
-          : signalLoop
-            ? "signal-loop"
-            : assembly
-              ? "connector-assembly"
-              : "communication",
-        field: "title.view-line",
-        value: drawingTitle,
-      },
-      ...(presentation?.titleBlockLines ?? []).map((value) => ({
-        ownerKind: "presentation" as const,
-        ownerId: "presentation",
-        field: "title.authored-line" as const,
-        value,
-      })),
-    ],
-  };
+  return plannedTitleContext(
+    {
+      projectName: projectName,
+      revision: presentation?.revision ?? "UNSPECIFIED",
+      backgroundColor: "#ffffff",
+      toolVersion: "0.3.0-alpha.2",
+      lines: [
+        {
+          ownerKind: "view",
+          ownerId: wiring
+            ? "wiring"
+            : signalLoop
+              ? "signal-loop"
+              : assembly
+                ? "connector-assembly"
+                : "communication",
+          field: "title.view-line",
+          value: drawingTitle,
+        },
+        ...(presentation?.titleBlockLines ?? []).map((value) => ({
+          ownerKind: "presentation" as const,
+          ownerId: "presentation",
+          field: "title.authored-line" as const,
+          value,
+        })),
+      ],
+    },
+    presentation,
+  );
 }

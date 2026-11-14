@@ -19,7 +19,7 @@ import { expandPattern, parsePattern } from "./pattern.js";
 import { sheetKey, sheetIdentityKey } from "./sheet-key.js";
 import { Issues, checkLiteral, checkText } from "./validation.js";
 
-const labels: Record<Slot, string> = {
+export const titleLabels: Record<Slot, string> = {
   project: "Project",
   sheetTitle: "Sheet title",
   drawingNumber: "DWG NO",
@@ -94,11 +94,61 @@ function fieldsFor(presentation: Presentation): readonly [string, Field][] {
       slot,
       presentation.titleBlock?.fields?.[slot] ?? {
         slot,
-        label: labels[slot],
+        label: titleLabels[slot],
         ...(binding ? { bind: binding } : {}),
       },
     ];
   });
+}
+/** The same source precedence used by final resolution also sizes headings
+ * before pagination. Exact-sheet titles reserve capacity and resolve later. */
+export function planningHeadings(
+  presentation: Presentation,
+  request: PacketRequest,
+  viewIndex: number | undefined,
+  project: string,
+  title: string,
+) {
+  const state = initial(presentation);
+  overlay(
+    state,
+    request.titleData?.defaults,
+    "request-defaults",
+    "/titleData/defaults",
+  );
+  const index =
+    request.titleData?.byView?.findIndex((r) => r.viewIndex === viewIndex) ??
+    -1;
+  if (index >= 0)
+    overlay(
+      state,
+      request.titleData?.byView?.[index],
+      "request-view",
+      `/titleData/byView/${index}`,
+    );
+  return Object.fromEntries(
+    fieldsFor(presentation)
+      .filter(([key]) => key === "project" || key === "sheetTitle")
+      .map(([key, field]) => {
+        const result = headingFact(field, state, project, title);
+        const label = field.label;
+        const value = result?.known ? (result.value ?? "") : "";
+        return [key, { label, value }];
+      }),
+  ) as Record<"project" | "sheetTitle", { label: string; value: string }>;
+}
+function headingFact(
+  field: Field,
+  state: State,
+  project: string,
+  title: string,
+) {
+  if (field.bind === "project.name") return fact(project, "project", "/name");
+  if (field.bind === "sheet.title")
+    return state.title.source === null
+      ? fact(title, "title", "/title")
+      : state.title;
+  return undefined;
 }
 function resolveField(
   key: string,
@@ -114,12 +164,7 @@ function resolveField(
   let result =
     state.values.get(key) ??
     fact(field.value, "presentation", `${pointer}/value`);
-  if (field.bind === "project.name") result = fact(project, "project", "/name");
-  if (field.bind === "sheet.title")
-    result =
-      state.title.source === null
-        ? fact(sheet.title, "title", "/title")
-        : state.title;
+  result = headingFact(field, state, project, sheet.title) ?? result;
   if (field.bind === "sheet.revision") result = state.revision;
   if (field.bind === "sheet.numberOfTotal")
     result = fact(`${number} of ${total}`, "page", "/numberOfTotal");
@@ -205,14 +250,48 @@ function validateResolved(
 }
 function authoredViewIndex(sheet: FinalSheet): number | undefined {
   if (sheet.identity.kind === "companion") {
-    const owners =
-      sheet.ownerViewIndexes ??
-      (sheet.viewIndex === undefined ? [] : [sheet.viewIndex]);
+    const owners = sheet.ownerViewIndexes ?? [];
     return owners.length === 1 ? owners[0] : undefined;
   }
   return sheet.identity.kind === "view" || sheet.identity.kind === "document"
     ? sheet.viewIndex
     : undefined;
+}
+function validateOwners(
+  request: PacketRequest,
+  sheet: FinalSheet,
+  issues: Issues,
+): void {
+  const owners = sheet.ownerViewIndexes;
+  if (
+    owners !== undefined &&
+    (sheet.identity.kind !== "companion" ||
+      !owners.length ||
+      new Set(owners).size !== owners.length ||
+      owners.some(
+        (index) =>
+          !Number.isInteger(index) || index < 1 || index > request.views.length,
+      ))
+  )
+    issues.add(
+      "R006",
+      "",
+      "Companion owners must be unique, in-range authored-view integers.",
+      "unresolved-sheet-key",
+    );
+  if (
+    sheet.identity.kind !== "companion" &&
+    sheet.viewIndex !== undefined &&
+    (!Number.isInteger(sheet.viewIndex) ||
+      sheet.viewIndex < 1 ||
+      sheet.viewIndex > request.views.length)
+  )
+    issues.add(
+      "R006",
+      "",
+      "Invalid authored-view index.",
+      "unresolved-sheet-key",
+    );
 }
 function validateSheets(
   request: PacketRequest,
@@ -242,6 +321,7 @@ function validateSheets(
         "Invalid final-sheet part index/total.",
         "unresolved-sheet-key",
       );
+    validateOwners(request, sheet, issues);
     const identity = sheetIdentityKey(sheet.identity);
     const previous = totals.get(identity);
     if (previous !== undefined && previous !== sheet.partTotal)

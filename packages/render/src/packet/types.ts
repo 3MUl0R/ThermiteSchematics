@@ -80,6 +80,7 @@ export interface NormalizedDocumentationView {
   readonly title: string;
 }
 export interface RenderedSheet {
+  readonly sheetKey?: string;
   readonly occurrenceIds?: readonly string[];
   readonly annotationIds?: readonly string[];
   readonly number: number;
@@ -117,6 +118,7 @@ export interface CircuitContinuation {
   readonly netId: string | null;
 }
 export interface RenderedPacket {
+  readonly presentationFormat?: "project-presentation/0.3";
   readonly navigation?: import("./navigation-types.js").IssuedNavigation;
   readonly format: "schematic-packet/0.1";
   readonly page: PaperPage;
@@ -161,6 +163,7 @@ export interface RootedLegendSource {
   profile?: "compact" | "dense";
 }
 export interface Draft {
+  resolvedTitle?: import("../internal/title-data/model.js").ResolvedTitle;
   documentNeeds?: readonly import("./document-types.js").DocumentNeedSeed[];
   issuedDocument?: import("./document-types.js").DocumentIdentity;
   documentRows?: readonly import("./document-types.js").DocumentRowDraft[];

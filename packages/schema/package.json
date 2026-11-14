@@ -12,7 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./schemas/*": "./schemas/*"
+    "./schemas/*": "./schemas/*",
+    "./internal/title-data/*": {
+      "types": "./dist/internal/title-data/*.d.ts",
+      "import": "./dist/internal/title-data/*.js"
+    }
   },
   "files": [
     "dist",
