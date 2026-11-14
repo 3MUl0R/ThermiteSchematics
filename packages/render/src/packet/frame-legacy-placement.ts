@@ -8,6 +8,7 @@ import { continuationInkFailure } from "./continuation-fit.js";
 import { resolveRootedContinuations } from "./continuation-resolve.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
 import {
+  FRAME_LOSS_LIMIT_PERCENT,
   frameContext,
   type FrameReceipt,
   fieldLoss,
@@ -68,7 +69,8 @@ export function legacyFramePlacement(
       fieldLoss(
         required(ctx.receipt.referenceFields[i], "Missing reference field"),
         frameField(required(other.drawingBounds, "Missing modern field")),
-      ) <= 2;
+      ) <=
+        FRAME_LOSS_LIMIT_PERCENT + 1e-8;
     if (keep) drafts[i] = structuredClone(other);
     strategies.push(keep ? "folded-group" : "legacy-continuation-placement");
   }

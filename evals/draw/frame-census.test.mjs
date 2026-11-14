@@ -163,3 +163,68 @@ it("enforces the half-millimetre gate independently of zero overlap counts", () 
   expect(compactFindings({ ...clean, bottomRuleClearanceMm: 0.499 })).toBe(1);
   expect(compactFindings({ ...clean, bottomRuleClearanceMm: NaN })).toBe(1);
 });
+
+const nativeCutFixture = (
+  y = 60,
+  extra = "",
+) => `<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+<svg x="30" y="40" width="100" height="80" viewBox="0 0 100 80" overflow="hidden">
+<path data-wire-uid="owned" d="M 0 20 L 100 20" stroke="black" stroke-width=".3"/>
+<path data-wire-uid="other" d="M 0 50 L 100 50" stroke="black" stroke-width=".3"/>
+</svg><a data-continuation-id="C001" data-continuation-end="0" ${extra}><path d="M 130 ${y} L 132 ${y}" stroke="black" stroke-width=".3"/></a></svg>`;
+const ownedEnd = [
+  { id: "C001", end: 0, provenance: { kind: "wire", uid: "owned" } },
+];
+it("rejects a stub on another conductor's visible cut point at the same viewport edge", async () => {
+  const { continuationGeometry } =
+    await import("./frame-census/continuations.mjs");
+  expect(
+    (await continuationGeometry(census.page, nativeCutFixture(), ownedEnd))
+      .findings,
+  ).toEqual([]);
+  expect(
+    (await continuationGeometry(census.page, nativeCutFixture(90), ownedEnd))
+      .findings,
+  ).toEqual([
+    {
+      id: "C001",
+      end: 0,
+      kind: "stub-not-on-visible-owned-route",
+      cut: { x: 130, y: 90 },
+      provenance: ownedEnd[0].provenance,
+    },
+  ]);
+});
+it("fails a painted stub without a sheet continuation entry", async () => {
+  const { continuationGeometry } =
+    await import("./frame-census/continuations.mjs");
+  expect(
+    (await continuationGeometry(census.page, nativeCutFixture(), [])).findings,
+  ).toEqual([{ id: "C001", end: 0, kind: "unlisted-painted-stub" }]);
+  expect(
+    (
+      await continuationGeometry(
+        census.page,
+        nativeCutFixture(60, 'opacity="0"'),
+        [],
+      )
+    ).findings,
+  ).toEqual([]);
+});
+it("imports census helpers from outside the checkout working directory", async () => {
+  const { execFileSync } = await import("node:child_process"),
+    { tmpdir } = await import("node:os");
+  const modules = ["./frame-census/text.mjs", "./frame-census/shapes.mjs"].map(
+    (p) => new URL(p, import.meta.url).href,
+  );
+  expect(() =>
+    execFileSync(
+      process.execPath,
+      [
+        "-e",
+        `for (const url of ${JSON.stringify(modules)}) await import(url);`,
+      ],
+      { cwd: tmpdir(), stdio: "pipe" },
+    ),
+  ).not.toThrow();
+});

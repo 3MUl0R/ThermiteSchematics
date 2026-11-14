@@ -1,3 +1,10 @@
+import { MAX_GRID_PLANS } from "./safe-cuts.js";
+import { MAX_CONTINUATION_BANKS } from "./continuation-bank.js";
+import { MAX_FRAME_FOLD_PLANS } from "./frame-fold-groups.js";
+import {
+  MAX_PLACEMENT_LAYOUTS,
+  ROOTED_COMPACT_PROFILES,
+} from "./rooted-limits.js";
 import { hasCompactFrame } from "./frame-profile.js";
 import type { RootedCandidate } from "./rooted-build.js";
 import type { ContinuationBank } from "./continuation-bank.js";
@@ -31,10 +38,10 @@ export interface FrameReceipt {
   referenceFields: FrameField[];
   /** Bounds for the new search, in addition to one existing-placement probe. */
   candidateLimit: {
-    gridsPerBank: 36;
-    banksPerLayout: 6;
-    foldsPerGrid: 64;
-    layouts: 52;
+    gridsPerBank: number;
+    banksPerLayout: number;
+    foldsPerGrid: number;
+    layouts: number;
   };
   candidates: FrameAttempt[];
   sheets: {
@@ -92,10 +99,11 @@ export function beginFramePlanning(
       frameField(required(d.drawingBounds, "Missing legacy drawing field")),
     ),
     candidateLimit: {
-      gridsPerBank: 36,
-      banksPerLayout: 6,
-      foldsPerGrid: 64,
-      layouts: 52,
+      gridsPerBank: MAX_GRID_PLANS,
+      banksPerLayout: MAX_CONTINUATION_BANKS,
+      foldsPerGrid: MAX_FRAME_FOLD_PLANS,
+      // Initial profiles, the existing placement budget, and one reference seed.
+      layouts: ROOTED_COMPACT_PROFILES.length + MAX_PLACEMENT_LAYOUTS + 1,
     },
     candidates: [],
     sheets: [],

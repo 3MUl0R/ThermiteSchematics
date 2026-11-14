@@ -106,6 +106,16 @@ export async function continuationGeometry(page, svg, expected) {
     return { links, paths };
   });
   const findings = [];
+  for (const stub of geometry.links)
+    if (
+      stub.visible &&
+      !expected.some((link) => link.id === stub.id && link.end === stub.end)
+    )
+      findings.push({
+        id: stub.id,
+        end: stub.end,
+        kind: "unlisted-painted-stub",
+      });
   for (const link of expected) {
     const own = geometry.links.filter(
       (l) => l.id === link.id && l.end === link.end,

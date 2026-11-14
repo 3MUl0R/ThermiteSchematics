@@ -1,3 +1,17 @@
+import {
+  continuationLabel,
+  continuationHeaderWidth,
+} from "../src/packet/continuation-label.js";
+import { continuationInk } from "../src/packet/frame-banks.js";
+import { compactFramePlan } from "../src/packet/frame-plan.js";
+import { resolveRootedContinuations } from "../src/packet/continuation-resolve.js";
+import { MAX_GRID_PLANS } from "../src/packet/safe-cuts.js";
+import { MAX_CONTINUATION_BANKS } from "../src/packet/continuation-bank.js";
+import { MAX_FRAME_FOLD_PLANS } from "../src/packet/frame-fold-groups.js";
+import {
+  MAX_PLACEMENT_LAYOUTS,
+  ROOTED_COMPACT_PROFILES,
+} from "../src/packet/rooted-limits.js";
 import { expect, it } from "vitest";
 import {
   beginFramePlanning,
@@ -12,7 +26,7 @@ import { legacyFramePlacement } from "../src/packet/frame-legacy-placement.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { useCompactFrame } from "../src/packet/frame-profile.js";
 import type { RootedCandidate } from "../src/packet/rooted-build.js";
-import type { Draft, PaperPage } from "../src/packet/types.js";
+import type { Draft, Link } from "../src/packet/types.js";
 function fixture() {
   const normalized = normalizePaperPage({
     size: "a4",
@@ -157,4 +171,121 @@ it("keeps a fitting sheet while falling back only its incompatible peer", () => 
     "folded-group",
     "legacy-continuation-placement",
   ]);
+});
+
+it("keeps a smaller maximum loss ahead of a smaller total loss", () => {
+  const { page, reference } = fixture();
+  const uneven = resized(reference, [196.2, 200]); // [1.9, 0]
+  const balanced = resized(reference, [198, 198]); // [1, 1]
+  expect(frameBudgetOrder(balanced, uneven, page)).toBeLessThan(0);
+  expect(frameBudgetOrder(uneven, balanced, page)).toBeGreaterThan(0);
+});
+it("does not let a second sheet's gain offset the first sheet's loss in ordering", () => {
+  const { page, reference } = fixture();
+  const gain = resized(reference, [196.2, 240]); // [1.9, 0], despite 20% gain
+  const smallerLoss = resized(reference, [198, 200]); // [1, 0]
+  expect(frameBudgetOrder(smallerLoss, gain, page)).toBeLessThan(0);
+  expect(frameBudgetFailure(resized(reference, [195.8, 250]), page)).toBe(
+    "drawing-field-loss",
+  );
+});
+it("falls back when the modern native section partition differs", () => {
+  const { page, reference } = fixture(),
+    modern = resized(reference, [196, 200]);
+  const legacy = reference.drafts[0],
+    other = modern.drafts[0];
+  if (!legacy || !other) throw Error("Missing partition fixture");
+  legacy.rootedSections = [
+    { viewport: { x: 0, y: 0, w: 100, h: 80 }, continuedLocationIds: [] },
+  ];
+  other.rootedSections = [
+    { viewport: { x: 100, y: 0, w: 100, h: 80 }, continuedLocationIds: [] },
+  ];
+  const result = legacyFramePlacement(reference, modern, page);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.value[0]?.drawingBounds?.w).toBe(200);
+  expect(result.value[0]?.rootedSections).toEqual(legacy.rootedSections);
+  expect(compactPlanningReceipts(page)[0]?.sheets[0]?.strategy).toBe(
+    "legacy-continuation-placement",
+  );
+});
+it("falls back when modern sheets come from another prepared layout", () => {
+  const { page, reference } = fixture(),
+    modern = resized(reference, [196, 200]);
+  modern.prepared = structuredClone(reference.prepared);
+  const result = legacyFramePlacement(reference, modern, page);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.value[0]?.drawingBounds?.w).toBe(200);
+  expect(compactPlanningReceipts(page)[0]?.sheets[0]?.strategy).toBe(
+    "legacy-continuation-placement",
+  );
+});
+
+function continuationFixture() {
+  const f = fixture();
+  f.reference.drafts.forEach((d, i) => {
+    const l: Link = {
+      id: "C001",
+      end: i === 0 ? 0 : 1,
+      to: i === 0 ? 2 : 1,
+      toZone: "A1",
+      conductor: "W1",
+      netId: "fixture-net",
+      x: i === 0 ? 220 : 70,
+      y: 80,
+      side: i === 0 ? "right" : "left",
+    };
+    l.label = continuationLabel(l, 60, continuationHeaderWidth(1), false);
+    d.links = [l];
+  });
+  resolveRootedContinuations(f.reference.drafts, f.page);
+  const first = f.reference.drafts[0],
+    link = first?.links[0];
+  if (!first || !link?.label) throw Error("Missing continuation fixture");
+  return { ...f, first, link, label: link.label };
+}
+it("refuses final glyphs inside a compact zone lane, with a per-sheet failure", () => {
+  const { page, reference, first, link, label } = continuationFixture();
+  const service = compactFramePlan(first.title, page).service,
+    row = label.rows[0];
+  if (!row) throw Error("Missing header row");
+  const ink = continuationInk(link, true)[0];
+  if (!ink) throw Error("Missing final glyph");
+  row.x += service.x + service.w - ink.x - ink.w + 0.1;
+  const result = legacyFramePlacement(reference, undefined, page);
+  expect(result).toMatchObject({ ok: false, error: { code: "R006" } });
+  const [receipt] = compactPlanningReceipts(page);
+  expect(receipt?.termination).toBe("no-compatible-fallback");
+  expect(receipt?.fallback?.[0]).toMatchObject({
+    sheet: 1,
+    failure: expect.stringMatching(
+      /Final continuation .* compact service area/,
+    ),
+  });
+});
+it("checks final glyph ink against native content even when reserved row ink is elsewhere", () => {
+  const { page, reference, first, link, label } = continuationFixture();
+  const ink = continuationInk(link, true)[0];
+  if (!ink) throw Error("Missing final glyph");
+  first.rootedShapes = [{ x: ink.x + 1, y: ink.y + 0.2, w: 1, h: 1 }];
+  for (const row of label.rows) row.ink = { x: 100, y: 140, w: 1, h: 1 };
+  const result = legacyFramePlacement(reference, undefined, page);
+  expect(result).toMatchObject({ ok: false, error: { code: "R006" } });
+  const [receipt] = compactPlanningReceipts(page);
+  expect(receipt?.termination).toBe("no-compatible-fallback");
+  expect(receipt?.fallback?.[0]).toMatchObject({
+    sheet: 1,
+    failure: expect.stringMatching(/cannot keep clear ink/),
+  });
+});
+it("receipts use the search's enforcing limits", () => {
+  const { page } = fixture();
+  expect(compactPlanningReceipts(page)[0]?.candidateLimit).toEqual({
+    gridsPerBank: MAX_GRID_PLANS,
+    banksPerLayout: MAX_CONTINUATION_BANKS,
+    foldsPerGrid: MAX_FRAME_FOLD_PLANS,
+    layouts: MAX_PLACEMENT_LAYOUTS + ROOTED_COMPACT_PROFILES.length + 1,
+  });
 });

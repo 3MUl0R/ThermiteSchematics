@@ -33,7 +33,7 @@ import {
 } from "./rooted-search.js";
 import { searchSettled } from "./rooted-settled.js";
 type Profile = RootedSearch["prepared"][number]["profile"];
-const INITIAL_PLACEMENT_LAYOUTS = 24;
+import { INITIAL_PLACEMENT_LAYOUTS } from "./rooted-limits.js";
 async function tryPlacement(
   ir: Readonly<ElectricalIr>,
   request: SchematicViewRequest,
