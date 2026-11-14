@@ -133,7 +133,7 @@ current inventory and the limits of each model.
 The normal check is the cross-platform source-alpha development check.
 Source engine instructions live in the compact [root guide](AGENTS.md).
 Keep historical private release controls intact. The normal check excludes the
-frozen `release-package.test.ts` inventory suite and does not assert protected
+historical `release-package.test.ts` inventory suite and does not assert protected
 release-evidence audits.
 Source archives are verified separately by extracting, installing, building, and
 running the alpha CLI. Historical checks and former guide context are preserved
@@ -263,43 +263,50 @@ to silence a failure. Rendering changes also need print-size review in both flow
 
 ### Health budgets
 
-`bun run check:health` runs the same deterministic AST ratchet as `bun run check`.
-The committed `scripts/health-budget.json` caps only files over 850 lines and
-functions over 70 lines: existing outliers cannot grow, and newly crossing an
-outlier threshold fails; sizes at or below the thresholds need no entries.
-Non-null assertions and test suppressions default to zero per file, with only
-nonzero entries stored. Duplicates count at 50 or more normalized body tokens;
-existing groups cannot grow, and new meaningful groups fail. Source coverage is
-`packages/*/src` and `scripts` (including frozen scripts, without editing them).
-Only git-tracked files are scanned; run from the checkout root. Add a new file to
-the index (`git add -N <file>` is enough) before checking it. Untracked/ignored
-scratch cannot fail the ratchet; untracked in-scope files are listed in a warning.
-Generator-owned sources are excluded only at
-`packages/schema/src/generated/` and `packages/render/src/text-metrics-data.ts`;
-their generators' own check commands still guard them.
-Shell/Python/PowerShell scripts have line budgets; TypeScript/JavaScript also
-have AST metrics. Tests are excluded from size/assertion/duplicate metrics.
-Tracked tests anywhere in the checkout are scanned for `.skip`, `.todo`, `.skipIf`,
-`.runIf`, `.only`, Node skip/todo options (including shorthand), runtime
-`ctx.skip()` and destructured `skip()` calls. Conditional forms count too.
-Counts are declarations, not expanded parameterized test cases. Fixtures and
-build outputs are excluded. CRLF/LF checkouts give identical measurements.
+`bun run check:health` runs the deterministic AST ratchet in `bun run check`.
+Global ceilings are 3,000 physical lines per file and 300 per function. They,
+and the total non-null assertion and test suppression ceilings, never rise.
+The outlier thresholds remain 850 file lines and 70 function lines: crossing a
+threshold or growing an entry fails until explicitly reviewed. Entries below
+the global ceilings may be raised with a reason; grandfathered over-cap items
+only fall, even after deletion or a move. `health:accept` cannot waive ceilings.
 
-| Action                          | Command / rule                                                                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Check current values            | `bun run check:health`                                                                                                                                                                                                                |
-| Keep an improvement permanently | `bun run health:lower`, then inspect the budget diff; it rejects every increase, removes sizes at/below their thresholds and zero counters, and writes only on success                                                                |
-| Accept reviewed growth          | `bun run health:accept` raises only current regressions to measured values, prints each old -> new, and leaves every other entry alone. The PR must list every raise with a one-line reason; prefer a cheap extraction when practical |
-| Understand a failure            | The message names the file or lexical function, metric, old budget and new value (or the threshold for a newly crossing size); assertion/skip defaults are zero and duplicate groups default to one body                              |
+Coverage is hand-written code in `packages/*/src`, `packages/*/test`, `evals/**`
+and `scripts/**`, including code fixtures. Generated schema/text metrics,
+JSON/data, pure-data fixtures, goldens, snapshots and signed repin evidence are
+excluded. `evals/agent` is frozen to E2's harness: its existing tracked-test
+suppression scan stays, but its sizes are excluded pending a separate versioned
+harness-equivalence change. Other tracked tests outside this scope likewise keep
+suppression-only treatment. Test sizes count; `describe`/`suite` callbacks are
+excluded as grouping. Their nested `it`/`test` bodies, hooks and helpers count.
+This is the code-health scorecard measurement method. Non-null/duplicate counts
+retain their production/script treatment; tests count suppressions, not assertions
+or duplicate bodies. Duplicate bodies count at 50 normalized AST tokens.
 
-Named functions use lexical names. Anonymous callbacks also use their order of
-occurrence: an earlier callback can shift `map callback~2` to `map callback~3`.
-For an intentional rename/move or position shift, re-key the existing allowance
-(e.g. replace `"file.ts#outer/map callback~2": 171` with
-`"file.ts#outer/map callback~3": 171`), then run
-`bun run health:lower` to remove stale allowances. Review the new identity before
-accepting it. An identical edit to every member of a duplicate group changes its
-hash and appears as a new group; it needs review too. Duplicate normalization drops trivia but preserves identifier,
-string, template and regex contents. The ratchet caps growth; it does not certify
-code quality or replace review. `bun run test -- packages/cli/test/health-ratchet.test.ts`
-checks mutations, explicit acceptance and downward-only updates.
+Only Git-tracked files are scanned; run at the checkout root. Use `git add -N`
+for new files; omitted untracked code produces a warning. CRLF/LF measurements
+and identity hashes agree. Source spans include signatures and internal
+comments/blanks, excluding preceding trivia. Named functions use lexical names;
+anonymous callbacks also use occurrence order. Shell/Python/PowerShell have file
+line budgets; JavaScript/TypeScript also have function/AST metrics.
+
+The checker compares budgets against the merge-base with local `dev` (or
+`origin/dev`; standalone repositories use HEAD). The v2 scope migration is seeded
+from that base's source, not the working tree. Empty synthetic test repositories
+have no historical comparison. Do not delete grandfathered entries: `--lower`
+retains zero tombstones for removed identities, preventing reset by deletion.
+
+| Action                 | Command / rule                                                                                                                                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Check                  | `bun run check:health`                                                                                                                                                                                                                             |
+| Bank reductions        | `bun run health:lower`; refuses regressions, lowers counters/entries and retains grandfathered tombstones                                                                                                                                          |
+| Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only below ceilings, records/prints each raise and reason; list each in the PR                                                                                                                 |
+| Move an allowance      | Add `moves[newIdentity] = {section, from, sha256}` in health-budget.json; section is `files` or `functions`, hash comes from `measure().fileHashes` or `bodyHashes` on the base; old identity must be absent, new bytes/normalized body must match |
+
+A moved grandfathered allowance must be transferred at equal or lower value,
+with the old identity retained as a tombstone. Under-cap outlier moves also need
+proof, not a new allowance. Normalized hashes preserve identifiers, string,
+template and regex contents while dropping trivia. Extractions that change a
+body must stay below the global cap and have reviewed budget reasons.
+`bun run test -- packages/cli/test/health-ratchet.test.ts packages/cli/test/health-history.test.ts`
+covers cap, history, reset, move, suppression, CRLF and acceptance negatives.

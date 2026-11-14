@@ -90,7 +90,7 @@ const meaningful = `{
 const fileThreshold = DEFAULT_THRESHOLDS.fileLines;
 const functionThreshold = DEFAULT_THRESHOLDS.functionLines;
 
-it("is deterministic and ignores comment/string lookalikes and ordinary test metrics", () => {
+it("is deterministic and ignores comment/string lookalikes and test assertion counters", () => {
   const { root } = fixture(
     original + '// value! and it.skip("ignored")\nconst text = "test.skip";\n',
   );
@@ -336,7 +336,7 @@ it("rejects invalid threshold configuration", () => {
   ).toThrow("Invalid health threshold: functionLines");
 });
 
-it("accept raises only current regressions, prints each raise and preserves every other value", () => {
+it("accept raises only reasoned regressions below ceilings and preserves other values", () => {
   const { root, file } = fixture(
     fn("existing", 90) + "const checked = value!;\n",
   );
@@ -344,6 +344,7 @@ it("accept raises only current regressions, prints each raise and preserves ever
   budget.files["packages/example/src/retired.ts"] = 999;
   budget.functions["packages/example/src/retired.ts#old"] = 100;
   budget.skippedTests["retired.test.ts"] = 3;
+  budget.ceilings.skippedTests = 1;
   budget.duplicates["stale-group"] = 5;
   const code =
     fn("existing", 93) +
@@ -364,7 +365,11 @@ it("accept raises only current regressions, prints each raise and preserves ever
   const current = measure(root);
   const messages = regressions(current, budget);
   expect(messages).toHaveLength(5);
-  const updated = acceptBudget(current, budget);
+  const updated = acceptBudget(
+    current,
+    budget,
+    "redistribute existing allowance",
+  );
   expect(regressions(current, updated)).toEqual([]);
   expect(updated.thresholds).toEqual(budget.thresholds);
   expect(updated.files["packages/example/src/retired.ts"]).toBe(999);
@@ -373,7 +378,11 @@ it("accept raises only current regressions, prints each raise and preserves ever
   expect(updated.skippedTests["retired.test.ts"]).toBe(3);
   expect(updated.duplicates["stale-group"]).toBe(5);
   const path = saveBudget(root, budget);
-  const result = command(root, ["--accept"]);
+  const result = command(root, [
+    "--accept",
+    "--reason",
+    "redistribute existing allowance",
+  ]);
   expect(result.status, result.stderr).toBe(0);
   for (const message of messages) expect(result.stdout).toContain(message);
   expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(updated);
