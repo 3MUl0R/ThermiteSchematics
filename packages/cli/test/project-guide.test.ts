@@ -64,6 +64,7 @@ import wiring from "./project-guide/wiring-circuits.js";
 import continuations from "./project-guide/continuations.js";
 import drawingFrames from "./project-guide/drawing-frames.js";
 import documentCompanions from "./project-guide/document-companions.js";
+import { repairControls } from "./project-guide/repair-controls.js";
 
 const guidePath = join(
   repositoryRoot,
@@ -657,10 +658,7 @@ afterAll(async () => {
 describe("generated project guide", () => {
   it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
     expect(live.bytes).toBeLessThanOrEqual(GUIDE_BYTE_BUDGET);
-    expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([
-      "docs/drawing-frames.md",
-    ]);
-    await ok(["guide", "drawing-frames"], ctx.work);
+    expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);
     const pointers = [
       ...new Set(
         [...live.text.matchAll(/`thermite guide ([a-z-]+)`/g)].map(
@@ -668,6 +666,7 @@ describe("generated project guide", () => {
         ),
       ),
     ];
+    expect(pointers).toContain("drawing-frames");
     expect(pointers.length).toBeGreaterThan(0);
     for (const pointer of pointers) await ok(["guide", pointer], ctx.work);
     const pinned = (await readJson(join(repositoryRoot, "package.json")))
@@ -857,6 +856,7 @@ describe("observation gates", () => {
 });
 
 describe("self-tests: the checks reject broken guides", () => {
+  repairControls(mutate, ledgerProblems);
   it("runs a packet block's own value, not the guide's first packet", async () => {
     const packet = live.fences.find((f) =>
       f.body.includes('"schematic-packet-request/0.1"'),

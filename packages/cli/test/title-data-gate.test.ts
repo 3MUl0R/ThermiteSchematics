@@ -39,7 +39,10 @@ async function run(args: string[]) {
 }
 describe("TB2 atomic compact publication", () => {
   it("preserves every original guide byte and appends the approved snippet within budget", async () => {
-    const guide = await readFile("packages/cli/assets/THERMITE_AGENTS.md");
+    // Historical TB2b publication input from 654bfc6, not the evolving live guide.
+    const guide = await readFile(
+      "packages/cli/test/fixtures/guide-tb2-publication.md.txt",
+    );
     expect(sha(guide.subarray(0, 19637))).toBe(
       "45a85b42a2804522fabfd59787aab0b825ac0c7e5c9feb0f3aeb575ebb676c49",
     );

@@ -41,7 +41,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "For packet frames, use presentation 0.3 named slots; see `docs/drawing-frames.md`.",
+        "For packet frames, use presentation 0.3 named slots; see `thermite guide drawing-frames`.",
       async check() {
         const svg = await frame();
         expect(svg).toContain("Client:");
