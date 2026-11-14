@@ -42,7 +42,8 @@ it("counts added normalized lines with multiplicities and accepts pure shrink", 
 });
 function smokeBody() {
   const text = readFileSync(
-    new URL("../../compiler/test/package-smoke.test.ts", import.meta.url),
+    // Preserve the real over-cap regression input after its source is extracted.
+    new URL("./fixtures/health-package-smoke.ts.txt", import.meta.url),
     "utf8",
   );
   const source = ts.createSourceFile(
