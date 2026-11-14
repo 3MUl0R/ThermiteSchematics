@@ -42,6 +42,7 @@ export async function viewDrafts(
         circuitAppearances,
         referenceOffset,
       ),
+    page,
   );
 }
 

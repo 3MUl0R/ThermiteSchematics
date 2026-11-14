@@ -126,6 +126,19 @@ export function compactPlanningReceipts(
   return structuredClone(receipts.get(page) ?? []);
 }
 
+/** Replay completed work only. Active search contexts are never shared. */
+export function replayCompactPlanningReceipts(
+  page: PaperPage,
+  completed: readonly FrameReceipt[],
+) {
+  const all = receipts.get(page) ?? [];
+  for (const receipt of structuredClone(completed)) {
+    receipt.rootedViewOrdinal = all.length;
+    all.push(receipt);
+  }
+  receipts.set(page, all);
+}
+
 /** Compare both printed tick endpoints and the independently reconstructed mark sequence. */
 export function frameField(b: DrawingBounds): FrameField {
   const q = (v: number) => Number(n(v));

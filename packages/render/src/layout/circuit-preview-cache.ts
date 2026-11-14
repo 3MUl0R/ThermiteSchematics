@@ -1,5 +1,7 @@
 import { serialize } from "node:v8";
 import { legendSheets } from "../packet/device-legend.js";
+import { hasCompactFrame } from "../packet/frame-profile.js";
+import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import {
   circuitInlineContext,
   type CircuitInlineContext,
@@ -52,7 +54,7 @@ export const circuitPreviewSheets: typeof legendSheets = (
   documents,
 ) => {
   const context = circuitInlineContext.getStore();
-  const input = [drafts, page];
+  const input = [drafts, page, hasCompactFrame(page), titleFrameContext(page)];
   if (!context || notice || documents !== undefined || !plainData(input))
     return legendSheets(ir, drafts, page, notice, documents);
   // V8 preserves undefined, property order, holes, cycles and shared references.

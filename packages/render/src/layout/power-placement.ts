@@ -37,6 +37,10 @@ import { circuitRouteMetrics } from "./circuit-route-quality.js";
 import { compareText } from "../ordering.js";
 import { required } from "../presentation/util.js";
 import { elkWorkScope, type ElkWorkLedger } from "./elk-work.js";
+import {
+  frameBudgetFailure,
+  frameBudgetOrder,
+} from "../packet/frame-budget.js";
 
 export interface PowerPlacementState {
   original: RootedCandidate;
@@ -136,13 +140,19 @@ async function powerCandidate(
   for (const candidate of built.value) {
     const printed = materializeRootedCandidate(ir, candidate, page);
     if (!printed.ok) continue;
-    const composed = composeRootedWinner(
+    const printedCandidate = { ...candidate, drafts: printed.value };
+    const composition = composeRootedWinner(
       ir,
-      { ...candidate, drafts: printed.value },
+      printedCandidate,
       state.native,
       page,
     );
+    const composed =
+      frameBudgetOrder(composition, printedCandidate, page) <= 0
+        ? composition
+        : printedCandidate;
     if (
+      !frameBudgetFailure(composed, page) &&
       composed.drafts.length <= original.drafts.length &&
       compositionFits(composed, state.native, page) &&
       powerConductorGuard(composed, original) &&

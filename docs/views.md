@@ -437,6 +437,10 @@ measurement, navigation finalization and the whole-packet guard still run.
 Identical legend-fitting and index previews may also reuse privately copied
 measurements within the same search. Final notice/document finalization runs
 fresh; every routing candidate still receives the whole-packet guard.
+Compact-frame legacy and modern probes belong to one logical power view.
+Reuse keys include the frame profile and authored title inputs; planning receipts are privately
+replayed with their new view ordinals. Power alternatives keep the original
+legacy field reference and its per-sheet scale, page and field-loss constraints.
 
 The candidate must reduce jog-bearing conductors without increasing any
 conductor's bends, raw or clipped defects, or unrepaired clipped length beyond

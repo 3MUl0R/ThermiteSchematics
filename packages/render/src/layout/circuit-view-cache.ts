@@ -1,4 +1,15 @@
 import type { RenderOutcome } from "../types.js";
+import type { PaperPage } from "../packet/types.js";
+import { hasCompactFrame } from "../packet/frame-profile.js";
+import {
+  titleFrameContext,
+  titlePresentationContext,
+} from "../internal/title-data/frame-context.js";
+import {
+  compactPlanningReceipts,
+  replayCompactPlanningReceipts,
+  type FrameReceipt,
+} from "../packet/frame-budget.js";
 import { nextCircuitLayoutRun } from "./circuit-inline.js";
 import {
   circuitInlineContext,
@@ -12,6 +23,7 @@ interface SavedView {
   start: number;
   selected: boolean[];
   result: unknown;
+  receipts: readonly FrameReceipt[];
 }
 const views = new WeakMap<CircuitInlineContext, SavedView[]>();
 
@@ -24,12 +36,18 @@ export async function cachedCircuitView<T>(
   presentation: object | undefined,
   input: readonly unknown[],
   render: () => Promise<RenderOutcome<T>>,
+  page?: PaperPage,
 ): Promise<RenderOutcome<T>> {
   const context = circuitInlineContext.getStore();
   if (!context) return render();
   const entries = views.get(context) ?? [];
   views.set(context, entries);
-  const key = JSON.stringify(input),
+  const key = JSON.stringify([
+      input,
+      page ? hasCompactFrame(page) : false,
+      page ? titleFrameContext(page) : undefined,
+      titlePresentationContext(presentation),
+    ]),
     start = context.cursor;
   const saved =
     context.qualityPhase &&
@@ -46,8 +64,10 @@ export async function cachedCircuitView<T>(
     );
   if (saved) {
     for (const _ of saved.selected) nextCircuitLayoutRun();
+    if (page) replayCompactPlanningReceipts(page, saved.receipts);
     return structuredClone(saved.result) as RenderOutcome<T>;
   }
+  const receiptStart = page ? compactPlanningReceipts(page).length : 0;
   const result = await render();
   if (result.ok)
     entries.push({
@@ -59,6 +79,7 @@ export async function cachedCircuitView<T>(
         context.selected.has(start + i),
       ),
       result: structuredClone(result),
+      receipts: page ? compactPlanningReceipts(page).slice(receiptStart) : [],
     });
   return result;
 }

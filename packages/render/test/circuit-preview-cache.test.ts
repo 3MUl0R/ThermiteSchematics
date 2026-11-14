@@ -11,6 +11,8 @@ import { documentPaper } from "./document-fixture.js";
 import { offViewFixture } from "./off-view-fixtures.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { failure } from "../src/packet/errors.js";
+import { useCompactFrame } from "../src/packet/frame-profile.js";
+import { configureTitleFrame } from "../src/internal/title-data/frame-context.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -26,6 +28,37 @@ const result = () =>
     value: [{ svg: "original" }],
     navigation: { annotations: [{ text: "original" }] },
   }) as unknown as ReturnType<typeof legend.legendSheets>;
+
+it("remeasures the identity-only compact frame selection", () => {
+  const [ir, drafts, page] = inputs();
+  const work = vi.spyOn(legend, "legendSheets").mockImplementation(result);
+  circuitInlineContext.run(circuitLayoutContext(), () => {
+    circuitPreviewSheets(ir, drafts, page);
+    const compact = { ...page };
+    useCompactFrame(compact);
+    circuitPreviewSheets(ir, drafts, compact);
+    expect(work).toHaveBeenCalledTimes(2);
+  });
+});
+
+it("remeasures page-owned title metadata with equal serialized paper", () => {
+  const [ir, drafts, page] = inputs();
+  const work = vi.spyOn(legend, "legendSheets").mockImplementation(result);
+  circuitInlineContext.run(circuitLayoutContext(), () => {
+    for (const text of ["FIRST", "SECOND"]) {
+      const selected = { ...page };
+      configureTitleFrame(selected, {
+        presentation: {
+          format: "project-presentation/0.3",
+          frame: { header: { text } },
+        },
+        request: { format: "schematic-packet-request/0.2", views: [] },
+      });
+      circuitPreviewSheets(ir, drafts, selected);
+    }
+    expect(work).toHaveBeenCalledTimes(2);
+  });
+});
 
 it("reuses identical previews and protects saved and returned measurements", () => {
   const args = inputs(),

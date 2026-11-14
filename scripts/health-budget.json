@@ -353,7 +353,7 @@
     "packages/cli/test/runtime-package.test.ts#fixture": 86,
     "packages/cli/test/signal-loop.test.ts#call callback~3": 93,
     "packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": 77,
-    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface": 227,
+    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface": 228,
     "packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": 101,
     "packages/cli/test/workflow-structure.test.ts#createPublisherHarness": 83,
     "packages/cli/test/workflow-structure.test.ts#describe callback/it callback~16": 97,
@@ -458,6 +458,7 @@
     "packages/render/src/packet/references.ts#referenceTables": 130,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
     "packages/render/src/packet/reports.ts#tableDrafts": 158,
+    "packages/render/src/packet/rooted-search.ts#searchRootedCandidates": 78,
     "packages/render/src/packet/topology.ts#topologyDrafts": 178,
     "packages/render/src/packet/topology.ts#topologyDrafts/compose": 144,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
@@ -518,6 +519,7 @@
     "packages/render/test/circuit-fixture.ts#parallelCircuitFixture": 135,
     "packages/render/test/circuit-operator-fidelity.test.ts#describe callback/call callback~3": 89,
     "packages/render/test/circuit-pagination.test.ts#describe callback/call callback": 173,
+    "packages/render/test/circuit-view-cache-nav3.test.ts#it callback": 85,
     "packages/render/test/continuation-oracle.ts#continuationOracle": 106,
     "packages/render/test/continuation-oracle.ts#continuationOracle/flatMap callback": 78,
     "packages/render/test/continuation-oracle.ts#continuationOracle/flatMap callback/map callback": 72,
@@ -933,9 +935,9 @@
     },
     "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface": {
       "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface",
-      "from": 191,
-      "to": 227,
-      "reason": "Audit constant bracket access to eval and Function, including concatenated member names; keep the exact pinned ELK exception and all C7 hard caps."
+      "from": 227,
+      "to": 228,
+      "reason": "RT2b explicitly re-audited the unchanged ELK worker loader and accounting-only module delta; the authorized one-line exact-source pin comment preserves all audit rules."
     },
     "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": {
       "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit",
@@ -948,6 +950,12 @@
       "from": 183,
       "to": 188,
       "reason": "Measure supplied project and sheet headings before circuit bounds and return the existing capacity error before layout."
+    },
+    "functions:packages/render/src/packet/rooted-search.ts#searchRootedCandidates": {
+      "identity": "functions:packages/render/src/packet/rooted-search.ts#searchRootedCandidates",
+      "from": 70,
+      "to": 78,
+      "reason": "RT2b retains the shared actual-ELK ledger around TB2 compact reference seeding; the 85-line NAV3 regression callback verifies companion, renumbering and clone isolation across reuse."
     },
     "functions:packages/render/src/packet/topology.ts#topologyDrafts": {
       "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts",
@@ -966,6 +974,12 @@
       "from": 212,
       "to": 217,
       "reason": "Attach the native authored view index and first-sheet context before the existing per-view dispatcher."
+    },
+    "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback": {
+      "identity": "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback",
+      "from": 70,
+      "to": 85,
+      "reason": "RT2b retains the shared actual-ELK ledger around TB2 compact reference seeding; the 85-line NAV3 regression callback verifies companion, renumbering and clone isolation across reuse."
     },
     "functions:packages/schema/src/schema-registry.ts#validateEntity": {
       "identity": "functions:packages/schema/src/schema-registry.ts#validateEntity",

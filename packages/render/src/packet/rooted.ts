@@ -25,10 +25,14 @@ import {
   nativeWinner,
 } from "./rooted-search.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
+import { rememberPowerPlacement } from "../layout/power-placement.js";
 import {
-  rememberPowerPlacement,
-  selectPowerPlacement,
-} from "../layout/power-placement.js";
+  frameReferences,
+  rootedSearches,
+  rememberPowerFrame,
+  selectFramedPower,
+} from "./rooted-power-frame.js";
+import { required } from "../presentation/util.js";
 import type { RootedCandidate } from "./rooted-build.js";
 export { cuts } from "./rooted-cuts.js";
 
@@ -40,6 +44,49 @@ export async function drawingDrafts(
   page: PaperPage,
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
+): Promise<RenderOutcome<Draft[]>> {
+  const qualityRun =
+    request?.format === "schematic-view-request/0.1" &&
+    request.family === "power" &&
+    request.flow === "left-to-right"
+      ? nextCircuitLayoutRun()
+      : undefined;
+  if (qualityRun?.power) {
+    const selected = await selectFramedPower(ir, qualityRun, page);
+    return drawingResult(selected, qualityRun.power.native);
+  }
+  const result = await framedDrawingDrafts(
+    ir,
+    request,
+    presentation,
+    page,
+    mode,
+    referenceOffset,
+  );
+  if (result.ok && qualityRun) {
+    const selected = frameCandidate(result.value);
+    const search = required(
+      rootedSearches.get(selected),
+      "Missing selected rooted search",
+    );
+    rememberPowerPlacement(
+      qualityRun,
+      selected,
+      required(nativeWinner(search), "Missing native winner"),
+      search,
+    );
+    if (qualityRun.power) rememberPowerFrame(qualityRun.power, selected, page);
+  }
+  return result;
+}
+
+async function framedDrawingDrafts(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  mode: "standard" | "compact",
+  referenceOffset: number,
 ): Promise<RenderOutcome<Draft[]>> {
   if (!hasCompactFrame(page))
     return selectedDrawingDrafts(
@@ -69,16 +116,19 @@ export async function drawingDrafts(
     referenceOffset,
   );
   beginFramePlanning(page, reference);
-  if (retainCompactPlacement(ordinary, page)) return ordinary;
-  return replanCompactDrawing(
-    ir,
-    request,
-    presentation,
-    page,
-    mode,
-    referenceOffset,
-    reference,
-  );
+  const result = retainCompactPlacement(ordinary, page)
+    ? ordinary
+    : await replanCompactDrawing(
+        ir,
+        request,
+        presentation,
+        page,
+        mode,
+        referenceOffset,
+        reference,
+      );
+  if (result.ok) frameReferences.set(frameCandidate(result.value), reference);
+  return result;
 }
 
 function retainCompactPlacement(
@@ -125,11 +175,20 @@ async function replanCompactDrawing(
     finishFramePlanning(page, frameCandidate(planned.value), "folded-group");
     return planned;
   }
-  return legacyFramePlacement(
+  const result = legacyFramePlacement(
     reference,
     planned.ok ? frameCandidate(planned.value) : undefined,
     page,
   );
+  if (result.ok) {
+    const selected = { ...reference, drafts: result.value };
+    rememberFrameCandidate(selected);
+    rootedSearches.set(
+      selected,
+      required(rootedSearches.get(reference), "Missing legacy search"),
+    );
+  }
+  return result;
 }
 
 /** Search owns ELK; the selected winner may then compose its existing strips. */
@@ -141,16 +200,6 @@ async function selectedDrawingDrafts(
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
 ): Promise<RenderOutcome<Draft[]>> {
-  const qualityRun =
-    request.format === "schematic-view-request/0.1" &&
-    request.family === "power" &&
-    request.flow === "left-to-right"
-      ? nextCircuitLayoutRun()
-      : undefined;
-  if (qualityRun?.power) {
-    const selected = await selectPowerPlacement(ir, qualityRun, page);
-    return drawingResult(selected, qualityRun.power.native);
-  }
   const run = await searchRootedCandidates(
     ir,
     request,
@@ -179,7 +228,7 @@ async function selectedDrawingDrafts(
   const composed = composeRootedWinner(ir, winner, native, page);
   const selected =
     frameBudgetOrder(composed, winner, page) <= 0 ? composed : winner;
-  rememberPowerPlacement(qualityRun, selected, native, run);
+  rootedSearches.set(selected, run);
   return drawingResult(selected, native);
 }
 
