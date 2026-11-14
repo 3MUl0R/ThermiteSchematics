@@ -34,10 +34,7 @@ import {
   type ElkWorkLedger,
   ElkWorkBudgetError,
 } from "../layout/elk-work.js";
-import {
-  circuitInlineContext,
-  withCircuitLayoutCache,
-} from "../layout/circuit-inline-context.js";
+import { withCircuitLayoutCache } from "../layout/circuit-inline-context.js";
 
 type Profile = "compact" | "dense" | undefined;
 export interface RootedSearch {
@@ -165,15 +162,13 @@ export async function searchRootedCandidates(
 ) {
   const legacy = () =>
     elkWorkScope.exit(() =>
-      circuitInlineContext.exit(() =>
-        runRootedSearch(
-          ir,
-          request,
-          presentation,
-          page,
-          compact,
-          referenceOffset,
-        ),
+      runRootedSearch(
+        ir,
+        request,
+        presentation,
+        page,
+        compact,
+        referenceOffset,
       ),
     );
   return withFontMetricCache(async () => {
