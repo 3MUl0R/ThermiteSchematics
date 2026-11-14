@@ -133,7 +133,7 @@ current inventory and the limits of each model.
 The normal check is the cross-platform source-alpha development check.
 Source engine instructions live in the compact [root guide](AGENTS.md).
 Keep historical private release controls intact. The normal check excludes the
-frozen `release-package.test.ts` inventory suite and does not assert protected
+historical `release-package.test.ts` inventory suite and does not assert protected
 release-evidence audits.
 Source archives are verified separately by extracting, installing, building, and
 running the alpha CLI. Historical checks and former guide context are preserved
@@ -263,43 +263,90 @@ to silence a failure. Rendering changes also need print-size review in both flow
 
 ### Health budgets
 
-`bun run check:health` runs the same deterministic AST ratchet as `bun run check`.
-The committed `scripts/health-budget.json` caps only files over 850 lines and
-functions over 70 lines: existing outliers cannot grow, and newly crossing an
-outlier threshold fails; sizes at or below the thresholds need no entries.
-Non-null assertions and test suppressions default to zero per file, with only
-nonzero entries stored. Duplicates count at 50 or more normalized body tokens;
-existing groups cannot grow, and new meaningful groups fail. Source coverage is
-`packages/*/src` and `scripts` (including frozen scripts, without editing them).
-Only git-tracked files are scanned; run from the checkout root. Add a new file to
-the index (`git add -N <file>` is enough) before checking it. Untracked/ignored
-scratch cannot fail the ratchet; untracked in-scope files are listed in a warning.
-Generator-owned sources are excluded only at
-`packages/schema/src/generated/` and `packages/render/src/text-metrics-data.ts`;
-their generators' own check commands still guard them.
-Shell/Python/PowerShell scripts have line budgets; TypeScript/JavaScript also
-have AST metrics. Tests are excluded from size/assertion/duplicate metrics.
-Tracked tests anywhere in the checkout are scanned for `.skip`, `.todo`, `.skipIf`,
-`.runIf`, `.only`, Node skip/todo options (including shorthand), runtime
-`ctx.skip()` and destructured `skip()` calls. Conditional forms count too.
-Counts are declarations, not expanded parameterized test cases. Fixtures and
-build outputs are excluded. CRLF/LF checkouts give identical measurements.
+`bun run check:health` runs the deterministic AST ratchet in `bun run check`.
+Global ceilings are 3,000 physical lines per file and 300 per function. They,
+and the total non-null assertion and test suppression ceilings, never rise.
+The outlier thresholds remain 850 file lines and 70 function lines. Against dev,
+crossing a threshold or growing an entry requires an exact reviewed reason.
+Release targets enforce the hard invariants without recomposing per-item reasons
+from earlier dev PRs. Active grandfathered over-cap entries only fall. Dev checks
+content continuity per PR; release compares the admitted entries by value without
+re-deriving cumulative continuity. `health:accept` cannot waive hard invariants.
 
-| Action                          | Command / rule                                                                                                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Check current values            | `bun run check:health`                                                                                                                                                                                                                |
-| Keep an improvement permanently | `bun run health:lower`, then inspect the budget diff; it rejects every increase, removes sizes at/below their thresholds and zero counters, and writes only on success                                                                |
-| Accept reviewed growth          | `bun run health:accept` raises only current regressions to measured values, prints each old -> new, and leaves every other entry alone. The PR must list every raise with a one-line reason; prefer a cheap extraction when practical |
-| Understand a failure            | The message names the file or lexical function, metric, old budget and new value (or the threshold for a newly crossing size); assertion/skip defaults are zero and duplicate groups default to one body                              |
+Coverage defaults to **all tracked code** (`js/mjs/cjs/jsx`, `ts/mts/cts/tsx`,
+Python, shell and PowerShell), including package fixtures, generators, examples
+and new directories. The explicit generated-code exclusions are
+`packages/schema/src/generated/**` and `packages/render/src/text-metrics-data.ts`.
+JSON/data and signed evidence are not code; pure literal-data modules in
+fixtures/goldens/snapshots are excluded by AST inspection. Directory names alone
+do not exclude code helpers. `evals/agent` is frozen to E2's harness: its existing
+tracked-test suppression scan stays, but its sizes are excluded pending a separate
+versioned harness-equivalence change. Test sizes count; only direct
+`describe`/`suite` grouping callbacks in test files are excluded (including
+`.only`, `.each(...)` and other suite modifiers, not arbitrary chained calls).
+Their nested `it`/`test` bodies, hooks and helpers count. Non-null/duplicate counts
+cover production/scripts; tests and fixture code count suppressions, not assertions
+or duplicate bodies. Duplicate bodies count at 50 normalized AST tokens.
 
-Named functions use lexical names. Anonymous callbacks also use their order of
-occurrence: an earlier callback can shift `map callback~2` to `map callback~3`.
-For an intentional rename/move or position shift, re-key the existing allowance
-(e.g. replace `"file.ts#outer/map callback~2": 171` with
-`"file.ts#outer/map callback~3": 171`), then run
-`bun run health:lower` to remove stale allowances. Review the new identity before
-accepting it. An identical edit to every member of a duplicate group changes its
-hash and appears as a new group; it needs review too. Duplicate normalization drops trivia but preserves identifier,
-string, template and regex contents. The ratchet caps growth; it does not certify
-code quality or replace review. `bun run test -- packages/cli/test/health-ratchet.test.ts`
-checks mutations, explicit acceptance and downward-only updates.
+Only Git-tracked files are scanned; run at the checkout root. Use `git add -N`
+for new files; omitted untracked code produces a warning. Lines split on CRLF,
+CR, LF, U+2028 and U+2029. Source spans include signatures and internal
+comments/blanks, excluding preceding trivia. Named functions use lexical names;
+anonymous callbacks also use occurrence order. Shell/Python/PowerShell have file
+line budgets; JavaScript/TypeScript also have function/AST metrics.
+
+The checker compares against the merge-base with the fetched PR target
+(`GITHUB_BASE_REF`, restricted to `dev` or `release`) first, otherwise the newer of `origin/dev` and local `dev`
+(whichever contains the other). Missing or divergent baseline refs fail closed;
+fetch full history and reconcile them. CI uses `fetch-depth: 0` and verifies the
+base ref. Only synthetic test repositories may explicitly opt in with
+`THERMITE_HEALTH_ALLOW_NO_BASE=1`; it is ignored whenever `CI` or `GITHUB_ACTIONS`
+is set, including empty/false values. With no baseline ref the local opt-in
+compares against HEAD if it exists. If the PR base has no committed budget, the
+one-time migration uses the budget committed at `merge-base(HEAD, origin/dev)`.
+That budget must exist and validate in the current format; there is no upgrade,
+source re-seed, local-dev fallback or PR-head fallback for this authority. The PR
+base source is still measured and printed as information only. All hard invariants
+use the committed dev bootstrap; the PR target still selects the reason tier.
+Once release has a committed budget, comparison uses that release base normally.
+Existing committed v2/v3 budgets on the normal path retain their migration rules.
+Version 4 retires old sub-cap records and ignores legacy string reasons.
+
+A grandfathered allowance on dev follows content within its file, not a name or callback
+position. The matcher hashes substantive AST-token lines without trivia and
+counts **added lines = current lines minus common lines**, consuming repeated
+base lines once per occurrence. At most 70 added lines are allowed, even with a
+reason; pure shrinks qualify. Matches are one-to-one: most common lines first,
+then fewest added lines, exact hashes, unchanged identities and lexical IDs as
+deterministic tie-breakers. A candidate nested inside another available candidate
+for the same base body is excluded; consumed bodies no longer compete. AST source
+ranges establish nesting, including same-line bodies. Over-cap files use the same 70-line bound
+with trimmed nonempty file lines. Matching cannot waive the decreasing size limit.
+Base fingerprints authenticate stored locators; current fingerprints are refreshed
+by `health:lower`. Unmatched bodies are new and face the global cap. A record
+retires when its matched value reaches the cap or below, or its content is deleted;
+`health:lower` removes it without a tombstone. Subsequent growth follows ordinary
+per-item policy. A recreated body must also stay under the global cap. On release,
+each over-cap body/file still needs an active entry whose value does not exceed
+the base entry. Its current fingerprint and location must be valid, and cross-file
+moves still need proof; reviewed dev swaps are not cumulatively limited to 70.
+`health:accept` automatically banks stale allowances downward before authorizing
+raises, including reductions inherited from a rebase. Lowering needs no reason.
+
+| Action                 | Command / rule                                                                                                                                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Check                  | `bun run check:health`                                                                                                                                                                                                                             |
+| Bank reductions        | `bun run health:lower`; refuses regressions, lowers counters/entries, refreshes content fingerprints and retires deleted/sub-cap allowances                                                                                                        |
+| Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only under ceilings; records `{identity, from, to, reason}`, with `from` equal to the base budget and `to` equal to the current value and budget; list each raise in the PR                    |
+| Move an allowance      | Add `moves[newIdentity] = {section, from, sha256}` in health-budget.json; section is `files` or `functions`, hash comes from `measure().fileHashes` or `bodyHashes` on the base; old identity must be absent, new bytes/normalized body must match |
+
+A move proof transfers one identity once. A grandfathered allowance transfers at
+equal or lower value; the old location leaves no tombstone. Cross-file under-cap
+outlier moves also need proof. Same-file grandfathered callback shifts use content
+matching. Normalized hashes preserve identifiers, strings, templates and regex
+contents while dropping trivia. A copy plus an edit is not a move: the source
+identity must be absent. Against dev, a reason from an earlier raise cannot
+authorize later growth: its exact base/current values must match. Release
+targets check ceilings, grandfathered values and move validity without
+per-item reason composition. Ratchet tests are in
+`packages/cli/test/health-*.test.ts`, including real-body 70/71-line headroom probes.

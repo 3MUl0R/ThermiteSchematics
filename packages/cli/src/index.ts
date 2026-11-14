@@ -905,6 +905,359 @@ export async function runLock(
     written: locked.ok && locked.written,
   };
 }
+interface CliCommandContext {
+  options: RunCliOptions;
+  stdout: CliWritable;
+  stderr: CliWritable;
+  exitCode: ValidateExitCode;
+}
+type QueryAction = (
+  request: QueryCommandRequest,
+  flags: QueryFlags,
+) => Promise<void>;
+function registerCliInit(program: Command) {
+  program
+    .command("init")
+    .description("initialize an agent-ready Thermite Schematics project")
+    .option("--name <project-name>", "project name")
+    .option("--revision <revision>", "project revision")
+    .helpOption("--help", "display help for command");
+}
+
+function registerCliAgent(program: Command, context: CliCommandContext) {
+  const { options, stdout, stderr } = context;
+  const agentCommand = program
+    .command("agent")
+    .description("invoke deterministic agent tools with JSON requests");
+  const agentCommands = [
+    ["resolve", "resolve or search project objects"],
+    ["inspect", "inspect one project object"],
+    ["query", "execute a supported graph query"],
+    ["validate", "validate an electrical-system project"],
+    ["create-view", "create a schematic from a structured view request"],
+    ["apply-source-patch", "validate and apply a guarded source patch"],
+  ] as const;
+  for (const [tool, description] of agentCommands) {
+    const command = agentCommand
+      .command(tool)
+      .description(description)
+      .requiredOption("--input <file|->", "request JSON file or '-' for stdin")
+      .addHelpText("after", () => agentHelp(tool));
+
+    command.action(async () => {
+      const flags = command.opts<AgentFlags>();
+      const result = await runAgentCommand(tool, flags.input, {
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        ...(options.agentStdin === undefined
+          ? {}
+          : { stdin: options.agentStdin }),
+        ...(options.agentCreateTools === undefined
+          ? {}
+          : { createTools: options.agentCreateTools }),
+      });
+
+      if (result.stdout !== "") {
+        stdout.write(result.stdout);
+      }
+      if (result.stderr !== "") {
+        stderr.write(result.stderr);
+      }
+      context.exitCode = result.exitCode;
+    });
+  }
+}
+
+function registerCliValidate(program: Command, context: CliCommandContext) {
+  const { options, stdout } = context;
+  const validateCommand = projectCommand(program, "validate")
+    .option("--json", "emit diagnostics as JSON")
+    .option("--strict", "treat warnings as validation failures");
+  validateCommand.action(async (inputPath: string | undefined) => {
+    const flags = validateCommand.opts<{ json?: boolean; strict?: boolean }>();
+    const path = projectPath(validateCommand, inputPath, options.cwd);
+    const result = await runValidate(path, {
+      json: flags.json === true,
+      strict: flags.strict === true,
+      color: flags.json !== true && stdout.isTTY === true,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+
+    if (result.output !== "") {
+      stdout.write(`${result.output}\n`);
+    }
+
+    context.exitCode = result.exitCode;
+  });
+}
+
+function registerCliLock(program: Command, context: CliCommandContext) {
+  const { options, stdout } = context;
+  const lockCommand = projectCommand(program, "lock")
+    .option("--check", "verify the lock without writing")
+    .option("--json", "emit diagnostics as JSON");
+  lockCommand.action(async (inputPath: string | undefined) => {
+    const flags = lockCommand.opts<{ check?: boolean; json?: boolean }>();
+    const path = projectPath(lockCommand, inputPath, options.cwd);
+    const result = await runLock(path, {
+      check: flags.check === true,
+      json: flags.json === true,
+      color: flags.json !== true && stdout.isTTY === true,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+
+    if (result.output !== "") {
+      stdout.write(`${result.output}\n`);
+    }
+
+    context.exitCode = result.exitCode;
+  });
+}
+
+function registerCliCompile(program: Command, context: CliCommandContext) {
+  const { options, stdout, stderr } = context;
+  const compileCommand = program
+    .command("compile")
+    .description("compile an electrical-system project to canonical IR")
+    .argument("[path]", "project directory or direct manifest path")
+    .option("-o, --output <file>", "atomically write IR to a file")
+    .option("--diagnostics-json", "emit diagnostics as JSON on stderr");
+  compileCommand.action(async (inputPath: string | undefined) => {
+    const flags = compileCommand.opts<{
+      output?: string;
+      diagnosticsJson?: boolean;
+    }>();
+    const result = await runCompile(inputPath, {
+      ...(flags.output === undefined ? {} : { output: flags.output }),
+      diagnosticsJson: flags.diagnosticsJson === true,
+      color: flags.diagnosticsJson !== true && (stderr.isTTY ?? false) === true,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    });
+
+    if (result.stdout !== "") {
+      stdout.write(result.stdout);
+    }
+    if (result.stderr !== "") {
+      stderr.write(`${result.stderr}\n`);
+    }
+
+    context.exitCode = result.exitCode;
+  });
+}
+
+function registerCliRender(program: Command, context: CliCommandContext) {
+  const { options, stdout, stderr } = context;
+  const renderCommand = program
+    .command("render")
+    .description("render a deterministic electrical schematic as SVG")
+    .argument("<designation>", "exact canonical device designation")
+    .addOption(
+      new Option("--family <family>", "schematic view family")
+        .choices(["control", "power"])
+        .makeOptionMandatory(),
+    )
+    .addOption(
+      new Option("--flow <flow>", "schematic flow direction")
+        .choices(["left-to-right", "top-to-bottom"])
+        .default("left-to-right"),
+    )
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("-o, --output <file>", "atomically write SVG to a file")
+    .option("--json", "emit the render result and report as JSON");
+  renderCommand.action(async (designation: string) => {
+    const flags = renderCommand.opts<RenderFlags>();
+    const result = await runRender(designation, {
+      family: flags.family,
+      flow: flags.flow,
+      ...(flags.project === undefined ? {} : { project: flags.project }),
+      ...(flags.output === undefined ? {} : { output: flags.output }),
+      json: flags.json === true,
+      color: flags.json !== true && stderr.isTTY === true,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.renderCompileProject === undefined
+        ? {}
+        : { compile: options.renderCompileProject }),
+      ...(options.renderCreateRenderer === undefined
+        ? {}
+        : { createRenderer: options.renderCreateRenderer }),
+      ...(options.renderAtomicWrite === undefined
+        ? {}
+        : { atomicWrite: options.renderAtomicWrite }),
+    });
+
+    if (result.stdout !== "") {
+      stdout.write(result.stdout);
+    }
+    if (result.stderr !== "") {
+      stderr.write(result.stderr);
+    }
+    context.exitCode = result.exitCode;
+  });
+}
+
+function registerCliView(program: Command, context: CliCommandContext) {
+  const { options, stdout, stderr } = context;
+  const viewCommand = program
+    .command("view")
+    .description("render a deterministic demonstration view as SVG")
+    .argument("<designation>", "exact canonical root designation")
+    .option("--power", "render the legacy power view")
+    .option("--actuation", "render the legacy control actuation view")
+    .option("--to <designation>", "trace to an exact target designation")
+    .option("--conductors", "render all authored cable conductors")
+    .option("--loads", "render complete loads for a source")
+    .option("--include-power", "include the trace root's declared power arms")
+    .addOption(
+      new Option("--flow <flow>", "schematic flow direction")
+        .choices(["left-to-right", "top-to-bottom"])
+        .default("left-to-right"),
+    )
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("-o, --output <file>", "atomically write SVG to a file")
+    .option("--json", "emit the view result and report as JSON");
+  viewCommand.hook("preAction", () => {
+    const invalid = viewFlagsError(viewCommand.opts<ViewFlags>());
+    if (invalid !== undefined) {
+      viewCommand.error(`error: ${invalid}`);
+    }
+  });
+  viewCommand.action(async (designation: string) => {
+    const flags = viewCommand.opts<ViewFlags>();
+    const result = await runView(designation, {
+      power: flags.power === true,
+      actuation: flags.actuation === true,
+      ...(flags.to === undefined ? {} : { to: flags.to }),
+      conductors: flags.conductors === true,
+      loads: flags.loads === true,
+      includePower: flags.includePower === true,
+      flow: flags.flow,
+      ...(flags.project === undefined ? {} : { project: flags.project }),
+      ...(flags.output === undefined ? {} : { output: flags.output }),
+      json: flags.json === true,
+      color: flags.json !== true && stderr.isTTY === true,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.renderCompileProject === undefined
+        ? {}
+        : { compile: options.renderCompileProject }),
+      ...(options.renderCreateRenderer === undefined
+        ? {}
+        : { createRenderer: options.renderCreateRenderer }),
+      ...(options.renderAtomicWrite === undefined
+        ? {}
+        : { atomicWrite: options.renderAtomicWrite }),
+    });
+
+    if (result.stdout !== "") {
+      stdout.write(result.stdout);
+    }
+    if (result.stderr !== "") {
+      stderr.write(result.stderr);
+    }
+    context.exitCode = result.exitCode;
+  });
+}
+
+function registerCliInspect(program: Command, runQueryAction: QueryAction) {
+  const inspectCommand = program
+    .command("inspect")
+    .description("inspect a designated project object")
+    .option(
+      "--type-description",
+      "show the full authored type description in human output",
+    )
+    .argument("<designation>", "canonical project object designation")
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("--json", "emit the query result and report as JSON");
+  inspectCommand.action(async (designation: string) => {
+    await runQueryAction(
+      { command: "inspect", designation },
+      inspectCommand.opts<QueryFlags>(),
+    );
+  });
+}
+
+function registerCliNeighbors(program: Command, runQueryAction: QueryAction) {
+  const neighborsCommand = program
+    .command("neighbors")
+    .description("show immediate device neighbors")
+    .argument("<designation>", "canonical device designation")
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("--json", "emit the query result and report as JSON");
+  neighborsCommand.action(async (designation: string) => {
+    await runQueryAction(
+      { command: "neighbors", designation },
+      neighborsCommand.opts<QueryFlags>(),
+    );
+  });
+}
+
+function registerCliTrace(program: Command, runQueryAction: QueryAction) {
+  const traceCommand = program
+    .command("trace")
+    .description("trace conductive topology from a device")
+    .argument("<designation>", "canonical device designation")
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("--json", "emit the query result and report as JSON");
+  traceCommand.action(async (designation: string) => {
+    await runQueryAction(
+      { command: "trace", designation },
+      traceCommand.opts<QueryFlags>(),
+    );
+  });
+}
+
+function registerCliNet(program: Command, runQueryAction: QueryAction) {
+  const netCommand = program
+    .command("net")
+    .description("show the derived net for a device terminal")
+    .argument("[reference]", "dotted device-and-terminal reference")
+    .option("--device <designation>", "exact device designation")
+    .option("--terminal <key>", "exact terminal key")
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("--json", "emit the query result and report as JSON");
+  netCommand.action(async (reference: string | undefined) => {
+    const flags = netCommand.opts<
+      QueryFlags & { device?: string; terminal?: string }
+    >();
+    const hasReference = reference !== undefined;
+    const hasDevice = flags.device !== undefined;
+    const hasTerminal = flags.terminal !== undefined;
+    const hasParts = hasDevice && hasTerminal;
+
+    if (
+      hasDevice !== hasTerminal ||
+      (hasReference && (hasDevice || hasTerminal)) ||
+      (!hasReference && !hasParts)
+    ) {
+      netCommand.error(
+        "exactly one net addressing form is required: [reference] or --device with --terminal",
+      );
+    }
+
+    const selector: TerminalSelector = hasReference
+      ? { by: "display", value: reference }
+      : {
+          by: "parts",
+          deviceDesignation: flags.device!,
+          terminalKey: flags.terminal!,
+        };
+    await runQueryAction({ command: "net", selector }, flags);
+  });
+}
+
+function registerCliCable(program: Command, runQueryAction: QueryAction) {
+  const cableCommand = program
+    .command("cable")
+    .description("show cable conductor membership")
+    .argument("<designation>", "canonical cable designation")
+    .option("--project <path>", "project directory or direct manifest path")
+    .option("--json", "emit the query result and report as JSON");
+  cableCommand.action(async (designation: string) => {
+    await runQueryAction(
+      { command: "cable", designation },
+      cableCommand.opts<QueryFlags>(),
+    );
+  });
+}
 
 export async function runCli(
   argv: readonly string[] = process.argv,
@@ -953,10 +1306,8 @@ export async function runCli(
     if (result.stderr !== "") stderr.write(result.stderr);
     return result.exitCode;
   }
-
   const program = new Command();
-  let exitCode: ValidateExitCode = 0;
-
+  const context: CliCommandContext = { options, stdout, stderr, exitCode: 0 };
   program
     .name("thermite")
     .description("Thermite Schematics command-line tools")
@@ -966,7 +1317,6 @@ export async function runCli(
       writeErr: (text) => stderr.write(text),
     })
     .exitOverride();
-
   const runQueryAction = async (
     request: QueryCommandRequest,
     flags: QueryFlags,
@@ -988,334 +1338,20 @@ export async function runCli(
     if (result.stderr !== "") {
       stderr.write(result.stderr);
     }
-    exitCode = result.exitCode;
+    context.exitCode = result.exitCode;
   };
-
-  program
-    .command("init")
-    .description("initialize an agent-ready Thermite Schematics project")
-    .option("--name <project-name>", "project name")
-    .option("--revision <revision>", "project revision")
-    .helpOption("--help", "display help for command");
-
-  const agentCommand = program
-    .command("agent")
-    .description("invoke deterministic agent tools with JSON requests");
-
-  const agentCommands = [
-    ["resolve", "resolve or search project objects"],
-    ["inspect", "inspect one project object"],
-    ["query", "execute a supported graph query"],
-    ["validate", "validate an electrical-system project"],
-    ["create-view", "create a schematic from a structured view request"],
-    ["apply-source-patch", "validate and apply a guarded source patch"],
-  ] as const;
-
-  for (const [tool, description] of agentCommands) {
-    const command = agentCommand
-      .command(tool)
-      .description(description)
-      .requiredOption("--input <file|->", "request JSON file or '-' for stdin")
-      .addHelpText("after", () => agentHelp(tool));
-
-    command.action(async () => {
-      const flags = command.opts<AgentFlags>();
-      const result = await runAgentCommand(tool, flags.input, {
-        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-        ...(options.agentStdin === undefined
-          ? {}
-          : { stdin: options.agentStdin }),
-        ...(options.agentCreateTools === undefined
-          ? {}
-          : { createTools: options.agentCreateTools }),
-      });
-
-      if (result.stdout !== "") {
-        stdout.write(result.stdout);
-      }
-      if (result.stderr !== "") {
-        stderr.write(result.stderr);
-      }
-      exitCode = result.exitCode;
-    });
-  }
-
-  const validateCommand = projectCommand(program, "validate")
-    .option("--json", "emit diagnostics as JSON")
-    .option("--strict", "treat warnings as validation failures");
-
-  validateCommand.action(async (inputPath: string | undefined) => {
-    const flags = validateCommand.opts<{ json?: boolean; strict?: boolean }>();
-    const path = projectPath(validateCommand, inputPath, options.cwd);
-    const result = await runValidate(path, {
-      json: flags.json === true,
-      strict: flags.strict === true,
-      color: flags.json !== true && stdout.isTTY === true,
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    });
-
-    if (result.output !== "") {
-      stdout.write(`${result.output}\n`);
-    }
-
-    exitCode = result.exitCode;
-  });
-  const lockCommand = projectCommand(program, "lock")
-    .option("--check", "verify the lock without writing")
-    .option("--json", "emit diagnostics as JSON");
-
-  lockCommand.action(async (inputPath: string | undefined) => {
-    const flags = lockCommand.opts<{ check?: boolean; json?: boolean }>();
-    const path = projectPath(lockCommand, inputPath, options.cwd);
-    const result = await runLock(path, {
-      check: flags.check === true,
-      json: flags.json === true,
-      color: flags.json !== true && stdout.isTTY === true,
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    });
-
-    if (result.output !== "") {
-      stdout.write(`${result.output}\n`);
-    }
-
-    exitCode = result.exitCode;
-  });
-  const compileCommand = program
-    .command("compile")
-    .description("compile an electrical-system project to canonical IR")
-    .argument("[path]", "project directory or direct manifest path")
-    .option("-o, --output <file>", "atomically write IR to a file")
-    .option("--diagnostics-json", "emit diagnostics as JSON on stderr");
-
-  compileCommand.action(async (inputPath: string | undefined) => {
-    const flags = compileCommand.opts<{
-      output?: string;
-      diagnosticsJson?: boolean;
-    }>();
-    const result = await runCompile(inputPath, {
-      ...(flags.output === undefined ? {} : { output: flags.output }),
-      diagnosticsJson: flags.diagnosticsJson === true,
-      color: flags.diagnosticsJson !== true && (stderr.isTTY ?? false) === true,
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    });
-
-    if (result.stdout !== "") {
-      stdout.write(result.stdout);
-    }
-    if (result.stderr !== "") {
-      stderr.write(`${result.stderr}\n`);
-    }
-
-    exitCode = result.exitCode;
-  });
-
-  const renderCommand = program
-    .command("render")
-    .description("render a deterministic electrical schematic as SVG")
-    .argument("<designation>", "exact canonical device designation")
-    .addOption(
-      new Option("--family <family>", "schematic view family")
-        .choices(["control", "power"])
-        .makeOptionMandatory(),
-    )
-    .addOption(
-      new Option("--flow <flow>", "schematic flow direction")
-        .choices(["left-to-right", "top-to-bottom"])
-        .default("left-to-right"),
-    )
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("-o, --output <file>", "atomically write SVG to a file")
-    .option("--json", "emit the render result and report as JSON");
-
-  renderCommand.action(async (designation: string) => {
-    const flags = renderCommand.opts<RenderFlags>();
-    const result = await runRender(designation, {
-      family: flags.family,
-      flow: flags.flow,
-      ...(flags.project === undefined ? {} : { project: flags.project }),
-      ...(flags.output === undefined ? {} : { output: flags.output }),
-      json: flags.json === true,
-      color: flags.json !== true && stderr.isTTY === true,
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      ...(options.renderCompileProject === undefined
-        ? {}
-        : { compile: options.renderCompileProject }),
-      ...(options.renderCreateRenderer === undefined
-        ? {}
-        : { createRenderer: options.renderCreateRenderer }),
-      ...(options.renderAtomicWrite === undefined
-        ? {}
-        : { atomicWrite: options.renderAtomicWrite }),
-    });
-
-    if (result.stdout !== "") {
-      stdout.write(result.stdout);
-    }
-    if (result.stderr !== "") {
-      stderr.write(result.stderr);
-    }
-    exitCode = result.exitCode;
-  });
-
-  const viewCommand = program
-    .command("view")
-    .description("render a deterministic demonstration view as SVG")
-    .argument("<designation>", "exact canonical root designation")
-    .option("--power", "render the legacy power view")
-    .option("--actuation", "render the legacy control actuation view")
-    .option("--to <designation>", "trace to an exact target designation")
-    .option("--conductors", "render all authored cable conductors")
-    .option("--loads", "render complete loads for a source")
-    .option("--include-power", "include the trace root's declared power arms")
-    .addOption(
-      new Option("--flow <flow>", "schematic flow direction")
-        .choices(["left-to-right", "top-to-bottom"])
-        .default("left-to-right"),
-    )
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("-o, --output <file>", "atomically write SVG to a file")
-    .option("--json", "emit the view result and report as JSON");
-
-  viewCommand.hook("preAction", () => {
-    const invalid = viewFlagsError(viewCommand.opts<ViewFlags>());
-    if (invalid !== undefined) {
-      viewCommand.error(`error: ${invalid}`);
-    }
-  });
-
-  viewCommand.action(async (designation: string) => {
-    const flags = viewCommand.opts<ViewFlags>();
-    const result = await runView(designation, {
-      power: flags.power === true,
-      actuation: flags.actuation === true,
-      ...(flags.to === undefined ? {} : { to: flags.to }),
-      conductors: flags.conductors === true,
-      loads: flags.loads === true,
-      includePower: flags.includePower === true,
-      flow: flags.flow,
-      ...(flags.project === undefined ? {} : { project: flags.project }),
-      ...(flags.output === undefined ? {} : { output: flags.output }),
-      json: flags.json === true,
-      color: flags.json !== true && stderr.isTTY === true,
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      ...(options.renderCompileProject === undefined
-        ? {}
-        : { compile: options.renderCompileProject }),
-      ...(options.renderCreateRenderer === undefined
-        ? {}
-        : { createRenderer: options.renderCreateRenderer }),
-      ...(options.renderAtomicWrite === undefined
-        ? {}
-        : { atomicWrite: options.renderAtomicWrite }),
-    });
-
-    if (result.stdout !== "") {
-      stdout.write(result.stdout);
-    }
-    if (result.stderr !== "") {
-      stderr.write(result.stderr);
-    }
-    exitCode = result.exitCode;
-  });
-
-  const inspectCommand = program
-    .command("inspect")
-    .description("inspect a designated project object")
-    .option(
-      "--type-description",
-      "show the full authored type description in human output",
-    )
-    .argument("<designation>", "canonical project object designation")
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("--json", "emit the query result and report as JSON");
-
-  inspectCommand.action(async (designation: string) => {
-    await runQueryAction(
-      { command: "inspect", designation },
-      inspectCommand.opts<QueryFlags>(),
-    );
-  });
-
-  const neighborsCommand = program
-    .command("neighbors")
-    .description("show immediate device neighbors")
-    .argument("<designation>", "canonical device designation")
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("--json", "emit the query result and report as JSON");
-
-  neighborsCommand.action(async (designation: string) => {
-    await runQueryAction(
-      { command: "neighbors", designation },
-      neighborsCommand.opts<QueryFlags>(),
-    );
-  });
-
-  const traceCommand = program
-    .command("trace")
-    .description("trace conductive topology from a device")
-    .argument("<designation>", "canonical device designation")
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("--json", "emit the query result and report as JSON");
-
-  traceCommand.action(async (designation: string) => {
-    await runQueryAction(
-      { command: "trace", designation },
-      traceCommand.opts<QueryFlags>(),
-    );
-  });
-
-  const netCommand = program
-    .command("net")
-    .description("show the derived net for a device terminal")
-    .argument("[reference]", "dotted device-and-terminal reference")
-    .option("--device <designation>", "exact device designation")
-    .option("--terminal <key>", "exact terminal key")
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("--json", "emit the query result and report as JSON");
-
-  netCommand.action(async (reference: string | undefined) => {
-    const flags = netCommand.opts<
-      QueryFlags & { device?: string; terminal?: string }
-    >();
-    const hasReference = reference !== undefined;
-    const hasDevice = flags.device !== undefined;
-    const hasTerminal = flags.terminal !== undefined;
-    const hasParts = hasDevice && hasTerminal;
-
-    if (
-      hasDevice !== hasTerminal ||
-      (hasReference && (hasDevice || hasTerminal)) ||
-      (!hasReference && !hasParts)
-    ) {
-      netCommand.error(
-        "exactly one net addressing form is required: [reference] or --device with --terminal",
-      );
-    }
-
-    const selector: TerminalSelector = hasReference
-      ? { by: "display", value: reference }
-      : {
-          by: "parts",
-          deviceDesignation: flags.device!,
-          terminalKey: flags.terminal!,
-        };
-    await runQueryAction({ command: "net", selector }, flags);
-  });
-
-  const cableCommand = program
-    .command("cable")
-    .description("show cable conductor membership")
-    .argument("<designation>", "canonical cable designation")
-    .option("--project <path>", "project directory or direct manifest path")
-    .option("--json", "emit the query result and report as JSON");
-
-  cableCommand.action(async (designation: string) => {
-    await runQueryAction(
-      { command: "cable", designation },
-      cableCommand.opts<QueryFlags>(),
-    );
-  });
-
+  registerCliInit(program);
+  registerCliAgent(program, context);
+  registerCliValidate(program, context);
+  registerCliLock(program, context);
+  registerCliCompile(program, context);
+  registerCliRender(program, context);
+  registerCliView(program, context);
+  registerCliInspect(program, runQueryAction);
+  registerCliNeighbors(program, runQueryAction);
+  registerCliTrace(program, runQueryAction);
+  registerCliNet(program, runQueryAction);
+  registerCliCable(program, runQueryAction);
   try {
     await program.parseAsync([...argv], { from: "node" });
   } catch (error) {
@@ -1329,6 +1365,5 @@ export async function runCli(
 
     return 2;
   }
-
-  return exitCode;
+  return context.exitCode;
 }

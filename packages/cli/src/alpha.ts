@@ -189,28 +189,14 @@ function printingOptions(command: Command, report = false): Command {
     .option("--index", "include drawing index and device/function references")
     .option("--margin <mm>", "paper margin in millimeters (5–25)");
 }
-/** Alpha entry point; existing thermite and its six guarded agent tools remain compatible. */
-export async function runThermite(argv = process.argv): Promise<number> {
-  const forwarded = [
-    "validate",
-    "lock",
-    "compile",
-    "inspect",
-    "neighbors",
-    "trace",
-    "net",
-    "render",
-    "agent",
-  ];
-  if (forwarded.includes(argv[2] ?? "")) return runCli(argv);
-  let exitCode = 0;
-  const command = new Command("thermite")
-    .description(
-      "Thermite Schematics — electrical JSON to printable ELK drawings",
-    )
-    .version(THERMITE_VERSION)
-    .exitOverride();
-  registerGuideCommand(command);
+interface AlphaState {
+  exitCode: number;
+}
+type Produce = (
+  flags: Flags,
+  view?: SchematicViewRequest | DocumentationRequest,
+) => Promise<void>;
+function registerAlphaInit(command: Command) {
   command
     .command("init <directory>")
     .description("create a project with visible, editable core library files")
@@ -243,6 +229,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
         );
       },
     );
+}
+
+function registerAlphaDiagnostics(command: Command, state: AlphaState) {
   command
     .command("diagnostics")
     .description(
@@ -267,7 +256,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         process.stderr.write(
           JSON.stringify({ diagnostics: c.diagnostics }) + "\n",
         );
-        exitCode = c.toolFailure ? 2 : 1;
+        state.exitCode = c.toolFailure ? 2 : 1;
         return;
       }
       let report;
@@ -287,7 +276,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
             },
           }) + "\n",
         );
-        exitCode = 1;
+        state.exitCode = 1;
         return;
       }
       const content =
@@ -306,6 +295,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
         JSON.stringify({ diagnostics: c.diagnostics, error: null }) + "\n",
       );
     });
+}
+
+function registerAlphaContinuity(command: Command, state: AlphaState) {
   command
     .command("continuity")
     .description(
@@ -329,7 +321,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         process.stderr.write(
           JSON.stringify({ diagnostics: compiled.diagnostics }) + "\n",
         );
-        exitCode = compiled.toolFailure ? 2 : 1;
+        state.exitCode = compiled.toolFailure ? 2 : 1;
         return;
       }
       let report;
@@ -348,7 +340,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
             },
           }) + "\n",
         );
-        exitCode = 1;
+        state.exitCode = 1;
         return;
       }
       const content =
@@ -369,8 +361,11 @@ export async function runThermite(argv = process.argv): Promise<number> {
         JSON.stringify({ diagnostics: compiled.diagnostics, error: null }) +
           "\n",
       );
-      if (!report.passed) exitCode = 1;
+      if (!report.passed) state.exitCode = 1;
     });
+}
+
+function registerAlphaCable(command: Command, state: AlphaState) {
   command
     .command("cable <designation>")
     .description(
@@ -384,7 +379,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         process.stderr.write(
           JSON.stringify({ diagnostics: compiled.diagnostics }) + "\n",
         );
-        exitCode = compiled.toolFailure ? 2 : 1;
+        state.exitCode = compiled.toolFailure ? 2 : 1;
         return;
       }
       const resolved = createQueryEngine(compiled.ir).cable({
@@ -398,7 +393,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
             error: resolved.error,
           }) + "\n",
         );
-        exitCode = 1;
+        state.exitCode = 1;
         return;
       }
       const schedule = buildCableSchedule(
@@ -415,133 +410,132 @@ export async function runThermite(argv = process.argv): Promise<number> {
           "\n",
       );
     });
-  async function produce(
-    flags: Flags,
-    view?: SchematicViewRequest | DocumentationRequest,
-  ) {
-    const compiled = await compileProject(flags.project);
-    if (!compiled.ok) {
-      process.stderr.write(
-        JSON.stringify({ diagnostics: compiled.diagnostics }) + "\n",
-      );
-      exitCode = compiled.toolFailure ? 2 : 1;
-      return;
-    }
-    const page = pageFlags(flags);
-    let packet: SchematicPacketRequest | undefined;
-    if (view === undefined) {
-      const value = await requestJson(flags.input!);
-      if (typeof value !== "object" || value === null || Array.isArray(value))
-        throw new Error("Packet request must be a JSON object.");
-      const authoredPage = (value as { page?: unknown }).page;
-      if (
-        Object.hasOwn(value, "page") &&
-        (typeof authoredPage !== "object" ||
-          authoredPage === null ||
-          Array.isArray(authoredPage))
-      )
-        throw new Error("Packet page must be a JSON object.");
-      packet = {
-        ...value,
-        ...(flags.layout ? { layout: flags.layout } : {}),
-        ...(flags.index ? { index: true } : {}),
-        ...(page === undefined
-          ? {}
-          : {
-              page: {
-                ...(authoredPage as Record<string, unknown> | undefined),
-                ...page,
-              },
-            }),
-      } as SchematicPacketRequest;
-    }
-    const result =
-      packet === undefined
-        ? await renderSchematicSheets(
-            compiled.ir,
-            view!,
-            compiled.presentation,
-            page,
-            {
-              ...(flags.layout ? { layout: flags.layout } : {}),
-              ...(flags.index ? { index: true } : {}),
-            },
-          )
-        : await renderSchematicPacket(
-            compiled.ir,
-            packet,
-            compiled.presentation,
-          );
-    if (!result.ok) {
-      process.stderr.write(
-        JSON.stringify({
-          diagnostics: compiled.diagnostics,
-          error: result.error,
-        }) + "\n",
-      );
-      exitCode = 1;
-      return;
-    }
-    const diagnostics = [
-      ...compiled.diagnostics,
-      ...(packet === undefined
-        ? []
-        : (result.value.coverage.diagnostics ?? [])),
-    ];
-    if (flags.strict && diagnostics.some((d) => d.severity === "warning")) {
-      process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
-      exitCode = 1;
-      return;
-    }
-    let content: string | Buffer;
-    const extension =
-      flags.output === undefined
-        ? undefined
-        : extname(flags.output).toLowerCase();
-    if (flags.json && extension !== undefined && extension !== ".json")
-      throw new Error("--json output must use a .json filename.");
-    try {
-      if (flags.json || extension === ".json")
-        content = JSON.stringify(result.value, null, 2) + "\n";
-      else if (extension === ".svg") {
-        if (result.value.sheets.length !== 1) {
-          process.stderr.write(
-            JSON.stringify({
-              diagnostics: compiled.diagnostics,
-              error: multipleSheetError(result.value),
-            }) + "\n",
-          );
-          exitCode = 1;
-          return;
-        }
-        content = embedPrintableFont(result.value.sheets[0]!.svg);
-      } else if (extension === ".pdf")
-        content = await packetPdf(result.value, compiled.ir.project.name);
-      else if (extension === ".csv")
-        throw new Error("Use thermite report <kind> to export a CSV schedule.");
-      else content = embedPrintableFont(result.value.html);
-    } catch (error) {
-      const failure = fontBudgetFailure(error);
-      if (!failure) throw error;
-      process.stderr.write(
-        JSON.stringify({ diagnostics, error: failure }) + "\n",
-      );
-      exitCode = 1;
-      return;
-    }
-    if (flags.output) {
-      await writeAlphaOutput(
-        flags.project,
-        flags.output,
-        content,
-        flags.input && flags.input !== "-" ? [flags.input] : [],
-      );
-      process.stdout.write(
-        `Wrote ${result.value.sheets.length} sheet(s) to ${resolve(flags.output)}\n`,
-      );
-    } else process.stdout.write(content);
-    process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
+}
+
+async function producePacket(
+  state: AlphaState,
+  flags: Flags,
+  view?: SchematicViewRequest | DocumentationRequest,
+) {
+  const compiled = await compileProject(flags.project);
+  if (!compiled.ok) {
+    process.stderr.write(
+      JSON.stringify({ diagnostics: compiled.diagnostics }) + "\n",
+    );
+    state.exitCode = compiled.toolFailure ? 2 : 1;
+    return;
   }
+  const page = pageFlags(flags);
+  let packet: SchematicPacketRequest | undefined;
+  if (view === undefined) {
+    const value = await requestJson(flags.input!);
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      throw new Error("Packet request must be a JSON object.");
+    const authoredPage = (value as { page?: unknown }).page;
+    if (
+      Object.hasOwn(value, "page") &&
+      (typeof authoredPage !== "object" ||
+        authoredPage === null ||
+        Array.isArray(authoredPage))
+    )
+      throw new Error("Packet page must be a JSON object.");
+    packet = {
+      ...value,
+      ...(flags.layout ? { layout: flags.layout } : {}),
+      ...(flags.index ? { index: true } : {}),
+      ...(page === undefined
+        ? {}
+        : {
+            page: {
+              ...(authoredPage as Record<string, unknown> | undefined),
+              ...page,
+            },
+          }),
+    } as SchematicPacketRequest;
+  }
+  const result =
+    packet === undefined
+      ? await renderSchematicSheets(
+          compiled.ir,
+          view!,
+          compiled.presentation,
+          page,
+          {
+            ...(flags.layout ? { layout: flags.layout } : {}),
+            ...(flags.index ? { index: true } : {}),
+          },
+        )
+      : await renderSchematicPacket(compiled.ir, packet, compiled.presentation);
+  if (!result.ok) {
+    process.stderr.write(
+      JSON.stringify({
+        diagnostics: compiled.diagnostics,
+        error: result.error,
+      }) + "\n",
+    );
+    state.exitCode = 1;
+    return;
+  }
+  const diagnostics = [
+    ...compiled.diagnostics,
+    ...(packet === undefined ? [] : (result.value.coverage.diagnostics ?? [])),
+  ];
+  if (flags.strict && diagnostics.some((d) => d.severity === "warning")) {
+    process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
+    state.exitCode = 1;
+    return;
+  }
+  let content: string | Buffer;
+  const extension =
+    flags.output === undefined
+      ? undefined
+      : extname(flags.output).toLowerCase();
+  if (flags.json && extension !== undefined && extension !== ".json")
+    throw new Error("--json output must use a .json filename.");
+  try {
+    if (flags.json || extension === ".json")
+      content = JSON.stringify(result.value, null, 2) + "\n";
+    else if (extension === ".svg") {
+      if (result.value.sheets.length !== 1) {
+        process.stderr.write(
+          JSON.stringify({
+            diagnostics: compiled.diagnostics,
+            error: multipleSheetError(result.value),
+          }) + "\n",
+        );
+        state.exitCode = 1;
+        return;
+      }
+      content = embedPrintableFont(result.value.sheets[0]!.svg);
+    } else if (extension === ".pdf")
+      content = await packetPdf(result.value, compiled.ir.project.name);
+    else if (extension === ".csv")
+      throw new Error("Use thermite report <kind> to export a CSV schedule.");
+    else content = embedPrintableFont(result.value.html);
+  } catch (error) {
+    const failure = fontBudgetFailure(error);
+    if (!failure) throw error;
+    process.stderr.write(
+      JSON.stringify({ diagnostics, error: failure }) + "\n",
+    );
+    state.exitCode = 1;
+    return;
+  }
+  if (flags.output) {
+    await writeAlphaOutput(
+      flags.project,
+      flags.output,
+      content,
+      flags.input && flags.input !== "-" ? [flags.input] : [],
+    );
+    process.stdout.write(
+      `Wrote ${result.value.sheets.length} sheet(s) to ${resolve(flags.output)}\n`,
+    );
+  } else process.stdout.write(content);
+  process.stderr.write(JSON.stringify({ diagnostics, error: null }) + "\n");
+}
+
+function registerAlphaView(command: Command, produce: Produce) {
   printingOptions(
     command
       .command("view <designation>")
@@ -561,6 +555,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
     .action(async (root: string, flags: Flags) =>
       produce(flags, viewRequest(root, flags)),
     );
+}
+
+function registerAlphaPacket(command: Command, produce: Produce) {
   printingOptions(
     command
       .command("packet")
@@ -575,6 +572,13 @@ export async function runThermite(argv = process.argv): Promise<number> {
       "schematic-packet-request/0.1 JSON file, or - for stdin",
     )
     .action(async (flags: Flags) => produce(flags));
+}
+
+function registerAlphaReport(
+  command: Command,
+  state: AlphaState,
+  produce: Produce,
+) {
   printingOptions(
     command
       .command("report <kind>")
@@ -608,7 +612,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
           process.stderr.write(
             JSON.stringify({ diagnostics: c.diagnostics }) + "\n",
           );
-          exitCode = c.toolFailure ? 2 : 1;
+          state.exitCode = c.toolFailure ? 2 : 1;
           return;
         }
         const table = buildDocumentation(c.ir, request, undefined, {
@@ -629,6 +633,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
         );
       } else await produce(flags, request);
     });
+}
+
+function registerAlphaSnapshot(command: Command, state: AlphaState) {
   command
     .command("snapshot")
     .description("save semantic source state for later review")
@@ -642,7 +649,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         process.stderr.write(
           JSON.stringify({ diagnostics: c.diagnostics }) + "\n",
         );
-        exitCode = c.toolFailure ? 2 : 1;
+        state.exitCode = c.toolFailure ? 2 : 1;
         return;
       }
       await writeAlphaOutput(
@@ -655,6 +662,9 @@ export async function runThermite(argv = process.argv): Promise<number> {
         JSON.stringify({ diagnostics: c.diagnostics, error: null }) + "\n",
       );
     });
+}
+
+function registerAlphaReview(command: Command, state: AlphaState) {
   command
     .command("review")
     .description("compare the current project with a saved semantic snapshot")
@@ -671,7 +681,7 @@ export async function runThermite(argv = process.argv): Promise<number> {
         process.stderr.write(
           JSON.stringify({ diagnostics: c.diagnostics }) + "\n",
         );
-        exitCode = c.toolFailure ? 2 : 1;
+        state.exitCode = c.toolFailure ? 2 : 1;
         return;
       }
       const review = reviewProject(baseline, createProjectSnapshot(c.ir));
@@ -690,6 +700,13 @@ export async function runThermite(argv = process.argv): Promise<number> {
         JSON.stringify({ diagnostics: c.diagnostics, error: null }) + "\n",
       );
     });
+}
+
+function registerAlphaWatch(
+  command: Command,
+  state: AlphaState,
+  produce: Produce,
+) {
   printingOptions(
     command
       .command("watch")
@@ -705,18 +722,52 @@ export async function runThermite(argv = process.argv): Promise<number> {
         flags.input!,
         flags.output,
         async () => {
-          exitCode = 0;
+          state.exitCode = 0;
           await produce(flags);
         },
       );
     });
+}
+/** Alpha entry point; existing thermite and its six guarded agent tools remain compatible. */
+export async function runThermite(argv = process.argv): Promise<number> {
+  const forwarded = [
+    "validate",
+    "lock",
+    "compile",
+    "inspect",
+    "neighbors",
+    "trace",
+    "net",
+    "render",
+    "agent",
+  ];
+  if (forwarded.includes(argv[2] ?? "")) return runCli(argv);
+  const state: AlphaState = { exitCode: 0 };
+  const command = new Command("thermite")
+    .description(
+      "Thermite Schematics — electrical JSON to printable ELK drawings",
+    )
+    .version(THERMITE_VERSION)
+    .exitOverride();
+  registerGuideCommand(command);
+  registerAlphaInit(command);
+  registerAlphaDiagnostics(command, state);
+  registerAlphaContinuity(command, state);
+  registerAlphaCable(command, state);
+  const produce: Produce = (flags, view) => producePacket(state, flags, view);
+  registerAlphaView(command, produce);
+  registerAlphaPacket(command, produce);
+  registerAlphaReport(command, state, produce);
+  registerAlphaSnapshot(command, state);
+  registerAlphaReview(command, state);
+  registerAlphaWatch(command, state, produce);
   command.addHelpText(
     "after",
     "\nExisting commands: validate, lock, compile, inspect, neighbors, trace, net, render, agent.\nUse thermite agent --help for the six guarded, stateless agent tools.\n",
   );
   try {
     await command.parseAsync(argv);
-    return exitCode;
+    return state.exitCode;
   } catch (error) {
     if (error instanceof CommanderError) return error.exitCode === 0 ? 0 : 2;
     process.stderr.write(

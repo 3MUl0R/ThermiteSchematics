@@ -49,6 +49,13 @@ function command(root: string, args: string[] = []) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: root,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_BASE_REF: "",
+      CI: undefined,
+      GITHUB_ACTIONS: undefined,
+      THERMITE_HEALTH_ALLOW_NO_BASE: "1",
+    },
   });
 }
 function saveBudget(root: string, budget: ReturnType<typeof createBudget>) {
@@ -90,7 +97,7 @@ const meaningful = `{
 const fileThreshold = DEFAULT_THRESHOLDS.fileLines;
 const functionThreshold = DEFAULT_THRESHOLDS.functionLines;
 
-it("is deterministic and ignores comment/string lookalikes and ordinary test metrics", () => {
+it("is deterministic and ignores comment/string lookalikes and test assertion counters", () => {
   const { root } = fixture(
     original + '// value! and it.skip("ignored")\nconst text = "test.skip";\n',
   );
@@ -112,7 +119,7 @@ it.each([
     "grown outlier function",
     fn("verifyRuntimeArchive", 549),
     fn("verifyRuntimeArchive", 552),
-    "example.ts#verifyRuntimeArchive: function lines 549 -> 552",
+    "example.ts#verifyRuntimeArchive: functions ceiling 549 -> 552",
   ],
   [
     "function threshold crossing",
@@ -336,7 +343,7 @@ it("rejects invalid threshold configuration", () => {
   ).toThrow("Invalid health threshold: functionLines");
 });
 
-it("accept raises only current regressions, prints each raise and preserves every other value", () => {
+it("accept raises only reasoned regressions below ceilings and banks stale allowances", () => {
   const { root, file } = fixture(
     fn("existing", 90) + "const checked = value!;\n",
   );
@@ -344,6 +351,7 @@ it("accept raises only current regressions, prints each raise and preserves ever
   budget.files["packages/example/src/retired.ts"] = 999;
   budget.functions["packages/example/src/retired.ts#old"] = 100;
   budget.skippedTests["retired.test.ts"] = 3;
+  budget.ceilings.skippedTests = 1;
   budget.duplicates["stale-group"] = 5;
   const code =
     fn("existing", 93) +
@@ -364,16 +372,32 @@ it("accept raises only current regressions, prints each raise and preserves ever
   const current = measure(root);
   const messages = regressions(current, budget);
   expect(messages).toHaveLength(5);
-  const updated = acceptBudget(current, budget);
+  const updated = acceptBudget(
+    current,
+    budget,
+    "redistribute existing allowance",
+  );
   expect(regressions(current, updated)).toEqual([]);
   expect(updated.thresholds).toEqual(budget.thresholds);
-  expect(updated.files["packages/example/src/retired.ts"]).toBe(999);
-  expect(updated.functions["packages/example/src/retired.ts#old"]).toBe(100);
-  expect(updated.nonNullAssertions["packages/example/src/example.ts"]).toBe(1);
-  expect(updated.skippedTests["retired.test.ts"]).toBe(3);
-  expect(updated.duplicates["stale-group"]).toBe(5);
+  expect(updated.ceilings).toEqual(budget.ceilings);
+  expect(updated.functions["packages/example/src/example.ts#existing"]).toBe(
+    93,
+  );
+  expect(updated.files["packages/example/src/retired.ts"]).toBeUndefined();
+  expect(
+    updated.functions["packages/example/src/retired.ts#old"],
+  ).toBeUndefined();
+  expect(
+    updated.nonNullAssertions["packages/example/src/example.ts"],
+  ).toBeUndefined();
+  expect(updated.skippedTests["retired.test.ts"]).toBeUndefined();
+  expect(updated.duplicates["stale-group"]).toBeUndefined();
   const path = saveBudget(root, budget);
-  const result = command(root, ["--accept"]);
+  const result = command(root, [
+    "--accept",
+    "--reason",
+    "redistribute existing allowance",
+  ]);
   expect(result.status, result.stderr).toBe(0);
   for (const message of messages) expect(result.stdout).toContain(message);
   expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(updated);
@@ -381,7 +405,7 @@ it("accept raises only current regressions, prints each raise and preserves ever
   expect(command(root, ["--accept"]).status).toBe(0);
   expect(readFileSync(path, "utf8")).toBe(bytes);
 });
-it("accept is a byte-preserving no-op when only improvements remain", () => {
+it("accept banks improvements without a reason, then is a byte-preserving no-op", () => {
   const { root, file } = fixture(fn("existing", 90));
   const budget = createBudget(measure(root));
   writeFileSync(file, original);
@@ -389,7 +413,12 @@ it("accept is a byte-preserving no-op when only improvements remain", () => {
   const path = saveBudget(root, budget),
     bytes = readFileSync(path, "utf8");
   expect(command(root, ["--accept"]).status).toBe(0);
-  expect(readFileSync(path, "utf8")).toBe(bytes);
+  const banked = readFileSync(path, "utf8");
+  expect(banked).not.toBe(bytes);
+  expect(JSON.parse(banked).functions).toEqual({});
+  expect(JSON.parse(banked).ceilings).toEqual(budget.ceilings);
+  expect(command(root, ["--accept"]).status).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe(banked);
 });
 it("excludes generator-owned sources from every metric", () => {
   const { root } = fixture(original);
