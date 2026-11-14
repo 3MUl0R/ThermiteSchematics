@@ -3,6 +3,7 @@ import type { DocumentationTable } from "@thermite/query";
 import { describeCodePoint, measureText } from "../text-metrics.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { n, text } from "./svg.js";
+import { required } from "../presentation/util.js";
 import {
   reportColumns,
   reportHeaderParts,
@@ -16,6 +17,11 @@ import {
 } from "./report-identifiers.js";
 import { wrapReportCell } from "./report-wrapping.js";
 import {
+  ReportMeasurementError,
+  reportLineMetrics,
+  reportRowHeight,
+} from "./report-measurement.js";
+import {
   wireReportColumns,
   type WireColumnAllocation,
 } from "./wire-report-columns.js";
@@ -25,6 +31,8 @@ const REPORT_CELL_SIZES = [2.6, 2.5] as const;
 interface ProbeCache {
   wraps: Map<string, string[]>;
   metrics: Map<string, ReturnType<typeof measureText>>;
+  names?: Map<string, ReportName[]>;
+  work?: { wrapCalls: number; lineMeasurements: number };
 }
 
 /** Reuse native names, identifiers and exact wraps across a bounded width grid.
@@ -46,19 +54,31 @@ export function wireColumnProbe(
       identifiers,
       "columns",
     ),
-    cache: ProbeCache = { wraps: new Map(), metrics: new Map() };
+    work = { wrapCalls: 0, lineMeasurements: 0 },
+    cache: ProbeCache = {
+      wraps: new Map(),
+      metrics: new Map(),
+      names: new Map(),
+      work,
+    };
+  const policy = probeCellPolicy(
+    ir,
+    table,
+    width,
+    page,
+    size,
+    names,
+    identifiers,
+    allocation,
+    cache,
+  );
   return {
     widths: allocation.widths,
     minimums: allocation.minimums,
+    validate: (widths: number[]) => validateProbeWidths(widths, width),
+    ...probeCells(policy, identifiers, cache, work),
     measure(widths: number[]) {
-      if (
-        widths.length !== 7 ||
-        widths.some((w) => !Number.isFinite(w) || w <= 4) ||
-        Math.abs(widths.reduce((sum, w) => sum + w, 0) - width) > 1e-6
-      )
-        throw Error(
-          "Wire column candidate does not fill seven physical columns",
-        );
+      validateProbeWidths(widths, width);
       return measuredCells(
         ir,
         table,
@@ -76,6 +96,82 @@ export function wireColumnProbe(
         cache,
       );
     },
+  };
+}
+
+function probeCells(
+  policy: CellPolicy,
+  identifiers: ReportIdentifiers,
+  cache: ProbeCache,
+  work: NonNullable<ProbeCache["work"]>,
+) {
+  const { table, cellSize } = policy;
+  return {
+    work,
+    headerNote: reportHeaderNote(policy.allocation, policy.page),
+    cellKey(column: number, row: number) {
+      const source = required(table.rows[row], "Missing native report row");
+      return JSON.stringify([
+        source.cells[column],
+        identifiers.get(source.key)?.[column] ?? [],
+      ]);
+    },
+    cell(column: number, width: number, row?: number) {
+      const source =
+        row === undefined
+          ? undefined
+          : required(table.rows[row], "Missing native report row");
+      const value = required(
+        source ? source.cells[column] : table.columns[column],
+        "Missing native report cell",
+      );
+      const lines = splitReportCell(
+        policy,
+        value,
+        column,
+        source ? "probe" : "header",
+        source?.key,
+        width,
+      );
+      return reportLineMetrics(lines, cellSize, cache.metrics, () => {
+        work.lineMeasurements++;
+      });
+    },
+  };
+}
+
+function validateProbeWidths(widths: number[], width: number) {
+  if (
+    widths.length !== 7 ||
+    widths.some((w) => !Number.isFinite(w) || w <= 4) ||
+    Math.abs(widths.reduce((sum, w) => sum + w, 0) - width) > 1e-6
+  )
+    throw new ReportMeasurementError(
+      "Wire column candidate does not fill seven physical columns",
+    );
+}
+
+function probeCellPolicy(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  width: number,
+  page: PaperPage,
+  size: number,
+  names: ReportName[],
+  identifiers: ReportIdentifiers,
+  allocation: WireColumnAllocation,
+  cache: ProbeCache,
+): CellPolicy {
+  return {
+    table,
+    width,
+    page,
+    cellSize: size,
+    allocation,
+    widths: allocation.widths,
+    insets: allocation.widths.map(() => 2),
+    ...cellWrappers(size, names, identifiers, allocation, cache),
+    ...reportDiagnostics(ir, table, size),
   };
 }
 
@@ -285,6 +381,7 @@ function cellWrappers(
   const cached = (key: string, run: () => string[]) => {
     const hit = cache?.wraps.get(key);
     if (hit) return hit;
+    if (cache?.work) cache.work.wrapCalls++;
     const lines = run();
     cache?.wraps.set(key, lines);
     return lines;
@@ -296,7 +393,7 @@ function cellWrappers(
       value,
       w,
       cellSize,
-      names,
+      cachedReportNames(value, names, cache),
       identifiers.get(key ?? "")?.[column],
     );
   if (cache) {
@@ -308,6 +405,20 @@ function cellWrappers(
       cached(JSON.stringify(["body", ...args]), () => body(...args));
   }
   return { wrapHeader, wrapCell };
+}
+
+function cachedReportNames(
+  value: string,
+  names: ReportName[],
+  cache?: ProbeCache,
+) {
+  if (!cache?.names) return names;
+  const normalized = value.normalize("NFC");
+  const hit = cache.names.get(normalized);
+  if (hit) return hit;
+  const local = names.filter((name) => normalized.includes(name.value));
+  cache.names.set(normalized, local);
+  return local;
 }
 
 type HeaderWrapper = (value: string, width: number, column: number) => string[];
@@ -356,7 +467,9 @@ export function wrapReportHeader(
         ? [word]
         : undefined;
     if (!parts)
-      throw Error("A header word cannot fit with readable hyphen fragments.");
+      throw new ReportMeasurementError(
+        "A header word cannot fit with readable hyphen fragments.",
+      );
     lines.push(...parts.slice(0, -1));
     line = parts.at(-1)!;
   }
@@ -495,10 +608,28 @@ function splitCells(
   row: string,
   key?: string,
 ) {
+  const { table, allocation, widths } = policy;
+  if (allocation.error)
+    throw new ReportMeasurementError(allocationMessage(policy));
+  if (row !== "header" && key === undefined)
+    throw Error(
+      `Report ${JSON.stringify(table.title)} (${table.kind}), row ${row}: body layout requires an explicit source row key.`,
+    );
+  return cells.map((value, i) =>
+    splitReportCell(policy, value, i, row, key, widths[i]!),
+  );
+}
+
+function splitReportCell(
+  policy: CellPolicy,
+  value: string,
+  column: number,
+  row: string,
+  key: string | undefined,
+  width: number,
+) {
   const {
-    table,
     allocation,
-    widths,
     insets,
     wrapHeader,
     wrapCell,
@@ -507,22 +638,19 @@ function splitCells(
     page,
     cellSize,
   } = policy;
-  if (allocation.error) throw Error(allocationMessage(policy));
-  if (row !== "header" && key === undefined)
-    throw Error(
-      `Report ${JSON.stringify(table.title)} (${table.kind}), row ${row}: body layout requires an explicit source row key.`,
+  if (allocation.error)
+    throw new ReportMeasurementError(allocationMessage(policy));
+  try {
+    const available = width - 2 * insets[column]! - 0.01;
+    return row === "header"
+      ? wrapHeader(value, available, column)
+      : wrapCell(value, available, column, key);
+  } catch (error) {
+    if (!(error instanceof ReportMeasurementError)) throw error;
+    throw new ReportMeasurementError(
+      `${context(row, column)}: ${error.message}${unknownReason(value)} ${page?.orientation === "landscape" ? "Use larger paper or shorter authored text" : "Use larger paper, landscape, or shorter authored text"}; selected text is ${cellSize} mm em (minimum 2.5 mm).`,
     );
-  return cells.map((value, i) => {
-    try {
-      return row === "header"
-        ? wrapHeader(value, widths[i]! - 2 * insets[i]! - 0.01, i)
-        : wrapCell(value, widths[i]! - 2 * insets[i]! - 0.01, i, key);
-    } catch (error) {
-      throw Error(
-        `${context(row, i)}: ${error instanceof Error ? error.message : "Text cannot fit."}${unknownReason(value)} ${page?.orientation === "landscape" ? "Use larger paper or shorter authored text" : "Use larger paper, landscape, or shorter authored text"}; selected text is ${cellSize} mm em (minimum 2.5 mm).`,
-      );
-    }
-  });
+  }
 }
 function endpointLocationLines(cells: string[][]) {
   return cells
@@ -541,15 +669,7 @@ function reportGeometry(
   headerNote?: string,
   cache?: ProbeCache["metrics"],
 ) {
-  const metrics = cells.flat().map((value) => {
-      const hit = cache?.get(value);
-      if (hit) return hit;
-      const measured = measureText(value, cellSize);
-      cache?.set(value, measured);
-      return measured;
-    }),
-    ascent = Math.max(0, ...metrics.map((m) => m.ascent)),
-    descent = Math.max(0, ...metrics.map((m) => m.descent)),
+  const { ascent, descent } = reportLineMetrics(cells.flat(), cellSize, cache),
     lineHeight = Math.max(3.6, ascent + descent + 0.6),
     baseline = Math.max(4, ascent + 1),
     count = Math.max(...cells.map((c) => c.length));
@@ -562,12 +682,7 @@ function reportGeometry(
     noteHeight: heading && headerNote ? 4 : 0,
     baseline,
     lineHeight,
-    height:
-      (heading && headerNote ? 4 : 0) +
-      Math.max(
-        count * 3.6 + (heading ? 5 : 4),
-        baseline + (count - 1) * lineHeight + descent + 1,
-      ),
+    height: reportRowHeight(count, ascent, descent, heading, headerNote),
   };
 }
 

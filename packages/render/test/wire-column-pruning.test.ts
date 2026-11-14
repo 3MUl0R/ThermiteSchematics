@@ -1,6 +1,9 @@
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import * as cellModule from "../src/packet/report-cells.js";
+import { ReportMeasurementError } from "../src/packet/report-measurement.js";
+import { tableDrafts } from "../src/packet/reports.js";
+import { parseSvg } from "./off-view-fixtures.js";
 import {
   paginatedReportCells,
   reportPagination,
@@ -80,8 +83,8 @@ it("tightens the native bound with the incumbent and scores only final page ties
     if (candidate.pages !== 5) expect(candidate.wrapLines).toBeNull();
     else expect(candidate.wrapLines).not.toBeNull();
   }
-  const ties = receipt.candidates.filter((c) => c.pages === 5).length;
-  expect(result.wrapRows).toBe(ties * f.table.rows.length);
+  expect(result.wrapRows).toBe(f.table.rows.length);
+  expect(result.emissionRows).toBe(f.table.rows.length);
 });
 
 it("bounds actual paginator work for 1,500 rows that reach tier (b)", () => {
@@ -92,8 +95,16 @@ it("bounds actual paginator work for 1,500 rows that reach tier (b)", () => {
     receipt = result.receipt;
   expect(receipt.tier).toBe("b");
   expect(receipt.candidates).toHaveLength(1821);
-  expect(result.rowSteps).toBeLessThanOrEqual(2_000_000);
-  expect(result.wrapRows).toBeLessThanOrEqual(15_000);
+  expect(result.rowSteps).toBe(1_964_661);
+  expect(result.emissionRows).toBe(1500);
+  expect(result.wrapRows).toBe(1500);
+  expect(result.work.heightRows).toBe(2_731_500);
+  expect(result.work.logicalCells).toBe(207_138);
+  expect(result.work.cellMeasurements).toBe(50_107);
+  expect(result.actualCellMeasurements).toBe(result.work.cellMeasurements);
+  expect(result.work.wrapCalls).toBe(59_000);
+  expect(result.work.lineMeasurements).toBe(3307);
+  expect(result.work.widthLevels).toEqual([31, 37, 32, 22, 14, 1, 1]);
   expect(result.rowSteps).toBe(
     receipt.candidates.reduce((n, c) => n + (c.rowSteps ?? 0), 0),
   );
@@ -110,12 +121,13 @@ it.each(["native-reference", "search-setup"] as const)(
     if (stage === "native-reference") {
       const original = cellModule.reportCells;
       vi.spyOn(cellModule, "reportCells").mockImplementation((...args) => {
-        if (args[4] === "legacy") throw Error("Synthetic reference failure");
+        if (args[4] === "legacy")
+          throw new ReportMeasurementError("Synthetic reference failure");
         return original(...args);
       });
     } else {
       vi.spyOn(cellModule, "wireColumnProbe").mockImplementation(() => {
-        throw Error("Synthetic probe failure");
+        throw new ReportMeasurementError("Synthetic probe failure");
       });
     }
     const measure = () =>
@@ -149,4 +161,35 @@ it("refuses an initial measurement error rather than claiming a stacked fallback
   expect(() =>
     paginatedReportCells(f.ir, f.table, f.width, f.height, f.page, f.top),
   ).toThrow("Synthetic initial failure");
+});
+
+it.each([Error, TypeError, RangeError])(
+  "rethrows unexpected setup %s errors",
+  (ErrorType) => {
+    const f = pruningFixture(machine);
+    vi.spyOn(cellModule, "wireColumnProbe").mockImplementation(() => {
+      throw new ErrorType("Unexpected setup bug");
+    });
+    expect(() =>
+      paginatedReportCells(f.ir, f.table, f.width, f.height, f.page, f.top),
+    ).toThrow("Unexpected setup bug");
+  },
+);
+
+it("paints an expected setup fallback as a visible report diagnostic", () => {
+  const f = pruningFixture(machine);
+  vi.spyOn(cellModule, "wireColumnProbe").mockImplementation(() => {
+    throw new ReportMeasurementError("Synthetic measured constraint");
+  });
+  const result = tableDrafts(f.ir, f.table, undefined, f.page);
+  if (!result.ok) throw Error(result.error.message);
+  const svg = parseSvg(
+    `<svg>${result.value.map((d) => d.content).join("")}</svg>`,
+  );
+  const notes = [...svg.querySelectorAll("[data-report-note]")]
+    .map((n) => n.textContent)
+    .join(" ");
+  expect(notes).toContain(
+    "Wire allocation fallback (search-setup): Synthetic measured constraint",
+  );
 });
