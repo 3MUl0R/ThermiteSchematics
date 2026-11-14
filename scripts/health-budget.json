@@ -86,7 +86,7 @@
     "packages/render/test/selection.test.ts": 1878,
     "packages/render/test/symbol-profile-conformance.test.ts": 943,
     "packages/render/test/title-data-resolve.test.ts": 938,
-    "packages/render/test/title-data-validation.test.ts": 895,
+    "packages/render/test/title-data-validation.test.ts": 915,
     "packages/render/test/view-spec.test.ts": 1149,
     "packages/schema/test/schema-registry.test.ts": 1202,
     "scripts/library-batch/run.check.mjs": 1029,
@@ -457,7 +457,7 @@
     "packages/render/src/packet/page.ts#frame": 130,
     "packages/render/src/packet/references.ts#referenceTables": 130,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
-    "packages/render/src/packet/reports.ts#tableDrafts": 161,
+    "packages/render/src/packet/reports.ts#tableDrafts": 158,
     "packages/render/src/packet/topology.ts#topologyDrafts": 178,
     "packages/render/src/packet/topology.ts#topologyDrafts/compose": 144,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
@@ -642,7 +642,7 @@
     "packages/render/test/wire-schedule-locations.test.ts#call callback": 85,
     "packages/render/test/xml-checker.ts#checkRestrictedSvgXml": 119,
     "packages/schema/src/parser.ts#mapTree": 78,
-    "packages/schema/src/schema-registry.ts#validateEntity": 84,
+    "packages/schema/src/schema-registry.ts#validateEntity": 96,
     "packages/schema/src/schema-registry.ts#validateProjectManifest": 78,
     "packages/schema/src/structural-checks.ts#checkCable": 76,
     "packages/schema/src/structural-checks.ts#checkDeviceType": 116,
@@ -907,6 +907,12 @@
       "to": 938,
       "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
     },
+    "files:packages/render/test/title-data-validation.test.ts": {
+      "identity": "files:packages/render/test/title-data-validation.test.ts",
+      "from": 895,
+      "to": 915,
+      "reason": "TB2b accepted closed fixed slots and exact three-version diagnostics: record bounded validation-test and mapping/dispatch body growth; preserve every global ceiling and the 300-line body cap."
+    },
     "functions:packages/cli/src/alpha.ts#producePacket": {
       "identity": "functions:packages/cli/src/alpha.ts#producePacket",
       "from": 70,
@@ -964,8 +970,8 @@
     "functions:packages/schema/src/schema-registry.ts#validateEntity": {
       "identity": "functions:packages/schema/src/schema-registry.ts#validateEntity",
       "from": 70,
-      "to": 84,
-      "reason": "Dispatch compact presentation to the canonical structural validator and map its diagnostics to the established compiler shape, retaining the direct legacy branch."
+      "to": 96,
+      "reason": "TB2b accepted closed fixed slots and exact three-version diagnostics: record bounded validation-test and mapping/dispatch body growth; preserve every global ceiling and the 300-line body cap."
     },
     "functions:scripts/health-measure.mjs#measureSources": {
       "identity": "functions:scripts/health-measure.mjs#measureSources",
