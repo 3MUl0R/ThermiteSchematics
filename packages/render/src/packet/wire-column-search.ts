@@ -1,6 +1,5 @@
 import type { DocumentationTable } from "@thermite/query";
-import type { ElectricalIr } from "@thermite/compiler";
-import type { PaperPage } from "./types.js";
+import type { ReportPagination } from "./report-paginator.js";
 import { required } from "../presentation/util.js";
 import { reportCells, wireColumnProbe } from "./report-cells.js";
 
@@ -18,6 +17,9 @@ export interface WireAllocationAttempt {
   widths: number[];
   pages: number | null;
   wrapLines: number | null;
+  rowSteps: number | null;
+  prunedAtPage?: number;
+  pageLimit?: number;
   failure?: string;
 }
 export interface WireAllocationReceipt {
@@ -80,54 +82,59 @@ const scoreOrder = (a: WireAllocationAttempt, b: WireAllocationAttempt) =>
   vectorOrder(a.widths, b.widths);
 
 function scoreCandidate(
-  table: DocumentationTable,
   widths: number[],
   measure: ReturnType<typeof wireColumnProbe>["measure"],
-  pageCount: (measured: ReturnType<typeof reportCells>) => number,
+  paginate: (
+    measured: ReturnType<typeof reportCells>,
+    limit: number,
+  ) => ReportPagination,
+  limit: number,
 ) {
   const attempt: WireAllocationAttempt = {
     widths,
     pages: null,
     wrapLines: null,
+    rowSteps: null,
   };
   try {
     const measured = measure(widths),
-      pages = pageCount(measured);
+      result = paginate(measured, limit),
+      pages = result.pages;
+    attempt.rowSteps = result.rowSteps;
+    if (result.prunedAtPage !== undefined) {
+      attempt.prunedAtPage = result.prunedAtPage;
+      attempt.pageLimit = limit;
+      return attempt;
+    }
     if (!Number.isFinite(pages)) {
       attempt.failure = "A header or body row exceeds fresh-sheet capacity";
-      return { attempt };
+      return attempt;
     }
     attempt.pages = pages;
-    attempt.wrapLines =
-      measured.split(table.columns, "header").flat().length * pages +
-      table.rows.reduce(
-        (n, row) =>
-          n + measured.split(row.cells, "probe", row.key).flat().length,
-        0,
-      );
-    return { attempt, measured };
+    return attempt;
   } catch (error) {
     attempt.failure =
       error instanceof Error ? error.message : "Candidate measurement failed";
-    return { attempt };
+    return attempt;
   }
 }
 
 /** Enumerate the complete bounded grid, not just the first capacity-preserving
  * probe. Pages, printed wrap lines, then numeric vector order break ties. */
 export function searchWireColumns(
-  ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   width: number,
   height: number,
-  page: PaperPage,
   size: number,
   nativePages: number,
-  pageCount: (measured: ReturnType<typeof reportCells>) => number,
+  paginate: (
+    measured: ReturnType<typeof reportCells>,
+    limit: number,
+  ) => ReportPagination,
   top: number,
+  probe: ReturnType<typeof wireColumnProbe>,
 ) {
-  const probe = wireColumnProbe(ir, table, width, page, size),
-    locators = probe.widths.slice(5),
+  const locators = probe.widths.slice(5),
     minimums = probe.minimums.slice(0, NATIVE_COLUMNS);
   const receipt: WireAllocationReceipt = {
     format: "wire-column-search/1",
@@ -147,19 +154,45 @@ export function searchWireColumns(
     selected: null,
     tier: "c",
   };
-  let best: ReturnType<typeof reportCells> | undefined;
+  let bestPages = nativePages;
+  const contenders: number[] = [];
   for (const widths of [probe.widths, ...vectors(minimums, locators, width)]) {
     if (receipt.candidates.length >= WIRE_SEARCH_CANDIDATES)
       throw Error("Wire allocation grid exceeded its bound");
-    const { attempt, measured } = scoreCandidate(
-      table,
+    const attempt = scoreCandidate(
       widths,
       probe.measure,
-      pageCount,
+      paginate,
+      Math.min(nativePages, bestPages),
     );
     const index = receipt.candidates.push(attempt) - 1;
-    if (!measured || attempt.pages === null || attempt.pages > nativePages)
-      continue;
+    if (attempt.pages === null || attempt.pages > bestPages) continue;
+    if (attempt.pages < bestPages) contenders.length = 0;
+    bestPages = attempt.pages;
+    contenders.push(index);
+  }
+  return scoreTies(table, probe, receipt, contenders, bestPages);
+}
+
+/** Only final page ties need the secondary score; dominated receipts stay null. */
+function scoreTies(
+  table: DocumentationTable,
+  probe: ReturnType<typeof wireColumnProbe>,
+  receipt: WireAllocationReceipt,
+  contenders: number[],
+  bestPages: number,
+) {
+  let best: ReturnType<typeof reportCells> | undefined;
+  for (const index of contenders) {
+    const attempt = required(receipt.candidates[index], "Missing contender"),
+      measured = probe.measure(attempt.widths);
+    attempt.wrapLines =
+      measured.split(table.columns, "header").flat().length * bestPages +
+      table.rows.reduce(
+        (n, row) =>
+          n + measured.split(row.cells, "probe", row.key).flat().length,
+        0,
+      );
     const previous =
       receipt.selected === null
         ? undefined

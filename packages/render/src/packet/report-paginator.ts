@@ -1,3 +1,9 @@
+export interface ReportPagination {
+  pages: number;
+  rowSteps: number;
+  prunedAtPage?: number;
+}
+
 /** Shared by allocation scoring and painted report emission. Keep absolute
  * coordinates: rounding at a page boundary must make the same decision. */
 export function reportPaginator(
