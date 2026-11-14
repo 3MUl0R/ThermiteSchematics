@@ -9,8 +9,9 @@ import {
   lowerBudget,
 } from "../../../scripts/health-ratchet.mjs";
 import {
-  lineSimilarity,
+  lineAdditions,
   allowanceMatches,
+  exactMove,
 } from "../../../scripts/health-continuity.mjs";
 import {
   repo,
@@ -23,13 +24,23 @@ import {
   fn,
 } from "./health-fixture.js";
 const file = "packages/example/test/code.test.ts";
-it("normalized line similarity uses multiset overlap and the 0.5 boundary", () => {
-  expect(lineSimilarity(["a", "b"], ["a", "x"])).toBe(0.5);
-  expect(lineSimilarity(["a", "a"], ["a", "b"])).toBe(0.5);
-  expect(lineSimilarity(["a", "b", "c"], ["a", "x", "y"])).toBeLessThan(0.5);
-  expect(lineSimilarity([], [])).toBe(0);
+it("counts added normalized lines with multiplicities and accepts pure shrink", () => {
+  expect(lineAdditions(["a", "b"], ["a", "x"])).toEqual({
+    added: 1,
+    common: 1,
+  });
+  expect(lineAdditions(["a", "a"], ["a", "a", "a"])).toEqual({
+    added: 1,
+    common: 2,
+  });
+  expect(lineAdditions(["a", "b", "c"], ["a"])).toEqual({
+    added: 0,
+    common: 1,
+  });
+  expect(lineAdditions([], [])).toEqual({ added: 0, common: 0 });
+  expect(lineAdditions(undefined, ["a"]).added).toBe(Infinity);
 });
-it("rejects the review's unrelated 454-line replacement of the real package-smoke body", () => {
+function smokeBody() {
   const text = readFileSync(
     new URL("../../compiler/test/package-smoke.test.ts", import.meta.url),
     "utf8",
@@ -40,26 +51,40 @@ it("rejects the review's unrelated 454-line replacement of the real package-smok
     ts.ScriptTarget.Latest,
     true,
   );
-  let original: ts.Node | undefined;
+  let original: ts.Block | undefined;
   function find(node: ts.Node) {
     if (ts.isFunctionLike(node) && node.body) {
       const n =
         source.getLineAndCharacterOfPosition(node.end).line -
         source.getLineAndCharacterOfPosition(node.getStart(source)).line +
         1;
-      if (n === 1278) original = node.body;
+      if (n === 1278 && ts.isBlock(node.body)) original = node.body;
     }
     ts.forEachChild(node, find);
   }
   find(source);
   expect(original).toBeDefined();
+  return { source, body: original! };
+}
+function smokePrefix(lines: number) {
+  const { source, body } = smokeBody();
+  const start = source.getLineAndCharacterOfPosition(
+    body.getStart(source),
+  ).line;
+  const kept = body.statements.filter(
+    (s) =>
+      source.getLineAndCharacterOfPosition(s.end).line - start + 1 <= lines,
+  );
+  expect(kept.length).toBeGreaterThan(0);
+  return source.text.slice(body.getStart(source), kept.at(-1)!.end);
+}
+const smokeSource = (body: string) =>
+  `describe('packed',()=>{it('install together',async()=>${body});});\n`;
+function smokeFixture() {
   const root = repo(),
     path = "packages/compiler/test/package-smoke.test.ts";
-  put(
-    root,
-    path,
-    `describe('packed',()=>{it('install together',async()=>${original!.getText(source)});});\n`,
-  );
+  const { source, body } = smokeBody();
+  put(root, path, smokeSource(body.getText(source)));
   const base = metrics(root),
     budget = createBudget(base);
   save(root, budget);
@@ -68,6 +93,10 @@ it("rejects the review's unrelated 454-line replacement of the real package-smok
   const id = Object.keys(budget.grandfathered.functions).find((k) =>
     k.endsWith("/it callback"),
   )!;
+  return { root, path, id, base, budget };
+}
+it("rejects the review's unrelated 454-line replacement of the real package-smoke body", () => {
+  const { root, path, id, base } = smokeFixture();
   put(
     root,
     path,
@@ -76,13 +105,114 @@ it("rejects the review's unrelated 454-line replacement of the real package-smok
   const current = metrics(root);
   expect(current.functions[id]).toBe(454);
   expect(
-    lineSimilarity(base.bodyLines[id], current.bodyLines[id]),
-  ).toBeLessThan(0.5);
+    lineAdditions(base.bodyLines[id], current.bodyLines[id]).added,
+  ).toBeGreaterThan(70);
   const result = run(root);
   expect(result.status, result.stderr).toBe(1);
   expect(result.stderr).toContain(
     "ceiling 300 -> 454 (new or unmatched content)",
   );
+});
+it("accepts the review's pure 1278 to 420 shrink with zero added lines", () => {
+  const { root, path, id, base } = smokeFixture();
+  const prefix = smokePrefix(418);
+  put(
+    root,
+    path,
+    smokeSource(prefix + "\n".repeat(420 - prefix.split("\n").length) + "}"),
+  );
+  const current = metrics(root);
+  expect(current.functions[id]).toBe(420);
+  expect(lineAdditions(base.bodyLines[id], current.bodyLines[id]).added).toBe(
+    0,
+  );
+  const result = run(root, ["--lower"]);
+  expect(result.status, result.stderr).toBe(0);
+  expect(
+    JSON.parse(readFileSync(root + "/scripts/health-budget.json", "utf8"))
+      .grandfathered.functions[id],
+  ).toBe(420);
+});
+it("rejects the review's retained prefix plus 561 new replacement lines", () => {
+  const { root, path, id, base } = smokeFixture();
+  const prefix = smokePrefix(700);
+  put(
+    root,
+    path,
+    smokeSource(prefix + "\n" + "void 987654321;\n".repeat(561) + "}"),
+  );
+  const current = metrics(root);
+  expect(current.functions[id]).toBeLessThan(1278);
+  expect(current.functions[id]).toBeGreaterThan(300);
+  expect(lineAdditions(base.bodyLines[id], current.bodyLines[id]).added).toBe(
+    561,
+  );
+  const result = run(root, ["--lower"]);
+  expect(result.status, result.stderr).toBe(1);
+  expect(result.stderr).toContain("new or unmatched content");
+});
+it.each([70, 71])(
+  "continuity permits exactly 70 added lines, not %i when above 70",
+  (added) => {
+    const root = repo();
+    put(root, file, fn(600));
+    const base = metrics(root),
+      budget = createBudget(base),
+      id = `${file}#existing`;
+    put(
+      root,
+      file,
+      fn(600).replace(
+        "void value;\n".repeat(added),
+        "void 987654321;\n".repeat(added),
+      ),
+    );
+    const current = metrics(root),
+      reference = { budget, metrics: base };
+    expect(lineAdditions(base.bodyLines[id], current.bodyLines[id]).added).toBe(
+      added,
+    );
+    if (added === 70) {
+      const next = lowerBudget(current, budget, reference);
+      expect(historyRegressions(current, next, budget, base)).toEqual([]);
+    } else {
+      expect(() => lowerBudget(current, budget, reference)).toThrow(
+        "new or unmatched content",
+      );
+      expect(() =>
+        acceptBudget(current, budget, "cannot waive continuity", reference),
+      ).toThrow("new or unmatched content");
+    }
+  },
+);
+it("chooses the best match first, one-to-one and independently of declaration order", () => {
+  const root = repo();
+  const alpha = fn(600, "alpha"),
+    beta = fn(600, "beta").replace(
+      "void value;\n".repeat(70),
+      "void 222;\n".repeat(70),
+    );
+  put(root, file, alpha + beta);
+  const base = metrics(root),
+    budget = createBudget(base),
+    reference = { budget, metrics: base };
+  const edited = alpha.replace(
+    "void value;\n".repeat(70),
+    "void 333;\n".repeat(70),
+  );
+  put(root, file, beta + edited);
+  const current = metrics(root),
+    matches = allowanceMatches(current, budget, reference);
+  expect(matches.functions[`${file}#beta`]).toMatchObject({
+    id: `${file}#beta`,
+    added: 0,
+  });
+  expect(matches.functions[`${file}#alpha`]).toMatchObject({
+    id: `${file}#alpha`,
+    added: 70,
+  });
+  put(root, file, edited + beta);
+  expect(allowanceMatches(metrics(root), budget, reference)).toEqual(matches);
 });
 it("an earlier callback shifts its key while the same over-cap content keeps its allowance", () => {
   const root = repo();
@@ -100,7 +230,7 @@ it("an earlier callback shifts its key while the same over-cap content keeps its
     (k) => matches.functions[k].id === id,
   )!;
   expect(key).not.toBe(id);
-  expect(matches.functions[key].similarity).toBe(1);
+  expect(matches.functions[key].added).toBe(0);
   expect(regressions(current, budget, reference)).toEqual([]);
   expect(historyRegressions(current, budget, budget, base)).toEqual([]);
   const next = lowerBudget(current, budget, reference);
@@ -214,4 +344,52 @@ it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 bud
     to: 2869,
     reason: "specific second raise",
   });
+});
+it("rejects copy plus edit of runSchematicCommand as a move, against either target", () => {
+  const text = readFileSync(
+    new URL("../src/index.ts", import.meta.url),
+    "utf8",
+  );
+  const source = ts.createSourceFile(
+    "index.ts",
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const node = source.statements.find(
+    (s): s is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(s) && s.name?.text === "runSchematicCommand",
+  )!;
+  expect(node).toBeDefined();
+  const root = repo(),
+    from = "packages/cli/src/index.ts",
+    to = "packages/cli/src/dup-copy.ts";
+  const original = node.getText(source),
+    offset = node.body!.getStart(source) - node.getStart(source) + 1;
+  put(root, from, original);
+  const base = metrics(root),
+    budget = createBudget(base);
+  put(
+    root,
+    from,
+    original.slice(0, offset) + "void 0;" + original.slice(offset),
+  );
+  put(root, to, original);
+  const current = metrics(root),
+    next = structuredClone(budget),
+    key = `${to}#runSchematicCommand`,
+    old = `${from}#runSchematicCommand`;
+  next.functions[key] = current.functions[key];
+  next.moves[key] = {
+    section: "functions",
+    from: old,
+    sha256: base.bodyHashes[old],
+  };
+  expect(current.functions[old]).toBe(base.functions[old]);
+  expect(current.bodyHashes[old]).not.toBe(base.bodyHashes[old]);
+  expect(exactMove("functions", key, next, base, current)).toBe(false);
+  for (const target of ["dev", "release"])
+    expect(
+      historyRegressions(current, next, budget, base, target).join("\n"),
+    ).toContain("Move proof requires absent source");
 });

@@ -66,6 +66,8 @@ export function run(
   const env = {
     ...process.env,
     GITHUB_BASE_REF: "",
+    CI: undefined,
+    GITHUB_ACTIONS: undefined,
     THERMITE_HEALTH_ALLOW_NO_BASE: undefined,
     ...extra,
   };

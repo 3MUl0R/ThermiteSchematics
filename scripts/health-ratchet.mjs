@@ -54,7 +54,13 @@ function main() {
   const failures = [
     ...regressions(current, next, history),
     ...(history
-      ? historyRegressions(current, next, history.budget, history.metrics)
+      ? historyRegressions(
+          current,
+          next,
+          history.budget,
+          history.metrics,
+          history.target,
+        )
       : []),
   ];
   if (failures.length) throw Error(regressionMessage(failures));

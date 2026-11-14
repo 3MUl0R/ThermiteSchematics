@@ -48,6 +48,7 @@ function referenceValue(section, key, budget, reference) {
 }
 function changes(current, budget, reference) {
   validateBudget(budget);
+  if (reference?.target === "release") return [];
   const rows = [],
     matches = allowanceMatches(current, budget, reference);
   for (const section of SECTIONS)
@@ -122,7 +123,7 @@ function reasonMatches(record, identity, from, to) {
 }
 function authorizationRows(current, budget, reference) {
   const result = [];
-  if (!reference) return result;
+  if (!reference || reference.target === "release") return result;
   for (const section of SECTIONS)
     for (const [key, to] of Object.entries(budget[section])) {
       const from = referenceValue(section, key, budget, {
@@ -244,7 +245,7 @@ export function lowerBudget(current, budget, reference) {
   return next;
 }
 export function regressionMessage(errors) {
-  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Each authorization must match {identity, from: base value, to: current value, reason}. --lower banks reductions and retires sub-cap/deleted records. Cross-file moves require {section, from, sha256} in moves[newIdentity].`;
+  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, each authorization must match {identity, from: base value, to: current value, reason}. Release targets enforce hard invariants without composing dev reasons. --lower banks reductions and retires sub-cap/deleted records. Continuity allows at most 70 added lines. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
 }
 function grandfatherHistory(current, budget, reference) {
   const errors = [],
@@ -321,10 +322,16 @@ function itemHistory(current, budget, reference) {
   }
   return errors;
 }
-export function historyRegressions(current, budget, baseBudget, base) {
+export function historyRegressions(
+  current,
+  budget,
+  baseBudget,
+  base,
+  target = "dev",
+) {
   validateBudget(budget);
   validateBudget(baseBudget);
-  const reference = { budget: baseBudget, metrics: base },
+  const reference = { budget: baseBudget, metrics: base, target },
     errors = [];
   for (const section of ["ceilings", "thresholds"])
     for (const [key, value] of Object.entries(budget[section]))

@@ -103,10 +103,10 @@ it("PR target release takes priority even when dev points at the forged PR head"
 });
 it("a missing PR target fails closed with a fetch instruction", () => {
   const { root } = staleFixture();
-  const result = run(root, [], { GITHUB_BASE_REF: "missing" });
+  const result = run(root, [], { GITHUB_BASE_REF: "release" });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain(
-    "PR baseline refs/remotes/origin/missing is missing",
+    "PR baseline refs/remotes/origin/release is missing",
   );
   expect(result.stderr).toContain("fetch-depth: 0");
 });
@@ -124,3 +124,39 @@ it("CI fetches complete base history in both jobs", () => {
     ),
   ).toBe(yaml);
 });
+it.each(["CI", "GITHUB_ACTIONS"])(
+  "ignores the synthetic opt-in whenever %s is set",
+  (name) => {
+    const root = repo();
+    put(root, path, fn(604, "forged"));
+    save(root, createBudget(metrics(root)));
+    commit(root, "forgery without a baseline");
+    for (const value of ["true", "false", ""]) {
+      const result = run(root, [], {
+        [name]: value,
+        THERMITE_HEALTH_ALLOW_NO_BASE: "1",
+      });
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("no health baseline");
+    }
+  },
+);
+it.each(["forged", "main", "refs/heads/dev", "dev/../forged"])(
+  "rejects unsupported GITHUB_BASE_REF %s locally and in CI",
+  (target) => {
+    const root = repo();
+    put(root, path, fn(604, "forged"));
+    save(root, createBudget(metrics(root)));
+    const sha = commit(root, "forged budget");
+    git(root, "update-ref", "refs/remotes/origin/forged", sha);
+    for (const extra of [{}, { CI: "true" }, { GITHUB_ACTIONS: "true" }]) {
+      const result = run(root, [], {
+        ...extra,
+        GITHUB_BASE_REF: target,
+        THERMITE_HEALTH_ALLOW_NO_BASE: "1",
+      });
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stderr).toContain("GITHUB_BASE_REF must be dev or release");
+    }
+  },
+);

@@ -1,11 +1,11 @@
 import { sizeKey, valuesOf } from "./health-budget.mjs";
-export const CONTINUITY_THRESHOLD = 0.5;
+export const CONTINUITY_MAX_ADDED = 70;
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const fileOf = (key) => key.split("#", 1)[0];
-// Multiset Dice overlap of trivia-free, substantive AST-line hashes. Repeated
-// lines count only up to their frequency in the other body, not as a set union.
-export function lineSimilarity(a, b) {
-  if (!a?.length || !b?.length) return 0;
+// Count added substantive AST lines. Repeated lines consume base occurrences,
+// so copying one retained line hundreds of times does not establish continuity.
+export function lineAdditions(a, b) {
+  if (!a || !b) return { added: Infinity, common: 0 };
   const counts = new Map();
   for (const hash of a) counts.set(hash, (counts.get(hash) ?? 0) + 1);
   let common = 0;
@@ -14,7 +14,7 @@ export function lineSimilarity(a, b) {
       common++;
       counts.set(hash, counts.get(hash) - 1);
     }
-  return (2 * common) / (a.length + b.length);
+  return { added: b.length - common, common };
 }
 export function exactMove(section, key, budget, base, current) {
   const proof = budget.moves[key],
@@ -26,9 +26,7 @@ export function exactMove(section, key, budget, base, current) {
     proof.from !== key &&
     Object.hasOwn(base[hashes], proof.from) &&
     Object.hasOwn(current[hashes], key) &&
-    (section === "files"
-      ? !Object.hasOwn(current[hashes], proof.from)
-      : current[hashes][proof.from] !== base[hashes][proof.from]) &&
+    !Object.hasOwn(current[hashes], proof.from) &&
     proof.sha256 === base[hashes][proof.from] &&
     proof.sha256 === current[hashes][key]
   );
@@ -66,17 +64,19 @@ function candidates(section, current, budget, reference) {
         (section === "files" ? key !== from : fileOf(key) !== fileOf(from))
       )
         continue;
-      const similarity =
-        base[hashes][from] === current[hashes][key]
-          ? 1
-          : lineSimilarity(base[lines]?.[from], current[lines]?.[key]);
-      if (similarity >= CONTINUITY_THRESHOLD)
-        rows.push({ key, id, from, limit, similarity });
+      const exact = base[hashes][from] === current[hashes][key];
+      const { added, common } = exact
+        ? { added: 0, common: current[lines]?.[key]?.length ?? 0 }
+        : lineAdditions(base[lines]?.[from], current[lines]?.[key]);
+      if (added <= CONTINUITY_MAX_ADDED)
+        rows.push({ key, id, from, limit, added, common, exact });
     }
   }
   return rows.sort(
     (a, b) =>
-      b.similarity - a.similarity ||
+      a.added - b.added ||
+      b.common - a.common ||
+      Number(b.exact) - Number(a.exact) ||
       Number(b.key === b.from) - Number(a.key === a.from) ||
       compare(a.id, b.id) ||
       compare(a.key, b.key),
@@ -134,6 +134,16 @@ export function moveRegressions(current, budget, reference) {
           .map(([k, h]) => [h, k]),
       );
     for (const [key, hash] of Object.entries(current[hashes])) {
+      const proof = budget.moves[key];
+      if (
+        proof?.section === section &&
+        !Object.hasOwn(base[hashes], key) &&
+        Object.hasOwn(base[hashes], proof.from) &&
+        Object.hasOwn(current[hashes], proof.from)
+      )
+        errors.push(
+          `Move proof requires absent source: ${section}.${proof.from} -> ${key}`,
+        );
       if (exactMove(section, key, budget, base, current)) {
         const from = budget.moves[key].from;
         if (used.has(from))

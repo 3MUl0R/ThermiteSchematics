@@ -57,6 +57,8 @@ function command(root: string, args: string[] = []) {
     env: {
       ...process.env,
       GITHUB_BASE_REF: "",
+      CI: undefined,
+      GITHUB_ACTIONS: undefined,
       THERMITE_HEALTH_ALLOW_NO_BASE: "1",
     },
   });

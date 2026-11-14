@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { inScope, measureSources } from "./health-measure.mjs";
-import { upgradeBudget } from "./health-budget.mjs";
+import { createBudget, upgradeBudget } from "./health-budget.mjs";
 function git(root, args, options = {}) {
   const result = spawnSync("git", ["-C", root, ...args], {
     maxBuffer: 128 * 1024 * 1024,
@@ -45,11 +45,20 @@ function ancestor(root, first, second) {
       .status === 0
   );
 }
+function allowNoBase(env) {
+  return (
+    env.THERMITE_HEALTH_ALLOW_NO_BASE === "1" &&
+    env.CI === undefined &&
+    env.GITHUB_ACTIONS === undefined
+  );
+}
 export function baselineRef(root, env = process.env) {
   if (env.GITHUB_BASE_REF) {
+    if (!["dev", "release"].includes(env.GITHUB_BASE_REF))
+      throw Error("Health history: GITHUB_BASE_REF must be dev or release.");
     const name = `refs/remotes/origin/${env.GITHUB_BASE_REF}`;
     if (resolveRef(root, name)) return name;
-    if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1") return undefined;
+    if (allowNoBase(env)) return undefined;
     throw Error(
       `Health history: PR baseline ${name} is missing; fetch the PR base with full history (fetch-depth: 0).`,
     );
@@ -67,7 +76,7 @@ export function baselineRef(root, env = process.env) {
   }
   if (remoteCommit) return remote;
   if (localCommit) return local;
-  if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1") return undefined;
+  if (allowNoBase(env)) return undefined;
   throw Error(
     "Health history: no health baseline; fetch the PR base or origin/dev with full history. THERMITE_HEALTH_ALLOW_NO_BASE=1 is only for synthetic test repositories.",
   );
@@ -76,7 +85,7 @@ export function readHistory(root, env = process.env) {
   const ref = baselineRef(root, env),
     head = resolveRef(root, "HEAD");
   if (!head) {
-    if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1" && !ref) return undefined;
+    if (allowNoBase(env) && !ref) return undefined;
     throw Error(
       "Health history: HEAD is missing; no authenticated baseline is available.",
     );
@@ -91,19 +100,27 @@ export function readHistory(root, env = process.env) {
       `Health history: no merge-base with ${ref}; fetch full history (git fetch --unshallow, or actions/checkout fetch-depth: 0).`,
     );
   const revision = merged.stdout.trim();
-  const previous = spawnSync(
-    "git",
-    ["-C", root, "show", `${revision}:scripts/health-budget.json`],
-    { encoding: "utf8" },
-  );
-  if (previous.status !== 0)
-    throw Error("Health history: baseline has no committed health budget");
   const metrics = historicalMetrics(root, revision),
-    raw = JSON.parse(previous.stdout);
+    committed =
+      git(root, ["ls-tree", "-z", revision, "--", "scripts/health-budget.json"])
+        .length > 0;
+  const budget = committed
+    ? upgradeBudget(
+        JSON.parse(
+          git(root, [
+            "show",
+            `${revision}:scripts/health-budget.json`,
+          ]).toString("utf8"),
+        ),
+        metrics,
+      )
+    : createBudget(metrics);
   return {
     revision,
     ref: ref ?? "HEAD (explicit synthetic opt-in)",
+    target: ref?.endsWith("/release") ? "release" : "dev",
+    budgetSource: committed ? "committed" : "base-source",
     metrics,
-    budget: upgradeBudget(raw, metrics),
+    budget,
   };
 }
