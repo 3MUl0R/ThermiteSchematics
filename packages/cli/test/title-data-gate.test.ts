@@ -126,15 +126,24 @@ describe("TB2 atomic compact publication", () => {
       expect(
         validate({ format: "project-presentation/0.3", frame }),
       ).not.toEqual([]);
-    expect(validate({ format: "bad" })).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "E014",
-          jsonPointer: "/format",
-          allowed: ["project-presentation/0.1", "project-presentation/0.2"],
-        }),
-      ]),
-    );
+    expect(validate({ format: "bad" })).toEqual([
+      {
+        code: "E014",
+        severity: "error",
+        message:
+          'Expected "format" to be one of: ["project-presentation/0.1", "project-presentation/0.2", "project-presentation/0.3"].',
+        file: "presentation.json",
+        line: 1,
+        column: 1,
+        jsonPointer: "/format",
+        allowed: [
+          "project-presentation/0.1",
+          "project-presentation/0.2",
+          "project-presentation/0.3",
+        ],
+        allowedCount: 3,
+      },
+    ]);
     const diagnostics = validate({
       format: "project-presentation/0.3",
       titleBlock: {

@@ -15,13 +15,15 @@ export function validatePresentationDiscriminator(
     const type = errors.find(
       (error) => error.keyword === "type" && error.instancePath === "",
     );
-    if (type === undefined) throw new Error("Missing presentation root type error.");
+    if (type === undefined)
+      throw new Error("Missing presentation root type error.");
     return mapAjvErrors([type], { ...context, value });
   }
   const union = errors.find(
     (error) => error.keyword === "anyOf" && error.instancePath === "",
   );
-  if (union === undefined) throw new Error("Missing presentation format error.");
+  if (union === undefined)
+    throw new Error("Missing presentation format error.");
   // The accepted versions come from the canonical schema, never a parallel list.
   const schema = validate.schema as {
     $defs: {
