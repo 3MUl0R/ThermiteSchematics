@@ -52,7 +52,7 @@
     "packages/cli/test/project-guide/wiring-circuits.ts": 1028,
     "packages/cli/test/query-cli.test.ts": 1011,
     "packages/cli/test/release-consumer-closure.ts": 1002,
-    "packages/cli/test/release-package.test.ts": 3107,
+    "packages/cli/test/release-package.test.ts": 2383,
     "packages/cli/test/render-cli.test.ts": 2402,
     "packages/cli/test/workflow-structure.test.ts": 1564,
     "packages/compiler/src/loader.ts": 1473,
@@ -297,7 +297,9 @@
     "packages/cli/test/release-consumer-closure.ts#classifyLoadedProgram": 77,
     "packages/cli/test/release-consumer-closure.ts#compileStrictCandidateConsumer": 130,
     "packages/cli/test/release-install-smoke.test.ts#describe callback/it callback": 105,
-    "packages/cli/test/release-package.test.ts#assertInProcessLauncherSyntax": 89,
+    "packages/cli/test/release-package-helpers.ts#assertInProcessLauncherSyntax": 89,
+    "packages/cli/test/release-package-helpers.ts#shellWithoutCommentsAndHeredocs": 97,
+    "packages/cli/test/release-package-helpers.ts#writeSyntheticPack": 100,
     "packages/cli/test/release-package.test.ts#describe callback/it callback~10": 71,
     "packages/cli/test/release-package.test.ts#describe callback/it callback~11": 77,
     "packages/cli/test/release-package.test.ts#describe callback/it callback~25": 144,
@@ -307,9 +309,7 @@
     "packages/cli/test/release-package.test.ts#describe callback/it callback~40": 112,
     "packages/cli/test/release-package.test.ts#describe callback/it callback~41": 97,
     "packages/cli/test/release-package.test.ts#describe callback/it callback~8": 86,
-    "packages/cli/test/release-package.test.ts#shellWithoutCommentsAndHeredocs": 97,
     "packages/cli/test/release-package.test.ts#stageDeclarationFixture": 78,
-    "packages/cli/test/release-package.test.ts#writeSyntheticPack": 100,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~12": 198,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~21": 181,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~22": 155,
@@ -686,7 +686,7 @@
   },
   "grandfathered": {
     "files": {
-      "packages/cli/test/release-package.test.ts": 3107
+      "packages/cli/test/release-package.test.ts": 2383
     },
     "functions": {
       "evals/draw/browser.mjs#measureSheet": 2380,
@@ -722,7 +722,23 @@
       "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": 552
     }
   },
-  "moves": {},
+  "moves": {
+    "packages/cli/test/release-package-helpers.ts#assertInProcessLauncherSyntax": {
+      "section": "functions",
+      "from": "packages/cli/test/release-package.test.ts#assertInProcessLauncherSyntax",
+      "sha256": "89239fc7c8b236055d64cb4dfef6ce1a7aaf7072fec9951f7edf33611fe21b1e"
+    },
+    "packages/cli/test/release-package-helpers.ts#shellWithoutCommentsAndHeredocs": {
+      "section": "functions",
+      "from": "packages/cli/test/release-package.test.ts#shellWithoutCommentsAndHeredocs",
+      "sha256": "85e1b3b7c54b3a2d77fa95f194fa39b73f5c8006a30f481745bbb73296dc8c11"
+    },
+    "packages/cli/test/release-package-helpers.ts#writeSyntheticPack": {
+      "section": "functions",
+      "from": "packages/cli/test/release-package.test.ts#writeSyntheticPack",
+      "sha256": "ca1258ecf824ffd833abd437a7fdec31c981214a2769fe76c20f2bbf6bdecd96"
+    }
+  },
   "nonNullAssertions": {
     "packages/agent-tools/src/apply-source-patch.ts": 14,
     "packages/agent-tools/src/common/immutable.ts": 2,
