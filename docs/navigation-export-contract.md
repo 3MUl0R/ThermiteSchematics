@@ -260,11 +260,30 @@ the fewest pages, then the fewest printed wrap lines (including repeated
 headers), then numeric lexicographic width order. This is a bounded enumeration,
 not a claim of continuous global optimality.
 
+Every vector keeps its original enumeration index. Pagination stops only when
+its monotonically increasing page count strictly exceeds the smaller of the
+native reference and the best completed count. Equal-page candidates remain
+eligible. Only candidates tied at the final minimum page count receive a wrap
+total; numeric lexicographic width order still breaks those ties. Candidates
+inherit the weighted vector's header-hyphenation flags and policy note rather
+than recomputing them: a wider candidate can retain the note without printing
+hyphens, and a candidate requiring new header hyphenation is unmeasurable. This
+intentionally narrows the enumerated grid; it does not alter candidate order.
+
 The internal `paginatedReportCells` result records `allocationReceipt` in
 `wire-column-search/1` form: physical field, retained em, native page reference,
 grid bounds and minima, fixed locator widths, every candidate's widths/page
-count/wrap count, and the selected index/tier. An unmeasurable candidate has a
-null page count and an explicit failure; it is never a zero-page success.
+count/wrap count, paginator row steps, and the selected index/tier. A candidate
+pruned at page N records `prunedAtPage: N` and `pageLimit`; its null `pages` is
+not a completed count. Dominated candidates have null `wrapLines`. An
+unmeasurable candidate has a null page count and an explicit failure; it is
+never a zero-page success. Row steps are null if pagination throws before
+returning a measurement.
+If native-reference measurement or initial search setup throws, the already
+measured stacked layout is retained, with `allocationFallback` recording the
+stage and reason. The catch covers only that setup: an initial stacked-layout
+measurement error or an unexpected later search error still refuses, and a
+stacked layout that cannot paginate still receives the normal refusal.
 Only when no enumerated tier-(b) candidate preserves capacity do the two
 location fields stack beneath their respective endpoints. Stacked fields
 retain separate painted rectangles and painted header sub-cells, with explicit

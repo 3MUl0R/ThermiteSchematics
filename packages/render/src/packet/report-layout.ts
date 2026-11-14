@@ -1,9 +1,9 @@
 import type { ElectricalIr } from "@thermite/compiler";
 import type { DocumentationTable } from "@thermite/query";
 import type { PaperPage } from "./types.js";
-import { reportCells } from "./report-cells.js";
+import { reportCells, wireColumnProbe } from "./report-cells.js";
 import { wrap } from "./svg.js";
-import { reportPaginator } from "./report-paginator.js";
+import { reportPaginator, type ReportPagination } from "./report-paginator.js";
 import {
   searchWireColumns,
   type WireAllocationReceipt,
@@ -19,33 +19,52 @@ export function paginatedReportCells(
   top = 0,
 ): ReturnType<typeof reportCells> & {
   allocationReceipt?: WireAllocationReceipt;
+  allocationFallback?: {
+    stage: "native-reference" | "search-setup";
+    reason: string;
+  };
 } {
   const first = reportCells(ir, table, width, page);
   if (!first.inlineLocations) return first;
-  const native = {
-    ...table,
-    columns: table.columns.slice(0, 5),
-    widths: [0.15, 0.24, 0.24, 0.18, 0.19],
-    rows: table.rows.map((r) => ({ ...r, cells: r.cells.slice(0, 5) })),
-    notes: table.notes.filter(
-      (note) =>
-        !note.startsWith(
-          "Sheet.zone locates the native endpoint in this packet;",
-        ),
-    ),
-  };
-  const baseline = reportCells(ir, native, width, page, "legacy");
-  const count = reportPageCount(native, baseline, width, height, top);
+  let count: number, probe: ReturnType<typeof wireColumnProbe>;
+  let stage: "native-reference" | "search-setup" = "native-reference";
+  try {
+    const native = {
+      ...table,
+      columns: table.columns.slice(0, 5),
+      widths: [0.15, 0.24, 0.24, 0.18, 0.19],
+      rows: table.rows.map((r) => ({ ...r, cells: r.cells.slice(0, 5) })),
+      notes: table.notes.filter(
+        (note) =>
+          !note.startsWith(
+            "Sheet.zone locates the native endpoint in this packet;",
+          ),
+      ),
+    };
+    const baseline = reportCells(ir, native, width, page, "legacy");
+    count = reportPageCount(native, baseline, width, height, top);
+    stage = "search-setup";
+    probe = wireColumnProbe(ir, table, width, page, first.cellSize);
+  } catch (error) {
+    return {
+      ...first,
+      allocationFallback: {
+        stage,
+        reason:
+          error instanceof Error ? error.message : "Allocation setup failed",
+      },
+    };
+  }
   const searched = searchWireColumns(
-    ir,
     table,
     width,
     height,
-    page,
     first.cellSize,
     count,
-    (measured) => reportPageCount(table, measured, width, height, top),
+    (measured, limit) =>
+      reportPagination(table, measured, width, height, top, limit),
     top,
+    probe,
   );
   return {
     ...(searched.measured ?? first),
@@ -61,6 +80,19 @@ export function reportPageCount(
   height: number,
   top = 0,
 ) {
+  return reportPagination(table, measured, width, height, top).pages;
+}
+
+/** Page counts only increase. Crossing the limit proves this vector cannot win;
+ * the returned pruned page is a lower bound, not a completed measurement. */
+export function reportPagination(
+  table: DocumentationTable,
+  measured: ReturnType<typeof reportCells>,
+  width: number,
+  height: number,
+  top = 0,
+  pageLimit = Infinity,
+): ReportPagination {
   const notes = table.notes.flatMap((note) =>
     wrap(note, Math.floor(width / 1.6)),
   );
@@ -69,12 +101,21 @@ export function reportPageCount(
     true,
   ).height;
   const paginator = reportPaginator(top, height, header, notes.length);
-  if (!paginator.headerFits) return Infinity;
+  let rowSteps = 0;
+  if (!paginator.headerFits) return { pages: Infinity, rowSteps };
   for (const row of table.rows) {
     const rowHeight = measured.geometry(
       measured.split(row.cells, "probe", row.key),
     ).height;
-    if (paginator.place(rowHeight).kind === "overflow") return Infinity;
+    rowSteps++;
+    if (paginator.place(rowHeight).kind === "overflow")
+      return { pages: Infinity, rowSteps };
+    if (paginator.pages > pageLimit)
+      return {
+        pages: paginator.pages,
+        rowSteps,
+        prunedAtPage: paginator.pages,
+      };
   }
-  return paginator.pages;
+  return { pages: paginator.pages, rowSteps };
 }

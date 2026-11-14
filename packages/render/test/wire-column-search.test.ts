@@ -130,7 +130,8 @@ it("enumerates beyond the failed weighted probe and minimizes pages, wrap lines 
     maxCandidates: WIRE_SEARCH_CANDIDATES,
   });
   expect(receipt.candidates).toHaveLength(1821);
-  expect(receipt.candidates[0]?.pages).toBe(7);
+  expect(receipt.candidates[0]?.pages).toBeNull();
+  expect(receipt.candidates[0]?.prunedAtPage).toBe(7);
   expect(receipt.nativePages).toBe(6);
   expect(receipt.tier).toBe("b");
   const best = [...receipt.candidates]
@@ -160,7 +161,7 @@ it("uses the independently painted stacked tier only when every enumerated real-
   expect(receipt.candidates.every((c) => c.pages === null || c.pages > 2)).toBe(
     true,
   );
-  expect(receipt.candidates.some((c) => c.pages === 3)).toBe(true);
+  expect(receipt.candidates.some((c) => c.prunedAtPage === 3)).toBe(true);
   expect(measured.inlineLocations).toBe(true);
   expect(reportPageCount(table, measured, 130, 90, 31)).toBe(2);
   const cells = measured.split(table.columns, "header"),
