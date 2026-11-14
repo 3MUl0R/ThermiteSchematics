@@ -27,7 +27,9 @@ function source(path: string) {
   const target =
     path === "packages/compiler/test/package-smoke.test.ts"
       ? new URL("./fixtures/health-package-smoke.ts.txt", import.meta.url)
-      : new URL("../../../" + path, import.meta.url);
+      : path === "packages/render/src/view-spec.ts"
+        ? new URL("./fixtures/health-view-spec.ts.txt", import.meta.url)
+        : new URL("../../../" + path, import.meta.url);
   return readFileSync(target, "utf8");
 }
 it("keeps normalizeSchematicView after the review's one-blank-line edit instead of matching rejectRoot", () => {
