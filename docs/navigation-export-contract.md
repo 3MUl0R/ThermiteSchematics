@@ -249,8 +249,24 @@ Singly terminated, spare and unassigned cores retain their native endpoint slots
 Location columns reserve the widest printed locator, including `not drawn`, with
 2 mm cell insets. Allocation first tries seven real columns with the native line-count capacity.
 If they cannot fit, seven real columns may add native wraps only when measured
-pagination stays at the native packet capacity. Only if that would add pages do
-the two location fields stack beneath their respective endpoints. Stacked fields
+pagination stays at the native packet capacity. Tier (b) enumerates the existing
+weighted vector and a bounded grid: after native protected-token minima and the
+two measured locator widths, distribute the remaining width in twelve shares
+across the five native columns. The complete grid has 1,820 vectors, for at most
+1,821 attempts including the weighted probe. Each uses the renderer's exact
+wrapping and the same row-placement paginator as painted report emission, at
+the retained em and 2 mm insets. Among capacity-preserving candidates, choose
+the fewest pages, then the fewest printed wrap lines (including repeated
+headers), then numeric lexicographic width order. This is a bounded enumeration,
+not a claim of continuous global optimality.
+
+The internal `paginatedReportCells` result records `allocationReceipt` in
+`wire-column-search/1` form: physical field, retained em, native page reference,
+grid bounds and minima, fixed locator widths, every candidate's widths/page
+count/wrap count, and the selected index/tier. An unmeasurable candidate has a
+null page count and an explicit failure; it is never a zero-page success.
+Only when no enumerated tier-(b) candidate preserves capacity do the two
+location fields stack beneath their respective endpoints. Stacked fields
 retain separate painted rectangles and painted header sub-cells, with explicit
 `From sheet.zone` / `To sheet.zone` labels. Native text and location ink each stay
 inside their own sub-cell; ordinary tables retain one rectangle per column.

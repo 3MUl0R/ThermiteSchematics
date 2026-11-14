@@ -3,6 +3,11 @@ import type { DocumentationTable } from "@thermite/query";
 import type { PaperPage } from "./types.js";
 import { reportCells } from "./report-cells.js";
 import { wrap } from "./svg.js";
+import { reportPaginator } from "./report-paginator.js";
+import {
+  searchWireColumns,
+  type WireAllocationReceipt,
+} from "./wire-column-search.js";
 
 /** Prefer real columns. Extra wrapping is allowed only at native page capacity. */
 export function paginatedReportCells(
@@ -11,7 +16,10 @@ export function paginatedReportCells(
   width: number,
   height: number,
   page: PaperPage,
-) {
+  top = 0,
+): ReturnType<typeof reportCells> & {
+  allocationReceipt?: WireAllocationReceipt;
+} {
   const first = reportCells(ir, table, width, page);
   if (!first.inlineLocations) return first;
   const native = {
@@ -26,19 +34,23 @@ export function paginatedReportCells(
         ),
     ),
   };
-  try {
-    const baseline = reportCells(ir, native, width, page, "legacy");
-    const columns = reportCells(ir, table, width, page, "columns");
-    if (
-      columns.cellSize === baseline.cellSize &&
-      reportPageCount(table, columns, width, height) <=
-        reportPageCount(native, baseline, width, height)
-    )
-      return columns;
-  } catch {
-    // A real-column probe cannot refuse a printable stacked allocation.
-  }
-  return first;
+  const baseline = reportCells(ir, native, width, page, "legacy");
+  const count = reportPageCount(native, baseline, width, height, top);
+  const searched = searchWireColumns(
+    ir,
+    table,
+    width,
+    height,
+    page,
+    first.cellSize,
+    count,
+    (measured) => reportPageCount(table, measured, width, height, top),
+    top,
+  );
+  return {
+    ...(searched.measured ?? first),
+    allocationReceipt: searched.receipt,
+  };
 }
 
 /** Same row, header, title and note capacity used by the report paginator. */
@@ -47,6 +59,7 @@ export function reportPageCount(
   measured: ReturnType<typeof reportCells>,
   width: number,
   height: number,
+  top = 0,
 ) {
   const notes = table.notes.flatMap((note) =>
     wrap(note, Math.floor(width / 1.6)),
@@ -55,20 +68,13 @@ export function reportPageCount(
     measured.split(table.columns, "header"),
     true,
   ).height;
-  const capacity = height - 9 - 5 - notes.length * 3.5 - header;
-  if (capacity < 9) return Infinity;
-  let pages = 1,
-    used = 0;
+  const paginator = reportPaginator(top, height, header, notes.length);
+  if (!paginator.headerFits) return Infinity;
   for (const row of table.rows) {
     const rowHeight = measured.geometry(
       measured.split(row.cells, "probe", row.key),
     ).height;
-    if (rowHeight > capacity) return Infinity;
-    if (used + rowHeight > capacity) {
-      pages++;
-      used = 0;
-    }
-    used += rowHeight;
+    if (paginator.place(rowHeight).kind === "overflow") return Infinity;
   }
-  return pages;
+  return paginator.pages;
 }
