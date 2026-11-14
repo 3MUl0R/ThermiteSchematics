@@ -23,7 +23,12 @@ import {
 } from "./health-fixture.js";
 
 function source(path: string) {
-  return readFileSync(new URL("../../../" + path, import.meta.url), "utf8");
+  // Historical 0779e76 input keeps the original over-cap attacks unchanged.
+  const target =
+    path === "packages/compiler/test/package-smoke.test.ts"
+      ? new URL("./fixtures/health-package-smoke.ts.txt", import.meta.url)
+      : new URL("../../../" + path, import.meta.url);
+  return readFileSync(target, "utf8");
 }
 it("keeps normalizeSchematicView after the review's one-blank-line edit instead of matching rejectRoot", () => {
   const root = repo(),
