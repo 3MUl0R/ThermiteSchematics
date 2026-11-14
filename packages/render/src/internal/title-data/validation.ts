@@ -5,18 +5,15 @@ import {
   Issues,
   checkLiteral,
   isObject,
-} from "../../../../schema/dist/internal/title-data/validation-common.js";
-import {
-  checkPlainText,
-  visitStrings,
-} from "../../../../schema/dist/internal/title-data/text.js";
+} from "#title-schema/validation-common";
+import { checkPlainText, visitStrings } from "#title-schema/text";
 export {
   Issues,
   checkLiteral,
   isObject,
   validDate,
-} from "../../../../schema/dist/internal/title-data/validation-common.js";
-export { checkPresentation } from "../../../../schema/dist/internal/title-data/presentation-validation.js";
+} from "#title-schema/validation-common";
+export { checkPresentation } from "#title-schema/presentation-validation";
 export function checkText(
   value: string,
   pointer: string,

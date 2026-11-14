@@ -1,6 +1,7 @@
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type {
   InvalidRenderTextError,
+  InvalidTitleTextError,
   InvalidViewRequestError,
 } from "./errors.js";
 import {
@@ -33,8 +34,10 @@ export function preflightNamedTitle(
 
 export function renderInputErrorContext(
   ir: Readonly<ElectricalIr>,
-  error: InvalidRenderTextError | InvalidViewRequestError,
+  error:
+    InvalidRenderTextError | InvalidTitleTextError | InvalidViewRequestError,
 ) {
+  if (error.code === "R005" && error.ownerKind === "title-field") return error;
   if (error.code === "R005") return renderTextErrorContext(ir, error);
   const selector = error.requestedRoot;
   const device = ir.devices.find(

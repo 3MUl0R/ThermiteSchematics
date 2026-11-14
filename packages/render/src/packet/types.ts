@@ -33,7 +33,7 @@ export interface PaperPage {
   readonly widthMm: number;
   readonly heightMm: number;
 }
-export interface SchematicPacketRequest {
+export interface LegacySchematicPacketRequest {
   readonly format: "schematic-packet-request/0.1";
   readonly page?: PageSettings;
   readonly views: readonly (
@@ -59,6 +59,9 @@ export interface SchematicPacketRequest {
         readonly appearances?: "all" | "drawings";
       };
 }
+export type SchematicPacketRequest =
+  | LegacySchematicPacketRequest
+  | import("../internal/title-data/model.js").PacketRequest;
 export interface SheetReference {
   readonly deviceUid: string;
   readonly designation: string;
@@ -80,6 +83,7 @@ export interface NormalizedDocumentationView {
   readonly title: string;
 }
 export interface RenderedSheet {
+  readonly sheetKey?: string;
   readonly occurrenceIds?: readonly string[];
   readonly annotationIds?: readonly string[];
   readonly number: number;
@@ -117,6 +121,7 @@ export interface CircuitContinuation {
   readonly netId: string | null;
 }
 export interface RenderedPacket {
+  readonly presentationFormat?: "project-presentation/0.3";
   readonly navigation?: import("./navigation-types.js").IssuedNavigation;
   readonly format: "schematic-packet/0.1";
   readonly page: PaperPage;
@@ -161,6 +166,7 @@ export interface RootedLegendSource {
   profile?: "compact" | "dense";
 }
 export interface Draft {
+  resolvedTitle?: import("../internal/title-data/model.js").ResolvedTitle;
   documentNeeds?: readonly import("./document-types.js").DocumentNeedSeed[];
   issuedDocument?: import("./document-types.js").DocumentIdentity;
   documentRows?: readonly import("./document-types.js").DocumentRowDraft[];
@@ -246,4 +252,11 @@ export interface DrawingBounds {
   y: number;
   w: number;
   h: number;
+}
+
+export interface PacketRenderOptions {
+  readonly source?: {
+    readonly file: string;
+    readonly nodes: import("@thermite/schema").JsonPointerNodeMap;
+  };
 }

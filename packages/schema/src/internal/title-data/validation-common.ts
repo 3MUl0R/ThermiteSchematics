@@ -1,8 +1,5 @@
-import {
-  normalizeDiagnosticFile,
-  type JsonPointerNodeMap,
-  type JsonValue,
-} from "../../index.js";
+import { normalizeDiagnosticFile } from "../../diagnostics.js";
+import type { JsonPointerNodeMap, JsonValue } from "../../parser.js";
 import type { TitleDiagnostic } from "./diagnostics.js";
 export class Issues {
   readonly diagnostics: TitleDiagnostic[] = [];

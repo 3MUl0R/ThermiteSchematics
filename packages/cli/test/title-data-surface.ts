@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import ts from "typescript";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,10 +50,12 @@ function targetPath(
       literal,
     );
   const scoped = /^@thermite\/([^/]+)(?:\/(.*))?$/u.exec(specifier);
+  if (specifier.startsWith("#title-schema/"))
+    return `packages/schema/src/internal/title-data/${specifier.slice(14).replace(/\.js$/u, "")}.ts`;
   let path = absoluteHidden
     ? absoluteHidden[1]
     : scoped
-      ? `packages/${scoped[1]}/src/${scoped[2] ?? "index"}`
+      ? `packages/${scoped[1]}/src/${(scoped[2] ?? "index").replace(/^(?:src|dist)\//u, "")}`
       : specifier.startsWith(".")
         ? posix.join(posix.dirname(file), specifier)
         : undefined;
@@ -68,6 +71,7 @@ function targetPath(
  * exact hidden title-data directories. Unknown dynamic loaders fail closed. */
 export function auditTitleDataSurface(
   input: ReadonlyMap<string, string>,
+  published = false,
 ): string[] {
   const files = new Map([...input].map(([path, text]) => [normal(path), text]));
   const issues: string[] = [],
@@ -126,10 +130,17 @@ export function auditTitleDataSurface(
 
     if (envAccess.test(text)) env.add(file);
     if (
+      !published &&
       !hidden(file) &&
       /project-presentation\/0\.3|schematic-packet-request\/0\.2/u.test(text)
     )
       issues.push(`${file}: unreleased format outside title-data`);
+    if (
+      published &&
+      env.has(file) &&
+      /project-presentation\/0\.3|schematic-packet-request\/0\.2/u.test(text)
+    )
+      issues.push(`${file}: released format behind an env gate`);
     const dependencies: string[] = [];
     const add = (specifier: string | undefined, dynamic = false) => {
       if (specifier === undefined) {
@@ -142,7 +153,34 @@ export function auditTitleDataSurface(
       const target = targetPath(file, specifier, files);
       if (target) dependencies.push(target);
     };
+    // The one runtime constructor executes the pinned ELK worker. Any edit
+    // invalidates this exact-source exception; aliases and eval stay forbidden.
+    const pinnedElk =
+      file === "packages/render/src/layout/elk-runtime.ts" &&
+      createHash("sha256")
+        .update(text.replaceAll("\r\n", "\n"))
+        .digest("hex") ===
+        "abbbfbdbd8f28a053e06818a871c7809bc6433b37bf41ca726100516901d3a47";
     const visit = (node: ts.Node) => {
+      if (
+        ts.isElementAccessExpression(node) &&
+        node.argumentExpression &&
+        ["eval", "Function"].includes(
+          constantText(node.argumentExpression) ?? "",
+        ) &&
+        !pinnedElk
+      )
+        issues.push(
+          `${file}: dynamic code cannot be audited for title-data access`,
+        );
+      if (
+        ts.isIdentifier(node) &&
+        ["eval", "Function"].includes(node.text) &&
+        !(node.text === "Function" && pinnedElk)
+      )
+        issues.push(
+          `${file}: dynamic code cannot be audited for title-data access`,
+        );
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&
@@ -239,13 +277,14 @@ export function auditTitleDataSurface(
     );
   };
   for (const file of files.keys()) {
-    if (!hidden(file) && reaches(file, hidden))
+    if (!published && !hidden(file) && reaches(file, hidden))
       issues.push(
         `${file}: public module or barrel reaches hidden title-data${env.has(file) ? " behind an env gate" : ""}`,
       );
     if (
       hidden(file) &&
-      (env.has(file) || reaches(file, (target) => env.has(target)))
+      (env.has(file) ||
+        (!published && reaches(file, (target) => env.has(target))))
     )
       issues.push(`${file}: title-data reaches an env gate`);
   }

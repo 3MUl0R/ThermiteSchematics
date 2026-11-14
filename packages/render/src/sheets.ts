@@ -1,3 +1,8 @@
+import { finalizeTitleData } from "./internal/title-data/finalize.js";
+import {
+  packetFrameMetadata,
+  authoredTitlePresentation,
+} from "./internal/title-data/frame-context.js";
 import { withFontMetricCache } from "./symbols/font-metric-cache.js";
 import {
   fitLegendDrafts,
@@ -45,6 +50,7 @@ import type {
 } from "./packet/types.js";
 export type {
   PageSettings,
+  PacketRenderOptions,
   PaperPage,
   SchematicPacketRequest,
   SheetReference,
@@ -172,7 +178,12 @@ async function renderPacket(
     const result = await viewDrafts(
       ir,
       view,
-      presentation,
+      authoredTitlePresentation(
+        presentation,
+        paper.value,
+        viewIndex,
+        drafts.length + 1,
+      ),
       paper.value,
       request.layout,
       circuitAppearances,
@@ -346,6 +357,8 @@ function assemblePacket(
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
   try {
+    const titles = finalizeTitleData(ir, drafts, page, presentation);
+    if (!titles.ok) return titles;
     const rendered = legendSheets(ir, drafts, page, true, {
       presentation,
       standalone: !explicitPacket,
@@ -374,6 +387,7 @@ function assemblePacket(
       ok: true,
       value: {
         format: "schematic-packet/0.1",
+        ...packetFrameMetadata(page),
         page: page,
         sheets,
         html: printPacketHtml(sheets, page, ir.project.name),
@@ -459,7 +473,23 @@ export async function renderPacketWithAdvice(
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
+  options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
+  if (
+    presentation?.format === "project-presentation/0.3" ||
+    request?.format === "schematic-packet-request/0.2"
+  ) {
+    const { renderTitlePacket } =
+      await import("./internal/title-data/entry.js");
+    return renderTitlePacket(
+      ir,
+      request,
+      presentation,
+      explicitPacket,
+      configurePage,
+      options,
+    );
+  }
   const result = await renderPacket(
     ir,
     request,
@@ -505,9 +535,10 @@ export function renderSchematicPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
   presentation?: Readonly<CompiledProjectPresentation>,
+  options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
   return withFontMetricCache(() =>
-    renderPacketWithAdvice(ir, request, presentation, true),
+    renderPacketWithAdvice(ir, request, presentation, true, undefined, options),
   );
 }
 export function renderSchematicSheets(

@@ -1,3 +1,4 @@
+import { assertProjectGuideBudget } from "../packages/cli/src/project-guide-budget.ts";
 // The maintained docs are authoritative; these ignored assets are built for packaging.
 import { execFileSync } from "node:child_process";
 import {
@@ -15,6 +16,9 @@ import { rewriteGuideLinks } from "../packages/cli/src/guide-markdown.ts";
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const destination = join(root, "packages/cli/assets/guide");
 export async function guideAssets(commit) {
+  assertProjectGuideBudget(
+    await readFile(join(root, "packages/cli/assets/THERMITE_AGENTS.md")),
+  );
   const topics = JSON.parse(
     await readFile(join(root, "docs/topics.json"), "utf8"),
   );

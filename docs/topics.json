@@ -82,5 +82,13 @@
     "readBefore": [
       "before reviewing connection requirements or model coverage"
     ]
+  },
+  {
+    "id": "drawing-frames",
+    "file": "docs/drawing-frames.md",
+    "title": "Compact frames and supplied title data",
+    "readBefore": [
+      "before changing presentation frames or packet title metadata"
+    ]
   }
 ]

@@ -1,6 +1,6 @@
-// Hidden packet/resolver model. Structural presentation types live below render.
-import type { SchematicPacketRequest } from "../../packet/types.js";
-import type { Slot } from "../../../../schema/dist/internal/title-data/model.js";
+// Packet metadata and resolver model. Presentation structure belongs to schema.
+import type { LegacySchematicPacketRequest } from "../../packet/types.js";
+import type { Slot } from "#title-schema/model";
 export {
   slots,
   bindings,
@@ -9,11 +9,8 @@ export {
   type Field,
   type Grid,
   type Presentation,
-} from "../../../../schema/dist/internal/title-data/model.js";
-export type {
-  TitleDiagnostic,
-  Result,
-} from "../../../../schema/dist/internal/title-data/diagnostics.js";
+} from "#title-schema/model";
+export type { TitleDiagnostic, Result } from "#title-schema/diagnostics";
 export interface RevisionRow {
   readonly version: string;
   readonly comment?: string;
@@ -31,7 +28,10 @@ export interface TitleData {
   readonly byView?: readonly (TitleRecord & { readonly viewIndex: number })[];
   readonly bySheet?: readonly (TitleRecord & { readonly sheetKey: string })[];
 }
-export interface PacketRequest extends Omit<SchematicPacketRequest, "format"> {
+export interface PacketRequest extends Omit<
+  LegacySchematicPacketRequest,
+  "format"
+> {
   readonly format: "schematic-packet-request/0.2";
   readonly titleData?: TitleData;
 }
@@ -83,4 +83,13 @@ export interface ResolvedTitle {
   readonly history: readonly Readonly<
     Record<keyof Required<RevisionRow>, Fact<string>>
   >[];
+}
+
+export interface TitleSource {
+  readonly file: string;
+  readonly nodes: import("@thermite/schema").JsonPointerNodeMap;
+}
+export interface TitleSources {
+  readonly packet?: TitleSource;
+  readonly presentation?: TitleSource;
 }

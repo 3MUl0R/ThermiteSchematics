@@ -1,4 +1,5 @@
-import { appendJsonPointer, type JsonValue } from "../../index.js";
+import { appendJsonPointer } from "../../json-pointer.js";
+import type { JsonValue } from "../../parser.js";
 import { Issues, isObject } from "./validation-common.js";
 
 // Plain comparisons such as A<B and C>D are not tags. Attributes must have

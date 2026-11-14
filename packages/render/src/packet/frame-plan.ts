@@ -1,3 +1,4 @@
+import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type { NormalizedSchematicView } from "../types.js";
 import { circuitTextLines } from "../circuit.js";
@@ -32,6 +33,7 @@ export interface FramePlan {
 export function compactTitleRows(
   title: SchematicTitleContext,
   page: PaperPage,
+  planning = true,
 ): FrameText[] {
   const width = page.widthMm - 2 * page.marginMm - 76;
   const circuit = title.lines.some(
@@ -44,17 +46,40 @@ export function compactTitleRows(
       ? circuitTextLines(value, width, size)
       : wrap(value, Math.floor(width / 1.6))
     ).map((value) => Object.freeze({ value, size, bold, field }));
+  const selected =
+    title.lines.find((e) => e.field === "title.view-line")?.value ?? "";
+  const candidates = planning
+    ? [selected, ...(title.titleCandidates ?? [])]
+    : [selected];
+  const headingRows = candidates.map((value) =>
+    rows(value, 2.7, false, "sheetTitle").map((row) =>
+      Object.freeze({ ...row, size: 2.8 }),
+    ),
+  );
+  const measured = headingRows.map((lines) => ({
+    lines,
+    extent: Math.max(
+      ...lines.map(
+        (row, i) =>
+          4 * i - printableTextMetrics(row.value, row.size, row.bold).bottom,
+      ),
+    ),
+  }));
+  const largest = measured.reduce((a, b) => (a.extent >= b.extent ? a : b));
   return [
     ...rows(title.projectName, 3.2, true, "project"),
-    ...rows(
-      title.lines.find((e) => e.field === "title.view-line")?.value ?? "",
-      2.7,
-      false,
-      "sheetTitle",
-    ).map((row) => Object.freeze({ ...row, size: 2.8 })),
+    ...largest.lines,
     ...title.lines
       .filter((e) => e.field === "title.authored-line")
       .flatMap((e) => rows(e.value, 2.5)),
+    ...(titleFrameContext(page)?.presentation.frame?.generatorStamp === "title"
+      ? rows(
+          `Tool: Thermite Schematics ${title.toolVersion}`,
+          2.5,
+          false,
+          "generatorStamp",
+        )
+      : []),
   ];
 }
 

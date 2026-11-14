@@ -3,10 +3,14 @@ import {
   parseJson,
   validateJsonValue,
   type JsonValue,
+  type JsonPointerNodeMap,
 } from "@thermite/schema";
 import { packetSchema } from "./schema.js";
-import { parsePresentationStructure } from "../../../../schema/dist/internal/title-data/presentation.js";
-export { PRESENTATION_BYTE_LIMIT } from "../../../../schema/dist/internal/title-data/presentation.js";
+import {
+  parsePresentationStructure,
+  validatePresentationStructure,
+} from "#title-schema/presentation";
+export { PRESENTATION_BYTE_LIMIT } from "#title-schema/presentation";
 import {
   Issues,
   checkStrings,
@@ -39,22 +43,30 @@ function parse<T>(input: string | Uint8Array, file: string): Result<T> {
   const parsed = parseJson(text, file);
   if (parsed.diagnostics.length || parsed.value === undefined)
     return { diagnostics: parsed.diagnostics };
-  const issues = new Issues(file, parsed.nodes);
+  return validatePacketMetadata(parsed.value, file, parsed.nodes) as Result<T>;
+}
+/** Only the packet envelope and title metadata are checked here. View validation
+ * belongs to the existing render pipeline. */
+export function validatePacketMetadata(
+  value: JsonValue,
+  file = "packet.json",
+  nodes: JsonPointerNodeMap = new Map(),
+): Result<PacketRequest> {
+  const issues = new Issues(file, nodes);
   issues.diagnostics.push(
-    ...validateJsonValue(validatePacket, parsed.value, {
+    ...validateJsonValue(validatePacket, value, {
       file,
-      nodes: parsed.nodes,
+      nodes: nodes,
     }),
   );
-  if (isObject(parsed.value)) {
-    checkPacketEnvelope(parsed.value, issues);
-    if (Array.isArray(parsed.value.views))
-      checkStrings(parsed.value.views, "/views", issues);
-    if (isObject(parsed.value.titleData)) {
-      checkStrings(parsed.value.titleData, "/titleData", issues);
+  if (isObject(value)) {
+    checkPacketEnvelope(value, issues);
+    if (Array.isArray(value.views)) checkStrings(value.views, "/views", issues);
+    if (isObject(value.titleData)) {
+      checkStrings(value.titleData, "/titleData", issues);
       checkTitleData(
-        parsed.value.titleData,
-        Array.isArray(parsed.value.views) ? parsed.value.views.length : 0,
+        value.titleData,
+        Array.isArray(value.views) ? value.views.length : 0,
         issues,
       );
     }
@@ -62,8 +74,9 @@ function parse<T>(input: string | Uint8Array, file: string): Result<T> {
   const diagnostics = issues.sorted();
   return diagnostics.length
     ? { diagnostics }
-    : { value: parsed.value as T, diagnostics };
+    : { value: value as unknown as PacketRequest, diagnostics };
 }
+
 function checkPacketEnvelope(
   value: Record<string, JsonValue>,
   issues: Issues,
@@ -104,6 +117,19 @@ export function parseInternalPresentation(
   const result = parsePresentationStructure(input, file);
   if (result.value === undefined) return { diagnostics: result.diagnostics };
   const issues = new Issues(file, result.nodes);
+  checkStrings(result.value as unknown as JsonValue, "", issues);
+  return issues.diagnostics.length
+    ? { diagnostics: issues.sorted() }
+    : { value: result.value, diagnostics: [] };
+}
+export function validateInternalPresentation(
+  value: JsonValue,
+  file = "presentation.json",
+  nodes: JsonPointerNodeMap = new Map(),
+): Result<Presentation> {
+  const result = validatePresentationStructure(value, file, nodes);
+  if (!result.value) return { diagnostics: result.diagnostics };
+  const issues = new Issues(file, nodes);
   checkStrings(result.value as unknown as JsonValue, "", issues);
   return issues.diagnostics.length
     ? { diagnostics: issues.sorted() }

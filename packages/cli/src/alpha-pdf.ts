@@ -201,6 +201,18 @@ function withPdfFontFallback(svg: string, sheet: number): string {
   });
 }
 
+function packetInfo(packet: RenderedPacket, title: string) {
+  return {
+    Title: title,
+    ...(packet.presentationFormat === "project-presentation/0.3"
+      ? {}
+      : { Author: "Thermite Schematics" }),
+    Creator: "Thermite Schematics",
+    CreationDate: new Date(0),
+    ModDate: new Date(0),
+  };
+}
+
 /** Convert only an internally generated packet; never import arbitrary SVG documents. */
 export async function packetPdf(
   packet: RenderedPacket,
@@ -219,13 +231,7 @@ export async function packetPdf(
   const doc = new PDFDocument({
     autoFirstPage: false,
     compress: true,
-    info: {
-      Title: title,
-      Author: "Thermite Schematics",
-      Creator: "Thermite Schematics",
-      CreationDate: new Date(0),
-      ModDate: new Date(0),
-    },
+    info: packetInfo(packet, title),
   });
   // svg-to-pdfkit emits all anchors as URI annotations. Convert our known
   // sheet fragments into actual PDF destinations before their objects flush.

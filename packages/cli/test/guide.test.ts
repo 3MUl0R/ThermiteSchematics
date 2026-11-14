@@ -195,6 +195,13 @@ it("builds fresh guide assets from an exported source archive without Git", asyn
     join(root, "node_modules"),
     "junction",
   );
+  await cp(
+    join(repositoryRoot, "packages/cli/src/project-guide-budget.ts"),
+    join(root, "packages/cli/src/project-guide-budget.ts"),
+  );
+  await mkdir(join(root, "packages/cli/assets"), { recursive: true });
+  const guide = join(root, "packages/cli/assets/THERMITE_AGENTS.md");
+  await writeFile(guide, "a".repeat(20500));
   const script = join(root, "scripts/build-guide.mjs");
   await cp(join(repositoryRoot, "scripts/build-guide.mjs"), script);
   const commit = "c".repeat(40);
@@ -215,6 +222,11 @@ it("builds fresh guide assets from an exported source archive without Git", asyn
   ).toEqual({ commit });
   run = await exec([script, "--check"], root);
   expect(run.code, run.stderr).toBe(0);
+  await writeFile(guide, "a".repeat(20501));
+  run = await exec([script], root);
+  expect(run.code).toBe(1);
+  expect(run.stderr).toContain("20501 bytes");
+  await writeFile(guide, "a".repeat(20500));
   await writeFile(join(root, "scripts/source-commit.txt"), "$Format:%H$\n");
   run = await exec([script], root);
   expect(run.code).toBe(1);
@@ -407,7 +419,30 @@ async function addObject(project: string, object: unknown) {
   await validate(project);
 }
 
+async function executeFrameExample(value: any): Promise<void> {
+  const project = await freshProject("starter");
+  const presentation = jsonBlocks("drawing-frames").find(
+    (v) => v.format === "project-presentation/0.3",
+  );
+  await writeJson(
+    join(project, "presentation.json"),
+    value.format === "project-presentation/0.3" ? value : presentation,
+  );
+  const c = await validate(project);
+  if (!c.ok) throw Error("Uncompiled frame guide fixture");
+  const request =
+    value.format === "project-presentation/0.3"
+      ? jsonBlocks("drawing-frames").find(
+          (v) => v.format === "schematic-packet-request/0.2",
+        )
+      : value;
+  const result = await renderSchematicPacket(c.ir, request, c.presentation);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+  if (result.ok)
+    expect(result.value.sheets[0]?.svg).toContain(">EXAMPLE-001</text>");
+}
 async function executeJson(id: string, value: any): Promise<void> {
+  if (id === "drawing-frames") return executeFrameExample(value);
   if (
     value.format === "schematic-packet-request/0.1" ||
     value.format?.endsWith("view-request/0.1")

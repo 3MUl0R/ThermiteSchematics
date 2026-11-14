@@ -1,9 +1,6 @@
 import type { Fact } from "./model.js";
-import type { PatternToken } from "../../../../schema/dist/internal/title-data/pattern.js";
-export {
-  parsePattern,
-  type PatternToken,
-} from "../../../../schema/dist/internal/title-data/pattern.js";
+import type { PatternToken } from "#title-schema/pattern";
+export { parsePattern, type PatternToken } from "#title-schema/pattern";
 export function expandPattern(
   tokens: readonly PatternToken[],
   base: Fact<string>,

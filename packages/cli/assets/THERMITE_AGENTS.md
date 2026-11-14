@@ -315,3 +315,8 @@ Repeat text keeps 4 mm horizontally from overlapping text bands; centroids
 round half-up to 0.01 mm.
 
 Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless names have -/–/−/+; else /, or comma if names have /.
+
+For packet frames, use presentation 0.3 named slots; see `docs/drawing-frames.md`.
+Enter only supplied title/revision data. Unknown fields stay labelled blank;
+unknown revision stays `UNSPECIFIED` and remains unmet at issue review.
+Preview the whole packet after frame changes; handle R006 honestly.

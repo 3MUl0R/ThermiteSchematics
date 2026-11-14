@@ -1,3 +1,11 @@
+import { titleFrameContext } from "../internal/title-data/frame-context.js";
+import {
+  authorTitleCells,
+  rightTitleCells,
+  historyTitle,
+  headingTitle,
+  titlePaint,
+} from "../internal/title-data/paint.js";
 import type { Draft, PaperPage } from "./types.js";
 import {
   compactFramePlan,
@@ -16,10 +24,6 @@ import {
 } from "../svg/escape.js";
 import { n, text, line, namespaceSheetContent } from "./svg.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
-
-function cell(x: number, y: number, w: number, h: number): string {
-  return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="#344054" stroke-width="0.25"/>`;
-}
 
 export function compactFrame(
   draft: Draft,
@@ -45,15 +49,7 @@ export function compactFrame(
     `<title>${xml(label)} - Sheet ${number} of ${total}</title>`,
     `<rect width="${n(page.widthMm)}" height="${n(page.heightMm)}" fill="white"/>`,
     `<rect x="${n(m)}" y="${n(m)}" width="${n(w)}" height="${n(bottom - m)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
-    text(m + 4, m + 5, "THERMITE  /  ELECTRICAL", 2.6, "start", 700),
-    text(
-      page.widthMm - m - 4,
-      m + 5,
-      `SHEET ${number} OF ${total}`,
-      2.6,
-      "end",
-    ),
-    line(m, m + 8, page.widthMm - m, m + 8),
+    ...frameHeader(page, number, total),
     namespaceSheetContent(draft.content, number),
   ];
   const notice = rootedSheetNoticeSvg(draft.view, page);
@@ -72,12 +68,44 @@ export function compactFrame(
   }
   out.push(line(m, top, page.widthMm - m, top));
   out.push(...titleCells(draft, plan, page, number, total));
+  out.push(text(m + 1, bottom + 4, draft.note, 2.5));
+  const stamp =
+    titleFrameContext(page)?.presentation.frame?.generatorStamp ?? "border";
+  if (stamp === "border")
+    out.push(
+      text(page.widthMm - m, bottom + 4, "Thermite 0.3.0-alpha.2", 2.5, "end"),
+    );
   out.push(
-    text(m + 1, bottom + 4, draft.note, 2.5),
-    text(page.widthMm - m, bottom + 4, "Thermite 0.3.0-alpha.2", 2.5, "end"),
+    `<metadata>${xml(`Generator: Thermite Schematics ${draft.title.toolVersion}`)}</metadata>`,
     "</svg>",
   );
   return out.join("\n") + "\n";
+}
+
+function frameHeader(page: PaperPage, number: number, total: number) {
+  const m = page.marginMm,
+    w = page.widthMm - 2 * m;
+  return [
+    titlePaint(
+      number,
+      "header",
+      m + 4,
+      m + 5,
+      titleFrameContext(page)?.presentation.frame?.header?.text ??
+        "THERMITE  /  ELECTRICAL",
+      w - 8 - printableTextMetrics("SHEET 100 OF 100", 2.6).right - 3,
+      2.6,
+      true,
+    ),
+    text(
+      page.widthMm - m - 4,
+      m + 5,
+      `SHEET ${number} OF ${total}`,
+      2.6,
+      "end",
+    ),
+    line(m, m + 8, page.widthMm - m, m + 8),
+  ];
 }
 
 function gridMarks(plan: FramePlan, page: PaperPage): string[] {
@@ -131,63 +159,29 @@ function titleCells(
   total: number,
 ): string[] {
   const out: string[] = [],
-    m = page.marginMm,
-    w = page.widthMm - 2 * m,
-    bottom = page.heightMm - m,
     top = plan.title.top,
-    label = sheetLabel(draft.view);
+    label = titleFrameContext(page)
+      ? (draft.title.lines.find((entry) => entry.field === "title.view-line")
+          ?.value ?? sheetLabel(draft.view))
+      : sheetLabel(draft.view);
   const rows = compactTitleRows(
     {
       ...draft.title,
-      lines: draft.title.lines.map((e) =>
-        e.field === "title.view-line" ? { ...e, value: label } : e,
+      projectName: headingTitle(draft, "project", draft.title.projectName),
+      lines: draft.title.lines.map((entry) =>
+        entry.field === "title.view-line"
+          ? { ...entry, value: headingTitle(draft, "sheetTitle", label) }
+          : entry,
       ),
     },
     page,
+    false,
   );
   out.push(...rows.map((row, i) => titleRowSvg(row, i, plan, page, number)));
-  const right = page.widthMm - m - 66;
-  out.push(...authorCells(page));
-  out.push(text(m + 3, bottom - 2, "Revision history: UNSPECIFIED", 2.5));
-  [
-    ["DWG NO", ""],
-    ["Customer", ""],
-    ["REV", draft.title.revision],
-    ["Sheet", `${number} of ${total}`],
-  ].forEach(([label, value], i) => {
-    const y = top + (i * plan.title.height) / 4;
-    out.push(
-      cell(right, y, 66, plan.title.height / 4),
-      text(right + 2, y + 4.5, `${label}:`, 2.5, "start", 700),
-    );
-    if (value) {
-      if (printableTextMetrics(value, 2.7).right > 39)
-        throw Error(
-          `Sheet ${number} field ${label} requires more than 39 mm; use a larger paper/profile or shorter supplied value.`,
-        );
-      out.push(
-        text(right + 25, y + 4.5, value, 2.7).replace(
-          "<text ",
-          label === "Sheet"
-            ? '<text data-frame-sheet-number="true" '
-            : "<text ",
-        ),
-      );
-    }
-  });
-  return out;
-}
-
-function authorCells(page: PaperPage): string[] {
-  const out: string[] = [],
-    m = page.marginMm,
-    bottom = page.heightMm - m;
-  const left = page.widthMm - 2 * m - 66;
-  ["Drawn by", "Date", "Checked by", "Approved by"].forEach((label, i) =>
-    out.push(
-      cell(m + (i * left) / 4, bottom - 13, left / 4, 7),
-      text(m + (i * left) / 4 + 2, bottom - 10, `${label}:`, 2.5, "start", 700),
-    ),
+  out.push(
+    ...authorTitleCells(draft, page, number),
+    historyTitle(draft, page, number),
+    ...rightTitleCells(draft, page, number, total, top, plan.title.height),
   );
   return out;
 }

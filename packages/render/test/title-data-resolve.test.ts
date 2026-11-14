@@ -885,3 +885,54 @@ it.each(["project", "sheetTitle"] as const)(
     expect(bound.diagnostics).toEqual([]);
   },
 );
+
+it.each([[1, 1], [99], [1.5], [0], []].map((owners) => ({ owners })))(
+  "rejects invalid native companion owners $owners",
+  ({ owners }) => {
+    const companion: FinalSheet = {
+      identity: { kind: "companion", documentId: "invalid-owner" },
+      ownerViewIndexes: owners,
+      partIndex: 1,
+      partTotal: 1,
+      title: "Companion",
+    };
+    const result = resolveTitles(
+      presentation(),
+      packet(undefined, 2),
+      "Source",
+      [drawing, companion],
+    );
+    expect(result.value).toBeUndefined();
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "R006",
+          details: expect.objectContaining({ reason: "unresolved-sheet-key" }),
+        }),
+      ]),
+    );
+  },
+);
+it("ignores scalar companion viewIndex rather than inheriting its metadata", () => {
+  const companion: FinalSheet = {
+    identity: { kind: "companion", documentId: "scalar-is-not-owner" },
+    viewIndex: 1,
+    partIndex: 1,
+    partTotal: 1,
+    title: "Companion",
+  };
+  const titles = resolve(
+    presentation(),
+    packet({
+      defaults: { values: { drawnBy: "DEFAULT" } },
+      byView: [{ viewIndex: 1, values: { drawnBy: "VIEW" } }],
+    }),
+    [drawing, companion],
+  );
+  const first = titles[0],
+    companionTitle = titles[1];
+  if (!first || !companionTitle)
+    throw Error("Missing ownership fixture titles.");
+  expect(lookup(first, "drawnBy").text).toBe("VIEW");
+  expect(lookup(companionTitle, "drawnBy").text).toBe("DEFAULT");
+});

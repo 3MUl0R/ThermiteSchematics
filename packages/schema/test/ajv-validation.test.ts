@@ -135,6 +135,7 @@ describe("closed Ajv keyword mapping", () => {
       maxLength: "E013",
       enum: "E014",
       const: "E014",
+      anyOf: "E014",
       minItems: "E015",
       maxItems: "E015",
       minimum: "E015",
@@ -161,6 +162,7 @@ describe("closed Ajv keyword mapping", () => {
 
     expect([...usedKeywords].sort()).toEqual([
       "additionalProperties",
+      "anyOf",
       "const",
       "enum",
       "maxItems",
