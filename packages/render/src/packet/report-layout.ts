@@ -3,10 +3,16 @@ import type { DocumentationTable } from "@thermite/query";
 import type { PaperPage } from "./types.js";
 import { reportCells, wireColumnProbe } from "./report-cells.js";
 import { wrap } from "./svg.js";
-import { reportPaginator, type ReportPagination } from "./report-paginator.js";
+import {
+  reportPaginator,
+  reportHeightPagination,
+  type ReportPagination,
+} from "./report-paginator.js";
+import { ReportMeasurementError } from "./report-measurement.js";
 import {
   searchWireColumns,
   type WireAllocationReceipt,
+  type WirePagination,
 } from "./wire-column-search.js";
 
 /** Prefer real columns. Extra wrapping is allowed only at native page capacity. */
@@ -46,6 +52,7 @@ export function paginatedReportCells(
     stage = "search-setup";
     probe = wireColumnProbe(ir, table, width, page, first.cellSize);
   } catch (error) {
+    if (!(error instanceof ReportMeasurementError)) throw error;
     return {
       ...first,
       allocationFallback: {
@@ -61,14 +68,31 @@ export function paginatedReportCells(
     height,
     first.cellSize,
     count,
-    (measured, limit) =>
-      reportPagination(table, measured, width, height, top, limit),
+    reportPaginations(table, width, height, top),
     top,
     probe,
   );
   return {
     ...(searched.measured ?? first),
     allocationReceipt: searched.receipt,
+  };
+}
+
+/** Paired arithmetic/emission paths share the same frame and note reservation. */
+export function reportPaginations(
+  table: DocumentationTable,
+  width: number,
+  height: number,
+  top = 0,
+): WirePagination {
+  const noteLines = table.notes.flatMap((note) =>
+    wrap(note, Math.floor(width / 1.6)),
+  ).length;
+  return {
+    measured: (measured, limit) =>
+      reportPagination(table, measured, width, height, top, limit),
+    heights: (measured, limit) =>
+      reportHeightPagination(measured, top, height, noteLines, limit),
   };
 }
 

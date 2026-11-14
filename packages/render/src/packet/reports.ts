@@ -103,7 +103,7 @@ export function tableDrafts(
       "unprintable-layout",
       "Insufficient report area. Shorten title lines or select a larger sheet.",
     );
-  let measured: ReturnType<typeof reportCells>, header: string[][];
+  let measured: ReturnType<typeof paginatedReportCells>, header: string[][];
   try {
     measured = paginatedReportCells(ir, table, b.w, b.h, page, b.y);
     header = measured.split(table.columns, "header");
@@ -130,7 +130,7 @@ export function tableDrafts(
     header,
     headerH,
   );
-  const notes = reportNotes(table, b.w);
+  const notes = reportNotes(table, b.w, measured.allocationFallback);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
   const paginator = reportPaginator(b.y, b.h, headerH, notes.length);
   if (!paginator.headerFits) {
@@ -269,8 +269,18 @@ function unprintableReportText(
   );
 }
 
-function reportNotes(table: DocumentationTable, width: number) {
-  return table.notes.flatMap((note, index) =>
+function reportNotes(
+  table: DocumentationTable,
+  width: number,
+  fallback?: { stage: string; reason: string },
+) {
+  const notes = fallback
+    ? [
+        ...table.notes,
+        `Wire allocation fallback (${fallback.stage}): ${fallback.reason}`,
+      ]
+    : table.notes;
+  return notes.flatMap((note, index) =>
     wrap(note, Math.floor(width / 1.6)).map((value) => ({ index, value })),
   );
 }

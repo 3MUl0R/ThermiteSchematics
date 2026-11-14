@@ -1,5 +1,6 @@
 import type { DocumentationTable } from "@thermite/query";
-import type { ReportPagination } from "./report-paginator.js";
+import type { ReportPagination, ReportHeights } from "./report-paginator.js";
+import { wireColumnArithmetic } from "./wire-column-arithmetic.js";
 import { required } from "../presentation/util.js";
 import { reportCells, wireColumnProbe } from "./report-cells.js";
 
@@ -81,13 +82,18 @@ const scoreOrder = (a: WireAllocationAttempt, b: WireAllocationAttempt) =>
   (a.wrapLines ?? Infinity) - (b.wrapLines ?? Infinity) ||
   vectorOrder(a.widths, b.widths);
 
-function scoreCandidate(
-  widths: number[],
-  measure: ReturnType<typeof wireColumnProbe>["measure"],
-  paginate: (
+export interface WirePagination {
+  measured: (
     measured: ReturnType<typeof reportCells>,
     limit: number,
-  ) => ReportPagination,
+  ) => ReportPagination;
+  heights: (measured: ReportHeights, limit: number) => ReportPagination;
+}
+
+function scoreCandidate(
+  widths: number[],
+  arithmetic: ReturnType<typeof wireColumnArithmetic>,
+  paginate: WirePagination["heights"],
   limit: number,
 ) {
   const attempt: WireAllocationAttempt = {
@@ -97,25 +103,28 @@ function scoreCandidate(
     rowSteps: null,
   };
   try {
-    const measured = measure(widths),
+    const measured = arithmetic.candidate(widths),
       result = paginate(measured, limit),
       pages = result.pages;
     attempt.rowSteps = result.rowSteps;
     if (result.prunedAtPage !== undefined) {
       attempt.prunedAtPage = result.prunedAtPage;
       attempt.pageLimit = limit;
-      return attempt;
+      return { attempt };
     }
     if (!Number.isFinite(pages)) {
       attempt.failure = "A header or body row exceeds fresh-sheet capacity";
-      return attempt;
+      return { attempt };
     }
     attempt.pages = pages;
-    return attempt;
+    return {
+      attempt,
+      wrapLines: measured.headerLines * pages + measured.bodyLines,
+    };
   } catch (error) {
     attempt.failure =
       error instanceof Error ? error.message : "Candidate measurement failed";
-    return attempt;
+    return { attempt };
   }
 }
 
@@ -127,10 +136,7 @@ export function searchWireColumns(
   height: number,
   size: number,
   nativePages: number,
-  paginate: (
-    measured: ReturnType<typeof reportCells>,
-    limit: number,
-  ) => ReportPagination,
+  paginate: WirePagination,
   top: number,
   probe: ReturnType<typeof wireColumnProbe>,
 ) {
@@ -155,53 +161,79 @@ export function searchWireColumns(
     tier: "c",
   };
   let bestPages = nativePages;
+  const arithmetic = wireColumnArithmetic(probe, table),
+    wrapTotals: (number | undefined)[] = [];
   const contenders: number[] = [];
   for (const widths of [probe.widths, ...vectors(minimums, locators, width)]) {
     if (receipt.candidates.length >= WIRE_SEARCH_CANDIDATES)
       throw Error("Wire allocation grid exceeded its bound");
-    const attempt = scoreCandidate(
+    const scored = scoreCandidate(
       widths,
-      probe.measure,
-      paginate,
+      arithmetic,
+      paginate.heights,
       Math.min(nativePages, bestPages),
     );
+    const attempt = scored.attempt;
     const index = receipt.candidates.push(attempt) - 1;
+    wrapTotals[index] = scored.wrapLines;
     if (attempt.pages === null || attempt.pages > bestPages) continue;
     if (attempt.pages < bestPages) contenders.length = 0;
     bestPages = attempt.pages;
     contenders.push(index);
   }
-  return scoreTies(table, probe, receipt, contenders, bestPages);
+  const selected = scoreTies(receipt, contenders, wrapTotals);
+  const measured =
+    selected === null
+      ? undefined
+      : verifyChoice(table, probe, receipt, selected, paginate);
+  return { measured, receipt, work: { ...arithmetic.work, ...probe.work } };
 }
 
 /** Only final page ties need the secondary score; dominated receipts stay null. */
 function scoreTies(
-  table: DocumentationTable,
-  probe: ReturnType<typeof wireColumnProbe>,
   receipt: WireAllocationReceipt,
   contenders: number[],
-  bestPages: number,
+  totals: (number | undefined)[],
 ) {
-  let best: ReturnType<typeof reportCells> | undefined;
   for (const index of contenders) {
-    const attempt = required(receipt.candidates[index], "Missing contender"),
-      measured = probe.measure(attempt.widths);
-    attempt.wrapLines =
-      measured.split(table.columns, "header").flat().length * bestPages +
-      table.rows.reduce(
-        (n, row) =>
-          n + measured.split(row.cells, "probe", row.key).flat().length,
-        0,
-      );
+    const attempt = required(receipt.candidates[index], "Missing contender");
+    attempt.wrapLines = required(totals[index], "Missing contender wrap total");
     const previous =
       receipt.selected === null
         ? undefined
         : receipt.candidates[receipt.selected];
     if (!previous || scoreOrder(attempt, previous) < 0) {
       receipt.selected = index;
-      best = measured;
     }
   }
-  if (best) receipt.tier = "b";
-  return { measured: best, receipt };
+  if (receipt.selected !== null) receipt.tier = "b";
+  return receipt.selected;
+}
+
+/** The selected vector always receives the ordinary full emission measurement.
+ * Keep this assertion active in tests and production rather than trusting caches. */
+function verifyChoice(
+  table: DocumentationTable,
+  probe: ReturnType<typeof wireColumnProbe>,
+  receipt: WireAllocationReceipt,
+  selected: number,
+  paginate: WirePagination,
+) {
+  const chosen = required(
+    receipt.candidates[selected],
+    "Missing chosen vector",
+  );
+  const measured = probe.measure(chosen.widths),
+    actual = paginate.measured(measured, Infinity);
+  const wraps =
+    measured.split(table.columns, "header").flat().length * actual.pages +
+    table.rows.reduce(
+      (n, row) => n + measured.split(row.cells, "probe", row.key).flat().length,
+      0,
+    );
+  if (actual.pages !== chosen.pages || wraps !== chosen.wrapLines)
+    throw Error(
+      "Wire arithmetic score disagrees with full emission measurement",
+    );
+  return measured;
 }

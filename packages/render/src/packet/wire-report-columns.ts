@@ -8,6 +8,7 @@ import {
 } from "./report-column-widths.js";
 import type { ReportIdentifiers } from "./report-identifiers.js";
 import { wrapReportCell } from "./report-wrapping.js";
+import { ReportMeasurementError } from "./report-measurement.js";
 
 const nativeWeights = [0.15, 0.24, 0.24, 0.18, 0.19];
 export type WireColumnAllocation = ReturnType<typeof reportColumns> & {
@@ -47,6 +48,9 @@ export function wireReportColumns(
     1,
   );
   if (baseline.error) return { ...standard, nativeFits: false };
+  const locations = locatorWidths(table, size);
+  if (mode === "columns")
+    return wrappingColumns(native, width, size, names, identifiers, locations);
   const minimum = baseline.widths.map((w, column) =>
     fieldMinimum(
       native,
@@ -58,9 +62,6 @@ export function wireReportColumns(
       baseline.hyphenatedColumns[column] ?? false,
     ),
   );
-  const locations = locatorWidths(table, size);
-  if (mode === "columns")
-    return wrappingColumns(native, width, size, names, identifiers, locations);
   const inline = inlineColumns(baseline, minimum, locations, width);
   if (standard.error) return inline;
   const requiredWidths = [...minimum, ...locations];
@@ -176,7 +177,7 @@ function fieldMinimum(
     for (const word of header.split(/\s+/u)) {
       if (measureText(word, size).width > width) {
         const parts = hyphenated && reportHeaderParts(word, width, size);
-        if (!parts) throw Error("Header word cannot fit");
+        if (!parts) throw new ReportMeasurementError("Header word cannot fit");
         if (line) lines++;
         lines += parts.length - 1;
         line = required(parts.at(-1), "Missing header part");

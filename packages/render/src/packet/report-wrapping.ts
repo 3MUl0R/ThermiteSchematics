@@ -1,4 +1,5 @@
 import { measureText } from "../text-metrics.js";
+import { ReportMeasurementError } from "./report-measurement.js";
 import { identifierSpans } from "./report-identifiers.js";
 import {
   reportTokens,
@@ -93,7 +94,7 @@ function splitUnit(
     }
     const next = separator >= 0 ? separator : edge >= 0 ? edge : fallback;
     if (next < 0)
-      throw Error(
+      throw new ReportMeasurementError(
         "An authored identifier, designation or location cannot fit without splitting.",
       );
     const end = clusters[next]?.index ?? unit.length;

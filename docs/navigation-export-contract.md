@@ -270,6 +270,26 @@ than recomputing them: a wider candidate can retain the note without printing
 hyphens, and a candidate requiring new header hyphenation is unmeasurable. This
 intentionally narrows the enumerated grid; it does not alter candidate order.
 
+Search cell profiles are measured once per exact physical column width and
+source text/identifier tuple. Floating-point residue variants of a nominal
+grid level remain distinct keys. Profiles retain line count, maximum ascent
+and maximum descent from the actual wrapped lines, including inserted glyphs.
+Candidate row heights use the emission formula with the same operation order;
+the row-height array then visits the existing paginator one row at a time at
+absolute coordinates. Prefix sums and rounded thresholds are not equivalent.
+The chosen vector receives the ordinary full measurement and pagination, with
+an active page-count and wrap-total agreement assertion before emission.
+
+Search work counters are separate from the unchanged receipt: `logicalCells`
+counts row/header-column-width slots; `cellMeasurements` counts actual profile
+attempts after sharing identical text and protected identifiers; `wrapCalls`
+counts uncached header/body wrapping calls, including chosen-vector checking;
+`lineMeasurements` counts uncached wrapped-line metric measurements for the
+profiles. Wrapping's internal fit checks are not separate profile measurements.
+`heightRows` counts arithmetic row reconstructions, and `widthLevels` counts
+the exact width keys per column. Paginator row steps count visits to the
+paginator, regardless of whether their heights came from geometry or arrays.
+
 The internal `paginatedReportCells` result records `allocationReceipt` in
 `wire-column-search/1` form: physical field, retained em, native page reference,
 grid bounds and minima, fixed locator widths, every candidate's widths/page
@@ -279,11 +299,15 @@ not a completed count. Dominated candidates have null `wrapLines`. An
 unmeasurable candidate has a null page count and an explicit failure; it is
 never a zero-page success. Row steps are null if pagination throws before
 returning a measurement.
-If native-reference measurement or initial search setup throws, the already
-measured stacked layout is retained, with `allocationFallback` recording the
-stage and reason. The catch covers only that setup: an initial stacked-layout
-measurement error or an unexpected later search error still refuses, and a
-stacked layout that cannot paginate still receives the normal refusal.
+A single candidate's measurement error is recorded as a candidate failure;
+other candidates continue. Within the search, only setup, bound and tie-scoring
+errors (including emission agreement failures) refuse the packet. A typed
+layout/measurement error during native-reference or initial probe setup can
+retain the already measured stacked layout: `allocationFallback` records its
+stage/reason, and a visible report diagnostic uses the normal note reservation.
+Unexpected setup error types are rethrown. An initial stacked-layout measurement
+error still refuses, and a stacked layout that cannot paginate still receives
+the normal refusal. Setup failures never create an enumeration success receipt.
 Only when no enumerated tier-(b) candidate preserves capacity do the two
 location fields stack beneath their respective endpoints. Stacked fields
 retain separate painted rectangles and painted header sub-cells, with explicit

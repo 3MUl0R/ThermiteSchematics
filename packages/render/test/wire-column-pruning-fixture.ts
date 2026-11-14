@@ -8,6 +8,7 @@ import {
 } from "../src/packet/report-layout.js";
 import { searchWireColumns } from "../src/packet/wire-column-search.js";
 import { wrap } from "../src/packet/svg.js";
+import { reportHeightPagination } from "../src/packet/report-paginator.js";
 
 export const MACHINE_VECTORS = [
   {
@@ -87,8 +88,12 @@ export function pruningFixture(ir: ElectricalIr, height = 132.9) {
 }
 
 export function countedSearch(f: ReturnType<typeof pruningFixture>) {
-  let rowSteps = 0,
-    bodySplits = 0;
+  const counts = {
+    rowSteps: 0,
+    bodySplits: 0,
+    emissionRows: 0,
+    cellMeasurements: 0,
+  };
   const probe = wireColumnProbe(
     f.ir,
     f.table,
@@ -96,46 +101,86 @@ export function countedSearch(f: ReturnType<typeof pruningFixture>) {
     f.page,
     f.first.cellSize,
   );
-  const countedProbe = {
-    ...probe,
-    measure(widths: number[]) {
-      const measured = probe.measure(widths);
-      return {
-        ...measured,
-        split(cells: readonly string[], row: string, key?: string) {
-          if (row !== "header") bodySplits++;
-          return measured.split(cells, row, key);
-        },
-      };
-    },
-  };
+  const countedProbe = probeWithCounts(probe, counts);
+  const notes = f.table.notes.flatMap((n) =>
+    wrap(n, Math.floor(f.width / 1.6)),
+  ).length;
   const result = searchWireColumns(
     f.table,
     f.width,
     f.height,
     f.first.cellSize,
     f.nativePages,
-    (measured, limit) => {
-      const count = reportPagination(
-        f.table,
-        {
-          ...measured,
-          geometry(cells: string[][], heading = false) {
-            if (!heading) rowSteps++;
-            return measured.geometry(cells, heading);
-          },
-        },
-        f.width,
-        f.height,
-        f.top,
-        limit,
-      );
-      return count;
+    {
+      measured: (measured, limit) => {
+        const count = reportPagination(
+          f.table,
+          countedGeometry(measured, counts),
+          f.width,
+          f.height,
+          f.top,
+          limit,
+        );
+        return count;
+      },
+      heights: (measured, limit) => {
+        const result = reportHeightPagination(
+          measured,
+          f.top,
+          f.height,
+          notes,
+          limit,
+        );
+        counts.rowSteps += result.rowSteps;
+        return result;
+      },
     },
     f.top,
     countedProbe,
   );
-  return { ...result, rowSteps, wrapRows: bodySplits - rowSteps };
+  return {
+    ...result,
+    rowSteps: counts.rowSteps,
+    emissionRows: counts.emissionRows,
+    actualCellMeasurements: counts.cellMeasurements,
+    wrapRows: counts.bodySplits - counts.emissionRows,
+  };
+}
+
+function probeWithCounts(
+  probe: ReturnType<typeof wireColumnProbe>,
+  counts: { cellMeasurements: number; bodySplits: number },
+) {
+  return {
+    ...probe,
+    cell(...args: Parameters<typeof probe.cell>) {
+      counts.cellMeasurements++;
+      return probe.cell(...args);
+    },
+    measure(widths: number[]) {
+      const measured = probe.measure(widths);
+      return {
+        ...measured,
+        split(cells: readonly string[], row: string, key?: string) {
+          if (row !== "header") counts.bodySplits++;
+          return measured.split(cells, row, key);
+        },
+      };
+    },
+  };
+}
+
+function countedGeometry(
+  measured: ReturnType<typeof reportCells>,
+  counts: { emissionRows: number },
+) {
+  return {
+    ...measured,
+    geometry(cells: string[][], heading = false) {
+      if (!heading) counts.emissionRows++;
+      return measured.geometry(cells, heading);
+    },
+  };
 }
 
 /** Fresh text measurement and a separate cursor calculation; no receipt or
