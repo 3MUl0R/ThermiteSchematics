@@ -8,59 +8,54 @@ const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const testFile = (path) =>
   /(?:^|\/)(?:test|tests|__tests__)\//.test(path) ||
   /\.(?:test|spec|check)\.[cm]?[jt]sx?$/.test(path);
-// Generator inventory: packages/schema/scripts/generate-types.mjs owns src/generated;
-// scripts/update-text-metrics.mjs owns the standalone render metrics data file.
-function generated(path) {
-  return (
-    /^packages\/schema\/src\/generated\//.test(path) ||
-    path === "packages/render/src/text-metrics-data.ts"
-  );
-}
+// These are generated artifacts, not directory-name conventions. A new code
+// location is measured unless its owner is listed here (or it is pure fixture data).
+export const EXCLUDED_CODE = [
+  /^packages\/schema\/src\/generated\//,
+  /^packages\/render\/src\/text-metrics-data\.ts$/,
+];
 export function inScope(path) {
-  if (
-    generated(path) ||
-    /(?:^|\/)(?:node_modules|dist|out|goldens|snapshots)\//.test(path)
-  )
-    return false;
   if (!/\.(?:[cm]?[jt]sx?|py|sh|ps1)$/.test(path)) return false;
-  // E2's agent harness remains frozen: only its existing test-suppression scan.
-  if (path.startsWith("evals/agent/")) return testFile(path);
-  return (
-    /^packages\/[^/]+\/(?:src|test)\//.test(path) ||
-    path.startsWith("evals/") ||
-    path.startsWith("scripts/") ||
-    testFile(path)
-  );
+  if (EXCLUDED_CODE.some((pattern) => pattern.test(path))) return false;
+  // E2 owns a separately versioned harness; preserve its suppression-only scan.
+  return !path.startsWith("evals/agent/") || testFile(path);
 }
 function sizeScope(path) {
+  return !path.startsWith("evals/agent/");
+}
+function suiteCallee(node) {
+  if (ts.isIdentifier(node)) return ["describe", "suite"].includes(node.text);
+  if (
+    ts.isPropertyAccessExpression(node) &&
+    ["only", "skip", "todo", "concurrent", "sequential", "shuffle"].includes(
+      node.name.text,
+    )
+  )
+    return suiteCallee(node.expression);
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ["each", "skipIf", "runIf"].includes(node.expression.name.text)
+  )
+    return suiteCallee(node.expression.expression);
+  if (
+    ts.isTaggedTemplateExpression(node) &&
+    ts.isPropertyAccessExpression(node.tag) &&
+    node.tag.name.text === "each"
+  )
+    return suiteCallee(node.tag.expression);
+  return false;
+}
+function suiteCallback(node, path) {
   return (
-    !path.startsWith("evals/agent/") &&
-    (/^packages\/[^/]+\/(?:src|test)\//.test(path) ||
-      path.startsWith("evals/") ||
-      path.startsWith("scripts/"))
+    testFile(path) &&
+    ts.isCallExpression(node.parent) &&
+    node.parent.arguments.includes(node) &&
+    suiteCallee(node.parent.expression)
   );
 }
-function suiteCallback(node) {
-  if (
-    !ts.isCallExpression(node.parent) ||
-    !node.parent.arguments.includes(node)
-  )
-    return false;
-  let callee = node.parent.expression;
-  while (
-    ts.isCallExpression(callee) ||
-    ts.isPropertyAccessExpression(callee) ||
-    ts.isElementAccessExpression(callee)
-  ) {
-    if (
-      (ts.isPropertyAccessExpression(callee) ||
-        ts.isElementAccessExpression(callee)) &&
-      ["describe", "suite"].includes(propertyName(callee))
-    )
-      return true;
-    callee = callee.expression;
-  }
-  return ts.isIdentifier(callee) && ["describe", "suite"].includes(callee.text);
+export function normalizeLines(text) {
+  return text.replace(/\r\n|[\r\n\u2028\u2029]/g, "\n");
 }
 function pureData(node) {
   if (!node) return false;
@@ -73,6 +68,13 @@ function pureData(node) {
     ].includes(node.kind)
   )
     return true;
+  if (
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isParenthesizedExpression(node)
+  )
+    return pureData(node.expression);
   if (ts.isPrefixUnaryExpression(node)) return pureData(node.operand);
   if (ts.isArrayLiteralExpression(node)) return node.elements.every(pureData);
   if (ts.isObjectLiteralExpression(node))
@@ -83,7 +85,7 @@ function pureData(node) {
 }
 function dataFixture(path, source) {
   return (
-    /(?:^|\/)fixtures\//.test(path) &&
+    /(?:^|\/)(?:fixtures|goldens|snapshots)\//.test(path) &&
     source &&
     source.statements.every((s) =>
       ts.isExportAssignment(s)
@@ -128,8 +130,10 @@ function trackedPaths(root) {
     .sort(compare);
 }
 function lineCount(text) {
-  // CRLF and LF checkouts have the same budget; a final newline adds no line.
-  return text === "" ? 0 : text.replace(/\r?\n$/, "").split(/\r?\n/).length;
+  const normalized = normalizeLines(text);
+  return normalized === ""
+    ? 0
+    : normalized.replace(/\n$/, "").split("\n").length;
 }
 function functionName(node, source) {
   if (node.name) return node.name.getText(source);
@@ -263,7 +267,9 @@ export function measureSources(paths, read) {
     bodies = new Map(),
     bodyTokens = {},
     bodyHashes = {},
-    fileHashes = {};
+    fileHashes = {},
+    bodyLines = {},
+    fileLines = {};
   for (const path of paths) {
     const text = read(path).replace(/\r\n/g, "\n");
     const source = /\.[cm]?[jt]sx?$/.test(path)
@@ -272,7 +278,7 @@ export function measureSources(paths, read) {
     if (source?.parseDiagnostics.length)
       throw new Error(`Cannot parse health source: ${path}`);
     if (dataFixture(path, source)) continue;
-    const onlySkips = testFile(path),
+    const onlySkips = testFile(path) || /(?:^|\/)fixtures\//.test(path),
       sizes = sizeScope(path);
     const metrics = !sizes
       ? { skippedTests: 0 }
@@ -293,7 +299,7 @@ export function measureSources(paths, read) {
         ).line;
         const end = source.getLineAndCharacterOfPosition(node.end).line;
         nestedScope = `${name}/`;
-        if (suiteCallback(node)) {
+        if (suiteCallback(node, path)) {
           ts.forEachChild(node, (child) => visit(child, nestedScope));
           return;
         }
@@ -301,6 +307,8 @@ export function measureSources(paths, read) {
         const { hash, tokens } = normalizedBody(node.body, source);
         bodyTokens[identity] = tokens;
         bodyHashes[identity] = hash;
+        if (functions[identity] > 70)
+          bodyLines[identity] = normalizedLineHashes(node.body, source);
         if (onlySkips) {
           ts.forEachChild(node, (child) => visit(child, nestedScope));
           return;
@@ -313,18 +321,29 @@ export function measureSources(paths, read) {
     }
     if (source) visit(source);
     files[path] = metrics;
-    if (sizes)
-      fileHashes[path] = createHash("sha256").update(text).digest("hex");
+    if (sizes) {
+      fileHashes[path] = createHash("sha256")
+        .update(normalizeLines(text))
+        .digest("hex");
+      if (metrics.lines > 850)
+        fileLines[path] = normalizeLines(text)
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((s) => createHash("sha256").update(s).digest("hex"));
+    }
   }
   const duplicates = duplicateGroups(bodies);
   return {
-    version: 3,
+    version: 4,
     files,
     functions,
     duplicates,
     bodyTokens,
     bodyHashes,
     fileHashes,
+    bodyLines,
+    fileLines,
   };
 }
 
@@ -338,4 +357,34 @@ function duplicateGroups(bodies) {
         { ...group, members: group.members.sort(compare) },
       ]),
   );
+}
+
+// Trivia-free AST tokens, grouped by source line. Keep literal and regex text;
+// omit brace-only lines, which otherwise make unrelated blocks look alike.
+function normalizedLineHashes(body, source) {
+  const lines = new Map();
+  function visit(node) {
+    if (ts.isJSDoc(node)) return;
+    const children = node.getChildren(source);
+    if (children.length) {
+      children.forEach(visit);
+      return;
+    }
+    const value = node.getText(source);
+    if (!value) return;
+    const line = source.getLineAndCharacterOfPosition(
+      node.getStart(source),
+    ).line;
+    const row = lines.get(line) ?? [];
+    row.push(value);
+    lines.set(line, row);
+  }
+  visit(body);
+  return [...lines.values()]
+    .filter((row) =>
+      row.some((token) => !["{", "}", ";", ",", ")", "("].includes(token)),
+    )
+    .map((row) =>
+      createHash("sha256").update(JSON.stringify(row)).digest("hex"),
+    );
 }

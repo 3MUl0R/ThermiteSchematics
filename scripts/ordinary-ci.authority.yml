@@ -26,6 +26,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Fetch the PR target and its ancestry for the health history ratchet.
+          fetch-depth: 0
+      - name: Verify fetched health baseline
+        shell: bash
+        env:
+          HEALTH_PR_BASE: ${{ github.base_ref || 'dev' }}
+        run: git rev-parse --verify "refs/remotes/origin/$HEALTH_PR_BASE^{commit}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -85,6 +92,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Fetch the PR target and its ancestry for the health history ratchet.
+          fetch-depth: 0
+      - name: Verify fetched health baseline
+        shell: bash
+        env:
+          HEALTH_PR_BASE: ${{ github.base_ref || 'dev' }}
+        run: git rev-parse --verify "refs/remotes/origin/$HEALTH_PR_BASE^{commit}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

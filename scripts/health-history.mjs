@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { inScope, measureSources } from "./health-measure.mjs";
-import { createBudget } from "./health-policy.mjs";
+import { upgradeBudget } from "./health-budget.mjs";
 function git(root, args, options = {}) {
   const result = spawnSync("git", ["-C", root, ...args], {
     maxBuffer: 128 * 1024 * 1024,
@@ -31,20 +31,66 @@ export function historicalMetrics(root, revision) {
   }
   return measureSources(paths, (path) => sources.get(path));
 }
-export function readHistory(root) {
-  const head = spawnSync("git", ["-C", root, "rev-parse", "--verify", "HEAD"], {
-    encoding: "utf8",
-  });
-  // Empty repositories are used by the synthetic checker tests, not engine PRs.
-  if (head.status !== 0) return undefined;
-  const ref = ["refs/heads/dev", "refs/remotes/origin/dev"].find(
-    (name) =>
-      spawnSync("git", ["-C", root, "show-ref", "--verify", "--quiet", name])
-        .status === 0,
+function resolveRef(root, ref) {
+  const result = spawnSync(
+    "git",
+    ["-C", root, "rev-parse", "--verify", `${ref}^{commit}`],
+    { encoding: "utf8" },
   );
-  const revision = ref
-    ? git(root, ["merge-base", "HEAD", ref]).toString("utf8").trim()
-    : head.stdout.trim();
+  return result.status === 0 ? result.stdout.trim() : undefined;
+}
+function ancestor(root, first, second) {
+  return (
+    spawnSync("git", ["-C", root, "merge-base", "--is-ancestor", first, second])
+      .status === 0
+  );
+}
+export function baselineRef(root, env = process.env) {
+  if (env.GITHUB_BASE_REF) {
+    const name = `refs/remotes/origin/${env.GITHUB_BASE_REF}`;
+    if (resolveRef(root, name)) return name;
+    if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1") return undefined;
+    throw Error(
+      `Health history: PR baseline ${name} is missing; fetch the PR base with full history (fetch-depth: 0).`,
+    );
+  }
+  const remote = "refs/remotes/origin/dev",
+    local = "refs/heads/dev";
+  const remoteCommit = resolveRef(root, remote),
+    localCommit = resolveRef(root, local);
+  if (remoteCommit && localCommit) {
+    if (ancestor(root, localCommit, remoteCommit)) return remote;
+    if (ancestor(root, remoteCommit, localCommit)) return local;
+    throw Error(
+      "Health history: dev and origin/dev diverge; fetch/reconcile the baseline refs.",
+    );
+  }
+  if (remoteCommit) return remote;
+  if (localCommit) return local;
+  if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1") return undefined;
+  throw Error(
+    "Health history: no health baseline; fetch the PR base or origin/dev with full history. THERMITE_HEALTH_ALLOW_NO_BASE=1 is only for synthetic test repositories.",
+  );
+}
+export function readHistory(root, env = process.env) {
+  const ref = baselineRef(root, env),
+    head = resolveRef(root, "HEAD");
+  if (!head) {
+    if (env.THERMITE_HEALTH_ALLOW_NO_BASE === "1" && !ref) return undefined;
+    throw Error(
+      "Health history: HEAD is missing; no authenticated baseline is available.",
+    );
+  }
+  const merged = ref
+    ? spawnSync("git", ["-C", root, "merge-base", "HEAD", ref], {
+        encoding: "utf8",
+      })
+    : { status: 0, stdout: head };
+  if (merged.status !== 0)
+    throw Error(
+      `Health history: no merge-base with ${ref}; fetch full history (git fetch --unshallow, or actions/checkout fetch-depth: 0).`,
+    );
+  const revision = merged.stdout.trim();
   const previous = spawnSync(
     "git",
     ["-C", root, "show", `${revision}:scripts/health-budget.json`],
@@ -54,8 +100,10 @@ export function readHistory(root) {
     throw Error("Health history: baseline has no committed health budget");
   const metrics = historicalMetrics(root, revision),
     raw = JSON.parse(previous.stdout);
-  // The v2 -> v3 scope expansion is authenticated against base source, never HEAD.
-  const budget =
-    raw.version === 2 ? createBudget(metrics, raw.thresholds) : raw;
-  return { revision, metrics, budget };
+  return {
+    revision,
+    ref: ref ?? "HEAD (explicit synthetic opt-in)",
+    metrics,
+    budget: upgradeBudget(raw, metrics),
+  };
 }

@@ -54,6 +54,11 @@ function command(root: string, args: string[] = []) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: root,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_BASE_REF: "",
+      THERMITE_HEALTH_ALLOW_NO_BASE: "1",
+    },
   });
 }
 
@@ -79,17 +84,21 @@ it.each([
   );
 });
 it("excludes describe/suite grouping but counts test bodies, hooks and helpers", () => {
-  const { root, file } = fixture();
+  const { root } = fixture();
+  const file = join(root, "packages/example/test/group.test.ts");
+  mkdirSync(join(root, "packages/example/test"));
   writeFileSync(
     file,
     `describe('group', () => {\n${body(301)}\nbeforeEach(() => {\n${"void 1;\n".repeat(299)}});\nit('logic', () => {\n${"void 1;\n".repeat(299)}});\n});\nsuite.each([1])('suite', () => {\n${"void 1;\n".repeat(400)}});\n`,
   );
   const current = metrics(root),
-    values = Object.values(current.functions);
+    values = Object.entries(current.functions)
+      .filter(([key]) => key.startsWith("packages/example/test/group.test.ts#"))
+      .map(([, value]) => value);
   expect(values).toHaveLength(3);
   expect(values).toEqual([301, 301, 301]);
 });
-it("counts hand-written test fixtures but excludes pure data, goldens and generated sources", () => {
+it("counts hand-written code even in goldens and excludes pure data/generated sources", () => {
   const { root } = fixture();
   for (const [path, source] of [
     [
@@ -137,7 +146,12 @@ it("requires a reason for an under-ceiling raise and records it", () => {
   const next = acceptBudget(current, budget, "ordered helper extraction");
   expect(
     next.reasons["functions:packages/example/src/example.ts#existing"],
-  ).toBe("ordered helper extraction");
+  ).toEqual({
+    identity: "functions:packages/example/src/example.ts#existing",
+    from: 90,
+    to: 95,
+    reason: "ordered helper extraction",
+  });
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
 });
 it.each(["fileLines", "functionLines", "nonNullAssertions", "skippedTests"])(
@@ -180,7 +194,7 @@ it.each([301, 380])("cannot raise grandfathered functions from %i", (size) => {
   const forged = createBudget(current);
   expect(
     historyRegressions(current, forged, budget, base).join("\n"),
-  ).toContain("cannot rise or reset");
+  ).toContain("cannot rise or be forged");
 });
 it("grandfathered file budgets only fall", () => {
   const { root, file } = fixture("// data\n".repeat(3001));
@@ -209,44 +223,50 @@ it("a lowered grandfathered body cannot regain its old allowance", () => {
     ),
   ).toContain("340 -> 350");
 });
-it("deletion leaves a zero tombstone and cannot reset grandfathering", () => {
+it("deletion retires the record; recreated under-cap logic passes", () => {
   const { root, file } = fixture(body(380));
-  const budget = createBudget(metrics(root));
+  const before = metrics(root),
+    budget = createBudget(before);
   writeFileSync(file, "");
-  const base = metrics(root),
-    lowered = lowerBudget(base, budget);
+  const empty = metrics(root),
+    lowered = lowerBudget(empty, budget, { budget, metrics: before });
+  expect(lowered.grandfathered.functions).toEqual({});
+  writeFileSync(file, body(55));
+  const current = metrics(root);
   expect(
-    lowered.grandfathered.functions["packages/example/src/example.ts#existing"],
-  ).toBe(0);
+    regressions(current, lowered, { budget: lowered, metrics: empty }),
+  ).toEqual([]);
+  expect(historyRegressions(current, lowered, lowered, empty)).toEqual([]);
   writeFileSync(file, body(301));
-  const current = metrics(root),
-    forged = createBudget(current);
   expect(
-    historyRegressions(current, forged, lowered, base).join("\n"),
-  ).toContain("0 -> 301");
+    regressions(metrics(root), lowered, {
+      budget: lowered,
+      metrics: empty,
+    }).join("\n"),
+  ).toContain("ceiling 300 -> 301");
 });
-it("a rename/move requires exact normalized identity proof and transfers the allowance", () => {
+it("a cross-file move needs exact proof and transfers one stable allowance", () => {
   const { root, file } = fixture(body(380));
   const base = metrics(root),
     budget = createBudget(base);
   const oldKey = "packages/example/src/example.ts#existing",
     newKey = "packages/example/src/moved.ts#existing";
   renameSync(file, join(root, "packages/example/src/moved.ts"));
-  const current = metrics(root),
-    next = createBudget(current);
-  next.grandfathered.functions[oldKey] = 0;
-  expect(historyRegressions(current, next, budget, base).join("\n")).toContain(
-    "needs identity proof",
-  );
-  next.moves[newKey] = {
+  const current = metrics(root);
+  expect(
+    historyRegressions(current, budget, budget, base).join("\n"),
+  ).toContain("new or unmatched content");
+  budget.moves[newKey] = {
     section: "functions",
     from: oldKey,
     sha256: base.bodyHashes[oldKey],
   };
+  const next = lowerBudget(current, budget, { budget, metrics: base });
+  expect(next.locations.functions[oldKey]).toBe(newKey);
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
   next.moves[newKey].sha256 = "forged";
   expect(historyRegressions(current, next, budget, base).join("\n")).toContain(
-    "needs identity proof",
+    "new or unmatched content",
   );
 });
 it("CRLF cannot evade the arrow ceiling and retains identity hashes", () => {
@@ -283,7 +303,7 @@ it("CLI refuses history reset/raise before writing, including accept and lower",
   for (const args of [[], ["--accept", "--reason", "forged"], ["--lower"]]) {
     const result = command(root, args);
     expect(result.status, result.stderr).toBe(1);
-    expect(result.stderr).toContain("cannot rise or reset");
+    expect(result.stderr).toContain("functions ceiling 380 -> 390");
     expect(readFileSync(path, "utf8")).toBe(bytes);
   }
   delete forged.grandfathered.functions[
@@ -301,8 +321,7 @@ it("a move proof cannot duplicate one grandfathered allowance into two bodies", 
   for (const name of ["first", "second"])
     writeFileSync(join(root, `packages/example/src/${name}.ts`), body(380));
   const current = metrics(root),
-    next = createBudget(current);
-  next.grandfathered.functions[oldKey] = 0;
+    next = structuredClone(budget);
   for (const name of ["first", "second"])
     next.moves[`packages/example/src/${name}.ts#existing`] = {
       section: "functions",

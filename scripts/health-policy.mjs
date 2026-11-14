@@ -1,344 +1,331 @@
-export const DEFAULT_THRESHOLDS = Object.freeze({
-  duplicateTokens: 50,
-  fileLines: 850,
-  functionLines: 70,
-});
-export const SIZE_CEILINGS = Object.freeze({
-  fileLines: 3000,
-  functionLines: 300,
-});
-const sections = [
-  "files",
-  "functions",
-  "nonNullAssertions",
-  "skippedTests",
-  "duplicates",
-];
-const sizeKey = (section) =>
-  section === "files" ? "fileLines" : "functionLines";
-export const sorted = (entries) =>
-  Object.fromEntries(entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-export function totals(current) {
-  return {
-    nonNullAssertions: Object.values(current.files).reduce(
-      (n, f) => n + (f.nonNullAssertions ?? 0),
-      0,
-    ),
-    skippedTests: Object.values(current.files).reduce(
-      (n, f) => n + f.skippedTests,
-      0,
-    ),
-  };
+import {
+  DEFAULT_THRESHOLDS,
+  SIZE_CEILINGS,
+  SECTIONS,
+  sizeKey,
+  sorted,
+  totals,
+  valuesOf,
+  fallbackOf,
+  createBudget,
+  validateBudget,
+} from "./health-budget.mjs";
+import {
+  allowanceMatches,
+  allowanceLimit,
+  exactMove,
+  moveRegressions,
+} from "./health-continuity.mjs";
+export {
+  DEFAULT_THRESHOLDS,
+  SIZE_CEILINGS,
+  createBudget,
+  validateBudget,
+} from "./health-budget.mjs";
+function referenceValue(section, key, budget, reference) {
+  if (!reference) return budget[section][key] ?? fallbackOf(budget, section);
+  const from = exactMove(
+    section,
+    key,
+    budget,
+    reference.metrics,
+    reference.current,
+  )
+    ? budget.moves[key].from
+    : key;
+  const inherited = ["files", "functions"].includes(section)
+    ? Object.entries(reference.budget.locations[section]).find(
+        ([, key]) => key === from,
+      )?.[0]
+    : undefined;
+  return (
+    reference.budget[section][from] ??
+    (inherited
+      ? reference.budget.grandfathered[section][inherited]
+      : undefined) ??
+    fallbackOf(reference.budget, section)
+  );
 }
-function numericMap(map, where, minimum = 1) {
-  if (!map || typeof map !== "object" || Array.isArray(map))
-    throw Error(`Invalid health budget map: ${where} (expected an object)`);
-  for (const [key, n] of Object.entries(map))
-    if (!Number.isSafeInteger(n) || n < minimum)
-      throw Error(`Invalid health budget value: ${where}.${key}`);
-}
-export function validateBudget(budget) {
-  if (budget.version !== 3)
-    throw Error("Unsupported health budget version; expected 3");
-  for (const key of Object.keys(DEFAULT_THRESHOLDS))
-    if (
-      !Number.isSafeInteger(budget.thresholds?.[key]) ||
-      budget.thresholds[key] < 1
-    )
-      throw Error(`Invalid health threshold: ${key}`);
-  for (const section of sections) numericMap(budget[section], section);
-  numericMap(budget.ceilings, "ceilings", 0);
-  for (const key of [
-    ...Object.keys(SIZE_CEILINGS),
-    "nonNullAssertions",
-    "skippedTests",
-  ])
-    if (!Number.isSafeInteger(budget.ceilings[key]))
-      throw Error(`Missing health ceiling: ${key}`);
-  for (const [key, n] of Object.entries(SIZE_CEILINGS))
-    if (budget.ceilings[key] < 1 || budget.ceilings[key] > n)
-      throw Error(`Health ceiling ${key} cannot exceed ${n}`);
-  for (const section of ["files", "functions"])
-    numericMap(budget.grandfathered?.[section], `grandfathered.${section}`, 0);
-  if (!budget.reasons || !budget.moves)
-    throw Error("Missing health reasons or moves");
-}
-export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
-  const files = Object.entries(current.files);
-  const budget = {
-    version: 3,
-    thresholds: sorted(Object.entries(thresholds)),
-    ceilings: sorted(Object.entries({ ...SIZE_CEILINGS, ...totals(current) })),
-    files: sorted(
-      files
-        .filter(([, f]) => f.lines > thresholds.fileLines)
-        .map(([p, f]) => [p, f.lines]),
-    ),
-    functions: sorted(
-      Object.entries(current.functions).filter(
-        ([, n]) => n > thresholds.functionLines,
-      ),
-    ),
-    nonNullAssertions: sorted(
-      files
-        .filter(([, f]) => f.nonNullAssertions > 0)
-        .map(([p, f]) => [p, f.nonNullAssertions]),
-    ),
-    skippedTests: sorted(
-      files
-        .filter(([, f]) => f.skippedTests > 0)
-        .map(([p, f]) => [p, f.skippedTests]),
-    ),
-    duplicates: sorted(
-      Object.entries(current.duplicates)
-        .filter(([, g]) => g.tokens >= thresholds.duplicateTokens)
-        .map(([h, g]) => [h, g.members.length]),
-    ),
-    grandfathered: {
-      files: sorted(
-        files
-          .filter(([, f]) => f.lines > SIZE_CEILINGS.fileLines)
-          .map(([p, f]) => [p, f.lines]),
-      ),
-      functions: sorted(
-        Object.entries(current.functions).filter(
-          ([, n]) => n > SIZE_CEILINGS.functionLines,
-        ),
-      ),
-    },
-    moves: {},
-    reasons: {},
-  };
-  return sorted(Object.entries(budget));
-}
-function changes(current, budget) {
+function changes(current, budget, reference) {
   validateBudget(budget);
-  const rows = [];
-  const check = (section, key, n, fallback, metric) => {
-    const oldValue = budget[section][key] ?? fallback;
-    if (n > oldValue)
+  const rows = [],
+    matches = allowanceMatches(current, budget, reference);
+  for (const section of SECTIONS)
+    for (const [key, n] of Object.entries(valuesOf(current, section))) {
+      const size = ["files", "functions"].includes(section);
+      if (size && n > budget.ceilings[sizeKey(section)]) continue;
+      if (
+        section === "duplicates" &&
+        current.duplicates[key].tokens < budget.thresholds.duplicateTokens
+      )
+        continue;
+      const matched = size && matches[section][key];
+      const oldValue =
+        budget[section][key] ??
+        (matched
+          ? allowanceLimit(matched, budget, section)
+          : fallbackOf(budget, section));
+      if (n <= oldValue) continue;
+      const metric = {
+        files: "file lines",
+        functions: "function lines",
+        nonNullAssertions: "non-null assertions",
+        skippedTests: "skipped tests",
+        duplicates: "duplicate bodies",
+      }[section];
+      const label =
+        section === "duplicates"
+          ? `${current.duplicates[key].members.join(", ")} [${key}]`
+          : key;
       rows.push({
         section,
         key,
         oldValue,
         newValue: n,
-        message: `${key}: ${metric}${budget[section][key] === undefined && ["files", "functions"].includes(section) ? " threshold" : ""} ${oldValue} -> ${n}`,
+        message: `${label}: ${metric}${size && budget[section][key] === undefined && !matched ? " threshold" : ""} ${oldValue} -> ${n}`,
       });
-  };
-  for (const [p, f] of Object.entries(current.files)) {
-    check("files", p, f.lines ?? 0, budget.thresholds.fileLines, "file lines");
-    check(
-      "nonNullAssertions",
-      p,
-      f.nonNullAssertions ?? 0,
-      0,
-      "non-null assertions",
-    );
-    check("skippedTests", p, f.skippedTests, 0, "skipped tests");
-  }
-  for (const [p, n] of Object.entries(current.functions))
-    check("functions", p, n, budget.thresholds.functionLines, "function lines");
-  for (const [h, g] of Object.entries(current.duplicates))
-    if (g.tokens >= budget.thresholds.duplicateTokens) {
-      const before = rows.length;
-      check("duplicates", h, g.members.length, 1, "duplicate bodies");
-      if (rows.length !== before)
-        rows.at(-1).message =
-          `${g.members.join(", ")} [${h}]: duplicate bodies ${budget.duplicates[h] ?? 1} -> ${g.members.length}`;
     }
   return rows;
 }
-export function ceilingRegressions(current, budget) {
+export function ceilingRegressions(current, budget, reference) {
   validateBudget(budget);
-  const errors = [];
-  for (const [section, values] of [
-    [
-      "files",
-      Object.fromEntries(
-        Object.entries(current.files)
-          .filter(([, f]) => f.lines !== undefined)
-          .map(([p, f]) => [p, f.lines]),
-      ),
-    ],
-    ["functions", current.functions],
-  ])
-    for (const [key, value] of Object.entries(values)) {
-      const limit =
-        budget.grandfathered[section][key] ?? budget.ceilings[sizeKey(section)];
+  const errors = [],
+    matches = allowanceMatches(current, budget, reference);
+  for (const section of ["files", "functions"])
+    for (const [key, value] of Object.entries(valuesOf(current, section))) {
+      const limit = allowanceLimit(matches[section][key], budget, section);
       if (value > limit)
-        errors.push(`${key}: ${section} ceiling ${limit} -> ${value}`);
+        errors.push(
+          `${key}: ${section} ceiling ${limit} -> ${value}${!matches[section][key] && value > budget.ceilings[sizeKey(section)] ? " (new or unmatched content)" : ""}`,
+        );
     }
   for (const [key, n] of Object.entries(totals(current)))
     if (n > budget.ceilings[key])
       errors.push(`Global ${key} ceiling ${budget.ceilings[key]} -> ${n}`);
   return errors;
 }
-export function regressions(current, budget) {
+export function regressions(current, budget, reference) {
   return [
-    ...ceilingRegressions(current, budget),
-    ...changes(current, budget).map((c) => c.message),
+    ...ceilingRegressions(current, budget, reference),
+    ...changes(current, budget, reference).map((c) => c.message),
   ];
 }
-export function acceptBudget(current, budget, reason) {
-  const errors = ceilingRegressions(current, budget);
+function reasonMatches(record, identity, from, to) {
+  return (
+    record &&
+    record.identity === identity &&
+    record.from === from &&
+    record.to === to &&
+    typeof record.reason === "string" &&
+    Boolean(record.reason.trim())
+  );
+}
+function authorizationRows(current, budget, reference) {
+  const result = [];
+  if (!reference) return result;
+  for (const section of SECTIONS)
+    for (const [key, to] of Object.entries(budget[section])) {
+      const from = referenceValue(section, key, budget, {
+        ...reference,
+        current,
+      });
+      if (to > from)
+        result.push({
+          section,
+          key,
+          from,
+          to,
+          actual: valuesOf(current, section)[key] ?? 0,
+        });
+    }
+  return result;
+}
+export function acceptBudget(current, budget, reason, reference) {
+  const errors = ceilingRegressions(current, budget, reference);
   if (errors.length) throw Error(errors.join("\n"));
-  const rows = changes(current, budget),
-    accepted = structuredClone(budget);
-  if (rows.length && (typeof reason !== "string" || !reason.trim()))
+  const accepted = structuredClone(budget),
+    rows = changes(current, budget, reference);
+  const pending = authorizationRows(current, budget, reference).filter(
+    (r) =>
+      !reasonMatches(
+        budget.reasons[`${r.section}:${r.key}`],
+        `${r.section}:${r.key}`,
+        r.from,
+        r.actual,
+      ),
+  );
+  if (
+    (rows.length || pending.length) &&
+    (typeof reason !== "string" || !reason.trim())
+  )
     throw Error("Every budget raise requires --reason <text>");
-  for (const { section, key, newValue } of rows) {
-    if (Object.hasOwn(budget.grandfathered[section] ?? {}, key))
-      throw Error(`Cannot raise grandfathered ${section}.${key}`);
+  for (const { section, key, newValue } of rows)
     accepted[section][key] = newValue;
-    accepted.reasons[`${section}:${key}`] = reason.trim();
+  for (const { section, key } of [...rows, ...pending]) {
+    const identity = `${section}:${key}`,
+      to = valuesOf(current, section)[key];
+    if (accepted[section][key] !== to)
+      throw Error(
+        `Raise must equal current value: ${identity}; run health:lower`,
+      );
+    const from = referenceValue(
+      section,
+      key,
+      budget,
+      reference ? { ...reference, current } : undefined,
+    );
+    if (to > from)
+      accepted.reasons[identity] = {
+        identity,
+        from,
+        to,
+        reason: reason.trim(),
+      };
   }
-  for (const section of [...sections, "reasons"])
+  bankGrandfathers(current, budget, accepted, reference);
+  for (const section of [...SECTIONS, "reasons"])
     accepted[section] = sorted(Object.entries(accepted[section]));
   return accepted;
 }
-export function lowerBudget(current, budget) {
-  const errors = regressions(current, budget);
+function bankReasons(current, previous, next, reference) {
+  next.reasons = structuredClone(previous.reasons);
+  if (!reference) return;
+  for (const r of authorizationRows(current, next, reference)) {
+    const identity = `${r.section}:${r.key}`,
+      old = previous.reasons[identity];
+    if (
+      reasonMatches(old, identity, r.from, previous[r.section][r.key]) &&
+      r.to <= old.to
+    )
+      next.reasons[identity] = { ...old, to: r.to };
+  }
+}
+function bankGrandfathers(current, previous, next, reference) {
+  const matches = allowanceMatches(current, previous, reference);
+  for (const section of ["files", "functions"]) {
+    next.grandfathered[section] = {};
+    next.locations[section] = {};
+    next.fingerprints[section] = {};
+    const values = valuesOf(current, section),
+      hashes = section === "files" ? current.fileHashes : current.bodyHashes;
+    for (const [key, row] of Object.entries(matches[section])) {
+      const value = values[key],
+        cap = next.ceilings[sizeKey(section)];
+      if (value <= cap) {
+        if (
+          value > next.thresholds[sizeKey(section)] &&
+          next[section][key] === undefined
+        )
+          next[section][key] = value;
+        continue;
+      }
+      next.grandfathered[section][row.id] = Math.min(
+        value,
+        allowanceLimit(row, previous, section),
+      );
+      next.locations[section][row.id] = key;
+      next.fingerprints[section][row.id] = hashes[key];
+    }
+    for (const field of ["grandfathered", "locations", "fingerprints"])
+      next[field][section] = sorted(Object.entries(next[field][section]));
+    next[section] = sorted(Object.entries(next[section]));
+  }
+}
+export function lowerBudget(current, budget, reference) {
+  const errors = regressions(current, budget, reference);
   if (errors.length) throw Error(regressionMessage(errors));
   const next = createBudget(current, budget.thresholds);
   next.ceilings = sorted(
     Object.entries({ ...budget.ceilings, ...totals(current) }),
   );
   next.moves = budget.moves;
-  next.reasons = budget.reasons;
-  for (const section of ["files", "functions"]) {
-    const values =
-      section === "files"
-        ? Object.fromEntries(
-            Object.entries(current.files).map(([p, f]) => [p, f.lines ?? 0]),
-          )
-        : current.functions;
-    next.grandfathered[section] = sorted(
-      Object.entries(budget.grandfathered[section]).map(([key, limit]) => [
-        key,
-        Math.min(limit, values[key] ?? 0),
-      ]),
-    );
-  }
+  bankReasons(current, budget, next, reference);
+  bankGrandfathers(current, budget, next, reference);
   return next;
 }
 export function regressionMessage(errors) {
-  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. List every raise/reason in the PR. --lower only lowers budgets. Moves require {section, from, sha256} in moves[newIdentity].`;
+  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Each authorization must match {identity, from: base value, to: current value, reason}. --lower banks reductions and retires sub-cap/deleted records. Cross-file moves require {section, from, sha256} in moves[newIdentity].`;
 }
-function validMove(section, key, budget, base, current) {
-  const proof = budget.moves[key];
-  const hashes = section === "files" ? "fileHashes" : "bodyHashes";
-  return (
-    proof?.section === section &&
-    typeof proof.from === "string" &&
-    typeof proof.sha256 === "string" &&
-    Object.hasOwn(base[hashes], proof.from) &&
-    Object.hasOwn(current[hashes], key) &&
-    proof.from !== key &&
-    !Object.hasOwn(current[hashes], proof.from) &&
-    proof.sha256 === base[hashes][proof.from] &&
-    proof.sha256 === current[hashes][key]
-  );
-}
-function grandfatherHistory(budget, baseBudget, base, current) {
-  const errors = [];
+function grandfatherHistory(current, budget, reference) {
+  const errors = [],
+    matches = allowanceMatches(current, budget, reference);
   for (const section of ["files", "functions"]) {
-    const previous = baseBudget.grandfathered[section],
-      next = budget.grandfathered[section];
-    for (const [key, limit] of Object.entries(previous))
-      if (!Object.hasOwn(next, key) || next[key] > limit)
-        errors.push(
-          `Grandfathered ${section}.${key} cannot rise or reset by deletion (${limit} -> ${next[key] ?? "deleted"})`,
-        );
-    for (const [key, limit] of Object.entries(next)) {
-      const move = validMove(section, key, budget, base, current),
-        from = budget.moves[key]?.from;
-      const old = previous[key] ?? (move ? previous[from] : undefined);
-      if (old === undefined || limit > old)
-        errors.push(`Unproved grandfathered ${section}.${key}: ${limit}`);
-      const entry = budget[section][key];
-      if (entry !== undefined && entry > limit)
-        errors.push(`Grandfathered ${section}.${key} budget exceeds ${limit}`);
-    }
-  }
-  return errors;
-}
-function itemHistory(budget, baseBudget, base, current) {
-  const errors = [];
-  for (const section of sections)
-    for (const [key, value] of Object.entries(budget[section])) {
-      const size = ["files", "functions"].includes(section),
-        move = size && validMove(section, key, budget, base, current);
-      const fallback = size
-        ? budget.thresholds[sizeKey(section)]
-        : section === "duplicates"
-          ? 1
-          : 0;
-      const old =
-        baseBudget[section][key] ??
-        (move ? baseBudget[section][budget.moves[key].from] : undefined) ??
-        fallback;
-      if (value > old && !budget.reasons[`${section}:${key}`]?.trim())
-        errors.push(
-          `Budget raise needs a reason: ${section}.${key} ${old} -> ${value}`,
-        );
-      if (
-        size &&
-        value > budget.ceilings[sizeKey(section)] &&
-        value >
-          (baseBudget.grandfathered[section][key] ??
-            (move
-              ? baseBudget.grandfathered[section][budget.moves[key].from]
-              : 0) ??
-            0)
-      )
-        errors.push(`Budget exceeds ceiling: ${section}.${key}`);
-    }
-  return errors;
-}
-function moveHistory(budget, baseBudget, base, current) {
-  const errors = [];
-  for (const [section, hashes] of [
-    ["files", "fileHashes"],
-    ["functions", "bodyHashes"],
-  ]) {
-    const consumed = new Set();
-    const retired = new Map(
-      Object.entries(base[hashes])
-        .filter(
-          ([key]) =>
-            !Object.hasOwn(current[hashes], key) &&
-            Object.hasOwn(baseBudget[section], key),
-        )
-        .map(([key, hash]) => [hash, key]),
-    );
-    for (const [key, hash] of Object.entries(current[hashes])) {
-      if (
-        !Object.hasOwn(base[hashes], key) &&
-        validMove(section, key, budget, base, current)
-      ) {
-        const from = budget.moves[key].from;
-        if (consumed.has(from))
-          errors.push(
-            `Move identity consumed more than once: ${section}.${from}`,
-          );
-        consumed.add(from);
+    for (const [id, value] of Object.entries(budget.grandfathered[section])) {
+      if (value <= budget.ceilings[sizeKey(section)]) {
+        errors.push(`Retire sub-cap grandfathered ${section}.${id}`);
+        continue;
       }
       if (
-        !Object.hasOwn(base[hashes], key) &&
-        retired.has(hash) &&
-        !validMove(section, key, budget, base, current)
+        !Object.entries(matches[section]).some(
+          ([key, row]) =>
+            row.id === id &&
+            valuesOf(current, section)[key] > budget.ceilings[sizeKey(section)],
+        )
       )
         errors.push(
-          `Rename/move needs identity proof: ${section}.${retired.get(hash)} -> ${key}`,
+          `Retire unmatched or sub-cap grandfathered ${section}.${id}`,
+        );
+      const before = reference.budget.grandfathered[section][id];
+      if (before === undefined || value > before)
+        errors.push(
+          `Grandfathered ${section}.${id} cannot rise or be forged (${before ?? "new"} -> ${value})`,
         );
     }
+    // Locations are descriptive; content matching, not a mutable pointer, grants caps.
+    for (const [key, row] of Object.entries(matches[section]))
+      if (
+        valuesOf(current, section)[key] > budget.ceilings[sizeKey(section)] &&
+        !Object.hasOwn(budget.grandfathered[section], row.id)
+      )
+        errors.push(
+          `Missing active grandfathered ${section}.${row.id}; ${key} still over cap`,
+        );
+  }
+  for (const section of ["files", "functions"])
+    for (const [key, row] of Object.entries(matches[section])) {
+      if (valuesOf(current, section)[key] <= budget.ceilings[sizeKey(section)])
+        continue;
+      const hashes =
+        section === "files" ? current.fileHashes : current.bodyHashes;
+      const location = budget.locations[section][row.id];
+      if (budget.fingerprints[section][row.id] !== hashes[key])
+        errors.push(
+          `Refresh grandfathered content fingerprint with health:lower: ${row.id}`,
+        );
+      if (
+        section === "files"
+          ? location !== key
+          : location?.split("#", 1)[0] !== key.split("#", 1)[0]
+      )
+        errors.push(
+          `Grandfathered location must follow matched content: ${row.id}`,
+        );
+    }
+  return errors;
+}
+function itemHistory(current, budget, reference) {
+  const errors = [];
+  for (const section of ["files", "functions"])
+    for (const [key, n] of Object.entries(budget[section]))
+      if (n > budget.ceilings[sizeKey(section)])
+        errors.push(`Regular budget exceeds ceiling: ${section}.${key}`);
+  for (const r of authorizationRows(current, budget, reference)) {
+    const identity = `${r.section}:${r.key}`;
+    if (
+      r.to !== r.actual ||
+      !reasonMatches(budget.reasons[identity], identity, r.from, r.actual)
+    )
+      errors.push(
+        `Budget raise needs exact reason: ${identity} ${r.from} -> ${r.actual} (budget ${r.to})`,
+      );
   }
   return errors;
 }
 export function historyRegressions(current, budget, baseBudget, base) {
   validateBudget(budget);
   validateBudget(baseBudget);
-  const errors = [];
+  const reference = { budget: baseBudget, metrics: base },
+    errors = [];
   for (const section of ["ceilings", "thresholds"])
     for (const [key, value] of Object.entries(budget[section]))
       if (value > baseBudget[section][key])
@@ -347,8 +334,9 @@ export function historyRegressions(current, budget, baseBudget, base) {
         );
   return [
     ...errors,
-    ...grandfatherHistory(budget, baseBudget, base, current),
-    ...itemHistory(budget, baseBudget, base, current),
-    ...moveHistory(budget, baseBudget, base, current),
+    ...ceilingRegressions(current, budget, reference),
+    ...grandfatherHistory(current, budget, reference),
+    ...itemHistory(current, budget, reference),
+    ...moveRegressions(current, budget, reference),
   ];
 }

@@ -49,6 +49,11 @@ function command(root: string, args: string[] = []) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: root,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_BASE_REF: "",
+      THERMITE_HEALTH_ALLOW_NO_BASE: "1",
+    },
   });
 }
 function saveBudget(root: string, budget: ReturnType<typeof createBudget>) {
@@ -112,7 +117,7 @@ it.each([
     "grown outlier function",
     fn("verifyRuntimeArchive", 549),
     fn("verifyRuntimeArchive", 552),
-    "example.ts#verifyRuntimeArchive: function lines 549 -> 552",
+    "example.ts#verifyRuntimeArchive: functions ceiling 549 -> 552",
   ],
   [
     "function threshold crossing",

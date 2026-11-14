@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measure } from "./health-measure.mjs";
 import { readHistory } from "./health-history.mjs";
+import { upgradeBudget } from "./health-budget.mjs";
 import {
   acceptBudget,
   lowerBudget,
@@ -42,27 +43,31 @@ function main() {
   const root = resolve("."),
     path = resolve("scripts/health-budget.json");
   const current = measure(root),
-    budget = JSON.parse(readFileSync(path, "utf8"));
-  const history = readHistory(root);
+    history = readHistory(root);
+  const budget = upgradeBudget(JSON.parse(readFileSync(path, "utf8")), current);
   const next =
     mode === "--accept"
-      ? acceptBudget(current, budget, reason)
+      ? acceptBudget(current, budget, reason, history)
       : mode === "--lower"
-        ? lowerBudget(current, budget)
+        ? lowerBudget(current, budget, history)
         : budget;
   const failures = [
-    ...regressions(current, next),
+    ...regressions(current, next, history),
     ...(history
       ? historyRegressions(current, next, history.budget, history.metrics)
       : []),
   ];
   if (failures.length) throw Error(regressionMessage(failures));
   if (mode === "--accept") {
-    const raised = regressions(current, budget);
+    const raised = regressions(current, budget, history);
     for (const message of raised)
       process.stdout.write(`Accepted: ${message}; reason: ${reason}\n`);
     if (!raised.length) process.stdout.write("No budget raises needed.\n");
-    else writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
+    if (
+      JSON.stringify(next) !==
+      JSON.stringify(JSON.parse(readFileSync(path, "utf8")))
+    )
+      writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
   }
   if (mode === "--lower")
     writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
