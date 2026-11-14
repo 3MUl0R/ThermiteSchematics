@@ -1,10 +1,11 @@
 import type { PaperPage } from "../../packet/types.js";
-import type { PacketRequest, Presentation } from "./model.js";
+import type { PacketRequest, Presentation, TitleSources } from "./model.js";
 import { useCompactFrame } from "../../packet/frame-profile.js";
 
 export interface TitleFrameContext {
   readonly presentation: Presentation;
   readonly request: PacketRequest;
+  readonly sources?: TitleSources;
 }
 const contexts = new WeakMap<PaperPage, TitleFrameContext>();
 /** A normalized page owns the selected frame and authored metadata. */

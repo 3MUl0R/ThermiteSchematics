@@ -26,6 +26,7 @@
 - [Report and reference selection](report-filtering.md) — Schedule filters and reference indexes. Command: `thermite guide report-filtering`. Read before reading, authoring or exporting a BOM or other report; before filtering reports or packet references.
 - [Field-device hookup drawings](signal-loops.md) — Field-device hookups and cordsets. Command: `thermite guide signal-loops`. Read before drawing signal loops, cordsets or enclosures.
 - [Connection completeness](completeness.md) — Required, unused and deferred connections. Command: `thermite guide completeness`. Read before reviewing connection requirements or model coverage.
+- [Drawing frames and supplied title data](drawing-frames.md) — Compact frames and supplied title data. Command: `thermite guide drawing-frames`. Read before changing presentation frames or packet title metadata.
 
 ## Other references
 

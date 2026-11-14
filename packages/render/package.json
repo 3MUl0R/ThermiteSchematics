@@ -21,7 +21,8 @@
     "@thermite/compiler": "0.2.0",
     "@thermite/query": "0.2.0",
     "elkjs": "0.12.0",
-    "fontkit": "2.0.4"
+    "fontkit": "2.0.4",
+    "@thermite/schema": "0.2.0"
   },
   "imports": {
     "#title-schema/*": "@thermite/schema/internal/title-data/*"

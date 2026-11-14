@@ -3,6 +3,8 @@ import {
   normalizeDiagnosticFile,
   normalizeDiagnostics,
   type Diagnostic,
+  type ProjectPresentationFile,
+  type JsonPointerNodeMap,
 } from "@thermite/schema";
 
 import { expandResolvedProject } from "./expansion.js";
@@ -21,7 +23,18 @@ import { symbolProfileDiagnostics } from "./symbol-profiles.js";
 import { withSkippedChecks } from "./validation-skips.js";
 
 export interface CompiledProjectPresentation {
-  readonly format: "project-presentation/0.1" | "project-presentation/0.2";
+  readonly format:
+    | "project-presentation/0.1"
+    | "project-presentation/0.2"
+    | "project-presentation/0.3";
+  readonly compactFrame?: Extract<
+    ProjectPresentationFile,
+    { format: "project-presentation/0.3" }
+  >;
+  readonly compactFrameSource?: {
+    readonly file: string;
+    readonly nodes: JsonPointerNodeMap;
+  };
   readonly revision: string;
   readonly backgroundColor: string;
   readonly titleBlockLines: readonly string[];
@@ -53,6 +66,14 @@ function hasError(diagnostics: readonly Diagnostic[]): boolean {
   return diagnostics.some((diagnostic) => diagnostic.severity === "error");
 }
 
+function freezePresentation<T>(value: T): T {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) freezePresentation(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 function compileProjectPresentation(
   project: LoadedProject,
 ): CompiledProjectPresentation {
@@ -68,6 +89,19 @@ function compileProjectPresentation(
     ...(authored?.page === undefined
       ? {}
       : { page: Object.freeze({ ...authored.page }) }),
+    ...(authored?.format === "project-presentation/0.3"
+      ? {
+          compactFrame: freezePresentation(structuredClone(authored)),
+          ...(project.presentation
+            ? {
+                compactFrameSource: Object.freeze({
+                  file: project.presentation.file,
+                  nodes: new Map(project.presentation.nodes),
+                }),
+              }
+            : {}),
+        }
+      : {}),
   });
 }
 

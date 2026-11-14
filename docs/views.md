@@ -735,3 +735,5 @@ The additive M3 locators and row-region anchor are specified in the
 [navigation export contract](navigation-export-contract.md). They are locators,
 not an electrical or visibility oracle. Checker 5.8 cannot measure these new
 contracts; NAV3 must not reach release before the independent E3 checker is green.
+
+Opt-in presentation 0.3 uses the compact 6×4 frame. See [drawing frames](drawing-frames.md) for title fields, sheet keys, capacity and packet request 0.2.

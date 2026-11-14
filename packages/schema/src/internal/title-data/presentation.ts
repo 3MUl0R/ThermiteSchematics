@@ -69,6 +69,11 @@ export function validatePresentationStructure(
     checkPlainText(value, pointer, located),
   );
   if (isObject(value)) checkPresentation(value, located);
+  if (
+    !located.diagnostics.length &&
+    Buffer.byteLength(JSON.stringify(value), "utf8") > PRESENTATION_BYTE_LIMIT
+  )
+    located.add("E015", "", "Presentation exceeds 64 KiB.");
   const diagnostics = located.sorted();
   return diagnostics.length
     ? { diagnostics, nodes: nodes }

@@ -47,7 +47,7 @@
     "packages/cli/test/cli.test.ts": 1261,
     "packages/cli/test/docs-index.test.ts": 1029,
     "packages/cli/test/init.test.ts": 1648,
-    "packages/cli/test/project-guide.test.ts": 1135,
+    "packages/cli/test/project-guide.test.ts": 1140,
     "packages/cli/test/project-guide/communication-completeness.ts": 1145,
     "packages/cli/test/project-guide/core.ts": 1621,
     "packages/cli/test/project-guide/general.ts": 2020,
@@ -58,7 +58,7 @@
     "packages/cli/test/release-package.test.ts": 2383,
     "packages/cli/test/render-cli.test.ts": 2402,
     "packages/cli/test/workflow-structure.test.ts": 1564,
-    "packages/compiler/src/loader.ts": 1473,
+    "packages/compiler/src/loader.ts": 1497,
     "packages/compiler/test/loader.test.ts": 1079,
     "packages/compiler/test/lock.test.ts": 1242,
     "packages/compiler/test/package-smoke.test.ts": 1463,
@@ -85,7 +85,7 @@
     "packages/render/test/renderer.test.ts": 1301,
     "packages/render/test/selection.test.ts": 1878,
     "packages/render/test/symbol-profile-conformance.test.ts": 943,
-    "packages/render/test/title-data-resolve.test.ts": 887,
+    "packages/render/test/title-data-resolve.test.ts": 938,
     "packages/render/test/title-data-validation.test.ts": 895,
     "packages/render/test/view-spec.test.ts": 1149,
     "packages/schema/test/schema-registry.test.ts": 1202,
@@ -268,11 +268,11 @@
     "packages/cli/src/alpha-guide.ts#registerGuideCommand/action callback": 71,
     "packages/cli/src/alpha-init.ts#initializeAlphaProject": 162,
     "packages/cli/src/alpha-output.ts#writeAlphaOutput": 104,
-    "packages/cli/src/alpha-pdf.ts#packetPdf": 104,
+    "packages/cli/src/alpha-pdf.ts#packetPdf": 98,
     "packages/cli/src/alpha-pdf.ts#withPdfFontFallback": 81,
     "packages/cli/src/alpha-pdf.ts#withPdfLabelClips": 79,
     "packages/cli/src/alpha-watch.ts#watchAlphaProject": 84,
-    "packages/cli/src/alpha.ts#producePacket": 122,
+    "packages/cli/src/alpha.ts#producePacket": 102,
     "packages/cli/src/guide-markdown.ts#rewriteGuideLinks": 97,
     "packages/cli/src/index.ts#runCli": 108,
     "packages/cli/src/index.ts#runQuery": 85,
@@ -296,7 +296,7 @@
     "packages/cli/test/docs-example-modeling.ts#executeModelingExamples": 114,
     "packages/cli/test/docs-example-review.test.ts#it callback~3": 77,
     "packages/cli/test/golden-migration-manifest.test.ts#describe callback/it callback": 73,
-    "packages/cli/test/guide.test.ts#executeJson": 219,
+    "packages/cli/test/guide.test.ts#executeJson": 220,
     "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry": 208,
     "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry/evaluate callback": 164,
     "packages/cli/test/industrial-pilot.test.ts#it callback": 152,
@@ -352,8 +352,9 @@
     "packages/cli/test/request-discovery.test.ts#it callback~4": 82,
     "packages/cli/test/runtime-package.test.ts#fixture": 86,
     "packages/cli/test/signal-loop.test.ts#call callback~3": 93,
-    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface": 191,
-    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": 82,
+    "packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": 77,
+    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface": 227,
+    "packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": 101,
     "packages/cli/test/workflow-structure.test.ts#createPublisherHarness": 83,
     "packages/cli/test/workflow-structure.test.ts#describe callback/it callback~16": 97,
     "packages/cli/test/workflow-structure.test.ts#describe callback/it callback~4": 130,
@@ -372,7 +373,7 @@
     "packages/compiler/src/loader.ts#loadLibraryDocuments": 179,
     "packages/compiler/src/loader.ts#loadProjectDocuments": 76,
     "packages/compiler/src/loader.ts#loadProjectInternal": 164,
-    "packages/compiler/src/loader.ts#loadProjectPresentation": 84,
+    "packages/compiler/src/loader.ts#loadProjectPresentation": 81,
     "packages/compiler/src/lock.ts#lockProject": 83,
     "packages/compiler/src/lock.ts#verifyLibraryLock": 195,
     "packages/compiler/src/nets.ts#deriveProjectNets": 91,
@@ -451,14 +452,14 @@
     "packages/render/src/layout/validate-output.ts#validateNodeAndLabelCollisions": 77,
     "packages/render/src/layout/validate-output.ts#validateRouteInteractions": 71,
     "packages/render/src/packet/cable.ts#cableDrafts": 191,
-    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 183,
+    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 188,
     "packages/render/src/packet/folding.ts#foldDrawingDrafts": 96,
     "packages/render/src/packet/page.ts#frame": 130,
     "packages/render/src/packet/references.ts#referenceTables": 130,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
-    "packages/render/src/packet/reports.ts#tableDrafts": 178,
-    "packages/render/src/packet/topology.ts#topologyDrafts": 176,
-    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 142,
+    "packages/render/src/packet/reports.ts#tableDrafts": 161,
+    "packages/render/src/packet/topology.ts#topologyDrafts": 178,
+    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 144,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
     "packages/render/src/presentation.ts#insertSemanticJunctions": 108,
     "packages/render/src/render-error-context.ts#renderErrorContext": 100,
@@ -482,7 +483,7 @@
     "packages/render/src/selection/traversal.ts#selectedSteps": 76,
     "packages/render/src/semantic-order.ts#semanticOrder": 93,
     "packages/render/src/semantic-order.ts#semanticOrder/key": 89,
-    "packages/render/src/sheets.ts#renderPacket": 212,
+    "packages/render/src/sheets.ts#renderPacket": 217,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures": 164,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures/map callback~2": 112,
     "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing/map callback~3": 177,
@@ -641,6 +642,7 @@
     "packages/render/test/wire-schedule-locations.test.ts#call callback": 85,
     "packages/render/test/xml-checker.ts#checkRestrictedSvgXml": 119,
     "packages/schema/src/parser.ts#mapTree": 78,
+    "packages/schema/src/schema-registry.ts#validateEntity": 84,
     "packages/schema/src/schema-registry.ts#validateProjectManifest": 78,
     "packages/schema/src/structural-checks.ts#checkCable": 76,
     "packages/schema/src/structural-checks.ts#checkDeviceType": 116,
@@ -887,11 +889,83 @@
       "to": 1369,
       "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
     },
+    "files:packages/cli/test/project-guide.test.ts": {
+      "identity": "files:packages/cli/test/project-guide.test.ts",
+      "from": 1135,
+      "to": 1140,
+      "reason": "Register the drawing-frame fact module and resolve the exact approved docs pointer through its shipped offline topic; existing guide rules remain byte-identical."
+    },
+    "files:packages/compiler/src/loader.ts": {
+      "identity": "files:packages/compiler/src/loader.ts",
+      "from": 1473,
+      "to": 1497,
+      "reason": "Enforce the compact-only raw 64 KiB presentation cap in an extracted helper, retaining the legacy validation call and diagnostics."
+    },
+    "files:packages/render/test/title-data-resolve.test.ts": {
+      "identity": "files:packages/render/test/title-data-resolve.test.ts",
+      "from": 887,
+      "to": 938,
+      "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
+    },
     "functions:packages/cli/src/alpha.ts#producePacket": {
       "identity": "functions:packages/cli/src/alpha.ts#producePacket",
       "from": 70,
       "to": 122,
       "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
+    },
+    "functions:packages/cli/test/guide.test.ts#executeJson": {
+      "identity": "functions:packages/cli/test/guide.test.ts#executeJson",
+      "from": 219,
+      "to": 220,
+      "reason": "Delegate the new drawing-frame JSON examples to a separately bounded execution helper."
+    },
+    "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": {
+      "identity": "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5",
+      "from": 70,
+      "to": 77,
+      "reason": "Exercise the same compiled compact fixture through agent validation, CLI validation, both public packet versions and CLI SVG export."
+    },
+    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface": {
+      "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface",
+      "from": 191,
+      "to": 227,
+      "reason": "Audit constant bracket access to eval and Function, including concatenated member names; keep the exact pinned ELK exception and all C7 hard caps."
+    },
+    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": {
+      "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit",
+      "from": 82,
+      "to": 101,
+      "reason": "Audit constant bracket access to eval and Function, including concatenated member names; keep the exact pinned ELK exception and all C7 hard caps."
+    },
+    "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": {
+      "identity": "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked",
+      "from": 183,
+      "to": 188,
+      "reason": "Measure supplied project and sheet headings before circuit bounds and return the existing capacity error before layout."
+    },
+    "functions:packages/render/src/packet/topology.ts#topologyDrafts": {
+      "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts",
+      "from": 176,
+      "to": 178,
+      "reason": "Measure supplied headings before topology bounds and reject derived overflow before layout."
+    },
+    "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose": {
+      "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose",
+      "from": 142,
+      "to": 144,
+      "reason": "Pass the same authored presentation context into topology composition for heading resolution."
+    },
+    "functions:packages/render/src/sheets.ts#renderPacket": {
+      "identity": "functions:packages/render/src/sheets.ts#renderPacket",
+      "from": 212,
+      "to": 217,
+      "reason": "Attach the native authored view index and first-sheet context before the existing per-view dispatcher."
+    },
+    "functions:packages/schema/src/schema-registry.ts#validateEntity": {
+      "identity": "functions:packages/schema/src/schema-registry.ts#validateEntity",
+      "from": 70,
+      "to": 84,
+      "reason": "Dispatch compact presentation to the canonical structural validator and map its diagnostics to the established compiler shape, retaining the direct legacy branch."
     },
     "functions:scripts/health-measure.mjs#measureSources": {
       "identity": "functions:scripts/health-measure.mjs#measureSources",

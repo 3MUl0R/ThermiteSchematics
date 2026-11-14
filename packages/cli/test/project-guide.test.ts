@@ -62,6 +62,7 @@ import general from "./project-guide/general.js";
 import signalLoops from "./project-guide/signal-loops.js";
 import wiring from "./project-guide/wiring-circuits.js";
 import continuations from "./project-guide/continuations.js";
+import drawingFrames from "./project-guide/drawing-frames.js";
 import documentCompanions from "./project-guide/document-companions.js";
 
 const guidePath = join(
@@ -88,6 +89,7 @@ const MODULES: Record<string, FactModule> = {
   "wiring-circuits": wiring,
   continuations,
   "document-companions": documentCompanions,
+  "drawing-frames": drawingFrames,
 };
 const FACTS = Object.entries(MODULES).flatMap(([module, { facts }]) =>
   facts.map((fact) => ({ module, ...fact })),
@@ -655,7 +657,10 @@ afterAll(async () => {
 describe("generated project guide", () => {
   it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
     expect(live.bytes).toBeLessThanOrEqual(GUIDE_BYTE_BUDGET);
-    expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);
+    expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([
+      "docs/drawing-frames.md",
+    ]);
+    await ok(["guide", "drawing-frames"], ctx.work);
     const pointers = [
       ...new Set(
         [...live.text.matchAll(/`thermite guide ([a-z-]+)`/g)].map(

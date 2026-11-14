@@ -144,6 +144,15 @@ it.each(invalidViews.map((view, index) => ({ view, index })))(
     const b = await renderTitleFrameBenchmark(ir, modern, presentation);
     expect(a.ok).toBe(false);
     expect(b).toEqual(a);
+    expect(await renderSchematicPacket(ir, modern)).toEqual(a);
+    expect(
+      await renderSchematicPacket(ir, modern, {
+        format: "project-presentation/0.3",
+        revision: "UNSPECIFIED",
+        backgroundColor: "#ffffff",
+        titleBlockLines: [],
+      }),
+    ).toEqual(a);
   },
 );
 

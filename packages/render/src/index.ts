@@ -99,3 +99,5 @@ export type {
 export { describeCodePoint, supportsGlyph } from "./text-metrics.js";
 
 export { unshapedPrintableFont } from "./symbols/font-shaping.js";
+
+export type { PacketRenderOptions } from "./packet/types.js";

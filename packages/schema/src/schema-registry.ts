@@ -1,3 +1,4 @@
+import { validatePresentationStructure } from "./internal/title-data/presentation.js";
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -205,7 +206,10 @@ export class SchemaRegistry {
 
     for (const name of ENTITY_SCHEMA_NAMES) {
       const id = `https://thermiteschematics.com/schemas/0.1/${name}.schema.json`;
-      const validate = ajv.getSchema(id);
+      const validate =
+        (name === "project-presentation"
+          ? ajv.getSchema(`${id}#/$defs/legacy`)
+          : undefined) ?? ajv.getSchema(id);
 
       if (validate === undefined) {
         throw new Error(
@@ -501,6 +505,31 @@ export class SchemaRegistry {
     value: JsonValue,
     context: EntityValidationContext,
   ): Diagnostic[] {
+    if (
+      entity === "project-presentation" &&
+      isJsonObject(value) &&
+      value.format === "project-presentation/0.3"
+    )
+      return validatePresentationStructure(
+        value,
+        context.file,
+        context.nodes,
+      ).diagnostics.map((diagnostic) => {
+        // Public compiler diagnostics retain the established Diagnostic shape.
+        const publicDiagnostic = {
+          ...diagnostic,
+          code: diagnostic.code === "R005" ? "E013" : diagnostic.code,
+        } as Diagnostic & Record<string, unknown>;
+        for (const key of [
+          "reason",
+          "ownerKind",
+          "ownerId",
+          "field",
+          "details",
+        ])
+          delete publicDiagnostic[key];
+        return publicDiagnostic;
+      });
     const validate = this.#entityValidators.get(entity);
 
     if (validate === undefined) {

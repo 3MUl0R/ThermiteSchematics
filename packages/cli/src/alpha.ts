@@ -23,6 +23,7 @@ import {
   type SchematicPacketRequest,
   type SchematicViewRequest,
   type RenderedPacket,
+  type PacketRenderOptions,
 } from "@thermite/render";
 import { parseJson } from "@thermite/schema";
 import { Command, CommanderError, Option } from "commander";
@@ -79,7 +80,10 @@ interface Flags {
   location?: string;
   filter?: string;
 }
-async function requestJson(path: string): Promise<unknown> {
+async function requestJson(
+  path: string,
+  onSource?: (source: NonNullable<PacketRenderOptions["source"]>) => void,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   if (path === "-") {
     let size = 0;
@@ -100,6 +104,7 @@ async function requestJson(path: string): Promise<unknown> {
   );
   if (value.diagnostics.length || value.value === undefined)
     throw new Error(JSON.stringify(value.diagnostics));
+  onSource?.({ file: path, nodes: value.nodes });
   return value.value;
 }
 function pageFlags(flags: Flags): PageSettings | undefined {
@@ -412,6 +417,37 @@ function registerAlphaCable(command: Command, state: AlphaState) {
     });
 }
 
+async function packetInput(flags: Flags, page: PageSettings | undefined) {
+  let source: PacketRenderOptions["source"];
+  const value = await requestJson(flags.input!, (value) => {
+    source = value;
+  });
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new Error("Packet request must be a JSON object.");
+  const authoredPage = (value as { page?: unknown }).page;
+  if (
+    Object.hasOwn(value, "page") &&
+    (typeof authoredPage !== "object" ||
+      authoredPage === null ||
+      Array.isArray(authoredPage))
+  )
+    throw new Error("Packet page must be a JSON object.");
+  const packet = {
+    ...value,
+    ...(flags.layout ? { layout: flags.layout } : {}),
+    ...(flags.index ? { index: true } : {}),
+    ...(page === undefined
+      ? {}
+      : {
+          page: {
+            ...(authoredPage as Record<string, unknown> | undefined),
+            ...page,
+          },
+        }),
+  } as SchematicPacketRequest;
+  return { packet, source };
+}
+
 async function producePacket(
   state: AlphaState,
   flags: Flags,
@@ -426,33 +462,8 @@ async function producePacket(
     return;
   }
   const page = pageFlags(flags);
-  let packet: SchematicPacketRequest | undefined;
-  if (view === undefined) {
-    const value = await requestJson(flags.input!);
-    if (typeof value !== "object" || value === null || Array.isArray(value))
-      throw new Error("Packet request must be a JSON object.");
-    const authoredPage = (value as { page?: unknown }).page;
-    if (
-      Object.hasOwn(value, "page") &&
-      (typeof authoredPage !== "object" ||
-        authoredPage === null ||
-        Array.isArray(authoredPage))
-    )
-      throw new Error("Packet page must be a JSON object.");
-    packet = {
-      ...value,
-      ...(flags.layout ? { layout: flags.layout } : {}),
-      ...(flags.index ? { index: true } : {}),
-      ...(page === undefined
-        ? {}
-        : {
-            page: {
-              ...(authoredPage as Record<string, unknown> | undefined),
-              ...page,
-            },
-          }),
-    } as SchematicPacketRequest;
-  }
+  const input = view === undefined ? await packetInput(flags, page) : undefined;
+  const packet = input?.packet;
   const result =
     packet === undefined
       ? await renderSchematicSheets(
@@ -465,7 +476,12 @@ async function producePacket(
             ...(flags.index ? { index: true } : {}),
           },
         )
-      : await renderSchematicPacket(compiled.ir, packet, compiled.presentation);
+      : await renderSchematicPacket(
+          compiled.ir,
+          packet,
+          compiled.presentation,
+          input?.source ? { source: input.source } : undefined,
+        );
   if (!result.ok) {
     process.stderr.write(
       JSON.stringify({
@@ -569,7 +585,7 @@ function registerAlphaPacket(command: Command, produce: Produce) {
     )
     .requiredOption(
       "--input <file>",
-      "schematic-packet-request/0.1 JSON file, or - for stdin",
+      "schematic-packet-request/0.1 or schematic-packet-request/0.2 JSON file (titleData needs presentation 0.3), or - for stdin",
     )
     .action(async (flags: Flags) => produce(flags));
 }

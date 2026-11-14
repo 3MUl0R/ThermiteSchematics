@@ -1,5 +1,5 @@
-// Hidden packet/resolver model. Structural presentation types live below render.
-import type { SchematicPacketRequest } from "../../packet/types.js";
+// Packet metadata and resolver model. Presentation structure belongs to schema.
+import type { LegacySchematicPacketRequest } from "../../packet/types.js";
 import type { Slot } from "#title-schema/model";
 export {
   slots,
@@ -28,7 +28,10 @@ export interface TitleData {
   readonly byView?: readonly (TitleRecord & { readonly viewIndex: number })[];
   readonly bySheet?: readonly (TitleRecord & { readonly sheetKey: string })[];
 }
-export interface PacketRequest extends Omit<SchematicPacketRequest, "format"> {
+export interface PacketRequest extends Omit<
+  LegacySchematicPacketRequest,
+  "format"
+> {
   readonly format: "schematic-packet-request/0.2";
   readonly titleData?: TitleData;
 }
@@ -80,4 +83,13 @@ export interface ResolvedTitle {
   readonly history: readonly Readonly<
     Record<keyof Required<RevisionRow>, Fact<string>>
   >[];
+}
+
+export interface TitleSource {
+  readonly file: string;
+  readonly nodes: import("@thermite/schema").JsonPointerNodeMap;
+}
+export interface TitleSources {
+  readonly packet?: TitleSource;
+  readonly presentation?: TitleSource;
 }

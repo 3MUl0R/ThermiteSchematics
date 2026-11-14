@@ -50,6 +50,7 @@ import type {
 } from "./packet/types.js";
 export type {
   PageSettings,
+  PacketRenderOptions,
   PaperPage,
   SchematicPacketRequest,
   SheetReference,
@@ -472,7 +473,23 @@ export async function renderPacketWithAdvice(
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
+  options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
+  if (
+    presentation?.format === "project-presentation/0.3" ||
+    request?.format === "schematic-packet-request/0.2"
+  ) {
+    const { renderTitlePacket } =
+      await import("./internal/title-data/entry.js");
+    return renderTitlePacket(
+      ir,
+      request,
+      presentation,
+      explicitPacket,
+      configurePage,
+      options,
+    );
+  }
   const result = await renderPacket(
     ir,
     request,
@@ -518,9 +535,10 @@ export function renderSchematicPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
   presentation?: Readonly<CompiledProjectPresentation>,
+  options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
   return withFontMetricCache(() =>
-    renderPacketWithAdvice(ir, request, presentation, true),
+    renderPacketWithAdvice(ir, request, presentation, true, undefined, options),
   );
 }
 export function renderSchematicSheets(

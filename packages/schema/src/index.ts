@@ -110,3 +110,5 @@ export type {
   Wire,
 } from "./generated/index.js";
 export type { LibraryType, ProjectObject } from "./source-types.js";
+
+export { PRESENTATION_BYTE_LIMIT as PROJECT_PRESENTATION_BYTE_LIMIT } from "./internal/title-data/presentation.js";

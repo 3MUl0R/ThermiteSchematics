@@ -1,4 +1,4 @@
-// Hidden structural presentation contract; no public registry or export.
+// Structural compact presentation model shared with canonical validation.
 export interface PageSettings {
   readonly size?: "letter" | "tabloid" | "a4" | "a3";
   readonly orientation?: "landscape" | "portrait";

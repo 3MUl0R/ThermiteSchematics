@@ -154,3 +154,53 @@ it("audits hidden references even behind an aliased loader", () => {
     auditTitleDataSurface(fixture("packages/render/src/index.ts", source)),
   ).not.toEqual([]);
 });
+
+it.each([
+  'eval("import(\\"./internal/title-data/parse.js\\")")',
+  "const run=eval; run(process.env.TB_CODE)",
+  '(0, eval)("code")',
+  'const make=Function; make("code")',
+  'new Function("code")',
+  'globalThis["eval"]("code")',
+  'globalThis["ev"+"al"]("code")',
+  'globalThis["Function"]("code")',
+])("rejects dynamic code: %s", (source) => {
+  expect(
+    auditTitleDataSurface(
+      fixture("packages/render/src/index.ts", source),
+      true,
+    ),
+  ).not.toEqual([]);
+});
+it("resolves scoped dist barrels", () => {
+  expect(
+    auditTitleDataSurface(
+      fixture(
+        "packages/cli/src/index.ts",
+        'import "@thermite/render/dist/bridge.js";',
+        [
+          [
+            "packages/render/src/bridge.ts",
+            'export * from "./internal/title-data/parse.js";',
+          ],
+        ],
+      ),
+    ),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("packages/cli/src/index.ts: public"),
+    ]),
+  );
+});
+it("permits only the unchanged pinned ELK constructor", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const path = "packages/render/src/layout/elk-runtime.ts";
+  const source = await readFile(path, "utf8");
+  expect(auditTitleDataSurface(new Map([[path, source]]), true)).toEqual([]);
+  expect(
+    auditTitleDataSurface(
+      new Map([[path, source + '\nnew Function("code");']]),
+      true,
+    ),
+  ).not.toEqual([]);
+});

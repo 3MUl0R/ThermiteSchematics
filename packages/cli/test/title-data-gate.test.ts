@@ -10,13 +10,16 @@ import * as schemaApi from "@thermite/schema";
 import * as renderApi from "@thermite/render";
 import { compileProject } from "@thermite/compiler";
 import { createAgentTools } from "@thermite/agent-tools";
-import { packetPdf } from "../src/alpha-pdf.js";
 import { initializeAlphaProject } from "../src/alpha-init.js";
+import {
+  assertProjectGuideBudget,
+  PROJECT_GUIDE_BYTE_LIMIT,
+} from "../src/project-guide-budget.js";
 const execFile = promisify(execCallback);
 const cli = resolve("packages/cli/dist/thermite-bin.js");
 let root: string, project: string;
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "thermite-tb1-"));
+  root = await mkdtemp(join(tmpdir(), "thermite-tb2-"));
   project = join(root, "synthetic-project");
   await initializeAlphaProject(project);
 });
@@ -31,182 +34,282 @@ async function run(args: string[]) {
     return { ...result, code: 0 };
   } catch (error) {
     const result = error as { stdout: string; stderr: string; code: number };
-    return { stdout: result.stdout, stderr: result.stderr, code: result.code };
+    return result;
   }
 }
-describe("TB1 S5 public release gate", () => {
-  it("keeps the project guide byte-identical at 19,637", async () => {
+describe("TB2 atomic compact publication", () => {
+  it("preserves every original guide byte and appends the approved snippet within budget", async () => {
     const guide = await readFile("packages/cli/assets/THERMITE_AGENTS.md");
-    expect(guide.byteLength).toBe(19637);
-    expect(sha(guide)).toBe(
+    expect(sha(guide.subarray(0, 19637))).toBe(
       "45a85b42a2804522fabfd59787aab0b825ac0c7e5c9feb0f3aeb575ebb676c49",
     );
+    expect(guide.subarray(19637)).toEqual(
+      await readFile(
+        "packages/cli/test/fixtures/title-frame-guide-addition.txt",
+      ),
+    );
+    expect(guide.length).toBeLessThanOrEqual(20500);
+    expect(PROJECT_GUIDE_BYTE_LIMIT).toBe(20500);
+    expect(() => assertProjectGuideBudget("a".repeat(20500))).not.toThrow();
+    expect(() => assertProjectGuideBudget("a".repeat(20501))).toThrow(/20501/);
+    expect(() => assertProjectGuideBudget("é".repeat(10251))).toThrow(/20502/);
   });
-  it("keeps internal entry points out of all runtime exports and imports", async () => {
+  it("keeps private functions out of root APIs and audits the released graph", async () => {
     for (const api of [schemaApi, renderApi])
       expect(
         Object.keys(api).filter((k) =>
-          /InternalPresentation|InternalPacket|parsePresentationStructure|presentationSchema|resolveTitles|sheetKey|titleDataSchema|presentationSettings/.test(
+          /InternalPresentation|InternalPacket|parsePresentationStructure|presentationSchema|resolveTitles|sheetKey|titleDataSchema|presentationSettings|renderTitleFrameBenchmark/.test(
             k,
           ),
         ),
       ).toEqual([]);
     const files = new Map<string, string>();
-    await Promise.all(
-      ["schema", "render", "compiler", "query", "cli", "agent-tools"].map(
-        async (pkg) => {
-          const base = `packages/${pkg}/src`;
-          const paths = (await readdir(base, { recursive: true })).filter(
-            (path) => path.endsWith(".ts"),
-          );
-          await Promise.all(
-            paths.map(async (path) =>
-              files.set(
-                schemaApi.normalizeDiagnosticFile(join(base, path)),
-                await readFile(join(base, path), "utf8"),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-    expect(auditTitleDataSurface(files)).toEqual([]);
-  });
-  it("rejects 0.3 in the public registry with the legacy E014 diagnostic", () => {
-    const registry = schemaApi.createInMemoryCanonicalSchemaRegistry();
-    const parsed = schemaApi.parseJson(
-      '{"format":"project-presentation/0.3","revision":"A","backgroundColor":"#ffffff"}',
-      "presentation.json",
-    );
-    expect(
-      registry.validateEntity("project-presentation", parsed.value!, {
-        file: "presentation.json",
-        nodes: parsed.nodes,
-      }),
-    ).toEqual([
-      {
-        code: "E014",
-        severity: "error",
-        message:
-          'Value is not one of the allowed values: ["project-presentation/0.1", "project-presentation/0.2"].',
-        file: "presentation.json",
-        line: 1,
-        column: 11,
-        jsonPointer: "/format",
-        allowed: ["project-presentation/0.1", "project-presentation/0.2"],
-        allowedCount: 2,
-      },
-    ]);
-  });
-  it("does not advertise unreleased formats in CLI help, schemas or topics", async () => {
-    for (const args of [
-      ["--help"],
-      ["packet", "--help"],
-      ["guide", "--json"],
-      ["guide", "schema", "project-presentation"],
+    for (const pkg of [
+      "schema",
+      "render",
+      "compiler",
+      "query",
+      "cli",
+      "agent-tools",
     ]) {
-      const result = await run(args);
-      expect(result.code).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).not.toMatch(
-        /project-presentation\/0\.3|schematic-packet-request\/0\.2|drawing-frames|titleData/,
-      );
+      const base = `packages/${pkg}/src`;
+      for (const path of (await readdir(base, { recursive: true })).filter(
+        (p) => p.endsWith(".ts"),
+      ))
+        files.set(
+          schemaApi.normalizeDiagnosticFile(join(base, path)),
+          await readFile(join(base, path), "utf8"),
+        );
     }
-    const directory = (await run(["guide", "--path"])).stdout.trim();
-    for (const file of (await readdir(directory)).filter((f) =>
-      f.endsWith(".md"),
-    ))
-      expect(await readFile(join(directory, file), "utf8")).not.toMatch(
-        /project-presentation\/0\.3|schematic-packet-request\/0\.2|titleData/,
-      );
+    expect(auditTitleDataSurface(files, true)).toEqual([]);
+    for (const [file, text] of files)
+      if (file.startsWith("packages/render/src/internal/title-data/"))
+        expect(text).not.toMatch(/(?:\.\.\/)+schema\/dist\//);
+    const parseUrl = new URL(
+      "../../render/dist/internal/title-data/parse.js",
+      import.meta.url,
+    ).href;
+    const node = await execFile(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        `const {parseInternalPresentation}=await import(${JSON.stringify(parseUrl)});if(!parseInternalPresentation('{"format":"project-presentation/0.3"}').value)process.exit(1);`,
+      ],
+      { cwd: tmpdir() },
+    );
+    expect(node.stderr).toBe("");
   });
-  it("preserves 0.1 rejection and refuses the internal packet format through the public CLI", async () => {
-    const good = await readFile(join(project, "presentation.json"));
-    const compiled = await compileProject(project);
-    expect(compiled.ok).toBe(true);
-    const input = join(root, "packet.json");
-    for (const format of [
-      "schematic-packet-request/0.1",
-      "schematic-packet-request/0.2",
-    ]) {
-      await writeFile(
-        input,
-        JSON.stringify({
-          format,
-          views: [{ format: "documentation-view-request/0.1", kind: "bom" }],
-          titleData: { defaults: { revision: "X" } },
-        }),
+  it("accepts only compact 6 by 4 and retains the legacy diagnostic branch", () => {
+    const registry = schemaApi.createInMemoryCanonicalSchemaRegistry();
+    const validate = (value: unknown) =>
+      registry.validateEntity(
+        "project-presentation",
+        value as schemaApi.JsonValue,
+        { file: "presentation.json", nodes: new Map() },
       );
-      const result = await run([
+    expect(
+      validate({
+        format: "project-presentation/0.3",
+        frame: { zones: { default: { columns: 6, rows: 4 } } },
+        titleBlock: { profile: "compact" },
+      }),
+    ).toEqual([]);
+    for (const frame of [
+      { zones: { default: { columns: 5, rows: 4 } } },
+      { zones: { default: { columns: 6, rows: 5 } } },
+      { profile: "extended" },
+      { header: null },
+      { logo: "x" },
+      { zones: { byPaper: { a3: { landscape: { columns: 7, rows: 4 } } } } },
+    ])
+      expect(
+        validate({ format: "project-presentation/0.3", frame }),
+      ).not.toEqual([]);
+    expect(validate({ format: "bad" })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "E014",
+          jsonPointer: "/format",
+          allowed: ["project-presentation/0.1", "project-presentation/0.2"],
+        }),
+      ]),
+    );
+    const diagnostics = validate({
+      format: "project-presentation/0.3",
+      titleBlock: {
+        fields: { drawnBy: { slot: "drawnBy", value: "bad\u200btext" } },
+      },
+    });
+    expect(diagnostics.length).toBeGreaterThan(0);
+    const diagnosticSchema = JSON.parse(requireDiagnosticSchema);
+    // The public schema accepts compiler diagnostics, never internal ownership extras.
+    expect(diagnosticSchema.additionalProperties).toBe(false);
+    for (const diagnostic of diagnostics) {
+      expect(diagnostic.code).toMatch(/^[EIW][0-9]{3}$/);
+    }
+    for (const diagnostic of diagnostics)
+      for (const key of Object.keys(diagnostic))
+        expect(Object.keys(diagnosticSchema.properties)).toContain(key);
+  });
+  it("publishes schema, packet help and drawing-frame topic together", async () => {
+    const help = await run(["packet", "--help"]);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("schematic-packet-request/0.2");
+    const schema = await run(["guide", "schema", "project-presentation"]);
+    expect(schema.code).toBe(0);
+    expect(schema.stdout).toContain("project-presentation/0.3");
+    const topics = await run(["guide", "--json"]);
+    expect(topics.code).toBe(0);
+    expect(topics.stdout).toContain("drawing-frames");
+    const doc = await run(["guide", "drawing-frames"]);
+    expect(doc.code).toBe(0);
+    expect(doc.stdout).toContain("UNSPECIFIED");
+  });
+  it("keeps init on 0.2 and wires compiled 0.3 through CLI, agent and public rendering", async () => {
+    const file = join(project, "presentation.json"),
+      original = await readFile(file);
+    expect(JSON.parse(original.toString()).format).toBe(
+      "project-presentation/0.2",
+    );
+    try {
+      await writeFile(
+        file,
+        JSON.stringify({ format: "project-presentation/0.3" }),
+      );
+      const compiled = await compileProject(project);
+      expect(compiled.ok).toBe(true);
+      if (!compiled.ok) return;
+      expect(compiled.presentation.compactFrame).toEqual({
+        format: "project-presentation/0.3",
+      });
+      expect(Object.isFrozen(compiled.presentation.compactFrame)).toBe(true);
+      expect(
+        (
+          await createAgentTools().validate({
+            format: "agent-tool-request/0.1",
+            project,
+          })
+        ).ok,
+      ).toBe(true);
+      expect((await run(["validate", project, "--json"])).code).toBe(0);
+      const request = {
+        format: "schematic-packet-request/0.2" as const,
+        views: [
+          {
+            format: "documentation-view-request/0.1" as const,
+            kind: "bom" as const,
+          },
+        ],
+        titleData: {
+          defaults: { revision: "CURRENT", values: { drawnBy: "D" } },
+        },
+      };
+      const presentationOnly = await renderApi.renderSchematicPacket(
+        compiled.ir,
+        { format: "schematic-packet-request/0.1", views: request.views },
+        compiled.presentation,
+      );
+      expect(presentationOnly.ok).toBe(true);
+      if (presentationOnly.ok)
+        expect(presentationOnly.value.presentationFormat).toBe(
+          "project-presentation/0.3",
+        );
+      const result = await renderApi.renderSchematicPacket(
+        compiled.ir,
+        request,
+        compiled.presentation,
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.presentationFormat).toBe("project-presentation/0.3");
+      expect(result.value.sheets[0]?.svg).toContain(">D</text>");
+      expect(result.value.sheets[0]?.svg).toContain(">CURRENT</text>");
+      const input = join(root, "packet.json"),
+        output = join(root, "packet.svg");
+      await writeFile(input, JSON.stringify(request));
+      const rendered = await run([
         "packet",
         "--project",
         project,
         "--input",
         input,
         "--output",
-        join(root, "never.svg"),
+        output,
       ]);
-      expect(result.code).toBe(1);
-      expect(result.stdout).toBe("");
-      expect(JSON.parse(result.stderr)).toMatchObject({
-        error: {
-          code: "R006",
-          reason: "invalid-packet",
-          message:
-            "A packet requires format schematic-packet-request/0.1 and 1–40 views, with an optional shared page.",
-        },
-      });
-    }
-    expect(await readFile(join(project, "presentation.json"))).toEqual(good);
-  });
-  it("preserves legacy PDF Author metadata", async () => {
-    const compiled = await compileProject(project);
-    expect(compiled.ok).toBe(true);
-    if (!compiled.ok) return;
-    const packet = await renderApi.renderSchematicPacket(
-      compiled.ir,
-      {
-        format: "schematic-packet-request/0.1",
-        views: [{ format: "documentation-view-request/0.1", kind: "bom" }],
-      },
-      compiled.presentation,
-    );
-    expect(packet.ok).toBe(true);
-    if (!packet.ok) return;
-    const pdf = await packetPdf(packet.value, "Synthetic legacy packet");
-    const bytes = pdf.toString("latin1");
-    expect(bytes).toMatch(/\/Author \d+ 0 R/);
-    expect(bytes).toMatch(/\/Creator \d+ 0 R/);
-  });
-  it("keeps CLI/agent/compiler rejection of 0.3 presentation identical", async () => {
-    const file = join(project, "presentation.json"),
-      original = await readFile(file);
-    try {
-      const value = JSON.parse(original.toString());
-      value.format = "project-presentation/0.3";
-      await writeFile(file, JSON.stringify(value));
-      const compiled = await compileProject(project);
-      expect(compiled.ok).toBe(false);
-      const diagnostics = compiled.diagnostics.filter(
-        (d) => d.jsonPointer === "/format" && d.code === "E014",
-      );
-      expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0]).toMatchObject({
-        code: "E014",
-        allowed: ["project-presentation/0.1", "project-presentation/0.2"],
-      });
-      const outcome = await createAgentTools().validate({
-        format: "agent-tool-request/0.1",
-        project,
-      });
-      expect(outcome.ok).toBe(false);
-      expect(outcome.diagnostics).toEqual(compiled.diagnostics);
-      const result = await run(["validate", project, "--json"]);
-      expect(result.code).toBe(1);
-      expect(JSON.parse(result.stdout)).toEqual(compiled.diagnostics);
-      expect(result.stderr).toBe("");
+      expect(rendered.code).toBe(0);
+      expect(await readFile(output, "utf8")).toContain(">CURRENT</text>");
     } finally {
       await writeFile(file, original);
     }
   });
+});
+// Read once without adding a production schema dependency to the audit helper.
+const requireDiagnosticSchema = await readFile(
+  "packages/schema/schemas/diagnostic.schema.json",
+  "utf8",
+);
+
+it("enforces the compact raw-file byte cap and retains presentation glyph locations", async () => {
+  const file = join(project, "presentation.json"),
+    original = await readFile(file);
+  try {
+    const text =
+      '{\n"format":"project-presentation/0.3",\n"titleBlock":{"fields":{"drawnBy":{"slot":"drawnBy","label":"Drawn by","value":"😀"}}}\n}';
+    await writeFile(file, text);
+    const compiled = await compileProject(project);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    const result = await renderApi.renderSchematicPacket(
+      compiled.ir,
+      {
+        format: "schematic-packet-request/0.2",
+        views: [{ format: "documentation-view-request/0.1", kind: "bom" }],
+      },
+      compiled.presentation,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error.details?.titleDiagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file: expect.stringContaining("presentation.json"),
+            line: 3,
+            jsonPointer: "/titleBlock/fields/drawnBy/value",
+          }),
+        ]),
+      );
+    const raw = JSON.stringify({ format: "project-presentation/0.3" });
+    await writeFile(file, raw + " ".repeat(65536 - Buffer.byteLength(raw)));
+    expect((await compileProject(project)).ok).toBe(true);
+    await writeFile(file, raw + " ".repeat(65537 - Buffer.byteLength(raw)));
+    const large = await compileProject(project);
+    expect(large.ok).toBe(false);
+    expect(large.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "E015",
+          message: "Presentation exceeds 64 KiB.",
+        }),
+      ]),
+    );
+  } finally {
+    await writeFile(file, original);
+  }
+});
+it("enforces compact normalized values at the exact byte bound", () => {
+  const registry = schemaApi.createInMemoryCanonicalSchemaRegistry();
+  const base = { format: "project-presentation/0.3", $schema: "" },
+    padding = 65536 - Buffer.byteLength(JSON.stringify(base));
+  for (const [extra, ok] of [
+    [0, true],
+    [1, false],
+  ] as const) {
+    const diagnostics = registry.validateEntity(
+      "project-presentation",
+      { ...base, $schema: "a".repeat(padding + extra) },
+      { file: "presentation.json", nodes: new Map() },
+    );
+    expect(diagnostics.length === 0).toBe(ok);
+  }
 });

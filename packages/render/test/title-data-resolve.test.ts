@@ -896,10 +896,12 @@ it.each([[1, 1], [99], [1.5], [0], []].map((owners) => ({ owners })))(
       partTotal: 1,
       title: "Companion",
     };
-    const result = resolveTitles(presentation(), packet(), "Source", [
-      drawing,
-      companion,
-    ]);
+    const result = resolveTitles(
+      presentation(),
+      packet(undefined, 2),
+      "Source",
+      [drawing, companion],
+    );
     expect(result.value).toBeUndefined();
     expect(result.diagnostics).toEqual(
       expect.arrayContaining([
@@ -927,6 +929,10 @@ it("ignores scalar companion viewIndex rather than inheriting its metadata", () 
     }),
     [drawing, companion],
   );
-  expect(lookup(titles[0]!, "drawnBy").text).toBe("VIEW");
-  expect(lookup(titles[1]!, "drawnBy").text).toBe("DEFAULT");
+  const first = titles[0],
+    companionTitle = titles[1];
+  if (!first || !companionTitle)
+    throw Error("Missing ownership fixture titles.");
+  expect(lookup(first, "drawnBy").text).toBe("VIEW");
+  expect(lookup(companionTitle, "drawnBy").text).toBe("DEFAULT");
 });

@@ -14,6 +14,7 @@ import {
   type Slot,
   type Source,
   type TitleRecord,
+  type TitleSources,
 } from "./model.js";
 import { expandPattern, parsePattern } from "./pattern.js";
 import { sheetKey, sheetIdentityKey } from "./sheet-key.js";
@@ -159,6 +160,7 @@ function resolveField(
   number: number,
   total: number,
   issues: Issues,
+  sources?: TitleSources,
 ): ResolvedField {
   const pointer = appendJsonPointer("/titleBlock/fields", key);
   let result =
@@ -197,6 +199,7 @@ function resolveField(
     sheet,
     issues,
     field.pattern !== undefined && !state.values.has(key),
+    sources,
   );
   return {
     key,
@@ -217,6 +220,7 @@ function validateResolved(
   sheet: FinalSheet,
   issues: Issues,
   pattern: boolean,
+  sources?: TitleSources,
 ): void {
   if (result.value === null) return;
   const derived = result.source === "project" || result.source === "title";
@@ -226,8 +230,12 @@ function validateResolved(
       : result.source === "title"
         ? `/sheets/${number - 1}/title`
         : (result.pointer ?? `/sheets/${number - 1}/fields/${key}`);
+  const origin =
+    result.source === "presentation" ? sources?.presentation : sources?.packet;
   const local = new Issues(
-    result.source === "presentation" ? "presentation.json" : "packet.json",
+    origin?.file ??
+      (result.source === "presentation" ? "presentation.json" : "packet.json"),
+    origin?.nodes,
   );
   checkText(result.value, pointer, local);
   if (derived && [...result.value].length > 160) {
@@ -387,8 +395,12 @@ export function resolveTitles(
   request: PacketRequest,
   projectName: string,
   sheets: readonly FinalSheet[],
+  sources?: TitleSources,
 ): Result<readonly ResolvedTitle[]> {
-  const issues = new Issues("packet.json");
+  const issues = new Issues(
+    sources?.packet?.file ?? "packet.json",
+    sources?.packet?.nodes,
+  );
   validateSheets(request, sheets, issues);
   if (issues.diagnostics.length) return { diagnostics: issues.sorted() };
   const value = sheets.map((sheet, i): ResolvedTitle => {
@@ -431,6 +443,7 @@ export function resolveTitles(
         i + 1,
         sheets.length,
         issues,
+        sources,
       ),
     );
     return {

@@ -33,7 +33,7 @@ export interface PaperPage {
   readonly widthMm: number;
   readonly heightMm: number;
 }
-export interface SchematicPacketRequest {
+export interface LegacySchematicPacketRequest {
   readonly format: "schematic-packet-request/0.1";
   readonly page?: PageSettings;
   readonly views: readonly (
@@ -59,6 +59,9 @@ export interface SchematicPacketRequest {
         readonly appearances?: "all" | "drawings";
       };
 }
+export type SchematicPacketRequest =
+  | LegacySchematicPacketRequest
+  | import("../internal/title-data/model.js").PacketRequest;
 export interface SheetReference {
   readonly deviceUid: string;
   readonly designation: string;
@@ -249,4 +252,11 @@ export interface DrawingBounds {
   y: number;
   w: number;
   h: number;
+}
+
+export interface PacketRenderOptions {
+  readonly source?: {
+    readonly file: string;
+    readonly nodes: import("@thermite/schema").JsonPointerNodeMap;
+  };
 }

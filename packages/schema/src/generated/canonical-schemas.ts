@@ -1407,59 +1407,381 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://thermiteschematics.com/schemas/0.1/project-presentation.schema.json",
       title: "ProjectPresentationFile",
-      type: "object",
-      additionalProperties: false,
-      required: ["format", "revision", "backgroundColor"],
-      properties: {
-        $schema: {
-          type: "string",
+      oneOf: [
+        {
+          $ref: "#/$defs/legacy",
         },
-        format: {
-          enum: ["project-presentation/0.1", "project-presentation/0.2"],
+        {
+          $ref: "#/$defs/compact",
         },
-        revision: {
-          type: "string",
-          minLength: 1,
-          maxLength: 128,
-          pattern: "^[^\\u0009\\u000a\\u000d\\u0085\\u2028\\u2029]+$",
-        },
-        backgroundColor: {
-          type: "string",
-          pattern: "^#[0-9a-f]{6}$",
-        },
-        titleBlock: {
+      ],
+      $defs: {
+        legacy: {
+          title: "LegacyProjectPresentationFile",
           type: "object",
           additionalProperties: false,
-          required: ["lines"],
+          required: ["format", "revision", "backgroundColor"],
           properties: {
-            lines: {
-              type: "array",
-              maxItems: 4,
-              items: {
-                type: "string",
-                minLength: 1,
-                maxLength: 160,
-                pattern: "^[^\\u0009\\u000a\\u000d\\u0085\\u2028\\u2029]+$",
+            $schema: {
+              type: "string",
+            },
+            format: {
+              enum: ["project-presentation/0.1", "project-presentation/0.2"],
+            },
+            revision: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              pattern: "^[^\\u0009\\u000a\\u000d\\u0085\\u2028\\u2029]+$",
+            },
+            backgroundColor: {
+              type: "string",
+              pattern: "^#[0-9a-f]{6}$",
+            },
+            titleBlock: {
+              type: "object",
+              additionalProperties: false,
+              required: ["lines"],
+              properties: {
+                lines: {
+                  type: "array",
+                  maxItems: 4,
+                  items: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 160,
+                    pattern: "^[^\\u0009\\u000a\\u000d\\u0085\\u2028\\u2029]+$",
+                  },
+                },
+              },
+            },
+            page: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                size: {
+                  enum: ["letter", "tabloid", "a4", "a3"],
+                },
+                orientation: {
+                  enum: ["landscape", "portrait"],
+                },
+                marginMm: {
+                  type: "number",
+                  minimum: 5,
+                  maximum: 25,
+                },
               },
             },
           },
         },
-        page: {
+        compact: {
           type: "object",
           additionalProperties: false,
           properties: {
-            size: {
-              enum: ["letter", "tabloid", "a4", "a3"],
+            $schema: {
+              type: "string",
             },
-            orientation: {
-              enum: ["landscape", "portrait"],
+            format: {
+              const: "project-presentation/0.3",
             },
-            marginMm: {
-              type: "number",
-              minimum: 5,
-              maximum: 25,
+            revision: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+            },
+            backgroundColor: {
+              type: "string",
+              pattern: "^#[0-9a-f]{6}$",
+            },
+            page: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                size: {
+                  enum: ["letter", "tabloid", "a4", "a3"],
+                },
+                orientation: {
+                  enum: ["landscape", "portrait"],
+                },
+                marginMm: {
+                  type: "number",
+                  minimum: 5,
+                  maximum: 25,
+                },
+              },
+              required: [],
+            },
+            frame: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                zones: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    default: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        columns: {
+                          type: "integer",
+                          const: 6,
+                        },
+                        rows: {
+                          type: "integer",
+                          const: 4,
+                        },
+                      },
+                      required: ["columns", "rows"],
+                    },
+                    byPaper: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        letter: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            landscape: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                            portrait: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                          },
+                          required: [],
+                        },
+                        tabloid: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            landscape: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                            portrait: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                          },
+                          required: [],
+                        },
+                        a4: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            landscape: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                            portrait: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                          },
+                          required: [],
+                        },
+                        a3: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            landscape: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                            portrait: {
+                              type: "object",
+                              additionalProperties: false,
+                              properties: {
+                                columns: {
+                                  type: "integer",
+                                  const: 6,
+                                },
+                                rows: {
+                                  type: "integer",
+                                  const: 4,
+                                },
+                              },
+                              required: ["columns", "rows"],
+                            },
+                          },
+                          required: [],
+                        },
+                      },
+                      required: [],
+                    },
+                  },
+                  required: [],
+                },
+                header: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    text: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 160,
+                    },
+                  },
+                  required: ["text"],
+                },
+                generatorStamp: {
+                  enum: ["title", "border", "metadata"],
+                },
+              },
+              required: [],
+            },
+            titleBlock: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                profile: {
+                  const: "compact",
+                },
+                lines: {
+                  type: "array",
+                  maxItems: 4,
+                  items: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 160,
+                  },
+                },
+                fields: {
+                  type: "object",
+                  propertyNames: {
+                    pattern: "^[a-z][A-Za-z0-9_]{0,31}$",
+                  },
+                  additionalProperties: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      slot: {
+                        enum: [
+                          "project",
+                          "sheetTitle",
+                          "drawingNumber",
+                          "customer",
+                          "drawnBy",
+                          "date",
+                          "checkedBy",
+                          "approvedBy",
+                          "revision",
+                          "sheetNumber",
+                        ],
+                      },
+                      label: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 40,
+                      },
+                      value: {
+                        type: ["string", "null"],
+                        minLength: 1,
+                        maxLength: 160,
+                      },
+                      bind: {
+                        enum: [
+                          "project.name",
+                          "sheet.title",
+                          "sheet.revision",
+                          "sheet.numberOfTotal",
+                        ],
+                      },
+                      pattern: {
+                        type: "string",
+                        minLength: 1,
+                        maxLength: 160,
+                      },
+                    },
+                    required: ["slot", "label"],
+                  },
+                },
+              },
+              required: [],
             },
           },
+          required: ["format"],
+          title: "CompactProjectPresentationFile",
         },
       },
     },

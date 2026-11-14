@@ -112,6 +112,7 @@ export function finalizeTitleData(
     context.request,
     ir.project.name,
     descriptors,
+    context.sources,
   );
   if (!result.value) return titleFailure(result.diagnostics);
   for (const [index, title] of result.value.entries()) {

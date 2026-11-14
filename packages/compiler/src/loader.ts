@@ -14,6 +14,7 @@ import {
 
 import {
   DIAGNOSTIC_CATALOG,
+  PROJECT_PRESENTATION_BYTE_LIMIT,
   appendJsonPointer,
   loadSchemaRegistry,
   normalizeDiagnosticFile,
@@ -975,12 +976,35 @@ async function loadProjectPresentation(
 
   state.projectPresentation = parsed.document;
   state.documentDiagnostics.push(
-    ...registry.validateEntity("project-presentation", parsed.document.value, {
-      file: parsed.document.file,
-      nodes: parsed.document.nodes,
-    }),
+    ...validateLoadedPresentation(registry, parsed.document),
   );
   return matchedFile;
+}
+
+function validateLoadedPresentation(
+  registry: SchemaRegistry,
+  document: UnvalidatedLoadedDocument,
+): Diagnostic[] {
+  if (
+    isJsonObject(document.value) &&
+    document.value.format === "project-presentation/0.3" &&
+    document.rawBytes.byteLength > PROJECT_PRESENTATION_BYTE_LIMIT
+  )
+    return [
+      {
+        code: "E015",
+        severity: "error",
+        file: document.file,
+        line: 1,
+        column: 1,
+        jsonPointer: "",
+        message: "Presentation exceeds 64 KiB.",
+      },
+    ];
+  return registry.validateEntity("project-presentation", document.value, {
+    file: document.file,
+    nodes: document.nodes,
+  });
 }
 
 async function loadProjectDocuments(

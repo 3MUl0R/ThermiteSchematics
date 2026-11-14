@@ -431,3 +431,5 @@ Help prints accepted literals as JSON, keyed by field path; a suffix names the
 operation or request version. Selector shapes are above and in complete help
 requests. Source object shapes are available through `thermite guide schema`
 and [modeling](data-model.md).
+
+Presentation 0.3 and packet title metadata are described in [drawing frames](drawing-frames.md). The six agent request contracts stay unchanged; use the packet CLI for paginated title blocks.

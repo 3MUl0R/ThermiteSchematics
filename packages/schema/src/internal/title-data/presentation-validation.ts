@@ -1,4 +1,5 @@
-import { appendJsonPointer, type JsonValue } from "../../index.js";
+import { appendJsonPointer } from "../../json-pointer.js";
+import type { JsonValue } from "../../parser.js";
 import { bindings, slots } from "./model.js";
 import { parsePattern } from "./pattern.js";
 import { Issues, checkLiteral, isObject } from "./validation-common.js";
@@ -51,8 +52,12 @@ export function checkPresentation(
 ): void {
   checkLiteral(value.revision, "revision", "/revision", issues);
   const header = isObject(value.frame) ? value.frame.header : undefined;
-  if (isObject(header))
-    checkLiteral(header.text, "header", "/frame/header/text", issues);
+  if (
+    isObject(header) &&
+    typeof header.text === "string" &&
+    !header.text.trim()
+  )
+    issues.add("E013", "/frame/header/text", "Title header must be nonblank.");
   const tb = value.titleBlock;
   if (!isObject(tb)) return;
   if (Array.isArray(tb.lines))

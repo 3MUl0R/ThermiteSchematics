@@ -125,10 +125,11 @@ export function parseInternalPresentation(
 export function validateInternalPresentation(
   value: JsonValue,
   file = "presentation.json",
+  nodes: JsonPointerNodeMap = new Map(),
 ): Result<Presentation> {
-  const result = validatePresentationStructure(value, file);
+  const result = validatePresentationStructure(value, file, nodes);
   if (!result.value) return { diagnostics: result.diagnostics };
-  const issues = new Issues(file);
+  const issues = new Issues(file, nodes);
   checkStrings(result.value as unknown as JsonValue, "", issues);
   return issues.diagnostics.length
     ? { diagnostics: issues.sorted() }
