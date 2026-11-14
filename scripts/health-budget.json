@@ -458,7 +458,7 @@
     "packages/render/src/packet/references.ts#referenceTables": 130,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
     "packages/render/src/packet/reports.ts#tableDrafts": 158,
-    "packages/render/src/packet/rooted-search.ts#searchRootedCandidates": 78,
+    "packages/render/src/packet/rooted-search.ts#searchRootedCandidates": 70,
     "packages/render/src/packet/topology.ts#topologyDrafts": 178,
     "packages/render/src/packet/topology.ts#topologyDrafts/compose": 144,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
@@ -951,12 +951,6 @@
       "to": 188,
       "reason": "Measure supplied project and sheet headings before circuit bounds and return the existing capacity error before layout."
     },
-    "functions:packages/render/src/packet/rooted-search.ts#searchRootedCandidates": {
-      "identity": "functions:packages/render/src/packet/rooted-search.ts#searchRootedCandidates",
-      "from": 70,
-      "to": 78,
-      "reason": "RT2b retains the shared actual-ELK ledger around TB2 compact reference seeding; the 85-line NAV3 regression callback verifies companion, renumbering and clone isolation across reuse."
-    },
     "functions:packages/render/src/packet/topology.ts#topologyDrafts": {
       "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts",
       "from": 176,
@@ -979,7 +973,7 @@
       "identity": "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback",
       "from": 70,
       "to": 85,
-      "reason": "RT2b retains the shared actual-ELK ledger around TB2 compact reference seeding; the 85-line NAV3 regression callback verifies companion, renumbering and clone isolation across reuse."
+      "reason": "The 85-line NAV3 regression callback verifies companion, document renumbering and clone isolation across view reuse."
     },
     "functions:packages/schema/src/schema-registry.ts#validateEntity": {
       "identity": "functions:packages/schema/src/schema-registry.ts#validateEntity",

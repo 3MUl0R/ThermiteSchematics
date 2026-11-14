@@ -53,7 +53,10 @@ export async function drawingDrafts(
       : undefined;
   if (qualityRun?.power) {
     const selected = await selectFramedPower(ir, qualityRun, page);
-    return drawingResult(selected, qualityRun.power.native);
+    if (qualityRun.quality && qualityRun.power.selected)
+      return drawingResult(selected, qualityRun.power.native);
+    rememberFrameCandidate(selected);
+    return { ok: true, value: selected.drafts };
   }
   const result = await framedDrawingDrafts(
     ir,

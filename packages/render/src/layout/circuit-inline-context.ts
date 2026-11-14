@@ -1,8 +1,9 @@
+import { serialize } from "node:v8";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { InlineLabelFitError } from "./inline-label-error.js";
 import type { CircuitLayoutRun } from "./circuit-inline.js";
 import type { ElkLayoutArguments } from "elkjs/lib/elk-api.js";
-import { chargeElkWork } from "./elk-work.js";
+import { chargeElkWork, recordElkDispatch } from "./elk-work.js";
 
 export interface CircuitInlineContext {
   baselineLayouts?: number;
@@ -47,7 +48,7 @@ export function withCircuitLayoutCache<T>(
 export const circuitLayoutCacheKey = (
   input: unknown,
   options?: ElkLayoutArguments,
-) => JSON.stringify([input, options]);
+) => serialize([input, options]).toString("base64");
 
 /** Within the packet cache, misses lay out a clone and hits return a clone:
  * neither mutates its input, and callers consume the returned graph. Only an
@@ -61,6 +62,7 @@ export async function cachedCircuitLayout<Input, T>(
   const context = circuitInlineContext.getStore();
   if (!context) {
     chargeElkWork();
+    recordElkDispatch();
     return layout(input);
   }
   const key = circuitLayoutCacheKey(input, options),
@@ -69,11 +71,12 @@ export async function cachedCircuitLayout<Input, T>(
     chargeElkWork(true);
     return structuredClone(found) as T;
   }
+  chargeElkWork();
   if (context.qualityPhase && !context.permittedInputs.has(key))
     throw new InlineLabelFitError(
       "Circuit alternative requires recovery outside the original printable composition.",
     );
-  chargeElkWork();
+  recordElkDispatch();
   const output = await layout(structuredClone(input));
   context.layouts.set(key, structuredClone(output));
   return output;

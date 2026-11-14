@@ -68,6 +68,7 @@ interface Context {
   reference: RootedCandidate | null;
   receipt: FrameReceipt;
   layouts: WeakMap<PreparedSchematicDrawing, number>;
+  newLayouts?: Set<PreparedSchematicDrawing> | undefined;
   layoutCount: number;
   attempts: Set<string>;
 }
@@ -230,6 +231,7 @@ export function recordFrameAttempt(
   if (ordinal === undefined) {
     ordinal = ctx.layoutCount++;
     ctx.layouts.set(p, ordinal);
+    ctx.newLayouts?.add(p);
   }
   const id = JSON.stringify([ordinal, profile, bank, grid, groups]);
   if (ctx.attempts.has(id)) return;
@@ -285,4 +287,43 @@ export function finishFramePlanning(
         ? "zero-loss-lower-bound"
         : "bounded-enumeration";
   ctx.reference = null;
+}
+
+/** An abandoned capped search must leave the active legacy receipt untouched.
+ * Search only appends attempts and assigns layout ordinals; it does not finish
+ * planning. Retain original prepared identities, and remove only new entries. */
+export async function rollbackFrameSearch<T>(
+  page: PaperPage,
+  search: () => Promise<T>,
+): Promise<T> {
+  const saved = [...(pages.get(page)?.values() ?? [])]
+    .filter((ctx) => ctx.reference)
+    .map((ctx) => {
+      const snapshot = {
+        ctx,
+        count: ctx.layoutCount,
+        attempts: new Set(ctx.attempts),
+        length: ctx.receipt.candidates.length,
+        previous: ctx.newLayouts,
+        added: new Set<PreparedSchematicDrawing>(),
+      };
+      ctx.newLayouts = snapshot.added;
+      return snapshot;
+    });
+  try {
+    return await search();
+  } catch (error) {
+    for (const s of saved) {
+      s.ctx.layoutCount = s.count;
+      s.ctx.attempts = s.attempts;
+      s.ctx.receipt.candidates.length = s.length;
+      for (const p of s.added) s.ctx.layouts.delete(p);
+    }
+    throw error;
+  } finally {
+    for (const s of saved) {
+      for (const p of s.added) s.previous?.add(p);
+      s.ctx.newLayouts = s.previous;
+    }
+  }
 }

@@ -56,6 +56,11 @@ export function selectCircuitPacket(
       context.selected.add(index);
       context.cursor = 0;
       const candidate = await render();
+      if (run.power && !run.power.selected) {
+        context.selected.delete(index);
+        context.viewDecisions.push({ view: index, reason: "no alternative" });
+        continue;
+      }
       if (!candidate.ok && candidate.error.code !== "R006")
         throw new Error(
           `Unexpected circuit candidate failure: ${candidate.error.message}`,

@@ -178,3 +178,60 @@ it("compares composed power fields before preferring a smaller field", async () 
     );
   });
 }, 30000);
+
+it("preserves finalized fallback drafts when a modern sheet was kept and no alternative is selected", async () => {
+  const context = circuitLayoutContext();
+  const legacy = await import("../src/packet/frame-legacy-placement.js");
+  const rooted = await import("../src/packet/rooted.js");
+  const fallback = legacy.legacyFramePlacement;
+  const kept = vi
+    .spyOn(legacy, "legacyFramePlacement")
+    .mockImplementation((reference, modern, p) => {
+      const result = fallback(reference, modern, p);
+      if (result.ok) {
+        // Distinguishable finalized modern metadata; quality must preserve it verbatim.
+        for (const draft of result.value)
+          draft.rootedBank = { ...reference.bank, left: 7 };
+        result.value[0]!.rootedFit!.basePages = 2;
+        result.value[0]!.rootedLegendSource!.grid = {
+          xs: [0, 500],
+          ys: [0, 500],
+        };
+        // Feed the finalized modern sheet through the real fallback keep branch.
+        frames.beginFramePlanning(p, reference);
+        return fallback(reference, { ...reference, drafts: result.value }, p);
+      }
+      return result;
+    });
+  vi.spyOn(frames, "frameBudgetFailure").mockReturnValue("scale-change");
+  await circuitInlineContext.run(context, async () => {
+    const originalPage = page();
+    const original = await rooted.drawingDrafts(
+      ir,
+      view,
+      undefined,
+      originalPage,
+      "compact",
+    );
+    expect(original.ok).toBe(true);
+    expect(kept).toHaveBeenCalled();
+    expect(
+      compactPlanningReceipts(originalPage)
+        .at(-1)
+        ?.fallback?.every((s) => s.strategy === "folded-group"),
+    ).toBe(true);
+    const expected = JSON.stringify(original);
+    context.qualityPhase = true;
+    context.cursor = 0;
+    const after = await rooted.drawingDrafts(
+      ir,
+      view,
+      undefined,
+      page(),
+      "compact",
+    );
+    expect(JSON.stringify(after)).toBe(expected);
+    if (after.ok) after.value[0]!.rootedBank!.left = 99;
+    expect(JSON.stringify(original)).toBe(expected);
+  });
+}, 30000);

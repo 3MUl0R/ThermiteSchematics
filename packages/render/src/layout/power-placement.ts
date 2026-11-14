@@ -62,7 +62,7 @@ export function rememberPowerPlacement(
     original: copyCandidate(original),
     native,
     search,
-    work: required(search.elkWork, "Missing actual power ELK ledger"),
+    work: required(search.elkWork, "Missing logical power ELK ledger"),
   };
   run.attempts = run.power.work.calls;
   const key = "printed-power";
@@ -77,13 +77,14 @@ export function powerPlacementAvailable(run: CircuitLayoutRun) {
   const state = run.power;
   return (
     !state ||
-    (state.work.calls < MAX_PLACEMENT_LAYOUTS &&
+    (!state.work.exhausted &&
+      state.work.calls < MAX_PLACEMENT_LAYOUTS &&
       !economyExhausted(state.search) &&
       run.qualityAttempts < STANDARD_ECONOMY_ATTEMPTS)
   );
 }
 
-/** Exactly one recursive NS input after ordinary recovery. Actual ELK work and
+/** Exactly one recursive NS input after ordinary recovery. Logical requests and
  * the unchanged economy must fit; neither budget is reset or reserved
  * ahead of the existing TTB retry. Recomposition never re-runs recovery. */
 export async function selectPowerPlacement(
@@ -188,8 +189,8 @@ function powerEngine(run: CircuitLayoutRun, state: PowerPlacementState) {
         "Power alternative permits one routing configuration per view.",
       );
     configurationKey = key;
-    if (!context?.layouts.has(key)) {
-      if (run.qualityAttempts || state.work.calls >= MAX_PLACEMENT_LAYOUTS)
+    if (!run.qualityAttempts) {
+      if (state.work.calls >= MAX_PLACEMENT_LAYOUTS)
         throw new InlineLabelFitError(
           "Power alternative exhausted its shared layout budget.",
         );

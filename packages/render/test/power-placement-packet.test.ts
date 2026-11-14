@@ -15,7 +15,7 @@ import * as quality from "../src/layout/power-placement.js";
 import * as prepared from "../src/off-view/prepared.js";
 import * as measured from "../src/layout/circuit-route-quality.js";
 import * as recovery from "../src/packet/rooted-placements.js";
-import { ElkWorkBudgetError } from "../src/layout/elk-work.js";
+import { elkWorkScope, ElkWorkBudgetError } from "../src/layout/elk-work.js";
 
 let ir: ElectricalIr;
 beforeAll(async () => {
@@ -98,7 +98,7 @@ it("charges the one extra input to the existing recovery pool and reuses exact i
   expect(context.viewDecisions).toEqual([{ view: 0, reason: "accepted" }]);
 }, 30000);
 
-it("does not charge exact-input cache hits against the actual placement pool", async () => {
+it("uses logical requests rather than legacy proposal counters for quality eligibility", async () => {
   const traces: NonNullable<Parameters<typeof circuitInlineTrace.run>[0]> = [];
   await circuitInlineTrace.run(traces, () =>
     renderSchematicPacket(ir, request),
@@ -111,13 +111,17 @@ it("does not charge exact-input cache hits against the actual placement pool", a
   expect(quality.powerPlacementAvailable(run)).toBe(true);
 }, 30000);
 
-it.each(["actual", "economy"] as const)(
+it.each(["logical", "economy", "exhausted"] as const)(
   "keeps the complete original at the shared %s limit",
   async (limit) => {
     const select = quality.selectPowerPlacement;
     vi.spyOn(quality, "selectPowerPlacement").mockImplementation(
       async (ir, run, page) => {
-        if (limit === "actual") run.power!.work.calls = 48;
+        if (limit === "logical") run.power!.work.calls = 48;
+        if (limit === "exhausted") {
+          run.power!.work.exhausted = true;
+          run.power!.work.calls = 1;
+        }
         if (limit === "economy")
           run.power!.search.economyStartedAt = run.power!.search.attempts - 4;
         return select(ir, run, page);
@@ -130,6 +134,7 @@ it.each(["actual", "economy"] as const)(
     );
     expect(after).toEqual(before);
     expect(traces[0]!.runs[0]!.qualityAttempts).toBe(0);
+    expect(quality.powerPlacementAvailable(traces[0]!.runs[0]!)).toBe(false);
   },
   30000,
 );
@@ -174,10 +179,18 @@ it("keeps a view with no measured printed jog byte-identical, with no quality in
 
 it("refuses a second distinct quality input for the same view", async () => {
   const before = await originalPacket(ir, request);
+  let completed = 0;
   vi.spyOn(prepared, "relayoutDrawing").mockImplementation(
     async (p, engine) => {
+      const second = { id: "second synthetic quality input" };
+      // Isolate the per-view configuration guard from the packet miss veto.
+      circuitInlineContext
+        .getStore()!
+        .permittedInputs.add(circuitLayoutCacheKey(second));
       await engine.layout({ id: "first synthetic quality input" });
-      await engine.layout({ id: "second synthetic quality input" });
+      completed++;
+      await engine.layout(second);
+      completed++;
       return { ok: true, value: p };
     },
   );
@@ -188,18 +201,22 @@ it("refuses a second distinct quality input for the same view", async () => {
     ),
   ).toEqual(before);
   expect(traces[0]!.runs[0]!.qualityAttempts).toBe(1);
+  expect(completed).toBe(1);
 }, 30000);
 
 it("propagates a recovery programming error instead of treating it as budget exhaustion", async () => {
   const error = new TypeError("synthetic recovery bug");
-  vi.spyOn(recovery, "placements").mockRejectedValue(error);
+  vi.spyOn(recovery, "placements").mockRejectedValueOnce(error);
   await expect(renderSchematicPacket(ir, request)).rejects.toBe(error);
 }, 30000);
 
-it("retains a complete saved candidate when the actual recovery work pool is exhausted", async () => {
-  vi.spyOn(recovery, "placements").mockRejectedValue(
-    new ElkWorkBudgetError("synthetic actual work exhaustion"),
-  );
+it("retains the exact legacy result when the logical recovery pool is exhausted", async () => {
+  const placements = recovery.placements;
+  vi.spyOn(recovery, "placements").mockImplementation(async (...args) => {
+    if (elkWorkScope.getStore())
+      throw new ElkWorkBudgetError("synthetic logical exhaustion");
+    return placements(...args);
+  });
   const result = await originalPacket(ir, { ...request, layout: "standard" });
   if (!result.ok) throw Error(JSON.stringify(result));
   const printed = new Set(
@@ -217,7 +234,7 @@ it("retains a complete saved candidate when the actual recovery work pool is exh
   );
 }, 30000);
 
-it("charges one economy attempt for a cached quality configuration and zero ELK layouts", async () => {
+it("charges a logical and economy attempt for a cached quality configuration with zero dispatches", async () => {
   const traces: NonNullable<Parameters<typeof circuitInlineTrace.run>[0]> = [];
   const result = await circuitInlineTrace.run(traces, () =>
     renderSchematicPacket(ir, request),
@@ -231,13 +248,15 @@ it("charges one economy attempt for a cached quality configuration and zero ELK 
   state.decided = false;
   state.selected = undefined;
   run.qualityAttempts = 0;
-  const calls = state.work.calls;
+  const calls = state.work.calls,
+    dispatches = state.work.dispatches;
   await circuitInlineContext.run(context, () =>
     quality.selectPowerPlacement(ir, run, result.value.page),
   );
   expect(state.search.attempts).toBe(4);
-  expect(state.work.calls).toBe(calls);
-  expect(run.qualityAttempts).toBe(0);
+  expect(state.work.calls).toBe(calls + 1);
+  expect(state.work.dispatches).toBe(dispatches);
+  expect(run.qualityAttempts).toBe(1);
 }, 30000);
 
 it("refuses a second routing configuration even when its input is cached", async () => {
@@ -258,4 +277,28 @@ it("refuses a second routing configuration even when its input is cached", async
   );
   expect(await renderSchematicPacket(ir, request)).toEqual(before);
   expect(completed).toBe(1);
+}, 30000);
+
+it("does not accept or print a quality rerender when the run produced no alternative", async () => {
+  const before = await originalPacket(ir, request);
+  vi.spyOn(prepared, "relayoutDrawing").mockResolvedValue({
+    ok: false,
+    error: {
+      code: "R006",
+      root: "M1",
+      reason: "unprintable-layout",
+      message: "No synthetic alternative",
+    },
+  });
+  vi.spyOn(packetGuard, "circuitPacketGuard").mockReturnValue(true);
+  const traces: NonNullable<Parameters<typeof circuitInlineTrace.run>[0]> = [];
+  expect(
+    await circuitInlineTrace.run(traces, () =>
+      renderSchematicPacket(ir, request),
+    ),
+  ).toEqual(before);
+  expect(traces[0]!.selected.size).toBe(0);
+  expect(traces[0]!.viewDecisions.some((d) => d.reason === "accepted")).toBe(
+    false,
+  );
 }, 30000);

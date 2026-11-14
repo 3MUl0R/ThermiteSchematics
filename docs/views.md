@@ -425,10 +425,15 @@ After a complete printable packet exists, a left-to-right power view with a
 jog in its final printed groups may try one recursive ELK network-simplex
 placement. It retains the selected hierarchy, reservations, fixed ports, phase
 order and labels. Ordinary recovery has priority: the alternative consumes a
-remaining actual ELK layout in the same 48-placement pool and a remaining
+remaining logical ELK request in the same 48-placement pool and a remaining
 attempt in the four-attempt standard economy, with no additional recovery
-search. Exact-input cache hits consume no placement. Each rooted search asserts
-the actual ELK call ceiling deterministically. Exhaustion keeps the original.
+search. Exact-input cache hits consume a request; the cache only saves execution
+time. The cap applies only to left-to-right power searches. At any search
+boundary, exhaustion discards the capped result and keeps the unchanged legacy
+search result, without a power alternative. Top-to-bottom search and adapter
+recovery are uncharged. The compact frame receipt separately bounds 52 candidate
+layouts (three initial profiles, 48 placement proposals and one reference seed);
+that is not a count of ELK requests or dispatches.
 Exact ELK inputs share the circuit alternative's packet cache; recomposition
 does not spend another routing pool. A view without a printed jog is unchanged.
 Unchanged view drafts may be reused before assembly, keyed by their exact inputs
