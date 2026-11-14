@@ -100,8 +100,15 @@ function frameText(
   if (node.name !== "text" || !packet.page) return value;
   const { widthMm: w, heightMm: h, marginMm: m } = packet.page,
     a = node.attrs;
+  if (
+    a["data-frame-sheet-number"] === "true" &&
+    value === `${old} of ${oldTotal}`
+  )
+    return `${next} of ${total}`;
   const at = (x: number, y: number) =>
     Math.abs(Number(a.x) - x) < 1e-6 && Math.abs(Number(a.y) - y) < 1e-6;
+  if (at(w - m - 4, m + 5) && value === `SHEET ${old} OF ${oldTotal}`)
+    return `SHEET ${next} OF ${total}`;
   if (
     at(w - m - 4, m + 5) &&
     value ===

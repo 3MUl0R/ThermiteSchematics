@@ -1,9 +1,14 @@
+import { frameContext } from "./frame-budget.js";
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
 import { repairSearchJogs } from "./rooted-jog-repair.js";
 import { searchSettled } from "./rooted-settled.js";
-import { MAX_MIXED_LAYOUTS } from "./rooted-mixed.js";
+import {
+  MAX_PLACEMENT_LAYOUTS,
+  ROOTED_COMPACT_PROFILES,
+} from "./rooted-limits.js";
+export { MAX_PLACEMENT_LAYOUTS } from "./rooted-limits.js";
 import { invariantCardConstraint } from "./rooted-constraint.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
 import type {
@@ -24,9 +29,6 @@ import {
 } from "./rooted-constraint.js";
 import { compareCandidates } from "./rooted-score.js";
 
-const INITIAL_PLACEMENT_LAYOUTS = 24;
-export const MAX_PLACEMENT_LAYOUTS =
-  INITIAL_PLACEMENT_LAYOUTS + MAX_MIXED_LAYOUTS;
 type Profile = "compact" | "dense" | undefined;
 export interface RootedSearch {
   diagnostics?: RootedDiagnostic[];
@@ -162,10 +164,23 @@ export async function searchRootedCandidates(
       attempts: 0,
       tried: new Set(),
     };
-    for (const profile of compact
-      ? ([undefined, "compact", "dense"] as const)
-      : [undefined]) {
+    for (const profile of compact ? ROOTED_COMPACT_PROFILES : [undefined]) {
       await initial(ir, request, presentation, page, profile, run);
+    }
+    const reference =
+      run.prepared[0] && frameContext(page, run.prepared[0].p.view)?.reference;
+    if (reference) {
+      const seeded = buildRootedCandidates(
+        ir,
+        reference.prepared,
+        page,
+        reference.profile,
+        false,
+        true,
+        referenceOffset,
+        true,
+      );
+      if (seeded.ok) run.candidates.push(...seeded.value);
     }
     validateEconomyCandidate(ir, run, page);
     if (searchSettled(run, page)) {

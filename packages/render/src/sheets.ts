@@ -75,6 +75,7 @@ async function renderPacket(
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
+  configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
@@ -126,13 +127,7 @@ async function renderPacket(
       e instanceof Error ? e.message : "Invalid reference filter.",
     );
   }
-  const paper = normalizePaperPage(
-    Object.hasOwn(request, "page")
-      ? record(request.page)
-        ? { ...presentation?.page, ...request.page }
-        : request.page
-      : (presentation?.page ?? {}),
-  );
+  const paper = packetPaperPage(request, presentation, configurePage);
   if (!paper.ok) return paper;
   let drafts: Draft[] = [];
   const legendViews: LegendViewDrafts[] = [];
@@ -458,13 +453,20 @@ function compactAdviceView(
   );
 }
 
-async function renderPacketWithAdvice(
+export async function renderPacketWithAdvice(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
+  configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  const result = await renderPacket(ir, request, presentation, explicitPacket);
+  const result = await renderPacket(
+    ir,
+    request,
+    presentation,
+    explicitPacket,
+    configurePage,
+  );
   if (
     result.ok ||
     result.error.code !== "R006" ||
@@ -482,6 +484,7 @@ async function renderPacketWithAdvice(
       { ...request, layout: "compact" },
       presentation,
       explicitPacket,
+      configurePage,
     );
     return compact.ok
       ? {
@@ -527,4 +530,21 @@ export function renderSchematicSheets(
       false,
     ),
   );
+}
+
+function packetPaperPage(
+  request: SchematicPacketRequest,
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
+  configurePage:
+    ((page: import("./packet/types.js").PaperPage) => void) | undefined,
+) {
+  const paper = normalizePaperPage(
+    Object.hasOwn(request, "page")
+      ? record(request.page)
+        ? { ...presentation?.page, ...request.page }
+        : request.page
+      : (presentation?.page ?? {}),
+  );
+  if (paper.ok) configurePage?.(paper.value);
+  return paper;
 }

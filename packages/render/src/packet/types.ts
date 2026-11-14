@@ -240,6 +240,8 @@ export interface CircuitContinuationBlock {
 
 /** Printable drawing rectangle in millimetres, shared by framing and references. */
 export interface DrawingBounds {
+  /** Compact band destinations extend the outer grid cells to this service edge. */
+  frameService?: Readonly<{ x: number; y: number; w: number; h: number }>;
   x: number;
   y: number;
   w: number;

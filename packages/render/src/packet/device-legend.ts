@@ -1,3 +1,5 @@
+import { hasCompactFrame } from "./frame-profile.js";
+import { compactFramePlan, compactLegendBounds } from "./frame-plan.js";
 import {
   legendPagination,
   type LegendSearchFailure,
@@ -52,11 +54,21 @@ export function legendSheets(
     const legend = addDeviceLegend(
       ir,
       sheet.svg,
-      {
-        ...area,
-        w: page.widthMm - page.marginMm - 3.34 - area.x,
-        h: area.h + 10.66,
-      },
+      hasCompactFrame(page)
+        ? compactLegendBounds(
+            area,
+            compactFramePlan(
+              draft.title,
+              page,
+              draft.view as import("../types.js").NormalizedSchematicView,
+            ),
+            page,
+          )
+        : {
+            ...area,
+            w: page.widthMm - page.marginMm - 3.34 - area.x,
+            h: area.h + 10.66,
+          },
       1,
       false,
       draft.view as import("../types.js").NormalizedSchematicView,

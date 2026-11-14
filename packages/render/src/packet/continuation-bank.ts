@@ -16,7 +16,12 @@ export interface ContinuationBank {
   right: number;
   top: number;
   bottom: number;
+  extra?: { readonly left: number; readonly right: number };
 }
+export const CONTINUATION_BANK_FORMS = [false, true] as const;
+export const FALLBACK_BANK_RESERVATIONS = [1.7, 3.5] as const;
+export const MAX_CONTINUATION_BANKS =
+  CONTINUATION_BANK_FORMS.length * (1 + FALLBACK_BANK_RESERVATIONS.length);
 // Physical caption envelopes and the existing gutters, all in sheet mm.
 const SIDE_CAPTION_INSET = { left: 9.35, right: 4.35 };
 const VERTICAL_CAPTION_INSET = 4.15;
@@ -27,6 +32,7 @@ export function continuationBanks(
   b: DrawingBounds,
   scale: number,
   offset = 0,
+  extraReservations = false,
 ): ContinuationBank[] {
   const seeds = rootedGrids(p, b, scale);
   const sides = new Set(
@@ -44,10 +50,8 @@ export function continuationBanks(
   const cutSources = continuationBankSources(p, seeds, b, scale);
   const maxBody = Math.max(headerWidth, ...sources.map((s) => s.width));
   const plans: ContinuationBank[] = [];
-  for (const [width, single] of [
-    [maxBody, false],
-    [maxBody, true],
-  ] as const) {
+  for (const single of CONTINUATION_BANK_FORMS) {
+    const width = maxBody;
     const side = (name: string) =>
       bankExtent(cutSources(name), width, headerWidth, single);
     const plan = {
@@ -82,10 +86,12 @@ export function continuationBanks(
     if (!plans.some((p) => JSON.stringify(p) === JSON.stringify(plan)))
       plans.push(plan);
   }
+  if (extraReservations) appendFallbackBanks(plans, sides);
   return plans;
 }
 export function bankBounds(b: DrawingBounds, bank: ContinuationBank) {
   return {
+    ...b,
     x: b.x + bank.left,
     y: b.y + bank.top,
     w: b.w - bank.left - bank.right,
@@ -127,4 +133,23 @@ function bankExtent(
     );
   }
   return { maxW, maxH };
+}
+
+function appendFallbackBanks(
+  plans: ContinuationBank[],
+  sides: ReadonlySet<string>,
+) {
+  for (const extra of FALLBACK_BANK_RESERVATIONS)
+    for (const plan of [...plans].slice(0, CONTINUATION_BANK_FORMS.length)) {
+      if (sides.has("left") || sides.has("right"))
+        plans.push({
+          ...plan,
+          left: plan.left + (sides.has("left") ? extra : 0),
+          right: plan.right + (sides.has("right") ? extra : 0),
+          extra: {
+            left: sides.has("left") ? extra : 0,
+            right: sides.has("right") ? extra : 0,
+          },
+        });
+    }
 }

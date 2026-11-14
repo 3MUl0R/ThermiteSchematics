@@ -1,3 +1,4 @@
+import { frameBudgetOrder } from "./frame-budget.js";
 import { localityRegression } from "./rooted-locality.js";
 import { candidateOrder, compareTerms, economyTerms } from "./rooted-order.js";
 import { routeGrowth } from "./rooted-clipped-routes.js";
@@ -71,6 +72,7 @@ export function compareCandidates(
     : [];
   const physical = ar.map((v, i) => v - (br[i] ?? 0)).find((v) => v !== 0) ?? 0;
   return (
+    frameBudgetOrder(a, b, page) ||
     newJogs(a, baseline) - newJogs(b, baseline) ||
     newDetours(a, baselineDetours) - newDetours(b, baselineDetours) ||
     physical ||

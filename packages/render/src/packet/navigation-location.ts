@@ -25,6 +25,18 @@ export function navigationZone(
   };
   x = roundNavigation(x);
   y = roundNavigation(y);
+  if (area.frameService) {
+    const s = area.frameService;
+    if (
+      x >= roundNavigation(s.x) &&
+      x <= roundNavigation(s.x + s.w) &&
+      y >= roundNavigation(s.y) &&
+      y <= roundNavigation(s.y + s.h)
+    ) {
+      x = Math.max(b.x, Math.min(roundNavigation(b.x + b.w), x));
+      y = Math.max(b.y, Math.min(roundNavigation(b.y + b.h), y));
+    }
+  }
   if (
     ![x, y, b.x, b.y, b.w, b.h].every(Number.isFinite) ||
     b.w <= 0 ||

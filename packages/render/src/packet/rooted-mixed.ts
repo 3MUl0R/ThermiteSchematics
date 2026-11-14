@@ -4,7 +4,8 @@ import type { PaperPage } from "./types.js";
 import { compareCandidates } from "./rooted-score.js";
 import { actualChoices, cardGroups } from "../off-view/choices.js";
 
-export const MAX_MIXED_LAYOUTS = 24;
+import { MAX_MIXED_LAYOUTS } from "./rooted-limits.js";
+export { MAX_MIXED_LAYOUTS } from "./rooted-limits.js";
 type Profile = RootedSearch["prepared"][number]["profile"];
 
 /** Change one card's quadrant within a uniform group. All boxes are from the
