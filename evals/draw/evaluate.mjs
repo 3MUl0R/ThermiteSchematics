@@ -234,7 +234,9 @@ export function evaluateSheet(
           ? "fail"
           : r.assessment === "direct-actuation"
             ? "pass"
-            : "manual",
+            : r.assessment === "outside-direct-actuation-scope"
+              ? "not-applicable"
+              : "manual",
         evidence: {
           findingCount: r.findings.length,
           findings: r.findings,

@@ -3,7 +3,6 @@ import { nativeRows } from "./m3-native.mjs";
 import { issuedRows } from "./m3-documents.mjs";
 import { rowZones } from "./m3-zones.mjs";
 import { painted, extent, finding } from "./review-geometry.mjs";
-import { documentationTableKinds } from "./identifier-tables.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -90,7 +89,6 @@ export function measuredWireAppearances(packet, geometries, ir, rows) {
       .map((r) => [r.key, r]),
   );
   for (const [index, sheet] of packet.sheets.entries()) {
-    if (documentationTableKinds.includes(sheet.view.kind)) continue;
     const g = geometries[index];
     if (!g) continue;
     for (const item of [
@@ -102,11 +100,58 @@ export function measuredWireAppearances(packet, geometries, ir, rows) {
         const row = cores.get(
           JSON.stringify([item.cableUid, item.conductorId]),
         );
-        const ends = row?.ends.filter(Boolean);
-        if (ends?.length === item.markerCount) {
-          const end = ends[item.slot];
-          if (end) terminal = [end.deviceUid, end.terminalKey];
-        }
+        // Labels in this painted core row independently identify the native
+        // ends. Match each label to its nearest measured circle; array/DOM
+        // order and exported endpoint slots supply no identity.
+        const markers = (g.wireTerminals ?? []).filter(
+          (m) => m.cableScope && m.cableScope === item.cableScope,
+        );
+        const candidates = (row?.ends ?? []).filter(Boolean).filter((end) => {
+          const device = ir.devices.find((d) => d.uid === end.deviceUid),
+            expected = compact(`${device?.designation}.${end.terminalKey}`);
+          const labels = g.texts.filter(
+            (t) =>
+              painted(t) && t.cableScope && t.cableScope === item.cableScope,
+          );
+          return labels.some((first) => {
+            let value = "";
+            const lines = labels
+              .filter(
+                (t) =>
+                  Math.abs(
+                    (t.anchor?.x ?? t.bbox.x) -
+                      (first.anchor?.x ?? first.bbox.x),
+                  ) < 0.05 && t.bbox.y >= first.bbox.y,
+              )
+              .sort((a, b) => a.bbox.y - b.bbox.y);
+            for (const line of lines) {
+              value += compact(line.text);
+              if (value === expected) {
+                const distance = (m) =>
+                  Math.hypot(
+                    Math.max(
+                      0,
+                      first.bbox.x - m.bbox.x - m.bbox.w,
+                      m.bbox.x - first.bbox.x - first.bbox.w,
+                    ),
+                    Math.max(
+                      0,
+                      first.bbox.y - m.bbox.y - m.bbox.h,
+                      m.bbox.y - first.bbox.y - first.bbox.h,
+                    ),
+                  );
+                const d = distance(item);
+                return !markers.some(
+                  (m) => m !== item && distance(m) <= d + 0.01,
+                );
+              }
+              if (!expected.startsWith(value)) break;
+            }
+            return false;
+          });
+        });
+        if (candidates.length === 1)
+          terminal = [candidates[0].deviceUid, candidates[0].terminalKey];
       }
       const key = JSON.stringify(terminal);
       if (!needed.has(key)) continue;

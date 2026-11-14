@@ -1,11 +1,13 @@
 // Browser-free classification of measured geometry and exported source roles.
 import { inside } from "./checks.mjs";
+import { classifyReferenceTags } from "./device-tags.mjs";
 import { printedZones } from "./printed-zones.mjs";
 const normal = (s) =>
   String(s ?? "")
     .replace(/\s+/g, " ")
     .trim();
 export function classifyTextGeometry(g, ir = {}) {
+  classifyReferenceTags(g, ir);
   const texts = [...g.texts, ...(g.hiddenTexts ?? [])];
   const frame = g.frame,
     header = g.headerRule;
@@ -42,11 +44,12 @@ export function classifyTextGeometry(g, ir = {}) {
       devices.get(t.deviceUid) ?? role?.primaryDesignation,
     );
     t.secondaryReference = !!(
-      t.tagField == null &&
-      role &&
-      primary &&
-      normal(t.text) !== primary &&
-      ((role.boundary && normal(t.text) === "BOUNDARY") || role.related)
+      t.nativeReference ||
+      (t.tagField == null &&
+        role &&
+        primary &&
+        normal(t.text) !== primary &&
+        ((role.boundary && normal(t.text) === "BOUNDARY") || role.related))
     );
   }
   g.zoneStrip = topBand;

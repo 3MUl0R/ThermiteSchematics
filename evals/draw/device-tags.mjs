@@ -246,7 +246,53 @@ function referenceEntryAudit(
   return { valid, findings };
 }
 
+// A reference role only locates candidates. Native qualified terminal ink and
+// complete source fields establish which rows may use the reference size floor.
+export function classifyReferenceTags(g, ir) {
+  for (const t of g.texts) t.nativeReference = false;
+  for (const device of ir.devices ?? []) {
+    const blocks = new Map();
+    for (const t of g.texts.filter(
+      (t) =>
+        t.tagKind === "reference" &&
+        t.tagOwnerUid === device.uid &&
+        t.tagOwnershipValid === true &&
+        t.tagPainted === true,
+    )) {
+      const key = JSON.stringify([t.tagBlock, t.tagContainer]);
+      if (!blocks.has(key)) blocks.set(key, { kind: "reference", rows: [] });
+      blocks.get(key).rows.push(t);
+    }
+    for (const block of blocks.values())
+      block.rows.sort((a, b) =>
+        a.anchor && b.anchor
+          ? Math.abs(a.anchor.y - b.anchor.y) > 0.17
+            ? a.anchor.y - b.anchor.y
+            : a.anchor.x - b.anchor.x
+          : a.order - b.order,
+      );
+    const qualified = [...blocks.values()].filter((b) =>
+      terminalIdentity(b, device, ir),
+    );
+    const bodyHere = (g.devices ?? []).some(
+      (d) => d.deviceUid === device.uid && d.tagKind !== "reference",
+    );
+    const type = ir.deviceTypes?.find((t) => t.id === device.typeId);
+    for (const block of blocks.values()) {
+      if (
+        qualified.includes(block) ||
+        (!bodyHere &&
+          qualified.length &&
+          referenceEntry(block) &&
+          !missingFields(block, device, type, ir).length)
+      )
+        for (const t of block.rows) t.nativeReference = true;
+    }
+  }
+}
+
 export function deviceTagFindings(g, ir, references, issue, view) {
+  classifyReferenceTags(g, ir);
   const appearances = (g.devices ?? []).filter(
     (d) => d.tagKind !== "reference",
   );

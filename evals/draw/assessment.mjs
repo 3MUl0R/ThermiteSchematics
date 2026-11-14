@@ -281,6 +281,7 @@ export const summary = (rows) =>
             "xfail",
             "xpass",
             "manual",
+            "not-applicable",
             "not-implemented",
             "infrastructure-error",
           ].map((status) => [

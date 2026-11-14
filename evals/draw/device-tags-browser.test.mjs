@@ -44,7 +44,7 @@ const full = () =>
 const body = (content) =>
   `<g data-device-uid="a"><rect x="10" y="10" width="80" height="40" fill="none" stroke="black"/>${content}</g>`;
 
-it.each(["body", "reference", "unknown", "unowned"])(
+it.each(["body", "unknown", "unowned"])(
   "keeps %s tag fields primary inside a circuit relation owner",
   async (kind) => {
     const owner = (content) =>
@@ -325,7 +325,8 @@ it("multiplies colour alpha, fill opacity and every ancestor opacity", async () 
     await missingDescription(
       descriptionWith('fill="rgba(255,0,0,0.8)" fill-opacity="1"', wrap),
     ),
-  ).toEqual([]);
+  ).toContain("authored description"); // Alpha is sufficient, contrast is not.
+  expect(await missingDescription(descriptionWith('fill="black"'))).toEqual([]);
   expect(
     await missingDescription(
       descriptionWith("", (s) => `<g opacity="0.001">${s}</g>`),
@@ -348,7 +349,7 @@ it("uses the existing physical em floor including transforms", async () => {
     await missingDescription(descriptionWith('style="font-size:2.5px"')),
   ).toEqual([]);
 });
-it("rejects later filled occluders regardless of pointer events; ignores strokes, earlier fills and translucent shapes", async () => {
+it("rejects later filled occluders regardless of pointer events; permits thin crossings, white backgrounds and light veils", async () => {
   const cover = (attrs) =>
     `<rect x="12" y="21" width="60" height="5" ${attrs}/>`;
   for (const attrs of [
@@ -590,4 +591,236 @@ it("requires exact same-sheet owned qualified reference keys and rejects hidden 
       true,
     ).flatMap((f) => f.missing ?? []),
   ).toEqual(["authored part P/1-A", "authored description"]);
+});
+
+it.each([
+  ['fill="#fafafa"', (s) => s],
+  [
+    'fill="black"',
+    (s) => '<rect x="12" y="21" width="65" height="5" fill="black"/>' + s,
+  ],
+  ["", (s) => `<g style="filter:opacity(0)">${s}</g>`],
+  ['style="filter:blur(2px)"', (s) => s],
+  ["", (s) => `<g transform="scale(0.05 1)">${s}</g>`],
+  ['textLength="0.5" lengthAdjust="spacingAndGlyphs"', (s) => s],
+  ['stroke="white" stroke-width="4" paint-order="fill stroke"', (s) => s],
+])(
+  "#206 refuses invisible, filtered or squeezed row %s",
+  async (attrs, wrap) => {
+    expect(await missingDescription(descriptionWith(attrs, wrap))).toContain(
+      "authored description",
+    );
+  },
+);
+it.each([
+  '<image x="12" y="21" width="65" height="5" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22white%22/%3E%3C/svg%3E"/>',
+  '<foreignObject x="12" y="21" width="65" height="5"><div xmlns="http://www.w3.org/1999/xhtml" style="background:white;width:100%;height:100%">cover</div></foreignObject>',
+  '<defs><linearGradient id="cover"><stop stop-color="white"/></linearGradient></defs><rect x="12" y="21" width="65" height="5" fill="url(#cover)"/>',
+  '<path d="M12 24 L77 24" stroke="white" stroke-width="6"/>',
+  '<text x="15" y="25" font-size="2.7" fill="white">Field terminals</text>',
+])("#206 later paint covers owned text: %s", async (cover) => {
+  expect(await missingDescription(descriptionWith() + cover)).toContain(
+    "authored description",
+  );
+});
+it("#206 white text on the actual dark band passes; a paint server underneath fails closed", async () => {
+  const band = '<rect x="12" y="21" width="65" height="5" fill="black"/>';
+  expect(
+    await missingDescription(band + descriptionWith('fill="white"')),
+  ).toEqual([]);
+  const pattern =
+    '<defs><pattern id="p" width="1" height="1" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="black"/></pattern></defs>';
+  expect(
+    await missingDescription(
+      pattern +
+        band.replace('fill="black"', 'fill="url(#p)"') +
+        descriptionWith('fill="white"'),
+    ),
+  ).toContain("authored description");
+});
+it("#206 reference tag rows use the 2.3 mm vertical floor", async () => {
+  const source = svg(
+    referenceEntry().replaceAll('font-size="2.7"', 'font-size="2.3"') +
+      qualifiedKey(),
+  );
+  const g = classifyTextGeometry(await openSheet(page, source), ir);
+  expect(
+    g.texts
+      .filter((t) => t.tagKind === "reference")
+      .every((t) => t.secondaryReference),
+  ).toBe(true);
+  expect(deviceTags(g, ir, refs, true)).toEqual([]);
+  const small = classifyTextGeometry(
+    await openSheet(
+      page,
+      source.replaceAll('font-size="2.3"', 'font-size="2.2"'),
+    ),
+    ir,
+  );
+  expect(deviceTags(small, ir, refs, true).length).toBeGreaterThan(0);
+});
+
+it("#206 contrast follows translucent later paint and the final opaque background", async () => {
+  const cover =
+    '<rect x="12" y="21" width="65" height="5" fill="white" opacity="0.9"/>';
+  expect(await missingDescription(descriptionWith() + cover)).toContain(
+    "authored description",
+  );
+  const server =
+    '<defs><pattern id="old" width="1" height="1"><rect width="1" height="1" fill="black"/></pattern></defs><rect x="12" y="21" width="65" height="5" fill="url(#old)"/>';
+  const white = '<rect x="12" y="21" width="65" height="5" fill="white"/>';
+  expect(await missingDescription(server + white + descriptionWith())).toEqual(
+    [],
+  );
+  expect(await missingDescription(server + descriptionWith())).toContain(
+    "authored description",
+  );
+});
+it("#206 a same-colour own stroke preserves contrasting lettering", async () => {
+  expect(
+    await missingDescription(
+      descriptionWith('stroke="black" stroke-width="1"'),
+    ),
+  ).toEqual([]);
+});
+it("#206 reference roles require native qualified ink, not just a reference flag", async () => {
+  const source = svg(
+    referenceEntry().replaceAll('font-size="2.7"', 'font-size="2.3"') +
+      qualifiedKey("FOREIGN.X1.1"),
+  );
+  const g = classifyTextGeometry(await openSheet(page, source), ir);
+  expect(
+    g.texts
+      .filter((t) => t.tagBlock === "entry")
+      .every((t) => !t.secondaryReference),
+  ).toBe(true);
+  expect(deviceTags(g, ir, refs, true).length).toBeGreaterThan(0);
+});
+
+it("#206 erased earlier glyphs cannot provide a contrasting background", async () => {
+  const earlier =
+    '<text x="15" y="25" font-size="2.7" fill="black">Field terminals</text>';
+  expect(
+    await missingDescription(earlier + descriptionWith('fill="white"')),
+  ).toContain("authored description");
+});
+
+it("#206 natural font advance differences do not shrink the physical em", async () => {
+  const input = structuredClone(ir);
+  input.devices[0].description = "OL1";
+  const source = svg(
+    body(
+      full()
+        .replace("Field terminals", "OL1")
+        .replace(/<text[^>]*data-tag-field="description"[^>]*>/, (tag) =>
+          tag
+            .replace('font-size="2.7"', 'font-size="2.5"')
+            .replace("<text ", '<text letter-spacing="-0.05" '),
+        ),
+    ),
+  ).replace(
+    "<svg ",
+    '<svg font-family="Thermite Sans, Thermite Math, sans-serif" ',
+  );
+  const g = await openSheet(page, source);
+  const row = g.texts.find((t) => t.tagField === "description");
+  expect(row.fontSize).toBeCloseTo(2.5, 5);
+  expect(deviceTags(g, input, refs, true)).toEqual([]);
+});
+
+it.each(["fallback", "embedded"])(
+  "R2 painted horizontal factors use the actual %s face and both SVG adjustment mechanisms",
+  async (face) => {
+    const deliver = async (content) => {
+      content = content.replace(
+        /<text[^>]*data-tag-field="description"[^>]*>/,
+        (tag) => tag.replace('font-size="2.7"', 'font-size="2.5"'),
+      );
+      const source = svg(body(content)).replace(
+        "<svg ",
+        `<svg font-family="${face === "embedded" ? "Thermite Sans, Thermite Math, sans-serif" : "Arial, sans-serif"}" `,
+      );
+      if (face === "fallback") return source;
+      const { embedPrintableFont } =
+        await import("../../packages/cli/dist/printable-font.js");
+      return embedPrintableFont(source);
+    };
+    await openSheet(page, await deliver(descriptionWith()));
+    const nativeAdvance = await page.evaluate(() =>
+      document
+        .querySelector('[data-tag-field="description"]')
+        .getComputedTextLength(),
+    );
+    for (const mechanism of [
+      "transform",
+      "relative-transform",
+      "textLength",
+      "parent-textLength",
+      "leaf-span-textLength",
+    ]) {
+      for (const [factor, allowed] of [
+        [0.5, false],
+        [0.95, true],
+        [1.05, false],
+        [0.909, false],
+        [0.9091, true],
+        [0.91, true],
+        [1, true],
+      ]) {
+        let content = mechanism.includes("transform")
+          ? descriptionWith("", (s) => {
+              const vertical = mechanism === "relative-transform" ? 1.2 : 1;
+              return `<g transform="translate(15 25) scale(${factor * vertical} ${vertical}) translate(-15 -25)">${s}</g>`;
+            })
+          : descriptionWith(
+              `textLength="${nativeAdvance * factor}" lengthAdjust="spacingAndGlyphs"`,
+            );
+        if (mechanism === "parent-textLength")
+          content = content.replace(
+            ">Field terminals<",
+            "><tspan>Field terminals</tspan><",
+          );
+        if (mechanism === "leaf-span-textLength") {
+          content = descriptionWith().replace(
+            ">Field terminals<",
+            `><tspan textLength="${nativeAdvance * factor}" lengthAdjust="spacingAndGlyphs">Field terminals</tspan><`,
+          );
+        }
+        const g = await openSheet(page, await deliver(content));
+        const findings = deviceTags(g, ir, refs, true);
+        expect(findings.length === 0, `${face} ${mechanism} ${factor}`).toBe(
+          allowed,
+        );
+        expect(
+          g.texts.find((t) => t.tagField === "description").tagHorizontalFactor,
+        ).toBeCloseTo(factor, 4);
+      }
+    }
+  },
+);
+
+it("R2 uniform root scale on fractional CSS pixels is not horizontal stretching", async () => {
+  const pageSize = (content) =>
+    svg(body(content))
+      .replace('width="200mm"', 'width="420mm"')
+      .replace('height="120mm"', 'height="297mm"')
+      .replace('viewBox="0 0 200 120"', 'viewBox="0 0 420 297"');
+  const good = await openSheet(page, pageSize(descriptionWith()));
+  expect(deviceTags(good, ir, refs, true)).toEqual([]);
+  expect(
+    good.texts.find((t) => t.tagField === "description").tagHorizontalFactor,
+  ).toBeCloseTo(1, 6);
+  const stretched = await openSheet(
+    page,
+    pageSize(
+      descriptionWith(
+        "",
+        (s) =>
+          `<g transform="translate(15 25) scale(1.05 1) translate(-15 -25)">${s}</g>`,
+      ),
+    ),
+  );
+  expect(
+    deviceTags(stretched, ir, refs, true).flatMap((f) => f.missing ?? []),
+  ).toContain("authored description");
 });

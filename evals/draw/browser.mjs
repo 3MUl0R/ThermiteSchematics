@@ -596,6 +596,7 @@ export function measureSheet(options = {}) {
         terminal,
         bbox: v.b,
         point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
+        cableScope: ids.get(cable),
         cableUid: cable.getAttribute("data-cable-uid"),
         conductorId: cable.getAttribute("data-conductor-id"),
         slot: circles.indexOf(e),
@@ -1035,6 +1036,7 @@ export function measureSheet(options = {}) {
       throw Error("Stacked report: text outside its painted row sub-cell");
     return hits[0];
   };
+  const textPaintGeometry = new Map();
   const textCandidates = Array.from(root.querySelectorAll("text"))
     .flatMap((e) => {
       if (!continuationOwner(e) || !e.querySelector("tspan")) return [e];
@@ -1131,6 +1133,17 @@ export function measureSheet(options = {}) {
       part.style.setProperty("alignment-baseline", "alphabetic", "important");
       textRoot.parentElement.appendChild(alphabetic);
       const baselineShift = e.getBBox().y - part.getBBox().y;
+      // The native SVG advance uses the very same resolved face and shaping
+      // context, including host fallback. Only remove textLength adjustments;
+      // no font or renderer metric is substituted into this measurement.
+      alphabetic.removeAttribute("textLength");
+      for (const span of alphabetic.querySelectorAll("[textLength]"))
+        span.removeAttribute("textLength");
+      const nativeSvgAdvance =
+        e.closest("text[textLength],tspan[textLength]") ||
+        e.querySelector("[textLength]")
+          ? part.getComputedTextLength()
+          : actualAdvance;
       alphabetic.remove();
       const local = {
         x: start.x - metrics.actualBoundingBoxLeft * lengthScale,
@@ -1141,12 +1154,24 @@ export function measureSheet(options = {}) {
         height:
           metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent,
       };
+      textPaintGeometry.set(e, {
+        local,
+        font: textCanvas.font,
+        width: metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
+        height:
+          metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent,
+        left: metrics.actualBoundingBoxLeft,
+        ascent: metrics.actualBoundingBoxAscent,
+      });
       v.b = bounds(e, local);
       const intersection = intersect(v.b, v.clip);
       v.painted =
         !hiddenContinuation && intersection.w > 0.001 && intersection.h > 0.001;
       const scaleX = Math.hypot(m.a * sx, m.b * sy),
-        scaleY = Math.hypot(m.c * sx, m.d * sy);
+        scaleY = Math.hypot(m.c * sx, m.d * sy),
+        // Screen CSS pixels are isotropic. Separate viewport-to-mm inverses
+        // contain root layout rounding and must not invent glyph distortion.
+        paintedAxisRatio = Math.hypot(m.a, m.b) / Math.hypot(m.c, m.d);
       const anchor = new DOMPoint(
         e.x.baseVal[0]?.value ?? start.x,
         e.y.baseVal[0]?.value ?? start.y,
@@ -1389,11 +1414,19 @@ export function measureSheet(options = {}) {
                   };
                 })()
               : undefined,
+          cableScope: ids.get(
+            e.closest("g[data-cable-uid][data-conductor-id]"),
+          ),
           fontMeasured: "Chromium resolved " + css.fontFamily,
           clip,
           role,
           font: css.fontFamily,
           fontSize: parseFloat(css.fontSize) * scaleY,
+          tagNativeAdvanceMm: nativeSvgAdvance * scaleX,
+          tagHorizontalFactor:
+            nativeSvgAdvance > 0 && scaleY > 0
+              ? (actualAdvance / nativeSvgAdvance) * paintedAxisRatio
+              : null,
           capReferenceEmMm: parseFloat(css.fontSize) * scaleX * lengthScale,
           angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
           advance: e.getComputedTextLength() * Math.hypot(m.a * sx, m.b * sy),
@@ -1709,21 +1742,225 @@ export function measureSheet(options = {}) {
       }
     return covered / 45;
   };
+  // DQ-06 measures the final paint stack at actual glyph samples. Unknown
+  // backgrounds fail closed; document flags never establish visible lettering.
+  const textPaintRows = new Map(
+    textCandidates.map((t) => [elementsById.get(t.element), t]),
+  );
+  const tagLayers = all.flatMap((e) => {
+    if (
+      !e.matches(
+        "path,polygon,polyline,rect,circle,ellipse,image,foreignObject,text,tspan",
+      )
+    )
+      return [];
+    const text = textPaintRows.get(e);
+    if (e.matches("text,tspan") && !text) return [];
+    const v = visible(e);
+    if (!v) return [];
+    const css = getComputedStyle(e),
+      fill = fillPaint(e),
+      strokeColour = colour(css.stroke);
+    let opacity = 1,
+      filtered = false;
+    for (let node = e; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      opacity *= Number(style.opacity);
+      filtered ||= style.filter !== "none";
+    }
+    if (opacity === 0) return [];
+    const inverse = e.getScreenCTM().inverse(),
+      scale = Math.max(
+        Math.hypot(inverse.a, inverse.b),
+        Math.hypot(inverse.c, inverse.d),
+      ),
+      strokeWidth = parseFloat(css.strokeWidth),
+      strokeAlpha =
+        ((strokeColour?.[3] ?? 0) / 255) * Number(css.strokeOpacity) * opacity;
+    let clips;
+    try {
+      clips = shapeClips(e);
+    } catch {
+      clips = null;
+    }
+    const boxPaint = e.matches("image,foreignObject"),
+      unknown =
+        boxPaint || filtered || (css.fill !== "none" && !colour(css.fill));
+    const pad =
+        strokeAlpha > 0 ? ((strokeWidth / scale) * Math.max(sx, sy)) / 2 : 0,
+      b = text?.bbox ?? v.b;
+    return [
+      {
+        e,
+        text,
+        inverse,
+        clips: clips && [v.clip, ...clips],
+        order: orders.get(e),
+        fill: colour(css.fill),
+        alpha: fill.alpha,
+        stroke: strokeColour,
+        strokeAlpha,
+        strokeWidth,
+        strokeFirst: css.paintOrder.startsWith("stroke"),
+        unknown,
+        bbox: {
+          x: b.x - pad,
+          y: b.y - pad,
+          w: b.w + pad * 2,
+          h: b.h + pad * 2,
+        },
+      },
+    ];
+  });
+  const glyphMasks = new Map();
+  const glyphAt = (layer, p) => {
+    const t = layer.text,
+      data = textPaintGeometry.get(layer.e);
+    if (!data) return false;
+    if (!glyphMasks.has(layer.e)) {
+      const canvas = document.createElement("canvas"),
+        pixels = 12;
+      canvas.width = Math.max(1, Math.ceil(data.width * pixels));
+      canvas.height = Math.max(1, Math.ceil(data.height * pixels));
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.scale(pixels, pixels);
+      ctx.font = data.font;
+      ctx.fillText(t.renderedString, data.left, data.ascent);
+      glyphMasks.set(layer.e, {
+        bytes: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+        w: canvas.width,
+        h: canvas.height,
+      });
+    }
+    const mask = glyphMasks.get(layer.e),
+      q = new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy).matrixTransform(
+        layer.inverse,
+      ),
+      x = Math.floor(((q.x - data.local.x) / data.local.width) * mask.w),
+      y = Math.floor(((q.y - data.local.y) / data.local.height) * mask.h);
+    return (
+      x >= 0 &&
+      y >= 0 &&
+      x < mask.w &&
+      y < mask.h &&
+      mask.bytes[(y * mask.w + x) * 4 + 3] >= 128
+    );
+  };
+  const layerHit = (o, p) => {
+    if (
+      !contains(o.bbox, p) ||
+      (o.clips && !o.clips.every((b) => contains(b, p)))
+    )
+      return null;
+    if (o.unknown || !o.clips) return { unknown: true };
+    if (o.text)
+      return glyphAt(o, p) ? { colour: o.fill, alpha: o.alpha } : null;
+    const local = new DOMPoint(
+      rr.x + p.x / sx,
+      rr.y + p.y / sy,
+    ).matrixTransform(o.inverse);
+    const fill = o.alpha > 0 && o.e.isPointInFill(local),
+      stroke = o.strokeAlpha > 0 && o.e.isPointInStroke(local);
+    if (fill && o.strokeFirst) return { colour: o.fill, alpha: o.alpha };
+    if (stroke) return { colour: o.stroke, alpha: o.strokeAlpha };
+    return fill ? { colour: o.fill, alpha: o.alpha } : null;
+  };
+  const blend = (foreground, alpha, background) =>
+    background.map((c, i) => foreground[i] * alpha + c * (1 - alpha));
+  const luminance = (rgb) =>
+    rgb
+      .map((v) => {
+        const c = v / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      })
+      .reduce((v, c, i) => v + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => {
+    const x = luminance(a),
+      y = luminance(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  const tagPaint = (t) => {
+    const own = tagLayers.find((l) => l.text === t);
+    if (!own || own.unknown || own.alpha < 0.2 || !own.fill) return false;
+    // A thick stroke painted after fill can erase the row's own glyphs.
+    const css = getComputedStyle(own.e);
+    if (
+      own.strokeAlpha >= 0.2 &&
+      !own.stroke?.slice(0, 3).every((c, i) => c === own.fill[i]) &&
+      own.strokeWidth >= parseFloat(css.fontSize) / 4 &&
+      !css.paintOrder.startsWith("stroke")
+    )
+      return false;
+    const layers = tagLayers.filter(
+      (o) =>
+        o !== own &&
+        intersect(o.bbox, t.bbox).w > 0 &&
+        intersect(o.bbox, t.bbox).h > 0,
+    );
+    let samples = 0,
+      legible = 0,
+      covered = 0,
+      minimum = Infinity;
+    for (let x = 0; x < 30; x++)
+      for (let y = 0; y < 7; y++) {
+        const p = {
+          x: t.bbox.x + (t.bbox.w * (x + 0.5)) / 30,
+          y: t.bbox.y + (t.bbox.h * (y + 0.5)) / 7,
+        };
+        if (!glyphAt(own, p)) continue;
+        samples++;
+        let background = [255, 255, 255],
+          known = true;
+        const after = [];
+        for (const layer of layers) {
+          const hit = layerHit(layer, p);
+          if (!hit) continue;
+          if (layer.order > own.order) {
+            after.push({ layer, hit });
+            continue;
+          }
+          if (hit.unknown) {
+            known = false;
+            continue;
+          }
+          // Earlier lettering supplies no continuous substrate for a row
+          // which erases its glyphs. Shape paint establishes the background.
+          if (layer.text) continue;
+          background = blend(hit.colour, hit.alpha, background);
+          if (hit.alpha >= 0.999) known = true;
+        }
+        if (!known) return false;
+        let foreground = blend(own.fill, own.alpha, background);
+        for (const { layer, hit } of after) {
+          if (hit.unknown) return false;
+          foreground = blend(hit.colour, hit.alpha, foreground);
+          // Shape paint covers both glyphs and surrounding substrate; text
+          // covers its own glyphs only. Translucent paint also changes contrast.
+          if (!layer.text)
+            background = blend(hit.colour, hit.alpha, background);
+        }
+        const ratio = contrast(foreground, background);
+        minimum = Math.min(minimum, ratio);
+        if (after.length && ratio < 3) covered++;
+        if (ratio >= 3) legible++;
+      }
+    t.tagContrastMinimum = Number.isFinite(minimum) ? minimum : 0;
+    t.tagOcclusion = samples ? covered / samples : 1;
+    return samples > 0 && legible / samples > 0.5;
+  };
   // DQ-06 uses complete painted owned rows. The rectangular clip rules used
   // for native shape measurement also apply to the whole measured ink box.
   for (const t of texts.filter((t) => t.tagOwnerUid)) {
     const e = elementsById.get(t.element),
       paint = fillPaint(e);
     t.tagPaintAlpha = paint.alpha;
-    t.tagOcclusion = occlusion(t);
     try {
       const clips = shapeClips(e);
       t.tagPainted =
         t.painted &&
         clips !== null &&
         paint.alpha >= 0.2 &&
-        !paint.background &&
-        t.tagOcclusion <= 0.5 &&
+        tagPaint(t) &&
         [t.viewport, ...clips].every(
           (b) =>
             t.bbox.x >= b.x - 0.001 &&

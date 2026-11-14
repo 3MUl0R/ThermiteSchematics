@@ -117,14 +117,36 @@ export function scopeTables(packet, geometries, ir, tables, request) {
         packet.sheets.flatMap((s, i) =>
           s.view.kind === kind
             ? (geometries[i].texts ?? [])
-                .filter((t) => t.documentId && t.documentOrigin !== "auto")
+                .filter(
+                  (t) =>
+                    t.documentId &&
+                    t.documentOrigin !== "auto" &&
+                    !rows.some((r) => r.documentId === t.documentId && r.auto),
+                )
                 .map((t) => t.documentId)
             : [],
         ),
       ),
     ];
-    for (const [i, table] of tables.filter((t) => t.kind === kind).entries())
-      result.push({ ...table, documentId: docs[i] });
+    const requested = tables.filter((t) => t.kind === kind);
+    for (const table of requested) {
+      // Registry identity locates a document; its header and every source row
+      // are still checked against ink. Never infer identity from page order.
+      const matches = (packet.navigation?.documents ?? []).filter(
+        (d) =>
+          d.kind === kind &&
+          !d.autoOrigin &&
+          d.authoredOrder === table.authoredOrder &&
+          docs.includes(d.id),
+      );
+      const documentId =
+        matches.length === 1
+          ? matches[0].id
+          : requested.length === 1 && docs.length === 1
+            ? docs[0]
+            : undefined;
+      result.push({ ...table, documentId });
+    }
   }
   const needs = packet.sheets.flatMap((s, i) =>
     nativeNeeds(
@@ -150,15 +172,15 @@ export function scopeTables(packet, geometries, ir, tables, request) {
             .map((r) => r.documentId),
         ),
       ];
-    for (const [i, id] of ids.entries())
+    for (const id of ids)
       result.push({
         ...universe,
         origin: "auto",
         documentId: id,
-        rows:
-          i === 0
-            ? universe.rows.filter((r) => missing.some((x) => x.key === r.key))
-            : [],
+        // Multiple companions form one inventory. Check the complete union,
+        // including missing and duplicate rows, independently of their order.
+        inventoryDocumentIds: ids,
+        rows: universe.rows.filter((r) => missing.some((x) => x.key === r.key)),
       });
   }
   result.universe = tables.universe;
@@ -179,7 +201,11 @@ export function documentInventory(table, packet, geometries) {
       .filter(
         (r) =>
           r.kind === table.kind &&
-          (table.documentId ? r.documentId === table.documentId : !r.auto),
+          (table.inventoryDocumentIds
+            ? table.inventoryDocumentIds.includes(r.documentId)
+            : table.documentId
+              ? r.documentId === table.documentId
+              : !r.auto),
       )
       .map((r) => r.key),
     expected = table.rows.map((r) => r.key),
@@ -212,7 +238,7 @@ export function printedHeader(row, tables) {
     (t) => t.documentId === row.documentId && t.kind === row.kind,
   );
   return (
-    !table ||
+    !!table &&
     table.columns.every((c) =>
       row.columnNames.some((n) => compact(c) === compact(n)),
     )

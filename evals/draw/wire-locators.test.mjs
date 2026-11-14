@@ -195,7 +195,7 @@ it("accepts a valid later drawn sheet without requiring the renderer's canonical
   cell(f, 0).text = "03.C4";
   expect(audit(f).findings).toEqual([]);
 });
-it("report pages and different native terminals supply no landing", () => {
+it("report page ink is measured regardless of its view kind", () => {
   const f = locatorFixture();
   f.source.wireTerminals[0].terminal = ["a", "OTHER"];
   f.report.wireTerminals = [
@@ -203,7 +203,8 @@ it("report pages and different native terminals supply no landing", () => {
   ];
   f.report.texts.push(...f.source.texts.map((t) => structuredClone(t)));
   cell(f, 0).text = "02.A1";
-  expect(audit(f).findings).toHaveLength(1);
+  expect(audit(f).findings).toEqual([]);
+  f.report.wireTerminals[0].terminal = ["a", "OTHER"];
   expect(audit(f).findings[0].kind).toBe("wire-locator-without-appearance");
 });
 it("reconstructs wrapped native pin rows without trusting a pin-row flag", () => {
@@ -254,6 +255,7 @@ it("binds single-ended core markers to their native endpoint slot", () => {
     {
       cableUid: "c",
       conductorId: "1",
+      cableScope: "single-core",
       slot: 0,
       markerCount: 1,
       bbox: { x: 29, y: 49, w: 2, h: 2 },
@@ -261,6 +263,12 @@ it("binds single-ended core markers to their native endpoint slot", () => {
   ];
   for (const c of [...f.report.texts, ...f.report.reportCells])
     c.row = '["c","1"]';
+  f.source.texts.push(
+    ink("A.1", {
+      cableScope: "single-core",
+      bbox: { x: 29, y: 44, w: 8, h: 2 },
+    }),
+  );
   cell(f, 0).text = "not drawn";
   cell(f, 1).text = "01.A1";
   expect(audit(f).findings).toEqual([]);
@@ -280,4 +288,60 @@ it("verifies a keyed pin row with no native description against its printed nati
   expect(audit(f).findings).toEqual([]);
   f.source.texts.at(-1).text = "OTHER";
   expect(audit(f).findings).toHaveLength(1);
+});
+
+it("D1b right pin key with a wrong native description is no appearance", () => {
+  const f = locatorFixture();
+  f.source.texts.push(
+    ink("1: Foreign terminal", { deviceUid: "a", textContainer: "pin" }),
+  );
+  expect(pinListAppearances(f.source, f.ir)).toEqual([]);
+  f.source.texts.at(-1).text = "1: Native terminal";
+  expect(pinListAppearances(f.source, f.ir)).toHaveLength(1);
+});
+it("D1b table view kind cannot hide actual native terminal ink", () => {
+  const f = locatorFixture();
+  f.packet.sheets[0].view.kind = "bom";
+  expect(wireLocatorAudit(f.packet, f.geometries, f.ir).findings).toEqual([]);
+});
+
+it("D1b cable marker identity follows painted native endpoint labels, never circle order", () => {
+  const f = locatorFixture();
+  f.ir.wires = [];
+  f.ir.cables = [
+    {
+      uid: "c",
+      designation: "C",
+      typeId: "core",
+      assignments: [
+        {
+          id: "1",
+          endpoints: [
+            { terminal: { deviceUid: "a", terminalKey: "1" } },
+            { terminal: { deviceUid: "b", terminalKey: "1" } },
+          ],
+        },
+      ],
+    },
+  ];
+  f.ir.cableTypes = [{ id: "core", conductors: [{ id: "1" }] }];
+  f.source.wireTerminals = f.source.wireTerminals.map((t, slot) => ({
+    ...t,
+    terminal: undefined,
+    cableUid: "c",
+    conductorId: "1",
+    cableScope: "core-row",
+    slot: 1 - slot,
+    markerCount: 2,
+  }));
+  f.source.texts.push(
+    ink("A.1", { cableScope: "core-row", bbox: { x: 29, y: 44, w: 8, h: 2 } }),
+    ink("B.1", { cableScope: "core-row", bbox: { x: 89, y: 84, w: 8, h: 2 } }),
+  );
+  for (const c of [...f.report.texts, ...f.report.reportCells])
+    c.row = '["c","1"]';
+  expect(audit(f).findings).toEqual([]);
+  // A forged label cannot borrow the endpoint identity from circle slot order.
+  f.source.texts.at(-2).text = "FOREIGN.1";
+  expect(audit(f).findings[0].kind).toBe("wire-locator-without-appearance");
 });

@@ -198,3 +198,59 @@ it.each([false, true])(
     ).toBe(true);
   },
 );
+
+it("D1b wrong pin description supplies no appearance despite the native key prefix", async () => {
+  const source = drawing(true).replace(
+    "1: Native terminal",
+    "1: Foreign terminal",
+  );
+  const result = wireLocatorAudit(
+    packet,
+    [
+      await openSheet(page, source),
+      await openSheet(page, schedule(false, "01.A1")),
+    ],
+    native(),
+  );
+  expect(result.findings[0].kind).toBe("wire-locator-without-appearance");
+});
+it("D1b cable circles are matched by nearby painted endpoint identities after DOM reordering", async () => {
+  const ir = native();
+  ir.wires = [];
+  ir.cables = [
+    {
+      uid: "c",
+      designation: "C",
+      typeId: "core",
+      assignments: [
+        {
+          id: "1",
+          endpoints: [
+            { terminal: { deviceUid: "a", terminalKey: "1" } },
+            { terminal: { deviceUid: "b", terminalKey: "1" } },
+          ],
+        },
+      ],
+    },
+  ];
+  ir.cableTypes = [{ id: "core", conductors: [{ id: "1" }] }];
+  const source = drawing().replace(
+    /<g data-device-uid="a">[\s\S]*?<\/g><g data-device-uid="b">[\s\S]*?<\/g>/,
+    `<g data-cable-uid="c" data-conductor-id="1">${text(29, 45, "A.1")}${text(89, 85, "B.1")}<circle cx="90" cy="90" r="1" fill="white" stroke="black"/><circle cx="30" cy="50" r="1" fill="white" stroke="black"/></g>`,
+  );
+  const report = await openSheet(
+    page,
+    schedule(false, "01.A1").replace(
+      'data-report-row="w"',
+      'data-report-row="[&quot;c&quot;,&quot;1&quot;]"',
+    ),
+  );
+  expect(
+    wireLocatorAudit(packet, [await openSheet(page, source), report], ir)
+      .findings,
+  ).toEqual([]);
+  const wrong = await openSheet(page, source.replace("A.1", "FOREIGN.1"));
+  expect(wireLocatorAudit(packet, [wrong, report], ir).findings[0].kind).toBe(
+    "wire-locator-without-appearance",
+  );
+});
