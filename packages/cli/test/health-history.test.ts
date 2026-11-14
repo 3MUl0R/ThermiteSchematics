@@ -292,3 +292,24 @@ it("CLI refuses history reset/raise before writing, including accept and lower",
   save(root, forged);
   expect(command(root).status).toBe(1);
 });
+it("a move proof cannot duplicate one grandfathered allowance into two bodies", () => {
+  const { root, file } = fixture(body(380));
+  const base = metrics(root),
+    budget = createBudget(base);
+  const oldKey = "packages/example/src/example.ts#existing";
+  writeFileSync(file, "");
+  for (const name of ["first", "second"])
+    writeFileSync(join(root, `packages/example/src/${name}.ts`), body(380));
+  const current = metrics(root),
+    next = createBudget(current);
+  next.grandfathered.functions[oldKey] = 0;
+  for (const name of ["first", "second"])
+    next.moves[`packages/example/src/${name}.ts#existing`] = {
+      section: "functions",
+      from: oldKey,
+      sha256: base.bodyHashes[oldKey],
+    };
+  expect(historyRegressions(current, next, budget, base).join("\n")).toContain(
+    "Move identity consumed more than once",
+  );
+});

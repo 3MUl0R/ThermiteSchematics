@@ -230,6 +230,9 @@ function validMove(section, key, budget, base, current) {
   return (
     proof?.section === section &&
     typeof proof.from === "string" &&
+    typeof proof.sha256 === "string" &&
+    Object.hasOwn(base[hashes], proof.from) &&
+    Object.hasOwn(current[hashes], key) &&
     proof.from !== key &&
     !Object.hasOwn(current[hashes], proof.from) &&
     proof.sha256 === base[hashes][proof.from] &&
@@ -298,6 +301,7 @@ function moveHistory(budget, baseBudget, base, current) {
     ["files", "fileHashes"],
     ["functions", "bodyHashes"],
   ]) {
+    const consumed = new Set();
     const retired = new Map(
       Object.entries(base[hashes])
         .filter(
@@ -307,7 +311,18 @@ function moveHistory(budget, baseBudget, base, current) {
         )
         .map(([key, hash]) => [hash, key]),
     );
-    for (const [key, hash] of Object.entries(current[hashes]))
+    for (const [key, hash] of Object.entries(current[hashes])) {
+      if (
+        !Object.hasOwn(base[hashes], key) &&
+        validMove(section, key, budget, base, current)
+      ) {
+        const from = budget.moves[key].from;
+        if (consumed.has(from))
+          errors.push(
+            `Move identity consumed more than once: ${section}.${from}`,
+          );
+        consumed.add(from);
+      }
       if (
         !Object.hasOwn(base[hashes], key) &&
         retired.has(hash) &&
@@ -316,6 +331,7 @@ function moveHistory(budget, baseBudget, base, current) {
         errors.push(
           `Rename/move needs identity proof: ${section}.${retired.get(hash)} -> ${key}`,
         );
+    }
   }
   return errors;
 }

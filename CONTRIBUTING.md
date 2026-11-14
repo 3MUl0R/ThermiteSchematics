@@ -303,7 +303,7 @@ retains zero tombstones for removed identities, preventing reset by deletion.
 | Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only below ceilings, records/prints each raise and reason; list each in the PR                                                                                                                 |
 | Move an allowance      | Add `moves[newIdentity] = {section, from, sha256}` in health-budget.json; section is `files` or `functions`, hash comes from `measure().fileHashes` or `bodyHashes` on the base; old identity must be absent, new bytes/normalized body must match |
 
-A moved grandfathered allowance must be transferred at equal or lower value,
+A move proof transfers one identity once. A grandfathered allowance transfers at equal or lower value,
 with the old identity retained as a tombstone. Under-cap outlier moves also need
 proof, not a new allowance. Normalized hashes preserve identifiers, string,
 template and regex contents while dropping trivia. Extractions that change a
