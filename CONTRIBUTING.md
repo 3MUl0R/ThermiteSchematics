@@ -301,9 +301,15 @@ fetch full history and reconcile them. CI uses `fetch-depth: 0` and verifies the
 base ref. Only synthetic test repositories may explicitly opt in with
 `THERMITE_HEALTH_ALLOW_NO_BASE=1`; it is ignored whenever `CI` or `GITHUB_ACTIONS`
 is set, including empty/false values. With no baseline ref the local opt-in
-compares against HEAD if it exists. A missing committed base budget, like a v2
-migration, seeds from authenticated base source rather than the working tree. Version 4
-retires old sub-cap records and ignores legacy string reasons.
+compares against HEAD if it exists. If the PR base has no committed budget, the
+one-time migration uses the budget committed at `merge-base(HEAD, origin/dev)`.
+That budget must exist and validate in the current format; there is no upgrade,
+source re-seed, local-dev fallback or PR-head fallback for this authority. The PR
+base source is still measured and printed as information only. All hard invariants
+use the committed dev bootstrap; the PR target still selects the reason tier.
+Once release has a committed budget, comparison uses that release base normally.
+Existing committed v2/v3 budgets on the normal path retain their migration rules.
+Version 4 retires old sub-cap records and ignores legacy string reasons.
 
 A grandfathered allowance follows content within its file, not a name or callback
 position. The matcher hashes substantive AST-token lines without trivia and

@@ -13,35 +13,23 @@ import {
   fn,
 } from "./health-fixture.js";
 const path = "packages/cli/src/alpha.ts";
-it.each(["dev", "release"])(
-  "seeds a missing %s budget from committed base source and rejects a forged ceiling",
-  (target) => {
-    const root = repo();
-    put(root, path, fn(380, "existingDebt"));
-    const base = commit(root, "source predates health budgets");
-    git(root, "update-ref", `refs/remotes/origin/${target}`, base);
-    // The current tree is smaller; seeding from it would incorrectly permit 390.
-    put(root, path, fn(350, "existingDebt"));
-    const budget = createBudget(metrics(root));
-    save(root, budget);
-    const env = { GITHUB_BASE_REF: target };
-    const history = readHistory(root, env);
-    expect(history.budgetSource).toBe("base-source");
-    expect(history.target).toBe(target);
-    expect(history.budget.grandfathered.functions[`${path}#existingDebt`]).toBe(
-      380,
-    );
-    let result = run(root, [], env);
-    expect(result.status, result.stderr).toBe(0);
-    budget.ceilings.nonNullAssertions++;
-    save(root, budget);
-    result = run(root, [], env);
-    expect(result.status, result.stderr).toBe(1);
-    expect(result.stderr).toContain(
-      "ceilings.nonNullAssertions cannot rise: 0 -> 1",
-    );
-  },
-);
+it("uses a committed release budget normally without requiring origin/dev", () => {
+  const root = repo();
+  put(root, path, fn(90));
+  save(root, createBudget(metrics(root)));
+  const base = commit(root, "release already has a budget");
+  git(root, "update-ref", "refs/remotes/origin/release", base);
+  put(root, path, fn(95));
+  save(root, createBudget(metrics(root)));
+  const env = { GITHUB_BASE_REF: "release" },
+    history = readHistory(root, env);
+  expect(history.budgetSource).toBe("committed");
+  expect(history.revision).toBe(base);
+  expect(history.information).toBeUndefined();
+  const result = run(root, [], env);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).not.toContain("Health bootstrap:");
+});
 it.each([false, true])(
   "allows the 52 to 72 to 82 dev chain against release (committed base budget: %s)",
   (hasBudget) => {
@@ -51,7 +39,11 @@ it.each([false, true])(
     const release = commit(root, "release at 52 lines");
     git(root, "update-ref", "refs/remotes/origin/release", release);
     git(root, "update-ref", "refs/remotes/origin/dev", release);
-    if (!hasBudget) save(root, createBudget(metrics(root)));
+    if (!hasBudget) {
+      save(root, createBudget(metrics(root)));
+      const bootstrap = commit(root, "dev commits its current-format budget");
+      git(root, "update-ref", "refs/remotes/origin/dev", bootstrap);
+    }
     for (const size of [72, 82]) {
       put(root, path, fn(size, "runThermite"));
       const accepted = run(

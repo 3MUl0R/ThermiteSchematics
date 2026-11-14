@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measure } from "./health-measure.mjs";
-import { readHistory } from "./health-history.mjs";
+import { readHistory, formatHistoryInformation } from "./health-history.mjs";
 import { upgradeBudget } from "./health-budget.mjs";
 import {
   acceptBudget,
@@ -44,6 +44,7 @@ function main() {
     path = resolve("scripts/health-budget.json");
   const current = measure(root),
     history = readHistory(root);
+  process.stdout.write(formatHistoryInformation(history));
   const budget = upgradeBudget(JSON.parse(readFileSync(path, "utf8")), current);
   const next =
     mode === "--accept"

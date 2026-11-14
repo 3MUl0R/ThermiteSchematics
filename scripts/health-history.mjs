@@ -1,6 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { inScope, measureSources } from "./health-measure.mjs";
-import { createBudget, upgradeBudget } from "./health-budget.mjs";
+import {
+  SIZE_CEILINGS,
+  totals,
+  upgradeBudget,
+  validateBudget,
+} from "./health-budget.mjs";
 function git(root, args, options = {}) {
   const result = spawnSync("git", ["-C", root, ...args], {
     maxBuffer: 128 * 1024 * 1024,
@@ -81,6 +86,74 @@ export function baselineRef(root, env = process.env) {
     "Health history: no health baseline; fetch the PR base or origin/dev with full history. THERMITE_HEALTH_ALLOW_NO_BASE=1 is only for synthetic test repositories.",
   );
 }
+function mergeBase(root, ref) {
+  const merged = spawnSync("git", ["-C", root, "merge-base", "HEAD", ref], {
+    encoding: "utf8",
+  });
+  if (merged.status !== 0)
+    throw Error(
+      `Health history: no merge-base with ${ref}; fetch full history (git fetch --unshallow, or actions/checkout fetch-depth: 0).`,
+    );
+  return merged.stdout.trim();
+}
+function committedBudget(root, revision) {
+  if (
+    !git(root, ["ls-tree", "-z", revision, "--", "scripts/health-budget.json"])
+      .length
+  )
+    return undefined;
+  return JSON.parse(
+    git(root, ["show", `${revision}:scripts/health-budget.json`]).toString(
+      "utf8",
+    ),
+  );
+}
+function sourceInformation(ref, revision, metrics) {
+  return {
+    ref,
+    revision,
+    files: Object.keys(metrics.files).length,
+    functions: Object.keys(metrics.functions).length,
+    overCapFiles: Object.values(metrics.files).filter(
+      (f) => f.lines > SIZE_CEILINGS.fileLines,
+    ).length,
+    overCapFunctions: Object.values(metrics.functions).filter(
+      (n) => n > SIZE_CEILINGS.functionLines,
+    ).length,
+    ...totals(metrics),
+  };
+}
+function devBootstrap(root, target, information) {
+  const ref = "refs/remotes/origin/dev",
+    revision = mergeBase(root, ref);
+  const budget = committedBudget(root, revision);
+  if (!budget)
+    throw Error(
+      `Health history: dev bootstrap ${revision} has no committed health budget; merge a current-format budget into origin/dev first.`,
+    );
+  try {
+    // Never upgrade or re-seed this authority from source or the PR head.
+    validateBudget(budget);
+  } catch (error) {
+    throw Error(
+      `Health history: dev bootstrap requires a valid current-format budget: ${error.message}`,
+    );
+  }
+  return {
+    revision,
+    ref,
+    target,
+    budgetSource: "dev-bootstrap",
+    budget,
+    metrics: historicalMetrics(root, revision),
+    information,
+  };
+}
+export function formatHistoryInformation(history) {
+  const info = history?.information;
+  if (!info) return "";
+  return `Health bootstrap: committed budget at ${history.ref}@${history.revision} (merge-base of HEAD and origin/dev).\nSource information only: ${info.ref}@${info.revision}: ${info.files} files, ${info.functions} bodies; ${info.overCapFiles} files over 3000, ${info.overCapFunctions} bodies over 300; non-null assertions ${info.nonNullAssertions}, skipped tests ${info.skippedTests}.\n`;
+}
 export function readHistory(root, env = process.env) {
   const ref = baselineRef(root, env),
     head = resolveRef(root, "HEAD");
@@ -90,37 +163,22 @@ export function readHistory(root, env = process.env) {
       "Health history: HEAD is missing; no authenticated baseline is available.",
     );
   }
-  const merged = ref
-    ? spawnSync("git", ["-C", root, "merge-base", "HEAD", ref], {
-        encoding: "utf8",
-      })
-    : { status: 0, stdout: head };
-  if (merged.status !== 0)
-    throw Error(
-      `Health history: no merge-base with ${ref}; fetch full history (git fetch --unshallow, or actions/checkout fetch-depth: 0).`,
-    );
-  const revision = merged.stdout.trim();
+  const revision = ref ? mergeBase(root, ref) : head;
   const metrics = historicalMetrics(root, revision),
-    committed =
-      git(root, ["ls-tree", "-z", revision, "--", "scripts/health-budget.json"])
-        .length > 0;
-  const budget = committed
-    ? upgradeBudget(
-        JSON.parse(
-          git(root, [
-            "show",
-            `${revision}:scripts/health-budget.json`,
-          ]).toString("utf8"),
-        ),
-        metrics,
-      )
-    : createBudget(metrics);
+    raw = committedBudget(root, revision);
+  const target = ref?.endsWith("/release") ? "release" : "dev";
+  if (raw === undefined)
+    return devBootstrap(
+      root,
+      target,
+      sourceInformation(ref, revision, metrics),
+    );
   return {
     revision,
     ref: ref ?? "HEAD (explicit synthetic opt-in)",
-    target: ref?.endsWith("/release") ? "release" : "dev",
-    budgetSource: committed ? "committed" : "base-source",
+    target,
+    budgetSource: "committed",
     metrics,
-    budget,
+    budget: upgradeBudget(raw, metrics),
   };
 }
