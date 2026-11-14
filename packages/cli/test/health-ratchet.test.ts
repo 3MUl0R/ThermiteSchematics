@@ -343,7 +343,7 @@ it("rejects invalid threshold configuration", () => {
   ).toThrow("Invalid health threshold: functionLines");
 });
 
-it("accept raises only reasoned regressions below ceilings and preserves other values", () => {
+it("accept raises only reasoned regressions below ceilings and banks stale allowances", () => {
   const { root, file } = fixture(
     fn("existing", 90) + "const checked = value!;\n",
   );
@@ -379,11 +379,19 @@ it("accept raises only reasoned regressions below ceilings and preserves other v
   );
   expect(regressions(current, updated)).toEqual([]);
   expect(updated.thresholds).toEqual(budget.thresholds);
-  expect(updated.files["packages/example/src/retired.ts"]).toBe(999);
-  expect(updated.functions["packages/example/src/retired.ts#old"]).toBe(100);
-  expect(updated.nonNullAssertions["packages/example/src/example.ts"]).toBe(1);
-  expect(updated.skippedTests["retired.test.ts"]).toBe(3);
-  expect(updated.duplicates["stale-group"]).toBe(5);
+  expect(updated.ceilings).toEqual(budget.ceilings);
+  expect(updated.functions["packages/example/src/example.ts#existing"]).toBe(
+    93,
+  );
+  expect(updated.files["packages/example/src/retired.ts"]).toBeUndefined();
+  expect(
+    updated.functions["packages/example/src/retired.ts#old"],
+  ).toBeUndefined();
+  expect(
+    updated.nonNullAssertions["packages/example/src/example.ts"],
+  ).toBeUndefined();
+  expect(updated.skippedTests["retired.test.ts"]).toBeUndefined();
+  expect(updated.duplicates["stale-group"]).toBeUndefined();
   const path = saveBudget(root, budget);
   const result = command(root, [
     "--accept",
@@ -397,7 +405,7 @@ it("accept raises only reasoned regressions below ceilings and preserves other v
   expect(command(root, ["--accept"]).status).toBe(0);
   expect(readFileSync(path, "utf8")).toBe(bytes);
 });
-it("accept is a byte-preserving no-op when only improvements remain", () => {
+it("accept banks improvements without a reason, then is a byte-preserving no-op", () => {
   const { root, file } = fixture(fn("existing", 90));
   const budget = createBudget(measure(root));
   writeFileSync(file, original);
@@ -405,7 +413,12 @@ it("accept is a byte-preserving no-op when only improvements remain", () => {
   const path = saveBudget(root, budget),
     bytes = readFileSync(path, "utf8");
   expect(command(root, ["--accept"]).status).toBe(0);
-  expect(readFileSync(path, "utf8")).toBe(bytes);
+  const banked = readFileSync(path, "utf8");
+  expect(banked).not.toBe(bytes);
+  expect(JSON.parse(banked).functions).toEqual({});
+  expect(JSON.parse(banked).ceilings).toEqual(budget.ceilings);
+  expect(command(root, ["--accept"]).status).toBe(0);
+  expect(readFileSync(path, "utf8")).toBe(banked);
 });
 it("excludes generator-owned sources from every metric", () => {
   const { root } = fixture(original);

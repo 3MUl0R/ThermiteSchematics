@@ -257,7 +257,7 @@ export function lowerBudget(current, budget, reference) {
   return next;
 }
 export function regressionMessage(errors) {
-  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, each authorization must match {identity, from: base value, to: current value, reason}. Release targets enforce hard invariants without composing dev reasons. --lower banks reductions and retires sub-cap/deleted records. Continuity allows at most 70 added lines. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
+  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, each authorization must match {identity, from: base value, to: current value, reason}. Release targets compare grandfathered values without cumulative content continuity or composing dev reasons. Both --accept and --lower bank reductions and retire sub-cap/deleted records. Dev continuity allows at most 70 added lines per PR. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
 }
 function grandfatherHistory(current, budget, reference) {
   const errors = [],
