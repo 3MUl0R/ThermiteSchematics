@@ -1,3 +1,4 @@
+import { continuationGeometry } from "./continuations.mjs";
 import { compactFindings } from "./findings.mjs";
 // Read-only paint audit for an already rendered compact capture. No expectations
 // or source fixtures are modified. Two caller-owned shards are the maximum.
@@ -64,6 +65,11 @@ try {
         artifactDir: join(output, "crops"),
         tag: name + "-" + sheet.number,
       });
+      const nativeCuts = await continuationGeometry(
+        census.page,
+        svg,
+        sheet.continuations,
+      );
       const gaps = [],
         banks = new Map();
       for (const l of shapes.labels) {
@@ -100,6 +106,8 @@ try {
         sheet: sheet.number,
         ...text,
         ...shapes,
+        nativeCutEndpoints: nativeCuts.endpoints,
+        nativeCutFindings: nativeCuts.findings,
         labels: undefined,
         minCutGapMm: gaps.length ? Math.min(...gaps) : null,
         cutGapFailures: gaps.filter((g) => g < 3.15 - 1e-8).length,
@@ -118,6 +126,11 @@ try {
   const summary = {
     sheets: results.length,
     findings: results.reduce((n, r) => n + r.findings, 0),
+    nativeCutFailures: results.reduce(
+      (n, r) => n + r.nativeCutFindings.length,
+      0,
+    ),
+    nativeCutEndpoints: results.reduce((n, r) => n + r.nativeCutEndpoints, 0),
     zoneTextContacts: results.reduce((n, r) => n + r.inkCollisions.length, 0),
     zoneShapeContacts: results.reduce(
       (n, r) => n + r.zoneShapeCollisions.length,

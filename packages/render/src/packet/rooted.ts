@@ -1,3 +1,14 @@
+import { hasCompactFrame } from "./frame-profile.js";
+import {
+  beginFramePlanning,
+  frameCandidate,
+  rememberFrameCandidate,
+  frameBudgetFailure,
+  frameBudgetOrder,
+  finishFramePlanning,
+  recordFrameAttempt,
+} from "./frame-budget.js";
+import { legacyFramePlacement } from "./frame-legacy-placement.js";
 import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
@@ -15,8 +26,108 @@ import {
 } from "./rooted-search.js";
 export { cuts } from "./rooted-cuts.js";
 
-/** Search owns ELK; the selected winner may then compose its existing strips. */
+/** The legacy path is unchanged; compact planning owns a separate reference page. */
 export async function drawingDrafts(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  mode: "standard" | "compact" = "standard",
+  referenceOffset = 0,
+): Promise<RenderOutcome<Draft[]>> {
+  if (!hasCompactFrame(page))
+    return selectedDrawingDrafts(
+      ir,
+      request,
+      presentation,
+      page,
+      mode,
+      referenceOffset,
+    );
+  const legacy = await selectedDrawingDrafts(
+    ir,
+    request,
+    presentation,
+    { ...page },
+    mode,
+    referenceOffset,
+  );
+  if (!legacy.ok) return legacy;
+  const reference = frameCandidate(legacy.value);
+  const ordinary = await selectedDrawingDrafts(
+    ir,
+    request,
+    presentation,
+    page,
+    mode,
+    referenceOffset,
+  );
+  beginFramePlanning(page, reference);
+  if (retainCompactPlacement(ordinary, page)) return ordinary;
+  return replanCompactDrawing(
+    ir,
+    request,
+    presentation,
+    page,
+    mode,
+    referenceOffset,
+    reference,
+  );
+}
+
+function retainCompactPlacement(
+  result: RenderOutcome<Draft[]>,
+  page: PaperPage,
+) {
+  if (!result.ok) return false;
+  const c = frameCandidate(result.value);
+  recordFrameAttempt(
+    page,
+    c.prepared,
+    c.profile,
+    c.bank,
+    c.grid,
+    c.foldGroups,
+    c.scale,
+    c.drafts.map((d) => {
+      if (!d.drawingBounds) throw Error("Missing compact field");
+      return d.drawingBounds;
+    }),
+  );
+  if (frameBudgetFailure(c, page)) return false;
+  finishFramePlanning(page, c, "existing-compact");
+  return true;
+}
+async function replanCompactDrawing(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  mode: "standard" | "compact",
+  referenceOffset: number,
+  reference: import("./rooted-build.js").RootedCandidate,
+): Promise<RenderOutcome<Draft[]>> {
+  const planned = await selectedDrawingDrafts(
+    ir,
+    request,
+    presentation,
+    page,
+    mode,
+    referenceOffset,
+  );
+  if (planned.ok && !frameBudgetFailure(frameCandidate(planned.value), page)) {
+    finishFramePlanning(page, frameCandidate(planned.value), "folded-group");
+    return planned;
+  }
+  return legacyFramePlacement(
+    reference,
+    planned.ok ? frameCandidate(planned.value) : undefined,
+    page,
+  );
+}
+
+/** Search owns ELK; the selected winner may then compose its existing strips. */
+async function selectedDrawingDrafts(
   ir: Readonly<ElectricalIr>,
   request: SchematicViewRequest,
   presentation: CompiledProjectPresentation | undefined,
@@ -49,7 +160,9 @@ export async function drawingDrafts(
     : materializeRootedCandidate(ir, winner, page);
   if (!materialized.ok) return materialized;
   winner.drafts = materialized.value;
-  const selected = composeRootedWinner(ir, winner, native, page);
+  const composed = composeRootedWinner(ir, winner, native, page);
+  const selected =
+    frameBudgetOrder(composed, winner, page) <= 0 ? composed : winner;
   const context = graphCardContext(selected.prepared.graph);
   selected.drafts[0]!.rootedFit = {
     basePages: native.drafts.length,
@@ -63,5 +176,6 @@ export async function drawingDrafts(
     ...(selected.profile ? { profile: selected.profile } : {}),
   };
   for (const draft of selected.drafts) draft.rootedBank = selected.bank;
+  rememberFrameCandidate(selected);
   return { ok: true, value: selected.drafts };
 }

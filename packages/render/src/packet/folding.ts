@@ -22,6 +22,7 @@ export function foldDrawingDrafts(
     prepared: PreparedSchematicDrawing;
     inner: string;
     profile?: "compact" | "dense";
+    groups?: readonly (readonly number[])[];
   },
 ): Draft[] {
   const pad = OUTER_SVG_PADDING,
@@ -101,7 +102,7 @@ export function foldDrawingDrafts(
         ...(r.yMm === undefined ? {} : { yMm: r.yMm - start * scale }),
       }));
   }
-  const groups = sectionGroups(heights, b.h);
+  const groups = context?.groups ?? sectionGroups(heights, b.h);
   return groups.length < drafts.length
     ? stackSections(drafts, heights, groups, b)
     : untrimmed;

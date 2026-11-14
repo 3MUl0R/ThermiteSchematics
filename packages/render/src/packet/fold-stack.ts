@@ -89,7 +89,7 @@ function append(
 export function stackSections(
   drafts: readonly Draft[],
   heights: readonly number[],
-  groups: readonly number[][],
+  groups: readonly (readonly number[])[],
   b: DrawingBounds,
   axis: FoldAxis = "y",
   gapAfter: (source: number, position: number) => number = () => SECTION_GAP,

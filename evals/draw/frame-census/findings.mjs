@@ -1,6 +1,7 @@
 /** Each paint obligation is independent. Incomplete metrics fail closed. */
 export function compactFindings(row) {
   return (
+    (row.nativeCutFindings?.length ?? 1) +
     row.inkCollisions.length +
     row.nearInk.length +
     row.laneViolations.length +

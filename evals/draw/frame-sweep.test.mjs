@@ -9,6 +9,7 @@ import { continuationGeometry } from "./frame-census/continuations.mjs";
 import { verifyFrameCounts } from "./frame-census/contracts.mjs";
 
 let browser, page, ir, presentation, template, narrow, folded;
+let narrowPlanning, foldedPlanning;
 beforeAll(async () => {
   const project = fileURLToPath(
     new URL("../../examples/machine-demo/", import.meta.url),
@@ -35,6 +36,9 @@ beforeAll(async () => {
       layout: "standard",
     },
     presentation,
+    (r) => {
+      narrowPlanning = r;
+    },
   );
   expect(narrow.ok, JSON.stringify(narrow)).toBe(true);
   folded = await renderCompactBenchmark(
@@ -45,6 +49,9 @@ beforeAll(async () => {
       layout: "compact",
     },
     presentation,
+    (r) => {
+      foldedPlanning = r;
+    },
   );
   expect(folded.ok, JSON.stringify(folded)).toBe(true);
   browser = await launch();
@@ -145,4 +152,71 @@ it("M-N1-LEGAL: an impossible protected-width case refuses atomically", async ()
   if (result.ok) return;
   expect(result.error.message).toMatch(/protected width .*exceeds/);
   expect("value" in result).toBe(false);
+});
+
+it("plans the folded A3 banks within each sheet's field budget before considering legacy placement", () => {
+  for (const receipts of [narrowPlanning, foldedPlanning]) {
+    expect(receipts.length).toBeGreaterThan(0);
+    for (const r of receipts) {
+      expect(r.candidates.length).toBeGreaterThan(0);
+      expect(r.sheets.length).toBe(r.referenceFields.length);
+      expect(
+        r.candidates.every((c) => c.fields.length === c.losses.length),
+      ).toBe(true);
+      expect(
+        r.sheets.every(
+          (s) =>
+            s.lossPercent <= 2 &&
+            s.strategy !== "legacy-continuation-placement",
+        ),
+      ).toBe(true);
+      expect(r.candidates.every((c) => c.scale === r.referenceScale)).toBe(
+        true,
+      );
+      expect(r.fallback).toBeUndefined();
+    }
+  }
+  const affected = foldedPlanning.find(
+    (r) => r.view.root.designation === "LS1",
+  );
+  expect(affected.sheets).toHaveLength(1);
+  expect(affected.sheets[0].strategy).toBe("folded-group");
+  expect(affected.sheets[0].lossPercent).toBe(0);
+  expect(affected.termination).toBe("zero-loss-lower-bound");
+  const chosen = affected.candidates.find(
+    (c) => c.id === affected.sheets[0].candidate,
+  );
+  expect(chosen.groups).toEqual([[0, 1]]);
+  expect(chosen.failure).toBeUndefined();
+});
+
+it("retains both finite per-side legal reservation fallbacks for the narrow repeat view", async () => {
+  const { prepareSchematicDrawing } =
+    await import("../../packages/render/src/renderer.js");
+  const { continuationBanks } =
+    await import("../../packages/render/src/packet/continuation-bank.js");
+  const { rootedSpace } =
+    await import("../../packages/render/src/packet/rooted-build.js");
+  const { normalizePaperPage } =
+    await import("../../packages/render/src/packet/page.js");
+  const { useCompactFrame } =
+    await import("../../packages/render/src/packet/frame-profile.js");
+  const request = template.views.find((v) => v.root?.value === "LS1");
+  const prepared = await prepareSchematicDrawing(ir, request, presentation, {
+    packetContinuations: true,
+  });
+  expect(prepared.ok).toBe(true);
+  if (!prepared.ok) return;
+  const paper = normalizePaperPage({ size: "a3", orientation: "landscape" });
+  expect(paper.ok).toBe(true);
+  if (!paper.ok) return;
+  useCompactFrame(paper.value);
+  const { b, scale } = rootedSpace(prepared.value, paper.value, false);
+  const banks = continuationBanks(prepared.value, b, scale, 0, true);
+  for (const extra of [1.7, 3.5])
+    expect(
+      banks.some(
+        (bank) => bank.extra?.left === extra && bank.extra?.right === extra,
+      ),
+    ).toBe(true);
 });

@@ -141,6 +141,7 @@ it("rejects bottom digits with less than half a millimetre of painted clearance"
 
 it("enforces the half-millimetre gate independently of zero overlap counts", () => {
   const clean = {
+    nativeCutFindings: [],
     inkCollisions: [],
     nearInk: [],
     laneViolations: [],
@@ -152,6 +153,13 @@ it("enforces the half-millimetre gate independently of zero overlap counts", () 
     bottomRuleClearanceMm: 0.5,
   };
   expect(compactFindings(clean)).toBe(0);
+  expect(
+    compactFindings({
+      ...clean,
+      nativeCutFindings: [{ kind: "stub-not-on-visible-owned-route" }],
+    }),
+  ).toBe(1);
+  expect(compactFindings({ ...clean, nativeCutFindings: undefined })).toBe(1);
   expect(compactFindings({ ...clean, bottomRuleClearanceMm: 0.499 })).toBe(1);
   expect(compactFindings({ ...clean, bottomRuleClearanceMm: NaN })).toBe(1);
 });

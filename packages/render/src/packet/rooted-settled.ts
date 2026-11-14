@@ -1,3 +1,5 @@
+import { hasCompactFrame } from "./frame-profile.js";
+import { frameContext, frameZeroLoss } from "./frame-budget.js";
 import { localityRegression } from "./rooted-locality.js";
 import { routeGrowth } from "./rooted-clipped-routes.js";
 import {
@@ -16,6 +18,9 @@ export function searchSettled(run: RootedSearch, page: PaperPage): boolean {
   return (
     !!candidate &&
     !!baseline &&
+    (!hasCompactFrame(page) ||
+      !frameContext(page, candidate.prepared.view) ||
+      frameZeroLoss(candidate, page)) &&
     !localityRegression(candidate, run.localityReference) &&
     candidate.drafts.length <= baseline.drafts.length &&
     newJogs(candidate, baseline.jogs) === 0 &&

@@ -1,3 +1,4 @@
+import { frameContext } from "./frame-budget.js";
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
@@ -166,6 +167,21 @@ export async function searchRootedCandidates(
       ? ([undefined, "compact", "dense"] as const)
       : [undefined]) {
       await initial(ir, request, presentation, page, profile, run);
+    }
+    const reference =
+      run.prepared[0] && frameContext(page, run.prepared[0].p.view)?.reference;
+    if (reference) {
+      const seeded = buildRootedCandidates(
+        ir,
+        reference.prepared,
+        page,
+        reference.profile,
+        false,
+        true,
+        referenceOffset,
+        true,
+      );
+      if (seeded.ok) run.candidates.push(...seeded.value);
     }
     validateEconomyCandidate(ir, run, page);
     if (searchSettled(run, page)) {
