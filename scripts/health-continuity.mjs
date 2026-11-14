@@ -142,16 +142,27 @@ export function allowanceMatches(current, budget, reference) {
       continue;
     }
     const used = new Set(),
-      rows = candidates(section, current, budget, reference);
+      rows = candidates(section, current, budget, reference),
+      owners = new Map(
+        Object.entries(reference.budget.grandfathered[section])
+          .filter(([, n]) => n > budget.ceilings[sizeKey(section)])
+          .map(([id]) => [
+            sourceBody(section, id, reference.budget, reference.metrics),
+            id,
+          ]),
+      );
     for (const row of rows) {
       if (used.has(row.id) || result[section][row.key]) continue;
-      // Already consumed bodies are no longer candidates. This preserves a
-      // grandfathered inner body's own row once its outer body is matched.
+      // A containing body's authenticated grandfathered location belongs to
+      // its own entry; it cannot exclude another entry's nested body. Consumed
+      // bodies are likewise no longer competing candidates.
       if (
         section === "functions" &&
         rows.some(
           (other) =>
-            !result[section][other.key] && nestedCandidate(row, other, current),
+            !result[section][other.key] &&
+            !(owners.has(other.key) && owners.get(other.key) !== row.id) &&
+            nestedCandidate(row, other, current),
         )
       )
         continue;
