@@ -116,6 +116,7 @@ it("rejects both jog-bearing proposals against the final reference and keeps the
   expect(decisions).toMatchObject([
     { branchRequests: 2, qualityRequests: 2, accepted: false },
   ]);
+  expect(trials.map((trial) => trial.packetAllowed)).toEqual([false, true]);
   for (const trial of trials) {
     expect(routeGrowth(trial.candidate, trial.reference, false)).toEqual([
       1, 1.5, 0, 0,
@@ -124,7 +125,6 @@ it("rejects both jog-bearing proposals against the final reference and keeps the
       1, 1.5, 0, 0,
     ]);
     expect(trial.routesAllowed).toBe(false);
-    expect(trial.packetAllowed).toBe(true);
     expect(
       foldCandidateAllowed(
         fixture.ir,

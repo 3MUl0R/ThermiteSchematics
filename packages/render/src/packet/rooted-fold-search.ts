@@ -25,6 +25,7 @@ import {
   powerRouteGraph,
 } from "../layout/power-placement-guard.js";
 import { circuitCrossingGuard } from "../layout/circuit-native-guard.js";
+import { circuitConductorNonRegression } from "../layout/circuit-route-quality.js";
 import { routeGrowth } from "./rooted-clipped-routes.js";
 import { compositionFits } from "./composition-fit.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
@@ -178,6 +179,10 @@ export function foldCandidateAllowed(
     [false, true].every(
       (clipped) =>
         routeGrowth(candidate, original, clipped).every((n) => n === 0) &&
+        circuitConductorNonRegression(
+          powerRouteGraph(candidate, clipped),
+          powerRouteGraph(original, clipped),
+        ) &&
         circuitCrossingGuard(
           powerRouteGraph(candidate, clipped),
           powerRouteGraph(original, clipped),

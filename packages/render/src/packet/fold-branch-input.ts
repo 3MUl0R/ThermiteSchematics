@@ -74,7 +74,7 @@ export function foldBranchInput<T extends ElkNode>(
         if (label.id && labels.has(label.id))
           label.layoutOptions = {
             ...label.layoutOptions,
-            [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL",
+            [ELK_OPTIONS.edgeLabelsPlacement]: "CENTER",
           };
   };
   visit(copy);
