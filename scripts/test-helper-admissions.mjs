@@ -55,6 +55,9 @@ export function guardedAssertion(node, fn) {
         ts.SyntaxKind.AmpersandAmpersandToken,
         ts.SyntaxKind.BarBarToken,
         ts.SyntaxKind.QuestionQuestionToken,
+        ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+        ts.SyntaxKind.BarBarEqualsToken,
+        ts.SyntaxKind.QuestionQuestionEqualsToken,
       ].includes(parent.operatorToken.kind)
     )
       guarded = true;
