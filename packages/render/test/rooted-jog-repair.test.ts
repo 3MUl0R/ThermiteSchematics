@@ -12,6 +12,7 @@ import * as compose from "../src/packet/rooted-compose.js";
 import * as fit from "../src/packet/composition-fit.js";
 import * as score from "../src/packet/rooted-score.js";
 import { sideCandidate, sidePage } from "./helpers/side-candidate.js";
+import { required } from "../src/presentation/util.js";
 
 const ir = {} as ElectricalIr;
 afterEach(() => vi.restoreAllMocks());
@@ -53,6 +54,31 @@ function fixture() {
   vi.spyOn(compose, "composeRootedWinner").mockImplementation((_ir, c) => c);
   return { original, candidate, run, layout, check };
 }
+it("does not dispatch a retry for a printed turn inside CHECK's numerical band", async () => {
+  const { original, run, layout } = fixture();
+  const edge = required(original.prepared.layout.edges[0], "Fixture route");
+  const dy = 2.999999 / original.scale;
+  const points = [
+    { x: 100, y: 60 },
+    { x: 150, y: 60 },
+    { x: 150, y: 60 + dy },
+    { x: 170, y: 60 + dy },
+  ];
+  original.prepared = {
+    ...original.prepared,
+    layout: {
+      ...original.prepared.layout,
+      edges: original.prepared.layout.edges.map((e) =>
+        e === edge ? { ...e, points } : e,
+      ),
+    },
+  };
+  expect(await repairRootedJogs(ir, original, original, sidePage, run)).toBe(
+    original,
+  );
+  expect(layout).not.toHaveBeenCalled();
+  expect(run.attempts).toBe(0);
+});
 it("charges the retry to the existing budget and keeps the source drawing immutable", async () => {
   const { original, candidate, run, layout } = fixture(),
     before = structuredClone(original);
