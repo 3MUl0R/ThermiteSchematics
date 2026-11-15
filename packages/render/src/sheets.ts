@@ -75,6 +75,7 @@ import { printPacketHtml } from "./packet/html.js";
 export { printPacketHtml } from "./packet/html.js";
 
 import { tableDrafts } from "./packet/reports.js";
+import { contextualRenderOutcome } from "./render-diagnostic-context.js";
 
 async function renderPacket(
   ir: Readonly<ElectricalIr>,
@@ -537,8 +538,19 @@ export function renderSchematicPacket(
   presentation?: Readonly<CompiledProjectPresentation>,
   options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withFontMetricCache(() =>
-    renderPacketWithAdvice(ir, request, presentation, true, undefined, options),
+  return withFontMetricCache(async () =>
+    contextualRenderOutcome(
+      ir,
+      request,
+      await renderPacketWithAdvice(
+        ir,
+        request,
+        presentation,
+        true,
+        undefined,
+        options,
+      ),
+    ),
   );
 }
 export function renderSchematicSheets(
@@ -548,17 +560,21 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withFontMetricCache(() =>
-    renderPacketWithAdvice(
+  return withFontMetricCache(async () =>
+    contextualRenderOutcome(
       ir,
-      {
-        ...options,
-        format: "schematic-packet-request/0.1",
-        ...(page === undefined ? {} : { page }),
-        views: [view],
-      },
-      presentation,
-      false,
+      view,
+      await renderPacketWithAdvice(
+        ir,
+        {
+          ...options,
+          format: "schematic-packet-request/0.1",
+          ...(page === undefined ? {} : { page }),
+          views: [view],
+        },
+        presentation,
+        false,
+      ),
     ),
   );
 }
