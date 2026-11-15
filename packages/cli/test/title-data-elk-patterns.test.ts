@@ -52,16 +52,16 @@ it.each([
   ["nested array rest", "let r={}; [...[{...r}]] = [w.c];"],
   [
     "array rest offset",
-    "let r={}; let first:unknown; [first,...[{...r}]] = [0,w.c];",
+    "let r={}; let first:unknown; [first,...[{...r}]] = [0,w.c]; void first;",
   ],
   [
     "nested array element offset",
-    "let r={}; let first:unknown; [first,{...r}] = [0,w.c];",
+    "let r={}; let first:unknown; [first,{...r}] = [0,w.c]; void first;",
   ],
   ["array index source", "let r={}; for ([{...r}] of [[w.c]]);"],
   [
     "for-of nested object and array",
-    "let e=(_v:unknown)=>{}; function rows():{a:[Ctx]}[]{return [{a:[w.c]}];} for ({a:[{enterWith:e}]} of rows());",
+    "let e=(_v:unknown)=>{}; function rows():{a:[Ctx]}[]{return [{a:[w.c]}];} for ({a:[{enterWith:e}]} of rows()); void e;",
   ],
   [
     "nullable source before default",
@@ -69,9 +69,12 @@ it.each([
   ],
   [
     "assignment default",
-    "let e=(_v:unknown)=>{}; ({a:{enterWith:e}=w.c} = {});",
+    "let e=(_v:unknown)=>{}; ({a:{enterWith:e}=w.c} = {}); void e;",
   ],
-  ["array default", "let e=(_v:unknown)=>{}; [{enterWith:e}=w.c] = [];"],
+  [
+    "array default",
+    "let e=(_v:unknown)=>{}; [{enterWith:e}=w.c] = []; void e;",
+  ],
   [
     "default source with an empty target",
     "let r={}; ({a:{...r}={}} = {a:w.c});",
@@ -89,7 +92,9 @@ it.each([
 });
 it("audits a for-in pattern even though TypeScript also rejects that syntax", () => {
   const input =
-    source + prelude + "let e=(_v:unknown)=>{}; for ({enterWith:e} in {});";
+    source +
+    prelude +
+    "let e=(_v:unknown)=>{}; for ({enterWith:e} in {}); void w; void e;";
   expect(
     diagnostics(input)
       .filter((d) => !baseline.has(d.text))

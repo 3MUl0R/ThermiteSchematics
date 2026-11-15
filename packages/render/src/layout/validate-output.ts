@@ -6,7 +6,7 @@ import {
 } from "./context-reference-layout.js";
 import { validateCompoundRegions } from "./compound-regions.js";
 import { contextJunctionInk } from "./context-reference-ink.js";
-import { terminalContextAttachment } from "../terminal-context-reference.js";
+import "../terminal-context-reference.js";
 import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { layoutLabelInk } from "./label-bounds.js";

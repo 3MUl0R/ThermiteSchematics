@@ -55,10 +55,11 @@ it("rejects the C7e cbe6108 substitution: 1008 to 993 non-null, 17 points of fal
   ).toBe(17);
   expect(regressions(current, budget, reference)).toEqual([
     expect.stringContaining("Type assertion allowance requires exact reason"),
+    expect.stringContaining("type assertions 0 -> 15"),
   ]);
   expect(() =>
     acceptBudget(current, budget, "not an implicit cast allowance", reference),
-  ).toThrow("Type assertion");
+  ).toThrow("cannot rise");
   const result = run(root);
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("0 -> 15");
@@ -111,7 +112,7 @@ it("round 2 rejects re-adding 15 casts under a stale reason from the base", () =
   ]);
   expect(() =>
     acceptBudget(current, budget, "generic reason", reference),
-  ).toThrow("Type assertion");
+  ).toThrow("cannot rise");
   const rejected = run(root);
   expect(rejected.status).toBe(1);
   expect(rejected.stderr).toContain("Type assertion");
@@ -124,7 +125,9 @@ it("round 2 rejects re-adding 15 casts under a stale reason from the base", () =
   });
   expect(typeAssertionRegressions(current, budget, reference)).toEqual([]);
   save(root, budget);
-  expect(run(root).status).toBe(0);
+  const stillRejected = run(root);
+  expect(stillRejected.status).toBe(1);
+  expect(stillRejected.stderr).toContain("type assertions");
 });
 it("requires a new appended cast record with the authenticated base count", () => {
   const root = repo(),

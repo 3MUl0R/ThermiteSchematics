@@ -307,7 +307,7 @@ one-time migration uses the budget committed at `merge-base(HEAD, origin/dev)`.
 That budget must exist and validate in the current format; there is no upgrade,
 source re-seed, local-dev fallback or PR-head fallback for this authority. The PR
 base source is still measured and printed as information only. All hard invariants
-use the committed dev bootstrap; the PR target still selects the reason tier.
+use the committed dev bootstrap; per-identity monotonicity applies to both targets.
 Once release has a committed budget, comparison uses that release base normally.
 Existing committed v2/v3 budgets on the normal path retain their migration rules.
 Version 4 retires old sub-cap records and ignores legacy string reasons.
@@ -330,33 +330,92 @@ per-item policy. A recreated body must also stay under the global cap. On releas
 each over-cap body/file still needs an active entry whose value does not exceed
 the base entry. Its current fingerprint and location must be valid, and cross-file
 moves still need proof; reviewed dev swaps are not cumulatively limited to 70.
-`health:accept` automatically banks stale allowances downward before authorizing
-raises, including reductions inherited from a rebase. Lowering needs no reason.
+`health:accept` banks stale allowances downward, including reductions inherited
+from a rebase. It cannot raise an existing identity. Lowering needs no reason.
 
-| Action                 | Command / rule                                                                                                                                                                                                                                     |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Check                  | `bun run check:health`                                                                                                                                                                                                                             |
-| Bank reductions        | `bun run health:lower`; refuses regressions, lowers counters/entries, refreshes content fingerprints and retires deleted/sub-cap allowances                                                                                                        |
-| Accept reviewed growth | `bun run health:accept --reason "specific reason"`; only under ceilings; records `{identity, from, to, reason}`, with `from` equal to the base budget and `to` equal to the current value and budget; list each raise in the PR                    |
-| Move an allowance      | Add `moves[newIdentity] = {section, from, sha256}` in health-budget.json; section is `files` or `functions`, hash comes from `measure().fileHashes` or `bodyHashes` on the base; old identity must be absent, new bytes/normalized body must match |
+| Action                | Command / rule                                                                                                                                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Check                 | `bun run check:health`                                                                                                                                                                                                                           |
+| Bank reductions       | `bun run health:lower`; refuses regressions, lowers counters/entries, refreshes content fingerprints and retires deleted/sub-cap allowances                                                                                                      |
+| Record a new identity | `bun run health:accept --reason "specific reason"`; only for a new identity within policy (files ≤3,000, functions ≤300; other counters default to zero, duplicates to one). Existing numeric allowances cannot rise, even with an exact reason. |
+| Move an allowance     | Record `moves[newIdentity] = {section, from, sha256}` (or use `section:newIdentity` to disambiguate counters sharing a file). New bytes/normalized body must match the base, and the source identity must be absent.                             |
 
-A move proof transfers one identity once. A grandfathered allowance transfers at
-equal or lower value; the old location leaves no tombstone. Cross-file under-cap
-outlier moves also need proof. Same-file grandfathered callback shifts use content
-matching. Normalized hashes preserve identifiers, strings, templates and regex
-contents while dropping trivia. A copy plus an edit is not a move: the source
-identity must be absent. Against dev, a reason from an earlier raise cannot
-authorize later growth: its exact base/current values must match. Release
-targets check ceilings, grandfathered values and move validity without
-per-item reason composition. Ratchet tests are in
-`packages/cli/test/health-*.test.ts`, including real-body 70/71-line headroom probes.
+Every numeric section is monotone against the authenticated base, on both dev
+and release: files, functions, non-null expressions, casts, definite-assignment
+declarations, skipped tests and duplicate groups. A move must also remove at least
+the destination allowance's value from its recorded source allowance in this
+change. Retaining a stale source record or reusing a source reduction fails.
+
+An ordinary size allowance also follows a substantial continuation when its
+budgeted base identity loses content to new identities, including across files.
+Every budgeted source is considered, even if it stays above 850/70 lines;
+keeping a decoy or compatibility wrapper cannot reset the cap. A source keeping
+at least 80% of its old normalized lines is intact and is not a continuation
+origin. Otherwise its retained lines contribute to the split, and its remaining
+numeric allowance is charged against the shared cap. Each candidate part must retain
+at least 20% of the old normalized lines; the parts together must retain at least
+80%. Line intersections consume occurrences, so repeated lines do not create
+extra retained content. File lines are trimmed nonempty text (including comments);
+function lines are trivia-free AST tokens grouped by line, excluding brace-only
+lines. Metadata covers small bodies too, so a stale allowance cannot evade this
+rule after its source shrinks below the ordinary threshold.
+Eligibility is established before ownership is assigned, so a weak ancestor
+cannot steal a matching inner body. Retention uses disjoint current body views
+(most shared lines, then fewest added lines), avoiding nested double counting.
+
+All numeric allowances in a matching group share the source allowance, including
+any stale record retained at the old key. A new part above 850/70 needs an allowance;
+an ordinary unbudgeted helper at or below that threshold consumes no numeric grant.
+The shared cap includes a fixed **3 physical lines per new above-threshold
+continuation part**, for both functions and files. The named constant
+`SPLIT_PART_OVERHEAD_LINES` covers a header, closing brace and call site, or the
+import/export lines of a file split. It is not configurable and is not stored in
+the budget. Small unbudgeted parts earn no overhead credit. For example, a
+200-line function may split into 103 + 100 under a shared cap of 203; adding one
+more physical line exceeds that cap. This credit needs no separate reason and
+does not waive the normal reason requirements for a new allowance. All parts
+must also meet the normal 3,000/300 ceilings; anything beyond the shared cap plus
+this fixed overhead is ordinary growth.
+Content-ranked ownership reserves separately budgeted nested functions; a parent
+and child do not consume the same group's credit twice. Remaining ambiguous
+origins each impose their own constraint, without pooling extra allowances.
+An authenticated verbatim move selects its recorded source instead of an
+overlapping candidate; the existing funding ledger still checks its reduction.
+Sorting and multiset comparisons make the result independent of object or line
+order. This is a static similarity policy, not semantic identity: content below
+the 80% collective threshold is new. The history measurements and positive
+extraction/boilerplate controls are recorded with the HEALTH-8 review receipts.
+
+For a counted construct extracted while its source file remains, the
+section-qualified proof additionally names `sourceBody` and `targetBody`.
+Their normalized body hashes must equal `sha256`; the old body must be absent.
+Its hash must also be absent throughout the source file, preventing a renamed
+copy from being credited as a move.
+All of the destination file's counted constructs must belong to that body,
+and the source file's measured count must fall accordingly. A shared credit
+ledger prevents double spending. Retain an exact fresh reason such as
+`moved verbatim from <file> by HEALTH-8 extraction` for every transferred counter;
+the reason alone grants no allowance. Whole-file moves retain the original
+file-hash proof. Verbatim duplicate bodies keep the same content identity.
+
+Historical reasons remain readable and append-only; they never authorize an
+existing allowance to grow. Normalized body hashes retain identifiers, strings,
+templates and regex contents while dropping trivia. Same-file grandfathered
+callback shifts still use the content matcher and its 70-added-line dev limit.
+Release grandfather entries compare by value without composing dev edits, but
+all ordinary numeric allowances obey the same monotonicity rule. Ratchet tests
+are in `packages/cli/test/health-*.test.ts`.
+
+Casts already had a measured implicit per-file allowance. Version 4 now stores
+it explicitly in `typeAssertions`, seeded only from authenticated baseline source
+when an older budget lacks the section. Removing the section cannot reseed it
+from PR-head counts.
 
 Definite-assignment declarations (`let value!: T` and class fields `value!: T`)
 have a separate `definiteAssignments` counter, including tests. Its initial
 per-file baseline and global ceiling are measured from authenticated base source
 when reading an older v4 budget. The committed migration records that baseline
-with a reason; the ceiling can only fall. It follows the existing per-item
-reason and lowering rules. Expression non-null counts retain their old scope.
+with a reason; the ceiling can only fall. It follows the same monotone per-item and lowering rules. Expression non-null counts retain their old scope.
 Only a fully absent counter section migrates; partial sections fail validation.
 The counters do not detect empty type-predicate/assertion functions or `any`-typed
 bindings that drop optionality; those remain review responsibilities.

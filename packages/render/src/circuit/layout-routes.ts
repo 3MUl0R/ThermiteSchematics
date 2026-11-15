@@ -63,7 +63,7 @@ export function appendCircuitRoute(
   e: ElkExtendedEdge,
   state: CircuitRouteState,
 ) {
-  const { cs, group, nodes, laidNodes, routes, wireSvg, labels, n } = state;
+  const { cs, group, routes, wireSvg, labels, n } = state;
   const index = Number(e.id.slice(1)),
     c = cs[index];
   if (!c || e.sections?.length !== 1)

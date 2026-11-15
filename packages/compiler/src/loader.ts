@@ -1,3 +1,8 @@
+import {
+  isAbsoluteGlob,
+  hasParentSegment,
+  libraryPatternEscapesRoot,
+} from "./loader-patterns.js";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
@@ -9,7 +14,6 @@ import {
   relative,
   resolve,
   sep,
-  win32,
 } from "node:path";
 
 import {
@@ -385,40 +389,6 @@ export async function canonicalizeMatchedFile(
       identityKey: `path:${canonicalPath}`,
     };
   }
-}
-
-function isAbsoluteGlob(pattern: string): boolean {
-  return posix.isAbsolute(pattern) || win32.isAbsolute(pattern);
-}
-
-function hasParentSegment(pattern: string): boolean {
-  return pattern.split("/").includes("..");
-}
-
-function libraryPatternEscapesRoot(pattern: string): boolean {
-  let depth = 0;
-
-  for (const segment of pattern.split("/")) {
-    if (segment === "" || segment === ".") {
-      continue;
-    }
-
-    if (segment === "..") {
-      if (depth === 0) {
-        return true;
-      }
-
-      depth -= 1;
-      continue;
-    }
-
-    // A globstar may consume zero segments, so it cannot establish containment.
-    if (segment !== "**") {
-      depth += 1;
-    }
-  }
-
-  return false;
 }
 
 function unmatchedGlobDiagnostic(

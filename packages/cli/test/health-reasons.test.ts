@@ -11,38 +11,32 @@ import {
   appendedReasonMatches,
 } from "../../../scripts/health-reasons.mjs";
 import { fn, repo, put, metrics } from "./health-fixture.js";
-it("appends successive raises and partial reductions without replacing their reasons", () => {
+it("retains historical raise records losslessly while banking a reduction", () => {
   const root = repo(),
     path = "packages/example/src/history.ts",
     id = "functions:" + path + "#existing";
-  put(root, path, fn(80));
+  put(root, path, fn(95));
   const base = metrics(root),
     budget = createBudget(base);
-  put(root, path, fn(90));
-  const ninety = metrics(root),
-    first = acceptBudget(ninety, budget, "first", { budget, metrics: base });
-  put(root, path, fn(95));
-  const second = acceptBudget(metrics(root), first, "second", {
-    budget: first,
-    metrics: ninety,
-  });
-  expect(second.reasons[id]).toEqual([
+  budget.reasons[id] = [
     { identity: id, from: 80, to: 90, reason: "first" },
     { identity: id, from: 90, to: 95, reason: "second" },
-  ]);
+  ];
   put(root, path, fn(93));
   const current = metrics(root),
-    next = lowerBudget(current, second, { budget: first, metrics: ninety });
-  expect(next.reasons[id]).toEqual([
-    ...second.reasons[id],
-    { identity: id, from: 90, to: 93, reason: "second" },
-  ]);
-  expect(historyRegressions(current, next, first, ninety)).toEqual([]);
+    next = lowerBudget(current, budget, { budget, metrics: base });
+  expect(next.functions[path + "#existing"]).toBe(93);
+  expect(next.reasons[id]).toEqual(budget.reasons[id]);
+  expect(historyRegressions(current, next, budget, base)).toEqual([]);
   const forged = structuredClone(next);
   forged.reasons[id].shift();
-  expect(reasonHistoryRegressions(forged, first).join()).toContain(
+  expect(reasonHistoryRegressions(forged, budget).join()).toContain(
     "must append",
   );
+  put(root, path, fn(96));
+  expect(() =>
+    acceptBudget(metrics(root), budget, "third", { budget, metrics: base }),
+  ).toThrow("cannot rise");
 });
 it("migrates v4 single reason records losslessly and leaves arrays idempotent", () => {
   const old = {

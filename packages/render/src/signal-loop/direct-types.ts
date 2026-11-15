@@ -1,5 +1,4 @@
 import type {
-  ElectricalIr,
   IrDevice,
   IrDeviceType,
   IrFunction,

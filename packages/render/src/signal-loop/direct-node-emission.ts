@@ -10,18 +10,7 @@ export function emitDirectLoopNodes(
   out: string[],
   context: LoopNodeContext,
 ) {
-  const {
-    stages,
-    devices,
-    types,
-    vertical,
-    tags,
-    captions,
-    pinRows,
-    ports,
-    n,
-    selected,
-  } = context;
+  const { stages, devices, types, ports, selected } = context;
   const references = [];
   for (const node of graph.children ?? []) {
     const index = Number(node.id.slice(1)),

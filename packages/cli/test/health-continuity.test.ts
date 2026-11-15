@@ -284,7 +284,7 @@ it("runThermite +5 lines is accepted with a reason after its sub-cap record reti
   ]);
   expect(result.status, result.stderr).toBe(0);
 });
-it("a banked sub-cap outlier can grow again under the ordinary per-item policy", () => {
+it("a retired sub-cap outlier cannot raise its ordinary allowance", () => {
   const root = repo();
   put(root, file, fn(380));
   const before = metrics(root),
@@ -293,13 +293,13 @@ it("a banked sub-cap outlier can grow again under the ordinary per-item policy",
   const base = metrics(root),
     retired = lowerBudget(base, budget, { budget, metrics: before });
   put(root, file, fn(205));
-  const current = metrics(root),
-    next = acceptBudget(current, retired, "normal under-cap growth", {
+  expect(retired.grandfathered.functions).toEqual({});
+  expect(() =>
+    acceptBudget(metrics(root), retired, "under-cap growth", {
       budget: retired,
       metrics: base,
-    });
-  expect(next.grandfathered.functions).toEqual({});
-  expect(historyRegressions(current, next, retired, base)).toEqual([]);
+    }),
+  ).toThrow("cannot rise");
 });
 it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 budget", () => {
   const root = repo(),
@@ -307,12 +307,19 @@ it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 bud
   put(root, path, "// lines\n".repeat(1334));
   const original = metrics(root),
     first = createBudget(original);
+  expect(first.files[path]).toBe(1334);
   put(root, path, "// lines\n".repeat(1369));
   const base = metrics(root),
-    budget = acceptBudget(base, first, "original extraction", {
-      budget: first,
-      metrics: original,
-    });
+    budget = createBudget(base);
+  // Authenticate a historical grant, not a grant made by the current policy.
+  budget.reasons[`files:${path}`] = [
+    {
+      identity: `files:${path}`,
+      from: 1334,
+      to: 1369,
+      reason: "original extraction",
+    },
+  ];
   expect(budget.reasons[`files:${path}`]).toEqual([
     {
       identity: `files:${path}`,
@@ -337,19 +344,14 @@ it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 bud
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("needs exact reason");
   result = run(root, ["--accept", "--reason", "specific second raise"]);
-  expect(result.status, result.stderr).toBe(0);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("cannot rise");
   const current = JSON.parse(
     readFileSync(root + "/scripts/health-budget.json", "utf8"),
   );
-  expect(current.reasons[`files:${path}`]).toEqual([
-    ...budget.reasons[`files:${path}`],
-    {
-      identity: `files:${path}`,
-      from: 1369,
-      to: 2869,
-      reason: "specific second raise",
-    },
-  ]);
+  expect(current.reasons[`files:${path}`]).toEqual(
+    budget.reasons[`files:${path}`],
+  );
 });
 it("rejects copy plus edit of runSchematicCommand as a move, against either target", () => {
   const text = readFileSync(

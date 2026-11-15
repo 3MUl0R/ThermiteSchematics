@@ -731,7 +731,7 @@ function pnpTraceFirstSignalEdgeId(
 
 export function buildElkAdapterGraph(
   graph: Readonly<PresentationGraph>,
-  selected?: Readonly<SelectedSubgraph>,
+  _selected?: Readonly<SelectedSubgraph>,
 ): ElkAdapterBuild {
   invariant(
     graph.format === "schematic-presentation/0.1",

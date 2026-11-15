@@ -718,8 +718,10 @@ export function emitReportRow(
   inlineLocations = false,
 ): string[] {
   const content: string[] = [];
-  const { cellSize, baseline, lineHeight, insets, noteHeight, headerNote } =
-    geometry(cells, heading);
+  const { cellSize, baseline, lineHeight, insets, headerNote } = geometry(
+    cells,
+    heading,
+  );
   const regions = reportCellRegions(
     cells,
     widths,

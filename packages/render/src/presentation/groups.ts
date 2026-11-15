@@ -20,7 +20,7 @@ import {
 } from "../ordering.js";
 
 export function buildGroups(
-  context: PresentationContext,
+  _context: PresentationContext,
   representations: readonly SymbolRepresentation[],
 ): PresentationGroups {
   const devices = new Map<string, IrDevice>();

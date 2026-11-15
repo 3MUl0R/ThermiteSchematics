@@ -15,13 +15,9 @@ import {
   printableSlotWidth,
   printableFitAttributes,
 } from "../symbols/printable-font.js";
-import type {
-  ElectricalIr,
-  ConductiveElementId,
-  TerminalId,
-} from "@thermite/compiler";
+import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 
-import { comparePresentationLabel, compareText } from "../ordering.js";
+import { comparePresentationLabel } from "../ordering.js";
 import {
   OUTER_SVG_PADDING,
   SYMBOL_CATALOG,

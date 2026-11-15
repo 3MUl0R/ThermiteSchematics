@@ -13,6 +13,7 @@ export const SECTIONS = [
   "files",
   "functions",
   "nonNullAssertions",
+  "typeAssertions",
   "definiteAssignments",
   "skippedTests",
   "duplicates",
@@ -74,7 +75,10 @@ export function validateBudget(budget) {
     )
       throw Error(`Invalid health threshold: ${key}`);
   for (const section of SECTIONS)
-    if (section !== "definiteAssignments" || budget[section] !== undefined)
+    if (
+      !["definiteAssignments", "typeAssertions"].includes(section) ||
+      budget[section] !== undefined
+    )
       numericMap(budget[section], section);
   if (
     (budget.definiteAssignments === undefined) !==
@@ -136,6 +140,7 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
   }
   for (const section of [
     "nonNullAssertions",
+    "typeAssertions",
     "definiteAssignments",
     "skippedTests",
   ])
@@ -149,15 +154,28 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
   );
   return sorted(Object.entries(result));
 }
+export function seedTypeAssertions(budget, metrics) {
+  if (budget.typeAssertions !== undefined) return budget;
+  // The former implicit per-file count becomes explicit from authenticated
+  // baseline source, never from a PR head that deletes its own counter map.
+  return {
+    ...budget,
+    typeAssertions: sorted(
+      Object.entries(valuesOf(metrics, "typeAssertions")).filter(
+        ([, n]) => n > 0,
+      ),
+    ),
+  };
+}
+function seedCounters(budget, metrics) {
+  return seedTypeAssertions(seedDefiniteAssignments(budget, metrics), metrics);
+}
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
 export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
   if (raw.version === 4) {
     validateBudget(raw);
-    return seedDefiniteAssignments(
-      migrateReasonLists(raw),
-      declarationBaseline,
-    );
+    return seedCounters(migrateReasonLists(raw), declarationBaseline);
   }
   if (raw.version === 2) return createBudget(metrics, raw.thresholds);
   if (raw.version !== 3) throw Error("Unsupported health budget version");
@@ -188,8 +206,5 @@ export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
       Object.keys(next.grandfathered[section]).map((k) => [k, k]),
     );
   }
-  return seedDefiniteAssignments(
-    sorted(Object.entries(next)),
-    declarationBaseline,
-  );
+  return seedCounters(sorted(Object.entries(next)), declarationBaseline);
 }

@@ -102,7 +102,7 @@ export function directLoopNode(
   index: number,
   context: LoopNodeContext,
 ) {
-  const { vertical, stages, pinRows, ports, width } = context;
+  const { vertical, stages, pinRows } = context;
   const { device, type, captionWidth, caption, tag } = directLoopNodeCaption(
     uid,
     index,

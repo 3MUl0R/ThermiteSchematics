@@ -39,7 +39,7 @@ import {
   resolveDeviceFilter,
 } from "@thermite/query";
 
-import type { RenderOutcome, SchematicViewRequest } from "./types.js";
+import type { RenderOutcome } from "./types.js";
 
 import type {
   SchematicPacketRequest,

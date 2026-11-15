@@ -178,33 +178,27 @@ it("accept banks the renderPacket 217 to 212 rebase before accepting new TB2 ent
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
   expect(run(root).status).toBe(0);
 });
-it("accept lowers without a reason and preserves an exact prior authorization when banking its partial reduction", () => {
+it("accept lowers a historical allowance without a reason and preserves its records", () => {
   const root = repo(),
     path = "packages/example/test/lower.test.ts",
-    id = `${path}#existing`;
-  put(root, path, fn(80));
-  const base = metrics(root),
-    budget = createBudget(base),
-    reference = { budget, metrics: base };
+    id = path + "#existing";
   put(root, path, fn(95));
-  const raised = acceptBudget(
-    metrics(root),
-    budget,
-    "reviewed growth",
-    reference,
-  );
+  const base = metrics(root),
+    budget = createBudget(base);
+  budget.reasons["functions:" + id] = [
+    {
+      identity: "functions:" + id,
+      from: 80,
+      to: 95,
+      reason: "historical growth",
+    },
+  ];
   put(root, path, fn(90));
   const current = metrics(root),
-    next = acceptBudget(current, raised, undefined, reference);
+    next = acceptBudget(current, budget, undefined, { budget, metrics: base });
   expect(next.functions[id]).toBe(90);
-  expect(next.reasons[`functions:${id}`]).toEqual([
-    ...raised.reasons[`functions:${id}`],
-    {
-      identity: `functions:${id}`,
-      from: 80,
-      to: 90,
-      reason: "reviewed growth",
-    },
-  ]);
+  expect(next.reasons["functions:" + id]).toEqual(
+    budget.reasons["functions:" + id],
+  );
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
 });

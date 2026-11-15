@@ -1,49 +1,31 @@
-import { circuitTerminalAttachments } from "./symbols/circuit-attachments.js";
-import {
-  attachmentStrokeWeights,
-  terminalAttachmentStroke,
-} from "./symbols/attachment-stroke.js";
-import {
-  routePortAttributes,
-  terminalPortAttribute,
-} from "./layout/port-attributes.js";
-import { circuitRoutePitch } from "./symbols/circuit-route-pitch.js";
+import "./symbols/circuit-attachments.js";
+import { attachmentStrokeWeights } from "./symbols/attachment-stroke.js";
+import "./layout/port-attributes.js";
+import "./symbols/circuit-route-pitch.js";
 import { circuitConductorFunctions } from "./symbols/circuit-pagination-functions.js";
 import { deviceTagFitDetails } from "./packet/device-tag-fit.js";
-import { deviceTagSvg } from "./device-tag-svg.js";
+import "./device-tag-svg.js";
 import type { DeviceTagPlan } from "./device-tags.js";
-import { ownedTagText, tagAttributes } from "./device-tag-ownership.js";
+import "./device-tag-ownership.js";
 import {
   circuitTextLines,
   measure,
-  channelRowSlots,
   TERMINAL_TEXT_SIZE,
 } from "./symbols/circuit-text.js";
 export { circuitTextLines } from "./symbols/circuit-text.js";
-import { relationCaptionPlan } from "./symbols/circuit-relations.js";
-import { nodeCaptionSegments } from "./symbols/circuit-node-ink.js";
-import {
-  reserveCircuitCaptions,
-  reserveCircuitDeviceTag,
-  circuitTagReservation,
-} from "./symbols/circuit-caption-reservation.js";
-import {
-  emitCircuitContactCaption,
-  type CaptionBox,
-} from "./symbols/circuit-caption.js";
-import { printableTextMetrics } from "./symbols/printable-font.js";
-import {
-  captionInk,
-  ownerCaption,
-  strokeBoxes,
-} from "./symbols/caption-ink.js";
-import { printableLabelGeometry } from "./symbols/printable-label.js";
+import "./symbols/circuit-relations.js";
+import "./symbols/circuit-node-ink.js";
+import "./symbols/circuit-caption-reservation.js";
+import "./symbols/circuit-caption.js";
+import "./symbols/printable-font.js";
+import "./symbols/caption-ink.js";
+import "./symbols/printable-label.js";
 import { unsupportedProfileError } from "./preflight.js";
 import { CircuitRenderError } from "./render-error-context.js";
 import type { Diagnostic } from "@thermite/schema";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
-import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
+
 import type {
   ElectricalIr,
   IrDevice,
@@ -56,13 +38,8 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
-import {
-  declaredSensorOutput,
-  printableCaption,
-  coilQualifier,
-  motorIsThreePhase,
-} from "./symbols/printable-policy.js";
-import { InlineLabelCollisionError } from "./layout/inline-label-error.js";
+import { printableCaption } from "./symbols/printable-policy.js";
+import "./layout/inline-label-error.js";
 import { circuitPortGroups } from "./layout/circuit-port-order.js";
 import { circuitInlineContext } from "./layout/circuit-inline-context.js";
 import { rememberCircuitDrawing } from "./layout/circuit-printed-layouts.js";
@@ -70,22 +47,7 @@ import {
   layoutCircuitGroup,
   type CircuitLayoutRun,
 } from "./layout/circuit-inline.js";
-import {
-  circuitMarkSegments,
-  circuitTransformerCore,
-  circuitInterfaceMark,
-  circuitBlock,
-  circuitMark,
-  isCircuitTerminalStrip,
-  circuitMotor,
-  circuitMotorVertical,
-  circuitWinding,
-  circuitWindingVertical,
-  circuitTerminal,
-  composedCircuitMark,
-  circuitLegendReservation,
-  type CircuitMark,
-} from "./symbols/circuit.js";
+import { circuitMark, type CircuitMark } from "./symbols/circuit.js";
 import { emitCircuitNode } from "./circuit/node-emission.js";
 import {
   circuitGraphPins,
@@ -106,13 +68,7 @@ import {
   circuitDrawingResult,
 } from "./circuit/layout-drawing.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
-import type {
-  Point,
-  PhysicalConductor,
-  Pin,
-  FunctionRow,
-  DeviceNode,
-} from "./circuit/types.js";
+import type { PhysicalConductor, Pin, DeviceNode } from "./circuit/types.js";
 
 export interface CircuitFunctionSelector {
   readonly device: ObjectSelector;

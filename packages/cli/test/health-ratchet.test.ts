@@ -76,7 +76,9 @@ function rejectsCommand(
     const result = command(root, args);
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain(message);
-    expect(result.stderr).toContain("Raising a budget requires a manual edit");
+    expect(result.stderr).toContain(
+      "Per-identity numeric allowances and global ceilings never rise",
+    );
     expect(readFileSync(path, "utf8")).toBe(bytes);
   }
 }
@@ -343,7 +345,7 @@ it("rejects invalid threshold configuration", () => {
   ).toThrow("Invalid health threshold: functionLines");
 });
 
-it("accept raises only reasoned regressions below ceilings and banks stale allowances", () => {
+it("accept refuses unfunded redistribution and leaves budget bytes unchanged", () => {
   const { root, file } = fixture(
     fn("existing", 90) + "const checked = value!;\n",
   );
@@ -372,37 +374,18 @@ it("accept raises only reasoned regressions below ceilings and banks stale allow
   const current = measure(root);
   const messages = regressions(current, budget);
   expect(messages).toHaveLength(5);
-  const updated = acceptBudget(
-    current,
-    budget,
-    "redistribute existing allowance",
-  );
-  expect(regressions(current, updated)).toEqual([]);
-  expect(updated.thresholds).toEqual(budget.thresholds);
-  expect(updated.ceilings).toEqual(budget.ceilings);
-  expect(updated.functions["packages/example/src/example.ts#existing"]).toBe(
-    93,
-  );
-  expect(updated.files["packages/example/src/retired.ts"]).toBeUndefined();
-  expect(
-    updated.functions["packages/example/src/retired.ts#old"],
-  ).toBeUndefined();
-  expect(
-    updated.nonNullAssertions["packages/example/src/example.ts"],
-  ).toBeUndefined();
-  expect(updated.skippedTests["retired.test.ts"]).toBeUndefined();
-  expect(updated.duplicates["stale-group"]).toBeUndefined();
-  const path = saveBudget(root, budget);
+  expect(() =>
+    acceptBudget(current, budget, "redistribute existing allowance"),
+  ).toThrow("cannot rise");
+  const path = saveBudget(root, budget),
+    bytes = readFileSync(path, "utf8");
   const result = command(root, [
     "--accept",
     "--reason",
     "redistribute existing allowance",
   ]);
-  expect(result.status, result.stderr).toBe(0);
-  for (const message of messages) expect(result.stdout).toContain(message);
-  expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(updated);
-  const bytes = readFileSync(path, "utf8");
-  expect(command(root, ["--accept"]).status).toBe(0);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("cannot rise");
   expect(readFileSync(path, "utf8")).toBe(bytes);
 });
 it("accept banks improvements without a reason, then is a byte-preserving no-op", () => {

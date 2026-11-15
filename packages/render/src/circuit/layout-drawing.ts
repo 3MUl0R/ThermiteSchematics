@@ -2,7 +2,7 @@ import { printableLabelGeometry } from "../symbols/printable-label.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
-import type { DeviceNode, PhysicalConductor } from "./types.js";
+
 import type { CircuitPins } from "./layout-input.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 type Label = CircuitLabelState["labels"][number];
@@ -61,7 +61,7 @@ export function circuitDrawingResult(
   contents: string,
   diagnostics: Diagnostic[],
 ) {
-  const { graph, group, nodes, cs, laidNodes, circuitDeviceTags } = state;
+  const { graph, group, nodes, laidNodes, circuitDeviceTags } = state;
   const drawing = {
     id: group.id,
     label: group.label ?? group.id,

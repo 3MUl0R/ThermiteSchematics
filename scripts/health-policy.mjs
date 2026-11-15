@@ -1,3 +1,4 @@
+import { monotoneRegressions } from "./health-monotonic.mjs";
 import { typeAssertionRegressions } from "./health-casts.mjs";
 import {
   reasonMatches,
@@ -22,6 +23,7 @@ import {
   allowanceMatches,
   allowanceLimit,
   exactMove,
+  moveProof,
   moveRegressions,
 } from "./health-continuity.mjs";
 export {
@@ -32,22 +34,21 @@ export {
 } from "./health-budget.mjs";
 function referenceValue(section, key, budget, reference) {
   if (!reference) return budget[section][key] ?? fallbackOf(budget, section);
-  const from = exactMove(
-    section,
-    key,
-    budget,
-    reference.metrics,
-    reference.current,
-  )
-    ? budget.moves[key].from
-    : key;
+  const from =
+    ["files", "functions"].includes(section) &&
+    exactMove(section, key, budget, reference.metrics, reference.current)
+      ? moveProof(section, key, budget).from
+      : key;
   const inherited = ["files", "functions"].includes(section)
     ? Object.entries(reference.budget.locations[section]).find(
         ([, key]) => key === from,
       )?.[0]
     : undefined;
   return (
-    reference.budget[section][from] ??
+    reference.budget[section]?.[from] ??
+    (section === "typeAssertions"
+      ? reference.metrics.files[from]?.typeAssertions
+      : undefined) ??
     (inherited
       ? reference.budget.grandfathered[section][inherited]
       : undefined) ??
@@ -56,7 +57,6 @@ function referenceValue(section, key, budget, reference) {
 }
 function changes(current, budget, reference) {
   validateBudget(budget);
-  if (reference?.target === "release") return [];
   const rows = [],
     matches = allowanceMatches(current, budget, reference);
   for (const section of SECTIONS)
@@ -79,6 +79,7 @@ function changes(current, budget, reference) {
         files: "file lines",
         functions: "function lines",
         nonNullAssertions: "non-null assertions",
+        typeAssertions: "type assertions",
         definiteAssignments: "definite-assignment declarations",
         skippedTests: "skipped tests",
         duplicates: "duplicate bodies",
@@ -112,7 +113,11 @@ export function ceilingRegressions(current, budget, reference) {
   for (const [key, n] of Object.entries(totals(current)))
     if (n > budget.ceilings[key])
       errors.push(`Global ${key} ceiling ${budget.ceilings[key]} -> ${n}`);
-  return [...errors, ...typeAssertionRegressions(current, budget, reference)];
+  return [
+    ...errors,
+    ...typeAssertionRegressions(current, budget, reference),
+    ...monotoneRegressions(current, budget, reference),
+  ];
 }
 export function regressions(current, budget, reference) {
   return [
@@ -122,7 +127,7 @@ export function regressions(current, budget, reference) {
 }
 function authorizationRows(current, budget, reference) {
   const result = [];
-  if (!reference || reference.target === "release") return result;
+  if (!reference) return result;
   for (const section of SECTIONS)
     for (const [key, to] of Object.entries(budget[section])) {
       const from = referenceValue(section, key, budget, {
@@ -140,10 +145,7 @@ function authorizationRows(current, budget, reference) {
     }
   return result;
 }
-export function acceptBudget(current, budget, reason, reference) {
-  const errors = ceilingRegressions(current, budget, reference);
-  if (errors.length) throw Error(errors.join("\n"));
-  const accepted = structuredClone(budget);
+function bankAllowances(current, accepted) {
   // Rebase reductions need no authorization. Bank them before finding raises,
   // so an allowance above both actual and base cannot deadlock accept/lower.
   for (const section of SECTIONS) {
@@ -155,6 +157,16 @@ export function acceptBudget(current, budget, reason, reference) {
       else accepted[section][key] = value;
     }
   }
+}
+export function acceptBudget(current, budget, reason, reference) {
+  const initialErrors = ceilingRegressions(current, budget, reference).filter(
+    (message) =>
+      !message.startsWith("Type assertion allowance") &&
+      !message.startsWith("Allowance cannot rise"),
+  );
+  if (initialErrors.length) throw Error(initialErrors.join("\n"));
+  const accepted = structuredClone(budget);
+  bankAllowances(current, accepted);
   bankReasons(current, budget, accepted, reference);
   const rows = changes(current, accepted, reference);
   const pending = authorizationRows(current, accepted, reference).filter(
@@ -166,13 +178,19 @@ export function acceptBudget(current, budget, reason, reference) {
         r.actual,
       ),
   );
+  for (const { section, key, newValue } of rows)
+    accepted[section][key] = newValue;
+  const baseline = reference ?? {
+    budget,
+    metrics: { files: {}, functions: {}, duplicates: {} },
+  };
+  const errors = monotoneRegressions(current, accepted, baseline);
+  if (errors.length) throw Error(errors.join("\n"));
   if (
     (rows.length || pending.length) &&
     (typeof reason !== "string" || !reason.trim())
   )
-    throw Error("Every budget raise requires --reason <text>");
-  for (const { section, key, newValue } of rows)
-    accepted[section][key] = newValue;
+    throw Error("Every new allowance requires --reason <text>");
   for (const { section, key } of [...rows, ...pending]) {
     const identity = `${section}:${key}`,
       to = valuesOf(current, section)[key];
@@ -194,6 +212,8 @@ export function acceptBudget(current, budget, reason, reference) {
         reason: reason.trim(),
       });
   }
+  const hardErrors = ceilingRegressions(current, accepted, reference);
+  if (hardErrors.length) throw Error(hardErrors.join("\n"));
   bankGrandfathers(current, budget, accepted, reference);
   for (const section of [...SECTIONS, "reasons"])
     accepted[section] = sorted(Object.entries(accepted[section]));
@@ -256,7 +276,7 @@ export function lowerBudget(current, budget, reference) {
   return next;
 }
 export function regressionMessage(errors) {
-  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, the latest append-only reason record must match {identity, from: base value, to: current value, reason}. Changed-file type assertion increases require their own exact typeAssertions:<path> reason record. Release targets compare grandfathered values without cumulative content continuity or composing dev reasons. Both --accept and --lower bank reductions and retire sub-cap/deleted records. Dev continuity allows at most 70 added lines per PR. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
+  return `${errors.join("\n")}\nPer-identity numeric allowances and global ceilings never rise. health:accept may bank reductions or record a new identity within policy; a verbatim move must retire an equal or larger source allowance using moves. Historical reasons remain append-only, but do not authorize growth. Cross-file moves require {section, from, sha256}, keyed by identity or section:identity, and an absent source identity. Dev grandfather continuity still allows at most 70 added lines; release grandfather entries compare by value.`;
 }
 function grandfatherHistory(current, budget, reference) {
   const errors = [],
@@ -356,6 +376,7 @@ export function historyRegressions(
     ...ceilingRegressions(current, budget, reference),
     ...grandfatherHistory(current, budget, reference),
     ...itemHistory(current, budget, reference),
+    ...monotoneRegressions(current, budget, reference),
     ...moveRegressions(current, budget, reference),
   ];
 }

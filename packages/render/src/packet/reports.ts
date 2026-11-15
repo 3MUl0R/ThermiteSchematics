@@ -2,7 +2,7 @@ import {
   plannedTitleContext,
   headingCapacity,
 } from "../internal/title-data/headings.js";
-import { reportCells, emitReportRow } from "./report-cells.js";
+import { emitReportRow } from "./report-cells.js";
 import { paginatedReportCells } from "./report-layout.js";
 import { reportPaginator } from "./report-paginator.js";
 
@@ -27,7 +27,7 @@ import type {
   NormalizedDocumentationView,
 } from "./types.js";
 import { failure } from "./errors.js";
-import { bounds, zone } from "./page.js";
+import { bounds } from "./page.js";
 import { n, text, wrap } from "./svg.js";
 import { reportDocumentContext } from "./document-report.js";
 import type { DocumentRowDraft } from "./document-types.js";

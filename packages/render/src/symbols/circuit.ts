@@ -9,7 +9,7 @@ import {
   sourceEnclosureInk,
   windingPolyline,
 } from "./printable-policy.js";
-import { escapeXmlText as xml } from "../svg/escape.js";
+import "../svg/escape.js";
 
 import { composedCircuitMark, type CircuitMark } from "./circuit-mark.js";
 export {
