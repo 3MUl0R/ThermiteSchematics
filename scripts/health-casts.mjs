@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { reasonMatches } from "./health-reasons.mjs";
+import { appendedReasonMatches } from "./health-reasons.mjs";
 // Reuse the parsed AST. No TypeScript Program, binding or type-check pass.
 export function countTypeAssertions(source) {
   const start = performance.now();
@@ -33,9 +33,17 @@ export function typeAssertionRegressions(current, budget, reference) {
     )
       continue;
     const identity = "typeAssertions:" + path;
-    if (!reasonMatches(budget.reasons[identity], identity, before, value))
+    if (
+      !appendedReasonMatches(
+        budget.reasons[identity],
+        reference.budget.reasons[identity],
+        identity,
+        before,
+        value,
+      )
+    )
       errors.push(
-        `Type assertion allowance requires exact reason: ${path} ${before} -> ${value}`,
+        `Type assertion allowance requires exact reason appended in this change: ${path} ${before} -> ${value}`,
       );
   }
   return errors;

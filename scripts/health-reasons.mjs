@@ -14,6 +14,19 @@ export function reasonMatches(value, identity, from, to) {
     Boolean(record.reason.trim())
   );
 }
+// A cast authorization is spent when it enters the base, even if the count later
+// falls. Require a fresh final record and preserve the authenticated prefix.
+export function appendedReasonMatches(value, baseValue, identity, from, to) {
+  const records = reasonList(value),
+    before = reasonList(baseValue),
+    last = records.at(-1);
+  return (
+    records.length > before.length &&
+    before.every((record, i) => isDeepStrictEqual(record, records[i])) &&
+    !before.some((record) => isDeepStrictEqual(record, last)) &&
+    reasonMatches(value, identity, from, to)
+  );
+}
 export function migrateReasonLists(budget) {
   return {
     ...budget,
