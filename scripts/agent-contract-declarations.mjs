@@ -166,13 +166,16 @@ function compareInterface(name, before, after, changes) {
     const next = after.fields[field],
       path = `/${name}/${field}`;
     if (!next) changes.push({ classification: "removal", path });
-    else if (value.type !== next.type || value.optional !== next.optional)
+    else if (value.type !== next.type || value.optional !== next.optional) {
+      const widened =
+        value.optional === next.optional && unionWidened(value.type, next.type);
       changes.push({
-        classification: "type-change",
+        classification: widened ? "additive" : "type-change",
         path,
         before: value,
         after: next,
       });
+    }
   }
   for (const field of Object.keys(after.fields))
     if (!(field in before.fields))
@@ -196,4 +199,30 @@ function compareInterface(name, before, after, changes) {
           parent === "SourceMetadataRequest" ? "additive" : "meaning-change",
         path: `/${name}/extends/${parent}`,
       });
+}
+
+/** Widening a literal union retains all old values; formatting is immaterial. */
+function unionWidened(before, after) {
+  const branches = (text) => {
+    const file = ts.createSourceFile(
+      "field.ts",
+      `type Field = ${text}`,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const node = file.statements[0]?.type;
+    if (!node) return undefined;
+    const parts = ts.isUnionTypeNode(node) ? node.types : [node];
+    if (
+      !parts.every(
+        (part) =>
+          ts.isLiteralTypeNode(part) && ts.isStringLiteral(part.literal),
+      )
+    )
+      return undefined;
+    return parts.map((part) => part.literal.text);
+  };
+  const old = branches(before),
+    next = branches(after);
+  return old && next && old.every((part) => next.includes(part));
 }

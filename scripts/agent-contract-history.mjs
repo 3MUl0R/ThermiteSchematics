@@ -3,6 +3,7 @@ import {
   compareDeclarations,
   publicDeclarations,
 } from "./agent-contract-declarations.mjs";
+import { compareValidator } from "./agent-contract-validator.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -71,7 +72,12 @@ export function contractInventory(cwd, base, head) {
         return [{ path, kind: "schema" }];
       if (CONTRACT_BASELINE.examples.includes(path))
         return [{ path, kind: "examples" }];
-      if (CONTRACT_BASELINE.declarations.includes(path))
+      if (CONTRACT_BASELINE.validatorSources.includes(path))
+        return [{ path, kind: "validator-source" }];
+      if (
+        CONTRACT_BASELINE.declarations.includes(path) ||
+        path in CONTRACT_BASELINE.transitiveDeclarations
+      )
         return [{ path, kind: "declarations" }];
       if (CONTRACT_BASELINE.helpSources.includes(path))
         return [{ path, kind: "help-source" }];
@@ -88,6 +94,7 @@ function compareContent(kind, before, after, publicNames) {
   if (before === after) return [];
   if (kind === "declarations")
     return compareDeclarations(before, after, publicNames);
+  if (kind === "validator-source") return compareValidator(before, after);
   if (kind === "help-source")
     return [
       {
@@ -155,9 +162,10 @@ export function followHistory(cwd, base, head, surface) {
 function historyEdge(cwd, surface, { commit, current, prior }, parent) {
   const before = readRevision(cwd, parent, prior),
     after = readRevision(cwd, commit, current);
-  const publicNames =
-    surface.kind === "declarations" &&
-    surface.path !== "packages/agent-tools/src/index.ts"
+  const publicNames = CONTRACT_BASELINE.transitiveDeclarations[surface.path]
+    ? new Set(CONTRACT_BASELINE.transitiveDeclarations[surface.path])
+    : surface.kind === "declarations" &&
+        surface.path !== "packages/agent-tools/src/index.ts"
       ? new Set(
           [parent, commit].flatMap((revision) =>
             publicDeclarations(
@@ -226,9 +234,10 @@ function workingTreeEdges(cwd, inventory) {
     const before = readRevision(cwd, "HEAD", surface.path),
       after = disk(surface.path);
     if (before === after) return [];
-    const publicNames =
-      surface.kind === "declarations" &&
-      surface.path !== "packages/agent-tools/src/index.ts"
+    const publicNames = CONTRACT_BASELINE.transitiveDeclarations[surface.path]
+      ? new Set(CONTRACT_BASELINE.transitiveDeclarations[surface.path])
+      : surface.kind === "declarations" &&
+          surface.path !== "packages/agent-tools/src/index.ts"
         ? new Set(
             [
               readRevision(cwd, "HEAD", "packages/agent-tools/src/index.ts"),

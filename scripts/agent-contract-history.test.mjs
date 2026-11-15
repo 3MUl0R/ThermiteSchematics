@@ -12,6 +12,8 @@ import { afterEach, expect, it } from "vitest";
 import {
   auditContractHistory,
   followHistory,
+  contractInventory,
+  CONTRACT_BASELINE,
 } from "./agent-contract-history.mjs";
 import {
   compareInstances,
@@ -288,4 +290,58 @@ it("also checks the side-parent contract when a merge loses its added field", ()
   expect(auditContractHistory(cwd, "HEAD", base).violations).toContainEqual(
     expect.objectContaining({ classification: "removal", path: "/side" }),
   );
+});
+
+it("audits transitive render/query/compiler declarations and the runtime validator", () => {
+  const inventory = contractInventory(
+    process.cwd(),
+    CONTRACT_BASELINE.base,
+    "HEAD",
+  );
+  for (const path of [
+    "packages/render/src/types.ts",
+    "packages/query/src/types.ts",
+    "packages/compiler/src/compiler.ts",
+    "packages/agent-tools/src/common/request-validation.ts",
+  ])
+    expect(
+      inventory.some((entry) => entry.path === path),
+      path,
+    ).toBe(true);
+  expect(
+    violations(
+      compareDeclarations(
+        "export interface RenderSummary { netIds: readonly string[] }",
+        "export interface RenderSummary { netIdList: readonly string[] }",
+        new Set(["RenderSummary"]),
+      ),
+    ),
+  ).toContainEqual(
+    expect.objectContaining({
+      classification: "removal",
+      path: "/RenderSummary/netIds",
+    }),
+  );
+  expect(
+    violations(
+      compareDeclarations(
+        'export type ObjectSelector = {by: "uid"; value: string} | {by: "designation"; value: string}',
+        'export type ObjectSelector = {by: "uid"; value: string}',
+        new Set(["ObjectSelector"]),
+      ),
+    ),
+  ).toContainEqual(
+    expect.objectContaining({
+      classification: "type-change",
+      path: "/ObjectSelector",
+    }),
+  );
+});
+
+it("accepts a widened literal field union while rejecting a narrowed one", () => {
+  const old = 'export interface Result { format: "one" | "two" }';
+  const widened =
+    'export interface Result { format: | "one" | "two" | "three" }';
+  expect(violations(compareDeclarations(old, widened))).toEqual([]);
+  expect(violations(compareDeclarations(widened, old))).not.toEqual([]);
 });

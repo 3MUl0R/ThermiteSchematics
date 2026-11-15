@@ -2,65 +2,20 @@ import { execFileSync } from "node:child_process";
 import { relative, resolve } from "node:path";
 import ts from "typescript";
 
-const matchesCode = (text) => /^R00[1-6]$/u.test(text);
+import {
+  codeType,
+  constructionSites,
+  owner,
+  renderCodes,
+  visit,
+} from "./render-diagnostic-semantic.mjs";
 const slash = (path) => path.replaceAll("\\", "/");
-function owner(node) {
-  for (let parent = node.parent; parent; parent = parent.parent) {
-    if (!ts.isFunctionLike(parent)) continue;
-    if (parent.name) return parent.name.getText();
-    if (ts.isVariableDeclaration(parent.parent))
-      return parent.parent.name.getText();
-  }
-  return "<module>";
-}
-function visit(node, callback) {
-  callback(node);
-  ts.forEachChild(node, (child) => visit(child, callback));
-}
-function scanLiteralSites(file, path) {
-  const sites = [];
-  visit(file, (node) => {
-    if (
-      ts.isPropertyAssignment(node) &&
-      node.name.getText(file) === "code" &&
-      ts.isStringLiteral(node.initializer) &&
-      matchesCode(node.initializer.text)
-    )
-      sites.push({
-        node,
-        path,
-        owner: owner(node),
-        kind: "constructor",
-        codes: [node.initializer.text],
-      });
-    if (ts.isCallExpression(node)) {
-      const codes = node.arguments
-        .filter((arg) => ts.isStringLiteral(arg) && matchesCode(arg.text))
-        .map((arg) => arg.text);
-      if (codes.length)
-        sites.push({
-          node,
-          path,
-          owner: owner(node),
-          kind: "code-argument",
-          codes,
-        });
-    }
-  });
-  return sites;
-}
 function factoryKey(path, name) {
   return `${path}:${name}`;
 }
 function typedRenderError(checker, expression) {
-  const type = checker.getTypeAtLocation(expression);
-  const code = checker.getPropertyOfType(type, "code");
-  if (!code) return false;
-  const codeType = checker.getTypeOfSymbolAtLocation(code, expression);
-  const choices = codeType.isUnion() ? codeType.types : [codeType];
-  return choices.some(
-    (choice) => choice.isStringLiteral() && matchesCode(choice.value),
-  );
+  const type = codeType(checker, expression);
+  return type !== undefined && renderCodes(type).length > 0;
 }
 function messageWrappers(file, path, checker) {
   const wrappers = new Set();
@@ -114,13 +69,20 @@ export function diagnosticInventory(root = resolve(".")) {
       path,
       file: program.getSourceFile(resolve(root, path)),
     }));
-  const sites = files.flatMap(({ path, file }) => scanLiteralSites(file, path));
+  const sites = files.flatMap(({ path, file }) =>
+    constructionSites(file, path, checker),
+  );
   const factories = new Map();
   for (const site of sites.filter((site) => site.kind === "constructor")) {
-    const key = factoryKey(site.path, site.owner),
-      codes = factories.get(key) ?? new Set();
-    for (const code of site.codes) codes.add(code);
-    factories.set(key, codes);
+    for (const key of [
+      factoryKey(site.path, site.owner),
+      containingFunction(site.node),
+    ]) {
+      if (!key) continue;
+      const codes = factories.get(key) ?? new Set();
+      for (const code of site.codes) codes.add(code);
+      factories.set(key, codes);
+    }
   }
   sites.push(...factoryCalls(root, checker, files, factories));
   return {
@@ -138,16 +100,26 @@ function factoryCalls(root, checker, files, factories) {
   for (const { path, file } of files)
     visit(file, (node) => {
       if (!ts.isCallExpression(node)) return;
-      let symbol = checker.getSymbolAtLocation(node.expression);
-      if (symbol?.flags & ts.SymbolFlags.Alias)
-        symbol = checker.getAliasedSymbol(symbol);
-      const decl = symbol?.valueDeclaration;
-      if (!decl) return;
+      const signature = checker.getResolvedSignature(node);
+      const decl = signature?.declaration;
+      if (!decl || !files.some(({ file }) => file === decl.getSourceFile()))
+        return;
       const key = factoryKey(
         slash(relative(root, decl.getSourceFile().fileName)),
-        decl.name?.getText() ?? "",
+        decl.name?.getText() ??
+          (ts.isVariableDeclaration(decl.parent)
+            ? decl.parent.name.getText()
+            : "<anonymous>"),
       );
-      const codes = factories.get(key);
+      const resultType = checker.getReturnTypeOfSignature(signature);
+      const code = checker.getPropertyOfType(resultType, "code");
+      const inferred = code
+        ? renderCodes(checker.getTypeOfSymbolAtLocation(code, node))
+        : [];
+      const codes =
+        factories.get(decl) ??
+        factories.get(key) ??
+        (inferred.length ? new Set(inferred) : undefined);
       if (codes)
         sites.push({
           node,
@@ -177,4 +149,10 @@ function identifySites(sites) {
       };
     })
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Declaration identity keeps anonymous factories distinct from their enclosing owner. */
+function containingFunction(node) {
+  for (let parent = node.parent; parent; parent = parent.parent)
+    if (ts.isFunctionLike(parent)) return parent;
 }

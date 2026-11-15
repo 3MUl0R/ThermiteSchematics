@@ -1,6 +1,7 @@
 import type { ElectricalIr } from "@thermite/compiler";
 import type { RenderFailure, RenderOutcome } from "./types.js";
 import { packetViewContext, record } from "./packet/errors.js";
+import { Issues, checkText } from "./internal/title-data/validation.js";
 
 /** Existing precise device/view details take precedence over caller scope. */
 function hasNamedScope(details: unknown): boolean {
@@ -28,37 +29,124 @@ function hasNamedScope(details: unknown): boolean {
   return false;
 }
 
+/** Only own data properties can contribute single-view context. */
+function dataProperty(value: object, key: string): unknown {
+  const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+  if (descriptor && !("value" in descriptor))
+    throw Error("Uninspectable diagnostic context property");
+  return descriptor?.value;
+}
+
+function snapshotView(value: unknown, depth = 0): Record<string, unknown> {
+  if (!record(value) || depth > 2) return {};
+  const result: Record<string, unknown> = {};
+  for (const key of [
+    "format",
+    "title",
+    "root",
+    "intent",
+    "family",
+    "kind",
+    "medium",
+    "by",
+    "value",
+    "to",
+    "from",
+    "includePower",
+  ]) {
+    const child = dataProperty(value, key);
+    if (typeof child === "string" || typeof child === "boolean")
+      result[key] = child;
+    else if (
+      child !== undefined &&
+      ["root", "intent", "to", "from"].includes(key)
+    )
+      result[key] = snapshotView(child, depth + 1);
+  }
+  return result;
+}
+
+function singleViewContext(
+  request: unknown,
+  ir: Readonly<ElectricalIr>,
+  viewIndex = 0,
+) {
+  const view = snapshotView(request);
+  // Missing/non-object requests have no authored view identity to invent.
+  if (
+    (typeof view.format !== "string" && typeof view.title !== "string") ||
+    (!view.root && !view.title && !view.kind && !view.from)
+  )
+    return [];
+  const context = packetViewContext(view, viewIndex, ir);
+  return context.title === "Untitled view" && !("title" in view)
+    ? []
+    : [context];
+}
+
+function validProjectName(ir: Readonly<ElectricalIr>): string | undefined {
+  const name = ir.project.name;
+  if (typeof name !== "string" || !name.length || [...name].length > 160)
+    return undefined;
+  const issues = new Issues("diagnostic-context");
+  checkText(name, "/project/name", issues);
+  return issues.diagnostics.length ? undefined : name;
+}
+
 function callerScope(
   ir: Readonly<ElectricalIr>,
   request: unknown,
   error: RenderFailure,
 ) {
-  const requestField =
-    "reason" in error && error.reason === "invalid-page"
-      ? "/page"
-      : record(request) && request.format === "schematic-packet-request/0.1"
-        ? "/views"
-        : "/";
-  const base = { projectName: ir.project.name, requestField };
+  let requestField = "/";
+  let projectName: string | undefined;
   try {
-    if (record(request) && request.format === "schematic-packet-request/0.1") {
-      if (!Array.isArray(request.views) || !request.views.length)
+    if ("reason" in error && error.reason === "invalid-page")
+      requestField = "/page";
+    projectName = validProjectName(ir);
+    const format = record(request)
+      ? dataProperty(request, "format")
+      : undefined;
+    const packet = format === "schematic-packet-request/0.1";
+    requestField =
+      "reason" in error && error.reason === "invalid-page"
+        ? "/page"
+        : packet
+          ? "/views"
+          : "/";
+    const base = {
+      ...(projectName === undefined ? {} : { projectName }),
+      requestField,
+    };
+    if (packet && record(request)) {
+      const authoredViews = dataProperty(request, "views");
+      if (!Array.isArray(authoredViews) || !authoredViews.length)
         return { ...base, views: [] };
-      const authoredViews: readonly unknown[] = request.views;
-      // A rejected oversized request has no rendered contributors. Identify its
-      // first overflowing authored entry without walking an unbounded array.
+      // Bound context work for a rejected oversized packet.
       const views =
         authoredViews.length > 40
-          ? [packetViewContext(authoredViews[40], 40, ir)]
-          : authoredViews.map((view, index) =>
-              packetViewContext(view, index, ir),
+          ? singleViewContext(dataProperty(authoredViews, "40"), ir, 40)
+          : Array.from(
+              { length: authoredViews.length },
+              (_, index) => index,
+            ).flatMap((index) =>
+              singleViewContext(
+                dataProperty(authoredViews, String(index)),
+                ir,
+                index,
+              ),
             );
       return { ...base, views };
     }
-    return { ...base, views: [packetViewContext(request, 0, ir)] };
+    return { ...base, views: singleViewContext(request, ir) };
   } catch {
-    // Context must never replace the original diagnostic for a hostile caller.
-    return { ...base, views: [], scopeUnavailable: true };
+    // All caller/IR reads are guarded; keep the selected failure unchanged.
+    return {
+      ...(projectName === undefined ? {} : { projectName }),
+      requestField,
+      views: [],
+      scopeUnavailable: true,
+    };
   }
 }
 

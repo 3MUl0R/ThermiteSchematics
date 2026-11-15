@@ -422,8 +422,14 @@ Renderer R codes and CLI T001 exceptions are covered in [views](views.md).
 R001–R006 retain their original classification and message. Read their structured
 details too: native device, conductor and function identities accompany failures
 where those objects are known. Otherwise `details.diagnosticContext` identifies
-the authored view by zero-based `viewIndex` and title, together with the project
-name and request field. Invalid page settings belong to `/page`; an empty packet
+the authored view by zero-based `viewIndex` and title, together with a valid
+project name and request field. Single-view context reads own data properties
+only; it never invokes request accessors. Missing or non-object view requests
+have no placeholder title. If context inspection or native lookup fails,
+`scopeUnavailable: true` accompanies an empty `views` array, while the original
+failure code, message and existing fields remain unchanged. Invalid project
+names are omitted from this optional context. Invalid page settings belong to
+`/page`; an empty packet
 belongs to `/views` and has no view identity to invent. The standalone page
 normalizer has neither an IR nor a view and identifies its page fields instead.
 
@@ -437,6 +443,18 @@ semantic changes still require review. The source-metadata annotation types
 preserve existing fields and add optional metadata; their definitions are
 checked independently. Internal dependency-injection interfaces are outside the
 public package barrel and are not agent contracts.
+
+The declaration inventory also pins the named render request/result types
+(including `RenderSummary`), query selectors and result envelopes (including
+`ObjectSelector`), and compiler `CompileResult`, `CompiledProjectPresentation`,
+`ElectricalIr` and `IrProject`. The exact named boundary is
+`scripts/agent-contract-baseline.json`: this is not a recursive proof of every
+imported IR, schema, geometry or library implementation type. Those deeper
+structures remain covered by their schemas, goldens and domain tests; changes
+to their meaning require review. The shared runtime request validator is a
+separate fail-closed surface. An altered existing function refuses the audit,
+except the independently tested additive allowed-values diagnostic argument
+introduced by PR #19; comments and formatting do not change its snapshot.
 
 ## Offline request vocabulary
 

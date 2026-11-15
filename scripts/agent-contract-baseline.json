@@ -22,5 +22,45 @@
   "helpSources": [
     "packages/cli/src/agent-help.ts",
     "packages/agent-tools/src/request-vocabulary.ts"
-  ]
+  ],
+  "transitiveDeclarations": {
+    "packages/render/src/types.ts": [
+      "SchematicFlow",
+      "SchematicViewFamily",
+      "LegacySchematicViewRequest",
+      "IntentSchematicViewRequest",
+      "DemonstrationViewIntent",
+      "SchematicViewRequest",
+      "NormalizedLegacySchematicView",
+      "NormalizedIntentSchematicView",
+      "NormalizedSchematicView",
+      "RenderSummary",
+      "RenderedSchematic",
+      "RenderOutcome",
+      "RenderFailure"
+    ],
+    "packages/query/src/types.ts": [
+      "ObjectSelector",
+      "TerminalSelector",
+      "QueryResult",
+      "QueryErrorCode",
+      "QueryError",
+      "ProjectObjectView",
+      "ProjectObjectKind",
+      "DeviceView",
+      "TerminalView",
+      "PotentialView",
+      "InspectResult",
+      "NeighborsResult",
+      "NetResult",
+      "CableResult",
+      "TraceResult"
+    ],
+    "packages/compiler/src/compiler.ts": [
+      "CompileResult",
+      "CompiledProjectPresentation"
+    ],
+    "packages/compiler/src/ir.ts": ["ElectricalIr", "IrProject"]
+  },
+  "validatorSources": ["packages/agent-tools/src/common/request-validation.ts"]
 }
