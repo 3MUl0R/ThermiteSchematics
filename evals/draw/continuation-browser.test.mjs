@@ -4,7 +4,11 @@ import { svgLocators, identities } from "./locators.mjs";
 import { evaluateSheet } from "./evaluate.mjs";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createRequire } from "node:module";
-import { drawingContextOptions, openSheet, measureSheet } from "./browser.mjs";
+import {
+  drawingContextOptions,
+  openSheet,
+  evaluateSheetGeometry,
+} from "./browser.mjs";
 import { continuations, pdfGeometryTexts, legibility } from "./checks.mjs";
 import {
   continuationMediaIssues,
@@ -64,7 +68,7 @@ async function measure(rows, medium = "svg") {
   if (medium === "svg") return openSheet(page, svg(rows));
   await page.setContent('<section id="sheet-1">' + svg(rows) + "</section>");
   await page.evaluate(() => document.fonts.ready);
-  return page.evaluate(measureSheet, {
+  return evaluateSheetGeometry(page, {
     selector: "#sheet-1>svg",
     textOnly: true,
   });
@@ -338,7 +342,7 @@ browserIt(
         "</section>",
     );
     await page.evaluate(() => document.fonts.ready);
-    const h = await page.evaluate(measureSheet, {
+    const h = await evaluateSheetGeometry(page, {
       selector: "#sheet-1>svg",
       textOnly: true,
     });

@@ -1326,6 +1326,71 @@ bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.jso
   --browser-arg=--disable-gpu-rasterization --require-identical
 ```
 
+### Paired raster gate without GPU rasterization
+
+For a move-only checker change, compare each report's own pinned source artifacts
+with [paired-raster.mjs](paired-raster.mjs). Both inputs must be strict reports.
+Every declared PNG crop and reference crop must have the same path, physical
+sheet, medium and exact crop box on both sides; missing, extra and empty region
+inventories fail. Each side of each region uses a fresh browser launch and print
+context, device scale 300/96 and the fonts-ready barrier. SVG/HTML use the explicit
+`--disable-gpu-rasterization` argument. PDF regions use the pinned PDF with the
+existing pdf.js 300 dpi renderer, recorded separately as `backend: "pdf.js"`.
+
+```sh
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
+  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json
+```
+
+The paired GPU-disabled run passes a region immediately when its PNG bytes are
+identical. Every differing region receives **N fresh-launch base self-samples**,
+default **10**, configurable with `--samples N`; values below 10 are refused.
+The head passes if its bytes match a sampled base variant, or if **both** its
+changed-pixel count and maximum RGBA channel delta from the original paired base
+reference are no greater than the corresponding **maximum pairwise distances
+among the N base self-samples**. The two maxima may come from different pairs.
+There is no global tolerance, percentile or cross-region pooling. Identical base
+samples give a zero envelope; a differing head outside it fails.
+
+Byte identity alone is insufficient: the [RASTER-GATE r1 probe](paired-raster-probe.json)
+recorded **350 fresh-launch samples** (five regions × ten launches × seven
+configurations) from the unchanged base source. Residual variants remained with
+GPU raster disabled, software compositing, one raster thread and baseline Skia.
+The adaptive self-envelope follows the RASTER-GATE r1 helm ruling for #307.
+
+The separate `thermite-draw-paired-raster/1.1` result keeps literal `byteIdentical`
+and adds `pass`; the CLI succeeds only when every region passes. Each region
+records mode, browser, arguments, actual self-sample **N**, base variant count,
+pairwise envelope, head distance and verdict, plus source/PNG hashes and the
+sample/pair distance matrix. On the immediate identity path, N is 0 and the one
+paired base variant is reported; otherwise the variant count describes the N
+self-samples. A mode, browser, context, dimensions or base-source mismatch fails.
+The initial paired base remains the head-distance reference. Input evidence PNGs
+are never replaced.
+
+```sh
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
+  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json \
+  --samples 10
+```
+
+Use this with identical observations, crop inventories/boxes and renderer
+artifacts for move-only checker changes. For changes to the raster path itself
+it is one control alongside the per-file default-mode repeat envelope. It does
+not establish default-mode pixel identity.
+
+Default capture arguments, evidence, bind limits and signed records remain
+unchanged. This additional gate protocol leaves `EVALS_VERSION` at **5.14**:
+existing measurements, statuses and report fields do not change; added checker
+module hashes are checker provenance. GPU-disabled capture remains unsuitable
+as the published default, for the record #61 compatibility reason below.
+
+`measureSheet` uses browser-only [measurement helpers](measurement/prepare.mjs).
+`sheetMeasurementSource()` serializes their declared dependencies explicitly;
+`evaluateSheetGeometry(page, options)` runs that callable in the page. Initialization,
+mutable row state and DOM measurement order are retained. Screenshot functions and
+crop arithmetic are unchanged; this extraction also leaves checker 5.14 unchanged.
+
 Issue #137 measurements on darwin-arm64, macOS 26.3 and Chromium 145.0.7632.6
 used twenty captures per region across ten fresh launches. Each column below is
 the worst per-crop pairwise result, so maxima need not come from the same pair.

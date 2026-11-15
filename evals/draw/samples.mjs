@@ -9,7 +9,7 @@ import {
   openSheet,
   cropBox,
   screenshotCrop,
-  measureSheet,
+  evaluateSheetGeometry,
 } from "./browser.mjs";
 import { loadPdf, renderPdf } from "./pdf.mjs";
 import { readJson, json } from "./support.mjs";
@@ -97,7 +97,7 @@ try {
         await page.setContent(gunzipSync(bytes).toString("utf8"));
         selector = `#sheet-${row.sheet}>svg`;
         g = classifyTextGeometry(
-          await page.evaluate(measureSheet, { selector, textOnly: true }),
+          await evaluateSheetGeometry(page, { selector, textOnly: true }),
           ir,
         );
       } else g = classifyTextGeometry(await openSheet(page, svg), ir);

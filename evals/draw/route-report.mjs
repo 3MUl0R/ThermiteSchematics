@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import {
   launch,
   displaySheet,
-  measureSheet,
+  sheetMeasurementSource,
   drawingContextOptions,
 } from "./browser.mjs";
 import { conductorLengths } from "./conductor-lengths.mjs";
@@ -42,7 +42,7 @@ async function capture(directory, prior) {
     gs.push(
       await page.evaluate(
         (source) => (0, eval)(`(${source})`)({ routesOnly: true }),
-        measureSheet.toString(),
+        sheetMeasurementSource(),
       ),
     );
   }

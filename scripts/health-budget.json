@@ -30,7 +30,6 @@
     "fee96a7d67baab3796f9e86876f3ff1ac988763089f4e36e64e8bc0c36b0e8fe": 2
   },
   "files": {
-    "evals/draw/browser.mjs": 2467,
     "evals/draw/checks.mjs": 1462,
     "evals/draw/checks.test.mjs": 1072,
     "evals/draw/m3-delivery.test.mjs": 1387,
@@ -99,14 +98,12 @@
   "fingerprints": {
     "files": {},
     "functions": {
-      "evals/draw/browser.mjs#measureSheet": "2bb632f4e2cea922796f846492e014a0fcdd422b7a738238b225b83d546da1c9",
-      "evals/draw/browser.mjs#measureSheet/flatMap callback~5": "b5c591cb78e6936061510aba5dccf7045527675d4d7c31a27a501bba6d2f755d",
       "evals/draw/evaluate.mjs#evaluateSheet": "68ea4fd98b09ed1e7fbf946b2ceba0dcb453572bba4e95adb9aef516f7f1db8c",
       "evals/draw/m3-delivery.mjs#m3Delivery": "eb07d8f11083f14dfe1e68df19e809f5e4310e42431c9783c9003d58a1bbebee",
       "evals/draw/mirror-returns.mjs#mirrorReturns": "d043e2d67c31f591d448abae30198cdda09c9d002fcc42196a797880ce626636",
       "evals/draw/repin-core.mjs#prepareRepin": "ced671393b947e6b949e55b7ff72bbda7d8d42582cf20aabf227da0e5656288c",
-      "evals/draw/run.mjs#pool callback": "0d2570cc8aa7028179e33ef12c749192cc5c50d33ffa8585dc98a69b99a0396a",
-      "evals/draw/run.mjs#pool callback/retainingCase callback": "0248e44eb32b9f36271db7d5a7cebee3777d9c06e121adfe2051dff781118730",
+      "evals/draw/run.mjs#pool callback": "45cf6143e3ed4583c6da318b9e9327d8a5637cae2d00c93553e65ac7289b5792",
+      "evals/draw/run.mjs#pool callback/retainingCase callback": "7f15af5c44134d072045357e6a75d207d6a7151dd39d052ed95f2f6e00e2b345",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
@@ -116,13 +113,8 @@
     "evals/draw/assessment.mjs#assess": 138,
     "evals/draw/authored-report-fields.mjs#authoredReportFields": 105,
     "evals/draw/bind-exhaustion.test.mjs#call callback": 168,
-    "evals/draw/browser.mjs#measureSheet/flatMap callback~9": 190,
-    "evals/draw/browser.mjs#measureSheet/identity": 75,
-    "evals/draw/browser.mjs#measureSheet/ownedLandings": 132,
-    "evals/draw/browser.mjs#measureSheet/ownedLandings/flatMap callback": 124,
-    "evals/draw/browser.mjs#measureSheet/paintedShapeBounds": 144,
-    "evals/draw/browser.mjs#measureSheet/shapeClips": 72,
-    "evals/draw/browser.mjs#measureSheet/tagIdentity": 83,
+    "evals/draw/browser.mjs#measureSheet": 229,
+    "evals/draw/browser.mjs#measureSheet/flatMap callback": 190,
     "evals/draw/checks.mjs#conductorInterference": 194,
     "evals/draw/checks.mjs#reports": 78,
     "evals/draw/circuit-appearances.mjs#fullCircuitAppearances": 108,
@@ -161,6 +153,10 @@
     "evals/draw/m3-native.mjs#nativeNeeds": 134,
     "evals/draw/m3-registry.mjs#registryFindings": 170,
     "evals/draw/marker-authoring.mjs#serializeRegistry": 88,
+    "evals/draw/measurement/geometry.mjs#identity": 75,
+    "evals/draw/measurement/geometry.mjs#shapeClips": 72,
+    "evals/draw/measurement/geometry.mjs#tagIdentity": 83,
+    "evals/draw/measurement/outline.mjs#paintedShapeBounds": 144,
     "evals/draw/mirror-fixture.mjs#mirrorFixture": 120,
     "evals/draw/pdf-bind.test.mjs#call callback": 175,
     "evals/draw/pdf-calibration.mjs#pdfCalibration": 122,
@@ -683,8 +679,6 @@
   "grandfathered": {
     "files": {},
     "functions": {
-      "evals/draw/browser.mjs#measureSheet": 2380,
-      "evals/draw/browser.mjs#measureSheet/flatMap callback~5": 369,
       "evals/draw/evaluate.mjs#evaluateSheet": 447,
       "evals/draw/m3-delivery.mjs#m3Delivery": 405,
       "evals/draw/mirror-returns.mjs#mirrorReturns": 431,
@@ -699,8 +693,6 @@
   "locations": {
     "files": {},
     "functions": {
-      "evals/draw/browser.mjs#measureSheet": "evals/draw/browser.mjs#measureSheet",
-      "evals/draw/browser.mjs#measureSheet/flatMap callback~5": "evals/draw/browser.mjs#measureSheet/flatMap callback~5",
       "evals/draw/evaluate.mjs#evaluateSheet": "evals/draw/evaluate.mjs#evaluateSheet",
       "evals/draw/m3-delivery.mjs#m3Delivery": "evals/draw/m3-delivery.mjs#m3Delivery",
       "evals/draw/mirror-returns.mjs#mirrorReturns": "evals/draw/mirror-returns.mjs#mirrorReturns",
@@ -727,6 +719,31 @@
       "section": "functions",
       "from": "packages/cli/test/release-package.test.ts#writeSyntheticPack",
       "sha256": "ca1258ecf824ffd833abd437a7fdec31c981214a2769fe76c20f2bbf6bdecd96"
+    },
+    "evals/draw/measurement/geometry.mjs#tagIdentity": {
+      "section": "functions",
+      "from": "evals/draw/browser.mjs#measureSheet/tagIdentity",
+      "sha256": "8fec6be81aef1675264355efbf70bd6722595ee91f1e4ab2a30b295b66b7bf14"
+    },
+    "evals/draw/measurement/geometry.mjs#identity": {
+      "section": "functions",
+      "from": "evals/draw/browser.mjs#measureSheet/identity",
+      "sha256": "72bc3773b206f23ee76c4b713d97c1e36472450a12101711e674379cd0ef1ff6"
+    },
+    "evals/draw/measurement/outline.mjs#paintedShapeBounds": {
+      "section": "functions",
+      "from": "evals/draw/browser.mjs#measureSheet/paintedShapeBounds",
+      "sha256": "0e3674e3f7d5f302e795e41696324799721d336bbeadb6e57080f7a87fec407e"
+    },
+    "evals/draw/browser.mjs#measureSheet/flatMap callback": {
+      "section": "functions",
+      "from": "evals/draw/browser.mjs#measureSheet/flatMap callback~9",
+      "sha256": "51d06957de3c587590d9bc9223c12c752b08ff82f5032ca37046deb1aea2c265"
+    },
+    "evals/draw/measurement/geometry.mjs#shapeClips": {
+      "section": "functions",
+      "from": "evals/draw/browser.mjs#measureSheet/shapeClips",
+      "sha256": "10282f52db8a9b515bcbd5a9b9fa15431d66a8d2c5d7922fb835b634027a585e"
     }
   },
   "nonNullAssertions": {

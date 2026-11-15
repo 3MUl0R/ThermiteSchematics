@@ -4,7 +4,7 @@ import {
   drawingContextOptions,
   openSheet,
   displaySheet,
-  measureSheet,
+  sheetMeasurementSource,
 } from "./browser.mjs";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { mirrorReturns } from "./mirror-returns.mjs";
@@ -93,7 +93,7 @@ it("Q5 route-only browser capture keeps actual transforms and clips", async () =
   );
   const g = await page.evaluate(
     (source) => (0, eval)(`(${source})`)({ routesOnly: true }),
-    measureSheet.toString(),
+    sheetMeasurementSource(),
   );
   expect(g.shapes).toHaveLength(1);
   for (const [key, value] of Object.entries({ x: 20, y: 30, w: 50, h: 50 }))

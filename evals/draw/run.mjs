@@ -44,7 +44,7 @@ import {
   displaySheet,
   cropBox,
   screenshotCrop,
-  measureSheet,
+  sheetMeasurementSource,
   drawingContextOptions,
 } from "./browser.mjs";
 import {
@@ -414,7 +414,7 @@ try {
             (_, i) =>
               measure({ selector: `#sheet-${i + 1}>svg`, textOnly: true }),
           );
-        }, measureSheet.toString());
+        }, sheetMeasurementSource());
         const htmlSvgs = await page.evaluate(() =>
           Array.from(
             document.querySelectorAll("section>svg"),
