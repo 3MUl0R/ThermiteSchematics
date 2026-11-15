@@ -272,22 +272,17 @@ export async function topologyDrafts(
     };
     const fits = (drawing: NotedDrawing) => compose(drawing).ok;
     const unfit = topologyUnfit(compose);
+    const stagger = topologyStaggerGuard(compose);
     const drawings = wiring
       ? [await prepareWiringDrawing(ir, request)]
       : signalLoop
-        ? [
-            await prepareSignalLoopDrawing(
-              ir,
-              request,
-              topologyStaggerGuard(compose),
-            ),
-          ]
+        ? [await prepareSignalLoopDrawing(ir, request, stagger.accept)]
         : assembly
           ? await prepareConnectorAssemblyPages(ir, request, fits, unfit)
           : await prepareCommunicationPages(ir, request, fits, unfit);
     const drafts: Draft[] = [];
     for (const drawing of drawings) {
-      const result = compose(drawing);
+      const result = signalLoop ? stagger.compose(drawing) : compose(drawing);
       if (!result.ok) return result;
       drafts.push(result.value);
     }
@@ -443,15 +438,39 @@ function topologyStaggerGuard(
     observeScale?: (scale: number) => void,
   ) => RenderOutcome<Draft>,
 ) {
-  return (candidate: NotedDrawing, fallback: NotedDrawing) => {
-    let beforeScale = 0,
-      afterScale = 0;
-    const before = compose(fallback, (scale) => {
-      beforeScale = scale;
-    });
-    const after = compose(candidate, (scale) => {
-      afterScale = scale;
-    });
-    return after.ok && (!before.ok || afterScale >= beforeScale);
+  let native:
+    | {
+        drawing: NotedDrawing | undefined;
+        outcome: RenderOutcome<Draft> | undefined;
+        scale: number;
+      }
+    | undefined;
+  let accepted:
+    { drawing: NotedDrawing; outcome: RenderOutcome<Draft> } | undefined;
+  return {
+    accept(candidate: NotedDrawing, fallback: NotedDrawing | undefined) {
+      if (!native) {
+        let scale = 0;
+        const outcome = fallback
+          ? compose(fallback, (value) => {
+              scale = value;
+            })
+          : undefined;
+        native = { drawing: fallback, outcome, scale };
+      }
+      let afterScale = 0;
+      const after = compose(candidate, (scale) => {
+        afterScale = scale;
+      });
+      const allows =
+        after.ok && (!native.outcome?.ok || afterScale >= native.scale);
+      if (allows) accepted = { drawing: candidate, outcome: after };
+      return allows;
+    },
+    compose(drawing: NotedDrawing) {
+      if (native?.drawing === drawing && native.outcome) return native.outcome;
+      if (accepted?.drawing === drawing) return accepted.outcome;
+      return compose(drawing);
+    },
   };
 }

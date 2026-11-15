@@ -22,6 +22,7 @@ import {
 import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
 import {
   InlineLabelFitError,
+  isInlineLabelFailure,
   InlineLabelCollisionError as Collision,
 } from "./layout/inline-label-error.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
@@ -445,7 +446,7 @@ export async function prepareSignalLoopDrawing(
   request: SignalLoopViewRequest,
   acceptCandidate?: (
     candidate: ReturnType<typeof directLoopDrawing>,
-    fallback: ReturnType<typeof directLoopDrawing>,
+    fallback: ReturnType<typeof directLoopDrawing> | undefined,
   ) => boolean,
 ) {
   const selected = selectSignalLoop(ir, request);
@@ -517,6 +518,11 @@ export async function prepareSignalLoopDrawing(
               p.terminal === e.ends[side === "out" ? 0 : 1].terminalKey),
       )!.id;
   const documentNeeds = directLoopDocumentNeeds(ir, assembledCables, stages);
+  const draw = (graph: ElkNode) =>
+    directLoopDrawing(graph, selected, request, edges, context, documentNeeds);
+  const fallback = directLoopFallback(draw);
+  let accepted:
+    { graph: ElkNode; drawing: ReturnType<typeof draw> } | undefined;
   const graph = await layoutDirectLoop(
     children,
     edges.map((e, i) => ({
@@ -537,35 +543,16 @@ export async function prepareSignalLoopDrawing(
       : [],
     checkLabels,
     acceptCandidate
-      ? (candidate, fallback) =>
-          acceptCandidate(
-            directLoopDrawing(
-              candidate,
-              selected,
-              request,
-              edges,
-              context,
-              documentNeeds,
-            ),
-            directLoopDrawing(
-              fallback,
-              selected,
-              request,
-              edges,
-              context,
-              documentNeeds,
-            ),
-          )
+      ? (candidate, native) => {
+          const drawing = draw(candidate);
+          if (!acceptCandidate(drawing, fallback.project(native))) return false;
+          accepted = { graph: candidate, drawing };
+          return true;
+        }
       : undefined,
   );
-  return directLoopDrawing(
-    graph,
-    selected,
-    request,
-    edges,
-    context,
-    documentNeeds,
-  );
+  if (accepted?.graph === graph) return accepted.drawing;
+  return fallback.selected(graph) ?? draw(graph);
 }
 
 function directLoopDrawing(
@@ -610,4 +597,32 @@ function directLoopDrawing(
     request,
     assemblies.length > 0,
   );
+}
+
+/** The fixed native fallback is projected at most once, including failures. */
+function directLoopFallback(
+  draw: (graph: ElkNode) => ReturnType<typeof directLoopDrawing>,
+) {
+  let fallback:
+    | { graph: ElkNode; drawing: ReturnType<typeof draw> }
+    | { graph: ElkNode; error: unknown }
+    | undefined;
+  return {
+    project(graph: ElkNode) {
+      if (!fallback) {
+        try {
+          fallback = { graph, drawing: draw(graph) };
+        } catch (error) {
+          if (!isInlineLabelFailure(error)) throw error;
+          fallback = { graph, error };
+        }
+      }
+      return "drawing" in fallback ? fallback.drawing : undefined;
+    },
+    selected(graph: ElkNode) {
+      if (fallback?.graph !== graph) return undefined;
+      if ("error" in fallback) throw fallback.error;
+      return fallback.drawing;
+    },
+  };
 }
