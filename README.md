@@ -171,8 +171,10 @@ fit horizontal circuit sections on the same sheet where possible. The default
 `standard` preserves the initial layout. Search the HTML by device designation
 and follow clickable conductor continuations.
 
-Pagination keeps devices and labels intact, with a minimum circuit text size of
-2.5 mm. If a view cannot be split safely at that size, Thermite returns R006 with
+Pagination keeps devices and labels intact. Every printed text run in SVG, HTML
+and PDF uses at least 2.5 mm vertical physical em, including frame furniture,
+zones, notes, footers, captions, references and the version stamp. Device
+designation tags keep their 2.7 mm floor. If a view cannot be split safely at that size, Thermite returns R006 with
 an actionable explanation; use a larger sheet, another flow, or a narrower view.
 
 ## Cables and component libraries

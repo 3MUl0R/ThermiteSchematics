@@ -2,6 +2,7 @@ import { symbolProfile } from "./profiles.js";
 import { printableCaption } from "./printable-policy.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { printableTextMetrics } from "./printable-font.js";
+import { CaptionPlacementError } from "./caption-ink.js";
 export type CaptionPoint = { x: number; y: number };
 export type CaptionBox = {
   left: number;
@@ -49,8 +50,9 @@ export function circuitCaptionPosition(
   occupied: readonly CaptionBox[],
   width: number,
   height: number,
+  emMm = 2.5,
 ) {
-  const m = printableTextMetrics(value, 2.3),
+  const m = printableTextMetrics(value, emMm),
     w = m.right - m.left,
     h = m.top - m.bottom,
     candidates: { x: number; y: number; box: CaptionBox; score: number }[] = [];
@@ -99,6 +101,25 @@ interface CircuitContactCaption {
   diagnostics: import("@thermite/schema").Diagnostic[];
   text: (x: number, y: number, value: string, size: number) => string;
 }
+function contactCaptionPosition(
+  c: CircuitContactCaption,
+  value: string,
+  emMm: number,
+) {
+  const owner = c.centers.find((p) => p.key === c.fn.id.functionKey);
+  if (!owner)
+    throw Error(`Missing contact caption owner ${c.fn.id.functionKey}`);
+  return circuitCaptionPosition(
+    value,
+    { x: c.x, y: c.y, bounds: owner.bounds },
+    c.centers.filter((p) => p.key !== c.fn.id.functionKey).map((p) => p.bounds),
+    c.segments,
+    c.occupied,
+    c.width,
+    c.height,
+    emMm,
+  );
+}
 export function emitCircuitContactCaption(c: CircuitContactCaption): string {
   if (
     symbolProfile(c.type) !== "thermite:breaker" ||
@@ -111,22 +132,15 @@ export function emitCircuitContactCaption(c: CircuitContactCaption): string {
     fn: c.fn,
     mark: `circuit:${c.mark}`,
   });
-  const owner = c.centers.find((p) => p.key === c.fn.id.functionKey);
-  if (!owner)
-    throw Error(`Missing contact caption owner ${c.fn.id.functionKey}`);
-  const p = circuitCaptionPosition(
-    caption,
-    { x: c.x, y: c.y, bounds: owner.bounds },
-    c.centers.filter((p) => p.key !== c.fn.id.functionKey).map((p) => p.bounds),
-    c.segments,
-    c.occupied,
-    c.width,
-    c.height,
-  );
+  const p = contactCaptionPosition(c, caption, 2.5);
   if (p) {
     c.occupied.push(p.box);
-    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text(p.x, p.y, caption, 2.3)}</g>`;
+    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text(p.x, p.y, caption, 2.5)}</g>`;
   }
+  // Preserve an existing omission, but never create one because type grew.
+  // The old em probes content compatibility only; it is never emitted.
+  if (contactCaptionPosition(c, caption, 2.3))
+    throw new CaptionPlacementError(caption);
   c.diagnostics.push({
     code: "W907",
     severity: "warning",

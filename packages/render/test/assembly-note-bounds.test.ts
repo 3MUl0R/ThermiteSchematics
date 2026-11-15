@@ -30,12 +30,23 @@ beforeAll(async () => {
     .views[0];
 });
 const noteRows = (svg: string) =>
-  [...parseHTML(svg).document.querySelectorAll('text[font-size="2.5"]')].filter(
+  [
+    ...parseHTML(svg).document.querySelectorAll(
+      '[data-navigation-view] text[font-size="2.5"]',
+    ),
+  ].filter(
     (e) =>
       !e.parentElement?.closest("[data-device-uid], [data-assembly-label]"),
   );
 
 describe("assembly note bounds", () => {
+  it("keeps 2.5 mm frame furniture out of the assembly-note population", () => {
+    const svg =
+      '<svg><text font-size="2.5">1</text><text font-size="2.5">Footer</text><g data-navigation-view="synthetic"><text font-size="2.5">Complete assembly note</text></g></svg>';
+    expect(noteRows(svg).map((n) => n.textContent)).toEqual([
+      "Complete assembly note",
+    ]);
+  });
   it("reserves note space without losing the selected connector inventory", async () => {
     const before = JSON.stringify(ir),
       original = await prepareConnectorAssemblyDrawing(ir, view);

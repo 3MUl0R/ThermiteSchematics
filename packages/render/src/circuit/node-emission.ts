@@ -79,7 +79,7 @@ export function emitCircuitNode(
   emitNodeGangs(state);
   for (const p of node.pins) emitNodePin(p, state);
   const { out, text } = state;
-  footers.forEach((p) => out.push(text(p.x, p.y, p.value, 2.3, p.anchor)));
+  footers.forEach((p) => out.push(text(p.x, p.y, p.value, 2.5, p.anchor)));
   out.push("</g>");
   return out.join("");
 }
@@ -170,7 +170,7 @@ function nodeEmissionPlacement(state: EmissionBase): EmissionPlaced {
         node.width / 2,
         node.height - (vertical ? 7 : 1),
         "BOUNDARY",
-        2.3,
+        2.5,
         "middle",
       ),
     );
@@ -286,7 +286,7 @@ function nodeCaptionBoxes(
         "BOUNDARY",
         node.width / 2,
         node.height - (vertical ? 7 : 1),
-        2.3,
+        2.5,
         "middle",
       ),
     );
@@ -371,7 +371,7 @@ function nodeFooters(state: EmissionState) {
       value,
       vertical && coilRow ? designationX : node.width / 2,
       y,
-      2.3,
+      2.5,
       vertical && coilRow ? designationAnchor : "middle",
       false,
       bounds,

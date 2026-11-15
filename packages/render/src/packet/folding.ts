@@ -1,3 +1,4 @@
+import { viewportSize } from "./viewport-size.js";
 import { sectionGroups, stackSections } from "./fold-stack.js";
 import { stripEnvelope } from "./strip-envelope.js";
 import { rootedDraft } from "./rooted-draft.js";
@@ -72,7 +73,7 @@ export function foldDrawingDrafts(
       fullH,
       Math.max(...spans.map((s) => s.y + s.h)) + pad + 12,
     );
-    const h = (end - start) * scale,
+    const h = viewportSize(end - start, scale),
       draft = required(drafts[col], "Missing strip");
     heights.push(h);
     trimSectionViewport(draft, {
@@ -84,7 +85,7 @@ export function foldDrawingDrafts(
     // Only the first viewport belongs to this section; drawing text is unchanged.
     draft.content = draft.content.replace(/<svg\b[^>]*>/u, (tag) =>
       tag
-        .replace(/\bheight="[^"]*"/u, `height="${n(h)}"`)
+        .replace(/\bheight="[^"]*"/u, `height="${h}"`)
         .replace(
           /\bviewBox="[^"]*"/u,
           `viewBox="${n(xs[col]!)} ${n(start)} ${n(xs[col + 1]! - xs[col]!)} ${n(end - start)}"`,

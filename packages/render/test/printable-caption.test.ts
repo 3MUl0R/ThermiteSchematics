@@ -76,7 +76,7 @@ describe("printable function facts", () => {
       const coil = parseHTML(result.value.html)
         .document.querySelector('[data-function-key="coil"]')!
         .closest("[data-device-uid]")!;
-      const labels = [...coil.querySelectorAll('text[font-size="2.3"]')].map(
+      const labels = [...coil.querySelectorAll('text[font-size="2.5"]')].map(
         (t) => t.textContent!,
       );
       expect(labels.join(" ")).toContain("300");
@@ -88,7 +88,7 @@ describe("printable function facts", () => {
           circuitTextLines(
             label,
             Number(coil.getAttribute("data-circuit-body-width")) - 4 + 0.001,
-            2.3,
+            2.5,
           ),
         ).toEqual([label]);
       // Whole authored terminal sets retain their measured caption width.
@@ -366,8 +366,8 @@ describe("printable function facts", () => {
       }
       const available =
         Number(coil.getAttribute("data-layout-width")) - 4 + 0.001;
-      for (const label of coil.querySelectorAll('text[font-size="2.3"]')) {
-        expect(circuitTextLines(label.textContent!, available, 2.3)).toEqual([
+      for (const label of coil.querySelectorAll('text[font-size="2.5"]')) {
+        expect(circuitTextLines(label.textContent!, available, 2.5)).toEqual([
           label.textContent,
         ]);
       }

@@ -360,9 +360,11 @@ invariant; pre-dispatch CLI usage errors with plain-text stderr are outside it t
 
 
 Circuit sheets use ELK's validated diagram, preserving its geometry. Cuts avoid
-devices, rails, symbol/terminal labels, junctions, and routing bends. Primary circuit
-text, including symbol legends, uses at least 2.5 mm em at printed scale; secondary
-cross-reference and boundary captions use 2.3 mm em. Repeated SVG IDs are namespaced
+devices, rails, symbol/terminal labels, junctions, and routing bends. All printed
+text uses at least 2.5 mm vertical physical em in SVG, HTML and PDF, including
+symbol legends, secondary references, boundary/contact/relation captions, frame
+furniture, zones, notes, footers and the version stamp. Device designation tags
+retain their 2.7 mm floor. The separate ISO cap-height policy is unchanged. Repeated SVG IDs are namespaced
 per sheet without changing electrical metadata. An unprintable arrangement returns R006 rather
 than clipping a device, overlapping a continuation label, or silently omitting
 content. Change flow, page size, or the selected view to resolve it.

@@ -266,7 +266,7 @@ parts prefer existing separators. Every character is retained, and wrapping adds
 no punctuation or spaces. No truncation, inferred rating or subminimum fit is
 used. An owner that cannot fit with its tag produces R006.
 
-Primary symbol legends, wire labels, conductor details, terminal labels and PLC channel addresses use at least 2.5 mm em at printed scale. Secondary cross-reference and boundary captions use 2.3 mm em. Long labels are measured before routing and pagination; an unreadable block or group is rejected rather than clipped.
+All printed text uses at least 2.5 mm vertical physical em in SVG, HTML and PDF, including symbol legends, wire labels, conductor details, terminal labels, PLC channel addresses, secondary references, boundary/contact/relation captions, frame furniture, zones, notes, footers and the version stamp. Device designation tags retain their 2.7 mm floor. The separate ISO cap-height policy is unchanged. Long labels are measured before routing and pagination; an unreadable block or group is rejected rather than clipped.
 
 Vertical device designations, and relation footers in both flows, use pinned
 font ink to find
