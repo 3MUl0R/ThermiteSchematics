@@ -14,6 +14,14 @@ import { compileCoreFixture } from "./fixtures.js";
 import { motorCircuitView } from "./circuit-fixture.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 let ir: ElectricalIr, view: CircuitViewRequest;
+const paginationCases = (["left-to-right", "top-to-bottom"] as const).flatMap(
+  (flow) =>
+    (["tabloid", "a3", "a4", "letter"] as const).map((size) => ({
+      flow,
+      size,
+      timeout: flow === "top-to-bottom" && size === "tabloid" ? 240000 : 120000,
+    })),
+);
 beforeAll(async () => {
   const directory = resolve("examples/circuit-pagination");
   const c = await compileProject(directory);
@@ -88,8 +96,8 @@ describe("whole-conductor circuit pagination", () => {
             expect.arrayContaining(gang),
           );
   });
-  for (const flow of ["left-to-right", "top-to-bottom"] as const)
-    it.each(["tabloid", "a3", "a4", "letter"] as const)(
+  for (const { flow, size, timeout } of paginationCases)
+    it.each([size])(
       `conserves wiring and symbols with reciprocal references: ${flow}, %s`,
       async (size) => {
         const before = JSON.stringify(ir);
@@ -264,6 +272,7 @@ describe("whole-conductor circuit pagination", () => {
         expect(await renderSchematicPacket(ir, request)).toEqual(r);
         expect(JSON.stringify(ir)).toBe(before);
       },
+      timeout,
     );
 
   it("preserves fitting group output and the single-drawing API", async () => {

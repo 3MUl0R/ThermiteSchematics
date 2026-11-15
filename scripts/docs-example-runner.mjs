@@ -9,6 +9,15 @@ export async function cabinetsShell(c, fence) {
   return shell(c, fence.body);
 }
 export async function repoShell(c, fence) {
+  if (fence.file === "docs/machine-demo.md") {
+    const run = c.run;
+    // This full packet example reaches 99 s on CI; other examples keep 30 s.
+    c = {
+      ...c,
+      run: (args, cwd, env, settings) =>
+        run(args, cwd, env, { timeoutMs: 120000, ...settings }),
+    };
+  }
   await c.copy("examples", join(c.work, "examples"));
   await c.copy(
     "scripts/demo-change.mjs",

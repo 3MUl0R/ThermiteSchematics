@@ -22,6 +22,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,9 +41,38 @@ jobs:
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
+      - name: Cache pinned Chromium
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - name: Install pinned Chromium and system dependencies
+        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+      - name: Select pinned Chromium for both browser harnesses
+        shell: bash
+        run: |
+          bun -e '
+            import { chromium } from "playwright-core";
+            import { accessSync, appendFileSync } from "node:fs";
+            const executable = chromium.executablePath();
+            accessSync(executable);
+            appendFileSync(process.env.GITHUB_ENV,
+              `THERMITE_DRAW_CHROMIUM=${executable}\nTHERMITE_TEST_BROWSER=${executable}\n`);
+          '
+      - name: Capture Linux layout evidence
+        if: runner.os == 'Linux'
+        run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python
+      - name: Retain Linux layout evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ci-layout-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          path: coverage/ci-layout/
+          if-no-files-found: warn
+          retention-days: 7
       - run: bun run package:pack
       - name: Verify Linux candidate without network access
         if: runner.os == 'Linux'
@@ -88,6 +118,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,7 +137,36 @@ jobs:
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
+      - name: Cache pinned Chromium
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - name: Install pinned Chromium and system dependencies
+        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+      - name: Select pinned Chromium for both browser harnesses
+        shell: bash
+        run: |
+          bun -e '
+            import { chromium } from "playwright-core";
+            import { accessSync, appendFileSync } from "node:fs";
+            const executable = chromium.executablePath();
+            accessSync(executable);
+            appendFileSync(process.env.GITHUB_ENV,
+              `THERMITE_DRAW_CHROMIUM=${executable}\nTHERMITE_TEST_BROWSER=${executable}\n`);
+          '
+      - name: Capture Linux layout evidence
+        if: runner.os == 'Linux'
+        run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
       - name: Check a linked worktree
         run: bun scripts/check-worktree.mjs
         env:
           THERMITE_RESEARCH_PYTHON: python
+      - name: Retain Linux layout evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ci-layout-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          path: coverage/ci-layout/
+          if-no-files-found: warn
+          retention-days: 7
