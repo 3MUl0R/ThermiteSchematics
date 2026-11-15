@@ -69,7 +69,6 @@
     "packages/render/src/circuit.ts": 913,
     "packages/render/src/layout/elk-adapter.ts": 887,
     "packages/render/src/layout/validate-output.ts": 1600,
-    "packages/render/src/signal-loop.ts": 971,
     "packages/render/src/svg/emitter.ts": 1244,
     "packages/render/src/symbols/validate.ts": 1108,
     "packages/render/test/b4-tier1.test.ts": 1666,
@@ -106,7 +105,6 @@
       "evals/draw/run.mjs#pool callback": "0d2570cc8aa7028179e33ef12c749192cc5c50d33ffa8585dc98a69b99a0396a",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "0248e44eb32b9f36271db7d5a7cebee3777d9c06e121adfe2051dff781118730",
       "packages/query/src/documentation.ts#buildDocumentationTable": "994ac92a3c3b4955b2109b713f8fbc72987149a1a25f14c1c6700881cb57f9ec",
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "401c7eb9ef48d3b4177df0f78603726f2e741635441584f401fe287816608a4b",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
@@ -464,7 +462,7 @@
     "packages/render/src/sheets.ts#renderPacket": 217,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures": 164,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures/map callback~2": 112,
-    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing/map callback~3": 177,
+    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 127,
     "packages/render/src/signal-loop.ts#selectSignalLoop": 261,
     "packages/render/src/svg/emitter.ts#conductorAttributes": 89,
     "packages/render/src/svg/emitter.ts#emitFrames": 88,
@@ -693,7 +691,6 @@
       "evals/draw/run.mjs#pool callback": 514,
       "evals/draw/run.mjs#pool callback/retainingCase callback": 508,
       "packages/query/src/documentation.ts#buildDocumentationTable": 714,
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 530,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
@@ -711,7 +708,6 @@
       "evals/draw/run.mjs#pool callback": "evals/draw/run.mjs#pool callback",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "evals/draw/run.mjs#pool callback/retainingCase callback",
       "packages/query/src/documentation.ts#buildDocumentationTable": "packages/query/src/documentation.ts#buildDocumentationTable",
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
@@ -819,7 +815,13 @@
     "packages/render/src/selection/traversal.ts": 6,
     "packages/render/src/sheets.ts": 2,
     "packages/render/src/signal-loop-enclosures.ts": 42,
-    "packages/render/src/signal-loop.ts": 91,
+    "packages/render/src/signal-loop.ts": 31,
+    "packages/render/src/signal-loop/direct-assemblies.ts": 4,
+    "packages/render/src/signal-loop/direct-node-emission.ts": 14,
+    "packages/render/src/signal-loop/direct-node-ports.ts": 2,
+    "packages/render/src/signal-loop/direct-nodes.ts": 4,
+    "packages/render/src/signal-loop/direct-port-emission.ts": 13,
+    "packages/render/src/signal-loop/direct-routes.ts": 23,
     "packages/render/src/svg/emitter.ts": 1,
     "packages/render/src/symbols/catalog.ts": 1,
     "packages/render/src/symbols/circuit.ts": 1,
@@ -967,6 +969,42 @@
       "from": 0,
       "to": 8,
       "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts",
+      "from": 0,
+      "to": 4,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts",
+      "from": 0,
+      "to": 14,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts",
+      "from": 0,
+      "to": 4,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts",
+      "from": 0,
+      "to": 13,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts",
+      "from": 0,
+      "to": 23,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
     },
     "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": {
       "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",

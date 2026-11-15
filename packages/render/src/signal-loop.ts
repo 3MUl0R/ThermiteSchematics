@@ -37,6 +37,11 @@ import {
   finishDirectLoopDrawing,
 } from "./signal-loop/direct-polarity.js";
 import { drawEnclosures } from "./signal-loop-enclosures.js";
+import type { DrawingEdge } from "./signal-loop/direct-types.js";
+import { directLoopAssemblies } from "./signal-loop/direct-assemblies.js";
+import { directLoopNode } from "./signal-loop/direct-nodes.js";
+import { emitDirectLoopRoutes } from "./signal-loop/direct-routes.js";
+import { emitDirectLoopNodes } from "./signal-loop/direct-node-emission.js";
 
 export interface SignalLoopViewRequest {
   readonly format: "signal-loop-view-request/0.1";
@@ -68,10 +73,6 @@ export interface Conductor {
   net: string;
   cable?: string;
   spare: boolean;
-}
-interface DrawingEdge extends Omit<Conductor, "net"> {
-  net?: string;
-  assembly?: { connector: string; members: readonly Conductor[] };
 }
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -452,50 +453,12 @@ export async function prepareSignalLoopDrawing(
       ? c
       : { ...c, ends: [c.ends[1], c.ends[0]] as const },
   );
-  const assemblies: DrawingEdge[] = [];
-  const assembledCables = new Set<string>();
-  for (const spec of request.cableAssemblies ?? []) {
-    const matching = ir.cables.filter(
-      (c) => c.uid === spec.cable || c.designation === spec.cable,
-    );
-    if (matching.length !== 1)
-      throw new Error(
-        `Cable ${JSON.stringify(spec.cable)} does not resolve uniquely.`,
-      );
-    const cable = matching[0]!,
-      members = physicalEdges
-        .filter((e) => e.cable === cable.uid)
-        .sort((a, b) => compare(a.id, b.id));
-    if (!members.length || assembledCables.has(cable.uid))
-      throw new Error(
-        "Cable assembly must identify a unique cable in the selected loop.",
-      );
-    if (
-      members.some((m) =>
-        m.ends.some((t, i) => t.deviceUid !== members[0]!.ends[i]!.deviceUid),
-      )
-    )
-      throw new Error(
-        "A cable assembly must terminate on the same pair of devices for every core.",
-      );
-    if (width(spec.connector) > 15)
-      throw new Error("Connector label is too wide.");
-    const mapping = members.map((m) => pinMapPair(m));
-    assemblies.push({
-      id: `assembly:${cable.uid}`,
-      cable: cable.uid,
-      ends: members[0]!.ends,
-      spare: false,
-      assembly: { connector: spec.connector, members },
-      label: [
-        cable.designation,
-        ...wrap(spec.description, 55),
-        `${members.length} cores / pin map:`,
-        ...wrap(mapping.join(", "), 55),
-      ],
-    });
-    assembledCables.add(cable.uid);
-  }
+  const { assemblies, assembledCables } = directLoopAssemblies(
+    ir,
+    request,
+    physicalEdges,
+    { key, compare, n, text, width, wrap },
+  );
   const edges: DrawingEdge[] = [
     ...physicalEdges.filter((e) => !e.cable || !assembledCables.has(e.cable)),
     ...assemblies,
@@ -516,183 +479,28 @@ export async function prepareSignalLoopDrawing(
         unused?: boolean;
       }[]
     >();
-  const children: ElkNode[] = stages.map((uid, index) => {
-    const device = devices.get(uid)!,
-      type = types.get(device.typeId)!;
-    const channel =
-      uid === selected.from.device.uid
-        ? selected.from
-        : uid === selected.to.device.uid
-          ? selected.to
-          : undefined;
-    const isChannel = channel?.function.kind === "channel";
-    const preferredWidth = selected.output
-      ? index === 0 || index === stages.length - 1
-        ? 50
-        : 44
-      : isChannel
-        ? 66
-        : 50;
-    const tag = drawingDeviceTag(device, type, preferredWidth);
-    tags.set(uid, tag);
-    const captionWidth = tag.widthMm;
-    let w = captionWidth;
-    const caption = [
-      ...(device.location?.trim()
-        ? wrap(device.location, captionWidth - 6)
-        : []),
-      ...(isChannel
-        ? wrap(selectedChannelCaption(channel!), captionWidth - 6)
-        : []),
-    ];
-    captions.set(uid, caption);
-    const terms = new Set(
-      physicalEdges.flatMap((e) =>
-        e.ends.filter((t) => t.deviceUid === uid).map((t) => t.terminalKey),
-      ),
-    );
-    // Order contacts toward the actuator; real identifiers remain schematic,
-    // not a connector-face view. ELK owns placement and routing.
-    const destinationOrder = (terminal: string): number => {
-      let current: TerminalId = { deviceUid: uid, terminalKey: terminal };
-      while (current.deviceUid !== stages.at(-1)) {
-        const next = physicalEdges.filter(
-          (e) => key(e.ends[0]) === key(current),
-        );
-        if (next.length !== 1) return Number.MAX_SAFE_INTEGER;
-        current = next[0]!.ends[1];
-      }
-      const endType = selected.to.type;
-      return (
-        endType.terminalOrder ?? endType.terminals.map((t) => t.key)
-      ).indexOf(current.terminalKey);
-    };
-    const ordered = [...terms].sort((a, b) => {
-      if (selected.output) {
-        const difference = destinationOrder(a) - destinationOrder(b);
-        if (difference) return difference;
-      }
-      const order = type.terminalOrder ?? type.terminals.map((t) => t.key);
-      return order.indexOf(a) - order.indexOf(b) || compare(a, b);
-    });
-    if (vertical) w += Math.max(66, ordered.length * 14 + 10);
-    if (vertical && (index === 0 || index === stages.length - 1))
-      pinRows.set(
-        uid,
-        appendPinRows(caption, type, ordered, uid, captionWidth - 6),
-      );
-    const header =
-      (index === 0 && type.symbol === "thermite:pressure-transmitter"
-        ? 26
-        : 5) + deviceHeaderHeight(tag, caption);
-    const h = vertical
-      ? Math.max(header + 5, 35)
-      : header + ordered.length * 10 + 5;
-    const list: NonNullable<ReturnType<typeof ports.get>> = ordered.flatMap(
-      (terminal, i) =>
-        (["in", "out"] as const).flatMap((side) => {
-          const has = physicalEdges.some(
-            (e) =>
-              key(e.ends[side === "out" ? 0 : 1]) ===
-              key({ deviceUid: uid, terminalKey: terminal }),
-          );
-          if (!has) return [];
-          const suppressed = assemblies.some((a) =>
-            a.assembly!.members.some(
-              (m) =>
-                key(m.ends[side === "out" ? 0 : 1]) ===
-                key({ deviceUid: uid, terminalKey: terminal }),
-            ),
-          );
-          const id = `n${index}_${side}_${i}`;
-          return [
-            {
-              id,
-              terminal,
-              side,
-              suppressed,
-              x: vertical ? captionWidth + 9 + i * 14 : side === "in" ? 0 : w,
-              y: vertical ? (side === "in" ? 0 : h) : header + 5 + i * 10,
-            },
-          ];
-        }),
-    );
-    for (const assembly of assemblies)
-      for (const side of ["in", "out"] as const) {
-        if (assembly.ends[side === "out" ? 0 : 1].deviceUid !== uid) continue;
-        if (list.some((p) => p.assembly && p.side === side))
-          throw new Error(
-            "Only one cable assembly per device face is supported in a loop view.",
-          );
-        const memberPorts = list.filter(
-          (p) =>
-            p.side === side &&
-            assembly.assembly!.members.some(
-              (m) => m.ends[side === "out" ? 0 : 1].terminalKey === p.terminal,
-            ),
-        );
-        if (index !== 0 && index !== stages.length - 1)
-          for (const p of memberPorts) {
-            if (
-              !list.some((q) => q.terminal === p.terminal && q.side !== p.side)
-            )
-              list.push({
-                ...p,
-                id: `${p.id}_unused`,
-                side: side === "in" ? "out" : "in",
-                x: vertical ? p.x : side === "in" ? w : 0,
-                y: vertical ? (side === "in" ? h : 0) : p.y,
-                suppressed: false,
-                unused: true,
-              });
-          }
-        list.push({
-          id: `n${index}_${side}_${assembly.id}`,
-          terminal: "",
-          side,
-          assembly,
-          x: vertical
-            ? memberPorts.reduce((s, p) => s + p.x, 0) / memberPorts.length
-            : side === "in"
-              ? 0
-              : w,
-          y: vertical
-            ? side === "in"
-              ? 0
-              : h
-            : memberPorts.reduce((s, p) => s + p.y, 0) / memberPorts.length,
-        });
-      }
-    if (list.some((p) => width(p.terminal) > (vertical ? 11 : w / 2 - 5)))
-      throw new Error(
-        "Terminal identifier is too wide for the signal loop symbol.",
-      );
-    ports.set(uid, list);
-    return {
-      id: `n${index}`,
-      width: w,
-      height: h,
-      layoutOptions: { "elk.portConstraints": "FIXED_POS" },
-      ports: list
-        .filter((p) => !p.suppressed && !p.unused)
-        .map((p) => ({
-          id: p.id,
-          x: p.x,
-          y: p.y,
-          width: 0,
-          height: 0,
-          layoutOptions: {
-            "elk.port.side": vertical
-              ? p.side === "in"
-                ? "NORTH"
-                : "SOUTH"
-              : p.side === "in"
-                ? "WEST"
-                : "EAST",
-          },
-        })),
-    };
-  });
+  const context = {
+    selected,
+    stages,
+    devices,
+    types,
+    vertical,
+    physicalEdges,
+    assemblies,
+    tags,
+    pinRows,
+    captions,
+    ports,
+    key,
+    compare,
+    n,
+    text,
+    width,
+    wrap,
+  };
+  const children: ElkNode[] = stages.map((uid, index) =>
+    directLoopNode(uid, index, context),
+  );
   const portId = (e: DrawingEdge, side: "in" | "out") =>
     ports
       .get(e.ends[side === "out" ? 0 : 1].deviceUid)!
@@ -735,225 +543,15 @@ export async function prepareSignalLoopDrawing(
     vertical,
   );
   const out: string[] = [enclosure.content];
-  for (const edge of graph.edges ?? []) {
-    const source = edges[Number(edge.id.slice(1))]!;
-    if (!edge.sections?.length)
-      throw new Error("Incomplete signal loop route.");
-    if (source.assembly)
-      out.push(
-        `<g ${routePortAttributes(edge)} data-cable-assembly="${attr(source.cable!)}"><desc>${xml(JSON.stringify(source.assembly.members))}</desc>`,
-      );
-    else
-      out.push(
-        `<g ${routePortAttributes(edge)} data-terminal-ends="${attr(JSON.stringify(source.ends))}" data-net-id="${attr(source.net!)}" data-loop-conductor="${attr(source.id)}">`,
-      );
-    for (const section of edge.sections) {
-      const points = snappedPath([
-        section.startPoint,
-        ...(section.bendPoints ?? []),
-        section.endPoint,
-      ]);
-      for (let i = 1; i < points.length; i++) {
-        const a = points[i - 1]!,
-          b = points[i]!;
-        for (const node of graph.children ?? []) {
-          if (
-            a.x === b.x
-              ? a.x > node.x! + 0.01 &&
-                a.x < node.x! + node.width! - 0.01 &&
-                Math.max(a.y, b.y) > node.y! + 0.01 &&
-                Math.min(a.y, b.y) < node.y! + node.height! - 0.01
-              : a.y > node.y! + 0.01 &&
-                a.y < node.y! + node.height! - 0.01 &&
-                Math.max(a.x, b.x) > node.x! + 0.01 &&
-                Math.min(a.x, b.x) < node.x! + node.width! - 0.01
-          )
-            throw new Error("Signal loop route crosses a device body.");
-        }
-      }
-      out.push(
-        `<path d="${points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="${source.spare ? "#697586" : "#23566d"}" stroke-width="${source.assembly ? 1.25 : 0.4}" stroke-linecap="round"${source.spare ? ' stroke-dasharray="2 1"' : ""}/>`,
-      );
-    }
-    for (const label of edge.labels ?? []) {
-      if (![label.x, label.y, label.width, label.height].every(Number.isFinite))
-        throw new Error("Unplaced signal loop label.");
-      out.push(
-        `<rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
-      );
-      source.label.forEach((s, i) =>
-        out.push(text(label.x! + 1, label.y! + 3 + i * 3.8, s)),
-      );
-    }
-    out.push("</g>");
-  }
-  const references = [];
-  for (const node of graph.children ?? []) {
-    const index = Number(node.id.slice(1)),
-      uid = stages[index]!,
-      device = devices.get(uid)!,
-      type = types.get(device.typeId)!;
-    out.push(
-      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})">`,
-      fieldDeviceBody(
-        type.symbol ?? "",
-        node.width!,
-        node.height!,
-        vertical ? 25 : node.width! / 2,
-      ),
-    );
-    out.push(
-      deviceHeaderSvg(
-        tags.get(uid),
-        captions.get(uid)!,
-        index === 0 && type.symbol === "thermite:pressure-transmitter" ? 21 : 0,
-        pinRows.get(uid),
-      ),
-    );
-    const list = ports.get(uid)!;
-    for (const p of list) {
-      if (p.assembly) {
-        out.push(
-          `<g ${terminalPortAttribute(p.id)}>${connectorPort(
-            p.x,
-            p.y,
-            vertical,
-            p.side,
-            p.assembly.assembly!.connector,
-          )}</g>`,
-        );
-        continue;
-      }
-      if (p.suppressed) {
-        if (!vertical && (index === 0 || index === stages.length - 1)) {
-          const role =
-            type.terminals.find((t) => t.key === p.terminal)?.description ?? "";
-          const connector = list.find((q) => q.assembly && q.side === p.side)!
-            .assembly!.assembly!.connector;
-          const clearance = 7 + width(connector);
-          const legendX = p.side === "in" ? clearance : 3;
-          out.push(
-            ...pinLegend(
-              uid,
-              p.terminal,
-              role,
-              Math.min(node.width! - 18, node.width! - clearance - 3),
-              legendX,
-              p.y + 1,
-            ),
-          );
-        }
-        continue;
-      }
-      out.push(
-        `<circle ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key({ deviceUid: uid, terminalKey: p.terminal }))}" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
-      );
-      out.push(
-        vertical
-          ? text(p.x + 1.5, p.side === "in" ? 4 : node.height! - 2, p.terminal)
-          : text(
-              p.side === "in" ? 2 : node.width! - 2,
-              p.y - 1.5,
-              p.terminal,
-              2.7,
-              p.side === "in" ? "start" : "end",
-            ),
-      );
-      if (!vertical && (index === 0 || index === stages.length - 1)) {
-        const role = type.terminals.find(
-          (t) => t.key === p.terminal,
-        )?.description;
-        if (role) {
-          const lines = wrap(role, node.width! - 12);
-          if (lines.length > 2)
-            throw new Error(
-              "Terminal description is too long for a signal loop view.",
-            );
-          lines.forEach((line, i) =>
-            out.push(
-              text(p.side === "in" ? 9 : 3, p.y + 1 + i * 3.3, line, 2.7),
-            ),
-          );
-        }
-      }
-      const twin = list.find(
-        (q) =>
-          !q.suppressed &&
-          !q.assembly &&
-          q.terminal === p.terminal &&
-          q.side !== p.side,
-      );
-      if (twin && p.side === "in")
-        out.push(
-          `<path d="M ${n(p.x)} ${n(p.y)} L ${n(twin.x)} ${n(twin.y)}" stroke="#344054" stroke-width="0.3" fill="none"/>`,
-        );
-      if (
-        ((!twin &&
-          !list.some((q) => q.suppressed && q.terminal === p.terminal)) ||
-          p.unused) &&
-        index !== 0 &&
-        index !== stages.length - 1
-      ) {
-        const auxiliaryEnd = selected.auxiliary.some((a) =>
-          [a.from, a.to].some((e) =>
-            e.function.terminals.some(
-              (t) => t.deviceUid === uid && t.terminalKey === p.terminal,
-            ),
-          ),
-        );
-        const label = auxiliaryEnd
-          ? (type.terminals.find((t) => t.key === p.terminal)?.description ??
-            "Auxiliary feed")
-          : "unused";
-        // Use the actual space between adjacent terminal lanes. A short word
-        // such as "unused" stays whole; only genuinely overlong tokens split.
-        const laneWidth =
-          Math.min(
-            ...list
-              .filter((q) => !q.assembly && q.x !== p.x)
-              .map((q) => Math.abs(q.x - p.x)),
-            2 * Math.min(p.x, node.width! - p.x),
-          ) - 2;
-        const lines = wrap(label, vertical ? laneWidth : node.width! - 12);
-        if (lines.length > (vertical ? 6 : 2))
-          throw new Error("Auxiliary feed legend is too long.");
-        lines.forEach((line, i) =>
-          out.push(
-            text(
-              vertical ? p.x : node.width! / 2,
-              (vertical
-                ? p.side === "in"
-                  ? 11
-                  : node.height! - (auxiliaryEnd ? 23 : 9)
-                : p.y + 1) +
-                i * 3.3,
-              line,
-              2.7,
-              "middle",
-            ),
-          ),
-        );
-      }
-    }
-    out.push("</g>");
-    references.push({
-      deviceUid: uid,
-      designation: device.designation,
-      functions: [
-        ...new Set(
-          [
-            selected.from,
-            selected.to,
-            ...selected.auxiliary.flatMap((a) => [a.from, a.to]),
-          ]
-            .filter((e) => e.device.uid === uid)
-            .map((e) => e.function.id.functionKey),
-        ),
-      ],
-      x: node.x! + node.width! / 2 - enclosure.minX,
-      y: node.y! + node.height! / 2 - enclosure.minY,
-    });
-  }
+  emitDirectLoopRoutes(graph, edges, out, {
+    key,
+    compare,
+    n,
+    text,
+    width,
+    wrap,
+  });
+  const references = emitDirectLoopNodes(graph, enclosure, out, context);
   return finishDirectLoopDrawing(
     {
       title: signalLoopTitle(selected),
