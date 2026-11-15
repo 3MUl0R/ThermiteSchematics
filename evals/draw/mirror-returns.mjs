@@ -98,7 +98,7 @@ export function mirrorReturns(packet, geometries, ir, request) {
     fn,
     extra,
   );
-  reconcileSelectedAppearances(request, ir, fn, all, packet, extra);
+  reconcileSelectedAppearances(request, ir, all, packet, extra);
   for (const [i, sheet] of packet.sheets.entries()) {
     const g = geometries[i];
     if (!g) continue;
@@ -217,40 +217,89 @@ function reconcileFullAppearances(
   }
 }
 
-function reconcileSelectedAppearances(request, ir, fn, all, packet, extra) {
-  // A ↔ B for explicit authored circuit selections, independently of seeds.
-  // At packet level a full selected source must occur in its authored view;
-  // boundary tiles alone never certify it. Other selection kinds also retain
-  // B/C and native SheetReference reconciliation below.
+function reconcileSelectedAppearances(request, ir, all, packet, extra) {
+  // Native selections are source obligations. Titles locate an issued sheet;
+  // an absent locator never erases an unresolved source or missing appearance.
   const views = request?.views ?? (request ? [request] : []);
   for (const [order, v] of views.entries()) {
     for (const selection of (v.groups ?? []).flatMap(
       (g) => g.functions ?? [],
     )) {
-      const ds = (ir.devices ?? []).filter((d) =>
-        selection.device?.by === "uid"
-          ? d.uid === selection.device.value
-          : d.designation === selection.device?.value,
-      );
-      if (ds.length !== 1) continue;
-      const id = { deviceUid: ds[0].uid, functionKey: selection.key };
+      const resolved = selectedNativeFunction(ir, selection);
+      if (resolved.error) {
+        unresolvedSelection(
+          packet,
+          extra,
+          "navigation-selected-source-unresolved",
+          {
+            selection,
+            view: order,
+            ...resolved.error,
+          },
+        );
+        continue;
+      }
+      const { id, native } = resolved;
       if (
-        !["coil", "contact"].includes(fn(id)?.kind) ||
+        !["coil", "contact"].includes(native.kind) ||
         all.some((a) => same(source(a), id) && a.view === order)
       )
         continue;
-      const sheet = packet.sheets.find((s) => s.view?.title === v.title);
-      if (sheet)
-        extra.push({
-          sheet: sheet.number,
-          ...finding(
-            "navigation-selected-appearance-missing",
-            {},
-            { source: id, view: order },
-          ),
-        });
+      const sheets = packet.sheets.filter((s) => s.view?.title === v.title);
+      if (!sheets.length) {
+        unresolvedSelection(
+          packet,
+          extra,
+          "navigation-selected-view-unresolved",
+          {
+            source: id,
+            view: order,
+            expectedTitle: v.title,
+          },
+        );
+        continue;
+      }
+      extra.push({
+        sheet: sheets[0].number,
+        ...finding(
+          "navigation-selected-appearance-missing",
+          {},
+          { source: id, view: order },
+        ),
+      });
     }
   }
+}
+function selectedNativeFunction(ir, selection) {
+  const devices = (ir.devices ?? []).filter((d) =>
+    selection.device?.by === "uid"
+      ? d.uid === selection.device.value
+      : d.designation === selection.device?.value,
+  );
+  if (devices.length !== 1)
+    return { error: { candidateDeviceUids: devices.map((d) => d.uid) } };
+  const id = { deviceUid: devices[0].uid, functionKey: selection.key },
+    functions = (ir.functions ?? []).filter((f) => same(f.id, id));
+  return functions.length === 1
+    ? { id, native: functions[0] }
+    : { error: { source: id, nativeFunctionCount: functions.length } };
+}
+function unresolvedSelection(packet, extra, kind, detail) {
+  const first = packet.sheets[0];
+  if (!first)
+    throw Error("Cannot reconcile a selected function without an issued sheet");
+  extra.push({
+    sheet: first.number,
+    ...finding(
+      kind,
+      {},
+      {
+        sheetLevel: true,
+        scope: "packet",
+        ...detail,
+      },
+    ),
+  });
 }
 
 function navigationBlocks(g, annotations) {

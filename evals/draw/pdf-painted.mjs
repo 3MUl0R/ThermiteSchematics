@@ -1,3 +1,4 @@
+import { nativeAdvanceItem } from "./pdf-advance-geometry.mjs";
 // Associate extraction items to native glyph placement by geometry/font only.
 import assert from "node:assert/strict";
 import { pdfGlyphRuns } from "./pdf-ink-operators.mjs";
@@ -8,30 +9,19 @@ import {
   intersectPdfBoxes,
 } from "./pdf-clip-operators.mjs";
 import { multiply } from "./pdf-operators.mjs";
-export function paintedItems(items, raw, glyphs, viewport) {
+export function paintedItems(items, raw, glyphs, viewport, measure = (p) => p) {
   assert(items.length === raw.length, "PDF extraction inventory changed");
   return items.flatMap((p, i) => {
     const m = multiply(viewport.transform, raw[i].transform),
       norm = Math.hypot(m[0], m[1]),
       ux = m[0] / norm,
       uy = m[1] / norm;
-    const owned = glyphs.filter((g) => {
-      const dx = g.base[0] - m[4],
-        dy = g.base[1] - m[5],
-        along = dx * ux + dy * uy,
-        across = dy * ux - dx * uy;
-      return (
-        g.font === raw[i].fontName &&
-        Math.abs(g.size - p.fontSize) < 0.001 &&
-        Math.abs(across) < 0.001 &&
-        along >= -0.001 &&
-        along < p.bbox.w - 0.001
-      );
-    });
+    const owned = ownedGlyphs(glyphs, raw[i], p, m, ux, uy);
     assert(owned.length, "PDF item has no native glyph association");
     const ink = owned.filter((g) => g.points.length);
     if (!ink.some((g) => g.visible)) return [];
-    if (ink.every((g) => g.visible)) return [p];
+    if (ink.every((g) => g.visible))
+      return [measure(p, owned, glyphs, [ux, uy])];
     assert(
       new Set(owned.map((g) => g.run)).size === 1,
       "Ambiguous partially clipped PDF item",
@@ -44,24 +34,31 @@ export function paintedItems(items, raw, glyphs, viewport) {
       if (text.trim()) {
         const first = group[0],
           last = group.at(-1);
-        fragments.push({
-          ...p,
-          text: text.trim(),
-          renderedString: text,
-          fontSize: first.size,
-          ...(p.anchor
-            ? { anchor: { x: first.base[0], y: first.base[1] } }
-            : {}),
-          bbox: {
-            x: first.base[0],
-            y: first.base[1] - first.size,
-            w: Math.hypot(
-              last.end[0] - first.base[0],
-              last.end[1] - first.base[1],
-            ),
-            h: first.size,
-          },
-        });
+        fragments.push(
+          measure(
+            {
+              ...p,
+              text: text.trim(),
+              renderedString: text,
+              fontSize: first.size,
+              ...(p.anchor
+                ? { anchor: { x: first.base[0], y: first.base[1] } }
+                : {}),
+              bbox: {
+                x: first.base[0],
+                y: first.base[1] - first.size,
+                w: Math.hypot(
+                  last.end[0] - first.base[0],
+                  last.end[1] - first.base[1],
+                ),
+                h: first.size,
+              },
+            },
+            group,
+            glyphs,
+            [ux, uy],
+          ),
+        );
       }
       group = [];
     };
@@ -73,7 +70,7 @@ export function paintedItems(items, raw, glyphs, viewport) {
     return fragments;
   });
 }
-export async function paintedPdfItems(page, items, raw) {
+async function paintedInventory(page, items, raw) {
   const { OPS } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const list = await page.getOperatorList(),
     viewport = page.getViewport({ scale: 25.4 / 72 }),
@@ -100,5 +97,34 @@ export async function paintedPdfItems(page, items, raw) {
     raw = (
       await page.getTextContent({ disableNormalization: true })
     ).items.filter((x) => x.str?.trim());
-  return paintedItems(items, raw, glyphs, viewport);
+  return { items, raw, glyphs, viewport };
+}
+
+function ownedGlyphs(glyphs, raw, p, m, ux, uy) {
+  return glyphs.filter((g) => {
+    const dx = g.base[0] - m[4],
+      dy = g.base[1] - m[5],
+      along = dx * ux + dy * uy,
+      across = dy * ux - dx * uy;
+    return (
+      g.font === raw.fontName &&
+      Math.abs(g.size - p.fontSize) < 0.001 &&
+      Math.abs(across) < 0.001 &&
+      along >= -0.001 &&
+      along < p.bbox.w - 0.001
+    );
+  });
+}
+
+export async function paintedPdfItems(page, items, raw) {
+  const data = await paintedInventory(page, items, raw);
+  return paintedItems(data.items, data.raw, data.glyphs, data.viewport);
+}
+export async function paintedPdfMeasurements(page, items) {
+  const data = await paintedInventory(page, items);
+  const args = [data.items, data.raw, data.glyphs, data.viewport];
+  return {
+    text: paintedItems(...args),
+    metrics: paintedItems(...args, nativeAdvanceItem),
+  };
 }

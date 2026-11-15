@@ -414,11 +414,11 @@ function evaluateDocuments(
   );
 }
 
-function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out) {
+function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics) {
   out.push(
     obs(
       "DQ-21",
-      cohort(checks.fontMetrics(g.texts, pdf), (f) => [
+      cohort(checks.fontMetrics(g.texts, pdfMetrics), (f) => [
         f.fontPair,
         f.columnIndex ?? "labels",
       ]),
@@ -475,6 +475,7 @@ function evaluateSheet(
   geometries = [],
   request,
   identifierPolicy = {},
+  pdfMetrics = pdf,
 ) {
   classifyTextGeometry(g, ir);
   const interference = checks.conductorInterference(g);
@@ -510,7 +511,7 @@ function evaluateSheet(
     obs,
     out,
   );
-  evaluatePdfAndReview(c, s, g, pdf, parity, obs, out);
+  evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics);
   return out;
 }
 export function evaluatePacket(c, packet, geometries, tables = []) {

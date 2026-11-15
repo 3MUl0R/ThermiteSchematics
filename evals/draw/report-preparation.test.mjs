@@ -76,7 +76,7 @@ it("the current target cannot opt into the historical summary reader", () => {
     /Current report eval version is stale/,
   );
 });
-it.each(["4.1", "4.2", "4.9", "5.0", "5.2", "5.14"])(
+it.each(["4.1", "4.2", "4.9", "5.0", "5.2", "5.14", "5.15"])(
   "preserves exact complete-summary baseline support for %s",
   (version) => {
     const c = fixture(),
