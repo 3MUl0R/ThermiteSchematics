@@ -66,7 +66,7 @@
     "packages/query/src/documentation.ts": 881,
     "packages/query/src/engine.ts": 1984,
     "packages/query/test/engine.test.ts": 1463,
-    "packages/render/src/circuit.ts": 2181,
+    "packages/render/src/circuit.ts": 913,
     "packages/render/src/layout/elk-adapter.ts": 887,
     "packages/render/src/layout/validate-output.ts": 1600,
     "packages/render/src/signal-loop.ts": 971,
@@ -106,10 +106,6 @@
       "evals/draw/run.mjs#pool callback": "0d2570cc8aa7028179e33ef12c749192cc5c50d33ffa8585dc98a69b99a0396a",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "0248e44eb32b9f36271db7d5a7cebee3777d9c06e121adfe2051dff781118730",
       "packages/query/src/documentation.ts#buildDocumentationTable": "994ac92a3c3b4955b2109b713f8fbc72987149a1a25f14c1c6700881cb57f9ec",
-      "packages/render/src/circuit.ts#emitNode": "b4513e4ccad6c8a47080051b3734703264412010a99de5995a259525da9bb960",
-      "packages/render/src/circuit.ts#layoutGroupUnchecked": "4d83795c16902b06fc277e16a67f5379dfa7ded83313d28074da9de2f83eeb7a",
-      "packages/render/src/circuit.ts#makeNodes": "a7a90a75f85fd68d4a527821eac622de74ca7c342aa76469feb45714641fb21f",
-      "packages/render/src/circuit.ts#makeNodes/map callback~5": "a65ed5a6364d2a287ec160ee9a6d3c078fd6092c5ba38313d63fe9499de909ba",
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "401c7eb9ef48d3b4177df0f78603726f2e741635441584f401fe287816608a4b",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
@@ -698,10 +694,6 @@
       "evals/draw/run.mjs#pool callback": 514,
       "evals/draw/run.mjs#pool callback/retainingCase callback": 508,
       "packages/query/src/documentation.ts#buildDocumentationTable": 714,
-      "packages/render/src/circuit.ts#emitNode": 429,
-      "packages/render/src/circuit.ts#layoutGroupUnchecked": 438,
-      "packages/render/src/circuit.ts#makeNodes": 498,
-      "packages/render/src/circuit.ts#makeNodes/map callback~5": 374,
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 530,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
@@ -720,10 +712,6 @@
       "evals/draw/run.mjs#pool callback": "evals/draw/run.mjs#pool callback",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "evals/draw/run.mjs#pool callback/retainingCase callback",
       "packages/query/src/documentation.ts#buildDocumentationTable": "packages/query/src/documentation.ts#buildDocumentationTable",
-      "packages/render/src/circuit.ts#emitNode": "packages/render/src/circuit.ts#emitNode",
-      "packages/render/src/circuit.ts#layoutGroupUnchecked": "packages/render/src/circuit.ts#layoutGroupUnchecked",
-      "packages/render/src/circuit.ts#makeNodes": "packages/render/src/circuit.ts#makeNodes",
-      "packages/render/src/circuit.ts#makeNodes/map callback~5": "packages/render/src/circuit.ts#makeNodes/map callback~5",
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
@@ -794,7 +782,14 @@
     "packages/query/src/ordering.ts": 2,
     "packages/query/src/review.ts": 4,
     "packages/query/src/traversal.ts": 1,
-    "packages/render/src/circuit.ts": 116,
+    "packages/render/src/circuit.ts": 17,
+    "packages/render/src/circuit/layout-drawing.ts": 9,
+    "packages/render/src/circuit/layout-input.ts": 9,
+    "packages/render/src/circuit/layout-routes.ts": 49,
+    "packages/render/src/circuit/make-nodes.ts": 9,
+    "packages/render/src/circuit/node-emission.ts": 2,
+    "packages/render/src/circuit/node-symbols.ts": 13,
+    "packages/render/src/circuit/nodes.ts": 8,
     "packages/render/src/communication.ts": 53,
     "packages/render/src/connector-assembly.ts": 77,
     "packages/render/src/coverage.ts": 3,
@@ -943,6 +938,48 @@
       "from": 70,
       "to": 88,
       "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
+    },
+    "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts",
+      "from": 0,
+      "to": 9,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/layout-input.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/layout-input.ts",
+      "from": 0,
+      "to": 9,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/layout-routes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/layout-routes.ts",
+      "from": 0,
+      "to": 49,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/make-nodes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/make-nodes.ts",
+      "from": 0,
+      "to": 9,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/node-emission.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/node-emission.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/node-symbols.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/node-symbols.ts",
+      "from": 0,
+      "to": 13,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/circuit/nodes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/circuit/nodes.ts",
+      "from": 0,
+      "to": 8,
+      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
     },
     "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": {
       "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",
