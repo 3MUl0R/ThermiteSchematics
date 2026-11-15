@@ -1,4 +1,10 @@
-import { createHash } from "node:crypto";
+import { constantText } from "./title-data-constant.js";
+import {
+  elkLoaderException,
+  forbiddenDynamicCode,
+  auditElkCapabilities,
+  ELK_RUNTIME_FILE,
+} from "./title-data-elk.js";
 import ts from "typescript";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,27 +14,6 @@ const hidden = (path: string) =>
 const envAccess =
   /\b(?:process|Bun)\s*(?:\.\s*env|\[\s*["']env["']\s*\])|import\.meta\.env/u;
 
-function constantText(node: ts.Expression): string | undefined {
-  if (ts.isStringLiteralLike(node)) return node.text;
-  if (ts.isParenthesizedExpression(node)) return constantText(node.expression);
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.PlusToken
-  ) {
-    const a = constantText(node.left),
-      b = constantText(node.right);
-    if (a !== undefined && b !== undefined) return a + b;
-  }
-  if (ts.isTemplateExpression(node)) {
-    let result = node.head.text;
-    for (const span of node.templateSpans) {
-      const value = constantText(span.expression);
-      if (value === undefined) return;
-      result += value + span.literal.text;
-    }
-    return result;
-  }
-}
 function targetPath(
   file: string,
   specifier: string,
@@ -153,32 +138,11 @@ export function auditTitleDataSurface(
       const target = targetPath(file, specifier, files);
       if (target) dependencies.push(target);
     };
-    // The one runtime constructor executes the pinned ELK worker. Any edit
-    // invalidates this exact-source exception; aliases and eval stay forbidden.
-    const pinnedElk =
-      file === "packages/render/src/layout/elk-runtime.ts" &&
-      createHash("sha256")
-        .update(text.replaceAll("\r\n", "\n"))
-        .digest("hex") ===
-        // Re-audited for RT2b: actual-ELK accounting context admission only.
-        "2ce6b59ca7bef029f0714cb9b87f823161753945bca60c15fdb7c39b1ef058e9";
+    const pinnedLoader = elkLoaderException(file, tree, issues);
+    if (file === ELK_RUNTIME_FILE)
+      auditElkCapabilities(tree, pinnedLoader, issues, closedText, factories);
     const visit = (node: ts.Node) => {
-      if (
-        ts.isElementAccessExpression(node) &&
-        node.argumentExpression &&
-        ["eval", "Function"].includes(
-          constantText(node.argumentExpression) ?? "",
-        ) &&
-        !pinnedElk
-      )
-        issues.push(
-          `${file}: dynamic code cannot be audited for title-data access`,
-        );
-      if (
-        ts.isIdentifier(node) &&
-        ["eval", "Function"].includes(node.text) &&
-        !(node.text === "Function" && pinnedElk)
-      )
+      if (forbiddenDynamicCode(node, pinnedLoader, closedText))
         issues.push(
           `${file}: dynamic code cannot be audited for title-data access`,
         );
@@ -250,10 +214,7 @@ export function auditTitleDataSurface(
             node.expression.text === "require") ||
           factoryCall(node.expression)
         )
-          add(
-            node.arguments[0] ? constantText(node.arguments[0]) : undefined,
-            true,
-          );
+          add(closedText(node.arguments[0]), true);
         if (
           ts.isPropertyAccessExpression(node.expression) &&
           node.expression.name.text === "resolve" &&

@@ -313,12 +313,14 @@ it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 bud
       budget: first,
       metrics: original,
     });
-  expect(budget.reasons[`files:${path}`]).toEqual({
-    identity: `files:${path}`,
-    from: 1334,
-    to: 1369,
-    reason: "original extraction",
-  });
+  expect(budget.reasons[`files:${path}`]).toEqual([
+    {
+      identity: `files:${path}`,
+      from: 1334,
+      to: 1369,
+      reason: "original extraction",
+    },
+  ]);
   save(root, budget);
   const sha = commit(root);
   git(root, "branch", "dev", sha);
@@ -339,12 +341,15 @@ it("a stale index.ts 1369 reason cannot authorize 2869 or a hand-edited 2870 bud
   const current = JSON.parse(
     readFileSync(root + "/scripts/health-budget.json", "utf8"),
   );
-  expect(current.reasons[`files:${path}`]).toEqual({
-    identity: `files:${path}`,
-    from: 1369,
-    to: 2869,
-    reason: "specific second raise",
-  });
+  expect(current.reasons[`files:${path}`]).toEqual([
+    ...budget.reasons[`files:${path}`],
+    {
+      identity: `files:${path}`,
+      from: 1369,
+      to: 2869,
+      reason: "specific second raise",
+    },
+  ]);
 });
 it("rejects copy plus edit of runSchematicCommand as a move, against either target", () => {
   const text = readFileSync(

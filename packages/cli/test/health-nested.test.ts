@@ -151,9 +151,11 @@ for (const shape of shapes) {
       forged = structuredClone(budget);
     forged.locations.functions[inner] = key;
     forged.fingerprints.functions[inner] = current.bodyHashes[key];
-    expect(
-      allowanceMatches(current, forged, reference).functions[key],
-    ).toBeUndefined();
+    const matches = allowanceMatches(current, forged, reference);
+    // The owner exception must preserve the real nested body while refusing
+    // the redirected locator. Before #273 the real body loses its allowance.
+    expect(matches.functions[inner]).toMatchObject({ id: inner, exact: true });
+    expect(matches.functions[key]).toBeUndefined();
     expect(regressions(current, forged, reference).join("\n")).toContain(
       `${key}: functions ceiling 300 -> ${shape.lines} (new or unmatched content)`,
     );
@@ -205,3 +207,38 @@ for (const shape of shapes) {
     expect(empty.locations.functions).toEqual({});
   });
 }
+
+it("resolves enclosing callback ownership after positional ~3 to ~4 renames", () => {
+  const root = repo(),
+    path = "packages/example/src/callbacks.ts";
+  const prefix = "[0].map(() => 0);\n".repeat(2);
+  const outer = path + "#map callback~3";
+  const inner = path + "#map callback/map callback";
+  const original =
+    '[0].map(() => {\nvoid "old outer";\n' +
+    "[0].map(() => {\n" +
+    Array.from({ length: 310 }, (_, n) => 'void "nested ' + n + '";').join(
+      "\n",
+    ) +
+    "\n});\n});\n";
+  put(root, path, prefix + original);
+  const base = metrics(root),
+    budget = createBudget(base);
+  put(
+    root,
+    path,
+    prefix +
+      "[0].map(() => 0);\n" +
+      original
+        .replace("old outer", "new outer")
+        .replaceAll("[0].map", "[1].map"),
+  );
+  const current = metrics(root),
+    reference = { budget, metrics: base };
+  const matches = allowanceMatches(current, budget, reference);
+  expect(matches.functions[inner]).toMatchObject({ id: inner, exact: true });
+  expect(matches.functions[path + "#map callback~4"]).toMatchObject({
+    id: outer,
+  });
+  expect(() => lowerBudget(current, budget, reference)).not.toThrow();
+});
