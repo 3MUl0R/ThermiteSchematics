@@ -1357,6 +1357,12 @@ existing measurements, statuses and report fields do not change; added checker
 module hashes are checker provenance. GPU-disabled capture remains unsuitable
 as the published default, for the record #61 compatibility reason below.
 
+`measureSheet` uses browser-only [measurement helpers](measurement/prepare.mjs).
+`sheetMeasurementSource()` serializes their declared dependencies explicitly;
+`evaluateSheetGeometry(page, options)` runs that callable in the page. Initialization,
+mutable row state and DOM measurement order are retained. Screenshot functions and
+crop arithmetic are unchanged; this extraction also leaves checker 5.14 unchanged.
+
 Issue #137 measurements on darwin-arm64, macOS 26.3 and Chromium 145.0.7632.6
 used twenty captures per region across ten fresh launches. Each column below is
 the worst per-crop pairwise result, so maxima need not come from the same pair.

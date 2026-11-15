@@ -7,7 +7,7 @@ import {
   launch,
   drawingContextOptions,
   openSheet,
-  measureSheet,
+  evaluateSheetGeometry,
 } from "./browser.mjs";
 import { utilisation, visibleShapeBounds } from "./utilisation.mjs";
 import { evaluateSheet, evaluatePacket } from "./evaluate.mjs";
@@ -115,7 +115,7 @@ try {
       if (medium === "svg") g = await openSheet(page, svg(body));
       else {
         await page.setContent(`<section id="sheet-1">${svg(body)}</section>`);
-        g = await page.evaluate(measureSheet, { selector: "#sheet-1>svg" });
+        g = await evaluateSheetGeometry(page, { selector: "#sheet-1>svg" });
       }
       assert.equal(g.utilisationErrors, undefined, `${name}/${medium}`);
       const result = utilisation(g);
@@ -184,7 +184,7 @@ try {
         await page.setContent(
           `<section style="mask-image: linear-gradient(black, transparent)">${svg(body)}</section>`,
         );
-        g = await page.evaluate(measureSheet);
+        g = await evaluateSheetGeometry(page);
       } else g = await openSheet(page, svg(body));
     }, "DQ-12 refusals must not abort shared geometry extraction");
     assert(g.shapes.length, "Other checks must retain the original geometry");

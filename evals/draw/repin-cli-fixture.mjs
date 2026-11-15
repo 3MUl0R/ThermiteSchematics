@@ -4,6 +4,7 @@ import {
   mkdir,
   readdir,
   copyFile,
+  cp,
   writeFile,
   rm,
 } from "node:fs/promises";
@@ -25,6 +26,9 @@ export async function cliFixture({ survivor = false } = {}) {
   const source = fileURLToPath(new URL("./", import.meta.url));
   for (const e of await readdir(source))
     if (e.endsWith(".mjs")) await copyFile(join(source, e), join(kit, e));
+  await cp(join(source, "measurement"), join(kit, "measurement"), {
+    recursive: true,
+  });
   await writeFile(
     join(kit, "corpus.mjs"),
     `export const cases=()=>[{id:${JSON.stringify(A)},flow:"left-to-right"}];export const verifyCorpus=async()=>({seal:"seal"});`,
