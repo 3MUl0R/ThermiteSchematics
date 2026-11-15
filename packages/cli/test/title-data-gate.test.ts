@@ -139,6 +139,14 @@ describe("TB2 atomic compact publication", () => {
         titleBlock: { profile: "compact" },
       }),
     ).toEqual([]);
+    expect(
+      validate({
+        format: "project-presentation/0.2",
+        revision: "A",
+        backgroundColor: "#ffffff",
+        frame: { zones: { default: { columns: 6, rows: 4 } } },
+      }).map(({ code, jsonPointer }) => ({ code, jsonPointer })),
+    ).toEqual([{ code: "E012", jsonPointer: "/frame" }]);
   });
   it.each(invalidFrames)(
     "rejects invalid compact furniture %j",

@@ -46,6 +46,8 @@ function checkField(
     issues.add("E013", `${pointer}/label`, "Title labels must be nonblank.");
   checkLiteral(field.value, key, `${pointer}/value`, issues);
 }
+/** Must run after the canonical schema validator; unknown keys and field bounds
+ * belong to that validator. This adds semantic diagnostics, not schema validation. */
 export function checkPresentation(
   value: Record<string, JsonValue>,
   issues: Issues,
