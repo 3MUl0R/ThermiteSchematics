@@ -214,9 +214,13 @@ it("rethrows an unexpected fallback projection error by identity", async () => {
       },
     });
   });
-  await expect(
-    loops.prepareSignalLoopDrawing(ir, request, () => true),
-  ).rejects.toBe(failure);
+  const outcome = await loops
+    .prepareSignalLoopDrawing(ir, request, () => true)
+    .then(
+      (drawing) => drawing,
+      (error: unknown) => error,
+    );
+  expect(outcome).toBe(failure);
 });
 
 it("projects and composes the fallback once across rejected phases and final issue", async () => {
