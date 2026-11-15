@@ -20,7 +20,6 @@ const covers = (common, total, share) =>
 function continuationRows(section, current, reference, budget) {
   const base = reference.metrics,
     before = reference.budget,
-    values = valuesOf(current, section),
     oldValues = valuesOf(base, section),
     field = section === "files" ? "fileLines" : "bodyLines",
     hashes = section === "files" ? "fileHashes" : "bodyHashes",
@@ -32,7 +31,16 @@ function continuationRows(section, current, reference, budget) {
     compare(a, b),
   )) {
     const old = base[field]?.[from];
-    if ((values[from] ?? 0) > fallbackOf(before, section) || !old?.length)
+    // Content loss, not physical size, determines whether a source can split.
+    // A source retaining four fifths is intact, even if a new helper overlaps.
+    if (
+      !old?.length ||
+      covers(
+        lineAdditions(old, current[field]?.[from] ?? []).common,
+        old.length,
+        RENAME_RETAINED_SHARE,
+      )
+    )
       continue;
     for (const [key, lines] of newBodies) {
       // A proven transfer chooses its authenticated origin. The existing
@@ -79,13 +87,6 @@ function contains(current, outer, inner) {
   );
 }
 
-function retiringLines(old, remaining) {
-  const retained = lineAdditions(old, remaining).common;
-  // An intact source is not evidence that an unrelated new helper continues it.
-  // A changed small source can, however, be one part of a split continuation.
-  return covers(retained, old.length, RENAME_RETAINED_SHARE) ? [] : remaining;
-}
-
 function disjointParts(rows, current) {
   const result = [];
   for (const row of rows)
@@ -111,7 +112,7 @@ function qualifiedGroups(section, rows, current, reference) {
       old = reference.metrics[field][from],
       retained = lineAdditions(
         old,
-        retiringLines(old, current[field][from] ?? []).concat(
+        (current[field][from] ?? []).concat(
           parts.flatMap((r) => current[field][r.key]),
         ),
       );

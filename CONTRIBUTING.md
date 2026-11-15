@@ -347,10 +347,12 @@ the destination allowance's value from its recorded source allowance in this
 change. Retaining a stale source record or reusing a source reduction fails.
 
 An ordinary size allowance also follows a substantial continuation when its
-base identity disappears or shrinks to an unbudgeted stub, including across files.
-Keeping a tiny compatibility wrapper cannot reset the cap. A changed stub may
-contribute retained lines to a split; an intact source does not establish
-continuity for an otherwise unrelated new helper. Each candidate part must retain
+budgeted base identity loses content to new identities, including across files.
+Every budgeted source is considered, even if it stays above 850/70 lines;
+keeping a decoy or compatibility wrapper cannot reset the cap. A source keeping
+at least 80% of its old normalized lines is intact and is not a continuation
+origin. Otherwise its retained lines contribute to the split, and its remaining
+numeric allowance is charged against the shared cap. Each candidate part must retain
 at least 20% of the old normalized lines; the parts together must retain at least
 80%. Line intersections consume occurrences, so repeated lines do not create
 extra retained content. File lines are trimmed nonempty text (including comments);
