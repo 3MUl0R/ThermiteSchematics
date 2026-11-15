@@ -6,6 +6,7 @@ import { cuts } from "./rooted-cuts.js";
 import { safeAxisPlans, MAX_GRID_SHEETS, MAX_GRID_PLANS } from "./safe-cuts.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import type { Draft, DrawingBounds } from "./types.js";
+import { boundarySafeGrid } from "./rooted-boundary-cuts.js";
 
 export interface RootedGrid {
   greedy?: boolean;
@@ -38,6 +39,31 @@ export function gridLinks(
 
 /** Keep the successful greedy plan. On failure score complete safe grids. */
 export function rootedGrids(
+  p: PreparedSchematicDrawing,
+  b: DrawingBounds,
+  scale: number,
+  fallback = true,
+  explore = false,
+  onFailure?: (error: RenderFailure) => void,
+  diagnoseIdentity = false,
+): RootedGrid[] {
+  const existing = originalRootedGrids(
+    p,
+    b,
+    scale,
+    fallback,
+    explore,
+    onFailure,
+    diagnoseIdentity,
+  );
+  if (existing.length) return existing;
+  const grid = boundarySafeGrid(p.layout, b, scale);
+  return grid && gridLinks(p, grid, b, scale, undefined, onFailure)
+    ? [grid]
+    : existing;
+}
+
+function originalRootedGrids(
   p: PreparedSchematicDrawing,
   b: DrawingBounds,
   scale: number,
