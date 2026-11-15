@@ -1,5 +1,5 @@
 import { fallbackOf, valuesOf } from "./health-budget.mjs";
-import { lineAdditions } from "./health-continuity.mjs";
+import { lineAdditions, exactMove, moveProof } from "./health-continuity.mjs";
 import { currentOwners } from "./health-owners.mjs";
 
 // A continuation can be one rename or several parts. Each part must retain
@@ -17,7 +17,7 @@ const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const covers = (common, total, share) =>
   common * share.denominator >= total * share.numerator;
 
-function continuationRows(section, current, reference) {
+function continuationRows(section, current, reference, budget) {
   const base = reference.metrics,
     before = reference.budget,
     values = valuesOf(current, section),
@@ -35,6 +35,14 @@ function continuationRows(section, current, reference) {
     if ((values[from] ?? 0) > fallbackOf(before, section) || !old?.length)
       continue;
     for (const [key, lines] of newBodies) {
+      // A proven transfer chooses its authenticated origin. The existing
+      // monotonicity ledger still verifies that origin funds the allowance.
+      if (
+        budget?.moves &&
+        exactMove(section, key, budget, base, current) &&
+        moveProof(section, key, budget).from !== from
+      )
+        continue;
       const { common, added } = lineAdditions(old, lines);
       if (covers(common, old.length, RENAME_PART_SHARE))
         rows.push({
@@ -78,9 +86,9 @@ function retiringLines(old, remaining) {
   return covers(retained, old.length, RENAME_RETAINED_SHARE) ? [] : remaining;
 }
 
-export function sizeContinuations(section, current, reference) {
+export function sizeContinuations(section, current, reference, budget) {
   if (!reference) return [];
-  const rows = continuationRows(section, current, reference),
+  const rows = continuationRows(section, current, reference, budget),
     owners =
       section === "functions"
         ? currentOwners(rows, current, reference.metrics)
@@ -124,7 +132,12 @@ export function renameRegressions(current, budget, reference) {
   const errors = [];
   for (const section of ["files", "functions"]) {
     const values = valuesOf(current, section);
-    for (const group of sizeContinuations(section, current, reference)) {
+    for (const group of sizeContinuations(
+      section,
+      current,
+      reference,
+      budget,
+    )) {
       // Retained stale source records consume credit too. Every group is
       // checked independently: ambiguous origins cannot pool extra credit.
       const remaining = budget[section][group.from] ?? 0,

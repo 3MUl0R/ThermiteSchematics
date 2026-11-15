@@ -366,6 +366,8 @@ This preserves extraction into small helpers. All parts must also meet the norma
 Content-ranked ownership reserves separately budgeted nested functions; a parent
 and child do not consume the same group's credit twice. Remaining ambiguous
 origins each impose their own constraint, without pooling extra allowances.
+An authenticated verbatim move selects its recorded source instead of an
+overlapping candidate; the existing funding ledger still checks its reduction.
 Sorting and multiset comparisons make the result independent of object or line
 order. This is a static similarity policy, not semantic identity: content below
 the 80% collective threshold is new. The history measurements and positive

@@ -374,3 +374,40 @@ it("rejects growth split between a retiring original and a new helper", () => {
     acceptBudget(current, before, "extract", { budget: before, metrics: base }),
   ).toThrow("cannot rise");
 });
+
+for (const target of ["dev", "release"])
+  it.each(["files", "functions"])(
+    "honors a proven %s source among overlapping retired items on " + target,
+    (section) => {
+      const root = repo(),
+        a = "src/a.ts",
+        b = "src/b.ts",
+        to = "src/c.ts";
+      const first =
+        section === "files" ? statements(0, 1000) + "\n" : body("same", 0, 78);
+      const second =
+        section === "files"
+          ? statements(0, 1200) + "\n"
+          : first.replace(/\n}\n$/, "\n" + "\n".repeat(40) + "}\n");
+      put(root, a, first);
+      put(root, b, second);
+      const base = metrics(root),
+        before = createBudget(base);
+      rmSync(join(root, a));
+      rmSync(join(root, b));
+      put(root, to, second);
+      const current = metrics(root),
+        next = createBudget(current),
+        key = section === "files" ? to : to + "#same",
+        from = section === "files" ? b : b + "#same";
+      next.moves[key] = {
+        section,
+        from,
+        sha256:
+          section === "files" ? base.fileHashes[from] : base.bodyHashes[from],
+      };
+      expect(historyRegressions(current, next, before, base, target)).toEqual(
+        [],
+      );
+    },
+  );
