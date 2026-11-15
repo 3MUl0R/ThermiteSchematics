@@ -252,3 +252,24 @@ it("consistent function renames preserve reference and I/O print cells, not sour
     report(ir).rows.map((r) => r.key),
   );
 });
+
+it("retains conventional source/load pairs and lists separated numeric suffixes", () => {
+  const base = ir.functions.find((f) => f.kind === "source");
+  if (!base) throw Error("Missing source fixture");
+  for (const [keys, expected] of [
+    [["H1", "H2"], "H1–H2"],
+    [["X1", "X2"], "X1–X2"],
+    [["L", "N"], "L–N"],
+    [["AI3", "AI7"], "AI3 / AI7"],
+    [["9", "13"], "9 / 13"],
+  ] as const) {
+    const fn = {
+      ...base,
+      terminals: keys.map((terminalKey) => ({
+        deviceUid: base.id.deviceUid,
+        terminalKey,
+      })),
+    };
+    expect(printedFunction(fn)).toBe(`Source ${expected}`);
+  }
+});

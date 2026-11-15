@@ -1,17 +1,32 @@
 import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
 
+/** A shared letter prefix plus separated integer suffixes reads as a range. */
+function rangeLikePair(terminals: readonly string[]) {
+  if (terminals.length !== 2) return false;
+  const [first, second] = terminals.map((t) => /^(\p{L}*)(\d+)$/u.exec(t));
+  const a = first?.[2],
+    b = second?.[2];
+  if (a === undefined || b === undefined || first?.[1] !== second?.[1])
+    return false;
+  const difference = BigInt(a) - BigInt(b);
+  return difference > 1n || difference < -1n;
+}
+
 /** Authored identities are indivisible; punctuation is a list separator only. */
 export function formatTerminalSet(
   terminals: readonly string[],
   label: (terminal: string) => string = (terminal) => terminal,
 ): string {
+  const printed = terminals.map(label);
   const separator =
-    terminals.length === 2 && terminals.every((t) => !/[-–−+]/u.test(t))
+    terminals.length === 2 &&
+    !rangeLikePair(terminals) &&
+    printed.every((t) => !/[-–−+]/u.test(t))
       ? "–"
-      : terminals.some((t) => t.includes("/"))
+      : printed.some((t) => t.includes("/"))
         ? ", "
         : " / ";
-  return terminals.map(label).join(separator);
+  return printed.join(separator);
 }
 
 /** Port keys are authored markings. Descriptions supplement, never replace, them. */

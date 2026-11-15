@@ -1,3 +1,5 @@
+import { required } from "../presentation/util.js";
+
 export interface ReportPagination {
   pages: number;
   rowSteps: number;
@@ -80,4 +82,3 @@ export function reportPaginator(
     },
   };
 }
-import { required } from "../presentation/util.js";

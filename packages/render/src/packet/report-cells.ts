@@ -18,6 +18,8 @@ import {
 import { wrapReportCell } from "./report-wrapping.js";
 import {
   ReportMeasurementError,
+  reportCellContext,
+  withReportContext,
   reportLineMetrics,
   reportRowHeight,
 } from "./report-measurement.js";
@@ -602,6 +604,23 @@ function allocationMessage({
       : "";
   return `Report ${JSON.stringify(table.title)} (${table.kind})${source}, column ${driver.column + 1} ${JSON.stringify(table.columns[driver.column])}: ${kind} ${JSON.stringify(driver.authoredName)} drives a minimum table width of ${allocation.minimumWidth.toFixed(3)} mm; only ${width.toFixed(3)} mm is available at the minimum 2.5 mm em after trying 2.6 mm. ${driver.kind === "identifier" ? (page?.orientation === "landscape" ? "Use larger paper." : "Use larger paper or landscape.") : advice}`;
 }
+
+function allocationError(policy: CellPolicy) {
+  const driver = policy.allocation.driver;
+  const row =
+    driver && "rowKey" in driver
+      ? policy.rowName(
+          policy.table.rows.findIndex((r) => r.key === driver.rowKey),
+        )
+      : "header";
+  return new ReportMeasurementError(
+    allocationMessage(policy),
+    driver ? reportCellContext(policy.table, row, driver.column) : undefined,
+    driver
+      ? `${driver.kind === "header" ? "Header" : "Label"} ${JSON.stringify(driver.authoredName)} cannot fit in this column.`
+      : "The column could not be fitted.",
+  );
+}
 function splitCells(
   policy: CellPolicy,
   cells: readonly string[],
@@ -609,8 +628,7 @@ function splitCells(
   key?: string,
 ) {
   const { table, allocation, widths } = policy;
-  if (allocation.error)
-    throw new ReportMeasurementError(allocationMessage(policy));
+  if (allocation.error) throw allocationError(policy);
   if (row !== "header" && key === undefined)
     throw Error(
       `Report ${JSON.stringify(table.title)} (${table.kind}), row ${row}: body layout requires an explicit source row key.`,
@@ -638,17 +656,19 @@ function splitReportCell(
     page,
     cellSize,
   } = policy;
-  if (allocation.error)
-    throw new ReportMeasurementError(allocationMessage(policy));
+  if (allocation.error) throw allocationError(policy);
   try {
     const available = width - 2 * insets[column]! - 0.01;
     return row === "header"
       ? wrapHeader(value, available, column)
       : wrapCell(value, available, column, key);
   } catch (error) {
-    if (!(error instanceof ReportMeasurementError)) throw error;
+    if (!(error instanceof ReportMeasurementError))
+      throw withReportContext(error, policy.table, row, column);
     throw new ReportMeasurementError(
       `${context(row, column)}: ${error.message}${unknownReason(value)} ${page?.orientation === "landscape" ? "Use larger paper or shorter authored text" : "Use larger paper, landscape, or shorter authored text"}; selected text is ${cellSize} mm em (minimum 2.5 mm).`,
+      reportCellContext(policy.table, row, column),
+      error.detail,
     );
   }
 }

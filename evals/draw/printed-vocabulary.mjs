@@ -17,14 +17,26 @@ const parts = (key) => {
     return [];
   }
 };
-export function terminalSet(names) {
+export function terminalSet(names, printed = names) {
+  // Independently parse bare terminal keys; qualifiers affect punctuation only.
+  const suffixes = names.map((name) => name.match(/^(\p{Letter}*)([0-9]+)$/u));
+  let rangeLike = false;
+  if (
+    names.length === 2 &&
+    suffixes[0] &&
+    suffixes[1] &&
+    suffixes[0][1] === suffixes[1][1]
+  ) {
+    const delta = BigInt(suffixes[0][2]) - BigInt(suffixes[1][2]);
+    rangeLike = delta < -1n || delta > 1n;
+  }
   const separator =
-    names.length === 2 && !names.some((s) => /[-–−+]/u.test(s))
+    names.length === 2 && !rangeLike && !printed.some((s) => /[-–−+]/u.test(s))
       ? "–"
-      : names.some((s) => s.includes("/"))
+      : printed.some((s) => s.includes("/"))
         ? ", "
         : " / ";
-  return names.join(separator);
+  return printed.join(separator);
 }
 function functionCaption(fn) {
   const kind =
@@ -79,6 +91,34 @@ function referenceSource(ir, row, packet, request) {
     ? functions.map(functionCaption).join(", ")
     : undefined;
 }
+function ioCell(ir, row, column) {
+  const [uid, key] = parts(row),
+    fn = ir.functions.find(
+      (f) =>
+        f.id.deviceUid === uid &&
+        f.id.functionKey === key &&
+        f.kind === "channel",
+    );
+  if (!fn) return null;
+  const names = fn.terminals.map((t) => t.terminalKey);
+  if (column === 6)
+    return {
+      expected: terminalSet(
+        names,
+        names.map((key) => `${device(ir, uid)?.designation}.${key}`),
+      ),
+      mechanism: "io-terminals",
+      family: "function",
+    };
+  return {
+    expected:
+      device(ir, uid)?.io?.channels?.[key]?.address ??
+      (terminalSet(fn.terminals.map((t) => t.terminalKey)) ||
+        "Channel identity not specified"),
+    mechanism: "io-channel",
+    family: "function",
+  };
+}
 function ownedCell(ir, row, column, context) {
   const kind = context.sheet?.view.kind;
   if (kind === "references" && column === 1) {
@@ -91,24 +131,7 @@ function ownedCell(ir, row, column, context) {
         }
       : { expected, mechanism: "function-reference", family: "function" };
   }
-  if (kind === "io" && column === 1) {
-    const [uid, key] = parts(row),
-      fn = ir.functions.find(
-        (f) =>
-          f.id.deviceUid === uid &&
-          f.id.functionKey === key &&
-          f.kind === "channel",
-      );
-    if (!fn) return null;
-    return {
-      expected:
-        device(ir, uid)?.io?.channels?.[key]?.address ??
-        (terminalSet(fn.terminals.map((t) => t.terminalKey)) ||
-          "Channel identity not specified"),
-      mechanism: "io-channel",
-      family: "function",
-    };
-  }
+  if (kind === "io" && [1, 6].includes(column)) return ioCell(ir, row, column);
   if (kind === "network" && [2, 3].includes(column)) {
     const link = ir.relations?.find((r) => r.uid === row && r.connection);
     if (link) {

@@ -292,7 +292,7 @@ const module: FactModule = {
         ]);
         expect(input.visible).toContain("IN / selected channel");
         expect(input.visible).toContain(
-          "polarity not verified: AI1 terminals 9–13, PT1 terminals 1–2.",
+          "polarity not verified: AI1 terminals 9 / 13, PT1 terminals 1–2.",
         );
         expect(input.visible).not.toContain("AI1.ch0");
         expect(input.visible).not.toContain("PT1.signal");

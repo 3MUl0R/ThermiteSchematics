@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import * as cellModule from "../src/packet/report-cells.js";
-import { ReportMeasurementError } from "../src/packet/report-measurement.js";
+import {
+  ReportMeasurementError,
+  reportCellContext,
+} from "../src/packet/report-measurement.js";
 import { tableDrafts } from "../src/packet/reports.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import {
@@ -179,7 +182,10 @@ it.each([Error, TypeError, RangeError])(
 it("paints an expected setup fallback as a visible report diagnostic", () => {
   const f = pruningFixture(machine);
   vi.spyOn(cellModule, "wireColumnProbe").mockImplementation(() => {
-    throw new ReportMeasurementError("Synthetic measured constraint");
+    throw new ReportMeasurementError(
+      "Synthetic measured constraint",
+      reportCellContext(f.table, "header", 4),
+    );
   });
   const result = tableDrafts(f.ir, f.table, undefined, f.page);
   if (!result.ok) throw Error(result.error.message);
@@ -188,8 +194,12 @@ it("paints an expected setup fallback as a visible report diagnostic", () => {
   );
   const notes = [...svg.querySelectorAll("[data-report-note]")]
     .map((n) => n.textContent)
-    .join(" ");
+    // Notes use fixed character chunks; do not insert spaces into their text.
+    .join("");
   expect(notes).toContain(
-    "Wire allocation fallback (search-setup): Synthetic measured constraint",
+    'An alternative layout for "Wire and core schedule" could not fit column "Assignment": Synthetic measured constraint',
+  );
+  expect(notes).not.toMatch(
+    /native-reference|search-setup|Wire allocation fallback/u,
   );
 });

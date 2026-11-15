@@ -272,12 +272,17 @@ function unprintableReportText(
 function reportNotes(
   table: DocumentationTable,
   width: number,
-  fallback?: { stage: string; reason: string },
+  fallback?: {
+    stage: string;
+    reason: string;
+    column?: string;
+    detail?: string;
+  },
 ) {
   const notes = fallback
     ? [
         ...table.notes,
-        `Wire allocation fallback (${fallback.stage}): ${fallback.reason}`,
+        `Sheet and zone references are shown below the endpoints. An alternative layout for ${JSON.stringify(table.title)} ${fallback.column && fallback.detail ? `could not fit column ${JSON.stringify(fallback.column)}: ${fallback.detail}` : "could not be measured; the affected column was not identified."}`,
       ]
     : table.notes;
   return notes.flatMap((note, index) =>
