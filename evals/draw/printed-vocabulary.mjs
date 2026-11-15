@@ -17,36 +17,26 @@ const parts = (key) => {
     return [];
   }
 };
-export function terminalSet(names, source, printed = names) {
-  // Native function bindings, not name prefixes, establish a contact/coil pair.
-  const bindings = source?.terminals ?? [];
-  const element =
-    ["contact", "coil"].includes(source?.kind) &&
-    typeof source.id?.deviceUid === "string" &&
-    bindings.length === 2 &&
-    new Set(bindings.map((t) => t.terminalKey)).size === 2 &&
-    bindings.every(
-      (t) =>
-        t.deviceUid === source.id?.deviceUid && names.includes(t.terminalKey),
-    );
-  const integers =
-    names.length === 2 && names.every((s) => /^[0-9]+$/u.test(s));
-  const distance = integers ? BigInt(names[0]) - BigInt(names[1]) : 0n;
-  const pair =
-    names.length === 2 && (element || distance === 1n || distance === -1n);
+export function terminalSet(names, printed = names) {
+  // Independently parse bare terminal keys; qualifiers affect punctuation only.
+  const suffixes = names.map((name) => name.match(/^(\p{Letter}*)([0-9]+)$/u));
+  let rangeLike = false;
+  if (
+    names.length === 2 &&
+    suffixes[0] &&
+    suffixes[1] &&
+    suffixes[0][1] === suffixes[1][1]
+  ) {
+    const delta = BigInt(suffixes[0][2]) - BigInt(suffixes[1][2]);
+    rangeLike = delta < -1n || delta > 1n;
+  }
   const separator =
-    pair && !printed.some((s) => /[-–−+]/u.test(s))
+    names.length === 2 && !rangeLike && !printed.some((s) => /[-–−+]/u.test(s))
       ? "–"
       : printed.some((s) => s.includes("/"))
         ? ", "
         : " / ";
   return printed.join(separator);
-}
-export function functionTerminals(fn) {
-  return terminalSet(
-    fn.terminals.map((t) => t.terminalKey),
-    fn,
-  );
 }
 function functionCaption(fn) {
   const kind =
@@ -56,7 +46,7 @@ function functionCaption(fn) {
         ? `${fn.direction === "input" ? "Input" : "Output"} channel`
         : fn.kind[0].toUpperCase() + fn.kind.slice(1);
   const terminals = fn.terminals.map((t) => t.terminalKey);
-  return [kind, terminalSet(terminals, fn)].filter(Boolean).join(" ");
+  return [kind, terminalSet(terminals)].filter(Boolean).join(" ");
 }
 function device(ir, uid) {
   return ir.devices.find((d) => d.uid === uid);
@@ -115,7 +105,6 @@ function ioCell(ir, row, column) {
     return {
       expected: terminalSet(
         names,
-        fn,
         names.map((key) => `${device(ir, uid)?.designation}.${key}`),
       ),
       mechanism: "io-terminals",

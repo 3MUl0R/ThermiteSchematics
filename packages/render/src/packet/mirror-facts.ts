@@ -2,19 +2,6 @@ import type { ElectricalIr, FunctionId } from "@thermite/compiler";
 import type { PlacedOccurrence, MirrorRow } from "./navigation-types.js";
 import { distinctDestinations } from "./navigation-labels.js";
 import { required } from "../presentation/util.js";
-import { printedTerminals } from "../print-projection.js";
-
-/** Mirror rows are extracted only from one native contact function below. */
-export function printedMirrorTerminals(row: MirrorRow) {
-  return printedTerminals({
-    id: row.source,
-    kind: "contact",
-    terminals: row.terminals.map((terminalKey) => ({
-      deviceUid: row.source.deviceUid,
-      terminalKey,
-    })),
-  });
-}
 
 export const sameFunction = (a: FunctionId, b: FunctionId) =>
   a.deviceUid === b.deviceUid && a.functionKey === b.functionKey;

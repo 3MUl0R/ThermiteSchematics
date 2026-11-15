@@ -1,4 +1,4 @@
-import { printedMirrorTerminals } from "./mirror-facts.js";
+import { formatTerminalSet } from "@thermite/query";
 import type {
   AnnotationReservation,
   NavigationAnnotation,
@@ -45,7 +45,7 @@ export function mirrorTextRuns(annotation: NavigationAnnotation, box: Rect) {
     const terminalsWidth = Math.max(
       23.5,
       ...mirror.rows.map(
-        (r) => measureNavigationText(printedMirrorTerminals(r)) + 2,
+        (r) => measureNavigationText(formatTerminalSet(r.terminals)) + 2,
       ),
     );
     for (const row of mirror.rows) {
@@ -56,7 +56,7 @@ export function mirrorTextRuns(annotation: NavigationAnnotation, box: Rect) {
       put(
         box.x + 10,
         y,
-        printedMirrorTerminals(row),
+        formatTerminalSet(row.terminals),
         MIRROR_ROW_MM,
         row.primitiveId,
       );

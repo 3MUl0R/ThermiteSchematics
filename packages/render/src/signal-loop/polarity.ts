@@ -1,4 +1,4 @@
-import { printedTerminals } from "../print-projection.js";
+import { formatTerminalSet } from "@thermite/query";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { LoopFunction } from "./series-selection.js";
 
@@ -9,7 +9,7 @@ export function loopFunctionReference(endpoint: LoopFunction) {
   return (
     endpoint.device.designation +
     (terminals.length
-      ? ` terminal${terminals.length === 1 ? "" : "s"} ${printedTerminals(endpoint.function)}`
+      ? ` terminal${terminals.length === 1 ? "" : "s"} ${formatTerminalSet(terminals)}`
       : "")
   );
 }

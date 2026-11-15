@@ -1,12 +1,29 @@
 import { expect, it } from "vitest";
 import { formatTerminalSet, printedPort } from "../src/index.js";
-import type { IrFunction } from "@thermite/compiler";
 it.each([
   [[], ""],
   [["3"], "3"],
   [["13", "14"], "13–14"],
-  [["A1", "A2"], "A1 / A2"],
+  [["A1", "A2"], "A1–A2"],
   [["9", "13"], "9 / 13"],
+  [["AI3", "AI7"], "AI3 / AI7"],
+  [["L1", "L3"], "L1 / L3"],
+  [["X2", "X5"], "X2 / X5"],
+  [["X5", "X2"], "X5 / X2"],
+  [["9", "10"], "9–10"],
+  [["H1", "H2"], "H1–H2"],
+  [["X1", "X2"], "X1–X2"],
+  [["L", "N"], "L–N"],
+  [["PE", "N"], "PE–N"],
+  [["A1", "B7"], "A1–B7"],
+  [["AI3", "ai7"], "AI3–ai7"],
+  [["Α1", "Α3"], "Α1 / Α3"],
+  [["01", "04"], "01 / 04"],
+  [["A1", "A1"], "A1–A1"],
+  [
+    ["9007199254740992", "9007199254740995"],
+    "9007199254740992 / 9007199254740995",
+  ],
   [["14", "13"], "14–13"],
   [["01", "02"], "01–02"],
   [
@@ -16,9 +33,9 @@ it.each([
   [["PE", "+24V"], "PE / +24V"],
   [["+", "-", "S"], "+ / - / S"],
   [["+", "-"], "+ / -"],
-  [["1/2", "3<&>"], "1/2, 3<&>"],
-  [["1/L1", "2/T1"], "1/L1, 2/T1"],
-  [["X10.1", "X10.2"], "X10.1 / X10.2"],
+  [["1/2", "3<&>"], "1/2–3<&>"],
+  [["1/L1", "2/T1"], "1/L1–2/T1"],
+  [["X10.1", "X10.2"], "X10.1–X10.2"],
   [["DC-IN.1", "DC-IN.2"], "DC-IN.1 / DC-IN.2"],
   [["L+", "M"], "L+ / M"],
   [["a–b", "c"], "a–b / c"],
@@ -71,54 +88,13 @@ it("checks the actual printed names when qualifying native terminal identities",
   );
 });
 
-function element(
-  names: string[],
-): Pick<IrFunction, "id" | "kind" | "terminals"> {
-  return {
-    id: { deviceUid: "native-device", functionKey: "arbitrary" },
-    kind: "contact",
-    terminals: names.map((terminalKey) => ({
-      deviceUid: "native-device",
-      terminalKey,
-    })),
-  };
-}
-
-it.each([
-  [["A1", "A2"], "A1–A2"],
-  [["13", "14"], "13–14"],
-  [["9", "13"], "9–13"],
-  [["1/L1", "2/T1"], "1/L1–2/T1"],
-  [["A–B", "C"], "A–B / C"],
-  [["+24V", "PE"], "+24V / PE"],
-])("retains only source-proven element pairs %j", (names, expected) => {
-  const native = element(names);
-  const before = JSON.stringify(native);
-  expect(formatTerminalSet(names, undefined, native)).toBe(expected);
-  native.kind = "coil";
-  expect(formatTerminalSet(names, undefined, native)).toBe(expected);
-  native.kind = "contact";
-  expect(JSON.stringify(native)).toBe(before);
-});
-
-it("never infers one element from a channel, matching prefix, foreign binding or incomplete set", () => {
-  const native = element(["A1", "A2"]);
-  expect(formatTerminalSet(["A1", "A2"])).toBe("A1 / A2");
-  expect(formatTerminalSet(["A1", "A3"], undefined, native)).toBe("A1 / A3");
-  const foreign = {
-    ...native,
-    terminals: native.terminals.map((t) => ({ ...t, deviceUid: "foreign" })),
-  };
-  expect(formatTerminalSet(["A1", "A2"], undefined, foreign)).toBe("A1 / A2");
-  const channel = {
-    ...element(["9", "13"]),
-    kind: "channel",
-    direction: "input",
-  } satisfies Pick<IrFunction, "id" | "kind" | "terminals"> & {
-    direction: string;
-  };
-  expect(formatTerminalSet(["9", "13"], undefined, channel)).toBe("9 / 13");
-  expect(
-    formatTerminalSet(["A1", "A2"], undefined, element(["A1", "A1"])),
-  ).toBe("A1 / A2");
+it("parses the terminal part while using printed qualified strings for punctuation", () => {
+  expect(formatTerminalSet(["9", "13"], (t) => `K1.${t}`)).toBe("K1.9 / K1.13");
+  expect(formatTerminalSet(["AI3", "AI7"], (t) => `K1.${t}`)).toBe(
+    "K1.AI3 / K1.AI7",
+  );
+  expect(formatTerminalSet(["A1", "A2"], (t) => `K1.${t}`)).toBe("K1.A1–K1.A2");
+  expect(formatTerminalSet(["A1", "A2"], (t) => `-K1.${t}`)).toBe(
+    "-K1.A1 / -K1.A2",
+  );
 });

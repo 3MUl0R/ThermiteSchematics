@@ -5,10 +5,7 @@ import {
   formatTerminalSet,
 } from "@thermite/query";
 import { renderSchematicPacket } from "../../../render/src/sheets.js";
-import {
-  printedFunction,
-  printedTerminals,
-} from "../../../render/src/print-projection.js";
+import { printedFunction } from "../../../render/src/print-projection.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
 // jumper, a single-ended core, a PLC and an overload relay, or against the
@@ -376,7 +373,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – for one contact/coil's authored terminal pair or consecutive integer keys, unless printed names have -/–/−/+; else /, or comma if they have /.",
+        "Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless bare keys have the same (possibly empty) letter prefix and integers >1 apart, or printed names have -/–/−/+; else /, or comma if they have /.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c));
@@ -422,7 +419,7 @@ const module: FactModule = {
               JSON.stringify(fn.id),
           )!;
           expect(row.textContent).toContain(
-            `${fn.kind === "contact" && fn.normal_state === "open" ? "NO" : "NC"}${printedTerminals(fn)}`,
+            `${fn.kind === "contact" && fn.normal_state === "open" ? "NO" : "NC"}${formatTerminalSet(fn.terminals.map((t) => t.terminalKey))}`,
           );
         }
         expect(
@@ -440,7 +437,7 @@ const module: FactModule = {
         expect(returns[0]!.ownerOccurrences).toHaveLength(3);
         expect(returns[0]!.text).toMatch(/^K1 \/[0-9]{2}\.[A-D][1-6]$/);
         expect(returns[0]!.returnLocality!.owners).toHaveLength(3);
-        expect(formatTerminalSet(["1/L1", "2/T1"])).toBe("1/L1, 2/T1");
+        expect(formatTerminalSet(["1/L1", "2/T1"])).toBe("1/L1–2/T1");
         expect(formatTerminalSet(["L+", "M"])).toBe("L+ / M");
         expect(formatTerminalSet(["a-b", "c/d"])).toBe("a-b, c/d");
       },
@@ -509,7 +506,7 @@ const module: FactModule = {
         )!;
         expect(row.cells[1]).toBe(
           device.io?.channels[fn.id.functionKey]?.address ??
-            printedTerminals(fn),
+            formatTerminalSet(fn.terminals.map((t) => t.terminalKey)),
         );
         expect(printedFunction(fn)).toContain(fn.terminals[0]!.terminalKey);
         expect(

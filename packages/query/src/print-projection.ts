@@ -1,53 +1,26 @@
-import type {
-  ElectricalIr,
-  IrDeviceType,
-  IrFunction,
-} from "@thermite/compiler";
+import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
 
-type TerminalElement = Pick<IrFunction, "id" | "kind" | "terminals">;
-
-/** Only native contact/coil bindings establish one element here. A channel,
- * source, load or matching name prefix does not establish a physical pair. */
-function isElementPair(
-  terminals: readonly string[],
-  element?: TerminalElement,
-) {
-  return (
-    terminals.length === 2 &&
-    terminals[0] !== terminals[1] &&
-    (element?.kind === "contact" || element?.kind === "coil") &&
-    element.terminals.length === 2 &&
-    new Set(element.terminals.map((t) => t.terminalKey)).size === 2 &&
-    element.terminals.every(
-      (t) =>
-        t.deviceUid === element.id.deviceUid &&
-        terminals.includes(t.terminalKey),
-    )
-  );
-}
-
-function consecutiveIntegers(terminals: readonly string[]) {
-  const [first, second] = terminals;
-  if (
-    terminals.length !== 2 ||
-    first === undefined ||
-    second === undefined ||
-    !terminals.every((t) => /^\d+$/u.test(t))
-  )
+/** A shared letter prefix plus separated integer suffixes reads as a range. */
+function rangeLikePair(terminals: readonly string[]) {
+  if (terminals.length !== 2) return false;
+  const [first, second] = terminals.map((t) => /^(\p{L}*)(\d+)$/u.exec(t));
+  const a = first?.[2],
+    b = second?.[2];
+  if (a === undefined || b === undefined || first?.[1] !== second?.[1])
     return false;
-  const difference = BigInt(first) - BigInt(second);
-  return difference === 1n || difference === -1n;
+  const difference = BigInt(a) - BigInt(b);
+  return difference > 1n || difference < -1n;
 }
 
 /** Authored identities are indivisible; punctuation is a list separator only. */
 export function formatTerminalSet(
   terminals: readonly string[],
   label: (terminal: string) => string = (terminal) => terminal,
-  element?: TerminalElement,
 ): string {
   const printed = terminals.map(label);
   const separator =
-    (isElementPair(terminals, element) || consecutiveIntegers(terminals)) &&
+    terminals.length === 2 &&
+    !rangeLikePair(terminals) &&
     printed.every((t) => !/[-–−+]/u.test(t))
       ? "–"
       : printed.some((t) => t.includes("/"))

@@ -6,10 +6,25 @@ import ts from "typescript";
 it.each([
   [["13", "14"], "13–14"],
   [["9", "13"], "9 / 13"],
-  [["A1", "A2"], "A1 / A2"],
+  [["AI3", "AI7"], "AI3 / AI7"],
+  [["L1", "L3"], "L1 / L3"],
+  [["X2", "X5"], "X2 / X5"],
+  [["9", "10"], "9–10"],
+  [["H1", "H2"], "H1–H2"],
+  [["X1", "X2"], "X1–X2"],
+  [["L", "N"], "L–N"],
+  [["PE", "N"], "PE–N"],
+  [["A1", "B7"], "A1–B7"],
+  [["AI3", "ai7"], "AI3–ai7"],
+  [["Α1", "Α3"], "Α1 / Α3"],
+  [
+    ["9007199254740992", "9007199254740995"],
+    "9007199254740992 / 9007199254740995",
+  ],
+  [["A1", "A2"], "A1–A2"],
   [["PE", "+24V"], "PE / +24V"],
-  [["1/L1", "2/T1"], "1/L1, 2/T1"],
-  [["X10.1", "X10.2"], "X10.1 / X10.2"],
+  [["1/L1", "2/T1"], "1/L1–2/T1"],
+  [["X10.1", "X10.2"], "X10.1–X10.2"],
   [["+", "-"], "+ / -"],
   [["L+", "M"], "L+ / M"],
   [["DC-IN.1", "DC-IN.2"], "DC-IN.1 / DC-IN.2"],
@@ -58,29 +73,13 @@ it("DQ-05 owned native contact caption accepts the S2 pair and rejects the old s
   expect(check()).toHaveLength(1);
 });
 
-it("DQ-05 distinguishes native coil/contact pairs from channel bindings and printed qualifiers", () => {
-  const fn = {
-    id: { deviceUid: "k", functionKey: "arbitrary" },
-    kind: "coil",
-    terminals: ["A1", "A2"].map((terminalKey) => ({
-      deviceUid: "k",
-      terminalKey,
-    })),
-  };
-  expect(terminalSet(["A1", "A2"], fn)).toBe("A1–A2");
-  expect(terminalSet(["A1", "A2"], { ...fn, kind: "channel" })).toBe("A1 / A2");
-  expect(terminalSet(["A1", "A3"], fn)).toBe("A1 / A3");
-  expect(terminalSet(["A1", "A2"], fn, ["-K1.A1", "-K1.A2"])).toBe(
+it("DQ-05 parses bare keys and checks actual printed qualifiers independently", () => {
+  expect(terminalSet(["9", "13"], ["K1.9", "K1.13"])).toBe("K1.9 / K1.13");
+  expect(terminalSet(["A1", "A2"], ["K1.A1", "K1.A2"])).toBe("K1.A1–K1.A2");
+  expect(terminalSet(["A1", "A2"], ["-K1.A1", "-K1.A2"])).toBe(
     "-K1.A1 / -K1.A2",
   );
-  expect(terminalSet(["9", "13"], undefined, ["K/1.9", "K/1.13"])).toBe(
-    "K/1.9, K/1.13",
-  );
-  const foreign = {
-    ...fn,
-    terminals: fn.terminals.map((t) => ({ ...t, deviceUid: "foreign" })),
-  };
-  expect(terminalSet(["A1", "A2"], foreign)).toBe("A1 / A2");
+  expect(terminalSet(["9", "13"], ["K/1.9", "K/1.13"])).toBe("K/1.9, K/1.13");
 });
 
 it("DQ-05 rejects the old channel range and checks qualified I/O cells independently", () => {

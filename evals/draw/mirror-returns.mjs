@@ -4,7 +4,7 @@ import {
   measuredZone,
 } from "./repeat-appearances.mjs";
 import { finding, painted, groupBy } from "./review-geometry.mjs";
-import { functionTerminals } from "./printed-vocabulary.mjs";
+import { terminalSet } from "./printed-vocabulary.mjs";
 import {
   nearestOwner,
   anchorDistance,
@@ -340,7 +340,7 @@ export function mirrorReturns(packet, geometries, ir, request) {
           const rows = actual.filter((r) => same(r.source, f.id));
           const expected = [
             f.normal_state === "open" ? "NO" : "NC",
-            functionTerminals(f),
+            terminalSet(f.terminals.map((t) => t.terminalKey)),
             ...(destinations(f.id).length ? destinations(f.id) : ["not drawn"]),
           ].join(" ");
           if (rows.length !== 1 || compact(rows[0].text) !== compact(expected))

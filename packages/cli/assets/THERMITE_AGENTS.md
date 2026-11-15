@@ -314,7 +314,7 @@ One repeat per device/view/sheet; fixed local slots, else own sheet.zone.
 Repeat text keeps 4 mm horizontally from overlapping text bands; centroids
 round half-up to 0.01 mm.
 
-Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – for one contact/coil's authored terminal pair or consecutive integer keys, unless printed names have -/–/−/+; else /, or comma if they have /.
+Mirrors: direct same-device coil/contact `actuates`; authored state/terminals, full locations or `not drawn`; no guessed counts. Fixed slots keep geometry/type. Local by ink: same sheet, ≤60 mm, adjacent zone, nearest coil frame; else heading has /ss.zone. Returns: all coils; native gangs/equal targets: caption/issued fragment. Notes add no pages; no vacancy: R006. Pairs: – unless bare keys have the same (possibly empty) letter prefix and integers >1 apart, or printed names have -/–/−/+; else /, or comma if they have /.
 
 For packet frames, use presentation 0.3 named slots; see `thermite guide drawing-frames`.
 Enter only supplied title/revision data. Unknown fields stay labelled blank;
