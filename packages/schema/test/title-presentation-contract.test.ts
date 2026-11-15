@@ -183,3 +183,27 @@ it("admits ten real slots and rejects an eleventh solely by closed-object E012",
     ),
   ).toEqual([{ code: "E012", jsonPointer: "/titleBlock/fields/custom" }]);
 });
+
+it.each([
+  ["<b>invalid</b>", "/titleBlock/fields"],
+  [["<b>invalid</b>"], "/titleBlock/fields/0"],
+])(
+  "preserves malformed field-container diagnostics for %j",
+  (fields, pointer) => {
+    const registry = createInMemoryCanonicalSchemaRegistry();
+    const diagnostics = registry.validateEntity(
+      "project-presentation",
+      {
+        format: "project-presentation/0.3",
+        titleBlock: { fields },
+      },
+      { file: "presentation.json", nodes: new Map() },
+    );
+    expect(
+      diagnostics.map((d) => ({ code: d.code, jsonPointer: d.jsonPointer })),
+    ).toEqual([
+      { code: "E011", jsonPointer: "/titleBlock/fields" },
+      { code: "E013", jsonPointer: pointer },
+    ]);
+  },
+);

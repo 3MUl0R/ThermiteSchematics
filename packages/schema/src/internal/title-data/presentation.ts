@@ -67,8 +67,12 @@ export function validatePresentationStructure(
       nodes: nodes,
     }),
   );
+  const hasFieldObject =
+    isObject(value) &&
+    isObject(value.titleBlock) &&
+    isObject(value.titleBlock.fields);
   visitStrings(value, "", (value, pointer) =>
-    checkPresentationText(value, pointer, located),
+    checkPresentationText(value, pointer, located, hasFieldObject),
   );
   if (isObject(value)) checkPresentation(value, located);
   if (
@@ -90,11 +94,13 @@ function checkPresentationText(
   value: string,
   pointer: string,
   issues: Issues,
+  hasFieldObject: boolean,
 ): void {
   const [root, fields, key] = splitJsonPointer(pointer);
   // Unknown slots are already rejected by the closed schema. Their unused
   // contents must not add semantic diagnostics to that single E012.
   if (
+    hasFieldObject &&
     root === "titleBlock" &&
     fields === "fields" &&
     !slots.some((slot) => slot === key)
