@@ -10,6 +10,7 @@ import { circuitHasJogs } from "./circuit-route-quality.js";
 import { circuitPacketGuard } from "./circuit-packet-guard.js";
 import { required } from "../presentation/util.js";
 import { powerPlacementAvailable } from "./power-placement.js";
+import { selectFinalFolds } from "../packet/fold-final-selection.js";
 
 /** The saved printable reference predates all routing alternatives. Each logical
  * circuit or LTR power view must repair its own printed jogs; guards compare
@@ -77,6 +78,6 @@ export function selectCircuitPacket(
           : "composition fit",
       });
     }
-    return selected;
+    return selectFinalFolds(selected, render);
   });
 }

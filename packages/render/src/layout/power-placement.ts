@@ -38,6 +38,10 @@ import { compareText } from "../ordering.js";
 import { required } from "../presentation/util.js";
 import { elkWorkScope, type ElkWorkLedger } from "./elk-work.js";
 import {
+  chargePowerQualityInput,
+  powerQualityAttempts,
+} from "./power-quality-budget.js";
+import {
   frameBudgetFailure,
   frameBudgetOrder,
 } from "../packet/frame-budget.js";
@@ -80,7 +84,7 @@ export function powerPlacementAvailable(run: CircuitLayoutRun) {
     (!state.work.exhausted &&
       state.work.calls < MAX_PLACEMENT_LAYOUTS &&
       !economyExhausted(state.search) &&
-      run.qualityAttempts < STANDARD_ECONOMY_ATTEMPTS)
+      powerQualityAttempts(run) < STANDARD_ECONOMY_ATTEMPTS)
   );
 }
 
@@ -188,15 +192,11 @@ function powerEngine(run: CircuitLayoutRun, state: PowerPlacementState) {
       throw new InlineLabelFitError(
         "Power alternative permits one routing configuration per view.",
       );
-    configurationKey = key;
-    if (!run.qualityAttempts) {
-      if (state.work.calls >= MAX_PLACEMENT_LAYOUTS)
-        throw new InlineLabelFitError(
-          "Power alternative exhausted its shared layout budget.",
-        );
-      run.qualityAttempts++;
+    if (configurationKey === undefined) {
+      chargePowerQualityInput(run, state.work);
       context?.permittedInputs.add(key);
     }
+    configurationKey = key;
     try {
       return await elkWorkScope.run(state.work, () =>
         layout(candidate, options),

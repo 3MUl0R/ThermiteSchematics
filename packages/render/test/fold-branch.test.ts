@@ -5,12 +5,12 @@ import { renderSchematicPacket } from "../src/index.js";
 import type { SchematicPacketRequest, RenderedPacket } from "../src/sheets.js";
 import type { RootedCandidate } from "../src/packet/rooted-build.js";
 import { circuitInlineTrace } from "../src/layout/circuit-inline-context.js";
-import { normalizePaperPage } from "../src/packet/page.js";
 import {
-  searchRootedCandidates,
   foldCandidateAllowed,
   MAX_FOLD_BRANCH_LAYOUTS,
+  MAX_FOLD_EXTRA_REQUESTS,
 } from "../src/packet/rooted-fold-search.js";
+import { foldDecisionTrace } from "../src/packet/fold-final-context.js";
 import * as crop from "../src/packet/fold-crop.js";
 import { rootedGangSegments } from "../src/symbols/rooted-gangs.js";
 
@@ -109,18 +109,22 @@ it("keeps the authored motor in FIELD with two safe strips and four reciprocal p
 
 it("bounds rejected branch alternatives by logical ELK requests, including exact cache hits", async () => {
   vi.spyOn(crop, "croppedFoldCandidates").mockReturnValue([]);
-  const page = normalizePaperPage(request.page);
-  if (!page.ok) throw Error(JSON.stringify(page.error));
-  const run = await searchRootedCandidates(
-    fixture.ir,
-    power,
-    fixture.presentation,
-    page.value,
-    true,
+  const trace: NonNullable<Parameters<typeof circuitInlineTrace.run>[0]> = [];
+  const decisions: NonNullable<Parameters<typeof foldDecisionTrace.run>[0]> =
+    [];
+  const result = await foldDecisionTrace.run(decisions, () =>
+    circuitInlineTrace.run(trace, () =>
+      renderSchematicPacket(fixture.ir, request, fixture.presentation),
+    ),
   );
-  const work = required(run.elkWork);
+  expect(result.ok).toBe(true);
+  const decision = required(decisions[0]);
+  const work = required(required(required(trace[0]).runs[0]).power).work;
+  expect(decision.branchRequests).toBe(2);
+  expect(decision.qualityRequests).toBe(0);
+  expect(work.calls - decision.referenceRequests).toBe(2);
   expect(MAX_FOLD_BRANCH_LAYOUTS).toBe(2);
-  expect(work.calls - work.baselineCalls).toBe(2);
+  expect(MAX_FOLD_EXTRA_REQUESTS).toBe(4);
   expect(work.calls).toBeLessThanOrEqual(work.limit);
 }, 30000);
 

@@ -22,10 +22,41 @@ interface SavedView {
   input: string;
   start: number;
   selected: boolean[];
+  power: ReturnType<typeof powerSelections>;
   result: unknown;
   receipts: readonly FrameReceipt[];
 }
 const views = new WeakMap<CircuitInlineContext, SavedView[]>();
+
+function powerSelections(
+  context: CircuitInlineContext,
+  start: number,
+  count: number,
+) {
+  return Array.from({ length: count }, (_, i) => {
+    const state = context.runs[start + i]?.power;
+    return {
+      state,
+      candidate: context.selected.has(start + i)
+        ? state?.selected
+        : state?.original,
+    };
+  });
+}
+
+function sameSelection(
+  entry: SavedView,
+  context: CircuitInlineContext,
+  start: number,
+) {
+  const current = powerSelections(context, start, entry.selected.length);
+  return entry.selected.every(
+    (selected, i) =>
+      selected === context.selected.has(start + i) &&
+      entry.power[i]?.state === current[i]?.state &&
+      entry.power[i]?.candidate === current[i]?.candidate,
+  );
+}
 
 /** Reuse only identical pre-assembly inputs and the same run selection. Each
  * caller gets its own drafts: assembly mutates links, namespaces and headings.
@@ -58,9 +89,7 @@ export async function cachedCircuitView<T>(
         entry.input === key &&
         entry.start === start &&
         start + entry.selected.length <= context.runs.length &&
-        entry.selected.every(
-          (selected, i) => selected === context.selected.has(start + i),
-        ),
+        sameSelection(entry, context, start),
     );
   if (saved) {
     for (const _ of saved.selected) nextCircuitLayoutRun();
@@ -78,6 +107,7 @@ export async function cachedCircuitView<T>(
       selected: Array.from({ length: context.cursor - start }, (_, i) =>
         context.selected.has(start + i),
       ),
+      power: powerSelections(context, start, context.cursor - start),
       result: structuredClone(result),
       receipts: page ? compactPlanningReceipts(page).slice(receiptStart) : [],
     });

@@ -7,7 +7,6 @@ import type { PaperPage } from "./types.js";
 import type { RootedCandidate } from "./rooted-build.js";
 import {
   searchRootedCandidates as searchBase,
-  rootedWinner,
   type RootedSearch,
 } from "./rooted-search.js";
 import { materializeRootedCandidate, rootedSpace } from "./rooted-build.js";
@@ -21,17 +20,27 @@ import {
   ElkWorkBudgetError,
   type ElkWorkLedger,
 } from "../layout/elk-work.js";
-import { powerNativeGuard } from "../layout/power-placement-guard.js";
+import {
+  powerNativeGuard,
+  powerRouteGraph,
+} from "../layout/power-placement-guard.js";
+import { circuitCrossingGuard } from "../layout/circuit-native-guard.js";
 import { routeGrowth } from "./rooted-clipped-routes.js";
 import { compositionFits } from "./composition-fit.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
 import { hasCompactFrame } from "./frame-profile.js";
 import { economyExhausted } from "./rooted-economy.js";
 import { applyLayoutSpacing } from "../layout/spacing.js";
-import { withCircuitLayoutCache } from "../layout/circuit-inline-context.js";
+import {
+  withCircuitLayoutCache,
+  circuitInlineContext,
+  circuitLayoutCacheKey,
+} from "../layout/circuit-inline-context.js";
+import { foldSources } from "./fold-final-context.js";
 
 export const FOLD_BRANCH_SPACINGS = [24, 28] as const;
 export const MAX_FOLD_BRANCH_LAYOUTS = FOLD_BRANCH_SPACINGS.length;
+export const MAX_FOLD_EXTRA_REQUESTS = 2 * MAX_FOLD_BRANCH_LAYOUTS;
 const strips = (c: RootedCandidate) =>
   c.drafts.reduce((n, d) => n + (d.rootedSections?.length ?? 0), 0);
 const ends = (c: RootedCandidate) =>
@@ -61,18 +70,18 @@ export async function searchRootedCandidates(
       request.flow === "left-to-right" &&
       !hasCompactFrame(page)
     )
-      await improveFold(ir, run, page);
+      foldSources.set(run, ir);
     return run;
   });
 }
 
-async function improveFold(
+export async function* foldProposals(
   ir: Readonly<ElectricalIr>,
   run: RootedSearch,
   page: PaperPage,
+  original: RootedCandidate,
 ) {
-  const original = rootedWinner(run, page),
-    dense = run.prepared.find((p) => p.profile === "dense")?.p;
+  const dense = run.prepared.find((p) => p.profile === "dense")?.p;
   if (
     !original ||
     !dense ||
@@ -122,9 +131,9 @@ async function improveFold(
         drafts: printed.value,
         printableDrafts: printed.value,
       };
-      if (foldCandidateAllowed(ir, selected, original, page)) {
-        run.candidates = [selected];
-        return;
+      if (foldGeometryAllowed(ir, selected, original, page)) {
+        yield selected;
+        break;
       }
     }
   }
@@ -146,16 +155,38 @@ function branchEngine(
     applyLayoutSpacing(copy, original.prepared.graph, {
       spacingProfile: "dense",
     });
-    return elkWorkScope.run(work, () =>
-      layout(foldBranchInput(copy, labels, spacing), options),
-    );
+    const candidate = foldBranchInput(copy, labels, spacing);
+    circuitInlineContext
+      .getStore()
+      ?.permittedInputs.add(circuitLayoutCacheKey(candidate, options));
+    return elkWorkScope.run(work, () => layout(candidate, options));
   };
   return engine;
 }
 
-/** The fold objective can add ordinary bends; it cannot buy a printed/native
- * jog, detour, crossing, lost endpoint, phase permutation or broken gang. */
+/** Compare the composed, quality-processed proposal with the fixed final base,
+ * never the earlier rooted winner. routeGrowth uses the unchanged 3 mm policy
+ * and JOG_NUMERICAL_TOLERANCE_MM for native and printed paths. */
 export function foldCandidateAllowed(
+  ir: Readonly<ElectricalIr>,
+  candidate: RootedCandidate,
+  original: RootedCandidate,
+  page: PaperPage,
+) {
+  return (
+    foldGeometryAllowed(ir, candidate, original, page) &&
+    [false, true].every(
+      (clipped) =>
+        routeGrowth(candidate, original, clipped).every((n) => n === 0) &&
+        circuitCrossingGuard(
+          powerRouteGraph(candidate, clipped),
+          powerRouteGraph(original, clipped),
+        ),
+    )
+  );
+}
+
+function foldGeometryAllowed(
   ir: Readonly<ElectricalIr>,
   candidate: RootedCandidate,
   original: RootedCandidate,
@@ -169,9 +200,6 @@ export function foldCandidateAllowed(
     powerNativeGuard(candidate.prepared, original.prepared) &&
     rootedGangSegments(ir, candidate.prepared.graph, candidate.prepared.layout)
       .ok &&
-    compositionFits(candidate, original, page) &&
-    [false, true].every((clipped) =>
-      routeGrowth(candidate, original, clipped).every((n) => n === 0),
-    )
+    compositionFits(candidate, original, page)
   );
 }
