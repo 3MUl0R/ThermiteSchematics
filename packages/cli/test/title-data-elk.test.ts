@@ -112,12 +112,12 @@ it.each([
     );
   },
 );
-it("keeps closed safe imports and ordinary exports outside the loader auditable", () => {
+it("rejects new loading forms outside the exact current static imports", () => {
   expect(
     audit(
       source + '\nexport * from "./elk-worker-budget.js"; import("elkjs");',
     ),
-  ).toEqual([]);
+  ).not.toEqual([]);
 });
 it.each(["class { postMessage() {} }", "null", "{}"])(
   "round 2 rejects cache pre-seed by initializer: %s",
@@ -136,7 +136,7 @@ it.each(["class { postMessage() {} }", "null", "{}"])(
     );
   },
 );
-it("permits an uninitialized or explicitly undefined loader cache", () => {
+it("permits only the canonical uninitialized loader cache", () => {
   expect(audit(source)).toEqual([]);
   expect(
     audit(
@@ -145,5 +145,5 @@ it("permits an uninitialized or explicitly undefined loader cache", () => {
         "let fauxWorker: ElkFauxWorkerConstructor | undefined = undefined;",
       ),
     ),
-  ).toEqual([]);
+  ).not.toEqual([]);
 });

@@ -1,3 +1,4 @@
+import { constantText } from "./title-data-constant.js";
 import {
   elkLoaderException,
   forbiddenDynamicCode,
@@ -13,27 +14,6 @@ const hidden = (path: string) =>
 const envAccess =
   /\b(?:process|Bun)\s*(?:\.\s*env|\[\s*["']env["']\s*\])|import\.meta\.env/u;
 
-function constantText(node: ts.Expression): string | undefined {
-  if (ts.isStringLiteralLike(node)) return node.text;
-  if (ts.isParenthesizedExpression(node)) return constantText(node.expression);
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.PlusToken
-  ) {
-    const a = constantText(node.left),
-      b = constantText(node.right);
-    if (a !== undefined && b !== undefined) return a + b;
-  }
-  if (ts.isTemplateExpression(node)) {
-    let result = node.head.text;
-    for (const span of node.templateSpans) {
-      const value = constantText(span.expression);
-      if (value === undefined) return;
-      result += value + span.literal.text;
-    }
-    return result;
-  }
-}
 function targetPath(
   file: string,
   specifier: string,
