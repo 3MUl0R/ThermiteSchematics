@@ -1,4 +1,6 @@
-import type { ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
+import { validatePresentationStructure } from "./internal/title-data/presentation.js";
+import { isObject } from "./internal/title-data/validation-common.js";
+import type { Ajv2020, ErrorObject, ValidateFunction } from "ajv/dist/2020.js";
 import { mapAjvErrors, type AjvDiagnosticContext } from "./ajv-validation.js";
 import type { Diagnostic } from "./diagnostics.js";
 import type { JsonValue } from "./parser.js";
@@ -40,4 +42,45 @@ export function validatePresentationDiscriminator(
     params: { ...union.params, discriminator: "format", allowedValues },
   };
   return mapAjvErrors([error], { ...context, value });
+}
+
+/** Known legacy formats retain the registry's existing strict validator. */
+export function validatePresentationEntity(
+  ajv: Ajv2020,
+  value: JsonValue,
+  context: Omit<AjvDiagnosticContext, "value">,
+): Diagnostic[] | undefined {
+  if (isObject(value) && value.format === "project-presentation/0.3")
+    return compactPresentationDiagnostics(value, context);
+  if (
+    isObject(value) &&
+    (value.format === "project-presentation/0.1" ||
+      value.format === "project-presentation/0.2")
+  )
+    return undefined;
+  const root = ajv.getSchema(
+    "https://thermiteschematics.com/schemas/0.1/project-presentation.schema.json",
+  );
+  if (root === undefined) throw new Error("Missing presentation schema.");
+  return validatePresentationDiscriminator(root, value, context);
+}
+
+function compactPresentationDiagnostics(
+  value: JsonValue,
+  context: Omit<AjvDiagnosticContext, "value">,
+): Diagnostic[] {
+  return validatePresentationStructure(
+    value,
+    context.file,
+    context.nodes,
+  ).diagnostics.map((diagnostic) => {
+    // Public compiler diagnostics retain the established Diagnostic shape.
+    const publicDiagnostic = {
+      ...diagnostic,
+      code: diagnostic.code === "R005" ? "E013" : diagnostic.code,
+    } as Diagnostic & Record<string, unknown>;
+    for (const key of ["reason", "ownerKind", "ownerId", "field", "details"])
+      delete publicDiagnostic[key];
+    return publicDiagnostic;
+  });
 }

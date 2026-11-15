@@ -6,6 +6,11 @@ rendering and PDF metadata. Init still creates presentation 0.2. Continuous SVG
 keeps its existing rendering; the frame and packet title data apply to paginated
 SVG, HTML, PDF and JSON exports.
 
+Presentation validation can take two passes. If `format` is missing or unknown,
+the first pass returns one E014 naming the accepted versions. Set a supported
+`format`, then validate again to see that version's field errors. Known 0.1/0.2
+formats retain their legacy diagnostics; known 0.3 validates only compact fields.
+
 ```json
 {
   "format": "project-presentation/0.3",
@@ -59,7 +64,7 @@ identity and final numbering come from the native project and selected views.
 `titleBlock.lines` retains up to four plain note lines. Text is plain and bounded:
 labels up to 40 code points, ordinary values and short titles up to 160, personnel
 and customer values up to 80, drawing numbers and revisions up to 128. Dates must
-be valid Gregorian `YYYY-MM-DD`. The presentation JSON is limited to 64 KiB of
+be valid Gregorian `YYYY-MM-DD`. Presentation 0.3 JSON is limited to 64 KiB of
 UTF-8, including whitespace. Unsupported glyphs, format characters, markup and
 unprintable values refuse rather than being substituted.
 

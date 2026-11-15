@@ -11,6 +11,8 @@ import type { Presentation } from "./model.js";
 import { presentationSchema } from "./schema.js";
 import { checkPresentation } from "./presentation-validation.js";
 import { checkPlainText, visitStrings } from "./text.js";
+import { splitJsonPointer } from "../../json-pointer.js";
+import { slots } from "./model.js";
 import { Issues, isObject } from "./validation-common.js";
 const ajv = createAjv2020();
 ajv.opts.allowUnionTypes = true;
@@ -66,7 +68,7 @@ export function validatePresentationStructure(
     }),
   );
   visitStrings(value, "", (value, pointer) =>
-    checkPlainText(value, pointer, located),
+    checkPresentationText(value, pointer, located),
   );
   if (isObject(value)) checkPresentation(value, located);
   if (
@@ -82,4 +84,21 @@ export function validatePresentationStructure(
         diagnostics,
         nodes: nodes,
       };
+}
+
+function checkPresentationText(
+  value: string,
+  pointer: string,
+  issues: Issues,
+): void {
+  const [root, fields, key] = splitJsonPointer(pointer);
+  // Unknown slots are already rejected by the closed schema. Their unused
+  // contents must not add semantic diagnostics to that single E012.
+  if (
+    root === "titleBlock" &&
+    fields === "fields" &&
+    !slots.some((slot) => slot === key)
+  )
+    return;
+  checkPlainText(value, pointer, issues);
 }

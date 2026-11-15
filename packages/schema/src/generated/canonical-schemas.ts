@@ -1737,25 +1737,25 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
                       $ref: "#/$defs/titleField",
                     },
                     drawingNumber: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/identifierTitleField",
                     },
                     customer: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/shortTitleField",
                     },
                     drawnBy: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/shortTitleField",
                     },
                     date: {
                       $ref: "#/$defs/titleField",
                     },
                     checkedBy: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/shortTitleField",
                     },
                     approvedBy: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/shortTitleField",
                     },
                     revision: {
-                      $ref: "#/$defs/titleField",
+                      $ref: "#/$defs/identifierTitleField",
                     },
                     sheetNumber: {
                       $ref: "#/$defs/titleField",
@@ -1797,6 +1797,96 @@ export const IN_MEMORY_CANONICAL_SCHEMAS: readonly LoadedSchema[] = [
               type: ["string", "null"],
               minLength: 1,
               maxLength: 160,
+            },
+            bind: {
+              enum: [
+                "project.name",
+                "sheet.title",
+                "sheet.revision",
+                "sheet.numberOfTotal",
+              ],
+            },
+            pattern: {
+              type: "string",
+              minLength: 1,
+              maxLength: 160,
+            },
+          },
+          required: ["slot", "label"],
+        },
+        shortTitleField: {
+          title: "CompactShortTitleField",
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slot: {
+              enum: [
+                "project",
+                "sheetTitle",
+                "drawingNumber",
+                "customer",
+                "drawnBy",
+                "date",
+                "checkedBy",
+                "approvedBy",
+                "revision",
+                "sheetNumber",
+              ],
+            },
+            label: {
+              type: "string",
+              minLength: 1,
+              maxLength: 40,
+            },
+            value: {
+              type: ["string", "null"],
+              minLength: 1,
+              maxLength: 80,
+            },
+            bind: {
+              enum: [
+                "project.name",
+                "sheet.title",
+                "sheet.revision",
+                "sheet.numberOfTotal",
+              ],
+            },
+            pattern: {
+              type: "string",
+              minLength: 1,
+              maxLength: 160,
+            },
+          },
+          required: ["slot", "label"],
+        },
+        identifierTitleField: {
+          title: "CompactIdentifierTitleField",
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            slot: {
+              enum: [
+                "project",
+                "sheetTitle",
+                "drawingNumber",
+                "customer",
+                "drawnBy",
+                "date",
+                "checkedBy",
+                "approvedBy",
+                "revision",
+                "sheetNumber",
+              ],
+            },
+            label: {
+              type: "string",
+              minLength: 1,
+              maxLength: 40,
+            },
+            value: {
+              type: ["string", "null"],
+              minLength: 1,
+              maxLength: 128,
             },
             bind: {
               enum: [

@@ -1,3 +1,4 @@
+import { bindings } from "../src/internal/title-data/model.js";
 import { expect, it } from "vitest";
 import { createAjv2020 } from "../src/ajv-validation.js";
 import {
@@ -132,4 +133,53 @@ it("describes the retained public packet metadata key pattern without exposing a
   expect(describeSchemaPattern("^[a-z][A-Za-z0-9_]{0,31}$")).toBe(
     "a lowercase ASCII letter followed by up to 31 ASCII letters, digits or underscores",
   );
+});
+
+it.each([
+  { slot: "customer", label: "Customer" },
+  { slot: "custom", label: "Unknown" },
+  { slot: "custom", label: "<b>unknown</b>", value: "bad\u200btext" },
+])("reports unknown slot content solely as one E012: %j", (field) => {
+  const registry = createInMemoryCanonicalSchemaRegistry();
+  const diagnostics = registry.validateEntity(
+    "project-presentation",
+    {
+      format: "project-presentation/0.3",
+      titleBlock: { fields: { custom: field } },
+    },
+    { file: "presentation.json", nodes: new Map() },
+  );
+  expect(diagnostics).toEqual([
+    {
+      code: "E012",
+      severity: "error",
+      message: 'Unknown property "custom".',
+      file: "presentation.json",
+      line: 1,
+      column: 1,
+      jsonPointer: "/titleBlock/fields/custom",
+    },
+  ]);
+});
+
+it("admits ten real slots and rejects an eleventh solely by closed-object E012", () => {
+  const registry = createInMemoryCanonicalSchemaRegistry();
+  const validate = (fields: JsonValue) =>
+    registry.validateEntity(
+      "project-presentation",
+      { format: "project-presentation/0.3", titleBlock: { fields } },
+      { file: "presentation.json", nodes: new Map() },
+    );
+  const fields = Object.fromEntries(
+    slots.map((slot) => {
+      const bind = Object.entries(bindings).find(([key]) => key === slot)?.[1];
+      return [slot, { slot, label: slot, ...(bind ? { bind } : {}) }];
+    }),
+  );
+  expect(validate(fields)).toEqual([]);
+  expect(
+    validate({ ...fields, custom: { slot: "customer", label: "X" } }).map(
+      (d) => ({ code: d.code, jsonPointer: d.jsonPointer }),
+    ),
+  ).toEqual([{ code: "E012", jsonPointer: "/titleBlock/fields/custom" }]);
 });

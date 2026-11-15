@@ -8,11 +8,7 @@ import {
   packetSchema,
   presentationSchema,
 } from "../src/internal/title-data/schema.js";
-import {
-  checkPresentation,
-  Issues,
-  validDate,
-} from "../src/internal/title-data/validation.js";
+import { Issues, validDate } from "../src/internal/title-data/validation.js";
 import {
   bindings,
   slots,
@@ -227,26 +223,6 @@ describe("TB1 internal strict presentation schema", () => {
       "/titleBlock/lines",
     );
   });
-  it("enforces field count even when future slots are gated", () => {
-    const make = (n: number) => ({
-      titleBlock: {
-        fields: Object.fromEntries(
-          Array.from({ length: n }, (_, i) => [
-            `key${i}`,
-            { slot: "customer", label: "X" },
-          ]),
-        ),
-      },
-    });
-    for (const [count, failed] of [
-      [10, false],
-      [11, true],
-    ] as const) {
-      const issues = new Issues("presentation.json");
-      checkPresentation(make(count), issues);
-      expect(issues.diagnostics.some((d) => d.code === "E015")).toBe(failed);
-    }
-  });
   it("accepts only the ten fixed slot keys in the closed schema", () => {
     for (const key of [
       "project",
@@ -312,19 +288,23 @@ describe("TB1 internal strict presentation schema", () => {
   ])("rejects presentation cross-field constraints", (extra, pointer) =>
     rejected(pp(extra), "E013", pointer as string),
   );
-  it("rejects duplicate slots", () =>
-    rejected(
-      pp({
-        titleBlock: {
-          fields: {
-            customer: { slot: "customer", label: "Customer" },
-            drawnBy: { slot: "customer", label: "Author" },
-          },
+  it("rejects repeated slots once through the key-slot invariant", () => {
+    const result = pp({
+      titleBlock: {
+        fields: {
+          customer: { slot: "customer", label: "Customer" },
+          drawnBy: { slot: "customer", label: "Author" },
         },
-      }),
-      "E013",
-      "/titleBlock/fields/drawnBy/slot",
-    ));
+      },
+    });
+    expect(result.value).toBeUndefined();
+    expect(
+      result.diagnostics.map((d) => ({
+        code: d.code,
+        jsonPointer: d.jsonPointer,
+      })),
+    ).toEqual([{ code: "E013", jsonPointer: "/titleBlock/fields/drawnBy" }]);
+  });
   it.each([
     [{}, "E010", "/format"],
     [{ format: "x" }, "E014", "/format"],
@@ -662,11 +642,9 @@ describe("TB1 packet title metadata", () => {
 });
 
 describe("TB1 schema boundary probes", () => {
-  it("bounds the generic field value independently of specialized slot semantics", () => {
-    expect(schemaP(p(field("customer", { value: "é".repeat(160) })))).toBe(
-      true,
-    );
-    expect(schemaP(p(field("customer", { value: "é".repeat(161) })))).toBe(
+  it("bounds the published customer value at the semantic limit", () => {
+    expect(schemaP(p(field("customer", { value: "é".repeat(80) })))).toBe(true);
+    expect(schemaP(p(field("customer", { value: "é".repeat(81) })))).toBe(
       false,
     );
   });
@@ -803,10 +781,8 @@ it("counts Unicode code points independently from printable-glyph admission", as
     checkLiteral("😀".repeat(n), "drawnBy", "/value", issues);
     expect(issues.diagnostics.some((d) => d.code === "E013")).toBe(over);
   }
-  expect(schemaP(p(field("customer", { value: "😀".repeat(160) })))).toBe(true);
-  expect(schemaP(p(field("customer", { value: "😀".repeat(161) })))).toBe(
-    false,
-  );
+  expect(schemaP(p(field("customer", { value: "😀".repeat(80) })))).toBe(true);
+  expect(schemaP(p(field("customer", { value: "😀".repeat(81) })))).toBe(false);
 });
 it("reports packet semantic reasons beneath invalid-packet", () => {
   const cases = [

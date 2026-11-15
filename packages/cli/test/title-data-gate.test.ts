@@ -37,6 +37,34 @@ async function run(args: string[]) {
     return result;
   }
 }
+const invalidFrames = [
+  [
+    { zones: { default: { columns: 5, rows: 4 } } },
+    "E014",
+    "/frame/zones/default/columns",
+  ],
+  [
+    { zones: { default: { columns: 6, rows: 5 } } },
+    "E014",
+    "/frame/zones/default/rows",
+  ],
+  [{ profile: "extended" }, "E012", "/frame/profile"],
+  [{ header: null }, "E011", "/frame/header"],
+  [{ logo: "x" }, "E012", "/frame/logo"],
+  [
+    { zones: { byPaper: { a3: { landscape: { columns: 7, rows: 4 } } } } },
+    "E014",
+    "/frame/zones/byPaper/a3/landscape/columns",
+  ],
+] as const;
+function validate(value: schemaApi.JsonValue) {
+  return schemaApi
+    .createInMemoryCanonicalSchemaRegistry()
+    .validateEntity("project-presentation", value, {
+      file: "presentation.json",
+      nodes: new Map(),
+    });
+}
 describe("TB2 atomic compact publication", () => {
   it("preserves every original guide byte and appends the approved snippet within budget", async () => {
     // Historical TB2b publication input from 654bfc6, not the evolving live guide.
@@ -104,13 +132,6 @@ describe("TB2 atomic compact publication", () => {
     expect(node.stderr).toBe("");
   });
   it("accepts only compact 6 by 4 and retains the legacy diagnostic branch", () => {
-    const registry = schemaApi.createInMemoryCanonicalSchemaRegistry();
-    const validate = (value: unknown) =>
-      registry.validateEntity(
-        "project-presentation",
-        value as schemaApi.JsonValue,
-        { file: "presentation.json", nodes: new Map() },
-      );
     expect(
       validate({
         format: "project-presentation/0.3",
@@ -118,52 +139,18 @@ describe("TB2 atomic compact publication", () => {
         titleBlock: { profile: "compact" },
       }),
     ).toEqual([]);
-    for (const frame of [
-      { zones: { default: { columns: 5, rows: 4 } } },
-      { zones: { default: { columns: 6, rows: 5 } } },
-      { profile: "extended" },
-      { header: null },
-      { logo: "x" },
-      { zones: { byPaper: { a3: { landscape: { columns: 7, rows: 4 } } } } },
-    ])
-      expect(
-        validate({ format: "project-presentation/0.3", frame }),
-      ).not.toEqual([]);
-    expect(validate({ format: "bad" })).toEqual([
-      {
-        code: "E014",
-        severity: "error",
-        message:
-          'Expected "format" to be one of: ["project-presentation/0.1", "project-presentation/0.2", "project-presentation/0.3"].',
-        file: "presentation.json",
-        line: 1,
-        column: 1,
-        jsonPointer: "/format",
-        allowed: [
-          "project-presentation/0.1",
-          "project-presentation/0.2",
-          "project-presentation/0.3",
-        ],
-        allowedCount: 3,
-      },
-    ]);
-    const diagnostics = validate({
-      format: "project-presentation/0.3",
-      titleBlock: {
-        fields: { drawnBy: { slot: "drawnBy", value: "bad\u200btext" } },
-      },
-    });
-    expect(diagnostics.length).toBeGreaterThan(0);
-    const diagnosticSchema = JSON.parse(requireDiagnosticSchema);
-    // The public schema accepts compiler diagnostics, never internal ownership extras.
-    expect(diagnosticSchema.additionalProperties).toBe(false);
-    for (const diagnostic of diagnostics) {
-      expect(diagnostic.code).toMatch(/^[EIW][0-9]{3}$/);
-    }
-    for (const diagnostic of diagnostics)
-      for (const key of Object.keys(diagnostic))
-        expect(Object.keys(diagnosticSchema.properties)).toContain(key);
   });
+  it.each(invalidFrames)(
+    "rejects invalid compact furniture %j",
+    (frame, code, jsonPointer) => {
+      expect(
+        validate({ format: "project-presentation/0.3", frame }).map((d) => ({
+          code: d.code,
+          jsonPointer: d.jsonPointer,
+        })),
+      ).toEqual([{ code, jsonPointer }]);
+    },
+  );
   it("publishes schema, packet help and drawing-frame topic together", async () => {
     const help = await run(["packet", "--help"]);
     expect(help.code).toBe(0);
@@ -177,6 +164,9 @@ describe("TB2 atomic compact publication", () => {
     const doc = await run(["guide", "drawing-frames"]);
     expect(doc.code).toBe(0);
     expect(doc.stdout).toContain("UNSPECIFIED");
+    expect(doc.stdout).toContain(
+      "Presentation validation can take two passes. If `format` is missing or unknown,",
+    );
   });
   it("keeps init on 0.2 and wires compiled 0.3 through CLI, agent and public rendering", async () => {
     const file = join(project, "presentation.json"),
@@ -255,6 +245,49 @@ describe("TB2 atomic compact publication", () => {
       await writeFile(file, original);
     }
   });
+  it("pins the accepted format diagnostic exactly", () => {
+    expect(validate({ format: "bad" })).toEqual([
+      {
+        code: "E014",
+        severity: "error",
+        message:
+          'Expected "format" to be one of: ["project-presentation/0.1", "project-presentation/0.2", "project-presentation/0.3"].',
+        file: "presentation.json",
+        line: 1,
+        column: 1,
+        jsonPointer: "/format",
+        allowed: [
+          "project-presentation/0.1",
+          "project-presentation/0.2",
+          "project-presentation/0.3",
+        ],
+        allowedCount: 3,
+      },
+    ]);
+  });
+  it("pins compact field codes and the public diagnostic shape", () => {
+    const diagnostics = validate({
+      format: "project-presentation/0.3",
+      titleBlock: {
+        fields: { drawnBy: { slot: "drawnBy", value: "bad\u200btext" } },
+      },
+    });
+    expect(
+      diagnostics.map((d) => ({ code: d.code, jsonPointer: d.jsonPointer })),
+    ).toEqual([
+      { code: "E010", jsonPointer: "/titleBlock/fields/drawnBy/label" },
+      { code: "E013", jsonPointer: "/titleBlock/fields/drawnBy/value" },
+    ]);
+    const diagnosticSchema = JSON.parse(requireDiagnosticSchema);
+    // The public schema accepts compiler diagnostics, never internal ownership extras.
+    expect(diagnosticSchema.additionalProperties).toBe(false);
+    for (const diagnostic of diagnostics) {
+      expect(diagnostic.code).toMatch(/^[EIW][0-9]{3}$/);
+    }
+    for (const diagnostic of diagnostics)
+      for (const key of Object.keys(diagnostic))
+        expect(Object.keys(diagnosticSchema.properties)).toContain(key);
+  });
 });
 // Read once without adding a production schema dependency to the audit helper.
 const requireDiagnosticSchema = await readFile(
@@ -282,29 +315,28 @@ it("enforces the compact raw-file byte cap and retains presentation glyph locati
     );
     expect(result.ok).toBe(false);
     if (!result.ok)
-      expect(result.error.details?.titleDiagnostics).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            file: expect.stringContaining("presentation.json"),
-            line: 3,
-            jsonPointer: "/titleBlock/fields/drawnBy/value",
-          }),
-        ]),
-      );
+      expect(result.error.details?.titleDiagnostics).toEqual([
+        expect.objectContaining({
+          code: "R005",
+          file: expect.stringContaining("presentation.json"),
+          line: 3,
+          jsonPointer: "/titleBlock/fields/drawnBy/value",
+        }),
+      ]);
     const raw = JSON.stringify({ format: "project-presentation/0.3" });
     await writeFile(file, raw + " ".repeat(65536 - Buffer.byteLength(raw)));
     expect((await compileProject(project)).ok).toBe(true);
     await writeFile(file, raw + " ".repeat(65537 - Buffer.byteLength(raw)));
     const large = await compileProject(project);
     expect(large.ok).toBe(false);
-    expect(large.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: "E015",
-          message: "Presentation exceeds 64 KiB.",
-        }),
-      ]),
-    );
+    expect(large.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "E015",
+        jsonPointer: "",
+        message: "Presentation exceeds 64 KiB.",
+      }),
+      expect.objectContaining({ code: "I208", jsonPointer: "" }),
+    ]);
   } finally {
     await writeFile(file, original);
   }
@@ -323,5 +355,33 @@ it("enforces compact normalized values at the exact byte bound", () => {
       { file: "presentation.json", nodes: new Map() },
     );
     expect(diagnostics.length === 0).toBe(ok);
+    expect(
+      diagnostics.map((d) => ({ code: d.code, jsonPointer: d.jsonPointer })),
+    ).toEqual(ok ? [] : [{ code: "E015", jsonPointer: "" }]);
   }
 });
+
+it.each(["project-presentation/0.1", "project-presentation/0.2"])(
+  "compiles %s above 64 KiB without applying the compact cap",
+  async (format) => {
+    const file = join(project, "presentation.json"),
+      original = await readFile(file);
+    try {
+      const raw = JSON.stringify({
+        format,
+        revision: "A",
+        backgroundColor: "#ffffff",
+      });
+      const padded = raw + " ".repeat(65537 - Buffer.byteLength(raw));
+      expect(Buffer.byteLength(padded)).toBe(65537);
+      await writeFile(file, padded);
+      const compiled = await compileProject(project);
+      expect(compiled.ok).toBe(true);
+      expect(
+        compiled.diagnostics.filter((d) => d.severity === "error"),
+      ).toEqual([]);
+    } finally {
+      await writeFile(file, original);
+    }
+  },
+);
