@@ -63,13 +63,11 @@
     "packages/compiler/test/lock.test.ts": 1242,
     "packages/compiler/test/rules.test.ts": 1437,
     "packages/compiler/test/symbol-profile.test.ts": 934,
-    "packages/query/src/documentation.ts": 881,
     "packages/query/src/engine.ts": 1984,
     "packages/query/test/engine.test.ts": 1463,
     "packages/render/src/circuit.ts": 913,
     "packages/render/src/layout/elk-adapter.ts": 887,
     "packages/render/src/layout/validate-output.ts": 1600,
-    "packages/render/src/signal-loop.ts": 971,
     "packages/render/src/svg/emitter.ts": 1244,
     "packages/render/src/symbols/validate.ts": 1108,
     "packages/render/test/b4-tier1.test.ts": 1666,
@@ -105,8 +103,6 @@
       "evals/draw/repin-core.mjs#prepareRepin": "ced671393b947e6b949e55b7ff72bbda7d8d42582cf20aabf227da0e5656288c",
       "evals/draw/run.mjs#pool callback": "0d2570cc8aa7028179e33ef12c749192cc5c50d33ffa8585dc98a69b99a0396a",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "0248e44eb32b9f36271db7d5a7cebee3777d9c06e121adfe2051dff781118730",
-      "packages/query/src/documentation.ts#buildDocumentationTable": "994ac92a3c3b4955b2109b713f8fbc72987149a1a25f14c1c6700881cb57f9ec",
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "401c7eb9ef48d3b4177df0f78603726f2e741635441584f401fe287816608a4b",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
@@ -390,6 +386,7 @@
     "packages/query/src/cable-schedule.ts#buildCableSchedule": 96,
     "packages/query/src/continuity.ts#auditContinuity": 79,
     "packages/query/src/device-filter.ts#resolveDeviceFilter": 86,
+    "packages/query/src/documentation.ts#buildDocumentationTable": 143,
     "packages/query/src/engine.ts#hydratePrimaryTables": 119,
     "packages/query/src/engine.ts#inspectObjectEntry": 92,
     "packages/query/src/engine.ts#validateConductiveRecords": 72,
@@ -464,7 +461,7 @@
     "packages/render/src/sheets.ts#renderPacket": 217,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures": 164,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures/map callback~2": 112,
-    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing/map callback~3": 177,
+    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 127,
     "packages/render/src/signal-loop.ts#selectSignalLoop": 261,
     "packages/render/src/svg/emitter.ts#conductorAttributes": 89,
     "packages/render/src/svg/emitter.ts#emitFrames": 88,
@@ -692,8 +689,6 @@
       "evals/draw/repin-core.mjs#prepareRepin": 742,
       "evals/draw/run.mjs#pool callback": 514,
       "evals/draw/run.mjs#pool callback/retainingCase callback": 508,
-      "packages/query/src/documentation.ts#buildDocumentationTable": 714,
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 530,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
@@ -710,8 +705,6 @@
       "evals/draw/repin-core.mjs#prepareRepin": "evals/draw/repin-core.mjs#prepareRepin",
       "evals/draw/run.mjs#pool callback": "evals/draw/run.mjs#pool callback",
       "evals/draw/run.mjs#pool callback/retainingCase callback": "evals/draw/run.mjs#pool callback/retainingCase callback",
-      "packages/query/src/documentation.ts#buildDocumentationTable": "packages/query/src/documentation.ts#buildDocumentationTable",
-      "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
@@ -776,7 +769,15 @@
     "packages/query/src/connector-assemblies.ts": 1,
     "packages/query/src/continuity.ts": 2,
     "packages/query/src/device-filter.ts": 5,
-    "packages/query/src/documentation.ts": 47,
+    "packages/query/src/documentation.ts": 11,
+    "packages/query/src/documentation/assemblies.ts": 3,
+    "packages/query/src/documentation/bom-rows.ts": 8,
+    "packages/query/src/documentation/bom.ts": 7,
+    "packages/query/src/documentation/io-ports.ts": 11,
+    "packages/query/src/documentation/io.ts": 1,
+    "packages/query/src/documentation/network.ts": 3,
+    "packages/query/src/documentation/terminals.ts": 2,
+    "packages/query/src/documentation/wires.ts": 1,
     "packages/query/src/engine.ts": 25,
     "packages/query/src/ordering.ts": 2,
     "packages/query/src/review.ts": 4,
@@ -819,7 +820,13 @@
     "packages/render/src/selection/traversal.ts": 6,
     "packages/render/src/sheets.ts": 2,
     "packages/render/src/signal-loop-enclosures.ts": 42,
-    "packages/render/src/signal-loop.ts": 91,
+    "packages/render/src/signal-loop.ts": 31,
+    "packages/render/src/signal-loop/direct-assemblies.ts": 4,
+    "packages/render/src/signal-loop/direct-node-emission.ts": 14,
+    "packages/render/src/signal-loop/direct-node-ports.ts": 2,
+    "packages/render/src/signal-loop/direct-nodes.ts": 4,
+    "packages/render/src/signal-loop/direct-port-emission.ts": 13,
+    "packages/render/src/signal-loop/direct-routes.ts": 23,
     "packages/render/src/svg/emitter.ts": 1,
     "packages/render/src/symbols/catalog.ts": 1,
     "packages/render/src/symbols/circuit.ts": 1,
@@ -926,6 +933,54 @@
       "to": 88,
       "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
     },
+    "nonNullAssertions:packages/query/src/documentation/assemblies.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/assemblies.ts",
+      "from": 0,
+      "to": 3,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/bom-rows.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/bom-rows.ts",
+      "from": 0,
+      "to": 8,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/bom.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/bom.ts",
+      "from": 0,
+      "to": 7,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/io-ports.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/io-ports.ts",
+      "from": 0,
+      "to": 11,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/io.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/io.ts",
+      "from": 0,
+      "to": 1,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/network.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/network.ts",
+      "from": 0,
+      "to": 3,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/terminals.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/terminals.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/query/src/documentation/wires.ts": {
+      "identity": "nonNullAssertions:packages/query/src/documentation/wires.ts",
+      "from": 0,
+      "to": 1,
+      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+    },
     "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts": {
       "identity": "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts",
       "from": 0,
@@ -967,6 +1022,42 @@
       "from": 0,
       "to": 8,
       "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts",
+      "from": 0,
+      "to": 4,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts",
+      "from": 0,
+      "to": 14,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts",
+      "from": 0,
+      "to": 4,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts",
+      "from": 0,
+      "to": 13,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+    },
+    "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts": {
+      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts",
+      "from": 0,
+      "to": 23,
+      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
     },
     "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": {
       "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",
