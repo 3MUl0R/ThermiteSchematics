@@ -1,10 +1,10 @@
 {
   "ceilings": {
+    "definiteAssignments": 1,
     "fileLines": 3000,
     "functionLines": 300,
     "nonNullAssertions": 1008,
-    "skippedTests": 56,
-    "definiteAssignments": 1
+    "skippedTests": 56
   },
   "definiteAssignments": {
     "packages/agent-tools/test/patch-filesystem.test.ts": 1
@@ -435,8 +435,8 @@
     "packages/render/src/packet/references.ts#referenceTables": 130,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
     "packages/render/src/packet/reports.ts#tableDrafts": 158,
-    "packages/render/src/packet/topology.ts#topologyDrafts": 178,
-    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 144,
+    "packages/render/src/packet/topology.ts#topologyDrafts": 172,
+    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 137,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
     "packages/render/src/presentation.ts#insertSemanticJunctions": 108,
     "packages/render/src/render-error-context.ts#renderErrorContext": 100,
@@ -463,7 +463,7 @@
     "packages/render/src/sheets.ts#renderPacket": 217,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures": 164,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures/map callback~2": 112,
-    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 127,
+    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 113,
     "packages/render/src/signal-loop.ts#selectSignalLoop": 261,
     "packages/render/src/svg/emitter.ts#conductorAttributes": 89,
     "packages/render/src/svg/emitter.ts#emitFrames": 88,
@@ -629,7 +629,7 @@
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~11": 133,
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~12": 143,
     "packages/schema/test/schema-registry.test.ts#describe callback/it callback~21": 72,
-    "scripts/health-measure.mjs#measureSources": 85,
+    "scripts/health-measure.mjs#measureSources": 84,
     "scripts/library-batch/promote.check.mjs#setup": 142,
     "scripts/library-batch/promote.check.mjs#test callback": 83,
     "scripts/library-batch/promote.mjs#promoteJob": 257,
