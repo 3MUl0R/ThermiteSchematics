@@ -22,6 +22,7 @@ import {
 import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
 import {
   InlineLabelFitError,
+  isInlineLabelFailure,
   InlineLabelCollisionError as Collision,
 } from "./layout/inline-label-error.js";
 import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
@@ -443,6 +444,10 @@ export function signalLoopTitle(
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
+  acceptCandidate?: (
+    candidate: ReturnType<typeof directLoopDrawing>,
+    fallback: ReturnType<typeof directLoopDrawing> | undefined,
+  ) => boolean,
 ) {
   const selected = selectSignalLoop(ir, request);
   if (selected.series) return prepareSeriesLoopDrawing(ir, request, selected);
@@ -513,6 +518,11 @@ export async function prepareSignalLoopDrawing(
               p.terminal === e.ends[side === "out" ? 0 : 1].terminalKey),
       )!.id;
   const documentNeeds = directLoopDocumentNeeds(ir, assembledCables, stages);
+  const draw = (graph: ElkNode) =>
+    directLoopDrawing(graph, selected, request, edges, context, documentNeeds);
+  const fallback = directLoopFallback(draw);
+  let accepted:
+    { graph: ElkNode; drawing: ReturnType<typeof draw> } | undefined;
   const graph = await layoutDirectLoop(
     children,
     edges.map((e, i) => ({
@@ -532,7 +542,28 @@ export async function prepareSignalLoopDrawing(
       ? edges.flatMap((e, i) => (e.cable || e.assembly ? [] : [`e${i}`]))
       : [],
     checkLabels,
+    acceptCandidate
+      ? (candidate, native) => {
+          const drawing = draw(candidate);
+          if (!acceptCandidate(drawing, fallback.project(native))) return false;
+          accepted = { graph: candidate, drawing };
+          return true;
+        }
+      : undefined,
   );
+  if (accepted?.graph === graph) return accepted.drawing;
+  return fallback.selected(graph) ?? draw(graph);
+}
+
+function directLoopDrawing(
+  graph: ElkNode,
+  selected: Exclude<ReturnType<typeof selectSignalLoop>, { series: unknown }>,
+  request: SignalLoopViewRequest,
+  edges: DrawingEdge[],
+  context: Parameters<typeof emitDirectLoopNodes>[3],
+  documentNeeds: ReturnType<typeof directLoopDocumentNeeds>,
+) {
+  const { vertical, assemblies, tags } = context;
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
   checkLabels(graph);
@@ -566,4 +597,32 @@ export async function prepareSignalLoopDrawing(
     request,
     assemblies.length > 0,
   );
+}
+
+/** The fixed native fallback is projected at most once, including failures. */
+function directLoopFallback(
+  draw: (graph: ElkNode) => ReturnType<typeof directLoopDrawing>,
+) {
+  let fallback:
+    | { graph: ElkNode; drawing: ReturnType<typeof draw> }
+    | { graph: ElkNode; error: unknown }
+    | undefined;
+  return {
+    project(graph: ElkNode) {
+      if (!fallback) {
+        try {
+          fallback = { graph, drawing: draw(graph) };
+        } catch (error) {
+          if (!isInlineLabelFailure(error)) throw error;
+          fallback = { graph, error };
+        }
+      }
+      return "drawing" in fallback ? fallback.drawing : undefined;
+    },
+    selected(graph: ElkNode) {
+      if (fallback?.graph !== graph) return undefined;
+      if ("error" in fallback) throw fallback.error;
+      return fallback.drawing;
+    },
+  };
 }
