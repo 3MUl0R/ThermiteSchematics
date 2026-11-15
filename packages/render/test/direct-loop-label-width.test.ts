@@ -11,21 +11,54 @@ import { placeLoopLabels } from "../src/layout/direct-loop-labels.js";
 const factory = runtime.createElkEngine;
 afterEach(() => vi.restoreAllMocks());
 function captureNative() {
-  let input: ElkNode, native: ElkNode;
+  const captures: { input: ElkNode; native: ElkNode }[] = [];
   vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
     const engine = factory();
     return {
       layout: async (graph: ElkNode) => {
-        input = structuredClone(graph);
+        const input = structuredClone(graph);
         const result = await engine.layout(graph);
-        native = structuredClone(result);
+        captures.push({ input, native: structuredClone(result) });
         return result;
       },
     } as ReturnType<typeof factory>;
   });
-  return () => ({ input, native });
+  return (graph?: ElkNode) => {
+    const capture = graph
+      ? [...captures]
+          .reverse()
+          .find(
+            ({ native }) =>
+              JSON.stringify([native.children, routes(native)]) ===
+              JSON.stringify([graph.children, routes(graph)]),
+          )
+      : captures.at(-1);
+    if (!capture)
+      throw new Error("No complete native graph matches the result");
+    return capture;
+  };
 }
 const routes = (g: ElkNode) => g.edges!.map(({ labels: _, ...edge }) => edge);
+
+function expectInlineLabelsOnSegments(graph: ElkNode, wireIds: string[]) {
+  for (const edge of graph.edges!.filter((e) => wireIds.includes(e.id)))
+    for (const label of edge.labels!) {
+      const center = label.x! + label.width! / 2;
+      const sections = edge.sections!.flatMap((s) => {
+        const points = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
+        return points.slice(1).map((b, i) => [points[i]!, b] as const);
+      });
+      expect(
+        sections.some(
+          ([a, b]) =>
+            Math.abs(a.x - center) < 1e-6 &&
+            Math.abs(b.x - center) < 1e-6 &&
+            label.y! >= Math.min(a.y, b.y) &&
+            label.y! + label.height! <= Math.max(a.y, b.y),
+        ),
+      ).toBe(true);
+    }
+}
 
 it.each(flows)(
   "sweeps transverse label widths across the old threshold in %s",
@@ -42,7 +75,7 @@ it.each(flows)(
       seed = (1664525 * seed + 1013904223) >>> 0;
       widths.push(0.1 + (seed / 2 ** 32) * 32);
     }
-    let first: unknown;
+    const first = new Map<string, unknown>();
     for (const width of widths)
       for (const mixed of [false, true]) {
         const { children, edges } = structuredClone(fixture);
@@ -68,7 +101,7 @@ it.each(flows)(
           checkLabels,
         );
         checkLabels(graph);
-        const { input, native } = captured();
+        const { input, native } = captured(graph);
         const inline =
           flow === "top-to-bottom" &&
           input
@@ -105,29 +138,13 @@ it.each(flows)(
               .every((e) => e.labels!.length === 0),
           ).toBe(true);
           expect(input.edges!.at(-1)!.labels).toEqual(edges.at(-1)!.labels);
-          first ??= routes(graph);
-          expect(routes(graph)).toEqual(first);
-          for (const edge of graph.edges!.filter((e) => wireIds.includes(e.id)))
-            for (const label of edge.labels!) {
-              const center = label.x! + label.width! / 2;
-              const sections = edge.sections!.flatMap((s) => {
-                const points = [
-                  s.startPoint,
-                  ...(s.bendPoints ?? []),
-                  s.endPoint,
-                ];
-                return points.slice(1).map((b, i) => [points[i]!, b] as const);
-              });
-              expect(
-                sections.some(
-                  ([a, b]) =>
-                    Math.abs(a.x - center) < 1e-6 &&
-                    Math.abs(b.x - center) < 1e-6 &&
-                    label.y! >= Math.min(a.y, b.y) &&
-                    label.y! + label.height! <= Math.max(a.y, b.y),
-                ),
-              ).toBe(true);
-            }
+          const gap =
+            input.layoutOptions?.[
+              "elk.layered.spacing.nodeNodeBetweenLayers"
+            ] ?? "8";
+          if (!first.has(gap)) first.set(gap, routes(graph));
+          expect(routes(graph)).toEqual(first.get(gap));
+          expectInlineLabelsOnSegments(graph, wireIds);
         } else expect(input.edges).toEqual(edges);
       }
   },

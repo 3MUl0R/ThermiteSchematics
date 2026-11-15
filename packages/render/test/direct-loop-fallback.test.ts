@@ -94,6 +94,50 @@ async function nativeDev(
   });
 }
 
+function captureLoopLayouts() {
+  const attempts: ElkNode[] = [],
+    outputs: ElkNode[] = [];
+  let selected: ElkNode | undefined;
+  const directLayout = layouts.layoutDirectLoop;
+  const chosen = vi
+    .spyOn(layouts, "layoutDirectLoop")
+    .mockImplementation(async (...args) => {
+      selected = await directLayout(...args);
+      return selected;
+    });
+  const capture = vi
+    .spyOn(runtime, "createElkEngine")
+    .mockImplementation(() => {
+      const engine = factory();
+      return {
+        layout: async (graph: ElkNode) => {
+          attempts.push(structuredClone(graph));
+          const result = await engine.layout(graph);
+          outputs.push(structuredClone(result));
+          return result;
+        },
+      } as ReturnType<typeof factory>;
+    });
+
+  return () => {
+    capture.mockRestore();
+    chosen.mockRestore();
+    const selectedIndex = outputs.findIndex(
+      (output) =>
+        JSON.stringify([
+          output.children,
+          output.edges?.map(({ labels: _, ...edge }) => edge),
+        ]) ===
+        JSON.stringify([
+          selected?.children,
+          selected?.edges?.map(({ labels: _, ...edge }) => edge),
+        ]),
+    );
+
+    return { attempts, selectedIndex };
+  };
+}
+
 it.each(["left-to-right", "top-to-bottom"] as const)(
   "matches dev refusals and native fallback SVGs across uniform and mixed wire widths in %s",
   async (flow) => {
@@ -135,20 +179,11 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           .mockImplementation(nativeDev);
         const before = await renderSchematicPacket(input, request);
         mock.mockRestore();
-        const attempts: ElkNode[] = [];
-        const capture = vi
-          .spyOn(runtime, "createElkEngine")
-          .mockImplementation(() => {
-            const engine = factory();
-            return {
-              layout: async (graph: ElkNode) => {
-                attempts.push(structuredClone(graph));
-                return engine.layout(graph);
-              },
-            } as ReturnType<typeof factory>;
-          });
+        const captured = captureLoopLayouts();
         const after = await renderSchematicPacket(input, request);
-        capture.mockRestore();
+        const { attempts, selectedIndex } = captured();
+        expect(selectedIndex).toBeGreaterThanOrEqual(0);
+        expect(attempts.length).toBeLessThanOrEqual(3);
         expect(
           after.ok,
           JSON.stringify({
@@ -164,7 +199,9 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
           expect(attempt.layoutOptions!["elk.spacing.edgeEdge"]).toBe("6");
         const inline =
           flow === "top-to-bottom" &&
-          attempts.at(-1)!.edges!.some((edge) => edge.labels!.length === 0);
+          attempts[selectedIndex]!.edges!.some(
+            (edge) => edge.labels!.length === 0,
+          );
         modes.add(after.ok ? (inline ? "inline" : "native") : "refuse");
         if (after.ok) {
           expect(after.value.sheets).toHaveLength(2);
@@ -239,7 +276,10 @@ it("retries the whole loop when no inline vertical segment fits the label height
     checkLabels,
   );
   checkLabels(graph);
-  expect(inputs).toHaveLength(2);
+  expect(inputs).toHaveLength(3);
+  expect(
+    inputs[2]?.layoutOptions?.["elk.layered.spacing.nodeNodeBetweenLayers"],
+  ).toBe(String(2 * 20 + 1));
   expect(
     inputs[0]!
       .edges!.filter((e) => ids.includes(e.id))
