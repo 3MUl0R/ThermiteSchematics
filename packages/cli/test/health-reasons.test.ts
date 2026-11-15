@@ -8,6 +8,7 @@ import {
 import {
   migrateReasonLists,
   reasonHistoryRegressions,
+  appendedReasonMatches,
 } from "../../../scripts/health-reasons.mjs";
 import { fn, repo, put, metrics } from "./health-fixture.js";
 it("appends successive raises and partial reductions without replacing their reasons", () => {
@@ -54,4 +55,39 @@ it("migrates v4 single reason records losslessly and leaves arrays idempotent", 
   expect(next).toEqual({ ...old, reasons: { item: [old.reasons.item] } });
   expect(migrateReasonLists(next)).toEqual(next);
   expect(old.reasons.item.reason).toBe("original");
+});
+
+it.each([
+  ["zero-width space", "Earlier\u200breview", "Earlier review"],
+  ["word joiner", "Earlier\u2060review", "Earlier review"],
+  ["soft hyphen", "Earlier\u00adreview", "Earlier review"],
+  [
+    "mixed format and whitespace",
+    " Ear\u200blier\t re\u2060view\u00ad ",
+    "Earlier review",
+  ],
+  ["removed format character", "Earlier review", "Earlier\u200breview"],
+])(
+  "round 4 INFO rejects a format-only reason replay: %s",
+  (_name, reason, before) => {
+    const identity = "typeAssertions:packages/example/src/replay.ts";
+    const old = { identity, from: 0, to: 1, reason: before };
+    expect(
+      appendedReasonMatches([old, { ...old, reason }], [old], identity, 0, 1),
+    ).toBe(false);
+  },
+);
+
+it("keeps genuinely different reason text, including a trailing period, fresh", () => {
+  const identity = "typeAssertions:packages/example/src/replay.ts";
+  const old = { identity, from: 0, to: 1, reason: "Earlier review" };
+  expect(
+    appendedReasonMatches(
+      [old, { ...old, reason: "Earlier review." }],
+      [old],
+      identity,
+      0,
+      1,
+    ),
+  ).toBe(true);
 });

@@ -18,7 +18,7 @@ export function reasonMatches(value, identity, from, to) {
 // falls. Require a fresh final record and preserve the authenticated prefix.
 function normalizedReason(record) {
   return record && typeof record.reason === "string"
-    ? { ...record, reason: record.reason.replace(/\s+/gu, "") }
+    ? { ...record, reason: record.reason.replace(/[\s\p{Cf}]+/gu, "") }
     : record;
 }
 export function appendedReasonMatches(value, baseValue, identity, from, to) {
