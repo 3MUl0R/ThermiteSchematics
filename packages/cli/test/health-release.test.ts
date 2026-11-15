@@ -83,7 +83,7 @@ it("compares grandfathered values across two reviewed 65-line dev swaps against 
     "ceiling 300 -> 301 (new or unmatched content)",
   );
 });
-it("uses a committed release budget normally without requiring origin/dev", () => {
+it("uses a committed release budget without origin/dev and rejects an allowance raise", () => {
   const root = repo();
   put(root, path, fn(90));
   save(root, createBudget(metrics(root)));
@@ -97,11 +97,12 @@ it("uses a committed release budget normally without requiring origin/dev", () =
   expect(history.revision).toBe(base);
   expect(history.information).toBeUndefined();
   const result = run(root, [], env);
-  expect(result.status, result.stderr).toBe(0);
+  expect(result.status, result.stderr).toBe(1);
+  expect(result.stderr).toContain("cannot rise");
   expect(result.stdout).not.toContain("Health bootstrap:");
 });
 it.each([false, true])(
-  "allows the 52 to 72 to 82 dev chain against release (committed base budget: %s)",
+  "rejects the former 52 to 72 to 82 allowance chain against release (committed base budget: %s)",
   (hasBudget) => {
     const root = repo();
     put(root, path, fn(52, "runThermite"));
@@ -114,40 +115,33 @@ it.each([false, true])(
       const bootstrap = commit(root, "dev commits its current-format budget");
       git(root, "update-ref", "refs/remotes/origin/dev", bootstrap);
     }
+    const original = readFileSync(root + "/scripts/health-budget.json", "utf8");
     for (const size of [72, 82]) {
       put(root, path, fn(size, "runThermite"));
-      const accepted = run(
-        root,
-        ["--accept", "--reason", `reviewed dev growth to ${size}`],
-        { GITHUB_BASE_REF: "dev" },
+      const accepted = run(root, ["--accept", "--reason", "reviewed growth"], {
+        GITHUB_BASE_REF: "dev",
+      });
+      expect(accepted.status).toBe(1);
+      expect(accepted.stderr).toContain("cannot rise");
+      expect(readFileSync(root + "/scripts/health-budget.json", "utf8")).toBe(
+        original,
       );
-      expect(accepted.status, accepted.stderr).toBe(0);
-      expect(run(root, [], { GITHUB_BASE_REF: "dev" }).status).toBe(0);
-      const sha = commit(root, `dev at ${size} lines`);
-      git(root, "update-ref", "refs/remotes/origin/dev", sha);
+      const forged = createBudget(metrics(root)),
+        identity = "functions:" + path + "#runThermite";
+      forged.reasons[identity] = [
+        { identity, from: 70, to: size, reason: "exact but forbidden" },
+      ];
+      save(root, forged);
+      const rejected = run(root, [], { GITHUB_BASE_REF: "release" });
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("cannot rise");
+      save(root, JSON.parse(original));
     }
-    const budget = JSON.parse(
-      readFileSync(root + "/scripts/health-budget.json", "utf8"),
-    );
-    expect(
-      budget.reasons[`functions:${path}#runThermite`].at(-1),
-    ).toMatchObject({
-      from: 72,
-      to: 82,
-    });
-    let result = run(root, [], { GITHUB_BASE_REF: "release" });
-    expect(result.status, result.stderr).toBe(0);
-    put(root, path, fn(77, "runThermite"));
-    const lowered = run(root, ["--lower"], { GITHUB_BASE_REF: "dev" });
-    expect(lowered.status, lowered.stderr).toBe(0);
-    const banked = commit(root, "dev partially lowers to 77 lines");
-    git(root, "update-ref", "refs/remotes/origin/dev", banked);
-    result = run(root, [], { GITHUB_BASE_REF: "release" });
-    expect(result.status, result.stderr).toBe(0);
+    put(root, path, fn(52, "runThermite"));
     put(root, "packages/cli/src/new.ts", fn(301, "brandNew"));
     put(root, "tools/new.py", "# line\n".repeat(3001));
     metrics(root);
-    result = run(root, [], { GITHUB_BASE_REF: "release" });
+    const result = run(root, [], { GITHUB_BASE_REF: "release" });
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain(
       "functions ceiling 300 -> 301 (new or unmatched content)",

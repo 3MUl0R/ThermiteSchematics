@@ -138,25 +138,22 @@ it("keeps evals/agent at suppression-only treatment without scanning its harness
     Object.keys(current.functions).some((p) => p.startsWith("evals/agent/")),
   ).toBe(false);
 });
-it("requires a reason for an under-ceiling raise and records it", () => {
+it("an exact reason cannot authorize an existing under-ceiling raise", () => {
   const { root, file } = fixture();
   const base = metrics(root),
     budget = createBudget(base);
   writeFileSync(file, body(95));
   const current = metrics(root);
-  expect(() => acceptBudget(current, budget)).toThrow("requires --reason");
-  const next = acceptBudget(current, budget, "ordered helper extraction");
-  expect(
-    next.reasons["functions:packages/example/src/example.ts#existing"],
-  ).toEqual([
-    {
-      identity: "functions:packages/example/src/example.ts#existing",
-      from: 90,
-      to: 95,
-      reason: "ordered helper extraction",
-    },
-  ]);
-  expect(historyRegressions(current, next, budget, base)).toEqual([]);
+  for (const reason of [undefined, "ordered helper extraction"])
+    expect(() => acceptBudget(current, budget, reason)).toThrow("cannot rise");
+  const next = createBudget(current);
+  const identity = "functions:packages/example/src/example.ts#existing";
+  next.reasons[identity] = [
+    { identity, from: 90, to: 95, reason: "historical reason" },
+  ];
+  expect(historyRegressions(current, next, budget, base).join("\n")).toContain(
+    "cannot rise",
+  );
 });
 it.each(["fileLines", "functionLines", "nonNullAssertions", "skippedTests"])(
   "rejects a manual global %s ceiling raise against history",

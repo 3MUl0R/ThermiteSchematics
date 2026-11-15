@@ -1,5 +1,5 @@
 import { auditDataFixture } from "./audit-scope.mjs";
-import { countTypeAssertions } from "./health-casts.mjs";
+import { countTypeAssertions, typeAssertionNode } from "./health-casts.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -154,12 +154,21 @@ function functionName(node, source) {
   }
   return "anonymous";
 }
-function normalizedBody(body, source) {
+function normalizedBody(body, source, onlySkips) {
   const tokens = [];
+  const counters = {
+    nonNullAssertions: 0,
+    typeAssertions: 0,
+    definiteAssignments: 0,
+    skippedTests: 0,
+  };
   function visit(node) {
     // AST leaves preserve regex/template/string contents while removing trivia.
     // A plain scanner cannot rescan template tails or regular expressions.
     if (ts.isJSDoc(node)) return;
+    declarationAssertions(node, counters, onlySkips, true);
+    if (typeAssertionNode(node)) counters.typeAssertions++;
+    if (isSuppression(node, onlySkips)) counters.skippedTests++;
     const children = node.getChildren(source);
     if (!children.length) {
       if (node.kind !== ts.SyntaxKind.JSDocComment)
@@ -170,6 +179,7 @@ function normalizedBody(body, source) {
   return {
     hash: createHash("sha256").update(JSON.stringify(tokens)).digest("hex"),
     tokens: tokens.filter(Boolean).length,
+    counters,
   };
 }
 function propertyName(node) {
@@ -301,11 +311,42 @@ function declarationAssertions(node, metrics, onlySkips, sizes) {
   )
     metrics.definiteAssignments++;
 }
+function storeBody(node, source, identity, lines, onlySkips, state) {
+  const { hash, tokens, counters } = normalizedBody(
+    node.body,
+    source,
+    onlySkips,
+  );
+  state.functions[identity] = lines;
+  state.bodyRanges[identity] = [node.getStart(source), node.end];
+  state.bodyTokens[identity] = tokens;
+  state.bodyCounters[identity] = counters;
+  state.bodyHashes[identity] = hash;
+  if (lines > 70)
+    state.bodyLines[identity] = normalizedLineHashes(node.body, source);
+  return { hash, tokens };
+}
+function storeFile(path, text, metrics, sizes, state) {
+  const { files, fileHashes, fileLines } = state;
+  files[path] = metrics;
+  if (sizes) {
+    fileHashes[path] = createHash("sha256")
+      .update(normalizeLines(text))
+      .digest("hex");
+    if (metrics.lines > 850)
+      fileLines[path] = normalizeLines(text)
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => createHash("sha256").update(s).digest("hex"));
+  }
+}
 export function measureSources(paths, read) {
   const files = {},
     functions = {},
     bodies = new Map(),
     bodyTokens = {},
+    bodyCounters = {},
     bodyHashes = {},
     bodyRanges = {},
     fileHashes = {},
@@ -336,13 +377,21 @@ export function measureSources(paths, read) {
           ts.forEachChild(node, (child) => visit(child, nestedScope));
           return;
         }
-        functions[identity] = end - start + 1;
-        bodyRanges[identity] = [node.getStart(source), node.end];
-        const { hash, tokens } = normalizedBody(node.body, source);
-        bodyTokens[identity] = tokens;
-        bodyHashes[identity] = hash;
-        if (functions[identity] > 70)
-          bodyLines[identity] = normalizedLineHashes(node.body, source);
+        const { hash, tokens } = storeBody(
+          node,
+          source,
+          identity,
+          end - start + 1,
+          onlySkips,
+          {
+            functions,
+            bodyRanges,
+            bodyTokens,
+            bodyCounters,
+            bodyHashes,
+            bodyLines,
+          },
+        );
         if (onlySkips) {
           ts.forEachChild(node, (child) => visit(child, nestedScope));
           return;
@@ -354,18 +403,7 @@ export function measureSources(paths, read) {
       ts.forEachChild(node, (child) => visit(child, nestedScope));
     }
     if (source) visit(source);
-    files[path] = metrics;
-    if (sizes) {
-      fileHashes[path] = createHash("sha256")
-        .update(normalizeLines(text))
-        .digest("hex");
-      if (metrics.lines > 850)
-        fileLines[path] = normalizeLines(text)
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .map((s) => createHash("sha256").update(s).digest("hex"));
-    }
+    storeFile(path, text, metrics, sizes, { files, fileHashes, fileLines });
   }
   const duplicates = duplicateGroups(bodies);
   const result = {
@@ -374,6 +412,7 @@ export function measureSources(paths, read) {
     functions,
     duplicates,
     bodyTokens,
+    bodyCounters,
     bodyHashes,
     bodyRanges,
     fileHashes,

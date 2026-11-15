@@ -17,19 +17,53 @@ export function lineAdditions(a, b) {
     }
   return { added: b.length - common, common };
 }
+export function moveProof(section, key, budget) {
+  return budget.moves[section + ":" + key] ?? budget.moves[key];
+}
+function countedBodyMove(section, key, proof, base, current) {
+  const from = proof.sourceBody,
+    to = proof.targetBody;
+  if (
+    ![
+      "nonNullAssertions",
+      "typeAssertions",
+      "definiteAssignments",
+      "skippedTests",
+    ].includes(section) ||
+    typeof from !== "string" ||
+    typeof to !== "string"
+  )
+    return false;
+  const count = current.bodyCounters?.[to]?.[section];
+  return (
+    from.split("#", 1)[0] === proof.from &&
+    to.split("#", 1)[0] === key &&
+    !Object.hasOwn(current.bodyHashes, from) &&
+    proof.sha256 === base.bodyHashes[from] &&
+    proof.sha256 === current.bodyHashes[to] &&
+    count > 0 &&
+    count === base.bodyCounters?.[from]?.[section] &&
+    count === current.files[key]?.[section] &&
+    count <=
+      (base.files[proof.from]?.[section] ?? 0) -
+        (current.files[proof.from]?.[section] ?? 0)
+  );
+}
 export function exactMove(section, key, budget, base, current) {
-  const proof = budget.moves[key],
-    hashes = section === "files" ? "fileHashes" : "bodyHashes";
+  if (section === "duplicates") return false;
+  const proof = moveProof(section, key, budget),
+    hashes = section === "functions" ? "bodyHashes" : "fileHashes";
   return (
     proof?.section === section &&
     typeof proof.from === "string" &&
     typeof proof.sha256 === "string" &&
     proof.from !== key &&
-    Object.hasOwn(base[hashes], proof.from) &&
-    Object.hasOwn(current[hashes], key) &&
-    !Object.hasOwn(current[hashes], proof.from) &&
-    proof.sha256 === base[hashes][proof.from] &&
-    proof.sha256 === current[hashes][key]
+    (countedBodyMove(section, key, proof, base, current) ||
+      (Object.hasOwn(base[hashes], proof.from) &&
+        Object.hasOwn(current[hashes], key) &&
+        !Object.hasOwn(current[hashes], proof.from) &&
+        proof.sha256 === base[hashes][proof.from] &&
+        proof.sha256 === current[hashes][key]))
   );
 }
 function sourceBody(section, id, before, base) {
@@ -59,7 +93,7 @@ function candidates(section, current, budget, reference) {
       if (size <= budget.thresholds[sizeKey(section)]) continue;
       const moved =
         exactMove(section, key, budget, base, current) &&
-        budget.moves[key].from === from;
+        moveProof(section, key, budget).from === from;
       if (
         !moved &&
         (section === "files" ? key !== from : fileOf(key) !== fileOf(from))
@@ -115,7 +149,7 @@ function releaseMatches(section, current, budget, reference) {
       (section === "files" ? key !== from : fileOf(key) !== fileOf(from)) &&
       !(
         exactMove(section, key, budget, reference.metrics, current) &&
-        budget.moves[key].from === from
+        moveProof(section, key, budget).from === from
       )
     )
       continue;
@@ -194,7 +228,7 @@ export function moveRegressions(current, budget, reference) {
           .map(([k, h]) => [h, k]),
       );
     for (const [key, hash] of Object.entries(current[hashes])) {
-      const proof = budget.moves[key];
+      const proof = moveProof(section, key, budget);
       if (
         proof?.section === section &&
         !Object.hasOwn(base[hashes], key) &&
@@ -205,7 +239,7 @@ export function moveRegressions(current, budget, reference) {
           `Move proof requires absent source: ${section}.${proof.from} -> ${key}`,
         );
       if (exactMove(section, key, budget, base, current)) {
-        const from = budget.moves[key].from;
+        const from = moveProof(section, key, budget).from;
         if (used.has(from))
           errors.push(
             `Move identity consumed more than once: ${section}.${from}`,

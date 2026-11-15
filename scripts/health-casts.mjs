@@ -1,26 +1,29 @@
 import ts from "typescript";
 import { appendedReasonMatches } from "./health-reasons.mjs";
+export function typeAssertionNode(node) {
+  return (
+    (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) &&
+    !(
+      ts.isTypeReferenceNode(node.type) &&
+      ts.isIdentifier(node.type.typeName) &&
+      node.type.typeName.text === "const"
+    )
+  );
+}
 // Reuse the parsed AST. No TypeScript Program, binding or type-check pass.
 export function countTypeAssertions(source) {
   const start = performance.now();
   let count = 0;
   function visit(node) {
-    if (
-      (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) &&
-      !(
-        ts.isTypeReferenceNode(node.type) &&
-        ts.isIdentifier(node.type.typeName) &&
-        node.type.typeName.text === "const"
-      )
-    )
-      count++;
+    if (typeAssertionNode(node)) count++;
     ts.forEachChild(node, visit);
   }
   visit(source);
   return { count, milliseconds: performance.now() - start };
 }
 // Apply to every changed code file, a conservative superset of extractions and
-// moves. An exact per-file reason record is the explicit cast-count allowance.
+// moves. A fresh exact reason is necessary provenance for a cast transfer;
+// monotone allowance and verbatim-move checks remain independently mandatory.
 export function typeAssertionRegressions(current, budget, reference) {
   if (!reference) return [];
   const errors = [];
