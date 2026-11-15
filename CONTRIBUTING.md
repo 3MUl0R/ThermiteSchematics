@@ -77,9 +77,11 @@ for both harnesses even without `THERMITE_REQUIRE_BROWSER=1`; that flag makes
 the PDF harness fail at discovery. CI sets it and selects pinned Chromium in
 both jobs on every OS.
 
-With pinned Chromium, default Canvas glyph bounds are whole-unit rounded on
-Linux and Windows; macOS defaults are precise. At millimetre text sizes, reported boxes and cap
-heights can differ by about 0.5 mm. Calibration tests opt into precise bounds;
+With pinned Chromium, default Canvas ascent and left glyph bounds are whole-unit
+rounded on Linux and Windows; right bounds and text-box widths are not uniformly
+integer-rounded. macOS defaults are precise. Captured differences reach about
+0.5 mm vertically, 1.2 mm at the Windows right edge and 1.5 mm in Windows
+glyph-box width; these are observations, not universal bounds. Calibration tests opt into precise bounds;
 see the [platform evidence and measurement code](docs/platforms.md#browser-for-tests).
 
 Use `bun scripts/test.mjs <files>` for targeted tests after rebuilding. On macOS,

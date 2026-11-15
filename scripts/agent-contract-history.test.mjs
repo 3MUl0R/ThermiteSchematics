@@ -53,7 +53,7 @@ function commit(cwd, path, value) {
   return git(cwd, "rev-parse", "HEAD");
 }
 
-// The complete Git-history audit exceeded 120 s on Windows CI.
+// Windows: 123–155 s; runtime grows with repository history. When 240 s headroom shrinks, re-measure; never just bump.
 it("all recorded public agent contract surfaces are additive at every historical edge", () => {
   const audit = auditContractHistory();
   expect(

@@ -177,10 +177,14 @@ The full check therefore needs a browser for both harnesses.
 fail before any guarded case can skip. CI sets it in both jobs on all three
 OSes and explicitly selects the pinned executable.
 
-With the pinned Chromium build, default Canvas glyph bounds on Linux and
-Windows are rounded to whole user units; macOS defaults are precise. At the
-checker's millimetre-sized text, this can shift measured text boxes and cap
-heights by about 0.5 mm. See [Chromium's small-font precision fix](https://chromium.googlesource.com/chromium/src/+/3f9f2e32ff8ce60dea2a7f897476bf20be9a950b),
+With the pinned Chromium build, default Canvas ascent and left glyph bounds on
+Linux and Windows are rounded to whole user units; right bounds and text-box
+widths are not uniformly integer-rounded. macOS defaults are precise. In the
+[3.5 mm calibration capture](https://github.com/BlackettApplied/ThermiteSchematics/actions/runs/43726905676/artifacts/14167310551),
+default versus precise measurements differ by about 0.5 mm vertically, about
+1.2 mm at the Windows right edge and about 1.5 mm in Windows glyph-box width.
+These are observed magnitudes, not universal bounds. See
+[Chromium's small-font precision fix](https://chromium.googlesource.com/chromium/src/+/3f9f2e32ff8ce60dea2a7f897476bf20be9a950b),
 the checker's [text measurements](../evals/draw/measurement/text-metrics.mjs)
 and [cap-height conversion](../evals/draw/measurement/text-fields.mjs).
 The [calibration tests](../evals/draw/checker-boundary-browser.test.mjs) opt into

@@ -2,7 +2,7 @@ import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { SchematicPacketRequest } from "../src/sheets.js";
 
 // Bun 1.4.2 Linux x64 returns one-ULP differences from Math.hypot in the raw
-// returnLocality.distanceMm metadata. Both Ubuntu jobs in run 43718889518
+// returnLocality.distanceMm metadata. Both Ubuntu jobs in run 43777116134
 // agree; every SVG and every other packet field matches the shared reference.
 // Keep whole-packet byte equality, with reviewed hashes for that platform.
 export function uncutReferenceKey(
