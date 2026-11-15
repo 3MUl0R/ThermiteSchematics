@@ -86,6 +86,24 @@ import {
   circuitLegendReservation,
   type CircuitMark,
 } from "./symbols/circuit.js";
+import {
+  circuitGraphPins,
+  circuitGraphChildren,
+  circuitGraphEdge,
+  circuitGraphInput,
+} from "./circuit/layout-input.js";
+import {
+  circuitRouteState,
+  appendCircuitRoute,
+  circuitTopology,
+  circuitLabelChecks,
+  recoverCircuitSelfLabels,
+  assertCircuitLabels,
+} from "./circuit/layout-routes.js";
+import {
+  circuitDrawingContents,
+  circuitDrawingResult,
+} from "./circuit/layout-drawing.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
 import type {
   Point,
@@ -957,431 +975,53 @@ async function layoutGroupUnchecked(
   distributed: boolean,
   run?: CircuitLayoutRun,
 ): Promise<CircuitDrawing> {
-  const nodes = makeNodes(ir, fs, cs, all, vertical, appearances, distributed),
-    pins = new Map<string, { node: DeviceNode; pins: Pin[] }>();
-  for (const node of nodes)
-    for (const pin of node.pins) {
-      const entry = pins.get(key(pin.terminal)) ?? { node, pins: [] };
-      entry.pins.push(pin);
-      pins.set(key(pin.terminal), entry);
-    }
-  const children: ElkNode[] = nodes.map((d) => ({
-    id: d.id,
-    width: d.width,
-    height: d.height,
-    layoutOptions: { "elk.portConstraints": "FIXED_POS" },
-    ports: d.pins.map((p) => ({
-      id: p.id,
-      width: 0,
-      height: 0,
-      x: p.x,
-      y: p.y,
-      layoutOptions: { "elk.port.side": p.side },
-    })),
-  }));
-  const selfLoops = new Set<number>();
-  const edges: ElkExtendedEdge[] = cs.map((c, i) => {
-    const lines = conductorLabelLines(c);
-    let a = pins.get(key(c.ends[0]!))!,
-      b = pins.get(key(c.ends[1]!))!;
-    if (!a || !b)
-      throw new Error(
-        `Circuit ${group.id}: missing physical endpoint presentation.`,
-      );
-    if (a.node.rank > b.node.rank) [a, b] = [b, a];
-    if (a.node === b.node) selfLoops.add(i);
-    const ap =
-      a.pins.find((p) => ["EAST", "SOUTH"].includes(p.side)) ?? a.pins[0]!;
-    const bp =
-      b.pins.find((p) => ["WEST", "NORTH"].includes(p.side)) ?? b.pins[0]!;
-    return {
-      id: `e${i}`,
-      sources: [ap.id],
-      targets: [bp.id],
-      labels: [
-        {
-          text: lines.join("\n"),
-          width: Math.max(...lines.map((line) => measure(line))) + 1.5,
-          height: 3.8 + (lines.length - 1) * 3.1,
-          layoutOptions: { "elk.edgeLabels.inline": "true" },
-        },
-      ],
-    };
-  });
-  const input: ElkNode = {
-    id: "circuit",
-    layoutOptions: {
-      "elk.algorithm": "layered",
-      "elk.direction": vertical ? "DOWN" : "RIGHT",
-      "elk.edgeRouting": "ORTHOGONAL",
-      "elk.spacing.nodeNode": "5",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "7",
-      "elk.spacing.edgeNode": "3",
-      "elk.spacing.edgeEdge": "3",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "3",
-      "elk.layered.spacing.edgeNodeBetweenLayers": "3",
-      "elk.spacing.edgeLabel": "1",
-      // A nested fixed-port loop can obstruct an outer-side label. Reserve
-      // enough room for its measured label inside the loop, with 1 mm on
-      // each side; ELK still owns the complete route and node placement.
-      ...(selfLoops.size
-        ? {
-            "elk.spacing.nodeSelfLoop": String(
-              Math.max(
-                10,
-                ...edges
-                  .filter((_, i) => selfLoops.has(i))
-                  .flatMap((edge) =>
-                    edge.labels!.map(
-                      (label) => Math.max(label.width!, label.height!) + 2,
-                    ),
-                  ),
-              ),
-            ),
-          }
-        : {}),
-      "elk.padding": "[top=2,left=2,bottom=2,right=2]",
-      "elk.randomSeed": "1",
-      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-      "elk.layered.crossingMinimization.forceNodeModelOrder": "true",
-      "elk.layered.mergeEdges": "false",
-    },
-    children,
-    edges,
+  const nodes = makeNodes(ir, fs, cs, all, vertical, appearances, distributed);
+  const hooks = {
+    key,
+    fkey,
+    compare,
+    n,
+    text,
+    conductorLabelLines,
+    circuitDeviceTags,
+    emitNode,
   };
+  const pins = circuitGraphPins(nodes, key);
+  const children = circuitGraphChildren(nodes);
+  const selfLoops = new Set<number>();
+  const edges = cs.map((c, i) =>
+    circuitGraphEdge(c, i, group, pins, selfLoops, hooks),
+  );
+  const input = circuitGraphInput(children, edges, selfLoops, vertical);
   const graph = await layoutCircuitGroup(
     input,
     run,
     new Map(cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32])),
     circuitPortGroups(nodes),
   );
-  if (
-    ![graph.width, graph.height].every(Number.isFinite) ||
-    graph.width! <= 0 ||
-    graph.height! <= 0
-  )
-    throw new Error(`Circuit ${group.id}: invalid layout bounds.`);
-  const laidNodes = new Map((graph.children ?? []).map((d) => [d.id, d]));
-  for (const d of nodes) {
-    const l = laidNodes.get(d.id);
-    if (!l || ![l.x, l.y, l.width, l.height].every(Number.isFinite))
-      throw new Error(`Circuit ${group.id}: missing device layout.`);
-  }
-  const routes: { index: number; points: Point[] }[] = [],
-    labels: {
-      index: number;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      text: string;
-    }[] = [];
-  const wireSvg: string[] = [];
+  const state = circuitRouteState(graph, nodes, cs, group, hooks);
   if (graph.edges?.length !== cs.length)
     throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
-  for (const e of graph.edges ?? []) {
-    const index = Number(e.id.slice(1)),
-      c = cs[index];
-    if (!c || e.sections?.length !== 1)
-      throw new Error(`Circuit ${group.id}: incomplete physical route.`);
-    const section = e.sections[0]!,
-      points = [
-        section.startPoint,
-        ...(section.bendPoints ?? []),
-        section.endPoint,
-      ];
-    for (let i = 1; i < points.length; i++) {
-      const a = points[i - 1]!,
-        b = points[i]!;
-      if (
-        ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
-        (Math.abs(a.x - b.x) > 1e-7 && Math.abs(a.y - b.y) > 1e-7)
-      )
-        throw new Error(`Circuit ${group.id}: nonorthogonal route.`);
-      for (const d of laidNodes.values()) {
-        const left = d.x! + 0.01,
-          right = d.x! + d.width! - 0.01,
-          top = d.y! + 0.01,
-          bottom = d.y! + d.height! - 0.01;
-        if (
-          (a.x === b.x &&
-            a.x > left &&
-            a.x < right &&
-            Math.max(a.y, b.y) > top &&
-            Math.min(a.y, b.y) < bottom) ||
-          (a.y === b.y &&
-            a.y > top &&
-            a.y < bottom &&
-            Math.max(a.x, b.x) > left &&
-            Math.min(a.x, b.x) < right)
-        )
-          throw new InlineLabelCollisionError(
-            `Circuit ${group.id}: conductor ${c.name} (${c.id}) crosses device ${nodes.find((node) => node.id === d.id)!.device.designation}.`,
-          );
-      }
-    }
-    const expected = [e.sources[0], e.targets[0]].map((id) => {
-      const d = nodes.find((d) => d.pins.some((p) => p.id === id))!,
-        p = d.pins.find((p) => p.id === id)!,
-        l = laidNodes.get(d.id)!;
-      return { x: l.x! + p.x, y: l.y! + p.y };
-    });
-    if (
-      Math.hypot(points[0]!.x - expected[0]!.x, points[0]!.y - expected[0]!.y) >
-        0.01 ||
-      Math.hypot(
-        points.at(-1)!.x - expected[1]!.x,
-        points.at(-1)!.y - expected[1]!.y,
-      ) > 0.01
-    )
-      throw new Error(
-        `Circuit ${group.id}: route endpoints moved away from their source terminals.`,
-      );
-    routes.push({ index, points });
-    const path = points
-      .map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`)
-      .join(" ");
-    wireSvg.push(
-      `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${path}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
-    );
-    for (const l of e.labels ?? []) {
-      if (![l.x, l.y, l.width, l.height].every(Number.isFinite))
-        throw new Error(`Circuit ${group.id}: unplaced conductor label.`);
-      labels.push({
-        index,
-        x: l.x!,
-        y: l.y!,
-        width: l.width!,
-        height: l.height!,
-        text: l.text!,
-      });
-    }
-  }
-  const segments = routes.flatMap((r) =>
-    r.points.slice(1).map((b, i) => ({ index: r.index, a: r.points[i]!, b })),
-  );
-  const on = (p: Point, a: Point, b: Point) =>
-    p.x >= Math.min(a.x, b.x) - 1e-7 &&
-    p.x <= Math.max(a.x, b.x) + 1e-7 &&
-    p.y >= Math.min(a.y, b.y) - 1e-7 &&
-    p.y <= Math.max(a.y, b.y) + 1e-7 &&
-    (a.x === b.x ? Math.abs(p.x - a.x) < 1e-7 : Math.abs(p.y - a.y) < 1e-7);
-  const common = (a: number, b: number) =>
-    cs[a]!.ends.some((t) => cs[b]!.ends.some((u) => key(t) === key(u)));
-  for (let i = 0; i < segments.length; i++)
-    for (const s of segments.slice(i + 1)) {
-      const t = segments[i]!;
-      if (t.index === s.index || common(t.index, s.index)) continue;
-      const v = t.a.x === t.b.x && s.a.x === s.b.x && t.a.x === s.a.x,
-        h = t.a.y === t.b.y && s.a.y === s.b.y && t.a.y === s.a.y;
-      const overlap = (axis: "x" | "y") =>
-        Math.min(
-          Math.max(t.a[axis], t.b[axis]),
-          Math.max(s.a[axis], s.b[axis]),
-        ) -
-          Math.max(
-            Math.min(t.a[axis], t.b[axis]),
-            Math.min(s.a[axis], s.b[axis]),
-          ) >
-        1e-7;
-      if ((v && overlap("y")) || (h && overlap("x")))
-        throw new InlineLabelCollisionError(
-          `Circuit ${group.id}: unrelated conductors ${cs[t.index]!.name} (${cs[t.index]!.id}) and ${cs[s.index]!.name} (${cs[s.index]!.id}) overlap.`,
-        );
-    }
-  const dots = new Map<string, Point>();
-  for (const r of routes)
-    for (const p of r.points) {
-      const touching = segments.filter(
-        (s) => common(s.index, r.index) && on(p, s.a, s.b),
-      );
-      const directions = new Set(
-        touching.flatMap((s) =>
-          [s.a, s.b].flatMap((q) => [
-            ...(q.x > p.x + 1e-7 ? ["E"] : []),
-            ...(q.x < p.x - 1e-7 ? ["W"] : []),
-            ...(q.y > p.y + 1e-7 ? ["S"] : []),
-            ...(q.y < p.y - 1e-7 ? ["N"] : []),
-          ]),
-        ),
-      );
-      if (directions.size >= 3) {
-        if (segments.some((s) => !common(s.index, r.index) && on(p, s.a, s.b)))
-          throw new InlineLabelCollisionError(
-            `Circuit ${group.id}: unrelated wire touches a source-terminal junction.`,
-          );
-        dots.set(`${n(p.x)},${n(p.y)}`, p);
-      }
-    }
-  const intersects = (
-    a: { x: number; y: number; width: number; height: number },
-    b: { x: number; y: number; width: number; height: number },
-  ) =>
-    a.x < b.x + b.width - 0.01 &&
-    a.x + a.width > b.x + 0.01 &&
-    a.y < b.y + b.height - 0.01 &&
-    a.y + a.height > b.y + 0.01;
-  const segmentBox = (s: (typeof segments)[number]) => ({
-    x: Math.min(s.a.x, s.b.x),
-    y: Math.min(s.a.y, s.b.y),
-    width: Math.abs(s.a.x - s.b.x),
-    height: Math.abs(s.a.y - s.b.y),
-  });
-  const labelObstructed = (label: (typeof labels)[number]) =>
-    [...laidNodes.values()].some((d) =>
-      intersects(label, {
-        x: d.x!,
-        y: d.y!,
-        width: d.width!,
-        height: d.height!,
-      }),
-    ) ||
-    labels.some(
-      (other) => other.index !== label.index && intersects(label, other),
-    ) ||
-    segments.some(
-      (s) => s.index !== label.index && intersects(label, segmentBox(s)),
-    );
-  // ELK can stack fixed-port self-loop labels away from their own loop and
-  // across an unrelated incoming wire. Recover labels only, beside an actual
-  // routed segment; never move the physical route or relax obstruction checks.
-  for (const label of labels.filter((l) => selfLoops.has(l.index))) {
-    const own = segments.filter((s) => s.index === label.index);
-    if (!labelObstructed(label)) continue;
-    const candidates = own.flatMap((s) => {
-      const box = segmentBox(s);
-      // Centered labels may overhang a short segment. The full measured box
-      // still has to clear every other route, label and device below.
-      if (box.height > 0)
-        return [
-          box.y + (box.height - label.height) / 2,
-          ...(box.height >= label.height + 1
-            ? [box.y + box.height - label.height - 0.5, box.y + 0.5]
-            : []),
-        ].flatMap((y) =>
-          [box.x - label.width - 1, box.x + 1].map((x) => ({ ...label, x, y })),
-        );
-      if (box.width > 0)
-        return [
-          box.x + (box.width - label.width) / 2,
-          ...(box.width >= label.width + 1
-            ? [box.x + box.width - label.width - 0.5, box.x + 0.5]
-            : []),
-        ].flatMap((x) =>
-          [box.y - label.height - 1, box.y + 1].map((y) => ({
-            ...label,
-            x,
-            y,
-          })),
-        );
-      return [];
-    });
-    const free = candidates.find(
-      (candidate) =>
-        candidate.x >= 0 &&
-        candidate.y >= 0 &&
-        candidate.x + candidate.width <= graph.width! &&
-        candidate.y + candidate.height <= graph.height! &&
-        !labelObstructed(candidate),
-    );
-    if (!free)
-      throw new InlineLabelCollisionError(
-        `Circuit ${group.id}: a self-loop wire label cannot fit beside its route without obscuring other drawing content.`,
-      );
-    label.x = free.x;
-    label.y = free.y;
-  }
-  for (let i = 0; i < labels.length; i++) {
-    const l = labels[i]!;
-    if (
-      [...laidNodes.values()].some((d) =>
-        intersects(l, { x: d.x!, y: d.y!, width: d.width!, height: d.height! }),
-      ) ||
-      labels.slice(i + 1).some((o) => intersects(l, o)) ||
-      segments.some(
-        (s) =>
-          s.index !== l.index &&
-          intersects(l, {
-            x: Math.min(s.a.x, s.b.x),
-            y: Math.min(s.a.y, s.b.y),
-            width: Math.abs(s.a.x - s.b.x),
-            height: Math.abs(s.a.y - s.b.y),
-          }),
-      )
-    )
-      throw new InlineLabelCollisionError(
-        `Circuit ${group.id}: a wire label overlaps other drawing content.`,
-      );
-  }
+  for (const e of graph.edges ?? []) appendCircuitRoute(e, state);
+  const topology = circuitTopology(state);
+  const checked = circuitLabelChecks(topology);
+  recoverCircuitSelfLabels(checked, selfLoops);
+  assertCircuitLabels(checked);
   const weights = attachmentStrokeWeights(graph.edges ?? [], cs);
   const diagnostics: Diagnostic[] = [];
-  const contents = [
-    ...wireSvg,
-    ...[...dots.values()].map(
-      (p) =>
-        `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
-    ),
-    ...labels.map(
-      (l) =>
-        `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
-          .split("\n")
-          .map((line, i) => {
-            const p = printableLabelGeometry(
-              { x: l.x, y: l.y + i * 3.1, width: l.width, height: 3.8 },
-              line,
-              l.width - 1.5,
-              segments
-                .filter((s) => s.index === l.index)
-                .map((s) => [s.a, s.b]),
-              2.5,
-              false,
-            );
-            return text(p.x, p.baseline, line);
-          })
-          .join("")}</g>`,
-    ),
-    ...nodes.map((d) => {
-      const l = laidNodes.get(d.id)!;
-      return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
-    }),
-  ].join("");
-  const drawing: CircuitDrawing = {
-    id: group.id,
-    label: group.label ?? group.id,
-    ...(diagnostics.length ? { diagnostics } : {}),
-    ...(group.lineReference ? { lineReference: group.lineReference } : {}),
-    width: graph.width!,
-    height: graph.height!,
-    deviceTags: circuitDeviceTags(nodes),
-    content: `<g data-circuit-group="${attr(group.id)}"${group.lineReference ? ` data-source-line-reference="${attr(group.lineReference)}"` : ""}>${contents}</g>`,
-    references: nodes.map((d) => {
-      const l = laidNodes.get(d.id)!;
-      return {
-        deviceUid: d.device.uid,
-        designation: d.device.designation,
-        functions: d.functions.map((f) => f.id.functionKey),
-        x: l.x! + d.width / 2,
-        y: l.y! + d.height / 2,
-      };
-    }),
-    coverage: {
-      conductorIds: cs.map((c) => c.id),
-      functionIds: fs.map(fkey).sort(compare),
-      terminalIds: [...pins.keys()].sort(compare),
-      boundaryTerminalIds: nodes
-        .flatMap((d) =>
-          d.pins
-            .filter(
-              (p) =>
-                !d.functions.some((f) =>
-                  f.terminals.some((t) => key(t) === key(p.terminal)),
-                ),
-            )
-            .map((p) => key(p.terminal)),
-        )
-        .sort(compare),
-    },
-  };
+  const contents = circuitDrawingContents(
+    checked,
+    vertical,
+    weights,
+    diagnostics,
+  );
+  const drawing: CircuitDrawing = circuitDrawingResult(
+    checked,
+    fs,
+    pins,
+    contents,
+    diagnostics,
+  );
   return rememberCircuitDrawing(drawing, input, run);
 }
 
