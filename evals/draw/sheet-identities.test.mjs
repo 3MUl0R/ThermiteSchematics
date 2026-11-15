@@ -52,10 +52,13 @@ it("keeps per-instance HTML/SVG locators equal across standalone font delivery",
 it("pins the runner's HTML-index argument on the delivered fixture", async () => {
   const { readFile } = await import("node:fs/promises");
   const assert = (await import("node:assert/strict")).default;
-  const source = await readFile(new URL("./run.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("./run-sheet.mjs", import.meta.url),
+    "utf8",
+  );
   // Execute the actual call-site block without importing the CLI or a browser.
   const start = source.indexOf("const locatorIndexes = {"),
-    end = source.indexOf("        assert.equal(", start);
+    end = source.indexOf("assert.equal(", start);
   expect(start >= 0 && end > start).toBe(true);
   const run = new Function(
     "svgLocators",

@@ -1,22 +1,18 @@
+import { renderCase } from "./run-case.mjs";
 import {
   strictCoverageReason,
   policyStatusCounts,
   statusTable,
 } from "./report-status.mjs";
-import { captureSources, SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
+import { SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
-import { checkSvgFontBudget } from "./font-budget.mjs";
-import { classifyTextGeometry } from "./text-classification.mjs";
-import { retainLostText } from "./lost-text.mjs";
 import { finalizeOutput } from "./output.mjs";
-import { retainPacket, compactCase, retainingCase } from "./retention.mjs";
 import assert from "node:assert/strict";
 import {
   access,
   mkdir,
   readdir,
-  readFile,
   realpath,
   rm,
   writeFile,
@@ -30,51 +26,20 @@ import {
   command,
   pool,
   json,
-  hash,
   readJson,
   canonical,
   stopCommands,
 } from "./support.mjs";
-import { cases, prepare, verifyCorpus, contentSeal } from "./corpus.mjs";
+import { cases, verifyCorpus, contentSeal } from "./corpus.mjs";
 import { assess, exitCode, summary } from "./assessment.mjs";
 import { expectations } from "./expectations.mjs";
-import {
-  launch,
-  openSheet,
-  displaySheet,
-  cropBox,
-  screenshotCrop,
-  sheetMeasurementSource,
-  drawingContextOptions,
-} from "./browser.mjs";
-import {
-  loadPdfBytes,
-  PDFJS_VERSION,
-  renderPdf,
-  pdfText,
-  imageCanvas,
-  ink,
-  nativeTool,
-  portableLabelRisks,
-} from "./pdf.mjs";
-import {
-  evaluateSheet,
-  textGeometryIssues,
-  evaluatePacket,
-  symbolsFromGeometry,
-  sweepResults,
-  observation,
-} from "./evaluate.mjs";
-import { pdfPageMetadata } from "./pdf-source-policy.mjs";
-import { attachSheetIdentities } from "./sheet-identities.mjs";
-import { svgLocators, attachIdentities, viewKey } from "./locators.mjs";
+import { launch } from "./browser.mjs";
+import { nativeTool } from "./pdf.mjs";
+import { sweepResults, observation } from "./evaluate.mjs";
+import { attachIdentities } from "./locators.mjs";
 import { criteria } from "./criteria.mjs";
-import { requireReportCells } from "./checks.mjs";
-import { identifierFindings } from "./identifier-checks.mjs";
-import { identifierTable } from "./identifier-tables.mjs";
-import { buildSourceTables, scopeTables } from "./m3-documents.mjs";
-import { pdfIdentifierRuns } from "./identifier-pdf.mjs";
 import { gallery } from "./gallery.mjs";
+
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   kit = join(root, "evals/draw");
 const { values } = parseArgs({
@@ -276,520 +241,24 @@ try {
   metadata.checkerSha256 = checkerManifestHash(metadata.checkers);
   const cli = (args) =>
     command(engine, process.execPath, [join(engine, "thermite.mjs"), ...args]);
-  const rendered = await pool(specs, async (c, index) => {
-    if (interrupted) throw Error("Interrupted");
-    process.stdout.write(`[${index + 1}/${specs.length}] ${c.id}\n`);
-    const directory = join(dest, c.id);
-    await mkdir(directory, { recursive: true });
-    return retainingCase(directory, values.artifacts, async () => {
-      const local = [];
-      let context;
-      try {
-        const { project, input, request } = await prepare(
-            c,
-            root,
-            directory,
-            cli,
-          ),
-          packetPath = join(directory, "packet.json");
-        const args = ["packet", "--project", project, "--input", input];
-        const generated = await cli([...args, "-o", packetPath]);
-        await writeFile(
-          join(directory, "cli.log"),
-          generated.stdout + generated.stderr,
-        );
-        if (generated.code !== 0) {
-          let error;
-          try {
-            error = JSON.parse(generated.stderr).error;
-          } catch {
-            throw Error(
-              `CLI did not return a structured render error: ${generated.stderr}`,
-            );
-          }
-          if (!error || !["R004", "R006"].includes(error.code))
-            throw Error(`Unexpected CLI failure: ${generated.stderr}`);
-          const issue = {
-            kind: "render-refusal",
-            element: "request",
-            designation: c.id,
-            sheetLevel: true,
-            error,
-          };
-          local.push(
-            observation(c, { number: 0 }, "DQ-11", [], {
-              status: "not-implemented",
-              reason:
-                "No drawing exists for visual confirmation of this refused configuration; executed remedies are assessed by the paired sweep.",
-              diagnostic: issue,
-            }),
-          );
-          for (let i = 1; i <= 24; i++)
-            if (i !== 11)
-              local.push(
-                observation(
-                  c,
-                  { number: 0 },
-                  `DQ-${String(i).padStart(2, "0")}`,
-                  [],
-                  {
-                    status: "not-implemented",
-                    reason: `No sheet produced: ${error.code}; diagnostic preserved under DQ-11.`,
-                  },
-                ),
-              );
-          attachIdentities(local, new Map(), {}, {}, c.project);
-          return {
-            case: c.id,
-            spec: c,
-            ok: false,
-            error,
-            rows: local,
-            sheets: [],
-          };
-        }
-        const packet = await readJson(packetPath);
-        for (const sheet of packet.sheets) {
-          sheet.svg = deliverSvg(sheet.svg);
-          checkSvgFontBudget(sheet.svg, `${c.id}/sheet-${sheet.number}`);
-        }
-        await retainPacket(directory, packet);
-        const compiled = await cli([
-          "compile",
-          project,
-          "--diagnostics-json",
-          "-o",
-          join(directory, "ir.json"),
-        ]);
-        if (compiled.code !== 0)
-          throw Error(`Compile failed: ${compiled.stderr}`);
-        const ir = await readJson(join(directory, "ir.json"));
-        const source = await compiler.compileProject(project);
-        if (!source.ok) throw Error("Native source binding compilation failed");
-        const binding = {
-          snapshotDigest: hash(JSON.stringify(compiler.serializeIr(source.ir))),
-          presentationDigest: hash(JSON.stringify(source.presentation ?? null)),
-          revision: source.presentation?.revision ?? "UNSPECIFIED",
-        };
-        let tables = buildSourceTables(ir, request, query.buildDocumentation);
-        await writeFile(join(directory, "query-reports.json"), json(tables));
-        // Produce each public artifact through the built CLI, not a renderer import.
-        const pdfPath = join(directory, "packet.pdf"),
-          htmlPath = join(directory, "packet.html");
-        for (const p of [htmlPath, pdfPath]) {
-          const r = await cli([...args, "-o", p]);
-          await writeFile(
-            join(directory, p.endsWith(".pdf") ? "pdf.log" : "html.log"),
-            r.stdout + r.stderr,
-          );
-          if (r.code !== 0) throw Error(`Artifact export failed: ${r.stderr}`);
-        }
-        if (native) {
-          const r = await command(root, native, [pdfPath, directory, "96"]);
-          if (r.code !== 0)
-            throw Error(`PDFKit rasterization failed: ${r.stderr}`);
-        }
-        const pdfBytes = await readFile(pdfPath),
-          pdf = await loadPdfBytes(pdfBytes),
-          pdfSource = {
-            bytes: pdfBytes,
-            pdfjsVersion: PDFJS_VERSION,
-            pages: [],
-          };
-        assert.equal(
-          pdf.numPages,
-          packet.sheets.length,
-          "PDF page count differs from SVG",
-        );
-        context = await browser.newContext(drawingContextOptions);
-        const page = await context.newPage();
-        await page.emulateMedia({ media: "print" });
-        const geometries = [],
-          sheetEvidence = [];
-        await page.setContent(await readFile(htmlPath, "utf8"));
-        await page.evaluate(() => document.fonts.ready);
-        const htmlGeometry = await page.evaluate((source) => {
-          const measure = (0, eval)(`(${source})`);
-          return Array.from(document.querySelectorAll("section>svg")).map(
-            (_, i) =>
-              measure({ selector: `#sheet-${i + 1}>svg`, textOnly: true }),
-          );
-        }, sheetMeasurementSource());
-        const htmlSvgs = await page.evaluate(() =>
-          Array.from(
-            document.querySelectorAll("section>svg"),
-            (svg) => svg.outerHTML,
-          ),
-        );
-        for (const g of htmlGeometry) classifyTextGeometry(g, ir);
-        retainLostText(
-          htmlGeometry,
-          packet.sheets.map((s) => viewKey(s.view)),
-        );
-        // Collect all tiled copies before deciding whether a semantic label was lost.
-        for (const sheet of packet.sheets)
-          geometries.push(await openSheet(page, sheet.svg));
-        retainLostText(
-          geometries,
-          packet.sheets.map((s) => viewKey(s.view)),
-        );
-        tables = scopeTables(packet, geometries, ir, tables, request);
-        tables.binding = binding;
-        for (const s of packet.sheets) {
-          const prefix = `sheet-${String(s.number).padStart(3, "0")}`,
-            svgPath = join(directory, `${prefix}.svg`);
-          await writeFile(svgPath, s.svg);
-          await displaySheet(page, s.svg);
-          const g = geometries[s.number - 1];
-          requireReportCells(g);
-          requireReportCells(htmlGeometry[s.number - 1]);
-          const locatorIndexes = {
-            svg: svgLocators(s.svg, ir, s.view, tables),
-            html: svgLocators(htmlSvgs[s.number - 1], ir, s.view, tables),
-          };
-          // Pin the call-site wiring independently of the chosen index argument.
-          assert.deepEqual(
-            locatorIndexes.html,
-            svgLocators(htmlSvgs[s.number - 1], ir, s.view, tables),
-            "HTML locator index must use the measured HTML SVG, not delivered SVG",
-          );
-          assert.equal(
-            htmlGeometry[s.number - 1].texts.filter((t) => t.painted !== false)
-              .length,
-            g.texts.filter((t) => t.painted !== false).length,
-            "HTML/SVG visible label inventory differs",
-          );
-          const htmlIssues = textGeometryIssues(htmlGeometry[s.number - 1]);
-          g.htmlTexts = htmlGeometry[s.number - 1].texts;
-          const pngPath = join(directory, `${prefix}.png`);
-          if (values.artifacts)
-            await page
-              .locator("body>svg")
-              .screenshot({ path: pngPath, scale: "css" });
-          const mask = await page.evaluateHandle(() => {
-            const style = document.createElement("style");
-            style.textContent =
-              "svg :is(path,line,polyline,polygon,rect,circle,ellipse):not(defs *){visibility:hidden!important}";
-            document.head.append(style);
-            return style;
-          });
-          const labelCanvas = await imageCanvas(
-            await page.locator("body>svg").screenshot({ scale: "css" }),
-          );
-          await mask.evaluate((e) => e.remove());
-          const pdfPage = await pdf.getPage(s.number),
-            pdfCanvas = await renderPdf(pdfPage),
-            pdfPngPath = join(directory, `${prefix}-pdfjs.png`);
-          if (values.artifacts)
-            await writeFile(pdfPngPath, pdfCanvas.toBuffer("image/png"));
-          pdfSource.pages.push(pdfPageMetadata(pdfPage));
-          const text = await pdfText(pdfPage, pdf.fontFamilies, pdf.fontCaps);
-          g.pdfTexts = text;
-          if (values.artifacts)
-            await writeFile(
-              join(directory, `${prefix}-pdf-text.json`),
-              json(text),
-            );
-          const nativePath = join(
-              directory,
-              `pdfkit-${String(s.number).padStart(3, "0")}.png`,
-            ),
-            nativeCanvas = native
-              ? await imageCanvas(await readFile(nativePath))
-              : null;
-          const parity = [];
-          for (const t of g.texts.filter((t) => t.painted !== false)) {
-            // Tighten vertically to avoid counting nearby rules as label ink.
-            const box = {
-              ...t.bbox,
-              y: t.bbox.y + 0.15,
-              h: Math.max(0.1, t.bbox.h - 0.3),
-            };
-            for (const [backend, canvas] of [
-              ["pdf.js", pdfCanvas],
-              ...(nativeCanvas ? [["PDFKit", nativeCanvas]] : []),
-            ])
-              parity.push({
-                ...t,
-                backend,
-                svgInk: ink(labelCanvas, box),
-                pdfInk: ink(canvas, {
-                  x: box.x - 0.3,
-                  y: box.y - 0.3,
-                  w: box.w + 0.6,
-                  h: box.h + 0.6,
-                }),
-              });
-          }
-          const maskRisks = await portableLabelRisks(pdfPage);
-          const measured = evaluateSheet(
-            c,
-            s,
-            packet,
-            g,
-            ir,
-            text,
-            parity,
-            symbolsFromGeometry(g, ir),
-            tables,
-            geometries,
-            request,
-            identifierPolicy,
-          );
-          const parityRow = measured.find((r) => r.dq === "DQ-01");
-          for (const t of g.texts.filter((t) => t.painted !== false)) {
-            const risk = maskRisks.find(
-              (r) =>
-                r.bbox.x < t.bbox.x + t.bbox.w &&
-                r.bbox.x + r.bbox.w > t.bbox.x &&
-                r.bbox.y < t.bbox.y + t.bbox.h &&
-                r.bbox.y + r.bbox.h > t.bbox.y,
-            );
-            if (risk)
-              parityRow.evidence.findings.push({
-                kind: "soft-mask-label-loss-risk",
-                element: t.element,
-                designation: t.text,
-                text: t.text,
-                bbox: t.bbox,
-                backend: "pdf.js operator audit",
-                ...risk,
-                bbox: t.bbox,
-              });
-          }
-          parityRow.evidence.findingCount = parityRow.evidence.findings.length;
-          parityRow.status = parityRow.evidence.findings.length
-            ? "fail"
-            : "pass";
-          const htmlRow = observation(c, s, "DQ-02", htmlIssues, {
-            id: `${c.id}/DQ-02/html-${s.number}`,
-            medium: "html",
-            scope:
-              "Real CLI HTML document in Chromium, independently measured from standalone SVG.",
-          });
-          measured.push(htmlRow);
-          const identifierSource = identifierTable(s, packet, g, ir, tables);
-          if (identifierSource) {
-            const identifierPdf = await pdfIdentifierRuns(pdfPage);
-            for (const medium of ["html", "pdf"]) {
-              const geometry =
-                medium === "html" ? htmlGeometry[s.number - 1] : g;
-              measured.push(
-                observation(
-                  c,
-                  s,
-                  "DQ-19",
-                  identifierFindings(
-                    geometry,
-                    identifierSource,
-                    ir,
-                    medium,
-                    identifierPdf,
-                    identifierPolicy,
-                  ),
-                  {
-                    id: `${c.id}/DQ-19/${medium}-${s.number}`,
-                    medium,
-                    scope:
-                      "Complete source identifier units on one independently measured physical line.",
-                  },
-                ),
-              );
-            }
-          }
-          attachSheetIdentities(
-            measured,
-            locatorIndexes,
-            s.view,
-            ir,
-            c.project,
-          );
-          // One representative 300 dpi crop per failed check/sheet. Every exact
-          // finding remains in JSON; this bounds raster work without hiding counts.
-          for (const row of measured.filter((r) => r.status === "fail")) {
-            const finding = row.evidence.findings.find(
-              (f) =>
-                f.bbox &&
-                f.bbox.x < g.width &&
-                f.bbox.y < g.height &&
-                f.bbox.x + f.bbox.w > 0 &&
-                f.bbox.y + f.bbox.h > 0,
-            );
-            if (!finding) {
-              row.evidence.noCropReason =
-                "Sheet-level or entirely clipped/off-sheet finding; inspect SVG and geometry evidence";
-              continue;
-            }
-            const box = canonical(cropBox(finding.bbox, g.width, g.height)),
-              duplicateMedium =
-                measured.filter(
-                  (r) =>
-                    r.status === "fail" &&
-                    r.dq === row.dq &&
-                    (r.medium ?? "svg") === (row.medium ?? "svg"),
-                ).length > 1,
-              crop = join(
-                directory,
-                `${prefix}-${row.dq}${row === htmlRow ? "-html" : row.medium === "pdf" ? "-pdf" : ""}${duplicateMedium ? "-" + hash(row.id).slice(0, 10) : ""}.png`,
-              );
-            if (
-              row.dq === "DQ-01" &&
-              row.evidence.findings[0].backend === "PDFKit"
-            ) {
-              const cropDir = join(directory, `${prefix}-pdfkit-crop`);
-              await mkdir(cropDir, { recursive: true });
-              const r = await command(root, native, [
-                pdfPath,
-                cropDir,
-                "300",
-                String(s.number),
-                ...[box.x, box.y, box.w, box.h].map(String),
-              ]);
-              if (r.code !== 0) throw Error("PDFKit crop failed");
-              await writeFile(
-                crop,
-                await readFile(
-                  join(
-                    cropDir,
-                    `pdfkit-${String(s.number).padStart(3, "0")}.png`,
-                  ),
-                ),
-              );
-            } else if (
-              row.dq === "DQ-01" ||
-              row.evidence.findings[0]?.medium === "pdf"
-            ) {
-              const canvas = await renderPdf(pdfPage, 300, box);
-              await writeFile(crop, canvas.toBuffer("image/png"));
-            } else if (row === htmlRow) {
-              await page.setContent(await readFile(htmlPath, "utf8"));
-              await page.evaluate(() => document.fonts.ready);
-              await screenshotCrop(page, box, crop, `#sheet-${s.number}>svg`);
-            } else await screenshotCrop(page, box, crop);
-            row.evidence.crop = relativeEvidence(crop);
-            row.evidence.cropBbox = box;
-            row.evidence.cropDpi = 300;
-            if (row.dq === "DQ-01") {
-              const reference = join(directory, `${prefix}-DQ-01-svg.png`);
-              await screenshotCrop(page, box, reference);
-              row.evidence.referenceCrop = relativeEvidence(reference);
-            }
-          }
-          local.push(...measured);
-          sheetEvidence.push({
-            number: s.number,
-            svg: relativeEvidence(svgPath),
-            png: values.artifacts
-              ? relativeEvidence(pngPath)
-              : relativeEvidence(svgPath),
-            pdf: relativeEvidence(pdfPath),
-            html: relativeEvidence(htmlPath),
-            ...(values.artifacts
-              ? { pdfPng: relativeEvidence(pdfPngPath) }
-              : {}),
-            ...(native && values.artifacts
-              ? { nativePng: relativeEvidence(nativePath) }
-              : {}),
-          });
-          if (native && !values.artifacts)
-            await rm(nativePath, { force: true });
-          pdfPage.cleanup();
-        }
-        const packetRows = evaluatePacket(c, packet, geometries, tables);
-        for (const row of packetRows) {
-          const sheet = packet.sheets.find((s) => s.number === row.sheet);
-          attachSheetIdentities(
-            [row],
-            {
-              svg: svgLocators(sheet.svg, ir, sheet.view, tables),
-              html: svgLocators(
-                htmlSvgs[sheet.number - 1],
-                ir,
-                sheet.view,
-                tables,
-              ),
-            },
-            sheet.view,
-            ir,
-            c.project,
-          );
-        }
-        // Packet-level diagnostics point to their first sheet at 300 dpi too.
-        for (const row of packetRows.filter(
-          (r) => r.status === "fail" && r.evidence.findings[0]?.bbox,
-        )) {
-          const s = packet.sheets.find((s) => s.number === row.sheet);
-          await displaySheet(page, s.svg);
-          const box = canonical(
-              cropBox(
-                row.evidence.findings[0].bbox,
-                packet.page.widthMm,
-                packet.page.heightMm,
-              ),
-            ),
-            crop = join(
-              directory,
-              `${row.dq}-packet-${hash(row.id).slice(0, 10)}.png`,
-            );
-          if (row.evidence.findings[0].medium === "pdf") {
-            const canvas = await renderPdf(
-              await pdf.getPage(row.sheet),
-              300,
-              box,
-            );
-            await writeFile(crop, canvas.toBuffer("image/png"));
-          } else if (row.evidence.findings[0].medium === "html") {
-            await page.setContent(await readFile(htmlPath, "utf8"));
-            await page.evaluate(() => document.fonts.ready);
-            await screenshotCrop(page, box, crop, `#sheet-${row.sheet}>svg`);
-          } else await screenshotCrop(page, box, crop);
-          row.evidence.crop = relativeEvidence(crop);
-          row.evidence.cropBbox = box;
-          row.evidence.cropDpi = 300;
-        }
-        local.push(...packetRows);
-        await pdf.loadingTask.destroy();
-        await compactCase(directory, values.artifacts);
-        if (!values.artifacts)
-          for (const sheet of sheetEvidence)
-            sheet.html = relativeEvidence(htmlPath + ".gz");
-        return {
-          case: c.id,
-          spec: c,
-          sourceHashes: await captureSources(
-            directory,
-            c.id,
-            packet.sheets.map((s) => s.number),
-            values.artifacts ? "packet.html" : "packet.html.gz",
-            pdfSource,
-          ),
-          ok: true,
-          rows: local,
-          sheets: sheetEvidence,
-        };
-      } catch (error) {
-        return {
-          case: c.id,
-          spec: c,
-          ok: false,
-          sheets: [],
-          rows: [
-            ...local,
-            {
-              id: `${c.id}/infrastructure`,
-              case: c.id,
-              status: "infrastructure-error",
-              reason: error.message
-                .replaceAll(root, "<evals>")
-                .replaceAll(engine, "<engine>"),
-            },
-          ],
-        };
-      } finally {
-        await context?.close();
-      }
-    });
-  });
+  const rendered = await pool(specs, (c, index) =>
+    renderCase(c, index, {
+      isInterrupted: () => interrupted,
+      specs,
+      dest,
+      values,
+      root,
+      engine,
+      cli,
+      browser,
+      native,
+      compiler,
+      query,
+      identifierPolicy,
+      deliverSvg,
+      relativeEvidence,
+    }),
+  );
   results.push(...rendered);
   rows.push(
     ...rendered.flatMap((r) => r.rows),

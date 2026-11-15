@@ -89,6 +89,96 @@ export function mirrorReturns(packet, geometries, ir, request) {
         ...detail,
       }),
     });
+  reconcileFullAppearances(
+    records,
+    packet,
+    occurrences,
+    matching,
+    emit,
+    fn,
+    extra,
+  );
+  reconcileSelectedAppearances(request, ir, fn, all, packet, extra);
+  for (const [i, sheet] of packet.sheets.entries()) {
+    const g = geometries[i];
+    if (!g) continue;
+    const local = records.filter((a) => a.sheet === sheet.number);
+    const blocks = navigationBlocks(g, annotations);
+    bindNavigationBlocks(
+      blocks,
+      occurrences,
+      local,
+      tag,
+      matching,
+      sheet,
+      extra,
+      emit,
+      ir,
+      g,
+      coils,
+    );
+    for (const a of local) {
+      const native = fn(source(a)),
+        direct = a.kind === "coil" ? contacts(source(a)) : coils(source(a));
+      const hasContacts = (ir.functions ?? []).some(
+        (f) => f.id.deviceUid === a.uid && f.kind === "contact",
+      );
+      const unspecified =
+        a.kind === "coil"
+          ? hasContacts && !direct.length
+          : (ir.functions ?? []).some(
+              (f) => f.id.deviceUid === a.uid && f.kind === "coil",
+            ) &&
+            !direct.length &&
+            !(ir.internalRelations ?? []).some(
+              (r) =>
+                ["actuates", "trips"].includes(r.verb) && same(r.to, source(a)),
+            );
+      const needed = direct.length > 0 || unspecified;
+      if (!direct.length)
+        a.assessment = unspecified
+          ? "associations-unspecified"
+          : "outside-direct-actuation-scope";
+      if (a.kind === "coil")
+        auditMirrorTable(
+          a,
+          needed,
+          direct,
+          unspecified,
+          emit,
+          destinations,
+          tag,
+          g,
+        );
+      else auditReturnCaption(a, needed, direct, emit, destinations, tag);
+      if (!native) emit(a, "navigation-native-source-missing");
+    }
+    for (const t of g.texts.filter(
+      (t) => painted(t) && /not assessed/i.test(t.text),
+    ))
+      extra.push({
+        sheet: sheet.number,
+        ...finding("navigation-forbidden-assessment-text", t),
+      });
+  }
+  return {
+    records,
+    findings: [...records.flatMap((r) => r.findings), ...extra],
+    extra,
+    coilAppearances: records.filter((r) => r.kind === "coil"),
+    contactAppearances: records.filter((r) => r.kind === "contact"),
+  };
+}
+
+function reconcileFullAppearances(
+  records,
+  packet,
+  occurrences,
+  matching,
+  emit,
+  fn,
+  extra,
+) {
   // B ↔ C conservation. A stripped or forged boundary locator cannot remove a
   // full native body/terminal obligation, nor can a dropped seed earn a pass.
   for (const a of records) {
@@ -125,6 +215,9 @@ export function mirrorReturns(packet, geometries, ir, request) {
         ),
       });
   }
+}
+
+function reconcileSelectedAppearances(request, ir, fn, all, packet, extra) {
   // A ↔ B for explicit authored circuit selections, independently of seeds.
   // At packet level a full selected source must occur in its authored view;
   // boundary tiles alone never certify it. Other selection kinds also retain
@@ -158,313 +251,290 @@ export function mirrorReturns(packet, geometries, ir, request) {
         });
     }
   }
-  for (const [i, sheet] of packet.sheets.entries()) {
-    const g = geometries[i];
-    if (!g) continue;
-    const local = records.filter((a) => a.sheet === sheet.number);
-    const groups = [
-      ...groupBy(
-        g.texts.filter(painted),
-        (t) => t.navigationAnnotation ?? t.navigationContainer,
-      ),
-    ].map(([id, rows]) => {
-      const exported = annotations.find(
-        (a) =>
-          a.id === id ||
-          a.primitiveIds?.some((p) =>
-            rows.some((t) => t.primitiveIds?.includes(p)),
-          ),
-      );
-      const role = rows[0].navigationRole;
-      const shapes = (g.shapes ?? []).filter(
-        (s) =>
-          s.navigationAnnotation === id &&
-          (!s.navigationInkSegments || s.navigationInkSegments.length),
-      );
-      return {
-        id,
-        rows,
-        exported,
-        role,
-        text: read(rows),
-        element: rows[0].element,
-        bbox: boxExtent([...rows, ...shapes]),
-      };
-    });
-    // Wording and native row locators discover M2 even when an export is absent.
-    const blocks = groups.filter(
-      (b) =>
-        ["mirror", "return", "association-unspecified"].includes(b.role) ||
-        b.rows.some((t) => t.mirrorRow) ||
-        /Contact associations unspecified|Actuating coil not specified/.test(
-          b.text,
-        ) ||
-        (b.exported &&
-          ["mirror", "return", "association-unspecified"].includes(
-            b.exported.role,
-          )),
+}
+
+function navigationBlocks(g, annotations) {
+  const groups = [
+    ...groupBy(
+      g.texts.filter(painted),
+      (t) => t.navigationAnnotation ?? t.navigationContainer,
+    ),
+  ].map(([id, rows]) => {
+    const exported = annotations.find(
+      (a) =>
+        a.id === id ||
+        a.primitiveIds?.some((p) =>
+          rows.some((t) => t.primitiveIds?.includes(p)),
+        ),
     );
-    for (const b of blocks) {
-      const owner = occurrences.find(
-        (o) => o.id === b.exported?.ownerOccurrence,
-      );
-      const isMirror =
-        b.role === "mirror" ||
-        b.rows.some((t) => t.mirrorRow) ||
-        /Contact associations unspecified/.test(b.text) ||
-        b.exported?.role === "mirror";
-      let candidates = local.filter(
-        (a) =>
-          a.kind === (isMirror ? "coil" : "contact") &&
-          (owner
-            ? matching(owner, a)
-            : b.text.startsWith(tag(a.uid) + " ") ||
-              b.text === tag(a.uid) ||
-              b.text.startsWith(tag(a.uid) + " (")),
-      );
-      if (candidates.length !== 1) {
-        extra.push({
-          sheet: sheet.number,
-          ...finding("mirror-return-unresolved-owner", b),
-        });
-        continue;
-      }
-      const primary = candidates[0];
-      if (
-        !b.exported ||
-        !owner ||
-        !b.rows.every((t) => t.navigationAnnotation === b.exported.id)
-      )
-        emit(primary, "mirror-return-locator-mismatch", b);
-      const owners = b.exported?.ownerOccurrences ?? [];
-      if (
-        b.exported &&
-        (!owners.includes(b.exported.ownerOccurrence) ||
-          new Set(owners).size !== owners.length)
-      )
-        emit(primary, "mirror-return-locator-mismatch", b, {
-          reason: "primary owner missing or duplicated",
-        });
-      candidates = [primary];
-      if (!isMirror && b.exported?.ownerOccurrences?.length > 1) {
-        const members = b.exported.ownerOccurrences.map((id) =>
-          occurrences.find((o) => o.id === id),
-        );
-        const resolved = members.map((o) =>
-          local.find((a) => a.kind === "contact" && o && matching(o, a)),
-        );
-        const nativeGang = (ir.gangedGroups ?? []).find((gang) =>
-          resolved.every(
-            (a) => a && gang.functionIds.some((id) => same(id, source(a))),
-          ),
-        );
-        const links = (g.shapes ?? []).filter(
-          (s) =>
-            s.mechanicalAssociation === "ganged" &&
-            (s.navigationView == null ||
-              s.navigationView === primary.viewKey) &&
-            (s.inkSegments?.length ||
-              s.navigationInkSegments?.length ||
-              s.stroke > 0),
-        );
-        const linked = links.flatMap((s) => parse(s.gangedFunctions) ?? []);
-        const valid =
-          nativeGang &&
-          resolved.every(
-            (a) =>
-              a &&
-              a.uid === primary.uid &&
-              a.view === primary.view &&
-              equal(
-                coils(source(a)).map((c) => c.id),
-                coils(source(primary)).map((c) => c.id),
-              ) &&
-              linked.some((id) => same(id, source(a))),
-          );
-        if (!valid || new Set(resolved).size !== resolved.length)
-          emit(primary, "return-gang-membership", b);
-        else candidates = resolved;
-      }
-      for (const a of candidates) a.blocks.push({ ...b, isMirror });
-    }
-    for (const a of local) {
-      const native = fn(source(a)),
-        direct = a.kind === "coil" ? contacts(source(a)) : coils(source(a));
-      const hasContacts = (ir.functions ?? []).some(
-        (f) => f.id.deviceUid === a.uid && f.kind === "contact",
-      );
-      const unspecified =
-        a.kind === "coil"
-          ? hasContacts && !direct.length
-          : (ir.functions ?? []).some(
-              (f) => f.id.deviceUid === a.uid && f.kind === "coil",
-            ) &&
-            !direct.length &&
-            !(ir.internalRelations ?? []).some(
-              (r) =>
-                ["actuates", "trips"].includes(r.verb) && same(r.to, source(a)),
-            );
-      const needed = direct.length > 0 || unspecified;
-      if (!direct.length)
-        a.assessment = unspecified
-          ? "associations-unspecified"
-          : "outside-direct-actuation-scope";
-      if (a.kind === "coil") {
-        const bs = a.blocks.filter((b) => b.isMirror);
-        if ((needed && !bs.length) || (!needed && bs.length))
-          emit(a, "mirror-block-count", bs[0] ?? a, {
-            expected: needed ? "one complete table (possibly split)" : 0,
-            actual: bs.length,
-          });
-        const actual = bs.flatMap((b) =>
-          [
-            ...groupBy(
-              b.rows.filter((t) => t.mirrorRowScope || t.mirrorRow),
-              (t) => t.mirrorRowScope ?? t.mirrorRow,
-            ),
-          ].map(([id, rows]) => ({
-            id,
-            rows,
-            text: read(rows),
-            element: rows[0].element,
-            bbox: boxExtent(rows),
-            source: parse(rows[0].mirrorRow),
-          })),
-        );
-        if (actual.length !== direct.length)
-          emit(a, "mirror-row-count", bs[0] ?? a, {
-            expected: direct.length,
-            actual: actual.length,
-          });
-        for (const f of direct) {
-          const rows = actual.filter((r) => same(r.source, f.id));
-          const expected = [
-            f.normal_state === "open" ? "NO" : "NC",
-            terminalSet(f.terminals.map((t) => t.terminalKey)),
-            ...(destinations(f.id).length ? destinations(f.id) : ["not drawn"]),
-          ].join(" ");
-          if (rows.length !== 1 || compact(rows[0].text) !== compact(expected))
-            emit(a, "mirror-row-facts", rows[0] ?? bs[0] ?? a, {
-              contact: f.id,
-              expected,
-              actual: rows.map((r) => r.text),
-            });
-        }
-        for (const r of actual)
-          if (!direct.some((f) => same(f.id, r.source)))
-            emit(a, "mirror-extra-row", r, { source: r.source });
-        for (const b of bs) {
-          const unspecifiedInk = /Contact associations unspecified/.test(
-            b.text,
-          );
-          if (unspecifiedInk !== unspecified)
-            emit(a, "mirror-unspecified", b, { expected: unspecified });
-          const heading = read(
-            b.rows.filter(
-              (t) =>
-                !t.mirrorRow &&
-                !/Contact associations unspecified/.test(t.text),
-            ),
-          ).trim();
-          // Wrapped unspecified body is excluded using its exact measured lines.
-          const headingRows = b.rows
-            .filter((t) => !t.mirrorRow)
-            .sort((x, y) => x.bbox.y - y.bbox.y);
-          const head = headingRows[0]?.text ?? heading;
-          const own = tag(a.uid),
-            match = head.match(
-              /^(.*?)\s*(?:\((\d+)\/(\d+)\))?\s*(?:\/(\d+)\.([A-Z]+\d+))?$/,
-            );
-          const located =
-            !!match?.[4] &&
-            match[1].trim() === own &&
-            Number(match[4]) === a.sheet &&
-            match[5] === a.zone;
-          const identity = match?.[1].trim() === own;
-          const distanceMm = anchorDistance(a.anchor, b.bbox),
-            frames = nearestOwner(g, a, b.bbox);
-          const corners = [
-            { x: b.bbox.x, y: b.bbox.y },
-            { x: b.bbox.x + b.bbox.w, y: b.bbox.y + b.bbox.h },
-          ].map((p) => measuredZone(g, p));
-          const adjacent =
-            a.zone &&
-            corners.every(Boolean) &&
-            corners[0].charCodeAt(0) <= a.zone.charCodeAt(0) + 1 &&
-            corners[1].charCodeAt(0) >= a.zone.charCodeAt(0) - 1 &&
-            Number(corners[0].slice(1)) <= Number(a.zone.slice(1)) + 1 &&
-            Number(corners[1].slice(1)) >= Number(a.zone.slice(1)) - 1;
-          const localTable =
-            distanceMm <= 60 + EPS + 1e-9 && adjacent && frames.ownerNearest;
-          if (
-            !identity ||
-            (!localTable && !located) ||
-            (match?.[4] && !located)
-          )
-            emit(a, "mirror-locality", b, {
-              distanceMm,
-              adjacent,
-              ...frames,
-              expectedHeading: `${own} /${token(a)}`,
-              actual: head,
-            });
-          a.measurements.push({
-            bbox: b.bbox,
-            anchor: a.anchor,
-            zone: a.zone,
-            distanceMm,
-            adjacent,
-            ...frames,
-            selfLocated: located,
-          });
-        }
-      } else {
-        const bs = a.blocks.filter((b) => !b.isMirror);
-        if (bs.length !== (needed ? 1 : 0))
-          emit(a, "return-caption-count", bs[0] ?? a, {
-            expected: needed ? 1 : 0,
-            actual: bs.length,
-          });
-        const expected = direct.length
-          ? direct
-              .map(
-                (c) =>
-                  `${tag(c.id.deviceUid)} ${
-                    destinations(c.id).length
-                      ? destinations(c.id)
-                          .map((d) => `/${d}`)
-                          .join(", ")
-                      : "not drawn"
-                  }`,
-              )
-              .join("; ")
-          : "Actuating coil not specified in device data";
-        for (const b of bs) {
-          if (compact(b.text) !== compact(expected))
-            emit(a, "return-coil-set", b, { expected, actual: b.text });
-          a.measurements.push({
-            bbox: b.bbox,
-            anchor: a.anchor,
-            distanceMm: anchorDistance(a.anchor, b.bbox),
-            assessment: "measured-no-threshold",
-          });
-        }
-      }
-      if (!native) emit(a, "navigation-native-source-missing");
-    }
-    for (const t of g.texts.filter(
-      (t) => painted(t) && /not assessed/i.test(t.text),
-    ))
+    const role = rows[0].navigationRole;
+    const shapes = (g.shapes ?? []).filter(
+      (s) =>
+        s.navigationAnnotation === id &&
+        (!s.navigationInkSegments || s.navigationInkSegments.length),
+    );
+    return {
+      id,
+      rows,
+      exported,
+      role,
+      text: read(rows),
+      element: rows[0].element,
+      bbox: boxExtent([...rows, ...shapes]),
+    };
+  });
+  // Wording and native row locators discover M2 even when an export is absent.
+  const blocks = groups.filter(
+    (b) =>
+      ["mirror", "return", "association-unspecified"].includes(b.role) ||
+      b.rows.some((t) => t.mirrorRow) ||
+      /Contact associations unspecified|Actuating coil not specified/.test(
+        b.text,
+      ) ||
+      (b.exported &&
+        ["mirror", "return", "association-unspecified"].includes(
+          b.exported.role,
+        )),
+  );
+  return blocks;
+}
+
+function bindNavigationBlocks(
+  blocks,
+  occurrences,
+  local,
+  tag,
+  matching,
+  sheet,
+  extra,
+  emit,
+  ir,
+  g,
+  coils,
+) {
+  for (const b of blocks) {
+    const owner = occurrences.find((o) => o.id === b.exported?.ownerOccurrence);
+    const isMirror =
+      b.role === "mirror" ||
+      b.rows.some((t) => t.mirrorRow) ||
+      /Contact associations unspecified/.test(b.text) ||
+      b.exported?.role === "mirror";
+    let candidates = local.filter(
+      (a) =>
+        a.kind === (isMirror ? "coil" : "contact") &&
+        (owner
+          ? matching(owner, a)
+          : b.text.startsWith(tag(a.uid) + " ") ||
+            b.text === tag(a.uid) ||
+            b.text.startsWith(tag(a.uid) + " (")),
+    );
+    if (candidates.length !== 1) {
       extra.push({
         sheet: sheet.number,
-        ...finding("navigation-forbidden-assessment-text", t),
+        ...finding("mirror-return-unresolved-owner", b),
+      });
+      continue;
+    }
+    const primary = candidates[0];
+    if (
+      !b.exported ||
+      !owner ||
+      !b.rows.every((t) => t.navigationAnnotation === b.exported.id)
+    )
+      emit(primary, "mirror-return-locator-mismatch", b);
+    const owners = b.exported?.ownerOccurrences ?? [];
+    if (
+      b.exported &&
+      (!owners.includes(b.exported.ownerOccurrence) ||
+        new Set(owners).size !== owners.length)
+    )
+      emit(primary, "mirror-return-locator-mismatch", b, {
+        reason: "primary owner missing or duplicated",
+      });
+    candidates = [primary];
+    if (!isMirror && b.exported?.ownerOccurrences?.length > 1) {
+      const members = b.exported.ownerOccurrences.map((id) =>
+        occurrences.find((o) => o.id === id),
+      );
+      const resolved = members.map((o) =>
+        local.find((a) => a.kind === "contact" && o && matching(o, a)),
+      );
+      const nativeGang = (ir.gangedGroups ?? []).find((gang) =>
+        resolved.every(
+          (a) => a && gang.functionIds.some((id) => same(id, source(a))),
+        ),
+      );
+      const links = (g.shapes ?? []).filter(
+        (s) =>
+          s.mechanicalAssociation === "ganged" &&
+          (s.navigationView == null || s.navigationView === primary.viewKey) &&
+          (s.inkSegments?.length ||
+            s.navigationInkSegments?.length ||
+            s.stroke > 0),
+      );
+      const linked = links.flatMap((s) => parse(s.gangedFunctions) ?? []);
+      const valid =
+        nativeGang &&
+        resolved.every(
+          (a) =>
+            a &&
+            a.uid === primary.uid &&
+            a.view === primary.view &&
+            equal(
+              coils(source(a)).map((c) => c.id),
+              coils(source(primary)).map((c) => c.id),
+            ) &&
+            linked.some((id) => same(id, source(a))),
+        );
+      if (!valid || new Set(resolved).size !== resolved.length)
+        emit(primary, "return-gang-membership", b);
+      else candidates = resolved;
+    }
+    for (const a of candidates) a.blocks.push({ ...b, isMirror });
+  }
+}
+
+function auditMirrorTable(
+  a,
+  needed,
+  direct,
+  unspecified,
+  emit,
+  destinations,
+  tag,
+  g,
+) {
+  const bs = a.blocks.filter((b) => b.isMirror);
+  if ((needed && !bs.length) || (!needed && bs.length))
+    emit(a, "mirror-block-count", bs[0] ?? a, {
+      expected: needed ? "one complete table (possibly split)" : 0,
+      actual: bs.length,
+    });
+  const actual = bs.flatMap((b) =>
+    [
+      ...groupBy(
+        b.rows.filter((t) => t.mirrorRowScope || t.mirrorRow),
+        (t) => t.mirrorRowScope ?? t.mirrorRow,
+      ),
+    ].map(([id, rows]) => ({
+      id,
+      rows,
+      text: read(rows),
+      element: rows[0].element,
+      bbox: boxExtent(rows),
+      source: parse(rows[0].mirrorRow),
+    })),
+  );
+  if (actual.length !== direct.length)
+    emit(a, "mirror-row-count", bs[0] ?? a, {
+      expected: direct.length,
+      actual: actual.length,
+    });
+  for (const f of direct) {
+    const rows = actual.filter((r) => same(r.source, f.id));
+    const expected = [
+      f.normal_state === "open" ? "NO" : "NC",
+      terminalSet(f.terminals.map((t) => t.terminalKey)),
+      ...(destinations(f.id).length ? destinations(f.id) : ["not drawn"]),
+    ].join(" ");
+    if (rows.length !== 1 || compact(rows[0].text) !== compact(expected))
+      emit(a, "mirror-row-facts", rows[0] ?? bs[0] ?? a, {
+        contact: f.id,
+        expected,
+        actual: rows.map((r) => r.text),
       });
   }
-  return {
-    records,
-    findings: [...records.flatMap((r) => r.findings), ...extra],
-    extra,
-    coilAppearances: records.filter((r) => r.kind === "coil"),
-    contactAppearances: records.filter((r) => r.kind === "contact"),
-  };
+  for (const r of actual)
+    if (!direct.some((f) => same(f.id, r.source)))
+      emit(a, "mirror-extra-row", r, { source: r.source });
+  for (const b of bs) {
+    const unspecifiedInk = /Contact associations unspecified/.test(b.text);
+    if (unspecifiedInk !== unspecified)
+      emit(a, "mirror-unspecified", b, { expected: unspecified });
+    const heading = read(
+      b.rows.filter(
+        (t) => !t.mirrorRow && !/Contact associations unspecified/.test(t.text),
+      ),
+    ).trim();
+    // Wrapped unspecified body is excluded using its exact measured lines.
+    const headingRows = b.rows
+      .filter((t) => !t.mirrorRow)
+      .sort((x, y) => x.bbox.y - y.bbox.y);
+    const head = headingRows[0]?.text ?? heading;
+    const own = tag(a.uid),
+      match = head.match(
+        /^(.*?)\s*(?:\((\d+)\/(\d+)\))?\s*(?:\/(\d+)\.([A-Z]+\d+))?$/,
+      );
+    const located =
+      !!match?.[4] &&
+      match[1].trim() === own &&
+      Number(match[4]) === a.sheet &&
+      match[5] === a.zone;
+    const identity = match?.[1].trim() === own;
+    const distanceMm = anchorDistance(a.anchor, b.bbox),
+      frames = nearestOwner(g, a, b.bbox);
+    const corners = [
+      { x: b.bbox.x, y: b.bbox.y },
+      { x: b.bbox.x + b.bbox.w, y: b.bbox.y + b.bbox.h },
+    ].map((p) => measuredZone(g, p));
+    const adjacent =
+      a.zone &&
+      corners.every(Boolean) &&
+      corners[0].charCodeAt(0) <= a.zone.charCodeAt(0) + 1 &&
+      corners[1].charCodeAt(0) >= a.zone.charCodeAt(0) - 1 &&
+      Number(corners[0].slice(1)) <= Number(a.zone.slice(1)) + 1 &&
+      Number(corners[1].slice(1)) >= Number(a.zone.slice(1)) - 1;
+    const localTable =
+      distanceMm <= 60 + EPS + 1e-9 && adjacent && frames.ownerNearest;
+    if (!identity || (!localTable && !located) || (match?.[4] && !located))
+      emit(a, "mirror-locality", b, {
+        distanceMm,
+        adjacent,
+        ...frames,
+        expectedHeading: `${own} /${token(a)}`,
+        actual: head,
+      });
+    a.measurements.push({
+      bbox: b.bbox,
+      anchor: a.anchor,
+      zone: a.zone,
+      distanceMm,
+      adjacent,
+      ...frames,
+      selfLocated: located,
+    });
+  }
+}
+
+function auditReturnCaption(a, needed, direct, emit, destinations, tag) {
+  const bs = a.blocks.filter((b) => !b.isMirror);
+  if (bs.length !== (needed ? 1 : 0))
+    emit(a, "return-caption-count", bs[0] ?? a, {
+      expected: needed ? 1 : 0,
+      actual: bs.length,
+    });
+  const expected = direct.length
+    ? direct
+        .map(
+          (c) =>
+            `${tag(c.id.deviceUid)} ${
+              destinations(c.id).length
+                ? destinations(c.id)
+                    .map((d) => `/${d}`)
+                    .join(", ")
+                : "not drawn"
+            }`,
+        )
+        .join("; ")
+    : "Actuating coil not specified in device data";
+  for (const b of bs) {
+    if (compact(b.text) !== compact(expected))
+      emit(a, "return-coil-set", b, { expected, actual: b.text });
+    a.measurements.push({
+      bbox: b.bbox,
+      anchor: a.anchor,
+      distanceMm: anchorDistance(a.anchor, b.bbox),
+      assessment: "measured-no-threshold",
+    });
+  }
 }

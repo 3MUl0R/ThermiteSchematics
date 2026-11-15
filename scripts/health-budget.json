@@ -37,7 +37,6 @@
     "evals/draw/repin-core.mjs": 1214,
     "evals/draw/repin.test.mjs": 1551,
     "evals/draw/review1-predicates.test.mjs": 1102,
-    "evals/draw/run.mjs": 937,
     "evals/engine/validation-gate-expectations.mjs": 867,
     "packages/agent-tools/src/apply-source-patch.ts": 991,
     "packages/agent-tools/src/patch-filesystem.ts": 871,
@@ -98,12 +97,7 @@
   "fingerprints": {
     "files": {},
     "functions": {
-      "evals/draw/evaluate.mjs#evaluateSheet": "68ea4fd98b09ed1e7fbf946b2ceba0dcb453572bba4e95adb9aef516f7f1db8c",
-      "evals/draw/m3-delivery.mjs#m3Delivery": "eb07d8f11083f14dfe1e68df19e809f5e4310e42431c9783c9003d58a1bbebee",
-      "evals/draw/mirror-returns.mjs#mirrorReturns": "d043e2d67c31f591d448abae30198cdda09c9d002fcc42196a797880ce626636",
       "evals/draw/repin-core.mjs#prepareRepin": "ced671393b947e6b949e55b7ff72bbda7d8d42582cf20aabf227da0e5656288c",
-      "evals/draw/run.mjs#pool callback": "45cf6143e3ed4583c6da318b9e9327d8a5637cae2d00c93553e65ac7289b5792",
-      "evals/draw/run.mjs#pool callback/retainingCase callback": "7f15af5c44134d072045357e6a75d207d6a7151dd39d052ed95f2f6e00e2b345",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
@@ -133,7 +127,11 @@
     "evals/draw/device-tags.mjs#deviceTagFindings": 158,
     "evals/draw/document-dependencies.mjs#legacyDependencyFindings": 143,
     "evals/draw/document-dependencies.mjs#pointerDependencies": 108,
+    "evals/draw/evaluate.mjs#evaluateDocuments": 101,
+    "evals/draw/evaluate.mjs#evaluateNavigation": 107,
     "evals/draw/evaluate.mjs#evaluatePacket": 158,
+    "evals/draw/evaluate.mjs#evaluateRoutes": 103,
+    "evals/draw/evaluate.mjs#evaluateTextAndSymbols": 116,
     "evals/draw/frame-census/continuations.mjs#continuationGeometry": 155,
     "evals/draw/frame-census/shape-geometry.mjs#shapeGeometry": 156,
     "evals/draw/frame-census/shape-raster.mjs#shapeRaster": 111,
@@ -145,6 +143,10 @@
     "evals/draw/locators.mjs#identities": 139,
     "evals/draw/locators.mjs#svgLocators": 124,
     "evals/draw/m3-delivery.mjs#completeCaption": 115,
+    "evals/draw/m3-delivery.mjs#locateNeedCaption": 81,
+    "evals/draw/m3-delivery.mjs#m3Delivery": 149,
+    "evals/draw/m3-delivery.mjs#measureNativeNeed": 122,
+    "evals/draw/m3-delivery.mjs#resolveDeliveredRows": 79,
     "evals/draw/m3-delivery.test.mjs#it callback~24": 93,
     "evals/draw/m3-delivery.test.mjs#it callback~32": 72,
     "evals/draw/m3-delivery.test.mjs#it callback~9": 92,
@@ -158,6 +160,9 @@
     "evals/draw/measurement/geometry.mjs#tagIdentity": 83,
     "evals/draw/measurement/outline.mjs#paintedShapeBounds": 144,
     "evals/draw/mirror-fixture.mjs#mirrorFixture": 120,
+    "evals/draw/mirror-returns.mjs#auditMirrorTable": 111,
+    "evals/draw/mirror-returns.mjs#bindNavigationBlocks": 94,
+    "evals/draw/mirror-returns.mjs#mirrorReturns": 132,
     "evals/draw/pdf-bind.test.mjs#call callback": 175,
     "evals/draw/pdf-calibration.mjs#pdfCalibration": 122,
     "evals/draw/pdf-ink-operators.mjs#pdfGlyphRuns": 178,
@@ -195,6 +200,10 @@
     "evals/draw/review1-predicates.test.mjs#it callback~5": 76,
     "evals/draw/review1-predicates.test.mjs#it callback~6": 106,
     "evals/draw/routing-hygiene.mjs#attachmentAudit": 78,
+    "evals/draw/run-case.mjs#captureCase": 119,
+    "evals/draw/run-sheet.mjs#captureSheetCrops": 73,
+    "evals/draw/run-sheet.mjs#measureSheetEvidence": 89,
+    "evals/draw/run-sheet.mjs#readSheetEvidence": 112,
     "evals/draw/symbol-fidelity.mjs#markFindings": 120,
     "evals/draw/symbol-fidelity.mjs#polarityFindings": 120,
     "evals/draw/wire-locators.mjs#wireLocatorAudit": 98,
@@ -679,12 +688,7 @@
   "grandfathered": {
     "files": {},
     "functions": {
-      "evals/draw/evaluate.mjs#evaluateSheet": 447,
-      "evals/draw/m3-delivery.mjs#m3Delivery": 405,
-      "evals/draw/mirror-returns.mjs#mirrorReturns": 431,
       "evals/draw/repin-core.mjs#prepareRepin": 742,
-      "evals/draw/run.mjs#pool callback": 514,
-      "evals/draw/run.mjs#pool callback/retainingCase callback": 508,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
@@ -693,12 +697,7 @@
   "locations": {
     "files": {},
     "functions": {
-      "evals/draw/evaluate.mjs#evaluateSheet": "evals/draw/evaluate.mjs#evaluateSheet",
-      "evals/draw/m3-delivery.mjs#m3Delivery": "evals/draw/m3-delivery.mjs#m3Delivery",
-      "evals/draw/mirror-returns.mjs#mirrorReturns": "evals/draw/mirror-returns.mjs#mirrorReturns",
       "evals/draw/repin-core.mjs#prepareRepin": "evals/draw/repin-core.mjs#prepareRepin",
-      "evals/draw/run.mjs#pool callback": "evals/draw/run.mjs#pool callback",
-      "evals/draw/run.mjs#pool callback/retainingCase callback": "evals/draw/run.mjs#pool callback/retainingCase callback",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
@@ -862,6 +861,14 @@
     "packages/schema/src/symbol-profiles.ts": 6
   },
   "reasons": {
+    "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts": [
+      {
+        "identity": "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts",
+        "from": 0,
+        "to": 1,
+        "reason": "Measured initial definite-assignment declaration baseline (#288); includes test helpers and cannot raise the global ceiling."
+      }
+    ],
     "files:packages/cli/src/index.ts": [
       {
         "identity": "files:packages/cli/src/index.ts",
@@ -892,6 +899,110 @@
         "from": 887,
         "to": 938,
         "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
+      }
+    ],
+    "functions:evals/draw/evaluate.mjs#evaluateDocuments": [
+      {
+        "identity": "functions:evals/draw/evaluate.mjs#evaluateDocuments",
+        "from": 70,
+        "to": 101,
+        "reason": "moved verbatim from evals/draw/evaluate.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/evaluate.mjs#evaluateNavigation": [
+      {
+        "identity": "functions:evals/draw/evaluate.mjs#evaluateNavigation",
+        "from": 70,
+        "to": 107,
+        "reason": "moved verbatim from evals/draw/evaluate.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/evaluate.mjs#evaluateRoutes": [
+      {
+        "identity": "functions:evals/draw/evaluate.mjs#evaluateRoutes",
+        "from": 70,
+        "to": 103,
+        "reason": "moved verbatim from evals/draw/evaluate.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/evaluate.mjs#evaluateTextAndSymbols": [
+      {
+        "identity": "functions:evals/draw/evaluate.mjs#evaluateTextAndSymbols",
+        "from": 70,
+        "to": 116,
+        "reason": "moved verbatim from evals/draw/evaluate.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/m3-delivery.mjs#locateNeedCaption": [
+      {
+        "identity": "functions:evals/draw/m3-delivery.mjs#locateNeedCaption",
+        "from": 70,
+        "to": 81,
+        "reason": "moved verbatim from evals/draw/m3-delivery.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/m3-delivery.mjs#measureNativeNeed": [
+      {
+        "identity": "functions:evals/draw/m3-delivery.mjs#measureNativeNeed",
+        "from": 70,
+        "to": 122,
+        "reason": "moved verbatim from evals/draw/m3-delivery.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/m3-delivery.mjs#resolveDeliveredRows": [
+      {
+        "identity": "functions:evals/draw/m3-delivery.mjs#resolveDeliveredRows",
+        "from": 70,
+        "to": 79,
+        "reason": "moved verbatim from evals/draw/m3-delivery.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/mirror-returns.mjs#auditMirrorTable": [
+      {
+        "identity": "functions:evals/draw/mirror-returns.mjs#auditMirrorTable",
+        "from": 70,
+        "to": 111,
+        "reason": "moved verbatim from evals/draw/mirror-returns.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/mirror-returns.mjs#bindNavigationBlocks": [
+      {
+        "identity": "functions:evals/draw/mirror-returns.mjs#bindNavigationBlocks",
+        "from": 70,
+        "to": 94,
+        "reason": "moved verbatim from evals/draw/mirror-returns.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/run-case.mjs#captureCase": [
+      {
+        "identity": "functions:evals/draw/run-case.mjs#captureCase",
+        "from": 70,
+        "to": 119,
+        "reason": "moved verbatim from evals/draw/run.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/run-sheet.mjs#captureSheetCrops": [
+      {
+        "identity": "functions:evals/draw/run-sheet.mjs#captureSheetCrops",
+        "from": 70,
+        "to": 73,
+        "reason": "moved verbatim from evals/draw/run.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/run-sheet.mjs#measureSheetEvidence": [
+      {
+        "identity": "functions:evals/draw/run-sheet.mjs#measureSheetEvidence",
+        "from": 70,
+        "to": 89,
+        "reason": "moved verbatim from evals/draw/run.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/run-sheet.mjs#readSheetEvidence": [
+      {
+        "identity": "functions:evals/draw/run-sheet.mjs#readSheetEvidence",
+        "from": 70,
+        "to": 112,
+        "reason": "moved verbatim from evals/draw/run.mjs by DRAW-SPLIT-2 extraction"
       }
     ],
     "functions:packages/cli/src/alpha.ts#producePacket": [
@@ -1172,14 +1283,6 @@
         "from": 0,
         "to": 2,
         "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
-      }
-    ],
-    "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts": [
-      {
-        "identity": "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts",
-        "from": 0,
-        "to": 1,
-        "reason": "Measured initial definite-assignment declaration baseline (#288); includes test helpers and cannot raise the global ceiling."
       }
     ]
   },

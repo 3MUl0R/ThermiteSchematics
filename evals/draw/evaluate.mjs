@@ -48,7 +48,7 @@ export function textGeometryIssues(g) {
     ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
   ];
 }
-function evaluateSheet(
+function evaluateTextAndSymbols(
   c,
   s,
   packet,
@@ -57,15 +57,12 @@ function evaluateSheet(
   pdf,
   parity,
   symbols,
-  tables = [],
-  geometries = [],
+  tables,
   request,
-  identifierPolicy = {},
+  interference,
+  obs,
+  out,
 ) {
-  classifyTextGeometry(g, ir);
-  const interference = checks.conductorInterference(g);
-  const obs = (dq, issues, extra) => observation(c, s, dq, issues, extra),
-    out = [];
   const schematic =
     s.view.format.startsWith("schematic-view") ||
     [
@@ -166,6 +163,20 @@ function evaluateSheet(
         "One complete owned, painted tag per device UID per sheet, including graphical communication/connector drawings and keyed local terminal references. Instance description (else type), catalog part and explicit string rating/part fields only; no inferred rating.",
     }),
   );
+}
+
+function evaluateNavigation(
+  c,
+  s,
+  packet,
+  g,
+  ir,
+  pdf,
+  geometries,
+  request,
+  obs,
+  out,
+) {
   out.push(
     obs(
       "DQ-08",
@@ -260,6 +271,9 @@ function evaluateSheet(
         { id: `${c.id}/DQ-07/reconciliation-${s.number}` },
       ),
     );
+}
+
+function evaluateRoutes(c, s, g, ir, obs, out) {
   const typography = continuationTypography(s, g, ir);
   out.push(
     obs("DQ-08", typography.findings, {
@@ -361,6 +375,21 @@ function evaluateSheet(
         paths: curved.map((s) => s.element),
       }),
     );
+}
+
+function evaluateDocuments(
+  c,
+  s,
+  packet,
+  g,
+  ir,
+  tables,
+  geometries,
+  request,
+  identifierPolicy,
+  obs,
+  out,
+) {
   const labelCoverage = conductorLabelCoverage(s, packet, g, geometries, ir);
   out.push(
     obs("DQ-16", [...checks.wirePlacement(g), ...labelCoverage.findings], {
@@ -448,6 +477,9 @@ function evaluateSheet(
       ),
     ]),
   );
+}
+
+function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out) {
   out.push(
     obs(
       "DQ-21",
@@ -493,6 +525,57 @@ function evaluateSheet(
   );
   for (const [dq, reason] of Object.entries(reasons))
     out.push(obs(dq, [], { status: "not-implemented", reason }));
+}
+
+function evaluateSheet(
+  c,
+  s,
+  packet,
+  g,
+  ir,
+  pdf,
+  parity,
+  symbols,
+  tables = [],
+  geometries = [],
+  request,
+  identifierPolicy = {},
+) {
+  classifyTextGeometry(g, ir);
+  const interference = checks.conductorInterference(g);
+  const obs = (dq, issues, extra) => observation(c, s, dq, issues, extra),
+    out = [];
+  evaluateTextAndSymbols(
+    c,
+    s,
+    packet,
+    g,
+    ir,
+    pdf,
+    parity,
+    symbols,
+    tables,
+    request,
+    interference,
+    obs,
+    out,
+  );
+  evaluateNavigation(c, s, packet, g, ir, pdf, geometries, request, obs, out);
+  evaluateRoutes(c, s, g, ir, obs, out);
+  evaluateDocuments(
+    c,
+    s,
+    packet,
+    g,
+    ir,
+    tables,
+    geometries,
+    request,
+    identifierPolicy,
+    obs,
+    out,
+  );
+  evaluatePdfAndReview(c, s, g, pdf, parity, obs, out);
   return out;
 }
 export function evaluatePacket(c, packet, geometries, tables = []) {

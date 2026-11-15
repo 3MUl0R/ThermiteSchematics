@@ -4,7 +4,7 @@ import ts from "typescript";
 import { canonical, json } from "./support.mjs";
 import { cropBox, drawingContextOptions } from "./browser.mjs";
 it("captures the exact box serialized for both sheet and packet evidence", async () => {
-  const source = await readFile(new URL("./run.mjs", import.meta.url), "utf8"),
+  const source = await runnerSource(),
     ast = ts.createSourceFile(
       "run.mjs",
       source,
@@ -56,7 +56,10 @@ it("uses offline capture without service workers or page scripts", () => {
 it.each(["run.mjs", "crop-source.mjs"])(
   "%s wires the shared isolated capture context",
   async (name) => {
-    const source = await readFile(new URL(name, import.meta.url), "utf8"),
+    const source =
+        name === "run.mjs"
+          ? await runnerSource()
+          : await readFile(new URL(name, import.meta.url), "utf8"),
       ast = ts.createSourceFile(
         name,
         source,
@@ -79,7 +82,7 @@ it.each(["run.mjs", "crop-source.mjs"])(
   },
 );
 it("the runner captures delivered source files and includes the per-sheet pins in JSON", async () => {
-  const s = await readFile(new URL("./run.mjs", import.meta.url), "utf8");
+  const s = await runnerSource();
   const ast = ts.createSourceFile(
       "run.mjs",
       s,
@@ -125,7 +128,7 @@ it("the builder freshly captures source rather than reading a pipeline PNG", asy
 });
 
 it("PDF measurement and report pins receive the same single-read byte buffer", async () => {
-  const s = await readFile(new URL("./run.mjs", import.meta.url), "utf8"),
+  const s = await runnerSource(),
     ast = ts.createSourceFile(
       "run.mjs",
       s,
@@ -166,3 +169,13 @@ it("PDF measurement and report pins receive the same single-read byte buffer", a
   expect(source.bytes).toBe(bytes);
   expect(source.pdfjsVersion).toBe("version");
 });
+
+async function runnerSource() {
+  return (
+    await Promise.all(
+      ["run.mjs", "run-case.mjs", "run-sheet.mjs"].map((name) =>
+        readFile(new URL(name, import.meta.url), "utf8"),
+      ),
+    )
+  ).join("\n");
+}
