@@ -423,8 +423,10 @@ R001–R006 retain their original classification and message. Read their structu
 details too: native device, conductor and function identities accompany failures
 where those objects are known. Otherwise `details.diagnosticContext` identifies
 the authored view by zero-based `viewIndex` and title, together with a valid
-project name and request field. Single-view context reads own data properties
-only; it never invokes request accessors. Missing or non-object view requests
+project name and request field. Single-view and packet diagnostic context read
+own data properties only, including array length and elements; they never invoke
+request accessors or ordinary Proxy get/prototype/enumeration traps. Required
+own-property descriptor traps are guarded like other inspection failures. Missing or non-object view requests
 have no placeholder title. If context inspection or native lookup fails,
 `scopeUnavailable: true` accompanies an empty `views` array, while the original
 failure code, message and existing fields remain unchanged. Invalid project

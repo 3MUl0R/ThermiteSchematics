@@ -166,8 +166,9 @@ external converter is needed. The PDF embeds its fonts and physical page sizes. 
 contains all sheet SVGs, page settings, and continuation metadata. The CLI refuses
 to silently truncate a multi-sheet drawing to one SVG.
 
-Use `--layout compact` to try up to three validated ELK spacing arrangements and
-fit horizontal circuit sections on the same sheet where possible. The default
+Use `--layout compact` to search three base ELK spacing profiles, additional
+placement arrangements and jog repairs, validating the resulting layouts and
+fitting horizontal circuit sections on the same sheet where possible. The default
 `standard` preserves the initial layout. Search the HTML by device designation
 and follow clickable conductor continuations.
 
