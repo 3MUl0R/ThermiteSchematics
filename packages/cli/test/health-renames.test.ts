@@ -411,3 +411,47 @@ for (const target of ["dev", "release"])
       );
     },
   );
+
+it("rejects an inner rename even when a weak retired ancestor overlaps it", () => {
+  const root = repo(),
+    path = "src/one.ts";
+  put(
+    root,
+    path,
+    "function outer() {\n" +
+      body("inner", 0, 98) +
+      statements(1000, 38) +
+      "\n}\n",
+  );
+  const base = metrics(root),
+    before = createBudget(base);
+  put(root, path, body("lifted", 0, 98, 30));
+  const current = metrics(root);
+  expect(() =>
+    acceptBudget(current, before, "rename", { budget: before, metrics: base }),
+  ).toThrow("cannot rise");
+});
+
+function duplicateSplit(extra: number) {
+  const root = repo(),
+    path = "src/one.ts";
+  put(root, path, body("first", 0, 100) + body("second", 0, 100));
+  const base = metrics(root),
+    before = createBudget(base);
+  put(root, path, body("partA", 0, 50, extra) + body("partB", 50, 50, extra));
+  return { base, before, current: metrics(root) };
+}
+it("rejects split growth when two retired origins have identical content", () => {
+  const { base, before, current } = duplicateSplit(100);
+  expect(() =>
+    acceptBudget(current, before, "split", { budget: before, metrics: base }),
+  ).toThrow("cannot rise");
+});
+it("shares separate allowances for an affordable split of identical origins", () => {
+  const { base, before, current } = duplicateSplit(28);
+  const next = acceptBudget(current, before, "split", {
+    budget: before,
+    metrics: base,
+  });
+  expect(historyRegressions(current, next, before, base)).toEqual([]);
+});

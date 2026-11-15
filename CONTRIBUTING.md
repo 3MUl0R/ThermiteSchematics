@@ -357,6 +357,9 @@ extra retained content. File lines are trimmed nonempty text (including comments
 function lines are trivia-free AST tokens grouped by line, excluding brace-only
 lines. Metadata covers small bodies too, so a stale allowance cannot evade this
 rule after its source shrinks below the ordinary threshold.
+Eligibility is established before ownership is assigned, so a weak ancestor
+cannot steal a matching inner body. Retention uses disjoint current body views
+(most shared lines, then fewest added lines), avoiding nested double counting.
 
 All numeric allowances in a matching group share the source allowance, including
 any stale record retained at the old key. A new part above 850/70 needs an allowance;

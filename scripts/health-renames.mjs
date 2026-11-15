@@ -86,17 +86,59 @@ function retiringLines(old, remaining) {
   return covers(retained, old.length, RENAME_RETAINED_SHARE) ? [] : remaining;
 }
 
+function disjointParts(rows, current) {
+  const result = [];
+  for (const row of rows)
+    if (
+      !result.some(
+        (other) =>
+          contains(current, other.key, row.key) ||
+          contains(current, row.key, other.key),
+      )
+    )
+      result.push(row);
+  return result;
+}
+
+function qualifiedGroups(section, rows, current, reference) {
+  const field = section === "files" ? "fileLines" : "bodyLines",
+    result = new Map();
+  for (const from of [...new Set(rows.map((r) => r.from))].sort(compare)) {
+    const parts = disjointParts(
+        rows.filter((r) => r.from === from),
+        current,
+      ),
+      old = reference.metrics[field][from],
+      retained = lineAdditions(
+        old,
+        retiringLines(old, current[field][from] ?? []).concat(
+          parts.flatMap((r) => current[field][r.key]),
+        ),
+      );
+    if (covers(retained.common, old.length, RENAME_RETAINED_SHARE))
+      result.set(from, {
+        section,
+        from,
+        limit: reference.budget[section][from],
+        oldLines: old.length,
+        retained: retained.common,
+      });
+  }
+  return result;
+}
+
 export function sizeContinuations(section, current, reference, budget) {
   if (!reference) return [];
   const rows = continuationRows(section, current, reference, budget),
+    qualified = qualifiedGroups(section, rows, current, reference),
+    eligible = rows.filter((r) => qualified.has(r.from)),
     owners =
       section === "functions"
-        ? currentOwners(rows, current, reference.metrics)
+        ? currentOwners(eligible, current, reference.metrics)
         : new Map(),
-    field = section === "files" ? "fileLines" : "bodyLines",
     groups = [];
-  for (const from of [...new Set(rows.map((r) => r.from))].sort(compare)) {
-    const parts = rows.filter(
+  for (const [from, group] of qualified) {
+    const parts = eligible.filter(
       (r) =>
         r.from === from && (!owners.has(r.key) || owners.get(r.key) === from),
     );
@@ -108,22 +150,7 @@ export function sizeContinuations(section, current, reference, budget) {
       )
       .map((r) => r.key)
       .sort(compare);
-    const old = reference.metrics[field][from],
-      retained = lineAdditions(
-        old,
-        retiringLines(old, current[field][from] ?? []).concat(
-          targets.flatMap((key) => current[field][key]),
-        ),
-      );
-    if (covers(retained.common, old.length, RENAME_RETAINED_SHARE))
-      groups.push({
-        section,
-        from,
-        limit: reference.budget[section][from],
-        oldLines: old.length,
-        retained: retained.common,
-        targets,
-      });
+    if (targets.length) groups.push({ ...group, targets });
   }
   return groups;
 }
