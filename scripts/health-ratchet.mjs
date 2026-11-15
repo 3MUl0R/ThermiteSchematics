@@ -37,6 +37,13 @@ function argumentsOf(args) {
     "Use bun scripts/health-ratchet.mjs [--lower|--accept [--reason <text>]]",
   );
 }
+function readBudget(path, current, history) {
+  return upgradeBudget(
+    JSON.parse(readFileSync(path, "utf8")),
+    current,
+    history?.metrics ?? current,
+  );
+}
 function main() {
   const start = performance.now(),
     { mode, reason } = argumentsOf(process.argv.slice(2));
@@ -45,7 +52,7 @@ function main() {
   const current = measure(root),
     history = readHistory(root);
   process.stdout.write(formatHistoryInformation(history));
-  const budget = upgradeBudget(JSON.parse(readFileSync(path, "utf8")), current);
+  const budget = readBudget(path, current, history);
   const next =
     mode === "--accept"
       ? acceptBudget(current, budget, reason, history)

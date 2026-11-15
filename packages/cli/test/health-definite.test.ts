@@ -83,3 +83,23 @@ it("rejects a forged definite-assignment ceiling over a legacy authenticated bas
     "ceilings.definiteAssignments cannot rise: 1 -> 2",
   );
 });
+
+it("does not re-authorize a declaration move by deleting the counter section", () => {
+  const root = repo(),
+    moved = "packages/example/src/moved.ts";
+  put(root, path, "let first!: string;");
+  const budget = createBudget(metrics(root));
+  save(root, budget);
+  git(root, "branch", "dev", commit(root));
+  put(root, path, "let first: string;");
+  put(root, moved, "let second!: string;");
+  delete budget.definiteAssignments;
+  delete budget.ceilings.definiteAssignments;
+  save(root, budget);
+  git(root, "add", "-A");
+  const result = run(root);
+  expect(result.status, result.stderr).toBe(1);
+  expect(result.stderr).toContain(
+    moved + ": definite-assignment declarations 0 -> 1",
+  );
+});
