@@ -31,7 +31,7 @@ export function reserveCircuitCaptions<Node extends CaptionOwner>(
           throw error;
         const metrics = [
           printableTextMetrics(node.device.designation, 2.7, true),
-          ...node.relationLabels.map((s) => printableTextMetrics(s, 2.3)),
+          ...node.relationLabels.map((s) => printableTextMetrics(s, 2.5)),
         ];
         node.width +=
           Math.max(...metrics.map((m) => m.right - m.left)) + 2 * gap;

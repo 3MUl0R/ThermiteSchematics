@@ -1,6 +1,7 @@
 import { hasCompactFrame } from "./frame-profile.js";
 import { compactFramePlan } from "./frame-plan.js";
 import { compactFrame } from "./frame-compact.js";
+import { legacyFooterNote } from "./legacy-footer.js";
 import { rootedLegendView } from "../device-legend.js";
 import { continuationLabelSvg } from "./continuation-label.js";
 import { circuitTextLines } from "../circuit.js";
@@ -177,13 +178,13 @@ export function frame(
         area.x + (area.w * (col + 0.5)) / 6,
         m + 12,
         String(col + 1),
-        2.2,
+        2.5,
         "middle",
       ),
     );
   for (let row = 0; row < 4; row++)
     out.push(
-      text(m + 3, area.y + (area.h * (row + 0.5)) / 4, "ABCD"[row]!, 2.2),
+      text(m + 3, area.y + (area.h * (row + 0.5)) / 4, "ABCD"[row]!, 2.5),
     );
   for (const link of draft.links) {
     out.push(
@@ -229,7 +230,7 @@ export function frame(
       y += 4;
     }
   }
-  out.push(text(m + 4, bottom - 3, draft.note, 2.2));
+  out.push(...legacyFooterNote(draft.note, m + 4, w - 76, bottom, y));
   const revisionRows = circuit
     ? circuitTextLines(`REV ${draft.title.revision}`, 58, 2.6)
     : wrap(`REV ${draft.title.revision}`, 34);
@@ -254,14 +255,14 @@ export function frame(
       page.widthMm - m - 62,
       bottom - 10,
       `${page.size.toUpperCase()} / ${page.orientation.toUpperCase()}`,
-      2.4,
+      2.5,
     ),
-    text(page.widthMm - m - 62, bottom - 6, "Thermite 0.3.0-alpha.2", 2.4),
+    text(page.widthMm - m - 62, bottom - 6, "Thermite 0.3.0-alpha.2", 2.5),
     text(
       page.widthMm - m - 62,
       bottom - 2.5,
       `SHEET ${number} OF ${total}`,
-      2.4,
+      2.5,
     ),
     "</svg>",
   );

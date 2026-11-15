@@ -17,21 +17,21 @@ export function relationCaptionPlan(
   const available =
     Math.max(
       bodyWidth,
-      Math.min(100, Math.max(0, ...full.map((s) => measure(s, 2.3) + 4))),
+      Math.min(100, Math.max(0, ...full.map((s) => measure(s, 2.5) + 4))),
     ) - 4;
   const lines = captions.flatMap((caption, i) => {
     const value = full[i];
     if (value === undefined) throw Error("Missing relation caption");
-    const rows = circuitTextLines(value, available, 2.3);
+    const rows = circuitTextLines(value, available, 2.5);
     const fits =
       rows.length <= 4 &&
-      value.split(/\s+/u).every((word) => measure(word, 2.3) <= available);
+      value.split(/\s+/u).every((word) => measure(word, 2.5) <= available);
     return fits
       ? rows
       : circuitTextLines(
           printableCaption({ ...caption, kind: "relation-summary" }),
           available,
-          2.3,
+          2.5,
         );
   });
   return {
@@ -40,7 +40,7 @@ export function relationCaptionPlan(
       bodyWidth,
       ...lines.map(
         (s) =>
-          Math.max(measure(s, 2.3), printableTextMetrics(s, 2.3).advance) + 4,
+          Math.max(measure(s, 2.5), printableTextMetrics(s, 2.5).advance) + 4,
       ),
     ),
   };

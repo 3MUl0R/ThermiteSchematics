@@ -113,7 +113,7 @@ it("reserves caption ink between wrapped notices and continuation labels and ref
     expect(
       inkOverlaps(
         textInk(caption, b.x, b.y - 9, 2.5),
-        textInk("C001 / 02", b.x + 30, b.y - 4, 2.2, false, "middle"),
+        textInk("C001 / 02", b.x + 30, b.y - 4, 2.5, false, "middle"),
       ),
     ).toBe(false);
     expect(

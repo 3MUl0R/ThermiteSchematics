@@ -44,7 +44,7 @@ function fixedInk(d: Draft, page: PaperPage, native: boolean): InkBox[] {
         String(col + 1),
         b.x + (b.w * (col + 0.5)) / 6,
         m + 12,
-        2.2,
+        2.5,
         false,
         "middle",
       ),
@@ -55,7 +55,7 @@ function fixedInk(d: Draft, page: PaperPage, native: boolean): InkBox[] {
         required("ABCD"[row], "Missing zone row"),
         m + 3,
         b.y + (b.h * (row + 0.5)) / 4,
-        2.2,
+        2.5,
       ),
     );
   return result;

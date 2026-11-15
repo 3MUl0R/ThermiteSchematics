@@ -50,7 +50,7 @@ export function circuitCaptionPosition(
   width: number,
   height: number,
 ) {
-  const m = printableTextMetrics(value, 2.3),
+  const m = printableTextMetrics(value, 2.5),
     w = m.right - m.left,
     h = m.top - m.bottom,
     candidates: { x: number; y: number; box: CaptionBox; score: number }[] = [];
@@ -125,7 +125,7 @@ export function emitCircuitContactCaption(c: CircuitContactCaption): string {
   );
   if (p) {
     c.occupied.push(p.box);
-    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text(p.x, p.y, caption, 2.3)}</g>`;
+    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text(p.x, p.y, caption, 2.5)}</g>`;
   }
   c.diagnostics.push({
     code: "W907",

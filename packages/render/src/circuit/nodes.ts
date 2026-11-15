@@ -505,7 +505,7 @@ function nodeVerticalSize(
     measure(device.designation, 2.7) + Math.max(4, designationLeft + 2),
     ...printableRelated.map(
       (s) =>
-        Math.max(measure(s, 2.3), printableTextMetrics(s, 2.3).advance) +
+        Math.max(measure(s, 2.5), printableTextMetrics(s, 2.5).advance) +
         Math.max(4, designationLeft + 2),
     ),
   );

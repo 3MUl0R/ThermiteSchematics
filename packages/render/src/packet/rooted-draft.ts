@@ -1,3 +1,4 @@
+import { viewportSize } from "./viewport-size.js";
 import { textInk } from "./rooted-caption.js";
 import { viewportContent } from "./rooted-content.js";
 import { required } from "../presentation/util.js";
@@ -126,7 +127,7 @@ export function rootedDraft(
     references: references(p, x, y, w, h, b, scale),
     note: `Layout: ${profile ?? "standard"}. Drawing scale: ${n(scale)} mm/unit. Continuations: reference / destination sheet.`,
     content:
-      `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${n(w * scale)}" height="${n(h * scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${markNativeOccurrences(inner, navigationSeeds)}</svg>` +
+      `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${viewportSize(w, scale)}" height="${viewportSize(h, scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${markNativeOccurrences(inner, navigationSeeds)}</svg>` +
       (caption ? text(b.x, captionY, caption, 2.5) : ""),
   };
 }
