@@ -2,7 +2,7 @@
 import { identifyZones } from "./zones.mjs";
 import { launch } from "../browser.mjs";
 import { embedPrintableFont } from "../../../packages/cli/dist/printable-font.js";
-import { textGeometry } from "./text-geometry.mjs";
+import { textGeometry, textVisibility } from "./text-geometry.mjs";
 import { textRaster } from "./text-raster.mjs";
 import { textContacts, laneContacts, titleContacts } from "./text-contacts.mjs";
 
@@ -26,7 +26,7 @@ export async function measureText(
   );
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(identifyZones);
-  const broad = await page.evaluate(textGeometry),
+  const broad = await page.evaluate(`(${textGeometry})(${textVisibility})`),
     raster = await textRaster(page, broad);
   const { hits, nearHits } = await textContacts(page, broad, raster, {
     artifactDir,

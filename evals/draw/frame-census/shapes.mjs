@@ -1,5 +1,5 @@
 import { identifyZones } from "./zones.mjs";
-import { shapeGeometry } from "./shape-geometry.mjs";
+import { shapeGeometry, shapeVisibility } from "./shape-geometry.mjs";
 import { shapeRaster } from "./shape-raster.mjs";
 import { bottomDigitClearance } from "./shape-bottom.mjs";
 const grouped = (pairs) => {
@@ -21,7 +21,7 @@ export async function extendedInk(
   );
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(identifyZones);
-  const p = await page.evaluate(shapeGeometry),
+  const p = await page.evaluate(`(${shapeGeometry})(${shapeVisibility})`),
     raster = shapeRaster(page, p, { artifactDir, tag });
   const { pairHit, restore } = raster;
   const zoneShapeHits = [],

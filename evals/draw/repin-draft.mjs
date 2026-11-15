@@ -20,6 +20,99 @@ const common = (kind) => ({
   classification: kind === "iso-cap-height-policy" ? "policy-gap" : "drawing",
 });
 const ref = (x) => ({ markerId: x.markerId, scope: x.scope });
+function appendEnvelopeDrift(inventory, markers, moves, entries) {
+  const envelopes = new Map(inventory.envelopes.map((e) => [e.markerId, e]));
+  const templates = new Map(markers);
+  for (const move of moves.values())
+    if (!templates.has(move.to.markerId))
+      templates.set(move.to.markerId, {
+        ...markers.get(move.from.markerId),
+        id: move.to.markerId,
+      });
+  for (const [id, m] of templates) {
+    const e = envelopes.get(id);
+    if (!e) continue;
+    for (const metric of ["occurrences", ...Object.keys(m.bands)]) {
+      const count = metric === "occurrences",
+        from = count ? m.count : m.bands[metric],
+        to = count ? e.count : e.bands[metric];
+      if (!to) continue;
+      const observed = count ? to : to.slice(1, 3),
+        prior = count ? from : from.slice(1, 3);
+      if (
+        observed.every(
+          (v, i) =>
+            Math.abs(Math.round(v * 1000) - Math.round(prior[i] * 1000)) <= 1,
+        )
+      )
+        continue;
+      entries.push({
+        ...common(m.kind),
+        action: "envelope-drift",
+        markerId: id,
+        metric,
+        from,
+        to,
+        observed,
+        coverage: "full",
+      });
+    }
+  }
+}
+function applyReviewerChoices(
+  entries,
+  superseded,
+  survivors,
+  inventory,
+  markers,
+) {
+  // Explicit reviewer choices refer to the default draft's final indices.
+  // Never infer identity succession or fill a cause/sign-off.
+  const chosen = new Set();
+  for (const { entryIndex, successor } of superseded) {
+    assert(
+      Number.isInteger(entryIndex) && !chosen.has(entryIndex),
+      "Invalid or repeated superseded choice",
+    );
+    assert(
+      entries[entryIndex]?.action === "retire",
+      "Superseded choice needs a retirement",
+    );
+    assert(
+      Number.isInteger(successor) &&
+        ["new-defect", "scope-added"].includes(entries[successor]?.action),
+      "Superseded choice needs a new-defect or scope-added successor",
+    );
+    chosen.add(entryIndex);
+    entries[entryIndex] = {
+      ...entries[entryIndex],
+      action: "superseded",
+      successor,
+    };
+  }
+  for (const { entryIndex, token } of survivors) {
+    assert(
+      Number.isInteger(entryIndex) && !chosen.has(entryIndex),
+      "Invalid or repeated survivor choice",
+    );
+    assert(
+      entries[entryIndex]?.action === "retire",
+      "Survivor choice needs a retirement",
+    );
+    const target = inventory.current.find((i) => i.token === token);
+    assert(
+      target && markers.has(target.markerId),
+      "Survivor choice needs an observed existing registry identity token",
+    );
+    chosen.add(entryIndex);
+    entries[entryIndex] = {
+      ...entries[entryIndex],
+      action: "superseded",
+      survivor: ref(target),
+    };
+  }
+}
+
 export function draftDecisions(
   inventory,
   { pr, baselineSha256, superseded = [], survivors = [] } = {},
@@ -139,43 +232,7 @@ export function draftDecisions(
         : { crop: { path: "", sha256: "" }, drawingSha256: "" }),
     });
   }
-  const envelopes = new Map(inventory.envelopes.map((e) => [e.markerId, e]));
-  const templates = new Map(markers);
-  for (const move of moves.values())
-    if (!templates.has(move.to.markerId))
-      templates.set(move.to.markerId, {
-        ...markers.get(move.from.markerId),
-        id: move.to.markerId,
-      });
-  for (const [id, m] of templates) {
-    const e = envelopes.get(id);
-    if (!e) continue;
-    for (const metric of ["occurrences", ...Object.keys(m.bands)]) {
-      const count = metric === "occurrences",
-        from = count ? m.count : m.bands[metric],
-        to = count ? e.count : e.bands[metric];
-      if (!to) continue;
-      const observed = count ? to : to.slice(1, 3),
-        prior = count ? from : from.slice(1, 3);
-      if (
-        observed.every(
-          (v, i) =>
-            Math.abs(Math.round(v * 1000) - Math.round(prior[i] * 1000)) <= 1,
-        )
-      )
-        continue;
-      entries.push({
-        ...common(m.kind),
-        action: "envelope-drift",
-        markerId: id,
-        metric,
-        from,
-        to,
-        observed,
-        coverage: "full",
-      });
-    }
-  }
+  appendEnvelopeDrift(inventory, markers, moves, entries);
   for (const pair of inventory.fontPairs ?? [])
     if (pair.changed)
       entries.push({
@@ -188,51 +245,7 @@ export function draftDecisions(
         coverage: "full",
       });
   entries.sort((a, b) => (json(a) < json(b) ? -1 : json(a) > json(b) ? 1 : 0));
-  // Explicit reviewer choices refer to the default draft's final indices.
-  // Never infer identity succession or fill a cause/sign-off.
-  const chosen = new Set();
-  for (const { entryIndex, successor } of superseded) {
-    assert(
-      Number.isInteger(entryIndex) && !chosen.has(entryIndex),
-      "Invalid or repeated superseded choice",
-    );
-    assert(
-      entries[entryIndex]?.action === "retire",
-      "Superseded choice needs a retirement",
-    );
-    assert(
-      Number.isInteger(successor) &&
-        ["new-defect", "scope-added"].includes(entries[successor]?.action),
-      "Superseded choice needs a new-defect or scope-added successor",
-    );
-    chosen.add(entryIndex);
-    entries[entryIndex] = {
-      ...entries[entryIndex],
-      action: "superseded",
-      successor,
-    };
-  }
-  for (const { entryIndex, token } of survivors) {
-    assert(
-      Number.isInteger(entryIndex) && !chosen.has(entryIndex),
-      "Invalid or repeated survivor choice",
-    );
-    assert(
-      entries[entryIndex]?.action === "retire",
-      "Survivor choice needs a retirement",
-    );
-    const target = inventory.current.find((i) => i.token === token);
-    assert(
-      target && markers.has(target.markerId),
-      "Survivor choice needs an observed existing registry identity token",
-    );
-    chosen.add(entryIndex);
-    entries[entryIndex] = {
-      ...entries[entryIndex],
-      action: "superseded",
-      survivor: ref(target),
-    };
-  }
+  applyReviewerChoices(entries, superseded, survivors, inventory, markers);
   return {
     format: "thermite-draw-decisions/1.0",
     pr,

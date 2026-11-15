@@ -109,8 +109,7 @@ const port = (deviceUid, portKey) => ({
   deviceUid,
   portKey,
 });
-export function nativeRows(ir) {
-  const rows = [];
+function appendWireRows(ir, rows) {
   for (const kind of ["wire", "jumper"])
     for (const w of ir[kind === "wire" ? "wires" : "jumpers"] ?? []) {
       const element = { kind, uid: w.uid },
@@ -140,6 +139,9 @@ export function nativeRows(ir) {
         exactColumns: [0, 1, 2, 4],
       });
     }
+}
+
+function appendCableRows(ir, rows) {
   for (const cable of ir.cables ?? []) {
     const connected = (ir.cableConductors ?? []).filter(
       (c) => c.id.cableUid === cable.uid,
@@ -187,6 +189,9 @@ export function nativeRows(ir) {
       });
     }
   }
+}
+
+function appendTerminalRows(ir, rows) {
   for (const t of ir.terminals ?? []) {
     const id = t.id,
       connections = rows.filter((w) =>
@@ -241,6 +246,9 @@ export function nativeRows(ir) {
       })),
     });
   }
+}
+
+function appendRelationRows(ir, rows) {
   for (const r of ir.relations ?? []) {
     const c = r.connection ?? r.assembly;
     if (!c) continue;
@@ -297,6 +305,9 @@ export function nativeRows(ir) {
       ],
     });
   }
+}
+
+function appendUnconnectedPorts(ir, rows) {
   for (const d of ir.devices ?? [])
     for (const [key, p] of Object.entries(
       ir.deviceTypes?.find((t) => t.id === d.typeId)?.ports ?? {},
@@ -327,6 +338,9 @@ export function nativeRows(ir) {
         ports: [{ column: 2, designation: d.designation, key }],
       });
     }
+}
+
+function appendUnoccupiedConnectors(ir, rows) {
   for (const d of ir.devices ?? [])
     for (const [key, definition] of Object.entries(
       ir.deviceTypes?.find((t) => t.id === d.typeId)?.connectorPorts ?? {},
@@ -354,9 +368,123 @@ export function nativeRows(ir) {
         exactColumns: [0, 1, 2, 3, 4],
       });
     }
+}
+
+export function nativeRows(ir) {
+  const rows = [];
+  appendWireRows(ir, rows);
+  appendCableRows(ir, rows);
+  appendTerminalRows(ir, rows);
+  appendRelationRows(ir, rows);
+  appendUnconnectedPorts(ir, rows);
+  appendUnoccupiedConnectors(ir, rows);
   return rows;
 }
+
 const distinct = (values) => [...new Set(values)];
+function communicationView(sheet, request) {
+  const candidates = (request?.views ?? []).filter(
+    (v) =>
+      v.format === "communication-view-request/0.1" &&
+      (!v.title || sheet.view.title?.startsWith(v.title)),
+  );
+  const single =
+    request?.views?.length === 1 &&
+    request.views[0].format === "communication-view-request/0.1"
+      ? request.views[0]
+      : undefined;
+  const view = single ?? (candidates.length === 1 ? candidates[0] : undefined);
+  return view;
+}
+function communicationAllowed(ir, view) {
+  const scopedLinks = (ir.relations ?? []).filter(
+    (r) =>
+      r.connection && (!view?.medium || r.connection.medium === view.medium),
+  );
+  const allowed = new Set(
+    view?.devices
+      ? ir.devices
+          .filter(
+            (d) =>
+              view.devices.includes(d.uid) ||
+              view.devices.includes(d.designation),
+          )
+          .map((d) => d.uid)
+      : ir.devices
+          .filter(
+            (d) =>
+              !view?.medium ||
+              Object.values(
+                ir.deviceTypes?.find((t) => t.id === d.typeId)?.ports ?? {},
+              ).some((p) => p.medium === view.medium),
+          )
+          .map((d) => d.uid),
+  );
+  if (!view?.devices)
+    for (const r of scopedLinks) {
+      allowed.add(r.fromDeviceUid);
+      allowed.add(r.toDeviceUid);
+    }
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const r of scopedLinks)
+      if (allowed.has(r.fromDeviceUid) || allowed.has(r.toDeviceUid))
+        for (const uid of [r.fromDeviceUid, r.toDeviceUid])
+          if (!allowed.has(uid)) {
+            allowed.add(uid);
+            changed = true;
+          }
+  }
+  return allowed;
+}
+function addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add) {
+  const view = communicationView(sheet, request),
+    allowed = communicationAllowed(ir, view);
+  const ordered = uids.slice().sort((a, b) => {
+    const an = device(ir, a)?.designation ?? a,
+      bn = device(ir, b)?.designation ?? b;
+    return an < bn ? -1 : an > bn ? 1 : a < b ? -1 : a > b ? 1 : 0;
+  });
+  const links = (ir.relations ?? [])
+    .filter(
+      (r) =>
+        r.connection &&
+        own.has(r.fromDeviceUid) &&
+        own.has(r.toDeviceUid) &&
+        (!view?.medium || r.connection.medium === view.medium),
+    )
+    .sort((a, b) =>
+      (a.designation ?? a.uid) < (b.designation ?? b.uid)
+        ? -1
+        : (a.designation ?? a.uid) > (b.designation ?? b.uid)
+          ? 1
+          : 0,
+    );
+  const facts = catalog
+    .filter((r) => r.kind === "network")
+    .flatMap((r) =>
+      r.facts.filter(
+        (f) =>
+          own.has(f.deviceUid) &&
+          (!view?.medium ||
+            ir.deviceTypes?.find(
+              (t) => t.id === device(ir, f.deviceUid)?.typeId,
+            )?.ports?.[f.portKey]?.medium === view.medium),
+      ),
+    );
+  for (const r of links)
+    facts.push(
+      port(r.fromDeviceUid, r.connection.fromPort),
+      port(r.toDeviceUid, r.connection.toPort),
+    );
+  add(
+    "port-link-status",
+    `communication-status/${sha([ordered, links.map((r) => r.uid)])}`,
+    facts,
+    { scopeMismatch: uids.filter((uid) => !allowed.has(uid)) },
+  );
+}
+
 // Source appearance + native endpoint incidence partition. Dropping a caption or
 // an exported dependency does not remove the independently expected need.
 export function nativeNeeds(sheet, g, ir, catalog = nativeRows(ir), request) {
@@ -451,101 +579,8 @@ export function nativeNeeds(sheet, g, ir, catalog = nativeRows(ir), request) {
       );
     }
   }
-  if (["communication", "topology"].includes(kind)) {
-    const candidates = (request?.views ?? []).filter(
-      (v) =>
-        v.format === "communication-view-request/0.1" &&
-        (!v.title || sheet.view.title?.startsWith(v.title)),
-    );
-    const single =
-      request?.views?.length === 1 &&
-      request.views[0].format === "communication-view-request/0.1"
-        ? request.views[0]
-        : undefined;
-    const view =
-      single ?? (candidates.length === 1 ? candidates[0] : undefined);
-    const scopedLinks = (ir.relations ?? []).filter(
-      (r) =>
-        r.connection && (!view?.medium || r.connection.medium === view.medium),
-    );
-    const allowed = new Set(
-      view?.devices
-        ? ir.devices
-            .filter(
-              (d) =>
-                view.devices.includes(d.uid) ||
-                view.devices.includes(d.designation),
-            )
-            .map((d) => d.uid)
-        : ir.devices
-            .filter(
-              (d) =>
-                !view?.medium ||
-                Object.values(
-                  ir.deviceTypes?.find((t) => t.id === d.typeId)?.ports ?? {},
-                ).some((p) => p.medium === view.medium),
-            )
-            .map((d) => d.uid),
-    );
-    if (!view?.devices)
-      for (const r of scopedLinks) {
-        allowed.add(r.fromDeviceUid);
-        allowed.add(r.toDeviceUid);
-      }
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const r of scopedLinks)
-        if (allowed.has(r.fromDeviceUid) || allowed.has(r.toDeviceUid))
-          for (const uid of [r.fromDeviceUid, r.toDeviceUid])
-            if (!allowed.has(uid)) {
-              allowed.add(uid);
-              changed = true;
-            }
-    }
-    const ordered = uids.slice().sort((a, b) => {
-      const an = device(ir, a)?.designation ?? a,
-        bn = device(ir, b)?.designation ?? b;
-      return an < bn ? -1 : an > bn ? 1 : a < b ? -1 : a > b ? 1 : 0;
-    });
-    const links = (ir.relations ?? [])
-      .filter(
-        (r) =>
-          r.connection &&
-          own.has(r.fromDeviceUid) &&
-          own.has(r.toDeviceUid) &&
-          (!view?.medium || r.connection.medium === view.medium),
-      )
-      .sort((a, b) =>
-        (a.designation ?? a.uid) < (b.designation ?? b.uid)
-          ? -1
-          : (a.designation ?? a.uid) > (b.designation ?? b.uid)
-            ? 1
-            : 0,
-      );
-    const facts = catalog
-      .filter((r) => r.kind === "network")
-      .flatMap((r) =>
-        r.facts.filter(
-          (f) =>
-            own.has(f.deviceUid) &&
-            (!view?.medium ||
-              ir.deviceTypes?.find(
-                (t) => t.id === device(ir, f.deviceUid)?.typeId,
-              )?.ports?.[f.portKey]?.medium === view.medium),
-        ),
-      );
-    for (const r of links)
-      facts.push(
-        port(r.fromDeviceUid, r.connection.fromPort),
-        port(r.toDeviceUid, r.connection.toPort),
-      );
-    add(
-      "port-link-status",
-      `communication-status/${sha([ordered, links.map((r) => r.uid)])}`,
-      facts,
-      { scopeMismatch: uids.filter((uid) => !allowed.has(uid)) },
-    );
-  }
+  if (["communication", "topology"].includes(kind))
+    addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add);
   if (["signal-loop", "analog-output"].includes(kind)) {
     const cableUids = new Set(
       catalog

@@ -349,43 +349,48 @@ it("checkSignedDrawings accepts the facts computed from the actual crops", () =>
     }));
   expect(() => checkSignedDrawings(c.bound, rows)).not.toThrow();
 });
+async function bindingCliSetup(c, header) {
+  const inventory = JSON.parse(
+      await readFile(join(c.out, "inventory.json"), "utf8"),
+    ),
+    draft = draftDecisions(inventory, { pr: "#7" }),
+    entry = draft.entries.find((e) => e.crop),
+    png = pngFixture({
+      stamped: header === 86,
+      width: header === 86 ? 760 : 4,
+    }),
+    path = "evals/out/draw-samples/bind/crop.png",
+    t = inventory.current.find((t) => entry.instances.includes(t.token)),
+    row = {
+      ...t,
+      token: t.token,
+      scope: t.scope,
+      text: t.facts.text,
+      reportSha256: inventory.binding?.summarySha256 ?? draft.summarySha256,
+      physicalSheet: t.physicalSheet,
+      instanceBbox: t.bbox,
+      sourceRender: {
+        medium: t.scope.medium,
+        svg: `${t.scope.case}/sheet-001.svg`,
+        svgSha256: hash("source"),
+      },
+      headerLines: cropHeader(t),
+      path,
+      sha256: hash(png),
+      headerPixels: header,
+      ...sourceGeometryFixture(),
+      capture: "fresh-source",
+    };
+  return { draft, entry, png, path, row };
+}
+
 // These real-CLI PNG hash comparisons require the project's Bun runner and its zlib output.
 it.each([0, 86])(
   "real CLI with mock source raster: draft → bind pixels → mock independent sign-off → preview → archive, header=%s",
   async (header) => {
     const c = await cliFixture();
     try {
-      const inventory = JSON.parse(
-          await readFile(join(c.out, "inventory.json"), "utf8"),
-        ),
-        draft = draftDecisions(inventory, { pr: "#7" }),
-        entry = draft.entries.find((e) => e.crop),
-        png = pngFixture({
-          stamped: header === 86,
-          width: header === 86 ? 760 : 4,
-        }),
-        path = "evals/out/draw-samples/bind/crop.png",
-        t = inventory.current.find((t) => entry.instances.includes(t.token)),
-        row = {
-          ...t,
-          token: t.token,
-          scope: t.scope,
-          text: t.facts.text,
-          reportSha256: inventory.binding?.summarySha256 ?? draft.summarySha256,
-          physicalSheet: t.physicalSheet,
-          instanceBbox: t.bbox,
-          sourceRender: {
-            medium: t.scope.medium,
-            svg: `${t.scope.case}/sheet-001.svg`,
-            svgSha256: hash("source"),
-          },
-          headerLines: cropHeader(t),
-          path,
-          sha256: hash(png),
-          headerPixels: header,
-          ...sourceGeometryFixture(),
-          capture: "fresh-source",
-        };
+      const { draft, entry, png, path, row } = await bindingCliSetup(c, header);
       expect(entry.drawingSha256).toBe("");
       entry.crop = { path, sha256: row.sha256 };
       entry.drawingSha256 = hash("signer typed claim");
