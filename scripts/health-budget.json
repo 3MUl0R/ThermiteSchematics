@@ -121,8 +121,7 @@
       "packages/render/src/wiring.ts#prepareWiringDrawing": "46116ebbf0c4d823255f8b3b80f390be77986f2671e2b3aa7f22fb62197e0602",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580",
-      "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": "4453191a76ab8d777b193f48fd8d9c1b0ccd459c46c360e58ded17b164c77ff2"
+      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
     }
   },
   "functions": {
@@ -724,8 +723,7 @@
       "packages/render/src/wiring.ts#prepareWiringDrawing": 426,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525,
-      "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": 552
+      "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
     }
   },
   "locations": {
@@ -753,8 +751,7 @@
       "packages/render/src/wiring.ts#prepareWiringDrawing": "packages/render/src/wiring.ts#prepareWiringDrawing",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs",
-      "scripts/runtime-package/verify.mjs#verifyRuntimeArchive": "scripts/runtime-package/verify.mjs#verifyRuntimeArchive"
+      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
     }
   },
   "moves": {
