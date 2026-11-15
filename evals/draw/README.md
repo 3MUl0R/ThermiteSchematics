@@ -1326,6 +1326,37 @@ bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.jso
   --browser-arg=--disable-gpu-rasterization --require-identical
 ```
 
+### Paired raster gate without GPU rasterization
+
+For a move-only checker change, compare each report's own pinned source artifacts
+with [paired-raster.mjs](paired-raster.mjs). Both inputs must be strict reports.
+Every declared PNG crop and reference crop must have the same path, physical
+sheet, medium and exact crop box on both sides; missing, extra and empty region
+inventories fail. Each side of each region uses a fresh browser launch and print
+context, device scale 300/96 and the fonts-ready barrier. SVG/HTML use the explicit
+`--disable-gpu-rasterization` argument. PDF regions use the pinned PDF with the
+existing pdf.js 300 dpi renderer, recorded separately as `backend: "pdf.js"`.
+
+```sh
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
+  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json
+```
+
+The gate requires PNG **byte identity**. Its separate
+`thermite-draw-paired-raster/1.0` output reports each file's changed-pixel count,
+maximum RGBA channel delta, source/PNG hashes, browser version and arguments,
+with `mode: "gpu-raster-disabled"` on every result. A mode or environment mismatch
+fails. Input evidence PNGs are never replaced. Use this with identical observations,
+crop inventories/boxes and renderer artifacts for move-only checker changes.
+For changes to the raster path itself it is one control alongside the per-file
+default-mode repeat envelope. It does not establish default-mode pixel identity.
+
+Default capture arguments, evidence, bind limits and signed records remain
+unchanged. This additional gate protocol leaves `EVALS_VERSION` at **5.14**:
+existing measurements, statuses and report fields do not change; added checker
+module hashes are checker provenance. GPU-disabled capture remains unsuitable
+as the published default, for the record #61 compatibility reason below.
+
 Issue #137 measurements on darwin-arm64, macOS 26.3 and Chromium 145.0.7632.6
 used twenty captures per region across ten fresh launches. Each column below is
 the worst per-crop pairwise result, so maxima need not come from the same pair.
