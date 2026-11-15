@@ -322,8 +322,7 @@ function storeBody(node, source, identity, lines, onlySkips, state) {
   state.bodyTokens[identity] = tokens;
   state.bodyCounters[identity] = counters;
   state.bodyHashes[identity] = hash;
-  if (lines > 70)
-    state.bodyLines[identity] = normalizedLineHashes(node.body, source);
+  state.bodyLines[identity] = normalizedLineHashes(node.body, source);
   return { hash, tokens };
 }
 function storeFile(path, text, metrics, sizes, state) {
@@ -333,12 +332,11 @@ function storeFile(path, text, metrics, sizes, state) {
     fileHashes[path] = createHash("sha256")
       .update(normalizeLines(text))
       .digest("hex");
-    if (metrics.lines > 850)
-      fileLines[path] = normalizeLines(text)
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => createHash("sha256").update(s).digest("hex"));
+    fileLines[path] = normalizeLines(text)
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => createHash("sha256").update(s).digest("hex"));
   }
 }
 export function measureSources(paths, read) {

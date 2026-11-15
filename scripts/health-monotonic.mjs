@@ -1,5 +1,6 @@
 import { SECTIONS, fallbackOf, valuesOf, sizeKey } from "./health-budget.mjs";
 import { exactMove, moveProof } from "./health-continuity.mjs";
+import { renameRegressions } from "./health-renames.mjs";
 
 function priorValue(section, key, reference) {
   const before = reference.budget;
@@ -63,5 +64,5 @@ export function monotoneRegressions(current, budget, reference) {
       );
     }
   }
-  return errors;
+  return [...errors, ...renameRegressions(current, budget, reference)];
 }

@@ -39,6 +39,9 @@ function countedBodyMove(section, key, proof, base, current) {
     from.split("#", 1)[0] === proof.from &&
     to.split("#", 1)[0] === key &&
     !Object.hasOwn(current.bodyHashes, from) &&
+    !Object.entries(current.bodyHashes).some(
+      ([key, hash]) => fileOf(key) === proof.from && hash === proof.sha256,
+    ) &&
     proof.sha256 === base.bodyHashes[from] &&
     proof.sha256 === current.bodyHashes[to] &&
     count > 0 &&

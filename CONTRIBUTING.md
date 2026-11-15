@@ -346,13 +346,37 @@ declarations, skipped tests and duplicate groups. A move must also remove at lea
 the destination allowance's value from its recorded source allowance in this
 change. Retaining a stale source record or reusing a source reduction fails.
 
+An ordinary size allowance also follows a substantial continuation when its
+base identity disappears, including across files. Each candidate part must retain
+at least 20% of the old normalized lines; the parts together must retain at least
+80%. Line intersections consume occurrences, so repeated lines do not create
+extra retained content. File lines are trimmed nonempty text (including comments);
+function lines are trivia-free AST tokens grouped by line, excluding brace-only
+lines. Metadata covers small bodies too, so a stale allowance cannot evade this
+rule after its source shrinks below the ordinary threshold.
+
+All numeric allowances in a matching group share the source allowance, including
+any stale record retained at the old key. A new part above 850/70 needs an allowance;
+an ordinary unbudgeted helper at or below that threshold consumes no numeric grant.
+This preserves extraction into small helpers. All parts must also meet the normal
+3,000/300 ceilings.
+Content-ranked ownership reserves separately budgeted nested functions; a parent
+and child do not consume the same group's credit twice. Remaining ambiguous
+origins each impose their own constraint, without pooling extra allowances.
+Sorting and multiset comparisons make the result independent of object or line
+order. This is a static similarity policy, not semantic identity: content below
+the 80% collective threshold is new. The history measurements and positive
+extraction/boilerplate controls are recorded with the HEALTH-8 review receipts.
+
 For a counted construct extracted while its source file remains, the
 section-qualified proof additionally names `sourceBody` and `targetBody`.
 Their normalized body hashes must equal `sha256`; the old body must be absent.
+Its hash must also be absent throughout the source file, preventing a renamed
+copy from being credited as a move.
 All of the destination file's counted constructs must belong to that body,
 and the source file's measured count must fall accordingly. A shared credit
 ledger prevents double spending. Retain an exact fresh reason such as
-"moved verbatim from <file> by HEALTH-8 extraction" for transferred casts;
+`moved verbatim from <file> by HEALTH-8 extraction` for every transferred counter;
 the reason alone grants no allowance. Whole-file moves retain the original
 file-hash proof. Verbatim duplicate bodies keep the same content identity.
 

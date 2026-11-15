@@ -53,9 +53,11 @@ function countedFixture(section: string, mode = "valid") {
     from,
     mode === "source-present"
       ? original
-      : mode === "outside"
-        ? ""
-        : counted(section, 2, "retained"),
+      : mode === "renamed-source"
+        ? counted(section, 1, "renamed") + counted(section, 1, "retained")
+        : mode === "outside"
+          ? ""
+          : counted(section, 2, "retained"),
   );
   put(
     root,
@@ -127,7 +129,13 @@ it.each(sections)(
     ).toEqual(next[section]);
   },
 );
-for (const mode of ["source-present", "outside", "double", "stale"]) {
+for (const mode of [
+  "source-present",
+  "outside",
+  "double",
+  "stale",
+  "renamed-source",
+]) {
   it.each(sections)(
     "rejects a " + mode + " %s move despite exact reasons and unchanged totals",
     (section) => {
