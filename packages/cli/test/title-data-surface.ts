@@ -1,4 +1,9 @@
-import { createHash } from "node:crypto";
+import {
+  elkLoaderException,
+  forbiddenDynamicCode,
+  auditElkCapabilities,
+  ELK_RUNTIME_FILE,
+} from "./title-data-elk.js";
 import ts from "typescript";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -153,32 +158,11 @@ export function auditTitleDataSurface(
       const target = targetPath(file, specifier, files);
       if (target) dependencies.push(target);
     };
-    // The one runtime constructor executes the pinned ELK worker. Any edit
-    // invalidates this exact-source exception; aliases and eval stay forbidden.
-    const pinnedElk =
-      file === "packages/render/src/layout/elk-runtime.ts" &&
-      createHash("sha256")
-        .update(text.replaceAll("\r\n", "\n"))
-        .digest("hex") ===
-        // Re-audited for RT2b: actual-ELK accounting context admission only.
-        "2ce6b59ca7bef029f0714cb9b87f823161753945bca60c15fdb7c39b1ef058e9";
+    const pinnedLoader = elkLoaderException(file, tree, issues);
+    if (file === ELK_RUNTIME_FILE)
+      auditElkCapabilities(tree, pinnedLoader, issues);
     const visit = (node: ts.Node) => {
-      if (
-        ts.isElementAccessExpression(node) &&
-        node.argumentExpression &&
-        ["eval", "Function"].includes(
-          constantText(node.argumentExpression) ?? "",
-        ) &&
-        !pinnedElk
-      )
-        issues.push(
-          `${file}: dynamic code cannot be audited for title-data access`,
-        );
-      if (
-        ts.isIdentifier(node) &&
-        ["eval", "Function"].includes(node.text) &&
-        !(node.text === "Function" && pinnedElk)
-      )
+      if (forbiddenDynamicCode(node, pinnedLoader, constantText))
         issues.push(
           `${file}: dynamic code cannot be audited for title-data access`,
         );
