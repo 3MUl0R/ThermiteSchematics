@@ -150,3 +150,33 @@ it("requires a new appended cast record with the authenticated base count", () =
     [],
   );
 });
+
+it.each([
+  ["spaces", " Earlier   review "],
+  ["newline", "Earlier\nreview"],
+  ["tab", "Earlier\treview"],
+  ["nonbreaking space", "\u00a0Earlier\u00a0review\u00a0"],
+  ["removed separator", "Earlierreview"],
+  ["inserted separators", "Ear lier rev iew"],
+])(
+  "round 3 rejects a whitespace-only cast reason replay: %s",
+  (_name, reason) => {
+    const root = repo(),
+      path = "packages/example/src/whitespace.ts",
+      id = "typeAssertions:" + path;
+    put(root, path, "declare const input:unknown; void input;");
+    const base = metrics(root),
+      budget = createBudget(base);
+    const old = { identity: id, from: 0, to: 1, reason: "Earlier review" };
+    budget.reasons[id] = [old];
+    const reference = { budget: structuredClone(budget), metrics: base };
+    put(root, path, "declare const input:unknown; void (input as string);");
+    const current = metrics(root);
+    budget.reasons[id].push({ ...old, reason });
+    expect(typeAssertionRegressions(current, budget, reference)).toHaveLength(
+      1,
+    );
+    budget.reasons[id].push({ ...old, reason: "A genuinely new review" });
+    expect(typeAssertionRegressions(current, budget, reference)).toEqual([]);
+  },
+);
