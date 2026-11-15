@@ -7,10 +7,7 @@ import {
   documentInventory,
   requestedTerminalPlan,
 } from "./m3-documents.mjs";
-import { mirrorReturns } from "./mirror-returns.mjs";
-const mirrorAudits = new WeakMap();
-import { repeatNavigation } from "./repeat-navigation.mjs";
-const repeatAudits = new WeakMap();
+import { navigationObservations } from "./navigation-observations.mjs";
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
 import { continuationTypography } from "./continuation-typography.mjs";
 import {
@@ -206,71 +203,9 @@ function evaluateNavigation(
           "Needs ordered physical terminal/port identities on off-page connectors to prove conductor order. Reciprocal connector anchors and destination zones are measured independently where identifiable; current exports associate labels and net IDs.",
       }),
     );
-  if (!repeatAudits.has(packet))
-    repeatAudits.set(packet, repeatNavigation(packet, geometries, ir, request));
-  const repeats = repeatAudits.get(packet);
-  if (
-    repeats.measurements.some((m) => m.sheet === s.number) ||
-    repeats.findings.some((f) => f.sheet === s.number)
-  )
-    out.push(
-      obs(
-        "DQ-07",
-        repeats.findings.filter((f) => f.sheet === s.number),
-        {
-          id: `${c.id}/DQ-07/repeats-${s.number}`,
-          evidence: {
-            findings: repeats.findings.filter((f) => f.sheet === s.number),
-            findingCount: repeats.findings.filter((f) => f.sheet === s.number)
-              .length,
-            measurements: repeats.measurements.filter(
-              (m) => m.sheet === s.number,
-            ),
-            appearanceCount: repeats.appearanceCount,
-            repeatCount: repeats.repeatCount,
-          },
-          scope:
-            "M5 full repeats: native terminal membership and measured geometry; one label per device/view/sheet, measured targets, qualifier, locality and clearance. M2 mirror/return observations are separate.",
-        },
-      ),
-    );
-  if (!mirrorAudits.has(packet))
-    mirrorAudits.set(packet, mirrorReturns(packet, geometries, ir, request));
-  const mirrors = mirrorAudits.get(packet);
-  for (const [index, r] of mirrors.records
-    .filter((r) => r.sheet === s.number)
-    .entries()) {
-    out.push(
-      obs("DQ-07", r.findings, {
-        id: `${c.id}/DQ-07/${r.kind === "coil" ? "mirror" : "return"}-${s.number}-${index}`,
-        status: r.findings.length
-          ? "fail"
-          : r.assessment === "direct-actuation"
-            ? "pass"
-            : r.assessment === "outside-direct-actuation-scope"
-              ? "not-applicable"
-              : "manual",
-        evidence: {
-          findingCount: r.findings.length,
-          findings: r.findings,
-          measurements: r.measurements,
-          source: { deviceUid: r.uid, functionKey: r.functionKey },
-          view: r.view,
-          assessment: r.assessment,
-        },
-        scope:
-          "One full native coil/contact appearance; direct same-device actuation, authored state/terminals, all measured destinations or not drawn. Mirror locality uses visible ink and frames; reciprocal distance measured without a threshold.",
-      }),
-    );
-  }
-  if (mirrors.extra.some((f) => f.sheet === s.number))
-    out.push(
-      obs(
-        "DQ-07",
-        mirrors.extra.filter((f) => f.sheet === s.number),
-        { id: `${c.id}/DQ-07/reconciliation-${s.number}` },
-      ),
-    );
+  out.push(
+    ...navigationObservations(c, s, packet, geometries, ir, request, obs),
+  );
 }
 
 function evaluateRoutes(c, s, g, ir, obs, out) {
