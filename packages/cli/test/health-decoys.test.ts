@@ -267,7 +267,7 @@ it.each(["dev", "release"])(
   (target) => {
     const root = repo(),
       from = "src/one.ts";
-    put(root, from, body("source", lines(0, 248) + "\n\n\n"));
+    put(root, from, body("source", lines(0, 248)));
     const base = metrics(root),
       before = createBudget(base);
     put(
@@ -285,7 +285,7 @@ it.each(["dev", "release"])(
         target,
       });
     }).not.toThrow();
-    expect(before.functions[from + "#source"]).toBe(253);
+    expect(before.functions[from + "#source"]).toBe(250);
     expect(next.functions[from + "#source"]).toBe(83);
     expect(next.functions[from + "#helper"]).toBe(170);
     expect(historyRegressions(current, next, before, base, target)).toEqual([]);

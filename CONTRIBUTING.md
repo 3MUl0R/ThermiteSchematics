@@ -366,8 +366,16 @@ cannot steal a matching inner body. Retention uses disjoint current body views
 All numeric allowances in a matching group share the source allowance, including
 any stale record retained at the old key. A new part above 850/70 needs an allowance;
 an ordinary unbudgeted helper at or below that threshold consumes no numeric grant.
-This preserves extraction into small helpers. All parts must also meet the normal
-3,000/300 ceilings.
+The shared cap includes a fixed **3 physical lines per new above-threshold
+continuation part**, for both functions and files. The named constant
+`SPLIT_PART_OVERHEAD_LINES` covers a header, closing brace and call site, or the
+import/export lines of a file split. It is not configurable and is not stored in
+the budget. Small unbudgeted parts earn no overhead credit. For example, a
+200-line function may split into 103 + 100 under a shared cap of 203; adding one
+more physical line exceeds that cap. This credit needs no separate reason and
+does not waive the normal reason requirements for a new allowance. All parts
+must also meet the normal 3,000/300 ceilings; anything beyond the shared cap plus
+this fixed overhead is ordinary growth.
 Content-ranked ownership reserves separately budgeted nested functions; a parent
 and child do not consume the same group's credit twice. Remaining ambiguous
 origins each impose their own constraint, without pooling extra allowances.

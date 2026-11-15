@@ -13,6 +13,9 @@ export const RENAME_RETAINED_SHARE = Object.freeze({
   numerator: 4,
   denominator: 5,
 });
+// A new large part needs a header, closing brace and call/import/export line.
+// Small unbudgeted parts need no grant and earn no extra credit.
+export const SPLIT_PART_OVERHEAD_LINES = 3;
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const covers = (common, total, share) =>
   common * share.denominator >= total * share.numerator;
@@ -175,10 +178,15 @@ export function renameRegressions(current, budget, reference) {
             (budget[section][key] ??
               (values[key] > fallbackOf(budget, section) ? values[key] : 0)),
           remaining,
-        );
-      if (claimed > group.limit)
+        ),
+        newParts = group.targets.filter(
+          (key) => values[key] > fallbackOf(budget, section),
+        ).length,
+        overhead = newParts * SPLIT_PART_OVERHEAD_LINES,
+        limit = group.limit + overhead;
+      if (claimed > limit)
         errors.push(
-          `Allowance cannot rise through rename: ${section}:${group.from} ${group.limit} -> ${claimed} shared by ${group.targets.join(", ")}${remaining ? " (source allowance retained)" : ""}`,
+          `Allowance cannot rise through rename: ${section}:${group.from} ${group.limit} + ${overhead} structural = ${limit} -> ${claimed} shared by ${group.targets.join(", ")}${remaining ? " (source allowance retained)" : ""}`,
         );
     }
   }
