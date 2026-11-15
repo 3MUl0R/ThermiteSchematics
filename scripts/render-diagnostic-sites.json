@@ -544,9 +544,9 @@
       "codes": ["R006"]
     },
     {
-      "id": "packages/render/src/packet/device-legend.ts:fitLegendDrafts:factory-call:1",
+      "id": "packages/render/src/packet/device-legend.ts:legendCandidateLimited:factory-call:1",
       "path": "packages/render/src/packet/device-legend.ts",
-      "owner": "fitLegendDrafts",
+      "owner": "legendCandidateLimited",
       "kind": "factory-call",
       "factory": "packages/render/src/packet/rooted-bound.ts:rootedPageCostFailure",
       "codes": ["R006"]
@@ -1136,6 +1136,10 @@
       "owner": "withPacketViews"
     },
     {
+      "path": "packages/render/src/packet/legend-bound-failure.ts",
+      "owner": "legendBoundFailure"
+    },
+    {
       "path": "packages/render/src/packet/rooted-constraint.ts",
       "owner": "rootedDiagnosticError"
     },
@@ -1176,12 +1180,24 @@
       "owner": "prepareSchematicDrawing"
     },
     {
+      "path": "packages/render/src/rooted-diagnostics.ts",
+      "owner": "diagnoseRooted"
+    },
+    {
+      "path": "packages/render/src/selection/conservation.ts",
+      "owner": "unrepresentedTerminalError"
+    },
+    {
       "path": "packages/render/src/sheets.ts",
       "owner": "renderPacketWithAdvice"
     },
     {
       "path": "packages/render/src/view-normalization.ts",
       "owner": "diagnoseRoot"
+    },
+    {
+      "path": "packages/render/src/view-normalization.ts",
+      "owner": "diagnoseTraceTarget"
     },
     {
       "path": "packages/render/src/view-normalization.ts",
@@ -1215,11 +1231,11 @@
     "packages/render/src/packet/cable.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/circuit.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/composition-fit.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/packet/device-legend.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/packet/device-legend.ts": "Native legend-entry UIDs/designations survive tail, original-failure and sheet-limit fallback paths. legendCandidateLimited delegates unchanged page-cost construction, with public authored view scope for packet-global budget failures.",
     "packages/render/src/packet/document-companions.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/errors.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/frame-legacy-placement.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/packet/legend-pagination.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/packet/legend-pagination.ts": "Measured tail failures retain native legend entries; observed search caps change the explanation only. Page-cost failure construction retains caller view scope.",
     "packages/render/src/packet/navigation-finalize.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/page.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/reports.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
@@ -1228,14 +1244,14 @@
     "packages/render/src/packet/rooted-economy.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/rooted-links.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/packet/rooted-search.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/packet/topology.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/packet/topology.ts": "Drawing fit refusals retain native referenced device names. Cached fallback projection/selection errors recover native UID-selected devices/functions from IR through topologySelectionContext.",
     "packages/render/src/preflight.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/presentation/context.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/renderer.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/rooted-diagnostics.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/rooted-diagnostics.ts": "Preserves contextual rooted failures and adds the actual unsupported device designation/profile from IR; transformer endpoint failures retain their native boundary identities.",
     "packages/render/src/selection/actuation.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/selection/conductors.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/selection/conservation.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/selection/conservation.ts": "Unrepresented-terminal R003 retains native device designation/terminal key, conductor identities and an authored circuit alternative; downstream context preserves these facts.",
     "packages/render/src/selection/context.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/selection/loads.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/selection/power.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
@@ -1247,6 +1263,15 @@
     "packages/render/src/symbols/rooted-gangs.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/symbols/validate.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
     "packages/render/src/title-block.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
-    "packages/render/src/view-request-errors.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities."
+    "packages/render/src/view-request-errors.ts": "Public drawing failure: native device/conductor/function details, or authored view index/title from the public-entry boundary. See AUDIT.md for non-drawing utilities.",
+    "packages/render/src/internal.ts": "Stopped-terminal wrappers retain native terminal tuples; public renderErrorContext resolves their device UIDs to designations and functions without changing the selected diagnostic.",
+    "packages/render/src/packet/conductor-context.ts": "Continuation identities resolve through IR wires, jumpers and cable cores to endpoint terminal keys and native device designations; packet-global failures retain authored view scope.",
+    "packages/render/src/packet/legend-bound-failure.ts": "Measured tail or original fallback retains native legendEntries deviceUid/designation; the message names each owner and viewTitle. Page-cost-only fallback retains authored view identities at the public packet boundary.",
+    "packages/render/src/packet/rooted-constraint.ts": "Adds measured span constraints to the existing error without removing native identity details; public view context remains attached for packet-level bounds.",
+    "packages/render/src/render-diagnostic-context.ts": "Native designation/function/view details take precedence. Missing scope resolves authored UID selections through IR to view index/title; empty packets identify project and request field without inventing a view.",
+    "packages/render/src/render-error-context.ts": "IR lookup supplies native device/cable designations, functions, stopped terminals and trace-target names while preserving stable IDs.",
+    "packages/render/src/render-text-context.ts": "Native text owner and conductor endpoints resolve to IR designations; invalid XML characters remain visibly escaped. Unlocatable project/title failures carry public caller view scope.",
+    "packages/render/src/view-normalization.ts": "Root and trace-target UIDs resolve through IR to native designations; rejected targets retain targetDeviceUid and targetDesignation. Malformed selectors retain authored request identity.",
+    "packages/render/src/signal-loop.ts": "Geometry exceptions may be cached/rethrown but do not construct R-codes; public topologyFailure supplies native selected-device identity from IR even before a drawing exists."
   }
 }

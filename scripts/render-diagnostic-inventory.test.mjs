@@ -12,7 +12,9 @@ it("all R001–R006 construction sites and context wrappers remain audited", () 
   const actual = diagnosticInventory();
   expect(actual.sites.map(({ line, ...site }) => site)).toEqual(expected.sites);
   expect(actual.wrappers).toEqual(expected.wrappers);
-  for (const path of new Set(actual.sites.map((site) => site.path)))
+  for (const path of new Set(
+    [...actual.sites, ...actual.wrappers].map((site) => site.path),
+  ))
     expect(
       expected.scopes[path]?.length,
       `missing native identity policy for ${path}`,

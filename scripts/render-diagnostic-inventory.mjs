@@ -52,14 +52,25 @@ function scanLiteralSites(file, path) {
 function factoryKey(path, name) {
   return `${path}:${name}`;
 }
-function messageWrappers(file, path) {
+function typedRenderError(checker, expression) {
+  const type = checker.getTypeAtLocation(expression);
+  const code = checker.getPropertyOfType(type, "code");
+  if (!code) return false;
+  const codeType = checker.getTypeOfSymbolAtLocation(code, expression);
+  const choices = codeType.isUnion() ? codeType.types : [codeType];
+  return choices.some(
+    (choice) => choice.isStringLiteral() && matchesCode(choice.value),
+  );
+}
+function messageWrappers(file, path, checker) {
   const wrappers = new Set();
   visit(file, (node) => {
     if (!ts.isObjectLiteralExpression(node)) return;
     const spreadsError = node.properties.some(
       (prop) =>
         ts.isSpreadAssignment(prop) &&
-        /\b(error|e)\b/u.test(prop.expression.getText(file)),
+        (/\b(error|e)\b/u.test(prop.expression.getText(file)) ||
+          typedRenderError(checker, prop.expression)),
     );
     if (
       spreadsError &&
@@ -115,7 +126,7 @@ export function diagnosticInventory(root = resolve(".")) {
   return {
     sites: identifySites(sites),
     wrappers: files
-      .flatMap(({ path, file }) => messageWrappers(file, path))
+      .flatMap(({ path, file }) => messageWrappers(file, path, checker))
       .sort((a, b) =>
         factoryKey(a.path, a.owner).localeCompare(factoryKey(b.path, b.owner)),
       ),

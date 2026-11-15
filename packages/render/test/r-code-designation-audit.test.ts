@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { writeFileSync } from "node:fs";
-import { compileProject, type ElectricalIr } from "@thermite/compiler";
+import {
+  compileProject,
+  type ElectricalIr,
+  type CompiledProjectPresentation,
+} from "@thermite/compiler";
 import {
   createSchematicRenderer,
   renderSchematic,
@@ -10,6 +14,16 @@ import {
   type RenderOutcome,
 } from "../src/index.js";
 import * as elkRuntime from "../src/layout/elk-runtime.js";
+import * as legendPagination from "../src/packet/legend-pagination.js";
+import { removeFixtures } from "../../cli/test/analog-output.cases.js";
+import {
+  legendIr,
+  legendRequest,
+  rejectLegendCandidate,
+  assertNativeLegend,
+  loopFixture,
+  captureLoopFallback,
+} from "./helpers/r-code-reaudit.js";
 import { errorContractCases } from "./render-contract-fixture.js";
 import {
   transformerFixture,
@@ -17,6 +31,7 @@ import {
 } from "./transformer-control-fixture.js";
 
 let core: ElectricalIr;
+let presentation: CompiledProjectPresentation | undefined;
 let cases: Awaited<ReturnType<typeof errorContractCases>>;
 const observed: unknown[] = [];
 afterAll(() => {
@@ -28,9 +43,13 @@ beforeAll(async () => {
   const compiled = await compileProject("examples/motor-starter");
   if (!compiled.ok) throw Error("Cannot compile the fixed audit fixture");
   core = compiled.ir;
+  presentation = compiled.presentation;
   cases = await errorContractCases();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await removeFixtures();
+});
 
 it("the standalone page normalizer identifies its authored fields without inventing a view", () => {
   const result = normalizePaperPage({ unexpected: true });
@@ -86,6 +105,26 @@ it("R002 retains the involved transformer and both stopped terminals", async () 
   } finally {
     await fixture.dispose();
   }
+});
+
+it("R001 trace-target wrapping retains the native UID-selected target designation", async () => {
+  const error = failure(
+    await renderSchematic(core, {
+      format: "schematic-view-request/0.2",
+      root: { by: "uid", value: device("LS1").uid },
+      intent: {
+        kind: "trace",
+        to: { by: "uid", value: device("K1").uid },
+        includePower: false,
+      },
+    }),
+    "R001",
+  );
+  expect(error.details).toMatchObject({
+    targetDeviceUid: device("K1").uid,
+    targetDesignation: "K1",
+  });
+  names({ message: error.message, details: error.details }, "LS1", "K1");
 });
 
 it("R003 names the actual unsupported device instead of just its UID", async () => {
@@ -231,3 +270,111 @@ it("R006 keeps the authored circuit keys and device names together", async () =>
     "Sensor",
   );
 });
+
+it("YIELD R006 observed plan caps retain the native final legend owners", async () => {
+  const ir = legendIr(core),
+    before = JSON.stringify(ir);
+  const error = failure(
+    await renderSchematicPacket(ir, legendRequest(ir), presentation),
+    "R006",
+  );
+  expect(error.details).toMatchObject({
+    constraint: "legend-search-limit",
+    searchCaps: ["axis-plans"],
+    viewTitle: "K1 / control",
+    legendEntries: [
+      expect.objectContaining({
+        designation: "PB1",
+        deviceUid: device("PB1").uid,
+      }),
+      expect.objectContaining({
+        designation: "PS1",
+        deviceUid: device("PS1").uid,
+      }),
+    ],
+  });
+  assertNativeLegend(ir, error);
+  names({ message: error.message }, "PB1", "PS1");
+  expect(JSON.stringify(ir)).toBe(before);
+}, 120000);
+
+it("YIELD R006 sheet-limit fallback retains real legend identities through the public packet API", async () => {
+  const ir = legendIr(core);
+  rejectLegendCandidate("sheet-limit");
+  const error = failure(
+    await renderSchematicPacket(ir, legendRequest(ir), presentation),
+    "R006",
+  );
+  expect(error.details).toMatchObject({
+    constraint: "legend-search-limit",
+    searchCaps: ["sheet-limit"],
+  });
+  assertNativeLegend(ir, error);
+  expect(error.message).toContain("100-sheet packet limit");
+  expect(error.message).not.toContain("page-cost bound");
+}, 120000);
+
+it("YIELD moved page-cost factory keeps the native authored views through a public failure", async () => {
+  const ir = legendIr(core),
+    costs = rejectLegendCandidate("page-cost");
+  const error = failure(
+    await renderSchematicPacket(ir, legendRequest(ir), presentation),
+    "R006",
+  );
+  expect(
+    costs.mock.results.some(
+      (r) => r.type === "return" && r.value?.code === "R006",
+    ),
+  ).toBe(true);
+  expect(error.details).toMatchObject({
+    constraint: "page-cost-bound",
+    views: [
+      { viewIndex: 0, title: "M1 / power" },
+      { viewIndex: 1, title: "K1 / control" },
+    ],
+  });
+  names(
+    { message: error.message, details: error.details },
+    "M1 / power",
+    "K1 / control",
+  );
+}, 120000);
+
+it("YIELD zero candidates preserve the original device-scoped failure", async () => {
+  const ir = legendIr(core);
+  vi.spyOn(legendPagination, "legendPagination").mockImplementation(
+    function* () {},
+  );
+  const error = failure(
+    await renderSchematicPacket(ir, legendRequest(ir), presentation),
+    "R006",
+  );
+  expect(error.message).not.toContain("Legend pagination");
+  assertNativeLegend(ir, error);
+}, 120000);
+
+it.each([false, true])(
+  "LOOP-SCALE cached fallback failure retains UID-selected device names (label fault: %s)",
+  async (fault) => {
+    const { ir, request } = await loopFixture(),
+      before = JSON.stringify(ir);
+    const capture = captureLoopFallback(fault);
+    const error = failure(await renderSchematicPacket(ir, request), "R006");
+    names({ message: error.message, details: error.details }, "AQ1", "V1");
+    expect(error.details).toMatchObject({
+      devices: expect.arrayContaining([
+        expect.objectContaining({ designation: "AQ1" }),
+        expect.objectContaining({ designation: "V1" }),
+      ]),
+    });
+    const { outputs, chosen, reads } = capture();
+    expect(outputs).toHaveLength(3);
+    expect(chosen).toBe(outputs[1]);
+    if (fault) {
+      expect(reads).toBe(1);
+      expect(error.message).toContain("out-of-bounds content");
+    } else expect(error.message).toContain("cannot fit at readable");
+    expect(JSON.stringify(ir)).toBe(before);
+  },
+  120000,
+);
