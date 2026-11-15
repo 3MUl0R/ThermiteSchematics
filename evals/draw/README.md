@@ -231,6 +231,13 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version **5.13** updates the independent DQ-05 terminal-set oracle (#283, #244).
+Only a complete native contact/coil pair or consecutive integer keys can use an
+en dash, and punctuation is checked on the printed qualified names. The oracle
+keeps its own implementation; it imports no renderer/query formatter. This lane
+reserves 5.13 after ENDPOINT's separately owned 5.12; integrating that lane's
+source changes remains necessary when it has not yet merged.
+
 Version **5.11** hardens the checker only (#256, #250, #206, #238):
 
 - M3 headers require a matching native source table. Requested documents use

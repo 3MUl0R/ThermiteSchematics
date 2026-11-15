@@ -8,7 +8,10 @@ import {
 } from "./report-column-widths.js";
 import type { ReportIdentifiers } from "./report-identifiers.js";
 import { wrapReportCell } from "./report-wrapping.js";
-import { ReportMeasurementError } from "./report-measurement.js";
+import {
+  ReportMeasurementError,
+  withReportContext,
+} from "./report-measurement.js";
 
 const nativeWeights = [0.15, 0.24, 0.24, 0.18, 0.19];
 export type WireColumnAllocation = ReturnType<typeof reportColumns> & {
@@ -172,37 +175,26 @@ function fieldMinimum(
 ) {
   const header = required(table.columns[column], "Missing native wire header");
   const wrapHeader = (width: number) => {
-    let lines = 1,
-      line = "";
-    for (const word of header.split(/\s+/u)) {
-      if (measureText(word, size).width > width) {
-        const parts = hyphenated && reportHeaderParts(word, width, size);
-        if (!parts) throw new ReportMeasurementError("Header word cannot fit");
-        if (line) lines++;
-        lines += parts.length - 1;
-        line = required(parts.at(-1), "Missing header part");
-        continue;
-      }
-      const next = line ? `${line} ${word}` : word;
-      if (measureText(next, size).width <= width) line = next;
-      else {
-        lines++;
-        line = word;
-      }
+    try {
+      return wireHeaderLines(header, width, size, hyphenated);
+    } catch (error) {
+      throw withReportContext(error, table, "header", column);
     }
-    return lines;
   };
-  const rows = table.rows.map((row) => ({
+  const rows = table.rows.map((row, index) => ({
+    row: String(index + 1),
     text: required(row.cells[column], "Missing native wire cell"),
     ids: identifiers.get(row.key)?.[column] ?? [],
   }));
-  const wrap = (row: (typeof rows)[number], width: number) =>
-    wrapReportCell(row.text, width - 4.01, size, names, row.ids).length;
-  const counts = rows.map(
-    (row) =>
-      wrapReportCell(row.text, originalWidth - 2.01, size, names, row.ids)
-        .length,
-  );
+  const wrap = (row: (typeof rows)[number], width: number, inset = 4.01) => {
+    try {
+      return wrapReportCell(row.text, width - inset, size, names, row.ids)
+        .length;
+    } catch (error) {
+      throw withReportContext(error, table, row.row, column);
+    }
+  };
+  const counts = rows.map((row) => wrap(row, originalWidth, 2.01));
   const headerLines = wrapHeader(originalWidth - 2.01);
   let low = 4.02,
     high = originalWidth + 2;
@@ -216,11 +208,39 @@ function fieldMinimum(
           (row, i) =>
             wrap(row, mid) <= required(counts[i], "Missing native line count"),
         );
-    } catch {
+    } catch (error) {
+      if (!(error instanceof ReportMeasurementError)) throw error;
       /* An indivisible native token establishes a real minimum. */
     }
     if (fits) high = mid;
     else low = mid;
   }
   return high + 0.02;
+}
+
+function wireHeaderLines(
+  header: string,
+  width: number,
+  size: number,
+  hyphenated: boolean,
+) {
+  let lines = 1,
+    line = "";
+  for (const word of header.split(/\s+/u)) {
+    if (measureText(word, size).width > width) {
+      const parts = hyphenated && reportHeaderParts(word, width, size);
+      if (!parts) throw new ReportMeasurementError("Header word cannot fit");
+      if (line) lines++;
+      lines += parts.length - 1;
+      line = required(parts.at(-1), "Missing header part");
+      continue;
+    }
+    const next = line ? `${line} ${word}` : word;
+    if (measureText(next, size).width <= width) line = next;
+    else {
+      lines++;
+      line = word;
+    }
+  }
+  return lines;
 }

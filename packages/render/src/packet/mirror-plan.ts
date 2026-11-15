@@ -1,5 +1,4 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import { formatTerminalSet } from "@thermite/query";
 import type {
   AnnotationReservation,
   NavigationAnnotation,
@@ -20,6 +19,7 @@ import {
   fullTargets,
   mirrorRows,
   mirrorTag,
+  printedMirrorTerminals,
   sameFunction,
   unspecifiedContact,
 } from "./mirror-facts.js";
@@ -172,9 +172,7 @@ function mirrorProfile(
 ) {
   const terminalsWidth = Math.max(
     23.5,
-    ...chunk.map(
-      (r) => measureNavigationText(formatTerminalSet(r.terminals)) + 2,
-    ),
+    ...chunk.map((r) => measureNavigationText(printedMirrorTerminals(r)) + 2),
   );
   const destinationWidth = Math.max(
     18.5,

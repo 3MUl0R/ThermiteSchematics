@@ -1,17 +1,59 @@
-import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
+import type {
+  ElectricalIr,
+  IrDeviceType,
+  IrFunction,
+} from "@thermite/compiler";
+
+type TerminalElement = Pick<IrFunction, "id" | "kind" | "terminals">;
+
+/** Only native contact/coil bindings establish one element here. A channel,
+ * source, load or matching name prefix does not establish a physical pair. */
+function isElementPair(
+  terminals: readonly string[],
+  element?: TerminalElement,
+) {
+  return (
+    terminals.length === 2 &&
+    terminals[0] !== terminals[1] &&
+    (element?.kind === "contact" || element?.kind === "coil") &&
+    element.terminals.length === 2 &&
+    new Set(element.terminals.map((t) => t.terminalKey)).size === 2 &&
+    element.terminals.every(
+      (t) =>
+        t.deviceUid === element.id.deviceUid &&
+        terminals.includes(t.terminalKey),
+    )
+  );
+}
+
+function consecutiveIntegers(terminals: readonly string[]) {
+  const [first, second] = terminals;
+  if (
+    terminals.length !== 2 ||
+    first === undefined ||
+    second === undefined ||
+    !terminals.every((t) => /^\d+$/u.test(t))
+  )
+    return false;
+  const difference = BigInt(first) - BigInt(second);
+  return difference === 1n || difference === -1n;
+}
 
 /** Authored identities are indivisible; punctuation is a list separator only. */
 export function formatTerminalSet(
   terminals: readonly string[],
   label: (terminal: string) => string = (terminal) => terminal,
+  element?: TerminalElement,
 ): string {
+  const printed = terminals.map(label);
   const separator =
-    terminals.length === 2 && terminals.every((t) => !/[-–−+]/u.test(t))
+    (isElementPair(terminals, element) || consecutiveIntegers(terminals)) &&
+    printed.every((t) => !/[-–−+]/u.test(t))
       ? "–"
-      : terminals.some((t) => t.includes("/"))
+      : printed.some((t) => t.includes("/"))
         ? ", "
         : " / ";
-  return terminals.map(label).join(separator);
+  return printed.join(separator);
 }
 
 /** Port keys are authored markings. Descriptions supplement, never replace, them. */

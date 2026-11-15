@@ -269,6 +269,8 @@ inherit the weighted vector's header-hyphenation flags and policy note rather
 than recomputing them: a wider candidate can retain the note without printing
 hyphens, and a candidate requiring new header hyphenation is unmeasurable. This
 intentionally narrows the enumerated grid; it does not alter candidate order.
+Per-candidate hyphenation recomputation is deferred (#268.3); the inherited
+policy and its note remain explicit rather than implying a fresh decision.
 
 Search cell profiles are measured once per exact physical column width and
 source text/identifier tuple. Floating-point residue variants of a nominal
@@ -278,7 +280,9 @@ Candidate row heights use the emission formula with the same operation order;
 the row-height array then visits the existing paginator one row at a time at
 absolute coordinates. Prefix sums and rounded thresholds are not equivalent.
 The chosen vector receives the ordinary full measurement and pagination, with
-an active page-count and wrap-total agreement assertion before emission.
+an active page-count and wrap-total agreement assertion before emission. This
+assertion runs in production and tests: disagreement refuses the packet, never
+accepts a cached score or silently falls back.
 
 Search work counters are separate from the unchanged receipt: `logicalCells`
 counts row/header-column-width slots; `cellMeasurements` counts actual profile
@@ -304,8 +308,14 @@ other candidates continue. Within the search, only setup, bound and tie-scoring
 errors (including emission agreement failures) refuse the packet. A typed
 layout/measurement error during native-reference or initial probe setup can
 retain the already measured stacked layout: `allocationFallback` records its
-stage/reason, and a visible report diagnostic uses the normal note reservation.
-Unexpected setup error types are rethrown. An initial stacked-layout measurement
+stage/reason for diagnostics. The printed note says that sheet/zone references
+are shown below endpoints and identifies the alternative arrangement, issued
+table title and affected column by name when that column maps exactly to the
+issued table. It never presents a hidden sizing row/column as a printed cell or
+prints an internal stage name. Unmapped columns are explicitly unidentified.
+The note uses the normal note reservation. Unexpected setup Error objects retain their
+original type and identity, with known row/column context; unresolved setup
+context explicitly says that the row or column was not identified. An initial stacked-layout measurement
 error still refuses, and a stacked layout that cannot paginate still receives
 the normal refusal. Setup failures never create an enumeration success receipt.
 Only when no enumerated tier-(b) candidate preserves capacity do the two
@@ -317,3 +327,20 @@ No tier shrinks the font or drops text. Final location filling cannot move rows 
 print `not drawn` unless the caller supplies endpoint references. Raw native query
 tables retain their optional location projection; renderers reserve it before
 layout.
+
+## Report proof maintenance
+
+Wire-search work-counter pins describe the particular native fixture, font metrics,
+exact floating-point widths and cache policy. Refresh them only after explaining
+which of those inputs changed: independently count actual profile calls, wrapping
+and paginator row visits, then re-run allocation/receipt and packet equivalence.
+Do not lower a counter by moving work outside its measured boundary or replacing
+a counted operation with an uncounted equivalent.
+
+A moved-label audit's sampled clipped ink boxes are not every native contour.
+Use `minimumMeasuredClippedInkBoxGapMm` for that supplementary bounding-box
+measurement and state which primitives it samples; exclude the audited annotation
+explicitly. State separately whether paths and their stroke widths are covered.
+A raster nearest-dark-pixel measurement includes rendered strokes but has pixel
+quantization, and must report its resolution. Neither partial metric may be named
+`minimumNativeContourGapMm` or presented as exact nearest-ink clearance.

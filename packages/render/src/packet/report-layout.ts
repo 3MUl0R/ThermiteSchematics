@@ -8,7 +8,10 @@ import {
   reportHeightPagination,
   type ReportPagination,
 } from "./report-paginator.js";
-import { ReportMeasurementError } from "./report-measurement.js";
+import {
+  ReportMeasurementError,
+  withReportContext,
+} from "./report-measurement.js";
 import {
   searchWireColumns,
   type WireAllocationReceipt,
@@ -28,6 +31,8 @@ export function paginatedReportCells(
   allocationFallback?: {
     stage: "native-reference" | "search-setup";
     reason: string;
+    column?: string;
+    detail?: string;
   };
 } {
   const first = reportCells(ir, table, width, page);
@@ -35,31 +40,17 @@ export function paginatedReportCells(
   let count: number, probe: ReturnType<typeof wireColumnProbe>;
   let stage: "native-reference" | "search-setup" = "native-reference";
   try {
-    const native = {
-      ...table,
-      columns: table.columns.slice(0, 5),
-      widths: [0.15, 0.24, 0.24, 0.18, 0.19],
-      rows: table.rows.map((r) => ({ ...r, cells: r.cells.slice(0, 5) })),
-      notes: table.notes.filter(
-        (note) =>
-          !note.startsWith(
-            "Sheet.zone locates the native endpoint in this packet;",
-          ),
-      ),
-    };
+    const native = nativeWireTable(table);
     const baseline = reportCells(ir, native, width, page, "legacy");
     count = reportPageCount(native, baseline, width, height, top);
     stage = "search-setup";
     probe = wireColumnProbe(ir, table, width, page, first.cellSize);
   } catch (error) {
-    if (!(error instanceof ReportMeasurementError)) throw error;
+    if (!(error instanceof ReportMeasurementError))
+      throw withReportContext(error, table, "not identified");
     return {
       ...first,
-      allocationFallback: {
-        stage,
-        reason:
-          error instanceof Error ? error.message : "Allocation setup failed",
-      },
+      allocationFallback: reportFallback(table, error, stage),
     };
   }
   const searched = searchWireColumns(
@@ -75,6 +66,37 @@ export function paginatedReportCells(
   return {
     ...(searched.measured ?? first),
     allocationReceipt: searched.receipt,
+  };
+}
+
+function nativeWireTable(table: DocumentationTable) {
+  return {
+    ...table,
+    columns: table.columns.slice(0, 5),
+    widths: [0.15, 0.24, 0.24, 0.18, 0.19],
+    rows: table.rows.map((r) => ({ ...r, cells: r.cells.slice(0, 5) })),
+    notes: table.notes.filter(
+      (note) =>
+        !note.startsWith(
+          "Sheet.zone locates the native endpoint in this packet;",
+        ),
+    ),
+  };
+}
+
+function reportFallback(
+  table: DocumentationTable,
+  error: ReportMeasurementError,
+  stage: "native-reference" | "search-setup",
+) {
+  const cell = error.cell;
+  const column =
+    cell?.column === undefined ? undefined : table.columns[cell.column];
+  const matched = column !== undefined && column === cell?.columnName;
+  return {
+    stage,
+    reason: error.message,
+    ...(matched ? { column, detail: error.detail } : {}),
   };
 }
 

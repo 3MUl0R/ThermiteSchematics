@@ -124,7 +124,7 @@ APIs reserve support for X2; the renderer does not yet supply packet locations.
 
 Visible function-reference cells show function kind, authored normal state for
 contacts, and the bound terminal set (for example `NO contact 13–14` or
-`Coil A1–A2`). Exactly two names use an en dash unless either contains `-`, `–`, `−` or `+`; otherwise, and for three or more names, use ` / `. If any name contains `/`, the slash separator becomes `, `. Authored order is retained. Keys and type names never establish main/auxiliary status.
+`Coil A1–A2`). Exactly two terminals use an en dash only when they are the complete pair of one native contact or coil function, or their native keys are consecutive integers. The strings actually printed, including any designation, must contain none of `-`, `–`, `−` or `+`. Other sets use ` / `; if a printed name contains `/`, that list separator becomes `, `. Authored order is retained. A channel or a shared name prefix does not prove one physical element; without contact/coil bindings, only the integer test applies. A qualified pair such as `-K1.13 / -K1.14` checks the printed designation too. Keys and type names never establish main/auxiliary status.
 I/O Channel cells show the authored address, else bound terminal identities;
 missing bindings print `Channel identity not specified`. CSV keeps the channel
 selector and network endpoint keys for lookup. Row keys, IR, query metadata and

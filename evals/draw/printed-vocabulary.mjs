@@ -17,14 +17,36 @@ const parts = (key) => {
     return [];
   }
 };
-export function terminalSet(names) {
+export function terminalSet(names, source, printed = names) {
+  // Native function bindings, not name prefixes, establish a contact/coil pair.
+  const bindings = source?.terminals ?? [];
+  const element =
+    ["contact", "coil"].includes(source?.kind) &&
+    typeof source.id?.deviceUid === "string" &&
+    bindings.length === 2 &&
+    new Set(bindings.map((t) => t.terminalKey)).size === 2 &&
+    bindings.every(
+      (t) =>
+        t.deviceUid === source.id?.deviceUid && names.includes(t.terminalKey),
+    );
+  const integers =
+    names.length === 2 && names.every((s) => /^[0-9]+$/u.test(s));
+  const distance = integers ? BigInt(names[0]) - BigInt(names[1]) : 0n;
+  const pair =
+    names.length === 2 && (element || distance === 1n || distance === -1n);
   const separator =
-    names.length === 2 && !names.some((s) => /[-–−+]/u.test(s))
+    pair && !printed.some((s) => /[-–−+]/u.test(s))
       ? "–"
-      : names.some((s) => s.includes("/"))
+      : printed.some((s) => s.includes("/"))
         ? ", "
         : " / ";
-  return names.join(separator);
+  return printed.join(separator);
+}
+export function functionTerminals(fn) {
+  return terminalSet(
+    fn.terminals.map((t) => t.terminalKey),
+    fn,
+  );
 }
 function functionCaption(fn) {
   const kind =
@@ -34,7 +56,7 @@ function functionCaption(fn) {
         ? `${fn.direction === "input" ? "Input" : "Output"} channel`
         : fn.kind[0].toUpperCase() + fn.kind.slice(1);
   const terminals = fn.terminals.map((t) => t.terminalKey);
-  return [kind, terminalSet(terminals)].filter(Boolean).join(" ");
+  return [kind, terminalSet(terminals, fn)].filter(Boolean).join(" ");
 }
 function device(ir, uid) {
   return ir.devices.find((d) => d.uid === uid);
@@ -79,6 +101,35 @@ function referenceSource(ir, row, packet, request) {
     ? functions.map(functionCaption).join(", ")
     : undefined;
 }
+function ioCell(ir, row, column) {
+  const [uid, key] = parts(row),
+    fn = ir.functions.find(
+      (f) =>
+        f.id.deviceUid === uid &&
+        f.id.functionKey === key &&
+        f.kind === "channel",
+    );
+  if (!fn) return null;
+  const names = fn.terminals.map((t) => t.terminalKey);
+  if (column === 6)
+    return {
+      expected: terminalSet(
+        names,
+        fn,
+        names.map((key) => `${device(ir, uid)?.designation}.${key}`),
+      ),
+      mechanism: "io-terminals",
+      family: "function",
+    };
+  return {
+    expected:
+      device(ir, uid)?.io?.channels?.[key]?.address ??
+      (terminalSet(fn.terminals.map((t) => t.terminalKey)) ||
+        "Channel identity not specified"),
+    mechanism: "io-channel",
+    family: "function",
+  };
+}
 function ownedCell(ir, row, column, context) {
   const kind = context.sheet?.view.kind;
   if (kind === "references" && column === 1) {
@@ -91,24 +142,7 @@ function ownedCell(ir, row, column, context) {
         }
       : { expected, mechanism: "function-reference", family: "function" };
   }
-  if (kind === "io" && column === 1) {
-    const [uid, key] = parts(row),
-      fn = ir.functions.find(
-        (f) =>
-          f.id.deviceUid === uid &&
-          f.id.functionKey === key &&
-          f.kind === "channel",
-      );
-    if (!fn) return null;
-    return {
-      expected:
-        device(ir, uid)?.io?.channels?.[key]?.address ??
-        (terminalSet(fn.terminals.map((t) => t.terminalKey)) ||
-          "Channel identity not specified"),
-      mechanism: "io-channel",
-      family: "function",
-    };
-  }
+  if (kind === "io" && [1, 6].includes(column)) return ioCell(ir, row, column);
   if (kind === "network" && [2, 3].includes(column)) {
     const link = ir.relations?.find((r) => r.uid === row && r.connection);
     if (link) {

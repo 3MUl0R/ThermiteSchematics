@@ -93,7 +93,7 @@ below the hookup explanation, in SVG `desc` and in enabled packet references;
 endpoints are sorted by designation and function. Terminal numbers come only from
 the selected function's authored bindings, in authored order; this order assigns
 no polarity. One binding prints `D terminal T1`; multiple bindings print
-`D terminals {terminal set}`. Exactly two terminal names use an en dash (`13–14`, `A1–A2`, `1/L1–2/T1`) unless either contains `-`, `–`, `−` or `+`. Other sets use ` / ` (`+ / - / S`); if any name contains `/`, that separator becomes `, `.
+`D terminals {terminal set}`. Exactly two terminals use an en dash only when they are the complete pair of one native contact or coil function, or their native keys are consecutive integers. The strings actually printed, including any designation, must contain none of `-`, `–`, `−` or `+`. Other sets use ` / `; if a printed name contains `/`, that list separator becomes `, `. Authored order is retained. A channel or a shared name prefix does not prove one physical element; without contact/coil bindings, only the integer test applies. Thus the input-channel set `{9, 13}` prints `9 / 13`; `A1–A2` needs the native coil/contact binding.
 The same formatter is used for references and other terminal sets. All authored
 bindings are written out fully, without an ellipsis. If bindings are unavailable,
 the designation alone is printed.
