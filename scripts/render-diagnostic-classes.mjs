@@ -156,12 +156,27 @@ function collectWrites(records, checker) {
       const name = ts.isPropertyAccessExpression(left)
         ? left.name.text
         : checker.getTypeAtLocation(left.argumentExpression);
+      if (constructorClass(node) !== record.node) return;
       if (
         name !== "code" &&
         !(name.isStringLiteral?.() && name.value === "code")
-      )
+      ) {
+        if (
+          typeof name !== "string" &&
+          !name.isStringLiteral?.() &&
+          !(
+            name.flags &
+            (ts.TypeFlags.NumberLike | ts.TypeFlags.ESSymbolLike)
+          ) &&
+          renderCodes(checker.getTypeAtLocation(node.right)).length
+        )
+          refuse(
+            record.path,
+            node,
+            "computed constructor-field name cannot be resolved",
+          );
         return;
-      if (constructorClass(node) !== record.node) return;
+      }
       const codes = siteCodes(checker, left, node.right, record.path);
       record.own = true;
       record.known = true;

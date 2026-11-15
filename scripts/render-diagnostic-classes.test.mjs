@@ -121,3 +121,11 @@ it.each([
     expect(() => inventory(source)).toThrow(/unaudited class R-code site/u);
   },
 );
+
+it("an unresolved constructor field name with an R-code value fails closed", () => {
+  expect(() =>
+    inventory(
+      'declare const key: string; class E { constructor() { this[key] = "R002"; } } new E();',
+    ),
+  ).toThrow(/unaudited class R-code site/u);
+});
