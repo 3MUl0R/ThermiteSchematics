@@ -116,11 +116,53 @@ interface CommunicationProjection {
   total: number;
   appearances: Map<string, number[]>;
 }
+type CommunicationLayoutState = ReturnType<typeof communicationLayoutState>;
+type CommunicationRenderState = ReturnType<typeof communicationRoutes>;
+type CommunicationEdge = NonNullable<ElkNode["edges"]>[number];
+type CommunicationSection = NonNullable<CommunicationEdge["sections"]>[number];
+type CommunicationRow = {
+  key: string;
+  label: string;
+  lines: string[];
+  side: "WEST" | "EAST";
+  y: number;
+};
+
 async function layoutCommunicationDrawing(
   ir: Readonly<ElectricalIr>,
   request: CommunicationViewRequest,
   projection?: CommunicationProjection,
 ): Promise<CommunicationDrawing> {
+  validateCommunicationRequest(request);
+  const state = communicationLayoutState(ir, request, projection);
+  const children = state.ordered.map((uid) => communicationNode(uid, state));
+  const elk = createElkEngine();
+  const { ordered, links } = state;
+  const documentNeeds = communicationDocumentNeeds(
+    ir,
+    ordered,
+    request.medium,
+    links.map((l) => l.uid),
+  );
+  const input = communicationGraphInput(children, state);
+  const expected = structuredClone(input);
+  const graph = await elk.layout(input);
+  assertTopologyIdentities(graph, expected);
+  if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
+    throw new Error("Invalid communication layout bounds.");
+  const draw = communicationRoutes(graph, state);
+  const references = appendCommunicationDevices(state, draw);
+  assertTopologyRouteEndpoints(graph);
+  return communicationDrawing(
+    graph,
+    state,
+    draw.out,
+    documentNeeds,
+    references,
+  );
+}
+
+function validateCommunicationRequest(request: CommunicationViewRequest) {
   if (
     !request ||
     request.format !== "communication-view-request/0.1" ||
@@ -138,9 +180,13 @@ async function layoutCommunicationDrawing(
     throw new Error(
       "Invalid communication view. Use medium ethernet or nrg-bus and optional unique device selectors.",
     );
-  const inventory = buildCommunicationInventory(ir);
-  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
-  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
+}
+
+function communicationSelectedDevices(
+  ir: Readonly<ElectricalIr>,
+  request: CommunicationViewRequest,
+  types: Map<string, IrDeviceType>,
+) {
   const selected = new Set<string>();
   for (const name of request.devices ?? []) {
     const matches = ir.devices.filter(
@@ -158,6 +204,15 @@ async function layoutCommunicationDrawing(
       throw new Error(`${name} has no ${request.medium} ports.`);
     selected.add(matches[0]!.uid);
   }
+  return selected;
+}
+
+function communicationLinks(
+  inventory: ReturnType<typeof buildCommunicationInventory>,
+  selected: Set<string>,
+  request: CommunicationViewRequest,
+  projection?: CommunicationProjection,
+) {
   const selectedLinks = inventory.links.filter(
     (r) =>
       r.connection.medium === request.medium &&
@@ -183,6 +238,24 @@ async function layoutCommunicationDrawing(
   const links = projection
     ? selectedLinks.filter((l) => projection.relations.has(l.uid))
     : selectedLinks;
+  return { selectedLinks, included, links };
+}
+
+function communicationLayoutState(
+  ir: Readonly<ElectricalIr>,
+  request: CommunicationViewRequest,
+  projection?: CommunicationProjection,
+) {
+  const inventory = buildCommunicationInventory(ir);
+  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
+  const selected = communicationSelectedDevices(ir, request, types);
+  const { selectedLinks, included, links } = communicationLinks(
+    inventory,
+    selected,
+    request,
+    projection,
+  );
   const ordered = [...included]
     .filter((uid) => !projection || projection.devices.has(uid))
     .sort((a, b) =>
@@ -190,91 +263,115 @@ async function layoutCommunicationDrawing(
     );
   const nodeIds = new Map(ordered.map((uid, i) => [uid, `d${i}`]));
   const portIds = new Map<string, string>();
-  const rows = new Map<
-    string,
-    {
-      key: string;
-      label: string;
-      lines: string[];
-      side: "WEST" | "EAST";
-      y: number;
-    }[]
-  >();
+  const rows = new Map<string, CommunicationRow[]>();
   const captions = new Map<string, string[]>();
   const tags = new Map<string, DeviceTagPlan>();
-  const children: ElkNode[] = ordered.map((uid) => {
-    const device = devices.get(uid)!,
-      type = types.get(device.typeId)!;
-    const tag = drawingDeviceTag(
-      device,
-      type,
-      request.medium === "nrg-bus" ? 44 : 66,
-    );
-    tags.set(uid, tag);
-    const nodeWidth = tag.widthMm;
-    const boundary = selected.size > 0 && !selected.has(uid);
-    const caption = [
-      ...(device.location?.trim()
-        ? wrap(
-            device.location,
-            request.medium === "nrg-bus" ? 24 : 35,
-            nodeWidth - 6,
-          )
-        : []),
-      ...(boundary ? ["Boundary (schedule)"] : []),
-      ...(projection &&
-      selectedLinks.some(
-        (l) =>
-          !projection.relations.has(l.uid) &&
-          (l.fromDeviceUid === uid || l.toDeviceUid === uid),
-      )
-        ? wrap(
-            "Other ports on other parts",
-            request.medium === "nrg-bus" ? 24 : 35,
-            nodeWidth - 6,
-          )
-        : []),
-    ];
-    if (caption.some((line) => textWidth(line) > nodeWidth - 6))
-      throw new Error(
-        `Communication caption for ${device.designation} is too wide; use a shorter label.`,
-      );
-    captions.set(uid, caption);
-    const labelBottom = deviceHeaderHeight(tag, caption) + 3;
-    const { list, portBottom } = communicationPortRows(
-      links,
-      uid,
-      type,
-      nodeWidth,
-      labelBottom,
-    );
-    rows.set(uid, list);
-    return {
-      id: nodeIds.get(uid)!,
-      width: nodeWidth,
-      height: Math.max(portBottom, labelBottom + 5) + 9,
-      layoutOptions: { "elk.portConstraints": "FIXED_POS" },
-      ports: list.map((p, i) => {
-        const id = `${nodeIds.get(uid)}p${i}`;
-        portIds.set(JSON.stringify([uid, p.key]), id);
-        return {
-          id,
-          width: 0,
-          height: 0,
-          x: p.side === "WEST" ? 0 : nodeWidth,
-          y: p.y,
-          layoutOptions: { "elk.port.side": p.side },
-        };
-      }),
-    };
-  });
-  const elk = createElkEngine();
-  const documentNeeds = communicationDocumentNeeds(
+  return {
     ir,
+    request,
+    projection,
+    devices,
+    types,
+    selected,
+    selectedLinks,
+    links,
     ordered,
-    request.medium,
-    links.map((l) => l.uid),
+    nodeIds,
+    portIds,
+    rows,
+    captions,
+    tags,
+  };
+}
+
+function communicationNode(
+  uid: string,
+  state: CommunicationLayoutState,
+): ElkNode {
+  const { devices, types, request, tags, links, rows, nodeIds, portIds } =
+    state;
+  const device = devices.get(uid)!,
+    type = types.get(device.typeId)!;
+  const tag = drawingDeviceTag(
+    device,
+    type,
+    request.medium === "nrg-bus" ? 44 : 66,
   );
+  tags.set(uid, tag);
+  const nodeWidth = tag.widthMm;
+  const caption = communicationCaption(uid, state, device, nodeWidth);
+  const labelBottom = deviceHeaderHeight(tag, caption) + 3;
+  const { list, portBottom } = communicationPortRows(
+    links,
+    uid,
+    type,
+    nodeWidth,
+    labelBottom,
+  );
+  rows.set(uid, list);
+  return {
+    id: nodeIds.get(uid)!,
+    width: nodeWidth,
+    height: Math.max(portBottom, labelBottom + 5) + 9,
+    layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+    ports: list.map((p, i) => {
+      const id = `${nodeIds.get(uid)}p${i}`;
+      portIds.set(JSON.stringify([uid, p.key]), id);
+      return {
+        id,
+        width: 0,
+        height: 0,
+        x: p.side === "WEST" ? 0 : nodeWidth,
+        y: p.y,
+        layoutOptions: { "elk.port.side": p.side },
+      };
+    }),
+  };
+}
+
+function communicationCaption(
+  uid: string,
+  state: CommunicationLayoutState,
+  device: ElectricalIr["devices"][number],
+  nodeWidth: number,
+) {
+  const { selected, request, projection, selectedLinks, captions } = state;
+  const boundary = selected.size > 0 && !selected.has(uid);
+  const caption = [
+    ...(device.location?.trim()
+      ? wrap(
+          device.location,
+          request.medium === "nrg-bus" ? 24 : 35,
+          nodeWidth - 6,
+        )
+      : []),
+    ...(boundary ? ["Boundary (schedule)"] : []),
+    ...(projection &&
+    selectedLinks.some(
+      (l) =>
+        !projection.relations.has(l.uid) &&
+        (l.fromDeviceUid === uid || l.toDeviceUid === uid),
+    )
+      ? wrap(
+          "Other ports on other parts",
+          request.medium === "nrg-bus" ? 24 : 35,
+          nodeWidth - 6,
+        )
+      : []),
+  ];
+  if (caption.some((line) => textWidth(line) > nodeWidth - 6))
+    throw new Error(
+      `Communication caption for ${device.designation} is too wide; use a shorter label.`,
+    );
+  captions.set(uid, caption);
+  return caption;
+}
+
+function communicationGraphInput(
+  children: ElkNode[],
+  state: CommunicationLayoutState,
+): ElkNode {
+  const { request, links, portIds } = state;
   const input: ElkNode = {
     id: "communication",
     layoutOptions: {
@@ -310,11 +407,10 @@ async function layoutCommunicationDrawing(
       ],
     })),
   };
-  const expected = structuredClone(input);
-  const graph = await elk.layout(input);
-  assertTopologyIdentities(graph, expected);
-  if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
-    throw new Error("Invalid communication layout bounds.");
+  return input;
+}
+
+function communicationRoutes(graph: ElkNode, state: CommunicationLayoutState) {
   const out: string[] = [];
   const rectangles = graph.children ?? [];
   const inside = (x: number, y: number, node: ElkNode) =>
@@ -322,68 +418,99 @@ async function layoutCommunicationDrawing(
     x < node.x! + node.width! - 0.01 &&
     y > node.y! + 0.01 &&
     y < node.y! + node.height! - 0.01;
-  for (const edge of graph.edges ?? []) {
-    const i = Number(edge.id.slice(1));
-    if (!edge.sections?.length)
-      throw new Error("Communication route is incomplete.");
-    const link = links[i]!;
-    const endpoints = [
-      { deviceUid: link.fromDeviceUid, portKey: link.connection.fromPort },
-      { deviceUid: link.toDeviceUid, portKey: link.connection.toPort },
-    ];
-    out.push(
-      `<g ${routePortAttributes(edge)} data-communication-link="${attr(link.uid)}" data-communication-endpoints="${attr(JSON.stringify(endpoints))}">`,
-    );
-    for (const section of edge.sections) {
-      const points = [
-        section.startPoint,
-        ...(section.bendPoints ?? []),
-        section.endPoint,
-      ].map((p) => ({ x: Number(n(p.x)), y: Number(n(p.y)) }));
-      for (let j = 1; j < points.length; j++) {
-        const a = points[j - 1]!,
-          b = points[j]!;
-        if (
-          ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
-          (a.x !== b.x && a.y !== b.y)
-        )
-          throw new Error("Communication route is not finite and orthogonal.");
-        for (const node of rectangles) {
-          const midX = Math.max(
-            node.x! + 0.02,
-            Math.min((a.x + b.x) / 2, node.x! + node.width! - 0.02),
-          );
-          const midY = Math.max(
-            node.y! + 0.02,
-            Math.min((a.y + b.y) / 2, node.y! + node.height! - 0.02),
-          );
-          if (
-            (a.x === b.x &&
-              inside(a.x, midY, node) &&
-              Math.max(a.y, b.y) > node.y! + 0.01 &&
-              Math.min(a.y, b.y) < node.y! + node.height! - 0.01) ||
-            (a.y === b.y &&
-              inside(midX, a.y, node) &&
-              Math.max(a.x, b.x) > node.x! + 0.01 &&
-              Math.min(a.x, b.x) < node.x! + node.width! - 0.01)
-          )
-            throw new Error("Communication route crosses a device body.");
-        }
-      }
-      out.push(
-        `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="${request.medium === "ethernet" ? "#176785" : "#775721"}" stroke-width="0.45"/>`,
+  const draw = { out, rectangles, inside };
+  for (const edge of graph.edges ?? [])
+    appendCommunicationRoute(edge, state, draw);
+  return draw;
+}
+
+function appendCommunicationRoute(
+  edge: CommunicationEdge,
+  state: CommunicationLayoutState,
+  draw: CommunicationRenderState,
+) {
+  const { links, request } = state;
+  const { out } = draw;
+  const i = Number(edge.id.slice(1));
+  if (!edge.sections?.length)
+    throw new Error("Communication route is incomplete.");
+  const link = links[i]!;
+  const endpoints = [
+    { deviceUid: link.fromDeviceUid, portKey: link.connection.fromPort },
+    { deviceUid: link.toDeviceUid, portKey: link.connection.toPort },
+  ];
+  out.push(
+    `<g ${routePortAttributes(edge)} data-communication-link="${attr(link.uid)}" data-communication-endpoints="${attr(JSON.stringify(endpoints))}">`,
+  );
+  for (const section of edge.sections)
+    appendCommunicationSection(section, request, draw);
+  appendCommunicationLabels(edge, draw.out);
+  out.push("</g>");
+}
+
+function appendCommunicationSection(
+  section: CommunicationSection,
+  request: CommunicationViewRequest,
+  draw: CommunicationRenderState,
+) {
+  const { rectangles, inside, out } = draw;
+  const points = [
+    section.startPoint,
+    ...(section.bendPoints ?? []),
+    section.endPoint,
+  ].map((p) => ({ x: Number(n(p.x)), y: Number(n(p.y)) }));
+  for (let j = 1; j < points.length; j++) {
+    const a = points[j - 1]!,
+      b = points[j]!;
+    if (
+      ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
+      (a.x !== b.x && a.y !== b.y)
+    )
+      throw new Error("Communication route is not finite and orthogonal.");
+    for (const node of rectangles) {
+      const midX = Math.max(
+        node.x! + 0.02,
+        Math.min((a.x + b.x) / 2, node.x! + node.width! - 0.02),
       );
-    }
-    for (const label of edge.labels ?? []) {
-      if (label.x === undefined || label.y === undefined)
-        throw new Error("Communication label is unplaced.");
-      out.push(
-        `<rect x="${n(label.x)}" y="${n(label.y)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
-        text(label.x + 1, label.y + 3, label.text!),
+      const midY = Math.max(
+        node.y! + 0.02,
+        Math.min((a.y + b.y) / 2, node.y! + node.height! - 0.02),
       );
+      if (
+        (a.x === b.x &&
+          inside(a.x, midY, node) &&
+          Math.max(a.y, b.y) > node.y! + 0.01 &&
+          Math.min(a.y, b.y) < node.y! + node.height! - 0.01) ||
+        (a.y === b.y &&
+          inside(midX, a.y, node) &&
+          Math.max(a.x, b.x) > node.x! + 0.01 &&
+          Math.min(a.x, b.x) < node.x! + node.width! - 0.01)
+      )
+        throw new Error("Communication route crosses a device body.");
     }
-    out.push("</g>");
   }
+  out.push(
+    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="${request.medium === "ethernet" ? "#176785" : "#775721"}" stroke-width="0.45"/>`,
+  );
+}
+
+function appendCommunicationLabels(edge: CommunicationEdge, out: string[]) {
+  for (const label of edge.labels ?? []) {
+    if (label.x === undefined || label.y === undefined)
+      throw new Error("Communication label is unplaced.");
+    out.push(
+      `<rect x="${n(label.x)}" y="${n(label.y)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
+      text(label.x + 1, label.y + 3, label.text!),
+    );
+  }
+}
+
+function appendCommunicationDevices(
+  state: CommunicationLayoutState,
+  draw: CommunicationRenderState,
+) {
+  const { ordered, devices, tags, captions, rows, portIds } = state;
+  const { rectangles, out } = draw;
   const references: CommunicationDrawing["references"] = [];
   for (const node of rectangles) {
     const uid = ordered[Number(node.id.slice(1))]!,
@@ -412,7 +539,46 @@ async function layoutCommunicationDrawing(
     out.push("</g>");
     references.push(drawingDeviceReference(node, device));
   }
-  assertTopologyRouteEndpoints(graph);
+  return references;
+}
+
+function communicationOtherParts(
+  deviceUid: string,
+  projection: CommunicationProjection,
+  devices: Map<string, ElectricalIr["devices"][number]>,
+) {
+  const parts = (projection.appearances.get(deviceUid) ?? []).filter(
+    (p) => p !== projection.part,
+  );
+  return parts.length
+    ? [
+        {
+          deviceUid,
+          designation: devices.get(deviceUid)!.designation,
+          parts,
+        },
+      ]
+    : [];
+}
+
+function communicationDrawing(
+  graph: ElkNode,
+  state: CommunicationLayoutState,
+  out: string[],
+  documentNeeds: ReturnType<typeof communicationDocumentNeeds>,
+  references: CommunicationDrawing["references"],
+): CommunicationDrawing {
+  const {
+    links,
+    ordered,
+    rows,
+    request,
+    projection,
+    devices,
+    tags,
+    selectedLinks,
+    selected,
+  } = state;
   return {
     topologyCoverage: {
       kind: "communication",
@@ -434,20 +600,9 @@ async function layoutCommunicationDrawing(
           pagination: {
             part: projection.part,
             total: projection.total,
-            devices: ordered.flatMap((deviceUid) => {
-              const parts = (
-                projection.appearances.get(deviceUid) ?? []
-              ).filter((p) => p !== projection.part);
-              return parts.length
-                ? [
-                    {
-                      deviceUid,
-                      designation: devices.get(deviceUid)!.designation,
-                      parts,
-                    },
-                  ]
-                : [];
-            }),
+            devices: ordered.flatMap((deviceUid) =>
+              communicationOtherParts(deviceUid, projection, devices),
+            ),
           },
         }
       : {}),
@@ -461,7 +616,6 @@ async function layoutCommunicationDrawing(
       : `${links.length} authored links; ${selected.size ? "boundary devices included; " : ""}see communication schedule for status and unconnected ports.`,
   };
 }
-
 /** Packet-only partitioning: preserve complete physical port links, never cut a route. */
 export async function prepareCommunicationPages(
   ir: Readonly<ElectricalIr>,
