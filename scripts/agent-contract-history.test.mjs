@@ -53,6 +53,7 @@ function commit(cwd, path, value) {
   return git(cwd, "rev-parse", "HEAD");
 }
 
+// The complete Git-history audit exceeded 120 s on Windows CI.
 it("all recorded public agent contract surfaces are additive at every historical edge", () => {
   const audit = auditContractHistory();
   expect(
@@ -65,7 +66,7 @@ it("all recorded public agent contract surfaces are additive at every historical
   );
   expect(audit.history.length).toBeGreaterThan(200);
   expect(audit.violations).toEqual([]);
-});
+}, 240000);
 
 it.each([
   [{ a: "text", b: 2 }, { a: "text" }, "removal"],
