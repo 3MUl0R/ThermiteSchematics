@@ -119,3 +119,31 @@ it("keeps closed safe imports and ordinary exports outside the loader auditable"
     ),
   ).toEqual([]);
 });
+it.each(["class { postMessage() {} }", "null", "{}"])(
+  "round 2 rejects cache pre-seed by initializer: %s",
+  (initializer) => {
+    const tampered = source.replace(
+      "let fauxWorker: ElkFauxWorkerConstructor | undefined;",
+      "let fauxWorker: ElkFauxWorkerConstructor | undefined = " +
+        initializer +
+        ";",
+    );
+    expect(tampered).not.toBe(source);
+    expect(audit(tampered)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("loader cache must start undefined"),
+      ]),
+    );
+  },
+);
+it("permits an uninitialized or explicitly undefined loader cache", () => {
+  expect(audit(source)).toEqual([]);
+  expect(
+    audit(
+      source.replace(
+        "let fauxWorker: ElkFauxWorkerConstructor | undefined;",
+        "let fauxWorker: ElkFauxWorkerConstructor | undefined = undefined;",
+      ),
+    ),
+  ).toEqual([]);
+});

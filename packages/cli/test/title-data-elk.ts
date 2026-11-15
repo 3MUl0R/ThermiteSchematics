@@ -165,6 +165,17 @@ export function auditElkCapabilities(
       if (
         ts.isVariableDeclaration(node) &&
         ts.isIdentifier(node.name) &&
+        node.name.text === "fauxWorker" &&
+        node.initializer &&
+        !(
+          ts.isIdentifier(node.initializer) &&
+          node.initializer.text === "undefined"
+        )
+      )
+        issues.push(ELK_RUNTIME_FILE + ": loader cache must start undefined");
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
         node.name.text === "WORKER_SPECIFIER" &&
         (!node.initializer ||
           !ts.isStringLiteral(node.initializer) ||
