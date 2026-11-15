@@ -3,6 +3,12 @@ import { elkProgram, elkProgramStats } from "./title-data-elk-program.js";
 import { elkImports } from "./title-data-elk-imports.js";
 import { elkModule } from "./title-data-elk-modules.js";
 import { elkGlobal } from "./title-data-elk-globals.js";
+import { elkBindings } from "./title-data-elk-bindings.js";
+import {
+  elkConstructorAssertions,
+  elkTypeAssertion,
+} from "./title-data-elk-types.js";
+import { elkAnnotation } from "./title-data-elk-annotations.js";
 import { elkKeys, elkText } from "./title-data-elk-keys.js";
 import {
   elkStateDeclarations,
@@ -32,6 +38,7 @@ export function auditElkAllowlist(
   const text = elkText(checker),
     imports = elkImports(tree, checker, issues);
   const state = elkStateDeclarations(tree, issues);
+  const assertions = elkConstructorAssertions(tree);
   function visit(node: ts.Node) {
     undefinedDeclaration(node, issues);
     if (!insideElkLoader(node, loader)) {
@@ -39,6 +46,9 @@ export function auditElkAllowlist(
       elkKeys(node, text, issues);
       elkStateReference(node, state, issues);
       elkGlobal(node, tree, checker, imports, text, issues);
+      elkBindings(node, tree, checker, imports, text, issues);
+      elkTypeAssertion(node, assertions, issues);
+      elkAnnotation(node, tree, checker, imports, issues);
     }
     ts.forEachChild(node, visit);
   }

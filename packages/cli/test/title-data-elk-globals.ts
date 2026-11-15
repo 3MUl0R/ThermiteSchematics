@@ -21,7 +21,7 @@ function permittedMember(symbol: ts.Symbol) {
     })
   );
 }
-function permittedSymbol(
+export function permittedSymbol(
   symbol: ts.Symbol | undefined,
   tree: ts.SourceFile,
   checker: ts.TypeChecker,
@@ -45,6 +45,18 @@ function permittedSymbol(
     permittedMember(target)
   );
 }
+// A shorthand's property symbol belongs to this module; its value can still
+// be a global or a loader-only import. Export names can hide aliases too.
+function referencedSymbol(node: ts.Identifier, checker: ts.TypeChecker) {
+  if (
+    ts.isShorthandPropertyAssignment(node.parent) &&
+    node.parent.name === node
+  )
+    return checker.getShorthandAssignmentValueSymbol(node.parent);
+  if (ts.isExportSpecifier(node.parent))
+    return checker.getExportSpecifierLocalTargetSymbol(node.parent);
+  return checker.getSymbolAtLocation(node);
+}
 export function elkGlobal(
   node: ts.Node,
   tree: ts.SourceFile,
@@ -57,7 +69,7 @@ export function elkGlobal(
     ts.isIdentifier(node) &&
     !permissions.names.has(node) &&
     !permittedSymbol(
-      checker.getSymbolAtLocation(node),
+      referencedSymbol(node, checker),
       tree,
       checker,
       permissions,
