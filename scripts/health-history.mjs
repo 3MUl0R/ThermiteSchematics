@@ -15,7 +15,7 @@ function git(root, args, options = {}) {
     throw Error(`Health history: git ${args[0]} failed`);
   return result.stdout;
 }
-export function historicalMetrics(root, revision) {
+export function historicalSources(root, revision) {
   const paths = git(root, ["ls-tree", "-rz", "--name-only", revision])
     .toString("utf8")
     .split("\0")
@@ -34,7 +34,11 @@ export function historicalMetrics(root, revision) {
     sources.set(path, bytes.subarray(end + 1, end + 1 + size).toString("utf8"));
     offset = end + 1 + size + 1;
   }
-  return measureSources(paths, (path) => sources.get(path));
+  return sources;
+}
+export function historicalMetrics(root, revision) {
+  const sources = historicalSources(root, revision);
+  return measureSources([...sources.keys()], (path) => sources.get(path));
 }
 function resolveRef(root, ref) {
   const result = spawnSync(
