@@ -128,7 +128,7 @@ it.each(flows)(
       const svg = result.value.sheets[0]!.svg;
       expect(svg).toContain('data-layout-source-port="');
       expect(svg).toContain('data-layout-port="');
-      // Keep the reviewed hashes intact while allowing additive route ownership.
+      // Pin the literal-floor drawing while allowing additive route ownership.
       const reviewedSvg = withoutRouteOwnershipMetadata(
         withoutViewWrapper(svg),
       );
@@ -139,8 +139,8 @@ it.each(flows)(
       // Pin the reviewed direct-loop output, including its semantic channel caption.
       expect(createHash("sha256").update(reviewedSvg).digest("hex")).toBe(
         flow === "left-to-right"
-          ? "62ca4c1e14ada419eabff3207ce9b12cd8cac11e2cfef1787149b8cd0eb0d888"
-          : "116e6df6c8d2e7636f3a4a15e71619a373cc44c742244e0b72fb5e59422295e6",
+          ? "4ea5efcbfbe5e0ce485297c1aa0b5af23d38ed9ab069dd9b98e004aa5e551756"
+          : "105c97823f875e7ed449b887321a27527c76cf046161fe4a67b1d0aa5d5bbac4",
       );
       // Pin the complete measured-tag drawing independently of ownership metadata.
       expect(
@@ -149,8 +149,8 @@ it.each(flows)(
           .digest("hex"),
       ).toBe(
         flow === "left-to-right"
-          ? "c82e42d456faeb88bb8370962ba63807f70d5a10b311161cf366f459f1d16078"
-          : "cbb406b171d427f83333dc9388657c31ad97e89d3ed00f25e30910ad534d7d94",
+          ? "d9c994d0cc68cb8a3da542046c7655be9ee7c54bf0eb160a8a552365d5f4b426"
+          : "25dd1d1c6a8b600ea15d9835ac7de5780f723637b9bc4a82ff10b5387628fe50",
       );
     }
     expect(JSON.stringify(ir)).toBe(before);
