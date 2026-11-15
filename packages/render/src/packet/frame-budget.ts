@@ -1,5 +1,4 @@
 import { MAX_GRID_PLANS } from "./safe-cuts.js";
-import { MAX_CONTINUATION_BANKS } from "./continuation-bank.js";
 import { MAX_FRAME_FOLD_PLANS } from "./frame-fold-groups.js";
 import {
   MAX_PLACEMENT_LAYOUTS,
@@ -36,7 +35,7 @@ export interface FrameReceipt {
   rootedViewOrdinal: number;
   referenceScale: number;
   referenceFields: FrameField[];
-  /** Bounds for the new search, in addition to one existing-placement probe. */
+  /** Observed bank maximum and enforcing caps, plus one existing-placement probe. */
   candidateLimit: {
     gridsPerBank: number;
     banksPerLayout: number;
@@ -101,7 +100,7 @@ export function beginFramePlanning(
     ),
     candidateLimit: {
       gridsPerBank: MAX_GRID_PLANS,
-      banksPerLayout: MAX_CONTINUATION_BANKS,
+      banksPerLayout: 0,
       foldsPerGrid: MAX_FRAME_FOLD_PLANS,
       // Initial profiles, the existing placement budget, and one reference seed.
       layouts: ROOTED_COMPACT_PROFILES.length + MAX_PLACEMENT_LAYOUTS + 1,
@@ -120,6 +119,19 @@ export function beginFramePlanning(
     attempts: new Set(),
   });
   pages.set(page, map);
+}
+/** Maximum of the bank lists actually passed to grid enumeration. */
+export function recordFrameBanks(
+  page: PaperPage,
+  p: PreparedSchematicDrawing,
+  banks: readonly ContinuationBank[],
+) {
+  const ctx = frameContext(page, p.view);
+  if (ctx)
+    ctx.receipt.candidateLimit.banksPerLayout = Math.max(
+      ctx.receipt.candidateLimit.banksPerLayout,
+      banks.length,
+    );
 }
 export function compactPlanningReceipts(
   page: PaperPage,
@@ -302,6 +314,7 @@ export async function rollbackFrameSearch<T>(
       const snapshot = {
         ctx,
         count: ctx.layoutCount,
+        banks: ctx.receipt.candidateLimit.banksPerLayout,
         attempts: new Set(ctx.attempts),
         length: ctx.receipt.candidates.length,
         previous: ctx.newLayouts,
@@ -315,6 +328,7 @@ export async function rollbackFrameSearch<T>(
   } catch (error) {
     for (const s of saved) {
       s.ctx.layoutCount = s.count;
+      s.ctx.receipt.candidateLimit.banksPerLayout = s.banks;
       s.ctx.attempts = s.attempts;
       s.ctx.receipt.candidates.length = s.length;
       for (const p of s.added) s.ctx.layouts.delete(p);

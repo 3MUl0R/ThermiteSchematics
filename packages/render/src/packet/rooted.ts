@@ -4,11 +4,11 @@ import {
   frameCandidate,
   rememberFrameCandidate,
   frameBudgetFailure,
-  frameBudgetOrder,
   finishFramePlanning,
   recordFrameAttempt,
 } from "./frame-budget.js";
 import { legacyFramePlacement } from "./frame-legacy-placement.js";
+import { selectRootedComposition } from "./rooted-selection.js";
 import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
@@ -229,8 +229,7 @@ async function selectedDrawingDrafts(
   if (!materialized.ok) return materialized;
   winner.drafts = materialized.value;
   const composed = composeRootedWinner(ir, winner, native, page);
-  const selected =
-    frameBudgetOrder(composed, winner, page) <= 0 ? composed : winner;
+  const selected = selectRootedComposition(winner, composed, page);
   rootedSearches.set(selected, run);
   return drawingResult(selected, native);
 }

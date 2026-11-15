@@ -6,7 +6,6 @@ import { continuationInk } from "../src/packet/frame-banks.js";
 import { compactFramePlan } from "../src/packet/frame-plan.js";
 import { resolveRootedContinuations } from "../src/packet/continuation-resolve.js";
 import { MAX_GRID_PLANS } from "../src/packet/safe-cuts.js";
-import { MAX_CONTINUATION_BANKS } from "../src/packet/continuation-bank.js";
 import { MAX_FRAME_FOLD_PLANS } from "../src/packet/frame-fold-groups.js";
 import {
   MAX_PLACEMENT_LAYOUTS,
@@ -22,6 +21,7 @@ import {
   frameBudgetOrder,
 } from "../src/packet/frame-budget.js";
 import { foldedBankProbes } from "../src/packet/frame-fold-groups.js";
+import { selectRootedComposition } from "../src/packet/rooted-selection.js";
 import { legacyFramePlacement } from "../src/packet/frame-legacy-placement.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { useCompactFrame } from "../src/packet/frame-profile.js";
@@ -284,8 +284,56 @@ it("receipts use the search's enforcing limits", () => {
   const { page } = fixture();
   expect(compactPlanningReceipts(page)[0]?.candidateLimit).toEqual({
     gridsPerBank: MAX_GRID_PLANS,
-    banksPerLayout: MAX_CONTINUATION_BANKS,
+    banksPerLayout: 0,
     foldsPerGrid: MAX_FRAME_FOLD_PLANS,
     layouts: MAX_PLACEMENT_LAYOUTS + ROOTED_COMPACT_PROFILES.length + 1,
   });
+});
+
+it.each(["scale", "pages"] as const)(
+  "ranks a legal positive loss before a zero-loss %s failure",
+  (failure) => {
+    const { page, reference } = fixture();
+    const legal = resized(reference, [198, 198]);
+    const illegal =
+      failure === "scale"
+        ? { ...reference, scale: 0.251 }
+        : { ...reference, drafts: reference.drafts.slice(0, 1) };
+    expect(frameBudgetFailure(legal, page)).toBeUndefined();
+    expect(frameBudgetFailure(illegal, page)).toBe(
+      failure === "scale" ? "scale-change" : "page-count",
+    );
+    expect(frameBudgetOrder(legal, illegal, page)).toBeLessThan(0);
+    expect(frameBudgetOrder(illegal, legal, page)).toBeGreaterThan(0);
+  },
+);
+it("measures a quantized anchor-sequence loss despite an unchanged endpoint rectangle", () => {
+  const before = frameField({ x: 0, y: 0, w: 100, h: 100 });
+  const after = frameField({ x: 0.0002, y: 0, w: 100, h: 100 });
+  expect(after.area).toBe(before.area);
+  expect(after.anchorArea).toBeLessThan(before.anchorArea);
+  expect(fieldLoss(before, after)).toBeGreaterThan(0);
+});
+it("rejects a 2.01 percent modern field at the legacy-placement keep boundary", () => {
+  const { page, reference } = fixture();
+  const modern = resized(reference, [195.98, 196]);
+  expect(frameBudgetFailure(modern, page)).toBe("drawing-field-loss");
+  const result = legacyFramePlacement(reference, modern, page);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw Error(result.error.message);
+  expect(result.value.map((d) => d.drawingBounds?.w)).toEqual([200, 196]);
+  expect(
+    compactPlanningReceipts(page)[0]?.sheets.map((s) => s.strategy),
+  ).toEqual(["legacy-continuation-placement", "folded-group"]);
+});
+
+it("retains the legal winner over an over-budget composed alternative", () => {
+  const { page, reference } = fixture();
+  const winner = resized(reference, [198, 198]);
+  const composed = resized(reference, [195.98, 200]);
+  expect(frameBudgetFailure(winner, page)).toBeUndefined();
+  expect(frameBudgetFailure(composed, page)).toBe("drawing-field-loss");
+  expect(selectRootedComposition(winner, composed, page)).toBe(winner);
+  const better = resized(reference, [199, 200]);
+  expect(selectRootedComposition(winner, better, page)).toBe(better);
 });
