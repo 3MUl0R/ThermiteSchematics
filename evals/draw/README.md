@@ -20,6 +20,14 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.15** adds explicit packet-level DQ-07 `not-applicable` coverage when
+the native repeat and mirror/return audits find no obligation, measurement or
+unmatched annotation. It is emitted once on the first sheet; an empty sheet in
+an otherwise applicable packet does not establish absence. Existing navigation
+observations and pass/fail criteria are unchanged. Full-report validation still
+requires coverage for every DQ and case, including the DQ-11 sweep pairing.
+Expectation rows cannot supply that native check coverage.
+
 DQ-17 resolves terminal captions from owned terminal metadata and the exported
 semantic port/node/marker identities, never from proximity. Its duplicate rule
 is per physical terminal **per drawn appearance**; separate split/continuation
@@ -986,6 +994,19 @@ They are stored observations, not permission to run a stale target checker.
 After this hardening change merges, the checker bundle hash matches no existing
 C1, so a re-pin needs a fresh C1 target. Existing C1s can still be compatible
 baselines, but a baseline without source pins cannot supply `notMove` crops.
+
+The summary reader supports the historical **5.3** schema by reading only absent
+`not-applicable` and `not-measured` counters as zero in memory. Reassessment must
+still agree: an omitted nonzero counter refuses. Supported 4.1–5.2 and 5.4–5.15
+summaries require every counter exactly; unknown versions refuse. Historical report bytes,
+hashes and source pins are never rewritten or supplied by the target report.
+Run the real-report acceptance and in-memory negative controls with:
+
+```sh
+bun evals/draw/report-preparation.check.mjs \
+  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --baseline evals/out/draw/C1-repin202/summary.json
+```
 
 Draft candidates with the shipped helper:
 

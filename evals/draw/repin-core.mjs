@@ -25,6 +25,8 @@ import {
 import assert from "node:assert/strict";
 import { isDeepStrictEqual as equal } from "node:util";
 import { assess, observations, exitCode, summary } from "./assessment.mjs";
+import { readReportSummary } from "./report-summary.mjs";
+import { requireCheckCoverage } from "./report-coverage.mjs";
 import { identityKey, markerId, checkKey } from "./locators.mjs";
 import { units, unitKey, compressScopes } from "./marker-scopes.mjs";
 import { measurements, envelope, bands } from "./marker-metrics.mjs";
@@ -190,25 +192,7 @@ function validateReport(
     !report.results.some((r) => r.status === "infrastructure-error"),
     "Infrastructure errors cannot be re-pinned",
   );
-  for (const c of report.cases)
-    for (let n = 1; n <= 24; n++) {
-      const spec = specs.find((s) => s.id === c);
-      const partner =
-        n === 11 && spec.sweep
-          ? specs.find(
-              (s) => s.flow === "top-to-bottom" && equal(s.sweep, spec.sweep),
-            )
-          : undefined;
-      assert(
-        report.results.some(
-          (r) =>
-            (r.case === c ||
-              (partner && r.id === `${partner.id}/DQ-11/flow-comparison`)) &&
-            r.dq === `DQ-${String(n).padStart(2, "0")}`,
-        ),
-        `Missing check observation: ${c}/DQ-${n}`,
-      );
-    }
+  requireCheckCoverage(report, specs);
   const checked = reassess(report, registry, specs);
   same(
     report.results.map((r) => [r.id, r.status]).sort(),
@@ -221,7 +205,7 @@ function validateReport(
     "Report drift does not match measured findings/registry",
   );
   same(
-    report.summary,
+    readReportSummary(report, checkerSha256 !== undefined),
     checked.summary,
     "Report summary does not match observations",
   );
