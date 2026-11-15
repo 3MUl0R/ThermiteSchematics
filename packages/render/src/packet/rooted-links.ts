@@ -1,10 +1,8 @@
 import { required } from "../presentation/util.js";
 import type { PresentationEdge, LayoutEdge, RenderOutcome } from "../types.js";
 import type { Draft, DrawingBounds } from "./types.js";
-import {
-  continuationIdentity,
-  continuationIdentityConstraint,
-} from "./continuation-identity.js";
+import { continuationIdentity } from "./continuation-identity.js";
+import { continuationCutMessage } from "./continuation-cut-message.js";
 import { rootedCrossings } from "./rooted-crossings.js";
 import { failure } from "./errors.js";
 
@@ -32,14 +30,9 @@ export function drawingContinuations(
     if (!crossings.length) continue;
     const identity = continuationIdentity(semantic);
     if (!identity)
-      return failure(
-        "unprintable-layout",
-        `A candidate cut crosses this conductor. ${required(
-          continuationIdentityConstraint(semantic),
-          "Missing identity constraint",
-        )} Use larger paper, landscape, or the other flow so no cut crosses this conductor.`,
-        { continuationIdentity: edge.id },
-      );
+      return failure("unprintable-layout", continuationCutMessage(semantic), {
+        continuationIdentity: edge.id,
+      });
     for (const c of crossings) {
       const id = `C${String(++serial).padStart(3, "0")}`;
       const common = { id, ...identity, netId: edge.netId };
