@@ -271,7 +271,12 @@ function scanHealthFile(path, text) {
     sizes = sizeScope(path);
   const metrics = !sizes
     ? { skippedTests: 0 }
-    : { lines: lineCount(text), nonNullAssertions: 0, skippedTests: 0 };
+    : {
+        lines: lineCount(text),
+        nonNullAssertions: 0,
+        definiteAssignments: 0,
+        skippedTests: 0,
+      };
   if (sizes && source) {
     const counted = countTypeAssertions(source);
     metrics.typeAssertions = counted.count;
@@ -286,6 +291,15 @@ export function measure(root = resolve(".")) {
   return measureSources(trackedPaths(root), (path) =>
     readFileSync(join(root, path), "utf8"),
   );
+}
+function declarationAssertions(node, metrics, onlySkips, sizes) {
+  if (!onlySkips && ts.isNonNullExpression(node)) metrics.nonNullAssertions++;
+  if (
+    sizes &&
+    (ts.isVariableDeclaration(node) || ts.isPropertyDeclaration(node)) &&
+    node.exclamationToken
+  )
+    metrics.definiteAssignments++;
 }
 export function measureSources(paths, read) {
   const files = {},
@@ -306,8 +320,7 @@ export function measureSources(paths, read) {
     const occurrences = new Map();
     function visit(node, scope = "") {
       if (isSuppression(node, onlySkips)) metrics.skippedTests++;
-      if (!onlySkips && ts.isNonNullExpression(node))
-        metrics.nonNullAssertions++;
+      declarationAssertions(node, metrics, onlySkips, sizes);
       let nestedScope = scope;
       if (sizes && ts.isFunctionLike(node) && node.body) {
         const name = `${scope}${functionName(node, source)}`;

@@ -3,7 +3,11 @@
     "fileLines": 3000,
     "functionLines": 300,
     "nonNullAssertions": 1008,
-    "skippedTests": 56
+    "skippedTests": 56,
+    "definiteAssignments": 1
+  },
+  "definiteAssignments": {
+    "packages/agent-tools/test/patch-filesystem.test.ts": 1
   },
   "duplicates": {
     "01a4e060711f5680a96cdc00579810383533b4d64f4c07e06ead9bbc242a9f05": 2,
@@ -1153,6 +1157,14 @@
         "from": 0,
         "to": 2,
         "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
+      }
+    ],
+    "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts": [
+      {
+        "identity": "definiteAssignments:packages/agent-tools/test/patch-filesystem.test.ts",
+        "from": 0,
+        "to": 1,
+        "reason": "Measured initial definite-assignment declaration baseline (#288); includes test helpers and cannot raise the global ceiling."
       }
     ]
   },

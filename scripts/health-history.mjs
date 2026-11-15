@@ -143,13 +143,14 @@ function devBootstrap(root, target, information) {
       `Health history: dev bootstrap requires a valid current-format budget: ${error.message}`,
     );
   }
+  const metrics = historicalMetrics(root, revision);
   return {
     revision,
     ref,
     target,
     budgetSource: "dev-bootstrap",
-    budget,
-    metrics: historicalMetrics(root, revision),
+    budget: upgradeBudget(budget, metrics),
+    metrics,
     information,
   };
 }

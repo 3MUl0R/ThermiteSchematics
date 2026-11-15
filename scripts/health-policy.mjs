@@ -79,6 +79,7 @@ function changes(current, budget, reference) {
         files: "file lines",
         functions: "function lines",
         nonNullAssertions: "non-null assertions",
+        definiteAssignments: "definite-assignment declarations",
         skippedTests: "skipped tests",
         duplicates: "duplicate bodies",
       }[section];

@@ -1,4 +1,5 @@
 import { migrateReasonLists } from "./health-reasons.mjs";
+import { seedDefiniteAssignments } from "./health-definite.mjs";
 export const DEFAULT_THRESHOLDS = Object.freeze({
   duplicateTokens: 50,
   fileLines: 850,
@@ -12,6 +13,7 @@ export const SECTIONS = [
   "files",
   "functions",
   "nonNullAssertions",
+  "definiteAssignments",
   "skippedTests",
   "duplicates",
 ];
@@ -27,6 +29,10 @@ export function totals(current) {
     ),
     skippedTests: Object.values(current.files).reduce(
       (n, f) => n + f.skippedTests,
+      0,
+    ),
+    definiteAssignments: Object.values(current.files).reduce(
+      (n, f) => n + (f.definiteAssignments ?? 0),
       0,
     ),
   };
@@ -67,7 +73,14 @@ export function validateBudget(budget) {
       budget.thresholds[key] < 1
     )
       throw Error(`Invalid health threshold: ${key}`);
-  for (const section of SECTIONS) numericMap(budget[section], section);
+  for (const section of SECTIONS)
+    if (section !== "definiteAssignments" || budget[section] !== undefined)
+      numericMap(budget[section], section);
+  if (
+    (budget.definiteAssignments === undefined) !==
+    (budget.ceilings?.definiteAssignments === undefined)
+  )
+    throw Error("Incomplete definiteAssignments baseline");
   numericMap(budget.ceilings, "ceilings", 0);
   for (const key of [
     ...Object.keys(SIZE_CEILINGS),
@@ -121,7 +134,11 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
       Object.keys(result.grandfathered[section]).map((id) => [id, id]),
     );
   }
-  for (const section of ["nonNullAssertions", "skippedTests"])
+  for (const section of [
+    "nonNullAssertions",
+    "definiteAssignments",
+    "skippedTests",
+  ])
     result[section] = sorted(
       Object.entries(valuesOf(current, section)).filter(([, n]) => n > 0),
     );
@@ -135,7 +152,8 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
 export function upgradeBudget(raw, metrics) {
-  if (raw.version === 4) return migrateReasonLists(raw);
+  if (raw.version === 4)
+    return seedDefiniteAssignments(migrateReasonLists(raw), metrics);
   if (raw.version === 2) return createBudget(metrics, raw.thresholds);
   if (raw.version !== 3) throw Error("Unsupported health budget version");
   const next = structuredClone(raw);
@@ -165,5 +183,5 @@ export function upgradeBudget(raw, metrics) {
       Object.keys(next.grandfathered[section]).map((k) => [k, k]),
     );
   }
-  return sorted(Object.entries(next));
+  return seedDefiniteAssignments(sorted(Object.entries(next)), metrics);
 }
