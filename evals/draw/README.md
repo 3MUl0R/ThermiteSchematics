@@ -1342,14 +1342,42 @@ bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
   --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json
 ```
 
-The gate requires PNG **byte identity**. Its separate
-`thermite-draw-paired-raster/1.0` output reports each file's changed-pixel count,
-maximum RGBA channel delta, source/PNG hashes, browser version and arguments,
-with `mode: "gpu-raster-disabled"` on every result. A mode or environment mismatch
-fails. Input evidence PNGs are never replaced. Use this with identical observations,
-crop inventories/boxes and renderer artifacts for move-only checker changes.
-For changes to the raster path itself it is one control alongside the per-file
-default-mode repeat envelope. It does not establish default-mode pixel identity.
+The paired GPU-disabled run passes a region immediately when its PNG bytes are
+identical. Every differing region receives **N fresh-launch base self-samples**,
+default **10**, configurable with `--samples N`; values below 10 are refused.
+The head passes if its bytes match a sampled base variant, or if **both** its
+changed-pixel count and maximum RGBA channel delta from the original paired base
+reference are no greater than the corresponding **maximum pairwise distances
+among the N base self-samples**. The two maxima may come from different pairs.
+There is no global tolerance, percentile or cross-region pooling. Identical base
+samples give a zero envelope; a differing head outside it fails.
+
+Byte identity alone is insufficient: the [RASTER-GATE r1 probe](paired-raster-probe.json)
+recorded **350 fresh-launch samples** (five regions × ten launches × seven
+configurations) from the unchanged base source. Residual variants remained with
+GPU raster disabled, software compositing, one raster thread and baseline Skia.
+The adaptive self-envelope follows the RASTER-GATE r1 helm ruling for #307.
+
+The separate `thermite-draw-paired-raster/1.1` result keeps literal `byteIdentical`
+and adds `pass`; the CLI succeeds only when every region passes. Each region
+records mode, browser, arguments, actual self-sample **N**, base variant count,
+pairwise envelope, head distance and verdict, plus source/PNG hashes and the
+sample/pair distance matrix. On the immediate identity path, N is 0 and the one
+paired base variant is reported; otherwise the variant count describes the N
+self-samples. A mode, browser, context, dimensions or base-source mismatch fails.
+The initial paired base remains the head-distance reference. Input evidence PNGs
+are never replaced.
+
+```sh
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
+  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json \
+  --samples 10
+```
+
+Use this with identical observations, crop inventories/boxes and renderer
+artifacts for move-only checker changes. For changes to the raster path itself
+it is one control alongside the per-file default-mode repeat envelope. It does
+not establish default-mode pixel identity.
 
 Default capture arguments, evidence, bind limits and signed records remain
 unchanged. This additional gate protocol leaves `EVALS_VERSION` at **5.14**:

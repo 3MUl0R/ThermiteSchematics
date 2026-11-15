@@ -152,3 +152,15 @@ it("mode labels and launch arguments cannot be mixed with default captures", () 
     }),
   ).toThrow(/mode/);
 });
+
+it("a planted one-pixel source change is outside the adaptive base envelope", () =>
+  inputs(dot, async (base, head) => {
+    const result = await compareReports(base, head);
+    expect(result.pass).toBe(false);
+    expect(result.results[0]).toMatchObject({
+      verdict: "fail",
+      N: 10,
+      envelope: { changedPixels: 0, maxChannelDelta: 0 },
+      headDistance: { changedPixels: 1, maxChannelDelta: 255 },
+    });
+  }));
