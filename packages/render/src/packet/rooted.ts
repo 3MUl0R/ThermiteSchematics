@@ -19,11 +19,8 @@ import type {
 } from "@thermite/compiler";
 import type { RenderOutcome, SchematicViewRequest } from "../types.js";
 import type { Draft, PaperPage } from "./types.js";
-import {
-  searchRootedCandidates,
-  rootedWinner,
-  nativeWinner,
-} from "./rooted-search.js";
+import { rootedWinner, nativeWinner } from "./rooted-search.js";
+import { searchRootedCandidates } from "./rooted-fold-search.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
 import { rememberPowerPlacement } from "../layout/power-placement.js";
 import {
