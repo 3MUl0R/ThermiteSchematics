@@ -32,7 +32,8 @@ function continuationRows(section, current, reference) {
     compare(a, b),
   )) {
     const old = base[field]?.[from];
-    if (Object.hasOwn(values, from) || !old?.length) continue;
+    if ((values[from] ?? 0) > fallbackOf(before, section) || !old?.length)
+      continue;
     for (const [key, lines] of newBodies) {
       const { common, added } = lineAdditions(old, lines);
       if (covers(common, old.length, RENAME_PART_SHARE))
@@ -70,6 +71,13 @@ function contains(current, outer, inner) {
   );
 }
 
+function retiringLines(old, remaining) {
+  const retained = lineAdditions(old, remaining).common;
+  // An intact source is not evidence that an unrelated new helper continues it.
+  // A changed small source can, however, be one part of a split continuation.
+  return covers(retained, old.length, RENAME_RETAINED_SHARE) ? [] : remaining;
+}
+
 export function sizeContinuations(section, current, reference) {
   if (!reference) return [];
   const rows = continuationRows(section, current, reference),
@@ -95,7 +103,9 @@ export function sizeContinuations(section, current, reference) {
     const old = reference.metrics[field][from],
       retained = lineAdditions(
         old,
-        targets.flatMap((key) => current[field][key]),
+        retiringLines(old, current[field][from] ?? []).concat(
+          targets.flatMap((key) => current[field][key]),
+        ),
       );
     if (covers(retained.common, old.length, RENAME_RETAINED_SHARE))
       groups.push({

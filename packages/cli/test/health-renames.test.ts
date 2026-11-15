@@ -337,3 +337,40 @@ it.each(["dev", "release"])(
     expect(historyRegressions(current, next, before, base, target)).toEqual([]);
   },
 );
+
+for (const target of ["dev", "release"])
+  it.each(["files", "functions"])(
+    "rejects %s rename-and-grow behind a retiring source stub on " + target,
+    (section) => {
+      const { root, from, to, base, before } = fixture(section);
+      if (section === "files") put(root, from, 'export * from "./new.js";\n');
+      else
+        put(
+          root,
+          from,
+          "export function assess() { return assessGrown(...arguments); }\n" +
+            readFileSync(join(root, to), "utf8"),
+        );
+      const current = metrics(root);
+      expect(() =>
+        acceptBudget(current, before, "rename", {
+          budget: before,
+          metrics: base,
+          target,
+        }),
+      ).toThrow("cannot rise");
+    },
+  );
+
+it("rejects growth split between a retiring original and a new helper", () => {
+  const root = repo(),
+    path = "src/one.ts";
+  put(root, path, body("original", 0, 136));
+  const base = metrics(root),
+    before = createBudget(base);
+  put(root, path, body("original", 0, 60) + body("helper", 60, 76, 100));
+  const current = metrics(root);
+  expect(() =>
+    acceptBudget(current, before, "extract", { budget: before, metrics: base }),
+  ).toThrow("cannot rise");
+});
