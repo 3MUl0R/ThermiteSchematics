@@ -1,3 +1,4 @@
+import { evaluateSheet } from "./evaluate.mjs";
 import { expect, it } from "vitest";
 import { fixture, ink } from "./m3-fixture.mjs";
 import { wireLocatorAudit, pinListAppearances } from "./wire-locators.mjs";
@@ -344,4 +345,93 @@ it("D1b cable marker identity follows painted native endpoint labels, never circ
   // A forged label cannot borrow the endpoint identity from circle slot order.
   f.source.texts.at(-2).text = "FOREIGN.1";
   expect(audit(f).findings[0].kind).toBe("wire-locator-without-appearance");
+});
+it("256.upstream rejects a mislabelled documentation kind from painted locator headers", () => {
+  const f = locatorFixture();
+  f.packet.sheets[1].view.kind = "bom";
+  f.report.texts.push(
+    ink("From sheet.zone", { columnName: "From sheet.zone", columnIndex: 5 }),
+    ink("To sheet.zone", { columnName: "To sheet.zone", columnIndex: 6 }),
+  );
+  expect(audit(f).findings.map((r) => r.kind)).toEqual([
+    "wire-locator-report-kind-mismatch",
+  ]);
+});
+it("256.upstream fails closed for a sparse native cable endpoint array", () => {
+  const f = locatorFixture();
+  f.ir.wires = [];
+  f.ir.cables = [
+    {
+      uid: "c",
+      designation: "C",
+      typeId: "core",
+      assignments: [
+        {
+          id: "1",
+          endpoints: [{ terminal: { deviceUid: "a", terminalKey: "1" } }],
+        },
+      ],
+    },
+  ];
+  f.ir.cableTypes = [{ id: "core", conductors: [{ id: "1" }] }];
+  for (const t of [...f.report.texts, ...f.report.reportCells])
+    t.row = '["c","1"]';
+  cell(f, 1).text = "not drawn";
+  expect(audit(f).findings.map((r) => r.kind)).toEqual([
+    "wire-locator-measurement-gap",
+  ]);
+});
+it("256.upstream records authored null cable ends as explicit absence, never a silently measured landing", () => {
+  const f = locatorFixture();
+  f.ir.wires = [];
+  f.ir.cables = [
+    {
+      uid: "c",
+      designation: "C",
+      typeId: "core",
+      assignments: [{ id: "1", usage: "spare", endpoints: [null, null] }],
+    },
+  ];
+  f.ir.cableTypes = [{ id: "core", conductors: [{ id: "1" }] }];
+  for (const t of [...f.report.texts, ...f.report.reportCells])
+    t.row = '["c","1"]';
+  cell(f, 0).text = cell(f, 1).text = "not drawn";
+  const result = audit(f);
+  expect(result.findings).toEqual([]);
+  expect(result.measurements.map((r) => [r.status, r.nativeAbsence])).toEqual([
+    ["not-applicable", "explicit-unterminated"],
+    ["not-applicable", "explicit-unterminated"],
+  ]);
+  f.ir.functions = [];
+  for (const g of f.geometries)
+    Object.assign(g, {
+      width: 240,
+      height: 220,
+      shapes: [],
+      terminals: [],
+      devices: [],
+      catalogs: [],
+      reportRows: [],
+    });
+  for (const s of f.packet.sheets)
+    Object.assign(s, { references: [], continuations: [] });
+  const observed = evaluateSheet(
+    { id: "explicit-absence", flow: "left-to-right" },
+    f.packet.sheets[1],
+    f.packet,
+    f.report,
+    f.ir,
+    [],
+    [],
+    [],
+    [],
+    f.geometries,
+  ).find((r) => r.id === "explicit-absence/DQ-19/sheet-002");
+  expect(
+    observed.evidence.nativeEndAbsences?.map((r) => r.nativeAbsence),
+  ).toEqual(["explicit-unterminated", "explicit-unterminated"]);
+  delete f.ir.cables[0].assignments[0].endpoints;
+  expect(audit(f).findings.map((r) => r.kind)).toEqual([
+    "wire-locator-measurement-gap",
+  ]);
 });

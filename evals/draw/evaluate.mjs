@@ -1,3 +1,4 @@
+import { measurementCoverage } from "./measurement-coverage.mjs";
 import { withRelationLandingSource } from "./relation-landing-sources.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 const wireLocatorAudits = new WeakMap();
@@ -753,7 +754,12 @@ function cohort(findings, key) {
 // Bind the unchanged IR at the evaluation boundary; drawn geometry cannot set it.
 function evaluateSheetWithSource(...args) {
   return withRelationLandingSource(args[3], args[4], () =>
-    evaluateSheet(...args),
+    measurementCoverage(
+      evaluateSheet(...args),
+      args[3],
+      wireLocatorAudits.get(args[2]),
+      args[1],
+    ),
   );
 }
 export { evaluateSheetWithSource as evaluateSheet };

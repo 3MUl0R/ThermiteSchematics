@@ -241,8 +241,22 @@ it("V5 resolves net repetition through its own wire and exact landing appearance
   expect(terminalText(await openSheet(page, svg(body + wire())))).toEqual([]);
   const split = body + marker("owner", "other", "A1", 140);
   expect(terminalText(await openSheet(page, svg(split + wire())))).toEqual([]);
+  expect(
+    terminalText(
+      await openSheet(
+        page,
+        svg(
+          split +
+            wire(
+              `data-route-source-port-key='${port.replace("feed", "other")}'`,
+            ),
+        ),
+      ),
+    ),
+  ).toEqual([
+    expect.objectContaining({ kind: "net-label-source-geometry-mismatch" }),
+  ]);
   for (const attrs of [
-    `data-route-source-port-key='${port.replace("feed", "other")}'`,
     `data-route-source-port-key='malformed'`,
     `data-route-source-port-key='${port}' data-edge-key='["wire","foreign"]'`,
   ])

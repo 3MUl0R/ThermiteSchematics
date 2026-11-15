@@ -131,5 +131,14 @@ it("keeps the terminal oracle's entire import graph independent of renderer/quer
       await visit(target);
     }
   }
-  await visit(new URL("./printed-vocabulary.mjs", import.meta.url));
+  for (const name of [
+    "printed-vocabulary",
+    "cable-end-identities",
+    "net-label-oracle",
+    "measurement-coverage",
+    "wire-source-contract",
+    "net-route-geometry",
+    "report-status",
+  ])
+    await visit(new URL(`./${name}.mjs`, import.meta.url));
 });

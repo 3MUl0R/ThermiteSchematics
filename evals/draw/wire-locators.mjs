@@ -1,5 +1,11 @@
+import {
+  wireInventory,
+  nativeWireSources,
+  wireCoverageGaps,
+  endApplicability,
+} from "./wire-source-contract.mjs";
+import { cableEndBindings } from "./cable-end-identities.mjs";
 // Native IR and Chromium ink only. Never imports the renderer's locator planner.
-import { nativeRows } from "./m3-native.mjs";
 import { issuedRows } from "./m3-documents.mjs";
 import { rowZones } from "./m3-zones.mjs";
 import { painted, extent, finding } from "./review-geometry.mjs";
@@ -78,15 +84,16 @@ export function pinListAppearances(g, ir) {
   return result;
 }
 
-export function measuredWireAppearances(packet, geometries, ir, rows) {
+export function measuredWireAppearances(
+  packet,
+  geometries,
+  ir,
+  rows,
+  cableOwners = cableEndBindings(packet, geometries, ir, rows).owners,
+) {
   const drawn = new Map();
   const needed = new Set(
     rows.flatMap((r) => r.ends.filter(Boolean).map(terminalKey)),
-  );
-  const cores = new Map(
-    rows
-      .filter((r) => r.element.kind === "cable_conductor")
-      .map((r) => [r.key, r]),
   );
   for (const [index, sheet] of packet.sheets.entries()) {
     const g = geometries[index];
@@ -95,64 +102,7 @@ export function measuredWireAppearances(packet, geometries, ir, rows) {
       ...(g.wireTerminals ?? []),
       ...pinListAppearances(g, ir),
     ]) {
-      let terminal = item.terminal;
-      if (!terminal && item.cableUid) {
-        const row = cores.get(
-          JSON.stringify([item.cableUid, item.conductorId]),
-        );
-        // Labels in this painted core row independently identify the native
-        // ends. Match each label to its nearest measured circle; array/DOM
-        // order and exported endpoint slots supply no identity.
-        const markers = (g.wireTerminals ?? []).filter(
-          (m) => m.cableScope && m.cableScope === item.cableScope,
-        );
-        const candidates = (row?.ends ?? []).filter(Boolean).filter((end) => {
-          const device = ir.devices.find((d) => d.uid === end.deviceUid),
-            expected = compact(`${device?.designation}.${end.terminalKey}`);
-          const labels = g.texts.filter(
-            (t) =>
-              painted(t) && t.cableScope && t.cableScope === item.cableScope,
-          );
-          return labels.some((first) => {
-            let value = "";
-            const lines = labels
-              .filter(
-                (t) =>
-                  Math.abs(
-                    (t.anchor?.x ?? t.bbox.x) -
-                      (first.anchor?.x ?? first.bbox.x),
-                  ) < 0.05 && t.bbox.y >= first.bbox.y,
-              )
-              .sort((a, b) => a.bbox.y - b.bbox.y);
-            for (const line of lines) {
-              value += compact(line.text);
-              if (value === expected) {
-                const distance = (m) =>
-                  Math.hypot(
-                    Math.max(
-                      0,
-                      first.bbox.x - m.bbox.x - m.bbox.w,
-                      m.bbox.x - first.bbox.x - first.bbox.w,
-                    ),
-                    Math.max(
-                      0,
-                      first.bbox.y - m.bbox.y - m.bbox.h,
-                      m.bbox.y - first.bbox.y - first.bbox.h,
-                    ),
-                  );
-                const d = distance(item);
-                return !markers.some(
-                  (m) => m !== item && distance(m) <= d + 0.01,
-                );
-              }
-              if (!expected.startsWith(value)) break;
-            }
-            return false;
-          });
-        });
-        if (candidates.length === 1)
-          terminal = [candidates[0].deviceUid, candidates[0].terminalKey];
-      }
+      const terminal = item.cableUid ? cableOwners.get(item) : item.terminal;
       const key = JSON.stringify(terminal);
       if (!needed.has(key)) continue;
       const zones = rowZones(g, item.bbox);
@@ -172,35 +122,21 @@ export function measuredWireAppearances(packet, geometries, ir, rows) {
 }
 
 export function wireLocatorAudit(packet, geometries, ir) {
-  const inventory = issuedRows(packet, geometries).filter(
-    (r) => r.kind === "wires",
+  const { inventory, findings: kindFindings } = wireInventory(
+    issuedRows(packet, geometries),
   );
   // Continuation-only and other non-inventory evaluations may contain only
   // conductor identities. They do not require native endpoint reconstruction.
-  if (!inventory.length) return { findings: [], measurements: [] };
+  if (!inventory.length) return { findings: kindFindings, measurements: [] };
   const gap = (row, reason) =>
     finding("wire-locator-measurement-gap", row.texts[0], {
       sheet: row.sheet,
       row: row.key,
       reason,
     });
-  const terminal = (t) =>
-    typeof t?.deviceUid === "string" &&
-    t.deviceUid.length > 0 &&
-    typeof t?.terminalKey === "string" &&
-    t.terminalKey.length > 0;
-  let native;
+  let native, absence;
   try {
-    for (const w of [...(ir.wires ?? []), ...(ir.jumpers ?? [])])
-      if (
-        !Array.isArray(w.endpoints) ||
-        w.endpoints.length !== 2 ||
-        ![0, 1].every((i) => terminal(w.endpoints[i]?.terminal))
-      )
-        throw Error(`Native conductor ${w.uid} has incomplete endpoints`);
-    native = nativeRows(ir).filter((r) => r.kind === "wires");
-    if (native.some((r) => r.ends.some((t) => t != null && !terminal(t))))
-      throw Error("Native conductor has incomplete terminal identity");
+    ({ rows: native, absence } = nativeWireSources(ir));
   } catch (error) {
     return {
       findings: inventory.map((row) => gap(row, error.message)),
@@ -208,8 +144,16 @@ export function wireLocatorAudit(packet, geometries, ir) {
     };
   }
   const rows = new Map(native.map((r) => [r.key, r]));
-  const drawn = measuredWireAppearances(packet, geometries, ir, native);
-  const findings = [],
+  const cable = cableEndBindings(packet, geometries, ir, native);
+  cable.notMeasured = wireCoverageGaps(cable.notMeasured, inventory);
+  const drawn = measuredWireAppearances(
+    packet,
+    geometries,
+    ir,
+    native,
+    cable.owners,
+  );
+  const findings = [...kindFindings, ...cable.findings],
     measurements = [];
   for (const row of inventory) {
     const source = rows.get(row.key);
@@ -255,6 +199,7 @@ export function wireLocatorAudit(packet, geometries, ir) {
         row: row.key,
         end,
         endpoint,
+        ...endApplicability(source, end, absence),
         printed: value,
         allowed,
         appearances,
@@ -272,5 +217,5 @@ export function wireLocatorAudit(packet, geometries, ir) {
         );
     }
   }
-  return { findings, measurements };
+  return { findings, measurements, notMeasured: cable.notMeasured };
 }
