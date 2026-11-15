@@ -24,8 +24,10 @@ import {
 import { CAPTION_CLEARANCE_MM } from "../symbols/caption-ink.js";
 import { MAX_PLACEMENT_LAYOUTS } from "../packet/rooted-search.js";
 import { STANDARD_ECONOMY_ATTEMPTS } from "../packet/rooted-economy.js";
+import type { PowerPlacementState } from "./power-placement.js";
 
 export interface CircuitLayoutRun {
+  power?: PowerPlacementState;
   quality: boolean;
   attempts: number;
   qualityAttempts: number;

@@ -284,11 +284,12 @@ export function fitLegendDrafts(
   views: readonly LegendViewDrafts[],
   page: PaperPage,
   layout: "standard" | "compact" | undefined,
+  render: typeof legendSheets = legendSheets,
 ): RenderOutcome<Draft[]> {
   const overrides = new Map<number, Draft[]>();
   let current = drafts;
   for (let attempt = 0; attempt <= views.length; attempt++) {
-    const rendered = legendSheets(ir, current, page);
+    const rendered = render(ir, current, page);
     if (rendered.ok) return { ok: true, value: current };
     if (
       "details" in rendered.error &&
@@ -319,7 +320,7 @@ export function fitLegendDrafts(
       const bound = rootedPageCostFailure(next);
       if (bound) failures.bound = bound;
       if (bound || next.length > 100) continue;
-      const trial = legendSheets(ir, next, page);
+      const trial = render(ir, next, page);
       if (trial.ok) return { ok: true, value: next };
       if ("details" in trial.error && trial.error.details?.navigationInvariant)
         return trial;

@@ -7,6 +7,7 @@ import {
   circuitInlineContext,
 } from "./circuit-inline-context.js";
 import type { ELK as ElkApi } from "elkjs/lib/elk-api.js";
+import { elkWorkScope, elkPacketWorkTrace } from "./elk-work.js";
 
 // elkjs 0.12.0 runs its GWT layout engine behind a worker interface. Outside a
 // browser the bundle substitutes an in-process faux worker, but the embedded
@@ -71,7 +72,12 @@ export function createElkEngine(): ElkApi {
   const engine = new ElkConstructor({
     workerFactory: (url) => new FauxWorker(url),
   });
-  if (!circuitInlineContext.getStore()) return engine;
+  if (
+    !circuitInlineContext.getStore() &&
+    !elkWorkScope.getStore() &&
+    !elkPacketWorkTrace.getStore()
+  )
+    return engine;
   const native = engine.layout.bind(engine);
   engine.layout = (input, options) =>
     cachedCircuitLayout(input, (copy) => native(copy, options), options);

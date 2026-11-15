@@ -160,7 +160,8 @@ export function auditTitleDataSurface(
       createHash("sha256")
         .update(text.replaceAll("\r\n", "\n"))
         .digest("hex") ===
-        "abbbfbdbd8f28a053e06818a871c7809bc6433b37bf41ca726100516901d3a47";
+        // Re-audited for RT2b: actual-ELK accounting context admission only.
+        "2ce6b59ca7bef029f0714cb9b87f823161753945bca60c15fdb7c39b1ef058e9";
     const visit = (node: ts.Node) => {
       if (
         ts.isElementAccessExpression(node) &&

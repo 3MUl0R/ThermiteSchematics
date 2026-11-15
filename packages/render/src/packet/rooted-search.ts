@@ -1,4 +1,4 @@
-import { frameContext } from "./frame-budget.js";
+import { frameContext, rollbackFrameSearch } from "./frame-budget.js";
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
@@ -28,9 +28,17 @@ import {
   type RootedDiagnostic,
 } from "./rooted-constraint.js";
 import { compareCandidates } from "./rooted-score.js";
+import {
+  elkWorkLedger,
+  elkWorkScope,
+  type ElkWorkLedger,
+  ElkWorkBudgetError,
+} from "../layout/elk-work.js";
+import { withCircuitLayoutCache } from "../layout/circuit-inline-context.js";
 
 type Profile = "compact" | "dense" | undefined;
 export interface RootedSearch {
+  elkWork?: ElkWorkLedger;
   diagnostics?: RootedDiagnostic[];
   referenceOffset?: number;
   candidates: RootedCandidate[];
@@ -38,6 +46,7 @@ export interface RootedSearch {
   errors: RenderFailure[];
   nativeErrors: Map<Profile, RenderFailure>;
   prepared: { p: PreparedSchematicDrawing; profile: Profile }[];
+  /** Existing proposal/economy schedule; elkWork counts logical LTR requests. */
   attempts: number;
   tried: Set<string>;
   settled?: boolean;
@@ -151,56 +160,113 @@ export async function searchRootedCandidates(
   compact: boolean,
   referenceOffset = 0,
 ) {
-  return withFontMetricCache(async () => {
-    const run: RootedSearch = {
-      standardEconomy: !compact,
-      diagnostics: [],
-      referenceOffset,
-      candidates: [],
-      native: [],
-      errors: [],
-      nativeErrors: new Map(),
-      prepared: [],
-      attempts: 0,
-      tried: new Set(),
-    };
-    for (const profile of compact ? ROOTED_COMPACT_PROFILES : [undefined]) {
-      await initial(ir, request, presentation, page, profile, run);
-    }
-    const reference =
-      run.prepared[0] && frameContext(page, run.prepared[0].p.view)?.reference;
-    if (reference) {
-      const seeded = buildRootedCandidates(
+  const legacy = () =>
+    elkWorkScope.exit(() =>
+      runRootedSearch(
         ir,
-        reference.prepared,
+        request,
+        presentation,
         page,
-        reference.profile,
-        false,
-        true,
+        compact,
         referenceOffset,
-        true,
-      );
-      if (seeded.ok) run.candidates.push(...seeded.value);
-    }
-    validateEconomyCandidate(ir, run, page);
-    if (searchSettled(run, page)) {
-      run.earlyExit = true;
-    } else {
-      // Hold one existing attempt for a physical jog left by ordinary recovery.
-      // Testing only the initial layout can pre-empt a jog-free recovered base.
-      const winner = rootedWinner(run, page);
-      run.jogRetryReserved =
-        winner?.prepared.view.family === "power" &&
-        winner.prepared.view.flow === "top-to-bottom" &&
-        [...(winner?.jogs.values() ?? [])].some((n) => n > 0);
-      await placements(ir, request, presentation, page, run);
-      if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
-    }
-    delete run.jogRetryReserved;
-    await repairSearchJogs(ir, run, page);
-    validateEconomyCandidate(ir, run, page);
-    return run;
+      ),
+    );
+  return withFontMetricCache(async () => {
+    // TTB retains the complete dev search, including adapter recovery and retry.
+    if (
+      request?.format !== "schematic-view-request/0.1" ||
+      request.family !== "power" ||
+      request.flow !== "left-to-right"
+    )
+      return legacy();
+    const work = elkWorkLedger(
+      JSON.stringify([request, compact, referenceOffset]),
+      MAX_PLACEMENT_LAYOUTS,
+    );
+    return withCircuitLayoutCache(async () => {
+      let run: RootedSearch;
+      try {
+        run = await elkWorkScope.run(work, () =>
+          rollbackFrameSearch(page, () =>
+            runRootedSearch(
+              ir,
+              request,
+              presentation,
+              page,
+              compact,
+              referenceOffset,
+            ),
+          ),
+        );
+      } catch (error) {
+        if (!(error instanceof ElkWorkBudgetError)) throw error;
+        // Discard the truncated search; the unchanged legacy path owns fallback.
+        work.exhausted = true;
+        run = await legacy();
+      }
+      run.elkWork = work;
+      work.baselineCalls = work.calls;
+      return run;
+    });
   });
+}
+
+async function runRootedSearch(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  compact: boolean,
+  referenceOffset: number,
+) {
+  const run: RootedSearch = {
+    standardEconomy: !compact,
+    diagnostics: [],
+    referenceOffset,
+    candidates: [],
+    native: [],
+    errors: [],
+    nativeErrors: new Map(),
+    prepared: [],
+    attempts: 0,
+    tried: new Set(),
+  };
+  for (const profile of compact ? ROOTED_COMPACT_PROFILES : [undefined]) {
+    await initial(ir, request, presentation, page, profile, run);
+  }
+  const reference =
+    run.prepared[0] && frameContext(page, run.prepared[0].p.view)?.reference;
+  if (reference) {
+    const seeded = buildRootedCandidates(
+      ir,
+      reference.prepared,
+      page,
+      reference.profile,
+      false,
+      true,
+      referenceOffset,
+      true,
+    );
+    if (seeded.ok) run.candidates.push(...seeded.value);
+  }
+  validateEconomyCandidate(ir, run, page);
+  if (searchSettled(run, page)) {
+    run.earlyExit = true;
+  } else {
+    // Hold one existing attempt for a physical jog left by ordinary recovery.
+    // Testing only the initial layout can pre-empt a jog-free recovered base.
+    const winner = rootedWinner(run, page);
+    run.jogRetryReserved =
+      winner?.prepared.view.family === "power" &&
+      winner.prepared.view.flow === "top-to-bottom" &&
+      [...(winner?.jogs.values() ?? [])].some((n) => n > 0);
+    await placements(ir, request, presentation, page, run);
+    if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
+  }
+  delete run.jogRetryReserved;
+  await repairSearchJogs(ir, run, page);
+  validateEconomyCandidate(ir, run, page);
+  return run;
 }
 
 function profileBuilder(

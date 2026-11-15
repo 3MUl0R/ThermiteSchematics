@@ -18,6 +18,7 @@ import { recoverCardLayout } from "./recover.js";
 import { required } from "../presentation/util.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
 import { reservePowerJogSpace } from "./power-jog-space.js";
+import type { ELK as ElkApi } from "elkjs/lib/elk-api.js";
 
 export interface DrawingContext {
   ir: Readonly<ElectricalIr>;
@@ -32,6 +33,25 @@ export function rememberDrawing(
 ) {
   contexts.set(p, context);
   return p;
+}
+
+/** Re-route the exact selected presentation, keeping its reservations, fixed
+ * ports and source context. The supplied engine owns the single quality input. */
+export async function relayoutDrawing(
+  p: PreparedSchematicDrawing,
+  engine: ElkApi,
+): Promise<RenderOutcome<PreparedSchematicDrawing>> {
+  const c = required(contexts.get(p), "Missing prepared source context");
+  const layout = await layoutPresentationGraph(p.graph, {
+    ...c.options,
+    engine,
+  });
+  if (!layout.ok)
+    return { ok: false, error: offViewLayoutFailure(p.graph, layout.error) };
+  const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
+  return gangs.ok
+    ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }
+    : gangs;
 }
 export async function initialCardLayout(
   graph: PresentationGraph,
