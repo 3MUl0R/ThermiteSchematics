@@ -350,3 +350,28 @@ authorize later growth: its exact base/current values must match. Release
 targets check ceilings, grandfathered values and move validity without
 per-item reason composition. Ratchet tests are in
 `packages/cli/test/health-*.test.ts`, including real-body 70/71-line headroom probes.
+
+Definite-assignment declarations (`let value!: T` and class fields `value!: T`)
+have a separate `definiteAssignments` counter, including tests. Its initial
+per-file baseline and global ceiling are measured from authenticated base source
+when reading an older v4 budget. The committed migration records that baseline
+with a reason; the ceiling can only fall. It follows the existing per-item
+reason and lowering rules. Expression non-null counts retain their old scope.
+The counters do not detect empty type-predicate/assertion functions or `any`-typed
+bindings that drop optionality; those remain review responsibilities.
+
+The separate test-helper audit follows actual test imports only within
+`packages/*/test/` (also `tests/`); it does not claim coverage outside that scope.
+Legacy bypass admissions authenticate the full enclosing function chain and
+consume one matching base function per current function. Identical copies do
+not acquire another admission. Changed helpers cannot guard assertions with
+`if`, conditional expressions, short-circuit operators or optional calls.
+
+The ELK wrapper audit is static, not a sandbox. Outside its hash-pinned loader,
+annotated slots and explicit generic arguments cannot re-home denied imported
+members into local interfaces. This deliberately reserves denied imported member
+names at annotated boundaries, including nested object and array slots, regardless
+of initializer syntax. Closed imported implementations remain trusted.
+Cast-reason replay comparison ignores whitespace, Unicode format characters and
+default-ignorable code points. Other changed text (including a trailing period
+or a braille blank) still counts as fresh, subject to exact from/to authorization.
