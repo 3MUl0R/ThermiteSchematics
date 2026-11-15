@@ -372,7 +372,8 @@ assertions wrapped in callbacks; this is not a proof that every assertion execut
 
 The ELK wrapper audit is static, not a sandbox. Outside its hash-pinned loader,
 denied imported member names are reserved at property access, constant-key element
-access and object destructuring (including rest and assignment patterns). The
+access and object destructuring. Assignment targets are followed through nested
+object/array patterns, defaults, spread/rest targets and for-of/for-in heads. The
 checker must resolve such a member entirely to its allowlisted external
 declarations; local, merged or unresolved symbols are rejected. This use-site
 rule does not depend on the spelling of an alias or generic type. The syntactic
@@ -382,6 +383,9 @@ such as `run` or `exit`. The audit does not analyze the implementations of close
 imported dependencies or provide a runtime sandbox; the loader is admitted by
 its exact hash. Nonconstant computed keys remain rejected by the existing key
 audit. Closed imported implementations remain trusted.
+Runtime-only members absent from the Node type declarations (such as Bun's
+AsyncLocalStorage `withScope`, `_enable` and `_propagate`) are not reserved:
+local interfaces declaring them pass; module augmentation is rejected.
 Cast-reason replay comparison ignores whitespace, Unicode format characters and
 default-ignorable code points. Other changed text (including a trailing period
 or a braille blank) still counts as fresh, subject to exact from/to authorization.
