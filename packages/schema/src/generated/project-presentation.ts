@@ -106,18 +106,54 @@ export interface CompactProjectPresentationFile {
     fields?: {
       project?: CompactTitleField;
       sheetTitle?: CompactTitleField;
-      drawingNumber?: CompactTitleField;
-      customer?: CompactTitleField;
-      drawnBy?: CompactTitleField;
+      drawingNumber?: CompactIdentifierTitleField;
+      customer?: CompactShortTitleField;
+      drawnBy?: CompactShortTitleField;
       date?: CompactTitleField;
-      checkedBy?: CompactTitleField;
-      approvedBy?: CompactTitleField;
-      revision?: CompactTitleField;
+      checkedBy?: CompactShortTitleField;
+      approvedBy?: CompactShortTitleField;
+      revision?: CompactIdentifierTitleField;
       sheetNumber?: CompactTitleField;
     };
   };
 }
 export interface CompactTitleField {
+  slot:
+    | "project"
+    | "sheetTitle"
+    | "drawingNumber"
+    | "customer"
+    | "drawnBy"
+    | "date"
+    | "checkedBy"
+    | "approvedBy"
+    | "revision"
+    | "sheetNumber";
+  label: string;
+  value?: string | null;
+  bind?:
+    "project.name" | "sheet.title" | "sheet.revision" | "sheet.numberOfTotal";
+  pattern?: string;
+}
+export interface CompactIdentifierTitleField {
+  slot:
+    | "project"
+    | "sheetTitle"
+    | "drawingNumber"
+    | "customer"
+    | "drawnBy"
+    | "date"
+    | "checkedBy"
+    | "approvedBy"
+    | "revision"
+    | "sheetNumber";
+  label: string;
+  value?: string | null;
+  bind?:
+    "project.name" | "sheet.title" | "sheet.revision" | "sheet.numberOfTotal";
+  pattern?: string;
+}
+export interface CompactShortTitleField {
   slot:
     | "project"
     | "sheetTitle"

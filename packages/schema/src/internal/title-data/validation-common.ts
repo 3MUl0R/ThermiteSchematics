@@ -83,14 +83,7 @@ export function checkLiteral(
   issues: Issues,
 ): void {
   if (typeof value !== "string") return;
-  const limit =
-    slot === "drawingNumber"
-      ? 128
-      : ["customer", "drawnBy", "checkedBy", "approvedBy"].includes(slot)
-        ? 80
-        : slot === "revision"
-          ? 128
-          : 160;
+  const limit = titleLiteralLimit(slot);
   if (!value.trim() || [...value].length > limit)
     issues.add(
       "E013",
@@ -103,4 +96,15 @@ export function checkLiteral(
       pointer,
       "Title date must be a valid Gregorian YYYY-MM-DD date.",
     );
+}
+
+/** Existing semantic code-point limits, shared with the schema parity controls. */
+export function titleLiteralLimit(slot: string): number {
+  return slot === "drawingNumber"
+    ? 128
+    : ["customer", "drawnBy", "checkedBy", "approvedBy"].includes(slot)
+      ? 80
+      : slot === "revision"
+        ? 128
+        : 160;
 }

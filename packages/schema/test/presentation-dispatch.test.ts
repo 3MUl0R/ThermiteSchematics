@@ -76,13 +76,6 @@ it("dispatches malformed compact fields only to compact diagnostics", () => {
       5,
       7,
     ),
-    error(
-      "E013",
-      "Built-in title keys must match their slot; compact has no extra slots.",
-      "/titleBlock/fields/custom",
-      5,
-      17,
-    ),
   ]);
   expect(
     compact({ customer: { slot: "customer", label: "Customer", extra: true } }),

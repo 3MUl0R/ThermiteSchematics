@@ -10,7 +10,7 @@ function checkField(
   issues: Issues,
 ): void {
   const slot = field.slot;
-  if (!slots.includes(key as (typeof slots)[number]) || slot !== key)
+  if (slot !== key)
     issues.add(
       "E013",
       pointer,
@@ -65,19 +65,11 @@ export function checkPresentation(
       checkLiteral(v, "line", `/titleBlock/lines/${i}`, issues),
     );
   if (!isObject(tb.fields)) return;
-  if (Object.keys(tb.fields).length > slots.length)
-    issues.add(
-      "E015",
-      "/titleBlock/fields",
-      "Compact has at most ten fixed title fields.",
-    );
-  const used = new Set<JsonValue>();
+  // The canonical closed object owns unknown keys and the ten-field bound.
+  // Matching each known key to its slot also rules out repeated slot claims.
   for (const [key, field] of Object.entries(tb.fields))
-    if (isObject(field)) {
+    if (slots.some((slot) => slot === key) && isObject(field)) {
       const pointer = appendJsonPointer("/titleBlock/fields", key);
-      if (used.has(field.slot ?? null))
-        issues.add("E013", `${pointer}/slot`, "Duplicate title slot.");
-      used.add(field.slot ?? null);
       checkField(key, field, pointer, issues);
     }
 }
