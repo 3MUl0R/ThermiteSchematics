@@ -122,6 +122,41 @@ function loaderSpecifier(node: ts.Node, factories: ReadonlySet<string>) {
     ? node.arguments[0]
     : null;
 }
+function auditElkBindings(node: ts.Node, issues: string[]) {
+  if (
+    ts.isVariableDeclaration(node) &&
+    ts.isIdentifier(node.name) &&
+    node.name.text === "fauxWorker" &&
+    node.initializer &&
+    !(
+      ts.isIdentifier(node.initializer) && node.initializer.text === "undefined"
+    )
+  )
+    issues.push(ELK_RUNTIME_FILE + ": loader cache must start undefined");
+  if (
+    ts.isVariableDeclaration(node) &&
+    ts.isIdentifier(node.name) &&
+    node.name.text === "WORKER_SPECIFIER" &&
+    (!node.initializer ||
+      !ts.isStringLiteral(node.initializer) ||
+      node.initializer.text !== "elkjs/lib/elk-worker.min.js" ||
+      !ts.isVariableDeclarationList(node.parent) ||
+      !(node.parent.flags & ts.NodeFlags.Const))
+  )
+    issues.push(
+      ELK_RUNTIME_FILE + ": worker specifier must remain a closed ELK resource",
+    );
+  if (
+    ts.isBinaryExpression(node) &&
+    ts.isIdentifier(node.left) &&
+    ["fauxWorker", "WORKER_SPECIFIER"].includes(node.left.text) &&
+    node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+    node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+  )
+    issues.push(
+      ELK_RUNTIME_FILE + ": loader binding mutated outside pinned function",
+    );
+}
 export function auditElkCapabilities(
   tree: ts.SourceFile,
   loader: ts.FunctionDeclaration | null,
@@ -162,41 +197,7 @@ export function auditElkCapabilities(
         issues.push(
           ELK_RUNTIME_FILE + ": forbidden ELK capability " + node.text,
         );
-      if (
-        ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "fauxWorker" &&
-        node.initializer &&
-        !(
-          ts.isIdentifier(node.initializer) &&
-          node.initializer.text === "undefined"
-        )
-      )
-        issues.push(ELK_RUNTIME_FILE + ": loader cache must start undefined");
-      if (
-        ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "WORKER_SPECIFIER" &&
-        (!node.initializer ||
-          !ts.isStringLiteral(node.initializer) ||
-          node.initializer.text !== "elkjs/lib/elk-worker.min.js" ||
-          !ts.isVariableDeclarationList(node.parent) ||
-          !(node.parent.flags & ts.NodeFlags.Const))
-      )
-        issues.push(
-          ELK_RUNTIME_FILE +
-            ": worker specifier must remain a closed ELK resource",
-        );
-      if (
-        ts.isBinaryExpression(node) &&
-        ts.isIdentifier(node.left) &&
-        ["fauxWorker", "WORKER_SPECIFIER"].includes(node.left.text) &&
-        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-      )
-        issues.push(
-          ELK_RUNTIME_FILE + ": loader binding mutated outside pinned function",
-        );
+      auditElkBindings(node, issues);
     }
     ts.forEachChild(node, visit);
   }
