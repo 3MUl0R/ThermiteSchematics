@@ -1,3 +1,4 @@
+import { migrateReasonLists } from "./health-reasons.mjs";
 export const DEFAULT_THRESHOLDS = Object.freeze({
   duplicateTokens: 50,
   fileLines: 850,
@@ -134,7 +135,7 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
 export function upgradeBudget(raw, metrics) {
-  if (raw.version === 4) return raw;
+  if (raw.version === 4) return migrateReasonLists(raw);
   if (raw.version === 2) return createBudget(metrics, raw.thresholds);
   if (raw.version !== 3) throw Error("Unsupported health budget version");
   const next = structuredClone(raw);

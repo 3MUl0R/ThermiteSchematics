@@ -843,240 +843,318 @@
     "packages/schema/src/symbol-profiles.ts": 6
   },
   "reasons": {
-    "files:packages/cli/src/index.ts": {
-      "identity": "files:packages/cli/src/index.ts",
-      "from": 1334,
-      "to": 1369,
-      "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
-    },
-    "files:packages/cli/test/project-guide.test.ts": {
-      "identity": "files:packages/cli/test/project-guide.test.ts",
-      "from": 1135,
-      "to": 1140,
-      "reason": "Register the drawing-frame fact module and resolve the exact approved docs pointer through its shipped offline topic; existing guide rules remain byte-identical."
-    },
-    "files:packages/compiler/src/loader.ts": {
-      "identity": "files:packages/compiler/src/loader.ts",
-      "from": 1473,
-      "to": 1497,
-      "reason": "Enforce the compact-only raw 64 KiB presentation cap in an extracted helper, retaining the legacy validation call and diagnostics."
-    },
-    "files:packages/render/test/title-data-resolve.test.ts": {
-      "identity": "files:packages/render/test/title-data-resolve.test.ts",
-      "from": 887,
-      "to": 938,
-      "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
-    },
-    "functions:packages/cli/src/alpha.ts#producePacket": {
-      "identity": "functions:packages/cli/src/alpha.ts#producePacket",
-      "from": 70,
-      "to": 122,
-      "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
-    },
-    "functions:packages/cli/test/guide.test.ts#executeJson": {
-      "identity": "functions:packages/cli/test/guide.test.ts#executeJson",
-      "from": 219,
-      "to": 220,
-      "reason": "Delegate the new drawing-frame JSON examples to a separately bounded execution helper."
-    },
-    "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": {
-      "identity": "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5",
-      "from": 70,
-      "to": 77,
-      "reason": "Exercise the same compiled compact fixture through agent validation, CLI validation, both public packet versions and CLI SVG export."
-    },
-    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface": {
-      "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface",
-      "from": 227,
-      "to": 228,
-      "reason": "RT2b explicitly re-audited the unchanged ELK worker loader and accounting-only module delta; the authorized one-line exact-source pin comment preserves all audit rules."
-    },
-    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": {
-      "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit",
-      "from": 82,
-      "to": 101,
-      "reason": "Audit constant bracket access to eval and Function, including concatenated member names; keep the exact pinned ELK exception and all C7 hard caps."
-    },
-    "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": {
-      "identity": "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked",
-      "from": 183,
-      "to": 188,
-      "reason": "Measure supplied project and sheet headings before circuit bounds and return the existing capacity error before layout."
-    },
-    "functions:packages/render/src/packet/topology.ts#topologyDrafts": {
-      "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts",
-      "from": 176,
-      "to": 178,
-      "reason": "Measure supplied headings before topology bounds and reject derived overflow before layout."
-    },
-    "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose": {
-      "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose",
-      "from": 142,
-      "to": 144,
-      "reason": "Pass the same authored presentation context into topology composition for heading resolution."
-    },
-    "functions:packages/render/src/sheets.ts#renderPacket": {
-      "identity": "functions:packages/render/src/sheets.ts#renderPacket",
-      "from": 212,
-      "to": 217,
-      "reason": "Attach the native authored view index and first-sheet context before the existing per-view dispatcher."
-    },
-    "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback": {
-      "identity": "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback",
-      "from": 70,
-      "to": 85,
-      "reason": "The 85-line NAV3 regression callback verifies companion, document renumbering and clone isolation across view reuse."
-    },
-    "functions:scripts/health-measure.mjs#measureSources": {
-      "identity": "functions:scripts/health-measure.mjs#measureSources",
-      "from": 70,
-      "to": 88,
-      "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
-    },
-    "nonNullAssertions:packages/query/src/documentation/assemblies.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/assemblies.ts",
-      "from": 0,
-      "to": 3,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/bom-rows.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/bom-rows.ts",
-      "from": 0,
-      "to": 8,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/bom.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/bom.ts",
-      "from": 0,
-      "to": 7,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/io-ports.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/io-ports.ts",
-      "from": 0,
-      "to": 11,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/io.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/io.ts",
-      "from": 0,
-      "to": 1,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/network.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/network.ts",
-      "from": 0,
-      "to": 3,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/terminals.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/terminals.ts",
-      "from": 0,
-      "to": 2,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/query/src/documentation/wires.ts": {
-      "identity": "nonNullAssertions:packages/query/src/documentation/wires.ts",
-      "from": 0,
-      "to": 1,
-      "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts",
-      "from": 0,
-      "to": 9,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/layout-input.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/layout-input.ts",
-      "from": 0,
-      "to": 9,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/layout-routes.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/layout-routes.ts",
-      "from": 0,
-      "to": 49,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/make-nodes.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/make-nodes.ts",
-      "from": 0,
-      "to": 9,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/node-emission.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/node-emission.ts",
-      "from": 0,
-      "to": 2,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/node-symbols.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/node-symbols.ts",
-      "from": 0,
-      "to": 13,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/circuit/nodes.ts": {
-      "identity": "nonNullAssertions:packages/render/src/circuit/nodes.ts",
-      "from": 0,
-      "to": 8,
-      "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts",
-      "from": 0,
-      "to": 4,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts",
-      "from": 0,
-      "to": 14,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts",
-      "from": 0,
-      "to": 2,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts",
-      "from": 0,
-      "to": 4,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts",
-      "from": 0,
-      "to": 13,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts": {
-      "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts",
-      "from": 0,
-      "to": 23,
-      "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
-    },
-    "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": {
-      "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",
-      "from": 0,
-      "to": 11,
-      "reason": "moved verbatim from packages/render/src/symbols/mappings.ts by C7e extraction"
-    },
-    "nonNullAssertions:packages/render/src/view-normalization.ts": {
-      "identity": "nonNullAssertions:packages/render/src/view-normalization.ts",
-      "from": 0,
-      "to": 2,
-      "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
-    },
-    "nonNullAssertions:packages/render/src/view-roots.ts": {
-      "identity": "nonNullAssertions:packages/render/src/view-roots.ts",
-      "from": 0,
-      "to": 2,
-      "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
-    }
+    "files:packages/cli/src/index.ts": [
+      {
+        "identity": "files:packages/cli/src/index.ts",
+        "from": 1334,
+        "to": 1369,
+        "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
+      }
+    ],
+    "files:packages/cli/test/project-guide.test.ts": [
+      {
+        "identity": "files:packages/cli/test/project-guide.test.ts",
+        "from": 1135,
+        "to": 1140,
+        "reason": "Register the drawing-frame fact module and resolve the exact approved docs pointer through its shipped offline topic; existing guide rules remain byte-identical."
+      }
+    ],
+    "files:packages/compiler/src/loader.ts": [
+      {
+        "identity": "files:packages/compiler/src/loader.ts",
+        "from": 1473,
+        "to": 1497,
+        "reason": "Enforce the compact-only raw 64 KiB presentation cap in an extracted helper, retaining the legacy validation call and diagnostics."
+      }
+    ],
+    "files:packages/render/test/title-data-resolve.test.ts": [
+      {
+        "identity": "files:packages/render/test/title-data-resolve.test.ts",
+        "from": 887,
+        "to": 938,
+        "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
+      }
+    ],
+    "functions:packages/cli/src/alpha.ts#producePacket": [
+      {
+        "identity": "functions:packages/cli/src/alpha.ts#producePacket",
+        "from": 70,
+        "to": 122,
+        "reason": "CLI command extraction preserves existing async action bodies and command order; index builder wrappers grow the file, and producePacket keeps the existing 122-line async body without extra await boundaries."
+      }
+    ],
+    "functions:packages/cli/test/guide.test.ts#executeJson": [
+      {
+        "identity": "functions:packages/cli/test/guide.test.ts#executeJson",
+        "from": 219,
+        "to": 220,
+        "reason": "Delegate the new drawing-frame JSON examples to a separately bounded execution helper."
+      }
+    ],
+    "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": [
+      {
+        "identity": "functions:packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5",
+        "from": 70,
+        "to": 77,
+        "reason": "Exercise the same compiled compact fixture through agent validation, CLI validation, both public packet versions and CLI SVG export."
+      }
+    ],
+    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface": [
+      {
+        "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface",
+        "from": 227,
+        "to": 228,
+        "reason": "RT2b explicitly re-audited the unchanged ELK worker loader and accounting-only module delta; the authorized one-line exact-source pin comment preserves all audit rules."
+      }
+    ],
+    "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": [
+      {
+        "identity": "functions:packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit",
+        "from": 82,
+        "to": 101,
+        "reason": "Audit constant bracket access to eval and Function, including concatenated member names; keep the exact pinned ELK exception and all C7 hard caps."
+      }
+    ],
+    "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": [
+      {
+        "identity": "functions:packages/render/src/packet/circuit.ts#circuitDraftsUnchecked",
+        "from": 183,
+        "to": 188,
+        "reason": "Measure supplied project and sheet headings before circuit bounds and return the existing capacity error before layout."
+      }
+    ],
+    "functions:packages/render/src/packet/topology.ts#topologyDrafts": [
+      {
+        "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts",
+        "from": 176,
+        "to": 178,
+        "reason": "Measure supplied headings before topology bounds and reject derived overflow before layout."
+      }
+    ],
+    "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose": [
+      {
+        "identity": "functions:packages/render/src/packet/topology.ts#topologyDrafts/compose",
+        "from": 142,
+        "to": 144,
+        "reason": "Pass the same authored presentation context into topology composition for heading resolution."
+      }
+    ],
+    "functions:packages/render/src/sheets.ts#renderPacket": [
+      {
+        "identity": "functions:packages/render/src/sheets.ts#renderPacket",
+        "from": 212,
+        "to": 217,
+        "reason": "Attach the native authored view index and first-sheet context before the existing per-view dispatcher."
+      }
+    ],
+    "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback": [
+      {
+        "identity": "functions:packages/render/test/circuit-view-cache-nav3.test.ts#it callback",
+        "from": 70,
+        "to": 85,
+        "reason": "The 85-line NAV3 regression callback verifies companion, document renumbering and clone isolation across view reuse."
+      }
+    ],
+    "functions:scripts/health-measure.mjs#measureSources": [
+      {
+        "identity": "functions:scripts/health-measure.mjs#measureSources",
+        "from": 70,
+        "to": 88,
+        "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/assemblies.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/assemblies.ts",
+        "from": 0,
+        "to": 3,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/bom-rows.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/bom-rows.ts",
+        "from": 0,
+        "to": 8,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/bom.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/bom.ts",
+        "from": 0,
+        "to": 7,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/io-ports.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/io-ports.ts",
+        "from": 0,
+        "to": 11,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/io.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/io.ts",
+        "from": 0,
+        "to": 1,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/network.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/network.ts",
+        "from": 0,
+        "to": 3,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/terminals.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/terminals.ts",
+        "from": 0,
+        "to": 2,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/query/src/documentation/wires.ts": [
+      {
+        "identity": "nonNullAssertions:packages/query/src/documentation/wires.ts",
+        "from": 0,
+        "to": 1,
+        "reason": "moved verbatim from packages/query/src/documentation.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/layout-drawing.ts",
+        "from": 0,
+        "to": 9,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/layout-input.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/layout-input.ts",
+        "from": 0,
+        "to": 9,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/layout-routes.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/layout-routes.ts",
+        "from": 0,
+        "to": 49,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/make-nodes.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/make-nodes.ts",
+        "from": 0,
+        "to": 9,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/node-emission.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/node-emission.ts",
+        "from": 0,
+        "to": 2,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/node-symbols.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/node-symbols.ts",
+        "from": 0,
+        "to": 13,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/circuit/nodes.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/circuit/nodes.ts",
+        "from": 0,
+        "to": 8,
+        "reason": "moved verbatim from packages/render/src/circuit.ts by C7h extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-assemblies.ts",
+        "from": 0,
+        "to": 4,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-emission.ts",
+        "from": 0,
+        "to": 14,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-node-ports.ts",
+        "from": 0,
+        "to": 2,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-nodes.ts",
+        "from": 0,
+        "to": 4,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-port-emission.ts",
+        "from": 0,
+        "to": 13,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/signal-loop/direct-routes.ts",
+        "from": 0,
+        "to": 23,
+        "reason": "moved verbatim from packages/render/src/signal-loop.ts by C7i extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",
+        "from": 0,
+        "to": 11,
+        "reason": "moved verbatim from packages/render/src/symbols/mappings.ts by C7e extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/view-normalization.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/view-normalization.ts",
+        "from": 0,
+        "to": 2,
+        "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
+      }
+    ],
+    "nonNullAssertions:packages/render/src/view-roots.ts": [
+      {
+        "identity": "nonNullAssertions:packages/render/src/view-roots.ts",
+        "from": 0,
+        "to": 2,
+        "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
+      }
+    ]
   },
   "skippedTests": {
     "evals/agent/stop.test.mjs": 4,

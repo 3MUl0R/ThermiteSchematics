@@ -1,4 +1,5 @@
 import { sizeKey, valuesOf } from "./health-budget.mjs";
+import { currentOwners } from "./health-owners.mjs";
 export const CONTINUITY_MAX_ADDED = 70;
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const fileOf = (key) => key.split("#", 1)[0];
@@ -143,14 +144,7 @@ export function allowanceMatches(current, budget, reference) {
     }
     const used = new Set(),
       rows = candidates(section, current, budget, reference),
-      owners = new Map(
-        Object.entries(reference.budget.grandfathered[section])
-          .filter(([, n]) => n > budget.ceilings[sizeKey(section)])
-          .map(([id]) => [
-            sourceBody(section, id, reference.budget, reference.metrics),
-            id,
-          ]),
-      );
+      owners = currentOwners(rows, current, reference.metrics);
     for (const row of rows) {
       if (used.has(row.id) || result[section][row.key]) continue;
       // A containing body's authenticated grandfathered location belongs to

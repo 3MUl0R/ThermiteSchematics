@@ -79,6 +79,9 @@ function main() {
   if (mode === "--lower")
     writeFileSync(path, JSON.stringify(next, null, 2) + "\n");
   process.stdout.write(
+    `Type assertion AST scan: ${(current.typeAssertionScanMs + (history?.metrics.typeAssertionScanMs ?? 0)).toFixed(1)} ms (current + baseline; no type program).\n`,
+  );
+  process.stdout.write(
     `Health ratchet passed (${Object.keys(current.files).length} files, ${Object.keys(current.functions).length} functions; ${(performance.now() - start).toFixed(0)} ms).\n`,
   );
 }

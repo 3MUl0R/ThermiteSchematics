@@ -148,12 +148,14 @@ it("requires a reason for an under-ceiling raise and records it", () => {
   const next = acceptBudget(current, budget, "ordered helper extraction");
   expect(
     next.reasons["functions:packages/example/src/example.ts#existing"],
-  ).toEqual({
-    identity: "functions:packages/example/src/example.ts#existing",
-    from: 90,
-    to: 95,
-    reason: "ordered helper extraction",
-  });
+  ).toEqual([
+    {
+      identity: "functions:packages/example/src/example.ts#existing",
+      from: 90,
+      to: 95,
+      reason: "ordered helper extraction",
+    },
+  ]);
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
 });
 it.each(["fileLines", "functionLines", "nonNullAssertions", "skippedTests"])(

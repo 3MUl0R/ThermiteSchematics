@@ -1,3 +1,11 @@
+import { typeAssertionRegressions } from "./health-casts.mjs";
+import {
+  reasonMatches,
+  latestReason,
+  appendReason,
+  migrateReasonLists,
+  reasonHistoryRegressions,
+} from "./health-reasons.mjs";
 import {
   DEFAULT_THRESHOLDS,
   SIZE_CEILINGS,
@@ -103,23 +111,13 @@ export function ceilingRegressions(current, budget, reference) {
   for (const [key, n] of Object.entries(totals(current)))
     if (n > budget.ceilings[key])
       errors.push(`Global ${key} ceiling ${budget.ceilings[key]} -> ${n}`);
-  return errors;
+  return [...errors, ...typeAssertionRegressions(current, budget, reference)];
 }
 export function regressions(current, budget, reference) {
   return [
     ...ceilingRegressions(current, budget, reference),
     ...changes(current, budget, reference).map((c) => c.message),
   ];
-}
-function reasonMatches(record, identity, from, to) {
-  return (
-    record &&
-    record.identity === identity &&
-    record.from === from &&
-    record.to === to &&
-    typeof record.reason === "string" &&
-    Boolean(record.reason.trim())
-  );
 }
 function authorizationRows(current, budget, reference) {
   const result = [];
@@ -188,12 +186,12 @@ export function acceptBudget(current, budget, reason, reference) {
       reference ? { ...reference, current } : undefined,
     );
     if (to > from)
-      accepted.reasons[identity] = {
+      appendReason(accepted, identity, {
         identity,
         from,
         to,
         reason: reason.trim(),
-      };
+      });
   }
   bankGrandfathers(current, budget, accepted, reference);
   for (const section of [...SECTIONS, "reasons"])
@@ -201,16 +199,16 @@ export function acceptBudget(current, budget, reason, reference) {
   return accepted;
 }
 function bankReasons(current, previous, next, reference) {
-  next.reasons = structuredClone(previous.reasons);
+  next.reasons = migrateReasonLists(previous).reasons;
   if (!reference) return;
   for (const r of authorizationRows(current, next, reference)) {
     const identity = `${r.section}:${r.key}`,
-      old = previous.reasons[identity];
+      old = latestReason(previous.reasons[identity]);
     if (
       reasonMatches(old, identity, r.from, previous[r.section][r.key]) &&
       r.to <= old.to
     )
-      next.reasons[identity] = { ...old, to: r.to };
+      appendReason(next, identity, { ...old, to: r.to });
   }
 }
 function bankGrandfathers(current, previous, next, reference) {
@@ -257,7 +255,7 @@ export function lowerBudget(current, budget, reference) {
   return next;
 }
 export function regressionMessage(errors) {
-  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, each authorization must match {identity, from: base value, to: current value, reason}. Release targets compare grandfathered values without cumulative content continuity or composing dev reasons. Both --accept and --lower bank reductions and retire sub-cap/deleted records. Dev continuity allows at most 70 added lines per PR. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
+  return `${errors.join("\n")}\nRaising a budget requires a manual edit or bun run health:accept --reason <text>, only under the global ceilings. Against dev, the latest append-only reason record must match {identity, from: base value, to: current value, reason}. Changed-file type assertion increases require their own exact typeAssertions:<path> reason record. Release targets compare grandfathered values without cumulative content continuity or composing dev reasons. Both --accept and --lower bank reductions and retire sub-cap/deleted records. Dev continuity allows at most 70 added lines per PR. Cross-file moves require {section, from, sha256} in moves[newIdentity] and an absent source identity.`;
 }
 function grandfatherHistory(current, budget, reference) {
   const errors = [],
@@ -353,6 +351,7 @@ export function historyRegressions(
         );
   return [
     ...errors,
+    ...reasonHistoryRegressions(budget, baseBudget),
     ...ceilingRegressions(current, budget, reference),
     ...grandfatherHistory(current, budget, reference),
     ...itemHistory(current, budget, reference),

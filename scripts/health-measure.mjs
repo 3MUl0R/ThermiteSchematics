@@ -1,3 +1,5 @@
+import { auditDataFixture } from "./audit-scope.mjs";
+import { countTypeAssertions } from "./health-casts.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -15,6 +17,7 @@ export const EXCLUDED_CODE = [
   /^packages\/render\/src\/text-metrics-data\.ts$/,
 ];
 export function inScope(path) {
+  if (auditDataFixture(path)) return false;
   if (!/\.(?:[cm]?[jt]sx?|py|sh|ps1)$/.test(path)) return false;
   if (EXCLUDED_CODE.some((pattern) => pattern.test(path))) return false;
   // E2 owns a separately versioned harness; preserve its suppression-only scan.
@@ -255,6 +258,29 @@ function isSuppression(node, inTest) {
   );
 }
 
+function scanHealthFile(path, text) {
+  let milliseconds = 0;
+  text = text.replace(/\r\n/g, "\n");
+  const source = /\.[cm]?[jt]sx?$/.test(path)
+    ? ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
+    : undefined;
+  if (source?.parseDiagnostics.length)
+    throw new Error(`Cannot parse health source: ${path}`);
+  if (dataFixture(path, source)) return null;
+  const onlySkips = testFile(path) || /(?:^|\/)fixtures\//.test(path),
+    sizes = sizeScope(path);
+  const metrics = !sizes
+    ? { skippedTests: 0 }
+    : { lines: lineCount(text), nonNullAssertions: 0, skippedTests: 0 };
+  if (sizes && source) {
+    const counted = countTypeAssertions(source);
+    metrics.typeAssertions = counted.count;
+    milliseconds = counted.milliseconds;
+  }
+
+  return { text, source, onlySkips, sizes, metrics, milliseconds };
+}
+
 /** AST metrics, with stable lexical function names rather than source-line IDs. */
 export function measure(root = resolve(".")) {
   return measureSources(trackedPaths(root), (path) =>
@@ -271,19 +297,12 @@ export function measureSources(paths, read) {
     fileHashes = {},
     bodyLines = {},
     fileLines = {};
+  let typeAssertionScanMs = 0;
   for (const path of paths) {
-    const text = read(path).replace(/\r\n/g, "\n");
-    const source = /\.[cm]?[jt]sx?$/.test(path)
-      ? ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
-      : undefined;
-    if (source?.parseDiagnostics.length)
-      throw new Error(`Cannot parse health source: ${path}`);
-    if (dataFixture(path, source)) continue;
-    const onlySkips = testFile(path) || /(?:^|\/)fixtures\//.test(path),
-      sizes = sizeScope(path);
-    const metrics = !sizes
-      ? { skippedTests: 0 }
-      : { lines: lineCount(text), nonNullAssertions: 0, skippedTests: 0 };
+    const scanned = scanHealthFile(path, read(path));
+    if (!scanned) continue;
+    const { text, source, onlySkips, sizes, metrics } = scanned;
+    typeAssertionScanMs += scanned.milliseconds;
     const occurrences = new Map();
     function visit(node, scope = "") {
       if (isSuppression(node, onlySkips)) metrics.skippedTests++;
@@ -336,7 +355,7 @@ export function measureSources(paths, read) {
     }
   }
   const duplicates = duplicateGroups(bodies);
-  return {
+  const result = {
     version: 4,
     files,
     functions,
@@ -348,6 +367,10 @@ export function measureSources(paths, read) {
     bodyLines,
     fileLines,
   };
+  Object.defineProperty(result, "typeAssertionScanMs", {
+    value: typeAssertionScanMs,
+  });
+  return result;
 }
 
 function duplicateGroups(bodies) {

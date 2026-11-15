@@ -129,7 +129,9 @@ it.each([false, true])(
     const budget = JSON.parse(
       readFileSync(root + "/scripts/health-budget.json", "utf8"),
     );
-    expect(budget.reasons[`functions:${path}#runThermite`]).toMatchObject({
+    expect(
+      budget.reasons[`functions:${path}#runThermite`].at(-1),
+    ).toMatchObject({
       from: 72,
       to: 82,
     });

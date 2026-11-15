@@ -197,11 +197,14 @@ it("accept lowers without a reason and preserves an exact prior authorization wh
   const current = metrics(root),
     next = acceptBudget(current, raised, undefined, reference);
   expect(next.functions[id]).toBe(90);
-  expect(next.reasons[`functions:${id}`]).toEqual({
-    identity: `functions:${id}`,
-    from: 80,
-    to: 90,
-    reason: "reviewed growth",
-  });
+  expect(next.reasons[`functions:${id}`]).toEqual([
+    ...raised.reasons[`functions:${id}`],
+    {
+      identity: `functions:${id}`,
+      from: 80,
+      to: 90,
+      reason: "reviewed growth",
+    },
+  ]);
   expect(historyRegressions(current, next, budget, base)).toEqual([]);
 });
