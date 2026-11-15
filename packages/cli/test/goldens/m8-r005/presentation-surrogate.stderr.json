@@ -52,6 +52,18 @@
     "ownerId": "presentation.titleBlock.lines[0]",
     "field": "title.authored-line",
     "reason": "unpaired-surrogate",
-    "root": "LS1"
+    "root": "LS1",
+    "details": {
+      "diagnosticContext": {
+        "projectName": "Motor Starter Reference System",
+        "requestField": "/",
+        "views": [
+          {
+            "viewIndex": 0,
+            "title": "LS1 / trace to PLC1"
+          }
+        ]
+      }
+    }
   }
 }

@@ -2,6 +2,7 @@ import { addContinuousLegend } from "./device-legend.js";
 import { initialCardLayout, rememberDrawing } from "./off-view/prepared.js";
 import { diagnoseRooted } from "./rooted-diagnostics.js";
 import { renderErrorContext } from "./render-error-context.js";
+import { renderDiagnosticContext } from "./render-diagnostic-context.js";
 import { compareText, functionIdKey } from "./ordering.js";
 import type {
   CompiledProjectPresentation,
@@ -347,7 +348,19 @@ export function createSchematicRendererWithDependencies(
 }
 
 export function createSchematicRenderer(): SchematicRenderer {
-  return createSchematicRendererWithDependencies();
+  const renderer = createSchematicRendererWithDependencies();
+  return Object.freeze({
+    async render(
+      ir: Readonly<ElectricalIr>,
+      request: Readonly<SchematicViewRequest>,
+      presentation?: Readonly<CompiledProjectPresentation>,
+    ) {
+      const result = await renderer.render(ir, request, presentation);
+      if (result.ok) return result;
+      const error = renderDiagnosticContext(ir, request, result.error);
+      return error === result.error ? result : failed(error);
+    },
+  });
 }
 
 export function renderSchematic(

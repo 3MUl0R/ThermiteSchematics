@@ -469,6 +469,12 @@ const r005Cases = Object.freeze([
       field: "project.name",
       reason: "empty-string",
       root: "LS1",
+      details: {
+        diagnosticContext: {
+          requestField: "/",
+          views: [{ viewIndex: 0, title: "LS1 / trace to PLC1" }],
+        },
+      },
     },
   },
   {
@@ -507,6 +513,13 @@ const r005Cases = Object.freeze([
       field: "title.authored-line",
       reason: "unpaired-surrogate",
       root: "LS1",
+      details: {
+        diagnosticContext: {
+          projectName: "Motor Starter Reference System",
+          requestField: "/",
+          views: [{ viewIndex: 0, title: "LS1 / trace to PLC1" }],
+        },
+      },
     },
   },
 ]);
