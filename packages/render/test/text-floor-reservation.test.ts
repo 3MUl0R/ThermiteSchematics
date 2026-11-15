@@ -1,3 +1,5 @@
+import type { IrFunction } from "@thermite/compiler";
+import { relationCaptionPlan } from "../src/symbols/circuit-relations.js";
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { viewportSize } from "../src/packet/viewport-size.js";
@@ -36,4 +38,39 @@ it("wraps the complete footer into its measured pre-reserved band", () => {
     ).toBeLessThanOrEqual(119.9);
     expect(Number(n.getAttribute("y"))).toBeGreaterThan(250);
   }
+});
+
+it("does not newly abbreviate terminal references when the floor adds a fifth row", () => {
+  const fn: IrFunction = {
+    id: { deviceUid: "synthetic", functionKey: "contact" },
+    kind: "contact",
+    normal_state: "closed",
+    source: {
+      file: "synthetic.json",
+      line: 1,
+      column: 1,
+      jsonPointer: "/functions/contact",
+    },
+    terminals: [
+      { deviceUid: "synthetic", terminalKey: "11" },
+      { deviceUid: "synthetic", terminalKey: "12" },
+    ],
+  };
+  const plan = relationCaptionPlan(
+    [
+      {
+        kind: "relation",
+        destination: "100 / 200 / 300 / 400 / 500",
+        functions: Array.from({ length: 37 }, () => fn),
+      },
+    ],
+    28,
+  );
+  expect(plan.lines.length).toBeGreaterThan(4);
+  expect(plan.lines.join(" ").match(/11–12/gu)).toHaveLength(37);
+  expect(plan.lines.join(" ")).not.toContain("contacts:");
+  for (const line of plan.lines)
+    expect(printableTextMetrics(line, 2.5).advance + 4).toBeLessThanOrEqual(
+      plan.width,
+    );
 });

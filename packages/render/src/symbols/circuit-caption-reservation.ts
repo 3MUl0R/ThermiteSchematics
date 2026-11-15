@@ -21,7 +21,6 @@ export function reserveCircuitCaptions<Node extends CaptionOwner>(
 ): void {
   const gap = CAPTION_CLEARANCE_MM + 0.4 / 2 + 0.002;
   for (const node of nodes) {
-    if (!vertical && !node.relationLabels.length) continue;
     for (let attempt = 0; ; attempt++) {
       try {
         probe(node);
