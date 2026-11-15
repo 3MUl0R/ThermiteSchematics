@@ -103,3 +103,17 @@ it("does not re-authorize a declaration move by deleting the counter section", (
     moved + ": definite-assignment declarations 0 -> 1",
   );
 });
+
+it("rejects a partial counter section instead of normalizing away a forged ceiling", () => {
+  const root = repo();
+  put(root, path, "let first!: string;");
+  const budget = createBudget(metrics(root));
+  save(root, budget);
+  git(root, "branch", "dev", commit(root));
+  delete budget.definiteAssignments;
+  budget.ceilings.definiteAssignments = 2;
+  save(root, budget);
+  const result = run(root);
+  expect(result.status, result.stderr).toBe(1);
+  expect(result.stderr).toContain("Incomplete definiteAssignments baseline");
+});

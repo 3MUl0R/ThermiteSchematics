@@ -152,11 +152,13 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
 export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
-  if (raw.version === 4)
+  if (raw.version === 4) {
+    validateBudget(raw);
     return seedDefiniteAssignments(
       migrateReasonLists(raw),
       declarationBaseline,
     );
+  }
   if (raw.version === 2) return createBudget(metrics, raw.thresholds);
   if (raw.version !== 3) throw Error("Unsupported health budget version");
   const next = structuredClone(raw);

@@ -357,6 +357,7 @@ per-file baseline and global ceiling are measured from authenticated base source
 when reading an older v4 budget. The committed migration records that baseline
 with a reason; the ceiling can only fall. It follows the existing per-item
 reason and lowering rules. Expression non-null counts retain their old scope.
+Only a fully absent counter section migrates; partial sections fail validation.
 The counters do not detect empty type-predicate/assertion functions or `any`-typed
 bindings that drop optionality; those remain review responsibilities.
 
