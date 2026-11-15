@@ -60,19 +60,6 @@ jobs:
               "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
               "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
-      - name: Capture browser font evidence
-        if: runner.os != 'macOS'
-        run: |
-          bun run build
-          bun packages/render/test/ci-browser-evidence.mjs coverage/ci-browser-evidence
-      - name: Retain browser font evidence
-        if: runner.os != 'macOS' && always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ci-font-${{ runner.os }}-check-${{ github.sha }}
-          path: coverage/ci-browser-evidence/
-          if-no-files-found: error
-          retention-days: 7
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python
@@ -159,19 +146,6 @@ jobs:
               "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
               "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
-      - name: Capture browser font evidence
-        if: runner.os != 'macOS'
-        run: |
-          bun run build
-          bun packages/render/test/ci-browser-evidence.mjs coverage/ci-browser-evidence
-      - name: Retain browser font evidence
-        if: runner.os != 'macOS' && always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ci-font-${{ runner.os }}-worktree-${{ github.sha }}
-          path: coverage/ci-browser-evidence/
-          if-no-files-found: error
-          retention-days: 7
       - name: Check a linked worktree
         run: bun scripts/check-worktree.mjs
         env:
