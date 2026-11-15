@@ -289,7 +289,9 @@ export function legendCandidateLimited(
   return !!bound || drafts.length > LEGEND_PACKET_SHEET_LIMIT;
 }
 /** Release a legend band by repacking strips, then recutting protected gaps if
- * needed. Route geometry and print scale stay intact; no ELK work or cap changes. */
+ * needed. Route geometry and print scale stay intact; no ELK work or cap changes.
+ * Without a measured tail, only an observed sheet limit justifies replacing
+ * the original device-rooted failure with a search report. */
 export function fitLegendDrafts(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
@@ -352,7 +354,7 @@ export function fitLegendDrafts(
         failures,
         current,
         view.context.title,
-        bestFailure.error,
+        failures.stops?.has("sheet-limit") ? bestFailure.error : undefined,
       );
       if (failure) return { ok: false, error: failure };
       return bestFailure;

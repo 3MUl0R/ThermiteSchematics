@@ -38,7 +38,7 @@ export function legendBoundFailure(
   const stop = bounded
     ? `exhausted the ${limit}-sheet packet page-cost bound (${base} native sheets)`
     : caps.length
-      ? `stopped at the ${caps.map((cap) => capNames.get(cap)).join(", ")}`
+      ? `recorded pruning at the ${caps.map((cap) => capNames.get(cap)).join(", ")}`
       : "exhausted its feasible protected-gap candidates";
   return {
     ...tail,

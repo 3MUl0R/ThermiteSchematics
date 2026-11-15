@@ -189,7 +189,7 @@ it("reports the observed plan cap for the all-device 799-character stress withou
   });
   if (!result.ok) {
     expect(result.error.message).toContain(
-      "stopped at the 6 retained axis plans per search state",
+      "recorded pruning at the 6 retained axis plans per search state",
     );
     expect(result.error.message).not.toContain("page-cost bound");
     expect(result.error.message).toContain(

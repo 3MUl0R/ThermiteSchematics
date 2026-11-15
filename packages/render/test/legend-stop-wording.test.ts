@@ -35,6 +35,8 @@ it.each(["axis-plans", "gap-points", "cuts", "sheet-limit"] as const)(
       "Synthetic view",
     );
     expect(failure?.message).not.toContain("packet page-cost bound");
+    expect(failure?.message).toContain("recorded pruning at the ");
+    expect(failure?.message).not.toContain("stopped at");
     expect(failureDetails(failure)?.constraint).toBe("legend-search-limit");
     expect(failureDetails(failure)?.searchCaps).toEqual([cap]);
     expect(failure?.message).toContain(
