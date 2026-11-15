@@ -231,6 +231,29 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version **5.14** hardens checker coverage (#262, #256, #222). Cable end
+circles bind to native cable/core and device/terminal identities through verified
+printed endpoint ink; neither DOM slots nor exported locator values establish
+ownership. Modern caption owner, terminal and end-role claims must agree with
+native source. Historical captions require a unique printed native identity;
+unavailable or ambiguous ownership is recorded as `not-measured`.
+
+DQ-17 records historical keyless net-label ownership as `not-measured` rather
+than pass. It normalizes native names and printed captions (NFC, collapsed
+whitespace, trim), checks source anchors against the painted path start and checks
+painted TAIL labels against the source half of that path. Empty reservations
+remain omission evidence, not painted label positions. Missing/malformed native
+conductor endpoints and wire locator columns on a mislabelled documentation kind
+fail closed. Literal controls cover null horizontal factors, absent-body reference
+entries, historical document fallback and both sides of the glyph majority
+boundary. The transitive oracle import guard covers all new modules. General
+authored-view attribution (#262.5) remains deferred pending an exported identity;
+titles supply no source identity.
+
+Explicit authored null cable ends and unassigned native cores record end-level
+`not-applicable` with a native absence reason; these are not unknown identities or
+measured landings. Missing or malformed endpoint fields produce findings.
+
 Version **5.13** updates the independent DQ-05 terminal-set oracle (#283, #244).
 Range-like pairs (equal letter prefixes and integer suffixes differing by more
 than one) use a list separator; other pairs retain the en dash. Parse bare

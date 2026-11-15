@@ -1,3 +1,4 @@
+import { netLabelFindings } from "./net-label-oracle.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import {
   isExplicitEmptyState,
@@ -398,68 +399,9 @@ export function terminalText(g) {
 // V5.1: TAIL net labels belong at the route source. Target captions cannot
 // replace source ink. Audit declared empty reservations as well as painted names.
 export function netLabelRepetition(g) {
-  const out = [];
-  for (const label of [...g.texts, ...(g.omittedNetLabels ?? [])].filter(
-    (t) =>
-      t.labelRole === "net" &&
-      t.labelOwnerKind === "edge" &&
-      Array.isArray(t.labelOwnerKey),
-  )) {
-    const routes = g.shapes.filter(
-      (s) =>
-        s.conductor &&
-        s.edgeOwnerKey &&
-        s.appearanceScope === label.appearanceScope &&
-        JSON.stringify(s.edgeOwnerKey) === JSON.stringify(label.labelOwnerKey),
-    );
-    const names = [
-      ...new Set(routes.map((s) => s.potentialName).filter(Boolean)),
-    ];
-    const text = label.omitted
-      ? names.length === 1
-        ? names[0]
-        : undefined
-      : label.text;
-    if (!text) continue;
-    const caption = g.texts.find(
-      (t) =>
-        t.labelRole === "terminal" &&
-        !captionOwnershipFinding(t) &&
-        t.text === text &&
-        t.appearanceScope === label.appearanceScope &&
-        routes.some((s) =>
-          s.landingOwners?.some(
-            (p) =>
-              p.landingEnd === "source" &&
-              p.deviceUid === t.deviceUid &&
-              p.terminal === t.terminal &&
-              p.terminalAppearance === t.terminalAppearance,
-          ),
-        ),
-    );
-    if (label.omitted && !caption)
-      out.push(
-        issue("net-label-suppressed-without-source-caption", label, {
-          text,
-          edgeOwnerKey: label.labelOwnerKey,
-          reason: "no-matching-source-caption",
-        }),
-      );
-    else if (!label.omitted && caption)
-      out.push(
-        issue("net-label-repeats-terminal-caption", label, {
-          text: label.text,
-          edgeOwnerKey: label.labelOwnerKey,
-          terminal: caption.terminal,
-          deviceUid: caption.deviceUid,
-          terminalAppearance: caption.terminalAppearance,
-          otherElement: caption.element,
-          otherBbox: caption.bbox,
-        }),
-      );
-  }
-  return out;
+  return netLabelFindings(g, captionOwnershipFinding);
 }
+
 export { titleFields } from "./title-fields.mjs";
 export function packetStyle(geometries) {
   const fonts = [

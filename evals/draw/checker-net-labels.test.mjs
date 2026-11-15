@@ -1,0 +1,149 @@
+import { expect, it } from "vitest";
+import { netLabelRepetition } from "./checks.mjs";
+import { evaluateSheet } from "./evaluate.mjs";
+import { summary } from "./assessment.mjs";
+const box = (x) => ({ x, y: 17, w: 8, h: 3 });
+function fixture() {
+  const caption = {
+    element: "caption",
+    text: "L1",
+    bbox: box(10),
+    labelRole: "terminal",
+    labelOwnerKind: "port",
+    labelOwnerKey: ["port", '["function","a","feed"]', "in"],
+    deviceUid: "a",
+    terminal: "L1",
+    terminalAppearance: "body-a",
+    appearanceScope: "drawing",
+  };
+  const label = {
+    element: "net",
+    text: "L1",
+    bbox: box(30),
+    labelRole: "net",
+    labelOwnerKind: "edge",
+    labelOwnerKey: ["wire", "w"],
+    appearanceScope: "drawing",
+  };
+  const route = {
+    element: "route",
+    cls: "",
+    stroke: 0.35,
+    fill: "none",
+    dash: "none",
+    bbox: { x: 10, y: 20, w: 180, h: 0 },
+    conductor: true,
+    edgeOwnerKey: ["wire", "w"],
+    appearanceScope: "drawing",
+    potentialName: "L1",
+    points: [
+      { x: 10, y: 20 },
+      { x: 190, y: 20 },
+    ],
+    landingOwners: [
+      {
+        landingEnd: "source",
+        deviceUid: "a",
+        terminal: "L1",
+        terminalAppearance: "body-a",
+        anchorElement: "marker-a",
+      },
+    ],
+    ownedLandings: [
+      {
+        end: "source",
+        endpoint: { x: 10, y: 20 },
+        anchor: { x: 10, y: 20 },
+        deviceUid: "a",
+        terminal: "L1",
+        anchorElement: "marker-a",
+      },
+    ],
+  };
+  const g = {
+    width: 240,
+    height: 220,
+    texts: [caption, label],
+    shapes: [route],
+    terminals: [],
+    devices: [],
+    catalogs: [],
+    reportRows: [],
+    omittedNetLabels: [],
+  };
+  return { g, caption, label, route };
+}
+function observation(g) {
+  const sheet = {
+    number: 1,
+    view: { format: "documentation-view/0.1", kind: "bom" },
+    references: [],
+    continuations: [],
+  };
+  return evaluateSheet(
+    { id: "synthetic", flow: "left-to-right" },
+    sheet,
+    { sheets: [sheet] },
+    g,
+    { devices: [], functions: [], nets: [] },
+    [],
+    [],
+    [],
+  ).find((r) => r.dq === "DQ-17");
+}
+it("222.1 keyless historical route ownership is not-measured, never pass", () => {
+  const { g, route } = fixture();
+  route.landingOwners[0].landingEnd = "unknown";
+  route.ownedLandings = [{ end: "source", reason: "missing-route-port-owner" }];
+  const row = observation(g);
+  expect(row.status).toBe("not-measured");
+  expect(row.reason).toMatch(/ownership/i);
+  expect(summary([row])["DQ-17"]["not-measured"]).toBe(1);
+});
+it("222.2 normalizes padded native names and printed captions with synthetic checker input", () => {
+  const { g, caption, label } = fixture();
+  caption.text = "  L1 \t";
+  label.text = "\tL1  ";
+  expect(netLabelRepetition(g).map((f) => f.kind)).toContain(
+    "net-label-repeats-terminal-caption",
+  );
+  label.omitted = true;
+  g.texts = [caption];
+  g.omittedNetLabels = [label];
+  g.shapes[0].potentialName = "  L1\t";
+  expect(netLabelRepetition(g)).toEqual([]);
+  caption.text = " N\t \nL1 ";
+  label.omitted = false;
+  label.text = "N L1";
+  g.texts = [caption, label];
+  g.omittedNetLabels = [];
+  expect(netLabelRepetition(g).map((f) => f.kind)).toContain(
+    "net-label-repeats-terminal-caption",
+  );
+  label.omitted = true;
+  g.texts = [caption];
+  g.omittedNetLabels = [label];
+  g.shapes[0].potentialName = " N\n  L1 ";
+  expect(netLabelRepetition(g)).toEqual([]);
+});
+it("222.3 checks the painted TAIL position against path direction independently of sourcePortId", () => {
+  const { g, label } = fixture();
+  g.texts = [label];
+  expect(netLabelRepetition(g)).toEqual([]);
+  label.bbox = box(170);
+  expect(netLabelRepetition(g).map((f) => f.kind)).toContain(
+    "net-label-not-at-route-source",
+  );
+});
+it("222.3 coherent false source ownership cannot substitute a far-end caption", () => {
+  const { g, label, route } = fixture();
+  label.omitted = true;
+  g.texts[0].bbox = box(180);
+  g.texts = [g.texts[0]];
+  g.omittedNetLabels = [label];
+  expect(netLabelRepetition(g)).toEqual([]);
+  route.ownedLandings[0].anchor = { x: 190, y: 20 };
+  expect(netLabelRepetition(g).map((f) => f.kind)).toContain(
+    "net-label-source-geometry-mismatch",
+  );
+});
