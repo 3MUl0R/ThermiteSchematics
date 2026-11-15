@@ -64,7 +64,7 @@ it("retains authored NC and changeover common-terminal sets", async () => {
           "[data-navigation-mirror-row]",
         ),
       ].map((n) => n.textContent),
-    ).toEqual(["NO11–14not drawn", "NC11–12not drawn"]);
+    ).toEqual(["NO11 / 14not drawn", "NC11–12not drawn"]);
   } finally {
     await relay.dispose();
   }
