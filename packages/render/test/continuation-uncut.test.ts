@@ -5,6 +5,7 @@ import { renderSchematicPacket } from "../src/sheets.js";
 import {
   uncutFixture,
   uncutLabelVariant,
+  uncutReferenceKey,
 } from "./continuation-uncut-fixtures.js";
 
 // Owned by scripts/update-continuation-uncut-goldens.mjs (--check|--write).
@@ -45,7 +46,7 @@ it.each(["init-starter", "motor-starter"] as const)(
       expect(result.value.sheets).toHaveLength(name === "init-starter" ? 1 : 7);
       expect(
         createHash("sha256").update(JSON.stringify(result.value)).digest("hex"),
-      ).toBe(reference[name][index]);
+      ).toBe(reference[uncutReferenceKey(name)][index]);
       for (const s of result.value.sheets)
         for (const l of s.continuations)
           expect(

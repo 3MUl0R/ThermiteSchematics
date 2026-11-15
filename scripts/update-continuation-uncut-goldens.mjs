@@ -6,17 +6,24 @@ import { renderSchematicPacket } from "../packages/render/dist/index.js";
 import {
   uncutFixture,
   uncutLabelVariant,
+  uncutReferenceKey,
 } from "../packages/render/test/continuation-uncut-fixtures.ts";
 
-// Build first. Owns only the six reviewed packet digests, never fixture inputs.
+// Build first. Owns this platform's six packet digests, never fixture inputs.
+// Other platforms' reviewed rows are retained unchanged.
 // Inspect the rendered packets before an intentional --write.
 const mode = process.argv[2];
 if (!["--check", "--write"].includes(mode))
   throw Error(
     "Usage: bun scripts/update-continuation-uncut-goldens.mjs --check|--write",
   );
-const reference = {};
+const path = new URL(
+  "../packages/render/test/snapshots/continuation-uncut.json",
+  import.meta.url,
+);
+const reference = JSON.parse(await readFile(path, "utf8"));
 for (const name of ["init-starter", "motor-starter"]) {
+  const key = uncutReferenceKey(name);
   const input = await uncutFixture(name),
     base = await renderSchematicPacket(
       input.ir,
@@ -31,7 +38,7 @@ for (const name of ["init-starter", "motor-starter"]) {
       ),
     ),
   );
-  reference[name] = [];
+  reference[key] = [];
   for (const label of ["", "   ", "A\nB"]) {
     const { ir, changed } = uncutLabelVariant(input.ir, crossed, name, label),
       result = await renderSchematicPacket(
@@ -45,16 +52,12 @@ for (const name of ["init-starter", "motor-starter"]) {
       result.value.sheets.length !== (name === "init-starter" ? 1 : 7)
     )
       throw Error(`Uncut-label coverage or page contract changed: ${name}`);
-    reference[name].push(
+    reference[key].push(
       createHash("sha256").update(JSON.stringify(result.value)).digest("hex"),
     );
   }
 }
-const path = new URL(
-    "../packages/render/test/snapshots/continuation-uncut.json",
-    import.meta.url,
-  ),
-  bytes = Buffer.from(JSON.stringify(reference, null, 2) + "\n");
+const bytes = Buffer.from(JSON.stringify(reference, null, 2) + "\n");
 if (mode === "--write") await writeFileAtomically(fileURLToPath(path), bytes);
 else if (!(await readFile(path)).equals(bytes))
   throw Error("Continuation uncut packet digests are stale.");

@@ -60,17 +60,6 @@ jobs:
               "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
               "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
-      - name: Capture Linux layout evidence
-        if: runner.os == 'Linux'
-        run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
-      - name: Retain Linux layout evidence
-        if: always() && runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ci-layout-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          path: coverage/ci-layout/
-          if-no-files-found: warn
-          retention-days: 7
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python
@@ -157,17 +146,6 @@ jobs:
               "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
               "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
-      - name: Capture Linux layout evidence
-        if: runner.os == 'Linux'
-        run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
-      - name: Retain Linux layout evidence
-        if: always() && runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ci-layout-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
-          path: coverage/ci-layout/
-          if-no-files-found: warn
-          retention-days: 7
       - name: Check a linked worktree
         run: bun scripts/check-worktree.mjs
         env:
