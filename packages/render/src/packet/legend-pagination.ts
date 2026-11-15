@@ -18,9 +18,18 @@ import { trimLegendStrip } from "./legend-strip.js";
 import type { Draft, PaperPage, RootedLegendSource } from "./types.js";
 import type { RenderFailure } from "../types.js";
 import { rootedPageCostFailure } from "./rooted-bound.js";
+import type { LegendSearchCap } from "./legend-search-limits.js";
 export interface LegendSearchFailure {
   tail?: { start: number; failure: RenderFailure };
   bound?: RenderFailure;
+  stops?: Set<LegendSearchCap>;
+}
+
+export function recordLegendCap(
+  failures: LegendSearchFailure | undefined,
+  cap: LegendSearchCap,
+) {
+  if (failures) (failures.stops ??= new Set()).add(cap);
 }
 
 interface BandContext {
@@ -171,6 +180,7 @@ export function* legendPagination(
         if (!cache.has(key)) cache.set(key, legendSpan(c, start, end));
         return required(cache.get(key), "Missing legend span result");
       },
+      (cap) => recordLegendCap(failures, cap),
     );
   for (const plan of plans) {
     const geometry = bandDrafts(c, plan, "");

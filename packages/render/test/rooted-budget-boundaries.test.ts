@@ -20,12 +20,14 @@ import {
   compactPlanningReceipts,
 } from "../src/packet/frame-budget.js";
 import { sideCandidate, sidePage } from "./helpers/side-candidate.js";
+import { required } from "../src/presentation/util.js";
 
 const ir = {} as ElectricalIr;
 afterEach(() => vi.restoreAllMocks());
 function fixture(flow: "left-to-right" | "top-to-bottom") {
   const candidate = sideCandidate(1),
     page = { ...sidePage };
+  candidate.printableDrafts = candidate.drafts;
   candidate.prepared.view = {
     ...candidate.prepared.view,
     family: "power",
@@ -72,7 +74,28 @@ it.each([47, 48])(
   async (count) => {
     const f = fixture("top-to-bottom"),
       ledgers: NonNullable<Parameters<typeof elkWorkTrace.run>[0]> = [];
-    if (count === 47) f.candidate.jogs.set("wire", 1);
+    if (count === 47) {
+      f.candidate.jogs.set("wire", 1);
+      const edge = required(
+        f.candidate.prepared.layout.edges[0],
+        "Fixture route",
+      );
+      const points = [
+        { x: 100, y: 60 },
+        { x: 150, y: 60 },
+        { x: 150, y: 68 },
+        { x: 170, y: 68 },
+      ];
+      f.candidate.prepared = {
+        ...f.candidate.prepared,
+        layout: {
+          ...f.candidate.prepared.layout,
+          edges: f.candidate.prepared.layout.edges.map((e) =>
+            e === edge ? { ...e, points } : e,
+          ),
+        },
+      };
+    }
     f.placements.mockImplementation(
       async (_ir, _request, _presentation, _page, run) => {
         expect(!!run.jogRetryReserved).toBe(count === 47);

@@ -96,7 +96,7 @@ export function interiorJogs(p: PreparedSchematicDrawing, scale: number) {
         const count = points.slice(2, -1).filter((v, j) => {
           const u = required(points[j + 1], "Missing rooted geometry"),
             length = Math.hypot(v.x - u.x, v.y - u.y) * scale;
-          return length > 0.05 && length < 3;
+          return length > 0.05 && length < 3 - JOG_NUMERICAL_TOLERANCE_MM;
         }).length;
         return [e.id, count] as const;
       }),
@@ -149,3 +149,4 @@ export function clipRootedInk(draft: import("./types.js").Draft, view: InkBox) {
   if (ink) draft.rootedInk = ink;
   else delete draft.rootedInk;
 }
+import { JOG_NUMERICAL_TOLERANCE_MM } from "./route-fragments.js";

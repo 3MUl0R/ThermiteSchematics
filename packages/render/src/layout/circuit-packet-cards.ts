@@ -24,8 +24,10 @@ function placements(
   clip: Rect,
   owner?: string,
   nested = false,
+  view?: string,
 ): Placed[] {
   const a = node.attrs;
+  const nativeView = a["data-navigation-view"] ?? view;
   let m = multiply(matrix, transform(a.transform));
   if (node.name === "svg" && nested && a.viewBox) {
     const [x, y, w, h] = a.viewBox.split(/[ ,]+/).map(Number) as [
@@ -60,12 +62,13 @@ function placements(
     ? JSON.stringify([
         a["data-off-view-terminal-id"],
         a["data-off-view-conductors"],
+        nativeView,
       ])
     : owner;
   return [
     { node, matrix: m, clip, ...(next ? { owner: next } : {}) },
     ...node.children.flatMap((n) =>
-      placements(n, m, clip, next, nested || node.name === "svg"),
+      placements(n, m, clip, next, nested || node.name === "svg", nativeView),
     ),
   ];
 }
@@ -127,8 +130,9 @@ export function circuitPacketCards(packet: RenderedPacket) {
       });
   });
 }
-/** Compare every original card, including cards on circuit sheets. Off-sheet
- * owners have no fabricated distance: only unchanged geometry is accepted. */
+/** Match native terminal/conductor identities within their issued view, never
+ * sheet numbers or printed titles. Multiplicity survives page renumbering.
+ * Off-sheet owners have no fabricated distance: require unchanged geometry. */
 export function circuitCardGuard(
   candidate: RenderedPacket,
   original: RenderedPacket,
@@ -136,9 +140,8 @@ export function circuitCardGuard(
   const old = circuitPacketCards(original),
     current = circuitPacketCards(candidate);
   if (old.length !== current.length) return false;
-  const key = (p: (typeof old)[number]) => JSON.stringify([p.key, p.sheet]);
   return old.every((b) => {
-    const index = current.findIndex((a) => key(a) === key(b));
+    const index = current.findIndex((a) => a.key === b.key);
     if (index < 0) return false;
     const a = required(
       current.splice(index, 1)[0],

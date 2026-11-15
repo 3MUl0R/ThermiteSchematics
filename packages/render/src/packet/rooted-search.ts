@@ -2,7 +2,7 @@ import { frameContext, rollbackFrameSearch } from "./frame-budget.js";
 import { withFontMetricCache } from "../symbols/font-metric-cache.js";
 import { validateEconomyCandidate } from "./rooted-economy.js";
 import { placements } from "./rooted-placements.js";
-import { repairSearchJogs } from "./rooted-jog-repair.js";
+import { repairSearchJogs, printedJogTrigger } from "./rooted-jog-repair.js";
 import { searchSettled } from "./rooted-settled.js";
 import {
   MAX_PLACEMENT_LAYOUTS,
@@ -255,11 +255,12 @@ async function runRootedSearch(
   } else {
     // Hold one existing attempt for a physical jog left by ordinary recovery.
     // Testing only the initial layout can pre-empt a jog-free recovered base.
-    const winner = rootedWinner(run, page);
-    run.jogRetryReserved =
-      winner?.prepared.view.family === "power" &&
-      winner.prepared.view.flow === "top-to-bottom" &&
-      [...(winner?.jogs.values() ?? [])].some((n) => n > 0);
+    run.jogRetryReserved = !!printedJogTrigger(
+      ir,
+      rootedWinner(run, page),
+      nativeWinner(run),
+      page,
+    );
     await placements(ir, request, presentation, page, run);
     if (run.validatedCandidate) run.candidates = [run.validatedCandidate];
   }

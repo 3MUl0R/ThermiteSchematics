@@ -36,7 +36,10 @@ function positions(graph: ElkNode) {
   );
 }
 /** Do not infer phases from printed names. Preserve each physical device's
- * original port order on both axes, including coherently moved nodes/routes. */
+ * original port order on both axes, including coherently moved nodes/routes.
+ * An axis tie (difference <1e-7) must remain a tie at that same tolerance;
+ * alignment supplies no license to choose either new order. The other axis
+ * retains its original strict order. Coherent translation remains legal. */
 export function circuitPortOrderGuard(
   candidate: ElkNode,
   original: ElkNode,
@@ -56,10 +59,9 @@ export function circuitPortOrderGuard(
         return (["x", "y"] as const).every((axis) => {
           const old = a[axis] - b[axis],
             next = c[axis] - d[axis];
-          return (
-            Math.abs(old) < 1e-7 ||
-            (Math.sign(old) === Math.sign(next) && Math.abs(next) >= 1e-7)
-          );
+          return Math.abs(old) < 1e-7
+            ? Math.abs(next) < 1e-7
+            : Math.sign(old) === Math.sign(next) && Math.abs(next) >= 1e-7;
         });
       }),
     ),

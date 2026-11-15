@@ -2,6 +2,7 @@ import { hasCompactFrame } from "./frame-profile.js";
 import { compactFramePlan, compactLegendBounds } from "./frame-plan.js";
 import {
   legendPagination,
+  recordLegendCap,
   type LegendSearchFailure,
 } from "./legend-pagination.js";
 import type { ElectricalIr } from "@thermite/compiler";
@@ -17,6 +18,7 @@ import { SECTION_GAP } from "./fold-stack.js";
 import { stackSections } from "./fold-stack.js";
 import { required } from "../presentation/util.js";
 import { legendBoundFailure } from "./legend-bound-failure.js";
+import { LEGEND_PACKET_SHEET_LIMIT } from "./legend-search-limits.js";
 import { centroidReferences } from "./navigation-occurrences.js";
 import { finalizeNavigation } from "./navigation-finalize.js";
 import { finalizeWireSchedules } from "./wire-schedule-locations.js";
@@ -276,8 +278,20 @@ function rebuild(
     );
   return drafts;
 }
+export function legendCandidateLimited(
+  drafts: Draft[],
+  failures: LegendSearchFailure,
+) {
+  const bound = rootedPageCostFailure(drafts);
+  if (bound) failures.bound = bound;
+  if (drafts.length > LEGEND_PACKET_SHEET_LIMIT)
+    recordLegendCap(failures, "sheet-limit");
+  return !!bound || drafts.length > LEGEND_PACKET_SHEET_LIMIT;
+}
 /** Release a legend band by repacking strips, then recutting protected gaps if
- * needed. Route geometry and print scale stay intact; no ELK work or cap changes. */
+ * needed. Route geometry and print scale stay intact; no ELK work or cap changes.
+ * Without a measured tail, only an observed sheet limit justifies replacing
+ * the original device-rooted failure with a search report. */
 export function fitLegendDrafts(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
@@ -317,9 +331,7 @@ export function fitLegendDrafts(
     )) {
       overrides.set(view.viewIndex, candidate);
       const next = rebuild(views, overrides, layout);
-      const bound = rootedPageCostFailure(next);
-      if (bound) failures.bound = bound;
-      if (bound || next.length > 100) continue;
+      if (legendCandidateLimited(next, failures)) continue;
       const trial = render(ir, next, page);
       if (trial.ok) return { ok: true, value: next };
       if ("details" in trial.error && trial.error.details?.navigationInvariant)
@@ -338,7 +350,12 @@ export function fitLegendDrafts(
       }
     }
     if (!accepted) {
-      const failure = legendBoundFailure(failures, current, view.context.title);
+      const failure = legendBoundFailure(
+        failures,
+        current,
+        view.context.title,
+        failures.stops?.has("sheet-limit") ? bestFailure.error : undefined,
+      );
       if (failure) return { ok: false, error: failure };
       return bestFailure;
     }

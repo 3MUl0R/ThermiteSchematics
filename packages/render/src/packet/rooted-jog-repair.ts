@@ -27,6 +27,26 @@ const jogCount = (c: RootedCandidate) =>
   [...c.jogs.values()].reduce((a, b) => a + b, 0);
 const SOURCE_TURN_MARGIN_UNITS = 0.5;
 
+/** Reservation and retry share the final printed/clipped trigger. A raw jog
+ * hidden by a cut (or inside CHECK's numerical band) spends no economy slot. */
+export function printedJogTrigger(
+  ir: Readonly<ElectricalIr>,
+  original: RootedCandidate | undefined,
+  native: RootedCandidate | undefined,
+  page: PaperPage,
+) {
+  if (
+    !original ||
+    !native ||
+    !jogCount(original) ||
+    original.prepared.view.family !== "power" ||
+    original.prepared.view.flow !== "top-to-bottom"
+  )
+    return undefined;
+  const printed = printedComposition(ir, original, native, page);
+  return printed && printedJogCount(printed) ? printed : undefined;
+}
+
 /** One page-aware ELK retry, charged to the existing placement budget.
  * Keep the original unless the complete printed candidate repairs a jog with
  * no new/worse per-conductor defect, extra page or lost card locality. */
@@ -38,18 +58,10 @@ export async function repairRootedJogs(
   run: RootedSearch,
   offset = 0,
 ) {
-  if (
-    run.attempts >= MAX_PLACEMENT_LAYOUTS ||
-    economyExhausted(run) ||
-    !jogCount(original) ||
-    original.prepared.view.family !== "power" ||
-    original.prepared.view.flow !== "top-to-bottom"
-  )
+  if (run.attempts >= MAX_PLACEMENT_LAYOUTS || economyExhausted(run))
     return original;
-  const before = printedComposition(ir, original, native, page);
-  // Reuse the checker's clipped-fragment, >0.05 and <3 mm semantics. A raw
-  // internal jog hidden by a cut cannot justify replacing the printed layout.
-  if (!before || !printedJogCount(before)) return original;
+  const before = printedJogTrigger(ir, original, native, page);
+  if (!before) return original;
   run.attempts++;
   const minimum = 3 / original.scale;
   const spacing = sourceTurnSpacing(before);

@@ -2,6 +2,10 @@ import type { LayoutPoint } from "../types.js";
 import type { InkBox } from "./rooted-ink.js";
 import { required } from "../presentation/util.js";
 
+/** SVG-to-mm conversion tolerance at the unchanged 3 mm policy boundary.
+ * A renderer-side contract test binds this value to CHECK's exported constant. */
+export const JOG_NUMERICAL_TOLERANCE_MM = 1e-5;
+
 /** Clip each connected painted path, without joining disjoint re-entries. */
 export function routeFragments(points: readonly LayoutPoint[], box: InkBox) {
   const result: LayoutPoint[][] = [];
@@ -60,7 +64,7 @@ function distance(p: LayoutPoint, a: LayoutPoint, b: LayoutPoint) {
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
 }
 /** Official physical criteria: >0.05 and <3 mm, and >2×Manhattan+20 mm.
- * No acceptance epsilon is added to these thresholds. */
+ * Only CHECK's numerical conversion tolerance applies at the 3 mm boundary. */
 export function fragmentDefects(source: readonly LayoutPoint[], scale: number) {
   const points: LayoutPoint[] = [];
   for (const raw of source) {
@@ -81,7 +85,13 @@ export function fragmentDefects(source: readonly LayoutPoint[], scale: number) {
     return Math.hypot(p.x - a.x, p.y - a.y);
   });
   const jogs = lengths
-    .filter((n, i) => i > 0 && i < lengths.length - 1 && n > 0.05 && n < 3)
+    .filter(
+      (n, i) =>
+        i > 0 &&
+        i < lengths.length - 1 &&
+        n > 0.05 &&
+        n < 3 - JOG_NUMERICAL_TOLERANCE_MM,
+    )
     .map((n) => 3 - n);
   const a = points[0],
     z = points.at(-1);
