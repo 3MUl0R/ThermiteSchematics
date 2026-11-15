@@ -3,7 +3,7 @@ import { permittedSymbol } from "./title-data-elk-globals.js";
 import { elkIssue } from "./title-data-elk-policy.js";
 import type { ElkPermissions } from "./title-data-elk-imports.js";
 
-function deniedMemberNames(
+export function deniedMemberNames(
   tree: ts.SourceFile,
   checker: ts.TypeChecker,
   permissions: ElkPermissions,
