@@ -69,10 +69,52 @@ function wrap(s: string, max: number): string[] {
   if (line) lines.push(line);
   return lines;
 }
+type Point = { x: number; y: number };
+type WiringRoute = { index: number; points: Point[] };
+type WiringSegment = { index: number; a: Point; b: Point };
+type WiringEdge = NonNullable<ElkNode["edges"]>[number];
+type WiringSection = NonNullable<WiringEdge["sections"]>[number];
+type WiringConductor = ReturnType<typeof wiringConductors>[number];
+type WiringState = ReturnType<typeof wiringGraphState>;
+
 export async function prepareWiringDrawing(
   ir: Readonly<ElectricalIr>,
   request: WiringViewRequest,
 ): Promise<CommunicationDrawing> {
+  validateWiringRequest(request);
+  const state = wiringGraphState(selectWiringDrawing(ir, request));
+  const children = state.ordered.map((uid) => wiringNode(uid, state));
+  const graph = await layoutWiring(children, wiringEdges(state));
+  if (![graph.width, graph.height].every(Number.isFinite))
+    throw new Error("Invalid wiring layout bounds.");
+  const out: string[] = [];
+  const nodes = graph.children ?? [];
+  const routes = appendWiringRoutes(graph, state.selected, nodes, out);
+  const segments = appendWiringJunctions(routes, state.selected, out);
+  assertWiringLabels(graph, nodes, segments);
+  const references = appendWiringDevices(nodes, state, out);
+  const { documentNeeds, selected, tags } = state;
+  return {
+    documentNeeds,
+    title: request.title,
+    content: out.join("\n"),
+    width: graph.width!,
+    height: graph.height!,
+    references,
+    deviceTags: [...tags.values()],
+    coverage: {
+      kind: "wiring",
+      conductorIds: selected.map((c) => c.id),
+      functionIds: [],
+    },
+    note: [
+      "Terminal wiring: device internals are not shown. [ +N ] = other physical connections at that terminal; see wire schedule.",
+      ...(request.notes ?? []),
+    ].join("\n"),
+  };
+}
+
+function validateWiringRequest(request: WiringViewRequest) {
   if (
     !request ||
     request.format !== "wiring-view-request/0.1" ||
@@ -98,9 +140,10 @@ export async function prepareWiringDrawing(
     throw new Error(
       "Invalid wiring view. Select 1-60 unique conductor designations or UIDs, a title and optional notes.",
     );
-  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
-  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
-  const all = [
+}
+
+function wiringConductors(ir: Readonly<ElectricalIr>) {
+  return [
     ...ir.wires.map((w) => ({
       id: w.uid,
       name: w.designation,
@@ -127,27 +170,13 @@ export async function prepareWiringDrawing(
       jumper: false,
     })),
   ];
-  const selected = request.conductors
-    .map((s) => {
-      const found = all.filter((w) => w.id === s || w.name === s);
-      if (found.length !== 1)
-        throw new Error(
-          `Conductor ${JSON.stringify(s)} does not resolve uniquely to fully terminated physical wiring.`,
-        );
-      return found[0]!;
-    })
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  if (new Set(selected.map((w) => w.id)).size !== selected.length)
-    throw new Error("Duplicate conductor identity in wiring view.");
-  const chosen = new Set(selected.map((w) => w.id));
-  const terminalIds = new Map(
-    selected.flatMap((w) => w.ends.map((t) => [key(t), t] as const)),
-  );
-  let ordered = [
-    ...new Set([...terminalIds.values()].map((t) => t.deviceUid)),
-  ].sort((a, b) =>
-    devices.get(a)!.designation < devices.get(b)!.designation ? -1 : 1,
-  );
+}
+
+function wiringDeviceOrder(
+  ordered: string[],
+  request: WiringViewRequest,
+  devices: Map<string, ElectricalIr["devices"][number]>,
+) {
   if (request.deviceOrder !== undefined) {
     if (
       !Array.isArray(request.deviceOrder) ||
@@ -170,6 +199,38 @@ export async function prepareWiringDrawing(
       );
     ordered = resolved.map((matches) => matches[0]!);
   }
+  return ordered;
+}
+
+function selectWiringDrawing(
+  ir: Readonly<ElectricalIr>,
+  request: WiringViewRequest,
+) {
+  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
+  const all = wiringConductors(ir);
+  const selected = request.conductors
+    .map((s) => {
+      const found = all.filter((w) => w.id === s || w.name === s);
+      if (found.length !== 1)
+        throw new Error(
+          `Conductor ${JSON.stringify(s)} does not resolve uniquely to fully terminated physical wiring.`,
+        );
+      return found[0]!;
+    })
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  if (new Set(selected.map((w) => w.id)).size !== selected.length)
+    throw new Error("Duplicate conductor identity in wiring view.");
+  const chosen = new Set(selected.map((w) => w.id));
+  const terminalIds = new Map(
+    selected.flatMap((w) => w.ends.map((t) => [key(t), t] as const)),
+  );
+  let ordered = [
+    ...new Set([...terminalIds.values()].map((t) => t.deviceUid)),
+  ].sort((a, b) =>
+    devices.get(a)!.designation < devices.get(b)!.designation ? -1 : 1,
+  );
+  ordered = wiringDeviceOrder(ordered, request, devices);
   // Endpoint order has no electrical meaning. Orient layout only, without mutating IR.
   for (const conductor of selected)
     if (
@@ -184,6 +245,20 @@ export async function prepareWiringDrawing(
     chosen,
     terminalIds,
   );
+  return {
+    ir,
+    devices,
+    types,
+    selected,
+    terminalIds,
+    ordered,
+    documentNeeds,
+    boundary,
+  };
+}
+
+function wiringGraphState(selection: ReturnType<typeof selectWiringDrawing>) {
+  const { ordered } = selection;
   const ids = new Map(ordered.map((uid, i) => [uid, `d${i}`]));
   const ports = new Map<string, string>();
   const labels = new Map<string, string[]>();
@@ -192,144 +267,206 @@ export async function prepareWiringDrawing(
     string,
     { key: string; label: string; side: "WEST" | "EAST"; y: number }[]
   >();
-  const children: ElkNode[] = ordered.map((uid) => {
-    const d = devices.get(uid)!,
-      type = types.get(d.typeId)!;
-    // Retain validation of authored type text even when an instance overrides it.
-    xml(type.description ?? "");
-    const tag = drawingDeviceTag(d, type, 48);
-    tags.set(uid, tag);
-    const nodeWidth = tag.widthMm;
-    const caption = d.location?.trim() ? wrap(d.location, nodeWidth - 6) : [];
-    const pins = [...terminalIds.values()]
-      .filter((t) => t.deviceUid === uid)
-      .sort(
-        (a, b) =>
-          (type.terminalOrder?.indexOf(a.terminalKey) ?? -1) -
-            (type.terminalOrder?.indexOf(b.terminalKey) ?? -1) ||
-          (a.terminalKey < b.terminalKey ? -1 : 1),
-      );
-    const omitted = omittedTerminalNeed(
-      ir,
-      uid,
-      pins.map((p) => p.terminalKey),
+  return { ...selection, ids, ports, labels, tags, rows };
+}
+
+function wiringNode(uid: string, state: WiringState): ElkNode {
+  const {
+    ir,
+    devices,
+    types,
+    tags,
+    terminalIds,
+    documentNeeds,
+    labels,
+    rows,
+    ids,
+    ports,
+  } = state;
+  const d = devices.get(uid)!,
+    type = types.get(d.typeId)!;
+  // Retain validation of authored type text even when an instance overrides it.
+  xml(type.description ?? "");
+  const tag = drawingDeviceTag(d, type, 48);
+  tags.set(uid, tag);
+  const nodeWidth = tag.widthMm;
+  const caption = d.location?.trim() ? wrap(d.location, nodeWidth - 6) : [];
+  const pins = [...terminalIds.values()]
+    .filter((t) => t.deviceUid === uid)
+    .sort(
+      (a, b) =>
+        (type.terminalOrder?.indexOf(a.terminalKey) ?? -1) -
+          (type.terminalOrder?.indexOf(b.terminalKey) ?? -1) ||
+        (a.terminalKey < b.terminalKey ? -1 : 1),
     );
-    if (omitted) {
-      caption.push(`${omitted.count} other terminals`);
-      documentNeeds.push(omitted);
-    }
-    labels.set(uid, caption);
-    let y = deviceHeaderHeight(tag, caption) + 6;
-    const list = pins.map((t) => {
-      const side = selected.some((w) => key(w.ends[1]!) === key(t))
-        ? ("WEST" as const)
-        : ("EAST" as const);
-      const label = `${t.terminalKey}${boundary.get(key(t)) ? ` [ +${boundary.get(key(t))} ]` : ""}`;
-      if (width(label) > nodeWidth - 6)
-        throw wiringWidthError(d.designation, t.terminalKey);
-      const row = { key: t.terminalKey, label, side, y };
-      row.y = Math.round(y);
-      y += 6;
-      return row;
-    });
-    rows.set(uid, list);
-    return {
-      id: ids.get(uid)!,
-      width: nodeWidth,
-      height: y + 2,
-      layoutOptions: { "elk.portConstraints": "FIXED_POS" },
-      ports: list.map((p, i) => {
-        const id = `${ids.get(uid)}p${i}`;
-        ports.set(key({ deviceUid: uid, terminalKey: p.key }), id);
-        return {
-          id,
-          width: 0,
-          height: 0,
-          x: p.side === "WEST" ? 0 : nodeWidth,
-          y: p.y,
-          layoutOptions: { "elk.port.side": p.side },
-        };
-      }),
-    };
-  });
-  const graph = await layoutWiring(
-    children,
-    selected.map((w, i) => ({
-      id: `e${i}`,
-      sources: [ports.get(key(w.ends[0]!))!],
-      targets: [ports.get(key(w.ends[1]!))!],
-      labels: [
-        {
-          text: w.name,
-          width: Math.max(width(w.name), width(w.detail)) + 2,
-          height: w.detail ? 8 : 4,
-        },
-      ],
-    })),
+  const omitted = omittedTerminalNeed(
+    ir,
+    uid,
+    pins.map((p) => p.terminalKey),
   );
-  if (![graph.width, graph.height].every(Number.isFinite))
-    throw new Error("Invalid wiring layout bounds.");
-  const out: string[] = [];
-  const nodes = graph.children ?? [];
-  const routes: { index: number; points: { x: number; y: number }[] }[] = [];
+  if (omitted) {
+    caption.push(`${omitted.count} other terminals`);
+    documentNeeds.push(omitted);
+  }
+  labels.set(uid, caption);
+  const { list, y } = wiringRows(
+    pins,
+    state,
+    d,
+    nodeWidth,
+    deviceHeaderHeight(tag, caption) + 6,
+  );
+  rows.set(uid, list);
+  return {
+    id: ids.get(uid)!,
+    width: nodeWidth,
+    height: y + 2,
+    layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+    ports: list.map((p, i) => {
+      const id = `${ids.get(uid)}p${i}`;
+      ports.set(key({ deviceUid: uid, terminalKey: p.key }), id);
+      return {
+        id,
+        width: 0,
+        height: 0,
+        x: p.side === "WEST" ? 0 : nodeWidth,
+        y: p.y,
+        layoutOptions: { "elk.port.side": p.side },
+      };
+    }),
+  };
+}
+
+function wiringRows(
+  pins: TerminalId[],
+  state: WiringState,
+  d: ElectricalIr["devices"][number],
+  nodeWidth: number,
+  y: number,
+) {
+  const { selected, boundary } = state;
+  const list = pins.map((t) => {
+    const side = selected.some((w) => key(w.ends[1]!) === key(t))
+      ? ("WEST" as const)
+      : ("EAST" as const);
+    const label = `${t.terminalKey}${boundary.get(key(t)) ? ` [ +${boundary.get(key(t))} ]` : ""}`;
+    if (width(label) > nodeWidth - 6)
+      throw wiringWidthError(d.designation, t.terminalKey);
+    const row = { key: t.terminalKey, label, side, y };
+    row.y = Math.round(y);
+    y += 6;
+    return row;
+  });
+  return { list, y };
+}
+
+function wiringEdges(state: WiringState) {
+  const { selected, ports } = state;
+  return selected.map((w, i) => ({
+    id: `e${i}`,
+    sources: [ports.get(key(w.ends[0]!))!],
+    targets: [ports.get(key(w.ends[1]!))!],
+    labels: [
+      {
+        text: w.name,
+        width: Math.max(width(w.name), width(w.detail)) + 2,
+        height: w.detail ? 8 : 4,
+      },
+    ],
+  }));
+}
+
+function appendWiringRoutes(
+  graph: ElkNode,
+  selected: WiringConductor[],
+  nodes: ElkNode[],
+  out: string[],
+) {
+  const routes: WiringRoute[] = [];
   for (const [i, edge] of (graph.edges ?? []).entries()) {
     if (!edge.sections?.length) throw new Error("Incomplete wiring route.");
     out.push(
       `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(selected[i]!.id)}" data-endpoints="${attr(JSON.stringify(selected[i]!.ends))}"><title>${xml(selected[i]!.name + (selected[i]!.detail ? " / " + selected[i]!.detail : ""))}</title>`,
     );
-    for (const section of edge.sections) {
-      const points = [
-        section.startPoint,
-        ...(section.bendPoints ?? []),
-        section.endPoint,
-      ];
-      routes.push({ index: i, points });
-      for (let j = 1; j < points.length; j++) {
-        const a = points[j - 1]!,
-          b = points[j]!;
-        if (
-          ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
-          (Math.abs(a.x - b.x) > 1e-7 && Math.abs(a.y - b.y) > 1e-7)
-        )
-          throw new Error("Invalid orthogonal wiring route.");
-        for (const d of nodes) {
-          const left = d.x! + 0.01,
-            right = d.x! + d.width! - 0.01,
-            top = d.y! + 0.01,
-            bottom = d.y! + d.height! - 0.01;
-          if (
-            (Math.abs(a.x - b.x) < 1e-7 &&
-              a.x > left &&
-              a.x < right &&
-              Math.max(a.y, b.y) > top &&
-              Math.min(a.y, b.y) < bottom) ||
-            (Math.abs(a.y - b.y) < 1e-7 &&
-              a.y > top &&
-              a.y < bottom &&
-              Math.max(a.x, b.x) > left &&
-              Math.min(a.x, b.x) < right)
-          )
-            throw new Error("Wiring route crosses a device body.");
-        }
-      }
-      out.push(
-        `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${selected[i]!.jumper ? 0.7 : 0.35}"/>`,
-      );
-    }
-    for (const l of edge.labels ?? []) {
-      if (![l.x, l.y, l.width, l.height].every(Number.isFinite))
-        throw new Error("Unplaced wiring label.");
-      out.push(
-        `<rect x="${n(l.x!)}" y="${n(l.y!)}" width="${n(l.width!)}" height="${n(l.height!)}" fill="white"/>`,
-        text(l.x! + 1, l.y! + 3, l.text!),
-        selected[i]!.detail
-          ? text(l.x! + 1, l.y! + 6.5, selected[i]!.detail)
-          : "",
-      );
-    }
+    for (const section of edge.sections)
+      appendWiringSection(section, i, selected, nodes, routes, out);
+    appendWiringLabels(edge, i, selected, out);
     out.push("</g>");
   }
-  type Point = { x: number; y: number };
+  return routes;
+}
+
+function appendWiringSection(
+  section: WiringSection,
+  i: number,
+  selected: WiringConductor[],
+  nodes: ElkNode[],
+  routes: WiringRoute[],
+  out: string[],
+) {
+  const points = [
+    section.startPoint,
+    ...(section.bendPoints ?? []),
+    section.endPoint,
+  ];
+  routes.push({ index: i, points });
+  for (let j = 1; j < points.length; j++) {
+    const a = points[j - 1]!,
+      b = points[j]!;
+    if (
+      ![a.x, a.y, b.x, b.y].every(Number.isFinite) ||
+      (Math.abs(a.x - b.x) > 1e-7 && Math.abs(a.y - b.y) > 1e-7)
+    )
+      throw new Error("Invalid orthogonal wiring route.");
+    for (const d of nodes) {
+      const left = d.x! + 0.01,
+        right = d.x! + d.width! - 0.01,
+        top = d.y! + 0.01,
+        bottom = d.y! + d.height! - 0.01;
+      if (
+        (Math.abs(a.x - b.x) < 1e-7 &&
+          a.x > left &&
+          a.x < right &&
+          Math.max(a.y, b.y) > top &&
+          Math.min(a.y, b.y) < bottom) ||
+        (Math.abs(a.y - b.y) < 1e-7 &&
+          a.y > top &&
+          a.y < bottom &&
+          Math.max(a.x, b.x) > left &&
+          Math.min(a.x, b.x) < right)
+      )
+        throw new Error("Wiring route crosses a device body.");
+    }
+  }
+  out.push(
+    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${selected[i]!.jumper ? 0.7 : 0.35}"/>`,
+  );
+}
+
+function appendWiringLabels(
+  edge: WiringEdge,
+  i: number,
+  selected: WiringConductor[],
+  out: string[],
+) {
+  for (const l of edge.labels ?? []) {
+    if (![l.x, l.y, l.width, l.height].every(Number.isFinite))
+      throw new Error("Unplaced wiring label.");
+    out.push(
+      `<rect x="${n(l.x!)}" y="${n(l.y!)}" width="${n(l.width!)}" height="${n(l.height!)}" fill="white"/>`,
+      text(l.x! + 1, l.y! + 3, l.text!),
+      selected[i]!.detail
+        ? text(l.x! + 1, l.y! + 6.5, selected[i]!.detail)
+        : "",
+    );
+  }
+}
+
+function appendWiringJunctions(
+  routes: WiringRoute[],
+  selected: WiringConductor[],
+  out: string[],
+) {
   const on = (p: Point, a: Point, b: Point) =>
     p.x >= Math.min(a.x, b.x) - 1e-7 &&
     p.x <= Math.max(a.x, b.x) + 1e-7 &&
@@ -345,6 +482,16 @@ export async function prepareWiringDrawing(
   const segments = routes.flatMap((r) =>
     r.points.slice(1).map((b, i) => ({ index: r.index, a: r.points[i]!, b })),
   );
+  assertWiringRouteOverlaps(segments, commonTerminal);
+  const dots = wiringJunctionDots(routes, segments, commonTerminal, on);
+  appendWiringJunctionSvg(dots, segments, commonTerminal, on, out);
+  return segments;
+}
+
+function assertWiringRouteOverlaps(
+  segments: WiringSegment[],
+  commonTerminal: (a: number, b: number) => boolean,
+) {
   // Coincident paths must represent a shared physical terminal, not an invented join.
   for (let i = 0; i < segments.length; i++)
     for (const other of segments.slice(i + 1)) {
@@ -375,6 +522,14 @@ export async function prepareWiringDrawing(
       if ((vertical && overlap("y")) || (horizontal && overlap("x")))
         throw new Error("Unrelated wiring routes overlap.");
     }
+}
+
+function wiringJunctionDots(
+  routes: WiringRoute[],
+  segments: WiringSegment[],
+  commonTerminal: (a: number, b: number) => boolean,
+  on: (p: Point, a: Point, b: Point) => boolean,
+) {
   const dots = new Map<string, { point: Point; index: number }>();
   for (const route of routes)
     for (const other of routes) {
@@ -403,6 +558,16 @@ export async function prepareWiringDrawing(
           dots.set(`${n(p.x)},${n(p.y)}`, { point: p, index: route.index });
       }
     }
+  return dots;
+}
+
+function appendWiringJunctionSvg(
+  dots: Map<string, { point: Point; index: number }>,
+  segments: WiringSegment[],
+  commonTerminal: (a: number, b: number) => boolean,
+  on: (p: Point, a: Point, b: Point) => boolean,
+  out: string[],
+) {
   for (const { point: p, index } of dots.values()) {
     if (
       segments.some(
@@ -417,6 +582,13 @@ export async function prepareWiringDrawing(
       `<circle data-wiring-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".65" fill="#344054"/>`,
     );
   }
+}
+
+function assertWiringLabels(
+  graph: ElkNode,
+  nodes: ElkNode[],
+  segments: WiringSegment[],
+) {
   const edgeLabels = (graph.edges ?? []).flatMap((e, index) =>
     (e.labels ?? []).map((l) => ({
       index,
@@ -462,6 +634,14 @@ export async function prepareWiringDrawing(
     )
       throw new Error("A wiring label obscures another conductor.");
   }
+}
+
+function appendWiringDevices(
+  nodes: ElkNode[],
+  state: WiringState,
+  out: string[],
+) {
+  const { ordered, devices, tags, labels, rows, ports } = state;
   const references: CommunicationDrawing["references"] = [];
   for (const node of nodes) {
     const uid = ordered[Number(node.id.slice(1))]!,
@@ -476,24 +656,7 @@ export async function prepareWiringDrawing(
     out.push("</g>");
     references.push(drawingDeviceReference(node, d));
   }
-  return {
-    documentNeeds,
-    title: request.title,
-    content: out.join("\n"),
-    width: graph.width!,
-    height: graph.height!,
-    references,
-    deviceTags: [...tags.values()],
-    coverage: {
-      kind: "wiring",
-      conductorIds: selected.map((c) => c.id),
-      functionIds: [],
-    },
-    note: [
-      "Terminal wiring: device internals are not shown. [ +N ] = other physical connections at that terminal; see wire schedule.",
-      ...(request.notes ?? []),
-    ].join("\n"),
-  };
+  return references;
 }
 
 function wiringWidthError(designation: string, terminalKey?: string) {
