@@ -292,279 +292,23 @@ export function m3Delivery(
         request,
       }),
     );
-  for (const need of needs) {
-    const records = exports.filter(
-        (d) =>
-          d.owner?.sheet === sheet.number &&
-          d.owner?.noteId === need.noteId &&
-          d.need === need.need,
-      ),
-      record = records.length === 1 ? records[0] : null;
-    let matches = record
-      ? notes.filter((t) => located(t, record.caption?.primitiveId))
-      : [];
-    const captionLocatorCount = matches.length;
-    if (!matches.length)
-      matches = notes.filter(
-        (t) => !used.has(t.element) && pointerMatches(need, t),
-      );
-    const note = matches[0] ?? { element: "sheet", text: "", sheetLevel: true };
-    used.add(note.element);
-    const fail = (kind, evidence = {}) =>
-      findings.push(
-        finding(kind, note, {
-          need: need.need,
-          noteId: need.noteId,
-          ...evidence,
-        }),
-      );
-    if (
-      record &&
-      (captionLocatorCount !== 1 ||
-        !(g.navigationViews ?? []).includes(record.owner?.viewKey))
-    )
-      fail("document-caption-locator-mismatch");
-    if (!matches.length) fail("document-native-need-without-visible-caption");
-    if (record && !pointerMatches(need, note))
-      fail("document-caption-native-scope-mismatch");
-    if (need.scopeMismatch?.length)
-      fail("document-source-view-scope-mismatch", {
-        foreignDeviceUids: need.scopeMismatch,
-      });
-    const nativeCount =
-      need.need === "conductor-incidence"
-        ? note.text.match(/\[\+(\d+)\]/u)
-        : need.need === "terminal-inventory"
-          ? note.text.match(/\b(\d+) other terminals?\b/u)
-          : null;
-    if (nativeCount && Number(nativeCount[1]) !== need.facts.length)
-      fail("document-caption-native-count-mismatch", {
-        expected: need.facts.length,
-        actual: Number(nativeCount[1]),
-      });
-    if (versioned) {
-      const columns = semanticColumns[need.need];
-      if (
-        records.length !== 1 ||
-        !bindingsMatch(record, context.binding) ||
-        !setEqual(factKeys(record.requiredFacts ?? []), factKeys(need.facts)) ||
-        !setEqual(record.requiredColumns, columns) ||
-        record.id !==
-          `dependency/1/${sha([record.owner?.viewKey, need.noteId])}` ||
-        ((["conductor-incidence", "terminal-inventory"].includes(need.need) ||
-          record.count !== undefined) &&
-          record.count !== need.facts.length) ||
-        compact(record.caption?.text) !== compact(note.text)
-      )
-        fail("document-dependency-inventory-mismatch", {
-          expectedFacts: need.facts,
-          actual: record,
-        });
-    }
-    const candidates = rows
-      .map((r) => ({
-        ...r,
-        native: catalog.find((n) => n.kind === r.kind && n.key === r.key),
-      }))
-      .filter(
-        (r) =>
-          r.native &&
-          sufficient(r, r.native) &&
-          printedHeader(r, context.tables),
-      );
-    let delivered = candidates;
-    if (versioned) {
-      delivered = [];
-      for (const resolution of record?.resolution ?? []) {
-        const doc = nav.documents?.find((d) => d.id === resolution.documentId);
-        if (!doc || !bindingsMatch(doc, context.binding)) {
-          fail("document-resolution-source-mismatch", {
-            documentId: resolution.documentId,
-          });
-          continue;
-        }
-        for (const id of resolution.rows ?? []) {
-          const row = doc.rows?.find((r) => r.id === id),
-            actual =
-              row &&
-              candidates.filter(
-                (r) =>
-                  r.documentId === doc.id &&
-                  r.key === row.nativeKey &&
-                  r.sheet === row.sheet &&
-                  r.primitiveIds.includes(row.primitiveId),
-              );
-          if (
-            !row ||
-            actual.length !== 1 ||
-            !rowMatchesAny(actual[0]?.native, need.facts)
-          ) {
-            fail("document-resolution-row-mismatch", {
-              documentId: doc.id,
-              rowId: id,
-            });
-            continue;
-          }
-          const visible = actual[0];
-          if (
-            !setEqual(
-              factKeys(row.facts ?? []),
-              factKeys(visible.native.facts),
-            ) ||
-            row.anchorRule !== "row-region-center/1" ||
-            !samePoint(row.anchorMm, visible.anchor) ||
-            !sameBox(row.rectMm, visible.region) ||
-            !visible.zones.includes(row.zone) ||
-            row.displayName !== visible.native.name
-          )
-            fail("document-row-locator-mismatch", {
-              rowId: id,
-              measured: {
-                anchor: visible.anchor,
-                region: visible.region,
-                zone: visible.zone,
-              },
-              claimed: row,
-            });
-          delivered.push({ ...visible, exportedRow: row });
-        }
-      }
-    }
-    const missing = need.facts.filter(
-      (f) => !delivered.some((r) => rowMatchesFact(r.native, f)),
-    );
-    if (missing.length)
-      fail("printed-document-target-insufficient", {
-        requiredFacts: need.facts.length,
-        missingFacts: missing,
-        reason: "missing-or-insufficient-visible-issued-rows",
-      });
-    const captions = [
-      ...note.text.matchAll(/(\d+)\.([A-Z]+\d+)\s*\(([^)]*)\)/gu),
-    ];
-    const countInk =
-      /:\s*\d+\s+(?:physical connections?|ports?|terminals?|cores?|assembl(?:y|ies))\b/u.test(
-        note.text,
-      );
-    const scoped = delivered.filter((r) => rowMatchesAny(r.native, need.facts));
-    const identityInk =
-      scoped.length &&
-      scoped.every((r) =>
-        captions.some(
-          (m) =>
-            Number(m[1]) === r.sheet &&
-            r.zones.includes(m[2]) &&
-            compact(m[3]).includes(compact(r.native.name)),
-        ),
-      );
-    // Native markings can themselves read "1 port". A locator may disambiguate
-    // two valid readings, but native rows/counts still have to verify that reading.
-    const compactForm =
-      countInk && (!identityInk || record?.caption?.form === "compact");
-    if (
-      record &&
-      record.caption?.form !== (compactForm ? "compact" : "identities")
-    )
-      fail("document-caption-form-mismatch");
-    const selected = delivered
-      .filter((r) => rowMatchesAny(r.native, need.facts))
-      .map((r) => {
-        // Export groups are locators only: admit their location solely after the
-        // row region and actual printed token independently verify it.
-        const group =
-          compactForm &&
-          record?.caption?.groups?.find(
-            (x) =>
-              x.documentId === r.documentId &&
-              x.rows?.includes(r.exportedRow?.id) &&
-              x.sheet === r.sheet &&
-              r.zones.includes(x.zone),
-          );
-        const printed = captions.find(
-          (m) =>
-            Number(m[1]) === r.sheet &&
-            r.zones.includes(m[2]) &&
-            (compactForm
-              ? group?.zone === m[2]
-              : compact(m[3]).includes(compact(r.native.name))),
-        );
-        return { ...r, zone: printed?.[2] ?? r.zone };
-      });
-    const groups = partition(selected, need.facts, ir);
-    if (!missing.length && need.facts.length && matches.length) {
-      const captionFailures = completeCaption(
-        groups,
-        note,
-        need.need,
-        ir,
-        compactForm,
-      );
-      for (const f of captionFailures) {
-        const result = finding(f.kind, note, { need: need.need, ...f });
-        if (/location/.test(f.kind)) targetFindings.push(result);
-        else findings.push(result);
-      }
-      if (compactForm && record) {
-        const actual = record.caption?.groups ?? [];
-        const expected = groups.map((x) => ({
-          documentId: x.rows[0].documentId,
-          rows: x.rows.map((r) => r.exportedRow?.id).sort(),
-          sheet: x.rows[0].sheet,
-          zone: x.rows[0].zone,
-          owner: x.owner,
-          count: x.facts.length,
-          unit: {
-            "conductor-incidence": "physical connections",
-            "terminal-inventory": "terminals",
-            "port-link-status": "ports",
-            "core-inventory": "cores",
-            "assembly-pin-map": "assemblies",
-          }[need.need],
-          factKeys: factKeys(x.facts),
-        }));
-        if (
-          record.caption.form !== "compact" ||
-          !equal(
-            actual.map((x) => ({
-              documentId: x.documentId,
-              rows: x.rows?.slice().sort(),
-              sheet: x.sheet,
-              zone: x.zone,
-              owner: x.owner,
-              count: x.count,
-              unit: x.unit,
-              factKeys: x.factKeys?.slice().sort(),
-            })),
-            expected,
-          )
-        )
-          fail("document-caption-partition-mismatch", { expected, actual });
-      }
-    }
-    if (need.need === "port-link-status")
-      for (const f of need.facts) {
-        const name = ir.devices.find((d) => d.uid === f.deviceUid)?.designation;
-        if (note.text.includes(`${name}.${f.portKey}`))
-          fail("document-caption-dotted-port-selector", {
-            deviceUid: f.deviceUid,
-            portKey: f.portKey,
-          });
-      }
-    measurements.push({
-      noteId: need.noteId,
-      need: need.need,
-      requiredFacts: need.facts.length,
-      deliveredFacts: need.facts.length - missing.length,
-      rows: selected.map((r) => ({
-        documentId: r.documentId,
-        key: r.key,
-        sheet: r.sheet,
-        zone: r.zone,
-        anchor: r.anchor,
-      })),
-      compact: compactForm,
+  for (const need of needs)
+    measureNativeNeed(need, {
+      exports,
+      sheet,
+      notes,
+      used,
+      g,
+      findings,
+      versioned,
+      context,
+      rows,
+      catalog,
+      nav,
+      ir,
+      targetFindings,
+      measurements,
     });
-  }
   for (const record of exports.filter((d) => d.owner?.sheet === sheet.number))
     if (
       !needs.some(
@@ -611,3 +355,352 @@ const samePoint = (a, b) =>
   a && b && Math.abs(a.x - b.x) <= 0.011 && Math.abs(a.y - b.y) <= 0.011;
 const sameBox = (a, b) =>
   a && b && ["x", "y", "w", "h"].every((k) => Math.abs(a[k] - b[k]) <= 0.011);
+
+function locateNeedCaption(
+  need,
+  exports,
+  sheet,
+  notes,
+  used,
+  g,
+  findings,
+  versioned,
+  context,
+) {
+  const records = exports.filter(
+      (d) =>
+        d.owner?.sheet === sheet.number &&
+        d.owner?.noteId === need.noteId &&
+        d.need === need.need,
+    ),
+    record = records.length === 1 ? records[0] : null;
+  let matches = record
+    ? notes.filter((t) => located(t, record.caption?.primitiveId))
+    : [];
+  const captionLocatorCount = matches.length;
+  if (!matches.length)
+    matches = notes.filter(
+      (t) => !used.has(t.element) && pointerMatches(need, t),
+    );
+  const note = matches[0] ?? { element: "sheet", text: "", sheetLevel: true };
+  used.add(note.element);
+  const fail = (kind, evidence = {}) =>
+    findings.push(
+      finding(kind, note, {
+        need: need.need,
+        noteId: need.noteId,
+        ...evidence,
+      }),
+    );
+  if (
+    record &&
+    (captionLocatorCount !== 1 ||
+      !(g.navigationViews ?? []).includes(record.owner?.viewKey))
+  )
+    fail("document-caption-locator-mismatch");
+  if (!matches.length) fail("document-native-need-without-visible-caption");
+  if (record && !pointerMatches(need, note))
+    fail("document-caption-native-scope-mismatch");
+  if (need.scopeMismatch?.length)
+    fail("document-source-view-scope-mismatch", {
+      foreignDeviceUids: need.scopeMismatch,
+    });
+  const nativeCount =
+    need.need === "conductor-incidence"
+      ? note.text.match(/\[\+(\d+)\]/u)
+      : need.need === "terminal-inventory"
+        ? note.text.match(/\b(\d+) other terminals?\b/u)
+        : null;
+  if (nativeCount && Number(nativeCount[1]) !== need.facts.length)
+    fail("document-caption-native-count-mismatch", {
+      expected: need.facts.length,
+      actual: Number(nativeCount[1]),
+    });
+  if (versioned) {
+    const columns = semanticColumns[need.need];
+    if (
+      records.length !== 1 ||
+      !bindingsMatch(record, context.binding) ||
+      !setEqual(factKeys(record.requiredFacts ?? []), factKeys(need.facts)) ||
+      !setEqual(record.requiredColumns, columns) ||
+      record.id !==
+        `dependency/1/${sha([record.owner?.viewKey, need.noteId])}` ||
+      ((["conductor-incidence", "terminal-inventory"].includes(need.need) ||
+        record.count !== undefined) &&
+        record.count !== need.facts.length) ||
+      compact(record.caption?.text) !== compact(note.text)
+    )
+      fail("document-dependency-inventory-mismatch", {
+        expectedFacts: need.facts,
+        actual: record,
+      });
+  }
+  return { record, matches, note, fail };
+}
+
+function resolveDeliveredRows(
+  need,
+  rows,
+  catalog,
+  context,
+  versioned,
+  record,
+  nav,
+  fail,
+) {
+  const candidates = rows
+    .map((r) => ({
+      ...r,
+      native: catalog.find((n) => n.kind === r.kind && n.key === r.key),
+    }))
+    .filter(
+      (r) =>
+        r.native && sufficient(r, r.native) && printedHeader(r, context.tables),
+    );
+  let delivered = candidates;
+  if (versioned) {
+    delivered = [];
+    for (const resolution of record?.resolution ?? []) {
+      const doc = nav.documents?.find((d) => d.id === resolution.documentId);
+      if (!doc || !bindingsMatch(doc, context.binding)) {
+        fail("document-resolution-source-mismatch", {
+          documentId: resolution.documentId,
+        });
+        continue;
+      }
+      for (const id of resolution.rows ?? []) {
+        const row = doc.rows?.find((r) => r.id === id),
+          actual =
+            row &&
+            candidates.filter(
+              (r) =>
+                r.documentId === doc.id &&
+                r.key === row.nativeKey &&
+                r.sheet === row.sheet &&
+                r.primitiveIds.includes(row.primitiveId),
+            );
+        if (
+          !row ||
+          actual.length !== 1 ||
+          !rowMatchesAny(actual[0]?.native, need.facts)
+        ) {
+          fail("document-resolution-row-mismatch", {
+            documentId: doc.id,
+            rowId: id,
+          });
+          continue;
+        }
+        const visible = actual[0];
+        if (
+          !setEqual(
+            factKeys(row.facts ?? []),
+            factKeys(visible.native.facts),
+          ) ||
+          row.anchorRule !== "row-region-center/1" ||
+          !samePoint(row.anchorMm, visible.anchor) ||
+          !sameBox(row.rectMm, visible.region) ||
+          !visible.zones.includes(row.zone) ||
+          row.displayName !== visible.native.name
+        )
+          fail("document-row-locator-mismatch", {
+            rowId: id,
+            measured: {
+              anchor: visible.anchor,
+              region: visible.region,
+              zone: visible.zone,
+            },
+            claimed: row,
+          });
+        delivered.push({ ...visible, exportedRow: row });
+      }
+    }
+  }
+  return delivered;
+}
+
+function selectCaptionRows(need, delivered, note, record, fail) {
+  const missing = need.facts.filter(
+    (f) => !delivered.some((r) => rowMatchesFact(r.native, f)),
+  );
+  if (missing.length)
+    fail("printed-document-target-insufficient", {
+      requiredFacts: need.facts.length,
+      missingFacts: missing,
+      reason: "missing-or-insufficient-visible-issued-rows",
+    });
+  const captions = [
+    ...note.text.matchAll(/(\d+)\.([A-Z]+\d+)\s*\(([^)]*)\)/gu),
+  ];
+  const countInk =
+    /:\s*\d+\s+(?:physical connections?|ports?|terminals?|cores?|assembl(?:y|ies))\b/u.test(
+      note.text,
+    );
+  const scoped = delivered.filter((r) => rowMatchesAny(r.native, need.facts));
+  const identityInk =
+    scoped.length &&
+    scoped.every((r) =>
+      captions.some(
+        (m) =>
+          Number(m[1]) === r.sheet &&
+          r.zones.includes(m[2]) &&
+          compact(m[3]).includes(compact(r.native.name)),
+      ),
+    );
+  // Native markings can themselves read "1 port". A locator may disambiguate
+  // two valid readings, but native rows/counts still have to verify that reading.
+  const compactForm =
+    countInk && (!identityInk || record?.caption?.form === "compact");
+  if (
+    record &&
+    record.caption?.form !== (compactForm ? "compact" : "identities")
+  )
+    fail("document-caption-form-mismatch");
+  const selected = delivered
+    .filter((r) => rowMatchesAny(r.native, need.facts))
+    .map((r) => {
+      // Export groups are locators only: admit their location solely after the
+      // row region and actual printed token independently verify it.
+      const group =
+        compactForm &&
+        record?.caption?.groups?.find(
+          (x) =>
+            x.documentId === r.documentId &&
+            x.rows?.includes(r.exportedRow?.id) &&
+            x.sheet === r.sheet &&
+            r.zones.includes(x.zone),
+        );
+      const printed = captions.find(
+        (m) =>
+          Number(m[1]) === r.sheet &&
+          r.zones.includes(m[2]) &&
+          (compactForm
+            ? group?.zone === m[2]
+            : compact(m[3]).includes(compact(r.native.name))),
+      );
+      return { ...r, zone: printed?.[2] ?? r.zone };
+    });
+  return { missing, compactForm, selected };
+}
+
+function measureNativeNeed(
+  need,
+  {
+    exports,
+    sheet,
+    notes,
+    used,
+    g,
+    findings,
+    versioned,
+    context,
+    rows,
+    catalog,
+    nav,
+    ir,
+    targetFindings,
+    measurements,
+  },
+) {
+  const { record, matches, note, fail } = locateNeedCaption(
+    need,
+    exports,
+    sheet,
+    notes,
+    used,
+    g,
+    findings,
+    versioned,
+    context,
+  );
+  const delivered = resolveDeliveredRows(
+    need,
+    rows,
+    catalog,
+    context,
+    versioned,
+    record,
+    nav,
+    fail,
+  );
+  const { missing, compactForm, selected } = selectCaptionRows(
+    need,
+    delivered,
+    note,
+    record,
+    fail,
+  );
+  const groups = partition(selected, need.facts, ir);
+  if (!missing.length && need.facts.length && matches.length) {
+    const captionFailures = completeCaption(
+      groups,
+      note,
+      need.need,
+      ir,
+      compactForm,
+    );
+    for (const f of captionFailures) {
+      const result = finding(f.kind, note, { need: need.need, ...f });
+      if (/location/.test(f.kind)) targetFindings.push(result);
+      else findings.push(result);
+    }
+    if (compactForm && record) {
+      const actual = record.caption?.groups ?? [];
+      const expected = groups.map((x) => ({
+        documentId: x.rows[0].documentId,
+        rows: x.rows.map((r) => r.exportedRow?.id).sort(),
+        sheet: x.rows[0].sheet,
+        zone: x.rows[0].zone,
+        owner: x.owner,
+        count: x.facts.length,
+        unit: {
+          "conductor-incidence": "physical connections",
+          "terminal-inventory": "terminals",
+          "port-link-status": "ports",
+          "core-inventory": "cores",
+          "assembly-pin-map": "assemblies",
+        }[need.need],
+        factKeys: factKeys(x.facts),
+      }));
+      if (
+        record.caption.form !== "compact" ||
+        !equal(
+          actual.map((x) => ({
+            documentId: x.documentId,
+            rows: x.rows?.slice().sort(),
+            sheet: x.sheet,
+            zone: x.zone,
+            owner: x.owner,
+            count: x.count,
+            unit: x.unit,
+            factKeys: x.factKeys?.slice().sort(),
+          })),
+          expected,
+        )
+      )
+        fail("document-caption-partition-mismatch", { expected, actual });
+    }
+  }
+  if (need.need === "port-link-status")
+    for (const f of need.facts) {
+      const name = ir.devices.find((d) => d.uid === f.deviceUid)?.designation;
+      if (note.text.includes(`${name}.${f.portKey}`))
+        fail("document-caption-dotted-port-selector", {
+          deviceUid: f.deviceUid,
+          portKey: f.portKey,
+        });
+    }
+  measurements.push({
+    noteId: need.noteId,
+    need: need.need,
+    requiredFacts: need.facts.length,
+    deliveredFacts: need.facts.length - missing.length,
+    rows: selected.map((r) => ({
+      documentId: r.documentId,
+      key: r.key,
+      sheet: r.sheet,
+      zone: r.zone,
+      anchor: r.anchor,
+    })),
+    compact: compactForm,
+  });
+}
