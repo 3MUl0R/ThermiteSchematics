@@ -22,7 +22,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/thermite-playwright
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/../thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,14 +57,12 @@ jobs:
             const executable = chromium.executablePath();
             accessSync(executable);
             appendFileSync(process.env.GITHUB_ENV,
-              `THERMITE_DRAW_CHROMIUM=${executable}\nTHERMITE_TEST_BROWSER=${executable}\n`);
+              "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
+              "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
       - name: Capture Linux layout evidence
         if: runner.os == 'Linux'
         run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
-      - run: bun run check
-        env:
-          THERMITE_RESEARCH_PYTHON: python
       - name: Retain Linux layout evidence
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -73,6 +71,9 @@ jobs:
           path: coverage/ci-layout/
           if-no-files-found: warn
           retention-days: 7
+      - run: bun run check
+        env:
+          THERMITE_RESEARCH_PYTHON: python
       - run: bun run package:pack
       - name: Verify Linux candidate without network access
         if: runner.os == 'Linux'
@@ -118,7 +119,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/thermite-playwright
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/../thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,15 +154,12 @@ jobs:
             const executable = chromium.executablePath();
             accessSync(executable);
             appendFileSync(process.env.GITHUB_ENV,
-              `THERMITE_DRAW_CHROMIUM=${executable}\nTHERMITE_TEST_BROWSER=${executable}\n`);
+              "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
+              "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
       - name: Capture Linux layout evidence
         if: runner.os == 'Linux'
         run: bun run build && bun packages/render/test/ci-layout-evidence.mjs
-      - name: Check a linked worktree
-        run: bun scripts/check-worktree.mjs
-        env:
-          THERMITE_RESEARCH_PYTHON: python
       - name: Retain Linux layout evidence
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -170,3 +168,7 @@ jobs:
           path: coverage/ci-layout/
           if-no-files-found: warn
           retention-days: 7
+      - name: Check a linked worktree
+        run: bun scripts/check-worktree.mjs
+        env:
+          THERMITE_RESEARCH_PYTHON: python
