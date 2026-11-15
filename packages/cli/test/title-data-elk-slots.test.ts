@@ -12,15 +12,13 @@ function diagnostics(text: string) {
     ts.createSourceFile(file, text, 99, true),
   );
   expect(program.getSyntacticDiagnostics(tree)).toEqual([]);
-  return program
-    .getSemanticDiagnostics(tree)
-    .map((d) =>
-      JSON.stringify({
-        code: d.code,
-        start: d.start,
-        message: ts.flattenDiagnosticMessageText(d.messageText, " "),
-      }),
-    );
+  return program.getSemanticDiagnostics(tree).map((d) =>
+    JSON.stringify({
+      code: d.code,
+      start: d.start,
+      message: ts.flattenDiagnosticMessageText(d.messageText, " "),
+    }),
+  );
 }
 const baseline = new Set(diagnostics(source));
 it.each([
