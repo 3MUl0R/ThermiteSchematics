@@ -2,7 +2,7 @@
   "ceilings": {
     "fileLines": 3000,
     "functionLines": 300,
-    "nonNullAssertions": 1010,
+    "nonNullAssertions": 1008,
     "skippedTests": 56
   },
   "duplicates": {
@@ -71,9 +71,7 @@
     "packages/render/src/layout/validate-output.ts": 1600,
     "packages/render/src/signal-loop.ts": 971,
     "packages/render/src/svg/emitter.ts": 1244,
-    "packages/render/src/symbols/mappings.ts": 1142,
     "packages/render/src/symbols/validate.ts": 1108,
-    "packages/render/src/view-spec.ts": 1362,
     "packages/render/test/b4-tier1.test.ts": 1666,
     "packages/render/test/layout-output.test.ts": 1551,
     "packages/render/test/mappings.test.ts": 1157,
@@ -115,9 +113,6 @@
       "packages/render/src/communication.ts#layoutCommunicationDrawing": "9a7a4c920403c1f61585234679bb33c61fc578783392beb21851359fa711dffd",
       "packages/render/src/connector-assembly.ts#layoutAssemblyDrawing": "23e270188cddeed043a67a284d2e9bdadbe897396be6789449f0bf9bd6b1ae91",
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "401c7eb9ef48d3b4177df0f78603726f2e741635441584f401fe287816608a4b",
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings": "5607a57dca8b28a2e7f3213f34417da3721c6476644397eea97041d69d930177",
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings/flatMap callback": "ab5e1c2a819ebf89c2f3c9980d8bd0908fc278adcb5b61d030f5052873002d4b",
-      "packages/render/src/view-spec.ts#normalizeSchematicView": "8a20f14530b9a0b858e5b8f475fd2433a19e9b7f396c771ef0da49fde530e6d4",
       "packages/render/src/wiring.ts#prepareWiringDrawing": "46116ebbf0c4d823255f8b3b80f390be77986f2671e2b3aa7f22fb62197e0602",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
@@ -494,7 +489,6 @@
     "packages/render/src/symbols/validate.ts#validateSymbolCatalog": 92,
     "packages/render/src/symbols/validate.ts#validateSymbolCatalog/forEach callback": 84,
     "packages/render/src/topology-coverage.ts#buildTopologyCoverage": 155,
-    "packages/render/src/view-spec.ts#normalizeSchematicView/rejectRoot": 86,
     "packages/render/src/view-spec.ts#validateIntentRequest": 130,
     "packages/render/test/attachment-emitter-families.test.ts#call callback": 88,
     "packages/render/test/attachment-weight-fixture.ts#assertAttachmentWeights": 79,
@@ -717,9 +711,6 @@
       "packages/render/src/communication.ts#layoutCommunicationDrawing": 345,
       "packages/render/src/connector-assembly.ts#layoutAssemblyDrawing": 350,
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 530,
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings": 353,
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings/flatMap callback": 347,
-      "packages/render/src/view-spec.ts#normalizeSchematicView": 354,
       "packages/render/src/wiring.ts#prepareWiringDrawing": 426,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
@@ -745,9 +736,6 @@
       "packages/render/src/communication.ts#layoutCommunicationDrawing": "packages/render/src/communication.ts#layoutCommunicationDrawing",
       "packages/render/src/connector-assembly.ts#layoutAssemblyDrawing": "packages/render/src/connector-assembly.ts#layoutAssemblyDrawing",
       "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing",
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings": "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings",
-      "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings/flatMap callback": "packages/render/src/symbols/mappings.ts#projectDeviceTypeSymbolMappings/flatMap callback",
-      "packages/render/src/view-spec.ts#normalizeSchematicView": "packages/render/src/view-spec.ts#normalizeSchematicView",
       "packages/render/src/wiring.ts#prepareWiringDrawing": "packages/render/src/wiring.ts#prepareWiringDrawing",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
@@ -853,12 +841,14 @@
     "packages/render/src/svg/emitter.ts": 1,
     "packages/render/src/symbols/catalog.ts": 1,
     "packages/render/src/symbols/circuit.ts": 1,
-    "packages/render/src/symbols/mappings.ts": 11,
     "packages/render/src/symbols/printable-font.ts": 4,
     "packages/render/src/symbols/printable-label.ts": 2,
+    "packages/render/src/symbols/project-mappings.ts": 11,
     "packages/render/src/symbols/validate.ts": 9,
     "packages/render/src/text-metrics.ts": 10,
-    "packages/render/src/view-spec.ts": 14,
+    "packages/render/src/view-normalization.ts": 2,
+    "packages/render/src/view-roots.ts": 2,
+    "packages/render/src/view-spec.ts": 10,
     "packages/render/src/wiring.ts": 67,
     "packages/schema/src/parser.ts": 2,
     "packages/schema/src/symbol-profiles.ts": 6
@@ -965,6 +955,24 @@
       "from": 70,
       "to": 88,
       "reason": "Apply reviewed C7a match ranking, release value policy and rebase lowering fixes"
+    },
+    "nonNullAssertions:packages/render/src/symbols/project-mappings.ts": {
+      "identity": "nonNullAssertions:packages/render/src/symbols/project-mappings.ts",
+      "from": 0,
+      "to": 11,
+      "reason": "moved verbatim from packages/render/src/symbols/mappings.ts by C7e extraction"
+    },
+    "nonNullAssertions:packages/render/src/view-normalization.ts": {
+      "identity": "nonNullAssertions:packages/render/src/view-normalization.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
+    },
+    "nonNullAssertions:packages/render/src/view-roots.ts": {
+      "identity": "nonNullAssertions:packages/render/src/view-roots.ts",
+      "from": 0,
+      "to": 2,
+      "reason": "moved verbatim from packages/render/src/view-spec.ts by C7e extraction"
     }
   },
   "skippedTests": {
