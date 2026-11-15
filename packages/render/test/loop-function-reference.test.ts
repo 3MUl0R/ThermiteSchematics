@@ -65,8 +65,8 @@ it("uses only bound terminals in authored order, falling back to the designation
           })),
         },
       });
-    expect(reference(["9", "13"])).toBe("AI1 terminals 9–13");
-    expect(reference(["13", "9"])).toBe("AI1 terminals 13–9");
+    expect(reference(["9", "13"])).toBe("AI1 terminals 9 / 13");
+    expect(reference(["13", "9"])).toBe("AI1 terminals 13 / 9");
     expect(reference(["3"])).toBe("AI1 terminal 3");
     expect(reference(["3", "5", "7"])).toBe("AI1 terminals 3 / 5 / 7");
     expect(reference(["1/2", "2/1"])).toBe("AI1 terminals 1/2–2/1");
