@@ -7,56 +7,18 @@ export const drawingContextOptions = Object.freeze({
   javaScriptEnabled: false,
 });
 import { classifyTextGeometry } from "./text-classification.mjs";
-import { access, readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { browserPath } from "./chromium-path.mjs";
+export { browserPath };
+import {
+  measureRelationDeclarations,
+  attachRelationDeclarations,
+  measureUnkeyedRelations,
+  measureMarkerIdentityClaims,
+} from "./relation-landing-browser.mjs";
 import { chromium } from "playwright-core";
 // Preserve the calibrated path: software rasterization broke a retained binding.
 // The repeat-capture check supplies explicit candidate arguments for experiments.
 export const drawingLaunchArgs = Object.freeze([]);
-export async function browserPath() {
-  if (process.env.THERMITE_DRAW_CHROMIUM) {
-    try {
-      await access(process.env.THERMITE_DRAW_CHROMIUM);
-    } catch {
-      throw Error(
-        `Drawing eval infrastructure: THERMITE_DRAW_CHROMIUM does not name an accessible executable: ${process.env.THERMITE_DRAW_CHROMIUM}. Set it to an installed Chromium executable or run bunx playwright-core install chromium. No checks were skipped.`,
-      );
-    }
-    return process.env.THERMITE_DRAW_CHROMIUM;
-  }
-  const roots =
-    process.platform === "darwin"
-      ? [join(homedir(), "Library/Caches/ms-playwright")]
-      : [join(homedir(), ".cache/ms-playwright")];
-  for (const root of roots) {
-    let entries = [];
-    try {
-      entries = await readdir(root);
-    } catch {}
-    for (const e of entries
-      .filter((x) => /^chromium-/.test(x))
-      .sort()
-      .reverse())
-      for (const suffix of [
-        "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-        "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-        "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
-        "chrome-linux64/chrome",
-        "chrome-linux/chrome",
-        "chrome-win/chrome.exe",
-      ]) {
-        const path = join(root, e, suffix);
-        try {
-          await access(path);
-          return path;
-        } catch {}
-      }
-  }
-  throw Error(
-    "Drawing eval infrastructure: Chromium missing. Install the local Chromium build with bunx playwright-core install chromium, or set THERMITE_DRAW_CHROMIUM to its executable. No checks were skipped.",
-  );
-}
 export async function launch(args = drawingLaunchArgs) {
   return chromium.launch({
     executablePath: await browserPath(),
@@ -2454,7 +2416,21 @@ export async function displaySheet(page, svg) {
 }
 export async function openSheet(page, svg) {
   await displaySheet(page, svg);
-  return classifyTextGeometry(await page.evaluate(measureSheet));
+  const geometry = await page.evaluate(measureSheet);
+  const anchors = (geometry.relationLandings ?? [])
+    .flatMap((r) => (r.ownedLandings ?? []).map((p) => p.anchorElement))
+    .filter(Boolean);
+  const declarations = await page.evaluate(measureRelationDeclarations, {
+    anchors,
+  });
+  const claims = await page.evaluate(measureMarkerIdentityClaims, { anchors });
+  attachRelationDeclarations(geometry, declarations, claims);
+  const missing = await page.evaluate(measureUnkeyedRelations);
+  const measured = new Set(geometry.relationLandings.map((r) => r.element));
+  geometry.relationLandings.push(
+    ...missing.filter((r) => !measured.has(r.element)),
+  );
+  return classifyTextGeometry(geometry);
 }
 export function cropBox(b, width, height, padding = 3) {
   const x = Math.max(0, b.x - padding),

@@ -629,8 +629,8 @@ export function routePoints(s) {
     y: b * p.x + d * p.y + f,
   }));
 }
-export function doubleLandings(g) {
-  const out = endpointLandingFindings(g),
+export function doubleLandings(g, ir) {
+  const out = endpointLandingFindings(g, ir),
     groups = new Map();
   for (const s of g.shapes.filter((s) => s.conductor && s.wire)) {
     const ps = routePoints(s);
