@@ -46,13 +46,17 @@ to arrange that conversation; do not include confidential agreement details.
 
 After installing dependencies, install the lockfile-pinned Chromium exactly as
 CI does: `bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium`.
+On Linux, `--with-deps` needs sudo or root privileges to install system libraries;
+omit it if those libraries are already installed.
 Print its executable with
 `bun -e "import { chromium } from 'playwright-core'; console.log(chromium.executablePath())"`
-and set both browser overrides to that path, especially on Windows or with a
-custom cache. CI exports both from `chromium.executablePath()`.
+and set both browser overrides to that path. Without `THERMITE_TEST_BROWSER`,
+system Chrome/Chromium is chosen before the pinned cached build. CI exports
+both overrides from `chromium.executablePath()`.
 
 - `THERMITE_TEST_BROWSER` selects the PDF/browser test harness executable.
-  A defined override, even an invalid or empty one, disables fallback. Without
+  A defined override, even an invalid or empty one, disables the helper's
+  discovery fallback. Without
   it, discovery tries macOS Google Chrome, `/usr/bin/chromium`,
   `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`, then Chrome under
   `%PROGRAMFILES%`. It next searches `~/Library/Caches/ms-playwright`,
@@ -65,10 +69,18 @@ custom cache. CI exports both from `chromium.executablePath()`.
 Both cache searches try `chromium-*` directories in reverse lexical order;
 [platform checks](docs/platforms.md#browser-for-tests) lists their executable
 suffix orders. Neither helper reads `PLAYWRIGHT_BROWSERS_PATH` directly.
-Without a browser, the PDF harness skips optional browser crops locally unless
-`THERMITE_REQUIRE_BROWSER=1` makes discovery fail. Draw suites always fail when
-Chromium is missing, so the full check needs it even without that flag. CI sets
-the flag and provisions Chromium in both jobs on every OS.
+Only guarded optional browser crops skip locally without a browser. Some browser
+suites call the PDF harness without a skip guard and fail rather than skip if
+no browser is available. When no path was found, Playwright tries its own registry.
+Draw suites also fail when Chromium is missing. The full check needs a browser
+for both harnesses even without `THERMITE_REQUIRE_BROWSER=1`; that flag makes
+the PDF harness fail at discovery. CI sets it and selects pinned Chromium in
+both jobs on every OS.
+
+With pinned Chromium, default Canvas glyph bounds are whole-unit rounded on
+Linux and Windows; macOS defaults are precise. At millimetre text sizes, reported boxes and cap
+heights can differ by about 0.5 mm. Calibration tests opt into precise bounds;
+see the [platform evidence and measurement code](docs/platforms.md#browser-for-tests).
 
 Use `bun scripts/test.mjs <files>` for targeted tests after rebuilding. On macOS,
 `bunx vitest` is unsupported: it bypasses temporary-directory canonicalization.
