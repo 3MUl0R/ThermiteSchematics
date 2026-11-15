@@ -2,6 +2,7 @@ import {
   frameContext,
   frameZeroLoss,
   recordFrameAttempt,
+  recordFrameBanks,
 } from "./frame-budget.js";
 import { hasCompactFrame } from "./frame-profile.js";
 import { cardDistances, CARD_LOCALITY_AIM_MM } from "./rooted-locality.js";
@@ -222,6 +223,7 @@ export function buildRootedCandidates(
     offset,
     extraReservations || !!context,
   );
+  if (context) recordFrameBanks(page, p, banks);
   const constraint = continuationGridConstraint(
     p,
     banks.map((bank) => bankBounds(b, bank)),
@@ -264,7 +266,7 @@ export function buildRootedCandidates(
   return failedBuild(p, constraint, captionFailure, search.identityFailure);
 }
 
-function buildGridCandidates(
+export function buildGridCandidates(
   p: PreparedSchematicDrawing,
   page: PaperPage,
   profile: "compact" | "dense" | undefined,

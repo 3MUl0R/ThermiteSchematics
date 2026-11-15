@@ -20,8 +20,6 @@ export interface ContinuationBank {
 }
 export const CONTINUATION_BANK_FORMS = [false, true] as const;
 export const FALLBACK_BANK_RESERVATIONS = [1.7, 3.5] as const;
-export const MAX_CONTINUATION_BANKS =
-  CONTINUATION_BANK_FORMS.length * (1 + FALLBACK_BANK_RESERVATIONS.length);
 // Physical caption envelopes and the existing gutters, all in sheet mm.
 const SIDE_CAPTION_INSET = { left: 9.35, right: 4.35 };
 const VERTICAL_CAPTION_INSET = 4.15;
