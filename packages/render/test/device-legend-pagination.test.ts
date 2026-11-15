@@ -173,7 +173,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
   120000,
 );
 
-it("returns R006 for the all-device 799-character reference stress within the unchanged page-cost bound", async () => {
+it("reports the observed plan cap for the all-device 799-character stress without inventing page-cost exhaustion", async () => {
   const ir = structuredClone(compiled.ir),
     description = Array(5).fill(note).join(" ");
   for (const d of ir.devices) d.description = description;
@@ -189,8 +189,9 @@ it("returns R006 for the all-device 799-character reference stress within the un
   });
   if (!result.ok) {
     expect(result.error.message).toContain(
-      "exhausted the 8-sheet packet page-cost bound (4 native sheets)",
+      "stopped at the 6 retained axis plans per search state",
     );
+    expect(result.error.message).not.toContain("page-cost bound");
     expect(result.error.message).toContain(
       "final sheet of K1 / control cannot fit complete entries for PB1 (body), PS1 (reference)",
     );
@@ -201,9 +202,8 @@ it("returns R006 for the all-device 799-character reference stress within the un
     expect(result.error).toMatchObject({
       root: "packet",
       details: {
-        constraint: "legend-pagination-bound",
-        maximumPages: 8,
-        basePages: 4,
+        constraint: "legend-search-limit",
+        searchCaps: ["axis-plans"],
         sheet: "final",
         legendEntries: [
           expect.objectContaining({ designation: "PB1", kind: "body" }),

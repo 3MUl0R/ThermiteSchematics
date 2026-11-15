@@ -409,8 +409,9 @@ References use final physical sheet numbers and zones.
 A top-to-bottom power view with a printed short interior jog may spend one remaining placement
 attempt on extra turn space beside captioned poles or a source phase port.
 Ordinary recovery runs first, holding one of the existing attempts for this
-retry when its initial layout has a jog. Clipped printed fragments use the same
-strict >0.05 and <3 mm definition as the drawing checker. The original stays
+retry when its selected composition has a printed or clipped jog. Printed
+fragments use the checker's >0.05 and <3 mm definition, with its 0.00001 mm
+numerical conversion tolerance at the 3 mm boundary. The original stays
 selected unless the retry passes page fit, gang and ink checks, reduces printed
 jogs, preserves each conductor's raw and clipped defect budgets and card
 locality, and uses no additional pages. Both economies preserve utilisation of
@@ -453,7 +454,15 @@ max(10 mm, 25%). Cable cores are compared individually. The final packet uses
 the circuit alternative's original-reference guard: no packet or view growth,
 lost annotation or card, local-to-self-located change, or increase in NAV's final
 printed-ink locality distance. The existing 0.1 mm card comparison remains.
-Top-to-bottom placement, source turns and their existing retry are unchanged.
+Top-to-bottom placement and source turns are unchanged; the existing retry and
+its reservation share the printed trigger above.
+
+The packet guard matches off-view cards by native terminal and conductor
+identities within their issued view, independently of sheet numbering or titles.
+Two self-located labels may retain absent distances as unchanged evidence;
+absence never counts as closer. Local labels and return-owner comparisons still
+require finite distance evidence. Originally aligned ports of one physical
+device must stay aligned, with the other axis retaining its original order.
 
 Compact additionally tries compact and dense spacing. Both modes
 preserve flow, ELK routes and minimum text sizes. Complete ink bounds determine

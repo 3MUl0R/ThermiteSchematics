@@ -6,6 +6,7 @@ export const MAX_AXIS_PLANS = 6;
 export const MAX_GRID_PLANS = MAX_AXIS_PLANS * MAX_AXIS_PLANS;
 export const MAX_CUTS = 40;
 export const MAX_GRID_SHEETS = 80;
+export type AxisSearchCap = "gap-points" | "axis-plans" | "cuts";
 
 export function mergedIntervals(items: readonly Interval[]) {
   const result: Interval[] = [];
@@ -21,6 +22,7 @@ function gapPoints(
   length: number,
   capacity: number,
   intervals: readonly Interval[],
+  onCap?: (cap: AxisSearchCap) => void,
 ) {
   const merged = mergedIntervals(intervals),
     points = [0, length];
@@ -40,6 +42,7 @@ function gapPoints(
     )
     .sort((a, b) => a - b);
   if (safe.length <= MAX_GAP_POINTS) return safe;
+  onCap?.("gap-points");
   return safe.filter(
     (_, i) =>
       i === 0 ||
@@ -71,11 +74,16 @@ export function safeAxisPlans(
   intervals: readonly Interval[],
   valid: (point: number) => boolean,
   validSpan?: (start: number, end: number) => boolean,
+  onCap?: (cap: AxisSearchCap) => void,
 ) {
-  if (!(capacity > 0) || length > capacity * MAX_CUTS) return [];
+  if (!(capacity > 0)) return [];
+  if (length > capacity * MAX_CUTS) {
+    onCap?.("cuts");
+    return [];
+  }
   if (length <= capacity && (!validSpan || validSpan(0, length)))
     return [[0, length]];
-  const points = gapPoints(length, capacity, intervals).filter(
+  const points = gapPoints(length, capacity, intervals, onCap).filter(
     (v) => v === 0 || v === length || valid(v),
   );
   const states = new Map<number, number[][]>([[0, [[0]]]]);
@@ -86,7 +94,9 @@ export function safeAxisPlans(
       if (validSpan && !validSpan(start, end)) continue;
       for (const path of paths)
         if (path.length <= MAX_CUTS) options.push([...path, end]);
+        else onCap?.("cuts");
     }
+    if (options.length > MAX_AXIS_PLANS) onCap?.("axis-plans");
     if (options.length)
       states.set(end, options.sort(pathOrder).slice(0, MAX_AXIS_PLANS));
   }
