@@ -1,14 +1,53 @@
 import type { NavigationAnnotation } from "../packet/navigation-types.js";
 
+type NullableDistance<T> = Omit<T, "distanceMm"> & {
+  distanceMm: number | null;
+};
+type ReturnLocality = NonNullable<NavigationAnnotation["returnLocality"]>;
+/** A guard also consumes serialized issued measurements, where distance may be
+ * absent. This does not change NAV's native measurement or electrical types. */
+type GuardAnnotation = Omit<
+  NavigationAnnotation,
+  "locality" | "returnLocality"
+> & {
+  locality?: NullableDistance<NonNullable<NavigationAnnotation["locality"]>>;
+  returnLocality?: Omit<ReturnLocality, "owners"> & {
+    owners: readonly NullableDistance<ReturnLocality["owners"][number]>[];
+  };
+};
+
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 const textContent = (s: string) => s.trim().replace(/\s+/gu, " ");
-const notFarther = (a: number, b: number) =>
-  Number.isFinite(a) && Number.isFinite(b) && a >= 0 && b >= 0 && a <= b + 1e-7;
+const notFarther = (a: number | null, b: number | null) =>
+  typeof a === "number" &&
+  typeof b === "number" &&
+  Number.isFinite(a) &&
+  Number.isFinite(b) &&
+  a >= 0 &&
+  b >= 0 &&
+  a <= b + 1e-7;
+
+/** Only two self-located labels may retain absent evidence as unchanged.
+ * Absence is never closer: one-sided nulls, local labels and return-owner
+ * distances require finite, nonnegative evidence and still fail closed. */
+function localityNotFarther(
+  a: NonNullable<GuardAnnotation["locality"]>,
+  b: NonNullable<GuardAnnotation["locality"]>,
+) {
+  if (a.distanceMm === null || b.distanceMm === null)
+    return (
+      a.distanceMm === null &&
+      b.distanceMm === null &&
+      a.mode === "self-located" &&
+      b.mode === "self-located"
+    );
+  return notFarther(a.distanceMm, b.distanceMm);
+}
 
 /** Destinations and located headings follow NAV's final pagination. Source
  * rows, their identities and their electrical facts must remain unchanged. */
-function facts(a: NavigationAnnotation) {
+function facts(a: GuardAnnotation) {
   return [
     a.role,
     a.ownerOccurrence,
@@ -26,7 +65,7 @@ function facts(a: NavigationAnnotation) {
   ];
 }
 
-function returnDistances(a: NavigationAnnotation, b: NavigationAnnotation) {
+function returnDistances(a: GuardAnnotation, b: GuardAnnotation) {
   const before = b.returnLocality,
     after = a.returnLocality;
   if (!before || !after || !Number.isInteger(after.sheet) || after.sheet < 1)
@@ -49,8 +88,8 @@ function returnDistances(a: NavigationAnnotation, b: NavigationAnnotation) {
 /** Consume NAV's issued, final measurements, never allocator families or boxes.
  * The printed-ink nearest-frame margin remains entirely NAV's policy. */
 export function circuitAnnotationGuard(
-  candidate: NavigationAnnotation,
-  original: NavigationAnnotation,
+  candidate: GuardAnnotation,
+  original: GuardAnnotation,
 ) {
   if (!same(facts(candidate), facts(original))) return false;
   const a = candidate.locality,
@@ -59,8 +98,7 @@ export function circuitAnnotationGuard(
   if (
     a &&
     b &&
-    ((b.mode === "local" && a.mode !== "local") ||
-      !notFarther(a.distanceMm, b.distanceMm))
+    ((b.mode === "local" && a.mode !== "local") || !localityNotFarther(a, b))
   )
     return false;
   if (candidate.role === "return") return returnDistances(candidate, original);
