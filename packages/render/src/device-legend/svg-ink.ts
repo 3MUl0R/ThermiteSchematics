@@ -1,7 +1,6 @@
 import { required } from "../presentation/util.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import {
-  identity,
   multiply,
   transform,
   project,

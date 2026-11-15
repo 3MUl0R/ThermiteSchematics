@@ -1,5 +1,4 @@
 import type { Draft } from "./types.js";
-import type { RenderOutcome } from "../types.js";
 
 import { circuitTextLines, type CircuitDrawing } from "../circuit.js";
 import type { CommunicationDrawing } from "../communication.js";

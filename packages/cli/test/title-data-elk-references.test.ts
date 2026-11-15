@@ -65,9 +65,9 @@ it.each([
 );
 
 it.each([
-  ["globalThis", "const box = { globalThis };"],
-  ["Reflect", "const box = { Reflect };"],
-  ["createRequire", "const box = { createRequire };"],
+  ["globalThis", "const box = { globalThis }; void box;"],
+  ["Reflect", "const box = { Reflect }; void box;"],
+  ["createRequire", "const box = { createRequire }; void box;"],
 ])("rejects other shorthand value captures: %s", (name, text) => {
   const input = source + "\n" + text;
   clean(input);
@@ -82,7 +82,7 @@ it.each([
   "const { enterWith } = circuitInlineContext; enterWith(circuitInlineContext.getStore()!);",
   "const { enterWith: enter } = circuitInlineContext; enter(circuitInlineContext.getStore()!);",
   'const { ["enterWith"]: enter } = circuitInlineContext; enter(circuitInlineContext.getStore()!);',
-  "function capture({enterWith}: typeof circuitInlineContext) { enterWith(circuitInlineContext.getStore()!); }",
+  "function capture({enterWith}: typeof circuitInlineContext) { enterWith(circuitInlineContext.getStore()!); } void capture;",
 ])("round 4 resolves destructured source members: %s", (text) => {
   const input = source + "\n" + text;
   clean(input);
@@ -111,6 +111,7 @@ it("keeps local bindings, allowed destructuring and allowed export renames", () 
 const process = { value: 1 }; const box = { process };
 const { value: local } = process; const { getStore: store } = circuitInlineContext;
 const { ["value"]: computed } = process;
+void box; void store; void computed;
 export { BundledElk as B }; export { local as renamed };
 `;
   clean(input);
@@ -120,10 +121,10 @@ export { BundledElk as B }; export { local as renamed };
 it.each([
   "(circuitInlineContext as unknown as Ctx).enterWith({quality: true});",
   "(<Ctx><unknown>circuitInlineContext).enterWith({quality: true});",
-  "const number = 1 as const;",
+  "const number = 1 as const; void number;",
 ])("round 4 L1 rejects an assertion outside the loader: %s", (text) => {
   const input =
-    source + "\ninterface Ctx { enterWith(v: unknown): void }\n" + text;
+    source + "\nexport interface Ctx { enterWith(v: unknown): void }\n" + text;
   clean(input);
   expect(audit(input)).toEqual(
     expect.arrayContaining([

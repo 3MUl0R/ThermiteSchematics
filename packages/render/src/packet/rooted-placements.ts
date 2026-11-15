@@ -36,8 +36,8 @@ type Profile = RootedSearch["prepared"][number]["profile"];
 import { INITIAL_PLACEMENT_LAYOUTS } from "./rooted-limits.js";
 async function tryPlacement(
   ir: Readonly<ElectricalIr>,
-  request: SchematicViewRequest,
-  presentation: CompiledProjectPresentation | undefined,
+  _request: SchematicViewRequest,
+  _presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
   run: RootedSearch,
   profile: Profile,

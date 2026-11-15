@@ -1,5 +1,5 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import type { ObjectSelector } from "@thermite/query";
+
 import type {
   RequestedBooleanInput,
   RequestedIntentInput,

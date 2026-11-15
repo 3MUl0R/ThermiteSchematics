@@ -1,38 +1,28 @@
-import { appendPinRows, pinLegend } from "./signal-loop/pin-rows.js";
+import "./signal-loop/pin-rows.js";
 import { directLoopDocumentNeeds } from "./packet/document-producers.js";
-import {
-  routePortAttributes,
-  terminalPortAttribute,
-} from "./layout/port-attributes.js";
-import {
-  drawingDeviceTag,
-  deviceHeaderSvg,
-  deviceHeaderHeight,
-} from "./device-tag-svg.js";
+import "./layout/port-attributes.js";
+import "./device-tag-svg.js";
 import type { DeviceTagPlan } from "./device-tags.js";
-import { selectedChannelCaption } from "./symbols/printable-policy.js";
+import "./symbols/printable-policy.js";
 import { measureText, wrapText } from "./text-metrics.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import { createQueryEngine } from "@thermite/query";
-import {
-  escapeXmlText as xml,
-  escapeXmlAttribute as attr,
-} from "./svg/escape.js";
+import { escapeXmlText as xml } from "./svg/escape.js";
 import { layoutDirectLoop } from "./layout/direct-loop-layout.js";
 import {
   InlineLabelFitError,
   isInlineLabelFailure,
   InlineLabelCollisionError as Collision,
 } from "./layout/inline-label-error.js";
-import { fieldDeviceBody, connectorPort } from "./symbols/field-device.js";
+import "./symbols/field-device.js";
 import {
   validateSignalLoopRequest,
   selectSeriesLoop,
 } from "./signal-loop/series-selection.js";
 import { prepareSeriesLoopDrawing } from "./signal-loop/series-layout.js";
-import { snappedPath } from "./signal-loop/route-geometry.js";
-import { pinMapPair } from "./signal-loop/pin-map.js";
+import "./signal-loop/route-geometry.js";
+import "./signal-loop/pin-map.js";
 import {
   directLoopPolarity,
   finishDirectLoopDrawing,

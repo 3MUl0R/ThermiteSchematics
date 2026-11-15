@@ -69,7 +69,7 @@ import { buildGroups } from "./groups.js";
 function buildSymbolNode(
   context: PresentationContext,
   representation: SymbolRepresentation,
-  boundaries: ReadonlyMap<string, BoundaryRecord>,
+  _boundaries: ReadonlyMap<string, BoundaryRecord>,
   constraints: ReadonlyMap<string, BoundaryConstraint>,
   groups: PresentationGroups,
 ): SymbolPresentationNode {

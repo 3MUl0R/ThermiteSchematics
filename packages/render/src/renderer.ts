@@ -22,7 +22,6 @@ import {
 import { orientSourceWindingMappings } from "./symbols/source-winding.js";
 import { SYMBOL_CATALOG } from "./symbols/catalog.js";
 import {
-  CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   projectDeviceTypeSymbolMappings,
   type DeviceTypeSymbolMapping,
 } from "./symbols/mappings.js";

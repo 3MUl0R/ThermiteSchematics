@@ -35,16 +35,7 @@ export function emitCircuitNode(
   input: EmissionInput,
   hooks: EmissionHooks,
 ): string {
-  const {
-    node,
-    x,
-    y,
-    vertical,
-    conductors,
-    diagnostics,
-    omitDesignation,
-    attachmentWeights,
-  } = input;
+  const { node, vertical } = input;
   if (node.tagLane) return emitTaggedNode(node.tagLane, input, hooks);
   const base = nodeEmissionBase(input, hooks);
   const placed = nodeEmissionPlacement(base);
@@ -91,7 +82,7 @@ function emitTaggedNode(
 ): string {
   const { node, x, y, vertical, conductors, diagnostics, attachmentWeights } =
     input;
-  const { circuitNodeAttributes, n, key, emitNode } = hooks;
+  const { circuitNodeAttributes, n, emitNode } = hooks;
   const { body, plan, geometry: g } = tagLane;
   const stems = body.pins
     .map((p, i) => emitNodeStem(p, i, node, g, attachmentWeights, hooks))
