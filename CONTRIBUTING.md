@@ -365,14 +365,23 @@ The separate test-helper audit follows actual test imports only within
 `packages/*/test/` (also `tests/`); it does not claim coverage outside that scope.
 Legacy bypass admissions authenticate the full enclosing function chain and
 consume one matching base function per current function. Identical copies do
-not acquire another admission. Changed helpers cannot guard assertions with
-`if`, conditional expressions, short-circuit operators or optional calls.
+not acquire another admission. Guard detection covers `if`, conditional
+expressions, `&&`, `||`, `??`, their logical-assignment forms (`&&=`, `||=`,
+`??=`), and optional calls. It does not detect `switch`/`case`, loop bodies or
+assertions wrapped in callbacks; this is not a proof that every assertion executes.
 
 The ELK wrapper audit is static, not a sandbox. Outside its hash-pinned loader,
-annotated slots and explicit generic arguments cannot re-home denied imported
-members into local interfaces. This deliberately reserves denied imported member
-names at annotated boundaries, including nested object and array slots, regardless
-of initializer syntax. Closed imported implementations remain trusted.
+denied imported member names are reserved at property access, constant-key element
+access and object destructuring (including rest and assignment patterns). The
+checker must resolve such a member entirely to its allowlisted external
+declarations; local, merged or unresolved symbols are rejected. This use-site
+rule does not depend on the spelling of an alias or generic type. The syntactic
+slot check remains for earlier diagnostics, without claiming resolved type-flow
+analysis. The reservation deliberately also rejects harmless local uses of names
+such as `run` or `exit`. The audit does not analyze the implementations of closed
+imported dependencies or provide a runtime sandbox; the loader is admitted by
+its exact hash. Nonconstant computed keys remain rejected by the existing key
+audit. Closed imported implementations remain trusted.
 Cast-reason replay comparison ignores whitespace, Unicode format characters and
 default-ignorable code points. Other changed text (including a trailing period
 or a braille blank) still counts as fresh, subject to exact from/to authorization.

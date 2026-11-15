@@ -182,7 +182,7 @@ function historicalReleaseWithCurrentTree() {
   );
   return { snapshot, head };
 }
-// 23,220 ms at nice 19 under host load ~27; allow 3x for this multi-tree test.
+// Match scripts/test.mjs's 120-second limit, including direct Vitest runs.
 // Each revision is authenticated and measured independently by the child CLI.
 it("passes the real 4579f58 release target on the current tree with the committed v4 dev bootstrap", () => {
   const { snapshot, head } = historicalReleaseWithCurrentTree();
@@ -195,4 +195,4 @@ it("passes the real 4579f58 release target on the current tree with the committe
     "Source information only: refs/remotes/origin/release@4579f587bcb01f2eb947f4a6d1a4993e99fc6725",
   );
   expect(result.stdout).toContain("non-null assertions 873, skipped tests 37");
-}, 69_660);
+}, 120_000);
