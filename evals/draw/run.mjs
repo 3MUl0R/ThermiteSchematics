@@ -1,3 +1,8 @@
+import {
+  strictCoverageReason,
+  policyStatusCounts,
+  statusTable,
+} from "./report-status.mjs";
 import { captureSources, SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
@@ -856,21 +861,8 @@ for (const row of rows.filter((r) => r.status === "infrastructure-error"))
   process.stderr.write(`${row.id}: ${row.reason}\n`);
 let code = exitCode(rows, values["report-only"]);
 const counts = summary(rows);
-const policyCounts = Object.fromEntries(
-  [
-    "pass",
-    "xfail",
-    "fail",
-    "xpass",
-    "manual",
-    "not-applicable",
-    "not-implemented",
-  ].map((status) => [
-    status,
-    rows.filter((r) => r.classification === "policy-gap" && r.status === status)
-      .length,
-  ]),
-);
+const policyCounts = policyStatusCounts(rows);
+const coverageReason = strictCoverageReason(rows, values["report-only"]);
 const report = {
   ...metadata,
   sourceHashes: {
@@ -878,6 +870,7 @@ const report = {
     sheets: results.flatMap((r) => r.sourceHashes ?? []),
   },
   exitCode: code,
+  exitReason: coverageReason,
   summary: counts,
   policySummary: policyCounts,
   ...assessment,
@@ -895,12 +888,8 @@ await writeFile(
     "",
     `Mode: ${values["report-only"] ? "report-only" : "strict"}; exit ${code}. Full findings and rounded measurements: [JSON](summary.json). [Gallery](gallery.html). [Reviewer form](reviewer-form.json).`,
     "",
-    "| DQ | Pass | Fail | Xfail | Xpass | Manual | Not applicable | Not implemented |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...Object.entries(counts).map(
-      ([dq, c]) =>
-        `| ${dq} | ${c.pass} | ${c.fail} | ${c.xfail} | ${c.xpass} | ${c.manual} | ${c["not-applicable"]} | ${c["not-implemented"]} |`,
-    ),
+    ...statusTable(counts),
+    ...(coverageReason ? ["", `Reason: ${coverageReason}`] : []),
     "",
     "## Drift within marker bands",
     "",

@@ -399,7 +399,7 @@ export function terminalText(g) {
 // V5.1: TAIL net labels belong at the route source. Target captions cannot
 // replace source ink. Audit declared empty reservations as well as painted names.
 export function netLabelRepetition(g) {
-  return netLabelFindings(g, captionOwnershipFinding);
+  return netLabelFindings(g, captionOwnershipFinding, issue);
 }
 
 export { titleFields } from "./title-fields.mjs";

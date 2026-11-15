@@ -1,4 +1,9 @@
-import { wireInventory, nativeWireSources } from "./wire-source-contract.mjs";
+import {
+  wireInventory,
+  nativeWireSources,
+  wireCoverageGaps,
+  endApplicability,
+} from "./wire-source-contract.mjs";
 import { cableEndBindings } from "./cable-end-identities.mjs";
 // Native IR and Chromium ink only. Never imports the renderer's locator planner.
 import { issuedRows } from "./m3-documents.mjs";
@@ -140,6 +145,7 @@ export function wireLocatorAudit(packet, geometries, ir) {
   }
   const rows = new Map(native.map((r) => [r.key, r]));
   const cable = cableEndBindings(packet, geometries, ir, native);
+  cable.notMeasured = wireCoverageGaps(cable.notMeasured, inventory);
   const drawn = measuredWireAppearances(
     packet,
     geometries,
@@ -193,12 +199,7 @@ export function wireLocatorAudit(packet, geometries, ir) {
         row: row.key,
         end,
         endpoint,
-        ...(endpoint
-          ? {}
-          : {
-              status: "not-applicable",
-              nativeAbsence: absence.get(JSON.stringify([source.key, end])),
-            }),
+        ...endApplicability(source, end, absence),
         printed: value,
         allowed,
         appearances,

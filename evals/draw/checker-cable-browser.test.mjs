@@ -1,3 +1,4 @@
+import { measurementCoverage } from "./measurement-coverage.mjs";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
@@ -70,14 +71,25 @@ function drawing({
   swapped = false,
   reordered = false,
   foreignCaption = false,
+  closeCircles = false,
+  missingCaption = false,
+  sameCircle = false,
 } = {}) {
   const circles = [
     circle("a", swapped ? 90 : 30, swapped ? 90 : 50),
-    circle("b", swapped ? 30 : 90, swapped ? 50 : 90),
+    ...(sameCircle
+      ? []
+      : [
+          circle(
+            "b",
+            closeCircles ? 30.005 : swapped ? 30 : 90,
+            closeCircles ? 50 : swapped ? 50 : 90,
+          ),
+        ]),
   ];
   if (reordered) circles.reverse();
   return svg(
-    `<g data-cable-uid="c" data-conductor-id="1"><path d="M30 50 L90 90" stroke="black" fill="none"/>${caption(foreignCaption ? "b" : "a", "A", "a", 29, 45)}${caption("b", "B", "z", 89, 85)}${circles.join("")}</g>`,
+    `<g data-cable-uid="c" data-conductor-id="1"><path d="M30 50 L90 90" stroke="black" fill="none"/>${caption(foreignCaption ? "b" : "a", "A", "a", 29, 45)}${missingCaption ? "" : caption("b", "B", "z", 89, 85)}${circles.join("")}</g>`,
   );
 }
 async function audit(options = {}, from, to) {
@@ -104,3 +116,48 @@ it("256.cable printed endpoint identity is checked against its native UID and te
     result.findings.some((f) => f.kind === "cable-end-identity-mismatch"),
   ).toBe(true);
 });
+
+function locatorObservation(audit, sheet) {
+  const dependency = {
+    id: `case/DQ-19/dependencies-${sheet}`,
+    dq: "DQ-19",
+    status: "fail",
+    evidence: { findings: [{ kind: "unrelated-dependency" }] },
+  };
+  const locator = {
+    id: `case/DQ-19/sheet-${String(sheet).padStart(3, "0")}`,
+    dq: "DQ-19",
+    status: audit.findings.some((f) => f.sheet === sheet) ? "fail" : "pass",
+    evidence: { findings: audit.findings.filter((f) => f.sheet === sheet) },
+  };
+  measurementCoverage([dependency, locator], { texts: [], shapes: [] }, audit, {
+    number: sheet,
+  });
+  expect(dependency.status).toBe("fail");
+  expect(dependency.evidence.notMeasured).toBeUndefined();
+  return locator;
+}
+it.each([
+  ["circles within 0.01 mm", { closeCircles: true }, "not drawn", "not drawn"],
+  ["missing end caption", { missingCaption: true }, "01.A1", "not drawn"],
+  [
+    "both ends selecting one circle",
+    { sameCircle: true },
+    "01.A1",
+    "not drawn",
+  ],
+])(
+  "r2.4 %s cannot become a measured DQ-19 pass",
+  async (_name, options, from, to) => {
+    const result = await audit(options, from, to);
+    expect(result.notMeasured.length > 0 || result.findings.length > 0).toBe(
+      true,
+    );
+    for (const sheet of [1, 2]) {
+      const observation = locatorObservation(result, sheet);
+      expect(observation.status).not.toBe("pass");
+      if (!observation.evidence.findings.length)
+        expect(observation.status).toBe("not-measured");
+    }
+  },
+);

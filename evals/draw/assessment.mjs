@@ -264,7 +264,8 @@ export function assess(rows, registry, selectedCases, context = {}) {
 }
 export function exitCode(rows, reportOnly = false) {
   if (rows.some((r) => r.status === "infrastructure-error")) return 2;
-  return !reportOnly && rows.some((r) => ["fail", "xpass"].includes(r.status))
+  return !reportOnly &&
+    rows.some((r) => ["fail", "xpass", "not-measured"].includes(r.status))
     ? 1
     : 0;
 }

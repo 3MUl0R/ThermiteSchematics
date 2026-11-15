@@ -137,6 +137,8 @@ it("keeps the terminal oracle's entire import graph independent of renderer/quer
     "net-label-oracle",
     "measurement-coverage",
     "wire-source-contract",
+    "net-route-geometry",
+    "report-status",
   ])
     await visit(new URL(`./${name}.mjs`, import.meta.url));
 });

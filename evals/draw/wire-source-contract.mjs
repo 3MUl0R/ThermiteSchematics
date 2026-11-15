@@ -95,3 +95,24 @@ export function nativeWireSources(ir) {
     throw Error("Native conductor has incomplete terminal identity");
   return { rows, absence: nativeEndAbsences(ir, rows) };
 }
+export function wireCoverageGaps(gaps, inventory) {
+  return gaps.flatMap((gap) => [
+    gap,
+    ...inventory
+      .filter((row) => row.key === gap.row && row.sheet !== gap.sheet)
+      .map((row) => ({
+        ...gap,
+        sheet: row.sheet,
+        appearanceSheet: gap.sheet,
+        documentId: row.documentId,
+      })),
+  ]);
+}
+export function endApplicability(source, end, absence) {
+  return source.ends[end]
+    ? {}
+    : {
+        status: "not-applicable",
+        nativeAbsence: absence.get(JSON.stringify([source.key, end])),
+      };
+}

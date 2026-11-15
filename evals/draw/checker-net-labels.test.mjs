@@ -2,77 +2,7 @@ import { expect, it } from "vitest";
 import { netLabelRepetition } from "./checks.mjs";
 import { evaluateSheet } from "./evaluate.mjs";
 import { summary } from "./assessment.mjs";
-const box = (x) => ({ x, y: 17, w: 8, h: 3 });
-function fixture() {
-  const caption = {
-    element: "caption",
-    text: "L1",
-    bbox: box(10),
-    labelRole: "terminal",
-    labelOwnerKind: "port",
-    labelOwnerKey: ["port", '["function","a","feed"]', "in"],
-    deviceUid: "a",
-    terminal: "L1",
-    terminalAppearance: "body-a",
-    appearanceScope: "drawing",
-  };
-  const label = {
-    element: "net",
-    text: "L1",
-    bbox: box(30),
-    labelRole: "net",
-    labelOwnerKind: "edge",
-    labelOwnerKey: ["wire", "w"],
-    appearanceScope: "drawing",
-  };
-  const route = {
-    element: "route",
-    cls: "",
-    stroke: 0.35,
-    fill: "none",
-    dash: "none",
-    bbox: { x: 10, y: 20, w: 180, h: 0 },
-    conductor: true,
-    edgeOwnerKey: ["wire", "w"],
-    appearanceScope: "drawing",
-    potentialName: "L1",
-    points: [
-      { x: 10, y: 20 },
-      { x: 190, y: 20 },
-    ],
-    landingOwners: [
-      {
-        landingEnd: "source",
-        deviceUid: "a",
-        terminal: "L1",
-        terminalAppearance: "body-a",
-        anchorElement: "marker-a",
-      },
-    ],
-    ownedLandings: [
-      {
-        end: "source",
-        endpoint: { x: 10, y: 20 },
-        anchor: { x: 10, y: 20 },
-        deviceUid: "a",
-        terminal: "L1",
-        anchorElement: "marker-a",
-      },
-    ],
-  };
-  const g = {
-    width: 240,
-    height: 220,
-    texts: [caption, label],
-    shapes: [route],
-    terminals: [],
-    devices: [],
-    catalogs: [],
-    reportRows: [],
-    omittedNetLabels: [],
-  };
-  return { g, caption, label, route };
-}
+import { box, netLabelFixture as fixture } from "./net-label-fixture.mjs";
 function observation(g) {
   const sheet = {
     number: 1,

@@ -231,6 +231,21 @@ Version 5.7 adds E2a's independent repeat and hardening predicates:
 These modules import no renderer navigation planner. Native IR supplies identity,
 terminal membership and function kind; authored requests supply selections;
 browser measurements supply painted text, baselines, frames, clips and locations.
+Version 5.14 review follow-ups attach DQ-19 coverage and explicit native absence
+only to the `sheet-NNN` locator observation, never the dependency observation.
+A lost cable-end appearance also marks the affected wire-report sheet as not
+measured. Strict mode rejects every `not-measured` observation, states the reason,
+and includes the status in the Markdown and policy summaries. Net-label findings
+retain the original locator, medium, box and em-box metadata used by identities
+and crop routing. Source-half checks require a measured source anchor and join
+route pieces geometrically in source order before projecting the label once.
+Unavailable or ambiguous direction remains not measured.
+
+Cable orientation is intentionally unconstrained: a complete coherent mirror of
+captions, circles and locators remains valid. Bare circles bind only through a
+unique nearby native caption; indistinguishable or reused circles and missing
+captions do not receive measured credit. No left/right electrical fact is inferred.
+
 Version **5.14** hardens checker coverage (#262, #256, #222). Cable end
 circles bind to native cable/core and device/terminal identities through verified
 printed endpoint ink; neither DOM slots nor exported locator values establish

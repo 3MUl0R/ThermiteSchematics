@@ -426,7 +426,7 @@ it("256.upstream records authored null cable ends as explicit absence, never a s
     [],
     [],
     f.geometries,
-  ).find((r) => r.dq === "DQ-19");
+  ).find((r) => r.id === "explicit-absence/DQ-19/sheet-002");
   expect(
     observed.evidence.nativeEndAbsences?.map((r) => r.nativeAbsence),
   ).toEqual(["explicit-unterminated", "explicit-unterminated"]);

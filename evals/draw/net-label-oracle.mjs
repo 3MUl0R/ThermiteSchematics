@@ -1,5 +1,6 @@
 // Native SVG geometry, never renderer label planners or sourcePortId helpers.
-import { finding, pointDistance } from "./review-geometry.mjs";
+import { pointDistance } from "./review-geometry.mjs";
+import { sourceOrderedRoute } from "./net-route-geometry.mjs";
 export const normalizedNetText = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -22,6 +23,7 @@ export function netOwnershipGaps(g) {
     const routes = routesFor(g, label);
     return !Array.isArray(label.labelOwnerKey) ||
       !routes.length ||
+      sourceOrderedRoute(routes).reason ||
       routes.some(
         (s) =>
           s.landingOwners?.some((p) => p.landingEnd === "unknown") ||
@@ -30,25 +32,15 @@ export function netOwnershipGaps(g) {
       ? [
           {
             element: label.element,
-            reason: "Historical net-label source ownership is unavailable",
+            reason: `Net-label source ownership unavailable: ${sourceOrderedRoute(routes).reason ?? "historical route-port keys are unavailable"}`,
           },
         ]
       : [];
   });
 }
-function sourceGeometry(route, label) {
-  const source = route.ownedLandings?.find((p) => p.end === "source");
-  const start = route.points?.[0];
-  if (source?.anchor && start && pointDistance(start, source.anchor) > 0.05)
-    return finding("net-label-source-geometry-mismatch", label, {
-      edgeOwnerKey: label.labelOwnerKey,
-      pathStart: start,
-      claimedSourceAnchor: source.anchor,
-    });
-}
 // Locate the painted reservation on the polyline itself. TAIL occupies the
 // source half of the route; endpoint owner flags cannot reverse path direction.
-function tailPosition(route, label) {
+function tailPosition(route, label, issue) {
   if (label.omitted) return; // An empty reservation is not a painted label position.
   const points = route.points ?? [];
   if (points.length < 2 || !label.bbox) return;
@@ -83,69 +75,87 @@ function tailPosition(route, label) {
     total += length;
   }
   if (total > 0 && at > total / 2 + 0.05)
-    return finding("net-label-not-at-route-source", label, {
+    return issue("net-label-not-at-route-source", label, {
       edgeOwnerKey: label.labelOwnerKey,
       routeLength: total,
       labelDistanceAlongRoute: at,
     });
 }
-export function netLabelFindings(g, captionOwnershipFinding) {
+export function netLabelFindings(g, captionOwnershipFinding, issue) {
   const out = [];
   for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
-    const routes = routesFor(g, label);
-    for (const route of routes) {
-      const source = sourceGeometry(route, label),
-        position = tailPosition(route, label);
-      if (source) out.push(source);
+    const routes = routesFor(g, label),
+      source = sourceOrderedRoute(routes);
+    if (source.mismatch)
+      out.push(
+        issue("net-label-source-geometry-mismatch", label, {
+          edgeOwnerKey: label.labelOwnerKey,
+          ...source.mismatch,
+        }),
+      );
+    else if (source.points) {
+      const position = tailPosition(source, label, issue);
       if (position) out.push(position);
     }
-    const names = [
-      ...new Set(
-        routes.map((s) => normalizedNetText(s.potentialName)).filter(Boolean),
-      ),
-    ];
-    const text = label.omitted
-      ? names.length === 1
-        ? names[0]
-        : undefined
-      : normalizedNetText(label.text);
-    if (!text) continue;
-    const caption = g.texts.find(
-      (t) =>
-        t.labelRole === "terminal" &&
-        !captionOwnershipFinding(t) &&
-        normalizedNetText(t.text) === text &&
-        t.appearanceScope === label.appearanceScope &&
-        routes.some((s) =>
-          s.landingOwners?.some(
-            (p) =>
-              p.landingEnd === "source" &&
-              p.deviceUid === t.deviceUid &&
-              p.terminal === t.terminal &&
-              p.terminalAppearance === t.terminalAppearance,
-          ),
-        ),
+    const repeated = netRepetitionFinding(
+      g,
+      label,
+      routes,
+      captionOwnershipFinding,
+      issue,
     );
-    if (label.omitted && !caption)
-      out.push(
-        finding("net-label-suppressed-without-source-caption", label, {
-          text,
-          edgeOwnerKey: label.labelOwnerKey,
-          reason: "no-matching-source-caption",
-        }),
-      );
-    else if (!label.omitted && caption)
-      out.push(
-        finding("net-label-repeats-terminal-caption", label, {
-          text: label.text,
-          edgeOwnerKey: label.labelOwnerKey,
-          terminal: caption.terminal,
-          deviceUid: caption.deviceUid,
-          terminalAppearance: caption.terminalAppearance,
-          otherElement: caption.element,
-          otherBbox: caption.bbox,
-        }),
-      );
+    if (repeated) out.push(repeated);
   }
   return out;
+}
+function netRepetitionFinding(
+  g,
+  label,
+  routes,
+  captionOwnershipFinding,
+  issue,
+) {
+  const names = [
+    ...new Set(
+      routes.map((s) => normalizedNetText(s.potentialName)).filter(Boolean),
+    ),
+  ];
+  const text = label.omitted
+    ? names.length === 1
+      ? names[0]
+      : undefined
+    : normalizedNetText(label.text);
+  if (!text) return;
+  const caption = g.texts.find(
+    (t) =>
+      t.labelRole === "terminal" &&
+      !captionOwnershipFinding(t) &&
+      normalizedNetText(t.text) === text &&
+      t.appearanceScope === label.appearanceScope &&
+      routes.some((s) =>
+        s.landingOwners?.some(
+          (p) =>
+            p.landingEnd === "source" &&
+            p.deviceUid === t.deviceUid &&
+            p.terminal === t.terminal &&
+            p.terminalAppearance === t.terminalAppearance,
+        ),
+      ),
+  );
+  if (label.omitted && !caption)
+    return issue("net-label-suppressed-without-source-caption", label, {
+      text,
+      edgeOwnerKey: label.labelOwnerKey,
+      reason: "no-matching-source-caption",
+    });
+  else if (!label.omitted && caption)
+    return issue("net-label-repeats-terminal-caption", label, {
+      text: label.text,
+      edgeOwnerKey: label.labelOwnerKey,
+      terminal: caption.terminal,
+      deviceUid: caption.deviceUid,
+      terminalAppearance: caption.terminalAppearance,
+      otherElement: caption.element,
+      otherBbox: caption.bbox,
+    });
 }
