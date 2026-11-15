@@ -1,21 +1,14 @@
 import { assertionNames, calledName } from "./test-helper-assertions.mjs";
 import ts from "typescript";
-import { createHash } from "node:crypto";
+import {
+  helperAdmissions,
+  guardedAssertion,
+} from "./test-helper-admissions.mjs";
 import { importedTestHelpers } from "./test-helper-graph.mjs";
 function functionOf(node) {
   for (let parent = node.parent; parent; parent = parent.parent)
     if (ts.isFunctionLike(parent)) return parent;
   return null;
-}
-function fingerprint(node) {
-  const tokens = [];
-  function visit(n) {
-    const children = n.getChildren();
-    if (children.length) children.forEach(visit);
-    else tokens.push([n.kind, n.getText()]);
-  }
-  visit(node);
-  return createHash("sha256").update(JSON.stringify(tokens)).digest("hex");
 }
 function assertion(node, names) {
   if (ts.isThrowStatement(node)) return true;
@@ -111,6 +104,11 @@ function bypasses(source, names) {
       emptyCatch ||
       swallowed ||
       emptyReturn ||
+      // A conditional throw is a failure guard itself, not a skipped assertion
+      // call. It still counts when detecting an earlier bypassing return.
+      (ts.isCallExpression(node) &&
+        assertion(node, names) &&
+        guardedAssertion(node, fn)) ||
       (exits(node) && laterAssert)
     )
       rows.push({
@@ -124,7 +122,7 @@ function bypasses(source, names) {
   return rows;
 }
 // Existing parser/visitor exits remain only in byte-equivalent AST functions.
-// They are not transferable: file + full function content authenticates them.
+// File + full function/enclosing-chain content and multiplicity authenticate them.
 // New/changed helpers cannot introduce these exits, catches or skip constructs.
 export function auditTestHelpers(current, base = new Map()) {
   const before = importedTestHelpers(base),
@@ -133,17 +131,11 @@ export function auditTestHelpers(current, base = new Map()) {
   const names = assertionNames(helpers),
     baseNames = assertionNames(before);
   for (const [file, source] of helpers) {
-    const admitted = new Set(
-      (before.has(file) ? bypasses(before.get(file), baseNames) : [])
-        .filter((row) => row.kind !== "skip/only/todo" && row.fn)
-        .map((row) => fingerprint(row.fn)),
+    const admitted = helperAdmissions(
+      before.has(file) ? bypasses(before.get(file), baseNames) : [],
     );
     for (const row of bypasses(source, names))
-      if (
-        row.kind === "skip/only/todo" ||
-        !row.fn ||
-        !admitted.has(fingerprint(row.fn))
-      )
+      if (row.kind === "skip/only/todo" || !row.fn || !admitted(row.fn))
         errors.push(
           file +
             ":" +

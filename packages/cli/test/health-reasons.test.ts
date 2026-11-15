@@ -91,3 +91,20 @@ it("keeps genuinely different reason text, including a trailing period, fresh", 
     ),
   ).toBe(true);
 });
+
+it.each(["\u034f", "\ufe0f", "\u3164", "\u115f"])(
+  "rejects a default-ignorable-only reason replay: %j",
+  (invisible) => {
+    const identity = "typeAssertions:packages/example/src/replay.ts";
+    const old = { identity, from: 0, to: 1, reason: "Earlier review" };
+    expect(
+      appendedReasonMatches(
+        [old, { ...old, reason: "Earlier" + invisible + " review" }],
+        [old],
+        identity,
+        0,
+        1,
+      ),
+    ).toBe(false);
+  },
+);

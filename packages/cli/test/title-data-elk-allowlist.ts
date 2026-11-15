@@ -9,6 +9,8 @@ import {
   elkTypeAssertion,
 } from "./title-data-elk-types.js";
 import { elkAnnotation } from "./title-data-elk-annotations.js";
+import { elkSlotAudit } from "./title-data-elk-slots.js";
+import { elkUseSiteAudit } from "./title-data-elk-use.js";
 import { elkKeys, elkText } from "./title-data-elk-keys.js";
 import {
   elkStateDeclarations,
@@ -39,6 +41,8 @@ export function auditElkAllowlist(
     imports = elkImports(tree, checker, issues);
   const state = elkStateDeclarations(tree, issues);
   const assertions = elkConstructorAssertions(tree);
+  const slots = elkSlotAudit(tree, checker, imports, issues);
+  const members = elkUseSiteAudit(tree, checker, imports, issues);
   function visit(node: ts.Node) {
     undefinedDeclaration(node, issues);
     if (!insideElkLoader(node, loader)) {
@@ -49,6 +53,8 @@ export function auditElkAllowlist(
       elkBindings(node, tree, checker, imports, text, issues);
       elkTypeAssertion(node, assertions, issues);
       elkAnnotation(node, tree, checker, imports, issues);
+      slots(node);
+      members(node);
     }
     ts.forEachChild(node, visit);
   }

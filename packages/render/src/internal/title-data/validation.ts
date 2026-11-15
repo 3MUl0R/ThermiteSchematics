@@ -13,7 +13,6 @@ export {
   isObject,
   validDate,
 } from "#title-schema/validation-common";
-export { checkPresentation } from "#title-schema/presentation-validation";
 export function checkText(
   value: string,
   pointer: string,

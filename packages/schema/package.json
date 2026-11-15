@@ -13,6 +13,7 @@
       "import": "./dist/index.js"
     },
     "./schemas/*": "./schemas/*",
+    "./internal/title-data/presentation-validation": null,
     "./internal/title-data/*": {
       "types": "./dist/internal/title-data/*.d.ts",
       "import": "./dist/internal/title-data/*.js"

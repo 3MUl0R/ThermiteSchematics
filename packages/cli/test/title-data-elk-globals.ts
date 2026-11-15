@@ -2,9 +2,9 @@ import ts from "typescript";
 import { ELK_MEMBERS, elkIssue } from "./title-data-elk-policy.js";
 import type { ElkPermissions } from "./title-data-elk-imports.js";
 
-function permittedMember(symbol: ts.Symbol) {
-  const rule = ELK_MEMBERS.get(symbol.name),
-    declarations = symbol.declarations ?? [];
+export function permittedExternalMember(symbol: ts.Symbol | undefined) {
+  const rule = ELK_MEMBERS.get(symbol?.name ?? ""),
+    declarations = symbol?.declarations ?? [];
   return (
     !!rule &&
     declarations.length > 0 &&
@@ -42,7 +42,7 @@ export function permittedSymbol(
       declarations.every(
         (declaration) => declaration.getSourceFile() === tree,
       )) ||
-    permittedMember(target)
+    permittedExternalMember(target)
   );
 }
 // A shorthand's property symbol belongs to this module; its value can still

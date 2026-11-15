@@ -350,3 +350,42 @@ authorize later growth: its exact base/current values must match. Release
 targets check ceilings, grandfathered values and move validity without
 per-item reason composition. Ratchet tests are in
 `packages/cli/test/health-*.test.ts`, including real-body 70/71-line headroom probes.
+
+Definite-assignment declarations (`let value!: T` and class fields `value!: T`)
+have a separate `definiteAssignments` counter, including tests. Its initial
+per-file baseline and global ceiling are measured from authenticated base source
+when reading an older v4 budget. The committed migration records that baseline
+with a reason; the ceiling can only fall. It follows the existing per-item
+reason and lowering rules. Expression non-null counts retain their old scope.
+Only a fully absent counter section migrates; partial sections fail validation.
+The counters do not detect empty type-predicate/assertion functions or `any`-typed
+bindings that drop optionality; those remain review responsibilities.
+
+The separate test-helper audit follows actual test imports only within
+`packages/*/test/` (also `tests/`); it does not claim coverage outside that scope.
+Legacy bypass admissions authenticate the full enclosing function chain and
+consume one matching base function per current function. Identical copies do
+not acquire another admission. Guard detection covers `if`, conditional
+expressions, `&&`, `||`, `??`, their logical-assignment forms (`&&=`, `||=`,
+`??=`), and optional calls. It does not detect `switch`/`case`, loop bodies or
+assertions wrapped in callbacks; this is not a proof that every assertion executes.
+
+The ELK wrapper audit is static, not a sandbox. Outside its hash-pinned loader,
+denied imported member names are reserved at property access, constant-key element
+access and object destructuring. Assignment targets are followed through nested
+object/array patterns, defaults, spread/rest targets and for-of/for-in heads. The
+checker must resolve such a member entirely to its allowlisted external
+declarations; local, merged or unresolved symbols are rejected. This use-site
+rule does not depend on the spelling of an alias or generic type. The syntactic
+slot check remains for earlier diagnostics, without claiming resolved type-flow
+analysis. The reservation deliberately also rejects harmless local uses of names
+such as `run` or `exit`. The audit does not analyze the implementations of closed
+imported dependencies or provide a runtime sandbox; the loader is admitted by
+its exact hash. Nonconstant computed keys remain rejected by the existing key
+audit. Closed imported implementations remain trusted.
+Runtime-only members absent from the Node type declarations (such as Bun's
+AsyncLocalStorage `withScope`, `_enable` and `_propagate`) are not reserved:
+local interfaces declaring them pass; module augmentation is rejected.
+Cast-reason replay comparison ignores whitespace, Unicode format characters and
+default-ignorable code points. Other changed text (including a trailing period
+or a braille blank) still counts as fresh, subject to exact from/to authorization.

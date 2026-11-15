@@ -136,20 +136,22 @@ function devBootstrap(root, target, information) {
       `Health history: dev bootstrap ${revision} has no committed health budget; merge a current-format budget into origin/dev first.`,
     );
   try {
-    // Never upgrade or re-seed this authority from source or the PR head.
+    // Require the committed v4 authority. Below, an absent declaration counter
+    // is seeded only from this authenticated merge-base source, never PR HEAD.
     validateBudget(budget);
   } catch (error) {
     throw Error(
       `Health history: dev bootstrap requires a valid current-format budget: ${error.message}`,
     );
   }
+  const metrics = historicalMetrics(root, revision);
   return {
     revision,
     ref,
     target,
     budgetSource: "dev-bootstrap",
-    budget,
-    metrics: historicalMetrics(root, revision),
+    budget: upgradeBudget(budget, metrics),
+    metrics,
     information,
   };
 }
