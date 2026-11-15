@@ -1,3 +1,4 @@
+import { withRelationLandingSource } from "./relation-landing-sources.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 const wireLocatorAudits = new WeakMap();
 import {
@@ -46,7 +47,7 @@ export function textGeometryIssues(g) {
     ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
   ];
 }
-export function evaluateSheet(
+function evaluateSheet(
   c,
   s,
   packet,
@@ -748,3 +749,11 @@ function cohort(findings, key) {
     instanceCount: list.length,
   }));
 }
+
+// Bind the unchanged IR at the evaluation boundary; drawn geometry cannot set it.
+function evaluateSheetWithSource(...args) {
+  return withRelationLandingSource(args[3], args[4], () =>
+    evaluateSheet(...args),
+  );
+}
+export { evaluateSheetWithSource as evaluateSheet };
