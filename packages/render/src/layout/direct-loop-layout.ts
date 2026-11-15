@@ -17,6 +17,8 @@ export async function layoutDirectLoop(
   vertical: boolean,
   inlineEdgeIds: readonly string[] = [],
   validateLabels: (graph: ElkNode) => void = () => {},
+  acceptCandidate: (candidate: ElkNode, fallback: ElkNode) => boolean = () =>
+    true,
 ): Promise<ElkNode> {
   const input: ElkNode = {
     id: "loop",
@@ -50,7 +52,9 @@ export async function layoutDirectLoop(
     const fallback = await createElkEngine().layout(structuredClone(expected));
     assertTopologyIdentities(fallback, expected);
     if (!vertical || !hasLoopJogs(fallback, inlineEdgeIds)) return fallback;
-    const staggered = tryLoopStaggers(graph, labels, validateLabels);
+    const accepts = (candidate: ElkNode) =>
+      acceptCandidate(candidate, fallback);
+    const staggered = tryLoopStaggers(graph, labels, validateLabels, accepts);
     if (staggered) return staggered;
     return spacedLoopCandidate(
       expected,
@@ -58,6 +62,7 @@ export async function layoutDirectLoop(
       inlineEdgeIds,
       validateLabels,
       fallback,
+      accepts,
     );
   }
 }
@@ -85,13 +90,14 @@ function tryLoopStaggers(
   graph: ElkNode,
   labels: Map<string, ElkLabel[]>,
   validateLabels: (graph: ElkNode) => void,
+  accepts: (candidate: ElkNode) => boolean,
 ) {
   if (hasLoopJogs(graph)) return undefined;
   for (const phase of [1, -1]) {
     try {
       placeLoopLabels(graph, labels, phase);
       validateLoopStagger(graph, labels, validateLabels);
-      return graph;
+      if (accepts(graph)) return graph;
     } catch (error) {
       if (!isInlineLabelFailure(error)) throw error;
     }
@@ -127,6 +133,7 @@ async function spacedLoopCandidate(
   inlineEdgeIds: readonly string[],
   validateLabels: (graph: ElkNode) => void,
   fallback: ElkNode,
+  accepts: (candidate: ElkNode) => boolean,
 ) {
   try {
     // A single larger native layer gap gives adjacent 4.8 mm label boxes room
@@ -144,7 +151,9 @@ async function spacedLoopCandidate(
     // Repairing a jog must not lengthen the loop's pagination axis.
     if ((candidate.height ?? Infinity) > (fallback.height ?? 0))
       return fallback;
-    return tryLoopStaggers(candidate, labels, validateLabels) ?? fallback;
+    return (
+      tryLoopStaggers(candidate, labels, validateLabels, accepts) ?? fallback
+    );
   } catch (error) {
     if (!isInlineLabelFailure(error)) throw error;
     return fallback;

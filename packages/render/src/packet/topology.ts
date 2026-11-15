@@ -133,7 +133,10 @@ export async function topologyDrafts(
     const wiring = request.format === "wiring-view-request/0.1";
     const signalLoop = request.format === "signal-loop-view-request/0.1";
     const assembly = request.format === "connector-assembly-view-request/0.1";
-    const compose = (drawing: NotedDrawing): RenderOutcome<Draft> => {
+    const compose = (
+      drawing: NotedDrawing,
+      observeScale?: (scale: number) => void,
+    ): RenderOutcome<Draft> => {
       const title = topologyTitle(
         ir.project.name,
         drawing.title,
@@ -152,24 +155,13 @@ export async function topologyDrafts(
       const partLines = communicationPartLines(drawing, b.w);
       const noteLines = topologyNoteLines(drawing, b.w, assembly, request);
       const noteHeight = (noteLines.length + partLines.length) * 3.5;
-      let scale = Math.min(
-        1,
-        b.w / drawing.width,
-        (b.h - headingHeight - 6) / drawing.height,
+      const { scale, reserveNotes } = topologyScale(
+        drawing,
+        b,
+        headingHeight,
+        noteHeight,
+        assembly || !!drawing.pagination || !!drawing.engineNotes,
       );
-      const reserveNotes =
-        (assembly || !!drawing.pagination || !!drawing.engineNotes) &&
-        headingHeight + drawing.height * scale + 4 + noteHeight > b.h;
-      if (reserveNotes) {
-        // Reserve notes before fitting; round down to the emitted SVG precision.
-        scale =
-          Math.floor(
-            Math.min(
-              scale,
-              (b.h - headingHeight - 4 - noteHeight) / drawing.height,
-            ) * 1000,
-          ) / 1000;
-      }
       const tagFit = topologyTagFit(
         drawing,
         b,
@@ -210,6 +202,7 @@ export async function topologyDrafts(
           ),
         )
         .join("\n");
+      observeScale?.(Number(n(scale)));
       return {
         ok: true,
         value: {
@@ -282,7 +275,13 @@ export async function topologyDrafts(
     const drawings = wiring
       ? [await prepareWiringDrawing(ir, request)]
       : signalLoop
-        ? [await prepareSignalLoopDrawing(ir, request)]
+        ? [
+            await prepareSignalLoopDrawing(
+              ir,
+              request,
+              topologyStaggerGuard(compose),
+            ),
+          ]
         : assembly
           ? await prepareConnectorAssemblyPages(ir, request, fits, unfit)
           : await prepareCommunicationPages(ir, request, fits, unfit);
@@ -406,4 +405,53 @@ function topologyTitle(
     },
     presentation,
   );
+}
+
+function topologyScale(
+  drawing: NotedDrawing,
+  b: { w: number; h: number },
+  headingHeight: number,
+  noteHeight: number,
+  canReserveNotes: boolean,
+) {
+  let scale = Math.min(
+    1,
+    b.w / drawing.width,
+    (b.h - headingHeight - 6) / drawing.height,
+  );
+  const reserveNotes =
+    canReserveNotes &&
+    headingHeight + drawing.height * scale + 4 + noteHeight > b.h;
+  if (reserveNotes) {
+    // Reserve notes before fitting; round down to the emitted SVG precision.
+    scale =
+      Math.floor(
+        Math.min(
+          scale,
+          (b.h - headingHeight - 4 - noteHeight) / drawing.height,
+        ) * 1000,
+      ) / 1000;
+  }
+  return { scale, reserveNotes };
+}
+
+/** Use the full composer, including notes and readable-size refusals. Compare
+ * the same three-decimal scale that is emitted, without a width tolerance. */
+function topologyStaggerGuard(
+  compose: (
+    drawing: NotedDrawing,
+    observeScale?: (scale: number) => void,
+  ) => RenderOutcome<Draft>,
+) {
+  return (candidate: NotedDrawing, fallback: NotedDrawing) => {
+    let beforeScale = 0,
+      afterScale = 0;
+    const before = compose(fallback, (scale) => {
+      beforeScale = scale;
+    });
+    const after = compose(candidate, (scale) => {
+      afterScale = scale;
+    });
+    return after.ok && (!before.ok || afterScale >= beforeScale);
+  };
 }

@@ -443,6 +443,10 @@ export function signalLoopTitle(
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
+  acceptCandidate?: (
+    candidate: ReturnType<typeof directLoopDrawing>,
+    fallback: ReturnType<typeof directLoopDrawing>,
+  ) => boolean,
 ) {
   const selected = selectSignalLoop(ir, request);
   if (selected.series) return prepareSeriesLoopDrawing(ir, request, selected);
@@ -532,7 +536,47 @@ export async function prepareSignalLoopDrawing(
       ? edges.flatMap((e, i) => (e.cable || e.assembly ? [] : [`e${i}`]))
       : [],
     checkLabels,
+    acceptCandidate
+      ? (candidate, fallback) =>
+          acceptCandidate(
+            directLoopDrawing(
+              candidate,
+              selected,
+              request,
+              edges,
+              context,
+              documentNeeds,
+            ),
+            directLoopDrawing(
+              fallback,
+              selected,
+              request,
+              edges,
+              context,
+              documentNeeds,
+            ),
+          )
+      : undefined,
   );
+  return directLoopDrawing(
+    graph,
+    selected,
+    request,
+    edges,
+    context,
+    documentNeeds,
+  );
+}
+
+function directLoopDrawing(
+  graph: ElkNode,
+  selected: Exclude<ReturnType<typeof selectSignalLoop>, { series: unknown }>,
+  request: SignalLoopViewRequest,
+  edges: DrawingEdge[],
+  context: Parameters<typeof emitDirectLoopNodes>[3],
+  documentNeeds: ReturnType<typeof directLoopDocumentNeeds>,
+) {
+  const { vertical, assemblies, tags } = context;
   if (!Number.isFinite(graph.width) || !Number.isFinite(graph.height))
     throw new Error("Invalid signal loop layout.");
   checkLabels(graph);
