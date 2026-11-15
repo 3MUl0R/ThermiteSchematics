@@ -160,9 +160,9 @@ export function auditTitleDataSurface(
     };
     const pinnedLoader = elkLoaderException(file, tree, issues);
     if (file === ELK_RUNTIME_FILE)
-      auditElkCapabilities(tree, pinnedLoader, issues);
+      auditElkCapabilities(tree, pinnedLoader, issues, closedText, factories);
     const visit = (node: ts.Node) => {
-      if (forbiddenDynamicCode(node, pinnedLoader, constantText))
+      if (forbiddenDynamicCode(node, pinnedLoader, closedText))
         issues.push(
           `${file}: dynamic code cannot be audited for title-data access`,
         );
@@ -234,10 +234,7 @@ export function auditTitleDataSurface(
             node.expression.text === "require") ||
           factoryCall(node.expression)
         )
-          add(
-            node.arguments[0] ? constantText(node.arguments[0]) : undefined,
-            true,
-          );
+          add(closedText(node.arguments[0]), true);
         if (
           ts.isPropertyAccessExpression(node.expression) &&
           node.expression.name.text === "resolve" &&

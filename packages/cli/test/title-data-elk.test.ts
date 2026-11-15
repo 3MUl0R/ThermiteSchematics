@@ -50,3 +50,72 @@ it("audits the closed loader bindings outside the pinned text", () => {
   ).not.toEqual([]);
   expect(audit(source + "\nfauxWorker = undefined;")).not.toEqual([]);
 });
+
+it.each([
+  ["folded dynamic import", 'export const m = () => import("node:" + "fs");'],
+  ["export star", 'export * from "node:fs";'],
+  ["named export", 'export { statSync as x } from "node:fs";'],
+])("round 2 rejects the %s review probe", (_name, text) => {
+  expect(audit(source + "\n" + text)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("forbidden ELK capability"),
+    ]),
+  );
+});
+it("round 2 rejects the constructor review probe", () => {
+  expect(
+    audit(source + '\nexport const leak = (() => {}).constructor("return 1");'),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("dynamic code cannot be audited"),
+    ]),
+  );
+});
+it.each([
+  'import("node:" + "fs");',
+  'const SPEC = "node:" + "fs"; import(SPEC);',
+  'require("node:" + "fs");',
+  'require.resolve("node:" + "fs");',
+  'createRequire(import.meta.url)("node:" + "fs");',
+  'createRequire(import.meta.url).resolve("node:" + "fs");',
+])("folds ELK capability loader specifiers: %s", (text) => {
+  expect(audit(source + "\n" + text)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("forbidden ELK capability"),
+    ]),
+  );
+});
+it.each([
+  "import(spec);",
+  "require(spec);",
+  "createRequire(import.meta.url)(spec);",
+  "createRequire(import.meta.url).resolve(spec);",
+])("fails closed on unresolved ELK loader specifiers: %s", (text) => {
+  expect(audit(source + "\n" + text)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("unresolved ELK capability specifier"),
+    ]),
+  );
+});
+it.each([
+  '(() => {})["constructor"]("return 1");',
+  'new ((() => {}).constructor)("return 1");',
+  'const Make = (() => {}).constructor; Make("return 1");',
+  '(() => {})["con" + "structor"]("return 1");',
+])(
+  "rejects constructor invocation and aliases outside the loader: %s",
+  (text) => {
+    expect(audit(source + "\n" + text)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("dynamic code cannot be audited"),
+      ]),
+    );
+  },
+);
+it("keeps closed safe imports and ordinary exports outside the loader auditable", () => {
+  expect(
+    audit(
+      source + '\nexport * from "./elk-worker-budget.js"; import("elkjs");',
+    ),
+  ).toEqual([]);
+});
