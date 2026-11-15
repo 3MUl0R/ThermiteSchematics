@@ -1,43 +1,5 @@
-export function shapeGeometry() {
-  const root = document.querySelector("body>svg"),
-    rr = root.getBoundingClientRect(),
-    W = root.viewBox.baseVal.width,
-    H = root.viewBox.baseVal.height,
-    k = W / rr.width;
-  const all = [
-    ...root.querySelectorAll(
-      "text,path,line,rect,circle,ellipse,polygon,polyline,use,image",
-    ),
-  ];
-  all.forEach((e, i) => e.setAttribute("data-ext-id", i));
-  const box = (e) => {
-      const b = e.getBoundingClientRect();
-      return {
-        x: (b.x - rr.x) * k,
-        y: (b.y - rr.y) * k,
-        w: b.width * k,
-        h: b.height * k,
-      };
-    },
-    inter = (a, b) => {
-      const x = Math.max(a.x, b.x),
-        y = Math.max(a.y, b.y),
-        r = Math.min(a.x + a.w, b.x + b.w),
-        d = Math.min(a.y + a.h, b.y + b.h);
-      return r > x && d > y ? { x, y, w: r - x, h: d - y } : null;
-    };
-  const border = [...root.children].find(
-      (e) => e.tagName === "rect" && e.getAttribute("fill") === "none",
-    ),
-    m = box(border).x,
-    T = Math.max(
-      ...[...root.children]
-        .filter((e) => e.tagName === "path")
-        .map(box)
-        .filter((b) => b.h < 0.02 && b.w > box(border).w * 0.8)
-        .map((b) => b.y),
-    );
-  function visible(e, stroke = false) {
+export function shapeVisibility(root, box, k, rr, inter) {
+  return function visible(e, stroke = false) {
     if (e.closest("defs,clipPath,mask,symbol,pattern")) return null;
     const cs = getComputedStyle(e);
     if (cs.display === "none" || cs.visibility !== "visible") return null;
@@ -84,7 +46,49 @@ export function shapeGeometry() {
         if (!b) return null;
       }
     return b;
-  }
+  };
+}
+
+export function shapeGeometry(visibility) {
+  const root = document.querySelector("body>svg"),
+    rr = root.getBoundingClientRect(),
+    W = root.viewBox.baseVal.width,
+    H = root.viewBox.baseVal.height,
+    k = W / rr.width;
+  const all = [
+    ...root.querySelectorAll(
+      "text,path,line,rect,circle,ellipse,polygon,polyline,use,image",
+    ),
+  ];
+  all.forEach((e, i) => e.setAttribute("data-ext-id", i));
+  const box = (e) => {
+      const b = e.getBoundingClientRect();
+      return {
+        x: (b.x - rr.x) * k,
+        y: (b.y - rr.y) * k,
+        w: b.width * k,
+        h: b.height * k,
+      };
+    },
+    inter = (a, b) => {
+      const x = Math.max(a.x, b.x),
+        y = Math.max(a.y, b.y),
+        r = Math.min(a.x + a.w, b.x + b.w),
+        d = Math.min(a.y + a.h, b.y + b.h);
+      return r > x && d > y ? { x, y, w: r - x, h: d - y } : null;
+    };
+  const border = [...root.children].find(
+      (e) => e.tagName === "rect" && e.getAttribute("fill") === "none",
+    ),
+    m = box(border).x,
+    T = Math.max(
+      ...[...root.children]
+        .filter((e) => e.tagName === "path")
+        .map(box)
+        .filter((b) => b.h < 0.02 && b.w > box(border).w * 0.8)
+        .map((b) => b.y),
+    );
+  const visible = visibility(root, box, k, rr, inter);
   const id = (e) => +e.getAttribute("data-ext-id"),
     zoneEls = all.filter(
       (e) =>

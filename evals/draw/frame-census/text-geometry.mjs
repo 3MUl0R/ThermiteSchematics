@@ -1,4 +1,60 @@
-export function textGeometry() {
+export function textVisibility(root, rr, k, box, inter, clipped) {
+  return function visible(e) {
+    if (e.closest("defs,clipPath,mask,symbol,pattern")) return null;
+    const cs = getComputedStyle(e);
+    if (
+      cs.visibility !== "visible" ||
+      cs.display === "none" ||
+      (cs.fill === "none" && cs.stroke === "none")
+    )
+      return null;
+    for (let p = e; p && p !== root.parentElement; p = p.parentElement)
+      if (
+        +getComputedStyle(p).opacity === 0 ||
+        getComputedStyle(p).display === "none"
+      )
+        return null;
+    let b = box(e);
+    if (!b.w || !b.h) return null;
+    for (let p = e.parentElement; p && p !== root; p = p.parentElement) {
+      if (p.tagName === "svg" && getComputedStyle(p).overflow !== "visible") {
+        const a = p.parentElement.getScreenCTM(),
+          own = p.transform?.baseVal?.consolidate()?.matrix,
+          mx = own ? a.multiply(own) : a;
+        const x = p.x.baseVal.value,
+          y = p.y.baseVal.value,
+          w = p.width.baseVal.value,
+          h = p.height.baseVal.value;
+        const pts = [
+          [x, y],
+          [x + w, y],
+          [x, y + h],
+          [x + w, y + h],
+        ].map(([x, y]) => new DOMPoint(x, y).matrixTransform(mx));
+        const xs = pts.map((q) => (q.x - rr.x) * k),
+          ys = pts.map((q) => (q.y - rr.y) * k),
+          clip = {
+            x: Math.min(...xs),
+            y: Math.min(...ys),
+            w: Math.max(...xs) - Math.min(...xs),
+            h: Math.max(...ys) - Math.min(...ys),
+          };
+        b = inter(b, clip);
+        if (!b) {
+          clipped.push({
+            id: +e.getAttribute("data-census-id"),
+            text: e.textContent,
+            reason: "nested-viewport",
+          });
+          return null;
+        }
+      }
+    }
+    return b;
+  };
+}
+
+export function textGeometry(visibility) {
   const root = document.querySelector("body>svg"),
     rr = root.getBoundingClientRect(),
     W = root.viewBox.baseVal.width,
@@ -60,59 +116,7 @@ export function textGeometry() {
   const zset = new Set([...ztexts, ...zticks]),
     clipped = [],
     texts = [];
-  function visible(e) {
-    if (e.closest("defs,clipPath,mask,symbol,pattern")) return null;
-    const cs = getComputedStyle(e);
-    if (
-      cs.visibility !== "visible" ||
-      cs.display === "none" ||
-      (cs.fill === "none" && cs.stroke === "none")
-    )
-      return null;
-    for (let p = e; p && p !== root.parentElement; p = p.parentElement)
-      if (
-        +getComputedStyle(p).opacity === 0 ||
-        getComputedStyle(p).display === "none"
-      )
-        return null;
-    let b = box(e);
-    if (!b.w || !b.h) return null;
-    for (let p = e.parentElement; p && p !== root; p = p.parentElement) {
-      if (p.tagName === "svg" && getComputedStyle(p).overflow !== "visible") {
-        const a = p.parentElement.getScreenCTM(),
-          own = p.transform?.baseVal?.consolidate()?.matrix,
-          mx = own ? a.multiply(own) : a;
-        const x = p.x.baseVal.value,
-          y = p.y.baseVal.value,
-          w = p.width.baseVal.value,
-          h = p.height.baseVal.value;
-        const pts = [
-          [x, y],
-          [x + w, y],
-          [x, y + h],
-          [x + w, y + h],
-        ].map(([x, y]) => new DOMPoint(x, y).matrixTransform(mx));
-        const xs = pts.map((q) => (q.x - rr.x) * k),
-          ys = pts.map((q) => (q.y - rr.y) * k),
-          clip = {
-            x: Math.min(...xs),
-            y: Math.min(...ys),
-            w: Math.max(...xs) - Math.min(...xs),
-            h: Math.max(...ys) - Math.min(...ys),
-          };
-        b = inter(b, clip);
-        if (!b) {
-          clipped.push({
-            id: +e.getAttribute("data-census-id"),
-            text: e.textContent,
-            reason: "nested-viewport",
-          });
-          return null;
-        }
-      }
-    }
-    return b;
-  }
+  const visible = visibility(root, rr, k, box, inter, clipped);
   for (const e of root.querySelectorAll("text")) {
     if (zset.has(e)) continue;
     const b = visible(e);

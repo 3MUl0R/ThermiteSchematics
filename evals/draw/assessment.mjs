@@ -56,22 +56,9 @@ function rangeDifferent(a, b) {
     (i) => Math.abs(Math.round(a[i] * 1000) - Math.round(b[i] * 1000)) > 1,
   );
 }
-export function assess(rows, registry, selectedCases, context = {}) {
-  assert.equal(
-    new Set(rows.map((r) => r.id)).size,
-    rows.length,
-    "Duplicate observation identity",
-  );
-  assert.equal(
-    registry.format,
-    "thermite-draw-expectations/2.0",
-    "Unsupported expectation format",
-  );
-  for (const row of rows)
-    for (const f of row.evidence?.findings ?? []) delete f.assessments;
+function markerEntries(registry, context) {
   const markers = new Map(),
-    ids = new Set(),
-    drift = [];
+    ids = new Set();
   for (const marker of registry.markers) {
     assert.equal(
       marker.id,
@@ -99,6 +86,68 @@ export function assess(rows, registry, selectedCases, context = {}) {
       observed: [],
     });
   }
+  return markers;
+}
+function recordDrift(entry, selectedCases, drift) {
+  const { marker } = entry;
+  if (entry.observed.length) {
+    const values = envelope(
+        entry.observed.flatMap((g) => g.findings.map(measurements)),
+      ),
+      countRange = envelope(
+        entry.observed.map((g) => ({
+          occurrences: g.occurrences ?? g.findings.length,
+        })),
+      ).occurrences;
+    const changes = [];
+    for (const [metric, [, lo, hi]] of Object.entries(marker.bands ?? {}))
+      if (values[metric] && rangeDifferent(values[metric], [lo, hi]))
+        changes.push({
+          metric,
+          reference: [lo, hi],
+          observed: values[metric],
+        });
+    if (marker.count && rangeDifferent(countRange, marker.count))
+      changes.push({
+        metric: "occurrences",
+        reference: marker.count,
+        observed: countRange,
+      });
+    if (changes.length)
+      drift.push({
+        marker: marker.id,
+        dq: marker.dq,
+        locator: marker.locator,
+        partialScope: [...entry.expected.values()].some(
+          (u) => !selectedCases.has(u.case),
+        ),
+        changes,
+        withinBand: entry.observed.every((g) =>
+          g.links.every(({ f }) =>
+            f.assessments
+              .filter((a) => a.marker === marker.id)
+              .every((a) => !a.deltas?.length),
+          ),
+        ),
+      });
+  }
+}
+
+export function assess(rows, registry, selectedCases, context = {}) {
+  assert.equal(
+    new Set(rows.map((r) => r.id)).size,
+    rows.length,
+    "Duplicate observation identity",
+  );
+  assert.equal(
+    registry.format,
+    "thermite-draw-expectations/2.0",
+    "Unsupported expectation format",
+  );
+  for (const row of rows)
+    for (const f of row.evidence?.findings ?? []) delete f.assessments;
+  const markers = markerEntries(registry, context),
+    drift = [];
   for (const group of observations(rows)) {
     const entry = markers.get(group.key),
       u = unitKey(group.unit),
@@ -215,47 +264,7 @@ export function assess(rows, registry, selectedCases, context = {}) {
         evidence: { findingCount: 0, findings: [] },
       });
     }
-    if (entry.observed.length) {
-      const values = envelope(
-          entry.observed.flatMap((g) => g.findings.map(measurements)),
-        ),
-        countRange = envelope(
-          entry.observed.map((g) => ({
-            occurrences: g.occurrences ?? g.findings.length,
-          })),
-        ).occurrences;
-      const changes = [];
-      for (const [metric, [, lo, hi]] of Object.entries(marker.bands ?? {}))
-        if (values[metric] && rangeDifferent(values[metric], [lo, hi]))
-          changes.push({
-            metric,
-            reference: [lo, hi],
-            observed: values[metric],
-          });
-      if (marker.count && rangeDifferent(countRange, marker.count))
-        changes.push({
-          metric: "occurrences",
-          reference: marker.count,
-          observed: countRange,
-        });
-      if (changes.length)
-        drift.push({
-          marker: marker.id,
-          dq: marker.dq,
-          locator: marker.locator,
-          partialScope: [...entry.expected.values()].some(
-            (u) => !selectedCases.has(u.case),
-          ),
-          changes,
-          withinBand: entry.observed.every((g) =>
-            g.links.every(({ f }) =>
-              f.assessments
-                .filter((a) => a.marker === marker.id)
-                .every((a) => !a.deltas?.length),
-            ),
-          ),
-        });
-    }
+    recordDrift(entry, selectedCases, drift);
   }
   rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return canonical({

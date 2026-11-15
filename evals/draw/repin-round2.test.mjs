@@ -270,6 +270,103 @@ function reportFor(registry, findings) {
     exitCode: a.exitCode,
   };
 }
+function appendD1Renames(
+  oldIds,
+  newIds,
+  links,
+  before,
+  after,
+  common,
+  target,
+  entries,
+) {
+  for (const [n, i] of oldIds.entries()) {
+    const a = before.instances.find(
+        (t) => t.markerId === markerId(i) && t.facts.text === links[n][0],
+      ),
+      b = after.instances.find((t) => t.markerId === markerId(newIds[n]));
+    entries.push({
+      ...common,
+      action: "rename",
+      crop: {
+        path: `evals/out/draw-samples/fixture/header-${n}.png`,
+        sha256: hash(`crop-${n}`),
+      },
+      from: target(a),
+      to: target(b),
+      pairs: [
+        {
+          from: a.token,
+          to: b.token,
+          text: { from: links[n][0], to: links[n][1] },
+          sourceLocator: {
+            from: a.facts.sourceLocator,
+            to: b.facts.sourceLocator,
+          },
+        },
+      ],
+    });
+    if (n === 0) {
+      const blank = before.instances.find(
+        (t) => t.markerId === markerId(i) && t.facts.text === "Unspecified",
+      );
+      entries.push({
+        ...common,
+        action: "retire",
+        ...target(a),
+        cause: "removed",
+        instances: [blank.token],
+      });
+      entries.push({
+        ...common,
+        action: "envelope-drift",
+        markerId: markerId(newIds[n]),
+        metric: "occurrences",
+        from: [2, 2],
+        to: [1, 1],
+        observed: [1, 1],
+        coverage: "full",
+      });
+    }
+  }
+}
+function appendD1Outcomes(
+  added,
+  literal,
+  drift,
+  after,
+  common,
+  target,
+  entries,
+) {
+  const extra = after.instances.find(
+    (t) => t.markerId === markerId(added) && t.scope.sheet === "sheet:21",
+  );
+  entries.push({
+    ...common,
+    action: "scope-added",
+    to: target(extra),
+    instances: [extra.token],
+  });
+  entries.push({
+    ...common,
+    action: "retire",
+    markerId: markerId(literal),
+    scope: { case: cid, sheet: view, medium: "svg" },
+    cause: "fixed",
+  });
+  entries.push({
+    ...common,
+    action: "envelope-drift",
+    markerId: markerId(drift),
+    metric: "advanceRatio",
+    from: [1, 1.05, 1.05, 1.1],
+    to: [1, 1.08, 1.08, 1.13],
+    observed: [1.08, 1.08],
+    coverage: "full",
+  });
+}
+
 function d1Fixture() {
   const links = [
     ["Manufacturer", "Mfr."],
@@ -377,81 +474,17 @@ function d1Fixture() {
     classification: "drawing",
   };
   const target = (t) => ({ markerId: t.markerId, scope: t.scope });
-  for (const [n, i] of oldIds.entries()) {
-    const a = before.instances.find(
-        (t) => t.markerId === markerId(i) && t.facts.text === links[n][0],
-      ),
-      b = after.instances.find((t) => t.markerId === markerId(newIds[n]));
-    entries.push({
-      ...common,
-      action: "rename",
-      crop: {
-        path: `evals/out/draw-samples/fixture/header-${n}.png`,
-        sha256: hash(`crop-${n}`),
-      },
-      from: target(a),
-      to: target(b),
-      pairs: [
-        {
-          from: a.token,
-          to: b.token,
-          text: { from: links[n][0], to: links[n][1] },
-          sourceLocator: {
-            from: a.facts.sourceLocator,
-            to: b.facts.sourceLocator,
-          },
-        },
-      ],
-    });
-    if (n === 0) {
-      const blank = before.instances.find(
-        (t) => t.markerId === markerId(i) && t.facts.text === "Unspecified",
-      );
-      entries.push({
-        ...common,
-        action: "retire",
-        ...target(a),
-        cause: "removed",
-        instances: [blank.token],
-      });
-      entries.push({
-        ...common,
-        action: "envelope-drift",
-        markerId: markerId(newIds[n]),
-        metric: "occurrences",
-        from: [2, 2],
-        to: [1, 1],
-        observed: [1, 1],
-        coverage: "full",
-      });
-    }
-  }
-  const extra = after.instances.find(
-    (t) => t.markerId === markerId(added) && t.scope.sheet === "sheet:21",
+  appendD1Renames(
+    oldIds,
+    newIds,
+    links,
+    before,
+    after,
+    common,
+    target,
+    entries,
   );
-  entries.push({
-    ...common,
-    action: "scope-added",
-    to: target(extra),
-    instances: [extra.token],
-  });
-  entries.push({
-    ...common,
-    action: "retire",
-    markerId: markerId(literal),
-    scope: { case: cid, sheet: view, medium: "svg" },
-    cause: "fixed",
-  });
-  entries.push({
-    ...common,
-    action: "envelope-drift",
-    markerId: markerId(drift),
-    metric: "advanceRatio",
-    from: [1, 1.05, 1.05, 1.1],
-    to: [1, 1.08, 1.08, 1.13],
-    observed: [1.08, 1.08],
-    coverage: "full",
-  });
+  appendD1Outcomes(added, literal, drift, after, common, target, entries);
   const registrySha256 = hash(serializeRegistry(registry));
   for (const e of entries.filter((e) => e.action === "rename")) {
     const p = e.pairs.find((p) => p.sourceLocator);

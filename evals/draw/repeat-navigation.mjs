@@ -41,6 +41,123 @@ function labels(g) {
       text: rows.map((t) => t.text).join(" "),
     }));
 }
+function repeatTargets(a, allMembers) {
+  const also = [],
+    repeats = [],
+    repeatMembers = [];
+  for (const m of a.members) {
+    const peers = allMembers
+      .filter((n) => n.uid === m.uid && n.functionKey === m.functionKey)
+      .sort(
+        (x, y) =>
+          x.order - y.order ||
+          x.sheet - y.sheet ||
+          x.zone?.localeCompare(y.zone),
+      );
+    const first = peers[0];
+    if (first.view === m.view && first.sheet === m.sheet)
+      also.push(
+        ...peers
+          .filter((n) => n.view !== m.view || n.sheet !== m.sheet)
+          .map(token),
+      );
+    else {
+      repeats.push(token(first));
+      repeatMembers.push(m);
+    }
+  }
+  const expected = {
+    "Also shown": unique(also),
+    "Repeat of": unique(repeats),
+  };
+  return { expected, repeatMembers };
+}
+function verifyRepeatTargets(label, expected, repeatMembers, emit) {
+  const sections = [
+    ...label.text.matchAll(
+      /(Also shown|Repeat of)\s+(.*?)(?=Also shown|Repeat of|$)/g,
+    ),
+  ];
+  for (const role of Object.keys(expected)) {
+    const lines = sections.filter((m) => m[1] === role),
+      targets = lines.flatMap((m) =>
+        [...m[2].matchAll(/\b(\d+)\.([A-Z]+\d+)\b/g)].map(
+          (x) => `${x[1].padStart(2, "0")}.${x[2]}`,
+        ),
+      );
+    if (
+      lines.length !== (expected[role].length ? 1 : 0) ||
+      !equal(targets, expected[role])
+    )
+      emit("repeat-targets", label, {
+        role,
+        expected: expected[role],
+        actual: targets,
+      });
+    if (role === "Repeat of" && expected[role].length) {
+      const noun =
+        unique(repeatMembers.map((m) => m.functionKey)).length > 1
+          ? "functions"
+          : repeatMembers[0]?.kind === "contact"
+            ? "contact"
+            : "function";
+      if (
+        lines.length !== 1 ||
+        lines[0][2].match(/\(same ([^)]+)\)/)?.[1] !== noun
+      )
+        emit("repeat-qualifier", label, { expected: noun });
+    }
+  }
+}
+function repeatClearance(g, label, emit) {
+  for (const t of g.texts.filter(painted)) {
+    if (label.rows.includes(t)) continue;
+    for (const row of label.rows) {
+      const d = gap(row.bbox, t.bbox);
+      if (
+        d.y === 0 &&
+        Math.min(row.bbox.y + row.bbox.h, t.bbox.y + t.bbox.h) >
+          Math.max(row.bbox.y, t.bbox.y) &&
+        d.x < 4 - EPS
+      )
+        emit("repeat-text-clearance", row, {
+          otherElement: t.element,
+          gapMm: d.x,
+          minimumMm: 4,
+        });
+    }
+  }
+  for (const s of g.shapes) {
+    const segments = s.navigationInkSegments ?? s.inkSegments ?? [];
+    let minimum = Infinity;
+    for (const row of label.rows)
+      for (const [p, q] of segments) {
+        const b = row.bbox;
+        // A segment intersects the label or approaches a corner/edge.
+        const corners = [
+          { x: b.x, y: b.y },
+          { x: b.x + b.w, y: b.y },
+          { x: b.x + b.w, y: b.y + b.h },
+          { x: b.x, y: b.y + b.h },
+        ];
+        const d =
+          Math.min(
+            boxDistance(p, b),
+            boxDistance(q, b),
+            ...corners.map((c) => distance(c, p, q)),
+          ) -
+          s.stroke / 2;
+        minimum = Math.min(minimum, d);
+      }
+    if (minimum < 1.5 - 0.05)
+      emit("repeat-ink-clearance", label, {
+        otherElement: s.element,
+        gapMm: minimum,
+        minimumMm: 1.5,
+      });
+  }
+}
+
 /** @returns {import('./navigation-contracts').RepeatAudit} */
 export function repeatNavigation(packet, geometries, ir, request) {
   const appearances = repeatAppearances(packet, geometries, ir, request);
@@ -139,69 +256,8 @@ export function repeatNavigation(packet, geometries, ir, request) {
       )
         emit("repeat-owner-text", found[0], { expected: designation });
       const label = found[0],
-        also = [],
-        repeats = [],
-        repeatMembers = [];
-      for (const m of a.members) {
-        const peers = allMembers
-          .filter((n) => n.uid === m.uid && n.functionKey === m.functionKey)
-          .sort(
-            (x, y) =>
-              x.order - y.order ||
-              x.sheet - y.sheet ||
-              x.zone?.localeCompare(y.zone),
-          );
-        const first = peers[0];
-        if (first.view === m.view && first.sheet === m.sheet)
-          also.push(
-            ...peers
-              .filter((n) => n.view !== m.view || n.sheet !== m.sheet)
-              .map(token),
-          );
-        else {
-          repeats.push(token(first));
-          repeatMembers.push(m);
-        }
-      }
-      const expected = {
-        "Also shown": unique(also),
-        "Repeat of": unique(repeats),
-      };
-      const sections = [
-        ...label.text.matchAll(
-          /(Also shown|Repeat of)\s+(.*?)(?=Also shown|Repeat of|$)/g,
-        ),
-      ];
-      for (const role of Object.keys(expected)) {
-        const lines = sections.filter((m) => m[1] === role),
-          targets = lines.flatMap((m) =>
-            [...m[2].matchAll(/\b(\d+)\.([A-Z]+\d+)\b/g)].map(
-              (x) => `${x[1].padStart(2, "0")}.${x[2]}`,
-            ),
-          );
-        if (
-          lines.length !== (expected[role].length ? 1 : 0) ||
-          !equal(targets, expected[role])
-        )
-          emit("repeat-targets", label, {
-            role,
-            expected: expected[role],
-            actual: targets,
-          });
-        if (role === "Repeat of" && expected[role].length) {
-          const noun =
-            unique(repeatMembers.map((m) => m.functionKey)).length > 1
-              ? "functions"
-              : repeatMembers[0]?.kind === "contact"
-                ? "contact"
-                : "function";
-          if (
-            lines.length !== 1 ||
-            lines[0][2].match(/\(same ([^)]+)\)/)?.[1] !== noun
-          )
-            emit("repeat-qualifier", label, { expected: noun });
-        }
-      }
+        { expected, repeatMembers } = repeatTargets(a, allMembers);
+      verifyRepeatTargets(label, expected, repeatMembers, emit);
       const anchor = centroid(a.ports),
         ownZone = measuredZone(g, anchor);
       const {
@@ -237,52 +293,7 @@ export function repeatNavigation(packet, geometries, ir, request) {
         selfLocated: !!selfLocated,
         bbox: label.bbox,
       });
-      for (const t of g.texts.filter(painted)) {
-        if (label.rows.includes(t)) continue;
-        for (const row of label.rows) {
-          const d = gap(row.bbox, t.bbox);
-          if (
-            d.y === 0 &&
-            Math.min(row.bbox.y + row.bbox.h, t.bbox.y + t.bbox.h) >
-              Math.max(row.bbox.y, t.bbox.y) &&
-            d.x < 4 - EPS
-          )
-            emit("repeat-text-clearance", row, {
-              otherElement: t.element,
-              gapMm: d.x,
-              minimumMm: 4,
-            });
-        }
-      }
-      for (const s of g.shapes) {
-        const segments = s.navigationInkSegments ?? s.inkSegments ?? [];
-        let minimum = Infinity;
-        for (const row of label.rows)
-          for (const [p, q] of segments) {
-            const b = row.bbox;
-            // A segment intersects the label or approaches a corner/edge.
-            const corners = [
-              { x: b.x, y: b.y },
-              { x: b.x + b.w, y: b.y },
-              { x: b.x + b.w, y: b.y + b.h },
-              { x: b.x, y: b.y + b.h },
-            ];
-            const d =
-              Math.min(
-                boxDistance(p, b),
-                boxDistance(q, b),
-                ...corners.map((c) => distance(c, p, q)),
-              ) -
-              s.stroke / 2;
-            minimum = Math.min(minimum, d);
-          }
-        if (minimum < 1.5 - 0.05)
-          emit("repeat-ink-clearance", label, {
-            otherElement: s.element,
-            gapMm: minimum,
-            minimumMm: 1.5,
-          });
-      }
+      repeatClearance(g, label, emit);
     }
   }
   return {
