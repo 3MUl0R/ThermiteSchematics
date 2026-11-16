@@ -6,6 +6,51 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { assemble, it0, base, mid, A, view } from "./repin-fixture.mjs";
 
+const expectedRefusals = {
+  "old version": "Run a fresh full report with the current evals version",
+  "missing checker": "Current checker bundle is required",
+  "report format": "Unsupported report format",
+  "report mode": "Use a full strict report",
+  "report registry": "Report registry hash is stale",
+  "report bundle": "Report checker bundle is stale",
+  "registry keys before report format": "Unknown registry field: extra",
+  "marker count": "Invalid existing count",
+  "file keys": "Unknown decisions file field: extra",
+  "file format": "Unsupported decisions format",
+  "empty PR": "Name the merged PR/lane",
+  "stale file summarySha256": "Stale decisions binding: summarySha256",
+  "stale file registrySha256": "Stale decisions binding: registrySha256",
+  "stale file checkerSha256": "Stale decisions binding: checkerSha256",
+  "stale file corpusSha256": "Stale decisions binding: corpusSha256",
+  "stale file evalsVersion": "Stale decisions binding: evalsVersion",
+  "missing baseline": "Bound baseline bytes/hash not supplied",
+  unreviewed: "Unreviewed draft entry; inspect it and set reviewed: true",
+  "missing rationale": "Record cause class and review rationale",
+  "missing signer": "signOff.by must be non-empty",
+  "unknown action": "Unknown decision action: guess",
+  "unknown entry field": "Unknown decision field: extra",
+  "wrong classification": "Explicit policy-gap/drawing classification required",
+  "invalid cause": "Retirement cause must be fixed, removed or not-measured",
+  "false not-measured": "Retirement cause contradicts measurement availability",
+  "unknown source scope":
+    "Retirement/rename source must be a stale measured scope",
+  "unknown scope field": "Unknown scope field: extra",
+  "wrong medium": "Invalid scope selector",
+  "empty retirement": "Empty instance retirement",
+  "unknown retirement token": "Unknown retirement instance",
+  "conflicting retirements": "Conflicting whole-scope retirement",
+  "missing crop": "Crop required: supply a non-empty file path and SHA-256",
+  "crop mismatch": "Reviewed crop missing or hash mismatch",
+  "unknown new token": "Unknown new-defect instance",
+  "empty new instances": "List each new finding instance",
+  "unknown target scope": "Target finding identity/scope not observed",
+  "rename wrong pair": "Rename pair is not in its declared scopes",
+  "rename no pairs": "List individual rename pairs",
+  "unproved native move":
+    "Cannot prove move (source row or locator kind changed); review a no-credit superseded retirement with an observed successor or survivor.",
+  "potential move retirement": "Retirement could be a move",
+};
+
 const old = it0("old"),
   target = it0("target");
 function retirement() {
@@ -103,10 +148,11 @@ function entryRefusals() {
   ].map(([name, mutate]) => ({ name, make: retirement, mutate }));
 }
 function moveCandidate() {
+  const moved = { ...target, src: old.src };
   return assemble({
     registryItems: [old],
-    currentItems: [target],
-    entries: ({ retire, add }) => [retire(old, "fixed"), add(target)],
+    currentItems: [moved],
+    entries: ({ retire, add }) => [retire(old, "fixed"), add(moved)],
   });
 }
 function targetRefusals() {
@@ -167,11 +213,16 @@ export async function refusalParity(baseRoot, headRoot) {
     ...entryRefusals(),
     ...targetRefusals(),
   ]) {
-    const input = make();
+    const input = structuredClone(make());
     mutate(input);
     const a = outcome(before, input),
       b = outcome(after, input);
     assert(!a.accepted, "Refusing input passed: " + name);
+    assert.equal(a.errorClass, "AssertionError", name);
+    assert(
+      a.message.startsWith(expectedRefusals[name]),
+      "Wrong refusal: " + name,
+    );
     assert.deepEqual(b, a, name);
     rows.push({ name, ...a });
   }
