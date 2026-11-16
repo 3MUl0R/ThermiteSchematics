@@ -250,13 +250,7 @@ export function measureSheet(options = {}, h) {
   });
   c.shapes = shapes;
   h.relationLandingRows(c);
-  const s = c;
-  return {
-    ...h.sheetFields1(s),
-    ...h.sheetFields2(s),
-    ...h.sheetFields3(s),
-    ...h.sheetFields4(s),
-  };
+  return h.trancheSheetFields(c);
 }
 function bindMeasurement(measure, helpers) {
   return (options = {}) => measure(options, helpers);

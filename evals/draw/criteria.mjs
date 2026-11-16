@@ -3,7 +3,8 @@ export const criteria = {
   "DQ-01": "PDF/SVG label parity: zero missing label regions",
   "DQ-02": "Text inside its cell/frame/sheet; no text-text overlap",
   "DQ-03": "No symbol primitive joins independent nets; review legend",
-  "DQ-04": "Glyphs and qualifiers match the selected standard",
+  "DQ-04":
+    "Glyphs and qualifiers match the selected standard; contact-state captions agree with native function/symbol roles; protection-role captions carry no NO/NC state",
   "DQ-05": "No IR function key printed by default",
   "DQ-06": "Device designation, description and authored rating/part",
   "DQ-07":
@@ -11,20 +12,23 @@ export const criteria = {
   "DQ-08":
     "Reciprocal ordered off-page sheet.zone, intact conductor identities and 2.5 mm block gaps",
   "DQ-09": "Four-side zones and all references resolve",
-  "DQ-10": "Monotone L1-L2-L3(-PE), U-V-W and upright qualifiers",
+  "DQ-10":
+    "Monotone L1-L2-L3(-PE), U-V-W and upright text and graphical AC/DC qualifiers",
   "DQ-11":
     "Vertical flow succeeds wherever horizontal does, or executed R006 remedy works",
   "DQ-12":
     "Median visible drawing-area utilisation >=40%; no avoidable extra sheet",
   "DQ-13":
     "Conductor >= outline/incident attachment stroke; filled dots only at >=3-way junctions",
-  "DQ-14": "Double landings appear as two conductors",
+  "DQ-14":
+    "Double landings appear as two native conductors without shared approach ink or free-air junction dots unsupported by native nodes",
   "DQ-15": "No jog <3 mm or unreasoned detour >2x Manhattan +20 mm",
-  "DQ-16": "Wire label <=2 mm from own conductor and nearest to it",
+  "DQ-16":
+    "Wire label <=2 mm from own conductor and nearest to it; native label ownership and painted support data are required; broader block association remains manual",
   "DQ-17": "No duplicate/overlapping terminal text",
   "DQ-18": "Title-block fields and revision table present",
   "DQ-19":
-    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index and sufficient printed document dependencies",
+    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope",
   "DQ-20": "One font family and one symbol catalog per packet",
   "DQ-21": "PDF and SVG font metrics identical",
   "DQ-22": "Two blind independent drafter reviews, material/minor red-lines",

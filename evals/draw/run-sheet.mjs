@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { prepareOraclePdf, prepareOracleHtml } from "./tranche3-pdf.mjs";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { command, json, hash, canonical } from "./support.mjs";
+import { command, json, canonical } from "./support.mjs";
+import { sheetCropName } from "./sheet-crop-name.mjs";
 import { displaySheet, cropBox, screenshotCrop } from "./browser.mjs";
 import {
   renderPdf,
@@ -90,7 +92,7 @@ async function readSheetEvidence(
     "HTML/SVG visible label inventory differs",
   );
   const htmlIssues = textGeometryIssues(htmlGeometry[s.number - 1]);
-  g.htmlTexts = htmlGeometry[s.number - 1].texts;
+  prepareOracleHtml(g, htmlGeometry[s.number - 1]);
   const pngPath = join(directory, `${prefix}.png`);
   if (values.artifacts)
     await page.locator("body>svg").screenshot({ path: pngPath, scale: "css" });
@@ -116,7 +118,7 @@ async function readSheetEvidence(
     pdf.fontFamilies,
     pdf.fontCaps,
   );
-  g.pdfTexts = text;
+  await prepareOraclePdf(g, ir, s, pdfPage, text);
   if (values.artifacts)
     await writeFile(join(directory, `${prefix}-pdf-text.json`), json(text));
   const nativePath = join(
@@ -243,17 +245,7 @@ async function captureSheetCrops(
       continue;
     }
     const box = canonical(cropBox(finding.bbox, g.width, g.height)),
-      duplicateMedium =
-        measured.filter(
-          (r) =>
-            r.status === "fail" &&
-            r.dq === row.dq &&
-            (r.medium ?? "svg") === (row.medium ?? "svg"),
-        ).length > 1,
-      crop = join(
-        directory,
-        `${prefix}-${row.dq}${row === htmlRow ? "-html" : row.medium === "pdf" ? "-pdf" : ""}${duplicateMedium ? "-" + hash(row.id).slice(0, 10) : ""}.png`,
-      );
+      crop = join(directory, sheetCropName(prefix, row, measured, htmlRow));
     if (row.dq === "DQ-01" && row.evidence.findings[0].backend === "PDFKit") {
       const cropDir = join(directory, `${prefix}-pdfkit-crop`);
       await mkdir(cropDir, { recursive: true });
