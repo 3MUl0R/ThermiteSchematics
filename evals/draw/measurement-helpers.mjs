@@ -66,7 +66,11 @@ export const measurementHelpers = Object.freeze({
     attr: { parameters: ["e", "name"], dependencies: [] },
     tagIdentity: { parameters: ["e"], dependencies: ["attr", "ids"] },
     ancestors: { parameters: ["e"], dependencies: ["root"] },
-    identity: { parameters: ["e"], dependencies: ["ancestors", "attr", "ids"] },
+    documentIdentity: { parameters: ["e"], dependencies: ["attr", "ids"] },
+    identity: {
+      parameters: ["e"],
+      dependencies: ["ancestors", "attr", "ids", "documentIdentity"],
+    },
     terminalDescriptionOwner: { parameters: ["e", "uid"], dependencies: [] },
     reportRuns: {
       parameters: ["e", "rendered", "matrix"],

@@ -1,23 +1,10 @@
+import { registryRowFindings, sameSet } from "./m3-registry-row.mjs";
+import { packetNativeNeeds } from "./m3-needs-context.mjs";
 // The exported registry is a third set of locators. Neither an entry nor its
 // absence establishes a native fact or suppresses a visible issued row.
 import { finding, painted } from "./review-geometry.mjs";
-import {
-  nativeNeeds,
-  factKeys,
-  semanticColumns,
-  compact,
-  nativeRequestForSheet,
-} from "./m3-native.mjs";
-import {
-  rowMatchesFact,
-  printedHeader,
-  requestedSupplies,
-} from "./m3-documents.mjs";
-import { sufficient } from "./document-dependencies.mjs";
-const sameSet = (a, b) =>
-  Array.isArray(a) &&
-  Array.isArray(b) &&
-  JSON.stringify(a.slice().sort()) === JSON.stringify(b.slice().sort());
+import { compact } from "./m3-native.mjs";
+import { rowMatchesFact, requestedSupplies } from "./m3-documents.mjs";
 const labels = {
   wires: "wire inventory",
   terminals: "terminal inventory",
@@ -35,17 +22,12 @@ export function registryFindings(
   const nav = packet.navigation,
     findings = [],
     documents = nav.documents ?? [],
-    allNeeds = packet.sheets.flatMap((s, i) =>
-      nativeNeeds(
-        s,
-        geometries[i],
-        ir,
-        catalog,
-        nativeRequestForSheet(packet, geometries, context.request, s),
-      ).map((n) => ({
-        ...n,
-        sheet: s.number,
-      })),
+    allNeeds = packetNativeNeeds(
+      packet,
+      geometries,
+      ir,
+      catalog,
+      context.request,
     ),
     binding = context.binding;
   const add = (kind, evidence) => findings.push(finding(kind, {}, evidence));
@@ -117,41 +99,8 @@ export function registryFindings(
     const rowIds = (doc.rows ?? []).map((r) => r.id);
     if (new Set(rowIds).size !== rowIds.length)
       add("document-registry-duplicate-row", { documentId: doc.id });
-    for (const entry of doc.rows ?? []) {
-      const found = actual.filter(
-          (r) =>
-            r.key === entry.nativeKey &&
-            r.sheet === entry.sheet &&
-            r.primitiveIds.includes(entry.primitiveId),
-        ),
-        source = catalog.find(
-          (r) => r.kind === doc.kind && r.key === entry.nativeKey,
-        );
-      if (
-        !source ||
-        found.length !== 1 ||
-        !sufficient(found[0], source) ||
-        !printedHeader(found[0], context.tables) ||
-        !sameSet(factKeys(entry.facts ?? []), factKeys(source.facts))
-      )
-        add("document-registry-row-mismatch", {
-          documentId: doc.id,
-          rowId: entry.id,
-          nativeKey: entry.nativeKey,
-        });
-      if (source) {
-        const columns = source.columns ?? [
-          ...new Set(source.facts.flatMap((f) => semanticColumns[f.kind])),
-        ];
-        if (!sameSet(entry.columns, columns))
-          add("document-registry-columns-mismatch", {
-            documentId: doc.id,
-            rowId: entry.id,
-            expected: columns,
-            actual: entry.columns,
-          });
-      }
-    }
+    for (const entry of doc.rows ?? [])
+      registryRowFindings(doc, entry, actual, catalog, context.tables, add);
     for (const row of actual)
       if (
         (doc.rows ?? []).filter(

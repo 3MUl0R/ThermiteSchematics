@@ -339,6 +339,7 @@ function containsFact(value, source) {
   ).test(String(value ?? "").normalize("NFC"));
 }
 export function sufficient(row, fact) {
+  if (fact.sourceGap) return false;
   if (row.kind !== fact.kind || row.key !== fact.key) return false;
   for (const [column, values] of Object.entries(fact.required)) {
     const value = compact(row.cells[column]);

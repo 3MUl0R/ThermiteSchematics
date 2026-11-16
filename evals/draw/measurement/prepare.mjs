@@ -20,7 +20,7 @@ export function prepareGeometry(c) {
     "attr",
   ]);
   h.elementIndex(c);
-  h.install(c, ["tagIdentity", "identity", "shapeClips"]);
+  h.install(c, ["tagIdentity", "documentIdentity", "identity", "shapeClips"]);
 }
 export function prepareTerminals(c) {
   const h = c.h;
