@@ -53,6 +53,8 @@ it("states not-applicable on an intact cap without inventing unresolved cable ma
     assemblies: ["CAP-X2"],
   });
   expect(drawing.note).toContain("1 pin mapping not applicable");
+  expect(drawing.note).toContain("1 authored assembly.");
+  expect(drawing.note).not.toContain("1 authored assemblies");
   expect(drawing.note).not.toMatch(/unresolved|cable pin mapping/);
   expect(drawing.topologyCoverage?.relationIds).toHaveLength(1);
   const link = parseHTML(drawing.content).document.querySelector(
@@ -79,6 +81,7 @@ it("retains real unresolved cable mappings and describes both states in a mixed 
     format: "connector-assembly-view-request/0.1",
     assemblies: ["CAP-X2", "W1"],
   });
+  expect(mixed.note).toContain("2 authored assemblies.");
   expect(mixed.note).toContain(
     "1 unresolved pin mapping; 1 pin mapping not applicable",
   );

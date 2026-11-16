@@ -643,7 +643,7 @@ function assemblyDrawing(
     note: [
       projection
         ? `${links.length} of ${selection.links.length} authored cap assemblies in this part. Complete named connector reservations; pin mapping not applicable. Repeated device bodies show different ports. See other parts and assembly schedule.`
-        : `${links.length} authored assemblies. Lines connect named connectors, not electrical pins; ${assemblyMappingNote(links)}. See assembly schedule for specifications and mapping reasons.`,
+        : `${links.length} authored assembl${links.length === 1 ? "y" : "ies"}. Lines connect named connectors, not electrical pins; ${assemblyMappingNote(links)}. See assembly schedule for specifications and mapping reasons.`,
       ...(!projection || projection.authoredNotes ? (request.notes ?? []) : []),
     ].join("\n"),
   };
