@@ -41,7 +41,13 @@ export function assemblySelection(view, ir) {
       if (Object.keys(portsOf(ir, d.uid) ?? {}).length) included.add(d.uid);
   return { links, included };
 }
-export function omittedPortNeeds(g, selection, ir, catalog) {
+export function assemblyPortNeeds(
+  g,
+  selection,
+  ir,
+  catalog,
+  drawn = { ports: new Map(), links: new Map() },
+) {
   const result = [];
   const shown = new Set((g.devices ?? []).map((d) => d.deviceUid));
   for (const uid of selection.included) {
@@ -51,6 +57,19 @@ export function omittedPortNeeds(g, selection, ir, catalog) {
     );
     for (const key of Object.keys(portsOf(ir, uid) ?? {})) {
       if (actual.some((p) => p.key === key)) continue;
+      const targets = drawn.ports.get(portId(uid, key)) ?? [];
+      if (targets.length) {
+        result.push({
+          uid,
+          owner: device(ir, uid)?.designation,
+          key,
+          kind: "drawn-port",
+          identity: portId(uid, key),
+          targets,
+          omitted: false,
+        });
+        continue;
+      }
       const links = ir.relations.filter(
         (r) =>
           r.assembly &&
@@ -61,7 +80,11 @@ export function omittedPortNeeds(g, selection, ir, catalog) {
       for (const rowKey of keys)
         result.push({
           uid,
+          owner: device(ir, uid)?.designation,
           key,
+          kind: "status-row",
+          identity: rowKey,
+          omitted: true,
           row: catalog.find((r) => r.kind === "assemblies" && r.key === rowKey),
         });
     }

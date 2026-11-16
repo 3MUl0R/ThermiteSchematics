@@ -1,3 +1,4 @@
+import { readCheckpointReport } from "./report-file.mjs";
 // Reindex existing measured evidence with source locators. No rendering, altered
 // measurements or engine imports. Keep proposals under ignored evals/out/.
 import { readFile, writeFile } from "node:fs/promises";
@@ -15,7 +16,7 @@ assert(
   !relative(outRoot, output).startsWith(".."),
   "Proposals belong under evals/out",
 );
-const report = await readJson(join(directory, "summary.json")),
+const { value: report } = await readCheckpointReport(directory),
   specs = cases();
 for (const c of report.cases) {
   const rows = report.results.filter((r) => r.case === c);

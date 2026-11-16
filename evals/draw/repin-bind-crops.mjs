@@ -1,3 +1,4 @@
+import { readReportFile } from "./report-file.mjs";
 // Prepare pixel facts before an independent reviewer signs; never writes approvals.
 import assert from "node:assert/strict";
 import { parseArgs } from "node:util";
@@ -61,7 +62,7 @@ if (
 ) {
   assert(values.report, "Cropped bindings require --report <summary.json>");
   for (const path of [values.report, ...(values.baseline ?? [])]) {
-    const r = await strictJsonFile(resolve(path));
+    const r = await readReportFile(resolve(path));
     reports.set(r.sha256, r.value);
     roots.set(r.sha256, dirname(resolve(path)));
     contexts.set(r.sha256, {

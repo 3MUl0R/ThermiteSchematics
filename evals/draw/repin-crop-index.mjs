@@ -1,3 +1,4 @@
+import { readReportFile } from "./report-file.mjs";
 // Build evidence with report-owned instance geometry. No sign-off or cause is written.
 import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -28,7 +29,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url)),
   contexts = new Map(),
   roots = new Map();
 for (const path of [v.report, ...(v.baseline ?? [])]) {
-  const r = await strictJsonFile(resolve(path));
+  const r = await readReportFile(resolve(path));
   reports.set(r.sha256, r.value);
   roots.set(r.sha256, dirname(resolve(path)));
   contexts.set(r.sha256, {
@@ -37,7 +38,7 @@ for (const path of [v.report, ...(v.baseline ?? [])]) {
     sha256: r.sha256,
   });
 }
-const current = await strictJsonFile(resolve(v.report));
+const current = await readReportFile(resolve(v.report));
 if (v["source-root"]) roots.set(current.sha256, resolve(v["source-root"]));
 if (!v.decisions) {
   const rows = pipelineCrops(current.value, current.sha256);

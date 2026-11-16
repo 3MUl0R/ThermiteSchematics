@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // GPU-disabled comparison for gates only; does not replace either report's PNGs.
 import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, access } from "node:fs/promises";
@@ -49,7 +50,7 @@ export async function compareReports(basePath, headPath, output, N = 10) {
   checkSampleCount(N);
   const paths = [basePath, headPath].map((p) => resolve(p));
   const raw = await Promise.all(paths.map((p) => readFile(p))),
-    reports = raw.map((b) => JSON.parse(b));
+    reports = raw.map((b) => parseReportBytes(b));
   const regions = pairedRegions(...reports),
     results = [];
   // Never overwrite a previous gate receipt or write into an input capture.

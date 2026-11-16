@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Opt-in browser check: compare every distinct raster across fresh launches.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -37,7 +38,7 @@ assert(
   "Use at least 10 fresh launches",
 );
 const raw = await readFile(resolve(v.report)),
-  report = JSON.parse(raw),
+  report = parseReportBytes(raw),
   root = dirname(resolve(v.report)),
   selected = v.case ?? [
     "init-starter-left-to-right",

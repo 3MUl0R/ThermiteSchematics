@@ -2,7 +2,33 @@ import { criteria } from "./criteria.mjs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { escapeHtml as esc, json } from "./support.mjs";
-export async function gallery(dest, results, rows) {
+export function failureArticle(r, sheets = []) {
+  const f = r.evidence?.findings?.[0],
+    box = f?.bbox;
+  const source =
+    r.evidence?.svg ??
+    sheets.find((s) => s.case === r.case && s.number === r.sheet)?.svg;
+  const summary = r.evidence?.summary;
+  const bounds = box
+    ? `<p>Measured bbox (mm): ${esc(JSON.stringify(box))}</p>`
+    : "";
+  const scope = r.scope ? `<p class="scope">${esc(r.scope)}</p>` : "";
+  const classification = box
+    ? "Boxed finding"
+    : f?.sheetLevel
+      ? "Sheet-level finding"
+      : "Unboxed finding";
+  const image = r.evidence?.crop
+    ? `<a href="${esc(r.evidence.crop)}"><img loading="lazy" src="${esc(r.evidence.crop)}"></a>${r.evidence.referenceCrop ? `<p>SVG reference</p><img loading="lazy" src="${esc(r.evidence.referenceCrop)}">` : ""}`
+    : `<p>${classification}. ${source ? `<a href="${esc(source)}">SVG (no automatic crop: ${r.evidence?.svg ? "output budget" : "not available"})</a>` : "Inspect measured evidence; no crop is invented."}</p>${bounds}`;
+  return `<article id="${esc(r.id)}"><h3>${esc(r.id)} · ${esc(r.status)}</h3><p>${esc(r.reason ?? f?.kind ?? "Retire stale marker")}</p>${summary ? `<p>${esc(summary)}</p>` : ""}${scope}${image}</article>`;
+}
+export async function gallery(
+  dest,
+  results,
+  rows,
+  reportFile = "summary.json",
+) {
   const sheets = results.flatMap((r) =>
     (r.sheets ?? []).map((s) => ({ case: r.case, ...s })),
   );
@@ -50,6 +76,6 @@ export async function gallery(dest, results, rows) {
   );
   await writeFile(
     join(dest, "gallery.html"),
-    `<!doctype html><meta charset="utf-8"><title>D-draw gallery</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}img{max-width:100%;height:auto}a{color:#1656a3}.sheet{width:100%}@media print{article{break-after:page}}</style><h1>D-draw gallery</h1><p><a href="summary.md">Report</a> · <a href="summary.json">JSON</a> · <a href="reviewer-form.json">Blind reviewer JSON form</a>. Open the original SVG or PDF and print at 100% on matching paper. Gallery thumbnails are scaled.</p><h2>Failing observations and 300 dpi crops</h2>${failures.map((r) => `<article id="${esc(r.id)}"><h3>${esc(r.id)} · ${r.status}</h3><p>${esc(r.reason ?? r.evidence?.findings?.[0]?.kind ?? "Retire stale marker")}</p>${r.evidence?.crop ? `<a href="${esc(r.evidence.crop)}"><img loading="lazy" src="${esc(r.evidence.crop)}"></a>${r.evidence.referenceCrop ? `<p>SVG reference</p><img loading="lazy" src="${esc(r.evidence.referenceCrop)}">` : ""}` : "<p>Sheet-level, clipped or off-sheet finding: inspect the SVG and measured evidence; no crop is invented.</p>"}</article>`).join("")}<h2>Every sheet (${sheets.length})</h2>${sheets.map((s) => `<article><h3>${esc(s.case)} / ${s.number}</h3><p><a href="${esc(s.svg)}">SVG at print size</a> · <a href="${esc(s.pdf)}#page=${s.number}">Direct PDF</a> · <a href="${esc(s.html)}">CLI HTML${s.html.endsWith(".gz") ? " (gzip)" : ""}</a>${s.pdfPng ? ` · <a href="${esc(s.pdfPng)}">pdf.js raster</a>` : ""}${s.nativePng ? ` · <a href="${esc(s.nativePng)}">Apple PDFKit raster</a>` : ""}</p><img class="sheet" loading="lazy" src="${esc(s.png)}"></article>`).join("")}`,
+    `<!doctype html><meta charset="utf-8"><title>D-draw gallery</title><style>body{font:15px system-ui;margin:24px;background:#eee}article{background:white;padding:16px;margin:16px 0}img{max-width:100%;height:auto}a{color:#1656a3}.sheet{width:100%}@media print{article{break-after:page}}</style><h1>D-draw gallery</h1><p><a href="summary.md">Report</a> · <a href="${esc(reportFile)}">JSON</a> · <a href="reviewer-form.json">Blind reviewer JSON form</a>. Open the original SVG or PDF and print at 100% on matching paper. Gallery thumbnails are scaled.</p><h2>Failing observations and source evidence</h2>${failures.map((r) => failureArticle(r, sheets)).join("")}<h2>Every sheet (${sheets.length})</h2>${sheets.map((s) => `<article><h3>${esc(s.case)} / ${s.number}</h3><p><a href="${esc(s.svg)}">SVG at print size</a> · <a href="${esc(s.pdf)}#page=${s.number}">Direct PDF</a> · <a href="${esc(s.html)}">CLI HTML${s.html.endsWith(".gz") ? " (gzip)" : ""}</a>${s.pdfPng ? ` · <a href="${esc(s.pdfPng)}">pdf.js raster</a>` : ""}${s.nativePng ? ` · <a href="${esc(s.nativePng)}">Apple PDFKit raster</a>` : ""}</p><img class="sheet" loading="lazy" src="${esc(s.png)}"></article>`).join("")}`,
   );
 }

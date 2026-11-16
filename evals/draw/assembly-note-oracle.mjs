@@ -1,76 +1,56 @@
+import { assemblyAppearances } from "./assembly-appearances.mjs";
+import {
+  assemblyNotes,
+  portNoteNeeds,
+  assemblyDeliveryFindings,
+  reasonNeed,
+  needKey,
+} from "./assembly-note-delivery.mjs";
 import { measuredRows } from "./tranche4-data.mjs";
 import { nativePortInk } from "./native-port-ink.mjs";
 import {
   assemblySelection,
-  omittedPortNeeds,
+  assemblyPortNeeds,
   portsOf,
 } from "./assembly-note-source.mjs";
 import { nativeRows } from "./m3-native.mjs";
 import { issuedRows } from "./m3-documents.mjs";
-import { logicalPointerNotes, sufficient } from "./document-dependencies.mjs";
 import { finding, painted } from "./review-geometry.mjs";
 import { inView, viewBindings } from "./tranche4-views.mjs";
-const tokens = (text) =>
-  [...text.matchAll(/\b(?:S)?(\d{1,3})[.]([A-Z]+\d+)\b/gu)].map((m) => ({
-    sheet: Number(m[1]),
-    zone: m[2],
-  }));
-function deliveryFindings(note, needs, rows, sheet) {
-  const refs = tokens(note.text),
-    findings = [];
-  for (const need of needs) {
-    const candidates =
-      need && rows.filter((r) => r.visible && sufficient(r, need));
-    if (
-      !candidates?.some((r) =>
-        refs.some((p) => p.sheet === r.sheet && r.zones.includes(p.zone)),
-      )
-    )
-      findings.push({
-        ...finding("assembly-note-native-row-target-unavailable", note, {
-          nativeRow: need?.key ?? null,
-          printedTargets: refs,
-        }),
-        sheet,
-      });
-  }
-  return findings;
-}
-function notesForSheet(s, g, selection, ir, catalog, rows) {
-  const omitted = omittedPortNeeds(g, selection, ir, catalog),
+function notesForSheet(s, g, selection, ir, catalog, rows, drawn) {
+  const omitted = assemblyPortNeeds(g, selection, ir, catalog, drawn),
     findings = [];
   const own = (g.tranche4?.assemblies ?? [])
     .map((a) => selection.links.find((r) => r.uid === a.uid))
     .filter(Boolean);
-  const notes = logicalPointerNotes(g.texts ?? []).filter(
-    (t) =>
-      !t.row &&
-      painted(t) &&
-      !t.furniture &&
-      /(?:\bother ports\b|\bauthored (?:cap )?assembl(?:y|ies)\b|\bsee\b.*\b(?:assembly|schedule)\b|\bassembl(?:y|ies)\b.*\bS?\d+[.][A-Z]+\d+\b)/iu.test(
-        t.text,
-      ),
+  const notes = assemblyNotes(g, omitted),
+    used = new Set();
+  const ownNeeds = own.map((r) =>
+    reasonNeed(catalog.find((n) => n.kind === "assemblies" && n.key === r.uid)),
   );
-  const used = new Set();
+  const named = new Set(
+    notes.flatMap((n) => portNoteNeeds(n, omitted).map(needKey)),
+  );
   for (const note of notes) {
-    const portNote = /\bother ports\b/iu.test(note.text);
+    const portNeed = portNoteNeeds(note, omitted),
+      portNote =
+        /\bother ports\b/iu.test(note.text) ||
+        (!/\bother parts\b/iu.test(note.text) && portNeed.length > 0);
+    const fallback = /\bother parts\b/iu.test(note.text)
+      ? omitted.filter((n) => !named.has(needKey(n)) || portNeed.includes(n))
+      : [];
     const needs = portNote
-      ? omitted.filter((n) => n.uid === note.deviceUid).map((n) => n.row)
+      ? portNeed
       : [
           ...new Map(
-            [
-              ...own.map((r) =>
-                catalog.find((n) => n.kind === "assemblies" && n.key === r.uid),
-              ),
-              ...omitted.map((n) => n.row),
-            ].map((r) => [r?.key, r]),
+            [...ownNeeds, ...fallback].map((n) => [needKey(n), n]),
           ).values(),
         ];
     const count = note.text.match(/\b(\d+)\s+other ports\b/iu)?.[1];
     const nativeCount = new Set(
       omitted.filter((n) => n.uid === note.deviceUid).map((n) => n.key),
     ).size;
-    if (!needs.length)
+    if (!needs.length && portNote)
       findings.push({
         ...finding("assembly-note-without-native-need", note),
         sheet: s.number,
@@ -83,22 +63,20 @@ function notesForSheet(s, g, selection, ir, catalog, rows) {
         }),
         sheet: s.number,
       });
-    for (const need of needs) used.add(need?.key);
-    findings.push(...deliveryFindings(note, needs, rows, s.number));
+    for (const need of needs) used.add(needKey(need));
+    findings.push(...assemblyDeliveryFindings(note, needs, rows, s.number));
   }
-  const required = [
-    ...omitted.map((n) => n.row),
-    ...own.map((r) =>
-      catalog.find((n) => n.kind === "assemblies" && n.key === r.uid),
-    ),
-  ];
+  const required = [...omitted, ...ownNeeds];
   for (const need of required)
-    if (!need || !used.has(need.key))
+    if (!used.has(needKey(need)))
       findings.push({
         ...finding(
           "assembly-native-need-without-note",
           {},
-          { nativeRow: need?.key ?? null },
+          {
+            nativeRow: need.row?.key ?? null,
+            nativePort: need.kind === "drawn-port" ? need.identity : undefined,
+          },
         ),
         sheet: s.number,
       });
@@ -139,6 +117,33 @@ function nativeInkFindings(s, g, selection, ir, seen) {
   }
   return findings;
 }
+function conservedSelection(selection, issued, seen, sheet, view) {
+  const findings = [];
+  for (const uid of selection.included)
+    if (!issued.has(uid))
+      findings.push({
+        ...finding(
+          "assembly-selected-device-not-issued",
+          {},
+          { deviceUid: uid, view },
+        ),
+        sheet,
+      });
+  for (const r of selection.links)
+    if (seen.get(r.uid) !== 1)
+      findings.push({
+        ...finding(
+          "assembly-selected-link-not-once",
+          {},
+          {
+            relation: r.uid,
+            appearances: seen.get(r.uid) ?? 0,
+          },
+        ),
+        sheet,
+      });
+  return findings;
+}
 export function assemblyNoteAudit(packet, geometries, ir, request) {
   if (!measuredRows(geometries))
     return {
@@ -164,7 +169,8 @@ export function assemblyNoteAudit(packet, geometries, ir, request) {
         },
       ],
     };
-  const keys = viewBindings(request, ir);
+  const keys = viewBindings(request, ir),
+    drawn = assemblyAppearances(packet, geometries, ir);
   for (const [view, v] of request.views.entries()) {
     if (v.format !== "connector-assembly-view-request/0.1") continue;
     let selection;
@@ -181,28 +187,30 @@ export function assemblyNoteAudit(packet, geometries, ir, request) {
       });
       continue;
     }
-    const seen = new Map();
+    const seen = new Map(),
+      issued = new Set();
+    eligible++;
     for (const [i, s] of packet.sheets.entries()) {
       const g = geometries[i];
       if (s.view.kind !== "connector-assembly" || !inView(g, keys[view]))
         continue;
-      const a = notesForSheet(s, g, selection, ir, catalog, rows);
+      for (const d of g.devices ?? []) issued.add(d.deviceUid);
+      const a = notesForSheet(s, g, selection, ir, catalog, rows, drawn);
       eligible += a.eligible;
       findings.push(
         ...nativeInkFindings(s, g, selection, ir, seen),
         ...a.findings,
       );
     }
-    for (const r of selection.links)
-      if (seen.get(r.uid) !== 1)
-        findings.push({
-          ...finding(
-            "assembly-selected-link-not-once",
-            {},
-            { relation: r.uid, appearances: seen.get(r.uid) ?? 0 },
-          ),
-          sheet: packet.sheets[0]?.number,
-        });
+    findings.push(
+      ...conservedSelection(
+        selection,
+        issued,
+        seen,
+        packet.sheets[0]?.number,
+        view,
+      ),
+    );
   }
   return { findings, eligible };
 }

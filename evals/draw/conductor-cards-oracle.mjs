@@ -7,9 +7,11 @@ import {
 } from "./tranche4-source.mjs";
 import { finding, painted } from "./review-geometry.mjs";
 function cardMatch(pending, right, identity, end, ir) {
+  // nativeConductors4 guarantees exactly two ends; the opposite index preserves self-loops.
   const candidates = pending
     .map((w) => ({
       w,
+      // nativeConductors4 requires exactly two ends; the opposite index also preserves self-loops.
       peer: w.ends[
         1 - w.ends.findIndex((t) => terminalId(t) === terminalId(end))
       ],

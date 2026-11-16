@@ -9,6 +9,7 @@ function validIssuedNumbers(numbers) {
     numbers.every((n, i) => n === i + 1)
   );
 }
+// Caption equality is packet/print consistency, not an independent native-IR oracle.
 function finalCaption(view) {
   if (!view.root) return view.title;
   const subject = view.root.designation;
@@ -19,6 +20,12 @@ function finalCaption(view) {
         ? `trace to ${view.target?.designation}`
         : view.intent;
   return subject && detail ? `${subject} / ${detail}` : undefined;
+}
+function qualifiedCaption(sheet, captions) {
+  const title = finalCaption(sheet.view);
+  return title && captions.filter((c) => c === title).length > 1
+    ? `${title} (sheet ${String(sheet.number).padStart(2, "0")})`
+    : title;
 }
 export function finalIndexAudit(packet, geometries, request) {
   const indexes = packet.sheets.filter((s) => s.view?.kind === "index"),
@@ -46,6 +53,7 @@ export function finalIndexAudit(packet, geometries, request) {
   )
     fail("final-index-references-disabled-but-issued");
   const rows = issuedRows(packet, geometries).filter((r) => r.kind === "index");
+  const captions = packet.sheets.map((s) => finalCaption(s.view));
   for (const s of packet.sheets) {
     const own = rows.filter((r) => r.key === String(s.number));
     if (
@@ -59,7 +67,7 @@ export function finalIndexAudit(packet, geometries, request) {
       });
       continue;
     }
-    const caption = finalCaption(s.view);
+    const caption = qualifiedCaption(s, captions);
     if (!caption || compact(own[0].cells[1]) !== compact(caption))
       findings.push({
         ...finding("final-index-view-caption-disagrees", own[0].texts[0], {

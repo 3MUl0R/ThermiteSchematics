@@ -1,9 +1,10 @@
+import { readReportFile } from "./report-file.mjs";
 // Retire only strict xpasses from a reviewed complete report. Never bless fails.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hash, readJson } from "./support.mjs";
+import { hash } from "./support.mjs";
 import { expectations } from "./expectations.mjs";
 import { cases } from "./corpus.mjs";
 import { compressScopes, units, unitKey } from "./marker-scopes.mjs";
@@ -48,7 +49,7 @@ if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const report = await readJson(process.argv[2]);
+  const { value: report } = await readReportFile(process.argv[2]);
   assert(
     process.argv.includes("--retire-xpasses"),
     "Use --retire-xpasses (never regenerate unexpected defects)",

@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Full-corpus evidence: compare pipeline PNGs without re-capturing or replacing them.
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
@@ -23,7 +24,7 @@ if (!v.report || !v.output)
 const path = resolve(v.report),
   root = dirname(path),
   raw = await readFile(path),
-  report = JSON.parse(raw),
+  report = parseReportBytes(raw),
   rows = pipelineCrops(report, hash(raw));
 const browser = await launch(),
   results = [],

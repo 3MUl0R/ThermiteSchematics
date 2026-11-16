@@ -14,11 +14,68 @@ VITEST_MAX_WORKERS=2 bun run test -- evals/draw
 ```
 
 Checkpoints are write-once directories under gitignored `evals/out/draw/`.
-Open `summary.md`, `summary.json`, `gallery.html` and `reviewer-form.json`.
+Open `summary.md`, `summary.json.gz`, `gallery.html` and `reviewer-form.json`.
 The JSON sorts keys and observations, rounds coordinates to 0.001 mm, and
 contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
+
+Version **5.19** implements CHECK3 C4's reviewed N17 omission semantics and
+N14 direction refinement. Pre-merge review fixes retain 5.19: per-port pointer
+ownership, repeated-caption sheet qualifiers and strict single-member report gzip.
+These are observation changes, so 5.18 is retained as
+a historical complete-summary schema rather than silently reinterpreted.
+
+- **N17 / DQ-19:** omission is packet-wide, not local-sheet absence. A native
+  port drawn on another issued assembly part is a drawn-port destination, not
+  an omitted/unoccupied status row. An owned, precise `port → sheet.zone` pointer
+  to that measured destination satisfies the need; any spanned destination zone
+  is accepted. Ports drawn nowhere still require their native assembly/status
+  row. Multi-port and other-parts notes must pair each named port with its own
+  `subject → sheet.zone` segment, separated by semicolons. A port cannot borrow
+  another port's pointer. A single subject retains all its destinations, including
+  semicolon-separated lists. Bare port names require the owning device context;
+  unbound footer subjects use the native `device.port` or `device:port`. A row
+  destination may still serve several sufficient schedule rows. Generic prose
+  without a destination fails when a native need exists; generic notes with no
+  native need remain outside this bounded predicate. An unoccupied port never becomes an invented cable. A drawn link does not
+  itself supply its native mapping reason: notes requesting reasons still bind
+  to sufficient issued reason rows. Each selected link is conserved once per
+  authored view, and every selected device must appear, even for a selection
+  consisting entirely of unoccupied ports. Missing ink, grid or ownership fails.
+- **N14 / DQ-13:** findings retain the matched native device/terminal identity.
+  Incident directions within the existing 10-degree uncertainty are merged
+  without a fixed bucket boundary, including the 0/360-degree wrap. Each merged
+  group's angular span is at most 10 degrees, with the boundary inclusive.
+  Evidence labels are distinct, rounded circular means of the groups. Only native-attributed ink counts;
+  unattributed painted rays can make the recorded count smaller than the visible
+  ray count. This count is not a census of all paint; the separate N3 ownership
+  check remains responsible for identity disagreement.
+- **N8:** peer selection assumes exactly two native conductor ends. The source
+  reader rejects any other arity before the peer lookup; the opposite-end lookup
+  preserves the real peer terminal of self-loops.
+- **N15:** expected-caption comparison is packet/print consistency, not a native
+  IR oracle. The final issued caption population determines repetition: repeated
+  titles require `title (sheet NN)` with the row's own issued number padded to at least two digits;
+  unique titles require the bare title. Printed cells never determine whether a
+  qualifier is required. `references:false` remains fixture-only until a corpus request uses
+  it; current corpus requests all leave references enabled.
+
+**Representation and review:** the unchanged 100,000,000-byte default cap counts
+stored bytes. The default writer now retains the complete canonical report as
+`summary.json.gz` (deterministic gzip, level 6); `--artifacts` retains raw
+`summary.json`. Decompression reproduces the exact canonical JSON bytes, with
+all observations, findings and ordering intact. Report readers accept either
+container, enforce strict UTF-8/duplicate-key parsing after decoding, and reject
+corrupt gzip (decoded size limit 256 MiB). Multiple gzip members and all
+trailing bytes, including zero padding, are refused. All source/report hashes bind the
+**stored file bytes**; changing containers requires a new report binding and
+never rebinds historical signed inputs. Decision JSON remains strict raw JSON.
+Native SVG/IR/packet/HTML/PDF/query artifacts are not repacked by this change.
+The gallery distinguishes boxed, sheet-level and unboxed findings, links each
+failed C3 row's source SVG, prints its measured box, and restores its per-row
+SVG-only scope. N14/N17 summaries are human review aids; their findings and
+statuses are not rewritten by the representation change.
 
 Version **5.18** adds CHECK3 C3's independent tranche-2 predicates. Separate
 `check3c3-*` rows are appended after all earlier packet observations, preserving
@@ -56,7 +113,7 @@ controls remain separate, and do not constitute an independent C3 medium audit.
   shape classification is unchanged. White knockouts, hidden/erased approaches,
   foreign owners and coincident duplicate rays cannot authorize a dot. Numerical
   coincidence is 0.01 mm; the measured marker radius plus half stroke width
-  defines contact, and the existing 10-degree ray bins are retained.
+  defines contact; 5.19 merges directions within the existing 10-degree uncertainty.
 - **N15 / DQ-19 refinement:** the final issued sheet list, including every index
   and reference page, must occur exactly once as visible index rows with correct
   printed numbers/captions. Multiple index pages and duplicate view titles are
@@ -78,12 +135,18 @@ controls remain separate, and do not constitute an independent C3 medium audit.
 
 `tranche4-*.test.mjs` contains positive/adversarial controls and output mutations.
 Missing private measurement bundles are failures, never successful empty audits.
+Port ownership still uses native-valid UID/key identity from DOM nesting plus painted geometry;
+independent owner-body containment is deferred because port circles can straddle the body and no
+containment convention is approved. Raw and gzip forms of the same logical baseline retain distinct
+stored-byte identities; content-level duplicate detection is deferred to a future protocol change.
+Compare decoded report hashes for content equality across runtimes: zlib may change container bytes.
+
 New exposure remains unpinned for the later REP3 batch (`repinNow: false`).
 C3 rows retain every finding's measured box and native source reference. They use
 source-bound full SVG sheets instead of another automatic first-finding PNG crop
 per failed row. Positive ray traces are reproducible from those sources; failure
 rays remain in the findings. This avoids duplicating evidence beyond the unchanged
-100 MB default output cap. Earlier observation bytes and crops are untouched.
+100 MB default output cap. Earlier findings, statuses and crops are untouched by the representation changes.
 
 Version **5.17** adds the CHECK3 C1 independent review-2 predicates (N3–N6,
 N12). They consume native IR and measured painted geometry, not renderer success
@@ -675,7 +738,7 @@ The reference manifest covers only `git ls-files` drawing JSON inputs, excluding
 package/tsconfig JSON and ignored output. A checkpoint explicitly invokes
 `seal.mjs --output <checkpoint>/corpus-seal.json`; it never rewrites the reference.
 The content hash covers `{format, casesSha256, files}`. `base` records the commit
-beside that hash and is not part of it. `--compare <summary.json>` warns only when
+beside that hash and is not part of it. `--compare <summary.json.gz>` warns only when
 content/inventory differs; legacy reports are compared through their adjacent
 `corpus-seal.json`. Changed tracked files are listed, not a CI failure.
 Run `bun evals/draw/seal.mjs` to update the committed reference only after reviewing
@@ -1112,8 +1175,8 @@ score follows a red report.
 ```sh
 bun evals/draw/run.mjs --checkpoint C1-consolidated-before
 bun evals/draw/repin.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
-  --baseline evals/out/draw/C1-previous/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
+  --baseline evals/out/draw/C1-previous/summary.json.gz \
   --inventory evals/out/repin-inventory.json
 ```
 
@@ -1164,7 +1227,7 @@ Run the real-report acceptance and in-memory negative controls with:
 
 ```sh
 bun evals/draw/report-preparation.check.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
   --baseline evals/out/draw/C1-repin202/summary.json
 ```
 
@@ -1206,15 +1269,15 @@ It writes no causes or approvals. Paths below are repository-relative:
 ```sh
 mkdir -p evals/out/review
 bun evals/draw/repin-crop-index.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
-  --baseline evals/out/draw/C1-previous/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
+  --baseline evals/out/draw/C1-previous/summary.json.gz \
   --decisions evals/out/D1-decisions.json \
   --samples evals/out/draw-samples/review \
   --index evals/out/review/crop-index.json \
   --output evals/out/review/decisions.unsigned.json
 bun evals/draw/repin-bind-crops.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
-  --baseline evals/out/draw/C1-previous/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
+  --baseline evals/out/draw/C1-previous/summary.json.gz \
   --decisions evals/out/review/decisions.unsigned.json \
   --crop-index evals/out/review/crop-index.json \
   --output evals/out/review/decisions.bound-unsigned.json
@@ -1348,11 +1411,11 @@ unsupported Apple PDFKit raster backend. Distinct-ink controls, including both
 O/Q directions, must refuse; the former O/Q acceptance allowance is removed.
 
 ```sh
-bun evals/draw/pdf-evidence.check.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/pdf-evidence.check.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/pdf-evidence.json
-bun evals/draw/pdf-repeat-capture.check.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/pdf-repeat-capture.check.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/pdf-repeats.json
-bun evals/draw/pdf-swaps.check.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/pdf-swaps.check.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/pdf-swaps.json
 ```
 
@@ -1455,9 +1518,9 @@ of 90 wrong-character crops, then tries three independent references (270
 comparisons). Both are opt-in browser checks with JSON evidence, not approvals:
 
 ```sh
-bun evals/draw/bind-audit.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/bind-audit.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/fresh-bind-audit.json
-bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/frozen-swaps.json
 ```
 
@@ -1500,9 +1563,9 @@ any repeat pair exceeds a bind limit; `--require-identical` additionally require
 identical PNG bytes.
 
 ```sh
-bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/repeat-capture.json
-bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json \
+bun evals/draw/repeat-capture.mjs --report evals/out/draw/C1-current/summary.json.gz \
   --output evals/out/repeat-candidate.json --baseline \
   --browser-arg=--disable-gpu-rasterization --require-identical
 ```
@@ -1519,8 +1582,8 @@ context, device scale 300/96 and the fonts-ready barrier. SVG/HTML use the expli
 existing pdf.js 300 dpi renderer, recorded separately as `backend: "pdf.js"`.
 
 ```sh
-bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
-  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json.gz \
+  --head evals/out/draw/head/summary.json.gz --output evals/out/paired-raster.json
 ```
 
 The paired GPU-disabled run passes a region immediately when its PNG bytes are
@@ -1550,8 +1613,8 @@ The initial paired base remains the head-distance reference. Input evidence PNGs
 are never replaced.
 
 ```sh
-bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json \
-  --head evals/out/draw/head/summary.json --output evals/out/paired-raster.json \
+bun evals/draw/paired-raster.mjs --base evals/out/draw/base/summary.json.gz \
+  --head evals/out/draw/head/summary.json.gz --output evals/out/paired-raster.json \
   --samples 10
 ```
 
@@ -1660,14 +1723,14 @@ For a full audit of actual pipeline PNGs (without replacing them), and the brows
 protocol acceptance with an isolated synthetic registry:
 
 ```sh
-bun evals/draw/crop-audit.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+bun evals/draw/crop-audit.mjs --report evals/out/draw/C1-consolidated-before/summary.json.gz \
   --output evals/out/crop-audit.json --passes 2
-bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+bun evals/draw/crop-swaps.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json.gz \
   --output evals/out/crop-swaps.json
-bun evals/draw/repin-pipeline.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json \
+bun evals/draw/repin-pipeline.check.mjs --report evals/out/draw/C1-consolidated-before/summary.json.gz \
   --output evals/out/pipeline-acceptance.json
 bun evals/draw/repin-pipeline.check.mjs --capture \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
   --output evals/out/capture-acceptance.json
 bun evals/draw/browser-network.check.mjs
 bun evals/draw/mutate.mjs --output evals/out/crop-mutations.json
@@ -1790,14 +1853,14 @@ its exact count drift instead. Conflicting inherited definitions are refused.
 
 ```sh
 bun evals/draw/repin.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
-  --baseline evals/out/draw/C1-previous/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
+  --baseline evals/out/draw/C1-previous/summary.json.gz \
   --decisions evals/out/D1-decisions.json \
   --preview evals/out/consolidated-expectations.mjs
 # Review that exact file and the printed projected statuses, then repeat with:
 bun evals/draw/repin.mjs \
-  --report evals/out/draw/C1-consolidated-before/summary.json \
-  --baseline evals/out/draw/C1-previous/summary.json \
+  --report evals/out/draw/C1-consolidated-before/summary.json.gz \
+  --baseline evals/out/draw/C1-previous/summary.json.gz \
   --decisions evals/out/D1-decisions.json \
   --preview evals/out/consolidated-expectations.mjs --apply
 bun evals/draw/run.mjs --checkpoint C1-consolidated

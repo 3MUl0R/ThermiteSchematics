@@ -8,11 +8,20 @@ function auditRow(c, s, dq, key, mechanism, a, observation) {
   return observation(c, s, dq, a.findings, {
     id: `${c.id}/${dq}/check3c3-${key}-${s.number}`,
     mechanism,
+    scope: "SVG semantic check only; does not independently certify HTML/PDF.",
     ...(!a.findings.length && !a.eligible ? { status: "not-applicable" } : {}),
     evidence: {
       findingCount: a.findings.length,
       findings: a.findings,
       eligible: a.eligible,
+      ...(a.findings.length && ["N14", "N17"].includes(mechanism)
+        ? {
+            summary:
+              mechanism === "N14"
+                ? `Filled marker requires three native incident directions; ${a.findings.length} finding(s). Unattributed paint is excluded.`
+                : `Assembly notes have ${a.findings.length} unresolved native delivery finding(s): ${a.findings[0].designation}`,
+          }
+        : {}),
       ...(a.findings.length
         ? { svg: `${c.id}/sheet-${String(s.number).padStart(3, "0")}.svg` }
         : {}),
