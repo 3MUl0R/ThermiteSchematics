@@ -34,7 +34,6 @@
     "evals/draw/checks.test.mjs": 1072,
     "evals/draw/m3-delivery.test.mjs": 1387,
     "evals/draw/mutate.mjs": 1194,
-    "evals/draw/repin-core.mjs": 1198,
     "evals/draw/repin.test.mjs": 1551,
     "evals/draw/review1-predicates.test.mjs": 1102,
     "evals/engine/validation-gate-expectations.mjs": 867,
@@ -97,7 +96,6 @@
   "fingerprints": {
     "files": {},
     "functions": {
-      "evals/draw/repin-core.mjs#prepareRepin": "ced671393b947e6b949e55b7ff72bbda7d8d42582cf20aabf227da0e5656288c",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
       "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
@@ -173,10 +171,12 @@
     "evals/draw/repeat-navigation.mjs#repeatNavigation": 144,
     "evals/draw/repeat-navigation.test.mjs#fixture": 81,
     "evals/draw/repin-core.mjs#instanceInventory": 125,
+    "evals/draw/repin-core.mjs#prepareRepin": 118,
     "evals/draw/repin-core.mjs#reviewInventory": 71,
     "evals/draw/repin-core.mjs#validateReport": 99,
     "evals/draw/repin-draft.mjs#draftDecisions": 141,
     "evals/draw/repin-drawing-bindings.test.mjs#call callback~5": 172,
+    "evals/draw/repin-finish.mjs#finishRepin": 80,
     "evals/draw/repin-fixture.mjs#assemble": 128,
     "evals/draw/repin-fixture.mjs#make": 129,
     "evals/draw/repin-fixture.mjs#make/report": 85,
@@ -187,6 +187,9 @@
     "evals/draw/repin-record-fixture.mjs#recordFixture": 78,
     "evals/draw/repin-record-write.mjs#recordFor": 84,
     "evals/draw/repin-record.mjs#verifyRecord": 96,
+    "evals/draw/repin-rename.mjs#applyRename": 100,
+    "evals/draw/repin-resolve.mjs#reconcileBounds": 109,
+    "evals/draw/repin-retire.mjs#applyRetirement": 144,
     "evals/draw/repin-round2.test.mjs#d1Fixture": 156,
     "evals/draw/repin-round2.test.mjs#sharedFixture": 118,
     "evals/draw/repin-source-integration.test.mjs#it callback~3": 91,
@@ -686,7 +689,6 @@
   "grandfathered": {
     "files": {},
     "functions": {
-      "evals/draw/repin-core.mjs#prepareRepin": 742,
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
       "scripts/release-build.mjs#createImmutableCompilerHost": 337,
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
@@ -695,7 +697,6 @@
   "locations": {
     "files": {},
     "functions": {
-      "evals/draw/repin-core.mjs#prepareRepin": "evals/draw/repin-core.mjs#prepareRepin",
       "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
       "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
       "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
@@ -969,6 +970,38 @@
         "from": 70,
         "to": 94,
         "reason": "moved verbatim from evals/draw/mirror-returns.mjs by DRAW-SPLIT-2 extraction"
+      }
+    ],
+    "functions:evals/draw/repin-finish.mjs#finishRepin": [
+      {
+        "identity": "functions:evals/draw/repin-finish.mjs#finishRepin",
+        "from": 70,
+        "to": 80,
+        "reason": "moved verbatim from evals/draw/repin-core.mjs by DRAW-SPLIT-3 extraction"
+      }
+    ],
+    "functions:evals/draw/repin-rename.mjs#applyRename": [
+      {
+        "identity": "functions:evals/draw/repin-rename.mjs#applyRename",
+        "from": 70,
+        "to": 100,
+        "reason": "moved verbatim from evals/draw/repin-core.mjs by DRAW-SPLIT-3 extraction"
+      }
+    ],
+    "functions:evals/draw/repin-resolve.mjs#reconcileBounds": [
+      {
+        "identity": "functions:evals/draw/repin-resolve.mjs#reconcileBounds",
+        "from": 70,
+        "to": 109,
+        "reason": "moved verbatim from evals/draw/repin-core.mjs by DRAW-SPLIT-3 extraction"
+      }
+    ],
+    "functions:evals/draw/repin-retire.mjs#applyRetirement": [
+      {
+        "identity": "functions:evals/draw/repin-retire.mjs#applyRetirement",
+        "from": 70,
+        "to": 144,
+        "reason": "moved verbatim from evals/draw/repin-core.mjs by DRAW-SPLIT-3 extraction"
       }
     ],
     "functions:evals/draw/run-case.mjs#captureCase": [
