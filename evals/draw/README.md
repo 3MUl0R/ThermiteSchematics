@@ -78,6 +78,31 @@ the complete visible/issued/dependency sets and bindings still have to agree.
 Hiding the registry cannot hide visible inline rows. Same-sheet captions use
 that sheet's real number and measured row zone, for example `01.B5`.
 
+Pre-merge C5 review fixes retain **5.20**. A graphical sheet with an inline
+auto inventory keeps its authored navigation view when scoping every sheet in
+the packet. Only a standalone auto-document sheet without navigation views is
+excluded. Its legacy metadata fallback is retained; an authored inline sheet
+still receives the native producer-kind mismatch guard.
+
+Missing native assembly mapping disposition/reason produces an explicit source
+gap and cannot satisfy a row, even if fabricated `undefined` text is printed.
+Registry row diagnostics name failed conditions and expose expected/actual facts.
+When the same row also has wrong semantic columns, that evidence is folded into
+the row finding; a columns-only defect still has its own finding. Thus each
+unoccupied row's old facts/columns export is reported once. Those old 5.19 exports
+are **export migration**, not evidence that the truthful printed `Unoccupied` /
+`No assembly declared` cells became wrong.
+
+Two limits remain follow-ups. Without a valid dependency declaration, M3's
+fallback caption matcher can consume an N17 `other ports` footer; attribution
+needs a shared caption grammar before narrowing legacy recognition. Correct
+versioned declarations use an explicit primitive locator. Drawn-port pointers
+should use their plain sheet.zone destination rather than `assembly inventory`
+wording. Standalone auto-text sheets without authored navigation views still
+fall back to the exported sheet kind; replacing that fallback requires native
+companion-origin reconstruction and separate adversarial controls. Neither limit
+is treated as permission to accept missing native needs or invalid delivery.
+
 `c5-contract.test.mjs` uses real compiled topology-coverage/CAP-X2 source with an
 independent future-client declaration fixture. Correct declarations pass both
 oracles; missing needs, invented maps/cables, wrong real ports, hidden dependency

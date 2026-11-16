@@ -883,7 +883,7 @@ it("reconstructs each authored communication medium and source scope independent
     texts: [],
   }));
   gs.push({
-    navigationViews: ["auto-does-not-acquire-an-authored-index"],
+    navigationViews: [],
     texts: [{ documentOrigin: "auto" }],
   });
   const selected = nativeRequestForSheet(packet, gs, request, packet.sheets[1]);

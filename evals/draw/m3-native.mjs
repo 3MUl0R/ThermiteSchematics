@@ -8,6 +8,7 @@ export {
 } from "./m3-facts.mjs";
 import {
   assemblyFacts,
+  assemblyStatus,
   appendUnoccupiedConnectors,
 } from "./m3-connector-facts.mjs";
 import { addWiringNeeds } from "./m3-wiring-needs.mjs";
@@ -189,6 +190,9 @@ function appendRelationRows(ir, rows) {
     const c = r.connection ?? r.assembly;
     if (!c) continue;
     const network = !!r.connection;
+    const status = network
+      ? { requiredStatus: [c.status ?? nativeEmptyState("unspecified-status")] }
+      : assemblyStatus(c);
     rows.push({
       kind: network ? "network" : "assemblies",
       key: r.uid,
@@ -197,6 +201,7 @@ function appendRelationRows(ir, rows) {
         ? [port(r.fromDeviceUid, c.fromPort), port(r.toDeviceUid, c.toPort)]
         : assemblyFacts(r),
       ownerUid: r.fromDeviceUid,
+      ...(status.sourceGap ? { sourceGap: status.sourceGap } : {}),
       required: {
         0: [r.designation ?? r.uid],
         1: network
@@ -215,16 +220,7 @@ function appendRelationRows(ir, rows) {
           : [c.kind].filter(Boolean),
         2: [nativePortText(ir, r.fromDeviceUid, c.fromPort, network)],
         3: [nativePortText(ir, r.toDeviceUid, c.toPort, network)],
-        4: [
-          network
-            ? (c.status ?? nativeEmptyState("unspecified-status"))
-            : c.status === undefined
-              ? nativeEmptyState(
-                  "unspecified-status",
-                  `\nPin mapping: ${c.pinMapping?.status}\n${c.pinMapping?.reason}`,
-                )
-              : `${c.status}\nPin mapping: ${c.pinMapping?.status}\n${c.pinMapping?.reason}`,
-        ],
+        4: status.requiredStatus,
       },
       exactColumns: network ? [0, 1, 2, 3, 4] : [0, 2, 3, 4],
       ports: [
@@ -479,12 +475,11 @@ export function nativeRequestForSheet(packet, geometries, request, sheet) {
   const views = request?.views ?? (request ? [request] : []),
     ordered = [];
   const own = geometries[packet.sheets.indexOf(sheet)];
-  if (own?.texts?.some((t) => t.documentOrigin === "auto"))
-    return { ...request, m3AutomaticDocument: true };
+  if (automaticDocument(own)) return { ...request, m3AutomaticDocument: true };
   for (const [i, s] of packet.sheets.entries()) {
     if (
       ["index", "references"].includes(s.view.kind) ||
-      geometries[i]?.texts?.some((t) => t.documentOrigin === "auto")
+      automaticDocument(geometries[i])
     )
       continue;
     for (const key of geometries[i]?.navigationViews ?? [])
@@ -502,4 +497,11 @@ export function nativeRequestForSheet(packet, geometries, request, sheet) {
           ownerKeys: keys,
         },
       };
+}
+function automaticDocument(g) {
+  // Inline rows do not erase the graphical sheet's authored navigation view.
+  return (
+    !g?.navigationViews?.length &&
+    g?.texts?.some((t) => t.documentOrigin === "auto")
+  );
 }

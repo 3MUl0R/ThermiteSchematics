@@ -1,4 +1,20 @@
 // Connector ports are mechanical/native port states, never communication links.
+import { nativeEmptyState } from "./native-empty-state.mjs";
+export function assemblyStatus(c) {
+  if (!c.pinMapping?.status || !c.pinMapping?.reason)
+    return {
+      sourceGap: "Native assembly pin mapping disposition/reason unavailable",
+      requiredStatus: [],
+    };
+  const suffix = `\nPin mapping: ${c.pinMapping.status}\n${c.pinMapping.reason}`;
+  return {
+    requiredStatus: [
+      c.status === undefined
+        ? nativeEmptyState("unspecified-status", suffix)
+        : `${c.status}${suffix}`,
+    ],
+  };
+}
 export const connectorPortFact = (deviceUid, portKey) => ({
   kind: "connector-port-status",
   deviceUid,

@@ -149,7 +149,7 @@
     "evals/draw/m3-delivery.test.mjs#it callback~9": 92,
     "evals/draw/m3-documents.mjs#scopeTables": 72,
     "evals/draw/m3-fixture.mjs#fixture": 125,
-    "evals/draw/m3-registry.mjs#registryFindings": 165,
+    "evals/draw/m3-registry.mjs#registryFindings": 132,
     "evals/draw/marker-authoring.mjs#serializeRegistry": 88,
     "evals/draw/measurement/geometry.mjs#identity": 71,
     "evals/draw/measurement/geometry.mjs#shapeClips": 72,

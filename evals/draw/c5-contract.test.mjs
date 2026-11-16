@@ -1,4 +1,5 @@
 import { contractMutants } from "./c5-contract-mutants.mjs";
+import { twoViewInline } from "./c5-inline-fixture.mjs";
 import { geometry4, text } from "./tranche4-fixtures.mjs";
 import { beforeAll, expect, it } from "vitest";
 import { resolve } from "node:path";
@@ -13,9 +14,11 @@ import {
   nativeRows,
   factKey,
   semanticColumns,
+  nativeRequestForSheet,
 } from "./m3-native.mjs";
 import { m3Delivery } from "./m3-delivery.mjs";
 import { assemblyNoteAudit } from "./assembly-note-oracle.mjs";
+import { sufficient } from "./document-dependencies.mjs";
 let ir, table, relation, view;
 beforeAll(async () => {
   const c = await compileProject(resolve("examples/topology-coverage"));
@@ -254,4 +257,79 @@ it("C5 an inline native row cannot disappear by hiding the issued-document regis
   expect(errors(x).map((f) => f.kind)).toContain(
     "document-visible-row-without-issued-document",
   );
+});
+it("C5 two-view inline inventory preserves both native scopes and the other sheet's delivery", () => {
+  const x = twoViewInline(ir, view, relation, table);
+  for (const i of [0, 1]) {
+    const sheet = x.packet.sheets[i],
+      scoped = nativeRequestForSheet(x.packet, x.geometries, x.request, sheet),
+      result = m3Delivery(
+        sheet,
+        x.packet,
+        x.geometries[i],
+        x.geometries,
+        x.ir,
+        x.request,
+        { binding: x.binding, tables: x.tables },
+      );
+    expect(scoped.m3AuthoredViewIndex).toBe(i);
+    expect(scoped.m3ViewScopeGap).toBeUndefined();
+    expect([...result.findings, ...result.targetFindings]).toEqual([]);
+    expect(result.measurement.requiredFacts).toBeGreaterThan(0);
+  }
+});
+it("C5 a mislabelled inline graphical sheet cannot suppress its native producer", () => {
+  const x = twoViewInline(ir, view, relation, table);
+  x.packet.sheets[0].view.kind = "communication";
+  expect(errors(x).map((f) => f.kind)).toContain(
+    "document-source-view-kind-mismatch",
+  );
+});
+it("C5 an unexpected auto-document navigation key fails closed instead of shifting native scopes", () => {
+  const x = twoViewInline(ir, view, relation, table);
+  x.geometries[2].navigationViews = ["unbound-auto-view"];
+  const scoped = nativeRequestForSheet(
+    x.packet,
+    x.geometries,
+    x.request,
+    x.packet.sheets[1],
+  );
+  expect(scoped.m3AuthoredViewIndex).toBeUndefined();
+  expect(scoped.m3ViewScopeGap).toMatchObject({
+    expectedViews: 2,
+    issuedViews: 3,
+  });
+});
+it("C5 absent native pin mapping fails closed without requiring invented undefined text", () => {
+  const x = candidate();
+  delete x.ir.relations.find((r) => r.uid === relation.uid).assembly.pinMapping;
+  const row = nativeRows(x.ir).find((r) => r.key === relation.uid);
+  expect(row.sourceGap).toContain("Native assembly pin mapping");
+  expect(JSON.stringify(row.required)).not.toContain("undefined");
+  expect(sufficient({ kind: row.kind, key: row.key, cells: {} }, row)).toBe(
+    false,
+  );
+  expect(errors(x).map((f) => f.kind)).toContain(
+    "document-native-assembly-source-unavailable",
+  );
+});
+it("C5 one unoccupied export migration yields one diagnostic naming both mismatches", () => {
+  const x = candidate(),
+    entry = x.packet.navigation.documents[0].rows.find((r) =>
+      r.nativeKey.includes('"X3"'),
+    );
+  entry.facts = [];
+  entry.columns = ["identity", "endpoints", "status", "pin-map"];
+  const findings = errors(x).filter(
+    (f) => f.rowId === entry.id && f.kind.startsWith("document-registry-"),
+  );
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({
+    kind: "document-registry-row-mismatch",
+    reasons: ["native-facts-mismatch", "semantic-columns-mismatch"],
+    expectedFacts: [{ kind: "connector-port-status", portKey: "X3" }],
+    actualFacts: [],
+    expectedColumns: ["identity", "endpoints", "status"],
+    actualColumns: entry.columns,
+  });
 });
