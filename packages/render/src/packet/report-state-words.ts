@@ -10,7 +10,7 @@ interface MeasuredCells {
 }
 
 /** Reserve state words before distributing surplus, at the existing em only.
- * A candidate must preserve every row/header height, hence page capacity. */
+ * Preserve every cell's line capacity and row/header height. */
 export function preferWholeStateWords<T extends MeasuredCells>(
   table: DocumentationTable,
   width: number,
@@ -40,15 +40,16 @@ export function preferWholeStateWords<T extends MeasuredCells>(
     const candidate = measure({ ...allocation, widths, minimums });
     const fits = (cells: readonly string[], key?: string) => {
       const heading = key === undefined;
+      const before = standard.split(cells, heading ? "header" : "probe", key);
+      const after = candidate.split(cells, heading ? "header" : "probe", key);
+      if (
+        after.length !== before.length ||
+        after.some((lines, i) => lines.length > (before[i]?.length ?? 0))
+      )
+        return false;
       return (
-        candidate.geometry(
-          candidate.split(cells, heading ? "header" : "probe", key),
-          heading,
-        ).height <=
-        standard.geometry(
-          standard.split(cells, heading ? "header" : "probe", key),
-          heading,
-        ).height
+        candidate.geometry(after, heading).height <=
+        standard.geometry(before, heading).height
       );
     };
     return fits(table.columns) &&

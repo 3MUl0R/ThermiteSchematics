@@ -1,4 +1,4 @@
-import { measureText, wrapText } from "../text-metrics.js";
+import { measureText } from "../text-metrics.js";
 import { wrap } from "./svg.js";
 
 /** Notes and pagination use the same measured words at the printed 2.5 mm em.
@@ -11,7 +11,7 @@ export function reportNoteLayout(value: string, width: number) {
     )
   )
     return { lines: original, fallback: "indivisible word" };
-  const lines = wrapText(value, width, 2.5);
+  const lines = measuredNoteWords(value, width);
   return lines.length <= original.length
     ? { lines, fallback: undefined }
     : { lines: original, fallback: "native note capacity" };
@@ -19,3 +19,25 @@ export function reportNoteLayout(value: string, width: number) {
 
 export const reportNoteLines = (value: string, width: number) =>
   reportNoteLayout(value, width).lines;
+
+/** Keep original code points, whitespace and explicit paragraph separators. */
+function measuredNoteWords(value: string, width: number) {
+  const lines: string[] = [];
+  let line = "";
+  for (const token of value.match(
+    /\r\n|[\n\r\u2028\u2029]|[^\S\n\r\u2028\u2029]+|\S+/gu,
+  ) ?? []) {
+    if (/^[\n\r\u2028\u2029]/u.test(token)) {
+      lines.push(line + token);
+      line = "";
+    } else if (/^\s+$/u.test(token)) line += token;
+    else {
+      if (line && measureText(line + token, 2.5).width > width) {
+        lines.push(line);
+        line = "";
+      }
+      line += token;
+    }
+  }
+  return [...lines, line];
+}
