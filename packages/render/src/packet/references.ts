@@ -61,7 +61,11 @@ function referenceRepresentation(
           const fn = ir.functions.find(
             (f) => f.id.deviceUid === r.deviceUid && f.id.functionKey === key,
           );
-          return fn ? printedFunction(fn) : "Function facts not specified";
+          const device = ir.devices.find((d) => d.uid === r.deviceUid);
+          const type = ir.deviceTypes.find((t) => t.id === device?.typeId);
+          return fn
+            ? printedFunction(fn, type)
+            : "Function facts not specified";
         })
         .join(", ") || "Terminal / schedule";
 }

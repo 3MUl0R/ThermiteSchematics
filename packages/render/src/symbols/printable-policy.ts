@@ -35,14 +35,19 @@ const GLYPH_WORDS: GlyphWords = Object.freeze({
 });
 // Legacy electrical models use contact/2 for protection poles. Their printable
 // marks represent protection elements, not NO/NC contact state.
-const PROTECTION_MARKS = new Set<PrintableMark>([
-  "ais:breaker-pole",
-  "ais:overload-pole",
-  "ais:fuse",
-  "circuit:breaker",
-  "circuit:overload",
-  "circuit:fuse",
-]);
+export function printedProtectionRole(mark: PrintableMark): string | undefined {
+  switch (mark) {
+    case "ais:breaker-pole":
+    case "circuit:breaker":
+      return "Breaker pole";
+    case "ais:overload-pole":
+    case "circuit:overload":
+      return "Overload element";
+    case "ais:fuse":
+    case "circuit:fuse":
+      return "Fuse element";
+  }
+}
 
 /** Physical ink dimensions; rooted drawing units are converted at composition time. */
 export const PRINTABLE_SYMBOL_POLICY = Object.freeze({
@@ -164,7 +169,7 @@ export function printableCaption(
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
     }
     case "function": {
-      if (PROTECTION_MARKS.has(caption.mark)) return "";
+      if (printedProtectionRole(caption.mark) !== undefined) return "";
       if (caption.mark === "ais:motor") return "";
       const word = functionWord(caption.fn, caption.type);
       return word && !glyphWords[caption.mark]?.includes(word) ? word : "";
