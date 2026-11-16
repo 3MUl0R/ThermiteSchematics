@@ -11,9 +11,11 @@ import * as group9 from "./measurement/reports.mjs";
 import * as group10 from "./measurement/outline.mjs";
 import * as preparation from "./measurement/prepare.mjs";
 import * as tranche3 from "./measurement/tranche3.mjs";
+import * as tranche4 from "./measurement/tranche4.mjs";
 export const measurementHelpers = Object.freeze({
   ...preparation,
   ...tranche3,
+  ...tranche4,
   ...group0,
   ...group1,
   ...group2,

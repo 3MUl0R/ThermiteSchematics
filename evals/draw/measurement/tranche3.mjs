@@ -7,6 +7,7 @@ export function trancheSheetFields(c) {
     ...h.sheetFields3(c),
     ...h.sheetFields4(c),
     ...h.trancheGeometry(c),
+    ...h.tranche4Fields(c),
   };
 }
 export function trancheGeometry(c) {

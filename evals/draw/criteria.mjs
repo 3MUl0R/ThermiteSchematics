@@ -10,7 +10,7 @@ export const criteria = {
   "DQ-07":
     "Full-repeat navigation, coil mirrors and contact-to-coil sheet.zone match IR",
   "DQ-08":
-    "Reciprocal ordered off-page sheet.zone, intact conductor identities and 2.5 mm block gaps",
+    "Reciprocal ordered off-page sheet.zone, source-backed conductor aliases and 2.5 mm block gaps; native circuit-terminal/network-port part references resolve reciprocally to measured destination zones",
   "DQ-09": "Four-side zones and all references resolve",
   "DQ-10":
     "Monotone L1-L2-L3(-PE), U-V-W and upright text and graphical AC/DC qualifiers",
@@ -19,7 +19,7 @@ export const criteria = {
   "DQ-12":
     "Median visible drawing-area utilisation >=40%; no avoidable extra sheet",
   "DQ-13":
-    "Conductor >= outline/incident attachment stroke; filled dots only at >=3-way junctions",
+    "Conductor >= outline/incident attachment stroke; filled dots only at >=3-way native junctions, measured by distinct painted incident rays including circuit and wiring attachments",
   "DQ-14":
     "Double landings appear as two native conductors without shared approach ink or free-air junction dots unsupported by native nodes",
   "DQ-15": "No jog <3 mm or unreasoned detour >2x Manhattan +20 mm",
@@ -28,10 +28,11 @@ export const criteria = {
   "DQ-17": "No duplicate/overlapping terminal text",
   "DQ-18": "Title-block fields and revision table present",
   "DQ-19":
-    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope",
+    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope; final index includes its own and reference pages; assembly notes deliver native reason/omitted-port needs to sufficient issued rows and measured zones",
   "DQ-20": "One font family and one symbol catalog per packet",
   "DQ-21": "PDF and SVG font metrics identical",
   "DQ-22": "Two blind independent drafter reviews, material/minor red-lines",
   "DQ-23": "Graphical terminal-strip diagram available",
-  "DQ-24": "Configured wire numbers unique and consistently placed",
+  "DQ-24":
+    "Configured wire numbers unique and consistently placed; printed stroke/inventory conductor aliases agree with native identity (not a configured-numbering-policy claim)",
 };

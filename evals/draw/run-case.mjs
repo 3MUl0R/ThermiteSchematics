@@ -1,3 +1,4 @@
+import { tranche4Observations } from "./tranche4-observations.mjs";
 import { captureSheets } from "./run-sheet.mjs";
 import { inventoryMediaObservations } from "./inventory-scope-media.mjs";
 import assert from "node:assert/strict";
@@ -76,7 +77,7 @@ async function captureCase(c, directory, env) {
       geometries,
     );
     tables = scopeTables(packet, geometries, ir, tables, request);
-    tables.binding = binding;
+    Object.assign(tables, { binding, request });
     await captureSheets(
       packet,
       {
@@ -312,6 +313,14 @@ async function capturePacketRows(
   const packetRows = [
     ...evaluatePacket(c, packet, geometries, tables),
     ...inventoryMediaObservations(c, packet, geometries, ir, observation),
+    ...tranche4Observations(
+      c,
+      packet,
+      geometries,
+      ir,
+      tables.request,
+      observation,
+    ),
   ];
   for (const row of packetRows) {
     const sheet = packet.sheets.find((s) => s.number === row.sheet);
