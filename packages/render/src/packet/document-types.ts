@@ -38,6 +38,19 @@ export interface DocumentDependency extends DocumentNeedSeed {
     rectMm: Rect;
     form?: "identities" | "compact";
     groups?: readonly DocumentCaptionGroup[];
+    locality?: {
+      deviceUid: string;
+      terminalKey?: string;
+      anchorMm: { x: number; y: number };
+      ownerLocation: { sheet: number; zone: string };
+      mode: "local" | "self-located";
+      distanceMm: number;
+      leader?: {
+        from: { x: number; y: number };
+        to: { x: number; y: number };
+        rect: Rect;
+      };
+    };
   };
 }
 export interface DocumentCaptionGroup {

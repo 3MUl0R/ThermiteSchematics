@@ -178,6 +178,14 @@ as `wire inventory` and `terminal inventory` are defined at document headers.
 Standalone captions have no resolution and explicitly state that no companion is
 included. Generic partial-view warnings create no dependency.
 
+Companion captions try clear local slots around their source terminal or device
+frame before using a remote slot. When that owner is unambiguous, optional
+`caption.locality` exports its source UID/key, physical anchor, sheet/zone,
+placement mode and distance. A remote caption retains its native subject; a
+straight nonconductive drafting leader is added only when its complete approach
+is clear. Its endpoints and reserved region are exported as `locality.leader`.
+This finalization never moves electrical routes, shrinks text or adds pages.
+
 `autoDocuments[]` separately exports `{documentId, dependencyIds, sheets}`.
 `documents[].autoOrigin.dependencyIds` identifies the missing source needs that
 caused generation. Every appended native row must trace to at least one of those
