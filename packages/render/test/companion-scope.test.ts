@@ -136,6 +136,9 @@ it("identifies a complete unfiltered network companion as all native rows", asyn
   expect(native.rows).toHaveLength(3);
   expect(table.rows).toEqual(native.rows);
   expect(table.notes.join(" ")).toContain("all 3 network rows");
+  expect(table.notes.at(-1)).toBe(
+    "Supplementary scope: all 3 network rows for source-detail notes; not a safety assessment.",
+  );
   expect(table.notes.join(" ")).not.toMatch(/not a complete|partial/);
 });
 it("does not assert absent terminal details or a globally incomplete inventory", () => {
@@ -178,4 +181,33 @@ it("removes internal filter notes by identity even when native notes follow them
     /Filtered report:|Device-owned rows follow/,
   );
   expect(notes.join(" ")).not.toContain("not a complete inventory");
+});
+
+it("does not call all filtered operator-console terminal rows a complete native inventory", async () => {
+  const compiled = await compileProject("examples/operator-console");
+  if (!compiled.ok) throw new Error("fixture compilation failed");
+  const native = buildDocumentation(compiled.ir, {
+    format: "documentation-view-request/0.1",
+    kind: "terminals",
+  });
+  const filtered = buildDocumentation(compiled.ir, {
+    format: "documentation-view-request/0.1",
+    kind: "terminals",
+    filter: { devices: ["HMI1", "K-B", "K-G", "K-R", "K-Y", "KP8", "SL1"] },
+  });
+  const table = factTable(
+    compiled.ir,
+    "terminals",
+    filtered.rows.flatMap(
+      (row) => rowFacts(compiled.ir, filtered, row.key).facts,
+    ),
+  );
+  expect(native.rows).toHaveLength(24);
+  expect(filtered.rows).toHaveLength(46);
+  expect(filtered.selection?.retainedRows).toBe(46);
+  expect(table.rows).toEqual(filtered.rows);
+  expect(table.notes.join(" ")).toContain(
+    "46 terminal rows for source-detail notes",
+  );
+  expect(table.notes.join(" ")).not.toMatch(/all \d+ terminal/);
 });

@@ -195,7 +195,7 @@ export function companionNotes(
   return [
     ...notes,
     complete
-      ? `Supplementary scope: ${scope}; supplementary for source-detail notes; not a safety assessment.`
+      ? `Supplementary scope: ${scope} for source-detail notes; not a safety assessment.`
       : `Supplementary scope: ${scope} for source-detail notes; not ${table.kind === "terminals" ? "a safety assessment" : "a complete inventory or safety assessment"}.`,
   ];
 }
