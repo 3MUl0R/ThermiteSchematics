@@ -42,6 +42,54 @@ agreement can be put in place. Start with an
 [issue requesting contributor contact](https://github.com/BlackettApplied/ThermiteSchematics/issues/new)
 to arrange that conversation; do not include confidential agreement details.
 
+## Browser for tests
+
+After installing dependencies, install the lockfile-pinned Chromium exactly as
+CI does: `bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium`.
+On Linux, `--with-deps` needs sudo or root privileges to install system libraries;
+omit it if those libraries are already installed.
+Print its executable with
+`bun -e "import { chromium } from 'playwright-core'; console.log(chromium.executablePath())"`
+and set both browser overrides to that path. Without `THERMITE_TEST_BROWSER`,
+system Chrome/Chromium is chosen before the pinned cached build. CI exports
+both overrides from `chromium.executablePath()`.
+
+- `THERMITE_TEST_BROWSER` selects the PDF/browser test harness executable.
+  A defined override, even an invalid or empty one, disables the helper's
+  discovery fallback. Without
+  it, discovery tries macOS Google Chrome, `/usr/bin/chromium`,
+  `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`, then Chrome under
+  `%PROGRAMFILES%`. It next searches `~/Library/Caches/ms-playwright`,
+  `~/.cache/ms-playwright`, then `%LOCALAPPDATA%/ms-playwright`.
+- `THERMITE_DRAW_CHROMIUM` selects the draw checker executable. A nonempty
+  inaccessible override fails without fallback. Otherwise discovery searches
+  `~/Library/Caches/ms-playwright` on macOS or `~/.cache/ms-playwright` on
+  other OSes; it does not search system Chrome or `%LOCALAPPDATA%`.
+
+Both cache searches try `chromium-*` directories in reverse lexical order;
+[platform checks](docs/platforms.md#browser-for-tests) lists their executable
+suffix orders. Neither helper reads `PLAYWRIGHT_BROWSERS_PATH` directly.
+Only guarded optional browser crops skip locally without a browser. Some browser
+suites call the PDF harness without a skip guard and fail rather than skip if
+no browser is available. When no path was found, Playwright tries its own registry.
+Draw suites also fail when Chromium is missing. The full check needs a browser
+for both harnesses even without `THERMITE_REQUIRE_BROWSER=1`; that flag makes
+the PDF harness fail at discovery. CI sets it and selects pinned Chromium in
+both jobs on every OS.
+
+With pinned Chromium, default Canvas ascent and left glyph bounds are whole-unit
+rounded on Linux and Windows; right bounds and text-box widths are not uniformly
+integer-rounded. macOS defaults are precise. Captured differences reach about
+0.5 mm vertically, 1.2 mm at the Windows right edge and 1.5 mm in Windows
+glyph-box width; these are observations, not universal bounds. Calibration tests opt into precise bounds;
+see the [platform evidence and measurement code](docs/platforms.md#browser-for-tests).
+
+Use `bun scripts/test.mjs <files>` for targeted tests after rebuilding. On macOS,
+`bunx vitest` is unsupported: it bypasses temporary-directory canonicalization.
+`TMPDIR` commonly lies under `/var`, a symlink to `/private/var`, and the source
+loader rejects symlink paths. The wrapper resolves `TMPDIR`, `TMP` and `TEMP`
+before creating fixtures. Use at most two workers on shared machines.
+
 ## From local fix to pull request
 
 1. Fork [BlackettApplied/ThermiteSchematics](https://github.com/BlackettApplied/ThermiteSchematics)
@@ -199,7 +247,8 @@ updating it. Illustrative entries require `--reason`; platform entries also need
 `--setup`. Inspect the inventory diff. `bun scripts/docs-examples.mjs --measure`
 prints counts by file and language. No bulk updater silently approves examples.
 Child commands close unused stdin and have deadlines (30 seconds for recipe
-commands, 120 seconds for bound tests). Teardown kills and awaits owned children
+commands, 120 seconds for bound tests; `docs/machine-demo.md` repo-shell
+commands also allow 120 seconds). Teardown kills and awaits owned children
 before removing their temporary files; bound-test scratch files also live under
 the owned temporary directory.
 

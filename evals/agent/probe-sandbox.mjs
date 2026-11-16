@@ -70,35 +70,51 @@ try {
     "validate",
     ".",
   ];
-  const run = (entry, custom = env) =>
-    spawnSync("codex", command(entry), {
+  const run = (entry, custom = env) => {
+    const started = performance.now();
+    const result = spawnSync("codex", command(entry), {
       cwd: project,
       env: custom,
       encoding: "utf8",
       timeout: 30000,
     });
+    return { ...result, elapsedMs: performance.now() - started };
+  };
   const direct = run(join(runtime, "thermite.real.mjs")),
     inside = run(join(runtime, "thermite.mjs"));
   const outsidePath =
     process.platform === "darwin"
       ? `/System/thermite-audit-${process.pid}`
       : `/proc/thermite-audit-${process.pid}`;
+  const outsideMarker = join(work, "outside-errors.jsonl");
   const outside = run(join(runtime, "thermite.mjs"), {
     ...env,
     THERMITE_EVAL_LOG: outsidePath,
+    THERMITE_EVAL_ERRORS: outsideMarker,
+  });
+  // A directory as the append target fails after an adjacent writable lock
+  // has been acquired, preserving the direct CLI's streams and exit status.
+  const appendPath = join(work, "blocked-append"),
+    appendMarker = join(work, "append-errors.jsonl");
+  mkdirSync(appendPath);
+  const append = run(join(runtime, "thermite.mjs"), {
+    ...env,
+    THERMITE_EVAL_LOG: appendPath,
+    THERMITE_EVAL_ERRORS: appendMarker,
   });
   const summary = (r) => ({
     exit: r.status,
     stdoutSha256: sha256(r.stdout ?? ""),
     stderrSha256: sha256(r.stderr ?? ""),
     error: r.error?.code ?? null,
+    elapsedMs: r.elapsedMs,
   });
-  const errors = existsSync(env.THERMITE_EVAL_ERRORS)
-    ? readFileSync(env.THERMITE_EVAL_ERRORS, "utf8")
-        .split("\n")
-        .filter(Boolean)
-        .map(JSON.parse)
-    : [];
+  const markers = (path) =>
+    existsSync(path)
+      ? readFileSync(path, "utf8").split("\n").filter(Boolean).map(JSON.parse)
+      : [];
+  const errors = markers(outsideMarker),
+    appendErrors = markers(appendMarker);
   const same = (r) =>
     r.status === direct.status &&
     r.stdout === direct.stdout &&
@@ -109,15 +125,25 @@ try {
     direct: summary(direct),
     inside: summary(inside),
     outside: summary(outside),
+    append: summary(append),
     insideLogWritten: existsSync(env.THERMITE_EVAL_LOG),
     loggingErrors: errors,
+    appendLoggingErrors: appendErrors,
     environmentLeaksCheckout: roots.some((root) =>
       Object.entries(env)
         .filter(([key]) => !/KEY|TOKEN/.test(key))
         .some(([, v]) => v.includes(root)),
     ),
     pass:
-      direct.status === 0 && same(inside) && same(outside) && errors.length > 0,
+      direct.status === 0 &&
+      same(inside) &&
+      outside.status === 2 &&
+      outside.stdout === "" &&
+      !outside.error &&
+      outside.elapsedMs < 10000 &&
+      errors.some((error) => error.stage === "lock") &&
+      same(append) &&
+      appendErrors.some((error) => error.stage === "logging"),
   };
   write(resolve(values.output), result);
   console.log(JSON.stringify(result, null, 2));

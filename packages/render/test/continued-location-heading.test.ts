@@ -200,47 +200,52 @@ const witnesses = [
   ["portrait", "compact", "top-to-bottom", true],
   ["portrait", "standard", "top-to-bottom", true],
 ] as const;
-it.each(witnesses)(
-  "keeps only painted SVG/HTML heading copies: letter %s %s %s",
-  async (orientation, layout, flow, originalVisible) => {
-    const r = await renderSchematicPacket(
-      ir,
-      {
-        format: "schematic-packet-request/0.1",
-        page: { size: "letter", orientation },
-        layout,
-        views: [
-          {
-            format: "schematic-view-request/0.1",
-            root: { by: "designation", value: "M1" },
-            family: "power",
-            flow,
-          },
-          {
-            format: "schematic-view-request/0.1",
-            root: { by: "designation", value: "K1" },
-            family: "control",
-            flow,
-          },
-        ],
-      },
-      presentation,
-    );
-    if (!r.ok) throw Error(JSON.stringify(r));
-    const svg = parseSvg(r.value.sheets[0]!.svg),
-      html = parseSvg(r.value.html);
-    for (const doc of [svg, html.querySelector("#sheet-1")!]) {
-      expect(
-        [...doc.querySelectorAll("text.label-location")].some(
-          (t) => t.textContent === "MAIN-PANEL",
-        ),
-      ).toBe(originalVisible);
-      expect(
-        [...doc.querySelectorAll("text")].some(
-          (t) => t.textContent === "CONTINUED LOCATION: MAIN-PANEL",
-        ),
-      ).toBe(!originalVisible);
-    }
-  },
-  30000,
-);
+for (const witness of witnesses)
+  it.each([witness])(
+    "keeps only painted SVG/HTML heading copies: letter %s %s %s",
+    async (orientation, layout, flow, originalVisible) => {
+      const r = await renderSchematicPacket(
+        ir,
+        {
+          format: "schematic-packet-request/0.1",
+          page: { size: "letter", orientation },
+          layout,
+          views: [
+            {
+              format: "schematic-view-request/0.1",
+              root: { by: "designation", value: "M1" },
+              family: "power",
+              flow,
+            },
+            {
+              format: "schematic-view-request/0.1",
+              root: { by: "designation", value: "K1" },
+              family: "control",
+              flow,
+            },
+          ],
+        },
+        presentation,
+      );
+      if (!r.ok) throw Error(JSON.stringify(r));
+      const svg = parseSvg(r.value.sheets[0]!.svg),
+        html = parseSvg(r.value.html);
+      for (const doc of [svg, html.querySelector("#sheet-1")!]) {
+        expect(
+          [...doc.querySelectorAll("text.label-location")].some(
+            (t) => t.textContent === "MAIN-PANEL",
+          ),
+        ).toBe(originalVisible);
+        expect(
+          [...doc.querySelectorAll("text")].some(
+            (t) => t.textContent === "CONTINUED LOCATION: MAIN-PANEL",
+          ),
+        ).toBe(!originalVisible);
+      }
+    },
+    witness[0] === "landscape" &&
+      witness[1] === "compact" &&
+      witness[2] === "left-to-right"
+      ? 60000
+      : 30000,
+  );

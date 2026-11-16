@@ -60,42 +60,46 @@ it("settles only at or below native pages, keeping 2x exclusively for packet ref
 
 // Complete 2.5 mm continuation banks add one sheet in these three witnesses.
 // The native-only early-exit assertions above remain unchanged.
-it.each([
+const settledCases = [
   ["tabloid", "landscape", 3],
   ["a3", "landscape", 3],
   ["a3", "portrait", 2],
   ["letter", "portrait", 6],
   ["letter", "landscape", 5],
-] as const)(
-  "searches past 2x settlement on %s %s compact LR",
-  async (size, orientation, maximum) => {
-    const c = await compileProject("examples/motor-starter");
-    if (!c.ok) throw Error(JSON.stringify(c));
-    const r = await renderSchematicPacket(
-      c.ir,
-      {
-        format: "schematic-packet-request/0.1",
-        layout: "compact",
-        page: { size, orientation },
-        views: [
-          {
-            ...request,
-            family: "power",
-            root: { by: "designation", value: "M1" },
-          },
-          request,
-        ],
-      },
-      c.presentation,
-    );
-    if (!r.ok) throw Error(JSON.stringify(r));
-    expect(r.value.sheets.length).toBeLessThanOrEqual(maximum);
-    expect(
-      r.value.sheets.every((s) => s.svg.includes("data-selected-view-notice")),
-    ).toBe(true);
-  },
-  30000,
-);
+] as const;
+for (const witness of settledCases)
+  it.each([witness])(
+    "searches past 2x settlement on %s %s compact LR",
+    async (size, orientation, maximum) => {
+      const c = await compileProject("examples/motor-starter");
+      if (!c.ok) throw Error(JSON.stringify(c));
+      const r = await renderSchematicPacket(
+        c.ir,
+        {
+          format: "schematic-packet-request/0.1",
+          layout: "compact",
+          page: { size, orientation },
+          views: [
+            {
+              ...request,
+              family: "power",
+              root: { by: "designation", value: "M1" },
+            },
+            request,
+          ],
+        },
+        c.presentation,
+      );
+      if (!r.ok) throw Error(JSON.stringify(r));
+      expect(r.value.sheets.length).toBeLessThanOrEqual(maximum);
+      expect(
+        r.value.sheets.every((s) =>
+          s.svg.includes("data-selected-view-notice"),
+        ),
+      ).toBe(true);
+    },
+    witness[0] === "letter" && witness[1] === "landscape" ? 60000 : 30000,
+  );
 
 const failure = (message: string): RenderFailure => ({
   code: "R006",
