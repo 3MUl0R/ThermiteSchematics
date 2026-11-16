@@ -99,13 +99,27 @@ it.each([
         const expected = model.rows.find(
           (r: { key: string }) => r.key === row.getAttribute("data-report-row"),
         )!;
+        // 5.17's identifier adapter predates final index closure. Check new
+        // administrative rows independently against the actual issued sheets.
+        const target = packet.sheets.find(
+          (s) => String(s.number) === row.getAttribute("data-report-row"),
+        );
+        if (!expected) {
+          expect(sheet.view.kind).toBe("index");
+          expect(["index", "references"]).toContain(target?.view.kind);
+        }
         for (const column of [0, 2]) {
           const actual = row
             .querySelector(`[data-report-column="${column + 1}"]`)!
             .textContent!.replace(/\s+/gu, " ")
             .trim();
           expect(actual).toBe(
-            expected.cells[column].replace(/\s+/gu, " ").trim(),
+            (
+              expected?.cells[column] ??
+              (column === 0 ? String(target?.number) : "")
+            )
+              .replace(/\s+/gu, " ")
+              .trim(),
           );
         }
       }
