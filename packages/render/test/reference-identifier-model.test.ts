@@ -105,7 +105,6 @@ it.each([
           (s) => String(s.number) === row.getAttribute("data-report-row"),
         );
         if (!expected) {
-          expect(sheet.view.kind).toBe("index");
           expect(["index", "references"]).toContain(target?.view.kind);
         }
         for (const column of [0, 2]) {

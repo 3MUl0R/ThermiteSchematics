@@ -8,6 +8,7 @@ import { required } from "./off-view-fixtures.js";
 import { parseHTML } from "linkedom";
 import {
   renderSchematicPacket,
+  sheetLabel,
   type SchematicPacketRequest,
 } from "../src/sheets.js";
 let ir: ElectricalIr;
@@ -48,7 +49,61 @@ it("disambiguates repeated titles with sheet destinations, not title identities"
   expect(new Set(names).size).toBe(2);
   expect(names[0]).toContain("sheet 01");
   expect(names[1]).toContain("sheet 02");
+  for (const row of rows(result.value.sheets).slice(2)) {
+    const target = required(
+      result.value.sheets.find(
+        (s) => String(s.number) === row.getAttribute("data-report-row"),
+      ),
+    );
+    expect(
+      row.querySelector('[data-report-column="2"]')?.textContent?.trim(),
+    ).toBe(sheetLabel(target.view));
+  }
 });
+it.each([2, 30])(
+  "matches every final row's title and kind to its issued sheet (%s content views)",
+  async (count) => {
+    const kinds = new Map([
+      ["Bill of materials", "bom"],
+      ["Drawing index", "index"],
+      ["Device and function references", "references"],
+    ]);
+    for (const references of [undefined, false]) {
+      const result = await renderSchematicPacket(ir, {
+        ...request,
+        references,
+        views: Array.from({ length: count }, () => request.views[0]),
+      });
+      if (!result.ok) throw Error(result.error.message);
+      const sheets = result.value.sheets;
+      expect(
+        rows(sheets).map((r) => Number(r.getAttribute("data-report-row"))),
+      ).toEqual(sheets.map((s) => s.number));
+      for (const row of rows(sheets)) {
+        const number = Number(row.getAttribute("data-report-row"));
+        const target = required(sheets.find((s) => s.number === number));
+        const label = required(
+          row.querySelector('[data-report-column="2"]')?.textContent,
+        )
+          .replace(/\s+/gu, " ")
+          .trim();
+        const title = label.replace(/ \(sheet \d+\)$/u, "");
+        expect({ number, kind: kinds.get(title), title }).toEqual({
+          number: target.number,
+          kind: target.view.kind,
+          title: sheetLabel(target.view),
+        });
+        const repeated =
+          sheets.filter((s) => sheetLabel(s.view) === title).length > 1;
+        expect(label).toBe(
+          repeated
+            ? `${title} (sheet ${String(number).padStart(2, "0")})`
+            : title,
+        );
+      }
+    }
+  },
+);
 it("keeps references:false intentional while indexing its own final page", async () => {
   const result = await renderSchematicPacket(ir, {
     ...request,

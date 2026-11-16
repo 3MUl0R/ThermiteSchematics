@@ -10,6 +10,8 @@ import type {
 import { sheetLabel, bounds, normalizePaperPage } from "./page.js";
 import { wrapText } from "../text-metrics.js";
 
+export const INDEX_TITLE = "Drawing index";
+
 type ReferenceDraft = Pick<
   Draft,
   "view" | "references" | "documentationTable" | "referenceNotes"
@@ -76,7 +78,9 @@ function isDeviceReference(r: SheetReference): boolean {
 
 /** Content drafts already carry final terminal-centroid locations from the
  * navigation seam. Preserve aggregate report groups while collecting each
- * function's final zones; appending index pages must happen later. */
+ * function's final zones; appending index pages must happen later.
+ * Legacy callers use the content-only index table; packet composition discards
+ * it and rebuilds the index after reference pagination establishes all rows. */
 export function referenceTables(
   ir: Readonly<ElectricalIr>,
   drafts: readonly ReferenceDraft[],
@@ -198,7 +202,7 @@ export function drawingIndex(
   }
   return {
     kind: "index",
-    title: "Drawing index",
+    title: INDEX_TITLE,
     columns: ["Sheet", "View", "Devices"],
     widths: [0.08, 0.42, 0.5],
     notes: [

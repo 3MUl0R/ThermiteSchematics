@@ -275,7 +275,7 @@ async function renderPacket(
     referenceSelection = indexes.value.referenceSelection;
     drafts = indexes.value.drafts;
   }
-  if (drafts.length > 100)
+  if (drafts.length > 100 /* Backstop after composition. */)
     return composedFailure(
       "Packet exceeds the 100-sheet limit including indexes.",
     );

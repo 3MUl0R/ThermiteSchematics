@@ -10,10 +10,9 @@ import type {
   SchematicPacketRequest,
   ReferenceSelection,
 } from "./types.js";
-import { drawingIndex, referenceTables } from "./references.js";
+import { INDEX_TITLE, drawingIndex, referenceTables } from "./references.js";
 import { tableDrafts } from "./reports.js";
 import { failure } from "./errors.js";
-import { required } from "../presentation/util.js";
 
 export const FINAL_INDEX_SHEET_LIMIT = 100;
 
@@ -64,9 +63,15 @@ export function finalReferenceDrafts(
     view: {
       format: "documentation-view/0.1",
       kind: "index",
-      title: "Drawing index",
+      title: INDEX_TITLE,
     },
-    title: required(content[0], "Missing content for final index").title,
+    title: {
+      projectName: INDEX_TITLE,
+      revision: "",
+      toolVersion: "",
+      backgroundColor: "#ffffff",
+      lines: [],
+    },
     references: [],
     documentationTable: true,
     content: "",
