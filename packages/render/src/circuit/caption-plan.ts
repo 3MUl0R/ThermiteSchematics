@@ -1,13 +1,14 @@
+import { fullyCoincidentCaption } from "./coincident-caption.js";
 import { circuitCaptionGeometry } from "./label-support.js";
 import type { CircuitLabelState } from "./layout-routes.js";
-import { besideCaption, captionAssociation } from "../layout/beside-caption.js";
-import { rectInkBox, routeInkDistance } from "../layout/ink-geometry.js";
+import { besideCaption } from "../layout/beside-caption.js";
+import { rectInkBox } from "../layout/ink-geometry.js";
 import {
   ownedLabelLeader,
   labelLeaderArrow,
 } from "../layout/wire-label-support.js";
-import { captionPlacementDiagnostic } from "../layout/caption-diagnostic.js";
-import { CircuitRenderError } from "../render-error-context.js";
+import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
+import { existingCircuitCaption } from "./caption-association.js";
 import { required } from "../presentation/util.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 type Label = CircuitLabelState["labels"][number];
@@ -17,8 +18,10 @@ export function plannedCircuitCaption(
   label: Label,
   state: CircuitLabelState,
 ) {
-  const original = circuitCaptionGeometry(line, i, label, state),
-    own = state.segments
+  const original = circuitCaptionGeometry(line, i, label, state);
+  if (fullyCoincidentCaption(label.index, state.segments))
+    return { ...original, leader: "" };
+  const own = state.segments
       .filter((s) => s.index === label.index)
       .map((s) => [s.a, s.b]),
     others = state.segments.filter((s) => s.index !== label.index),
@@ -46,13 +49,8 @@ export function plannedCircuitCaption(
       ? { ink: original.ink, needsLeader: false }
       : besideCaption(original.ink, reservation, own, context, 1, stroke);
   const failure = () =>
-    new CircuitRenderError(
-      captionPlacementDiagnostic(
-        line,
-        owner.id,
-        state.group.label ?? state.group.id,
-        "control",
-      ),
+    new InlineLabelCollisionError(
+      `Circuit ${state.group.id}: caption ${line} (${owner.id}) cannot be associated with its conductor without obscuring other drawing content.`,
     );
   if (!placement) throw failure();
   const points = placement.needsLeader
@@ -73,41 +71,6 @@ export function plannedCircuitCaption(
     ink: placement.ink,
     leader,
   };
-}
-
-// Circuit labels already have an opaque inline plate. Keep a native vertical
-// plate only when its complete glyph height lies on the owner's straight run
-// and no foreign conductor enters it; do not create new plates to mask overlap.
-function existingCircuitCaption(
-  ink: ReturnType<typeof rectInkBox>,
-  own: readonly (readonly { x: number; y: number }[])[],
-  foreign: readonly (readonly { x: number; y: number }[])[],
-  strokes: readonly number[],
-  stroke: number,
-) {
-  const association = captionAssociation(ink, own, foreign, stroke, 2, strokes);
-  // Preserve the existing conductor-facing anchors of already clear circuit
-  // captions inside the established 2 mm association reach. Repairs prefer
-  // 0.75 mm; a legal old anchor is not moved merely to tighten its spacing.
-  if (association.owner >= 0.5 && !association.needsLeader) return true;
-  return (
-    foreign.every(
-      (r, i) => routeInkDistance(ink, [r], strokes[i] ?? 0.32) > 0,
-    ) &&
-    own.some((r) =>
-      r.some((a, i) => {
-        const b = r[i + 1];
-        return (
-          b &&
-          Math.abs(a.x - b.x) < 1e-7 &&
-          a.x > ink.left &&
-          a.x < ink.right &&
-          Math.min(a.y, b.y) <= ink.top &&
-          Math.max(a.y, b.y) >= ink.bottom
-        );
-      }),
-    )
-  );
 }
 
 function circuitCaptionContext(

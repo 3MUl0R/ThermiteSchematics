@@ -105,6 +105,10 @@ function positions(label: ElkLabel, routes: readonly (readonly Point[])[]) {
 export function ownedWiringLabels(
   graph: ElkNode,
   keep?: (edgeId: string, label: Readonly<ElkLabel>) => boolean,
+  extraPositions?: (
+    label: Readonly<ElkLabel>,
+    routes: readonly (readonly Point[])[],
+  ) => { x: number; y: number }[],
 ) {
   const copy = structuredClone(graph),
     edges = paths(copy);
@@ -114,16 +118,22 @@ export function ownedWiringLabels(
         .filter((e) => e.id !== edge.id)
         .flatMap((e) => e.routes);
       if (
-        keep?.(edge.id, label) ||
-        horizontalLabelSupport(box(label), edge.routes, 2, foreign)
+        keep
+          ? keep(edge.id, label)
+          : horizontalLabelSupport(box(label), edge.routes, 2, foreign)
       )
         continue;
       const original = { x: label.x, y: label.y };
-      for (const p of positions(label, edge.routes)) {
+      for (const p of [
+        ...positions(label, edge.routes),
+        ...(extraPositions?.(label, edge.routes) ?? []),
+      ]) {
         Object.assign(label, p);
         if (
           free(label, edge.id, copy, edges) &&
-          horizontalLabelSupport(box(label), edge.routes, 2, foreign)
+          (keep
+            ? keep(edge.id, label)
+            : horizontalLabelSupport(box(label), edge.routes, 2, foreign))
         )
           break;
         Object.assign(label, original);

@@ -379,6 +379,13 @@
       "codes": ["R006"]
     },
     {
+      "id": "packages/render/src/layout/caption-diagnostic.ts:captionPlacementDiagnostic:constructor:1",
+      "path": "packages/render/src/layout/caption-diagnostic.ts",
+      "owner": "captionPlacementDiagnostic",
+      "kind": "constructor",
+      "codes": ["R004"]
+    },
+    {
       "id": "packages/render/src/layout/validate-output.ts:invalidLayoutError:constructor:1",
       "path": "packages/render/src/layout/validate-output.ts",
       "owner": "invalidLayoutError",
@@ -391,6 +398,14 @@
       "owner": "normalizeAndValidateLayout",
       "kind": "factory-call",
       "factory": "packages/render/src/layout/validate-output.ts:invalidLayoutError",
+      "codes": ["R004"]
+    },
+    {
+      "id": "packages/render/src/layout/wiring-label-support.ts:wiringLabelLeaders:factory-call:1",
+      "path": "packages/render/src/layout/wiring-label-support.ts",
+      "owner": "wiringLabelLeaders",
+      "kind": "factory-call",
+      "factory": "packages/render/src/layout/caption-diagnostic.ts:captionPlacementDiagnostic",
       "codes": ["R004"]
     },
     {
@@ -1466,6 +1481,14 @@
       "codes": ["R005"]
     },
     {
+      "id": "packages/render/src/svg/label-ink.ts:emitLabelInk:factory-call:1",
+      "path": "packages/render/src/svg/label-ink.ts",
+      "owner": "emitLabelInk",
+      "kind": "factory-call",
+      "factory": "packages/render/src/layout/caption-diagnostic.ts:captionPlacementDiagnostic",
+      "codes": ["R004"]
+    },
+    {
       "id": "packages/render/src/symbols/rooted-gangs.ts:gangFailure:constructor:1",
       "path": "packages/render/src/symbols/rooted-gangs.ts",
       "owner": "gangFailure",
@@ -1951,6 +1974,15 @@
       "facts": "Root and trace-target UIDs resolve through IR to native designations; rejected targets retain targetDeviceUid and targetDesignation. Malformed selectors retain authored request identity."
     },
     "packages/render/src/view-request-errors.ts": {
+      "category": "public-boundary"
+    },
+    "packages/render/src/layout/caption-diagnostic.ts": {
+      "category": "public-boundary"
+    },
+    "packages/render/src/layout/wiring-label-support.ts": {
+      "category": "public-boundary"
+    },
+    "packages/render/src/svg/label-ink.ts": {
       "category": "public-boundary"
     }
   },

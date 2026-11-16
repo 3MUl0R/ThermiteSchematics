@@ -2,6 +2,9 @@ import { printableLabelGeometry } from "../symbols/printable-label.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 import { ownedWiringLabels } from "../layout/wiring-label-support.js";
+import { existingCircuitCaption } from "./caption-association.js";
+import { fullyCoincidentCaption } from "./coincident-caption.js";
+import { circuitCaptionPositions } from "./caption-recovery.js";
 import { required } from "../presentation/util.js";
 
 /** Feed the final, already recovered label reservations to the shared physical
@@ -25,6 +28,7 @@ export function supportedCircuitLabels(state: CircuitLabelState) {
   const graph = ownedWiringLabels(
       input,
       (id, l) =>
+        fullyCoincidentCaption(Number(id.slice(1)), state.segments) ||
         !circuitLabelNeedsMove(
           {
             index: Number(id.slice(1)),
@@ -36,9 +40,11 @@ export function supportedCircuitLabels(state: CircuitLabelState) {
           },
           state,
         ),
+      circuitCaptionPositions,
     ),
     occurrences = new Map<number, number>();
   const labels = state.labels.map((label) => {
+    if (fullyCoincidentCaption(label.index, state.segments)) return label;
     const i = occurrences.get(label.index) ?? 0;
     occurrences.set(label.index, i + 1);
     const p = required(
@@ -75,31 +81,26 @@ function circuitLabelNeedsMove(
   label: CircuitLabelState["labels"][number],
   state: CircuitLabelState,
 ) {
-  const nearest = (
-    ink: { left: number; right: number; top: number; bottom: number },
-    own: boolean,
-  ) =>
-    Math.min(
-      ...state.segments
-        .filter((s) => (s.index === label.index) === own)
-        .map(({ a, b }) =>
-          Math.hypot(
-            Math.max(
-              Math.min(a.x, b.x) - ink.right,
-              ink.left - Math.max(a.x, b.x),
-              0,
-            ),
-            Math.max(
-              Math.min(a.y, b.y) - ink.bottom,
-              ink.top - Math.max(a.y, b.y),
-              0,
-            ),
-          ),
-        ),
-    );
-  return label.text.split("\n").some((line, i) => {
-    const p = circuitCaptionGeometry(line, i, label, state),
-      own = nearest(p.ink, true);
-    return own > 2 || nearest(p.ink, false) < own - 1e-7;
-  });
+  const own = state.segments
+      .filter((s) => s.index === label.index)
+      .map((s) => [s.a, s.b]),
+    foreign = state.segments.filter((s) => s.index !== label.index),
+    strokes = foreign.map((s) =>
+      required(state.cs[s.index], "Missing circuit conductor").jumper
+        ? 0.55
+        : 0.32,
+    ),
+    stroke = required(state.cs[label.index], "Missing circuit conductor").jumper
+      ? 0.55
+      : 0.32;
+  return label.text.split("\n").some(
+    (line, i) =>
+      !existingCircuitCaption(
+        circuitCaptionGeometry(line, i, label, state).ink,
+        own,
+        foreign.map((s) => [s.a, s.b]),
+        strokes,
+        stroke,
+      ),
+  );
 }
