@@ -916,7 +916,7 @@ export function referenceDogfood(ctx) {
     CABLE: ["CBL1"],
     START: ["START1"],
     STOP: ["PB1"],
-    COIL: ["PLC1", "K1"],
+    COIL: pump ? ["PLC1", "K1"] : ["PLC1", "K1", "OL1"],
     LEVEL: ["LS1"],
     TRANSMITTER: ["PT1"],
     ANALOG: ["PLC1"],

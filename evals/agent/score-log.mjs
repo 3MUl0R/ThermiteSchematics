@@ -3,7 +3,9 @@
 import { readFileSync, realpathSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { copiedContributorGuide } from "./contributor-policy.mjs";
 import { diff } from "./snapshot.mjs";
+import { allowedLibraryAcquisition } from "./library-acquisition.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 const stable = (value) =>
   value && typeof value === "object"
@@ -73,6 +75,8 @@ export function score({
   actualWarnings = [],
   requiredTopics = [],
   allowedUnused = [],
+  allowedLibraryPaths = [],
+  guideCopy,
   preserveSource = false,
   undocumentedShapes = [],
   wallTimeMs = null,
@@ -95,7 +99,10 @@ export function score({
         (edit.path === "CLAUDE.md" && initial?.files?.["CLAUDE.md"]) ||
         /(?:^|\/)AGENTS\.md$/.test(edit.path)
       )
-        add("V3", { boundary, ...edit });
+        if (
+          !copiedContributorGuide(edit, { context, guideCopy, initial, after })
+        )
+          add("V3", { boundary, ...edit });
       if (edit.path === "electrical-system.lock.json")
         add("V2", { boundary, ...edit });
       if (protectedFiles.has(edit.path) && edit.change !== "created") {
@@ -244,6 +251,7 @@ export function score({
     if (!oldUnused.has(point) && !allowedUnused.includes(point))
       add("V7", { reason: "unused-without-user-basis", point });
   const sourceReads = [],
+    libraryAcquisitions = [],
     documentReads = [],
     seenDocuments = new Set();
   const results = new Map(
@@ -312,7 +320,8 @@ export function score({
           /(?:\brepo:|\brepository\s*[:=]\s*)[^/\s'";]+\/thermiteschematics(?=[\s'";)]|$)/i.test(
             input,
           )));
-    if (!readsSource)
+    let readsLocal = readPattern.some((re) => re.test(canonicalInput));
+    if (!readsLocal)
       for (const token of input.match(/(?:[a-zA-Z]:[\\/]|\/)[^\s'";&)]+/g) ??
         [])
         try {
@@ -323,10 +332,17 @@ export function score({
                 pathText(realpathSync(token)).startsWith(root + "/"),
             )
           )
-            readsSource = true;
+            readsLocal = true;
         } catch {}
-    if (context === "runtime" && readsSource)
-      sourceReads.push({ id: event.id, input });
+    readsSource ||= readsLocal;
+    if (context === "runtime" && readsSource) {
+      if (
+        !readsLocal &&
+        allowedLibraryAcquisition(values[0] ?? "", allowedLibraryPaths)
+      )
+        libraryAcquisitions.push({ id: event.id, input });
+      else sourceReads.push({ id: event.id, input });
+    }
     const guideCommand = /thermite[^\n]*\bguide\b/.test(input);
     const directPath =
       typeof event.input === "object"
@@ -415,6 +431,7 @@ export function score({
       "project guide loaded by CLI, successful guide stdout, and observed document-read output bytes; missing read outputs remain unmeasured",
     documentReads,
     sourceReads: sourceReads.length,
+    libraryAcquisitions,
     retrieval: topics,
     finalMessage: normalized.finalMessage,
   };

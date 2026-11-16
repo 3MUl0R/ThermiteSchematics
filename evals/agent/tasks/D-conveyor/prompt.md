@@ -35,7 +35,7 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 - **C-CABLE (must)**: “via a multi-core field cable”. Roles/gap: cable.
 - **C-START (must)**: “start pushbutton (NO)”. Roles/gap: start-button; normal state: open.
 - **C-STOP (must)**: “stop pushbutton (NC) as PLC inputs”. Roles/gap: stop-button.
-- **C-COIL (must)**: “the PLC output drives the K1 coil through the OL1 aux contact”. Roles/gap: plc, contactor.
+- **C-COIL (must)**: “the PLC output drives the K1 coil through the OL1 aux contact”. Roles/gap: plc, contactor, overload.
 - **C-SENSOR (must)**: “a PNP 3-wire photo/prox sensor at the conveyor discharge”. Roles/gap: pnp-sensor.
 - **C-JUNCTION (must)**: “to a junction box”. Roles/gap: junction.
 - **C-SPARE (must)**: “one cable core left explicitly spare”. Roles/gap: cable.
@@ -44,3 +44,32 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 - **C-CHANGE (must)**: “Then make one realistic change via the guarded agent workflow (`thermite agent apply-source-patch`, dry-run first then apply)”. Roles/gap: deliverable observation.
 
 Visual inspection is rubric-only: “Visually check at least two outputs: screenshot the HTML packet with playwright-cli (see `playwright-cli --help`) and look at the images yourself; note readability problems.” PDF V1/V5 remain pending without E3 or judges.
+
+
+### Undesigned PSU input feed
+
+If the PSU input feed is undesigned, do not invent wiring, input ratings or branch protection. Preserve the final diagnostic on the PSU itself and mark the PSU requirement row **deferred**, even when the DC supply and its loads are modeled and drawn. A source-level connectionReview deferral alone does not provide the matrix exception. Use the actual PSU designation and actual final code; the shape below illustrates a final W905 on PS1:
+
+```json
+{
+  "id": "C-PSU",
+  "status": "deferred",
+  "designations": ["PS1"],
+  "evidence": {
+    "summary": "DC loads are drawn; the undesigned AC input feed requires reviewed engineering facts.",
+    "diagnostic": { "code": "W905", "designation": "PS1" }
+  }
+}
+```
+
+An unrelated device or a diagnostic absent from final validation does not justify this exception. Draw any feed that is actually designed.
+
+### Sandbox visual capture
+
+The quoted Playwright instruction is historical. The harness provides a Playwright file:// capture route outside the agent sandbox, without a listening daemon. Render two actual final outputs to HTML (including drawings/packet.html), then write visual-capture.request.json:
+
+```json
+{ "html": ["drawings/packet.html", "drawings/motor-power.html"] }
+```
+
+Wait for visual-captures/result.json. It records input and PNG hashes or an explicit error. Open and inspect both visual-captures/01.png and 02.png yourself with the image viewer and describe readability findings in friction.md. Capturing images alone is not visual inspection. Only project-local HTML is accepted; network resources are blocked. Rewriting the request with a nonce requests a fresh capture after changes. A failed capture remains an explicit gap; never claim it passed. PDF V1/V5 still need independent evidence or judges.

@@ -36,3 +36,22 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 - **P-FRICTION (must)**: “Keep a running friction log”. Roles/gap: deliverable observation.
 
 P-GUIDE: record guide bytes and how much you needed in guide-observation.json or friction.md. PDF V1/V5 are additional scorecard judge items; visual inspection is not requested by this pump brief.
+
+
+### Undesigned PSU input feed
+
+If the PSU input feed is undesigned, do not invent wiring, input ratings or branch protection. Preserve the final diagnostic on the PSU itself and mark the PSU requirement row **deferred**, even when the DC supply and its loads are modeled and drawn. A source-level connectionReview deferral alone does not provide the matrix exception. Use the actual PSU designation and actual final code; the shape below illustrates a final W905 on PS1:
+
+```json
+{
+  "id": "P-PSU",
+  "status": "deferred",
+  "designations": ["PS1"],
+  "evidence": {
+    "summary": "DC loads are drawn; the undesigned AC input feed requires reviewed engineering facts.",
+    "diagnostic": { "code": "W905", "designation": "PS1" }
+  }
+}
+```
+
+An unrelated device or a diagnostic absent from final validation does not justify this exception. Draw any feed that is actually designed.

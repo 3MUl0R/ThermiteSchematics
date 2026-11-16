@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.8.0)
+# Fresh-agent evaluator (E2 v1.9.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -216,7 +216,7 @@ a reviewed scorer change and eval-version bump.
 | V5   | Runtime tree changed, per call or across the run.                                                                                                                                                                                         |
 | V6   | Invented facts; rubric only.                                                                                                                                                                                                              |
 | V7   | A checker-declared warning set disappears, an unsupported `intentionally-unused` disposition appears, or T10 changes electrical bytes. Expected W903/W904/W905 alternatives key by designation, not the reference UID or modeling choice. |
-| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. Source context permits reads.                                                                                                              |
+| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. T07 alone permits declared optional-library GET acquisitions; engine-source reads still fail. Source context permits reads.                |
 
 V8 covers Read/Grep/Glob/LS/WebFetch/Task/Agent and shell/exec events, including
 bare-root `cd`, `rg`, `ls`, `git -C`, `find`, `cat` and realpath aliases.
@@ -257,7 +257,7 @@ are `satisfied`, `substituted`, `deferred`. Display wording/capitalization does
 not affect scoring.
 
 Satisfied/substituted rows must resolve to validated source and actual drawing
-appearances. A deferred must row needs non-empty source designations and a final compiler diagnostic on its own named device fitting the requirement role. D-task version 1.4.0 declares no library gaps: current core 0.2.0 supplies all eight previously listed capabilities, including a NO start button and a PLC with at least three DI. External task catalogs may still declare specific inventory-verified gaps; an existing unrelated object cannot represent a missing component. Optional conditional items
+appearances. A deferred must row needs non-empty source designations and a final compiler diagnostic on its own named device fitting the requirement role. D-task version 1.5.0 declares no library gaps: current core 0.2.0 supplies all eight previously listed capabilities, including a NO start button and a PLC with at least three DI. External task catalogs may still declare specific inventory-verified gaps; an existing unrelated object cannot represent a missing component. Optional conditional items
 may be deferred with a reason. Blanket `deferred: n/a` fails. Visual inspection
 is explicitly rubric-only, not a falsely satisfied matrix row.
 
@@ -372,16 +372,46 @@ is the task-group mean; `perRunDelta` is labeled separately. With about twelve
 groups this bound is conservative: a single negative group can reject B even
 when the per-run mean looks small. The threshold is not relaxed.
 
-C-01…C-30 (H-docs claim audit) and R01–R04 remain E2b slots before C2/W3:
-R01 worktree/focused test/rebuild; R02 seeded query-contract regression;
-R03 supplied-fact component/coverage/lock/render; R04 printable-symbol repair
-preserving continuous goldens. They are not runnable tasks here; H1/H2 remain
-scorer-owned. Any task/checker change bumps the eval version and requires
-previous-checkpoint replay before comparing scores.
+R01/R02 now live in the separate source-contributor catalog. Their setup makes
+an independent synthetic Git repository under the project, reusing read-only
+dependencies from the source context. R01 creates a linked worktree, runs a
+focused test and rebuilds. Its source-only guide-copy policy accepts new worktree
+instructions only when they exactly match the supplied source copies; modifications still flag V3. R02 repairs a seeded alias-ordering reversal without
+changing test assertions or configuration; its checker reruns the original
+focused test/build and checks the built comparator independently. These are
+Codex-only improvement measurements, not a both-agent category score.
 
-Eval 1.8.0 is the single bump over dev 1.7.0 for this PR: D tasks become 1.4.0, the PLC/onboard-AI sharing false negative is corrected, all eight obsolete gap entries are removed, and the reference uses L2's current core types. T3's guarded JSON-repair policy is unchanged; frozen briefs and briefSha256 remain identical. Re-run
-the full reference sweep on the selected engine commit before comparing results;
-the checkpoint identity gate prevents silently reusing 1.7.0 results.
+```sh
+bun evals/agent/run.mjs --agent codex --codex-auth "$HOME/.codex/auth.json" --tasks-dir evals/contributor/tasks --all --context source --commit <sha> --checkpoint contributor-<sha>
+```
+
+C-01…C-30, R03/R04 and held-out H1/H2 remain unimplemented or scorer-owned slots.
+
+Eval **1.9.0** changes D tasks to 1.5.0 and T07 to 1.2.0: C-COIL includes the
+frozen brief's overload; D appendices state the existing structured PSU-feed
+exception; a harness-owned Playwright file:// broker captures project HTML
+without a sandbox daemon; and T07 declares library acquisition paths. Frozen
+brief bytes/hashes are unchanged. Task/checker changes require previous-engine
+replay under this version before collecting the current-engine comparison.
+Retain old-version history separately; do not silently rescore original runs.
+Run the complete reference sweep on the previous checkpoint first. No model,
+scoring-gate or two-judge requirement is weakened.
+
+T07's exception permits only separate GET acquisitions from
+`libraries/field-interfaces/` and `libraries/industrial-pilot/` on the
+BlackettApplied/3MUl0R ThermiteSchematics GitHub contents/raw endpoints.
+`metrics.libraryAcquisitions` retains these observations separately. Other tasks,
+local engine reads (including aliases), root listings/clones, searches,
+implementation/docs paths, mixed commands and sibling libraries still count as
+V8. This permission is task metadata, not a general source-read waiver.
+
+For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
+array of 1–4 project-local HTML paths. The running harness writes PNGs and a
+hash-bound receipt in `visual-captures/`; the agent must open the images and
+record findings. Network requests and JavaScript are disabled. Errors remain
+explicit, and capture alone never passes visual review or PDF V1/V5. No Claude
+credential is required. The regression test launches the actual pinned browser;
+a non-model sandbox probe should verify request/PNG access before paid D runs.
 
 ## Verification
 

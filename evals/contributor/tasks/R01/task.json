@@ -1,0 +1,15 @@
+{
+  "id": "R01",
+  "version": "1.0.0",
+  "template": "starter",
+  "setup": "setup.mjs",
+  "prompt": "Create a linked Git worktree at worktree/ from the supplied engine/ source repository. Reuse the provided read-only dependencies by linking worktree/node_modules to engine/node_modules; do not reinstall, change dependencies or touch another checkout. Run the focused query ordering test and rebuild the worktree. Use bun run test -- packages/query/test/views-and-ordering.test.ts with VITEST_MAX_WORKERS=2, then bun run build. This is a source-contributor task: the engine/ copy is editable; the supplied runtime is immutable. Do not edit electrical project sources. Record commands, outcomes and friction in contributor-friction.md. Do not push or publish.",
+  "requiredTopics": [],
+  "expectedWarnings": [],
+  "reference": "reference.mjs",
+  "rubric": [],
+  "guideCopy": {
+    "from": "engine",
+    "to": "worktree"
+  }
+}

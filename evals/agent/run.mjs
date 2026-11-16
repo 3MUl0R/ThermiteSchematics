@@ -47,6 +47,7 @@ import { estimateCost } from "./cost.mjs";
 import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
+import { visualBroker } from "./visual-capture.mjs";
 import {
   agents,
   agentConfiguration,
@@ -658,7 +659,14 @@ export async function runOne({
         ctx,
         timeoutMs,
       );
-    } else execution = await capturedAgent(command, ctx, timeoutMs);
+    } else {
+      const stopCapture = await visualBroker(task, project, live);
+      try {
+        execution = await capturedAgent(command, ctx, timeoutMs);
+      } finally {
+        await stopCapture();
+      }
+    }
     secretList = [...new Set([...secretList, ...secretValues(env)])];
     execution.stdout = redactSecrets(execution.stdout, secretList);
     execution.stderr = redactSecrets(execution.stderr, secretList);
@@ -728,6 +736,8 @@ export async function runOne({
       transcript: execution.stdout,
       context,
       engineRoots,
+      allowedLibraryPaths: task.allowedLibraryPaths,
+      guideCopy: task.guideCopy,
     });
     // Let queued operator signals run after synchronous CLI flush work.
     await new Promise((resolve) => setImmediate(resolve));
@@ -780,6 +790,8 @@ export async function runOne({
         ctx.validationDiagnostics.filter((d) => d.severity === "warning"),
       requiredTopics: task.requiredTopics,
       allowedUnused: task.allowedUnused,
+      allowedLibraryPaths: task.allowedLibraryPaths,
+      guideCopy: task.guideCopy,
       preserveSource: task.preserveSource,
       undocumentedShapes: task.undocumentedShapes,
       wallTimeMs: ended - started,
@@ -1029,6 +1041,8 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       stored.validationDiagnostics.filter((d) => d.severity === "warning"),
     requiredTopics: task.requiredTopics,
     allowedUnused: task.allowedUnused,
+    allowedLibraryPaths: task.allowedLibraryPaths,
+    guideCopy: task.guideCopy,
     preserveSource: task.preserveSource,
     undocumentedShapes: task.undocumentedShapes,
     wallTimeMs: original.timings.wallTimeMs,

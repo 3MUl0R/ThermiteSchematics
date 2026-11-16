@@ -582,7 +582,7 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
-    expect(task.version).toBe("1.4.0");
+    expect(task.version).toBe("1.5.0");
     expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
       [],
     );
@@ -603,3 +603,49 @@ it("published gap objects exactly match task metadata in both appendices", () =>
       expect(format).not.toMatch(/LS1|pressure transmitter/);
   }
 });
+
+it("C-COIL requires the named overload as well as the PLC and contactor", () => {
+  const x = fixture();
+  const row = x.matrix.find((r) => r.id === "C-COIL");
+  expect(row.designations).toEqual(["PLC1", "K1", "OL1"]);
+  expect(
+    assessDogfood(x).requirements.find((r) => r.id === "C-COIL").pass,
+  ).toBe(true);
+  for (const designations of [
+    ["PLC1", "K1"],
+    ["PLC1", "K1", "PS1"],
+    ["PLC1", "K1", "OL1", "PS1"],
+  ]) {
+    row.designations = designations;
+    expect(
+      assessDogfood(x).requirements.find((r) => r.id === "C-COIL").pass,
+    ).toBe(false);
+  }
+});
+it.each(["D-pump", "D-conveyor"])(
+  "%s PSU feed exception needs the own-device final code and deferred row",
+  (name) => {
+    const x = fixture(name),
+      row = x.matrix.find((r) => r.id.endsWith("-PSU"));
+    x.sourceObjects = x.sourceObjects.filter(
+      (o) => !["W-PSU-L", "W-PSU-N"].includes(o.designation),
+    );
+    row.status = "deferred";
+    row.evidence = {
+      summary: "Undesigned input feed, no ratings invented",
+      diagnostic: { code: "W905", designation: "PS1" },
+    };
+    x.diagnostics = [{ code: "W905", designation: "PS1", severity: "warning" }];
+    expect(assessDogfood(x).checks.coverage).toBe(true);
+    for (const diagnostic of [
+      { code: "W903", designation: "PS1" },
+      { code: "W905", designation: "M1" },
+    ]) {
+      row.evidence.diagnostic = diagnostic;
+      expect(assessDogfood(x).checks.coverage).toBe(false);
+    }
+    row.evidence.diagnostic = { code: "W905", designation: "PS1" };
+    row.status = "satisfied";
+    expect(assessDogfood(x).checks.coverage).toBe(false);
+  },
+);
