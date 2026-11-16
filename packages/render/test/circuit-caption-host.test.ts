@@ -1,9 +1,10 @@
+import {
+  captionHostFixture as fixture,
+  captionHostWitness as nativeWitness,
+} from "./helpers/circuit-caption-host.js";
 import { expect, it, vi } from "vitest";
-import { compileProject } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
 import baseCaption from "./fixtures/siemens-4bb31-ttb-base.json";
-import { readFile } from "node:fs/promises";
-import { renderSchematicPacket } from "../src/sheets.js";
 import * as placement from "../src/circuit/caption-placement.js";
 import * as blocks from "../src/circuit/caption-block.js";
 import { plannedCircuitCaption } from "../src/circuit/caption-plan.js";
@@ -81,34 +82,6 @@ it("keeps a hostable run fail-closed at the exact unchanged block boundary", () 
     ),
   ).toBe(false);
 });
-async function fixture() {
-  const dir = "libraries/siemens-pilot/examples/6es7132-4bb31-0aa0",
-    c = await compileProject(dir);
-  expect(c.ok).toBe(true);
-  if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
-  const request = JSON.parse(
-    await readFile(`${dir}/packet.request.json`, "utf8"),
-  );
-  for (const view of request.views) view.flow = "top-to-bottom";
-  return renderSchematicPacket(c.ir, request);
-}
-async function nativeWitness() {
-  const original = placement.circuitCaptionPlacement;
-  let witness: Parameters<typeof original> | undefined;
-  const spy = vi
-    .spyOn(placement, "circuitCaptionPlacement")
-    .mockImplementation((...args) => {
-      if (args[0] === "FIXED4" && args[3].group.id === "g2") witness ??= args;
-      return original(...args);
-    });
-  try {
-    const rendered = await fixture();
-    expect(rendered.ok).toBe(true);
-  } finally {
-    spy.mockRestore();
-  }
-  return required(witness);
-}
 it("keeps the Siemens 4BB31 TTB public positive at three sheets after failed bounded recovery", async () => {
   const original = blocks.recoverLeaderCaptionBlocks;
   const receipts: ReturnType<typeof original>["recoveryReceipts"] = [];
