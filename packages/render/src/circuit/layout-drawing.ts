@@ -1,7 +1,5 @@
-import {
-  supportedCircuitLabels,
-  circuitCaptionGeometry,
-} from "./label-support.js";
+import { plannedCircuitCaption } from "./caption-plan.js";
+import { supportedCircuitLabels } from "./label-support.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
@@ -24,7 +22,6 @@ export function circuitDrawingContents(
       (p) =>
         `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
     ),
-    ...supported.leaders,
     ...labels.map((l) => circuitWireLabel(l, state)),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
@@ -35,22 +32,14 @@ export function circuitDrawingContents(
 }
 
 function circuitWireLabel(l: Label, state: CircuitLabelState) {
-  const { cs, n } = state;
-  return `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
+  const { cs, n, text } = state;
+  const plans = l.text
     .split("\n")
-    .map((line, i) => circuitWireLabelLine(line, i, l, state))
-    .join("")}</g>`;
-}
-
-function circuitWireLabelLine(
-  line: string,
-  i: number,
-  l: Label,
-  state: CircuitLabelState,
-) {
-  const { text } = state;
-  const p = circuitCaptionGeometry(line, i, l, state);
-  return text(p.x, p.baseline, line);
+    .map((line, i) => ({ line, ...plannedCircuitCaption(line, i, l, state) }));
+  return (
+    plans.map((p) => p.leader).join("") +
+    `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
+  );
 }
 
 export function circuitDrawingResult(

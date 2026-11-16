@@ -170,3 +170,72 @@ it("selects the longest free owned segment and preserves a valid old inline plat
   expect(label.x).toBe(80);
   expect(ownedWiringLabels(result)).toEqual(result);
 });
+
+it("moves touching glyph ink inside the 0.5–1 mm beside default, preserving its size and reserving leaders for competing physical ink", async () => {
+  const { besideCaption, captionAssociation } =
+      await import("../src/layout/beside-caption.js"),
+    { printableTextMetrics } = await import("../src/symbols/printable-font.js"),
+    m = printableTextMetrics("LS1-SWITCHED-RETURN", 2.5),
+    box = {
+      left: 20,
+      top: 20,
+      right: 20 + m.right - m.left,
+      bottom: 20 + m.top - m.bottom,
+    },
+    own = [
+      [
+        { x: box.right, y: 0 },
+        { x: box.right, y: 100 },
+      ],
+    ],
+    foreign = [
+      [
+        { x: box.right + 20, y: 0 },
+        { x: box.right + 20, y: 100 },
+      ],
+    ],
+    reservation = {
+      left: box.left - 2,
+      right: box.right + 2,
+      top: 18,
+      bottom: 25,
+    },
+    result = besideCaption(
+      box,
+      reservation,
+      own,
+      {
+        foreign,
+        obstacles: [],
+        bounds: { left: 0, top: 0, right: 100, bottom: 100 },
+      },
+      1,
+      0.35,
+    );
+  expect(result).toBeDefined();
+  if (!result) throw Error("Missing beside-run placement");
+  const measured = captionAssociation(result.ink, own, foreign, 0.35, 2);
+  expect(measured.owner).toBeGreaterThanOrEqual(0.5);
+  expect(measured.owner).toBeLessThanOrEqual(1);
+  expect(measured.foreign).toBeGreaterThan(measured.owner);
+  expect(result.needsLeader).toBe(false);
+  expect(result.ink.right - result.ink.left).toBeCloseTo(m.right - m.left, 6);
+  expect(result.ink.bottom - result.ink.top).toBeCloseTo(m.top - m.bottom, 6);
+});
+
+it("treats a square conductor cap's corner as painted ink, rather than a round centreline buffer", async () => {
+  const { routeInkDistance } = await import("../src/layout/ink-geometry.js");
+  const ink = { left: 10.15, right: 11, top: 0.15, bottom: 1 };
+  expect(
+    routeInkDistance(
+      ink,
+      [
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+      ],
+      0.35,
+    ),
+  ).toBe(0);
+});

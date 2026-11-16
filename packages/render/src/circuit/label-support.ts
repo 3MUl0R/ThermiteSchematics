@@ -1,13 +1,8 @@
 import { printableLabelGeometry } from "../symbols/printable-label.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { CircuitLabelState } from "./layout-routes.js";
-import {
-  ownedWiringLabels,
-  wiringLabelLeaders,
-} from "../layout/wiring-label-support.js";
-import { labelLeaderArrow } from "../layout/wire-label-support.js";
+import { ownedWiringLabels } from "../layout/wiring-label-support.js";
 import { required } from "../presentation/util.js";
-import { escapeXmlAttribute as attr } from "../svg/escape.js";
 
 /** Feed the final, already recovered label reservations to the shared physical
  * segment planner. Native route arrays and fixed terminal geometry never change. */
@@ -56,21 +51,7 @@ export function supportedCircuitLabels(state: CircuitLabelState) {
       y: required(p.y, "Missing circuit label y"),
     };
   });
-  const path = (points: readonly { x: number; y: number }[]) =>
-    points
-      .map((p, i) => `${i ? "L" : "M"} ${state.n(p.x)} ${state.n(p.y)}`)
-      .join(" ");
-  const leaders = wiringLabelLeaders(graph).flatMap((leader) => {
-    const owner = required(
-      state.cs[Number(leader.edgeId.slice(1))],
-      "Missing circuit label owner",
-    );
-    return [
-      `<path class="wire-label-leader" data-label-leader-owner="${attr(owner.id)}" d="${path(leader.points)}" fill="none" stroke="#475467" stroke-width=".15" stroke-dasharray=".5 .375"/>`,
-      `<path class="wire-label-leader-arrow" d="${path(labelLeaderArrow(leader.points, 0.75))}" fill="none" stroke="#475467" stroke-width=".15"/>`,
-    ];
-  });
-  return { labels, leaders };
+  return { labels };
 }
 
 export function circuitCaptionGeometry(

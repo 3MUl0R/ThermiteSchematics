@@ -1,3 +1,7 @@
+import { captionAssociation } from "./beside-caption.js";
+import { captionPlacementDiagnostic } from "./caption-diagnostic.js";
+import { CircuitRenderError } from "../render-error-context.js";
+import { routeSegments } from "./ink-geometry.js";
 import type { ElkNode, ElkLabel } from "elkjs/lib/elk-api.js";
 import { required } from "../presentation/util.js";
 import {
@@ -61,8 +65,7 @@ function free(
       e.labels.some((l) => l !== label && overlaps(area, box(l))) ||
       (e.id !== own &&
         e.routes.some((r) =>
-          r.slice(1).some((b, i) => {
-            const a = required(r[i], "Missing wire segment");
+          routeSegments(r).some(({ a, b }) => {
             return overlaps(area, {
               left: Math.min(a.x, b.x),
               right: Math.max(a.x, b.x),
@@ -77,11 +80,7 @@ function positions(label: ElkLabel, routes: readonly (readonly Point[])[]) {
   const width = required(label.width, "Missing label width"),
     height = required(label.height, "Missing label height");
   const segments = routes
-    .flatMap((r) =>
-      r
-        .slice(1)
-        .map((b, i) => ({ a: required(r[i], "Missing label segment"), b })),
-    )
+    .flatMap((r) => routeSegments(r))
     .filter(
       (s) => Math.abs(s.a.y - s.b.y) < 1e-7 && Math.abs(s.a.x - s.b.x) >= width,
     )
@@ -143,6 +142,13 @@ export function wiringLabelLeaders(graph: ElkNode) {
           .flatMap((e) => e.routes),
         ink = box(label);
       if (horizontalLabelSupport(ink, own, 2, foreign)) return [];
+      const association = captionAssociation(ink, own, foreign, 0.35, 2);
+      if (
+        association.owner > 0 &&
+        association.foreign > 0 &&
+        !association.needsLeader
+      )
+        return [];
       const points = ownedLabelLeader(
         ink,
         ink,
@@ -166,7 +172,16 @@ export function wiringLabelLeaders(graph: ElkNode) {
         2,
         0.25,
       );
-      return points ? [{ edgeId: edge.id, points }] : [];
+      if (!points)
+        throw new CircuitRenderError(
+          captionPlacementDiagnostic(
+            label.text ?? "",
+            edge.id,
+            edge.id,
+            "control",
+          ),
+        );
+      return [{ edgeId: edge.id, points }];
     }),
   );
 }

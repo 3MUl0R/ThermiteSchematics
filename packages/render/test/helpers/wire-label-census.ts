@@ -11,7 +11,12 @@ import type {
   NormalizedSchematicLayout,
 } from "../../src/types.js";
 import { required } from "../fixtures.js";
-import { nativePath, on, horizontalSupport } from "./wire-label-support.js";
+import {
+  nativePath,
+  on,
+  printedCaptionSupport,
+  foreignRoutes,
+} from "./wire-label-support.js";
 import { points } from "./route-quality.js";
 type Prepared = Extract<
   Awaited<ReturnType<typeof prepareSchematicDrawing>>,
@@ -44,6 +49,7 @@ function assertWireCaption(
   owner: LayoutEdge,
   doc: Document,
   key: string,
+  layout: NormalizedSchematicLayout,
 ) {
   const physical = required(
     doc.querySelector(`[data-edge-key="${svgSemanticId("edge", [owner.id])}"]`),
@@ -61,7 +67,7 @@ function assertWireCaption(
       : 1,
     x = Number(text.getAttribute("x")) - 20,
     y = Number(text.getAttribute("y")) - 20;
-  const supported = horizontalSupport(
+  const association = printedCaptionSupport(
     {
       left: x + m.left * scale,
       right: x + m.right * scale,
@@ -69,8 +75,11 @@ function assertWireCaption(
       bottom: y - m.bottom,
     },
     route,
-    8,
+    foreignRoutes(doc, layout, owner.id),
   );
+  const supported = association.supported;
+  expect(association.clear, key + " " + text.textContent).toBe(true);
+  expect(Number(text.getAttribute("font-size"))).toBe(10);
   const leaders = [...doc.querySelectorAll("[data-label-leader-owner]")].filter(
     (e) =>
       !supported &&
@@ -135,6 +144,7 @@ export function assertRootedCaptionCensus(
       required(layout.edges.find((e) => e.id === label.ownerId)),
       doc,
       key,
+      layout,
     );
   for (const { label } of contexts) assertNativeContext(label, doc, layout);
   return { count: captions.length, nativeContexts: contexts.length };

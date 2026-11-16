@@ -15,6 +15,8 @@ import {
   nativePath,
   on,
   horizontalSupport,
+  printedCaptionSupport,
+  foreignRoutes,
 } from "./helpers/wire-label-support.js";
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
@@ -59,7 +61,13 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const leader = [...doc.querySelectorAll("[data-label-leader-owner]")].find(
       (e) => e.getAttribute("data-label-leader-owner") === label.ownerId,
     );
-    const nativeSupport = horizontalSupport(ink, route, 8);
+    const association = printedCaptionSupport(
+      ink,
+      route,
+      foreignRoutes(doc, layout, own.id),
+    );
+    const nativeSupport = association.supported;
+    expect(association.clear).toBe(true);
     expect(nativeSupport || !!leader).toBe(true);
     if (!nativeSupport) {
       const ps = points(required(required(leader).getAttribute("d"))).map(
@@ -168,7 +176,9 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     const request = JSON.parse(
       await readFile("examples/self-loop-labels/packet.json", "utf8"),
     ).views[0];
-    const result = await prepareCircuitView(c.ir, { ...request, flow }),
+    const pending = prepareCircuitView(c.ir, { ...request, flow });
+    await expect(pending).resolves.toHaveProperty("groups");
+    const result = await pending,
       doc = parseHTML(required(result.groups[0]).content).document,
       id = "65000000-0000-4000-8000-000000000013";
     const group = required(doc.querySelector(`[data-wire-label="${id}"]`)),
