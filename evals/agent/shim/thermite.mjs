@@ -43,13 +43,25 @@ const queuedAt = Date.now();
 let lockOwned = false;
 if (project && log) {
   while (!lockOwned) {
+    let fd;
     try {
-      const fd = openSync(log + ".lock", "wx");
+      fd = openSync(log + ".lock", "wx");
       writeFileSync(fd, JSON.stringify({ pid: process.pid }));
       closeSync(fd);
       lockOwned = true;
     } catch (error) {
-      if (error.code !== "EEXIST") {
+      // A created but incompletely written lock is not owned. Close its fd and
+      // fail closed; do not mistake a write/close error for create contention.
+      if (fd !== undefined) {
+        try {
+          closeSync(fd);
+        } catch {}
+        auditFailure("lock", error);
+        break;
+      }
+      // Windows can deny creation while a just-unlinked file is delete-pending.
+      // Retry these errors under the same deadline, never by running unlocked.
+      if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(error.code)) {
         auditFailure("lock", error);
         break;
       }
@@ -77,7 +89,6 @@ if (project && log) {
                 } catch {}
               }
             }
-            continue;
           }
         }
       } catch {}
@@ -89,6 +100,8 @@ if (project && log) {
     }
   }
 } else auditFailure("configuration", { code: "MISSING_AUDIT_ENV" });
+// A failed audit lock must not run the real CLI or inspect/mutate audit state.
+if (!lockOwned) process.exit(2);
 const argv = process.argv.slice(2),
   i = argv.indexOf("--input"),
   inputArg =

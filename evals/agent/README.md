@@ -168,7 +168,12 @@ subsequent unguarded edit to a committed patch target.
 The log/state live under the run directory, not in the checkout. Each record
 is hash-chained; the runner verifies the chain/head and records the final log
 hash. Audit failures write a `shim-error` marker and become infrastructure
-failures. They never change the real CLI's stdout, stderr or exit code.
+failures. If the audit lock cannot be acquired, the shim exits 2 before running
+the CLI. Lock-create `EPERM`, `EACCES` and `EBUSY` retry like `EEXIST` within the
+existing 120-second deadline; a timeout or fatal failure remains audited. An
+empty lock or an owner whose liveness probe returns `EPERM` is never reaped.
+Once the CLI starts under its lock, audit failures never change that CLI's
+stdout, stderr or exit code.
 The real CLI inherits the caller's output descriptors. A small preload observer records writes out of band; no intermediate stdout pipe can absorb a downstream EPIPE. The CLI itself determines the exit code (including `| head`), and signals are forwarded. The observer and marker files are ephemeral and contain no checkout environment path. The evaluation protocol uses non-TTY streams.
 
 Project snapshots exclude `.git`; runtime hashes include all directories,
