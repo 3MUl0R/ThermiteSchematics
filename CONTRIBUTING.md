@@ -150,6 +150,11 @@ spare ends, and title blocks. Do not hide clipping with a smaller font or omit
 conductors to make a test pass. A safe, explained R006 failure is preferable to
 an incomplete drawing. Confirm both drawing flows for layout changes.
 
+Every render-lane PR must also pass `bun run check:perf` after rebuilding. This
+separate [performance gate](evals/README.md#required-performance-gate-for-render-changes)
+compares compile and packet medians with pinned dev on the same machine class,
+failing above +20%. Keep the output and load evidence with the review.
+
 ## Component library submissions
 
 Libraries are ordinary JSON directories with `library.json` and declared type

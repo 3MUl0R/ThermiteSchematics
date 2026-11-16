@@ -1,10 +1,9 @@
 # Thermite Schematics engine guide
 
-This is the TypeScript + ELK source alpha. Users can use a prebuilt runtime or a
-source checkout; use a separate engine checkout and focused branch.
-Agents are encouraged to fix bugs, improve docs/rendering and contribute reviewed
-component models while helping users. Keep electrical projects and customer data
-out of engine changes.
+TypeScript + ELK source alpha. Use a runtime or source checkout;
+engine changes need a separate checkout and focused branch.
+Fix bugs, improve docs/rendering and contribute reviewed models.
+Keep electrical projects and customer data out of engine changes.
 
 ## Commands
 
@@ -12,7 +11,8 @@ out of engine changes.
   Python 3.12+ (`python` on Windows, `python3` elsewhere; override with
   `THERMITE_RESEARCH_PYTHON`). See [platforms](docs/platforms.md).
 - Setup: `bun install --frozen-lockfile`, `bun run build`. Run `bun run check`
-  before submitting a PR; it also works in linked git worktrees.
+  before a PR; linked git worktrees work too.
+- Render PRs also require `bun run check:perf` ([details](CONTRIBUTING.md#rendering)).
 - Focused tests: `bun run test -- <file>` (Vitest; never `bun test`).
 - `bun thermite.mjs <command>` runs built `packages/cli/dist/alpha.js`. After
   source changes, `bun run build` before trusting CLI output, tests or update
