@@ -33,7 +33,8 @@ a historical complete-summary schema rather than silently reinterpreted.
   is accepted. Ports drawn nowhere still require their native assembly/status
   row. Multi-port and other-parts notes must pair each named port with its own
   `subject → sheet.zone` segment, separated by semicolons. A port cannot borrow
-  another port's pointer. Bare port names require the owning device context;
+  another port's pointer. A single subject retains all its destinations, including
+  semicolon-separated lists. Bare port names require the owning device context;
   unbound footer subjects use the native `device.port` or `device:port`. A row
   destination may still serve several sufficient schedule rows. Generic prose
   without a destination fails when a native need exists; generic notes with no

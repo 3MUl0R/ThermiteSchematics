@@ -64,6 +64,8 @@ it("B1 retains single-port targets and accepts any genuine spanned destination z
   const n = note("X10 → S2.C5");
   expect(portSubjects(n, [one])).toEqual([one]);
   expect(assemblyDeliveryFindings(n, [one], [], 1)).toEqual([]);
+  n.text = "X10 → S99.Z9; S2.C5";
+  expect(assemblyDeliveryFindings(n, [one], [], 1)).toEqual([]);
   n.text = "X10 → S3.B2";
   expect(assemblyDeliveryFindings(n, [one], [], 1)).toHaveLength(1);
 });

@@ -1,7 +1,11 @@
 import { compact } from "./tranche4-source.mjs";
-// A semicolon separates subjects; commas may list several targets of ONE subject.
+// Separate multiple subjects by semicolons; a single subject retains its full target list.
 function segments(note) {
-  return note.text.split(/[;\n]/u).map((text) => ({
+  const parts =
+    note.text.split(/->|→/u).length === 2
+      ? [note.text] // One subject retains all of its destinations, including semicolons.
+      : note.text.split(/[;\n]/u);
+  return parts.map((text) => ({
     ...note,
     text: text.replace(/^.*?\bother (?:ports|parts)\s*:\s*/iu, "").trim(),
   }));
