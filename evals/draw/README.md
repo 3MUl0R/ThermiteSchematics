@@ -20,6 +20,71 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.18** adds CHECK3 C3's independent tranche-2 predicates. Separate
+`check3c3-*` rows are appended after all earlier packet observations, preserving
+all 5.17 observation bytes and relative order. No pins are changed. These new
+rows measure **painted SVG**; the existing HTML/PDF parity and text/geometry
+controls remain separate, and do not constitute an independent C3 medium audit.
+
+- **N8 / DQ-08 and DQ-24 extension:** native wires, jumpers and cable cores bind
+  actual card, stroke, continuation and inventory identities. DQ-08 covers cards
+  and continuations; DQ-24 covers strokes and inventories. An authored primary
+  label, an explicit native alias or an intact designation/primary pair is
+  accepted; designation alone cannot silently replace a different primary label.
+  Cable `.` and `/` print aliases are equivalent. UID, native endpoints and the
+  complete protected identity are checked, including same-net wrong owners.
+  This extension does not claim a configured automatic wire-numbering policy.
+  Cards require a real native terminal; an empty terminal identity cannot turn
+  an unassigned core into a spare. Self-loops retain their real peer terminal.
+  Card rows must also name the correct native peer; clipped duplicate candidates
+  are excluded by measured visibility, while a visible card with erased text fails.
+- **N11 / DQ-08 extension:** independently reconstruct authored circuit and
+  communication selections, conserve each whole conductor/link once per view,
+  and measure terminal/port appearances per part. Repeated symbols retain their
+  native physical UID; they are not duplicate equipment. Every repeated subject
+  requires reciprocal P/part and sheet.zone references to every other appearance.
+  Destination zones are reconstructed from painted grid anchors; any zone
+  spanned by its measured body is accepted. Multiple parts may share one sheet.
+  Candidate view locators are bound to canonical native selection plus duplicate
+  ordinal, not caption equality or the `view/1` schema version. Missing source,
+  ink, peer, reference or grid data fails closed. **DQ-12 feasibility stays
+  manual**: a lower page count is not proof of a valid same-paper alternative.
+- **N14 / DQ-13 refinement:** ordinary terminal endpoints may be hollow. A filled
+  marker requires a native node and at least three distinct painted incident
+  rays, including source-owned conductor and terminal-attachment/symbol leads.
+  Both circuit and wiring marker classes are measured privately; legacy DQ-13
+  shape classification is unchanged. White knockouts, hidden/erased approaches,
+  foreign owners and coincident duplicate rays cannot authorize a dot. Numerical
+  coincidence is 0.01 mm; the measured marker radius plus half stroke width
+  defines contact, and the existing 10-degree ray bins are retained.
+- **N15 / DQ-19 refinement:** the final issued sheet list, including every index
+  and reference page, must occur exactly once as visible index rows with correct
+  printed numbers/captions. Multiple index pages and duplicate view titles are
+  allowed; title equality never merges physical sheets. `references:false`
+  permits intentionally absent reference pages but does not exempt the index
+  itself. The existing 100-sheet limit remains. Stable authored view/part naming
+  beyond this bounded final-index check (#302) stays manual.
+- **N17 / DQ-19 extension:** assembly pointers and omitted-port notes bind to
+  source-selected assembly reasons or native connector-port occupancy, then to
+  sufficient actual issued assembly rows and their measured sheet.zone. An
+  unoccupied port needs its native unoccupied/no-assembly row, not an invented
+  cable assembly. Generic schedule prose, a foreign port/assembly, absent cells,
+  wrong reasons or stale target zones fail. Native selected links are conserved
+  independently of printed success/state flags. Actual transformed path endpoints
+  must reach the measured native port circles, with nonempty painted ink. Dashed
+  cap/link endings are allowed; no new maximum dash-gap threshold is invented.
+  Free drafting prose beyond this
+  bounded dependency grammar remains manual.
+
+`tranche4-*.test.mjs` contains positive/adversarial controls and output mutations.
+Missing private measurement bundles are failures, never successful empty audits.
+New exposure remains unpinned for the later REP3 batch (`repinNow: false`).
+C3 rows retain every finding's measured box and native source reference. They use
+source-bound full SVG sheets instead of another automatic first-finding PNG crop
+per failed row. Positive ray traces are reproducible from those sources; failure
+rays remain in the findings. This avoids duplicating evidence beyond the unchanged
+100 MB default output cap. Earlier observation bytes and crops are untouched.
+
 Version **5.17** adds the CHECK3 C1 independent review-2 predicates (N3–N6,
 N12). They consume native IR and measured painted geometry, not renderer success
 flags. New `check3-*` observation IDs keep earlier observations separate. No
