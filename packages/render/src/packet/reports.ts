@@ -28,7 +28,8 @@ import type {
 } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds } from "./page.js";
-import { n, text, wrap } from "./svg.js";
+import { n, text } from "./svg.js";
+import { reportNoteLines } from "./report-note-wrapping.js";
 import { reportDocumentContext } from "./document-report.js";
 import type { DocumentRowDraft } from "./document-types.js";
 
@@ -286,7 +287,7 @@ function reportNotes(
       ]
     : table.notes;
   return notes.flatMap((note, index) =>
-    wrap(note, Math.floor(width / 1.6)).map((value) => ({ index, value })),
+    reportNoteLines(note, width).map((value) => ({ index, value })),
   );
 }
 function reportNoteSvg(

@@ -67,6 +67,13 @@ at whitespace, then after `-`, `/`, `.`, `:` or `_`, and inside other runs only
 as a last resort. Separators stay with the preceding run in order numbers and
 URLs. A URL containing `/M1/` does not reserve the whole URL's width.
 
+State/status columns first try a measured whole-word minimum before distributing
+surplus width. The candidate keeps the same text size and cannot increase any
+cell's line count or header/row height. Notes use measured word boundaries at 2.5 mm,
+preserving authored code points, whitespace and line separators. If an
+indivisible note word or the existing note-line capacity cannot fit, the native
+layout is retained; these preferences never add pages or a new refusal.
+
 Columns use compact 1 mm insets and restore 2 mm independently when every cell
 keeps its line count and its header still fits. If all whole header words cannot
 fit together, release one column's header minimum at a time, largest width saving

@@ -16,6 +16,7 @@ import {
   type ReportIdentifiers,
 } from "./report-identifiers.js";
 import { wrapReportCell } from "./report-wrapping.js";
+import { preferWholeStateWords } from "./report-state-words.js";
 import {
   ReportMeasurementError,
   reportCellContext,
@@ -226,7 +227,24 @@ export function reportCells(
     names,
     identifiers,
     allocation,
-    standard,
+    preferWholeStateWords(
+      table,
+      width,
+      cellSize,
+      allocation,
+      standard,
+      (candidate) =>
+        measuredCells(
+          ir,
+          table,
+          width,
+          page,
+          cellSize,
+          names,
+          identifiers,
+          candidate,
+        ),
+    ),
   );
 }
 

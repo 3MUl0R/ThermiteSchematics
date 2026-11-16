@@ -58,10 +58,11 @@ function captionSheet(
       );
       claims.push(
         required(placed.slot.allocatedMm, "Missing document caption slot").rect,
+        ...(placed.slot.leader ? [placed.slot.leader.rect] : []),
       );
       return documentCaptionInk(need, placed.slot, {
         form: placed.form,
-        ...(placed.groups ? { groups: placed.groups } : {}),
+        ...("groups" in placed ? { groups: placed.groups } : {}),
       });
     })
     .join("");

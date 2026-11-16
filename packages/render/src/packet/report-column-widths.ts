@@ -273,7 +273,7 @@ export function reportColumns(
   };
 }
 
-function distributeReportWidths(
+export function distributeReportWidths(
   minimum: number[],
   weights: readonly number[],
   width: number,
