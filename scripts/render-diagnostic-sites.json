@@ -683,6 +683,14 @@
       "codes": ["R006"]
     },
     {
+      "id": "packages/render/src/packet/references-final.ts:reserveFinalIndex:factory-call:1",
+      "path": "packages/render/src/packet/references-final.ts",
+      "owner": "reserveFinalIndex",
+      "kind": "factory-call",
+      "factory": "packages/render/src/packet/errors.ts:failure",
+      "codes": ["R006"]
+    },
+    {
       "id": "packages/render/src/packet/reports.ts:documentationDrafts:factory-call:1",
       "path": "packages/render/src/packet/reports.ts",
       "owner": "documentationDrafts",
@@ -1837,6 +1845,9 @@
     },
     "packages/render/src/packet/page.ts": {
       "category": "page-utility"
+    },
+    "packages/render/src/packet/references-final.ts": {
+      "category": "packet-budget"
     },
     "packages/render/src/packet/reports.ts": {
       "category": "public-boundary"

@@ -502,8 +502,14 @@ may place each location beneath its endpoint. See the
 
 Each sheet includes references identifying the visible device/function and its
 A-D / 1-6 zone. Cable endpoints and schedule rows also contribute references.
-`index: true` appends an index of content sheets and a device/function reference
-section. Reference locations belong to that generated packet, and can change
+`index: true` appends a final-sheet index and a device/function reference
+section. The index includes its own pages and the reference pages; its device
+column describes content sheets only. Repeated titles are qualified by their
+final sheet number, which is a destination rather than an authored-view identity.
+Index capacity is reserved within the 100-sheet packet limit; a packet that
+cannot close within that bound refuses. `references: false` omits the reference
+section while keeping every issued sheet, including the index itself, indexed.
+Reference locations belong to that generated packet, and can change
 when the request, paper, source or renderer changes. Object UIDs persist; sheet
 numbers and continuation labels are not permanent identifiers. Manual placement,
 pinned page breaks and incremental layout stability are not implemented.

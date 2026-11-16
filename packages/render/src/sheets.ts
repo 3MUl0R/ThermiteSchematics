@@ -12,7 +12,7 @@ import {
 import { circuitPreviewSheets as legendSheets } from "./layout/circuit-preview-cache.js";
 import { rootedPageCostFailure } from "./packet/rooted-bound.js";
 import { renderErrorContext } from "./render-error-context.js";
-import { referenceTables } from "./packet/references.js";
+import { finalReferenceDrafts } from "./packet/references-final.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
 import { appendViewDrafts } from "./packet/assembly.js";
@@ -75,7 +75,6 @@ export { normalizePaperPage, sheetLabel } from "./packet/page.js";
 import { printPacketHtml } from "./packet/html.js";
 export { printPacketHtml } from "./packet/html.js";
 
-import { tableDrafts } from "./packet/reports.js";
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
 
 async function renderPacket(
@@ -263,25 +262,20 @@ async function renderPacket(
   if (!companions.ok) return companions;
   drafts = companions.value;
   if (request.index) {
-    const located = legendSheets(ir, drafts, paper.value);
-    if (!located.ok) return located;
-    centroidReferences(drafts, located.navigation?.occurrences ?? []);
-    const indexes = referenceTables(ir, drafts, request, referenceDevices);
-    referenceSelection = indexes.referenceSelection;
-    for (const table of indexes.tables) {
-      const extra = tableDrafts(ir, table, presentation, paper.value);
-      if (!extra.ok)
-        return {
-          ok: false,
-          error: contextError(
-            extra.error,
-            drafts.flatMap((d) => d.views ?? []),
-          ),
-        };
-      drafts.push(...extra.value);
-    }
+    const indexes = packetReferences(
+      ir,
+      drafts,
+      request,
+      referenceDevices,
+      presentation,
+      paper.value,
+      contextError,
+    );
+    if (!indexes.ok) return indexes;
+    referenceSelection = indexes.value.referenceSelection;
+    drafts = indexes.value.drafts;
   }
-  if (drafts.length > 100)
+  if (drafts.length > 100 /* Backstop after composition. */)
     return composedFailure(
       "Packet exceeds the 100-sheet limit including indexes.",
     );
@@ -295,6 +289,40 @@ async function renderPacket(
     presentation,
   );
 }
+function packetReferences(
+  ir: Readonly<ElectricalIr>,
+  drafts: Draft[],
+  request: SchematicPacketRequest,
+  referenceDevices: ReturnType<typeof resolveDeviceFilter> | undefined,
+  presentation: CompiledProjectPresentation | undefined,
+  page: import("./packet/types.js").PaperPage,
+  contextError: typeof withPacketViews,
+): RenderOutcome<{
+  drafts: Draft[];
+  referenceSelection: ReferenceSelection | undefined;
+}> {
+  const located = legendSheets(ir, drafts, page);
+  if (!located.ok) return located;
+  centroidReferences(drafts, located.navigation?.occurrences ?? []);
+  const indexes = finalReferenceDrafts(
+    ir,
+    drafts,
+    request,
+    referenceDevices,
+    presentation,
+    page,
+  );
+  return indexes.ok
+    ? indexes
+    : {
+        ok: false,
+        error: contextError(
+          indexes.error,
+          drafts.flatMap((d) => d.views ?? []),
+        ),
+      };
+}
+
 function checkedPageCost(
   drafts: Draft[],
   contextError: typeof withPacketViews,

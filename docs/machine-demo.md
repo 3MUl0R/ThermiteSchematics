@@ -44,7 +44,7 @@ sheets even when search is filtering the screen. For printing, use Tabloid at
    and show how one model produces consistent documentation.
 
 The drawing index is appended after the content, followed by device/function
-references. It identifies the content sheets in this packet, not every possible
+references. It identifies every issued sheet, including index and reference pages, not every possible
 view of the project. All modeled wires and cable cores remain in the schedules.
 
 ## Demonstrate a reviewed change

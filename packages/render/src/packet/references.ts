@@ -10,6 +10,8 @@ import type {
 import { sheetLabel, bounds, normalizePaperPage } from "./page.js";
 import { wrapText } from "../text-metrics.js";
 
+export const INDEX_TITLE = "Drawing index";
+
 type ReferenceDraft = Pick<
   Draft,
   "view" | "references" | "documentationTable" | "referenceNotes"
@@ -76,7 +78,9 @@ function isDeviceReference(r: SheetReference): boolean {
 
 /** Content drafts already carry final terminal-centroid locations from the
  * navigation seam. Preserve aggregate report groups while collecting each
- * function's final zones; appending index pages must happen later. */
+ * function's final zones; appending index pages must happen later.
+ * Legacy callers use the content-only index table; packet composition discards
+ * it and rebuilds the index after reference pagination establishes all rows. */
 export function referenceTables(
   ir: Readonly<ElectricalIr>,
   drafts: readonly ReferenceDraft[],
@@ -87,29 +91,7 @@ export function referenceTables(
   referenceSelection: ReferenceSelection | undefined;
 } {
   let referenceSelection: ReferenceSelection | undefined;
-  const indexTable: DocumentationTable = {
-    kind: "index",
-    title: "Drawing index",
-    columns: ["Sheet", "View", "Devices"],
-    widths: [0.08, 0.42, 0.5],
-    notes: [
-      "Index covers the generated content sheets. References point to this packet revision.",
-      ...(request.references === false
-        ? [
-            "Device/function reference index omitted by request; content sheets remain indexed.",
-          ]
-        : []),
-    ],
-    rows: drafts.map((d, i) => ({
-      key: String(i + 1),
-      cells: [
-        String(i + 1),
-        sheetLabel(d.view),
-        [...new Set(d.references?.map((r) => r.designation) ?? [])].join(", "),
-      ],
-      deviceUids: [...new Set(d.references?.map((r) => r.deviceUid) ?? [])],
-    })),
-  };
+  const indexTable = drawingIndex(drafts, request);
   const groups = new Map<
     string,
     {
@@ -205,5 +187,51 @@ export function referenceTables(
     tables:
       request.references === false ? [indexTable] : [indexTable, refTable],
     referenceSelection,
+  };
+}
+
+/** Titles are presentation; the final physical sheet number is the row identity. */
+export function drawingIndex(
+  drafts: readonly ReferenceDraft[],
+  request: Pick<SchematicPacketRequest, "references" | "page">,
+): DocumentationTable {
+  const duplicates = new Map<string, number>();
+  for (const draft of drafts) {
+    const label = sheetLabel(draft.view);
+    duplicates.set(label, (duplicates.get(label) ?? 0) + 1);
+  }
+  return {
+    kind: "index",
+    title: INDEX_TITLE,
+    columns: ["Sheet", "View", "Devices"],
+    widths: [0.08, 0.42, 0.5],
+    notes: [
+      "Index covers every final sheet, including index and reference pages. Devices are listed for content sheets.",
+      ...(request.references === false
+        ? [
+            "Device/function reference index omitted by request; every issued sheet remains indexed.",
+          ]
+        : []),
+    ],
+    rows: drafts.map((draft, i) => {
+      const d =
+        "kind" in draft.view &&
+        ["index", "references"].includes(draft.view.kind)
+          ? { ...draft, references: [] }
+          : draft;
+      return {
+        key: String(i + 1),
+        cells: [
+          String(i + 1),
+          duplicates.get(sheetLabel(d.view)) === 1
+            ? sheetLabel(d.view)
+            : `${sheetLabel(d.view)} (sheet ${String(i + 1).padStart(2, "0")})`,
+          [...new Set(d.references?.map((r) => r.designation) ?? [])].join(
+            ", ",
+          ),
+        ],
+        deviceUids: [...new Set(d.references?.map((r) => r.deviceUid) ?? [])],
+      };
+    }),
   };
 }
