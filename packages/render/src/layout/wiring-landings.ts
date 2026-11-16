@@ -68,21 +68,38 @@ function splitPort(
       return p.y - q.y || p.x - q.x || (a.edge.id < b.edge.id ? -1 : 1);
     });
   const y = required(port.y, "Unplaced wiring terminal");
-  const globalY =
-    required(reference.nodes.get(node.id)?.y, "Missing wiring device") + y;
   for (const [i, use] of rest.entries()) {
-    const sign =
+    const side =
       rest.length === 2
         ? i === 0
-          ? -1
-          : 1
-        : remoteEnd(use, reference).y < globalY
-          ? -1
-          : 1;
+          ? "NORTH"
+          : "SOUTH"
+        : y === Math.min(...(node.ports ?? []).map((p) => p.y ?? Infinity))
+          ? "NORTH"
+          : "SOUTH";
     const id = `${port.id}${WIRING_LANDING_SUFFIX}${use.edge.id}-${use.end}`;
     node.ports = [
       ...(node.ports ?? []),
-      { ...port, id, y: y + sign * WIRING_LANDING_OFFSET },
+      {
+        ...port,
+        id,
+        x:
+          required(port.x, "Unplaced wiring terminal") +
+          (port.layoutOptions?.["elk.port.side"] === "WEST" ? -1 : 1) *
+            WIRING_LANDING_OFFSET,
+        y,
+        layoutOptions: {
+          ...port.layoutOptions,
+          "elk.port.side": side,
+          // Native embedded north/south ports stay at the authored row. This
+          // controls ELK's approach direction; no routed endpoint is moved.
+          "elk.port.borderOffset": String(
+            -(side === "NORTH"
+              ? y
+              : required(node.height, "Missing wiring height") - y),
+          ),
+        },
+      },
     ];
     use.edge[use.end] = use.edge[use.end].map((old) =>
       old === port.id ? id : old,
@@ -117,5 +134,11 @@ export function independentWiringInput(input: ElkNode, baseline: ElkNode) {
     );
     splitPort(node, port, uses, reference, aliases);
   }
+  // This candidate's side approaches need less inter-layer room. The original
+  // profile stays intact; route, ink, glyph and final-print guards still apply.
+  copy.layoutOptions = {
+    ...copy.layoutOptions,
+    "elk.layered.spacing.nodeNodeBetweenLayers": "9",
+  };
   return { input: copy, aliases };
 }

@@ -127,7 +127,13 @@ it("rejects a detached constrained endpoint without snapping it back after routi
     const edge = required(
       result.edges?.find((e) => e.sources.some((id) => id.includes("landing"))),
     );
-    required(edge.sections?.[0]).startPoint.x -= 2;
+    const section = required(edge.sections?.[0]),
+      next = section.bendPoints?.[0] ?? section.endPoint;
+    // Detach 0.1 mm along the native run, inside the terminal mark. Other
+    // geometry guards must not conceal a disabled native endpoint binding.
+    if (Math.abs(next.x - section.startPoint.x) > 1e-7)
+      section.startPoint.x += Math.sign(next.x - section.startPoint.x) * 0.2;
+    else section.startPoint.y += Math.sign(next.y - section.startPoint.y) * 0.2;
     return result;
   };
   expect(
@@ -244,8 +250,9 @@ it("keeps one physical port and bounded attachment coordinates for every declare
   for (const [alias, physical] of plan.aliases) {
     const a = required(ports.find((p) => p.id === alias)),
       b = required(ports.find((p) => p.id === physical));
-    expect(a.x).toBe(b.x);
-    expect(Math.abs(required(a.y) - required(b.y))).toBe(0.5);
+    expect(
+      Math.hypot(required(a.x) - required(b.x), required(a.y) - required(b.y)),
+    ).toBeLessThanOrEqual(0.7);
     expect(ports.filter((p) => p.id === physical)).toHaveLength(1);
   }
 });

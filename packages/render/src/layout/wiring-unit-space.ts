@@ -17,7 +17,15 @@ function unitsPoint(point: ElkPoint, factor: number) {
 }
 function unitsNode(node: ElkNode, factor: number) {
   unitsShape(node, factor);
-  for (const port of node.ports ?? []) unitsShape(port, factor);
+  for (const port of node.ports ?? []) {
+    unitsShape(port, factor);
+    const offset = port.layoutOptions?.["elk.port.borderOffset"];
+    if (offset !== undefined)
+      port.layoutOptions = {
+        ...port.layoutOptions,
+        "elk.port.borderOffset": String(Number(offset) * factor),
+      };
+  }
   for (const edge of node.edges ?? []) {
     for (const label of edge.labels ?? []) unitsShape(label, factor);
     for (const point of edge.junctionPoints ?? []) unitsPoint(point, factor);

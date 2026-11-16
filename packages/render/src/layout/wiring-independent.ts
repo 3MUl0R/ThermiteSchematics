@@ -1,3 +1,4 @@
+import { wiringLandingInkFits } from "./wiring-landing-ink.js";
 import type { ElkNode, ELK } from "elkjs/lib/elk-api.js";
 import { independentWiringInput } from "./wiring-landings.js";
 import { independentWiringRoutes } from "./wiring-independent-guard.js";
@@ -29,6 +30,7 @@ export async function chooseIndependentWiring(
   baseline: ElkNode,
   engine: ELK,
   admit?: (candidate: ElkNode, original: ElkNode) => boolean,
+  strokes?: ReadonlyMap<string, number>,
 ) {
   const plan = independentWiringInput(input, baseline);
   if (!plan) return baseline;
@@ -46,6 +48,7 @@ export async function chooseIndependentWiring(
   if (
     !conserved(candidate, plan.input) ||
     !independentWiringRoutes(candidate, plan.aliases) ||
+    !wiringLandingInkFits(candidate, plan.aliases, strokes) ||
     !circuitConductorNonRegression(candidate, baseline) ||
     !circuitCrossingGuard(candidate, baseline) ||
     (admit && !admit(candidate, baseline))

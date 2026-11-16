@@ -10,6 +10,7 @@ export async function layoutWiring(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
   admit?: (candidate: ElkNode, original: ElkNode) => boolean,
+  strokes?: ReadonlyMap<string, number>,
 ): Promise<ElkNode> {
   const owners = new Map(
     children.flatMap((node) => (node.ports ?? []).map((p) => [p.id, node.id])),
@@ -52,5 +53,5 @@ export async function layoutWiring(
   const graph = await engine.layout(input);
   assertTopologyIdentities(graph, expected);
   assertTopologyRouteEndpoints(graph);
-  return chooseIndependentWiring(expected, graph, engine, admit);
+  return chooseIndependentWiring(expected, graph, engine, admit, strokes);
 }

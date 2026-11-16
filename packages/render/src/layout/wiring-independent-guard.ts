@@ -1,3 +1,4 @@
+import { routeSegments } from "./ink-geometry.js";
 import type { ElkNode, ElkExtendedEdge, ElkPoint } from "elkjs/lib/elk-api.js";
 import { required } from "../presentation/util.js";
 import { WIRING_TERMINAL_RADIUS } from "./wiring-landings.js";
@@ -5,12 +6,9 @@ import { WIRING_TERMINAL_RADIUS } from "./wiring-landings.js";
 type Segment = { a: ElkPoint; b: ElkPoint };
 const EPSILON = 1e-7;
 function segments(edge: ElkExtendedEdge): Segment[] {
-  return (edge.sections ?? []).flatMap((s) => {
-    const points = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
-    return points
-      .slice(1)
-      .map((b, i) => ({ a: required(points[i], "Missing wiring point"), b }));
-  });
+  return (edge.sections ?? []).flatMap((s) =>
+    routeSegments([s.startPoint, ...(s.bendPoints ?? []), s.endPoint]),
+  );
 }
 function intersection(a: Segment, b: Segment) {
   const left = Math.max(Math.min(a.a.x, a.b.x), Math.min(b.a.x, b.b.x));
@@ -40,7 +38,7 @@ function physicalMarks(graph: ElkNode, aliases: ReadonlyMap<string, string>) {
     }
   return marks;
 }
-function inside(point: ElkPoint, mark: ElkPoint) {
+function insideTerminalMark(point: ElkPoint, mark: ElkPoint) {
   return (
     Math.hypot(point.x - mark.x, point.y - mark.y) <=
     WIRING_TERMINAL_RADIUS + EPSILON
@@ -61,7 +59,7 @@ function aliasLandingsFit(
       const owner = aliases.get(port.id);
       if (!owner) return true;
       const mark = required(marks.get(owner), "Missing physical wiring mark");
-      return inside(
+      return insideTerminalMark(
         {
           x:
             required(node.x, "Unplaced wiring device") +
@@ -118,7 +116,10 @@ export function independentWiringRoutes(
           } else if (
             !common.some((id) =>
               overlap.every((p) =>
-                inside(p, required(marks.get(id), "Missing physical terminal")),
+                insideTerminalMark(
+                  p,
+                  required(marks.get(id), "Missing physical terminal"),
+                ),
               ),
             )
           )

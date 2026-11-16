@@ -1,42 +1,22 @@
+import {
+  routeSegments as segments,
+  pointInsideBox as inside,
+  segmentTouchesBox as touchesBox,
+  type InkBox,
+} from "./ink-geometry.js";
 import type { LayoutPoint } from "../types.js";
 import { required } from "../presentation/util.js";
 
 type Point = LayoutPoint;
-export type LabelInkBox = {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-};
+export type LabelInkBox = InkBox;
 export type LabelSupportContext = {
   foreign: readonly (readonly Point[])[];
   obstacles: readonly LabelInkBox[];
   bounds: LabelInkBox;
   strokeClearance?: number;
+  foreignStrokes?: readonly number[];
 };
 const EPSILON = 1e-7;
-function segments(route: readonly Point[]) {
-  return route.slice(1).map((b, i) => ({
-    a: required(route[i], "Missing label support point"),
-    b,
-  }));
-}
-function touchesBox(a: Point, b: Point, box: LabelInkBox) {
-  return (
-    Math.max(a.x, b.x) >= box.left - EPSILON &&
-    Math.min(a.x, b.x) <= box.right + EPSILON &&
-    Math.max(a.y, b.y) >= box.top - EPSILON &&
-    Math.min(a.y, b.y) <= box.bottom + EPSILON
-  );
-}
-function inside(p: Point, box: LabelInkBox) {
-  return (
-    p.x >= box.left - EPSILON &&
-    p.x <= box.right + EPSILON &&
-    p.y >= box.top - EPSILON &&
-    p.y <= box.bottom + EPSILON
-  );
-}
 function contact(a: Point, b: Point, c: Point, d: Point) {
   return touchesBox(a, b, {
     left: Math.min(c.x, d.x),

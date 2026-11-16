@@ -1,3 +1,4 @@
+import { wiringStrokeMm } from "./layout/wiring-landing-ink.js";
 import { labelLeaderArrow } from "./layout/wire-label-support.js";
 import {
   ownedWiringLabels,
@@ -114,6 +115,7 @@ export async function prepareWiringDrawing(
           return admit(proposed, original);
         }
       : undefined,
+    new Map(state.selected.map((c, i) => [`e${i}`, wiringStrokeMm(c.jumper)])),
   );
   return wiringDrawing(graph, state, request);
 }
@@ -481,7 +483,7 @@ function appendWiringSection(
     }
   }
   out.push(
-    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${selected[i]!.jumper ? 0.7 : 0.35}"/>`,
+    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${wiringStrokeMm(selected[i]!.jumper)}"/>`,
   );
 }
 
