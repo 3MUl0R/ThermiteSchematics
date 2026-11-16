@@ -1,6 +1,7 @@
 import type { DocumentationTable } from "@thermite/query";
 import { measureText } from "../text-metrics.js";
 import type { ReportIdentifiers } from "./report-identifiers.js";
+import { reportNameIndex } from "./report-token-index.js";
 
 export interface ReportName {
   value: string;
@@ -36,25 +37,27 @@ export function* reportTextSegments(value: string) {
   if (segment) yield { segment, index };
 }
 
+const tokenizers = new WeakMap<
+  readonly ReportName[],
+  {
+    match: ReturnType<typeof reportNameIndex>;
+    values: Map<string, ReportToken[]>;
+  }
+>();
+
 /** Longest matching names, then the indivisible aspects/words they protect. */
 export function reportTokens(
   value: string,
   names: readonly ReportName[],
 ): ReportToken[] {
-  const hits: ReportToken[] = [];
-  for (const name of names) {
-    let start = value.indexOf(name.value);
-    while (start >= 0) {
-      const end = start + name.value.length;
-      // Inspect only the adjacent code point, never copy the whole prefix.
-      if (
-        !/[\p{L}\p{N}]$/u.test(value.slice(Math.max(0, start - 2), start)) &&
-        !/^[\p{L}\p{N}]/u.test(value.slice(end, end + 2))
-      )
-        hits.push({ ...name, start, end, authoredName: name.value });
-      start = value.indexOf(name.value, start + 1);
-    }
+  let cached = tokenizers.get(names);
+  if (!cached) {
+    cached = { match: reportNameIndex(names), values: new Map() };
+    tokenizers.set(names, cached);
   }
+  const prior = cached.values.get(value);
+  if (prior) return prior;
+  const hits = cached.match(value);
   const result: ReportToken[] = [];
   let previousEnd = -1;
   for (const hit of hits.sort((a, b) => a.start - b.start || b.end - a.end)) {
@@ -80,6 +83,7 @@ export function reportTokens(
       if (part.trim()) result.push({ ...hit, start, end, value: part });
     }
   }
+  cached.values.set(value, result);
   return result;
 }
 

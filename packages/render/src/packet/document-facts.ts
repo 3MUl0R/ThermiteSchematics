@@ -1,13 +1,20 @@
+import { renderCache } from "./render-cache.js";
 import { required } from "../presentation/util.js";
-import { serializeIr, type ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr } from "@thermite/compiler";
 import {
   buildDocumentation,
   type DocumentationTable,
   type ReportKind,
 } from "@thermite/query";
 import type { CompiledProjectPresentation } from "@thermite/compiler";
-import { navigationHash } from "./navigation-identity.js";
-import { sourceIncidences } from "./navigation-incidence.js";
+import {
+  navigationHash,
+  navigationSnapshotDigest,
+} from "./navigation-identity.js";
+import {
+  sourceIncidences,
+  type SourceIncidence,
+} from "./navigation-incidence.js";
 import type {
   DocumentFact,
   DocumentNeed,
@@ -64,7 +71,7 @@ export function documentIdentity(
   presentation?: CompiledProjectPresentation,
 ): Omit<DocumentIdentity, "id"> {
   return {
-    snapshotDigest: navigationHash(serializeIr(ir)),
+    snapshotDigest: navigationSnapshotDigest(ir),
     presentationDigest: navigationHash(presentation ?? null),
     revision: presentation?.revision ?? "UNSPECIFIED",
   };
@@ -103,28 +110,19 @@ export function rowFacts(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   key: string,
+  incidences: readonly SourceIncidence[] = sourceIncidences(ir),
+  cores?: readonly Extract<DocumentFact, { kind: "core-inventory" }>[],
 ): {
   facts: DocumentFact[];
   columns: SemanticColumn[];
 } {
-  const incidences = sourceIncidences(ir);
   if (table.kind === "wires") {
     const facts: DocumentFact[] = incidences
       .filter((i) => factRowKey({ kind: "conductor-incidence", ...i }) === key)
       .map((i) => ({ kind: "conductor-incidence", ...i }));
-    for (const cable of ir.cables) {
-      const type = required(
-        ir.cableTypes.find((t) => t.id === cable.typeId),
-        "Missing document source",
-      );
-      for (const core of type.conductors)
-        if (JSON.stringify([cable.uid, core.id]) === key)
-          facts.push({
-            kind: "core-inventory",
-            cableUid: cable.uid,
-            conductorId: core.id,
-          });
-    }
+    for (const core of cores ?? sourceCoreFacts(ir))
+      if (JSON.stringify([core.cableUid, core.conductorId]) === key)
+        facts.push({ ...core });
     return { facts, columns: ["identity", "endpoints", "status"] };
   }
   if (table.kind === "terminals") {
@@ -222,10 +220,11 @@ export function factTable(
         }
       : {}),
   });
-  const wanted = new Set(facts.map(factKey));
+  const wanted = new Set(facts.map(factKey)),
+    factsForRow = indexedRowFacts(ir);
   const { selection: _selection, ...native } = table;
   const rows = table.rows.filter((r) =>
-    rowFacts(ir, table, r.key).facts.some((f) => wanted.has(factKey(f))),
+    factsForRow(table, r.key).facts.some((f) => wanted.has(factKey(f))),
   );
   const coresOnly =
     kind === "wires" &&
@@ -242,4 +241,79 @@ export function factTable(
     rows,
     notes: companionNotes(table, rows, ir.devices.length),
   };
+}
+
+function* sourceCoreFacts(
+  ir: Readonly<ElectricalIr>,
+): Generator<Extract<DocumentFact, { kind: "core-inventory" }>> {
+  for (const cable of ir.cables) {
+    const type = required(
+      ir.cableTypes.find((t) => t.id === cable.typeId),
+      "Missing document source",
+    );
+    for (const core of type.conductors)
+      yield {
+        kind: "core-inventory",
+        cableUid: cable.uid,
+        conductorId: core.id,
+      };
+  }
+}
+
+function createRowFactsIndex(ir: Readonly<ElectricalIr>) {
+  let rows: Map<string, SourceIncidence[]> | undefined,
+    cores:
+      | Map<string, Extract<DocumentFact, { kind: "core-inventory" }>[]>
+      | undefined;
+  return (table: DocumentationTable, key: string) => {
+    if (!rows) {
+      const grouped = new Map<string, SourceIncidence[]>();
+      for (const incidence of sourceIncidences(ir)) {
+        const rowKey = factRowKey({
+          kind: "conductor-incidence",
+          ...incidence,
+        });
+        const values = grouped.get(rowKey) ?? [];
+        values.push(incidence);
+        grouped.set(rowKey, values);
+      }
+      rows = grouped;
+    }
+    // Keep type validation lazy: non-wire rows never required cable types.
+    if (table.kind === "wires" && !cores) {
+      const grouped = new Map<
+        string,
+        Extract<DocumentFact, { kind: "core-inventory" }>[]
+      >();
+      for (const core of sourceCoreFacts(ir)) {
+        const rowKey = factRowKey(core),
+          values = grouped.get(rowKey) ?? [];
+        values.push(core);
+        grouped.set(rowKey, values);
+      }
+      cores = grouped;
+    }
+    return rowFacts(ir, table, key, rows.get(key) ?? [], cores?.get(key) ?? []);
+  };
+}
+const rowIndexes = new WeakMap<
+  NonNullable<ReturnType<typeof renderCache.getStore>>,
+  WeakMap<Readonly<ElectricalIr>, ReturnType<typeof createRowFactsIndex>>
+>();
+
+/** One render's source endpoints and native cores, in their enumeration order. */
+export function indexedRowFacts(ir: Readonly<ElectricalIr>) {
+  const scope = renderCache.getStore();
+  if (!scope) return createRowFactsIndex(ir);
+  let indexes = rowIndexes.get(scope);
+  if (!indexes) {
+    indexes = new WeakMap();
+    rowIndexes.set(scope, indexes);
+  }
+  let index = indexes.get(ir);
+  if (!index) {
+    index = createRowFactsIndex(ir);
+    indexes.set(ir, index);
+  }
+  return index;
 }

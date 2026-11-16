@@ -1,3 +1,4 @@
+import { reportSourceIndex } from "./report-source-index.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import { buildCableSchedule, type DocumentationTable } from "@thermite/query";
 
@@ -112,13 +113,14 @@ function sourceContext(
   row: Row,
   connections?: ReadonlyMap<string, TerminalId[]>,
   kind?: DocumentationTable["kind"],
+  index = reportSourceIndex(ir),
 ) {
-  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+  const { devices } = index;
   const [uid, key] = rowParts(row);
   const device = devices.get(uid ?? "");
-  const relation = ir.relations.find((r) => r.uid === row.key);
-  const wire = [...ir.wires, ...ir.jumpers].find((w) => w.uid === row.key);
-  const cable = ir.cables.find((c) => c.uid === uid);
+  const relation = index.relations.get(row.key);
+  const wire = index.wires.get(row.key);
+  const cable = uid === undefined ? undefined : index.cables.get(uid);
   const endpoint = (t: TerminalId) =>
     `${deviceName(devices, t.deviceUid)}.${t.terminalKey}`;
   return {
@@ -280,9 +282,16 @@ export function reportIdentifiers(
     );
   const connections =
     table.kind === "terminals" ? terminalConnections(ir) : undefined;
+  const sourceIndex = reportSourceIndex(ir);
   return new Map(
     table.rows.map((row, index) => {
-      const context = sourceContext(ir, row, connections, table.kind);
+      const context = sourceContext(
+        ir,
+        row,
+        connections,
+        table.kind,
+        sourceIndex,
+      );
       const columns = table.columns.map(() => [] as string[]);
       for (const [column, header, source] of policy) {
         if (table.columns[column] !== header) continue;

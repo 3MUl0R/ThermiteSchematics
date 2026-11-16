@@ -1,3 +1,8 @@
+import {
+  renderCache,
+  MAX_GEOMETRY_CACHE_KEY_UNITS,
+  MAX_GEOMETRY_CACHE_TOTAL_KEY_UNITS,
+} from "./render-cache.js";
 import { required } from "../presentation/util.js";
 import {
   svgTree,
@@ -76,8 +81,38 @@ function labelClip(
   return clip;
 }
 
-/** Generated SVG only. Retains transforms and clips instead of treating copied inner SVG as full glyphs. */
+/** Read-only parse of this exact SVG, when the bounded render cache has it. */
+export function cachedNavigationTree(svg: string): SvgNode | undefined {
+  return svg.length <= MAX_GEOMETRY_CACHE_KEY_UNITS
+    ? renderCache.getStore()?.entries.get(svg)?.[0]?.node
+    : undefined;
+}
+
+/** Exact generated SVG repeats are read-only within the render operation. */
 export function navigationGeometry(svg: string): NavigationGeometry[] {
+  const cache =
+      svg.length <= MAX_GEOMETRY_CACHE_KEY_UNITS
+        ? renderCache.getStore()
+        : undefined,
+    prior = cache?.entries.get(svg);
+  if (prior) return prior;
+  const result = measureNavigationGeometry(svg);
+  // Keep a packet's measurements bounded and release them at the render boundary.
+  if (
+    cache &&
+    cache.entries.size < 256 &&
+    cache.nodes + result.length <= 50000 &&
+    cache.keyUnits + svg.length <= MAX_GEOMETRY_CACHE_TOTAL_KEY_UNITS
+  ) {
+    cache.entries.set(svg, result);
+    cache.nodes += result.length;
+    cache.keyUnits += svg.length;
+  }
+  return result;
+}
+
+/** Generated SVG only. Retains transforms and clips instead of treating copied inner SVG as full glyphs. */
+function measureNavigationGeometry(svg: string): NavigationGeometry[] {
   const tree = svgTree(svg),
     styles = svgStyles(tree),
     all = descendants(tree);

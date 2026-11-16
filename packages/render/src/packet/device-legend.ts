@@ -86,17 +86,32 @@ export function legendSheets(
     ...(documents ? { documents } : {}),
   });
   if (!finalized.ok) return finalized;
-  const located = structuredClone(drafts);
-  centroidReferences(located, finalized.value.navigation.occurrences);
   return {
     ok: true,
-    value: finalized.value.sheets.map((sheet, i) => ({
-      ...sheet,
-      references: located[i]?.references ?? sheet.references,
-    })),
+    value: locatedSheets(drafts, finalized.value),
     navigation: finalized.value.navigation,
   };
 }
+/** centroidReferences only replaces references; detach that output without
+ * cloning unrelated layout graphs and document bodies. */
+function locatedSheets(
+  drafts: readonly Draft[],
+  finalized: {
+    sheets: RenderedSheet[];
+    navigation: { occurrences: Parameters<typeof centroidReferences>[1] };
+  },
+) {
+  const located = drafts.map((draft) => ({
+    ...draft,
+    references: structuredClone(draft.references ?? []),
+  }));
+  centroidReferences(located, finalized.navigation.occurrences);
+  return finalized.sheets.map((sheet, i) => ({
+    ...sheet,
+    references: located[i]?.references ?? sheet.references,
+  }));
+}
+
 function repartitions(drafts: readonly Draft[], page: PaperPage): Draft[][] {
   const axis = drafts.find((d) => d.rootedPartAxis)?.rootedPartAxis;
   if (!axis || drafts.some((d) => !d.rootedParts || d.rootedPartAxis !== axis))

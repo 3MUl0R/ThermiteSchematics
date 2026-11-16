@@ -1,3 +1,4 @@
+import { renderCache } from "./render-cache.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import {
   buildDocumentation,
@@ -9,9 +10,36 @@ import {
   factKey,
   factReport,
   needColumns,
-  rowFacts,
+  indexedRowFacts,
 } from "./document-facts.js";
 
+export const MAX_NATIVE_TABLE_CACHE_ENTRIES = 64;
+
+interface NativeTableEntry {
+  kind: string;
+  device: string | undefined;
+  references: ScheduleReferences | undefined;
+  table: DocumentationTable;
+}
+const nativeTables = new WeakMap<
+  NonNullable<ReturnType<typeof renderCache.getStore>>,
+  { count: number; byIr: WeakMap<Readonly<ElectricalIr>, NativeTableEntry[]> }
+>();
+function nativeTableEntries(ir: Readonly<ElectricalIr>) {
+  const scope = renderCache.getStore();
+  if (!scope) return undefined;
+  let tables = nativeTables.get(scope);
+  if (!tables) {
+    tables = { count: 0, byIr: new WeakMap() };
+    nativeTables.set(scope, tables);
+  }
+  let entries = tables.byIr.get(ir);
+  if (!entries) {
+    entries = [];
+    tables.byIr.set(ir, entries);
+  }
+  return { entries, tables };
+}
 /** The public query remains the source projection, including non-strip devices. */
 export function nativeDocumentTable(
   ir: Readonly<ElectricalIr>,
@@ -36,7 +64,16 @@ export function nativeDocumentTable(
       return undefined;
     }
   }
-  return buildDocumentation(
+  const cached = nativeTableEntries(ir),
+    actualReferences = kind === "wires" ? references : undefined;
+  const found = cached?.entries.find(
+    (e) =>
+      e.kind === kind &&
+      e.device === device &&
+      e.references === actualReferences,
+  );
+  if (found) return found.table;
+  const table = buildDocumentation(
     ir,
     {
       format: "documentation-view-request/0.1",
@@ -45,6 +82,11 @@ export function nativeDocumentTable(
     },
     kind === "wires" ? (references ?? {}) : undefined,
   );
+  if (cached && cached.tables.count < MAX_NATIVE_TABLE_CACHE_ENTRIES) {
+    cached.entries.push({ kind, device, references: actualReferences, table });
+    cached.tables.count++;
+  }
+  return table;
 }
 const keys = (value: object) => Object.keys(value).sort().join(",");
 function factShape(fact: DocumentNeedSeed["requiredFacts"][number]) {
@@ -123,18 +165,22 @@ export function validateDocumentNeed(
           ? JSON.stringify([fact.terminal.deviceUid, fact.terminal.terminalKey])
           : "",
       );
-      cache.set(
-        cacheKey,
-        new Set(
-          table?.rows.flatMap((r) =>
-            rowFacts(ir, table, r.key).facts.map(factKey),
-          ) ?? [],
-        ),
-      );
+      cache.set(cacheKey, nativeFactKeys(ir, table));
     }
     const key = factKey(fact);
     if (seen.has(key) || !cache.get(cacheKey)?.has(key))
       throw Error("Duplicate or non-native document fact");
     seen.add(key);
   }
+}
+
+function nativeFactKeys(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable | undefined,
+) {
+  if (!table) return new Set<string>();
+  const factsForRow = indexedRowFacts(ir);
+  return new Set(
+    table.rows.flatMap((r) => factsForRow(table, r.key).facts.map(factKey)),
+  );
 }

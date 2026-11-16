@@ -17,7 +17,7 @@ import {
   documentIdentity,
   documentLabel,
   factKey,
-  rowFacts,
+  indexedRowFacts,
 } from "./document-facts.js";
 import { navigationGeometry } from "./navigation-walk.js";
 import { bounds } from "./page.js";
@@ -29,46 +29,32 @@ import { nativeDocumentTable } from "./document-native.js";
 import {
   printedDocumentRegion,
   printedDocumentLabel,
+  documentMeasurements,
 } from "./document-visible.js";
 function printedRows(
   ir: Readonly<ElectricalIr>,
   draft: Draft,
   sheet: RenderedSheet,
   page: PaperPage,
+  facts: ReturnType<typeof indexedRowFacts>,
 ): IssuedDocumentRow[] {
   const geometry = navigationGeometry(sheet.svg),
     header = draft.documentHeader;
   if (!header) return [];
-  const tables = new Map<string, ReturnType<typeof nativeDocumentTable>>();
+  const cache = documentRowCache(geometry),
+    { measurements } = cache;
   return (draft.documentRows ?? []).flatMap((r) => {
-    const kind = "kind" in draft.view ? draft.view.kind : "unknown";
-    if (
-      !printedDocumentLabel(header, documentLabel(kind), geometry, sheet.number)
-    )
-      return [];
-    const cacheKey =
-      kind === "terminals"
-        ? required(
-            JSON.stringify(r.nativeKey).split(",")[0],
-            "Missing document source",
-          )
-        : kind;
-    if (!tables.has(cacheKey))
-      tables.set(
-        cacheKey,
-        nativeDocumentTable(ir, kind, r.nativeKey, draft.scheduleReferences),
-      );
-    const table = tables.get(cacheKey),
-      native = table?.rows.find((row) => row.key === r.nativeKey);
-    if (
-      !table ||
-      !native ||
-      JSON.stringify(r.cells) !== JSON.stringify(native.cells) ||
-      JSON.stringify(header.cells) !== JSON.stringify(table.columns)
-    )
-      return [];
-    if (!printedDocumentRegion(header, table.columns, geometry, sheet.number))
-      return [];
+    const checked = checkedNativeRow(
+      ir,
+      draft,
+      sheet,
+      header,
+      r,
+      geometry,
+      cache,
+    );
+    if (!checked) return [];
+    const { table, native } = checked;
     const identifiers = reportIdentifiers(ir, { ...table, rows: [native] }).get(
       r.nativeKey,
     );
@@ -78,33 +64,108 @@ function printedRows(
       geometry,
       sheet.number,
       identifiers,
+      measurements,
     );
     if (!rectMm) return [];
-    return [locatedRow(ir, table, r, draft, sheet.number, page, rectMm)];
+    return [
+      locatedRow(
+        ir,
+        r,
+        draft,
+        sheet.number,
+        page,
+        rectMm,
+        facts(table, r.nativeKey),
+      ),
+    ];
   });
+}
+function checkedNativeRow(
+  ir: Readonly<ElectricalIr>,
+  draft: Draft,
+  sheet: RenderedSheet,
+  header: NonNullable<Draft["documentHeader"]>,
+  r: DocumentRowDraft,
+  geometry: ReturnType<typeof navigationGeometry>,
+  cache: ReturnType<typeof documentRowCache>,
+) {
+  const { tables, labels, headers, measurements } = cache;
+  const kind = "kind" in draft.view ? draft.view.kind : "unknown";
+  if (!labels.has(kind))
+    labels.set(
+      kind,
+      printedDocumentLabel(
+        header,
+        documentLabel(kind),
+        geometry,
+        sheet.number,
+        measurements,
+      ),
+    );
+  if (!labels.get(kind)) return undefined;
+  const cacheKey =
+    kind === "terminals"
+      ? required(
+          JSON.stringify(r.nativeKey).split(",")[0],
+          "Missing document source",
+        )
+      : kind;
+  if (!tables.has(cacheKey))
+    tables.set(
+      cacheKey,
+      nativeDocumentTable(ir, kind, r.nativeKey, draft.scheduleReferences),
+    );
+  const table = tables.get(cacheKey),
+    native = table?.rows.find((row) => row.key === r.nativeKey);
+  if (
+    !table ||
+    !native ||
+    JSON.stringify(r.cells) !== JSON.stringify(native.cells) ||
+    JSON.stringify(header.cells) !== JSON.stringify(table.columns)
+  )
+    return undefined;
+  if (!headers.has(table))
+    headers.set(
+      table,
+      !!printedDocumentRegion(
+        header,
+        table.columns,
+        geometry,
+        sheet.number,
+        undefined,
+        measurements,
+      ),
+    );
+  if (!headers.get(table)) return undefined;
+  return { table, native };
+}
+
+function documentRowCache(geometry: ReturnType<typeof navigationGeometry>) {
+  return {
+    tables: new Map<string, ReturnType<typeof nativeDocumentTable>>(),
+    labels: new Map<string, boolean>(),
+    headers: new Map<DocumentationTable, boolean>(),
+    measurements: documentMeasurements(geometry),
+  };
 }
 function locatedRow(
   ir: Readonly<ElectricalIr>,
-  table: DocumentationTable,
   r: DocumentRowDraft,
   draft: Draft,
   sheet: number,
   page: PaperPage,
   rectMm: Rect,
+  facts: ReturnType<ReturnType<typeof indexedRowFacts>>,
 ): IssuedDocumentRow {
   const anchorMm = {
     x: roundNavigation(rectMm.x + rectMm.w / 2),
     y: roundNavigation(rectMm.y + rectMm.h / 2),
   };
   return {
-    ...rowFacts(ir, table, r.nativeKey),
+    ...facts,
     id: `${required(draft.issuedDocument, "Missing document source").id}/row/${navigationHash(r.nativeKey)}`,
     nativeKey: r.nativeKey,
-    displayName: documentRowLabel(
-      ir,
-      rowFacts(ir, table, r.nativeKey).facts,
-      r.displayName,
-    ),
+    displayName: documentRowLabel(ir, facts.facts, r.displayName),
     primitiveId: `sheet-${sheet}-${r.primitiveId}`,
     rectMm,
     sheet: sheet,
@@ -122,12 +183,13 @@ export function issuedDocuments(
   presentation?: CompiledProjectPresentation,
 ): IssuedDocument[] {
   const identity = documentIdentity(ir, presentation),
-    documents = new Map<string, IssuedDocument>();
+    documents = new Map<string, IssuedDocument>(),
+    facts = indexedRowFacts(ir);
   for (const [i, draft] of drafts.entries()) {
     const d = draft.issuedDocument,
       sheet = sheets[i];
     if (!d || !sheet || !sameIdentity(d, identity)) continue;
-    const rows = printedRows(ir, draft, sheet, page),
+    const rows = printedRows(ir, draft, sheet, page, facts),
       prior = documents.get(d.id);
     if (
       new Set([...(prior?.rows ?? []), ...rows].map((r) => r.id)).size !==

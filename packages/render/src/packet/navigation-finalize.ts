@@ -1,6 +1,5 @@
 import type { ElectricalIr, FunctionId } from "@thermite/compiler";
 import { resolveReturnLocality } from "./return-locality.js";
-import { serializeIr } from "@thermite/compiler";
 import type { Draft, RenderedSheet, PaperPage } from "./types.js";
 import type {
   IssuedNavigation,
@@ -18,7 +17,7 @@ import {
   NavigationSlotFailure,
 } from "./navigation-slots.js";
 import { navigationDraftInputs } from "./navigation-seeds.js";
-import { navigationHash } from "./navigation-identity.js";
+import { navigationSnapshotDigest } from "./navigation-identity.js";
 import { text } from "./svg.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
@@ -454,7 +453,7 @@ function issuedNavigation(
 ): IssuedNavigation {
   return {
     format: "issued-navigation/0.1",
-    snapshotDigest: navigationHash(serializeIr(ir)),
+    snapshotDigest: navigationSnapshotDigest(ir),
     anchorRule: "function-terminal-centroid/2",
     quantumMm: 0.01,
     rounding: "decimal-half-up/1",

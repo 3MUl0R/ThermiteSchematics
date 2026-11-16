@@ -1,3 +1,7 @@
+import {
+  documentCoverRectangle,
+  laterRectangleCovers,
+} from "./document-covering.js";
 import { required } from "../presentation/util.js";
 import type {
   DocumentHeaderDraft,
@@ -8,13 +12,10 @@ import {
   type NavigationGeometry,
 } from "./navigation-walk.js";
 import { descendants } from "../device-legend/svg-tree.js";
-import {
-  inside,
-  intersection,
-  project,
-  type Rect,
-} from "../device-legend/geometry.js";
+import { inside, project, type Rect } from "../device-legend/geometry.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
+import type { DocumentMeasurements } from "./document-measurements.js";
+export { documentMeasurements } from "./document-measurements.js";
 type Printed = Pick<
   DocumentRowDraft | DocumentHeaderDraft,
   "primitiveId" | "rectMm" | "printedCells" | "cells"
@@ -27,15 +28,19 @@ export function printedDocumentLabel(
   label: string,
   geometry: DocumentGeometry,
   sheet: number,
+  measurements?: DocumentMeasurements,
 ): boolean {
-  const node = geometry.find(
-    (g) => g.node.attrs.id === `sheet-${sheet}-document-label`,
+  const id = `sheet-${sheet}-document-label`;
+  const node = (
+    measurements
+      ? measurements.byId.get(id)
+      : geometry.find((g) => g.node.attrs.id === id)
   )?.node;
   return (
     !!node &&
     node.text === header.labelText &&
     (node.text === label || node.text.endsWith(` — ${label}`)) &&
-    printedText(node, geometry)
+    printedText(node, geometry, measurements)
   );
 }
 function opaque(g: NavigationGeometry): boolean {
@@ -56,37 +61,28 @@ function covered(
   ink: Rect,
   g: NavigationGeometry,
   geometry: DocumentGeometry,
+  measurements?: DocumentMeasurements,
 ): boolean {
-  return geometry.slice(geometry.indexOf(g) + 1).some((later) => {
-    if (!later.visible || later.node.name !== "rect") return false;
-    const s = later.style ?? later.node.attrs,
-      a = later.node.attrs;
-    if (
-      s.fill === "none" ||
-      s.fill === "transparent" ||
-      Number(s.opacity ?? 1) === 0
-    )
-      return false;
-    const box = intersection(
-      project(
-        {
-          x: Number(a.x ?? 0),
-          y: Number(a.y ?? 0),
-          w: Number(a.width),
-          h: Number(a.height),
-        },
-        later.matrix,
+  if (measurements) return measurements.covered(ink, g);
+  const index = geometry.indexOf(g);
+  return geometry
+    .slice(index + 1)
+    .some((later, offset) =>
+      laterRectangleCovers(
+        ink,
+        index,
+        documentCoverRectangle(later, index + 1 + offset),
       ),
-      later.clip,
     );
-    return box ? !!intersection(ink, box) : false;
-  });
 }
-function printedText(
+function measurePrintedText(
   node: NavigationGeometry["node"],
   geometry: DocumentGeometry,
+  measurements?: DocumentMeasurements,
 ): boolean {
-  const g = geometry.find((g) => g.node === node);
+  const g = measurements
+    ? measurements.byNode.get(node)
+    : geometry.find((g) => g.node === node);
   if (!g || !opaque(g)) return false;
   const a = node.attrs,
     em = Number(g.style?.["font-size"] ?? a["font-size"]);
@@ -109,7 +105,18 @@ function printedText(
     },
     g.matrix,
   );
-  return inside(ink, g.clip) && !covered(ink, g, geometry);
+  return inside(ink, g.clip) && !covered(ink, g, geometry, measurements);
+}
+function printedText(
+  node: NavigationGeometry["node"],
+  geometry: DocumentGeometry,
+  measurements?: DocumentMeasurements,
+): boolean {
+  const cached = measurements?.texts.get(node);
+  if (cached !== undefined) return cached;
+  const printed = measurePrintedText(node, geometry, measurements);
+  measurements?.texts.set(node, printed);
+  return printed;
 }
 /** Generated table ink only; unsupported masking/transparency cannot confer coverage. */
 export function printedDocumentRegion(
@@ -118,10 +125,12 @@ export function printedDocumentRegion(
   geometry: DocumentGeometry,
   sheet: number,
   identifiers?: readonly string[][],
+  measurements?: DocumentMeasurements,
 ): Rect | undefined {
-  const g = geometry.find(
-    (g) => g.node.attrs.id === `sheet-${sheet}-${row.primitiveId}`,
-  );
+  const id = `sheet-${sheet}-${row.primitiveId}`;
+  const g = measurements
+    ? measurements.byId.get(id)
+    : geometry.find((g) => g.node.attrs.id === id);
   if (
     !g?.visible ||
     (row.nativeKey !== undefined &&
@@ -142,7 +151,16 @@ export function printedDocumentRegion(
       column.attrs["data-column-name"] !== columns[i]
     )
       return undefined;
-    if (!printedCell(row, i, column, geometry, identifiers?.[i] ?? []))
+    if (
+      !printedCell(
+        row,
+        i,
+        column,
+        geometry,
+        identifiers?.[i] ?? [],
+        measurements,
+      )
+    )
       return undefined;
   }
   return rect;
@@ -154,6 +172,7 @@ function printedCell(
   column: NavigationGeometry["node"],
   geometry: DocumentGeometry,
   identifiers: readonly string[],
+  measurements?: DocumentMeasurements,
 ): boolean {
   const texts = descendants(column).filter((n) => n.name === "text");
   if (
@@ -185,5 +204,5 @@ function printedCell(
     )
   )
     return false;
-  return texts.every((n) => printedText(n, geometry));
+  return texts.every((n) => printedText(n, geometry, measurements));
 }

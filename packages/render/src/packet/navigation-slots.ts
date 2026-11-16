@@ -1,6 +1,6 @@
 import { generatedSvgInk } from "../device-legend/svg-ink.js";
 import { intersection, project, type Rect } from "../device-legend/geometry.js";
-import { navigationGeometry } from "./navigation-walk.js";
+import { navigationGeometry, cachedNavigationTree } from "./navigation-walk.js";
 import type { SymbolGeometry } from "./navigation-symbols.js";
 import type {
   AnnotationReservation,
@@ -34,7 +34,7 @@ export class NavigationSlotFailure extends Error {
   }
 }
 function navigationObstacles(svg: string) {
-  const measured = generatedSvgInk(svg);
+  const measured = generatedSvgInk(svg, 1, cachedNavigationTree(svg));
   const ink = [
     ...measured.ink,
     ...measured.regions,

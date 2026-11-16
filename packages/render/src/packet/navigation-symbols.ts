@@ -119,7 +119,7 @@ export const boxDistance = (a: Rect, b: Rect) =>
     Math.max(a.y - b.y - b.h, b.y - a.y - a.h, 0),
   );
 export const anchorDistance = (anchor: { x: number; y: number }, box: Rect) =>
-  boxDistance({ ...anchor, w: 0, h: 0 }, box);
+  boxDistance({ x: anchor.x, y: anchor.y, w: 0, h: 0 }, box);
 // Checker ambiguity (0.01 mm) plus 0.01 mm for metric/browser distance error.
 const NEAREST_FRAME_MARGIN_MM = 0.02;
 export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {

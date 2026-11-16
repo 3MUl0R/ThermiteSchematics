@@ -7,7 +7,11 @@ import type { DocumentRowDraft } from "./document-types.js";
 import { text } from "./svg.js";
 import { zone } from "./page.js";
 import type { DrawingBounds } from "./types.js";
-import { documentIdentity, documentLabel, rowFacts } from "./document-facts.js";
+import {
+  documentIdentity,
+  documentLabel,
+  indexedRowFacts,
+} from "./document-facts.js";
 import { navigationHash } from "./navigation-identity.js";
 import { required } from "../presentation/util.js";
 export function documentReportTitle(table: DocumentationTable): string {
@@ -24,6 +28,7 @@ export function reportDocumentContext(
   header: string[][],
   headerH: number,
 ) {
+  const facts = indexedRowFacts(ir);
   const issuedDocument = {
     ...documentIdentity(ir, presentation),
     id: `document/1/${navigationHash([table.kind, table.rows.map((r) => r.key), table.selection ?? null])}`,
@@ -76,7 +81,7 @@ export function reportDocumentContext(
       return {
         nativeKey: source.key,
         displayName,
-        ...rowFacts(ir, table, source.key),
+        ...facts(table, source.key),
         cells: source.cells,
         printedCells: cells,
         primitiveId: `document-row-${index}`,

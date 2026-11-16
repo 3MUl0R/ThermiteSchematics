@@ -1,3 +1,4 @@
+import { withRenderCache } from "./packet/render-cache.js";
 import { finalizeTitleData } from "./internal/title-data/finalize.js";
 import {
   packetFrameMetadata,
@@ -538,17 +539,19 @@ export function renderSchematicPacket(
   presentation?: Readonly<CompiledProjectPresentation>,
   options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withFontMetricCache(async () =>
-    contextualRenderOutcome(
-      ir,
-      request,
-      await renderPacketWithAdvice(
+  return withRenderCache(() =>
+    withFontMetricCache(async () =>
+      contextualRenderOutcome(
         ir,
         request,
-        presentation,
-        true,
-        undefined,
-        options,
+        await renderPacketWithAdvice(
+          ir,
+          request,
+          presentation,
+          true,
+          undefined,
+          options,
+        ),
       ),
     ),
   );
@@ -560,20 +563,22 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withFontMetricCache(async () =>
-    contextualRenderOutcome(
-      ir,
-      view,
-      await renderPacketWithAdvice(
+  return withRenderCache(() =>
+    withFontMetricCache(async () =>
+      contextualRenderOutcome(
         ir,
-        {
-          ...options,
-          format: "schematic-packet-request/0.1",
-          ...(page === undefined ? {} : { page }),
-          views: [view],
-        },
-        presentation,
-        false,
+        view,
+        await renderPacketWithAdvice(
+          ir,
+          {
+            ...options,
+            format: "schematic-packet-request/0.1",
+            ...(page === undefined ? {} : { page }),
+            views: [view],
+          },
+          presentation,
+          false,
+        ),
       ),
     ),
   );

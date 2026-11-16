@@ -184,13 +184,11 @@ function emptyInk(): SvgInk {
     references: new Map(),
   };
 }
-/** All final visible ink, including nested fold/stack viewports and label clips. */
-export function generatedSvgInk(svg: string, scale = 1): SvgInk {
-  const tree = svgTree(svg),
-    root = required(
-      tree.children.find((n) => n.name === "svg"),
-      "Missing legend geometry",
-    );
+function inkDocument(tree: SvgNode) {
+  const root = required(
+    tree.children.find((n) => n.name === "svg"),
+    "Missing legend geometry",
+  );
   const styles = svgStyles(tree),
     nodes = descendants(tree),
     clips = new Map(
@@ -201,6 +199,15 @@ export function generatedSvgInk(svg: string, scale = 1): SvgInk {
           n.children.find((c) => c.name === "rect")?.attrs,
         ]),
     );
+  return { root, styles, clips };
+}
+/** All final visible ink, including nested fold/stack viewports and label clips. */
+export function generatedSvgInk(
+  svg: string,
+  scale = 1,
+  parsed?: SvgNode,
+): SvgInk {
+  const { root, styles, clips } = inkDocument(parsed ?? svgTree(svg));
   const v = required(root.attrs.viewBox, "Missing legend geometry")
       .split(/[ ,]+/)
       .map(Number),
