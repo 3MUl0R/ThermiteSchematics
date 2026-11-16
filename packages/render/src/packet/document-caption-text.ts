@@ -79,7 +79,8 @@ export function documentCaptionTokens(
       groups.set(location, members);
     }
     if (index) suffix(tokens, ";");
-    tokens.push(...document.label.split(" "));
+    if (need.need !== "connector-port-status")
+      tokens.push(...document.label.split(" "));
     for (const [i, [location, rows]] of [...groups].entries()) {
       if (i) suffix(tokens, ";");
       tokens.push(location, ...rowTokens(need, rows));

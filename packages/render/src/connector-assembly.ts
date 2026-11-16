@@ -1,3 +1,5 @@
+import { assemblyDocumentNeeds } from "./connector-assembly/document-needs.js";
+import type { DocumentNeedSeed } from "./packet/document-types.js";
 import { assemblyMappingNote } from "./connector-assembly/mapping-note.js";
 import {
   routePortAttributes,
@@ -44,6 +46,7 @@ export interface ConnectorAssemblyDrawing {
   note: string;
   deviceTags?: readonly DeviceTagPlan[];
   topologyCoverage?: TopologyDrawingCoverage;
+  documentNeeds?: readonly DocumentNeedSeed[];
   paginated?: boolean;
 }
 const n = (x: number) => String(Number(x.toFixed(3)));
@@ -350,7 +353,7 @@ function assemblyPorts(
   if (originalPorts.length < available.length)
     caption.push(
       ...wrap(
-        `${available.length - originalPorts.length} other ports: schedule`,
+        `${available.length - originalPorts.length} additional connector ports`,
         nodeWidth - 6,
       ),
     );
@@ -625,6 +628,14 @@ function assemblyDrawing(
     draw.state;
   const { out } = draw;
   return {
+    documentNeeds: assemblyDocumentNeeds(
+      selection.inventory,
+      links,
+      ordered,
+      ordered.flatMap((deviceUid) =>
+        (rows.get(deviceUid) ?? []).map((p) => ({ deviceUid, portKey: p.key })),
+      ),
+    ),
     topologyCoverage: {
       kind: "connector-assembly",
       relationIds: links.map((l) => l.uid),
@@ -642,8 +653,8 @@ function assemblyDrawing(
     deviceTags: [...tags.values()],
     note: [
       projection
-        ? `${links.length} of ${selection.links.length} authored cap assemblies in this part. Complete named connector reservations; pin mapping not applicable. Repeated device bodies show different ports. See other parts and assembly schedule.`
-        : `${links.length} authored assembl${links.length === 1 ? "y" : "ies"}. Lines connect named connectors, not electrical pins; ${assemblyMappingNote(links)}. See assembly schedule for specifications and mapping reasons.`,
+        ? `${links.length} of ${selection.links.length} selected cap assemblies in this part. Complete named connector reservations; pin mapping not applicable. Repeated device bodies show different ports.`
+        : `${links.length} selected assembl${links.length === 1 ? "y" : "ies"}. Lines connect named connectors, not electrical pins; ${assemblyMappingNote(links)}.`,
       ...(!projection || projection.authoredNotes ? (request.notes ?? []) : []),
     ].join("\n"),
   };

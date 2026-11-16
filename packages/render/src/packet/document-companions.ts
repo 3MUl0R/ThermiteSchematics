@@ -1,9 +1,11 @@
+import { inlineAssemblyDocument } from "./document-assembly-inline.js";
 import type {
   ElectricalIr,
   CompiledProjectPresentation,
 } from "@thermite/compiler";
 import type { Draft, PaperPage } from "./types.js";
 import type {
+  AssemblyOverflowEvidence,
   DocumentDependency,
   DocumentFact,
   IssuedDocument,
@@ -31,24 +33,54 @@ export function documentDependencies(
 ): DocumentDependency[] {
   const identity = documentIdentity(ir, presentation),
     nativeFacts = new Map<string, ReadonlySet<string>>();
-  if (drafts.some((d) => d.autoDocumentOrigin && d.documentNeeds?.length))
+  if (
+    drafts.some(
+      (d) =>
+        d.autoDocumentOrigin &&
+        d.documentNeeds?.length &&
+        !isInlineAssemblySource(d),
+    )
+  )
     throw Error("Cyclic generated companion promise");
-  const dependencies = drafts.flatMap((draft, i) =>
-    (draft.documentNeeds ?? []).map((need) => {
-      validateDocumentNeed(ir, need, nativeFacts);
-      const viewKey = need.viewKey ?? draft.navigationView?.key;
-      if (!viewKey) throw Error("Document promise has no selected appearance");
-      const id = `dependency/1/${navigationHash([viewKey, need.noteId])}`;
-      return {
-        ...need,
-        ...identity,
-        id,
-        owner: { viewKey, noteId: need.noteId, sheet: i + 1 },
-        resolution: [],
-      };
-    }),
+  const drawnPorts = new Set(
+    drafts.flatMap((d) =>
+      (d.topologyCoverage ?? [])
+        .filter((c) => c.kind === "connector-assembly")
+        .flatMap((c) =>
+          c.ports.map((p) => JSON.stringify([p.deviceUid, p.portKey])),
+        ),
+    ),
   );
-  if (new Set(dependencies.map((d) => d.id)).size !== dependencies.length)
+  const dependencies = drafts.flatMap((draft, i) =>
+    (draft.documentNeeds ?? [])
+      .filter(
+        (need) =>
+          need.need !== "connector-port-status" ||
+          !need.requiredFacts.every(
+            (f) =>
+              f.kind === "connector-port-status" &&
+              drawnPorts.has(JSON.stringify([f.deviceUid, f.portKey])),
+          ),
+      )
+      .map((need) => {
+        validateDocumentNeed(ir, need, nativeFacts);
+        const viewKey = need.viewKey ?? draft.navigationView?.key;
+        if (!viewKey)
+          throw Error("Document promise has no selected appearance");
+        const id = `dependency/1/${navigationHash([viewKey, need.noteId])}`;
+        return {
+          ...need,
+          ...identity,
+          id,
+          owner: { viewKey, noteId: need.noteId, sheet: i + 1 },
+          resolution: [],
+        };
+      }),
+  );
+  if (
+    new Set(dependencies.map(documentOccurrenceKey)).size !==
+    dependencies.length
+  )
     throw Error("Duplicate document note identity");
   return dependencies.filter((d) => d.requiredFacts.length);
 }
@@ -83,6 +115,7 @@ function companionDrafts(
   dependencies: readonly DocumentDependency[],
   page: PaperPage,
   presentation?: CompiledProjectPresentation,
+  overflow?: AssemblyOverflowEvidence,
 ): Draft[] {
   const table = factTable(ir, kind, [...group.facts.values()]);
   if (!table.rows.length)
@@ -109,6 +142,7 @@ function companionDrafts(
     draft.issuedDocument = { ...documentIdentity(ir, presentation), id };
     draft.autoDocumentOrigin = {
       dependencyIds: [...new Set(group.dependencies)],
+      ...(overflow ? { overflow } : {}),
     };
     draft.content = `<g data-document-id="${attr(id)}" data-document-origin="auto">${draft.content}</g>`;
     if (draft.documentNeeds?.length)
@@ -158,6 +192,16 @@ export function appendDocumentCompanions(
     );
     const result = [...drafts];
     for (const [kind, group] of missingGroups(dependencies, printed)) {
+      const inline = inlineGroup(
+        ir,
+        result,
+        kind,
+        group,
+        dependencies,
+        page,
+        presentation,
+      );
+      if (inline === "inline") continue;
       result.push(
         ...companionDrafts(
           ir,
@@ -167,6 +211,7 @@ export function appendDocumentCompanions(
           dependencies,
           page,
           presentation,
+          inline,
         ),
       );
       if (result.length > 100)
@@ -191,4 +236,68 @@ export function appendDocumentCompanions(
       },
     );
   }
+}
+
+/** An authored graphical producer can carry an inventory without generating needs. */
+function isInlineAssemblySource(draft: Draft) {
+  return (
+    draft.documentKind === "assemblies" &&
+    !!draft.inlineDocumentBounds &&
+    !!draft.navigationView &&
+    "kind" in draft.view &&
+    draft.view.kind === "connector-assembly" &&
+    (draft.documentNeeds ?? []).every(
+      (n) =>
+        n.noteId === "assembly-reasons" || n.need === "connector-port-status",
+    )
+  );
+}
+
+function inlineGroup(
+  ir: Readonly<ElectricalIr>,
+  drafts: Draft[],
+  kind: ReturnType<typeof factReport>,
+  group: MissingGroup,
+  dependencies: readonly DocumentDependency[],
+  page: PaperPage,
+  presentation?: CompiledProjectPresentation,
+) {
+  if (kind !== "assemblies") return undefined;
+  const affected = dependencies.filter((d) =>
+    group.dependencies.includes(d.id),
+  );
+  if (
+    !affected.some(
+      (d) =>
+        d.noteId === "assembly-reasons" || d.need === "connector-port-status",
+    )
+  )
+    return undefined;
+  const table = factTable(ir, kind, [...group.facts.values()]);
+  const attempt = inlineAssemblyDocument(
+    ir,
+    drafts,
+    table,
+    affected,
+    page,
+    presentation,
+  );
+  if (attempt.ok) return "inline";
+  const overflow: AssemblyOverflowEvidence = {
+    profile: "assembly-inline/1",
+    rowKeys: table.rows.map((r) => r.key),
+    sourceSheets: [...new Set(affected.map((d) => d.owner.sheet))],
+    attempts: attempt.attempts,
+  };
+  return overflow;
+}
+
+/** Native reason notes repeat on different parts; their occurrence includes the sheet. */
+function documentOccurrenceKey(
+  need: Pick<DocumentDependency, "id" | "need" | "noteId" | "owner">,
+) {
+  return need.need === "connector-port-status" ||
+    (need.need === "assembly-pin-map" && need.noteId === "assembly-reasons")
+    ? JSON.stringify([need.id, need.owner.sheet])
+    : need.id;
 }

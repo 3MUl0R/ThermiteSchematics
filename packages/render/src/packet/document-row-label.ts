@@ -34,6 +34,13 @@ export function documentRowLabel(
       conductor.endpoints.map((e) => endpoint(e.terminal)).join(" ↔ ")
     );
   }
+  if (first?.kind === "connector-port-status")
+    return `${
+      required(
+        ir.devices.find((d) => d.uid === first.deviceUid),
+        "Missing connector owner",
+      ).designation
+    } / ${first.portKey}`;
   if (first?.kind === "core-inventory")
     return `${
       required(

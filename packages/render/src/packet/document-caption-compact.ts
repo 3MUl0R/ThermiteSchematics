@@ -15,6 +15,7 @@ import { documentCaptionLead } from "./document-caption-text.js";
 const units = {
   "conductor-incidence": ["physical connection", "physical connections"],
   "terminal-inventory": ["terminal", "terminals"],
+  "connector-port-status": ["port", "ports"],
   "port-link-status": ["port", "ports"],
   "core-inventory": ["core", "cores"],
   "assembly-pin-map": ["assembly", "assemblies"],
@@ -24,7 +25,7 @@ function factOwner(
   fact: DocumentFact,
   devices: readonly string[],
 ): DocumentCaptionGroup["owner"] {
-  if (fact.kind === "port-link-status")
+  if (fact.kind === "port-link-status" || fact.kind === "connector-port-status")
     return { kind: "device", uid: fact.deviceUid };
   if (fact.kind === "conductor-incidence" || fact.kind === "terminal-inventory")
     return { kind: "device", uid: fact.terminal.deviceUid };
