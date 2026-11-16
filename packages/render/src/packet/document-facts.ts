@@ -184,15 +184,41 @@ export function factTable(
   });
   const wanted = new Set(facts.map(factKey));
   const { selection: _selection, ...native } = table;
+  const rows = table.rows.filter((r) =>
+    rowFacts(ir, table, r.key).facts.some((f) => wanted.has(factKey(f))),
+  );
+  const coresOnly =
+    kind === "wires" &&
+    facts.length > 0 &&
+    facts.every(
+      (f) =>
+        f.kind === "core-inventory" ||
+        (f.kind === "conductor-incidence" &&
+          f.element.kind === "cable_conductor"),
+    );
+  // The terminal device filter is an internal source lookup, not the companion's
+  // scope. Its two appended filter notes describe the intermediate whole rows.
+  const notes = table.selection ? table.notes.slice(0, -2) : table.notes;
+  const unit =
+    kind === "wires"
+      ? "conductor"
+      : kind === "terminals"
+        ? "terminal"
+        : kind === "assemblies"
+          ? "assembly"
+          : "network";
   return {
     ...native,
-    title: documentLabel(kind),
-    rows: table.rows.filter((r) =>
-      rowFacts(ir, table, r.key).facts.some((f) => wanted.has(factKey(f))),
-    ),
+    title: `Supplementary ${kind === "wires" ? (coresOnly ? "cable cores" : "connections") : documentLabel(kind).replace(" inventory", " details")}`,
+    rows,
     notes: [
-      ...table.notes,
-      "Companion inventory describes source facts only; it does not assess safety or completeness.",
+      ...notes.map((note) =>
+        note.replace(
+          "Lists every terminal, including",
+          "Selected terminal rows include",
+        ),
+      ),
+      `Supplementary scope: ${rows.length} ${unit} row${rows.length === 1 ? "" : "s"} for source-detail notes; not a complete inventory or safety assessment.`,
     ],
   };
 }
