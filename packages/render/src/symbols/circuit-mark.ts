@@ -320,8 +320,20 @@ const EARTH_LTR: readonly Primitive[] = [
   { ...line(3, 10, 9, 10), role: "earth-bar" },
   { ...line(4, 12, 8, 12), role: "earth-bar" },
 ];
-const markPrimitives = (mark: CircuitMark, vertical: boolean) =>
-  mark === "earth" && !vertical ? EARTH_LTR : MARKS[mark];
+// Qualifier strokes have page meaning independent of electrical flow. Undo only
+// their local quarter-turn; the body and its native attachment frame still turn.
+function uprightQualifier(p: Primitive): Primitive {
+  const turn = ([x, y]: Point): Point => [y, 12 - x];
+  if (p.kind === "line") return { ...p, a: turn(p.a), b: turn(p.b) };
+  if (p.kind === "polyline") return { ...p, points: p.points.map(turn) };
+  return p;
+}
+function markPrimitives(mark: CircuitMark, vertical: boolean) {
+  if (mark === "earth" && !vertical) return EARTH_LTR;
+  if (vertical && (mark === "ac-input" || mark === "dc-output"))
+    return MARKS[mark].map(uprightQualifier);
+  return MARKS[mark];
+}
 const hasExtendedInk = (mark: CircuitMark, vertical: boolean) =>
   mark.startsWith("pressure-") ||
   mark === "level-no" ||

@@ -159,6 +159,46 @@ export function rowFacts(
     };
   return { facts: [], columns: [] };
 }
+/** Remove only the query's internal lookup notes; preserve unrelated native notes. */
+export function companionNotes(
+  table: DocumentationTable,
+  rows: DocumentationTable["rows"],
+  totalDevices: number,
+): string[] {
+  const selection = table.selection;
+  const lookupNotes = new Set(
+    selection
+      ? [
+          `Filtered report: ${selection.deviceUids.length} of ${totalDevices} devices selected; ${selection.retainedRows} of ${selection.totalRows} source rows retained.`,
+          "Device-owned rows follow the selection; complete connection and cable rows retain peer details. Records without device endpoints remain included.",
+        ]
+      : [],
+  );
+  const notes = table.notes
+    .filter((note) => !lookupNotes.has(note))
+    .map((note) =>
+      note.replace(
+        "Lists every terminal, including",
+        "Selected terminal rows may include",
+      ),
+    );
+  const unit =
+    table.kind === "wires"
+      ? "conductor"
+      : table.kind === "terminals"
+        ? "terminal"
+        : table.kind === "assemblies"
+          ? "assembly"
+          : "network";
+  const complete = !selection && rows.length === table.rows.length;
+  const scope = `${complete ? "all " : ""}${rows.length} ${unit} row${rows.length === 1 ? "" : "s"}`;
+  return [
+    ...notes,
+    complete
+      ? `Supplementary scope: ${scope} for source-detail notes; not a safety assessment.`
+      : `Supplementary scope: ${scope} for source-detail notes; not ${table.kind === "terminals" ? "a safety assessment" : "a complete inventory or safety assessment"}.`,
+  ];
+}
 /** Explicit device UIDs include non-strip terminals. Preserve whole native rows. */
 export function factTable(
   ir: Readonly<ElectricalIr>,
@@ -184,15 +224,22 @@ export function factTable(
   });
   const wanted = new Set(facts.map(factKey));
   const { selection: _selection, ...native } = table;
+  const rows = table.rows.filter((r) =>
+    rowFacts(ir, table, r.key).facts.some((f) => wanted.has(factKey(f))),
+  );
+  const coresOnly =
+    kind === "wires" &&
+    facts.length > 0 &&
+    facts.every(
+      (f) =>
+        f.kind === "core-inventory" ||
+        (f.kind === "conductor-incidence" &&
+          f.element.kind === "cable_conductor"),
+    );
   return {
     ...native,
-    title: documentLabel(kind),
-    rows: table.rows.filter((r) =>
-      rowFacts(ir, table, r.key).facts.some((f) => wanted.has(factKey(f))),
-    ),
-    notes: [
-      ...table.notes,
-      "Companion inventory describes source facts only; it does not assess safety or completeness.",
-    ],
+    title: `Supplementary ${kind === "wires" ? (coresOnly ? "cable cores" : "connections") : documentLabel(kind).replace(" inventory", " details")}`,
+    rows,
+    notes: companionNotes(table, rows, ir.devices.length),
   };
 }
