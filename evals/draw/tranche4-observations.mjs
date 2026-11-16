@@ -13,11 +13,11 @@ function auditRow(c, s, dq, key, mechanism, a, observation) {
       findingCount: a.findings.length,
       findings: a.findings,
       eligible: a.eligible,
-      ...(a.measurements ? { measurements: a.measurements } : {}),
+      ...(a.findings.length
+        ? { svg: `${c.id}/sheet-${String(s.number).padStart(3, "0")}.svg` }
+        : {}),
       ...(a.measurement ? { measurement: a.measurement } : {}),
     },
-    scope:
-      "CHECK3 C3: native source identities and measured painted SVG. HTML/PDF remain under existing parity controls; this row does not independently certify those media.",
   });
 }
 function sheetAudit(a, s, eligible) {

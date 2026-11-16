@@ -77,6 +77,11 @@ controls remain separate, and do not constitute an independent C3 medium audit.
 `tranche4-*.test.mjs` contains positive/adversarial controls and output mutations.
 Missing private measurement bundles are failures, never successful empty audits.
 New exposure remains unpinned for the later REP3 batch (`repinNow: false`).
+C3 rows retain every finding's measured box and native source reference. They use
+source-bound full SVG sheets instead of another automatic first-finding PNG crop
+per failed row. Positive ray traces are reproducible from those sources; failure
+rays remain in the findings. This avoids duplicating evidence beyond the unchanged
+100 MB default output cap. Earlier observation bytes and crops are untouched.
 
 Version **5.17** adds the CHECK3 C1 independent review-2 predicates (N3–N6,
 N12). They consume native IR and measured painted geometry, not renderer success

@@ -336,9 +336,7 @@ async function capturePacketRows(
     );
   }
   // Packet-level diagnostics point to their first sheet at 300 dpi too.
-  for (const row of packetRows.filter(
-    (r) => r.status === "fail" && r.evidence.findings[0]?.bbox,
-  )) {
+  for (const row of packetRows.filter(packetCropRequired)) {
     const s = packet.sheets.find((s) => s.number === row.sheet);
     await displaySheet(page, s.svg);
     const box = canonical(
@@ -365,4 +363,12 @@ async function capturePacketRows(
     row.evidence.cropDpi = 300;
   }
   return packetRows;
+}
+
+function packetCropRequired(row) {
+  return (
+    row.status === "fail" &&
+    row.evidence.findings[0]?.bbox &&
+    !row.id.includes("/check3c3-")
+  );
 }
