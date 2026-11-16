@@ -43,6 +43,8 @@ export async function engine(path) {
         encoding: "utf8",
       }).trim(),
       rendererDistSha256: await treeHash(join(root, "packages/render/dist")),
+      compilerDistSha256: await treeHash(join(root, "packages/compiler/dist")),
+      schemaDistSha256: await treeHash(join(root, "packages/schema/dist")),
     },
   };
 }

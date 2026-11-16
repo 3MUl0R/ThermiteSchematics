@@ -8,7 +8,8 @@ import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { population, materialize, flowVariant } from "./inputs.mjs";
 import { engine, treeHash } from "./engines.mjs";
-import { outcome, compare, summary, sha256 } from "./results.mjs";
+import { compare, summary, sha256, regressed } from "./results.mjs";
+import { renderPair } from "./paired.mjs";
 import { command } from "../draw/support.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url)),
@@ -42,7 +43,7 @@ const before = await engine(resolve(values.base)),
     (s) => !values.case || s.id.includes(values.case),
   ),
   rows = [],
-  compilations = new Map();
+  compilations = { before: new Map(), after: new Map() };
 assert(specs.length > 0, "No selected inputs");
 const metadata = {
   format: "layout-flow-variants/1.0",
@@ -89,24 +90,13 @@ async function persist(path, value) {
   assert(data.length <= 5_000_000, `Receipt exceeds cap: ${path}`);
   await writeFile(path, data);
 }
-async function compiledProject(project) {
-  let compiled = compilations.get(project);
-  if (!compiled) {
-    compiled = before.compiler.compileProject(project);
-    compilations.set(project, compiled);
-  }
-  const result = await compiled;
-  assert(result.ok, JSON.stringify(result.diagnostics));
-  return result;
-}
 async function run(spec) {
   const slug =
       spec.id.replace(/[^a-zA-Z0-9._-]/gu, "_") +
       "-" +
       sha256(spec.id).slice(0, 8),
     dest = join(out, "inputs", slug),
-    prepared = await materialize(spec, root, dest, cli),
-    c = await compiledProject(prepared.project);
+    prepared = await materialize(spec, root, dest, cli);
   for (const flow of ["left-to-right", "top-to-bottom"]) {
     if (stopped) return;
     const request = await flowVariant(
@@ -118,39 +108,34 @@ async function run(spec) {
         cli,
       ),
       id = spec.id + "/" + flow,
-      input = { ir: c.ir, request, presentation: c.presentation },
-      inputHash = sha256(input);
-    const b = await before.renderer.renderSchematicPacket(
-      c.ir,
-      request,
-      c.presentation,
-    );
-    assert.equal(sha256(input), inputHash, "Base mutated input");
-    const a = await after.renderer.renderSchematicPacket(
-      c.ir,
-      request,
-      c.presentation,
-    );
-    assert.equal(sha256(input), inputHash, "Head mutated input");
-    const old = outcome(b),
-      current = outcome(a),
+      pair = await renderPair(
+        { before, after },
+        prepared.project,
+        request,
+        compilations,
+      ),
+      old = pair.before.outcome,
+      current = pair.after.outcome,
       row = {
         id,
         kind: spec.kind,
         source: prepared.source,
         flow,
-        inputSha256: inputHash,
+        inputSha256: {
+          before: pair.before.inputSha256,
+          after: pair.after.inputSha256,
+        },
         before: old,
         after: current,
         ...compare(old, current),
       };
     await persist(join(out, "results", slug + "-" + flow + ".json.gz"), {
-      input,
+      inputs: { before: pair.before.input, after: pair.after.input },
       before: old,
       after: current,
     });
     rows.push(row);
-    if (row.positiveToRefusal || row.pageGrowth) stopped = true;
+    if (regressed(row)) stopped = true;
     await checkpoint();
     console.log(
       JSON.stringify({
@@ -161,6 +146,8 @@ async function run(spec) {
         after: current.ok ? current.pages : current.code,
         positiveToRefusal: row.positiveToRefusal,
         pageGrowth: row.pageGrowth,
+        recovered: row.recovered,
+        refusalCodeChanged: row.refusalCodeChanged,
       }),
     );
   }
@@ -189,6 +176,16 @@ assert.equal(
   metadata.head.rendererDistSha256,
   "Head engine changed during sweep",
 );
+for (const [side, engine] of [
+  ["base", before],
+  ["head", after],
+])
+  for (const name of ["compiler", "schema"])
+    assert.equal(
+      await treeHash(join(engine.root, `packages/${name}/dist`)),
+      metadata[side][`${name}DistSha256`],
+      `${side} ${name} changed during sweep`,
+    );
 const result = {
   ...summary(rows, metadata.expected),
   fullPopulation: !values.case,
@@ -208,8 +205,9 @@ if (stopped && !failure)
     join(out, "STOP.json"),
     JSON.stringify(
       {
-        reason: "positive-to-refusal or page growth",
-        cases: rows.filter((r) => r.positiveToRefusal || r.pageGrowth),
+        reason:
+          "positive-to-refusal, successful page growth or refusal-code change",
+        cases: rows.filter(regressed),
       },
       null,
       2,
@@ -221,6 +219,8 @@ console.log(
     completed: result.completed,
     positiveToRefusal: result.positiveToRefusal,
     pageGrowth: result.pageGrowth,
+    recovered: result.recovered,
+    refusalCodeChanged: result.refusalCodeChanged,
     refusals: result.refusals.length,
   }),
 );
