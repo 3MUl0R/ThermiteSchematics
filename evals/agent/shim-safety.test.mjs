@@ -6,7 +6,6 @@ import {
   writeFileSync,
   readFileSync,
   rmSync,
-  chmodSync,
   existsSync,
   cpSync,
 } from "node:fs";
@@ -74,6 +73,274 @@ function normalizePipeErrno(stderr) {
     "pipe errno: <closed>",
   );
 }
+// Patch only the installed fixture. Bun's built-in fs bindings cannot be
+// intercepted reliably; the shipped shim has no error-injection environment.
+function lockControl(
+  w,
+  open,
+  { expire = false, prelude = "", windows = false } = {},
+) {
+  let source = readFileSync(w.entry, "utf8");
+  const platform = 'const windowsLockRetry = process.platform === "win32";';
+  // The historical shim has no gate; keep its algorithm unchanged in red runs.
+  if (!source.includes(platform))
+    source = source.replace(
+      "const queuedAt = Date.now();",
+      `${platform}\nconst queuedAt = Date.now();`,
+    );
+  expect(source.split(platform)).toHaveLength(2);
+  source = source.replace(platform, `const windowsLockRetry = ${windows};`);
+  const call = 'openSync(log + ".lock", "wx")';
+  expect(source.split(call)).toHaveLength(2);
+  source = source.replace(call, "testOpenLock()");
+  if (expire) {
+    const deadline = "Date.now() - queuedAt > 120000";
+    expect(source.split(deadline)).toHaveLength(2);
+    source = source.replace(deadline, "Date.now() - queuedAt > -1");
+  }
+  writeFileSync(
+    w.entry,
+    source.replace(
+      "const queuedAt = Date.now();",
+      `${prelude}\nconst queuedAt = Date.now();`,
+    ) + `\nfunction testOpenLock() { ${open} }\n`,
+  );
+}
+it.each(["EPERM", "EACCES", "EBUSY"])(
+  "a transient %s cannot start a CLI without owning the lock",
+  (code) => {
+    const w = world(`
+      const fs=await import("node:fs");
+      const owner=JSON.parse(fs.readFileSync(process.env.THERMITE_EVAL_LOG+".lock","utf8"));
+      if(owner.pid!==process.ppid) process.exit(99);
+      process.stdout.write("owned");
+    `);
+    try {
+      writeFileSync(w.log + ".lock", JSON.stringify({ pid: process.pid }));
+      lockControl(
+        w,
+        `
+        const attempt = linesForTest++;
+        appendFileSync(log+".attempts",String(attempt)+"\\n");
+        if(attempt===0) throw Object.assign(new Error("delete pending"),{code:${JSON.stringify(code)}});
+        unlinkSync(log+".lock"); // The synthetic previous owner finishes now.
+        return openSync(log+".lock","wx");
+      `,
+        { prelude: "let linesForTest = 0;", windows: true },
+      );
+      const result = invoke(w, []);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("owned");
+      expect(readFileSync(w.log + ".attempts", "utf8")).toBe("0\n1\n");
+      expect(lines(w.marker)).toEqual([]);
+      expect(lines(w.log)).toHaveLength(1);
+      expect(existsSync(w.log + ".lock")).toBe(false);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it.each(["EIO", "ENOSPC", "EINVAL", "ENOENT"])(
+  "an unrecoverable %s is audited and never executes the CLI",
+  (code) => {
+    const w = world('process.stdout.write("must not run");');
+    try {
+      lockControl(
+        w,
+        `throw Object.assign(new Error("failed"),{code:${JSON.stringify(code)}});`,
+      );
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
+      expect(lines(w.log)).toEqual([]);
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock", code }]);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it.each(["EEXIST", "EPERM", "EACCES", "EBUSY"])(
+  "a persistent %s hits the existing lock deadline without executing",
+  (code) => {
+    const w = world('process.stdout.write("must not run");');
+    try {
+      const owner = JSON.stringify({ pid: process.pid });
+      writeFileSync(w.log + ".lock", owner);
+      lockControl(
+        w,
+        `throw Object.assign(new Error("busy"),{code:${JSON.stringify(code)}});`,
+        { expire: true, windows: true },
+      );
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(lines(w.log)).toEqual([]);
+      expect(readFileSync(w.log + ".lock", "utf8")).toBe(owner);
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock-timeout", code }]);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it.each(["EPERM", "EACCES", "EBUSY"])(
+  "a POSIX %s create failure is audited immediately without a retry",
+  (code) => {
+    const w = world('process.stdout.write("must not run");');
+    try {
+      const owner = JSON.stringify({ pid: process.pid });
+      writeFileSync(w.log + ".lock", owner);
+      lockControl(
+        w,
+        `
+        appendFileSync(log+".attempts","attempt\\n");
+        throw Object.assign(new Error("denied"),{code:${JSON.stringify(code)}});
+      `,
+        { expire: true, windows: false },
+      );
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
+      expect(readFileSync(w.log + ".attempts", "utf8")).toBe("attempt\n");
+      expect(readFileSync(w.log + ".lock", "utf8")).toBe(owner);
+      expect(lines(w.log)).toEqual([]);
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock", code }]);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it("an empty initializing lock is never reaped or bypassed", () => {
+  const w = world('process.stdout.write("must not run");');
+  try {
+    writeFileSync(w.log + ".lock", "");
+    lockControl(w, 'return openSync(log+".lock","wx");', { expire: true });
+    const result = invoke(w, []);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(w.log + ".lock", "utf8")).toBe("");
+    expect(lines(w.marker).map((e) => e.stage)).toEqual(["lock-timeout"]);
+  } finally {
+    rmSync(w.root, { recursive: true, force: true });
+  }
+});
+it("EPERM probing a live owner does not authorize reaping", () => {
+  const w = world('process.stdout.write("must not run");');
+  try {
+    const owner = JSON.stringify({ pid: process.pid });
+    writeFileSync(w.log + ".lock", owner);
+    lockControl(w, 'return openSync(log+".lock","wx");', { expire: true });
+    writeFileSync(
+      w.entry,
+      readFileSync(w.entry, "utf8").replace(
+        "const queuedAt = Date.now();",
+        'process.kill=()=>{throw Object.assign(new Error("protected"),{code:"EPERM"});};\nconst queuedAt = Date.now();',
+      ),
+    );
+    expect(invoke(w, []).status).toBe(2);
+    expect(readFileSync(w.log + ".lock", "utf8")).toBe(owner);
+    expect(lines(w.log)).toEqual([]);
+    expect(lines(w.marker).map((e) => e.stage)).toEqual(["lock-timeout"]);
+  } finally {
+    rmSync(w.root, { recursive: true, force: true });
+  }
+});
+it("a blocked dead-owner reaper still reaches the lock deadline", () => {
+  const w = world('process.stdout.write("must not run");');
+  try {
+    const owner = JSON.stringify({ pid: 2147483647 });
+    writeFileSync(w.log + ".lock", owner);
+    writeFileSync(w.log + ".reaper", "held");
+    lockControl(w, 'return openSync(log+".lock","wx");', {
+      expire: true,
+      // A second check returns EPERM so the historical bypass terminates too.
+      prelude:
+        'let probes=0; process.kill=()=>{appendFileSync(log+".probes","probe\\n");throw Object.assign(new Error("probe"),{code:probes++===0?"ESRCH":"EPERM"});};',
+    });
+    const result = invoke(w, []);
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe("");
+    expect(readFileSync(w.log + ".lock", "utf8")).toBe(owner);
+    expect(readFileSync(w.log + ".reaper", "utf8")).toBe("held");
+    expect(readFileSync(w.log + ".probes", "utf8")).toBe("probe\n");
+    expect(lines(w.marker).map((e) => e.stage)).toEqual(["lock-timeout"]);
+  } finally {
+    rmSync(w.root, { recursive: true, force: true });
+  }
+});
+function failLockInitialization(w, operation) {
+  const original = readFileSync(w.entry, "utf8");
+  const target =
+    operation === "PID write"
+      ? "writeFileSync(fd, JSON.stringify({ pid: process.pid }));"
+      : "\n      closeSync(fd);";
+  expect(original.split(target)).toHaveLength(2);
+  const source = original.replace(
+    target,
+    '\n      throw Object.assign(new Error("initialization failed"),{code:"EIO"});',
+  );
+  // Observe explicit fd cleanup before process exit closes remaining handles.
+  writeFileSync(
+    w.entry,
+    source.replace("  closeSync,", "  closeSync as nativeCloseSync,") +
+      `\nfunction closeSync(fd) {
+      appendFileSync(log+".closed","closed"); return nativeCloseSync(fd);
+    }\n`,
+  );
+  return original;
+}
+it.each(["PID write", "close"])(
+  "a %s failure cleans its own lock so the next call can acquire it",
+  (operation) => {
+    const w = world('process.stdout.write("owned");');
+    try {
+      const original = failLockInitialization(w, operation);
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(existsSync(w.log + ".closed")).toBe(true);
+      expect(readFileSync(w.log + ".closed", "utf8")).toBe("closed");
+      const lockRemained = existsSync(w.log + ".lock");
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock", code: "EIO" }]);
+      writeFileSync(w.entry, original);
+      // A stale lock would fail immediately under this fixture-only deadline.
+      lockControl(w, 'return openSync(log+".lock","wx");', { expire: true });
+      const next = invoke(w, []);
+      expect(next.status).toBe(0);
+      expect(next.stdout).toBe("owned");
+      expect(lockRemained).toBe(false);
+      expect(lines(w.log)).toHaveLength(1);
+      expect(lines(w.marker)).toHaveLength(1);
+      expect(existsSync(w.log + ".lock")).toBe(false);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it.each(["THERMITE_EVAL_PROJECT", "THERMITE_EVAL_LOG"])(
+  "missing %s is audited and never executes without a lock",
+  (key) => {
+    const w = world('process.stdout.write("must not run");');
+    try {
+      delete w.env[key];
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(lines(w.marker).map((e) => e.stage)).toContain("configuration");
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
 it.each([
   "EPIPE -32",
   "ENOTCONN -57",
@@ -114,14 +381,9 @@ it("unwritable audit paths never alter the real CLI streams or status", () => {
   try {
     const blocked = join(w.root, "blocked");
     mkdirSync(blocked);
-    chmodSync(blocked, 0o500);
-    // Windows chmod does not deny directory writes, and root bypasses POSIX
-    // write bits. A directory as the append target guarantees a real audit
-    // write failure there; unprivileged POSIX still exercises EACCES.
-    w.env.THERMITE_EVAL_LOG =
-      process.platform === "win32" || process.getuid?.() === 0
-        ? blocked
-        : join(blocked, "log");
+    // Fail append after acquiring an adjacent writable lock on every platform.
+    // Lock-create permission failures are separately required to fail closed.
+    w.env.THERMITE_EVAL_LOG = blocked;
     w.env.THERMITE_EVAL_SCHEMA_VALIDATE = "0";
     const args = ["validate", "."];
     const direct = spawnSync("bun", [w.real, ...args], {
@@ -138,7 +400,6 @@ it("unwritable audit paths never alter the real CLI streams or status", () => {
     expect(shim.stderr).toEqual(direct.stderr);
     expect(lines(w.marker).some((e) => e.kind === "shim-error")).toBe(true);
   } finally {
-    chmodSync(join(w.root, "blocked"), 0o700);
     rmSync(w.root, { recursive: true, force: true });
   }
 });

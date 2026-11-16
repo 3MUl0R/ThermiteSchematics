@@ -168,7 +168,15 @@ subsequent unguarded edit to a committed patch target.
 The log/state live under the run directory, not in the checkout. Each record
 is hash-chained; the runner verifies the chain/head and records the final log
 hash. Audit failures write a `shim-error` marker and become infrastructure
-failures. They never change the real CLI's stdout, stderr or exit code.
+failures. If the project/log configuration is missing or the audit lock cannot
+be acquired, the shim exits 2 before running the CLI. On Windows only,
+lock-create `EPERM`, `EACCES` and `EBUSY` retry like `EEXIST` within the existing
+120-second deadline; other platforms fail these create errors immediately.
+A timeout or fatal failure remains audited. An existing empty lock or an owner
+whose liveness probe returns `EPERM` is never reaped. If this process creates a
+lock but cannot write its PID or close the descriptor, it removes that lock.
+Once the CLI starts under its lock, audit failures never change that CLI's
+stdout, stderr or exit code.
 The real CLI inherits the caller's output descriptors. A small preload observer records writes out of band; no intermediate stdout pipe can absorb a downstream EPIPE. The CLI itself determines the exit code (including `| head`), and signals are forwarded. The observer and marker files are ephemeral and contain no checkout environment path. The evaluation protocol uses non-TTY streams.
 
 Project snapshots exclude `.git`; runtime hashes include all directories,
@@ -385,8 +393,11 @@ bun evals/agent/probe-sandbox.mjs --runtime evals/out/agent/references-new/conte
 ```
 
 The optional sandbox probe needs a local Codex CLI, but makes no model call. It
-compares direct/shimmed validation inside the Codex workspace sandbox, including
-an unwritable audit path. Normal tests use synthetic transcripts, fake auth CLIs,
+compares direct/shimmed validation inside the Codex workspace sandbox. An
+unwritable lock path must exit 2 without CLI stdout and record a `lock` marker
+within 10 seconds. A separate failed log append, with a writable lock, must
+preserve the direct CLI's streams and exit status and record a `logging` marker.
+Normal tests use synthetic transcripts, fake auth CLIs,
 policy negatives and one reference pipeline smoke with checker-only recovery. Full reference,
 auth-readiness and sandbox probes stay outside the normal check. Verification
 timings and the final harness hash are recorded in the worktree's `PR.md`.
