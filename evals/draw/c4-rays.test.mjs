@@ -65,3 +65,14 @@ it("N14 mutation killed: 4.9 and 5.1 degrees cannot authorize a two-way dot", ()
     designation: "D",
   });
 });
+it("N14 evidence labels cannot collide for the reviewer's 267.5/273.7/277.6 probe", () => {
+  const rays = mergeRayAngles([267.5, 273.7, 277.6]);
+  expect(rays).toHaveLength(2);
+  expect(new Set(rays).size).toBe(2);
+  expect(rays).toEqual(mergeRayAngles([277.6, 267.5, 273.7]));
+  expect(mergeRayAngles([45])).toEqual([45]);
+});
+it("N14 retains the inclusive ten-degree uncertainty without changing direction counts", () => {
+  expect(mergeRayAngles([0, 10])).toHaveLength(1);
+  expect(mergeRayAngles([0, 10.01])).toHaveLength(2);
+});

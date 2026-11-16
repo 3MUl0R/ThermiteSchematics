@@ -5,12 +5,14 @@ import { join } from "node:path";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { hash, canonical } from "./support.mjs";
 import { strictJsonBytes } from "./strict-json.mjs";
+import { requireSingleGzipMember } from "./gzip-member.mjs";
 export const reportFilename = (artifacts = false) =>
   artifacts ? "summary.json" : "summary.json.gz";
 export function decodedReportBytes(bytes) {
-  return bytes[0] === 31 && bytes[1] === 139
-    ? gunzipSync(bytes, { maxOutputLength: 256 * 1024 * 1024 })
-    : bytes;
+  if (bytes[0] !== 31 || bytes[1] !== 139) return bytes;
+  const maxOutputLength = 256 * 1024 * 1024;
+  requireSingleGzipMember(bytes, maxOutputLength);
+  return gunzipSync(bytes, { maxOutputLength });
 }
 export const parseReportBytes = (bytes) =>
   strictJsonBytes(decodedReportBytes(bytes));

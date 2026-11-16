@@ -1,3 +1,14 @@
+import assert from "node:assert/strict";
+function representative(group) {
+  const angle =
+    (Math.atan2(
+      group.reduce((n, a) => n + Math.sin((a * Math.PI) / 180), 0),
+      group.reduce((n, a) => n + Math.cos((a * Math.PI) / 180), 0),
+    ) *
+      180) /
+    Math.PI;
+  return (Math.round(((angle + 360) % 360) * 1000) / 1000) % 360;
+}
 // Retain the established ten-degree uncertainty without a fixed bucket boundary.
 // Choose a deterministic minimum cover of the circle by arcs at most 10 degrees.
 export function mergeRayAngles(values) {
@@ -17,9 +28,7 @@ export function mergeRayAngles(values) {
       if (last && angle - last[0] <= 10 + 1e-9) last.push(angle);
       else groups.push([angle]);
     }
-    const result = groups
-      .map((g) => (Math.round(g[0] / 10) * 10) % 360)
-      .sort((a, b) => a - b);
+    const result = groups.map(representative).sort((a, b) => a - b);
     if (
       !best ||
       result.length < best.length ||
@@ -28,5 +37,9 @@ export function mergeRayAngles(values) {
     )
       best = result;
   }
+  assert(
+    new Set(best).size === best.length,
+    "Native ray group labels must be distinct",
+  );
   return best;
 }

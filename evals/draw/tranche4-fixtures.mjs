@@ -156,7 +156,12 @@ export function indexFixture({ references = true, indexPages = 1 } = {}) {
     addRow(
       geometries[1],
       String(s.number),
-      [String(s.number), s.view.title],
+      [
+        String(s.number),
+        packet.sheets.filter((p) => p.view.title === s.view.title).length > 1
+          ? `${s.view.title} (sheet ${String(s.number).padStart(2, "0")})`
+          : s.view.title,
+      ],
       "index",
     );
   return {

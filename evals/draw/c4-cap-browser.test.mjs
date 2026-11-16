@@ -73,3 +73,26 @@ it("S1 real cap-pagination sheet 1: X10 is drawn on part 2 and needs no unoccupi
   note.text = "See other parts and assembly schedule";
   expect(assemblyDeliveryFindings(note, [need], rows, 1)).toHaveLength(1);
 });
+it("B1 real cap sheet 1: X10/X11 pointers cannot be swapped or pooled anonymously", () => {
+  const uid = ir.devices.find((d) => d.designation === "R1").uid;
+  const pair = assemblyPortNeeds(
+    geometries[0],
+    assemblySelection(request.views[0], ir),
+    ir,
+    nativeRows(ir),
+    assemblyAppearances(packet, geometries, ir),
+  ).filter((n) => n.uid === uid && ["X10", "X11"].includes(n.key));
+  expect(pair).toHaveLength(2);
+  expect(pair.every((n) => n.kind === "drawn-port")).toBe(true);
+  const targets = pair.map(
+    (n) => `S${n.targets[0].sheet}.${n.targets[0].zones[0]}`,
+  );
+  const n = text(`2 other ports: X10 → ${targets[0]}; X11 → ${targets[1]}`, {
+    deviceUid: uid,
+  });
+  expect(assemblyDeliveryFindings(n, pair, [], 1)).toEqual([]);
+  n.text = `2 other ports: X10 → ${targets[1]}; X11 → ${targets[0]}`;
+  expect(assemblyDeliveryFindings(n, pair, [], 1)).toHaveLength(2);
+  n.text = `2 other ports: see ${targets.join(", ")}`;
+  expect(assemblyDeliveryFindings(n, pair, [], 1)).toHaveLength(2);
+});

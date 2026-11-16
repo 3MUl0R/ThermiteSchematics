@@ -33,9 +33,11 @@ function notesForSheet(s, g, selection, ir, catalog, rows, drawn) {
   );
   for (const note of notes) {
     const portNeed = portNoteNeeds(note, omitted),
-      portNote = /\bother ports\b/iu.test(note.text) || portNeed.length > 0;
+      portNote =
+        /\bother ports\b/iu.test(note.text) ||
+        (!/\bother parts\b/iu.test(note.text) && portNeed.length > 0);
     const fallback = /\bother parts\b/iu.test(note.text)
-      ? omitted.filter((n) => !named.has(needKey(n)))
+      ? omitted.filter((n) => !named.has(needKey(n)) || portNeed.includes(n))
       : [];
     const needs = portNote
       ? portNeed

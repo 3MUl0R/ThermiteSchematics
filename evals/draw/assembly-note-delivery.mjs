@@ -1,4 +1,4 @@
-import { compact } from "./tranche4-source.mjs";
+import { namedPortNeeds, portPointerText } from "./assembly-port-pointers.mjs";
 import { sufficient, logicalPointerNotes } from "./document-dependencies.mjs";
 import { finding, painted } from "./review-geometry.mjs";
 export const assemblyTargets = (text) =>
@@ -16,16 +16,7 @@ export const reasonNeed = (row) => ({
   row,
 });
 export function portSubjects(note, needs) {
-  const prefix = compact(note.text.split(/->|→/u)[0].replace(/^Port\s+/iu, ""));
-  return needs.filter(
-    (n) =>
-      n.uid === note.deviceUid &&
-      [
-        compact(n.key),
-        compact(n.owner + "." + n.key),
-        compact(n.owner + ":" + n.key),
-      ].includes(prefix),
-  );
+  return namedPortNeeds(note, needs);
 }
 export function assemblyNotes(g, needs) {
   return logicalPointerNotes(g.texts ?? []).filter(
@@ -40,15 +31,19 @@ export function assemblyNotes(g, needs) {
   );
 }
 export function portNoteNeeds(note, needs) {
-  return /\bother ports\b/iu.test(note.text)
-    ? needs.filter((n) => n.uid === note.deviceUid)
-    : portSubjects(note, needs);
+  return /\bother parts\b/iu.test(note.text)
+    ? needs
+    : /\bother ports\b/iu.test(note.text)
+      ? needs.filter((n) => n.uid === note.deviceUid)
+      : portSubjects(note, needs);
 }
 export function assemblyDeliveryFindings(note, needs, rows, sheet) {
-  const refs = assemblyTargets(note.text),
-    findings = [];
+  const findings = [];
   for (const need of needs) {
     const drawn = need?.kind === "drawn-port";
+    const refs = assemblyTargets(
+      drawn ? portPointerText(note, need) : note.text,
+    );
     const candidates = drawn
       ? need.targets
       : need?.row && rows.filter((r) => r.visible && sufficient(r, need.row));
