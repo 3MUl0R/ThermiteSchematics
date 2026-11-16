@@ -9,6 +9,7 @@ import {
   renderCodes,
   visit,
 } from "./render-diagnostic-semantic.mjs";
+import { classSites } from "./render-diagnostic-classes.mjs";
 const slash = (path) => path.replaceAll("\\", "/");
 function factoryKey(path, name) {
   return `${path}:${name}`;
@@ -85,6 +86,7 @@ export function diagnosticInventory(root = resolve(".")) {
     }
   }
   sites.push(...factoryCalls(root, checker, files, factories));
+  sites.push(...classSites(root, checker, files));
   return {
     sites: identifySites(sites),
     wrappers: files

@@ -29,7 +29,7 @@ export function visit(node, callback) {
   callback(node);
   ts.forEachChild(node, (child) => visit(child, callback));
 }
-function unresolved(type) {
+export function unresolved(type) {
   return (type.isUnion() ? type.types : [type]).some(
     (t) =>
       !!(
@@ -57,7 +57,7 @@ function propertyValue(checker, node) {
     };
   return declaration?.initializer;
 }
-function siteCodes(checker, node, expression, path) {
+export function siteCodes(checker, node, expression, path) {
   const type = ts.isObjectLiteralExpression(node)
     ? codeType(checker, node)
     : checker.getTypeAtLocation(node);

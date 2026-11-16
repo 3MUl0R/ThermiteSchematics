@@ -37,8 +37,13 @@ function dataProperty(value: object, key: string): unknown {
   return descriptor?.value;
 }
 
+/** Array.isArray inspects the internal brand without ordinary Proxy gets. */
+function inputRecord(value: unknown): value is object {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function snapshotView(value: unknown, depth = 0): Record<string, unknown> {
-  if (!record(value) || depth > 2) return {};
+  if (!inputRecord(value) || depth > 2) return {};
   const result: Record<string, unknown> = {};
   for (const key of [
     "format",
@@ -104,7 +109,7 @@ function callerScope(
     if ("reason" in error && error.reason === "invalid-page")
       requestField = "/page";
     projectName = validProjectName(ir);
-    const format = record(request)
+    const format = inputRecord(request)
       ? dataProperty(request, "format")
       : undefined;
     const packet = format === "schematic-packet-request/0.1";
@@ -118,18 +123,22 @@ function callerScope(
       ...(projectName === undefined ? {} : { projectName }),
       requestField,
     };
-    if (packet && record(request)) {
+    if (packet && inputRecord(request)) {
       const authoredViews = dataProperty(request, "views");
-      if (!Array.isArray(authoredViews) || !authoredViews.length)
-        return { ...base, views: [] };
+      if (!Array.isArray(authoredViews)) return { ...base, views: [] };
+      const length = dataProperty(authoredViews, "length");
+      if (
+        typeof length !== "number" ||
+        !Number.isSafeInteger(length) ||
+        length < 0
+      )
+        throw Error("Uninspectable diagnostic context array length");
+      if (!length) return { ...base, views: [] };
       // Bound context work for a rejected oversized packet.
       const views =
-        authoredViews.length > 40
+        length > 40
           ? singleViewContext(dataProperty(authoredViews, "40"), ir, 40)
-          : Array.from(
-              { length: authoredViews.length },
-              (_, index) => index,
-            ).flatMap((index) =>
+          : Array.from({ length }, (_, index) => index).flatMap((index) =>
               singleViewContext(
                 dataProperty(authoredViews, String(index)),
                 ir,
