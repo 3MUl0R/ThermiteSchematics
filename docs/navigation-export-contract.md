@@ -183,7 +183,9 @@ frame before using a remote slot. When that owner is unambiguous, optional
 `caption.locality` exports its source UID/key, physical anchor, sheet/zone,
 placement mode and distance. A remote caption retains its native subject; a
 straight nonconductive drafting leader is added only when its complete approach
-is clear. Its endpoints and reserved region are exported as `locality.leader`.
+is clear. Its visible gap beyond the painted terminal-marker edge is at least
+2 mm, including the transformed marker radius and stroke in the reservation.
+Its endpoints and reserved region are exported as `locality.leader`.
 This finalization never moves electrical routes, shrinks text or adds pages.
 
 `autoDocuments[]` separately exports `{documentId, dependencyIds, sheets}`.

@@ -5,12 +5,19 @@ import {
   type NavigationGeometry,
 } from "./navigation-walk.js";
 import { navigationZone } from "./navigation-location.js";
-import { inside, project, type Rect } from "../device-legend/geometry.js";
+import {
+  inside,
+  intersection,
+  project,
+  type Rect,
+} from "../device-legend/geometry.js";
 import type { SymbolGeometry } from "./navigation-symbols.js";
+import { captionTerminalMarkers } from "./document-caption-markers.js";
 
 export interface DocumentCaptionOwner extends SymbolGeometry {
   deviceUid: string;
   terminalKey?: string;
+  markerRadiusMm?: number;
 }
 function captionFrames(all: readonly NavigationGeometry[]) {
   // Wiring's native outer rectangle is an immediate child of its UID scope;
@@ -38,7 +45,10 @@ function captionFrames(all: readonly NavigationGeometry[]) {
       },
       g.matrix,
     );
-    return inside(rect, g.clip) ? [{ uid: g.deviceUid, rect }] : [];
+    const visible = intersection(rect, g.clip);
+    return visible && visible.w > 0 && visible.h > 0
+      ? [{ uid: g.deviceUid, rect: visible, contained: inside(rect, g.clip) }]
+      : [];
   });
 }
 
@@ -62,34 +72,22 @@ export function documentCaptionOwner(
   const frames = captionFrames(all);
   const markers =
     need.need === "conductor-incidence"
-      ? all
-          .filter(
-            (g) =>
-              g.deviceUid === uid &&
-              g.node.name === "circle" &&
-              terminals.every(
-                (t) => t.terminalKey === g.node.attrs["data-terminal-key"],
-              ),
-          )
-          .map((g) =>
-            project(
-              {
-                x: Number(g.node.attrs.cx),
-                y: Number(g.node.attrs.cy),
-                w: 0,
-                h: 0,
-              },
-              g.matrix,
-            ),
-          )
-          .filter((point) => inside(point, field))
+      ? captionTerminalMarkers(
+          all,
+          uid,
+          terminals.map((t) => t.terminalKey),
+          field,
+        )
       : [];
   const points = [
-    ...new Map(markers.map((p) => [JSON.stringify([p.x, p.y]), p])).values(),
+    ...new Map(
+      markers.map((m) => [JSON.stringify([m.point.x, m.point.y]), m.point]),
+    ).values(),
   ];
   const own = frames.filter(
     (f) =>
       f.uid === uid &&
+      f.contained &&
       (!points.length || points.every((point) => inside(point, f.rect))),
   );
   if (points.length > 1 || own.length !== 1) return undefined;
@@ -102,6 +100,9 @@ export function documentCaptionOwner(
   if (!inside({ ...anchorMm, w: 0, h: 0 }, field)) return undefined;
   return {
     deviceUid: uid,
+    ...(markers.length
+      ? { markerRadiusMm: Math.max(...markers.map((m) => m.radiusMm)) }
+      : {}),
     ...(points.length && terminals[0]
       ? { terminalKey: terminals[0].terminalKey }
       : {}),

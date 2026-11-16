@@ -1,6 +1,10 @@
 import type { ElectricalIr } from "@thermite/compiler";
 import type { Rect } from "../device-legend/geometry.js";
-import type { DocumentDependency, IssuedDocument } from "./document-types.js";
+import type {
+  DocumentDependency,
+  IssuedDocument,
+  DocumentCaptionGroup,
+} from "./document-types.js";
 import type { RenderedSheet } from "./types.js";
 import { documentCaptionTokens } from "./document-caption-text.js";
 import { compactDocumentCaption } from "./document-caption-compact.js";
@@ -8,6 +12,10 @@ import { DocumentDependencyError } from "./document-error.js";
 import { documentCaptionOwner } from "./document-caption-owner.js";
 import { documentCaptionSlot } from "./document-caption-slot.js";
 
+interface CaptionForm {
+  kind: "identities" | "compact";
+  build(): { tokens: string[]; groups?: readonly DocumentCaptionGroup[] };
+}
 export function placeDocumentCaption(
   ir: Readonly<ElectricalIr>,
   need: DocumentDependency,
@@ -18,29 +26,22 @@ export function placeDocumentCaption(
   standalone: boolean,
 ) {
   const owner = documentCaptionOwner(need, sheet, field);
-  const forms = [
-    () => ({
-      tokens: documentCaptionTokens(need, documents, standalone),
-      form: "identities" as const,
-    }),
-    () => {
-      if (standalone)
-        throw Error("Standalone captions have no issued target to compact");
-      return {
-        ...compactDocumentCaption(ir, need, documents),
-        form: "compact" as const,
-      };
-    },
-  ];
-  const errors: unknown[] = [];
+  const forms = captionForms(ir, need, documents, standalone);
+  const errors: Partial<
+    Record<
+      "local" | "self-located",
+      Partial<Record<"identities" | "compact", string>>
+    >
+  > = {};
   for (const mode of owner
     ? (["local", "self-located"] as const)
     : (["self-located"] as const)) {
-    for (const form of forms) {
+    for (const { kind, build } of forms) {
       try {
-        const { tokens, ...metadata } = form();
+        const { tokens, ...metadata } = build();
         return {
           ...metadata,
+          form: kind,
           slot: documentCaptionSlot(
             need,
             tokens,
@@ -52,19 +53,45 @@ export function placeDocumentCaption(
           ),
         };
       } catch (error) {
-        errors.push(error);
+        (errors[mode] ??= {})[kind] = String(error);
       }
     }
   }
   throw new DocumentDependencyError(
-    `Required companion captions at sheet ${sheet.number} (${need.subject}): identity and compact forms cannot fit: ${String(errors.at(-1))}`,
+    `Required companion captions at sheet ${sheet.number} (${need.subject}): identity and compact forms cannot fit: ${String(errors["self-located"]?.compact)}`,
     [need],
     {
       sheet: sheet.number,
       profile: "document-caption/1",
       availableMm: field,
-      identityFormError: String(errors[0]),
-      compactFormError: String(errors.at(-1)),
+      identityFormError: errors["self-located"]?.identities,
+      compactFormError: errors["self-located"]?.compact,
+      localFormErrors: errors.local,
+      remoteFormErrors: errors["self-located"],
     },
   );
+}
+
+function captionForms(
+  ir: Readonly<ElectricalIr>,
+  need: DocumentDependency,
+  documents: readonly IssuedDocument[],
+  standalone: boolean,
+): CaptionForm[] {
+  return [
+    {
+      kind: "identities" as const,
+      build: () => ({
+        tokens: documentCaptionTokens(need, documents, standalone),
+      }),
+    },
+    {
+      kind: "compact" as const,
+      build: () => {
+        if (standalone)
+          throw Error("Standalone captions have no issued target to compact");
+        return compactDocumentCaption(ir, need, documents);
+      },
+    },
+  ];
 }
