@@ -5,6 +5,7 @@ import { resolve, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { assemble, it0, base, mid, A, view } from "./repin-fixture.mjs";
+import { hash, json } from "./support.mjs";
 
 const expectedRefusals = {
   "old version": "Run a fresh full report with the current evals version",
@@ -59,6 +60,17 @@ function retirement() {
     currentItems: [],
     entries: ({ retire }) => [retire(old, "fixed")],
   });
+}
+function historicalCheck() {
+  const context = structuredClone(retirement()),
+    row = context.report.results.find(
+      (r) => !r.expectation && r.dq === "DQ-05" && r.viewScope === view,
+    );
+  row.id += "/sheet-001";
+  delete row.check;
+  context.reportSha256 = hash(json(context.report));
+  context.decisions[0].summarySha256 = context.reportSha256;
+  return context;
 }
 function addition() {
   return assemble({
@@ -200,7 +212,7 @@ export async function refusalParity(baseRoot, headRoot) {
   const before = (await load(baseRoot)).prepareRepin,
     after = (await load(headRoot)).prepareRepin;
   const rows = [];
-  for (const make of [retirement, addition]) {
+  for (const make of [retirement, addition, historicalCheck]) {
     const input = make(),
       a = outcome(before, input),
       b = outcome(after, input);

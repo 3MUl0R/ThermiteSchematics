@@ -3,6 +3,7 @@ import { isDeepStrictEqual as equal } from "node:util";
 import { units, unitKey } from "./marker-scopes.mjs";
 import { measurements, envelope } from "./marker-metrics.mjs";
 import { canonical } from "./support.mjs";
+import { checkKey } from "./locators.mjs";
 export const copy = (x) => structuredClone(x);
 export const same = (a, b, message) => assert(equal(a, b), message);
 export const scopeId = (id, scope) => {
