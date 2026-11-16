@@ -96,6 +96,16 @@ test("returns setup exit 2 for an invalid base revision", async () => {
       .code,
   ).toBe(2);
 });
+test("classifies a head module-initialization defect as correctness exit 3", async () => {
+  const f = create();
+  put(
+    join(f.head, "packages/compiler/src/index.js"),
+    "throw Error('synthetic import failure');\n",
+  );
+  const result = await cli(["--head-engine", f.head]).closed;
+  expect(result.code, result.stderr).toBe(3);
+  expect(result.stderr).toContain("synthetic import failure");
+});
 test("a synthetic +25% duration exits 1 after two failed measurements per row", async () => {
   const f = create(true);
   const source = join(f.head, "packages/compiler/src/index.js");
@@ -190,6 +200,14 @@ await main(process.argv.slice(2));`,
       if (process.platform !== "win32") run.child.kill(signal);
       const result = await run.closed;
       expect(result.code, result.stderr).toBe(status);
+      await until(() => {
+        try {
+          process.kill(paused.pid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      });
       expect(existsSync(dirname(paused.base))).toBe(false);
       expect(git(f.head, "worktree", "list", "--porcelain")).not.toContain(
         paused.base,

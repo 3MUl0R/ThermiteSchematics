@@ -230,7 +230,7 @@ explicit context collection mode, not a scoring or per-PR baseline update.
 
 Exit codes: **0** passes; **1** is a confirmed timing regression; **2** is setup,
 protocol, invalid timing data or base-side failure; **3** is head correctness
-(build, compile/render, view count, workload identity or output determinism).
+(build, module initialization, compile/render, view count, workload identity or output determinism).
 Correctness errors are not retried as timing noise. SIGINT/SIGTERM stop owned
 build/worker processes, remove the temporary directory and worktree registration,
 and exit 130/143. Directory removal and worktree pruning still run if

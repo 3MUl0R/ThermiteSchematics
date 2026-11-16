@@ -17,8 +17,15 @@ async function publicPackage(name) {
     ).href
   );
 }
-const { compileProject } = await publicPackage("compiler");
-const { renderSchematicPacket } = await publicPackage("render");
+const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
+let compileProject, renderSchematicPacket;
+try {
+  ({ compileProject } = await publicPackage("compiler"));
+  ({ renderSchematicPacket } = await publicPackage("render"));
+} catch (error) {
+  send({ error: error.message, kind: "correctness" });
+  process.exit(0);
+}
 const hash = (value) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function inputHash(directory) {
@@ -64,7 +71,6 @@ try {
   );
   process.exit(0);
 }
-const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 send({ ready: true });
 for await (const line of createInterface({ input: process.stdin })) {
   try {
