@@ -1,3 +1,8 @@
+import { labelLeaderArrow } from "./layout/wire-label-support.js";
+import {
+  ownedWiringLabels,
+  wiringLabelLeaders,
+} from "./layout/wiring-label-support.js";
 import {
   drawingDeviceTag,
   deviceHeaderSvg,
@@ -120,9 +125,11 @@ function wiringDrawing(
 ): CommunicationDrawing {
   if (![graph.width, graph.height].every(Number.isFinite))
     throw new Error("Invalid wiring layout bounds.");
+  graph = ownedWiringLabels(graph);
   const out: string[] = [];
   const nodes = graph.children ?? [];
   const routes = appendWiringRoutes(graph, state.selected, nodes, out);
+  appendWiringLabelLeaders(graph, state.selected, out);
   const segments = appendWiringJunctions(routes, state.selected, out);
   assertWiringLabels(graph, nodes, segments);
   const references = appendWiringDevices(nodes, state, out);
@@ -493,6 +500,25 @@ function appendWiringLabels(
       selected[i]!.detail
         ? text(l.x! + 1, l.y! + 6.5, selected[i]!.detail)
         : "",
+    );
+  }
+}
+
+function appendWiringLabelLeaders(
+  graph: ElkNode,
+  selected: WiringConductor[],
+  out: string[],
+) {
+  const path = (points: readonly Point[]) =>
+    points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ");
+  for (const leader of wiringLabelLeaders(graph)) {
+    const conductor = required(
+      selected[Number(leader.edgeId.slice(1))],
+      "Missing wiring label owner",
+    );
+    out.push(
+      `<path class="wire-label-leader" data-label-leader-owner="${attr(conductor.id)}" d="${path(leader.points)}" fill="none" stroke="#475467" stroke-width=".15" stroke-dasharray=".5 .375"/>`,
+      `<path class="wire-label-leader-arrow" d="${path(labelLeaderArrow(leader.points, 0.75))}" fill="none" stroke="#475467" stroke-width=".15"/>`,
     );
   }
 }

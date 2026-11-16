@@ -1,4 +1,7 @@
-import { printableLabelGeometry } from "../symbols/printable-label.js";
+import {
+  supportedCircuitLabels,
+  circuitCaptionGeometry,
+} from "./label-support.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
@@ -12,6 +15,8 @@ export function circuitDrawingContents(
   weights: ReadonlyMap<string, number>,
   diagnostics: Diagnostic[],
 ) {
+  const supported = supportedCircuitLabels(state);
+  state = { ...state, labels: supported.labels };
   const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode, n } = state;
   const contents = [
     ...wireSvg,
@@ -19,6 +24,7 @@ export function circuitDrawingContents(
       (p) =>
         `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
     ),
+    ...supported.leaders,
     ...labels.map((l) => circuitWireLabel(l, state)),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
@@ -42,15 +48,8 @@ function circuitWireLabelLine(
   l: Label,
   state: CircuitLabelState,
 ) {
-  const { segments, text } = state;
-  const p = printableLabelGeometry(
-    { x: l.x, y: l.y + i * 3.1, width: l.width, height: 3.8 },
-    line,
-    l.width - 1.5,
-    segments.filter((s) => s.index === l.index).map((s) => [s.a, s.b]),
-    2.5,
-    false,
-  );
+  const { text } = state;
+  const p = circuitCaptionGeometry(line, i, l, state);
   return text(p.x, p.baseline, line);
 }
 

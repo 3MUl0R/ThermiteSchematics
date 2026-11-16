@@ -1,3 +1,4 @@
+import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
 import { redundantNetLabelIds } from "./net-labels.js";
@@ -8,7 +9,6 @@ export { orthogonalPathData } from "./edge-path.js";
 import { terminalContextAttachment } from "../terminal-context-reference.js";
 import { contextJunctionInk } from "../layout/context-reference-ink.js";
 import { graphSemanticOrder } from "../semantic-order.js";
-import { printableLabelGeometry } from "../symbols/printable-label.js";
 import { rootedGangEmission } from "../symbols/rooted-gangs.js";
 import {
   boundedPrintableAdvance,
@@ -887,6 +887,7 @@ function emitLabels(
   labels: readonly LayoutLabel[],
   registry: RenderSourceRegistry,
   layout: Readonly<NormalizedSchematicLayout>,
+  mmPerUnit: number,
 ): void {
   const semantic = presentationLabelIndex(graph);
   const hiddenTerminalCaptions = duplicateTerminalCaptionIds(
@@ -916,37 +917,14 @@ function emitLabels(
       emitEmptyCaption(writer, label);
       continue;
     }
-    const position = printableLabelGeometry(
+    emitLabelInk(
+      writer,
       label,
       printed,
       presentation.textLength,
-      label.ownerKind === "edge"
-        ? [layout.edges.find((e) => e.id === label.ownerId)?.points ?? []]
-        : undefined,
-    );
-    writer.element(1, "rect", {
-      class: `label-background label-${label.role}`,
-      x: global(position.ink.left),
-      y: global(position.ink.top),
-      width: position.ink.right - position.ink.left,
-      height: position.ink.bottom - position.ink.top,
-    });
-    writer.element(
-      1,
-      "text",
-      {
-        class: `label-text label-${label.role}`,
-        ...tagLabelAttributes(presentation, graph.view),
-        "clip-path": `url(#${svgSemanticId("clip", [label.id])})`,
-        x: global(position.x),
-        y: global(position.baseline),
-        "font-family": "Thermite Sans, Thermite Math, sans-serif",
-        "font-size": 10,
-        "text-anchor": "start",
-        "dominant-baseline": "alphabetic",
-        ...printableFitAttributes(printed, 10, presentation.textLength),
-      },
-      printed,
+      layout,
+      mmPerUnit,
+      tagLabelAttributes(presentation, graph.view),
     );
   }
 }
@@ -1204,7 +1182,7 @@ export function emitSchematicSvg(
     mmPerUnit,
     ir,
   );
-  emitLabels(writer, graph, labels, registry, layout);
+  emitLabels(writer, graph, labels, registry, layout, mmPerUnit);
   if (!diagramOnly) writer.close(1, "g");
   if (!diagramOnly)
     emitTitleBlock(

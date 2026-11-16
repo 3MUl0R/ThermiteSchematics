@@ -4,10 +4,58 @@ import { expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "../../render/src/sheets.js";
 import { launchBrowser, browserPath } from "./helpers/pdf-raster.js";
-import { wiringOutlineDistances } from "./helpers/svg-outline-geometry.js";
+import type { Page } from "playwright-core";
+import {
+  svgOutlineGeometry,
+  wiringOutlineDistances,
+} from "./helpers/svg-outline-geometry.js";
 
 type Row = { file: string; text: string; dev: number };
 type Actual = { file: string; text: string; distance: number };
+async function labelMovedAway(page: Page, svg: string, gap: number) {
+  const geometry = await svgOutlineGeometry(page, svg, true),
+    label = geometry.texts.find((t) => t.text === "W-C01");
+  if (!label) throw Error("Missing mutation target W-C01");
+  const runs = geometry.shapes
+    .filter((s) => s.wire === label.wire)
+    .flatMap((s) =>
+      s.points.slice(1).flatMap((b, i) => {
+        const a = s.points[i];
+        if (
+          !a ||
+          a.y !== b.y ||
+          Math.min(a.x, b.x) > label.box.left ||
+          Math.max(a.x, b.x) < label.box.right
+        )
+          return [];
+        return [{ y: a.y, stroke: s.stroke }];
+      }),
+    )
+    .sort(
+      (a, b) =>
+        Math.abs(a.y - label.box.bottom) - Math.abs(b.y - label.box.bottom),
+    );
+  const run = runs[0];
+  if (!run) throw Error("Mutation target has no supporting horizontal run");
+  // Translate the complete inline plate past the frozen distance, not merely
+  // inside its new inline position. The negative exceeds the same limit by 0.1 mm.
+  const shift =
+    (run.y - run.stroke / 2 - gap - label.box.bottom) / label.matrix[3];
+  return page.evaluate((shift) => {
+    const text = [
+        ...document.querySelectorAll<SVGTextElement>(
+          "[data-wiring-conductor] text",
+        ),
+      ].find((t) => t.textContent === "W-C01"),
+      plate = text?.previousElementSibling,
+      root = document.querySelector("svg");
+    if (!text || plate?.tagName.toLowerCase() !== "rect" || !root)
+      throw Error("Missing complete mutation target");
+    text.setAttribute("transform", `translate(0 ${shift})`);
+    plate.setAttribute("transform", `translate(0 ${shift})`);
+    return root.outerHTML;
+  }, shift);
+}
 function assertBaseline(rows: Row[], actual: Actual[]) {
   let count = 0;
   for (const flow of ["left-to-right", "top-to-bottom"]) {
@@ -82,17 +130,17 @@ it.skipIf(!browserPath)(
       }
       expect(actual).toHaveLength(66); // Wiring has no flow; both legacy flow captures cover these same instances.
       assertBaseline(baseline.rows, actual);
-      await wiringOutlineDistances(page, r.value.sheets[0]!.svg);
-      const mutated = await page.evaluate(() => {
-        const t = [
-          ...document.querySelectorAll<SVGTextElement>(
-            "[data-wiring-conductor] text",
-          ),
-        ].find((t) => t.textContent === "W-C01")!;
-        // This label sits above a horizontal route: move 0.1 mm away from it.
-        t.setAttribute("y", String(Number(t.getAttribute("y")) - 0.1));
-        return document.querySelector("svg")!.outerHTML;
-      });
+      const frozen: Row = baseline.rows.find(
+        (row: Row) =>
+          row.file === "operator-console-left-to-right/sheet-001.svg" &&
+          row.text === "W-C01",
+      );
+      expect(frozen).toBeDefined();
+      const mutated = await labelMovedAway(
+        page,
+        r.value.sheets[0]!.svg,
+        frozen.dev + 0.1,
+      );
       const changed = await wiringOutlineDistances(page, mutated),
         bad = actual.map((row) =>
           row.file === "sheet-001.svg" && row.text === "W-C01"
@@ -106,10 +154,7 @@ it.skipIf(!browserPath)(
         rows.find(
           (row) => row.file === "sheet-001.svg" && row.text === "W-C01",
         )!;
-      expect(target(bad).distance - target(actual).distance).toBeCloseTo(
-        0.1,
-        5,
-      );
+      expect(target(bad).distance - frozen.dev).toBeCloseTo(0.1, 5);
       expect(() => assertBaseline(baseline.rows, bad)).toThrow();
     } finally {
       await page.close();
