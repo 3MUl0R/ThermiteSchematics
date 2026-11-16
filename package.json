@@ -34,6 +34,7 @@
     "check:linux": "bun scripts/platform/check-linux.mjs",
     "check:text-metrics": "bun scripts/update-text-metrics.mjs --check",
     "check:health": "bun scripts/health-ratchet.mjs",
+    "check:perf": "bun scripts/check-perf.mjs",
     "health:lower": "bun scripts/health-ratchet.mjs --lower",
     "test:catalog": "bun scripts/test-catalog.mjs",
     "health:accept": "bun scripts/health-ratchet.mjs --accept",

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { DIAGNOSTIC_CATALOG } from "@thermite/schema";
@@ -17,6 +17,33 @@ import {
 
 beforeAll(setUpSuite);
 afterAll(tearDownSuite);
+
+it("explains and rejects linked snapshot parents while accepting the real path", async () => {
+  const project = await freshProject("starter");
+  const real = join(project, "output-real");
+  const alias = join(project, "output-alias");
+  await mkdir(real);
+  await symlink(real, alias, process.platform === "win32" ? "junction" : "dir");
+  await writeFile(join(real, "before.json"), "sentinel");
+  const rejected = await thermite(
+    ["snapshot", "-o", "output-alias/before.json"],
+    project,
+  );
+  expect(rejected.code).toBe(2);
+  expect(rejected.stdout).toBe("");
+  expect(JSON.parse(rejected.stderr).error).toMatchObject({
+    code: "T001",
+    message: expect.stringContaining("Refusing linked or non-ordinary path"),
+  });
+  expect(await readFile(join(real, "before.json"), "utf8")).toBe("sentinel");
+  await ok(["snapshot", "-o", "output-real/before.json"], project);
+  expect(
+    JSON.parse(await readFile(join(real, "before.json"), "utf8")).format,
+  ).toBe("thermite-snapshot/0.1");
+  const topic = (await ok(["guide", "review"], project)).stdout;
+  expect(topic).toContain("Output paths reject symlinked parents with T001");
+  expect(topic).toContain("/private/tmp");
+});
 
 it("keeps the topic index discoverable from the project guide", async () => {
   const guide = await readFile(

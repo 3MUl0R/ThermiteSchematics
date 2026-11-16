@@ -1,0 +1,538 @@
+{
+  "format": "thermite-perf-baseline/1",
+  "revision": "fac3c432dcc7ae63014fa1a5d1f7df2842b9d8b5",
+  "createdAt": "2026-11-16T21:09:37.349Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryBytes": 17179869184,
+    "bun": "1.4.2"
+  },
+  "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+  "loadAfter": [12.87060546875, 10.87353515625, 8.984375],
+  "measurement": {
+    "samples": 5,
+    "warmup": 1,
+    "rows": [
+      {
+        "name": "machine-demo",
+        "views": 12,
+        "operation": "compile",
+        "baseMedianMs": 72.529583,
+        "headMedianMs": 84.53620799999999,
+        "ratio": 1.165541073081862,
+        "pass": true,
+        "observations": {
+          "base": [
+            {
+              "ms": 134.64633299999997,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": true,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 81.61687500000005,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 91.27195800000004,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 70.93983400000002,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 68.88487499999997,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 72.529583,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            }
+          ],
+          "head": [
+            {
+              "ms": 149.82400000000007,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": true,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 107.223209,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 84.53620799999999,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 93.79091599999992,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 66.53375000000005,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            },
+            {
+              "ms": 83.74416700000006,
+              "sha256": "261296e24afde7657056086d53d85694568ba69de3221c036bb635b6f6535f34",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "warmup": false,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.18701171875, 10.16845703125, 8.59033203125]
+            }
+          ]
+        }
+      },
+      {
+        "name": "machine-demo",
+        "views": 12,
+        "operation": "packet",
+        "baseMedianMs": 3485.997625,
+        "headMedianMs": 3615.3677499999976,
+        "ratio": 1.0371113634938285,
+        "pass": true,
+        "observations": {
+          "base": [
+            {
+              "ms": 4719.105083,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": true,
+              "loadBefore": [9.18701171875, 10.16845703125, 8.59033203125],
+              "loadAfter": [9.01171875, 10.11572265625, 8.58056640625]
+            },
+            {
+              "ms": 3992.5379159999993,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [8.6904296875, 10.03076171875, 8.5595703125],
+              "loadAfter": [9.03515625, 10.07958984375, 8.58544921875]
+            },
+            {
+              "ms": 3442.584791000001,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.03515625, 10.07958984375, 8.58544921875],
+              "loadAfter": [9.6728515625, 10.1943359375, 8.63427734375]
+            },
+            {
+              "ms": 3485.997625,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.55615234375, 10.15380859375, 8.63818359375],
+              "loadAfter": [9.55615234375, 10.15380859375, 8.63818359375]
+            },
+            {
+              "ms": 3452.3260829999963,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.55615234375, 10.15380859375, 8.63818359375],
+              "loadAfter": [9.83154296875, 10.20068359375, 8.66357421875]
+            },
+            {
+              "ms": 3641.3304170000047,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.8447265625, 10.197265625, 8.67138671875],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            }
+          ],
+          "head": [
+            {
+              "ms": 4150.019290999999,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": true,
+              "loadBefore": [9.01171875, 10.11572265625, 8.58056640625],
+              "loadAfter": [8.6904296875, 10.03076171875, 8.5595703125]
+            },
+            {
+              "ms": 3605.768582999999,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [8.6904296875, 10.03076171875, 8.5595703125],
+              "loadAfter": [8.6904296875, 10.03076171875, 8.5595703125]
+            },
+            {
+              "ms": 4005.5534160000025,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.6728515625, 10.1943359375, 8.63427734375],
+              "loadAfter": [9.77880859375, 10.20751953125, 8.64794921875]
+            },
+            {
+              "ms": 3798.8383749999994,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.77880859375, 10.20751953125, 8.64794921875],
+              "loadAfter": [9.55615234375, 10.15380859375, 8.63818359375]
+            },
+            {
+              "ms": 3615.3677499999976,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.83154296875, 10.20068359375, 8.66357421875],
+              "loadAfter": [9.8447265625, 10.197265625, 8.67138671875]
+            },
+            {
+              "ms": 3328.9500419999968,
+              "sha256": "ef108bb2a0aab9662926d43d280133fa42144b927b4c7d8f57c6ae35dd10fb12",
+              "inputSha256": "d6bafe039fdc2888b2f61a72ad0c52e1d1e5a06ea881b839fe9ca28e0a9af619",
+              "views": 12,
+              "sheets": 22,
+              "warmup": false,
+              "loadBefore": [9.8447265625, 10.197265625, 8.67138671875],
+              "loadAfter": [9.8447265625, 10.197265625, 8.67138671875]
+            }
+          ]
+        }
+      },
+      {
+        "name": "conveyor-line",
+        "views": 4,
+        "operation": "compile",
+        "baseMedianMs": 79.21654200000194,
+        "headMedianMs": 86.41045900000609,
+        "ratio": 1.0908133177538093,
+        "pass": true,
+        "observations": {
+          "base": [
+            {
+              "ms": 111.79383299999608,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": true,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 79.21654200000194,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 77.44437499999913,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 69.62654099999781,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 86.41766700000153,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 110.96795800000109,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            }
+          ],
+          "head": [
+            {
+              "ms": 86.049417000002,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": true,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 83.57991700000275,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 73.4678750000021,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 86.41045900000609,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 101.70445800000016,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            },
+            {
+              "ms": 105.62045900000521,
+              "sha256": "28ecd5b017d0272f59f966d47011f8d439c27b34ed189549d851de6a5193ecd1",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "warmup": false,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [9.77685546875, 10.17724609375, 8.6728515625]
+            }
+          ]
+        }
+      },
+      {
+        "name": "conveyor-line",
+        "views": 4,
+        "operation": "packet",
+        "baseMedianMs": 2695.866084000001,
+        "headMedianMs": 2766.974833,
+        "ratio": 1.026376958937994,
+        "pass": true,
+        "observations": {
+          "base": [
+            {
+              "ms": 2749.0800830000007,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": true,
+              "loadBefore": [9.77685546875, 10.17724609375, 8.6728515625],
+              "loadAfter": [10.19482421875, 10.2568359375, 8.70947265625]
+            },
+            {
+              "ms": 2695.866084000001,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [10.41943359375, 10.30224609375, 8.734375],
+              "loadAfter": [11.3466796875, 10.49609375, 8.81201171875]
+            },
+            {
+              "ms": 2642.8323330000057,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.3466796875, 10.49609375, 8.81201171875],
+              "loadAfter": [11.3466796875, 10.49609375, 8.81201171875]
+            },
+            {
+              "ms": 2708.8163330000098,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.47900390625, 10.53759765625, 8.83642578125],
+              "loadAfter": [11.8408203125, 10.6279296875, 8.8779296875]
+            },
+            {
+              "ms": 2739.994292000003,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.8408203125, 10.6279296875, 8.8779296875],
+              "loadAfter": [11.8408203125, 10.6279296875, 8.8779296875]
+            },
+            {
+              "ms": 2526.8853329999984,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.29296875, 10.5341796875, 8.85498046875],
+              "loadAfter": [12.87060546875, 10.87353515625, 8.984375]
+            }
+          ],
+          "head": [
+            {
+              "ms": 3347.7385829999985,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": true,
+              "loadBefore": [10.19482421875, 10.2568359375, 8.70947265625],
+              "loadAfter": [10.19482421875, 10.2568359375, 8.70947265625]
+            },
+            {
+              "ms": 3033.006666999994,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [10.19482421875, 10.2568359375, 8.70947265625],
+              "loadAfter": [10.41943359375, 10.30224609375, 8.734375]
+            },
+            {
+              "ms": 2426.8422499999942,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.3466796875, 10.49609375, 8.81201171875],
+              "loadAfter": [11.47900390625, 10.53759765625, 8.83642578125]
+            },
+            {
+              "ms": 2970.1040829999984,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.47900390625, 10.53759765625, 8.83642578125],
+              "loadAfter": [11.47900390625, 10.53759765625, 8.83642578125]
+            },
+            {
+              "ms": 2389.680124999999,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.8408203125, 10.6279296875, 8.8779296875],
+              "loadAfter": [11.29296875, 10.5341796875, 8.85498046875]
+            },
+            {
+              "ms": 2766.974833,
+              "sha256": "7cf2122eb929cec8ca2e0c12a0015a9579093c81272819b150f78753ac73eebb",
+              "inputSha256": "4b83ef9f52f1cc1c523cd7d7c75c4b54b98a5751ac2f3327baf1fbd546c25045",
+              "views": 4,
+              "sheets": 7,
+              "warmup": false,
+              "loadBefore": [11.29296875, 10.5341796875, 8.85498046875],
+              "loadAfter": [11.29296875, 10.5341796875, 8.85498046875]
+            }
+          ]
+        }
+      }
+    ],
+    "pass": true
+  }
+}

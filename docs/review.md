@@ -34,6 +34,11 @@ The unchanged-source review has no semantic changes. After a guarded edit,
 review again against the saved snapshot and inspect the generated drawing at
 100% print scale. Validation and a clean review do not approve a machine design.
 
+Output paths reject symlinked parents with T001. Prefer project-relative paths
+such as `drawings/before.json`. On macOS, `/tmp` is a link to `/private/tmp`;
+use the real directory when saving outside the project. The rejected path does
+not replace an existing output. This applies to snapshots as well as drawings.
+
 ## Watch
 
 `watch` waits one second after the previous load/rebuild finishes before polling
