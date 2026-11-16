@@ -1,3 +1,4 @@
+import { navigationCache } from "./navigation-cache.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import {
   buildDocumentation,
@@ -12,6 +13,31 @@ import {
   rowFacts,
 } from "./document-facts.js";
 
+interface NativeTableEntry {
+  kind: string;
+  device: string | undefined;
+  references: ScheduleReferences | undefined;
+  table: DocumentationTable;
+}
+const nativeTables = new WeakMap<
+  NonNullable<ReturnType<typeof navigationCache.getStore>>,
+  WeakMap<Readonly<ElectricalIr>, NativeTableEntry[]>
+>();
+function nativeTableEntries(ir: Readonly<ElectricalIr>) {
+  const scope = navigationCache.getStore();
+  if (!scope) return undefined;
+  let tables = nativeTables.get(scope);
+  if (!tables) {
+    tables = new WeakMap();
+    nativeTables.set(scope, tables);
+  }
+  let entries = tables.get(ir);
+  if (!entries) {
+    entries = [];
+    tables.set(ir, entries);
+  }
+  return entries;
+}
 /** The public query remains the source projection, including non-strip devices. */
 export function nativeDocumentTable(
   ir: Readonly<ElectricalIr>,
@@ -36,7 +62,16 @@ export function nativeDocumentTable(
       return undefined;
     }
   }
-  return buildDocumentation(
+  const entries = nativeTableEntries(ir),
+    actualReferences = kind === "wires" ? references : undefined;
+  const found = entries?.find(
+    (e) =>
+      e.kind === kind &&
+      e.device === device &&
+      e.references === actualReferences,
+  );
+  if (found) return found.table;
+  const table = buildDocumentation(
     ir,
     {
       format: "documentation-view-request/0.1",
@@ -45,6 +80,8 @@ export function nativeDocumentTable(
     },
     kind === "wires" ? (references ?? {}) : undefined,
   );
+  entries?.push({ kind, device, references: actualReferences, table });
+  return table;
 }
 const keys = (value: object) => Object.keys(value).sort().join(",");
 function factShape(fact: DocumentNeedSeed["requiredFacts"][number]) {

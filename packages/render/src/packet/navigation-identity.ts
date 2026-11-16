@@ -1,7 +1,17 @@
+import { navigationCache } from "./navigation-cache.js";
 import { createHash } from "node:crypto";
-import type { ElectricalIr } from "@thermite/compiler";
+import { serializeIr, type ElectricalIr } from "@thermite/compiler";
 export const navigationHash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** The source IR is unchanged throughout a render; never reuse its digest across calls. */
+export function navigationSnapshotDigest(ir: Readonly<ElectricalIr>): string {
+  const cache = navigationCache.getStore()?.snapshots;
+  const prior = cache?.get(ir);
+  if (prior !== undefined) return prior;
+  const digest = navigationHash(serializeIr(ir));
+  cache?.set(ir, digest);
+  return digest;
+}
 /** UID-resolve selections; presentation wording and layout are deliberately absent. */
 export function navigationViewKey(
   ir: Readonly<ElectricalIr>,

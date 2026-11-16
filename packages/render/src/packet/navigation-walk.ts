@@ -76,8 +76,29 @@ function labelClip(
   return clip;
 }
 
-/** Generated SVG only. Retains transforms and clips instead of treating copied inner SVG as full glyphs. */
+import { navigationCache } from "./navigation-cache.js";
+export { withNavigationGeometryCache } from "./navigation-cache.js";
+
+/** Exact generated SVG repeats are read-only within the render operation. */
 export function navigationGeometry(svg: string): NavigationGeometry[] {
+  const cache = navigationCache.getStore(),
+    prior = cache?.entries.get(svg);
+  if (prior) return prior;
+  const result = measureNavigationGeometry(svg);
+  // Keep a packet's measurements bounded and release them at the render boundary.
+  if (
+    cache &&
+    cache.entries.size < 256 &&
+    cache.nodes + result.length <= 50000
+  ) {
+    cache.entries.set(svg, result);
+    cache.nodes += result.length;
+  }
+  return result;
+}
+
+/** Generated SVG only. Retains transforms and clips instead of treating copied inner SVG as full glyphs. */
+function measureNavigationGeometry(svg: string): NavigationGeometry[] {
   const tree = svgTree(svg),
     styles = svgStyles(tree),
     all = descendants(tree);

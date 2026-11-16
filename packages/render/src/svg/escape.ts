@@ -25,10 +25,17 @@ export type SvgSemanticIdPrefix =
   | "terminal"
   | "wire";
 
+const HEX_BYTES = Array.from({ length: 256 }, (_, value) =>
+  value.toString(16).padStart(2, "0"),
+).join("");
+
 function encodeUtf16CodeUnits(value: string): string {
   let encoded = "";
   for (let index = 0; index < value.length; index++) {
-    encoded += value.charCodeAt(index).toString(16).padStart(4, "0");
+    const unit = value.charCodeAt(index),
+      high = (unit >>> 8) * 2,
+      low = (unit & 255) * 2;
+    encoded += HEX_BYTES.slice(high, high + 2) + HEX_BYTES.slice(low, low + 2);
   }
   return encoded;
 }

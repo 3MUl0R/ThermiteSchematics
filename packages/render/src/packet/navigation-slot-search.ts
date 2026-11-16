@@ -1,3 +1,12 @@
+import {
+  clearNavigationXs,
+  NAVIGATION_CLEARANCE_MM,
+  NAVIGATION_TEXT_CLEARANCE_MM,
+} from "./navigation-clearance.js";
+export {
+  NAVIGATION_CLEARANCE_MM,
+  NAVIGATION_TEXT_CLEARANCE_MM,
+} from "./navigation-clearance.js";
 import { inside, separated, type Rect } from "../device-legend/geometry.js";
 import {
   anchorDistance,
@@ -11,16 +20,12 @@ import {
   navigationPlacementInk,
   type NavigationPlacementFamily,
 } from "./navigation-placement.js";
-export const NAVIGATION_CLEARANCE_MM = 1.5;
-export const NAVIGATION_TEXT_CLEARANCE_MM = 4;
-function slotCandidates(
+function slotAxes(
   size: Rect,
   area: Rect,
   owner: Rect,
   obstacles: readonly Rect[],
-  locality?: SymbolGeometry,
-  texts: readonly Rect[] = [],
-  ink?: Rect,
+  texts: readonly Rect[],
 ) {
   const { w, h } = size;
   const xs = [
@@ -45,13 +50,47 @@ function slotCandidates(
       ...obstacles.flatMap((b) => [b.y + b.h + 1.51, b.y - h - 1.51]),
     ]),
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
-  const distance = (b: Rect) =>
-    locality
-      ? anchorDistance(locality.anchorMm, navigationPlacementInk(b, ink))
-      : boxDistance(owner, b);
+  return { xs: xs.sort((a, b) => a - b), ys };
+}
+function slotCandidates(
+  size: Rect,
+  area: Rect,
+  owner: Rect,
+  obstacles: readonly Rect[],
+  locality?: SymbolGeometry,
+  texts: readonly Rect[] = [],
+  ink?: Rect,
+  preferBesideBelow = false,
+) {
+  const { w, h } = size;
+  const { xs, ys } = slotAxes(size, area, owner, obstacles, texts);
   return ys
-    .flatMap((y) => xs.map((x) => ({ x, y, w, h })))
-    .sort((a, b) => distance(a) - distance(b) || a.y - b.y || a.x - b.x);
+    .flatMap((y) =>
+      clearNavigationXs(xs, y, w, h, obstacles, texts).map((x) => ({
+        x,
+        y,
+        w,
+        h,
+      })),
+    )
+    .map((box) => {
+      const printed = navigationPlacementInk(box, ink);
+      return {
+        box,
+        distance: locality
+          ? anchorDistance(locality.anchorMm, printed)
+          : boxDistance(owner, box),
+        priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.priority - b.priority ||
+        a.distance - b.distance ||
+        a.box.y - b.box.y ||
+        a.box.x - b.box.x,
+    )
+    .map(({ box }) => box);
 }
 /** All local shapes precede all self-located shapes; preserve authored shape order within each mode. */
 export function searchNavigationSlot(
@@ -78,13 +117,8 @@ export function searchNavigationSlot(
       locality,
       texts,
       ink,
+      preferBesideBelow && shape.mode === "local",
     );
-    if (preferBesideBelow && shape.mode === "local")
-      candidates.sort(
-        (a, b) =>
-          Number(!besideBelow(navigationPlacementInk(a, ink), owner)) -
-          Number(!besideBelow(navigationPlacementInk(b, ink), owner)),
-      );
     const box = candidates.find(
       (b) =>
         (!families ||

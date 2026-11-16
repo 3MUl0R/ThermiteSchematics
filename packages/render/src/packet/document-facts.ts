@@ -1,13 +1,19 @@
 import { required } from "../presentation/util.js";
-import { serializeIr, type ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr } from "@thermite/compiler";
 import {
   buildDocumentation,
   type DocumentationTable,
   type ReportKind,
 } from "@thermite/query";
 import type { CompiledProjectPresentation } from "@thermite/compiler";
-import { navigationHash } from "./navigation-identity.js";
-import { sourceIncidences } from "./navigation-incidence.js";
+import {
+  navigationHash,
+  navigationSnapshotDigest,
+} from "./navigation-identity.js";
+import {
+  sourceIncidences,
+  type SourceIncidence,
+} from "./navigation-incidence.js";
 import type {
   DocumentFact,
   DocumentNeed,
@@ -64,7 +70,7 @@ export function documentIdentity(
   presentation?: CompiledProjectPresentation,
 ): Omit<DocumentIdentity, "id"> {
   return {
-    snapshotDigest: navigationHash(serializeIr(ir)),
+    snapshotDigest: navigationSnapshotDigest(ir),
     presentationDigest: navigationHash(presentation ?? null),
     revision: presentation?.revision ?? "UNSPECIFIED",
   };
@@ -103,11 +109,11 @@ export function rowFacts(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   key: string,
+  incidences: readonly SourceIncidence[] = sourceIncidences(ir),
 ): {
   facts: DocumentFact[];
   columns: SemanticColumn[];
 } {
-  const incidences = sourceIncidences(ir);
   if (table.kind === "wires") {
     const facts: DocumentFact[] = incidences
       .filter((i) => factRowKey({ kind: "conductor-incidence", ...i }) === key)
@@ -241,5 +247,25 @@ export function factTable(
     title: `Supplementary ${kind === "wires" ? (coresOnly ? "cable cores" : "connections") : documentLabel(kind).replace(" inventory", " details")}`,
     rows,
     notes: companionNotes(table, rows, ir.devices.length),
+  };
+}
+
+/** One operation's source endpoints, in native enumeration order, keyed independently of printed rows. */
+export function indexedRowFacts(ir: Readonly<ElectricalIr>) {
+  let rows: Map<string, SourceIncidence[]> | undefined;
+  return (table: DocumentationTable, key: string) => {
+    if (!rows) {
+      rows = new Map();
+      for (const incidence of sourceIncidences(ir)) {
+        const rowKey = factRowKey({
+          kind: "conductor-incidence",
+          ...incidence,
+        });
+        const values = rows.get(rowKey) ?? [];
+        values.push(incidence);
+        rows.set(rowKey, values);
+      }
+    }
+    return rowFacts(ir, table, key, rows.get(key) ?? []);
   };
 }
