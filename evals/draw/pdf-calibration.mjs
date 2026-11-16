@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Read-only calibration of retained PDFs. This never upgrades an old C1/apply target.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -12,7 +13,7 @@ import { pinnedSource, captureSources } from "./source-hashes.mjs";
 export async function pdfCalibration(path) {
   path = resolve(path);
   const raw = await readFile(path),
-    original = JSON.parse(raw),
+    original = parseReportBytes(raw),
     report = structuredClone(original),
     root = dirname(path);
   assert(

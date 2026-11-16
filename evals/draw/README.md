@@ -14,11 +14,54 @@ VITEST_MAX_WORKERS=2 bun run test -- evals/draw
 ```
 
 Checkpoints are write-once directories under gitignored `evals/out/draw/`.
-Open `summary.md`, `summary.json`, `gallery.html` and `reviewer-form.json`.
+Open `summary.md`, `summary.json.gz`, `gallery.html` and `reviewer-form.json`.
 The JSON sorts keys and observations, rounds coordinates to 0.001 mm, and
 contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
+
+Version **5.19** implements CHECK3 C4's reviewed N17 omission semantics and
+N14 direction refinement. These are observation changes, so 5.18 is retained as
+a historical complete-summary schema rather than silently reinterpreted.
+
+- **N17 / DQ-19:** omission is packet-wide, not local-sheet absence. A native
+  port drawn on another issued assembly part is a drawn-port destination, not
+  an omitted/unoccupied status row. An owned, precise `port → sheet.zone` pointer
+  to that measured destination satisfies the need; any spanned destination zone
+  is accepted. Ports drawn nowhere still require their native assembly/status
+  row. An unoccupied port never becomes an invented cable. A drawn link does not
+  itself supply its native mapping reason: notes requesting reasons still bind
+  to sufficient issued reason rows. Each selected link is conserved once per
+  authored view, and every selected device must appear, even for a selection
+  consisting entirely of unoccupied ports. Missing ink, grid or ownership fails.
+- **N14 / DQ-13:** findings retain the matched native device/terminal identity.
+  Incident directions within the existing 10-degree uncertainty are merged
+  without a fixed bucket boundary, including the 0/360-degree wrap. Each merged
+  group's angular span is at most 10 degrees. Only native-attributed ink counts;
+  unattributed painted rays can make the recorded count smaller than the visible
+  ray count. This count is not a census of all paint; the separate N3 ownership
+  check remains responsible for identity disagreement.
+- **N8:** peer selection assumes exactly two native conductor ends. The source
+  reader rejects any other arity before the peer lookup; the opposite-end lookup
+  preserves the real peer terminal of self-loops.
+- **N15:** expected-caption comparison is packet/print consistency, not a native
+  IR oracle. `references:false` remains fixture-only until a corpus request uses
+  it; current corpus requests all leave references enabled.
+
+**Representation and review:** the unchanged 100,000,000-byte default cap counts
+stored bytes. The default writer now retains the complete canonical report as
+`summary.json.gz` (deterministic gzip, level 6); `--artifacts` retains raw
+`summary.json`. Decompression reproduces the exact canonical JSON bytes, with
+all observations, findings and ordering intact. Report readers accept either
+container, enforce strict UTF-8/duplicate-key parsing after decoding, and reject
+corrupt gzip (decoded size limit 256 MiB). All source/report hashes bind the
+**stored file bytes**; changing containers requires a new report binding and
+never rebinds historical signed inputs. Decision JSON remains strict raw JSON.
+Native SVG/IR/packet/HTML/PDF/query artifacts are not repacked by this change.
+The gallery distinguishes boxed, sheet-level and unboxed findings, links each
+failed C3 row's source SVG, prints its measured box, and restores its per-row
+SVG-only scope. N14/N17 summaries are human review aids; their findings and
+statuses are not rewritten by the representation change.
 
 Version **5.18** adds CHECK3 C3's independent tranche-2 predicates. Separate
 `check3c3-*` rows are appended after all earlier packet observations, preserving
@@ -56,7 +99,7 @@ controls remain separate, and do not constitute an independent C3 medium audit.
   shape classification is unchanged. White knockouts, hidden/erased approaches,
   foreign owners and coincident duplicate rays cannot authorize a dot. Numerical
   coincidence is 0.01 mm; the measured marker radius plus half stroke width
-  defines contact, and the existing 10-degree ray bins are retained.
+  defines contact; 5.19 merges directions within the existing 10-degree uncertainty.
 - **N15 / DQ-19 refinement:** the final issued sheet list, including every index
   and reference page, must occur exactly once as visible index rows with correct
   printed numbers/captions. Multiple index pages and duplicate view titles are
@@ -83,7 +126,7 @@ C3 rows retain every finding's measured box and native source reference. They us
 source-bound full SVG sheets instead of another automatic first-finding PNG crop
 per failed row. Positive ray traces are reproducible from those sources; failure
 rays remain in the findings. This avoids duplicating evidence beyond the unchanged
-100 MB default output cap. Earlier observation bytes and crops are untouched.
+100 MB default output cap. Earlier findings, statuses and crops are untouched by the representation changes.
 
 Version **5.17** adds the CHECK3 C1 independent review-2 predicates (N3–N6,
 N12). They consume native IR and measured painted geometry, not renderer success

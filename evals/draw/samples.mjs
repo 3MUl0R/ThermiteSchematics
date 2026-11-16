@@ -1,3 +1,4 @@
+import { readReportFile, readCheckpointReport } from "./report-file.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { gunzipSync } from "node:zlib";
 // Explicit visual acceptance step; never invoked by check or ordinary runs.
@@ -21,9 +22,9 @@ assert(
 );
 const dest = resolve("evals/out/draw-samples", name);
 await mkdir(dest, { recursive: true });
-const report = await readJson(
-    process.argv[4] ?? join(checkpoint, "summary.json"),
-  ),
+const { value: report } = await (process.argv[4]
+    ? readReportFile(process.argv[4])
+    : readCheckpointReport(checkpoint)),
   families = new Map();
 for (const row of report.results.filter((r) =>
   ["fail", "xfail"].includes(r.status),

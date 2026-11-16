@@ -9,6 +9,7 @@ function validIssuedNumbers(numbers) {
     numbers.every((n, i) => n === i + 1)
   );
 }
+// Caption equality is packet/print consistency, not an independent native-IR oracle.
 function finalCaption(view) {
   if (!view.root) return view.title;
   const subject = view.root.designation;

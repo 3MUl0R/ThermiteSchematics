@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Browser-required character sensitivity acceptance on actual checkpoint crops.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -18,8 +19,8 @@ assert(
 );
 const raw = await readFile(resolve(v.report)),
   root = dirname(resolve(v.report)),
-  report = JSON.parse(raw);
-const rows = pipelineCrops(JSON.parse(raw), hash(raw))
+  report = parseReportBytes(raw);
+const rows = pipelineCrops(parseReportBytes(raw), hash(raw))
   .filter((r) => r.scope.medium === "svg")
   .sort(
     (a, b) => a.sourceBbox.w * a.sourceBbox.h - b.sourceBbox.w * b.sourceBbox.h,

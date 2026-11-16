@@ -1,13 +1,13 @@
+import { readReportFile } from "./report-file.mjs";
 // Build an initial/reviewed proposal under evals/out; never edits the registry.
 // For established mixed deltas use repin.mjs, which preserves unlisted data.
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve, relative } from "node:path";
-import { readJson } from "./support.mjs";
 import { seed, serializeRegistry } from "./marker-authoring.mjs";
 import { cases } from "./corpus.mjs";
-const report = await readJson(process.argv[2]);
+const { value: report } = await readReportFile(process.argv[2]);
 assert(
   report.format === "thermite-draw-eval/1.0" &&
     report.subset === "full" &&

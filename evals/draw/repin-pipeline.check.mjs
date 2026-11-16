@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Browser-required protocol acceptance with a synthetic registry, never real approvals/apply.
 import assert from "node:assert/strict";
 import { parseArgs } from "node:util";
@@ -36,7 +37,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url)),
   kit = join(root, "evals/draw"),
   sourceRoot = dirname(resolve(v.report));
 const raw = await readFile(resolve(v.report)),
-  report = JSON.parse(raw),
+  report = parseReportBytes(raw),
   inv = instanceInventory(report, hash(raw));
 const candidates = expectations.markers
   .filter((m) => {

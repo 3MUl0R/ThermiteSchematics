@@ -30,7 +30,11 @@ it("a forced budget refusal retains source pins and accounts for the final summa
       results: [],
     };
     const done = await finalizeOutput(root, report, false, 1),
-      written = JSON.parse(await readFile(join(root, "summary.json"), "utf8"));
+      written = (
+        await (
+          await import("./report-file.mjs")
+        ).readReportFile(join(root, "summary.json.gz"))
+      ).value;
     expect(written.sourceHashes).toEqual(report.sourceHashes);
     expect(written.exitCode).toBe(2);
     expect(written.results[0].id).toBe("harness/output-budget");

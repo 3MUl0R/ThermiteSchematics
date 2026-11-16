@@ -1,3 +1,4 @@
+import { readReportFile, reportFilename } from "./report-file.mjs";
 import { renderCase } from "./run-case.mjs";
 import {
   strictCoverageReason,
@@ -174,7 +175,7 @@ try {
   let comparison;
   if (values.compare) {
     const priorPath = resolve(values.compare),
-      prior = await readJson(priorPath);
+      prior = (await readReportFile(priorPath)).value;
     const priorHash =
       prior.corpus?.contentHashVersion === 1
         ? prior.corpusSha256
@@ -345,17 +346,13 @@ const report = {
   ...assessment,
   results: rows,
 };
-await writeFile(
-  join(dest, "summary.json"),
-  JSON.stringify(canonical(report)) + "\n",
-);
-await gallery(dest, results, rows);
+await gallery(dest, results, rows, reportFilename(values.artifacts));
 await writeFile(
   join(dest, "summary.md"),
   [
     `# Drawing checkpoint ${values.checkpoint}`,
     "",
-    `Mode: ${values["report-only"] ? "report-only" : "strict"}; exit ${code}. Full findings and rounded measurements: [JSON](summary.json). [Gallery](gallery.html). [Reviewer form](reviewer-form.json).`,
+    `Mode: ${values["report-only"] ? "report-only" : "strict"}; exit ${code}. Full findings and rounded measurements: [JSON](${reportFilename(values.artifacts)}). [Gallery](gallery.html). [Reviewer form](reviewer-form.json).`,
     "",
     ...statusTable(counts),
     ...(coverageReason ? ["", `Reason: ${coverageReason}`] : []),
@@ -401,6 +398,6 @@ await writeFile(
 const finalized = await finalizeOutput(dest, report, values.artifacts);
 code = finalized.report.exitCode;
 process.stdout.write(
-  `${JSON.stringify(counts)}\nWall time ${elapsedSeconds.toFixed(2)} s; exit ${code}; ${relative(root, dest)}/summary.json\n`,
+  `${JSON.stringify(counts)}\nWall time ${elapsedSeconds.toFixed(2)} s; exit ${code}; ${relative(root, dest)}/${reportFilename(values.artifacts)}\n`,
 );
 process.exitCode = code;

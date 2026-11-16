@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Explicit Chromium acceptance; portable unit/mutation tests remain browser-free.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -222,7 +223,7 @@ try {
     );
   }
   if (values.report) {
-    const report = JSON.parse(await readFile(resolve(values.report))),
+    const report = parseReportBytes(await readFile(resolve(values.report))),
       root = dirname(resolve(values.report));
     const witness = report.sourceHashes.sheets.find(
       (s) =>

@@ -1,6 +1,6 @@
+import { writeReportFile } from "./report-file.mjs";
 import assert from "node:assert/strict";
 import { summary } from "./assessment.mjs";
-import { canonical } from "./support.mjs";
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { json } from "./support.mjs";
@@ -41,11 +41,7 @@ export async function finalizeOutput(
   artifacts = false,
   budget = 100000000,
 ) {
-  const write = (value) =>
-    writeFile(
-      join(root, "summary.json"),
-      JSON.stringify(canonical(value)) + "\n",
-    );
+  const write = (value) => writeReportFile(root, value, artifacts);
   await write(report);
   let cost = await outputCost(root, artifacts, budget);
   if (!cost.withinBudget) {

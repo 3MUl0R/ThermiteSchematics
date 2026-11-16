@@ -1,3 +1,4 @@
+import { parseReportBytes } from "./report-file.mjs";
 // Opt-in, full pipeline-region audit of freshly prepared evidence and N=3 binding.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -21,7 +22,7 @@ assert(
 const path = resolve(v.report),
   root = dirname(path),
   raw = await readFile(path),
-  report = JSON.parse(raw),
+  report = parseReportBytes(raw),
   rows = pipelineCrops(report, hash(raw));
 assert(
   report.mode === "strict" && report.subset === "full",

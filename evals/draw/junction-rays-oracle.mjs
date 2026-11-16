@@ -1,3 +1,4 @@
+import { mergeRayAngles } from "./ray-directions.mjs";
 import { physicalOracleGeometry } from "./tranche3-identities.mjs";
 import { nativeConductors4, sameEnds, terminalId } from "./tranche4-source.mjs";
 import { finding, pointDistance } from "./review-geometry.mjs";
@@ -35,7 +36,7 @@ function nativeAttachment(s, ir, marker) {
   );
 }
 function raysAt(marker, g, catalog, ir) {
-  const rays = new Set(),
+  const rays = [],
     owners = new Set(),
     p = marker.point,
     radius = Math.max(marker.bbox.w, marker.bbox.h) / 2;
@@ -60,14 +61,7 @@ function raysAt(marker, g, catalog, ir) {
       if (distance(p, ...seg) <= radius + (s.stroke ?? 0) / 2 + 0.01) {
         for (const q of seg)
           if (pointDistance(p, q) > radius + 0.01)
-            rays.add(
-              (Math.round(
-                (Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI / 10,
-              ) *
-                10 +
-                360) %
-                360,
-            );
+            rays.push((Math.atan2(q.y - p.y, q.x - p.x) * 180) / Math.PI);
         owners.add(
           w?.key ??
             s.attachment ??
@@ -75,7 +69,7 @@ function raysAt(marker, g, catalog, ir) {
         );
       }
   }
-  return { rays: [...rays].sort((a, b) => a - b), owners: [...owners] };
+  return { rays: mergeRayAngles(rays), owners: [...owners] };
 }
 function nativeMarker(m, g, ir) {
   const exists = (t) =>
@@ -134,7 +128,11 @@ export function junctionRayAudit(input, ir) {
       findings.push(finding("filled-junction-native-node-unavailable", m));
     else if (measured.rays.length < 3)
       findings.push(
-        finding("filled-endpoint-without-three-native-rays", m, {
+        finding("filled-endpoint-without-three-native-rays", native, {
+          nativeTerminal: {
+            deviceUid: native.deviceUid,
+            terminalKey: native.terminal,
+          },
           incidentRays: measured.rays.length,
           ...measured,
         }),
