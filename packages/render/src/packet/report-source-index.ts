@@ -1,5 +1,5 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import { navigationCache } from "./navigation-cache.js";
+import { renderCache } from "./render-cache.js";
 
 function firstByUid<T extends { uid: string }>(values: readonly T[]) {
   const result = new Map<string, T>();
@@ -16,13 +16,13 @@ function sourceIndex(ir: Readonly<ElectricalIr>) {
   };
 }
 const indexes = new WeakMap<
-  NonNullable<ReturnType<typeof navigationCache.getStore>>,
+  NonNullable<ReturnType<typeof renderCache.getStore>>,
   WeakMap<Readonly<ElectricalIr>, ReturnType<typeof sourceIndex>>
 >();
 
 /** Source lookup only; report kind/header policy still selects protected fields. */
 export function reportSourceIndex(ir: Readonly<ElectricalIr>) {
-  const scope = navigationCache.getStore();
+  const scope = renderCache.getStore();
   if (!scope) return sourceIndex(ir);
   let cache = indexes.get(scope);
   if (!cache) {

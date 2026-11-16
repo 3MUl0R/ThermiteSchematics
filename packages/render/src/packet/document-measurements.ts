@@ -1,4 +1,9 @@
-import { intersection, project, type Rect } from "../device-legend/geometry.js";
+import {
+  documentCoverRectangle,
+  laterRectangleCovers,
+  type CoverRectangle,
+} from "./document-covering.js";
+import type { Rect } from "../device-legend/geometry.js";
 import type { NavigationGeometry } from "./navigation-walk.js";
 
 /** Per immutable generated sheet; never retained across renders or IR edits. */
@@ -13,39 +18,19 @@ export function documentMeasurements(geometry: readonly NavigationGeometry[]) {
     if (!byNode.has(g.node)) byNode.set(g.node, g);
     if (!indices.has(g)) indices.set(g, index);
   }
-  let rectangles: { index: number; box: Rect }[] | undefined;
+  let rectangles: CoverRectangle[] | undefined;
   return {
     byId,
     byNode,
     texts,
     covered(ink: Rect, g: NavigationGeometry) {
       rectangles ??= geometry.flatMap((later, index) => {
-        if (!later.visible || later.node.name !== "rect") return [];
-        const s = later.style ?? later.node.attrs,
-          a = later.node.attrs;
-        if (
-          s.fill === "none" ||
-          s.fill === "transparent" ||
-          Number(s.opacity ?? 1) === 0
-        )
-          return [];
-        const box = intersection(
-          project(
-            {
-              x: Number(a.x ?? 0),
-              y: Number(a.y ?? 0),
-              w: Number(a.width),
-              h: Number(a.height),
-            },
-            later.matrix,
-          ),
-          later.clip,
-        );
-        return box ? [{ index, box }] : [];
+        const rectangle = documentCoverRectangle(later, index);
+        return rectangle ? [rectangle] : [];
       });
       const index = indices.get(g) ?? -1;
-      return rectangles.some(
-        (later) => later.index > index && !!intersection(ink, later.box),
+      return rectangles.some((later) =>
+        laterRectangleCovers(ink, index, later),
       );
     },
   };

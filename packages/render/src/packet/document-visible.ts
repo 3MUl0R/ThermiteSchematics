@@ -1,3 +1,7 @@
+import {
+  documentCoverRectangle,
+  laterRectangleCovers,
+} from "./document-covering.js";
 import { required } from "../presentation/util.js";
 import type {
   DocumentHeaderDraft,
@@ -8,12 +12,7 @@ import {
   type NavigationGeometry,
 } from "./navigation-walk.js";
 import { descendants } from "../device-legend/svg-tree.js";
-import {
-  inside,
-  intersection,
-  project,
-  type Rect,
-} from "../device-legend/geometry.js";
+import { inside, project, type Rect } from "../device-legend/geometry.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import type { DocumentMeasurements } from "./document-measurements.js";
 export { documentMeasurements } from "./document-measurements.js";
@@ -65,30 +64,16 @@ function covered(
   measurements?: DocumentMeasurements,
 ): boolean {
   if (measurements) return measurements.covered(ink, g);
-  return geometry.slice(geometry.indexOf(g) + 1).some((later) => {
-    if (!later.visible || later.node.name !== "rect") return false;
-    const s = later.style ?? later.node.attrs,
-      a = later.node.attrs;
-    if (
-      s.fill === "none" ||
-      s.fill === "transparent" ||
-      Number(s.opacity ?? 1) === 0
-    )
-      return false;
-    const box = intersection(
-      project(
-        {
-          x: Number(a.x ?? 0),
-          y: Number(a.y ?? 0),
-          w: Number(a.width),
-          h: Number(a.height),
-        },
-        later.matrix,
+  const index = geometry.indexOf(g);
+  return geometry
+    .slice(index + 1)
+    .some((later, offset) =>
+      laterRectangleCovers(
+        ink,
+        index,
+        documentCoverRectangle(later, index + 1 + offset),
       ),
-      later.clip,
     );
-    return box ? !!intersection(ink, box) : false;
-  });
 }
 function measurePrintedText(
   node: NavigationGeometry["node"],

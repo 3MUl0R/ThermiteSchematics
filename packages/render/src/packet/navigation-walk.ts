@@ -1,3 +1,8 @@
+import {
+  renderCache,
+  MAX_GEOMETRY_CACHE_KEY_UNITS,
+  MAX_GEOMETRY_CACHE_TOTAL_KEY_UNITS,
+} from "./render-cache.js";
 import { required } from "../presentation/util.js";
 import {
   svgTree,
@@ -76,12 +81,19 @@ function labelClip(
   return clip;
 }
 
-import { navigationCache } from "./navigation-cache.js";
-export { withNavigationGeometryCache } from "./navigation-cache.js";
+/** Read-only parse of this exact SVG, when the bounded render cache has it. */
+export function cachedNavigationTree(svg: string): SvgNode | undefined {
+  return svg.length <= MAX_GEOMETRY_CACHE_KEY_UNITS
+    ? renderCache.getStore()?.entries.get(svg)?.[0]?.node
+    : undefined;
+}
 
 /** Exact generated SVG repeats are read-only within the render operation. */
 export function navigationGeometry(svg: string): NavigationGeometry[] {
-  const cache = navigationCache.getStore(),
+  const cache =
+      svg.length <= MAX_GEOMETRY_CACHE_KEY_UNITS
+        ? renderCache.getStore()
+        : undefined,
     prior = cache?.entries.get(svg);
   if (prior) return prior;
   const result = measureNavigationGeometry(svg);
@@ -89,10 +101,12 @@ export function navigationGeometry(svg: string): NavigationGeometry[] {
   if (
     cache &&
     cache.entries.size < 256 &&
-    cache.nodes + result.length <= 50000
+    cache.nodes + result.length <= 50000 &&
+    cache.keyUnits + svg.length <= MAX_GEOMETRY_CACHE_TOTAL_KEY_UNITS
   ) {
     cache.entries.set(svg, result);
     cache.nodes += result.length;
+    cache.keyUnits += svg.length;
   }
   return result;
 }

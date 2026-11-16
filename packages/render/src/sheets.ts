@@ -1,4 +1,4 @@
-import { withNavigationGeometryCache } from "./packet/navigation-walk.js";
+import { withRenderCache } from "./packet/render-cache.js";
 import { finalizeTitleData } from "./internal/title-data/finalize.js";
 import {
   packetFrameMetadata,
@@ -539,7 +539,7 @@ export function renderSchematicPacket(
   presentation?: Readonly<CompiledProjectPresentation>,
   options?: import("./packet/types.js").PacketRenderOptions,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withNavigationGeometryCache(() =>
+  return withRenderCache(() =>
     withFontMetricCache(async () =>
       contextualRenderOutcome(
         ir,
@@ -563,7 +563,7 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
-  return withNavigationGeometryCache(() =>
+  return withRenderCache(() =>
     withFontMetricCache(async () =>
       contextualRenderOutcome(
         ir,

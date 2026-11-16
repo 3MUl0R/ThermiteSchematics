@@ -1,10 +1,8 @@
 import { nativeDocumentTable } from "../src/packet/document-native.js";
 import { navigationSnapshotDigest } from "../src/packet/navigation-identity.js";
 import { svgSemanticId, decodeSvgSemanticId } from "../src/svg/escape.js";
-import {
-  navigationGeometry,
-  withNavigationGeometryCache,
-} from "../src/packet/navigation-walk.js";
+import { navigationGeometry } from "../src/packet/navigation-walk.js";
+import { withRenderCache } from "../src/packet/render-cache.js";
 import {
   documentMeasurements,
   printedDocumentRegion,
@@ -187,7 +185,7 @@ it("reuses exact SVG measurements only inside one render scope", async () => {
   const svg =
     '<svg width="100" height="100" viewBox="0 0 100 100"><rect width="10" height="10"/></svg>';
   const outside = navigationGeometry(svg);
-  const first = await withNavigationGeometryCache(async () => {
+  const first = await withRenderCache(async () => {
     const measured = navigationGeometry(svg);
     await Promise.resolve();
     expect(navigationGeometry(svg)).toBe(measured);
@@ -198,7 +196,7 @@ it("reuses exact SVG measurements only inside one render scope", async () => {
   });
   expect(first).toEqual(outside);
   expect(first).not.toBe(outside);
-  await withNavigationGeometryCache(async () => {
+  await withRenderCache(async () => {
     expect(navigationGeometry(svg)).not.toBe(first);
   });
 });
@@ -215,7 +213,7 @@ it("does not reuse source snapshots or native tables across edited inputs", asyn
     secondReferences = {
       conductors: new Map([[wire.uid, ["03.C3", "04.D4"] as const]]),
     };
-  const original = await withNavigationGeometryCache(async () => {
+  const original = await withRenderCache(async () => {
     const first = nativeDocumentTable(ir, "wires", wire.uid, firstReferences),
       second = nativeDocumentTable(ir, "wires", wire.uid, secondReferences);
     expect(
@@ -232,7 +230,7 @@ it("does not reuse source snapshots or native tables across edited inputs", asyn
     return { first, digest };
   });
   ir.project.name += " edited";
-  await withNavigationGeometryCache(async () => {
+  await withRenderCache(async () => {
     expect(
       nativeDocumentTable(ir, "wires", wire.uid, firstReferences),
     ).not.toBe(original.first);
