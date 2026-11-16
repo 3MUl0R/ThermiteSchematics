@@ -6,7 +6,6 @@ import {
   writeFileSync,
   readFileSync,
   rmSync,
-  chmodSync,
   existsSync,
   cpSync,
 } from "node:fs";
@@ -76,8 +75,21 @@ function normalizePipeErrno(stderr) {
 }
 // Patch only the installed fixture. Bun's built-in fs bindings cannot be
 // intercepted reliably; the shipped shim has no error-injection environment.
-function lockControl(w, open, { expire = false, prelude = "" } = {}) {
+function lockControl(
+  w,
+  open,
+  { expire = false, prelude = "", windows = false } = {},
+) {
   let source = readFileSync(w.entry, "utf8");
+  const platform = 'const windowsLockRetry = process.platform === "win32";';
+  // The historical shim has no gate; keep its algorithm unchanged in red runs.
+  if (!source.includes(platform))
+    source = source.replace(
+      "const queuedAt = Date.now();",
+      `${platform}\nconst queuedAt = Date.now();`,
+    );
+  expect(source.split(platform)).toHaveLength(2);
+  source = source.replace(platform, `const windowsLockRetry = ${windows};`);
   const call = 'openSync(log + ".lock", "wx")';
   expect(source.split(call)).toHaveLength(2);
   source = source.replace(call, "testOpenLock()");
@@ -114,7 +126,7 @@ it.each(["EPERM", "EACCES", "EBUSY"])(
         unlinkSync(log+".lock"); // The synthetic previous owner finishes now.
         return openSync(log+".lock","wx");
       `,
-        { prelude: "let linesForTest = 0;" },
+        { prelude: "let linesForTest = 0;", windows: true },
       );
       const result = invoke(w, []);
       expect(result.status).toBe(0);
@@ -128,7 +140,7 @@ it.each(["EPERM", "EACCES", "EBUSY"])(
     }
   },
 );
-it.each(["EIO", "ENOSPC", "EINVAL"])(
+it.each(["EIO", "ENOSPC", "EINVAL", "ENOENT"])(
   "an unrecoverable %s is audited and never executes the CLI",
   (code) => {
     const w = world('process.stdout.write("must not run");');
@@ -160,7 +172,7 @@ it.each(["EEXIST", "EPERM", "EACCES", "EBUSY"])(
       lockControl(
         w,
         `throw Object.assign(new Error("busy"),{code:${JSON.stringify(code)}});`,
-        { expire: true },
+        { expire: true, windows: true },
       );
       const result = invoke(w, []);
       expect(result.status).toBe(2);
@@ -170,6 +182,36 @@ it.each(["EEXIST", "EPERM", "EACCES", "EBUSY"])(
       expect(
         lines(w.marker).map(({ stage, code }) => ({ stage, code })),
       ).toEqual([{ stage: "lock-timeout", code }]);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it.each(["EPERM", "EACCES", "EBUSY"])(
+  "a POSIX %s create failure is audited immediately without a retry",
+  (code) => {
+    const w = world('process.stdout.write("must not run");');
+    try {
+      const owner = JSON.stringify({ pid: process.pid });
+      writeFileSync(w.log + ".lock", owner);
+      lockControl(
+        w,
+        `
+        appendFileSync(log+".attempts","attempt\\n");
+        throw Object.assign(new Error("denied"),{code:${JSON.stringify(code)}});
+      `,
+        { expire: true, windows: false },
+      );
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
+      expect(readFileSync(w.log + ".attempts", "utf8")).toBe("attempt\n");
+      expect(readFileSync(w.log + ".lock", "utf8")).toBe(owner);
+      expect(lines(w.log)).toEqual([]);
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock", code }]);
     } finally {
       rmSync(w.root, { recursive: true, force: true });
     }
@@ -233,41 +275,57 @@ it("a blocked dead-owner reaper still reaches the lock deadline", () => {
     rmSync(w.root, { recursive: true, force: true });
   }
 });
-it("a PID write failure is audited without running or leaking its descriptor", () => {
-  const w = world('process.stdout.write("must not run");');
-  try {
-    let source = readFileSync(w.entry, "utf8");
-    const write = "writeFileSync(fd, JSON.stringify({ pid: process.pid }));";
-    expect(source.split(write)).toHaveLength(2);
-    source = source.replace(
-      write,
-      'throw Object.assign(new Error("write failed"),{code:"EIO"});',
-    );
-    // Observe explicit fd cleanup before process exit closes remaining handles.
-    source = source.replaceAll(
-      "  closeSync,",
-      "  closeSync as nativeCloseSync,",
-    );
-    writeFileSync(
-      w.entry,
-      source +
-        `\nfunction closeSync(fd) {
+function failLockInitialization(w, operation) {
+  const original = readFileSync(w.entry, "utf8");
+  const target =
+    operation === "PID write"
+      ? "writeFileSync(fd, JSON.stringify({ pid: process.pid }));"
+      : "\n      closeSync(fd);";
+  expect(original.split(target)).toHaveLength(2);
+  const source = original.replace(
+    target,
+    '\n      throw Object.assign(new Error("initialization failed"),{code:"EIO"});',
+  );
+  // Observe explicit fd cleanup before process exit closes remaining handles.
+  writeFileSync(
+    w.entry,
+    source.replace("  closeSync,", "  closeSync as nativeCloseSync,") +
+      `\nfunction closeSync(fd) {
       appendFileSync(log+".closed","closed"); return nativeCloseSync(fd);
     }\n`,
-    );
-    const result = invoke(w, []);
-    expect(result.status).toBe(2);
-    expect(result.stdout).toBe("");
-    expect(existsSync(w.log + ".closed")).toBe(true);
-    expect(readFileSync(w.log + ".closed", "utf8")).toBe("closed");
-    expect(readFileSync(w.log + ".lock", "utf8")).toBe("");
-    expect(lines(w.marker).map(({ stage, code }) => ({ stage, code }))).toEqual(
-      [{ stage: "lock", code: "EIO" }],
-    );
-  } finally {
-    rmSync(w.root, { recursive: true, force: true });
-  }
-});
+  );
+  return original;
+}
+it.each(["PID write", "close"])(
+  "a %s failure cleans its own lock so the next call can acquire it",
+  (operation) => {
+    const w = world('process.stdout.write("owned");');
+    try {
+      const original = failLockInitialization(w, operation);
+      const result = invoke(w, []);
+      expect(result.status).toBe(2);
+      expect(result.stdout).toBe("");
+      expect(existsSync(w.log + ".closed")).toBe(true);
+      expect(readFileSync(w.log + ".closed", "utf8")).toBe("closed");
+      const lockRemained = existsSync(w.log + ".lock");
+      expect(
+        lines(w.marker).map(({ stage, code }) => ({ stage, code })),
+      ).toEqual([{ stage: "lock", code: "EIO" }]);
+      writeFileSync(w.entry, original);
+      // A stale lock would fail immediately under this fixture-only deadline.
+      lockControl(w, 'return openSync(log+".lock","wx");', { expire: true });
+      const next = invoke(w, []);
+      expect(next.status).toBe(0);
+      expect(next.stdout).toBe("owned");
+      expect(lockRemained).toBe(false);
+      expect(lines(w.log)).toHaveLength(1);
+      expect(lines(w.marker)).toHaveLength(1);
+      expect(existsSync(w.log + ".lock")).toBe(false);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
 it.each(["THERMITE_EVAL_PROJECT", "THERMITE_EVAL_LOG"])(
   "missing %s is audited and never executes without a lock",
   (key) => {
@@ -323,7 +381,6 @@ it("unwritable audit paths never alter the real CLI streams or status", () => {
   try {
     const blocked = join(w.root, "blocked");
     mkdirSync(blocked);
-    chmodSync(blocked, 0o500);
     // Fail append after acquiring an adjacent writable lock on every platform.
     // Lock-create permission failures are separately required to fail closed.
     w.env.THERMITE_EVAL_LOG = blocked;
@@ -343,7 +400,6 @@ it("unwritable audit paths never alter the real CLI streams or status", () => {
     expect(shim.stderr).toEqual(direct.stderr);
     expect(lines(w.marker).some((e) => e.kind === "shim-error")).toBe(true);
   } finally {
-    chmodSync(join(w.root, "blocked"), 0o700);
     rmSync(w.root, { recursive: true, force: true });
   }
 });

@@ -39,6 +39,7 @@ function auditFailure(stage, error) {
     /* Runner also detects missing/truncated audit. */
   }
 }
+const windowsLockRetry = process.platform === "win32";
 const queuedAt = Date.now();
 let lockOwned = false;
 if (project && log) {
@@ -50,18 +51,26 @@ if (project && log) {
       closeSync(fd);
       lockOwned = true;
     } catch (error) {
-      // A created but incompletely written lock is not owned. Close its fd and
-      // fail closed; do not mistake a write/close error for create contention.
+      // This process created the file exclusively. Close its fd and remove
+      // that incomplete lock before failing closed, so later calls can acquire.
       if (fd !== undefined) {
         try {
           closeSync(fd);
         } catch {}
+        try {
+          unlinkSync(log + ".lock");
+        } catch (cleanup) {
+          auditFailure("lock-cleanup", cleanup);
+        }
         auditFailure("lock", error);
         break;
       }
       // Windows can deny creation while a just-unlinked file is delete-pending.
       // Retry these errors under the same deadline, never by running unlocked.
-      if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(error.code)) {
+      if (
+        error.code !== "EEXIST" &&
+        !(windowsLockRetry && ["EPERM", "EACCES", "EBUSY"].includes(error.code))
+      ) {
         auditFailure("lock", error);
         break;
       }
