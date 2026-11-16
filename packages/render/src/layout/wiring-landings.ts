@@ -69,36 +69,23 @@ function splitPort(
     });
   const y = required(port.y, "Unplaced wiring terminal");
   for (const [i, use] of rest.entries()) {
-    const side =
+    const direction =
       rest.length === 2
         ? i === 0
-          ? "NORTH"
-          : "SOUTH"
+          ? -1
+          : 1
         : y === Math.min(...(node.ports ?? []).map((p) => p.y ?? Infinity))
-          ? "NORTH"
-          : "SOUTH";
+          ? -1
+          : 1;
     const id = `${port.id}${WIRING_LANDING_SUFFIX}${use.edge.id}-${use.end}`;
     node.ports = [
       ...(node.ports ?? []),
       {
         ...port,
         id,
-        x:
-          required(port.x, "Unplaced wiring terminal") +
-          (port.layoutOptions?.["elk.port.side"] === "WEST" ? -1 : 1) *
-            WIRING_LANDING_OFFSET,
-        y,
-        layoutOptions: {
-          ...port.layoutOptions,
-          "elk.port.side": side,
-          // Native embedded north/south ports stay at the authored row. This
-          // controls ELK's approach direction; no routed endpoint is moved.
-          "elk.port.borderOffset": String(
-            -(side === "NORTH"
-              ? y
-              : required(node.height, "Missing wiring height") - y),
-          ),
-        },
+        x: required(port.x, "Unplaced wiring terminal"),
+        y: y + direction * WIRING_LANDING_OFFSET,
+        layoutOptions: { ...port.layoutOptions },
       },
     ];
     use.edge[use.end] = use.edge[use.end].map((old) =>
@@ -134,11 +121,14 @@ export function independentWiringInput(input: ElkNode, baseline: ElkNode) {
     );
     splitPort(node, port, uses, reference, aliases);
   }
-  // This candidate's side approaches need less inter-layer room. The original
-  // profile stays intact; route, ink, glyph and final-print guards still apply.
+  // Short native side stubs fan inside 3 mm of the unchanged terminal mark.
+  // Reserve 2.5 mm before the parallel channel, keeping it off the device frame.
+  // The original profile and all route, ink and final-print guards stay intact.
   copy.layoutOptions = {
     ...copy.layoutOptions,
-    "elk.layered.spacing.nodeNodeBetweenLayers": "9",
+    "elk.layered.spacing.nodeNodeBetweenLayers": "5",
+    "elk.spacing.edgeNode": "2.5",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "2.5",
   };
   return { input: copy, aliases };
 }

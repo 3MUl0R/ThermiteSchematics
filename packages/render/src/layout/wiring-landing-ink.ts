@@ -1,6 +1,10 @@
 import type { ElkNode, ElkPoint, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import { required } from "../presentation/util.js";
 import { routeSegments } from "./ink-geometry.js";
+import {
+  wiringFrameEdges,
+  WIRING_FRAME_STROKE_MM,
+} from "./wiring-frame-ink.js";
 export const WIRING_MIN_CLEAR_GAP_MM = 0.7;
 export const WIRING_MAX_FAN_IN_MM = 3;
 export const wiringStrokeMm = (jumper: boolean) => (jumper ? 0.7 : 0.35);
@@ -14,6 +18,7 @@ function narrowOutsideFan(
   b: ReturnType<typeof segments>[number],
   stroke: number,
   marks: readonly ElkPoint[],
+  minimumOverlap = 0,
 ) {
   for (const [axis, cross] of [
     ["x", "y"],
@@ -33,7 +38,7 @@ function narrowOutsideFan(
         Math.max(b.a[axis], b.b[axis]),
       );
     if (
-      hi - lo <= 1e-7 ||
+      hi - lo <= minimumOverlap + 1e-7 ||
       Math.abs(a.a[cross] - b.a[cross]) - stroke >=
         WIRING_MIN_CLEAR_GAP_MM - 1e-7
     )
@@ -82,18 +87,40 @@ export function wiringLandingInkFits(
     ),
     canonical = (id: string) => aliases.get(id) ?? id;
   const edges = graph.edges ?? [];
-  return edges.every((a, i) =>
-    edges.slice(i + 1).every((b) => {
-      const ids = [...a.sources, ...a.targets].map(canonical),
-        common = [...b.sources, ...b.targets]
-          .map(canonical)
-          .filter((id) => ids.includes(id))
-          .map((id) => required(marks.get(id), "Missing common terminal"));
-      const stroke =
-        ((strokes.get(a.id) ?? 0.35) + (strokes.get(b.id) ?? 0.35)) / 2;
-      return segments(a).every((s) =>
-        segments(b).every((t) => !narrowOutsideFan(s, t, stroke, common)),
-      );
-    }),
+  const frames = wiringFrameEdges(graph);
+  return (
+    edges.every((edge) =>
+      segments(edge).every((segment) =>
+        frames.every(
+          (frame) =>
+            !narrowOutsideFan(
+              segment,
+              frame,
+              ((strokes.get(edge.id) ?? 0.35) + WIRING_FRAME_STROKE_MM) / 2,
+              [...edge.sources, ...edge.targets]
+                .map(canonical)
+                .map((id) =>
+                  required(marks.get(id), "Missing frame approach terminal"),
+                ),
+              WIRING_MAX_FAN_IN_MM,
+            ),
+        ),
+      ),
+    ) &&
+    edges.every((a, i) =>
+      edges.slice(i + 1).every((b) => {
+        const ids = [...a.sources, ...a.targets].map(canonical),
+          common = [...b.sources, ...b.targets]
+            .map(canonical)
+            .filter((id) => ids.includes(id))
+            .map((id) => required(marks.get(id), "Missing common terminal"));
+        // Centreline distance loses both half-widths, hence (a + b) / 2.
+        const stroke =
+          ((strokes.get(a.id) ?? 0.35) + (strokes.get(b.id) ?? 0.35)) / 2;
+        return segments(a).every((s) =>
+          segments(b).every((t) => !narrowOutsideFan(s, t, stroke, common)),
+        );
+      }),
+    )
   );
 }

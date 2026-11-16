@@ -76,7 +76,10 @@ it("uses exactly one baseline and one constrained native layout for either landi
     expect(second.input.layoutOptions?.["elk.spacing.edgeLabel"]).toBe("4");
     expect(
       second.input.layoutOptions?.["elk.layered.spacing.edgeNodeBetweenLayers"],
-    ).toBe("20");
+    ).toBe("5");
+    expect(
+      second.input.layoutOptions?.["elk.layered.spacing.nodeNodeBetweenLayers"],
+    ).toBe("10");
     vi.restoreAllMocks();
   }
 });
@@ -288,7 +291,7 @@ it("keeps every console supply route, including W-C06 and W-C10, at its accepted
   });
 });
 
-it("retains the accepted wiring scale when a narrower sheet can fit only the baseline at that scale", async () => {
+it("retains the accepted wiring scale when a native reservation fits only the baseline at that scale", async () => {
   const request = {
     format: "schematic-packet-request/0.1" as const,
     page: {
@@ -302,7 +305,26 @@ it("retains the accepted wiring scale when a narrower sheet can fit only the bas
   vi.spyOn(landings, "independentWiringInput").mockReturnValue(undefined);
   const original = await renderSchematicPacket(source.ir, request);
   vi.restoreAllMocks();
+  const oversized = vi.fn();
+  vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
+    const engine = factory(),
+      native = engine.layout.bind(engine);
+    engine.layout = async (input, options) => {
+      const graph = await native(input, options);
+      if (
+        input.children?.some((node) =>
+          node.ports?.some((p) => p.id.includes("-landing-")),
+        )
+      ) {
+        graph.width = required(graph.width) + 400;
+        oversized();
+      }
+      return graph;
+    };
+    return engine;
+  });
   const candidate = await renderSchematicPacket(source.ir, request);
+  expect(oversized).toHaveBeenCalled();
   expect(original.ok).toBe(true);
   expect(candidate.ok).toBe(true);
   if (!original.ok || !candidate.ok)
