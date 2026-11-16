@@ -3,7 +3,12 @@ import { launch, openSheet, drawingContextOptions } from "./browser.mjs";
 import { physicalLandingAudit } from "./physical-landings.mjs";
 import { wireLabelSupportAudit } from "./wire-label-support.mjs";
 import { conversionQualifierAudit } from "./qualifier-oracle.mjs";
-import { landingFixture, qualifierFixture } from "./tranche3-fixtures.mjs";
+import {
+  landingFixture,
+  qualifierFixture,
+  wire,
+  end,
+} from "./tranche3-fixtures.mjs";
 let browser, page;
 beforeAll(async () => {
   browser = await launch();
@@ -45,6 +50,68 @@ it("N3 browser: separate approaches pass and shared ink fails independently of d
         .findings.length,
     ).toBeGreaterThan(0);
 });
+const circuitDot = (x, y, extra = "") =>
+  `<circle data-circuit-junction="true" cx="${x}" cy="${y}" r=".55" fill="black" ${extra}/>`;
+it("N3 circuit positive: a painted dot at a native >=3-way node is authorized", async () => {
+  const { ir } = landingFixture();
+  ir.wires.push(wire("C", end("Z"), end("D")));
+  const third = `<path data-wire-uid="C" data-endpoints='${JSON.stringify(ir.wires[2].endpoints.map((e) => e.terminal))}' d="M10 30 H100 V50" fill="none" stroke="black" stroke-width=".4"/>`;
+  const source = physical(false).replace(
+    "</svg>",
+    third + circuitDot(100, 50) + "</svg>",
+  );
+  const g = await openSheet(page, source);
+  expect(g.tranche3.circuitJunctions).toHaveLength(1);
+  expect(physicalLandingAudit(g, ir).findings).toEqual([]);
+});
+it("N3 circuit mutation killed: a free-air dot has no native node; legacy shapes stay unchanged", async () => {
+  const { ir } = landingFixture(),
+    original = await openSheet(page, physical(false)),
+    source = physical(false).replace("</svg>", circuitDot(70, 50) + "</svg>"),
+    g = await openSheet(page, source);
+  expect(g.shapes).toEqual(original.shapes);
+  expect(g.terminals).toEqual(original.terminals);
+  expect(g.tranche3.circuitJunctions).toHaveLength(1);
+  const findings = physicalLandingAudit(g, ir).findings;
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({
+    kind: "junction-dot-without-native-node",
+    nativeDegree: 0,
+  });
+  expect(Math.abs(findings[0].point.x - 70)).toBeLessThan(0.01);
+  expect(Math.abs(findings[0].point.y - 50)).toBeLessThan(0.01);
+});
+it("N3 circuit mutation killed: two native incidences cannot authorize a dot", async () => {
+  const { ir } = landingFixture();
+  const source = physical(false).replace(
+    "</svg>",
+    circuitDot(100, 50) + "</svg>",
+  );
+  const result = physicalLandingAudit(await openSheet(page, source), ir);
+  expect(result.findings).toHaveLength(1);
+  expect(result.findings[0]).toMatchObject({
+    kind: "junction-dot-without-native-node",
+    nativeDegree: 2,
+  });
+});
+it.each([
+  'opacity="0"',
+  'fill-opacity="0"',
+  'style="fill:white"',
+  'style="display:none"',
+])(
+  "N3 circuit positive: unpainted dot does not invent a junction (%s)",
+  async (extra) => {
+    const { ir } = landingFixture();
+    const source = physical(false).replace(
+      "</svg>",
+      circuitDot(70, 50, extra) + "</svg>",
+    );
+    const g = await openSheet(page, source);
+    expect(g.tranche3.circuitJunctions).toEqual([]);
+    expect(physicalLandingAudit(g, ir).findings).toEqual([]);
+  },
+);
 function conversion(kind, transform = "", ink = true) {
   const mark =
     kind === "ac-input"

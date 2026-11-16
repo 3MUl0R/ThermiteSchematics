@@ -36,7 +36,28 @@ export function trancheGeometry(c) {
       segments: strokeInk(e, v.clip, e.getScreenCTM(), true),
     });
   }
-  return { tranche3: { routeInk, leaders } };
+  return {
+    tranche3: {
+      routeInk,
+      leaders,
+      circuitJunctions: c.h.trancheCircuitJunctions(c),
+    },
+  };
+}
+// N3-private candidates: never add a class/shape to the legacy DQ-13 bundle.
+export function trancheCircuitJunctions(c) {
+  const { root, visible, fillPaint, strokeInk, identity } = c;
+  return [...root.querySelectorAll("circle[data-circuit-junction]")].flatMap(
+    (e) => {
+      const v = visible(e),
+        fill = fillPaint(e);
+      if (!v || fill.alpha < 0.2 || fill.background) return [];
+      const ink = strokeInk(e, v.clip, e.getScreenCTM(), true);
+      return ink.length
+        ? [{ ...identity(e), bbox: v.b, inkSegments: ink }]
+        : [];
+    },
+  );
 }
 export function trancheInkPieces({ pieces }) {
   const result = [];

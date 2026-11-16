@@ -35,6 +35,11 @@ remains manual.
   ink. The existing 0.01 mm endpoint/coincidence guards remain. Net-level edges
   without physical conductor identities are explicitly unimplemented, not proof
   of separate physical landings; unknown declared wire IDs or missing ink fail.
+  Circuit `data-circuit-junction` circles are measured in N3's private bundle,
+  including actual filled ink, clipping and transforms; their attribute grants
+  no native-node authorization. Legacy shape classes and DQ-13 stay unchanged.
+  N3's population is painted routes; existing coverage/endpoint guards retain
+  responsibility for native conductors with no painted route.
 - **DQ-16 / N4 remains manual beyond the existing rule:** retain the <=2 mm
   ink-box proximity test and 0.17 mm uncertainty unchanged. Native wire/core IDs,
   endpoint sets, source-backed printed identities and painted route data now

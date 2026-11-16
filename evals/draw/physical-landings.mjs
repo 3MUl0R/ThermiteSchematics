@@ -66,44 +66,48 @@ function overlapFindings(routes, source, g) {
   return out;
 }
 function dotFindings(g, source) {
-  return g.shapes
-    .filter((s) => s.cls?.includes("junction-dot"))
-    .flatMap((dot) => {
-      const p = {
-        x: dot.bbox.x + dot.bbox.w / 2,
-        y: dot.bbox.y + dot.bbox.h / 2,
-      };
-      const nodes = (g.terminals ?? []).filter(
-        (t) =>
-          t.appearanceScope === dot.appearanceScope &&
-          t.point &&
-          pointDistance(t.point, p) <= 0.01,
-      );
-      const degree = Math.max(
-        0,
-        ...nodes.map((t) =>
-          [...source.values()].reduce(
-            (count, ends) =>
-              count +
-              (ends?.filter(
-                (e) =>
-                  e &&
-                  e.deviceUid === t.deviceUid &&
-                  e.terminalKey === t.terminal,
-              ).length ?? 0),
-            0,
-          ),
+  const dots = new Map(
+    [
+      ...g.shapes.filter((s) => s.cls?.includes("junction-dot")),
+      ...(g.tranche3?.circuitJunctions ?? []),
+    ].map((dot) => [dot.element, dot]),
+  );
+  return [...dots.values()].flatMap((dot) => {
+    const p = {
+      x: dot.bbox.x + dot.bbox.w / 2,
+      y: dot.bbox.y + dot.bbox.h / 2,
+    };
+    const nodes = (g.terminals ?? []).filter(
+      (t) =>
+        t.appearanceScope === dot.appearanceScope &&
+        t.point &&
+        pointDistance(t.point, p) <= 0.01,
+    );
+    const degree = Math.max(
+      0,
+      ...nodes.map((t) =>
+        [...source.values()].reduce(
+          (count, ends) =>
+            count +
+            (ends?.filter(
+              (e) =>
+                e &&
+                e.deviceUid === t.deviceUid &&
+                e.terminalKey === t.terminal,
+            ).length ?? 0),
+          0,
         ),
-      );
-      return degree >= 3
-        ? []
-        : [
-            finding("junction-dot-without-native-node", dot, {
-              nativeDegree: degree,
-              point: p,
-            }),
-          ];
-    });
+      ),
+    );
+    return degree >= 3
+      ? []
+      : [
+          finding("junction-dot-without-native-node", dot, {
+            nativeDegree: degree,
+            point: p,
+          }),
+        ];
+  });
 }
 export function physicalLandingAudit(input, ir) {
   const g = physicalOracleGeometry(input, ir);
