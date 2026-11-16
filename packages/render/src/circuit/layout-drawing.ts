@@ -22,7 +22,9 @@ export function circuitDrawingContents(
       (p) =>
         `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
     ),
-    ...labels.map((l) => circuitWireLabel(l, state)),
+    ...labels.map((l) =>
+      circuitWireLabel(l, state, supported.baseFallbacks.has(l.index)),
+    ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
       return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
@@ -31,11 +33,16 @@ export function circuitDrawingContents(
   return contents;
 }
 
-function circuitWireLabel(l: Label, state: CircuitLabelState) {
+function circuitWireLabel(
+  l: Label,
+  state: CircuitLabelState,
+  basePlacementFallback: boolean,
+) {
   const { cs, n, text } = state;
-  const plans = l.text
-    .split("\n")
-    .map((line, i) => ({ line, ...plannedCircuitCaption(line, i, l, state) }));
+  const plans = l.text.split("\n").map((line, i) => ({
+    line,
+    ...plannedCircuitCaption(line, i, l, state, basePlacementFallback),
+  }));
   return (
     plans.map((p) => p.leader).join("") +
     `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`

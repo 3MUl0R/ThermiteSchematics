@@ -1,5 +1,9 @@
-import { printableLabelGeometry } from "../symbols/printable-label.js";
-import type { ElkNode } from "elkjs/lib/elk-api.js";
+import { circuitCaptionGeometry } from "./caption-geometry.js";
+import {
+  recoverLeaderCaptionBlocks,
+  circuitCaptionGraph,
+} from "./caption-block.js";
+export { circuitCaptionGeometry } from "./caption-geometry.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 import { ownedWiringLabels } from "../layout/wiring-label-support.js";
 import { existingCircuitCaption } from "./caption-association.js";
@@ -10,21 +14,7 @@ import { required } from "../presentation/util.js";
 /** Feed the final, already recovered label reservations to the shared physical
  * segment planner. Native route arrays and fixed terminal geometry never change. */
 export function supportedCircuitLabels(state: CircuitLabelState) {
-  const input: ElkNode = {
-    ...state.graph,
-    edges: (state.graph.edges ?? []).map((edge) => ({
-      ...edge,
-      labels: state.labels
-        .filter((l) => edge.id === `e${l.index}`)
-        .map((l) => ({
-          text: l.text,
-          x: l.x,
-          y: l.y,
-          width: l.width,
-          height: l.height,
-        })),
-    })),
-  };
+  const input = circuitCaptionGraph(state);
   const graph = ownedWiringLabels(
       input,
       (id, l) =>
@@ -57,26 +47,9 @@ export function supportedCircuitLabels(state: CircuitLabelState) {
       y: required(p.y, "Missing circuit label y"),
     };
   });
-  return { labels };
+  return recoverLeaderCaptionBlocks({ ...state, labels }, state.labels);
 }
 
-export function circuitCaptionGeometry(
-  line: string,
-  i: number,
-  label: CircuitLabelState["labels"][number],
-  state: CircuitLabelState,
-) {
-  return printableLabelGeometry(
-    { x: label.x, y: label.y + i * 3.1, width: label.width, height: 3.8 },
-    line,
-    label.width - 1.5,
-    state.segments
-      .filter((s) => s.index === label.index)
-      .map((s) => [s.a, s.b]),
-    2.5,
-    false,
-  );
-}
 function circuitLabelNeedsMove(
   label: CircuitLabelState["labels"][number],
   state: CircuitLabelState,
