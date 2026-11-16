@@ -2,7 +2,7 @@ import type { ElectricalIr } from "@thermite/compiler";
 import type { DocumentationTable } from "@thermite/query";
 import type { PaperPage } from "./types.js";
 import { reportCells, wireColumnProbe } from "./report-cells.js";
-import { wrap } from "./svg.js";
+import { reportNoteLines } from "./report-note-wrapping.js";
 import {
   reportPaginator,
   reportHeightPagination,
@@ -108,7 +108,7 @@ export function reportPaginations(
   top = 0,
 ): WirePagination {
   const noteLines = table.notes.flatMap((note) =>
-    wrap(note, Math.floor(width / 1.6)),
+    reportNoteLines(note, width),
   ).length;
   return {
     measured: (measured, limit) =>
@@ -139,9 +139,7 @@ export function reportPagination(
   top = 0,
   pageLimit = Infinity,
 ): ReportPagination {
-  const notes = table.notes.flatMap((note) =>
-    wrap(note, Math.floor(width / 1.6)),
-  );
+  const notes = table.notes.flatMap((note) => reportNoteLines(note, width));
   const header = measured.geometry(
     measured.split(table.columns, "header"),
     true,

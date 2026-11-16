@@ -1,5 +1,5 @@
 import type { IrDeviceType } from "@thermite/compiler";
-import { wrapText } from "../text-metrics.js";
+import { wrapCaptionQualifier } from "./caption-qualifier.js";
 
 /** Keep native row ownership alongside the unchanged caption line layout. */
 export function appendPinRows(
@@ -14,7 +14,7 @@ export function appendPinRows(
     const role = type.terminals.find((t) => t.key === terminal)?.description;
     if (!role) continue;
     rows.set(caption.length, JSON.stringify([uid, terminal]));
-    caption.push(...wrapText(`${terminal}: ${role}`, width, 2.7));
+    caption.push(...wrapCaptionQualifier(`${terminal}: ${role}`, width));
   }
   return rows;
 }
@@ -29,7 +29,7 @@ export function pinLegend(
   x: number,
   y: number,
 ) {
-  const lines = wrapText(`${terminal}  ${role}`, width, 2.7);
+  const lines = wrapCaptionQualifier(`${terminal}  ${role}`, width);
   if (lines.length > 2)
     throw Error("Pin legend is too long for the assembly symbol.");
   return lines.map((line, i) =>

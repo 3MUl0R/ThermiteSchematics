@@ -53,7 +53,7 @@ function forceFallback(
   return (
     [...svg.querySelectorAll("[data-report-note]")]
       .map((n) => n.textContent)
-      // Notes use fixed character chunks; do not insert spaces into their text.
+      // Word wrapping preserves boundary whitespace; reconstruct exact note text.
       .join("")
   );
 }
