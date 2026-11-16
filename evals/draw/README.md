@@ -34,6 +34,8 @@ controls remain separate, and do not constitute an independent C3 medium audit.
   Cable `.` and `/` print aliases are equivalent. UID, native endpoints and the
   complete protected identity are checked, including same-net wrong owners.
   This extension does not claim a configured automatic wire-numbering policy.
+  Cards require a real native terminal; an empty terminal identity cannot turn
+  an unassigned core into a spare. Self-loops retain their real peer terminal.
   Card rows must also name the correct native peer; clipped duplicate candidates
   are excluded by measured visibility, while a visible card with erased text fails.
 - **N11 / DQ-08 extension:** independently reconstruct authored circuit and

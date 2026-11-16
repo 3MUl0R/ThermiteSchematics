@@ -10,7 +10,9 @@ function cardMatch(pending, right, identity, end, ir) {
   const candidates = pending
     .map((w) => ({
       w,
-      peer: w.ends.find((t) => terminalId(t) !== terminalId(end)),
+      peer: w.ends[
+        1 - w.ends.findIndex((t) => terminalId(t) === terminalId(end))
+      ],
     }))
     .map((x) => ({
       ...x,
@@ -30,7 +32,9 @@ export function cardIdentityFindings(card, catalog, ir) {
   if (
     !Array.isArray(card.conductors) ||
     !card.conductors.length ||
-    !card.terminalId
+    !card.terminalId?.deviceUid ||
+    !card.terminalId?.terminalKey ||
+    !ir.terminals?.some((t) => terminalId(t.id) === terminalId(card.terminalId))
   )
     return [fail("conductor-card-source-unavailable")];
   const own = card.conductors.map((e) => catalog.get(elementKey(e)));

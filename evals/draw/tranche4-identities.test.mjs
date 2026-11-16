@@ -109,3 +109,27 @@ it("N8 cores: punctuation alias is allowed, native core UID substitution is kill
     false,
   );
 });
+it("N8 mutation killed: malformed terminal identity cannot turn an unassigned core into a spare card", () => {
+  const x = identityFixture();
+  x.rows = [];
+  x.g.texts = x.g.texts.filter((t) => !t.wire);
+  x.ir.cables = [{ uid: "C", designation: "CBL", typeId: "ct" }];
+  x.ir.cableTypes = [{ id: "ct", conductors: [{ id: "1" }] }];
+  const c = x.g.tranche4.cards[0];
+  c.terminalId = {};
+  c.conductors = [{ kind: "core", cableUid: "C", conductorId: "1" }];
+  c.texts = [text("CBL.1 → unterminated (spare)")];
+  expect(audit(x).findings.map((f) => f.kind)).toContain(
+    "conductor-card-source-unavailable",
+  );
+});
+it("N8 positive and mutation: a native self-loop peer remains its own terminal, not a spare", () => {
+  const x = identityFixture();
+  x.ir.wires[0].endpoints = wire4("A", "101", [end("D"), end("D")]).endpoints;
+  x.g.shapes[0].endpoints = x.ir.wires[0].endpoints.map((e) => e.terminal);
+  const t = x.g.tranche4.cards[0].texts[0];
+  t.text = "101 → K1.T";
+  expect(audit(x).findings).toEqual([]);
+  t.text = "101 → unterminated (spare)";
+  expect(audit(x).findings.length).toBeGreaterThan(0);
+});
