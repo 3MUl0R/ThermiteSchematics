@@ -270,11 +270,11 @@ export async function topologyDrafts(
         },
       };
     };
-    const fits = (drawing: NotedDrawing) => compose(drawing).ok;
+    const fits = topologyFits(compose);
     const unfit = topologyUnfit(compose);
     const stagger = topologyStaggerGuard(compose);
     const drawings = wiring
-      ? [await prepareWiringDrawing(ir, request)]
+      ? [await prepareWiringDrawing(ir, request, fits.wiring)]
       : signalLoop
         ? [await prepareSignalLoopDrawing(ir, request, stagger.accept)]
         : assembly
@@ -290,6 +290,31 @@ export async function topologyDrafts(
   } catch (e) {
     return topologyFailure(ir, request, e);
   }
+}
+
+function topologyFits(
+  compose: (
+    drawing: NotedDrawing,
+    observeScale?: (scale: number) => void,
+  ) => RenderOutcome<Draft>,
+) {
+  const ordinary = (drawing: NotedDrawing) => compose(drawing).ok;
+  return Object.assign(ordinary, {
+    wiring: (
+      candidate: CommunicationDrawing,
+      original: CommunicationDrawing,
+    ) => {
+      let beforeScale = 0,
+        afterScale = 0;
+      const before = compose(original, (s) => {
+        beforeScale = s;
+      });
+      const after = compose(candidate, (s) => {
+        afterScale = s;
+      });
+      return after.ok && (!before.ok || afterScale >= beforeScale);
+    },
+  });
 }
 
 function topologyUnfit(
