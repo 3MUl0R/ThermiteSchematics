@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { compileProject } from "@thermite/compiler";
 import { buildDocumentation } from "@thermite/query";
 import { offViewFixture } from "./off-view-fixtures.js";
 import {
@@ -6,7 +7,11 @@ import {
   dependencyDraft,
   documentPaper,
 } from "./document-fixture.js";
-import { factTable } from "../src/packet/document-facts.js";
+import {
+  companionNotes,
+  factTable,
+  rowFacts,
+} from "../src/packet/document-facts.js";
 import { appendDocumentCompanions } from "../src/packet/document-companions.js";
 
 let source: Awaited<ReturnType<typeof offViewFixture>>;
@@ -114,4 +119,63 @@ it("does not retain an intermediate device-filter count or a full-terminal promi
     /Filtered report:|Lists every terminal|Device-owned rows follow/,
   );
   expect(table.selection).toBeUndefined();
+});
+
+it("identifies a complete unfiltered network companion as all native rows", async () => {
+  const compiled = await compileProject("examples/operator-console");
+  if (!compiled.ok) throw new Error("fixture compilation failed");
+  const native = buildDocumentation(compiled.ir, {
+    format: "documentation-view-request/0.1",
+    kind: "network",
+  });
+  const table = factTable(
+    compiled.ir,
+    "network",
+    native.rows.flatMap((r) => rowFacts(compiled.ir, native, r.key).facts),
+  );
+  expect(native.rows).toHaveLength(3);
+  expect(table.rows).toEqual(native.rows);
+  expect(table.notes.join(" ")).toContain("all 3 network rows");
+  expect(table.notes.join(" ")).not.toMatch(/not a complete|partial/);
+});
+it("does not assert absent terminal details or a globally incomplete inventory", () => {
+  const device = source.ir.devices.find((d) => d.designation === "H1");
+  if (!device) throw new Error("missing fixture device");
+  const table = factTable(source.ir, "terminals", [
+    {
+      kind: "terminal-inventory",
+      terminal: { deviceUid: device.uid, terminalKey: "X1" },
+    },
+  ]);
+  expect(table.rows.every((r) => r.cells.at(-1) === "Terminated")).toBe(true);
+  expect(table.notes.join(" ")).toContain(
+    "Selected terminal rows may include unconnected terminals and explicit jumpers",
+  );
+  expect(table.notes.join(" ")).not.toMatch(
+    /not a complete|partial|Selected terminal rows include/,
+  );
+});
+
+it("removes internal filter notes by identity even when native notes follow them", () => {
+  const table = buildDocumentation(source.ir, {
+    format: "documentation-view-request/0.1",
+    kind: "terminals",
+    filter: { devices: ["H1"] },
+  });
+  const nativeNote = "Native note retained after internal query notes.";
+  const augmented = {
+    ...table,
+    notes: [...table.notes.slice(-2), nativeNote, ...table.notes.slice(0, -2)],
+  };
+  const notes = companionNotes(
+    augmented,
+    table.rows.slice(0, 1),
+    source.ir.devices.length,
+  );
+  expect(notes).toContain(nativeNote);
+  expect(notes.join(" ")).toContain("Terminals follow the authored order");
+  expect(notes.join(" ")).not.toMatch(
+    /Filtered report:|Device-owned rows follow/,
+  );
+  expect(notes.join(" ")).not.toContain("not a complete inventory");
 });

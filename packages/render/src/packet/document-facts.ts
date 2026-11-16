@@ -159,6 +159,46 @@ export function rowFacts(
     };
   return { facts: [], columns: [] };
 }
+/** Remove only the query's internal lookup notes; preserve unrelated native notes. */
+export function companionNotes(
+  table: DocumentationTable,
+  rows: DocumentationTable["rows"],
+  totalDevices: number,
+): string[] {
+  const selection = table.selection;
+  const lookupNotes = new Set(
+    selection
+      ? [
+          `Filtered report: ${selection.deviceUids.length} of ${totalDevices} devices selected; ${selection.retainedRows} of ${selection.totalRows} source rows retained.`,
+          "Device-owned rows follow the selection; complete connection and cable rows retain peer details. Records without device endpoints remain included.",
+        ]
+      : [],
+  );
+  const notes = table.notes
+    .filter((note) => !lookupNotes.has(note))
+    .map((note) =>
+      note.replace(
+        "Lists every terminal, including",
+        "Selected terminal rows may include",
+      ),
+    );
+  const unit =
+    table.kind === "wires"
+      ? "conductor"
+      : table.kind === "terminals"
+        ? "terminal"
+        : table.kind === "assemblies"
+          ? "assembly"
+          : "network";
+  const complete = !selection && rows.length === table.rows.length;
+  const scope = `${complete ? "all " : ""}${rows.length} ${unit} row${rows.length === 1 ? "" : "s"}`;
+  return [
+    ...notes,
+    complete
+      ? `Supplementary scope: ${scope}; supplementary for source-detail notes; not a safety assessment.`
+      : `Supplementary scope: ${scope} for source-detail notes; not ${table.kind === "terminals" ? "a safety assessment" : "a complete inventory or safety assessment"}.`,
+  ];
+}
 /** Explicit device UIDs include non-strip terminals. Preserve whole native rows. */
 export function factTable(
   ir: Readonly<ElectricalIr>,
@@ -196,29 +236,10 @@ export function factTable(
         (f.kind === "conductor-incidence" &&
           f.element.kind === "cable_conductor"),
     );
-  // The terminal device filter is an internal source lookup, not the companion's
-  // scope. Its two appended filter notes describe the intermediate whole rows.
-  const notes = table.selection ? table.notes.slice(0, -2) : table.notes;
-  const unit =
-    kind === "wires"
-      ? "conductor"
-      : kind === "terminals"
-        ? "terminal"
-        : kind === "assemblies"
-          ? "assembly"
-          : "network";
   return {
     ...native,
     title: `Supplementary ${kind === "wires" ? (coresOnly ? "cable cores" : "connections") : documentLabel(kind).replace(" inventory", " details")}`,
     rows,
-    notes: [
-      ...notes.map((note) =>
-        note.replace(
-          "Lists every terminal, including",
-          "Selected terminal rows include",
-        ),
-      ),
-      `Supplementary scope: ${rows.length} ${unit} row${rows.length === 1 ? "" : "s"} for source-detail notes; not a complete inventory or safety assessment.`,
-    ],
+    notes: companionNotes(table, rows, ir.devices.length),
   };
 }
