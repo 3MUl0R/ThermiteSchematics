@@ -26,7 +26,7 @@ function facts(designation: string, terminal: string) {
   if (!type || !fn) throw new Error("missing fixture function/type");
   return { device, type, fn };
 }
-it("names the drawn protection class while retaining authored normal state", () => {
+it("names the drawn protection class without projecting source contact state", () => {
   for (const [device, mark, noun] of [
     ["CB1", "breaker", "Breaker pole"],
     ["OL1", "overload", "Overload element"],
@@ -34,9 +34,10 @@ it("names the drawn protection class while retaining authored normal state", () 
     if (!device) throw new Error("missing designation");
     const { fn, type } = facts(device, "1/L1");
     expect(circuitMark(type, fn)).toBe(mark);
-    expect(printedFunction(fn, type)).toBe(`${noun} (NC) 1/L1–2/T1`);
+    expect(fn.normal_state).toBe("closed");
+    expect(printedFunction(fn, type)).toBe(`${noun} 1/L1–2/T1`);
     expect(printedFunction(fn, type)).not.toMatch(
-      /thermal|electronic|NC contact/i,
+      /thermal|electronic|NC contact|\(NC\)|\(NO\)/i,
     );
   }
 });
@@ -98,9 +99,9 @@ it("prints role-aware reference rows without changing source identities or auxil
     );
     expect(row?.cells[1]).toBe(printedFunction(fn, type));
   }
-  expect(
-    rows.some((r) => r.cells[1] === "Overload element (NC) 1/L1–2/T1"),
-  ).toBe(true);
+  expect(rows.some((r) => r.cells[1] === "Overload element 1/L1–2/T1")).toBe(
+    true,
+  );
   expect(JSON.stringify(ir)).toBe(before);
 });
 
@@ -111,4 +112,25 @@ it("names a declared fuse element without inventing a contact state", () => {
   expect(circuitMark(fuseType, element)).toBe("fuse");
   expect(printedFunction(element, fuseType)).toBe("Fuse element 1/L1–2/T1");
   expect(printedFunction(element)).toBe("Other 1/L1–2/T1");
+});
+
+it("omits NO and NC from protective captions while preserving authored state and genuine NO contacts", () => {
+  const { fn, type } = facts("CB1", "1/L1");
+  for (const normal_state of ["open", "closed"] as const) {
+    const element = { ...fn, normal_state };
+    const before = JSON.stringify(element);
+    expect(printedFunction(element, type)).toBe("Breaker pole 1/L1–2/T1");
+    expect(
+      printedFunction(element, {
+        ...type,
+        symbol: "thermite:fuse",
+        circuitSymbols: { [fn.id.functionKey]: "fuse" },
+      }),
+    ).toBe("Fuse element 1/L1–2/T1");
+    expect(JSON.stringify(element)).toBe(before);
+  }
+  const { fn: auxiliary, type: overload } = facts("OL1", "95");
+  expect(
+    printedFunction({ ...auxiliary, normal_state: "open" }, overload),
+  ).toBe("NO contact 95–96");
 });

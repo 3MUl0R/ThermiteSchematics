@@ -28,15 +28,13 @@ function protectionRole(fn: IrFunction, type: IrDeviceType | undefined) {
 /** Internal presentation only. Lookup keys, IR and CSV identities are unchanged. */
 export function printedFunction(fn: IrFunction, type?: IrDeviceType): string {
   const role = protectionRole(fn, type);
-  const noun = role
-    ? fn.kind === "contact"
-      ? `${role} (${fn.normal_state === "open" ? "NO" : "NC"})`
-      : role
-    : fn.kind === "contact"
+  const noun =
+    role ??
+    (fn.kind === "contact"
       ? `${fn.normal_state === "open" ? "NO" : "NC"} contact`
       : fn.kind === "channel"
         ? `${fn.direction === "input" ? "Input" : "Output"} channel`
-        : fn.kind.charAt(0).toUpperCase() + fn.kind.slice(1);
+        : fn.kind.charAt(0).toUpperCase() + fn.kind.slice(1));
   const terminals = fn.terminals.map((t) => t.terminalKey);
   return [noun, formatTerminalSet(terminals)].filter(Boolean).join(" ");
 }
