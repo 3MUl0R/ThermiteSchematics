@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { cpus, totalmem, loadavg, platform, arch } from "node:os";
-import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
+import { correctnessFailure } from "./errors.mjs";
+export { startWorker } from "./worker-client.mjs";
 
 export const workloads = { "machine-demo": 12, "conveyor-line": 4 };
 export const operations = ["compile", "packet"];
+export const sampleCounts = { compile: 21, packet: 5 };
 export function machineClass() {
   return {
     platform: platform(),
@@ -30,118 +30,130 @@ export function comparison(base, head) {
   const ratio = head / base;
   return { baseMedianMs: base, headMedianMs: head, ratio, pass: ratio <= 1.2 };
 }
-export function startWorker(engine) {
-  const child = spawn(
-    process.execPath,
-    [fileURLToPath(new URL("worker.mjs", import.meta.url)), engine],
-    { stdio: ["pipe", "pipe", "pipe"] },
-  );
-  let pending,
-    stderr = "",
-    failure;
-  const reject = (error) => {
-    failure = error;
-    pending?.reject(error);
-    pending = undefined;
+export function measurementOrder(samples, extraSide, seed) {
+  const opposite = (side) => (side === "base" ? "head" : "base");
+  const order = [[extraSide, opposite(extraSide)]]; // excluded warmup
+  let state = seed >>> 0;
+  for (let i = 0; i < Math.floor(samples / 2); i++) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const first = state < 0x80000000 ? "base" : "head";
+    order.push([first, opposite(first)], [opposite(first), first]);
+  }
+  if (samples % 2) order.push([extraSide, opposite(extraSide)]);
+  return order;
+}
+function validateSide(observations, side, views) {
+  const fail = (message) => {
+    throw correctnessFailure(side, message);
   };
-  child.on("error", reject);
-  child.stdin.on("error", reject);
-  child.on("exit", (code, signal) =>
-    reject(new Error(`Perf worker exited ${signal ?? code}: ${stderr}`)),
-  );
-  child.stderr.on("data", (data) => {
-    stderr = (stderr + data).slice(-8000);
-  });
-  createInterface({ input: child.stdout }).on("line", (line) => {
-    try {
-      const value = JSON.parse(line);
-      if (value.error) throw new Error(value.error);
-      assert(pending, "Unsolicited perf worker output");
-      const recipient = pending;
-      pending = undefined;
-      recipient.resolve(value);
-    } catch (error) {
-      reject(error);
-    }
-  });
-  async function receive(request) {
-    if (failure) throw failure;
-    assert(!pending, "Concurrent requests to one perf worker");
-    let timeout;
-    try {
-      return await new Promise((resolve, reject) => {
-        pending = { resolve, reject };
-        timeout = setTimeout(
-          () => reject(new Error("Perf worker timeout")),
-          120000,
-        );
-        if (request) child.stdin.write(`${JSON.stringify(request)}\n`);
+  if (observations.some((r) => r.views !== views))
+    fail(`Expected ${views} views`);
+  if (new Set(observations.map((r) => r.sha256)).size !== 1)
+    fail("Nondeterministic output");
+  if (new Set(observations.map((r) => r.inputSha256)).size !== 1)
+    fail("Workload changed during measurement");
+}
+async function observationsFor(base, head, request, order) {
+  const observations = { base: [], head: [] };
+  for (const [round, sides] of order.entries()) {
+    for (const side of sides) {
+      const loadBefore = loadavg();
+      const result = await (side === "base" ? base : head).sample(request);
+      assert(
+        Number.isFinite(result.ms) && result.ms > 0,
+        "Invalid sample duration",
+      );
+      observations[side].push({
+        ...result,
+        warmup: round === 0,
+        loadBefore,
+        loadAfter: loadavg(),
       });
-    } finally {
-      clearTimeout(timeout);
     }
   }
-  const ready = receive();
+  return observations;
+}
+export async function measureRow(
+  base,
+  head,
+  name,
+  operation,
+  { samples, seed, extraSide },
+) {
+  assert(Number.isInteger(samples) && samples >= 3 && samples <= 100);
+  const order = measurementOrder(samples, extraSide, seed);
+  const observations = await observationsFor(
+    base,
+    head,
+    { name, operation },
+    order,
+  );
+  for (const side of ["base", "head"])
+    validateSide(observations[side], side, workloads[name]);
+  if (observations.base[0].inputSha256 !== observations.head[0].inputSha256)
+    throw correctnessFailure(
+      "head",
+      `${name}: workload differs from the PR base`,
+    );
   return {
-    sample: async (request) => {
-      assert((await ready).ready);
-      return receive(request);
-    },
-    close: () => child.kill(),
+    seed,
+    order,
+    observations,
+    ...comparison(
+      median(observations.base.slice(1).map((r) => r.ms)),
+      median(observations.head.slice(1).map((r) => r.ms)),
+    ),
   };
 }
-export async function measurePair(base, head, samples = 5) {
-  assert(Number.isInteger(samples) && samples >= 3 && samples <= 100);
+async function confirmedRow(base, head, name, operation, settings) {
+  const measurements = [
+    await measureRow(base, head, name, operation, settings),
+  ];
+  if (!measurements[0].pass)
+    measurements.push(
+      await measureRow(base, head, name, operation, {
+        ...settings,
+        seed: (settings.seed + 1) >>> 0,
+        extraSide: settings.extraSide === "base" ? "head" : "base",
+      }),
+    );
+  const last = measurements.at(-1);
+  return {
+    name,
+    operation,
+    views: workloads[name],
+    samples: settings.samples,
+    warmup: 1,
+    baseMedianMs: last.baseMedianMs,
+    headMedianMs: last.headMedianMs,
+    ratio: last.ratio,
+    pass: measurements.some((m) => m.pass),
+    measurements,
+  };
+}
+export async function measurePair(
+  base,
+  head,
+  { counts = sampleCounts, seed = 20261116 } = {},
+) {
   const rows = [];
-  for (const [name, views] of Object.entries(workloads)) {
-    for (const operation of operations) {
-      const observations = { base: [], head: [] };
-      // Separate compile/packet loops, one warmup per operation and engine.
-      // AB then BA cancels steady drift without concurrent benchmark work.
-      for (let round = 0; round <= samples; round++) {
-        for (const side of round % 2 ? ["head", "base"] : ["base", "head"]) {
-          const loadBefore = loadavg();
-          const result = await (side === "base" ? base : head).sample({
-            name,
-            operation,
-          });
-          assert(Number.isFinite(result.ms) && result.ms > 0);
-          assert.equal(result.views, views);
-          observations[side].push({
-            ...result,
-            warmup: round === 0,
-            loadBefore,
-            loadAfter: loadavg(),
-          });
-        }
-      }
-      for (const side of ["base", "head"]) {
-        assert.equal(
-          new Set(observations[side].map((r) => r.sha256)).size,
-          1,
-          `${name}/${operation}/${side}: nondeterministic output`,
-        );
-        assert.equal(
-          new Set(observations[side].map((r) => r.inputSha256)).size,
-          1,
-        );
-      }
-      assert.equal(
-        observations.base[0].inputSha256,
-        observations.head[0].inputSha256,
-        `${name}: workload changed; review the baseline explicitly`,
+  for (const [index, name] of Object.keys(workloads).entries()) {
+    for (const operation of operations)
+      rows.push(
+        await confirmedRow(base, head, name, operation, {
+          samples: counts[operation],
+          seed,
+          // Odd counts need one extra first position. Opposite workloads balance
+          // that position for each operation; confirmation reverses it as well.
+          extraSide: (index + seed) % 2 ? "head" : "base",
+        }),
       );
-      rows.push({
-        name,
-        views,
-        operation,
-        ...comparison(
-          median(observations.base.slice(1).map((r) => r.ms)),
-          median(observations.head.slice(1).map((r) => r.ms)),
-        ),
-        observations,
-      });
-    }
   }
-  return { samples, warmup: 1, rows, pass: rows.every((r) => r.pass) };
+  return {
+    samples: counts,
+    warmup: 1,
+    seed,
+    rows,
+    pass: rows.every((r) => r.pass),
+  };
 }

@@ -127,7 +127,7 @@ entry that acquires a connection is also flagged for review.
 Use the guarded patch workflow for these device-source edits. Do not classify
 an unconnected point as unused merely to clear the report. Mark a point
 `intentionally-unused` only with explicit user intent. A brief that omits
-Ethernet does not declare the PLC's Ethernet port unused; retain its optional
+Ethernet does not declare a device's Ethernet port unused; retain its optional
 informational finding until the user decides.
 
 ## Findings and limits

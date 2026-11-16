@@ -195,35 +195,47 @@ fails `check` and is not a machine-independent performance claim.
 
 ## Required performance gate for render changes
 
-After rebuilding, run `bun run check:perf` for every render-lane PR. This separate
-gate is deliberately outside `check`: it times real packets and needs a matching
-machine class. It measures the same P-perf machine-demo 12-view and conveyor-line
-4-view workloads, with separate compile/render loops, one warmup and the median
-of five samples per engine. All four medians must be at most 120% of the base.
-It prints base and head medians and exits 1 for a regression, 2 for invalid
-measurement/setup. `--output <file.json>` saves samples, hashes, machine metadata,
-load averages and elapsed time. On platforms without load averages they are zero.
+Run `bun run check:perf` for every render-lane PR. The gate rebuilds the head
+first and rebuilds every base, including a cached `--base-engine <checkout>`;
+stale ignored dist cannot silently pass. The default base is
+`git merge-base HEAD origin/dev`. Use `--base-rev <revision>` to choose another
+PR parent explicitly. The selected commit is resolved to a SHA and recorded.
+A temporary detached base is installed, built and removed automatically. A
+cached base must have clean source at that exact SHA; it is rebuilt too.
 
-The reviewed pin is [scripts/perf-baseline.json](../scripts/perf-baseline.json),
-measured on dev `fac3c432dcc7ae63014fa1a5d1f7df2842b9d8b5` with Bun 1.4.2.
-Stored absolute medians are printed for context. The gate remeasures that exact
-revision and alternates base/head then head/base samples in the same session to
-reduce load and thermal drift. It requires the pin's CPU, memory, OS/architecture
-and Bun class, checks unchanged workload inputs and deterministic output, and
-never silently updates the pin or changes category 7's scoring anchor.
+This gate stays outside `check`. It measures the P-perf machine-demo 12-view and
+conveyor-line 4-view workloads in separate long-lived base/head workers on the
+same machine. Compile uses **21** samples and packet uses **5**, each after one
+excluded warmup. If a row exceeds **+20%**, only that row is remeasured once,
+with a new warmup and the same sample count. It fails only if **both** medians
+exceed +20%. There is no absolute floor. Both measurements and their samples,
+loads, hashes and ordering are retained by `--output <file.json>`.
 
-By default the gate installs and builds a temporary detached baseline worktree,
-then removes it. For repeated measurements, `--base-engine <checkout>` accepts a
-clean, independently built checkout at the exact pinned revision. Rebuild both
-checkouts before using this option; generated dist files are ignored by Git.
-`--samples N` accepts 3–100; use the default five for review evidence.
-`--self-check 5 --output <file.json>` measures five head-vs-head comparisons and
-reports their false-positive rate. Run this separately from tests or other heavy
-local jobs; alternating order reduces drift but cannot remove bursty contention.
-A noisy failure requires retained evidence and a quieter rerun, never a raised
-threshold. The pinned baseline was explicitly collected with
-`--record-baseline scripts/perf-baseline.json`; this requires clean pinned source
-and a passing base self-comparison. Re-pinning is a reviewed intentional change.
+Seeded AB/BA blocks balance first positions; odd counts have one extra first
+position, reversed for the other workload and for confirmation. Initial
+measurements balance the order for each operation across the two workloads. `--seed N`
+(default 20261116) records/replays that ordering. `--self-check 5 --output <file.json>`
+runs five head-vs-head trials with successive seeds and reports their final
+false-positive rate; retain initial failures and confirmations when assessing
+noise. Run timing trials separately from tests and other heavy jobs. High load
+(1-minute average above half the logical CPU count) prints a warning, never
+raises the threshold. Load averages are zero on platforms without them.
+
+The committed [historical baseline](../scripts/perf-baseline.json), measured on
+dev `fac3c432dcc7ae63014fa1a5d1f7df2842b9d8b5`, is printed as context only. It
+neither selects the PR base nor changes category 7's historical scoring anchor
+(DECISIONS #26). Different historical CPU/memory/OS/Bun metadata warns instead
+of preventing live base/head measurement. `--record-baseline <file.json>` is an
+explicit context collection mode, not a scoring or per-PR baseline update.
+
+Exit codes: **0** passes; **1** is a confirmed timing regression; **2** is setup,
+protocol, invalid timing data or base-side failure; **3** is head correctness
+(build, compile/render, view count, workload identity or output determinism).
+Correctness errors are not retried as timing noise. SIGINT/SIGTERM stop owned
+build/worker processes, remove the temporary directory and worktree registration,
+and exit 130/143. Directory removal and worktree pruning still run if
+`git worktree remove` fails. OS force-termination (including Windows process.kill)
+and SIGKILL cannot run cleanup handlers.
 
 Reserved slot: **T1 source metadata used verbatim in a successful guarded
 dry-run**. T1 is merged on base 629a563; the E1 probe remains deferred, with

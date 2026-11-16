@@ -1,187 +1,85 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir, loadavg } from "node:os";
+import { readFileSync, realpathSync } from "node:fs";
+import { loadavg } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
-  comparison,
   machineClass,
   measurePair,
-  operations,
   startWorker,
-  workloads,
+  sampleCounts,
 } from "./perf-gate/measure.mjs";
+import {
+  buildEngine,
+  prepareBase,
+  resolveBaseRevision,
+  verifyBase,
+} from "./perf-gate/checkout.mjs";
+import { git, lifecycle } from "./perf-gate/lifecycle.mjs";
+import { PerfFailure } from "./perf-gate/errors.mjs";
+import {
+  contextWarnings,
+  finish,
+  printComparison,
+  validateBaseline,
+} from "./perf-gate/report.mjs";
 
-export const baselineRevision = "fac3c432dcc7ae63014fa1a5d1f7df2842b9d8b5";
 const root = fileURLToPath(new URL("../", import.meta.url));
-const git = (directory, ...args) =>
-  execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
-const write = (path, value) =>
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
-export function validateBaseline(baseline, machine) {
-  assert.equal(baseline.format, "thermite-perf-baseline/1");
-  assert.equal(baseline.revision, baselineRevision);
-  assert.deepEqual(
-    baseline.machine,
-    machine,
-    "Use the pinned baseline's machine class",
-  );
-  assert.equal(baseline.measurement.warmup, 1);
-  assert(baseline.measurement.samples >= 3);
-  assert.equal(baseline.measurement.rows.length, 4);
-  for (const [name, views] of Object.entries(workloads)) {
-    for (const operation of operations) {
-      const rows = baseline.measurement.rows.filter(
-        (r) => r.name === name && r.operation === operation,
-      );
-      assert.equal(rows.length, 1);
-      assert.equal(rows[0].views, views);
-      comparison(rows[0].baseMedianMs, rows[0].headMedianMs);
-    }
-  }
-}
-function verifyBase(directory) {
-  assert.equal(git(directory, "rev-parse", "HEAD"), baselineRevision);
-  assert.equal(
-    git(
-      directory,
-      "status",
-      "--porcelain",
-      "--untracked-files=all",
-      "--",
-      "packages",
-      "examples",
-      "bun.lock",
-      "package.json",
-    ),
-    "",
-    "Baseline source must be clean; rebuild it before measuring",
-  );
-}
-async function pair(basePath, headPath, samples) {
-  const base = startWorker(basePath);
-  const head = startWorker(headPath);
-  try {
-    return await measurePair(base, head, samples);
-  } finally {
-    base.close();
-    head.close();
-  }
-}
-function options() {
+export function options(args = process.argv.slice(2)) {
   const { values } = parseArgs({
+    args,
     options: {
       "base-engine": { type: "string" },
+      "base-rev": { type: "string" },
       "head-engine": { type: "string", default: root },
       baseline: {
         type: "string",
         default: join(root, "scripts/perf-baseline.json"),
       },
-      samples: { type: "string", default: "5" },
       output: { type: "string" },
       "self-check": { type: "string" },
       "record-baseline": { type: "string" },
+      seed: { type: "string", default: "20261116" },
     },
   });
-  const samples = Number(values.samples);
-  assert(Number.isInteger(samples) && samples >= 3 && samples <= 100);
   const repetitions = values["self-check"] ? Number(values["self-check"]) : 1;
   assert(
     Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 100,
   );
+  const seed = Number(values.seed);
+  assert(Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff);
   assert(!(values["record-baseline"] && values["self-check"]));
-  return { values, samples, repetitions };
-}
-function prepareBase(values, headPath, resource) {
-  if (values["record-baseline"] || values["self-check"]) {
-    resource.basePath = headPath;
-    if (values["record-baseline"]) verifyBase(headPath);
-  } else if (values["base-engine"]) {
-    resource.basePath = realpathSync(resolve(values["base-engine"]));
-    verifyBase(resource.basePath);
-  } else {
-    resource.temporary = mkdtempSync(
-      join(realpathSync(tmpdir()), "thermite-perf-"),
-    );
-    resource.basePath = join(resource.temporary, "base");
-    git(
-      root,
-      "worktree",
-      "add",
-      "--detach",
-      resource.basePath,
-      baselineRevision,
-    );
-    resource.added = true;
-    for (const args of [
-      ["install", "--frozen-lockfile"],
-      ["run", "build"],
-    ])
-      execFileSync(process.execPath, args, {
-        cwd: resource.basePath,
-        stdio: ["ignore", "ignore", "inherit"],
-        timeout: 120000,
-      });
-    verifyBase(resource.basePath);
-  }
-}
-function printComparison(result, baseline, iteration) {
-  for (const row of result.rows) {
-    const pinned = baseline?.measurement.rows.find(
-      (r) => r.name === row.name && r.operation === row.operation,
-    );
-    console.log(
-      `${iteration + 1} ${row.name} ${row.operation}: base ${row.baseMedianMs.toFixed(2)} ms, head ${row.headMedianMs.toFixed(2)} ms, ${((row.ratio - 1) * 100).toFixed(1)}% ${row.pass ? "PASS" : "FAIL"}${pinned ? ` (pinned ${pinned.baseMedianMs.toFixed(2)} ms)` : ""}`,
-    );
-  }
-}
-function finish(report, values, repetitions, started) {
-  report.loadAfter = loadavg();
-  report.elapsedMs = performance.now() - started;
-  report.failedComparisons = report.comparisons.filter((r) => !r.pass).length;
-  report.pass = report.failedComparisons === 0;
-  if (values["self-check"])
-    report.falsePositiveRate = report.failedComparisons / repetitions;
-  if (values.output) write(values.output, report);
-  if (values["record-baseline"]) {
-    assert(
-      report.pass,
-      "Baseline self-comparison unstable; retain evidence and retry under quieter load",
-    );
-    write(values["record-baseline"], {
-      format: "thermite-perf-baseline/1",
-      revision: baselineRevision,
-      createdAt: report.createdAt,
-      machine: report.machine,
-      loadBefore: report.loadBefore,
-      loadAfter: report.loadAfter,
-      measurement: report.comparisons[0],
-    });
-  }
-  console.log(
-    `${report.mode}: ${report.failedComparisons}/${repetitions} failed; ${(report.elapsedMs / 1000).toFixed(1)} s; load ${report.loadBefore.join("/")} -> ${report.loadAfter.join("/")}`,
+  assert(
+    !(
+      values["base-engine"] &&
+      (values["record-baseline"] || values["self-check"])
+    ),
   );
-  if (!report.pass) process.exitCode = 1;
+  assert(
+    !(
+      values["base-rev"] &&
+      (values["record-baseline"] || values["self-check"])
+    ),
+  );
+  return { values, repetitions, seed };
 }
-async function main() {
-  const started = performance.now();
-  const { values, samples, repetitions } = options();
-  const headPath = realpathSync(resolve(values["head-engine"]));
-  const machine = machineClass();
-  const baseline = values["record-baseline"]
-    ? null
-    : JSON.parse(readFileSync(values.baseline));
-  if (baseline) validateBaseline(baseline, machine);
-  const report = {
-    format: "thermite-perf-gate/1",
+async function pair(basePath, headPath, owner, seed) {
+  const base = startWorker(basePath, "base", owner);
+  const head = startWorker(headPath, "head", owner);
+  try {
+    return await measurePair(base, head, { seed });
+  } finally {
+    base.close();
+    head.close();
+  }
+}
+function newReport(values, headPath, machine, baseRevision, baseline) {
+  const loads = loadavg();
+  const warnings = contextWarnings(baseline, machine, loads);
+  for (const warning of warnings) console.error(`Warning: ${warning}`);
+  return {
+    format: "thermite-perf-gate/2",
     mode: values["record-baseline"]
       ? "baseline"
       : values["self-check"]
@@ -189,27 +87,72 @@ async function main() {
         : "gate",
     createdAt: new Date().toISOString(),
     machine,
-    loadBefore: loadavg(),
+    loadBefore: loads,
+    warnings,
     headRevision: git(headPath, "rev-parse", "HEAD"),
     headStatus: git(headPath, "status", "--porcelain"),
-    baselineRevision,
+    baseRevision,
+    baseSelection:
+      values["base-rev"] ??
+      (values["self-check"] || values["record-baseline"]
+        ? "head"
+        : "merge-base HEAD origin/dev"),
+    contextRevision: baseline?.revision ?? null,
     thresholdRatio: 1.2,
+    samples: sampleCounts,
     comparisons: [],
   };
-  const resource = {};
+}
+export async function main(args) {
+  const started = performance.now();
+  const { values, repetitions, seed } = options(args);
+  const headPath = realpathSync(resolve(values["head-engine"]));
+  const self = values["self-check"] || values["record-baseline"];
+  const baseRevision = self
+    ? git(headPath, "rev-parse", "HEAD")
+    : resolveBaseRevision(headPath, values["base-rev"]);
+  const baseline = values["record-baseline"]
+    ? null
+    : JSON.parse(readFileSync(values.baseline));
+  if (baseline) validateBaseline(baseline);
+  const report = newReport(
+    values,
+    headPath,
+    machineClass(),
+    baseRevision,
+    baseline,
+  );
+  const owner = lifecycle(headPath);
+  let primaryError;
   try {
-    prepareBase(values, headPath, resource);
+    if (values["record-baseline"]) verifyBase(headPath, baseRevision);
+    // Always rebuild, including a cached --base-engine. mtimes cannot prove
+    // that ignored dist corresponds to the current source and build settings.
+    console.log("Building head before timing…");
+    await buildEngine(headPath, "head", owner);
+    const basePath = await prepareBase(values, headPath, baseRevision, owner);
     for (let iteration = 0; iteration < repetitions; iteration++) {
-      const result = await pair(resource.basePath, headPath, samples);
+      const result = await pair(
+        basePath,
+        headPath,
+        owner,
+        (seed + iteration) >>> 0,
+      );
       report.comparisons.push(result);
       printComparison(result, baseline, iteration);
     }
-    finish(report, values, repetitions, started);
+    finish(report, values, started);
+    return report;
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
-    if (resource.temporary) {
-      if (resource.added)
-        git(root, "worktree", "remove", "--force", resource.basePath);
-      rmSync(resource.temporary, { recursive: true, force: true });
+    const failures = owner.cleanup();
+    owner.dispose();
+    if (failures.length) {
+      const message = `Perf cleanup: ${failures.join("; ")}`;
+      if (primaryError) console.error(message);
+      else throw new PerfFailure(message);
     }
   }
 }
@@ -219,5 +162,5 @@ if (
 )
   main().catch((error) => {
     console.error(error.message);
-    process.exitCode = 2;
+    process.exitCode = error.exitCode ?? 2;
   });

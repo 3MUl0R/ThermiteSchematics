@@ -1,8 +1,7 @@
 # Thermite Schematics engine guide
 
-TypeScript + ELK source alpha. Use a runtime or source checkout;
-engine changes need a separate checkout and focused branch.
-Fix bugs, improve docs/rendering and contribute reviewed models.
+TypeScript + ELK source alpha. Use a separate checkout and focused branch for
+engine changes. Contribute fixes, docs/rendering and reviewed models.
 Keep electrical projects and customer data out of engine changes.
 
 ## Commands
@@ -12,7 +11,7 @@ Keep electrical projects and customer data out of engine changes.
   `THERMITE_RESEARCH_PYTHON`). See [platforms](docs/platforms.md).
 - Setup: `bun install --frozen-lockfile`, `bun run build`. Run `bun run check`
   before a PR; linked git worktrees work too.
-- Render PRs also require `bun run check:perf` ([details](CONTRIBUTING.md#rendering)).
+- Render PRs: `bun run check:perf`; `--base-rev` overrides merge-base with `origin/dev` ([details](CONTRIBUTING.md#rendering)).
 - Focused tests: `bun run test -- <file>` (Vitest; never `bun test`).
 - `bun thermite.mjs <command>` runs built `packages/cli/dist/alpha.js`. After
   source changes, `bun run build` before trusting CLI output, tests or update

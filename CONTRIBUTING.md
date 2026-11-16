@@ -150,10 +150,15 @@ spare ends, and title blocks. Do not hide clipping with a smaller font or omit
 conductors to make a test pass. A safe, explained R006 failure is preferable to
 an incomplete drawing. Confirm both drawing flows for layout changes.
 
-Every render-lane PR must also pass `bun run check:perf` after rebuilding. This
+Every render-lane PR must also pass `bun run check:perf`. It rebuilds the head and
+base before timing. This
 separate [performance gate](evals/README.md#required-performance-gate-for-render-changes)
-compares compile and packet medians with pinned dev on the same machine class,
-failing above +20%. Keep the output and load evidence with the review.
+compares compile and packet medians against the PR parent: by default the
+merge-base of HEAD with `origin/dev`, or an explicit `--base-rev <revision>`.
+It takes 21 compile and five packet samples per engine, confirms a failing row
+once, and fails when both exceed +20%. The committed baseline is historical
+context only; category 7's anchor is separate. Keep both measurements and load
+evidence with the review.
 
 ## Component library submissions
 

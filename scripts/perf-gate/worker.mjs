@@ -38,19 +38,31 @@ function inputHash(directory) {
   return hash(files);
 }
 const cases = new Map();
-for (const [name, views, packet] of [
-  [
-    "machine-demo",
-    12,
-    JSON.parse(
-      readFileSync(join(engine, "examples/machine-demo/packet.request.json")),
-    ),
-  ],
-  ["conveyor-line", 4, conveyorPacket],
-]) {
-  assert.equal(packet.views.length, views);
-  const project = join(engine, "examples", name);
-  cases.set(name, { project, packet, views, inputSha256: inputHash(project) });
+try {
+  for (const [name, views, packet] of [
+    [
+      "machine-demo",
+      12,
+      JSON.parse(
+        readFileSync(join(engine, "examples/machine-demo/packet.request.json")),
+      ),
+    ],
+    ["conveyor-line", 4, conveyorPacket],
+  ]) {
+    assert.equal(packet.views.length, views);
+    const project = join(engine, "examples", name);
+    cases.set(name, {
+      project,
+      packet,
+      views,
+      inputSha256: inputHash(project),
+    });
+  }
+} catch (error) {
+  process.stdout.write(
+    `${JSON.stringify({ error: error.message, kind: "correctness" })}\n`,
+  );
+  process.exit(0);
 }
 const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 send({ ready: true });
@@ -80,6 +92,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       ...(operation === "packet" ? { sheets: result.value.sheets.length } : {}),
     });
   } catch (error) {
-    send({ error: error.message });
+    send({ error: error.message, kind: "correctness" });
   }
 }
