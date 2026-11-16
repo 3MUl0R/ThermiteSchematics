@@ -947,7 +947,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Optional unconnected points, spares and unreviewed models stay visible as information.",
+        "Optional unconnected points, spares and unreviewed models stay informational.",
       async check() {
         const [{ report, compiler }, validated, moved] = await Promise.all([
           auditReport(),
@@ -979,8 +979,7 @@ const module: FactModule = {
       },
     },
     {
-      claim:
-        "A single-ended cable core does not satisfy a required connection.",
+      claim: "A single-ended cable core cannot satisfy a required connection.",
       async check() {
         const [{ report }, moved] = await Promise.all([
           auditReport(),
@@ -1137,7 +1136,7 @@ const module: FactModule = {
       "Authoring advice: the engine can only check declared terminals and ports.",
     ],
     [
-      "Never mark points unused to clear findings.",
+      "Mark unused only with explicit user intent.",
       "Authoring advice about review honesty; the engine cannot judge intent.",
     ],
   ]),

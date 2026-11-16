@@ -22,6 +22,38 @@ const execFile = promisify(execFileCallback);
 const cli = resolve("packages/cli/dist/thermite-bin.js");
 afterEach(removeFixtures);
 
+it("retains optional Ethernet information until an explicit unused decision", async () => {
+  const f = await fixture();
+  const hmi = f.source.objects[3];
+  expect(hmi.designation).toBe("HMI1");
+  // Omission from a brief supplies no unused disposition.
+  delete hmi.connectionReview.ports.ETH2;
+  const before = await f.valid();
+  const information = analyzeCompleteness(before.ir);
+  expect(
+    information.findings.find(
+      (r) => r.designation === "HMI1" && r.key === "ETH2",
+    ),
+  ).toMatchObject({ code: "I001", severity: "info" });
+  expect(
+    information.devices
+      .find((d) => d.designation === "HMI1")
+      ?.connections.find((c) => c.key === "ETH2")?.review,
+  ).toBeUndefined();
+  // This second case supplies the user decision missing in the dogfood.
+  hmi.connectionReview.ports.ETH2 = {
+    status: "intentionally-unused",
+    reason: "User explicitly reserves ETH2 for future expansion.",
+  };
+  const after = await f.valid();
+  expect(
+    analyzeCompleteness(after.ir).findings.find(
+      (r) => r.designation === "HMI1" && r.key === "ETH2",
+    ),
+  ).toMatchObject({ code: "I002", severity: "info" });
+  expect(after.diagnostics).toEqual(before.diagnostics);
+});
+
 it("inventories all points, distinguishes dangling cores, and never clears required warnings with an unused note", async () => {
   const f = await fixture(),
     c = await f.valid(),

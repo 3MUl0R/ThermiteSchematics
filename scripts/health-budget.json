@@ -49,7 +49,7 @@
     "packages/cli/test/docs-index.test.ts": 1029,
     "packages/cli/test/init.test.ts": 1648,
     "packages/cli/test/project-guide.test.ts": 1140,
-    "packages/cli/test/project-guide/communication-completeness.ts": 1145,
+    "packages/cli/test/project-guide/communication-completeness.ts": 1144,
     "packages/cli/test/project-guide/core.ts": 1621,
     "packages/cli/test/project-guide/general.ts": 2020,
     "packages/cli/test/project-guide/signal-loops.ts": 976,
