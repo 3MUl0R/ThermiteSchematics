@@ -20,6 +20,17 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.16** measures DQ-21 PDF widths from native content-stream glyph
+advances. PDF.js-inferred whitespace contributes no width; actual space glyphs
+and their spacing still contribute, including extraction-omitted end spaces.
+Multiple show-text runs on a line retain their native placement span. The
+`fontMetrics` predicate and max(0.15 mm, 2%) tolerance are unchanged; the other
+checks retain their existing PDF extraction geometry. DQ-07 absence evidence
+now records native coil/contact/actuation counts and issued view kinds, and
+explains native relays without measured full function bodies. Explicit source
+selections with an unresolved device/function or missing issued view title emit
+packet-level reconciliation findings rather than silently permitting absence.
+
 Version **5.15** adds explicit packet-level DQ-07 `not-applicable` coverage when
 the native repeat and mirror/return audits find no obligation, measurement or
 unmatched annotation. It is emitted once on the first sheet; an empty sheet in
@@ -997,7 +1008,7 @@ baselines, but a baseline without source pins cannot supply `notMove` crops.
 
 The summary reader supports the historical **5.3** schema by reading only absent
 `not-applicable` and `not-measured` counters as zero in memory. Reassessment must
-still agree: an omitted nonzero counter refuses. Supported 4.1–5.2 and 5.4–5.15
+still agree: an omitted nonzero counter refuses. Supported 4.1–5.2 and 5.4–5.16
 summaries require every counter exactly; unknown versions refuse. Historical report bytes,
 hashes and source pins are never rewritten or supplied by the target report.
 Run the real-report acceptance and in-memory negative controls with:

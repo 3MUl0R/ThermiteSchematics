@@ -1,4 +1,4 @@
-import { paintedPdfItems } from "./pdf-painted.mjs";
+import { paintedPdfItems, paintedPdfMeasurements } from "./pdf-painted.mjs";
 import assert from "node:assert/strict";
 import { maskLossRegions } from "./pdf-operators.mjs";
 import {
@@ -160,5 +160,12 @@ export async function portableLabelRisks(page) {
     pdfjs.OPS,
     page.view,
     page.getViewport({ scale: 25.4 / 72 }).transform,
+  );
+}
+
+export async function pdfTextMeasurements(page, families = [], fontCaps = {}) {
+  return paintedPdfMeasurements(
+    page,
+    await rawPdfText(page, families, fontCaps),
   );
 }

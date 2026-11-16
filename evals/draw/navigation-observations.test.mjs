@@ -78,6 +78,8 @@ it("emits one explicit packet absence, not one per empty sheet", () => {
         findingCount: 0,
         repeatObligations: 0,
         mirrorReturnAppearances: 0,
+        nativeFunctions: { coils: 0, contacts: 0, actuates: 0 },
+        packetViewKinds: [],
       },
     }),
   ]);
@@ -116,5 +118,82 @@ it.each([
     expect(observed.length).toBeGreaterThan(0);
     expect(observed.some((r) => r.id.endsWith("/not-applicable"))).toBe(false);
     expect(observed.some((r) => r.status === "fail")).toBe(true);
+  },
+);
+
+it("explains native relays without drawn function bodies without changing absence applicability", () => {
+  const f = fixture();
+  nativeFunction(f, "coil", []);
+  f.ir.functions.push({
+    ...f.ir.functions[0],
+    id: { deviceUid: "d", functionKey: "contact" },
+    kind: "contact",
+  });
+  f.ir.internalRelations = [
+    {
+      deviceUid: "d",
+      verb: "actuates",
+      from: f.ir.functions[0].id,
+      to: f.ir.functions[1].id,
+    },
+  ];
+  f.packet.sheets.forEach((s, i) => {
+    s.view.kind = i ? "terminals" : "wiring";
+  });
+  const observed = rows(f);
+  expect(observed).toHaveLength(1);
+  expect(observed[0].status).toBe("not-applicable");
+  expect(observed[0].evidence.nativeFunctions).toEqual({
+    coils: 1,
+    contacts: 1,
+    actuates: 1,
+  });
+  expect(observed[0].evidence.packetViewKinds).toEqual(["terminals", "wiring"]);
+  expect(observed[0].reason).toContain("no full coil/contact function bodies");
+});
+it("fails closed when an explicitly selected coil has no matching issued view title", () => {
+  const f = fixture();
+  nativeFunction(f, "coil", []);
+  f.request.views[1].groups = [
+    { functions: [{ device: { by: "uid", value: "d" }, key: "f" }] },
+  ];
+  f.packet.sheets[1].view.title = "No source view matches this";
+  const observed = rows(f);
+  expect(observed.some((r) => r.status === "not-applicable")).toBe(false);
+  expect(
+    observed.flatMap((r) => r.evidence.findings).map((f) => f.kind),
+  ).toEqual(["navigation-selected-view-unresolved"]);
+});
+it("fails closed when an explicitly selected coil designation is ambiguous", () => {
+  const f = fixture();
+  nativeFunction(f, "coil", []);
+  f.ir.devices.push({ uid: "foreign", designation: "D1" });
+  f.request.views[0].groups = [
+    { functions: [{ device: { by: "designation", value: "D1" }, key: "f" }] },
+  ];
+  const observed = rows(f);
+  expect(observed.some((r) => r.status === "not-applicable")).toBe(false);
+  expect(
+    observed.flatMap((r) => r.evidence.findings).map((f) => f.kind),
+  ).toEqual(["navigation-selected-source-unresolved"]);
+});
+
+it.each(["missing-device", "missing-function", "duplicate-function"])(
+  "records an unresolved explicit native selection: %s",
+  (kind) => {
+    const f = fixture();
+    nativeFunction(f, "coil", []);
+    f.request.views[0].groups = [
+      { functions: [{ device: { by: "uid", value: "d" }, key: "f" }] },
+    ];
+    if (kind === "missing-device") f.ir.devices = [];
+    if (kind === "missing-function") f.ir.functions = [];
+    if (kind === "duplicate-function")
+      f.ir.functions.push(structuredClone(f.ir.functions[0]));
+    const observed = rows(f);
+    expect(observed.some((r) => r.status === "not-applicable")).toBe(false);
+    expect(
+      observed.flatMap((r) => r.evidence.findings).map((f) => f.kind),
+    ).toEqual(["navigation-selected-source-unresolved"]);
   },
 );

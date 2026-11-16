@@ -100,18 +100,41 @@ export function navigationObservations(
     mirrors.extra.length === 0
   )
     out.push(
-      obs("DQ-07", [], {
-        id: `${c.id}/DQ-07/not-applicable`,
-        status: "not-applicable",
-        reason:
-          "Native packet audits found no full-repeat, coil-mirror or contact-return obligation, and no unmatched navigation annotation.",
-        evidence: {
-          findingCount: 0,
-          findings: [],
-          repeatObligations: repeats.repeatCount,
-          mirrorReturnAppearances: mirrors.records.length,
-        },
-      }),
+      obs("DQ-07", [], absenceObservation(c, repeats, mirrors, ir, packet)),
     );
   return out;
+}
+
+function absenceObservation(c, repeats, mirrors, ir, packet) {
+  const nativeFunctions = {
+    coils: (ir.functions ?? []).filter((f) => f.kind === "coil").length,
+    contacts: (ir.functions ?? []).filter((f) => f.kind === "contact").length,
+    actuates: (ir.internalRelations ?? []).filter((r) => r.verb === "actuates")
+      .length,
+  };
+  const packetViewKinds = [
+    ...new Set(
+      packet.sheets
+        .map((s) => s.view?.kind)
+        .filter((k) => typeof k === "string"),
+    ),
+  ].sort();
+  const reason =
+    "Native packet audits found no full-repeat, coil-mirror or contact-return obligation, and no unmatched navigation annotation.";
+  return {
+    id: `${c.id}/DQ-07/not-applicable`,
+    status: "not-applicable",
+    reason:
+      nativeFunctions.coils || nativeFunctions.contacts
+        ? `${reason} Native source has ${nativeFunctions.coils} coils and ${nativeFunctions.contacts} contacts; no full coil/contact function bodies were measured in packet views: ${packetViewKinds.join(", ") || "unspecified"}.`
+        : reason,
+    evidence: {
+      findingCount: 0,
+      findings: [],
+      repeatObligations: repeats.repeatCount,
+      mirrorReturnAppearances: mirrors.records.length,
+      nativeFunctions,
+      packetViewKinds,
+    },
+  };
 }

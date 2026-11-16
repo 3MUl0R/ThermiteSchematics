@@ -5,7 +5,7 @@ import { command, json, hash, canonical } from "./support.mjs";
 import { displaySheet, cropBox, screenshotCrop } from "./browser.mjs";
 import {
   renderPdf,
-  pdfText,
+  pdfTextMeasurements,
   imageCanvas,
   ink,
   portableLabelRisks,
@@ -111,7 +111,11 @@ async function readSheetEvidence(
   if (values.artifacts)
     await writeFile(pdfPngPath, pdfCanvas.toBuffer("image/png"));
   pdfSource.pages.push(pdfPageMetadata(pdfPage));
-  const text = await pdfText(pdfPage, pdf.fontFamilies, pdf.fontCaps);
+  const { text, metrics } = await pdfTextMeasurements(
+    pdfPage,
+    pdf.fontFamilies,
+    pdf.fontCaps,
+  );
   g.pdfTexts = text;
   if (values.artifacts)
     await writeFile(join(directory, `${prefix}-pdf-text.json`), json(text));
@@ -122,30 +126,12 @@ async function readSheetEvidence(
     nativeCanvas = native
       ? await imageCanvas(await readFile(nativePath))
       : null;
-  const parity = [];
-  for (const t of g.texts.filter((t) => t.painted !== false)) {
-    // Tighten vertically to avoid counting nearby rules as label ink.
-    const box = {
-      ...t.bbox,
-      y: t.bbox.y + 0.15,
-      h: Math.max(0.1, t.bbox.h - 0.3),
-    };
-    for (const [backend, canvas] of [
-      ["pdf.js", pdfCanvas],
-      ...(nativeCanvas ? [["PDFKit", nativeCanvas]] : []),
-    ])
-      parity.push({
-        ...t,
-        backend,
-        svgInk: ink(labelCanvas, box),
-        pdfInk: ink(canvas, {
-          x: box.x - 0.3,
-          y: box.y - 0.3,
-          w: box.w + 0.6,
-          h: box.h + 0.6,
-        }),
-      });
-  }
+  const parity = labelParityMeasurements(
+    g,
+    labelCanvas,
+    pdfCanvas,
+    nativeCanvas,
+  );
   const maskRisks = await portableLabelRisks(pdfPage);
   return {
     prefix,
@@ -157,6 +143,7 @@ async function readSheetEvidence(
     pdfPage,
     pdfPngPath,
     text,
+    metrics,
     nativePath,
     parity,
     maskRisks,
@@ -175,7 +162,7 @@ async function measureSheetEvidence(
     identifierPolicy,
     htmlGeometry,
   },
-  { g, text, parity, maskRisks, pdfPage, htmlIssues, locatorIndexes },
+  { g, text, metrics, parity, maskRisks, pdfPage, htmlIssues, locatorIndexes },
 ) {
   const measured = evaluateSheet(
     c,
@@ -190,30 +177,9 @@ async function measureSheetEvidence(
     geometries,
     request,
     identifierPolicy,
+    metrics,
   );
-  const parityRow = measured.find((r) => r.dq === "DQ-01");
-  for (const t of g.texts.filter((t) => t.painted !== false)) {
-    const risk = maskRisks.find(
-      (r) =>
-        r.bbox.x < t.bbox.x + t.bbox.w &&
-        r.bbox.x + r.bbox.w > t.bbox.x &&
-        r.bbox.y < t.bbox.y + t.bbox.h &&
-        r.bbox.y + r.bbox.h > t.bbox.y,
-    );
-    if (risk)
-      parityRow.evidence.findings.push({
-        kind: "soft-mask-label-loss-risk",
-        element: t.element,
-        designation: t.text,
-        text: t.text,
-        bbox: t.bbox,
-        backend: "pdf.js operator audit",
-        ...risk,
-        bbox: t.bbox,
-      });
-  }
-  parityRow.evidence.findingCount = parityRow.evidence.findings.length;
-  parityRow.status = parityRow.evidence.findings.length ? "fail" : "pass";
+  appendPortableLabelRisks(measured, g, maskRisks);
   const htmlRow = observation(c, s, "DQ-02", htmlIssues, {
     id: `${c.id}/DQ-02/html-${s.number}`,
     medium: "html",
@@ -325,4 +291,58 @@ async function captureSheetCrops(
       row.evidence.referenceCrop = relativeEvidence(reference);
     }
   }
+}
+
+function labelParityMeasurements(g, labelCanvas, pdfCanvas, nativeCanvas) {
+  const parity = [];
+  for (const t of g.texts.filter((t) => t.painted !== false)) {
+    // Tighten vertically to avoid counting nearby rules as label ink.
+    const box = {
+      ...t.bbox,
+      y: t.bbox.y + 0.15,
+      h: Math.max(0.1, t.bbox.h - 0.3),
+    };
+    for (const [backend, canvas] of [
+      ["pdf.js", pdfCanvas],
+      ...(nativeCanvas ? [["PDFKit", nativeCanvas]] : []),
+    ])
+      parity.push({
+        ...t,
+        backend,
+        svgInk: ink(labelCanvas, box),
+        pdfInk: ink(canvas, {
+          x: box.x - 0.3,
+          y: box.y - 0.3,
+          w: box.w + 0.6,
+          h: box.h + 0.6,
+        }),
+      });
+  }
+  return parity;
+}
+
+function appendPortableLabelRisks(measured, g, maskRisks) {
+  const parityRow = measured.find((r) => r.dq === "DQ-01");
+  for (const t of g.texts.filter((t) => t.painted !== false)) {
+    const risk = maskRisks.find(
+      (r) =>
+        r.bbox.x < t.bbox.x + t.bbox.w &&
+        r.bbox.x + r.bbox.w > t.bbox.x &&
+        r.bbox.y < t.bbox.y + t.bbox.h &&
+        r.bbox.y + r.bbox.h > t.bbox.y,
+    );
+    if (risk)
+      parityRow.evidence.findings.push({
+        kind: "soft-mask-label-loss-risk",
+        element: t.element,
+        designation: t.text,
+        text: t.text,
+        bbox: t.bbox,
+        backend: "pdf.js operator audit",
+        ...risk,
+        bbox: t.bbox,
+      });
+  }
+  parityRow.evidence.findingCount = parityRow.evidence.findings.length;
+  parityRow.status = parityRow.evidence.findings.length ? "fail" : "pass";
 }
