@@ -1,14 +1,9 @@
+import { packetNativeNeeds } from "./m3-needs-context.mjs";
 import { sufficient } from "./document-dependencies.mjs";
 import { rowZones } from "./m3-zones.mjs";
 import { painted, groupBy, extent } from "./review-geometry.mjs";
 import { quantize, measuredZone } from "./repeat-appearances.mjs";
-import {
-  compact,
-  factKey,
-  nativeRows,
-  nativeNeeds,
-  nativeRequestForSheet,
-} from "./m3-native.mjs";
+import { compact, factKey, nativeRows } from "./m3-native.mjs";
 export const rowMatchesFact = (r, f) =>
   r.facts.some((x) => factKey(x) === factKey(f));
 export function rowRegion(cells) {
@@ -16,6 +11,16 @@ export function rowRegion(cells) {
   return extent(
     cells.flatMap(({ bbox: b }) => [b, { x: b.x + b.w, y: b.y + b.h }]),
   );
+}
+function rowKind(sheet, texts, cells) {
+  const parts = [...texts, ...cells];
+  if (parts.every((p) => p.documentKind === undefined)) return sheet.view.kind;
+  const kinds = new Set(parts.map((p) => p.documentKind));
+  return kinds.size === 1 &&
+    typeof texts[0].documentKind === "string" &&
+    texts[0].documentKind.trim()
+    ? texts[0].documentKind
+    : "unresolved-document-kind";
 }
 export function issuedRows(packet, geometries) {
   return packet.sheets.flatMap((sheet, index) => {
@@ -47,7 +52,7 @@ export function issuedRows(packet, geometries) {
           y: quantize(region.y + region.h / 2),
         };
       return {
-        kind: sheet.view.kind,
+        kind: rowKind(sheet, texts, cells),
         key: t.row,
         documentId: t.documentId,
         auto: t.documentOrigin === "auto",
@@ -148,15 +153,7 @@ export function scopeTables(packet, geometries, ir, tables, request) {
       result.push({ ...table, documentId });
     }
   }
-  const needs = packet.sheets.flatMap((s, i) =>
-    nativeNeeds(
-      s,
-      geometries[i],
-      ir,
-      catalog,
-      nativeRequestForSheet(packet, geometries, request, s),
-    ),
-  );
+  const needs = packetNativeNeeds(packet, geometries, ir, catalog, request);
   for (const universe of tables.universe) {
     const requested = result.filter((t) => t.kind === universe.kind),
       missing = catalog.filter(

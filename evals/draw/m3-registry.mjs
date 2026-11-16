@@ -1,13 +1,8 @@
+import { packetNativeNeeds } from "./m3-needs-context.mjs";
 // The exported registry is a third set of locators. Neither an entry nor its
 // absence establishes a native fact or suppresses a visible issued row.
 import { finding, painted } from "./review-geometry.mjs";
-import {
-  nativeNeeds,
-  factKeys,
-  semanticColumns,
-  compact,
-  nativeRequestForSheet,
-} from "./m3-native.mjs";
+import { factKeys, semanticColumns, compact } from "./m3-native.mjs";
 import {
   rowMatchesFact,
   printedHeader,
@@ -35,17 +30,12 @@ export function registryFindings(
   const nav = packet.navigation,
     findings = [],
     documents = nav.documents ?? [],
-    allNeeds = packet.sheets.flatMap((s, i) =>
-      nativeNeeds(
-        s,
-        geometries[i],
-        ir,
-        catalog,
-        nativeRequestForSheet(packet, geometries, context.request, s),
-      ).map((n) => ({
-        ...n,
-        sheet: s.number,
-      })),
+    allNeeds = packetNativeNeeds(
+      packet,
+      geometries,
+      ir,
+      catalog,
+      context.request,
     ),
     binding = context.binding;
   const add = (kind, evidence) => findings.push(finding(kind, {}, evidence));

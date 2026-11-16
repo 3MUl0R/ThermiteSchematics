@@ -28,7 +28,7 @@ export const criteria = {
   "DQ-17": "No duplicate/overlapping terminal text",
   "DQ-18": "Title-block fields and revision table present",
   "DQ-19":
-    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope; final index includes its own and reference pages, with own-sheet qualifiers exactly for repeated captions; assembly notes deliver native reasons to sufficient issued rows and off-part ports to their individually named measured drawn destinations; port-status needs apply only when no issued sheet draws the port",
+    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope; final index includes its own and reference pages, with own-sheet qualifiers exactly for repeated captions; assembly notes deliver native reasons to sufficient issued rows and off-part ports to their individually named measured drawn destinations; port-status needs apply only when no issued sheet draws the port; M3 reconstructs selected assembly disposition/reason needs and distinct connector-port-status facts from native IR, with no invented cap pins or unoccupied-port cables",
   "DQ-20": "One font family and one symbol catalog per packet",
   "DQ-21": "PDF and SVG font metrics identical",
   "DQ-22": "Two blind independent drafter reviews, material/minor red-lines",

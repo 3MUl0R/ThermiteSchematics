@@ -180,7 +180,18 @@ export const geometry = {
       result.push(p);
     return result;
   },
-  identity: ({ e, ancestors, attr, ids }) => ({
+  documentIdentity: ({ e, attr, ids }) => {
+    const kind = attr(e, "data-document-kind");
+    return {
+      row: attr(e, "data-report-row"),
+      documentId: attr(e, "data-document-id"),
+      documentOrigin: attr(e, "data-document-origin"),
+      columnName: attr(e, "data-column-name"),
+      reportRowScope: ids.get(e.closest("[data-report-row]")),
+      ...(typeof kind === "string" ? { documentKind: kind } : {}),
+    };
+  },
+  identity: ({ e, ancestors, attr, ids, documentIdentity }) => ({
     element: ids.get(e),
     appearanceScope: ids.get(e.closest("svg")),
     primitiveIds: [e, ...ancestors(e)].map((n) => n.id).filter(Boolean),
@@ -204,11 +215,7 @@ export const geometry = {
     designation: attr(e, "data-designation"),
     terminal: attr(e, "data-terminal-key"),
     pinTerminal: attr(e, "data-pin-terminal"),
-    row: attr(e, "data-report-row"),
-    documentId: attr(e, "data-document-id"),
-    documentOrigin: attr(e, "data-document-origin"),
-    columnName: attr(e, "data-column-name"),
-    reportRowScope: ids.get(e.closest("[data-report-row]")),
+    ...documentIdentity(e),
     reportNote: e.getAttribute("data-report-note"),
     textContainer: ids.get(e.parentElement),
     authoredText: e.getAttribute("data-authored-text"),

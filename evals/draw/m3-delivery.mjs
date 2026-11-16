@@ -1,3 +1,9 @@
+import {
+  captionForms,
+  pointerMatches,
+  ownerFor,
+  checkConnectorSubject,
+} from "./m3-caption-kinds.mjs";
 import { registryFindings } from "./m3-registry.mjs";
 import { finding, groupBy } from "./review-geometry.mjs";
 import {
@@ -30,26 +36,6 @@ const bindingsMatch = (record, binding) =>
     (k) => record[k] === binding[k],
   );
 const loc = (r) => `${String(r.sheet).padStart(2, "0")}.${r.zone}`;
-function pointerMatches(n, t) {
-  if (t.nativeRequestNote || t.row) return false;
-  if (n.need === "conductor-incidence")
-    return (
-      /other physical connections|see wire schedule/i.test(t.text) &&
-      (!n.subject || !/inventory/i.test(t.text) || t.text.includes(n.subject))
-    );
-  if (n.need === "terminal-inventory")
-    return (
-      /other terminals|terminal inventory/i.test(t.text) &&
-      (!n.subject || !/inventory/i.test(t.text) || t.text.includes(n.subject))
-    );
-  if (n.need === "port-link-status")
-    return /see (communication|link) schedule|port protocol|network inventory/i.test(
-      t.text,
-    );
-  if (n.need === "core-inventory")
-    return /core details|wire inventory/i.test(t.text);
-  return /pin.map|assembly inventory/i.test(t.text);
-}
 function completeCaption(groups, note, need, ir, compactForm) {
   const failures = [],
     text = note.text;
@@ -77,14 +63,7 @@ function completeCaption(groups, note, need, ir, compactForm) {
           owner.kind === "device"
             ? ir.devices.find((d) => d.uid === owner.uid)?.designation
             : ir.cables.find((c) => c.uid === owner.uid)?.designation;
-      const forms = {
-        "conductor-incidence": ["physical connection", "physical connections"],
-        "terminal-inventory": ["terminal", "terminals"],
-        "port-link-status": ["port", "ports"],
-        "core-inventory": ["core", "cores"],
-        "assembly-pin-map": ["assembly", "assemblies"],
-      };
-      const unit = forms[need][count === 1 ? 0 : 1];
+      const unit = captionForms[need][count === 1 ? 0 : 1];
       const key = location.replace(/^0+(?=\d)/u, "");
       if (!compactTokens.has(key)) compactTokens.set(key, []);
       compactTokens.get(key).push(`${name}: ${count} ${unit}`);
@@ -165,21 +144,6 @@ function completeCaption(groups, note, need, ir, compactForm) {
       });
   return failures;
 }
-function ownerFor(f, row, ir) {
-  if (f.kind === "conductor-incidence" || f.kind === "terminal-inventory")
-    return { kind: "device", uid: f.terminal.deviceUid };
-  if (f.kind === "port-link-status")
-    return { kind: "device", uid: f.deviceUid };
-  if (f.kind === "assembly-pin-map")
-    return {
-      kind: "device",
-      uid: ir.relations.find((r) => r.uid === f.relationUid)?.fromDeviceUid,
-    };
-  const first = row.native.ends?.find(Boolean);
-  return first
-    ? { kind: "device", uid: first.deviceUid }
-    : { kind: "cable", uid: f.cableUid };
-}
 function partition(rows, facts, ir) {
   const placed = new Set(),
     entries = [];
@@ -200,6 +164,22 @@ function partition(rows, facts, ir) {
     facts: es.map((e) => e.fact),
   }));
 }
+function legacyCoverage(sheet, packet, g, geometries, ir, request, notes) {
+  // Legacy generic promises remain subject to their existing native circuit
+  // completeness check. Honest standalone generic partial warnings promise none.
+  if (notes.some((t) => /see circuit views or packet coverage/i.test(t.text))) {
+    const old = legacyDependencyFindings(
+      sheet,
+      { ...packet, navigation: undefined },
+      g,
+      geometries,
+      ir,
+      request,
+    );
+    return old.findings.filter((f) => f.need === "coverage");
+  }
+  return [];
+}
 export function m3Delivery(
   sheet,
   packet,
@@ -216,7 +196,11 @@ export function m3Delivery(
     sheet,
   );
   const catalog = nativeRows(ir),
-    needs = nativeNeeds(sheet, g, ir, catalog, scopedRequest),
+    needs = nativeNeeds(sheet, g, ir, catalog, scopedRequest, {
+      packet,
+      geometries,
+      request,
+    }),
     rows = issuedRows(packet, geometries),
     notes = logicalPointerNotes(g.texts ?? []).map((t) => ({
       ...t,
@@ -234,19 +218,9 @@ export function m3Delivery(
     targetFindings = [],
     used = new Set(),
     measurements = [];
-  // Legacy generic promises remain subject to their existing native circuit
-  // completeness check. Honest standalone generic partial warnings promise none.
-  if (notes.some((t) => /see circuit views or packet coverage/i.test(t.text))) {
-    const old = legacyDependencyFindings(
-      sheet,
-      { ...packet, navigation: undefined },
-      g,
-      geometries,
-      ir,
-      request,
-    );
-    findings.push(...old.findings.filter((f) => f.need === "coverage"));
-  }
+  findings.push(
+    ...legacyCoverage(sheet, packet, g, geometries, ir, request, notes),
+  );
   if (nav?.documentFormat && !versioned)
     findings.push(
       finding(
@@ -275,7 +249,9 @@ export function m3Delivery(
   if (
     versioned &&
     scopedRequest.m3AuthoredViewIndex !== undefined &&
-    ["wiring", "communication", "signal-loop"].includes(producer) &&
+    ["wiring", "communication", "signal-loop", "connector-assembly"].includes(
+      producer,
+    ) &&
     sheet.view.kind !== producer
   )
     findings.push(
@@ -612,6 +588,11 @@ function measureNativeNeed(
     versioned,
     context,
   );
+  if (need.sourceGap)
+    fail("document-native-assembly-source-unavailable", {
+      reason: need.sourceGap,
+    });
+  checkConnectorSubject(need, note, ir, fail);
   const delivered = resolveDeliveredRows(
     need,
     rows,
@@ -652,13 +633,7 @@ function measureNativeNeed(
         zone: x.rows[0].zone,
         owner: x.owner,
         count: x.facts.length,
-        unit: {
-          "conductor-incidence": "physical connections",
-          "terminal-inventory": "terminals",
-          "port-link-status": "ports",
-          "core-inventory": "cores",
-          "assembly-pin-map": "assemblies",
-        }[need.need],
+        unit: captionForms[need.need][1],
         factKeys: factKeys(x.facts),
       }));
       if (

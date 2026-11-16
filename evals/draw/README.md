@@ -20,6 +20,69 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.20** completes the N17 native **issued-documents/1** contract.
+This is an observation change on unchanged output; 5.19 remains a readable
+historical complete-summary schema. No expectations, renderer or corpus change.
+
+- A source-selected connector assembly produces an **assembly-pin-map** need
+  with `noteId: "assembly-reasons"` on the part drawing the native relation.
+  That existing family denotes the native mapping **disposition and reason**.
+  A cap whose native state is `not-applicable` needs its explanation printed;
+  it does **not** need, supply or authorize pin tuples. Made-up maps fail native
+  row sufficiency. Missing selected ink leaves the source obligation on the
+  view anchor rather than erasing it.
+- The new closed fact is `{kind: "connector-port-status", deviceUid, portKey}`.
+  Its semantic columns are **identity / endpoints / status**: no protocol,
+  cable ID or pin-map. Occupied assembly rows supply their two native endpoint
+  status facts alongside their relation fact. Unoccupied rows supply only their
+  real connector-port fact, preserving `--`, `Unoccupied` and `No assembly declared`.
+  Their row keys remain JSON `[device UID, port key]`; their semantic columns no
+  longer pretend to be pin-map columns. The physical assembly inventory table
+  remains the place where these rows are printed.
+- A connector-port-status **need** exists only for a selected native device's
+  port drawn nowhere in the packet. Any painted native-matched port on another
+  issued assembly part satisfies S1's drawn population. Repeated device parts
+  each retain their own omitted-port navigation need. Each need has one port fact
+  and stable `noteId: "connector-port-status/" + JSON.stringify([uid, portKey])`.
+  Mapping/reason and connector-status need fact sets stay separate, including
+  legacy loop mapping needs. Source scope and missing data fail closed.
+- Every production need caller passes the complete packet/geometry context as
+  nativeNeeds' sixth argument `{packet, geometries, request}`. Exported facts,
+  dependency seeds and renderer success flags never produce the native needs.
+  Authored selection plus independently measured native-bound appearances
+  partition the source obligations by part.
+
+A future renderer can reuse sufficient requested rows or declare genuine missing
+companions under the existing three-set/binding contract. Row facts must be the
+**whole native row fact set**, while each dependency's requiredFacts contains
+only its need's homogeneous kind. Assembly rows retain the four mapping-family
+semantic columns; unoccupied rows use the three connector-status columns.
+
+Print a precise reason caption such as `Assembly inventory 02.A3 (CAP-X2)`.
+For an omitted port, a per-port caption such as
+`R1.X3 → connector port status: assembly inventory 02.A3 (R1 / X3)` works with
+both M3 and the 5.19 N17 printed-delivery oracle. Compact native-device counts
+are also supported (`R1: 1 port` with a verified partition); a connector is never
+assigned a cable owner. The printed row still has to contain its full native
+reason/status and measured geometry. No page-growth or renderer repair credit
+is claimed by contract fixtures.
+
+An auto inventory can share the existing graphical sheet. Its SVG document
+container supplies `data-document-id`, `data-document-origin="auto"` and
+`data-document-kind="assemblies"`; the last field locates the native document
+kind independently of the outer sheet kind. It is measured on every row text
+and cell rectangle and must agree across them. An absent field preserves the
+legacy report-sheet contract; a blank or inconsistent field refuses delivery.
+The field is a locator, never proof: native row values, actual printed headers,
+the complete visible/issued/dependency sets and bindings still have to agree.
+Hiding the registry cannot hide visible inline rows. Same-sheet captions use
+that sheet's real number and measured row zone, for example `01.B5`.
+
+`c5-contract.test.mjs` uses real compiled topology-coverage/CAP-X2 source with an
+independent future-client declaration fixture. Correct declarations pass both
+oracles; missing needs, invented maps/cables, wrong real ports, hidden dependency
+footprints, wrong subjects and communication-kind substitution fail.
+
 Version **5.19** implements CHECK3 C4's reviewed N17 omission semantics and
 N14 direction refinement. Pre-merge review fixes retain 5.19: per-port pointer
 ownership, repeated-caption sheet qualifiers and strict single-member report gzip.

@@ -1,17 +1,24 @@
+import { terminalKey, factKey } from "./m3-facts.mjs";
+export {
+  terminalKey,
+  compact,
+  semanticColumns,
+  factKey,
+  factKeys,
+} from "./m3-facts.mjs";
+import {
+  assemblyFacts,
+  appendUnoccupiedConnectors,
+} from "./m3-connector-facts.mjs";
+import { addWiringNeeds } from "./m3-wiring-needs.mjs";
+import { assemblyNativeNeeds } from "./m3-assembly-needs.mjs";
 // Independent issued-documents/1 adapter. Only native IR and measured source
 // appearances enter this module; exported facts and planner code never do.
 import { createHash } from "node:crypto";
-import { painted } from "./review-geometry.mjs";
 import { nativeEmptyState } from "./native-empty-state.mjs";
 export const M3_FORMAT = "issued-documents/1";
 export const sha = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
-export const terminalKey = (t) =>
-  JSON.stringify([t?.deviceUid, t?.terminalKey]);
-export const compact = (s) =>
-  String(s ?? "")
-    .normalize("NFC")
-    .replace(/\s/gu, "");
 const device = (ir, uid) => ir.devices?.find((d) => d.uid === uid);
 const endName = (ir, t) =>
   t
@@ -33,77 +40,6 @@ const inc = (element, end, terminal) => ({
   end,
   terminal,
 });
-export const semanticColumns = {
-  "conductor-incidence": ["identity", "endpoints", "status"],
-  "terminal-inventory": ["identity", "connections", "status"],
-  "port-link-status": ["identity", "endpoints", "protocol", "status"],
-  "core-inventory": ["identity", "endpoints", "status"],
-  "assembly-pin-map": ["identity", "endpoints", "status", "pin-map"],
-};
-const exactKeys = (o, keys) =>
-  o &&
-  JSON.stringify(Object.keys(o).sort()) === JSON.stringify(keys.slice().sort());
-export function factKey(f) {
-  if (!f || !semanticColumns[f.kind]) throw Error("Unknown M3 fact kind");
-  if (f.kind === "conductor-incidence") {
-    if (
-      !exactKeys(f, ["kind", "element", "end", "terminal"]) ||
-      ![0, 1].includes(f.end) ||
-      !exactKeys(f.terminal, ["deviceUid", "terminalKey"])
-    )
-      throw Error("Invalid M3 incidence");
-    const e = f.element,
-      core = e?.kind === "cable_conductor";
-    if (
-      !exactKeys(
-        e,
-        core ? ["kind", "cableUid", "conductorId"] : ["kind", "uid"],
-      ) ||
-      !["wire", "jumper", "cable_conductor"].includes(e.kind)
-    )
-      throw Error("Invalid M3 element");
-    return JSON.stringify([
-      f.kind,
-      e.kind,
-      core ? [e.cableUid, e.conductorId] : e.uid,
-      f.end,
-      f.terminal.deviceUid,
-      f.terminal.terminalKey,
-    ]);
-  }
-  if (f.kind === "terminal-inventory") {
-    if (
-      !exactKeys(f, ["kind", "terminal"]) ||
-      !exactKeys(f.terminal, ["deviceUid", "terminalKey"])
-    )
-      throw Error("Invalid M3 terminal");
-    return JSON.stringify([
-      f.kind,
-      f.terminal.deviceUid,
-      f.terminal.terminalKey,
-    ]);
-  }
-  const fields =
-    f.kind === "port-link-status"
-      ? ["deviceUid", "portKey"]
-      : f.kind === "core-inventory"
-        ? ["cableUid", "conductorId"]
-        : ["relationUid"];
-  if (
-    !exactKeys(f, ["kind", ...fields]) ||
-    fields.some((k) => typeof f[k] !== "string")
-  )
-    throw Error("Invalid M3 fact fields");
-  return JSON.stringify([f.kind, ...fields.map((k) => f[k])]);
-}
-export function factKeys(facts) {
-  try {
-    const keys = facts.map(factKey);
-    return new Set(keys).size === keys.length ? keys.sort() : null;
-  } catch {
-    return null;
-  }
-}
 const port = (deviceUid, portKey) => ({
   kind: "port-link-status",
   deviceUid,
@@ -259,7 +195,7 @@ function appendRelationRows(ir, rows) {
       name: r.designation ?? r.uid,
       facts: network
         ? [port(r.fromDeviceUid, c.fromPort), port(r.toDeviceUid, c.toPort)]
-        : [{ kind: "assembly-pin-map", relationUid: r.uid }],
+        : assemblyFacts(r),
       ownerUid: r.fromDeviceUid,
       required: {
         0: [r.designation ?? r.uid],
@@ -336,36 +272,6 @@ function appendUnconnectedPorts(ir, rows) {
         },
         exactColumns: [0, 1, 2, 3, 4],
         ports: [{ column: 2, designation: d.designation, key }],
-      });
-    }
-}
-
-function appendUnoccupiedConnectors(ir, rows) {
-  for (const d of ir.devices ?? [])
-    for (const [key, definition] of Object.entries(
-      ir.deviceTypes?.find((t) => t.id === d.typeId)?.connectorPorts ?? {},
-    )) {
-      const occupied = (ir.relations ?? []).some(
-        (r) =>
-          r.assembly &&
-          ((r.fromDeviceUid === d.uid && r.assembly.fromPort === key) ||
-            (r.toDeviceUid === d.uid && r.assembly.toPort === key)),
-      );
-      if (occupied) continue;
-      rows.push({
-        kind: "assemblies",
-        key: JSON.stringify([d.uid, key]),
-        name: `${d.designation} / ${key}`,
-        facts: [],
-        columns: ["identity", "endpoints", "status", "pin-map"],
-        required: {
-          0: ["--"],
-          1: [definition.connector],
-          2: [nativePortText(ir, d.uid, key, false)],
-          3: ["Unoccupied"],
-          4: ["No assembly declared"],
-        },
-        exactColumns: [0, 1, 2, 3, 4],
       });
     }
 }
@@ -487,7 +393,14 @@ function addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add) {
 
 // Source appearance + native endpoint incidence partition. Dropping a caption or
 // an exported dependency does not remove the independently expected need.
-export function nativeNeeds(sheet, g, ir, catalog = nativeRows(ir), request) {
+export function nativeNeeds(
+  sheet,
+  g,
+  ir,
+  catalog = nativeRows(ir),
+  request,
+  scope,
+) {
   const kind = nativeProducerKind(request, sheet),
     needs = [],
     uids = distinct(
@@ -501,84 +414,10 @@ export function nativeNeeds(sheet, g, ir, catalog = nativeRows(ir), request) {
     const unique = [...new Map(facts.map((f) => [factKey(f), f])).values()];
     if (unique.length) needs.push({ need, noteId, facts: unique, ...extra });
   };
-  if (kind === "wiring") {
-    const authored = (request?.views ?? []).filter(
-      (v) =>
-        v.format === "wiring-view-request/0.1" &&
-        (!v.title || sheet.view.title?.startsWith(v.title)),
-    );
-    const sourceRows =
-      authored.length === 1
-        ? catalog.filter(
-            (r) =>
-              r.kind === "wires" &&
-              (authored[0].conductors ?? []).some(
-                (key) => key === r.key || key === r.name,
-              ),
-          )
-        : [];
-    const sourceTerminals = sourceRows
-      .flatMap((r) => r.ends ?? [])
-      .filter(Boolean);
-    const terminals = [
-      ...new Map(
-        [
-          ...(g.terminals ?? []).map((t) => ({
-            deviceUid: t.deviceUid,
-            terminalKey: t.terminal,
-          })),
-          ...sourceTerminals,
-        ].map((t) => [terminalKey(t), t]),
-      ).values(),
-    ];
-    for (const t of sourceTerminals)
-      if (!own.has(t.deviceUid)) {
-        uids.push(t.deviceUid);
-        own.add(t.deviceUid);
-      }
-    const selected = new Set(
-      (g.shapes ?? [])
-        .filter(
-          (s) => s.conductor && s.nativeBodyPainted !== false && painted(s),
-        )
-        .map((s) => s.wire),
-    );
-    for (const id of terminals) {
-      const hidden = catalog.filter(
-        (r) => r.kind === "wires" && !selected.has(r.key),
-      );
-      add(
-        "conductor-incidence",
-        `wiring-incidence/${terminalKey(id)}`,
-        hidden.flatMap((r) =>
-          r.facts.filter(
-            (f) =>
-              f.kind === "conductor-incidence" &&
-              terminalKey(f.terminal) === terminalKey(id),
-          ),
-        ),
-        { subject: endName(ir, id) },
-      );
-    }
-    for (const uid of uids) {
-      const drawn = new Set(
-        terminals.filter((t) => t.deviceUid === uid).map((t) => t.terminalKey),
-      );
-      add(
-        "terminal-inventory",
-        `wiring-terminals/${uid}`,
-        catalog
-          .filter(
-            (r) =>
-              r.kind === "terminals" &&
-              r.facts[0].terminal.deviceUid === uid &&
-              !drawn.has(r.facts[0].terminal.terminalKey),
-          )
-          .flatMap((r) => r.facts),
-        { subject: device(ir, uid)?.designation },
-      );
-    }
-  }
+  if (kind === "wiring")
+    addWiringNeeds(sheet, g, ir, catalog, request, uids, own, add);
+  if (kind === "connector-assembly")
+    return assemblyNativeNeeds(sheet, g, ir, request, scope);
   if (["communication", "topology"].includes(kind))
     addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add);
   if (["signal-loop", "analog-output"].includes(kind)) {
@@ -616,7 +455,7 @@ export function nativeNeeds(sheet, g, ir, catalog = nativeRows(ir), request) {
       "loop-assembly-pin-maps",
       catalog
         .filter((r) => r.kind === "assemblies" && rels.has(r.key))
-        .flatMap((r) => r.facts),
+        .flatMap((r) => r.facts.filter((f) => f.kind === "assembly-pin-map")),
     );
   }
   return [...new Map(needs.map((n) => [n.noteId, n])).values()];
@@ -630,6 +469,7 @@ export function nativeProducerKind(request, sheet) {
       "wiring-view-request/0.1": "wiring",
       "communication-view-request/0.1": "communication",
       "signal-loop-view-request/0.1": "signal-loop",
+      "connector-assembly-view-request/0.1": "connector-assembly",
     }[v.format] ??
     v.kind ??
     "other-selected-view"

@@ -165,6 +165,7 @@ export function sheetFields3(c) {
       .map(({ column, columnIndex, rect }) => {
         if (!rect)
           throw Error("Identifier measurement: report cell rectangle missing");
+        const { documentKind } = c.documentIdentity(column);
         return {
           row: attr(column, "data-report-row"),
           documentId: attr(column, "data-document-id"),
@@ -182,6 +183,7 @@ export function sheetFields3(c) {
             visible,
             shapeClips,
           }),
+          ...(documentKind === undefined ? {} : { documentKind }),
         };
       }),
   };
