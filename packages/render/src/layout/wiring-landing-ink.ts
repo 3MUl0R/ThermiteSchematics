@@ -97,11 +97,9 @@ export function wiringLandingInkFits(
               segment,
               frame,
               ((strokes.get(edge.id) ?? 0.35) + WIRING_FRAME_STROKE_MM) / 2,
-              [...edge.sources, ...edge.targets]
-                .map(canonical)
-                .map((id) =>
-                  required(marks.get(id), "Missing frame approach terminal"),
-                ),
+              // Only a short overlap can be frame fan-in. A longer run
+              // cannot borrow the conductor/conductor radial exemption.
+              [],
               WIRING_MAX_FAN_IN_MM,
             ),
         ),
