@@ -20,6 +20,90 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.17** adds the CHECK3 C1 independent review-2 predicates (N3–N6,
+N12). They consume native IR and measured painted geometry, not renderer success
+flags. New `check3-*` observation IDs keep earlier observations separate. No
+expectations or applied records change; newly exposed old-output defects remain
+unpinned for REP3. Selected-standard interpretation beyond these predicates
+remains manual.
+
+- **DQ-14 / N3:** distinct native conductor identities incident on the same
+  physical terminal may not share parallel painted approach ink outside its
+  measured marker. Native endpoint sets are checked independently of route IDs.
+  A free-air junction dot needs a coincident measured native terminal node with
+  at least three native conductor incidences. Removing a dot cannot hide shared
+  ink. The existing 0.01 mm endpoint/coincidence guards remain. Net-level edges
+  without physical conductor identities are explicitly unimplemented, not proof
+  of separate physical landings; unknown declared wire IDs or missing ink fail.
+  Circuit `data-circuit-junction` circles are measured in N3's private bundle,
+  including actual filled ink, clipping and transforms; their attribute grants
+  no native-node authorization. Legacy shape classes and DQ-13 stay unchanged.
+  N3's population is painted routes; existing coverage/endpoint guards retain
+  responsibility for native conductors with no painted route.
+- **DQ-16 / N4 remains manual beyond the existing rule:** retain the <=2 mm
+  ink-box proximity test and 0.17 mm uncertainty unchanged. Native wire/core IDs,
+  endpoint sets, source-backed printed identities and painted route data now
+  reconcile independently; absent or contradictory data fails closed. A proposed
+  block-centre nearest-support rule detects the reviewed long-label problem but
+  also flags the legitimate short `103` vertical-branch label. Therefore its
+  measurements are **manual review witnesses**, never automatic failures or
+  passes. No approved attachment convention distinguishes every such case; no
+  new width/clearance/2x ratio or parallel-text style requirement is invented.
+  Inline plates and vertical labels remain permitted. Broader segment ownership
+  needs visual review or a separately approved attachment convention.
+  Semantic net/potential names are not physical wire identity captions.
+  Explicit nonconductive `data-wire-label-leader` paths locate candidates only:
+  its continuous painted path must actually reach the label and its own conductor.
+- **DQ-04 / N5 extension:** owned function/report NC/NO contact captions must
+  agree with native contact state or explicit circuit-symbol class. Native
+  power-input/output roles on breaker/overload/fuse profiles identify protection
+  elements; closed auxiliary contacts retain NC. Keys, tags and descriptions
+  never establish construction. Missing ownership/role facts cannot justify a
+  state claim. SVG, independently measured HTML, and spatially reconstructed PDF
+  cells are checked. PDF owner recovery never requires text equality. DQ-05's
+  vocabulary adapter also accepts independently source-backed protection-class
+  captions; its old generic projection remains unchanged on old output, while
+  DQ-04 exposes that projection's role contradiction.
+  The helm's protection-role wording is `Breaker pole`, `Overload element` or
+  `Fuse element` followed by native terminals, with no parenthesized NO/NC state.
+  Genuine auxiliaries retain their source-backed contact state.
+- **DQ-10 / N6:** native AC-input/DC-output circuit qualifiers require actual
+  upright waveform or solid-over-dashed strokes, contained in their own measured
+  symbol/body boundary with owned native ports. Parent rotation, an upright text
+  node or a correctness attribute grants no exemption. Missing/erased glyphs,
+  unknown native owners, sideways strokes, inverted DC bars and displaced ink fail.
+  Stroke traversal order is immaterial. A half-turn of the point-symmetric AC
+  tilde is painted-equivalent and is not a failure; DC bar order is observable.
+  This bounded circuit-conversion oracle does not certify arbitrary AC/DC prose
+  or every selected-standard qualifier.
+- **DQ-19 / N12 extension:** issued wire inventories reconcile visible native
+  row facts and the complete paginated document, against native wires, jumpers
+  and cable-core rows. An unqualified title requires the full native inventory.
+  A partial inventory must explicitly say supplementary/partial/subset/filtered
+  or cable-core scope in its own heading or scope note. The generic safety or
+  completeness disclaimer is insufficient. Scope cannot be borrowed from an
+  unrelated same-title document. Minimal companions remain permitted. SVG,
+  HTML and PDF are checked; missing cells/title/native data fail closed. Free
+  prose and drafting adequacy beyond this bounded scope grammar remain manual.
+  Declared numeric conductor/row/wire/jumper/core/endpoint counts and source
+  denominators reconcile by native class: a mixed 17-jumper/2-wire inventory is
+  19 conductors, not 19 wires. Cable-core scope cannot hide native wire rows.
+  Wrapped scope notes are reconstructed before measuring counts. HTML uses its
+  own measured cells; PDF uses painted native extraction, without requiring a
+  text match to SVG.
+  A companion containing every native row states `all n ... rows` (or the native
+  conductor unit) and cannot call itself partial/subset; the count is checked.
+
+New semantic rows use separate crop filenames so their presence cannot rename
+earlier evidence on the same DQ/sheet.
+
+`tranche3-oracles.test.mjs` and `tranche3-browser.test.mjs` contain positive,
+negative and output-mutation controls, including same-net wrong owners, erased
+ink, arbitrary key renames, duplicate titles, real >=3-way nodes, valid inline
+plates and explicit leaders. Actual browser ink is sampled at 0.2 mm and adjacent
+collinear painted pieces are joined without bridging occlusion gaps; the 0.01 mm
+coincidence allowance is numerical, not an accepted physical gap.
+
 Version **5.16** measures DQ-21 PDF widths from native content-stream glyph
 advances. PDF.js-inferred whitespace contributes no width; actual space glyphs
 and their spacing still contribute, including extraction-omitted end spaces.

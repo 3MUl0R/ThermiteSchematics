@@ -1,4 +1,5 @@
 import { measurementCoverage } from "./measurement-coverage.mjs";
+import { tranche3Observations } from "./tranche3-observations.mjs";
 import { withRelationLandingSource } from "./relation-landing-sources.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 const wireLocatorAudits = new WeakMap();
@@ -512,6 +513,9 @@ function evaluateSheet(
     out,
   );
   evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics);
+  out.push(
+    ...tranche3Observations(c, s, packet, g, ir, geometries, observation),
+  );
   return out;
 }
 export function evaluatePacket(c, packet, geometries, tables = []) {

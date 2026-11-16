@@ -1,4 +1,5 @@
 import { isAuthoredReportText } from "./authored-report-fields.mjs";
+import { isRoleReferenceCaption } from "./contact-role-vocabulary.mjs";
 // Independent visible projection oracle. Never import renderer/query formatters.
 // Metadata identifies a candidate owner, not an exemption. Resolve it to source
 // and require the complete measured field to equal independently derived facts.
@@ -38,7 +39,7 @@ export function terminalSet(names, printed = names) {
         : " / ";
   return printed.join(separator);
 }
-function functionCaption(fn) {
+export function functionCaption(fn) {
   const kind =
     fn.kind === "contact"
       ? `${fn.normal_state === "open" ? "NO" : "NC"} contact`
@@ -249,6 +250,25 @@ function terminalNoteVocabulary(g, context, issue) {
     ],
   };
 }
+function vocabularyCells(cells, ir, context, issue, handled, findings) {
+  for (const texts of cells.values()) {
+    const source = ownedCell(ir, texts[0].row, texts[0].columnIndex, context);
+    if (!source) continue;
+    texts.forEach((t) => handled.add(t));
+    const printed = combined(texts);
+    const nativeRole =
+      source.mechanism === "function-reference" &&
+      isRoleReferenceCaption(
+        ir,
+        texts[0].row,
+        printed,
+        functionCaption,
+        terminalSet,
+      );
+    if (compact(printed) !== compact(source.expected) && !nativeRole)
+      findings.push(fieldIssue(issue, source, texts));
+  }
+}
 export function ownedVocabulary(g, ir, context, issue) {
   const findings = [],
     handled = new Set(),
@@ -259,13 +279,7 @@ export function ownedVocabulary(g, ir, context, issue) {
       if (!cells.has(key)) cells.set(key, []);
       cells.get(key).push(t);
     }
-  for (const texts of cells.values()) {
-    const source = ownedCell(ir, texts[0].row, texts[0].columnIndex, context);
-    if (!source) continue;
-    texts.forEach((t) => handled.add(t));
-    if (compact(combined(texts)) !== compact(source.expected))
-      findings.push(fieldIssue(issue, source, texts));
-  }
+  vocabularyCells(cells, ir, context, issue, handled, findings);
   // Recover caption ownership from routed source relations as well as the
   // optional caption marker. Dropping that marker must not hide a changed label.
   const routed = new Map();

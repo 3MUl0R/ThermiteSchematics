@@ -1,4 +1,5 @@
 import { captureSheets } from "./run-sheet.mjs";
+import { inventoryMediaObservations } from "./inventory-scope-media.mjs";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -308,7 +309,10 @@ async function capturePacketRows(
   htmlPath,
   relativeEvidence,
 ) {
-  const packetRows = evaluatePacket(c, packet, geometries, tables);
+  const packetRows = [
+    ...evaluatePacket(c, packet, geometries, tables),
+    ...inventoryMediaObservations(c, packet, geometries, ir, observation),
+  ];
   for (const row of packetRows) {
     const sheet = packet.sheets.find((s) => s.number === row.sheet);
     attachSheetIdentities(
