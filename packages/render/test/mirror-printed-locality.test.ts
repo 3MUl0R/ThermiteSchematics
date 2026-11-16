@@ -234,7 +234,10 @@ it("passes actual mirror ink into production slot search", async () => {
 });
 
 it("matches browser printed glyphs and rule endpoints for full, wrapped and self-located tables", async () => {
-  const browser = await launch();
+  // This calibration needs float glyph bounds, not the upstream integer fallback.
+  const browser = await launch([
+    "--enable-blink-features=CanvasTextMetricsPreciseBounds",
+  ]);
   try {
     const page = await (
       await browser.newContext(drawingContextOptions)

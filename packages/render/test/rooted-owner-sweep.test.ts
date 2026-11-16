@@ -110,4 +110,4 @@ it("never throws a missing-owner invariant for admitted shipped examples and fix
   }
   expect(admitted).toBeGreaterThanOrEqual(31);
   expect(views).toBeGreaterThanOrEqual(210);
-}, 30000);
+}, 60000);

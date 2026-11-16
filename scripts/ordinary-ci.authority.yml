@@ -22,6 +22,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/../thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,6 +41,25 @@ jobs:
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
+      - name: Cache pinned Chromium
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - name: Install pinned Chromium and system dependencies
+        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+      - name: Select pinned Chromium for both browser harnesses
+        shell: bash
+        run: |
+          bun -e '
+            import { chromium } from "playwright-core";
+            import { accessSync, appendFileSync } from "node:fs";
+            const executable = chromium.executablePath();
+            accessSync(executable);
+            appendFileSync(process.env.GITHUB_ENV,
+              "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
+              "THERMITE_TEST_BROWSER=" + executable + "\n");
+          '
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python
@@ -88,6 +108,7 @@ jobs:
     env:
       VITEST_MAX_WORKERS: 2
       THERMITE_REQUIRE_BROWSER: "1"
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/../thermite-playwright
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,6 +127,25 @@ jobs:
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
+      - name: Cache pinned Chromium
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+      - name: Install pinned Chromium and system dependencies
+        run: bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+      - name: Select pinned Chromium for both browser harnesses
+        shell: bash
+        run: |
+          bun -e '
+            import { chromium } from "playwright-core";
+            import { accessSync, appendFileSync } from "node:fs";
+            const executable = chromium.executablePath();
+            accessSync(executable);
+            appendFileSync(process.env.GITHUB_ENV,
+              "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
+              "THERMITE_TEST_BROWSER=" + executable + "\n");
+          '
       - name: Check a linked worktree
         run: bun scripts/check-worktree.mjs
         env:

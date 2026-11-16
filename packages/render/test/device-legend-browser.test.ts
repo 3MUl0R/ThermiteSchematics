@@ -21,6 +21,8 @@ beforeAll(async () => {
   browser = await launch();
   const context = await browser.newContext(drawingContextOptions);
   page = await context.newPage();
+  // CI can spend 30 s loading the dense plate after the full packet render.
+  page.setDefaultTimeout(60000);
 });
 afterAll(async () => {
   await browser?.close();
@@ -146,7 +148,7 @@ async function audit(svg: string, ir: any, refs: any[]) {
   }
   return { measured, legends };
 }
-// Audit each independent flow within the same 60-second per-test deadline.
+// Runner audits exceed 60 s; preserve each complete flow within a 120 s budget.
 it.each(["left-to-right", "top-to-bottom"] as const)(
   "has at least 3 mm from all final ink and location borders after letter-portrait trim/fold/stack in %s",
   async (flow) => {
@@ -178,7 +180,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     if (!r.ok) throw r;
     for (const s of r.value.sheets) await audit(s.svg, c.ir, s.references);
   },
-  60000,
+  120000,
 );
 async function captionClearance() {
   const captions = await page.evaluate(() => {
@@ -236,4 +238,4 @@ it("protects the dense DOL one-sheet packet and PLC1 tags in both flows", async 
     if (!r.ok) throw r;
     for (const s of r.value.sheets) await audit(s.svg, c.ir, s.references);
   }
-}, 60000);
+}, 120000);

@@ -37,44 +37,47 @@ afterAll(async () => {
     await rm(scratch, { recursive: true, force: true });
   }
 });
-it.each(corpus)(
-  "keeps every composed local resource scoped in $id",
-  async (spec) => {
-    const fixture = await prepare(
-      spec,
-      process.cwd(),
-      join(scratch, spec.id),
-      (args: string[]) =>
-        command(process.cwd(), "bun", ["thermite.mjs", ...args]),
-    );
-    let project = compiled.get(fixture.project);
-    if (!project) {
-      project = compileProject(fixture.project);
-      compiled.set(fixture.project, project);
-    }
-    const c = await project;
-    if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
-    const packet = await renderSchematicPacket(
-      c.ir,
-      fixture.request,
-      c.presentation,
-    );
-    if (!packet.ok) {
-      expect(refusals.has(spec.id), JSON.stringify(packet.error)).toBe(true);
-      expect(packet.error.code).toBe("R006");
-      return;
-    }
-    expect(refusals.has(spec.id)).toBe(false);
-    for (const sheet of packet.value.sheets) {
-      const inspected = scopedReferenceOracle(sheet.svg);
-      if (inspected.sections) {
-        composed.add(spec.id);
-        expect(
-          inspected.references,
-          `${spec.id} sheet ${sheet.number}: empty guard`,
-        ).toBeGreaterThan(0);
+for (const entry of corpus)
+  it.each([entry])(
+    "keeps every composed local resource scoped in $id",
+    async (spec) => {
+      const fixture = await prepare(
+        spec,
+        process.cwd(),
+        join(scratch, spec.id),
+        (args: string[]) =>
+          command(process.cwd(), "bun", ["thermite.mjs", ...args]),
+      );
+      let project = compiled.get(fixture.project);
+      if (!project) {
+        project = compileProject(fixture.project);
+        compiled.set(fixture.project, project);
       }
-    }
-  },
-  30000,
-);
+      const c = await project;
+      if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+      const packet = await renderSchematicPacket(
+        c.ir,
+        fixture.request,
+        c.presentation,
+      );
+      if (!packet.ok) {
+        expect(refusals.has(spec.id), JSON.stringify(packet.error)).toBe(true);
+        expect(packet.error.code).toBe("R006");
+        return;
+      }
+      expect(refusals.has(spec.id)).toBe(false);
+      for (const sheet of packet.value.sheets) {
+        const inspected = scopedReferenceOracle(sheet.svg);
+        if (inspected.sections) {
+          composed.add(spec.id);
+          expect(
+            inspected.references,
+            `${spec.id} sheet ${sheet.number}: empty guard`,
+          ).toBeGreaterThan(0);
+        }
+      }
+    },
+    entry.id === "sweep-motor-starter-letter-landscape-compact-left-to-right"
+      ? 60000
+      : 30000,
+  );

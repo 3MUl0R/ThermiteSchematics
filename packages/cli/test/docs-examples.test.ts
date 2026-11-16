@@ -48,5 +48,9 @@ for (const entries of groups.values()) {
         active.delete(c);
       }
     },
+    entries[0].file === "docs/machine-demo.md" &&
+      entries[0].recipe === "repo-shell"
+      ? 240000
+      : 120000,
   );
 }

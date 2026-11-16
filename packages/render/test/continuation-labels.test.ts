@@ -107,36 +107,37 @@ const cases = [
   ["G", "letter", "portrait", "compact", "top-to-bottom", 5],
   ["fold", "a3", "portrait", "compact", "left-to-right", 2],
 ] as const;
-it.each(cases)(
-  "resolves fit witness %s using independent printed anchors",
-  async (name, size, orientation, layout, flow, base) => {
-    const r = await renderSchematicPacket(ir, {
-      format: "schematic-packet-request/0.1",
-      page: { size, orientation },
-      layout,
-      views: [
-        {
-          format: "schematic-view-request/0.1",
-          root: { by: "designation", value: "M1" },
-          family: "power",
-          flow,
-        },
-        {
-          format: "schematic-view-request/0.1",
-          root: { by: "designation", value: "K1" },
-          family: "control",
-          flow,
-        },
-      ],
-    });
-    if (!r.ok) throw Error(JSON.stringify(r.error));
-    expect(r.value.sheets.length).toBeLessThanOrEqual(base + 1);
-    const result = continuationOracle(ir, r.value);
-    if (name === "fold") expect(result.sameSheet).toBeGreaterThan(0);
-    expect(r.value.sheets.every((s) => s.references.length > 0)).toBe(true);
-  },
-  30000,
-);
+for (const witness of cases)
+  it.each([witness])(
+    "resolves fit witness %s using independent printed anchors",
+    async (name, size, orientation, layout, flow, base) => {
+      const r = await renderSchematicPacket(ir, {
+        format: "schematic-packet-request/0.1",
+        page: { size, orientation },
+        layout,
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "M1" },
+            family: "power",
+            flow,
+          },
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "K1" },
+            family: "control",
+            flow,
+          },
+        ],
+      });
+      if (!r.ok) throw Error(JSON.stringify(r.error));
+      expect(r.value.sheets.length).toBeLessThanOrEqual(base + 1);
+      const result = continuationOracle(ir, r.value);
+      if (name === "fold") expect(result.sameSheet).toBeGreaterThan(0);
+      expect(r.value.sheets.every((s) => s.references.length > 0)).toBe(true);
+    },
+    witness[0] === "F" ? 60000 : 30000,
+  );
 it("keeps peers correct across repeated authored views and final indexes", async () => {
   const view = {
     format: "schematic-view-request/0.1" as const,

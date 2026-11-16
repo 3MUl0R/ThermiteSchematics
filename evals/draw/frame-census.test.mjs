@@ -134,7 +134,8 @@ it.each(["viewport", "clipPath", "white cover", "hidden", "zero opacity"])(
   },
 );
 it("rejects bottom digits with less than half a millimetre of painted clearance", async () => {
-  expect((await shapes(fixture("", 0.3))).bottomRuleClearanceMm).toBeLessThan(
+  // A 0.3 mm shift leaves 0.533 mm on Linux; cross the gate beyond a raster pixel.
+  expect((await shapes(fixture("", 0.5))).bottomRuleClearanceMm).toBeLessThan(
     0.5,
   );
 });

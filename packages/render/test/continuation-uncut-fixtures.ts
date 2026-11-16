@@ -1,6 +1,20 @@
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { SchematicPacketRequest } from "../src/sheets.js";
 
+// Bun 1.4.2 Linux x64 returns one-ULP differences from Math.hypot in the raw
+// returnLocality.distanceMm metadata. Both Ubuntu jobs in run 43777116134
+// agree; every SVG and every other packet field matches the shared reference.
+// Keep whole-packet byte equality, with reviewed hashes for that platform.
+export function uncutReferenceKey(
+  name: "init-starter" | "motor-starter",
+  platform = process.platform,
+  arch = process.arch,
+) {
+  return name === "motor-starter" && platform === "linux" && arch === "x64"
+    ? "motor-starter-linux-x64"
+    : name;
+}
+
 export async function uncutFixture(name: "init-starter" | "motor-starter") {
   const c = await compileProject(
     name === "init-starter"

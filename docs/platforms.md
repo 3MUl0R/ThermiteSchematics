@@ -114,16 +114,86 @@ were applied and recorded.
 
 `alpha-pdf.test.ts` renders 300-dpi PDF crops with the development-only PDF.js
 and native canvas dependencies. These checks run offline and include negative
-controls for cell overpainting and proportional font substitution. Browser
-crops also run when a local Chrome/Chromium or cached Playwright Chromium is
-available. Set `THERMITE_TEST_BROWSER` to its executable path to override
-discovery. Browser tests use `it.skipIf` so missing browsers appear as skips.
-Set `THERMITE_REQUIRE_BROWSER=1` to fail when no browser is available; ordinary
-CI sets this on all three Chrome-equipped runners. An explicitly invalid
-`THERMITE_TEST_BROWSER` disables automatic discovery for policy verification.
-PDF raster checks, including all four signal-loop variants, always run.
+controls for cell overpainting and proportional font substitution. PDF
+rasterization itself needs no browser, including all four signal-loop variants.
 The synthetic browser monospace specimen loads the shipped Noto Sans Mono face
 and waits for font loading before capture, so its advance checks do not depend
 on the host's generic monospace font. This is test setup; generated SVG and
 runtime font selection retain their existing contracts.
 No browser or raster dependency is included in the runtime package.
+
+## Browser for tests
+
+After `bun install --frozen-lockfile`, install the lockfile-pinned Chromium with
+the same command as CI:
+`bun node_modules/playwright-core/cli.js install --with-deps --no-shell chromium`.
+On Linux, `--with-deps` installs system libraries through apt and needs sudo
+or root privileges; omit that option if those libraries are already installed.
+To find that installation's executable, run
+`bun -e "import { chromium } from 'playwright-core'; console.log(chromium.executablePath())"`.
+Set both `THERMITE_TEST_BROWSER` and `THERMITE_DRAW_CHROMIUM` to that path.
+When `THERMITE_TEST_BROWSER` is unset, installed system Chrome/Chromium takes
+precedence over the pinned cached build. Explicit overrides select the CI
+binary, including on Windows or with a custom `PLAYWRIGHT_BROWSERS_PATH`. CI
+caches the browser outside the checkout and exports both overrides from
+`chromium.executablePath()`; the two discovery helpers do not read
+`PLAYWRIGHT_BROWSERS_PATH` themselves.
+
+The helpers have separate discovery orders:
+
+- The PDF/browser test harness (`packages/cli/test/helpers/pdf-raster.ts`)
+  uses `THERMITE_TEST_BROWSER` when defined. An invalid or empty override
+  disables the helper's discovery fallback. Otherwise it tries macOS Google Chrome
+  (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`),
+  `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`,
+  then `%PROGRAMFILES%/Google/Chrome/Application/chrome.exe`. It next searches
+  `~/Library/Caches/ms-playwright`, `~/.cache/ms-playwright`, then
+  `%LOCALAPPDATA%/ms-playwright`, ignoring absent roots. Within each root,
+  `chromium-*` directories are tried in reverse lexical order, with executable
+  suffixes in this order: `chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+  `chrome-mac/Chromium.app/Contents/MacOS/Chromium`, `chrome-linux64/chrome`,
+  `chrome-linux/chrome`, `chrome-win/chrome.exe`, `chrome-win64/chrome.exe`.
+- The draw checker (`evals/draw/chromium-path.mjs`) uses a nonempty
+  `THERMITE_DRAW_CHROMIUM` first; an inaccessible override throws without
+  fallback. Otherwise it searches `~/Library/Caches/ms-playwright` on macOS,
+  or `~/.cache/ms-playwright` on other OSes, including Windows. It tries
+  `chromium-*` directories in reverse lexical order, with suffixes
+  `chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+  `chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+  `chrome-mac/Chromium.app/Contents/MacOS/Chromium`, `chrome-linux64/chrome`,
+  `chrome-linux/chrome`, then `chrome-win/chrome.exe`. It does not search
+  system Chrome paths or `%LOCALAPPDATA%`.
+
+Locally, without `THERMITE_REQUIRE_BROWSER=1`, only browser cases guarded with
+`it.skipIf(!browserPath)` skip when the PDF harness finds no executable. Some
+browser suites call `launchBrowser()` without a skip guard and fail rather than
+skip if no browser is available. With no discovered path, those calls let
+Playwright try its own registry, which honours
+`PLAYWRIGHT_BROWSERS_PATH` and may require a headless shell absent from the
+documented `--no-shell` installation.
+Draw suites also fail when Chromium is unavailable, regardless of the flag.
+The full check therefore needs a browser for both harnesses.
+`THERMITE_REQUIRE_BROWSER=1` makes missing-browser discovery in the PDF harness
+fail before any guarded case can skip. CI sets it in both jobs on all three
+OSes and explicitly selects the pinned executable.
+
+With the pinned Chromium build, default Canvas ascent and left glyph bounds on
+Linux and Windows are rounded to whole user units; right bounds and text-box
+widths are not uniformly integer-rounded. macOS defaults are precise. In the
+[3.5 mm calibration capture](https://github.com/BlackettApplied/ThermiteSchematics/actions/runs/43726905676/artifacts/14167310551),
+default versus precise measurements differ by about 0.5 mm vertically, about
+1.2 mm at the Windows right edge and about 1.5 mm in Windows glyph-box width.
+These are observed magnitudes, not universal bounds. See
+[Chromium's small-font precision fix](https://chromium.googlesource.com/chromium/src/+/3f9f2e32ff8ce60dea2a7f897476bf20be9a950b),
+the checker's [text measurements](../evals/draw/measurement/text-metrics.mjs)
+and [cap-height conversion](../evals/draw/measurement/text-fields.mjs).
+The [calibration tests](../evals/draw/checker-boundary-browser.test.mjs) opt into
+`CanvasTextMetricsPreciseBounds`; the [default launch arguments](../evals/draw/browser.mjs)
+remain empty.
+
+Run targeted tests with `bun scripts/test.mjs <files>` after rebuilding source
+changes. `bunx vitest` is unsupported on macOS: it bypasses the wrapper's
+canonicalization of `TMPDIR`, `TMP` and `TEMP`. macOS temporary paths commonly
+start under the `/var` symlink to `/private/var`; the source loader rejects
+symlink paths, so fixtures created there can fail before their intended checks.
+The wrapper resolves the temporary directory before creating fixtures.
