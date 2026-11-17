@@ -20,6 +20,45 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.24** adopts the repaired #396 and #398 oracles in strict **DQ-08**
+(CHECK6, #406.1). This explicitly extends DQ-08 from terminal/part references to
+same-device detached protection/contact function navigation and individually
+named selected communication-port destinations. It does not change DQ-07's
+coil/repeat rules, the predicates, locality tolerances, or any existing row/pin.
+New `check6-element-navigation` and `check6-port-navigation` rows are appended
+through the existing packet assessment path, using native IR/request selections
+and independently measured SVG ink. Renderer correctness flags confer no credit.
+
+Applicability is determined separately for each owner and physical source sheet.
+#396 requires full selected native protection/contact appearances of one device
+on distinct issued sheets, outside the existing coil-actuation population.
+#398 requires a selected native communication endpoint absent on a local part
+and painted on another part. Unoccupied/unselected ports create no link need.
+A valid audit with **zero obligations, zero findings and zero measurement gaps**
+is not applicable: strict emits no row, while the exposure command retains its
+explicit `not-applicable` row. Missing native data, selected ink, or zone geometry
+is infrastructure, never n/a or pass. Infrastructure gets a separate row and
+cannot mask an independently observed drawing failure on that sheet.
+The four existing R006 cases have no issued sheets and remain not measured for
+these oracles (the runner retains its existing refusal rows):
+
+- `sweep-report-filtering-letter-portrait-standard-left-to-right`
+- `sweep-report-filtering-letter-portrait-standard-top-to-bottom`
+- `sweep-report-filtering-letter-portrait-compact-left-to-right`
+- `sweep-report-filtering-letter-portrait-compact-top-to-bottom`
+
+SVG-only scope remains explicit; HTML/PDF navigation is not independently certified.
+
+`check6-navigation.test.mjs` compiles a strict fixture from the unchanged
+motor-starter and network-pagination sources and their byte-locked libraries.
+It reuses existing request shapes: two native command-circuit parts pack on one
+TTB page, shifting the later power and communication sheets. Both flows must
+satisfy native element and per-port obligations at their **final** measured
+positions. Stale sheet/zone pointers and the named negative classes fail strict
+assessment after real SVG remeasurement. No corpus case or pin is added.
+The 5.23 full checkpoint is replayed before adoption, per scorecard §2; 5.23
+summaries remain readable with their complete counters.
+
 Version **5.23** fixes #395: a missing identifier table keeps table-dependent
 report-placeholder pins as infrastructure, shared sheet furniture is checked
 once against the complete nonempty sheet, and PDF painted measurement guards
@@ -30,10 +69,10 @@ Healthy corpus observations are unchanged;
 complete 5.22 reports remain readable. No expected markers are changed.
 
 The same pre-merge **5.23** adds two **non-strict exposure** oracles for #396
-(DQ-07) and #398 (DQ-08). They do not run in strict assessment and cannot move
-pins, earn repair credit or make an unscheduled renderer repair mandatory.
-The helm must approve strict adoption after a matching TEXT-NAV repair is
-scheduled. Run them first against unchanged output:
+(DQ-07) and #398 (DQ-08). The standalone replay does not enter strict assessment or move
+pins. Version 5.24 separately adopts the same predicates after T6/T7 repairs.
+Strict adoption is now authorized by CHECK6; the original exposure workflow
+remains available for independent replay against unchanged output:
 
 ```sh
 nice -n 19 bun evals/draw/navigation-exposure.mjs --capture evals/out/draw/CHECKPOINT --out evals/out/navigation-exposure.json

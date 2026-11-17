@@ -1,6 +1,6 @@
 import { measurePacketGeometry } from "./packet-geometry.mjs";
 import { caseInfrastructure } from "./case-infrastructure.mjs";
-import { tranche4Observations } from "./tranche4-observations.mjs";
+import { packetSemanticObservations } from "./navigation-strict.mjs";
 import { captureSheets } from "./run-sheet.mjs";
 import { inventoryMediaObservations } from "./inventory-scope-media.mjs";
 import assert from "node:assert/strict";
@@ -265,7 +265,7 @@ async function capturePacketRows(
   const packetRows = [
     ...evaluatePacket(c, packet, geometries, tables),
     ...inventoryMediaObservations(c, packet, geometries, ir, observation),
-    ...tranche4Observations(
+    ...packetSemanticObservations(
       c,
       packet,
       geometries,
