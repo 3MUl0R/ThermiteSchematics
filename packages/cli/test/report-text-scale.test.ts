@@ -8,67 +8,7 @@ import { browserPath, launchBrowser } from "./helpers/pdf-raster.js";
 import { openSheet } from "../../../evals/draw/browser.mjs";
 import { identifierFindings } from "../../../evals/draw/identifier-checks.mjs";
 
-// Run in Chromium. Compare identical SVG shaping with/without forced lengths,
-// rather than counting hanging, unpainted authored whitespace as glyph advance.
-function reportScaleIssues() {
-  const matched = [
-    ...document.querySelectorAll<SVGTextElement>("[data-report-column] text"),
-  ];
-  if (!matched.some((text) => text.textContent?.trim()))
-    return [{ text: "", kind: "no-report-text" }];
-  const headerIssues = [...document.querySelectorAll("[data-report-column]")]
-    .filter((cell) => !cell.closest("[data-report-row]"))
-    .flatMap((cell) => {
-      const expected = (cell.getAttribute("data-column-name") ?? "")
-        .replace(/\s+/gu, " ")
-        .trim();
-      const pieces = [...cell.querySelectorAll("text")].map(
-        (t) => t.textContent ?? "",
-      );
-      const hyphenated = pieces.some((t) => t.endsWith("-"));
-      const actual = pieces
-        .join(" ")
-        .replace(/- (?=\S)/gu, "")
-        .replace(/\s+/gu, " ")
-        .trim();
-      return expected === actual &&
-        (!hyphenated ||
-          !!cell.closest("svg")?.querySelector("[data-report-header-note]"))
-        ? []
-        : [{ text: actual, kind: "header-word-split" }];
-    });
-  const glyphIssues = [
-    ...document.querySelectorAll<SVGTextElement>("svg text"),
-  ].flatMap((text) => {
-    const value = text.textContent ?? "";
-    if (!value.trim()) return [];
-    const issues: { text: string; kind: string; scale?: number }[] = [];
-    if (text.closest("[data-report-column]") && value !== value.trim())
-      issues.push({ text: value, kind: "cell-wrap-space" });
-    const reference = text.cloneNode(true) as SVGTextElement;
-    for (const element of [reference, ...reference.querySelectorAll("*")]) {
-      element.removeAttribute("textLength");
-      element.removeAttribute("lengthAdjust");
-    }
-    text.parentElement!.appendChild(reference);
-    const natural = reference.getComputedTextLength();
-    reference.remove();
-    const matrix = text.getScreenCTM()!,
-      scale = natural
-        ? (((text.hasAttribute("textLength")
-            ? Number(text.getAttribute("textLength"))
-            : text.getComputedTextLength()) /
-            natural) *
-            Math.hypot(matrix.a, matrix.b)) /
-          Math.hypot(matrix.c, matrix.d)
-        : 1;
-    // Only numeric DOM/CTM rounding tolerance, not a wider distortion policy.
-    if (Math.max(scale, 1 / scale) > 1.1 + 1e-9 || scale > 1 + 1e-9)
-      issues.push({ text: value, kind: "glyph-scale", scale });
-    return issues;
-  });
-  return [...headerIssues, ...glyphIssues];
-}
+import { reportScaleScript } from "../../../evals/draw/report-scale.mjs";
 
 const papers = ["letter", "a4", "tabloid", "a3"] as const;
 let browser: Browser,
@@ -97,7 +37,7 @@ async function checked(packet: RenderedPacket) {
     for (const content of documents) {
       await page.setContent(content);
       await page.evaluate(() => document.fonts.ready);
-      expect(await page.evaluate(reportScaleIssues), medium).toEqual([]);
+      expect(await page.evaluate(reportScaleScript), medium).toEqual([]);
     }
   }
 }
@@ -127,7 +67,7 @@ describe.skipIf(!browserPath)(
       await page.setContent(
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Not a report</text></svg>',
       );
-      expect(await page.evaluate(reportScaleIssues)).toEqual([
+      expect(await page.evaluate(reportScaleScript)).toEqual([
         { text: "", kind: "no-report-text" },
       ]);
       const result = await renderSchematicPacket(filtering, {
@@ -149,7 +89,7 @@ describe.skipIf(!browserPath)(
             text.setAttribute("lengthAdjust", "spacingAndGlyphs");
           }, prefix);
           expect(
-            (await page.evaluate(reportScaleIssues)).some(
+            (await page.evaluate(reportScaleScript)).some(
               (issue) => issue.kind === "glyph-scale",
             ),
           ).toBe(true);
@@ -184,7 +124,7 @@ describe.skipIf(!browserPath)(
           text.setAttribute("lengthAdjust", "spacingAndGlyphs");
         }, scale);
         expect(
-          (await page.evaluate(reportScaleIssues)).length > 0,
+          (await page.evaluate(reportScaleScript)).length > 0,
           String(scale),
         ).toBe(fails);
       }
@@ -199,7 +139,7 @@ describe.skipIf(!browserPath)(
           text.setAttribute("transform", `scale(${scale} 1)`);
         }, scale);
         expect(
-          (await page.evaluate(reportScaleIssues)).length > 0,
+          (await page.evaluate(reportScaleScript)).length > 0,
           `transform ${scale}`,
         ).toBe(fails);
       }

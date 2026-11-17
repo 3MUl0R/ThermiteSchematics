@@ -1,3 +1,4 @@
+import { resolveTerminalStripLocations } from "./terminal-strip.js";
 import { resolveNativePartLocations } from "./native-part-locations.js";
 import {
   renderedRootedContinuations,
@@ -120,18 +121,23 @@ export function appendViewDrafts(
   return referenceNumber;
 }
 
+function terminalNetIds(ir: Readonly<ElectricalIr>) {
+  return new Map(
+    ir.indexes.netIdByTerminal.map((e) => [
+      JSON.stringify([e.key.deviceUid, e.key.terminalKey]),
+      e.value,
+    ]),
+  );
+}
+
 /** Final packet sheet numbers also namespace SVG IDs and continuation metadata. */
 export function assembleSheets(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
   page: PaperPage,
 ): RenderedSheet[] {
-  const netIds = new Map(
-    ir.indexes.netIdByTerminal.map((e) => [
-      JSON.stringify([e.key.deviceUid, e.key.terminalKey]),
-      e.value,
-    ]),
-  );
+  const netIds = terminalNetIds(ir);
+  resolveTerminalStripLocations(drafts, page);
   resolveNativePartLocations(drafts);
   for (const draft of drafts)
     for (const block of draft.circuitBlocks ?? [])

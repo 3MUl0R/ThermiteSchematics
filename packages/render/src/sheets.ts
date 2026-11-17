@@ -20,6 +20,7 @@ import { navigationViewKey } from "./packet/navigation-identity.js";
 import { centroidReferences } from "./packet/navigation-occurrences.js";
 import { seedCircuitNavigation } from "./packet/navigation-circuit.js";
 import { appendDocumentCompanions } from "./packet/document-companions.js";
+import { appendTerminalStrips } from "./packet/terminal-strip.js";
 
 import {
   circuitFunctionAppearances,
@@ -348,7 +349,7 @@ function packetCompanions(
 ): RenderOutcome<Draft[]> {
   const result = explicit
     ? appendDocumentCompanions(ir, drafts, page, presentation)
-    : { ok: true as const, value: drafts };
+    : { ok: true as const, value: appendTerminalStrips(drafts) };
   return result.ok
     ? result
     : {

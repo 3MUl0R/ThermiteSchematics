@@ -1,4 +1,5 @@
 import { embedPrintableFont, fontBudgetFailure } from "./printable-font.js";
+import { singleSheetSvg } from "./terminal-report-svg.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { analyzeCompleteness, compileProject } from "@thermite/compiler";
@@ -36,6 +37,9 @@ import { completenessText, completenessCsv } from "./alpha-diagnostics.js";
 import { writeAlphaOutput } from "./alpha-output.js";
 
 export const THERMITE_VERSION = "0.3.0-alpha.2";
+function outputExtension(output: string | undefined) {
+  return output === undefined ? undefined : extname(output).toLowerCase();
+}
 function multipleSheetError(packet: RenderedPacket) {
   const seen = new Set<string>();
   return {
@@ -502,17 +506,15 @@ async function producePacket(
     return;
   }
   let content: string | Buffer;
-  const extension =
-    flags.output === undefined
-      ? undefined
-      : extname(flags.output).toLowerCase();
+  const extension = outputExtension(flags.output);
   if (flags.json && extension !== undefined && extension !== ".json")
     throw new Error("--json output must use a .json filename.");
   try {
     if (flags.json || extension === ".json")
       content = JSON.stringify(result.value, null, 2) + "\n";
     else if (extension === ".svg") {
-      if (result.value.sheets.length !== 1) {
+      const svg = singleSheetSvg(result.value);
+      if (svg === undefined) {
         process.stderr.write(
           JSON.stringify({
             diagnostics: compiled.diagnostics,
@@ -522,7 +524,7 @@ async function producePacket(
         state.exitCode = 1;
         return;
       }
-      content = embedPrintableFont(result.value.sheets[0]!.svg);
+      content = embedPrintableFont(svg);
     } else if (extension === ".pdf")
       content = await packetPdf(result.value, compiled.ir.project.name);
     else if (extension === ".csv")

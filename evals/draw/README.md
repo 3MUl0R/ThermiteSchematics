@@ -59,6 +59,33 @@ assessment after real SVG remeasurement. No corpus case or pin is added.
 The 5.23 full checkpoint is replayed before adoption, per scorecard §2; 5.23
 summaries remain readable with their complete counters.
 
+Version **5.25** adds independent strip-only sheet classification and measured
+strip text/geometry exposure. This remains **non-strict**: current table-only
+DQ-23 observations and pins are unchanged. Report sheets retain their complete
+header, shaping and no-report-text guards. Strip-only sheets instead need
+visible terminal bodies and text at least 2.5 mm, and retain the same shaping
+bounds; missing/hidden ink fails explicitly. Native terminal/jumper coverage and
+reciprocal continuation destinations are checked in the separate exposure.
+Complete 5.23 and 5.24 summaries remain readable.
+
+The #336 terminal-strip oracle is a separate **non-strict exposure** check:
+
+```sh
+nice -n 19 bun evals/draw/terminal-strip-exposure.mjs --capture evals/out/draw/CHECKPOINT --out evals/out/terminal-strip-exposure.json
+```
+
+It reconstructs requested terminal selection, authored order, explicit jumper
+endpoints and conductor incidences from native IR, including the union of physical
+cable conductors and authored assignments. Every measured strip terminal is also
+compared with its linked native inventory row for exact incidence equality. Chromium measures terminal
+rectangles, jumper/stub paths and visible text; identity attributes locate ink
+but do not establish coverage. Missing/extra bridges, wrong order, invented
+shapes, wrong peers and missing reciprocal row references fail the exposure.
+The receipt binds input artifacts, strict report, checker and Chromium, with
+`strict: false` and `repinNow: false`. It does not alter the existing strict
+DQ-23 observation or pins. This SVG oracle does not certify HTML/PDF; those
+require separate print review. Existing refusals remain not measured.
+
 Version **5.23** fixes #395: a missing identifier table keeps table-dependent
 report-placeholder pins as infrastructure, shared sheet furniture is checked
 once against the complete nonempty sheet, and PDF painted measurement guards

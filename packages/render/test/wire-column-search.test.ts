@@ -99,7 +99,7 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       presentation,
     );
     if (!r.ok) throw Error(JSON.stringify(r.error));
-    expect(r.value.sheets).toHaveLength(41);
+    expect(r.value.sheets).toHaveLength(43);
     const wires = r.value.sheets.filter(
       (s) => "kind" in s.view && s.view.kind === "wires",
     );

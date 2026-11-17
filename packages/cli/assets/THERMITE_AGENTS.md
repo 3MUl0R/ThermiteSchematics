@@ -320,3 +320,5 @@ For packet frames, use presentation 0.3 named slots; see `thermite guide drawing
 Enter only supplied title/revision data. Unknown fields stay labelled blank;
 unknown revision stays `UNSPECIFIED` and remains unmet at issue review.
 Preview the whole packet after frame changes; handle R006 honestly.
+
+Terminal plans link strips to inventory rows; single-sheet SVG exports retain the inventory without strip references.

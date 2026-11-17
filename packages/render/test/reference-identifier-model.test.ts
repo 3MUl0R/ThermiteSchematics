@@ -129,7 +129,7 @@ it.each([
             (r: { key: string }) => r.key === JSON.stringify([plc.uid, []]),
           ).cells[2],
         ).toBe("1 / A1");
-      } else expect(model.rows).toHaveLength(6);
+      } else expect(model.rows).toHaveLength(7);
     }
   },
 );
@@ -180,7 +180,7 @@ it.each([
     const index = result.value.sheets.find((s) => s.view.kind === "index")!;
     expect(
       identifierTable(index, result.value, { reportRows: [] }, ir, []).rows,
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     const refs = result.value.sheets.filter(
       (s) => s.view.kind === "references",
     );

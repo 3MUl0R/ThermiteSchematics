@@ -971,3 +971,22 @@ attachment, including strokes not inventoried by the drawing checker.
 `SchematicViewRequest` union and compiler-owned presentation through to this
 renderer, then returns the renderer DTOs and R-errors unchanged. It does not add
 agent-owned view syntax, selection, layout, geometry, or another R-code.
+
+Terminal reports include a graphical schematic strip and the original connection
+inventory. Each terminal keeps its native device UID/terminal key; every bridge
+keeps its native jumper UID. Tn/Rn references appear on both the strip and its
+inventory row. Authored order is preserved; missing order, dimensions and
+hardware stay visibly unspecified. Location groups do not assign installation
+sides. Requested strips paginate at device boundaries and split oversized devices between
+terminals. Reciprocal device/terminal markers and explicit jumper stubs name the
+final sheet.zone. The measured strip can span sheets, with text of at least
+2.5 mm. Generated supplementary inventories retain their native tables.
+
+Standalone terminal reports use the same strip pagination as packets. HTML, PDF
+and JSON retain the strip and reciprocal Tn/Rn references. A single-sheet SVG
+export retains the original one-sheet inventory without strip references when
+the appended strip is the only reason for additional sheets; inventories that
+already need multiple sheets keep the existing multi-sheet export diagnostic.
+
+Terminal strips use the inventory cable schedule, including physical cable cores
+and authored single-ended/spare assignments, once per native core identity.
