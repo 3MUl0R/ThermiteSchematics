@@ -29,7 +29,7 @@
     "fee96a7d67baab3796f9e86876f3ff1ac988763089f4e36e64e8bc0c36b0e8fe": 2
   },
   "files": {
-    "evals/draw/checks.mjs": 1458,
+    "evals/draw/checks.mjs": 1367,
     "evals/draw/checks.test.mjs": 1072,
     "evals/draw/m3-delivery.test.mjs": 1326,
     "evals/draw/mutate.mjs": 1194,
@@ -94,7 +94,6 @@
     "evals/draw/browser.mjs#measureSheet": 223,
     "evals/draw/browser.mjs#measureSheet/flatMap callback": 190,
     "evals/draw/checks.mjs#conductorInterference": 194,
-    "evals/draw/checks.mjs#reports": 78,
     "evals/draw/circuit-appearances.mjs#fullCircuitAppearances": 108,
     "evals/draw/circuit-appearances.mjs#fullCircuitAppearances/filter callback": 86,
     "evals/draw/conductor-label-coverage.mjs#conductorLabelCoverage": 104,

@@ -45,9 +45,12 @@ export function documentObservations({
   cohort,
 }) {
   const identifiers = svgIdentifiers(s, packet, g, ir, tables, policy);
-  const reportFindings = identifiers.documents.flatMap(({ geometry, table }) =>
-    checks.reports(geometry, s, packet, table),
-  );
+  const reportFindings = [
+    ...identifiers.documents.flatMap(({ geometry, table }) =>
+      checks.reports(geometry, s, packet, table, false),
+    ),
+    ...checks.reportFurniture(g, s),
+  ];
   const rows = [
     obs("DQ-19", [
       ...wireFindings,
