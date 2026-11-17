@@ -3,7 +3,7 @@
     "definiteAssignments": 1,
     "fileLines": 3000,
     "functionLines": 300,
-    "nonNullAssertions": 1001,
+    "nonNullAssertions": 1000,
     "skippedTests": 52
   },
   "definiteAssignments": {
@@ -238,7 +238,7 @@
     "packages/cli/src/alpha-pdf.ts#withPdfFontFallback": 81,
     "packages/cli/src/alpha-pdf.ts#withPdfLabelClips": 79,
     "packages/cli/src/alpha-watch.ts#watchAlphaProject": 84,
-    "packages/cli/src/alpha.ts#producePacket": 102,
+    "packages/cli/src/alpha.ts#producePacket": 100,
     "packages/cli/src/guide-markdown.ts#rewriteGuideLinks": 97,
     "packages/cli/src/index.ts#runCli": 108,
     "packages/cli/src/index.ts#runQuery": 85,
@@ -656,7 +656,7 @@
     "packages/cli/src/alpha-guide.ts": 1,
     "packages/cli/src/alpha-init.ts": 2,
     "packages/cli/src/alpha-pdf.ts": 20,
-    "packages/cli/src/alpha.ts": 8,
+    "packages/cli/src/alpha.ts": 7,
     "packages/cli/src/guide-markdown.ts": 4,
     "packages/cli/src/index.ts": 2,
     "packages/cli/src/init.ts": 5,

@@ -321,4 +321,4 @@ Enter only supplied title/revision data. Unknown fields stay labelled blank;
 unknown revision stays `UNSPECIFIED` and remains unmet at issue review.
 Preview the whole packet after frame changes; handle R006 honestly.
 
-Terminal plans automatically link graphical strips to inventory rows with Tn/Rn references.
+Terminal plans link strips to inventory rows; single-sheet SVG exports retain the inventory without strip references.

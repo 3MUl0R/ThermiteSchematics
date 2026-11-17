@@ -4,12 +4,13 @@ import { expect } from "vitest";
 import { parseHTML } from "linkedom";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "@thermite/render";
+import { singleSheetSvg } from "../../src/terminal-report-svg.js";
 import { repositoryRoot, type FactModule } from "./harness.js";
 const module: FactModule = {
   facts: [
     {
       claim:
-        "Terminal plans automatically link graphical strips to inventory rows with Tn/Rn references.",
+        "Terminal plans link strips to inventory rows; single-sheet SVG exports retain the inventory without strip references.",
       async check() {
         const compiled = await compileProject(
           join(repositoryRoot, "examples/motor-starter"),
@@ -46,6 +47,15 @@ const module: FactModule = {
             ),
           ).toBe(true);
         }
+        const svg = singleSheetSvg(result.value);
+        expect(svg).toBeDefined();
+        const inventory = parseHTML(svg!).document;
+        expect(inventory.querySelectorAll("[data-report-row]")).toHaveLength(
+          terminals.length,
+        );
+        expect(
+          inventory.querySelectorAll("[data-strip-row],[data-strip-ref]"),
+        ).toHaveLength(0);
       },
     },
     {

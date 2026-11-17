@@ -981,3 +981,9 @@ sides. Requested strips paginate at device boundaries and split oversized device
 terminals. Reciprocal device/terminal markers and explicit jumper stubs name the
 final sheet.zone. The measured strip can span sheets, with text of at least
 2.5 mm. Generated supplementary inventories retain their native tables.
+
+Standalone terminal reports use the same strip pagination as packets. HTML, PDF
+and JSON retain the strip and reciprocal Tn/Rn references. A single-sheet SVG
+export retains the original one-sheet inventory without strip references when
+the appended strip is the only reason for additional sheets; inventories that
+already need multiple sheets keep the existing multi-sheet export diagnostic.
