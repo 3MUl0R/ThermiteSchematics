@@ -388,7 +388,7 @@
     "packages/core-library/test/fuse-function-kind.test.ts#it callback": 77,
     "packages/core-library/test/machine-fixtures.ts#machineProbe": 185,
     "packages/core-library/test/rm3.test.ts#call callback~2": 81,
-    "packages/core-library/test/transformer-control.test.ts#call callback": 79,
+    "packages/core-library/test/transformer-control.test.ts#call callback": 77,
     "packages/query/src/cable-schedule.ts#buildCableSchedule": 96,
     "packages/query/src/continuity.ts#auditContinuity": 79,
     "packages/query/src/device-filter.ts#resolveDeviceFilter": 86,

@@ -8,6 +8,7 @@ export async function agentRefusalFixture(
   name: "sensor" | "sensor-wire" | "pump",
 ) {
   const root = await mkdtemp(join(tmpdir(), "thermite-agent-refusal-"));
+  let result: Awaited<ReturnType<typeof compileProject>>;
   try {
     const source = await readFile(
       new URL(`./fixtures/agent-refusals/${name}.json`, import.meta.url),
@@ -24,13 +25,13 @@ export async function agentRefusalFixture(
     );
     const locked = await lockProject(root);
     if (!locked.ok) throw Error(JSON.stringify(locked.diagnostics));
-    const result = await compileProject(root);
+    result = await compileProject(root);
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-    return { ...result, root, dispose: () => rm(root, { recursive: true }) };
   } catch (error) {
     await rm(root, { recursive: true });
     throw error;
   }
+  return { ...result, root, dispose: () => rm(root, { recursive: true }) };
 }
 
 export const sensorTrace = {
