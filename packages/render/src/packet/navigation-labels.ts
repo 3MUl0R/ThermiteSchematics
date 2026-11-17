@@ -82,7 +82,7 @@ export function wrapNavigationText(text: string, width: number): string {
     })
     .join("\n");
 }
-function envelopeShapes(
+export function envelopeShapes(
   mode: NavigationShape["mode"],
   forms: string[],
 ): NavigationShape[] {

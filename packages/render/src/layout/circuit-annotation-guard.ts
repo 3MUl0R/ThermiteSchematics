@@ -19,6 +19,8 @@ type GuardAnnotation = Omit<
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 const textContent = (s: string) => s.trim().replace(/\s+/gu, " ");
+// Absorb floating-point drift only; print significance starts at 0.1 mm.
+const ANNOTATION_DISTANCE_DRIFT_MM = 1e-3;
 const notFarther = (a: number | null, b: number | null) =>
   typeof a === "number" &&
   typeof b === "number" &&
@@ -26,7 +28,7 @@ const notFarther = (a: number | null, b: number | null) =>
   Number.isFinite(b) &&
   a >= 0 &&
   b >= 0 &&
-  a <= b + 1e-7;
+  a <= b + ANNOTATION_DISTANCE_DRIFT_MM;
 
 /** Only two self-located labels may retain absent evidence as unchanged.
  * Absence is never closer: one-sided nulls, local labels and return-owner

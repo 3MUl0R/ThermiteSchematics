@@ -5,6 +5,7 @@ import type {
   NavigationAnnotation,
   IssuedNavigation,
 } from "./navigation-types.js";
+import { planElementNavigation } from "./navigation-elements.js";
 import { navigationHash } from "./navigation-identity.js";
 import { compareText } from "../ordering.js";
 import { required } from "../presentation/util.js";
@@ -81,10 +82,14 @@ export function planRepeatNavigation(
   const planned = [...labels.values()].map((members) =>
     groupedLabel(ir, members, capacities, maximumMembers),
   );
+  const elements = planElementNavigation(ir, occurrences);
   return {
     groups,
-    reservations: planned.map((p) => p.reservation),
-    annotations: planned.map((p) => p.annotation),
+    reservations: [
+      ...planned.map((p) => p.reservation),
+      ...elements.reservations,
+    ],
+    annotations: [...planned.map((p) => p.annotation), ...elements.annotations],
   };
 }
 function groupedLabel(

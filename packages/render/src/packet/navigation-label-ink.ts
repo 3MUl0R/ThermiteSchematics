@@ -34,7 +34,11 @@ export function repeatLocalityInk(
   annotation: NavigationAnnotation,
   reservation: AnnotationReservation,
 ): ReadonlyMap<string, Rect> | undefined {
-  if (!["canonical", "repeat", "mixed"].includes(annotation.role))
+  if (
+    !["canonical", "repeat", "mixed", "element-location"].includes(
+      annotation.role,
+    )
+  )
     return undefined;
   return new Map(
     (reservation.shapes ?? [])
