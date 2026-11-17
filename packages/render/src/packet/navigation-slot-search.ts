@@ -73,9 +73,10 @@ function slotCandidates(
   ink?: Rect,
   preferBesideBelow = false,
   textVerticalClearanceMm = 0,
+  withinLocalSources = false,
 ) {
   const { w, h } = size;
-  const { xs, ys } = slotAxes(
+  const axes = slotAxes(
     size,
     area,
     owner,
@@ -83,6 +84,10 @@ function slotCandidates(
     texts,
     textVerticalClearanceMm,
   );
+  const { xs, ys } =
+    withinLocalSources && locality
+      ? localSourceAxes(axes, w, h, locality)
+      : axes;
   return ys
     .flatMap((y) =>
       clearNavigationXs(
@@ -118,6 +123,23 @@ function slotCandidates(
         a.box.x - b.box.x,
     )
     .map(({ box }) => box);
+}
+/** Necessary bounds only: the final ink still has to pass exact 60 mm locality. */
+function localSourceAxes(
+  axes: { xs: number[]; ys: number[] },
+  w: number,
+  h: number,
+  locality: SymbolGeometry,
+) {
+  const anchors = [locality.anchorMm, ...(locality.sourceAnchorsMm ?? [])];
+  return {
+    xs: axes.xs.filter((x) =>
+      anchors.every((a) => x <= a.x + 60 && x + w >= a.x - 60),
+    ),
+    ys: axes.ys.filter((y) =>
+      anchors.every((a) => y <= a.y + 60 && y + h >= a.y - 60),
+    ),
+  };
 }
 /** All local shapes precede all self-located shapes; preserve authored shape order within each mode. */
 export function searchNavigationSlot(
@@ -161,6 +183,7 @@ export function searchNavigationSlot(
       fit ? undefined : ink,
       preferBesideBelow && shape.mode === "local",
       textVerticalClearanceMm,
+      fitPrintedInk && (shape.mode === "local" || !!locality?.sourceAnchorsMm),
     );
     const legal = (b: Rect) =>
       (!families ||
@@ -173,14 +196,15 @@ export function searchNavigationSlot(
           ),
         )) &&
       inside(b, fitArea) &&
-      obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm)) &&
+      // Reject remote/ambiguous slots before scanning every protected rectangle.
       ((shape.mode !== "local" && !locality?.sourceAnchorsMm) ||
         !locality ||
         localNavigationSlot(
           navigationPlacementInk(envelope(b), ink),
           locality,
-        ));
+        )) &&
+      obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
+      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm));
     const box = fitPrintedInk
       ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
       : candidates.find(legal);

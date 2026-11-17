@@ -20,15 +20,25 @@ function room(
   area: Rect,
   obstacles: readonly Rect[],
   texts: readonly Rect[],
+  bestRoom: number,
 ) {
-  return Math.min(
+  let spare = Math.min(
     box.x - area.x,
     box.y - area.y,
     area.x + area.w - box.x - box.w,
     area.y + area.h - box.y - box.h,
-    ...obstacles.map((o) => boxDistance(box, o) - NAVIGATION_CLEARANCE_MM),
-    ...texts.map((t) => boxDistance(box, t) - NAVIGATION_TEXT_CLEARANCE_MM),
   );
+  // Further obstacles can only reduce the score, so ties cannot replace best.
+  if (spare <= bestRoom) return spare;
+  for (const o of obstacles) {
+    spare = Math.min(spare, boxDistance(box, o) - NAVIGATION_CLEARANCE_MM);
+    if (spare <= bestRoom) return spare;
+  }
+  for (const t of texts) {
+    spare = Math.min(spare, boxDistance(box, t) - NAVIGATION_TEXT_CLEARANCE_MM);
+    if (spare <= bestRoom) return spare;
+  }
+  return spare;
 }
 /** Maximise the tightest spare clearance; retain deterministic distance/edge ties. */
 export function roomiestElementSlot(
@@ -40,7 +50,7 @@ export function roomiestElementSlot(
   let best: Rect | undefined,
     bestRoom = -Infinity;
   for (const box of legal) {
-    const spare = room(box, area, obstacles, texts);
+    const spare = room(box, area, obstacles, texts, bestRoom);
     if (spare > bestRoom) {
       best = box;
       bestRoom = spare;
