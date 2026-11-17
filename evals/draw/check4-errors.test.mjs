@@ -30,28 +30,28 @@ it("CHECK4 missing measured cells fail with the explicit type", () => {
     IdentifierMeasurementError,
   );
 });
-it.each([
-  "wire-locator-missing",
-  "text-outside-cell",
-])("CHECK4 identifier infrastructure never masks an absent %s pin", (kind) => {
-  const marker = { id: "pin", dq: "DQ-19", check: "sheet", kind };
-  const unit = { case: "fixture", sheet: "sheet:1", medium: "svg" };
-  const rows = [
-    { status: "infrastructure-error", instrumentation: "identifier" },
-  ];
-  expect(missingMarkerRow(marker, "key", unit, false, rows).status).toBe(
-    "xpass",
-  );
-  expect(
-    missingMarkerRow(
-      { ...marker, kind: "identifier-line-break" },
-      "key",
-      unit,
-      false,
-      rows,
-    ).status,
-  ).toBe("infrastructure-error");
-});
+it.each(["wire-locator-missing", "text-outside-cell"])(
+  "CHECK4 identifier infrastructure never masks an absent %s pin",
+  (kind) => {
+    const marker = { id: "pin", dq: "DQ-19", check: "sheet", kind };
+    const unit = { case: "fixture", sheet: "sheet:1", medium: "svg" };
+    const rows = [
+      { status: "infrastructure-error", instrumentation: "identifier" },
+    ];
+    expect(missingMarkerRow(marker, "key", unit, false, rows).status).toBe(
+      "xpass",
+    );
+    expect(
+      missingMarkerRow(
+        { ...marker, kind: "identifier-line-break" },
+        "key",
+        unit,
+        false,
+        rows,
+      ).status,
+    ).toBe("infrastructure-error");
+  },
+);
 it("CHECK4 a PDF programming error is not mistaken for a PDF data failure", async () => {
   const x = documents();
   const error = new TypeError("PDF programming sentinel");

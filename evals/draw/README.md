@@ -26,6 +26,53 @@ once against the complete sheet, and PDF painted-identifier measurement guards
 raise the typed measurement error. Healthy corpus observations are unchanged;
 complete 5.22 reports remain readable. No expected markers are changed.
 
+The same pre-merge **5.23** adds two **non-strict exposure** oracles for #396
+(DQ-07) and #398 (DQ-08). They do not run in strict assessment and cannot move
+pins, earn repair credit or make an unscheduled renderer repair mandatory.
+The helm must approve strict adoption after a matching TEXT-NAV repair is
+scheduled. Run them first against unchanged output:
+
+```sh
+nice -n 19 bun evals/draw/navigation-exposure.mjs --capture evals/out/draw/CHECKPOINT --out evals/out/navigation-exposure.json
+```
+
+The receipt binds the strict report, Chromium build, checker modules and every
+read native artifact. It lists each sheet's pass/fail/not-applicable assessment,
+native obligations and explicit measurement failures, with `strict: false` and
+`repinNow: false`. Existing R006 refusals are **not measured**. Infrastructure
+exits 2; drawing exposure does not alter the strict exit. SVG is independently
+measured; these receipts do not certify HTML/PDF navigation.
+
+- #396 groups full native protection elements and auxiliary contacts by device UID,
+  selected view and measured
+  terminal membership, then requires local reciprocal pointers to distinct
+  functions on other issued sheets. Same-function repeats, terminal interfaces,
+  and the existing direct coil/contact actuation population remain separate.
+  A shared UID means a location relationship; it invents no actuation or
+  construction. A pointer names the device and native function key or its full
+  terminal set, plus the destination sheet.zone. Printed contact/protection/coil
+  roles and contact states must be truthful. Any spanned destination-body zone
+  is accepted. The existing DQ-07 nearest-owner and 60 mm locality convention is
+  reused. Selected missing bodies, incomplete geometry and dangling printed
+  destinations cannot silently discharge an obligation.
+  PLC channels and source/PE functions have no adopted obligation in this scope;
+  their shared UID alone does not make them protection/auxiliary pairs.
+- #398 reconstructs selected communication-link endpoints from native IR and
+  the request, then binds each device/port to its painted circle and printed
+  port label. Every omitted, elsewhere drawn port needs its own named final
+  part/sheet.zone pointer, checked at that port's ink rather than the enclosing
+  device body. Each part is checked independently, so reverse omissions fail.
+  Unoccupied/unselected ports drawn nowhere create no fictitious link need.
+  A selected endpoint with missing ink is explicit infrastructure.
+- The exposure parser accepts `DEVICE.function → 02.A1` (or the native terminal
+  set), and `DEVICE.PORT → P2/S02.A1`. Semicolons delimit independently named
+  clauses; multiple destinations for one identity are accepted. Several named
+  identities with several anonymous pointers are ambiguous and fail. IDs on
+  measured containers locate ink; exported target arrays, success flags and
+  registry facts never authorize it. Broader compact caption grammars need a
+  reviewed native binding before strict adoption; no indirect-alias convention
+  or D02 coverage is introduced here.
+
 Version **5.22** fixes the four robustness gaps from #376 without adding an
 oracle, changing criteria or moving expected markers. Complete 5.21 reports
 remain readable.
