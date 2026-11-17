@@ -79,7 +79,8 @@ export interface NormalizedDocumentationView {
     | "connector-assembly"
     | "signal-loop"
     | "wiring"
-    | "circuit";
+    | "circuit"
+    | "terminal-strip";
   readonly title: string;
 }
 export interface RenderedSheet {
@@ -166,6 +167,8 @@ export interface RootedLegendSource {
   profile?: "compact" | "dense";
 }
 export interface Draft {
+  terminalStrip?: import("./terminal-strip.js").TerminalStripSheet;
+  terminalStripPlan?: import("./terminal-strip.js").StripDrawing;
   documentKind?: string;
   inlineDocumentBounds?: import("../device-legend/geometry.js").Rect;
   resolvedTitle?: import("../internal/title-data/model.js").ResolvedTitle;

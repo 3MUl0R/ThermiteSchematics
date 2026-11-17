@@ -68,7 +68,7 @@ it("M-N1-LEGAL: the narrow repeat sweep uses legal fallback cuts without page gr
       [
         {
           case: "repeat-machine-demo-a3-landscape-standard-left-to-right",
-          before: 22,
+          before: 23,
         },
       ],
       [
@@ -78,16 +78,16 @@ it("M-N1-LEGAL: the narrow repeat sweep uses legal fallback cuts without page gr
         },
       ],
     ).after,
-  ).toBe(22);
+  ).toBe(23);
   for (const sheet of narrow.value.sheets) {
-    expect(sheet.svg).toContain(`SHEET ${sheet.number} OF 22`);
-    expect(sheet.svg).toContain(`>${sheet.number} of 22</text>`);
+    expect(sheet.svg).toContain(`SHEET ${sheet.number} OF 23`);
+    expect(sheet.svg).toContain(`>${sheet.number} of 23</text>`);
   }
 });
 it("M-N1-LEGAL/GAP: every final stub stays two millimetres long and joins its visible owned route", async () => {
   expect(narrow.ok && folded.ok).toBe(true);
   if (!narrow.ok || !folded.ok) return;
-  expect(folded.value.sheets.length).toBe(20);
+  expect(folded.value.sheets.length).toBe(21);
   let endpoints = 0;
   for (const sheet of [...narrow.value.sheets, ...folded.value.sheets]) {
     if (!sheet.continuations.length) continue;

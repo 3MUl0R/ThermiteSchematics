@@ -1,3 +1,9 @@
+import {
+  chunkKey,
+  physicalOrder,
+  destination,
+  continuationCoverage,
+} from "./terminal-strip-continuations.mjs";
 // Attributes locate ink. Native IR defines obligations; measured shapes discharge them.
 const close = (a, b, t = 0.3) => Math.abs(a - b) <= t;
 const pointAt = (p, b) =>
@@ -44,12 +50,10 @@ function terminalCoverage(native, ink, findings) {
     );
     if (drawn.some((t) => !t?.rect)) continue;
     if (
-      drawn.some(
-        (t, i) =>
-          i > 0 &&
-          (!close(t.rect.x, drawn[i - 1].rect.x) ||
-            t.rect.y <= drawn[i - 1].rect.y),
-      )
+      drawn
+        .slice()
+        .sort(physicalOrder)
+        .some((t, i) => t.key !== group.terminals[i].key)
     )
       findings.push({ kind: "strip-wrong-order", device: group.uid });
     const heading = ink.headings
@@ -64,25 +68,58 @@ function terminalCoverage(native, ink, findings) {
   }
 }
 function bridgeCoverage(native, ink, findings) {
+  const compact = (s) => String(s ?? "").replace(/\s+/gu, "");
   for (const j of native.bridges) {
-    const paths = ink.bridges.filter((b) => b.uid === j.uid);
-    const ends = j.ends.map(
-      (k) => ink.terminals.find((t) => t.key === k)?.rect,
-    );
-    if (
-      paths.length !== 1 ||
-      ends.some((e) => !e) ||
-      paths[0].points.length < 3 ||
-      !pointAt(paths[0].points[0], ends[0]) ||
-      !pointAt(paths[0].points.at(-1), ends[1]) ||
-      !paths[0].painted ||
-      paths[0].length < 3
-    )
-      findings.push({ kind: "strip-bridge-geometry", uid: j.uid });
+    const paths = ink.bridges.filter((b) => b.uid === j.uid),
+      ends = j.ends.map((k) => ink.terminals.find((t) => t.key === k));
+    const split = chunkKey(ends[0]) !== chunkKey(ends[1]);
+    let valid =
+      ends.every((e) => e?.rect) &&
+      paths.every((p) => p.painted && p.length >= 3 && p.points.length >= 3);
+    if (split)
+      valid =
+        valid &&
+        paths.length === 2 &&
+        [0, 1].every((end) => {
+          const p = paths.find((p) => p.end === String(end)),
+            target = ends[1 - end];
+          return (
+            p &&
+            p.at === j.ends[end] &&
+            p.peer === j.ends[1 - end] &&
+            pointAt(p.points[0], ends[end].rect) &&
+            destination(target) &&
+            compact(p.text).includes(
+              compact(`continued on sheet ${destination(target)}`),
+            )
+          );
+        });
+    else
+      valid =
+        valid &&
+        paths.length === 1 &&
+        pointAt(paths[0].points[0], ends[0].rect) &&
+        pointAt(paths[0].points.at(-1), ends[1].rect);
+    if (!valid) findings.push({ kind: "strip-bridge-geometry", uid: j.uid });
+    for (const [end, key] of j.ends.entries()) {
+      const labels = (ink.bridgeLabels ?? []).filter(
+        (l) => l.uid === j.uid && l.at === key,
+      );
+      if (
+        labels.length !== 1 ||
+        !compact(labels[0].text).includes(compact(j.name)) ||
+        !compact(labels[0].text).includes(compact(j.peers[1 - end]))
+      )
+        findings.push({
+          kind: "strip-bridge-label",
+          uid: j.uid,
+          terminal: key,
+        });
+    }
   }
-  for (const b of ink.bridges)
-    if (!native.bridges.some((j) => j.uid === b.uid))
-      findings.push({ kind: "strip-extra-bridge", uid: b.uid });
+  for (const p of ink.bridges)
+    if (!native.bridges.some((j) => j.uid === p.uid))
+      findings.push({ kind: "strip-extra-bridge", uid: p.uid });
 }
 function incidenceCoverage(native, ink, findings) {
   const expected = new Map();
@@ -125,6 +162,7 @@ export function checkTerminalStrip(native, ink) {
   terminalCoverage(native, ink, findings);
   bridgeCoverage(native, ink, findings);
   incidenceCoverage(native, ink, findings);
+  continuationCoverage(native, ink, findings);
   for (const s of ink.unclaimed)
     findings.push({ kind: "strip-invented-hardware-or-bridge", shape: s });
   if (!ink.notes.some((t) => t.includes("hardware unspecified")))

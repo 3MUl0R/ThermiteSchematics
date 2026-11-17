@@ -121,7 +121,7 @@ it("uses native conveyor SRC1’s all-terminal zone for local and self-located f
   if (!r.ok) throw Error(JSON.stringify(r.error));
   // Location lines preserve this narrow packet’s capacity; native drawing
   // placement and the all-terminal anchor below remain exact.
-  expect(r.value.sheets).toHaveLength(19);
+  expect(r.value.sheets).toHaveLength(20);
   expect(
     r.value.sheets.filter((s) => s.view.format.startsWith("schematic-view/")),
   ).toHaveLength(9);

@@ -1,3 +1,4 @@
+import { EVALS_VERSION } from "./version.mjs";
 // Report-only DQ-23 oracle; never imported by strict assessment or pin tooling.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -16,6 +17,7 @@ import { stripInkScript } from "./terminal-strip-ink.mjs";
 import { checkTerminalStrip } from "./terminal-strip-check.mjs";
 import { readReportFile } from "./report-file.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
+import { sheetInkKindScript } from "./sheet-ink-kind.mjs";
 import { hash, json } from "./support.mjs";
 const { values } = parseArgs({
   options: { capture: { type: "string" }, out: { type: "string" } },
@@ -32,6 +34,19 @@ async function read(id, name) {
   const bytes = await readFile(join(directory, id, name));
   sources.push({ case: id, file: name, sha256: hash(bytes) });
   return bytes;
+}
+async function measureSvg(id, s, page) {
+  const name = `sheet-${String(s.number).padStart(3, "0")}.svg`,
+    bytes = await read(id, name);
+  const expected = report.value.sourceHashes.sheets.find(
+    (x) => x.case === id && x.sheet === s.number,
+  )?.svg.sha256;
+  assert.equal(hash(bytes), expected, "Strip SVG differs from strict capture");
+  await displaySheet(page, bytes.toString());
+  return {
+    measured: await page.evaluate(stripInkScript),
+    kinds: await page.evaluate(sheetInkKindScript),
+  };
 }
 async function measureView(id, page, packet, ir, v, index) {
   // Domain query selects native rows only. Native order/geometry are reconstructed separately.
@@ -56,39 +71,48 @@ async function measureView(id, page, packet, ir, v, index) {
       headings: [],
       notes: [],
       texts: [],
+      continuations: [],
+      bridgeLabels: [],
     };
   const sheets = packet.sheets.filter(
     (s) =>
-      s.view.kind === "terminals" &&
+      ["terminals", "terminal-strip"].includes(s.view.kind) &&
       (v.key
         ? s.sheetKey === `view:${v.key}` || s.sheetKey === v.key
         : s.view.title === table.title),
   );
+  const sheetKinds = [];
   for (const s of sheets) {
-    const name = `sheet-${String(s.number).padStart(3, "0")}.svg`,
-      bytes = await read(id, name);
-    const expected = report.value.sourceHashes.sheets.find(
-      (x) => x.case === id && x.sheet === s.number,
-    )?.svg.sha256;
-    assert.equal(
-      hash(bytes),
-      expected,
-      "Strip SVG differs from strict capture",
-    );
-    await displaySheet(page, bytes.toString());
-    const measured = await page.evaluate(stripInkScript);
+    const { measured, kinds } = await measureSvg(id, s, page);
     for (const key of Object.keys(ink)) ink[key].push(...measured[key]);
+    sheetKinds.push(...kinds.map((k) => ({ sheet: s.number, ...k })));
   }
+  const checked = checkTerminalStrip(native, ink);
+  const findings = [
+    ...checked.findings,
+    ...sheetKinds.flatMap((k) =>
+      k.issues.map((issue) => ({ sheet: k.sheet, ...issue })),
+    ),
+  ];
   return {
     case: id,
     view: index,
     title: table.title,
     sheets: sheets.map((s) => s.number),
-    ...checkTerminalStrip(native, ink),
+    ...checked,
+    findings,
+    assessment: findings.length ? "fail" : "pass",
+    sheetKinds,
   };
 }
 async function measureCase(id, page) {
-  if (!report.value.sourceHashes.sheets.some((s) => s.case === id))
+  if (!report.value.sourceHashes.sheets.some((s) => s.case === id)) {
+    const log = JSON.parse(await read(id, "cli.log"));
+    assert(
+      log.error?.code === "R006" ||
+        log.diagnostics?.some((d) => d.code === "R006"),
+      "No issued sheets without an R006 refusal",
+    );
     return [
       {
         case: id,
@@ -97,9 +121,10 @@ async function measureCase(id, page) {
         strict: false,
         repinNow: false,
         assessment: "not-measured",
-        reason: "No issued sheets; existing refusal",
+        reason: "R006 refusal: no issued sheets; not measured",
       },
     ];
+  }
   const packet = JSON.parse(await read(id, "packet.json")),
     ir = JSON.parse(await read(id, "ir.json")),
     request = JSON.parse(await read(id, "request.json")),
@@ -146,6 +171,8 @@ for (const row of rows)
   counts[row.assessment] = (counts[row.assessment] ?? 0) + 1;
 const receipt = {
   format: "terminal-strip-exposure/1",
+  evalsVersion: EVALS_VERSION,
+  captureEvalsVersion: report.value.evalsVersion,
   dq: "DQ-23",
   owner: "#336",
   strict: false,

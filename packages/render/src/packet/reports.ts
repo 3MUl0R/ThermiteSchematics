@@ -35,7 +35,7 @@ import type { DocumentRowDraft } from "./document-types.js";
 import {
   terminalStrip,
   stripRowReference,
-  stripDraft,
+  stripDrawing,
 } from "./terminal-strip.js";
 
 export function documentationDrafts(
@@ -45,7 +45,13 @@ export function documentationDrafts(
   page: PaperPage,
 ): RenderOutcome<Draft[]> {
   try {
-    return tableDrafts(ir, buildDocumentation(ir, request), presentation, page);
+    return tableDrafts(
+      ir,
+      buildDocumentation(ir, request),
+      presentation,
+      page,
+      true,
+    );
   } catch (e) {
     return failure(
       "invalid-packet",
@@ -87,6 +93,7 @@ function prepareReport(
   table: DocumentationTable,
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
+  projectStrip: boolean,
 ) {
   if (unprintableReportText(ir, table, presentation))
     return failure(
@@ -102,12 +109,7 @@ function prepareReport(
   const capacity = headingCapacity(title, presentation);
   if (capacity) return capacity;
   const fullBounds = bounds(title, page),
-    b = {
-      ...fullBounds,
-      w:
-        fullBounds.w -
-        (table.kind === "terminals" && table.rows.length ? 20 : 0),
-    };
+    b = fullBounds;
   if (b.w < 60 || b.h < 50)
     return failure(
       "unprintable-layout",
@@ -116,7 +118,7 @@ function prepareReport(
   let measured: ReturnType<typeof paginatedReportCells>, header: string[][];
   let strip: ReturnType<typeof terminalStrip>;
   try {
-    strip = terminalStrip(ir, table, fullBounds);
+    strip = projectStrip ? terminalStrip(ir, table, fullBounds) : undefined;
     measured = paginatedReportCells(ir, table, b.w, b.h, page, b.y);
     header = measured.split(table.columns, "header");
   } catch (error) {
@@ -132,9 +134,10 @@ export function tableDrafts(
   table: DocumentationTable,
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
+  projectStrip = false,
 ): RenderOutcome<Draft[]> {
   table = reserveWireLocations(table);
-  const prepared = prepareReport(ir, table, presentation, page);
+  const prepared = prepareReport(ir, table, presentation, page, projectStrip);
   if (!prepared.ok) return prepared;
   const { view, title, fullBounds, b, strip, measured, header } =
     prepared.value;
@@ -201,7 +204,11 @@ export function tableDrafts(
     content.push('<g id="document-header">');
     row(header, headerH, true);
     content.push("</g>");
-    if (strip) content.push(text(b.x + b.w + 2, b.y + 12, "Strip row", 2.5));
+    if (strip)
+      content.push(
+        text(b.x - 10, b.y + 12, "Strip", 2.5),
+        text(b.x - 10, b.y + 15.5, "row", 2.5),
+      );
   }
   function finish(end: number) {
     content.push(...reportNoteSvg(notes, b));
@@ -257,7 +264,7 @@ export function tableDrafts(
       stripRowReference(
         strip?.facts.terminals.get(source.key)?.ref,
         source.key,
-        b.x + b.w + 2,
+        b.x,
         y - height / 2 + 1,
       ),
     );
@@ -270,45 +277,9 @@ export function tableDrafts(
   if (!table.rows.length)
     content.push(text(b.x + 2, y + 7, "No matching records", 3));
   finish(table.rows.length);
-  appendStripReport(
-    ir,
-    table,
-    fullBounds,
-    bottom,
-    y,
-    drafts,
-    strip,
-    view,
-    title,
-  );
+  const firstDraft = drafts[0];
+  if (strip && firstDraft) firstDraft.terminalStripPlan = stripDrawing(strip);
   return { ok: true, value: drafts };
-}
-
-function appendStripReport(
-  ir: Readonly<ElectricalIr>,
-  table: DocumentationTable,
-  fullBounds: ReturnType<typeof bounds>,
-  bottom: number,
-  y: number,
-  drafts: Draft[],
-  strip: ReturnType<typeof terminalStrip>,
-  view: NormalizedDocumentationView,
-  title: SchematicTitleContext,
-) {
-  if (!strip) return;
-  let inline: ReturnType<typeof terminalStrip>;
-  try {
-    inline = terminalStrip(ir, table, {
-      ...fullBounds,
-      y: y + 6,
-      h: bottom - y - 9,
-    });
-  } catch {
-    /* A complete extra sheet is the bounded fallback. */
-  }
-  const last = drafts[drafts.length - 1];
-  if (inline && last) last.content += `\n${inline.content}`;
-  else drafts.push(stripDraft({ view, title }, strip.content));
 }
 
 /** Native query tables have no packet geometry; reserve endpoint cells here. */

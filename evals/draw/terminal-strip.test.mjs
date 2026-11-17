@@ -17,6 +17,8 @@ const empty = () => ({
   headings: [],
   notes: [],
   texts: [],
+  continuations: [],
+  bridgeLabels: [],
 });
 beforeAll(async () => {
   const c = await compileProject("examples/motor-starter");
@@ -115,4 +117,47 @@ it("rejects missing bridge ink while the native UID attribute remains", async ()
       (f) => f.kind === "strip-bridge-geometry",
     ),
   ).toBe(true);
+});
+
+it("measures reciprocal native continuations and split jumper ends across actual strip sheets", async () => {
+  const { longStrip } =
+    await import("../../packages/render/test/terminal-strip-pagination-fixture.ts");
+  const { ir } = longStrip(),
+    r = await renderSchematicPacket(ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "letter", orientation: "landscape" },
+      index: true,
+      references: false,
+      views: [
+        { format: "documentation-view-request/0.1", kind: "bom" },
+        {
+          format: "documentation-view-request/0.1",
+          kind: "terminals",
+          device: "XT-LONG",
+        },
+      ],
+    });
+  if (!r.ok) throw Error(JSON.stringify(r.error));
+  const collected = empty();
+  for (const s of r.value.sheets.filter((s) =>
+    ["terminals", "terminal-strip"].includes(s.view.kind),
+  )) {
+    await displaySheet(page, embedPrintableFont(s.svg));
+    const m = await page.evaluate(stripInkScript);
+    for (const key of Object.keys(collected)) collected[key].push(...m[key]);
+  }
+  const n = nativeStrip(ir, ["native-strip"]);
+  expect(collected.continuations.length).toBeGreaterThan(0);
+  expect(checkTerminalStrip(n, collected).findings).toEqual([]);
+  for (const mutate of [
+    (x) => x.continuations.pop(),
+    (x) =>
+      (x.continuations[0].text =
+        "XT-LONG continued on sheet 99.D6 at terminal invented"),
+    (x) => x.bridges.pop(),
+  ]) {
+    const changed = structuredClone(collected);
+    mutate(changed);
+    expect(checkTerminalStrip(n, changed).assessment).toBe("fail");
+  }
 });

@@ -1,3 +1,4 @@
+import { appendTerminalStrips } from "./terminal-strip.js";
 import { inlineAssemblyDocument } from "./document-assembly-inline.js";
 import type {
   ElectricalIr,
@@ -182,7 +183,8 @@ export function appendDocumentCompanions(
   let dependencies: DocumentDependency[] = [];
   try {
     dependencies = documentDependencies(ir, drafts, presentation);
-    if (!dependencies.length) return { ok: true, value: [...drafts] };
+    if (!dependencies.length)
+      return { ok: true, value: appendTerminalStrips([...drafts]) };
     const printed = issuedDocuments(
       ir,
       drafts,
@@ -220,7 +222,7 @@ export function appendDocumentCompanions(
         );
     }
     assertClosed(ir, result, dependencies, page, presentation);
-    return { ok: true, value: result };
+    return { ok: true, value: appendTerminalStrips(result) };
   } catch (error) {
     return failure(
       "unprintable-layout",

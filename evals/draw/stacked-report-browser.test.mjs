@@ -95,8 +95,8 @@ it("ordinary tables still require one painted rectangle per column", async () =>
 });
 
 it.each([
-  { project: "conveyor-line", stacked: false, pages: 19, wireParts: 4 },
-  { project: "machine-demo", stacked: true, pages: 36, wireParts: 5 },
+  { project: "conveyor-line", stacked: false, pages: 20, wireParts: 4 },
+  { project: "machine-demo", stacked: true, pages: 37, wireParts: 5 },
 ])(
   "independently measures the issued $project wire fields (stacked=$stacked)",
   async ({ project, stacked, pages, wireParts }) => {

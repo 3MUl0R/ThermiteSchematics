@@ -1,11 +1,53 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { parseHTML } from "linkedom";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "@thermite/render";
 import { repositoryRoot, type FactModule } from "./harness.js";
 const module: FactModule = {
   facts: [
+    {
+      claim:
+        "Terminal plans automatically link graphical strips to inventory rows with Tn/Rn references.",
+      async check() {
+        const compiled = await compileProject(
+          join(repositoryRoot, "examples/motor-starter"),
+        );
+        if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+        const result = await renderSchematicPacket(compiled.ir, {
+          format: "schematic-packet-request/0.1",
+          index: false,
+          views: [
+            {
+              format: "documentation-view-request/0.1",
+              kind: "terminals",
+              device: "TB1",
+            },
+          ],
+        });
+        if (!result.ok) throw Error(JSON.stringify(result.error));
+        const doc = parseHTML(
+          result.value.sheets.map((s) => s.svg).join("\n"),
+        ).document;
+        const terminals = [...doc.querySelectorAll("[data-strip-terminal]")];
+        const rows = [...doc.querySelectorAll("[data-strip-row]")];
+        expect(terminals.length).toBeGreaterThan(0);
+        expect(rows.length).toBe(terminals.length);
+        for (const t of terminals) {
+          const ref = t.getAttribute("data-strip-ref");
+          expect(ref).toMatch(/^T[1-9][0-9]*\/R[1-9][0-9]*$/u);
+          expect(
+            rows.some(
+              (r) =>
+                r.getAttribute("data-strip-row") ===
+                  t.getAttribute("data-strip-terminal") &&
+                r.getAttribute("data-strip-ref") === ref,
+            ),
+          ).toBe(true);
+        }
+      },
+    },
     {
       claim:
         "Packets may append required companion inventories; requested filters stay unchanged.",

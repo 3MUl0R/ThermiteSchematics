@@ -40,6 +40,11 @@ export function nativeStrip(ir, deviceUids) {
     )
     .map((j) => ({
       uid: j.uid,
+      name: j.designation ?? `Jumper ${j.uid}`,
+      peers: j.endpoints.map(
+        (e) =>
+          `${ir.devices.find((d) => d.uid === e.terminal.deviceUid).designation}.${e.terminal.terminalKey}`,
+      ),
       ends: j.endpoints.map((e) => terminalKey(e.terminal)),
     }));
   const incidences = [];

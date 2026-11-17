@@ -59,6 +59,15 @@ assessment after real SVG remeasurement. No corpus case or pin is added.
 The 5.23 full checkpoint is replayed before adoption, per scorecard §2; 5.23
 summaries remain readable with their complete counters.
 
+Version **5.25** adds independent strip-only sheet classification and measured
+strip text/geometry exposure. This remains **non-strict**: current table-only
+DQ-23 observations and pins are unchanged. Report sheets retain their complete
+header, shaping and no-report-text guards. Strip-only sheets instead need
+visible terminal bodies and text at least 2.5 mm, and retain the same shaping
+bounds; missing/hidden ink fails explicitly. Native terminal/jumper coverage and
+reciprocal continuation destinations are checked in the separate exposure.
+Complete 5.23 summaries remain readable.
+
 The #336 terminal-strip oracle is a separate **non-strict exposure** check:
 
 ```sh

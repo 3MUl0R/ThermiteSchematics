@@ -714,6 +714,30 @@
       "codes": ["R006"]
     },
     {
+      "id": "packages/render/src/packet/reports.ts:prepareReport:factory-call:1",
+      "path": "packages/render/src/packet/reports.ts",
+      "owner": "prepareReport",
+      "kind": "factory-call",
+      "factory": "packages/render/src/packet/errors.ts:failure",
+      "codes": ["R006"]
+    },
+    {
+      "id": "packages/render/src/packet/reports.ts:prepareReport:factory-call:2",
+      "path": "packages/render/src/packet/reports.ts",
+      "owner": "prepareReport",
+      "kind": "factory-call",
+      "factory": "packages/render/src/packet/errors.ts:failure",
+      "codes": ["R006"]
+    },
+    {
+      "id": "packages/render/src/packet/reports.ts:prepareReport:factory-call:3",
+      "path": "packages/render/src/packet/reports.ts",
+      "owner": "prepareReport",
+      "kind": "factory-call",
+      "factory": "packages/render/src/packet/errors.ts:failure",
+      "codes": ["R006"]
+    },
+    {
       "id": "packages/render/src/packet/reports.ts:tableDrafts:factory-call:1",
       "path": "packages/render/src/packet/reports.ts",
       "owner": "tableDrafts",
@@ -739,30 +763,6 @@
     },
     {
       "id": "packages/render/src/packet/reports.ts:tableDrafts:factory-call:4",
-      "path": "packages/render/src/packet/reports.ts",
-      "owner": "tableDrafts",
-      "kind": "factory-call",
-      "factory": "packages/render/src/packet/errors.ts:failure",
-      "codes": ["R006"]
-    },
-    {
-      "id": "packages/render/src/packet/reports.ts:tableDrafts:factory-call:5",
-      "path": "packages/render/src/packet/reports.ts",
-      "owner": "tableDrafts",
-      "kind": "factory-call",
-      "factory": "packages/render/src/packet/errors.ts:failure",
-      "codes": ["R006"]
-    },
-    {
-      "id": "packages/render/src/packet/reports.ts:tableDrafts:factory-call:6",
-      "path": "packages/render/src/packet/reports.ts",
-      "owner": "tableDrafts",
-      "kind": "factory-call",
-      "factory": "packages/render/src/packet/errors.ts:failure",
-      "codes": ["R006"]
-    },
-    {
-      "id": "packages/render/src/packet/reports.ts:tableDrafts:factory-call:7",
       "path": "packages/render/src/packet/reports.ts",
       "owner": "tableDrafts",
       "kind": "factory-call",

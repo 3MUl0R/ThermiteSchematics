@@ -977,5 +977,7 @@ inventory. Each terminal keeps its native device UID/terminal key; every bridge
 keeps its native jumper UID. Tn/Rn references appear on both the strip and its
 inventory row. Authored order is preserved; missing order, dimensions and
 hardware stay visibly unspecified. Location groups do not assign installation
-sides. The strip uses free space after the inventory when it fits, otherwise at
-most one extra terminal-plan sheet, with text of at least 2.5 mm.
+sides. Requested strips paginate at device boundaries and split oversized devices between
+terminals. Reciprocal device/terminal markers and explicit jumper stubs name the
+final sheet.zone. The measured strip can span sheets, with text of at least
+2.5 mm. Generated supplementary inventories retain their native tables.

@@ -1,206 +1,206 @@
-import type { ElectricalIr } from "@thermite/compiler";
+import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { DocumentationTable } from "@thermite/query";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { measureText } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
-import { wrapReportCell } from "./report-wrapping.js";
+import { stripFacts, stripTerminalKey } from "./terminal-strip-facts.js";
 import {
-  stripFacts,
-  stripTerminalKey,
-  type StripFacts,
-} from "./terminal-strip-facts.js";
-import { line, n, text } from "./svg.js";
-import type { DrawingBounds, Draft } from "./types.js";
+  fragmentAnchors,
+  paginateStrip,
+  stripLines,
+  type StripFragment,
+  type StripLabel,
+  type StripPlan,
+  type StripRow,
+} from "./terminal-strip-layout.js";
+import { n, text } from "./svg.js";
+import { bounds, zone } from "./page.js";
+import type { DrawingBounds, Draft, PaperPage } from "./types.js";
 
-type Group = StripFacts["groups"][number];
-function labelLines(value: string, width: number) {
-  return wrapReportCell(value, width, 2.5, [], []);
+export type StripDrawing = Pick<
+  StripPlan,
+  "bounds" | "notes" | "columns" | "pages"
+>;
+export interface TerminalStripSheet {
+  plan: StripDrawing;
+  page: number;
 }
-function measuredGroup(group: Group, facts: StripFacts, width: number) {
-  const bridges = facts.bridges.filter(
-    (j) => j.endpoints[0].terminal.deviceUid === group.device.uid,
-  );
-  const terminalW = Math.max(
-    16,
-    ...group.terminals.map((t) => measureText(t.id.terminalKey, 2.5).width + 4),
-  );
-  const gutter = bridges.length * 4 + 4;
-  const labelW = (width - terminalW - gutter - 18) / 2;
-  if (labelW < 16) throw Error("Terminal strip labels need wider paper.");
-  const heading = labelLines(
-    `${group.device.designation} — ${group.ordered ? "authored order" : "order unspecified; declaration listing"}`,
-    width,
-  );
-  const rows = group.terminals.map((t) => {
-    const sides = [true, false].map((same) =>
-      t.incidences
-        .filter((i) => i.sameLocation === same)
-        .map((i) => ({ ...i, lines: labelLines(i.label, labelW) })),
-    );
-    const count = Math.max(
-      ...sides.map((s) => s.reduce((sum, i) => sum + i.lines.length, 0)),
-    );
-    return { terminal: t, sides, height: Math.max(10, count * 3.5 + 3) };
-  });
-  const legend = bridges.flatMap((j, i) =>
-    labelLines(`B${i + 1}: ${j.designation ?? `Jumper ${j.uid}`}`, width),
-  );
-  const headerH = heading.length * 3.5 + 7;
-  return {
-    group,
-    bridges,
-    terminalW,
-    gutter,
-    labelW,
-    heading,
-    rows,
-    legend,
-    headerH,
-    height:
-      headerH +
-      rows.reduce((s, r) => s + r.height, 0) +
-      legend.length * 3.5 +
-      4,
-    width,
-  };
+type Locate = (key: string) => { sheet: number; zone: string };
+const destination = (where: ReturnType<Locate>) =>
+  `${String(where.sheet).padStart(2, "0")}.${where.zone}`;
+function bridgePeer(label: StripLabel): TerminalId {
+  if (!label.peer) throw Error("Missing native jumper peer");
+  return label.peer;
 }
-type Measured = ReturnType<typeof measuredGroup>;
-function placeGroups(facts: StripFacts, b: DrawingBounds, columns: number) {
-  const width = (b.w - (columns - 1) * 8) / columns;
-  const groups = facts.groups.map((g) => measuredGroup(g, facts, width));
-  const placed: { measured: Measured; x: number; y: number }[] = [];
-  let column = 0,
-    y = b.y;
-  for (const measured of groups) {
-    if (measured.height > b.h) return;
-    if (y + measured.height > b.y + b.h) {
-      column++;
-      y = b.y;
-    }
-    if (column >= columns) return;
-    placed.push({ measured, x: b.x + column * (width + 8), y });
-    y += measured.height + 5;
-  }
-  return placed;
-}
-function terminalSvg(
-  m: Measured,
-  row: Measured["rows"][number],
+function rowLabels(
+  part: StripFragment,
+  row: StripRow,
   x: number,
+  cy: number,
   y: number,
+  locate: Locate,
 ) {
-  const t = row.terminal,
-    cx = x + m.labelW + 8,
-    cy = y + row.height / 2;
-  const out = [
-    `<g data-strip-terminal="${attr(t.key)}" data-device-uid="${attr(t.id.deviceUid)}" data-terminal-key="${attr(t.id.terminalKey)}" data-strip-ref="${attr(t.ref)}" data-inventory-row="${attr(t.key)}">`,
-    `<rect x="${n(cx)}" y="${n(cy - 4)}" width="${n(m.terminalW)}" height="8" fill="#fff" stroke="#344054" stroke-width="0.35"/>`,
-    text(cx + m.terminalW / 2, cy - 0.5, t.id.terminalKey, 2.5, "middle", 700),
-    text(cx + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle"),
-    "</g>",
-  ];
+  const m = part.model,
+    out: string[] = [];
   row.sides.forEach((side, i) => {
     let baseline = y + 3.5;
-    const start = i === 0 ? cx : cx + m.terminalW;
-    const end = i === 0 ? cx - 5 : cx + m.terminalW + m.gutter + 5;
-    for (const incidence of side) {
-      out.push(
-        `<g data-strip-incidence="${attr(incidence.identity)}" data-strip-at="${attr(t.key)}">`,
-        line(start, cy, end, cy),
-      );
-      incidence.lines.forEach((value) => {
+    side.forEach((label, index) => {
+      const remote =
+        label.bridge &&
+        !part.rows.some(
+          (r) => r.terminal.key === stripTerminalKey(bridgePeer(label)),
+        );
+      const value =
+        label.label +
+        (remote
+          ? `; continued on sheet ${destination(locate(stripTerminalKey(bridgePeer(label))))}`
+          : "");
+      const lines = stripLines(value, m.labelW);
+      const start = i === 0 ? x : x + m.terminalW,
+        end = i === 0 ? x - 6 : x + m.terminalW + m.gutter + 6;
+      const anchor =
+        cy +
+        (index - (side.length - 1) / 2) *
+          Math.min(1, 4 / Math.max(1, side.length));
+      out.push(labelGroup(label, row.terminal.key, !!remote));
+      if (!label.bridge || remote)
+        out.push(
+          `<path d="M ${n(start)} ${n(anchor)} H ${n(i === 0 ? start - 3 : end - 3)} V ${n(baseline - 1)} H ${n(end)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
+        );
+      lines.forEach((line, j) =>
         out.push(
           text(
-            i === 0 ? x + m.labelW : end + 2,
-            baseline,
-            value,
+            i === 0 ? part.x + m.labelW : end + 2,
+            baseline + j * 3.5,
+            line,
             2.5,
             i === 0 ? "end" : "start",
           ),
-        );
-        baseline += 3.5;
-      });
+        ),
+      );
       out.push("</g>");
-    }
+      baseline += label.lines.length * 3.5;
+    });
   });
-  return { svg: out.join("\n"), x: cx, y: cy };
+  return out;
 }
-function groupSvg(m: Measured, x: number, y: number) {
-  const out = [`<g data-terminal-strip="${attr(m.group.device.uid)}">`];
-  m.heading.forEach((s, i) =>
-    out.push(text(x, y + 3 + i * 3.5, s, 2.5, "start", 700)),
+function labelGroup(label: StripLabel, at: string, remote: boolean) {
+  if (label.bridge)
+    return `<g ${remote ? `data-strip-jumper="${attr(label.bridge.uid)}" data-strip-jumper-end="${label.bridge.end}"` : `data-strip-bridge-label="${attr(label.bridge.uid)}"`} data-strip-at="${attr(at)}" data-strip-peer="${attr(stripTerminalKey(bridgePeer(label)))}">`;
+  return `<g data-strip-incidence="${attr(label.identity)}" data-strip-at="${attr(at)}">`;
+}
+function terminalSvg(
+  part: StripFragment,
+  row: StripRow,
+  y: number,
+  locate: Locate,
+) {
+  const m = part.model,
+    t = row.terminal,
+    x = part.x + m.labelW + 8,
+    cy = y + row.height / 2;
+  return [
+    `<g data-strip-terminal="${attr(t.key)}" data-device-uid="${attr(t.id.deviceUid)}" data-terminal-key="${attr(t.id.terminalKey)}" data-strip-ref="${attr(t.ref)}" data-inventory-row="${attr(t.key)}">`,
+    `<rect x="${n(x)}" y="${n(cy - 4)}" width="${n(m.terminalW)}" height="8" fill="#fff" stroke="#344054" stroke-width="0.35"/>`,
+    text(x + m.terminalW / 2, cy - 0.5, t.id.terminalKey, 2.5, "middle", 700),
+    text(x + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle"),
+    "</g>",
+    ...rowLabels(part, row, x, cy, y, locate),
+  ].join("\n");
+}
+function bridgeSvg(part: StripFragment) {
+  const anchors = new Map(fragmentAnchors(part).map((a) => [a.key, a]));
+  let laneIndex = 0;
+  return part.model.bridges
+    .flatMap((j, i) => {
+      const a = anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
+        b = anchors.get(stripTerminalKey(j.endpoints[1].terminal));
+      if (!a || !b) return [];
+      const edge = a.x + part.model.terminalW / 2,
+        lane = edge + 6 * ++laneIndex;
+      return [
+        `<g data-strip-jumper="${attr(j.uid)}"><path d="M ${n(edge)} ${n(a.y)} H ${n(lane)} V ${n(b.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
+        text(lane, Math.min(a.y, b.y) - 2, `B${i + 1}`, 2.5, "middle"),
+        "</g>",
+      ];
+    })
+    .join("\n");
+}
+function orderMarker(
+  part: StripFragment,
+  direction: "from" | "on",
+  y: number,
+  locate: Locate,
+) {
+  const target = direction === "from" ? part.from : part.to;
+  if (!target) return [];
+  const at =
+    direction === "from" ? part.rows[0]?.terminal : part.rows.at(-1)?.terminal;
+  const value = `${part.model.group.device.designation} continued ${direction} sheet ${destination(locate(target.key))} at terminal ${target.id.terminalKey}`;
+  return [
+    `<g data-strip-continuation="${direction}" data-strip-at="${attr(required(at, "Missing strip boundary").key)}" data-strip-target="${attr(target.key)}" data-device-uid="${attr(part.model.group.device.uid)}">`,
+    ...stripLines(value, part.model.width).map((line, i) =>
+      text(part.x, y + 3 + i * 3.5, line, 2.5),
+    ),
+    "</g>",
+  ];
+}
+function fragmentSvg(part: StripFragment, locate: Locate) {
+  const m = part.model,
+    out = [`<g data-terminal-strip="${attr(m.group.device.uid)}">`];
+  m.heading.forEach((line, i) =>
+    out.push(text(part.x, part.y + 3 + i * 3.5, line, 2.5, "start", 700)),
   );
-  out.push(
-    text(x, y + m.headerH - 2, "Same location", 2.5),
-    text(
-      x + m.labelW + 8 + m.terminalW + m.gutter + 7,
-      y + m.headerH - 2,
-      "Other / unknown location",
-      2.5,
+  const headingsY = part.y + m.heading.length * 3.5 + 4;
+  m.sideHeadings.forEach((lines, side) =>
+    lines.forEach((line, i) =>
+      out.push(
+        text(
+          side === 0
+            ? part.x
+            : part.x + m.labelW + 8 + m.terminalW + m.gutter + 8,
+          headingsY + i * 3.5,
+          line,
+          2.5,
+        ),
+      ),
     ),
   );
-  y += m.headerH;
-  const anchors = new Map<string, { x: number; y: number }>();
-  for (const row of m.rows) {
-    const terminal = terminalSvg(m, row, x, y);
-    out.push(terminal.svg);
-    anchors.set(row.terminal.key, terminal);
+  let y = part.y + m.headerH;
+  out.push(...orderMarker(part, "from", y, locate));
+  if (part.from) y += m.markerH;
+  for (const row of part.rows) {
+    out.push(terminalSvg(part, row, y, locate));
     y += row.height;
   }
-  m.bridges.forEach((j, i) => {
-    const a = required(
-      anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
-      "Missing jumper terminal",
-    );
-    const b = required(
-      anchors.get(stripTerminalKey(j.endpoints[1].terminal)),
-      "Missing jumper terminal",
-    );
-    const edge = a.x + m.terminalW,
-      lane = edge + 4 * (i + 1);
-    out.push(
-      `<g data-strip-jumper="${attr(j.uid)}"><path d="M ${n(edge)} ${n(a.y)} H ${n(lane)} V ${n(b.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
-      text(lane, Math.min(a.y, b.y) + 3, `B${i + 1}`, 2.5, "middle"),
-      "</g>",
-    );
-  });
-  m.legend.forEach((s, i) => out.push(text(x, y + 3 + i * 3.5, s, 2.5)));
-  return [...out, "</g>"].join("\n");
+  out.push(bridgeSvg(part), ...orderMarker(part, "on", y + 1, locate), "</g>");
+  return out.join("\n");
 }
-/** One complete schematic projection, bounded to one extra terminal-report sheet. */
+function stripContent(
+  plan: StripDrawing,
+  page: number,
+  title: string,
+  locate: Locate,
+) {
+  const b = plan.bounds;
+  return [
+    `<g data-sheet-kind="terminal-strip">`,
+    text(b.x, b.y + 3, `${title} — graphical strip`, 4, "start", 700),
+    ...(plan.pages[page] ?? []).map((part) => fragmentSvg(part, locate)),
+    ...plan.notes.map((line, i) =>
+      text(b.x, b.y + b.h - (plan.notes.length - 1 - i) * 3.5, line, 2.5),
+    ),
+    "</g>",
+  ].join("\n");
+}
 export function terminalStrip(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   b: DrawingBounds,
 ) {
-  if (table.kind !== "terminals" || !table.rows.length) return undefined;
-  const facts = stripFacts(ir, table);
-  const notes = labelLines(
-    "Schematic projection; hardware unspecified; dimensions unspecified. Location groups do not assign installation sides. Tn/Rn links each strip terminal to its inventory row.",
-    b.w,
-  );
-  const area = { ...b, y: b.y + 9, h: b.h - 13 - notes.length * 3.5 };
-  let placed: ReturnType<typeof placeGroups>;
-  for (const columns of [1, 2, 3]) {
-    try {
-      placed = placeGroups(facts, area, columns);
-    } catch {
-      continue;
-    }
-    if (placed) break;
-  }
-  if (!placed)
-    throw Error(
-      `Terminal strip ${JSON.stringify(table.title)} cannot fit one additional sheet at 2.5 mm; use larger paper or a narrower terminal selection.`,
-    );
-  const content = [
-    text(b.x, b.y + 3, `${table.title} — graphical strip`, 4, "start", 700),
-    ...placed.map((p) => groupSvg(p.measured, p.x, p.y)),
-    ...notes.map((s, i) =>
-      text(b.x, b.y + b.h - (notes.length - 1 - i) * 3.5, s, 2.5),
-    ),
-  ].join("\n");
-  return { content, facts };
+  return table.kind === "terminals" && table.rows.length
+    ? paginateStrip(stripFacts(ir, table), b)
+    : undefined;
 }
 export function stripRowReference(
   ref: string | undefined,
@@ -209,7 +209,7 @@ export function stripRowReference(
   y: number,
 ) {
   return ref
-    ? text(x, y, ref, 2.5).replace(
+    ? text(x - 2 - measureText(ref, 2.5).width, y, ref, 2.5).replace(
         "<text ",
         `<text data-strip-row="${attr(key)}" data-strip-ref="${attr(ref)}" `,
       )
@@ -217,14 +217,101 @@ export function stripRowReference(
 }
 export function stripDraft(
   base: Pick<Draft, "view" | "title">,
-  content: string,
+  plan: StripDrawing,
+  page: number,
 ): Draft {
   return {
     ...base,
-    content,
+    view: {
+      format: "documentation-view/0.1",
+      kind: "terminal-strip",
+      title: "title" in base.view ? base.view.title : "Terminal strip",
+    },
+    terminalStrip: {
+      plan: {
+        bounds: plan.bounds,
+        notes: plan.notes,
+        columns: plan.columns,
+        pages: plan.pages,
+      },
+      page,
+    },
+    drawingBounds: plan.bounds,
+    content: "",
     links: [],
     references: [],
     note: "Graphical strip; inventory references Tn/Rn",
     documentationTable: true,
   };
+}
+export function resolveTerminalStripLocations(
+  drafts: readonly Draft[],
+  page: PaperPage,
+) {
+  const locations = new Map<string, ReturnType<Locate>>();
+  const scope = (draft: Draft) =>
+    draft.navigationView?.key ?? JSON.stringify(draft.views ?? []);
+  drafts.forEach((draft, index) => {
+    const strip = draft.terminalStrip;
+    if (!strip) return;
+    for (const part of strip.plan.pages[strip.page] ?? [])
+      for (const anchor of fragmentAnchors(part))
+        locations.set(JSON.stringify([scope(draft), anchor.key]), {
+          sheet: index + 1,
+          zone: zone(
+            anchor.x,
+            anchor.y,
+            draft.drawingBounds ?? bounds(draft.title, page),
+          ),
+        });
+  });
+  for (const draft of drafts) {
+    const strip = draft.terminalStrip;
+    if (!strip) continue;
+    const locate: Locate = (key) =>
+      required(
+        locations.get(JSON.stringify([scope(draft), key])),
+        `Missing native strip destination ${key}`,
+      );
+    const content = stripContent(
+      strip.plan,
+      strip.page,
+      "title" in draft.view ? draft.view.title : "Terminal strip",
+      locate,
+    );
+    draft.content = draft.navigationView
+      ? `<g data-navigation-view="${attr(draft.navigationView.key)}">${content}</g>`
+      : content;
+  }
+}
+
+export function stripDrawing(plan: StripPlan): StripDrawing {
+  return {
+    bounds: plan.bounds,
+    notes: plan.notes,
+    columns: plan.columns,
+    pages: plan.pages,
+  };
+}
+/** Append only the requested projections after complete native inventories.
+ * Existing non-strip sheets keep their authored order and physical numbers. */
+export function appendTerminalStrips(drafts: Draft[]): Draft[] {
+  const strips: Draft[] = [];
+  for (const draft of drafts) {
+    const plan = draft.terminalStripPlan;
+    if (!plan) continue;
+    for (const [page] of plan.pages.entries())
+      strips.push({
+        ...stripDraft(draft, plan, page),
+        ...(draft.views ? { views: draft.views } : {}),
+        ...(draft.navigationView
+          ? { navigationView: draft.navigationView }
+          : {}),
+        ...(draft.navigationInputs
+          ? { navigationInputs: draft.navigationInputs }
+          : {}),
+        ...(draft.resolvedTitle ? { resolvedTitle: draft.resolvedTitle } : {}),
+      });
+  }
+  return [...drafts, ...strips];
 }

@@ -17,7 +17,7 @@ it("packs machine TB on21 including its M1/K1/K2 and LS1 compositions", async ()
   for (const v of request.views) if (v.flow) v.flow = "top-to-bottom";
   const r = await renderSchematicPacket(c.ir, request, c.presentation);
   if (!r.ok) throw Error(JSON.stringify(r.error));
-  expect(r.value.sheets).toHaveLength(21);
+  expect(r.value.sheets).toHaveLength(22);
   const pages = (designation: string) =>
     r.value.sheets.filter(
       (s) =>
@@ -56,7 +56,7 @@ it("keeps conveyor TB on11 with complete reciprocal continuations", async () => 
   };
   const r = await renderSchematicPacket(c.ir, request, c.presentation);
   if (!r.ok) throw Error(JSON.stringify(r.error));
-  expect(r.value.sheets).toHaveLength(11);
+  expect(r.value.sheets).toHaveLength(12);
   const ends = r.value.sheets.flatMap((sheet) =>
     sheet.continuations.map((end) => ({ sheet: sheet.number, ...end })),
   );
