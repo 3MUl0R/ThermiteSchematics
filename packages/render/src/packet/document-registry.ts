@@ -90,7 +90,8 @@ function checkedNativeRow(
   cache: ReturnType<typeof documentRowCache>,
 ) {
   const { tables, labels, headers, measurements } = cache;
-  const kind = "kind" in draft.view ? draft.view.kind : "unknown";
+  const kind =
+    draft.documentKind ?? ("kind" in draft.view ? draft.view.kind : "unknown");
   if (!labels.has(kind))
     labels.set(
       kind,
@@ -198,8 +199,13 @@ export function issuedDocuments(
       throw Error("Duplicate issued document row identity");
     documents.set(d.id, {
       ...d,
-      kind: "kind" in draft.view ? draft.view.kind : "unknown",
-      label: documentLabel("kind" in draft.view ? draft.view.kind : "unknown"),
+      kind:
+        draft.documentKind ??
+        ("kind" in draft.view ? draft.view.kind : "unknown"),
+      label: documentLabel(
+        draft.documentKind ??
+          ("kind" in draft.view ? draft.view.kind : "unknown"),
+      ),
       ...(draft.autoDocumentOrigin
         ? { autoOrigin: draft.autoDocumentOrigin }
         : { authoredOrder: draft.views?.[0]?.viewIndex ?? i }),

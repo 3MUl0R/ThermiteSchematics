@@ -5,6 +5,7 @@ import BundledElk from "elkjs/lib/elk.bundled.js";
 import type { ELK, ElkNode } from "elkjs/lib/elk-api.js";
 import { parseHTML } from "linkedom";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
+import { buildConnectorAssemblyInventory } from "@thermite/query";
 import {
   prepareConnectorAssemblyDrawing,
   type ConnectorAssemblyViewRequest,
@@ -164,7 +165,7 @@ describe("protective-cap packet pagination", () => {
     },
   );
 
-  it("keeps fitting view geometry and exact-selector port summaries unchanged", async () => {
+  it("keeps single-cap geometry and grows 1→3 sheets to close every omitted native port", async () => {
     const request: ConnectorAssemblyViewRequest = {
       format: "connector-assembly-view-request/0.1",
       assemblies: ["CAP-X01"],
@@ -175,10 +176,48 @@ describe("protective-cap packet pagination", () => {
       views: [request],
     });
     if (!result.ok) throw new Error(result.error.message);
-    expect(result.value.sheets).toHaveLength(1);
+    // The original one-sheet view omitted eleven native port statuses. Their
+    // complete measured inventory needs two same-paper companion sheets.
+    expect(result.value.sheets).toHaveLength(3);
     expect(result.value.sheets[0]!.svg).toContain(original.content);
     expect(result.value.sheets[0]!.view.title).not.toContain("Part ");
-    expect(result.value.sheets[0]!.svg).toContain("11 other ports: schedule");
+    expect(result.value.sheets[0]!.svg).toContain(
+      "11 additional connector ports",
+    );
+    expect(result.value.sheets[0]!.svg).not.toContain("other ports: schedule");
+    const selected = original.topologyCoverage;
+    if (!selected) throw Error("Missing native single-cap coverage");
+    const omitted = buildConnectorAssemblyInventory(ir).ports.filter(
+      (port) =>
+        selected.deviceUids.includes(port.deviceUid) &&
+        !selected.ports.some(
+          (p) => p.deviceUid === port.deviceUid && p.portKey === port.key,
+        ),
+    );
+    expect(omitted).toHaveLength(11);
+    const rows =
+      result.value.navigation?.documents.flatMap((d) => d.rows) ?? [];
+    for (const port of omitted) {
+      const matching = rows.filter((r) =>
+        r.facts.some(
+          (f) =>
+            f.kind === "connector-port-status" &&
+            f.deviceUid === port.deviceUid &&
+            f.portKey === port.key,
+        ),
+      );
+      expect(matching.length).toBeGreaterThan(0);
+      for (const row of matching) {
+        expect(row.columns).toEqual(
+          expect.arrayContaining(["identity", "endpoints", "status"]),
+        );
+        expect(
+          parseHTML(result.value.sheets[row.sheet - 1]?.svg ?? "")
+            .document.getElementById(row.primitiveId)
+            ?.getAttribute("data-report-row"),
+        ).toBe(row.nativeKey);
+      }
+    }
     expect(
       result.value.coverage.topology.counts.connectorPorts.represented,
     ).toBe(2);

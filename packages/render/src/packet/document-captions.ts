@@ -1,3 +1,5 @@
+import { packedPortCaptions } from "./document-port-captions.js";
+import { assemblyPortPointers } from "./document-assembly-pointers.js";
 import type {
   ElectricalIr,
   CompiledProjectPresentation,
@@ -39,33 +41,32 @@ function captionSheet(
   const claims = navigation.reservations
     .filter((r) => r.allocatedMm?.sheet === sheet.number)
     .map((r) => required(r.allocatedMm, "Missing navigation claim").rect);
-  const ink = needs
-    .map((need) => {
-      if (!standalone && missingDocumentFacts(need, documents).length)
-        throw new DocumentDependencyError(
-          `Unresolved document promise at sheet ${need.owner.sheet}: ${need.subject}`,
-          [need],
-        );
-      need.resolution = standalone ? [] : resolveDocumentNeed(need, documents);
-      const placed = placeDocumentCaption(
-        ir,
-        need,
-        documents,
-        field,
-        result,
-        claims,
-        standalone,
+  if (draft.inlineDocumentBounds) claims.push(draft.inlineDocumentBounds);
+  const ports = standalone
+    ? []
+    : needs.filter((n) => n.need === "connector-port-status");
+  const other = needs.filter((n) => !ports.includes(n));
+  let ink = captionNeeds(
+    ir,
+    result,
+    field,
+    other,
+    documents,
+    claims,
+    standalone,
+  );
+  for (const need of ports) {
+    if (missingDocumentFacts(need, documents).length)
+      throw new DocumentDependencyError(
+        `Unresolved document promise at sheet ${sheet.number}: ${need.subject}`,
+        [need],
       );
-      claims.push(
-        required(placed.slot.allocatedMm, "Missing document caption slot").rect,
-        ...(placed.slot.leader ? [placed.slot.leader.rect] : []),
-      );
-      return documentCaptionInk(need, placed.slot, {
-        form: placed.form,
-        ...("groups" in placed ? { groups: placed.groups } : {}),
-      });
-    })
-    .join("");
+    need.resolution = resolveDocumentNeed(need, documents);
+  }
+  const packed = packedPortCaptions(ports, documents, field, result, claims);
+  ink += packed
+    ? packed.svg
+    : captionNeeds(ir, result, field, ports, documents, claims, standalone);
   result.svg = result.svg.replace(/<\/svg>(\s*)$/, `${ink}</svg>$1`);
   return result;
 }
@@ -94,7 +95,7 @@ export function finalizeDocuments(
     ),
   );
   return {
-    sheets: result,
+    sheets: assemblyPortPointers(ir, drafts, result, page, dependencies),
     navigation: {
       ...navigation,
       documentFormat: "issued-documents/1",
@@ -110,4 +111,42 @@ export function finalizeDocuments(
         })),
     },
   };
+}
+
+function captionNeeds(
+  ir: Readonly<ElectricalIr>,
+  sheet: RenderedSheet,
+  field: import("../device-legend/geometry.js").Rect,
+  needs: readonly DocumentDependency[],
+  documents: readonly IssuedDocument[],
+  claims: import("../device-legend/geometry.js").Rect[],
+  standalone: boolean,
+) {
+  return needs
+    .map((need) => {
+      if (!standalone && missingDocumentFacts(need, documents).length)
+        throw new DocumentDependencyError(
+          `Unresolved document promise at sheet ${need.owner.sheet}: ${need.subject}`,
+          [need],
+        );
+      need.resolution = standalone ? [] : resolveDocumentNeed(need, documents);
+      const placed = placeDocumentCaption(
+        ir,
+        need,
+        documents,
+        field,
+        sheet,
+        claims,
+        standalone,
+      );
+      claims.push(
+        required(placed.slot.allocatedMm, "Missing document caption slot").rect,
+        ...(placed.slot.leader ? [placed.slot.leader.rect] : []),
+      );
+      return documentCaptionInk(need, placed.slot, {
+        form: placed.form,
+        ...("groups" in placed ? { groups: placed.groups } : {}),
+      });
+    })
+    .join("");
 }

@@ -32,9 +32,16 @@ source-note identity, not a browser-generated DOM ordinal:
   part. A changed partition may change the logical part's source scope.
 - Direct loop: `loop-core-details` and, when applicable,
   `loop-assembly-pin-maps` within the resolved selected view.
+- Connector assemblies: `assembly-reasons` on each native relation part, and
+  `connector-port-status/` plus JSON `[deviceUid, portKey]` for ports drawn
+  nowhere in the issued packet. A drawn port on another part has its own named
+  sheet.zone pointer.
 
 A duplicate source-note identity within one selected view refuses; it cannot
-silently erase an obligation. Repeated independent requests retain separate view
+silently erase an obligation. Native assembly reason/status notes may recur on
+different parts of that view. Their source-note id is shared and `owner.sheet`
+distinguishes the occurrences; every occurrence retains its own required facts
+and printed caption. Duplicates within one source part still refuse. Repeated independent requests retain separate view
 keys. Inserting earlier content changes locations without changing a note's id.
 
 ## Typed facts and semantic columns
@@ -50,6 +57,7 @@ may insert an electrical fact absent from the compiled source.
 | `conductor-incidence` | `element`, `end`, `terminal` | identity, endpoints, status |
 | `terminal-inventory` | `terminal` | identity, connections, status |
 | `port-link-status` | `deviceUid`, `portKey` | identity, endpoints, protocol, status |
+| `connector-port-status` | `deviceUid`, `portKey` | identity, endpoints, status |
 | `core-inventory` | `cableUid`, `conductorId` | identity, endpoints, status |
 | `assembly-pin-map` | `relationUid` | identity, endpoints, status, pin-map |
 
@@ -70,6 +78,12 @@ Canonical in-memory fact keys are JSON arrays with these entries, in order:
 - port: `[kind, deviceUid, portKey]`;
 - core: `[kind, cableUid, conductorId]`;
 - assembly: `[kind, relationUid]`.
+
+Occupied assembly rows supply the relation fact and the two real endpoint
+connector-port-status facts. Unoccupied connector rows supply only their native
+port-status fact and three semantic columns; their printed cells keep `--`,
+`Unoccupied` and `No assembly declared`. Caps retain their not-applicable
+mapping disposition and authored reason, with no electrical pin tuples.
 
 Object property insertion order cannot change these keys. The actual exported
 facts remain typed objects. Unconnected, unterminated, unassigned, unspecified,
@@ -168,7 +182,21 @@ SVG report headers have `id="sheet-N-document-header"`; row groups have
 `id="sheet-N-document-row-I"`. Cell groups have `data-report-column`,
 `data-column-name` and native cell rectangle attributes. Document ancestry has
 `data-document-id`; automatic ancestry also has `data-document-origin="auto"`.
-Standalone internal table drafts need not have a selected-view ancestry.
+Standalone internal table drafts need not have a selected-view ancestry. Inline
+assembly inventories carry `data-document-kind="assemblies"` on their document
+container while their enclosing sheet remains a connector-assembly view.
+
+Native assembly closure reuses sufficient issued rows first, then tries a bounded
+inline inventory on existing graphical source sheets. If the complete required
+rows and notes cannot fit there, a same-paper generated assembly schedule follows
+the source sheets. `autoOrigin.overflow` records the inline profile, required row
+keys, source sheets and failed measured attempts. The 100-sheet limit applies.
+Omitted-port captions retain each port's precise row destination; a packed block
+keeps their individual declarations and locators. Drawn-port pointers pair every
+named port with its own measured landing and use no inventory wording.
+Their compact form is `Port R1.X01 → 02.B3; Port R1.X02 → 03.C4.`:
+each port retains its own qualified identity and destination, with 2.5 mm text
+measured before bounded slot placement. A pointer never adds a graphical page.
 
 A dependency's `caption` has visible `text`, `primitiveId` and `rectMm` on
 `owner.sheet`. The corresponding SVG group carries `data-document-dependency`

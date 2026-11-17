@@ -10,6 +10,7 @@ export type DocumentFact =
       terminal: TerminalId;
     }
   | { kind: "terminal-inventory"; terminal: TerminalId }
+  | { kind: "connector-port-status"; deviceUid: string; portKey: string }
   | { kind: "port-link-status"; deviceUid: string; portKey: string }
   | { kind: "assembly-pin-map"; relationUid: string }
   | { kind: "core-inventory"; cableUid: string; conductorId: string };
@@ -88,7 +89,7 @@ export interface IssuedDocument {
   presentationDigest: string;
   revision: string;
   authoredOrder?: number;
-  autoOrigin?: { dependencyIds: readonly string[] };
+  autoOrigin?: GeneratedDocumentOrigin;
   rows: readonly IssuedDocumentRow[];
 }
 export interface DocumentIdentity {
@@ -113,4 +114,23 @@ export interface DocumentHeaderDraft {
   printedCells: readonly (readonly string[])[];
   primitiveId: string;
   rectMm: Rect;
+}
+
+export interface AssemblyInlineAttempt {
+  sheet: number;
+  widthMm: number;
+  neededHeightMm?: number;
+  availableMm: Rect;
+  reason: "vacancy" | "measurement";
+  message: string;
+}
+export interface AssemblyOverflowEvidence {
+  profile: "assembly-inline/1";
+  rowKeys: readonly string[];
+  sourceSheets: readonly number[];
+  attempts: readonly AssemblyInlineAttempt[];
+}
+export interface GeneratedDocumentOrigin {
+  dependencyIds: readonly string[];
+  overflow?: AssemblyOverflowEvidence;
 }

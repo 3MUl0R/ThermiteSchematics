@@ -94,6 +94,7 @@ function factShape(fact: DocumentNeedSeed["requiredFacts"][number]) {
     "conductor-incidence": "element,end,kind,terminal",
     "terminal-inventory": "kind,terminal",
     "port-link-status": "deviceUid,kind,portKey",
+    "connector-port-status": "deviceUid,kind,portKey",
     "core-inventory": "cableUid,conductorId,kind",
     "assembly-pin-map": "kind,relationUid",
   };

@@ -1,3 +1,4 @@
+import { assemblyFactRows } from "./document-assembly-facts.js";
 import { renderCache } from "./render-cache.js";
 import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
@@ -40,6 +41,7 @@ export function factKey(fact: DocumentFact): string {
         fact.terminal.deviceUid,
         fact.terminal.terminalKey,
       ]);
+    case "connector-port-status":
     case "port-link-status":
       return JSON.stringify([fact.kind, fact.deviceUid, fact.portKey]);
     case "core-inventory":
@@ -55,6 +57,7 @@ export const needColumns: Readonly<
 > = {
   "conductor-incidence": ["identity", "endpoints", "status"],
   "terminal-inventory": ["identity", "connections", "status"],
+  "connector-port-status": ["identity", "endpoints", "status"],
   "port-link-status": ["identity", "endpoints", "protocol", "status"],
   "assembly-pin-map": ["identity", "endpoints", "status", "pin-map"],
   "core-inventory": ["identity", "endpoints", "status"],
@@ -82,6 +85,7 @@ export function factReport(need: DocumentNeed): ReportKind {
       "conductor-incidence": "wires",
       "terminal-inventory": "terminals",
       "port-link-status": "network",
+      "connector-port-status": "assemblies",
       "assembly-pin-map": "assemblies",
       "core-inventory": "wires",
     } as const
@@ -102,6 +106,7 @@ export function factRowKey(fact: DocumentFact): string {
       return fact.relationUid;
     case "core-inventory":
       return JSON.stringify([fact.cableUid, fact.conductorId]);
+    case "connector-port-status":
     case "port-link-status":
       return JSON.stringify([fact.deviceUid, fact.portKey]);
   }
@@ -149,12 +154,7 @@ export function rowFacts(
     return { facts, columns: ["identity", "endpoints", "protocol", "status"] };
   }
   if (table.kind === "assemblies")
-    return {
-      facts: ir.relations
-        .filter((r) => r.assembly && r.uid === key)
-        .map((r) => ({ kind: "assembly-pin-map", relationUid: r.uid })),
-      columns: ["identity", "endpoints", "status", "pin-map"],
-    };
+    return assemblyFactRows(ir).get(key) ?? { facts: [], columns: [] };
   return { facts: [], columns: [] };
 }
 /** Remove only the query's internal lookup notes; preserve unrelated native notes. */
@@ -261,11 +261,19 @@ function* sourceCoreFacts(
 }
 
 function createRowFactsIndex(ir: Readonly<ElectricalIr>) {
+  let assemblies: ReturnType<typeof assemblyFactRows> | undefined;
   let rows: Map<string, SourceIncidence[]> | undefined,
     cores:
       | Map<string, Extract<DocumentFact, { kind: "core-inventory" }>[]>
       | undefined;
   return (table: DocumentationTable, key: string) => {
+    if (table.kind === "assemblies")
+      return (
+        (assemblies ??= assemblyFactRows(ir)).get(key) ?? {
+          facts: [],
+          columns: [],
+        }
+      );
     if (!rows) {
       const grouped = new Map<string, SourceIncidence[]>();
       for (const incidence of sourceIncidences(ir)) {
