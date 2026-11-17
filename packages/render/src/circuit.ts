@@ -555,7 +555,7 @@ async function layoutGroupUnchecked(
   const edges = cs.map((c, i) =>
     circuitGraphEdge(c, i, group, pins, selfLoops, hooks),
   );
-  const input = circuitGraphInput(children, edges, selfLoops, vertical);
+  const input = circuitGraphInput(children, edges, selfLoops, vertical, cs);
   const graph = await layoutCircuitGroup(
     input,
     run,

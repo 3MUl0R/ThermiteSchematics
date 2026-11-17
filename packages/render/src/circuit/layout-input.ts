@@ -4,6 +4,7 @@ import type { Diagnostic } from "@thermite/schema";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import type { DeviceNode, PhysicalConductor, Pin } from "./types.js";
+import { independentCircuitLandings } from "./landing-ports.js";
 export type LayoutGroup = {
   id: string;
   label?: string;
@@ -107,6 +108,7 @@ export function circuitGraphInput(
   edges: ElkExtendedEdge[],
   selfLoops: Set<number>,
   vertical: boolean,
+  conductors: readonly PhysicalConductor[],
 ) {
   const input: ElkNode = {
     id: "circuit",
@@ -149,5 +151,8 @@ export function circuitGraphInput(
     children,
     edges,
   };
-  return input;
+  return independentCircuitLandings(
+    input,
+    new Set(conductors.flatMap((c, i) => (c.jumper ? [] : [`e${i}`]))),
+  );
 }

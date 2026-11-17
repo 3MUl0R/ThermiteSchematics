@@ -1,4 +1,5 @@
 import { routePortAttributes } from "../layout/port-attributes.js";
+import { circuitRoutePin } from "./landing-ports.js";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import {
   escapeXmlText as xml,
@@ -140,14 +141,17 @@ export function assertCircuitEndpoints(
   points: Point[],
   state: CircuitRouteState,
 ) {
-  const { nodes, laidNodes, group } = state;
-  const expected = [e.sources[0], e.targets[0]].map((id) => {
-    const d = nodes.find((d) => d.pins.some((p) => p.id === id))!,
-      p = d.pins.find((p) => p.id === id)!,
-      l = laidNodes.get(d.id)!;
+  const { nodes, laidNodes, group, cs, key } = state;
+  const ports = [e.sources[0], e.targets[0]].map((id) =>
+    circuitRoutePin(id ?? "", nodes),
+  );
+  const expected = ports.map((p) => {
+    const l = laidNodes.get(p.node.id)!;
     return { x: l.x! + p.x, y: l.y! + p.y };
   });
   if (
+    JSON.stringify(ports.map((p) => key(p.pin.terminal)).sort()) !==
+      JSON.stringify(cs[Number(e.id.slice(1))]?.ends.map(key).sort()) ||
     Math.hypot(points[0]!.x - expected[0]!.x, points[0]!.y - expected[0]!.y) >
       0.01 ||
     Math.hypot(

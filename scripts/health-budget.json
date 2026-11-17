@@ -3,7 +3,7 @@
     "definiteAssignments": 1,
     "fileLines": 3000,
     "functionLines": 300,
-    "nonNullAssertions": 1003,
+    "nonNullAssertions": 1001,
     "skippedTests": 52
   },
   "definiteAssignments": {
@@ -700,7 +700,7 @@
     "packages/render/src/circuit.ts": 17,
     "packages/render/src/circuit/layout-drawing.ts": 9,
     "packages/render/src/circuit/layout-input.ts": 9,
-    "packages/render/src/circuit/layout-routes.ts": 49,
+    "packages/render/src/circuit/layout-routes.ts": 47,
     "packages/render/src/circuit/make-nodes.ts": 9,
     "packages/render/src/circuit/node-emission.ts": 2,
     "packages/render/src/circuit/node-symbols.ts": 13,
