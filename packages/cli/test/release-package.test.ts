@@ -51,6 +51,7 @@ import {
   assertUntrackedReleaseSources,
   assertCommittedMarkdownRejected,
   assertUndeclaredRuntimeRejected,
+  assertReleaseTreeOrdering,
 } from "../../../scripts/release-test-controls.mjs";
 import { verifyPrivateReleaseTarget } from "../../../scripts/verify-private-release-target.mjs";
 import {
@@ -1297,6 +1298,7 @@ describe("self-contained release package", () => {
     await assertUntrackedReleaseSources(repositoryRoot, sourceCommit);
     await assertCommittedMarkdownRejected(repositoryRoot, sourceCommit);
     await assertUndeclaredRuntimeRejected(repositoryRoot);
+    await assertReleaseTreeOrdering();
   });
 
   it("rejects a modified tracked release source", async () => {

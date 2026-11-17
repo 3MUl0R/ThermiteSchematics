@@ -6,7 +6,11 @@ import {
   buildFreshRelease,
   releaseInputsFromCommit,
 } from "./release-build.mjs";
-import { readGitObject } from "./release-common.mjs";
+import {
+  enumerateTree,
+  materializeFileMap,
+  readGitObject,
+} from "./release-common.mjs";
 import { collectThirdPartySource } from "./release-third-party-inventory.mjs";
 
 export async function assertUntrackedReleaseSources(
@@ -96,4 +100,24 @@ export async function assertUndeclaredRuntimeRejected(repositoryRoot) {
   ).rejects.toThrow(
     "PKG001 Unexpected runtime dependency 'release-undeclared-probe'.",
   );
+}
+
+export async function assertReleaseTreeOrdering() {
+  const temporaryRoot = await mkdtemp(
+    join(tmpdir(), "thermite-release-tree-order-"),
+  );
+  try {
+    const root = join(temporaryRoot, "dist");
+    const files = new Map([
+      ["documentation/index.js", Buffer.from("export {};\n")],
+      ["documentation.d.ts", Buffer.from("export {};\n")],
+    ]);
+    await expect(materializeFileMap({ root, files })).resolves.toBeUndefined();
+    expect((await enumerateTree(root)).map(({ path }) => path)).toEqual([
+      "documentation.d.ts",
+      "documentation/index.js",
+    ]);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: false });
+  }
 }
