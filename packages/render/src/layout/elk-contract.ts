@@ -2,6 +2,7 @@ import type { ELK as ElkApi, ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElkAdapterBuild } from "./elk-adapter.js";
 import { canonicalSerializable } from "../internal.js";
 import { createElkEngine } from "./elk-runtime.js";
+import { defaultElkMetadata } from "./elk-metadata.js";
 import {
   type ElkOptionAssignment,
   type ElkOptionMetadataSnapshot,
@@ -14,7 +15,9 @@ function invariant(condition: unknown, message: string): asserts condition {
 
 export async function validateElkRuntimeOptions(
   build: Readonly<ElkAdapterBuild>,
-  engine: ElkApi = createElkEngine(),
+  engine: Pick<ElkApi, "knownLayoutOptions"> = defaultElkMetadata(
+    createElkEngine(),
+  ),
 ): Promise<readonly ElkOptionMetadataSnapshot[]> {
   const targets: Record<ElkOptionAssignment["targetKind"], Set<string>> = {
     parent: new Set([build.graph.id]),
@@ -51,6 +54,18 @@ export async function validateElkRuntimeOptions(
   return validateOptionAssignmentsAgainstMetadata(
     await engine.knownLayoutOptions(),
     build.optionAssignments,
+  );
+}
+
+/** The adapter owns its default factory; injected engines retain their queries. */
+export function validateLayoutOptions(
+  build: Readonly<ElkAdapterBuild>,
+  engine: ElkApi,
+  injectedEngine?: ElkApi,
+) {
+  return validateElkRuntimeOptions(
+    build,
+    injectedEngine ?? defaultElkMetadata(engine),
   );
 }
 

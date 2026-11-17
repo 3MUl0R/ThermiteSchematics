@@ -28,7 +28,7 @@ import type {
   LayoutOptions,
 } from "elkjs/lib/elk-api.js";
 
-import { validateElkRuntimeOptions } from "./elk-contract.js";
+import { validateLayoutOptions } from "./elk-contract.js";
 export {
   validateElkRuntimeOptions,
   serializeElkAdapterForTest,
@@ -815,7 +815,7 @@ export async function layoutPresentationGraph(
   ) => {
     if (options.packetContinuations) reserveContinuationSources(candidate);
     const build = buildElkAdapterGraph(candidate, options.selected, recovery);
-    await validateElkRuntimeOptions(build, engine);
+    await validateLayoutOptions(build, engine, options.engine);
     const input = structuredClone(build.graph);
     applyLayoutSpacing(input, candidate, options);
     const output = await engine.layout(input);
