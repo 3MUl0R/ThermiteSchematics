@@ -20,7 +20,7 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
-Version **5.26** fixes #414's two latent navigation-oracle holes (CHECK7b),
+Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b),
 without changing current corpus rows or pins. Rooted power requests now have
 independent native topology coverage: conductor incidences and two-terminal
 power/protection functions connect the selected native load terminals to native
@@ -38,7 +38,7 @@ The #398 population forwards only shared native-part `*-unavailable` findings as
 infrastructure. Real drawing defects remain failures of the existing native-part
 DQ-08 rows, while per-port navigation is still judged independently, as pass or
 fail. Completely missing parts still diagnose unavailable selected port ink.
-Complete historical 5.25 summaries remain readable. This is checker maintenance,
+Complete historical 5.25 and 5.26 summaries remain readable. This is checker maintenance,
 not a new navigation convention or permission to re-pin. Positive, missing-ink,
 ambiguous-path, missing-data and cross-view controls supplement the existing
 navigation mutants; the compiled packing fixture is checked in both flows.
