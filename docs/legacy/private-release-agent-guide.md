@@ -1,5 +1,8 @@
 # Private 0.2.0 agent guide
 
+Historical record of the retired private npm tarball distribution. These
+procedures do not apply to current releases; use the [runtime package](../runtime-package.md).
+
 This is the verbatim §1–10 reference from the former root agent guide, for
 existing electrical projects using the authorized private `thermite-cli-0.2.0.tgz`
 and its isolated installation. It does not apply to source-alpha engine work or

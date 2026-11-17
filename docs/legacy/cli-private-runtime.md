@@ -1,5 +1,8 @@
 # Private runtime command reference
 
+Historical record of the retired private npm tarball distribution. These
+procedures do not apply to current releases; use the [runtime package](../runtime-package.md).
+
 Archived from the CLI README. For the current runtime and source workflows,
 see the [CLI reference](../../packages/cli/README.md).
 

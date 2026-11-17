@@ -68,7 +68,7 @@ for (const { name, description, directory } of suites) {
   for (const path of files) {
     const seconds = timings[path];
     process.stdout.write(
-      `  ${seconds === undefined ? "unmeasured" : `${seconds.toFixed(2)} s`}  ${path.slice(directory.length + 1)}${path.endsWith("release-package.test.ts") ? " (frozen; excluded from check)" : ""}\n`,
+      `  ${seconds === undefined ? "unmeasured" : `${seconds.toFixed(2)} s`}  ${path.slice(directory.length + 1)}\n`,
     );
   }
   process.stdout.write("\n");
