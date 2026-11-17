@@ -53,6 +53,67 @@ it("fills Letter companions with all eight atomic native cap rows at the existin
   expect(JSON.stringify(ir)).toBe(before);
 });
 
+it.each([
+  {
+    name: "Letter eight caps",
+    size: "letter",
+    views: 1,
+    pages: 2,
+    rows: [6, 2],
+    widths: [18.041, 24.952, 18.041, 18.041, 144.326],
+    height: 130.6,
+  },
+  {
+    name: "A3 full native inventory",
+    size: "a3",
+    views: 2,
+    pages: 1,
+    rows: [14],
+    widths: [45.5, 45.5, 45.5, 45.5, 182],
+    height: 183.4,
+  },
+])(
+  "prefers the smallest total row height when page counts tie: $name",
+  async (expected) => {
+    const result = await renderSchematicPacket(ir, {
+      ...request,
+      page: { size: expected.size, orientation: "landscape" },
+      layout: "compact",
+      views: request.views.slice(0, expected.views),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const schedules = result.value.sheets
+      .filter((s) => s.view.kind === "assemblies")
+      .map((s) => parseHTML(s.svg).document);
+    expect(schedules).toHaveLength(expected.pages);
+    expect(
+      schedules.map((d) => d.querySelectorAll("[data-report-row]").length),
+    ).toEqual(expected.rows);
+    const header = schedules[0]?.querySelector('[id$="document-header"]');
+    const cells = [...(header?.querySelectorAll("[data-report-column]") ?? [])];
+    expect(cells.map((c) => Number(c.getAttribute("data-cell-width")))).toEqual(
+      expected.widths,
+    );
+    const rows = schedules.flatMap((d) => [
+      ...d.querySelectorAll("[data-report-row]"),
+    ]);
+    // Count one measured header plus all native rows, as the tie-break does.
+    // Page counts alone cannot distinguish these real candidate allocations.
+    const total = rows.reduce(
+      (sum, row) =>
+        sum +
+        Number(
+          row
+            .querySelector("[data-cell-height]")
+            ?.getAttribute("data-cell-height"),
+        ),
+      Number(cells[0]?.getAttribute("data-cell-height")),
+    );
+    expect(total).toBeCloseTo(expected.height, 6);
+  },
+);
+
 it("does not buy density by splitting an ordinary native port state word", async () => {
   const result = await renderSchematicPacket(ir, {
     format: "schematic-packet-request/0.1",
