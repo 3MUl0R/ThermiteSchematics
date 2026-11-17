@@ -3,8 +3,7 @@ import { documents } from "./check4-fixture.mjs";
 import { documentObservations } from "./document-observations.mjs";
 import { reports } from "./checks.mjs";
 import { missingMarkerRow } from "./marker-missing.mjs";
-import { paintedItems } from "./pdf-painted.mjs";
-import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+import { paintedItems, PaintedPdfMeasurementError } from "./pdf-painted.mjs";
 const rows = (x) =>
   documentObservations({
     ...x,
@@ -94,6 +93,6 @@ it.each(["inventory", "association", "ambiguous"])(
         : [];
     expect(() =>
       paintedItems([item], kind === "inventory" ? [] : raw, glyphs, viewport),
-    ).toThrow(IdentifierMeasurementError);
+    ).toThrow(PaintedPdfMeasurementError);
   },
 );

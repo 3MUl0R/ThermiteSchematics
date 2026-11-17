@@ -1,4 +1,5 @@
 import { painted } from "./review-geometry.mjs";
+import { referenceClauses } from "./navigation-reference-clauses.mjs";
 export const escapeReference = (s) =>
   String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const hasReferenceName = (text, name) =>
@@ -33,11 +34,12 @@ export function referenceInk(g) {
     };
     bbox.w = Math.max(...rows.map((t) => t.bbox.x + t.bbox.w)) - bbox.x;
     bbox.h = Math.max(...rows.map((t) => t.bbox.y + t.bbox.h)) - bbox.y;
-    return rows
-      .map((t) => t.text)
-      .join(" ")
-      .split(/;|\n/u)
-      .filter(Boolean)
-      .map((text) => ({ element: rows[0].element, bbox, text, rows }));
+    // A printed tag header belongs to this measured annotation only. Row
+    // boundaries separate element/pointer clauses; they never pool targets.
+    return referenceClauses(rows, referenceTokens).map((clause) => ({
+      ...clause,
+      bbox,
+      rows,
+    }));
   });
 }

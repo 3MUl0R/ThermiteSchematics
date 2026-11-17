@@ -1,17 +1,13 @@
 import {
   portNavigationPopulation,
   visibleNativePort,
-  portId,
 } from "./port-navigation-source.mjs";
 import { device } from "./tranche4-source.mjs";
-import {
-  referenceTokens,
-  hasReferenceName,
-} from "./navigation-reference-ink.mjs";
+import { referenceTokens } from "./navigation-reference-ink.mjs";
+import { namedPortSubjects } from "./port-reference-ink.mjs";
 import { rowZones } from "./m3-zones.mjs";
 import { finding, painted } from "./review-geometry.mjs";
-function portClauses(part, source, ir) {
-  const tag = device(ir, source.deviceUid)?.designation;
+function portClauses(part, source, ir, selected) {
   const refs = (part.geometry.tranche4.partRefs ?? []).filter(
     (r) =>
       r.kind === "communication" &&
@@ -25,12 +21,12 @@ function portClauses(part, source, ir) {
     .flatMap((r) =>
       r.texts
         .filter(painted)
-        .map((t) => t.text)
-        .join(" ")
-        .split(/;|\n/u)
+        .flatMap((t) => t.text.split(/;|\n/u))
         .map((text) => ({ ...r, text })),
     )
-    .filter((r) => hasReferenceName(r.text, tag + "." + source.portKey));
+    .filter((r) =>
+      namedPortSubjects(r.text, selected, ir, part.view).includes(source),
+    );
 }
 export function portNavigationAudit(packet, geometries, ir, request) {
   const { parts, failures, selected } = portNavigationPopulation(
@@ -79,12 +75,13 @@ function inspectPortTarget(
 ) {
   const ink = visibleNativePort(target, source, ir),
     zones = rowZones(target.geometry, ink.bbox),
-    clauses = portClauses(part, source, ir);
+    clauses = portClauses(part, source, ir, selected);
   const expected = {
     sheet: part.sheet,
     view: part.view,
     sourcePart: part.part,
     deviceUid: source.deviceUid,
+    designation: device(ir, source.deviceUid)?.designation,
     portKey: source.portKey,
     targetPart: target.part,
     targetSheet: target.sheet,
@@ -112,29 +109,25 @@ function inspectPortTarget(
 
 function correctPortClause(c, part, source, target, selected, ir, zones) {
   const tokens = referenceTokens(c.text),
-    named = selected.filter(
-      (p) =>
-        p.view === part.view &&
-        hasReferenceName(
-          c.text,
-          device(ir, p.deviceUid)?.designation + "." + p.portKey,
-        ),
-    );
+    named = namedPortSubjects(c.text, selected, ir, part.view);
   const valid = (token) =>
-    source.targets.some(
-      (q) =>
-        token.part === q.part &&
-        token.sheet === q.sheet &&
-        rowZones(q.geometry, visibleNativePort(q, source, ir).bbox).includes(
-          token.zone,
-        ),
+    named.every((p) =>
+      p.targets.some(
+        (q) =>
+          (token.part === undefined || token.part === q.part) &&
+          token.sheet === q.sheet &&
+          rowZones(q.geometry, visibleNativePort(q, p, ir).bbox).includes(
+            token.zone,
+          ),
+      ),
     );
   return (
     named.length > 0 &&
-    named.every((p) => portId(p) === portId(source)) &&
+    named.includes(source) &&
+    named.every((p) => p.deviceUid === source.deviceUid) &&
     tokens.filter(
       (t) =>
-        t.part === target.part &&
+        (t.part === undefined || t.part === target.part) &&
         t.sheet === target.sheet &&
         zones.includes(t.zone),
     ).length === 1 &&

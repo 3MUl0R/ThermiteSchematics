@@ -22,8 +22,11 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Version **5.23** fixes #395: a missing identifier table keeps table-dependent
 report-placeholder pins as infrastructure, shared sheet furniture is checked
-once against the complete sheet, and PDF painted-identifier measurement guards
-raise the typed measurement error. Healthy corpus observations are unchanged;
+once against the complete nonempty sheet, and PDF painted measurement guards
+raise the typed identifier error only at the identifier-call boundary. Shared
+PDF metrics failures retain their own classification; programming errors
+propagate. Empty wires reports retain 5.22's lack of a zone-header obligation.
+Healthy corpus observations are unchanged;
 complete 5.22 reports remain readable. No expected markers are changed.
 
 The same pre-merge **5.23** adds two **non-strict exposure** oracles for #396
@@ -60,13 +63,23 @@ measured; these receipts do not certify HTML/PDF navigation.
 - #398 reconstructs selected communication-link endpoints from native IR and
   the request, then binds each device/port to its painted circle and printed
   port label. Every omitted, elsewhere drawn port needs its own named final
-  part/sheet.zone pointer, checked at that port's ink rather than the enclosing
+  sheet.zone pointer (with an optional, validated physical part prefix), checked
+  at that port's ink rather than the enclosing
   device body. Each part is checked independently, so reverse omissions fail.
   Unoccupied/unselected ports drawn nowhere create no fictitious link need.
   A selected endpoint with missing ink is explicit infrastructure.
 - The exposure parser accepts `DEVICE.function → 02.A1` (or the native terminal
-  set), and `DEVICE.PORT → P2/S02.A1`. Semicolons delimit independently named
-  clauses; multiple destinations for one identity are accepted. Several named
+  set), `DEVICE.PORT → P2/S02.A1`, and `DEVICE port PORT → 02.A1`.
+  Complete measured text rows, newlines and semicolons delimit clauses. Visual
+  wraps within an annotation join only until their printed pointer completes;
+  a fresh subject starts another clause even if the preceding pointer is missing.
+  A printed
+  `DEVICE:` header scopes later rows in the same measured annotation; per-row
+  element identities and destinations are never flattened. A grouped port
+  list such as `DEVICE port B1/B2/B3 → 02.D2` is allowed only when every named
+  native port has painted ink spanning that destination. A final sheet number
+  already identifies its physical part; an explicit part prefix must agree.
+  Multiple destinations for one identity are accepted. Several named
   identities with several anonymous pointers are ambiguous and fail. IDs on
   measured containers locate ink; exported target arrays, success flags and
   registry facts never authorize it. Broader compact caption grammars need a

@@ -82,6 +82,7 @@ export function reports(g, sheet, packet, table, furniture = true) {
 }
 export function reportFurniture(g, sheet) {
   if (
+    g.reportRows.length &&
     sheet.view?.kind === "wires" &&
     !g.texts.some((t) => /from.*sheet|to.*sheet|sheet.zone/i.test(t.text))
   )
