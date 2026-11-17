@@ -24,6 +24,7 @@ export interface SheetSlotRequest {
   preferBesideBelow?: boolean;
   families?: readonly NavigationPlacementFamily[];
   localityInkMm?: ReadonlyMap<string, Rect> | undefined;
+  fitPrintedInk?: boolean;
 }
 export class NavigationSlotFailure extends Error {
   constructor(
@@ -91,6 +92,7 @@ export function allocateNavigationSlots(
       options.preferBesideBelow,
       options.families,
       options.localityInkMm,
+      options.fitPrintedInk,
     );
     if (!result)
       throw new NavigationSlotFailure(
@@ -110,8 +112,8 @@ export function allocateNavigationSlots(
         },
       );
     const placedInk = options.localityInkMm?.get(result.shape.id);
-    obstacles.push(result.box);
-    texts.push(result.box);
+    obstacles.push(result.protectedBox);
+    texts.push(result.protectedBox);
     return {
       ...reservation,
       inkMm: result.shape.inkMm,

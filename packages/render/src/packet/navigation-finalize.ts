@@ -322,13 +322,17 @@ function sheetRequests(
     ].includes(annotation.role);
     const locality = symbolGeometry(
       owner,
-      mirrorService
+      mirrorService || annotation.role === "element-location"
         ? occurrences.filter((o) => annotation.ownerOccurrences.includes(o.id))
         : occurrences,
       sheet.svg,
       required(draft.drawingBounds, "Missing navigation field"),
       occurrences,
     );
+    if (annotation.role === "element-location")
+      locality.sourceAnchorsMm = occurrences
+        .filter((o) => annotation.ownerOccurrences.includes(o.id))
+        .map((o) => o.destination.anchorMm);
     if (annotation.role === "return" && annotation.ownerOccurrences.length > 1)
       locality.frameMm = required(
         unionInk(
@@ -375,6 +379,7 @@ function navigationRequest(
     ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
     preferBesideBelow: annotation.role === "mirror",
     localityGeometry: locality,
+    fitPrintedInk: annotation.role === "element-location",
     localityInkMm:
       annotation.role === "mirror"
         ? mirrorLocalityInk(annotation, reservation)
