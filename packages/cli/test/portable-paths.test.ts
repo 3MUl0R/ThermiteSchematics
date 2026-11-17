@@ -56,10 +56,13 @@ function sourceFiles(directory = root): string[] {
 }
 
 it("uses fileURLToPath for filesystem paths; pathname is reserved for HTTP URLs", () => {
-  // These three expressions inspect HTTP request paths or canonical HTTPS
-  // schema IDs. File URLs must be passed to fs directly or decoded by node:url.
+  // These expressions inspect HTTP request paths or canonical HTTPS schema
+  // IDs. File URLs must be passed to fs directly or decoded by node:url.
   const httpUses = [
     'evals/agent/capture-cli.mjs: new URL(req.url, "http://localhost").pathname',
+    "evals/agent/issue-lookup.mjs: url.pathname",
+    "evals/agent/issue-lookup.mjs: url.pathname",
+    "evals/agent/library-acquisition.mjs: url.pathname",
     "packages/schema/scripts/generate-types.mjs: url.pathname",
     "packages/schema/scripts/generate-types.mjs: new URL(id).pathname",
   ];

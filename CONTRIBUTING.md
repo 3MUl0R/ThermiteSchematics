@@ -84,11 +84,11 @@ integer-rounded. macOS defaults are precise. Captured differences reach about
 glyph-box width; these are observations, not universal bounds. Calibration tests opt into precise bounds;
 see the [platform evidence and measurement code](docs/platforms.md#browser-for-tests).
 
-Use `bun scripts/test.mjs <files>` for targeted tests after rebuilding. On macOS,
-`bunx vitest` is unsupported: it bypasses temporary-directory canonicalization.
-`TMPDIR` commonly lies under `/var`, a symlink to `/private/var`, and the source
-loader rejects symlink paths. The wrapper resolves `TMPDIR`, `TMP` and `TEMP`
-before creating fixtures. Use at most two workers on shared machines.
+Use `bun run test -- <files>` after rebuilding, with `VITEST_MAX_WORKERS=2` on
+shared machines. The wrapper canonicalizes macOS temp paths; `bunx vitest`
+bypasses it and is unsupported. With shared dependencies, add
+`--no-cache --configLoader=native`. Git paths follow `-C`:
+`git -C engine worktree add -b fix ../worktree HEAD` creates a sibling checkout.
 
 ## From local fix to pull request
 

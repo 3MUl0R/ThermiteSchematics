@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 // Port of the GI scorer, extended to independently verify both run boundaries.
-import { readFileSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { classifyToolCall, pathText, strings } from "./github-call.mjs";
+import { sourceRoots } from "./local-source.mjs";
+import { copiedContributorGuide } from "./contributor-policy.mjs";
 import { diff } from "./snapshot.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 const stable = (value) =>
@@ -73,6 +76,8 @@ export function score({
   actualWarnings = [],
   requiredTopics = [],
   allowedUnused = [],
+  allowedLibraryPaths = [],
+  guideCopy,
   preserveSource = false,
   undocumentedShapes = [],
   wallTimeMs = null,
@@ -95,7 +100,10 @@ export function score({
         (edit.path === "CLAUDE.md" && initial?.files?.["CLAUDE.md"]) ||
         /(?:^|\/)AGENTS\.md$/.test(edit.path)
       )
-        add("V3", { boundary, ...edit });
+        if (
+          !copiedContributorGuide(edit, { context, guideCopy, initial, after })
+        )
+          add("V3", { boundary, ...edit });
       if (edit.path === "electrical-system.lock.json")
         add("V2", { boundary, ...edit });
       if (protectedFiles.has(edit.path) && edit.change !== "created") {
@@ -244,6 +252,8 @@ export function score({
     if (!oldUnused.has(point) && !allowedUnused.includes(point))
       add("V7", { reason: "unused-without-user-basis", point });
   const sourceReads = [],
+    libraryAcquisitions = [],
+    issueLookups = [],
     documentReads = [],
     seenDocuments = new Set();
   const results = new Map(
@@ -251,82 +261,22 @@ export function score({
       .filter((e) => e.type === "tool-result")
       .map((e) => [e.id, e.output]),
   );
-  const strings = (value) =>
-    typeof value === "string"
-      ? [value]
-      : Array.isArray(value)
-        ? value.flatMap(strings)
-        : value && typeof value === "object"
-          ? Object.values(value).flatMap(strings)
-          : [];
-  const pathText = (text) =>
-    text
-      .replaceAll("\\", "/")
-      .replaceAll("/private/tmp/", "/tmp/")
-      .replaceAll("/private/var/", "/var/")
-      .toLowerCase();
-  const roots = engineRoots
-    .flatMap((root) => {
-      try {
-        return [root, realpathSync(root)];
-      } catch {
-        return [root];
-      }
-    })
-    .map(pathText);
-  const readPattern = roots.map(
-    (root) =>
-      new RegExp(
-        root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=[/\\s'\";)&\\]]|$)",
-      ),
-  );
-  const sourceUrl =
-    /(?:https?|ssh):\/\/(?:(?:git@)?github\.com\/[^/\s]+\/thermiteschematics(?=[/.?#\s'"\)]|$)|raw\.githubusercontent\.com\/[^/\s]+\/thermiteschematics\/|api\.github\.com\/repos\/[^/\s]+\/thermiteschematics(?:\/|$))/i;
+  const roots = sourceRoots(engineRoots);
   for (const event of normalized.events.filter((e) => e.type === "tool")) {
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
-    const values = strings(event.input),
-      input = values.join("\n"),
-      canonicalInput = pathText(input);
-    let readsSource =
-      readPattern.some((re) => re.test(canonicalInput)) ||
-      sourceUrl.test(input) ||
-      /git@github\.com:[^/\s]+\/thermiteschematics(?:\.git)?(?=[/\s'";)]|$)/i.test(
-        input,
-      ) ||
-      /\bgh\s+(?:repo\s+(?:clone|view)|api)\b[^\n]*\b[^/\s]+\/thermiteschematics(?:\.git)?(?=[/\s'";)]|$)/i.test(
-        input,
-      ) ||
-      (/\bgh\s+search\s+code\b/i.test(input) &&
-        !/(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))/.test(input)) ||
-      (/\bgh\s+(?:search\s+code|browse)\b/i.test(input) &&
-        /(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))[^/\s'";]+\/thermiteschematics(?=[/\s'";)]|$)/i.test(
-          input,
-        )) ||
-      (/\bgh\s+api\s+graphql\b/i.test(input) &&
-        (/(?:^|\s)(?:-F|--field)(?:=|\s+)[\w-]+=["']?thermiteschematics(?=[\s"';)]|$)/i.test(
-          input,
-        ) ||
-          /repository\s*\([^)]*\bname\s*:\s*\\?["']thermiteschematics\\?["']/i.test(
-            input,
-          ) ||
-          /(?:\brepo:|\brepository\s*[:=]\s*)[^/\s'";]+\/thermiteschematics(?=[\s'";)]|$)/i.test(
-            input,
-          )));
-    if (!readsSource)
-      for (const token of input.match(/(?:[a-zA-Z]:[\\/]|\/)[^\s'";&)]+/g) ??
-        [])
-        try {
-          if (
-            roots.some(
-              (root) =>
-                pathText(realpathSync(token)) === root ||
-                pathText(realpathSync(token)).startsWith(root + "/"),
-            )
-          )
-            readsSource = true;
-        } catch {}
-    if (context === "runtime" && readsSource)
-      sourceReads.push({ id: event.id, input });
+    const input = strings(event.input).join("\n");
+    const classified = classifyToolCall(event, {
+      engineRoots,
+      allowedLibraryPaths,
+    });
+    if (context === "runtime") {
+      if (classified.libraryAcquisition)
+        libraryAcquisitions.push({ id: event.id, input });
+      if (classified.class === "issue-lookup")
+        issueLookups.push({ id: event.id, input });
+      if (classified.class === "source-read")
+        sourceReads.push({ id: event.id, input });
+    }
     const guideCommand = /thermite[^\n]*\bguide\b/.test(input);
     const directPath =
       typeof event.input === "object"
@@ -415,6 +365,8 @@ export function score({
       "project guide loaded by CLI, successful guide stdout, and observed document-read output bytes; missing read outputs remain unmeasured",
     documentReads,
     sourceReads: sourceReads.length,
+    libraryAcquisitions,
+    issueLookups,
     retrieval: topics,
     finalMessage: normalized.finalMessage,
   };

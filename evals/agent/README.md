@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.8.0)
+# Fresh-agent evaluator (E2 v1.18.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -207,16 +207,16 @@ a reviewed scorer change and eval-version bump.
 | Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                       | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                        |
 | Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                 | “Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never hand-author schematic geometry”.                 |
 
-| Rule | Meaning                                                                                                                                                                                                                                   |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except an E002/E003 before-state JSON repair. Includes run boundaries, deletions and child writes.                                                     |
-| V2   | Library lock edited except by successful CLI `lock`.                                                                                                                                                                                      |
-| V3   | Project instructions/import wrapper changed after the baseline. Successful `init` may create instructions for a new project.                                                                                                              |
-| V4   | Apply has no identical successful earlier dry run. Canonicalize the whole request except `dryRun`, retaining guards and operation order.                                                                                                  |
-| V5   | Runtime tree changed, per call or across the run.                                                                                                                                                                                         |
-| V6   | Invented facts; rubric only.                                                                                                                                                                                                              |
-| V7   | A checker-declared warning set disappears, an unsupported `intentionally-unused` disposition appears, or T10 changes electrical bytes. Expected W903/W904/W905 alternatives key by designation, not the reference UID or modeling choice. |
-| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. Source context permits reads.                                                                                                              |
+| Rule | Meaning                                                                                                                                                                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except an E002/E003 before-state JSON repair. Includes run boundaries, deletions and child writes.                                                                                             |
+| V2   | Library lock edited except by successful CLI `lock`.                                                                                                                                                                                                                              |
+| V3   | Project instructions/import wrapper changed after the baseline. Successful `init` may create instructions for a new project.                                                                                                                                                      |
+| V4   | Apply has no identical successful earlier dry run. Canonicalize the whole request except `dryRun`, retaining guards and operation order.                                                                                                                                          |
+| V5   | Runtime tree changed, per call or across the run.                                                                                                                                                                                                                                 |
+| V6   | Invented facts; rubric only.                                                                                                                                                                                                                                                      |
+| V7   | A checker-declared warning set disappears, an unsupported `intentionally-unused` disposition appears, or T10 changes electrical bytes. Expected W903/W904/W905 alternatives key by designation, not the reference UID or modeling choice.                                         |
+| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. T07 alone permits declared optional-library GET acquisitions; the guide-required read-only bug tracker is permitted. Engine-source reads still fail. Source context permits reads. |
 
 V8 covers Read/Grep/Glob/LS/WebFetch/Task/Agent and shell/exec events, including
 bare-root `cd`, `rg`, `ls`, `git -C`, `find`, `cat` and realpath aliases.
@@ -257,7 +257,7 @@ are `satisfied`, `substituted`, `deferred`. Display wording/capitalization does
 not affect scoring.
 
 Satisfied/substituted rows must resolve to validated source and actual drawing
-appearances. A deferred must row needs non-empty source designations and a final compiler diagnostic on its own named device fitting the requirement role. D-task version 1.4.0 declares no library gaps: current core 0.2.0 supplies all eight previously listed capabilities, including a NO start button and a PLC with at least three DI. External task catalogs may still declare specific inventory-verified gaps; an existing unrelated object cannot represent a missing component. Optional conditional items
+appearances. A deferred must row needs non-empty source designations and a final compiler diagnostic on its own named device fitting the requirement role. D-task version 1.5.0 declares no library gaps: current core 0.2.0 supplies all eight previously listed capabilities, including a NO start button and a PLC with at least three DI. External task catalogs may still declare specific inventory-verified gaps; an existing unrelated object cannot represent a missing component. Optional conditional items
 may be deferred with a reason. Blanket `deferred: n/a` fails. Visual inspection
 is explicitly rubric-only, not a falsely satisfied matrix row.
 
@@ -372,16 +372,67 @@ is the task-group mean; `perRunDelta` is labeled separately. With about twelve
 groups this bound is conservative: a single negative group can reject B even
 when the per-run mean looks small. The threshold is not relaxed.
 
-C-01…C-30 (H-docs claim audit) and R01–R04 remain E2b slots before C2/W3:
-R01 worktree/focused test/rebuild; R02 seeded query-contract regression;
-R03 supplied-fact component/coverage/lock/render; R04 printable-symbol repair
-preserving continuous goldens. They are not runnable tasks here; H1/H2 remain
-scorer-owned. Any task/checker change bumps the eval version and requires
-previous-checkpoint replay before comparing scores.
+R01/R02 now live in the separate source-contributor catalog. Their setup makes
+an independent synthetic Git repository under the project, reusing read-only
+dependencies from the source context. R01 creates a linked worktree, runs a
+focused test and rebuilds. Its source-only guide-copy policy accepts new worktree
+instructions only when they exactly match the supplied source copies; modifications still flag V3. R02 repairs a seeded alias-ordering reversal without
+changing test assertions or configuration; its checker reruns the original
+focused test/build and checks the built comparator independently. These are
+Codex-only improvement measurements, not a both-agent category score.
 
-Eval 1.8.0 is the single bump over dev 1.7.0 for this PR: D tasks become 1.4.0, the PLC/onboard-AI sharing false negative is corrected, all eight obsolete gap entries are removed, and the reference uses L2's current core types. T3's guarded JSON-repair policy is unchanged; frozen briefs and briefSha256 remain identical. Re-run
-the full reference sweep on the selected engine commit before comparing results;
-the checkpoint identity gate prevents silently reusing 1.7.0 results.
+```sh
+bun evals/agent/run.mjs --agent codex --codex-auth "$HOME/.codex/auth.json" --tasks-dir evals/contributor/tasks --all --context source --commit <sha> --checkpoint contributor-<sha>
+```
+
+C-01…C-30, R03/R04 and held-out H1/H2 remain unimplemented or scorer-owned slots.
+
+Eval **1.9.0** changed D tasks to 1.5.0 and T07 to 1.2.0: C-COIL includes the
+frozen brief's overload; D appendices state the existing structured PSU-feed
+exception; a harness-owned Playwright file:// broker captures project HTML
+without a sandbox daemon; and T07 declares library acquisition paths. Frozen
+brief bytes/hashes are unchanged. Task/checker changes require previous-engine
+replay under this version before collecting the current-engine comparison.
+Retain old-version history separately; do not silently rescore original runs.
+Run the complete reference sweep on the previous checkpoint first. No model,
+scoring-gate or two-judge requirement is weakened.
+
+T07's exception permits only literal GET acquisitions from
+`libraries/field-interfaces/` and `libraries/industrial-pilot/` on the
+BlackettApplied/3MUl0R ThermiteSchematics GitHub contents/raw endpoints and scoped blob/tree URLs.
+`metrics.libraryAcquisitions` retains these observations separately. The permitted GET URL is separated from the command remainder, which is still scanned for engine-source reads. Quoted URL query strings and `--jq` response filters are parsed as arguments, not shell pipelines. Other tasks,
+local engine reads (including aliases), root listings/clones, searches,
+implementation/docs paths and sibling libraries still count as
+V8. This permission is task metadata, not a general source-read waiver.
+
+For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
+array of 1–4 project-local HTML paths. The running harness writes PNGs and a
+hash-bound receipt in `visual-captures/`; the agent must open the images and
+record findings. Network requests and JavaScript are disabled. Errors remain
+explicit, and capture alone never passes visual review or PDF V1/V5. No Claude
+credential is required. The regression test launches the actual pinned browser;
+a non-model sandbox probe should verify request/PNG access before paid D runs.
+
+Eval **1.10.0** moves T07 to 1.3.0 and corrects the follow-up acquisition false positive for downloading
+then reading that exact local output. It also fills a previously empty Codex
+web-search start event from the completed request, preserving engine-source
+read detection. Both changes have negative controls for implementation reads,
+extra local reads, repository searches and write requests. Original 1.9 runs
+remain immutable; any scorer replay is labeled with its new identity/version
+and provenance. The project guide's explicit requirement to check issues also
+permits GETs to the official repository's issue list, individual issues and
+comments, retained in `metrics.issueLookups` for every runtime task, as required
+by the shared project guide. This does not permit write requests,
+code searches, pull-request diffs, contents/code endpoints or GraphQL queries.
+Quoted `cat > report.md` here-doc bodies are authored Markdown, not source
+requests; executable/unquoted here-docs and real reads outside those reports
+remain scanned. A report executed later in the same shell event is not exempt.
+The D cable-listing checker now resolves the listing's declared designation
+and UID in manifest-listed cable sources, then compares its full data with a
+fresh query. Source object order does not choose the cable. Forged, stale,
+unlisted or non-cable identities still fail.
+Replay the prior checkpoint first, then collect affected T07
+runs under the same version. This is not a scored mixed-version checkpoint.
 
 ## Verification
 
@@ -495,3 +546,167 @@ earlier `invalid_request` or other typed cause survives either wrapper. Progress
 clears the pending cause. `terminal_reason` is not mapped. The two real Claude
 captures used API-key mode with a loopback ANTHROPIC_BASE_URL; the first-party
 OAuth error path remains unverified.
+
+Eval 1.11 separates a permitted literal GET URL from the rest of a shell event.
+Local response formatting (including a Bun JSON summary) does not turn that
+URL into engine-source access. The remainder is still scanned: a subsequent
+engine read or another prohibited URL remains V8, alongside the acquisition
+observation. POST/config/dynamic fetches remain unrecognized and flagged.
+This is a transcript policy, not an execution sandbox. Replays retain the
+original collection identity and write derived records separately.
+
+Eval 1.12 removes one redundant blank line from each D appendix/prompt and
+keeps task.json exactly synchronized (D tasks 1.5.1). Frozen briefs and scoring
+semantics are unchanged. Previous-engine reference and derived artifact replay
+still precede current-engine replay; old model collection versions are retained.
+
+Eval 1.13 added mixed-search negatives; its denylist was superseded by 1.14
+below. Historical 1.9/1.10 collections and derived 1.12 replays retain their
+identities. Their recorded issue searches contain no mixed references.
+Capture routing also canonicalizes project roots, including macOS `/var`
+aliases. Contributor fixtures use a root-only private Git `info/exclude` entry
+for linked dependencies; the engine's `node_modules/` rule still permits an
+ordinary source file with that name.
+
+Eval **1.15.0** introduced a classifier that classifies each tool call once as `issue-lookup`, `source-read`
+or `other`. It replaces the independent URL-source detector and issue exemption.
+Structured fetch tools use only their URL, never their prompt; search tools use
+only the query and explicit repository scope. Shell GET requests parse literal
+curl/wget/gh argv, headers and flags. Unknown flags or dynamic commands cannot
+acquire an exemption. Local engine reads or a second source access dominate an
+otherwise permitted issue fetch.
+
+URLs are iteratively percent-decoded, Unicode NFKC-normalized and lowercased,
+with IDNA/fullwidth-dot folding and WHATWG dot-segment resolution. GitHub hosts
+(including API, raw, codeload, objects, user-images and gist) and unrecognized
+GitHub tools default to source reads. Malformed encodings cannot hide a visible
+GitHub host. Normalization is classification only; it never executes input.
+
+Search tokens retain the 1.14 allowlist: plain words/whole quoted phrases or
+`site:github.com/<owner>/ThermiteSchematics/issues`,
+`repo:<owner>/ThermiteSchematics` paired with `is:issue` or `is:pr`, and
+`in:title,body,comments`; owners are `BlackettApplied` and `3MUl0R`. Boolean
+operators, URLs, unknown operators, hosts, dots and path separators are refused.
+Refusal produces ordinary/source classification, never an execution error.
+
+Fetched HTTP(S) URLs must have no credentials/nondefault port and exactly match
+GitHub issue/list or numbered PR conversation paths, or their REST equivalents
+(including issue comments). Files, commits, diff/patch suffixes, raw/plain/diff
+parameters and path-bearing fragments cannot acquire an exemption. Metadata
+query keys remain limited to `state`, `page`, `per_page`, `sort`, `direction`,
+with fixed values and no duplicates. Numeric issue/comment anchors are allowed.
+Shell issue requests accept no header override or only `application/json` and
+`application/vnd.github+json` Accept values; diff, patch and `.raw+json` media
+are refused. Literal `gh issue view`/`gh pr view` requests with explicit repo and
+number use the same conversation URL policy. Their `--json` fields are limited
+to conversation metadata; files/commits are refused. T07 alone still permits GET of its
+declared optional-library paths, including their raw JSON representation;
+engine paths never receive that permission.
+
+All 12 retained transcripts are rescored before/after without rewriting their
+collection identities. Eight have identical full transcript metrics. Newly
+structured MCP issue searches add two issue lookups to prior D-pump, three to
+prior T07-fresh and one to current D-pump. Current D-conveyor adds one source
+read: its MCP query has `repo:` without the required `is:issue`/`is:pr`. Every
+other metric is identical. Original manifests/transcripts and historical replay
+files remain unchanged; these are Codex-only replays, not a category score.
+
+Eval **1.16.0** introduced the capability-based policy superseded by 1.17 below.
+It replaced 1.15's incomplete
+compound-command and unknown-network handling. V8 measures honest agents' natural
+source-reading behavior; it is **not a sandbox**. Plausible honest forms must be
+classified correctly. Anything not fully understood never earns an issue
+exemption; if it might reach the network it counts as a source read. Static
+classification cannot defeat deliberate obfuscation in general. Opaque IPs,
+redirectors and novel encodings are limits: they never earn exemptions, but
+static scoring cannot establish where they ultimately connect. Runtime egress
+logging is the actual adversarial control, tracked separately by the helm;
+this scorer does not implement it. Under the helm's stopping rule, subsequent
+obfuscated bypasses are follow-ups; plausible honest misclassifications or
+legitimate-lookup regressions remain blocking.
+
+An issue exemption requires one fully parsed simple command. Compound operators,
+newlines, subshells, variables/expansions, backticks, env-prefix assignments,
+interpreter redirects and heredocs cannot earn it. The sole compound exception
+is a literal GET writing a named output, followed by exactly one `bun -e` program
+that reads that same output with `Bun.file(...).json()` and prints a JSON
+projection of direct object fields. The whole program is matched; extra code,
+other input files, additional commands and download-then-cat are refused.
+Unrecognized network-capable curl/wget/gh/git or interpreter eval/command forms
+count as source reads, including failed tokenization and quote-spliced targets.
+Known literal shell transport wrappers are inspected as commands; local client
+discovery, version checks and simple built CLI commands remain ordinary local calls.
+Unknown transport bodies retain the interpreter's network risk. Quoted Markdown
+report data remains distinct from execution and never creates an issue exemption.
+
+URL normalization strips ASCII tab/LF/CR throughout and trims leading/trailing
+C0 controls and spaces, as WHATWG URL does; it does not turn them into spaces.
+Existing decoding/NFKC/IDNA and exact issue path/media restrictions remain.
+`gh issue view <full URL>` and both `--json fields`/`--json=fields` forms are
+supported with the same fixed conversation-field set. Any server or tool name
+containing `github`, with any casing/separator, defaults to source-read. The
+fixed MCP operation allowlist is `fetch`, `search_issues`, and `issue_read` or
+`pull_request_read` with `get`/`get_comments`; arguments are scoped to their known
+fields. Unknown operations, methods or overrides receive no exemption.
+
+All 12 retained transcripts are rescored against 1.15 before 1.16, previous
+checkpoint first. All **19 issue/PR lookups keep their class**, including the
+recorded JSON formatter. Eight runtime records change conservative source
+counts for unknown network-capable shell calls; the four contributor-context
+records are identical. Four prior T07 GET-then-cat calls lose their library
+exemption under the compound rule; simple permitted library GETs and the exact
+JSON formatter remain allowed. These defaults are not proof of actual source
+fetches. Original evidence/replay identities and hashes remain unchanged;
+Codex-only replays are not category scores. REPORT.md contains every record's
+delta and event-level explanations.
+
+Eval **1.17.0** corrects that overbroad policy. V8 remains an honest-agent
+behavior metric, not a sandbox. Shell commands that tokenize statically are
+split on unquoted `&&`, `||`, `;`, `|`, background separators and newlines. Each
+part uses the same request classifier; aggregation takes source-read above
+issue lookup/library acquisition above other. A source part suppresses both
+issue and library credit for the whole call. Otherwise each observation is
+credited once per call. GET-then-cat, jq and sed parts are allowed again.
+
+Network defaults require **text evidence**, not executable capability: a
+network-tool invocation with an unlisted/dynamic target, an executable inline
+or heredoc body with network API evidence and a GitHub fragment/dynamic target,
+or an unresolved GitHub host fragment. Hosts/fragments are canonicalized with
+quote/escape removal, including split/concatenated GitHub spellings. Known Git
+network operations are distinguished from status/diff. File tools, the runtime
+CLI, filesystem-only interpreter bodies and the agent's local scripts are
+other, subject to the unchanged local engine-path checks. Data-writing heredocs,
+printed strings, schema URLs and local request collections do not become
+network calls. Known code written and executed in the same call is inspected;
+unknown local scripts are not opened or assumed to network.
+
+Structured fetch URL extraction, WHATWG whitespace/IDNA handling, issue paths,
+JSON-only Accept and fixed GitHub MCP operations remain unchanged. All r2–r5
+reviewer bypass fixtures remain source reads. Opaque targets, redirectors and
+novel obfuscation remain static-analysis limits; the separate runtime-egress
+issue is owned by helm, not implemented here.
+
+The suite retains every **184 r6 false-positive command record** as an `other`
+fixture (182 distinct command strings), with phase/task/event provenance. All
+12 retained transcript metric objects rescore **identically to 1.15**, with no
+remaining delta or new source reads. All 19 issue lookups preserve their class;
+all four prior T07 library acquisitions are restored. Original collection and
+replay identities/hashes remain unchanged. These are Codex-only transcript
+replays, not new model/checker runs or a category score.
+
+Eval **1.18.0** fixes four natural shell forms. Repository download tools
+(`degit`, `tiged`, `giget`, including npx/bunx/`bun x`/pnpm/yarn dlx wrappers)
+with repository arguments count like clones, including implicit GitHub
+`owner/repo` targets. Literal interpreter GET arguments use the same URL/header
+classifier as curl, including issue and permitted-library observations. Dynamic
+or spliced targets and unparsed network options receive no exemption. Local
+`gh` help (`help`, `--help`, `-h`) and `git help` are other. `git archive` is
+local without `--remote`; remote archives retain the network default. The
+unchanged local engine-path guard still takes precedence.
+
+The eight r7 reviewer probes and natural variants are fixtures; two older
+synthetic interpreter-fetch tails now correctly suppress issue credit. All 12
+retained transcript metrics still match 1.15 exactly: no deltas, all 19 issue
+lookups preserved, and all 24 library acquisitions retained. Original evidence
+identities/hashes and task versions are unchanged. These remain Codex-only
+transcript replays, not new model/checker runs or category scores.

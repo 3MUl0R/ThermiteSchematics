@@ -1,0 +1,203 @@
+import { literalShellBody, shellWords } from "./acquisition-command.mjs";
+import { posix } from "node:path";
+import { localCommand } from "./repository-command.mjs";
+import { interpreterFetches } from "./interpreter-fetch.mjs";
+import {
+  networkInvocation,
+  interpreterEvidence,
+  interpreterBody,
+  githubFragment,
+} from "./shell-network.mjs";
+const conversationFields = new Set([
+  "title",
+  "body",
+  "comments",
+  "author",
+  "url",
+  "number",
+  "state",
+  "labels",
+  "assignees",
+  "createdAt",
+  "updatedAt",
+  "closedAt",
+  "milestone",
+  "isDraft",
+]);
+
+function option(words, index, client) {
+  const value = words[index],
+    next = words[index + 1];
+  if (["-H", "--header"].includes(value))
+    return next ? { count: 2, header: next } : null;
+  if (value.startsWith("--header="))
+    return { count: 1, header: value.slice(9) };
+  if (value.startsWith("-H") && value.length > 2)
+    return { count: 1, header: value.slice(2) };
+  if (["-X", "--method", "--request"].includes(value))
+    return next === "GET" ? { count: 2 } : null;
+  if (/^--(?:method|request)=GET$/.test(value)) return { count: 1 };
+  if (
+    (client === "curl" && ["-o", "--output"].includes(value)) ||
+    (client === "wget" && ["-O", "--output-document"].includes(value))
+  )
+    return next ? { count: 2, output: next } : null;
+  if (/^--(?:output|output-document)=.+$/.test(value))
+    return { count: 1, output: value.slice(value.indexOf("=") + 1) };
+  if (client === "gh" && ["-q", "--jq"].includes(value))
+    return next !== undefined ? { count: 2 } : null;
+  if (client === "gh" && value === "--paginate") return { count: 1 };
+  if (
+    client === "curl" &&
+    (/^-+[fsSL]+$/.test(value) ||
+      [
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--location",
+        "--compressed",
+      ].includes(value))
+  )
+    return { count: 1 };
+  if (client === "wget" && ["-q", "--quiet"].includes(value))
+    return { count: 1 };
+  return null;
+}
+function issueView(words) {
+  if (
+    words[0] !== "gh" ||
+    !["issue", "pr"].includes(words[1]) ||
+    words[2] !== "view"
+  )
+    return null;
+  let repo, number, target;
+  for (let i = 3; i < words.length; i++) {
+    const word = words[i];
+    if (["-R", "--repo"].includes(word)) {
+      if (repo) return null;
+      repo = words[++i];
+    } else if (word.startsWith("--repo=")) {
+      if (repo) return null;
+      repo = word.slice(7);
+    } else if (word === "--json" || word.startsWith("--json=")) {
+      const fields = (word === "--json" ? words[++i] : word.slice(7))?.split(
+        ",",
+      );
+      if (
+        !fields?.length ||
+        !fields.every((field) => conversationFields.has(field))
+      )
+        return null;
+    } else if (["--jq", "-q"].includes(word)) {
+      if (words[++i] === undefined) return null;
+    } else if (word === "--comments") continue;
+    else if (/^https?:\/\//i.test(word) && !target && !number) target = word;
+    else if (/^[1-9][0-9]*$/.test(word) && !number && !target) number = word;
+    else return null;
+  }
+  if (target) return repo ? null : target;
+  return repo && number
+    ? `https://github.com/${repo}/${words[1] === "pr" ? "pull" : "issues"}/${number}`
+    : null;
+}
+function fetchArguments(words) {
+  const client = words[0],
+    headers = [];
+  let target, output;
+  for (let i = client === "gh" ? 2 : 1; i < words.length;) {
+    const word = words[i];
+    if (word === ">" && i === words.length - 2 && output === undefined) {
+      output = words[i + 1];
+      i += 2;
+      continue;
+    }
+    if (/^(?:[a-z]+:|repos\/)/i.test(word) && !target) {
+      target = word;
+      i++;
+      continue;
+    }
+    const parsed = option(words, i, client);
+    if (!parsed) return null;
+    if (parsed.header !== undefined) headers.push(parsed.header);
+    if (parsed.output !== undefined) {
+      if (output !== undefined) return null;
+      output = parsed.output;
+    }
+    i += parsed.count;
+  }
+  if (target?.startsWith("repos/")) target = `https://api.github.com/${target}`;
+  return target ? { target, headers, output } : null;
+}
+export function shellRequest(
+  input,
+  tokens = shellWords(literalShellBody(input), { literal: true }),
+  heredoc,
+) {
+  const words = tokens?.map((t) => t.value),
+    text = input;
+  if (heredoc) {
+    const command = posix.basename(words?.[0] ?? "");
+    const interpreter =
+      /^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/.test(command) &&
+      (!words[1] || words[1] === "-" || words[1].startsWith("-"));
+    const code = interpreter || heredoc.executed;
+    const expansion = !heredoc.quoted && /`|\$\(/.test(heredoc.body);
+    const requests = code && !expansion && interpreterFetches(heredoc.body);
+    if (requests && !networkInvocation(text, words)) return { requests };
+    const network =
+      networkInvocation(text, words) ||
+      (code &&
+        interpreterEvidence(heredoc.body, ["bun", "-e", heredoc.body])) ||
+      (expansion &&
+        (networkInvocation(heredoc.body, null) ||
+          githubFragment(heredoc.body)));
+    return { text, network, shell: true, safe: false, localBody: !network };
+  }
+  const network = networkInvocation(text, words),
+    api = interpreterEvidence(text, words);
+  const refused = { text, network: network || api, shell: true, safe: false };
+  if (!tokens || tokens.some((t) => t.control && t.value !== ">"))
+    return refused;
+  const head = [...words];
+  head[0] = posix.basename(head[0] ?? "");
+  const dynamic = tokens.some(
+    (t) => !/^(['"]).*\1$/.test(t.literal) && /\$/.test(t.literal),
+  );
+  // Data variables in a jq expression are literal argv, not target expansion.
+  if (dynamic) return refused;
+  if (localCommand(head)) return { localBody: true, shell: true };
+  const requests = interpreterFetches(interpreterBody(text, words));
+  if (requests) return { requests };
+  const viewHead = head.at(-2) === ">" ? head.slice(0, -2) : head;
+  const view = issueView(viewHead);
+  if (view)
+    return {
+      text,
+      target: view,
+      headers: [],
+      safe: true,
+      shell: true,
+      network: true,
+    };
+  if (
+    !["curl", "wget"].includes(head[0]) &&
+    !(head[0] === "gh" && head[1] === "api")
+  ) {
+    // File tools and local scripts do not fetch source by merely naming data.
+    const command = head[0];
+    const dataTool =
+      /^(?:echo|printf|cat|sed|rg|grep|jq|head|tail|mkdir|ls|pwd|command|which|type|cp|mv|rm|touch|wc|sort|uname)$/.test(
+        command,
+      );
+    const interpreter = interpreterBody(text, words) !== null;
+    return {
+      ...refused,
+      network: network || api,
+      localBody:
+        !network && !api && (dataTool || interpreter || !githubFragment(text)),
+    };
+  }
+  const fetch = fetchArguments(head);
+  if (!fetch) return refused;
+  return { text, ...fetch, safe: true, shell: true, network: true };
+}

@@ -532,7 +532,7 @@
         }
       }
     ],
-    "expected": 0
+    "expected": 1
   },
   {
     "form": "gh GraphQL unrelated",
@@ -549,7 +549,7 @@
         }
       }
     ],
-    "expected": 0
+    "expected": 1
   },
   {
     "form": "gh GraphQL variables",
@@ -588,7 +588,7 @@
   {
     "form": "gh scoped unrelated code search",
     "engineRoots": ["/engine"],
-    "expected": 0,
+    "expected": 1,
     "events": [
       {
         "type": "item.completed",
@@ -605,7 +605,7 @@
   {
     "form": "gh GraphQL unrelated variables",
     "engineRoots": ["/engine"],
-    "expected": 0,
+    "expected": 1,
     "events": [
       {
         "type": "item.completed",
