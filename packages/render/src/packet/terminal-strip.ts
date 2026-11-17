@@ -134,7 +134,7 @@ function bridgeSvg(part: StripFragment) {
         lane = edge + 6 * required(lanes.get(j.uid), "Missing bridge lane");
       return [
         `<g data-strip-jumper="${attr(j.uid)}"><path d="M ${n(edge)} ${n(a.y)} H ${n(lane)} V ${n(b.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
-        text(lane, Math.min(a.y, b.y) - 2, `B${i + 1}`, 2.5, "middle"),
+        text(lane, Math.min(a.y, b.y) - 5, `B${i + 1}`, 2.5, "middle"),
         "</g>",
       ];
     })

@@ -99,3 +99,52 @@ it("retains single-ended spare obligations and deduplicates cores in both native
   expect(drawn).toHaveLength(1);
   expect(drawn[0].peer).toBe("Unterminated");
 });
+it("keeps bridge-number glyphs clear of fanned conductor leader ink", async () => {
+  const c = await compileProject("examples/operator-console");
+  if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+  const r = await renderSchematicSheets(
+    c.ir,
+    {
+      format: "documentation-view-request/0.1",
+      kind: "terminals",
+      device: "XT-HMI",
+    },
+    undefined,
+    { size: "a3", orientation: "portrait" },
+  );
+  if (!r.ok) throw Error(JSON.stringify(r.error));
+  const sheets = r.value.sheets.filter((s) => s.view.kind === "terminal-strip");
+  expect(sheets).toHaveLength(1);
+  await displaySheet(page, embedPrintableFont(sheets[0].svg));
+  const collisions = await page.evaluate(() => {
+    const labels = [
+      ...document.querySelectorAll(
+        "[data-strip-jumper]:not([data-strip-jumper-end]) > text",
+      ),
+    ];
+    const paths = [...document.querySelectorAll("[data-strip-incidence] path")];
+    return labels.flatMap((label) => {
+      const b = label.getBBox();
+      return paths
+        .filter((path) => {
+          const length = path.getTotalLength();
+          for (let d = 0; d <= length; d += 0.1) {
+            const p = path.getPointAtLength(d);
+            if (
+              p.x >= b.x - 0.3 &&
+              p.x <= b.x + b.width + 0.3 &&
+              p.y >= b.y - 0.3 &&
+              p.y <= b.y + b.height + 0.3
+            )
+              return true;
+          }
+          return false;
+        })
+        .map((path) => ({
+          label: label.textContent,
+          incidence: path.parentElement.getAttribute("data-strip-incidence"),
+        }));
+    });
+  });
+  expect(collisions).toEqual([]);
+});
