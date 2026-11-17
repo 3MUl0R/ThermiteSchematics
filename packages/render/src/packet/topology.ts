@@ -41,6 +41,10 @@ import {
   wrapReport,
   assemblyNoteLines,
 } from "./svg.js";
+import {
+  communicationPartBlock,
+  communicationPortSelection,
+} from "./native-part-labels.js";
 import { communicationPartLines } from "./continuations.js";
 
 type NotedDrawing = CommunicationDrawing & {
@@ -133,6 +137,7 @@ export async function topologyDrafts(
     const wiring = request.format === "wiring-view-request/0.1";
     const signalLoop = request.format === "signal-loop-view-request/0.1";
     const assembly = request.format === "connector-assembly-view-request/0.1";
+    const selectedPorts = communicationPortSelection();
     const compose = (
       drawing: NotedDrawing,
       observeScale?: (scale: number) => void,
@@ -152,7 +157,11 @@ export async function topologyDrafts(
         ? circuitTextLines(drawing.title, b.w, 4)
         : [drawing.title];
       const headingHeight = 9 + (headingLines.length - 1) * 4.8;
-      const partLines = communicationPartLines(drawing, b.w);
+      const partLines = communicationPartLines(
+        drawing,
+        b.w,
+        selectedPorts(drawing),
+      );
       const noteLines = topologyNoteLines(drawing, b.w, assembly, request);
       const noteHeight = (noteLines.length + partLines.length) * 3.5;
       const { scale, reserveNotes } = topologyScale(
@@ -224,18 +233,13 @@ export async function topologyDrafts(
           ...(drawing.engineNotes ? {} : { communicationHeight: height }),
           ...(drawing.pagination
             ? {
-                communicationBlock: {
-                  view: 0,
-                  part: drawing.pagination.part,
-                  x: b.x,
-                  y: b.y + height - (partLines.length - 1) * 3.5,
-                  width: b.w,
-                  rows: drawing.pagination.devices.map((d) => ({
-                    deviceUid: d.deviceUid,
-                    label: d.designation,
-                    targets: d.parts.map((part) => ({ part, sheet: part })),
-                  })),
-                },
+                communicationBlock: communicationPartBlock(
+                  drawing,
+                  b,
+                  height,
+                  partLines.length,
+                  selectedPorts(drawing),
+                ),
               }
             : {}),
           references,

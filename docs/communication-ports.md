@@ -90,7 +90,7 @@ stays whole with both named ports and appears once across the parts. Original
 boundary devices and isolated selected bodies stay represented. A repeated
 body shows different ports of the same physical device; captions identify
 ports on other parts, and reciprocal references give P (view part) and S
-(actual packet sheet). The additive `communicationContinuations` sheet metadata
+(actual packet sheet) plus its final zone. Each omitted drawn port also has a named port-to-sheet.zone pointer; a device summary does not stand in for port identity. Locator widths are reserved before native part trials. The additive `communicationContinuations` sheet metadata
 records the authored packet view number, source/destination parts, destination
 sheet and device UID. Independent repeated views keep separate references.
 

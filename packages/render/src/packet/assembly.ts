@@ -1,3 +1,4 @@
+import { resolveNativePartLocations } from "./native-part-locations.js";
 import {
   renderedRootedContinuations,
   resolveRootedContinuations,
@@ -131,6 +132,7 @@ export function assembleSheets(
       e.value,
     ]),
   );
+  resolveNativePartLocations(drafts);
   for (const draft of drafts)
     for (const block of draft.circuitBlocks ?? [])
       draft.content += emitCircuitContinuationBlock(block);

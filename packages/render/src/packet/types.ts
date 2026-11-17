@@ -221,6 +221,11 @@ export interface Draft {
   documentationSelection?: DocumentationSelection;
   scheduleReferences?: ScheduleReferences;
 }
+export interface NativePartTarget {
+  part: number;
+  sheet: number;
+  zone?: string;
+}
 export interface CommunicationContinuationBlock {
   view: number;
   part: number;
@@ -230,7 +235,8 @@ export interface CommunicationContinuationBlock {
   rows: {
     deviceUid: string;
     label: string;
-    targets: { part: number; sheet: number }[];
+    targets: NativePartTarget[];
+    ports?: { key: string; targets: NativePartTarget[] }[];
   }[];
 }
 export interface CircuitContinuationBlock {
@@ -242,7 +248,7 @@ export interface CircuitContinuationBlock {
   rows: {
     id: string;
     label: string;
-    targets: { part: number; sheet: number }[];
+    targets: NativePartTarget[];
   }[];
 }
 

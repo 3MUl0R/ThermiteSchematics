@@ -399,7 +399,7 @@
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
     "packages/render/src/packet/reports.ts#tableDrafts": 158,
     "packages/render/src/packet/topology.ts#topologyDrafts": 172,
-    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 137,
+    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 136,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
     "packages/render/src/presentation.ts#insertSemanticJunctions": 108,
     "packages/render/src/render-error-context.ts#renderErrorContext": 100,

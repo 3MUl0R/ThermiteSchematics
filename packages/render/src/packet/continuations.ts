@@ -1,3 +1,11 @@
+import {
+  communicationPartRows,
+  communicationRowLayout,
+  nativePartToken,
+} from "./native-part-labels.js";
+import { required } from "../presentation/util.js";
+import type { PortIdentity } from "../topology-coverage.js";
+import type { NativePartTarget } from "./types.js";
 import type { Draft } from "./types.js";
 
 import { circuitTextLines, type CircuitDrawing } from "../circuit.js";
@@ -15,27 +23,33 @@ const communicationPartNotice =
   "Whole port links; repeated bodies describe the same device with other ports. P = view part, S = packet sheet.";
 function communicationReferenceLines(
   label: string,
-  targets: readonly { part: number; sheet: number }[],
+  targets: readonly NativePartTarget[],
   width: number,
 ): string[] {
   return assemblyNoteLines(
-    `${label} -> ${targets.map((t) => `P${t.part}/S${String(t.sheet).padStart(2, "0")}`).join(", ")}`,
+    `${label} -> ${targets.map(nativePartToken).join(", ")}`,
     width,
   );
 }
 export function communicationPartLines(
   drawing: CommunicationDrawing,
   width: number,
+  selected: readonly PortIdentity[] = [],
 ): string[] {
   if (!drawing.pagination) return [];
   return [
     ...assemblyNoteLines(communicationPartNotice, width),
-    ...drawing.pagination.devices.flatMap((d) =>
-      communicationReferenceLines(
-        d.designation,
-        d.parts.map((part) => ({ part, sheet: 100 })),
-        width,
-      ),
+    ...communicationPartRows(drawing, selected, true).flatMap(
+      (d) =>
+        communicationRowLayout(
+          d,
+          width,
+          communicationReferenceLines(
+            d.label,
+            d.targets.map((t) => ({ ...t, sheet: 100, zone: "D6" })),
+            width,
+          ),
+        ).lines,
     ),
   ];
 }
@@ -54,14 +68,19 @@ export function emitCommunicationContinuationBlock(
     out.push(
       `<g data-communication-continuation-device="${attr(row.deviceUid)}" data-communication-view="${block.view}" data-from-part="${block.part}" data-destination-parts="${attr(JSON.stringify(row.targets.map((t) => t.part)))}" data-destination-sheets="${attr(JSON.stringify(row.targets.map((t) => t.sheet)))}">`,
     );
-    for (const s of communicationReferenceLines(
+    const summary = communicationReferenceLines(
       row.label,
       row.targets,
       block.width,
-    )) {
-      out.push(text(block.x, y, s, 2.5));
-      y += 3.5;
-    }
+    );
+    const layout = communicationRowLayout(row, block.width, summary);
+    for (const [line, s] of summary.entries())
+      out.push(text(block.x, y + line * 3.5, s, 2.5));
+    for (const entry of layout.entries)
+      out.push(
+        `<g data-native-part-device="${attr(row.deviceUid)}" data-native-part-port="${attr(entry.key)}">${text(block.x + entry.x, y + entry.line * 3.5, entry.text, 2.5)}</g>`,
+      );
+    y += layout.lines.length * 3.5;
     out.push("</g>");
   }
   return out.join("");
@@ -73,9 +92,10 @@ function circuitContinuationLines(
   parts: readonly number[],
   sheets: readonly number[],
   width: number,
+  zones: readonly (string | undefined)[] = [],
 ): string[] {
   return circuitTextLines(
-    `${label} -> ${parts.map((part, i) => `P${part}/S${String(sheets[i] ?? 100).padStart(2, "0")}`).join(", ")}`,
+    `${label} -> ${parts.map((part, i) => nativePartToken({ part, sheet: sheets[i] ?? 100, zone: zones[i] ?? "D6" })).join(", ")}`,
     width,
   );
 }
@@ -111,6 +131,9 @@ export function emitCircuitContinuationBlock(
       row.targets.map((t) => t.part),
       row.targets.map((t) => t.sheet),
       block.width,
+      row.targets.map((t) =>
+        required(t.zone, "Unresolved circuit destination zone"),
+      ),
     )) {
       out.push(text(block.x, y, s, 2.5));
       y += 3.5;
