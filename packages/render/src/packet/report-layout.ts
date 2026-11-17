@@ -3,6 +3,7 @@ import type { DocumentationTable } from "@thermite/query";
 import type { PaperPage } from "./types.js";
 import { reportCells, wireColumnProbe } from "./report-cells.js";
 import { reportNoteLines } from "./report-note-wrapping.js";
+import { denserAssemblyCells } from "./report-assembly-columns.js";
 import {
   reportPaginator,
   reportHeightPagination,
@@ -36,6 +37,10 @@ export function paginatedReportCells(
   };
 } {
   const first = reportCells(ir, table, width, page);
+  if (table.kind === "assemblies")
+    return denserAssemblyCells(ir, table, width, page, first, (cells) =>
+      reportPageCount(table, cells, width, height, top),
+    );
   if (!first.inlineLocations) return first;
   let count: number, probe: ReturnType<typeof wireColumnProbe>;
   let stage: "native-reference" | "search-setup" = "native-reference";
