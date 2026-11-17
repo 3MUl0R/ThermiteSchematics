@@ -392,7 +392,7 @@
     "packages/render/src/layout/validate-output.ts#validateFinalBounds": 101,
     "packages/render/src/layout/validate-output.ts#validateRouteInteractions": 71,
     "packages/render/src/packet/cable.ts#cableDrafts": 191,
-    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 188,
+    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 173,
     "packages/render/src/packet/folding.ts#foldDrawingDrafts": 96,
     "packages/render/src/packet/page.ts#frame": 130,
     "packages/render/src/packet/references.ts#referenceTables": 108,

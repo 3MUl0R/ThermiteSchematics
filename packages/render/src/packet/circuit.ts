@@ -1,9 +1,12 @@
-import {
-  plannedTitleContext,
-  headingCapacity,
-} from "../internal/title-data/headings.js";
+import { headingCapacity } from "../internal/title-data/headings.js";
+import { circuitTitleContext } from "./circuit-title.js";
+import { circuitPartRows } from "./circuit-part-packing.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { deviceTagFitDetails } from "./device-tag-fit.js";
+import {
+  circuitViewFootprint,
+  circuitGroupFootprint,
+} from "./circuit-footprint.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
 import { recordPrintedCircuitDrawing } from "../layout/circuit-printed-layouts.js";
 import { isInlineLabelFailure } from "../layout/inline-label-error.js";
@@ -25,17 +28,13 @@ import type {
   ElectricalIr,
 } from "@thermite/compiler";
 
-import type { SchematicTitleContext } from "../title-block.js";
 import type { RenderOutcome } from "../types.js";
 
 import type { Draft, PaperPage, DrawingBounds } from "./types.js";
 import { failure, record } from "./errors.js";
 import { bounds, zone } from "./page.js";
 import { n, text, requestNoteText } from "./svg.js";
-import {
-  circuitPartHeight,
-  resolveCircuitContinuations,
-} from "./continuations.js";
+import { resolveCircuitContinuations } from "./continuations.js";
 
 export async function circuitDrafts(
   ir: Readonly<ElectricalIr>,
@@ -87,36 +86,16 @@ async function circuitDraftsUnchecked(
   appearances?: Map<string, string[]>,
 ): Promise<RenderOutcome<Draft[]>> {
   const prepared = await prepareCircuitView(ir, request, appearances);
-  const title: SchematicTitleContext = plannedTitleContext(
-    {
-      projectName: ir.project.name,
-      revision: presentation?.revision ?? "UNSPECIFIED",
-      backgroundColor: "#ffffff",
-      toolVersion: "0.3.0-alpha.2",
-      lines: [
-        {
-          ownerKind: "view",
-          ownerId: "circuit",
-          field: "title.view-line",
-          value: prepared.title,
-        },
-        ...(presentation?.titleBlockLines ?? []).map((value) => ({
-          ownerKind: "presentation" as const,
-          ownerId: "presentation",
-          field: "title.authored-line" as const,
-          value,
-        })),
-      ],
-    },
-    presentation,
-  );
+  const title = circuitTitleContext(ir, prepared, presentation);
   const capacity = headingCapacity(title, presentation);
   if (capacity) return capacity;
   const b = bounds(title, page);
   const notes = prepared.notes.flatMap((s) => circuitTextLines(s, b.w));
-  const headingLines = circuitTextLines(prepared.title, b.w, 3.5),
-    headerHeight = headingLines.length * 4.5 + 3;
-  const available = b.h - headerHeight - 1;
+  const { headingLines, headerHeight, available } = circuitViewFootprint(
+    prepared.title,
+    b.w,
+    b.h,
+  );
   if (available < 35)
     return failure(
       "unprintable-layout",
@@ -145,15 +124,9 @@ async function circuitDraftsUnchecked(
   drafts.push(newDraft());
   const fits = (group: CircuitDrawing) => {
     const width = group.width > columnWidth + 0.001 ? b.w : columnWidth;
-    const heading = circuitGroupLabel(group);
     return (
       group.width <= width + 0.001 &&
-      circuitTextLines(heading, width, 2.7).length * 3.5 +
-        1 +
-        group.height +
-        circuitPartHeight(group, width) +
-        3 <=
-        available
+      circuitGroupFootprint(group, width).height <= available
     );
   };
   const groups: CircuitDrawing[] = [];
@@ -169,34 +142,41 @@ async function circuitDraftsUnchecked(
         { ...b, h: available },
       )),
     );
-  for (const group of groups) {
-    const spanning = group.width > columnWidth + 0.001;
-    const width = spanning ? b.w : columnWidth;
-    if (group.width > width + 0.001)
-      return failure(
-        "unprintable-layout",
-        `Circuit ${group.id} needs ${n(group.width)} mm at readable size; select a narrower circuit group, another flow, or larger paper.${deviceTagFitDetails(group, width, available).message}`,
-        {
-          groupId: group.id,
-          devices: group.references,
-          ...deviceTagFitDetails(group, width, available),
-        },
-      );
-    const heading = circuitGroupLabel(group);
-    const headings = circuitTextLines(heading, width, 2.7);
-    const headHeight = headings.length * 3.5 + 1;
-    const height =
-      headHeight + group.height + circuitPartHeight(group, width) + 3;
-    if (height > available)
-      return failure(
-        "unprintable-layout",
-        `Circuit ${group.id} cannot fit as a complete group at readable size. Split its source selection into smaller circuit or channel groups.${deviceTagFitDetails(group, width, available).message}`,
-        {
-          groupId: group.id,
-          devices: group.references,
-          ...deviceTagFitDetails(group, width, available),
-        },
-      );
+  const rows = circuitPartRows(groups, {
+    flow: request.flow,
+    columns: prepared.columns,
+    authoredGroups: request.groups.length,
+    columnWidth,
+    fieldWidth: b.w,
+    available,
+    noteLines: notes.length,
+  });
+  for (const row of rows) {
+    const spanning = row.width > columnWidth + 0.001;
+    const height = row.height;
+    for (const { group, width } of row.cells) {
+      if (group.width > width + 0.001)
+        return failure(
+          "unprintable-layout",
+          `Circuit ${group.id} needs ${n(group.width)} mm at readable size; select a narrower circuit group, another flow, or larger paper.${deviceTagFitDetails(group, width, available).message}`,
+          {
+            groupId: group.id,
+            devices: group.references,
+            ...deviceTagFitDetails(group, width, available),
+          },
+        );
+      const { height } = circuitGroupFootprint(group, width);
+      if (height > available)
+        return failure(
+          "unprintable-layout",
+          `Circuit ${group.id} cannot fit as a complete group at readable size. Split its source selection into smaller circuit or channel groups.${deviceTagFitDetails(group, width, available).message}`,
+          {
+            groupId: group.id,
+            devices: group.references,
+            ...deviceTagFitDetails(group, width, available),
+          },
+        );
+    }
     let offset = spanning ? Math.max(...cursors) : cursors[column]!;
     if (offset + height > available) {
       if (
@@ -213,42 +193,46 @@ async function circuitDraftsUnchecked(
       offset = spanning ? Math.max(...cursors) : cursors[column]!;
     }
     const draft = drafts.at(-1)!;
-    if (group.diagnostics?.length)
-      (draft.diagnostics ??= []).push(...group.diagnostics);
-    draft.coverage!.push({
-      kind: "circuit",
-      group: group.id,
-      conductorIds: [...group.coverage.conductorIds],
-      functionIds: [...group.coverage.functionIds],
-    });
-    const x = b.x + (spanning ? 0 : column * (columnWidth + 8)),
-      y = b.y + headerHeight + offset;
-    draft.content +=
-      headings
-        .map((s, i) => groupHeading(x, y + 2.7 + i * 3.5, s, group.id))
-        .join("") +
-      `<g transform="translate(${n(x)} ${n(y + headHeight)})">${group.content}</g>`;
-    recordPrintedCircuitDrawing(group);
-    if (group.pagination) {
-      draft.note =
-        "Circuit parts · [+N]: outside part · P/S: repeated physical terminal · full wires retained";
-      (draft.circuitParts ??= []).push({
-        drawing: group,
-        x,
-        y: y + headHeight + group.height + 4,
-        width,
+    const rowX = b.x + (spanning ? 0 : column * (columnWidth + 8));
+    const y = b.y + headerHeight + offset;
+    for (const { group, width, x: dx } of row.cells) {
+      const x = rowX + dx;
+      const { headings, headHeight } = circuitGroupFootprint(group, width);
+      if (group.diagnostics?.length)
+        (draft.diagnostics ??= []).push(...group.diagnostics);
+      draft.coverage!.push({
+        kind: "circuit",
+        group: group.id,
+        conductorIds: [...group.coverage.conductorIds],
+        functionIds: [...group.coverage.functionIds],
       });
+      draft.content +=
+        headings
+          .map((s, i) => groupHeading(x, y + 2.7 + i * 3.5, s, group.id))
+          .join("") +
+        `<g transform="translate(${n(x)} ${n(y + headHeight)})">${group.content}</g>`;
+      recordPrintedCircuitDrawing(group);
+      if (group.pagination) {
+        draft.note =
+          "Circuit parts · [+N]: outside part · P/S: repeated physical terminal · full wires retained";
+        (draft.circuitParts ??= []).push({
+          drawing: group,
+          x,
+          y: y + headHeight + group.height + 4,
+          width,
+        });
+      }
+      draft.references!.push(
+        ...group.references.map((r) => ({
+          deviceUid: r.deviceUid,
+          designation: r.designation,
+          functions: r.functions,
+          xMm: x + r.x,
+          yMm: y + headHeight + r.y,
+          zone: zone(x + r.x, y + headHeight + r.y, b),
+        })),
+      );
     }
-    draft.references!.push(
-      ...group.references.map((r) => ({
-        deviceUid: r.deviceUid,
-        designation: r.designation,
-        functions: r.functions,
-        xMm: x + r.x,
-        yMm: y + headHeight + r.y,
-        zone: zone(x + r.x, y + headHeight + r.y, b),
-      })),
-    );
     if (spanning) {
       cursors = [offset + height, offset + height];
       column = 0;
@@ -355,15 +339,6 @@ interface CircuitNoteLayout {
   cursors: readonly number[];
   available: number;
   gap: number;
-}
-
-function circuitGroupLabel(group: CircuitDrawing) {
-  return [
-    group.lineReference ? `Ref. ${group.lineReference}` : undefined,
-    group.label,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 function groupHeading(x: number, y: number, label: string, id: string): string {
