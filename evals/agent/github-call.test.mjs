@@ -7,6 +7,7 @@ const cases = [
   "github-calls-r6.json",
   "local-commands-r7.json",
   "github-calls-r7.json",
+  "github-calls-r8.json",
 ].flatMap((file) =>
   JSON.parse(
     readFileSync(new URL(`./fixtures/${file}`, import.meta.url), "utf8"),
@@ -20,6 +21,13 @@ for (const fixture of cases)
       allowedLibraryPaths: ["libraries/field-interfaces"],
     };
     expect(classifyToolCall(event, options).class).toBe(fixture.class);
+    if (fixture.curlEquivalent)
+      expect(classifyToolCall(event, options)).toEqual(
+        classifyToolCall(
+          { ...event, input: `curl '${fixture.curlEquivalent}'` },
+          options,
+        ),
+      );
     // Exercise structured Claude arguments and the actual scorer, not only helpers.
     const result = score({
       ...options,

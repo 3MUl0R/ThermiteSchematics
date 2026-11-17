@@ -1,6 +1,11 @@
 import { canonicalText } from "./github-canonical.mjs";
 import { posix } from "node:path";
 import { interpreterText } from "./interpreter-text.mjs";
+import {
+  repositoryAcquisition,
+  localCommand,
+  gitOperation,
+} from "./repository-command.mjs";
 const clients = new Set(["curl", "wget", "gh", "nc", "ssh", "scp", "rsync"]);
 export const shellTool = (name) =>
   /^(?:command_execution|bash|shell|exec_command)$/i.test(name);
@@ -27,15 +32,13 @@ export function networkInvocation(text, words) {
     }
     const command = posix.basename(words[i] ?? ""),
       args = words.slice(i + 1);
+    if (localCommand(words.slice(i))) return false;
+    if (repositoryAcquisition(words.slice(i))) return true;
     if (command === "git") {
-      let j = 0;
-      while (j < args.length && args[j].startsWith("-"))
-        j += ["-C", "-c", "--git-dir", "--work-tree", "--namespace"].includes(
-          args[j],
-        )
-          ? 2
-          : 1;
-      return /^(?:clone|fetch|pull|ls-remote|archive)$/.test(args[j] ?? "");
+      const operation = gitOperation(args);
+      return /^(?:clone|fetch|pull|ls-remote|archive)$/.test(
+        operation[0] ?? "",
+      );
     }
     if (["scp", "rsync"].includes(command))
       return args.some((arg) => /(?:\w@)?[^/\s:]+:|:\/\//.test(arg));
@@ -107,10 +110,7 @@ export function interpreterEvidence(text, words) {
       code,
     ) || module;
   if (child || networkInvocation(code, null)) return true;
-  if (!api) return false;
-  return (
-    githubFragment(body) ||
-    !/https?:\/\/[^\s'"`+\\]+/.test(body) ||
-    /\$|\+|\b(?:url|host|target|endpoint)\b/i.test(code)
-  );
+  // Literal targets now use the shared GET classifier; unresolved executable
+  // API calls keep the network default, including non-GitHub remote targets.
+  return api;
 }

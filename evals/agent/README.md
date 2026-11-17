@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.17.0)
+# Fresh-agent evaluator (E2 v1.18.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -693,3 +693,20 @@ remaining delta or new source reads. All 19 issue lookups preserve their class;
 all four prior T07 library acquisitions are restored. Original collection and
 replay identities/hashes remain unchanged. These are Codex-only transcript
 replays, not new model/checker runs or a category score.
+
+Eval **1.18.0** fixes four natural shell forms. Repository download tools
+(`degit`, `tiged`, `giget`, including npx/bunx/`bun x`/pnpm/yarn dlx wrappers)
+with repository arguments count like clones, including implicit GitHub
+`owner/repo` targets. Literal interpreter GET arguments use the same URL/header
+classifier as curl, including issue and permitted-library observations. Dynamic
+or spliced targets and unparsed network options receive no exemption. Local
+`gh` help (`help`, `--help`, `-h`) and `git help` are other. `git archive` is
+local without `--remote`; remote archives retain the network default. The
+unchanged local engine-path guard still takes precedence.
+
+The eight r7 reviewer probes and natural variants are fixtures; two older
+synthetic interpreter-fetch tails now correctly suppress issue credit. All 12
+retained transcript metrics still match 1.15 exactly: no deltas, all 19 issue
+lookups preserved, and all 24 library acquisitions retained. Original evidence
+identities/hashes and task versions are unchanged. These remain Codex-only
+transcript replays, not new model/checker runs or category scores.

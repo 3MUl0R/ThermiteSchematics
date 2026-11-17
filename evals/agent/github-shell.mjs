@@ -1,5 +1,7 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
 import { posix } from "node:path";
+import { localCommand } from "./repository-command.mjs";
+import { interpreterFetches } from "./interpreter-fetch.mjs";
 import {
   networkInvocation,
   interpreterEvidence,
@@ -140,6 +142,8 @@ export function shellRequest(
       (!words[1] || words[1] === "-" || words[1].startsWith("-"));
     const code = interpreter || heredoc.executed;
     const expansion = !heredoc.quoted && /`|\$\(/.test(heredoc.body);
+    const requests = code && !expansion && interpreterFetches(heredoc.body);
+    if (requests && !networkInvocation(text, words)) return { requests };
     const network =
       networkInvocation(text, words) ||
       (code &&
@@ -161,6 +165,9 @@ export function shellRequest(
   );
   // Data variables in a jq expression are literal argv, not target expansion.
   if (dynamic) return refused;
+  if (localCommand(head)) return { localBody: true, shell: true };
+  const requests = interpreterFetches(interpreterBody(text, words));
+  if (requests) return { requests };
   const viewHead = head.at(-2) === ">" ? head.slice(0, -2) : head;
   const view = issueView(viewHead);
   if (view)

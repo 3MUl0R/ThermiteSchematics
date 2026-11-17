@@ -9,7 +9,7 @@ const allowedLibraryAcquisition = (input, allowedLibraryPaths) =>
 const paths = ["libraries/field-interfaces", "libraries/industrial-pilot"];
 const url =
   "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/fac3c43/libraries/field-interfaces/library.json";
-it("recognizes library GETs followed by read-only local parts", () => {
+it("recognizes literal library GETs and read-only local parts", () => {
   for (const command of [
     `curl --fail --silent --show-error '${url}' -o artifacts/library.json`,
     `curl '${url}' -o './artifacts/file with space.json'`,
@@ -19,6 +19,8 @@ it("recognizes library GETs followed by read-only local parts", () => {
     `curl '${url}' -o artifacts/library.json && cat artifacts/library.json`,
     `curl '${url}' -o artifacts/library.json && jq '.' artifacts/library.json | sed -n '1,3p'`,
     `gh api 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces' --jq '.[].name | select(.)'`,
+    `python -c "fetch('${url}')"`,
+    `python3 -c "import requests; requests.get('${url}')"`,
   ])
     expect(allowedLibraryAcquisition(command, paths), command).toBe(true);
 });
@@ -31,7 +33,7 @@ it("does not exempt extra reads, commands, writes, other paths or dynamic progra
     `gh api -f name=x '${url}'`,
     `curl --config /engine/config '${url}'`,
     `curl '${url}' -o artifacts/library.json && cat $(cat /engine/file)`,
-    `python -c "fetch('${url}')"`,
+    `python3 -c "import requests; requests.get('${url}' + suffix)"`,
     `curl '${url.replace("libraries/field-interfaces/library.json", "packages/compiler/src/index.ts")}'`,
   ])
     expect(allowedLibraryAcquisition(command, paths), command).toBe(false);

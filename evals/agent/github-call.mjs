@@ -72,6 +72,8 @@ function classifySearch(query, github, engineRoots) {
  * filesystem-only bodies are other unless they name a local engine path.
  * Unknown commands earn no exemption; source defaults require textual network
  * evidence, an unresolved GitHub fragment, or an unlisted/dynamic network target.
+ * Repository download tools count like clones; literal interpreter GETs use
+ * this same URL policy. Help and archives without --remote are local.
  * Opaque IPs, redirectors and deliberate obfuscation remain static-analysis
  * limits. Runtime egress logging is the separate adversarial control, owned by
  * helm and not implemented here. Obfuscated bypasses are follow-ups under the
@@ -106,6 +108,12 @@ export function classifyToolCall(
   return classifyRequest(call, github, engineRoots, allowedLibraryPaths);
 }
 function classifyRequest(call, github, engineRoots, allowedLibraryPaths) {
+  if (call.requests)
+    return aggregateParts(
+      call.requests.map((part) =>
+        classifyRequest(part, github, engineRoots, allowedLibraryPaths),
+      ),
+    );
   if (Object.hasOwn(call, "query"))
     return { class: classifySearch(call.query, github, engineRoots) };
   const canonical = canonicalUrl(call.target);

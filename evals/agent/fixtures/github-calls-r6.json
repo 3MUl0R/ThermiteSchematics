@@ -530,9 +530,11 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' -o /tmp/out.json && bun -e 'const d=await Bun.file(\"/tmp/out.json\").json(); console.log(JSON.stringify(d.map(x=>({name:x.name})))); fetch(\"https://example.com\")'"
     },
-    "class": "issue-lookup",
+    "class": "source-read",
     "classAt116": "source-read",
-    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback.",
+    "classAt117": "issue-lookup",
+    "r8Reason": "Literal interpreter fetch uses the same remote default as curl; source tail dominates issue credit."
   },
   {
     "label": "r6 dynamic/unknown shell curl \"$URL\"",
@@ -959,9 +961,11 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' -o /tmp/issue.json && bun -e 'const d=await Bun.file(\"/tmp/issue.json\").json(); console.log(JSON.stringify(d.map(x=>({number:x.number,title:x.title,body:x.body})),null,2)); fetch(\"https://example.com\")'"
     },
-    "class": "issue-lookup",
+    "class": "source-read",
     "classAt116": "source-read",
-    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback.",
+    "classAt117": "issue-lookup",
+    "r8Reason": "Literal interpreter fetch uses the same remote default as curl; source tail dominates issue credit."
   },
   {
     "label": "r6 exact JSON formatter suffix ' && curl https://example.com'",
