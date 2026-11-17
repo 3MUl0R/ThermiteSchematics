@@ -8,10 +8,9 @@ const spawn = vi.hoisted(() =>
 vi.mock("node:child_process", () => ({ spawnSync: spawn }));
 
 it.each([
-  ["packages/cli/test/release-package.test.ts", true],
-  ["packages\\cli\\test\\release-package.test.ts", true],
-  ["packages/cli/test/init.test.ts", false],
-])("selects the legacy suite explicitly with %s", async (selected, legacy) => {
+  "packages/cli/test/init.test.ts",
+  "packages\\cli\\test\\init.test.ts",
+])("forwards the selected suite %s", async (selected) => {
   const argv = process.argv;
   const exit = process.exitCode;
   try {
@@ -22,9 +21,6 @@ it.each([
     expect(spawn).toHaveBeenCalledOnce();
     const args = spawn.mock.calls[0]![1];
     expect(args).toContain(selected);
-    expect(
-      args.includes("--exclude=packages/cli/test/release-package.test.ts"),
-    ).toBe(!legacy);
   } finally {
     process.argv = argv;
     process.exitCode = exit;

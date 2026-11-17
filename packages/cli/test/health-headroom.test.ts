@@ -4,6 +4,8 @@ import ts from "typescript";
 import { expect, it } from "vitest";
 import { measure, measureSources } from "../../../scripts/health-measure.mjs";
 import { allowanceMatches } from "../../../scripts/health-continuity.mjs";
+import { createBudget } from "../../../scripts/health-ratchet.mjs";
+import { metrics, put, repo } from "./health-fixture.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url)),
   base = measure(root),
@@ -14,7 +16,8 @@ const root = fileURLToPath(new URL("../../../", import.meta.url)),
 // Probe continuity separately from the decreasing size cap: insert 70/71 real
 // AST-token lines, keeping every nested/sibling candidate in the measured file.
 // These probes do not authorize the resulting size growth.
-function probe(key: string, added: number) {
+function probe(key: string, added: number, context = { root, base, budget }) {
+  const { root, base, budget } = context;
   const path = key.split("#", 1)[0],
     original = readFileSync(root + "/" + path, "utf8"),
     parsed = ts.createSourceFile(path, original, ts.ScriptTarget.Latest, true),
@@ -72,3 +75,21 @@ it.each(Object.keys(budget.grandfathered.functions))(
     expect(probe(key, 71)?.id, id).not.toBe(id);
   },
 );
+
+it("keeps the 70/71 boundary exercised with no live grandfathered bodies", () => {
+  const root = repo(),
+    path = "src/headroom.ts";
+  put(
+    root,
+    path,
+    `function retained() {\n${Array.from({ length: 320 }, (_, n) => `void "fixture ${n}";`).join("\n")}\n}\n`,
+  );
+  const base = metrics(root),
+    budget = createBudget(base),
+    [id] = Object.keys(budget.grandfathered.functions),
+    key = budget.locations.functions[id],
+    context = { root, base, budget };
+  expect(base.functions[key]).toBeGreaterThan(300);
+  expect(probe(key, 70, context), id).toMatchObject({ id, added: 70 });
+  expect(probe(key, 71, context)?.id, id).not.toBe(id);
+});

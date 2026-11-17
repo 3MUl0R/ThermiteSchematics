@@ -19,11 +19,8 @@ Keep electrical projects and customer data out of engine changes.
 - `bun thermite.mjs init <new-directory>` writes the project guide from
   `packages/cli/assets/THERMITE_AGENTS.md` and a visible local core library.
   Follow it in the electrical project.
-- `bun.lock` is active. `package-lock.json`, `test:legacy-package`, the
-  `release-candidate`/`release-publish` workflows and every script they run
-  (`scripts/release-*` and more) are frozen release paths; leave them alone.
-  Public runtime: `scripts/runtime-package/`, `bun run package:pack`;
-  see [runtime packaging](docs/runtime-package.md).
+- `bun.lock` is active. Releases ship through `scripts/runtime-package/` and
+  `bun run package:pack`; see [runtime packaging](docs/runtime-package.md).
 
 ## Package map
 
@@ -66,6 +63,7 @@ in both flows; explain R006 rather than clip or drop conductors. Follow
 inventories, lock updates, fork/PR review and sign-off (`git commit -s`). Target
 `dev`; a human reads and accepts the CLA, never an agent on their behalf.
 
-The [legacy guide](docs/legacy/private-release-agent-guide.md) preserves the
-former root sections; see [release controls](docs/legacy/private-release.md).
-`packages/cli/assets/AGENTS.md` is frozen and read by every init.
+The [historical guide](docs/legacy/private-release-agent-guide.md) and
+[retired distribution archive](docs/legacy/private-release.md) preserve former
+instructions. `packages/cli/assets/AGENTS.md` remains a byte-preserved historical
+input to init; current project guidance is generated separately.

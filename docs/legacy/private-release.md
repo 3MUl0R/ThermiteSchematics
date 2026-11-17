@@ -1,13 +1,14 @@
-# Private v0.2.0 Release Checklist
+# Historical private v0.2.0 Release Checklist
 
-This is the frozen distribution and publication contract for the Task 6 packager and
+This historical checklist records the retired distribution and publication contract for the Task 6 packager and
 acceptance harness, the Task 9 protected candidate workflow and release gate, and the
 protected publisher. The three packaged READMEs are final before the Task 6 packager
 records their bytes. This checklist documents the implemented machinery; it does not
 make a local build, current checkout, or documentation-only change release authority.
 
+The machinery described here has been removed from the current checkout.
 This checklist applies only to the historical private v0.2.0 artifact and its
-protected publisher. It does not describe the current Apache-2.0 source alpha;
+former protected publisher. It does not describe the current Apache-2.0 source alpha;
 see the [runtime packaging guide](../runtime-package.md). Public npm publication
 and direct GitHub Release asset uploads remain outside this legacy pipeline.
 The [private-runtime agent guide](private-release-agent-guide.md) preserves the
@@ -95,7 +96,7 @@ self-consistent locally authored evidence set are rejected.
 ## Sole publisher and input
 
 Task 9's sole GitHub Release uploader is named
-`scripts/release-publish.mjs`. It runs only in the protected
+the former protected publisher. It runs only in the protected
 `m8-private-release` environment with `actions: read` and `contents: write`.
 Its sole operator input is the successful M8 Release Candidate `run_id`, passed as
 `--gate-run-id <validated-unsigned-decimal>`.
