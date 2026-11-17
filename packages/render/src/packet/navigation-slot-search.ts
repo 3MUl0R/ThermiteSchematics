@@ -16,6 +16,10 @@ import {
 } from "./navigation-symbols.js";
 import type { NavigationShape } from "./navigation-types.js";
 import {
+  elementDrawingArea,
+  roomiestElementSlot,
+} from "./navigation-element-room.js";
+import {
   navigationPlacementFamily,
   navigationPlacementInk,
   type NavigationPlacementFamily,
@@ -26,6 +30,7 @@ function slotAxes(
   owner: Rect,
   obstacles: readonly Rect[],
   texts: readonly Rect[],
+  textVerticalClearanceMm = 0,
 ) {
   const { w, h } = size;
   const xs = [
@@ -47,6 +52,12 @@ function slotAxes(
       area.y + area.h - h,
       owner.y - h - 1.51,
       owner.y + owner.h + 1.51,
+      ...(textVerticalClearanceMm
+        ? texts.flatMap((b) => [
+            b.y + b.h + textVerticalClearanceMm + 0.01,
+            b.y - h - textVerticalClearanceMm - 0.01,
+          ])
+        : []),
       ...obstacles.flatMap((b) => [b.y + b.h + 1.51, b.y - h - 1.51]),
     ]),
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
@@ -61,12 +72,28 @@ function slotCandidates(
   texts: readonly Rect[] = [],
   ink?: Rect,
   preferBesideBelow = false,
+  textVerticalClearanceMm = 0,
 ) {
   const { w, h } = size;
-  const { xs, ys } = slotAxes(size, area, owner, obstacles, texts);
+  const { xs, ys } = slotAxes(
+    size,
+    area,
+    owner,
+    obstacles,
+    texts,
+    textVerticalClearanceMm,
+  );
   return ys
     .flatMap((y) =>
-      clearNavigationXs(xs, y, w, h, obstacles, texts).map((x) => ({
+      clearNavigationXs(
+        xs,
+        y,
+        w,
+        h,
+        obstacles,
+        texts,
+        textVerticalClearanceMm,
+      ).map((x) => ({
         x,
         y,
         w,
@@ -105,6 +132,10 @@ export function searchNavigationSlot(
   localityInkMm?: ReadonlyMap<string, Rect>,
   fitPrintedInk = false,
 ) {
+  const fitArea = fitPrintedInk ? elementDrawingArea(area) : area;
+  const textVerticalClearanceMm = fitPrintedInk
+    ? NAVIGATION_TEXT_CLEARANCE_MM
+    : 0;
   const ordered = ["local", "self-located"].flatMap((mode) =>
     shapes.filter((s) => s.mode === mode),
   );
@@ -122,45 +153,47 @@ export function searchNavigationSlot(
         : b;
     const candidates = slotCandidates(
       size,
-      area,
+      fitArea,
       owner,
       obstacles,
       locality,
       texts,
       fit ? undefined : ink,
       preferBesideBelow && shape.mode === "local",
+      textVerticalClearanceMm,
     );
-    const box = candidates.find(
-      (b) =>
-        (!families ||
-          families.includes(
-            navigationPlacementFamily(
-              navigationPlacementInk(envelope(b), ink),
-              area,
-              owner,
-              locality,
-            ),
-          )) &&
-        inside(b, area) &&
-        obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-        texts.every((t) => textSeparated(b, t)) &&
-        ((shape.mode !== "local" && !locality?.sourceAnchorsMm) ||
-          !locality ||
-          localNavigationSlot(
+    const legal = (b: Rect) =>
+      (!families ||
+        families.includes(
+          navigationPlacementFamily(
             navigationPlacementInk(envelope(b), ink),
+            area,
+            owner,
             locality,
-          )),
-    );
+          ),
+        )) &&
+      inside(b, fitArea) &&
+      obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
+      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm)) &&
+      ((shape.mode !== "local" && !locality?.sourceAnchorsMm) ||
+        !locality ||
+        localNavigationSlot(
+          navigationPlacementInk(envelope(b), ink),
+          locality,
+        ));
+    const box = fitPrintedInk
+      ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
+      : candidates.find(legal);
     if (box) return { box: envelope(box), protectedBox: box, shape };
   }
   return undefined;
 }
 
-/** Protect the fixed text envelope horizontally where line bands overlap. */
-function textSeparated(label: Rect, other: Rect) {
+/** Horizontal text separation, plus the explicit vertical gap for element ink. */
+function textSeparated(label: Rect, other: Rect, verticalClearanceMm: number) {
   return (
-    label.y + label.h <= other.y ||
-    other.y + other.h <= label.y ||
+    label.y + label.h + verticalClearanceMm <= other.y ||
+    other.y + other.h + verticalClearanceMm <= label.y ||
     label.x + label.w + NAVIGATION_TEXT_CLEARANCE_MM <= other.x ||
     other.x + other.w + NAVIGATION_TEXT_CLEARANCE_MM <= label.x
   );

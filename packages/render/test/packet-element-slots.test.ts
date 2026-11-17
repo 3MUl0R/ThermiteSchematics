@@ -16,7 +16,7 @@ const shape = (mode: NavigationShape["mode"] = "local"): NavigationShape => ({
 });
 const ink = { x: 1, y: 1, w: 16, h: 4 };
 const owner = { x: 0, y: 0, w: 0, h: 0 };
-const area = { x: 0, y: 0, w: 18, h: 10 };
+const area = { x: 0, y: 0, w: 18.1, h: 10 };
 
 it("fits the printed ink and its metric margin without consuming empty emission padding", () => {
   const plain = searchNavigationSlot([shape()], area, owner, []);
@@ -36,8 +36,10 @@ it("fits the printed ink and its metric margin without consuming empty emission 
   expect(result).toBeDefined();
   if (!result) return;
   const printed = navigationPlacementInk(result.box, ink);
-  expect(printed.x).toBeCloseTo(0.01, 9);
-  expect(printed.y).toBeCloseTo(0.01, 9);
+  expect(printed.x).toBeGreaterThanOrEqual(1);
+  expect(printed.y).toBeGreaterThanOrEqual(1);
+  expect(printed.x + printed.w).toBeLessThanOrEqual(area.w - 1);
+  expect(printed.y + printed.h).toBeLessThanOrEqual(area.h - 1);
   expect(result.protectedBox.w).toBeCloseTo(16.02, 9);
   expect(result.protectedBox.h).toBeCloseTo(4.02, 9);
   expect(printed.w).toBe(16);
@@ -76,8 +78,8 @@ it("protects actual ink between consecutive element labels, including the 4 mm t
   });
   const result = allocateNavigationSlots(
     [request("first"), request("second")],
-    { x: 0, y: 0, w: 37, h: 4.04 },
-    '<svg width="37mm" height="4.04mm" viewBox="0 0 37 4.04"/>',
+    { x: 0, y: 0, w: 41, h: 7 },
+    '<svg width="41mm" height="7mm" viewBox="0 0 41 7"/>',
     1,
   );
   expect(result).toHaveLength(2);
@@ -89,10 +91,10 @@ it("protects actual ink between consecutive element labels, including the 4 mm t
   if (!first || !second) throw Error("Missing literal ink");
   expect(second.x - first.x - first.w).toBeGreaterThanOrEqual(4);
   for (const p of printed) {
-    expect(p.x).toBeGreaterThanOrEqual(0.01);
-    expect(p.y).toBeGreaterThanOrEqual(0.01);
-    expect(p.x + p.w).toBeLessThan(37);
-    expect(p.y + p.h).toBeLessThan(4.04);
+    expect(p.x).toBeGreaterThanOrEqual(1);
+    expect(p.y).toBeGreaterThanOrEqual(1);
+    expect(p.x + p.w).toBeLessThanOrEqual(40);
+    expect(p.y + p.h).toBeLessThanOrEqual(6);
   }
 });
 

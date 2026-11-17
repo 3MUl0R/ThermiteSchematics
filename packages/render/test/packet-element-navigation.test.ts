@@ -6,7 +6,7 @@ import { renderSchematicPacket } from "../src/sheets.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { printedFunction } from "../src/print-projection.js";
 import { readFile } from "node:fs/promises";
-import { navigationLabelInk } from "../src/packet/navigation-label-ink.js";
+import { printedElementInk } from "./packet-element-print-fixture.js";
 import { anchorDistance } from "../src/packet/navigation-symbols.js";
 
 let ir: ElectricalIr, uid: string;
@@ -178,7 +178,11 @@ it("keeps a shared native locator within 60 mm of every overload pole, not just 
     expect(
       anchorDistance(
         pole.destination.anchorMm,
-        navigationLabelInk(locator.text, box),
+        printedElementInk(
+          result.value.sheets[pole.destination.sheet - 1]?.svg ?? "",
+          locator.id,
+          box,
+        ).ink,
       ),
     ).toBeLessThanOrEqual(60);
   }

@@ -25,6 +25,7 @@ export function clearNavigationXs(
   h: number,
   obstacles: readonly Rect[],
   texts: readonly Rect[],
+  textVerticalClearanceMm = 0,
 ) {
   const changes = new Int32Array(xs.length + 1);
   const block = (other: Rect, gap: number) => {
@@ -41,7 +42,10 @@ export function clearNavigationXs(
     ))
       block(other, NAVIGATION_CLEARANCE_MM);
   for (const other of texts)
-    if (!(y + h <= other.y || other.y + other.h <= y))
+    if (!(
+      y + h + textVerticalClearanceMm <= other.y ||
+      other.y + other.h + textVerticalClearanceMm <= y
+    ))
       block(other, NAVIGATION_TEXT_CLEARANCE_MM);
   let blocked = 0;
   return xs.filter((_, index) => {
