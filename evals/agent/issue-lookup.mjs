@@ -16,11 +16,20 @@ function approvedIssueSearch(input) {
     input.match(
       /(?:site:(?:https?:\/\/)?|https?:\/\/)?github\.com\/[^\s"'()]+|repo:[^\s"'()]+/gi,
     ) ?? [];
-  return (
-    targets.length > 0 &&
-    targets.every((t) =>
+  if (
+    !targets.length ||
+    !targets.every((t) =>
       issueUrl(t.replace(/^site:/i, "").replace(/^(?!https?:)/i, "https://")),
     )
+  )
+    return false;
+  // Remove issue paths only: query/fragment text can contain another source URL.
+  const remainder = targets.reduce(
+    (text, target) => text.replace(target.split(/[?#]/)[0], ""),
+    input,
+  );
+  return !/(?:[a-z][a-z0-9+.-]*:\/\/|git@|repo:|raw\.githubusercontent\.com|thermiteschematics|(?:[\w-]+\.)+[\w-]+[/:]|\/(?:blob|tree|commits?|archive)(?=[/?#\s]|$)|\.(?:git|zip|tgz|tar)\b)/i.test(
+    remainder,
   );
 }
 function issueUrl(target) {

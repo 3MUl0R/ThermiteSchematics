@@ -10,6 +10,16 @@ const metric = (command) =>
       },
     ],
   });
+const metricQuery = (query) =>
+  score({
+    transcript: [
+      {
+        type: "item.started",
+        item: { id: "s", type: "web_search", query: "" },
+      },
+      { type: "item.completed", item: { id: "s", type: "web_search", query } },
+    ],
+  });
 it("keeps guide-required read-only issue context separate from source rescue", () => {
   for (const command of [
     `curl --fail 'https://api.github.com/repos/BlackettApplied/ThermiteSchematics/issues?state=open&per_page=100' -o issues.json`,
@@ -53,19 +63,6 @@ it("retains engine code, docs, clone/search and write-request negatives", () => 
 });
 
 it("native searches distinguish issue-only context from code/repository queries", () => {
-  const metricQuery = (query) =>
-    score({
-      transcript: [
-        {
-          type: "item.started",
-          item: { id: "s", type: "web_search", query: "" },
-        },
-        {
-          type: "item.completed",
-          item: { id: "s", type: "web_search", query },
-        },
-      ],
-    });
   const issue = metricQuery(
     "site:github.com/BlackettApplied/ThermiteSchematics/issues Thermite",
   );
@@ -77,4 +74,87 @@ it("native searches distinguish issue-only context from code/repository queries"
     "site:github.com/BlackettApplied/ThermiteSchematics/issues OR site:github.com/BlackettApplied/ThermiteSchematics/packages/compiler",
   ])
     expect(metricQuery(query).sourceReads, query).toBe(1);
+});
+
+const issueSite = "site:github.com/3MUl0R/ThermiteSchematics/issues";
+it.each([
+  [
+    "reviewer raw",
+    "https://raw.githubusercontent.com/3MUl0R/ThermiteSchematics/main/packages/compiler/src/index.ts",
+  ],
+  ["reviewer clone", "git@github.com:3MUl0R/ThermiteSchematics.git"],
+  [
+    "raw",
+    "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/dev/packages/query/src/index.ts",
+  ],
+  ["raw host", "raw.githubusercontent.com"],
+  [
+    "blob",
+    "https://github.com/BlackettApplied/ThermiteSchematics/blob/dev/docs/modeling.md",
+  ],
+  ["tree", "github.com/3MUl0R/ThermiteSchematics/tree/dev/packages"],
+  ["commit", "https://github.com/3MUl0R/ThermiteSchematics/commit/fac3c43"],
+  [
+    "commits",
+    "https://github.com/BlackettApplied/ThermiteSchematics/commits/dev",
+  ],
+  ["dot-git", "https://github.com/BlackettApplied/ThermiteSchematics.git"],
+  ["git-at", "git@github.com:BlackettApplied/ThermiteSchematics.git"],
+  ["other git-at host", "git@gitlab.example:review/source.git"],
+  ["ssh clone", "ssh://git@github.com/3MUl0R/ThermiteSchematics"],
+  ["git clone", "git://github.com/3MUl0R/ThermiteSchematics.git"],
+  [
+    "archive",
+    "https://github.com/3MUl0R/ThermiteSchematics/archive/refs/heads/dev.tar.gz",
+  ],
+  [
+    "zip",
+    "https://codeload.github.com/BlackettApplied/ThermiteSchematics/zip/refs/heads/dev",
+  ],
+  ["mirror zip", "https://source.example/review/source.zip"],
+  [
+    "mirror tree",
+    "sourcegraph.com/github.com/3MUl0R/ThermiteSchematics/-/tree/packages",
+  ],
+  ["repository qualifier", "repo:3MUl0R/ThermiteSchematics"],
+  [
+    "bare repository path",
+    "3MUl0R/ThermiteSchematics/packages/query/src/index.ts",
+  ],
+  [
+    "nested query URL",
+    "https://github.com/3MUl0R/ThermiteSchematics/issues/367?source=https://raw.githubusercontent.com/3MUl0R/ThermiteSchematics/dev/packages/query/src/index.ts",
+  ],
+  [
+    "nested fragment URL",
+    "https://github.com/3MUl0R/ThermiteSchematics/issues/367#https://github.com/3MUl0R/ThermiteSchematics/tree/dev",
+  ],
+])(
+  "issue-search exemption refuses %s repository references",
+  (_form, reference) => {
+    const result = metricQuery(`${issueSite} ${reference}`);
+    expect(result.sourceReads).toBe(1);
+    expect(result.issueLookups).toHaveLength(0);
+    expect(result.violations.filter((v) => v.rule === "V8")).toHaveLength(1);
+  },
+);
+
+it.each([
+  `${issueSite} Thermite`,
+  "site:github.com/BlackettApplied/ThermiteSchematics/issues Thermite",
+  `${issueSite}/367 Thermite`,
+  `${issueSite} https://github.com/3MUl0R/ThermiteSchematics/issues/367`,
+  `${issueSite} https://github.com/BlackettApplied/ThermiteSchematics/issues?state=open`,
+])("issue-only search stays an issue lookup: %s", (query) => {
+  const result = metricQuery(query);
+  expect(result.sourceReads).toBe(0);
+  expect(result.issueLookups).toHaveLength(1);
+});
+
+it("a raw repository URL alone remains exactly one source read", () => {
+  const result = metricQuery(
+    "https://raw.githubusercontent.com/3MUl0R/ThermiteSchematics/main/packages/compiler/src/index.ts",
+  );
+  expect(result.sourceReads).toBe(1);
+  expect(result.issueLookups).toHaveLength(0);
 });

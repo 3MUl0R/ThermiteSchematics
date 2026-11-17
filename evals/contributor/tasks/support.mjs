@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import {
   cpSync,
+  appendFileSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -9,7 +10,7 @@ import {
   symlinkSync,
   existsSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 const focused = "packages/query/test/views-and-ordering.test.ts";
 const source = "packages/query/src/ordering.ts";
@@ -20,6 +21,14 @@ export const mutation = {
 };
 const git = (cwd, ...args) =>
   execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+export function ignoreFixtureDependencies(repository) {
+  // Linked contributor worktrees share this private exclusion, not engine policy.
+  const exclude = resolve(
+    repository,
+    git(repository, "rev-parse", "--git-path", "info/exclude"),
+  );
+  appendFileSync(exclude, "\n/node_modules\n");
+}
 export function dependencyOverlay(runtime, repository) {
   const dependencies = join(repository, "node_modules");
   mkdirSync(dependencies, { recursive: true });
@@ -74,6 +83,7 @@ export function setup(ctx, seeded = false) {
     writeFileSync(path, text.replace(mutation.before, mutation.after));
   }
   git(repository, "init", "--quiet");
+  ignoreFixtureDependencies(repository);
   git(repository, "add", ".");
   git(
     repository,

@@ -90,13 +90,14 @@ export async function captureHtml(project, request) {
       viewport: { width: 1600, height: 1200 },
       deviceScaleFactor: 1,
     });
+    const root = realpathSync(project);
     await context.route("**/*", async (route) => {
       const url = new URL(route.request().url());
       try {
         if (
           url.protocol === "data:" ||
           (url.protocol === "file:" &&
-            captureInput(project, relative(project, fileURLToPath(url))))
+            captureInput(root, relative(root, fileURLToPath(url))))
         )
           return await route.continue();
       } catch {}

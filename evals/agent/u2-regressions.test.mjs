@@ -5,6 +5,8 @@ import {
   rmSync,
   writeFileSync,
   symlinkSync,
+  mkdirSync,
+  realpathSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -84,6 +86,41 @@ it("the visual route captures real project HTML and rejects escaping inputs", as
     ).rejects.toThrow();
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+it("the visual route works under a symlinked temp root, including macOS /var/folders", async () => {
+  const directory = realpathSync(
+    mkdtempSync(join(tmpdir(), "thermite-u2-alias-")),
+  );
+  try {
+    // The test wrapper canonicalizes TMPDIR; deliberately restore the stock alias.
+    const alias =
+      process.platform === "darwin" && directory.startsWith("/private/var/")
+        ? directory.slice("/private".length)
+        : join(directory, "alias");
+    if (alias === join(directory, "alias"))
+      symlinkSync(
+        directory,
+        alias,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+    const project = join(alias, "project");
+    mkdirSync(project);
+    expect(realpathSync(project)).not.toBe(project);
+    writeFileSync(
+      join(project, "page.html"),
+      '<html><body><svg width="300" height="200"><rect width="300" height="200" fill="black"/><text x="20" y="50" fill="white">Alias packet</text></svg></body></html>',
+    );
+    const result = await captureHtml(project, { html: ["page.html"] });
+    expect(result.files[0].input).toBe("page.html");
+    expect(result.files[0].bytes).toBeGreaterThan(1000);
+    expect(
+      readFileSync(join(project, result.files[0].output))
+        .subarray(1, 4)
+        .toString(),
+    ).toBe("PNG");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 it("D appendices keep the frozen brief and give the PSU matrix exception exactly", () => {

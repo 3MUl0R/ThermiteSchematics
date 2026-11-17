@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.12.0)
+# Fresh-agent evaluator (E2 v1.13.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -421,7 +421,8 @@ extra local reads, repository searches and write requests. Original 1.9 runs
 remain immutable; any scorer replay is labeled with its new identity/version
 and provenance. The project guide's explicit requirement to check issues also
 permits GETs to the official repository's issue list, individual issues and
-comments, retained in `metrics.issueLookups`. This does not permit write requests,
+comments, retained in `metrics.issueLookups` for every runtime task, as required
+by the shared project guide. This does not permit write requests,
 code searches, pull-request diffs, contents/code endpoints or GraphQL queries.
 Quoted `cat > report.md` here-doc bodies are authored Markdown, not source
 requests; executable/unquoted here-docs and real reads outside those reports
@@ -558,3 +559,16 @@ Eval 1.12 removes one redundant blank line from each D appendix/prompt and
 keeps task.json exactly synchronized (D tasks 1.5.1). Frozen briefs and scoring
 semantics are unchanged. Previous-engine reference and derived artifact replay
 still precede current-engine replay; old model collection versions are retained.
+
+Eval 1.13 closes mixed native issue/source searches. Only approved issue targets
+may appear in an issue-only search; raw, blob/tree/commit, clone, archive and
+other repository references in the remainder stay V8, including URLs nested in
+issue query strings or fragments. For example,
+`site:github.com/3MUl0R/ThermiteSchematics/issues Thermite` stays an issue lookup;
+adding a raw source URL does not. Historical 1.9/1.10 collections and derived
+1.12 replays retain their identities. Their recorded issue searches contain no
+mixed references, so this restriction changes none of their recorded metrics.
+Capture routing also canonicalizes project roots, including macOS `/var`
+aliases. Contributor fixtures use a root-only private Git `info/exclude` entry
+for linked dependencies; the engine's `node_modules/` rule still permits an
+ordinary source file with that name.
