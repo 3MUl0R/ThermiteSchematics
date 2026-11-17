@@ -66,15 +66,18 @@ export function nativePowerTopology(ir) {
       sources.add(terminalId(p.terminal));
   return { graph, edges, sources };
 }
-export function reachable(graph, start, skip) {
+function reachable({ graph, sources }, start, skip) {
   const seen = new Set([start]),
     queue = [start];
-  for (let i = 0; i < queue.length; i++)
-    for (const { to, edge } of graph.get(queue[i]) ?? [])
+  for (const from of queue) {
+    // Record the source as reached, then stop before following its other loads.
+    if (sources.has(from)) continue;
+    for (const { to, edge } of graph.get(from) ?? [])
       if (edge !== skip && !seen.has(to)) {
         seen.add(to);
         queue.push(to);
       }
+  }
   return seen;
 }
 export function rootedProtectionNeeds(ir, root, topology) {
@@ -88,14 +91,17 @@ export function rootedProtectionNeeds(ir, root, topology) {
   const needs = new Map();
   for (const start of starts) {
     const key = terminalId(start),
-      all = reachable(topology.graph, key),
+      all = reachable(topology, key),
       sources = [...topology.sources].filter((k) => all.has(k));
     if (!sources.length)
       throw new RootedTopologyUnavailable(
         "Native root-to-source topology unavailable",
       );
     for (const edge of topology.edges.filter(
-      (e) => e.fn && all.has(e.keys[0]),
+      (e) =>
+        e.fn &&
+        e.keys.every((k) => all.has(k)) &&
+        e.keys.some((k) => !topology.sources.has(k)),
     )) {
       const fn = edge.fn;
       if (
@@ -109,9 +115,8 @@ export function rootedProtectionNeeds(ir, root, topology) {
         )
       )
         continue;
-      const remaining = reachable(topology.graph, key, edge),
-        mandatory =
-          sources.length > 0 && !sources.some((s) => remaining.has(s));
+      const remaining = reachable(topology, key, edge),
+        mandatory = !sources.some((s) => remaining.has(s));
       const id = JSON.stringify(fn.id),
         previous = needs.get(id);
       if (!previous || mandatory)

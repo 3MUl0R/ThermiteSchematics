@@ -25,6 +25,8 @@ without changing current corpus rows or pins. Rooted power requests now have
 independent native topology coverage: conductor incidences and two-terminal
 power/protection functions connect the selected native load terminals to native
 sources. These are symbolic traversal edges, never electrical net joins.
+Declared supply terminals and native potential sources end the traversal, so a
+rooted view does not acquire obligations from another load on a shared supply.
 An unavoidable protection function with a detached native contact must have a
 full measured appearance in that authored view, even if its ink and all its
 locators disappear together. A known omission fails with the native UID/function,

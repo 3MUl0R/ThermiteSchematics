@@ -106,6 +106,47 @@ it("FU1 unambiguous native coverage reports all three missing poles with source 
     ),
   ).toBe(true);
 });
+it.each(["supply terminal", "potential source"])(
+  "FU1 a shared %s bounds the rooted corridor",
+  (boundary) => {
+    const x = rootedFixture();
+    const { ir } = x;
+    const other = { ...ir.devices[0], uid: "D2", designation: "OL2" };
+    ir.devices.push(other);
+    const source = ir.functions.find((f) => f.kind === "source");
+    if (boundary === "potential source") {
+      ir.functions = ir.functions.filter((f) => f !== source);
+      ir.potentials = source.terminals.map((terminal) => ({ terminal }));
+    }
+    const otherFunctions = ir.functions
+      .filter((f) => f.id.deviceUid === "D")
+      .map((f) => ({
+        ...f,
+        id: { ...f.id, deviceUid: other.uid },
+        terminals: f.terminals.map((t) => ({ ...t, deviceUid: other.uid })),
+      }));
+    ir.functions.push(...otherFunctions);
+    for (const [i, terminal] of source.terminals.entries()) {
+      const pole = otherFunctions.find(
+        (f) => f.id.functionKey === `pole${i + 1}`,
+      );
+      ir.wires.push({
+        uid: `other-${i}`,
+        endpoints: [terminal, pole.terminals[0]].map((t) => ({ terminal: t })),
+      });
+    }
+    const judged = () => rows(x).filter((r) => r.owner === "#396");
+    expect(judged().map((r) => r.status)).toEqual(["pass", "pass"]);
+    eraseProtection(x);
+    const omissions = judged();
+    expect(omissions.map((r) => r.status)).toEqual(["fail"]);
+    expect(omissions[0].evidence.findings.map((f) => f.deviceUid)).toEqual([
+      "D",
+      "D",
+      "D",
+    ]);
+  },
+);
 it("FU1 parallel native paths stay explicit infrastructure instead of inventing a selected branch", () => {
   const x = rootedFixture();
   eraseProtection(x);
