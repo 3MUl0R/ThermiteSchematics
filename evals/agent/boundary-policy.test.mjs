@@ -39,10 +39,6 @@ for (const [name, input] of [
     "Bash",
     { command: "gh api repos/someone/ThermiteSchematics/contents/docs" },
   ],
-  [
-    "WebFetch",
-    { url: "https://github.com/3MUl0R/ThermiteSchematics/issues/46" },
-  ],
   ["Bash", { command: "cd /engine && rg uid packages" }],
   [
     "WebFetch",

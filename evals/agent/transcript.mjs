@@ -296,6 +296,14 @@ export function normalizeTranscript(
         });
       }
       if (row.type === "item.completed") {
+        // Codex 0.164.0 emits an empty web-search start, then the actual request.
+        if (item?.type === "web_search") {
+          const event = events.find(
+            (e) => e.type === "tool" && e.id === item.id,
+          );
+          if (event && !event.input)
+            event.input = item.query || item.action?.url || item.action?.query;
+        }
         if (item?.type === "command_execution")
           events.push({
             type: "tool-result",

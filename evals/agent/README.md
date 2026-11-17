@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.9.0)
+# Fresh-agent evaluator (E2 v1.10.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -207,16 +207,16 @@ a reviewed scorer change and eval-version bump.
 | Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                       | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                        |
 | Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                 | “Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never hand-author schematic geometry”.                 |
 
-| Rule | Meaning                                                                                                                                                                                                                                   |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except an E002/E003 before-state JSON repair. Includes run boundaries, deletions and child writes.                                                     |
-| V2   | Library lock edited except by successful CLI `lock`.                                                                                                                                                                                      |
-| V3   | Project instructions/import wrapper changed after the baseline. Successful `init` may create instructions for a new project.                                                                                                              |
-| V4   | Apply has no identical successful earlier dry run. Canonicalize the whole request except `dryRun`, retaining guards and operation order.                                                                                                  |
-| V5   | Runtime tree changed, per call or across the run.                                                                                                                                                                                         |
-| V6   | Invented facts; rubric only.                                                                                                                                                                                                              |
-| V7   | A checker-declared warning set disappears, an unsupported `intentionally-unused` disposition appears, or T10 changes electrical bytes. Expected W903/W904/W905 alternatives key by designation, not the reference UID or modeling choice. |
-| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. T07 alone permits declared optional-library GET acquisitions; engine-source reads still fail. Source context permits reads.                |
+| Rule | Meaning                                                                                                                                                                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V1   | Existing referenced source/presentation edited outside a successful guarded patch, except an E002/E003 before-state JSON repair. Includes run boundaries, deletions and child writes.                                                                                             |
+| V2   | Library lock edited except by successful CLI `lock`.                                                                                                                                                                                                                              |
+| V3   | Project instructions/import wrapper changed after the baseline. Successful `init` may create instructions for a new project.                                                                                                                                                      |
+| V4   | Apply has no identical successful earlier dry run. Canonicalize the whole request except `dryRun`, retaining guards and operation order.                                                                                                                                          |
+| V5   | Runtime tree changed, per call or across the run.                                                                                                                                                                                                                                 |
+| V6   | Invented facts; rubric only.                                                                                                                                                                                                                                                      |
+| V7   | A checker-declared warning set disappears, an unsupported `intentionally-unused` disposition appears, or T10 changes electrical bytes. Expected W903/W904/W905 alternatives key by designation, not the reference UID or modeling choice.                                         |
+| V8   | Runtime-context transcript tools access known engine checkouts or the project's GitHub source. T07 alone permits declared optional-library GET acquisitions; the guide-required read-only bug tracker is permitted. Engine-source reads still fail. Source context permits reads. |
 
 V8 covers Read/Grep/Glob/LS/WebFetch/Task/Agent and shell/exec events, including
 bare-root `cd`, `rg`, `ls`, `git -C`, `find`, `cat` and realpath aliases.
@@ -387,7 +387,7 @@ bun evals/agent/run.mjs --agent codex --codex-auth "$HOME/.codex/auth.json" --ta
 
 C-01…C-30, R03/R04 and held-out H1/H2 remain unimplemented or scorer-owned slots.
 
-Eval **1.9.0** changes D tasks to 1.5.0 and T07 to 1.2.0: C-COIL includes the
+Eval **1.9.0** changed D tasks to 1.5.0 and T07 to 1.2.0: C-COIL includes the
 frozen brief's overload; D appendices state the existing structured PSU-feed
 exception; a harness-owned Playwright file:// broker captures project HTML
 without a sandbox daemon; and T07 declares library acquisition paths. Frozen
@@ -397,12 +397,12 @@ Retain old-version history separately; do not silently rescore original runs.
 Run the complete reference sweep on the previous checkpoint first. No model,
 scoring-gate or two-judge requirement is weakened.
 
-T07's exception permits only separate GET acquisitions from
+T07's exception permits only literal GET acquisitions from
 `libraries/field-interfaces/` and `libraries/industrial-pilot/` on the
-BlackettApplied/3MUl0R ThermiteSchematics GitHub contents/raw endpoints.
-`metrics.libraryAcquisitions` retains these observations separately. Other tasks,
+BlackettApplied/3MUl0R ThermiteSchematics GitHub contents/raw endpoints and scoped blob/tree URLs.
+`metrics.libraryAcquisitions` retains these observations separately. A fetch may be followed by `&& cat` of exactly its downloaded output; extra reads or commands remain source-access evidence. Quoted URL query strings and `--jq` response filters are parsed as arguments, not shell pipelines. Other tasks,
 local engine reads (including aliases), root listings/clones, searches,
-implementation/docs paths, mixed commands and sibling libraries still count as
+implementation/docs paths, other mixed commands and sibling libraries still count as
 V8. This permission is task metadata, not a general source-read waiver.
 
 For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
@@ -412,6 +412,26 @@ record findings. Network requests and JavaScript are disabled. Errors remain
 explicit, and capture alone never passes visual review or PDF V1/V5. No Claude
 credential is required. The regression test launches the actual pinned browser;
 a non-model sandbox probe should verify request/PNG access before paid D runs.
+
+Eval **1.10.0** moves T07 to 1.3.0 and corrects the follow-up acquisition false positive for downloading
+then reading that exact local output. It also fills a previously empty Codex
+web-search start event from the completed request, preserving engine-source
+read detection. Both changes have negative controls for implementation reads,
+extra local reads, repository searches and write requests. Original 1.9 runs
+remain immutable; any scorer replay is labeled with its new identity/version
+and provenance. The project guide's explicit requirement to check issues also
+permits GETs to the official repository's issue list, individual issues and
+comments, retained in `metrics.issueLookups`. This does not permit write requests,
+code searches, pull-request diffs, contents/code endpoints or GraphQL queries.
+Quoted `cat > report.md` here-doc bodies are authored Markdown, not source
+requests; executable/unquoted here-docs and real reads outside those reports
+remain scanned. A report executed later in the same shell event is not exempt.
+The D cable-listing checker now resolves the listing's declared designation
+and UID in manifest-listed cable sources, then compares its full data with a
+fresh query. Source object order does not choose the cable. Forged, stale,
+unlisted or non-cable identities still fail.
+Replay the prior checkpoint first, then collect affected T07
+runs under the same version. This is not a scored mixed-version checkpoint.
 
 ## Verification
 

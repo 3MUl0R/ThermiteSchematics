@@ -1,3 +1,4 @@
+import { cableListingMatches } from "./cable-listing.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sha256 } from "./snapshot.mjs";
@@ -558,11 +559,11 @@ export async function checkDogfood(ctx) {
   const diagnostic = query(clean, "diagnostics", "--json");
   files["drawings/diagnostics.json"] =
     canonical(safeRead("drawings/diagnostics.json")) === canonical(diagnostic);
-  const cable = objects(ctx.project).find((o) => o.kind === "cable");
-  files["drawings/cable.json"] =
-    !!cable &&
-    canonical(safeRead("drawings/cable.json")) ===
-      canonical(query(clean, "cable", cable.designation, "--json"));
+  files["drawings/cable.json"] = cableListingMatches(
+    safeRead("drawings/cable.json"),
+    objects(ctx.project),
+    (designation) => query(clean, "cable", designation, "--json"),
+  );
   files["drawings/before.json"] = !!safeRead("drawings/before.json");
   let reviewed = null;
   try {
