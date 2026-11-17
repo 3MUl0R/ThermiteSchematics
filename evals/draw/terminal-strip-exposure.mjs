@@ -1,5 +1,5 @@
 import { EVALS_VERSION } from "./version.mjs";
-// Report-only DQ-23 oracle; never imported by strict assessment or pin tooling.
+// Standalone replay. Strict DQ-23 separately adopts the shared native/ink predicates.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
