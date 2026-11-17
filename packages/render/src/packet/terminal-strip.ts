@@ -58,14 +58,19 @@ function rowLabels(
       const lines = stripLines(value, m.labelW);
       const start = i === 0 ? x : x + m.terminalW,
         end = i === 0 ? x - 6 : x + m.terminalW + m.gutter + 6;
-      const anchor =
-        cy +
-        (index - (side.length - 1) / 2) *
-          Math.min(1, 4 / Math.max(1, side.length));
+      const half = Math.ceil(side.length / 2);
+      const offset =
+        index < half
+          ? (-3.2 * (half - index)) / (half + 1)
+          : (3.2 * (index - half + 1)) / (side.length - half + 1);
+      const anchor = cy + offset;
+      const elbow =
+        start +
+        (i === 0 ? -1 : 1) * (2 + (3 * (index + 1)) / (side.length + 1));
       out.push(labelGroup(label, row.terminal.key, !!remote));
       if (!label.bridge || remote)
         out.push(
-          `<path d="M ${n(start)} ${n(anchor)} H ${n(i === 0 ? start - 3 : end - 3)} V ${n(baseline - 1)} H ${n(end)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
+          `<path d="M ${n(start)} ${n(anchor)} H ${n(elbow)} V ${n(baseline - 1)} H ${n(end)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
         );
       lines.forEach((line, j) =>
         out.push(
@@ -110,14 +115,23 @@ function terminalSvg(
 }
 function bridgeSvg(part: StripFragment) {
   const anchors = new Map(fragmentAnchors(part).map((a) => [a.key, a]));
-  let laneIndex = 0;
+  const lanes = new Map(
+    part.model.bridges
+      .flatMap((j, index) => {
+        const a = anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
+          b = anchors.get(stripTerminalKey(j.endpoints[1].terminal));
+        return a && b ? [{ uid: j.uid, span: Math.abs(a.y - b.y), index }] : [];
+      })
+      .sort((a, b) => a.span - b.span || a.index - b.index)
+      .map((j, index) => [j.uid, index + 1]),
+  );
   return part.model.bridges
     .flatMap((j, i) => {
       const a = anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
         b = anchors.get(stripTerminalKey(j.endpoints[1].terminal));
       if (!a || !b) return [];
       const edge = a.x + part.model.terminalW / 2,
-        lane = edge + 6 * ++laneIndex;
+        lane = edge + 6 * required(lanes.get(j.uid), "Missing bridge lane");
       return [
         `<g data-strip-jumper="${attr(j.uid)}"><path d="M ${n(edge)} ${n(a.y)} H ${n(lane)} V ${n(b.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
         text(lane, Math.min(a.y, b.y) - 2, `B${i + 1}`, 2.5, "middle"),
