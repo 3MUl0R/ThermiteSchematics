@@ -37,6 +37,8 @@ it.each(["init-starter", "motor-starter"] as const)(
     for (const [index, label] of ["", "   ", "A\nB"].entries()) {
       const { ir, changed } = uncutLabelVariant(input.ir, crossed, name, label);
       expect(changed.length).toBeGreaterThan(0);
+      if (name === "motor-starter")
+        expect(changed).toHaveLength(label === "" ? 1 : 21);
       const result = await renderSchematicPacket(
         ir,
         input.request,
