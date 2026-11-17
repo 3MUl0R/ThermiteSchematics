@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { score } from "./score-log.mjs";
+import { approvedIssueLookup } from "./issue-lookup.mjs";
 const metric = (command) =>
   score({
     engineRoots: ["/engine"],
@@ -36,8 +37,10 @@ it("keeps guide-required read-only issue context separate from source rescue", (
       item: {
         id: "w",
         type: "web_search",
-        query:
-          "https://github.com/BlackettApplied/ThermiteSchematics/issues/367",
+        action: {
+          type: "open_page",
+          url: "https://github.com/BlackettApplied/ThermiteSchematics/issues/367",
+        },
       },
     },
   ];
@@ -132,6 +135,9 @@ it.each([
 ])(
   "issue-search exemption refuses %s repository references",
   (_form, reference) => {
+    expect(
+      approvedIssueLookup(`${issueSite} ${reference}`, { search: true }),
+    ).toBe(false);
     const result = metricQuery(`${issueSite} ${reference}`);
     expect(result.sourceReads).toBe(1);
     expect(result.issueLookups).toHaveLength(0);
@@ -142,9 +148,6 @@ it.each([
 it.each([
   `${issueSite} Thermite`,
   "site:github.com/BlackettApplied/ThermiteSchematics/issues Thermite",
-  `${issueSite}/367 Thermite`,
-  `${issueSite} https://github.com/3MUl0R/ThermiteSchematics/issues/367`,
-  `${issueSite} https://github.com/BlackettApplied/ThermiteSchematics/issues?state=open`,
 ])("issue-only search stays an issue lookup: %s", (query) => {
   const result = metricQuery(query);
   expect(result.sourceReads).toBe(0);

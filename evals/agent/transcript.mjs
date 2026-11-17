@@ -4,6 +4,25 @@ import {
   knownAgentError,
 } from "./event-errors.mjs";
 import { terminalProtocol } from "./cli-protocol.mjs";
+function webLookup(events, item) {
+  const event = events.find((e) => e.type === "tool" && e.id === item.id);
+  if (!event) return;
+  if (
+    item.action?.type === "open_page" &&
+    typeof item.action.url === "string"
+  ) {
+    event.input = item.action.url;
+    event.lookupKind = "fetch";
+  } else if (
+    item.action?.type === "search" &&
+    typeof item.action.query === "string"
+  ) {
+    event.input = item.action.query;
+    delete event.lookupKind;
+  } else if (!event.input) {
+    event.input = item.query || item.action?.url || item.action?.query;
+  }
+}
 // Normalize both CLI streams. Truncated/noisy runs retain lower-bound usage.
 export function normalizeTranscript(
   input,
@@ -294,16 +313,11 @@ export function normalizeTranscript(
           input: item.command ?? item.arguments ?? item.changes ?? item.query,
           time: row.timestamp ?? null,
         });
+        if (item.type === "web_search") webLookup(events, item);
       }
       if (row.type === "item.completed") {
         // Codex 0.164.0 emits an empty web-search start, then the actual request.
-        if (item?.type === "web_search") {
-          const event = events.find(
-            (e) => e.type === "tool" && e.id === item.id,
-          );
-          if (event && !event.input)
-            event.input = item.query || item.action?.url || item.action?.query;
-        }
+        if (item?.type === "web_search") webLookup(events, item);
         if (item?.type === "command_execution")
           events.push({
             type: "tool-result",

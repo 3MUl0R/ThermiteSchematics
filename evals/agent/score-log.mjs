@@ -297,10 +297,11 @@ export function score({
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
     const values = strings(event.input),
       input = values.join("\n"),
-      acquisition = scopeAcquisition(
-        sourceScanInput(event.name, values),
-        allowedLibraryPaths,
-      ),
+      search = event.name === "web_search" && event.lookupKind !== "fetch",
+      scanInput = sourceScanInput(event.name, values),
+      acquisition = search
+        ? { input: scanInput }
+        : scopeAcquisition(scanInput, allowedLibraryPaths),
       scannedInput = acquisition.input,
       canonicalInput = pathText(scannedInput);
     let readsSource =
@@ -353,15 +354,10 @@ export function score({
         libraryAcquisitions.push({ id: event.id, input });
       if (!readsLocal && acquisition.issue)
         issueLookups.push({ id: event.id, input });
-      if (readsSource) {
-        if (
-          !readsLocal &&
-          approvedIssueLookup(values[0] ?? "", {
-            search: event.name === "web_search",
-          })
-        )
+      if (readsSource || search) {
+        if (!readsLocal && approvedIssueLookup(input, { search }))
           issueLookups.push({ id: event.id, input });
-        else sourceReads.push({ id: event.id, input });
+        else if (readsSource) sourceReads.push({ id: event.id, input });
       }
     }
     const guideCommand = /thermite[^\n]*\bguide\b/.test(input);

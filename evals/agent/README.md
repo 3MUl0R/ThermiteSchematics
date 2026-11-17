@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.13.0)
+# Fresh-agent evaluator (E2 v1.14.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -560,15 +560,40 @@ keeps task.json exactly synchronized (D tasks 1.5.1). Frozen briefs and scoring
 semantics are unchanged. Previous-engine reference and derived artifact replay
 still precede current-engine replay; old model collection versions are retained.
 
-Eval 1.13 closes mixed native issue/source searches. Only approved issue targets
-may appear in an issue-only search; raw, blob/tree/commit, clone, archive and
-other repository references in the remainder stay V8, including URLs nested in
-issue query strings or fragments. For example,
-`site:github.com/3MUl0R/ThermiteSchematics/issues Thermite` stays an issue lookup;
-adding a raw source URL does not. Historical 1.9/1.10 collections and derived
-1.12 replays retain their identities. Their recorded issue searches contain no
-mixed references, so this restriction changes none of their recorded metrics.
+Eval 1.13 added mixed-search negatives; its denylist was superseded by 1.14
+below. Historical 1.9/1.10 collections and derived 1.12 replays retain their
+identities. Their recorded issue searches contain no mixed references.
 Capture routing also canonicalizes project roots, including macOS `/var`
 aliases. Contributor fixtures use a root-only private Git `info/exclude` entry
 for linked dependencies; the engine's `node_modules/` rule still permits an
 ordinary source file with that name.
+
+Eval **1.14.0** grants issue-lookup exemptions by an allowlist. Search text is
+iteratively percent-decoded, Unicode NFKC-normalized, lowercased and whitespace
+collapsed until stable; malformed encodings are refused. Every token must be a
+plain word, a whole quoted phrase of plain words, or a fixed operator:
+`site:github.com/<owner>/ThermiteSchematics/issues`,
+`repo:<owner>/ThermiteSchematics` paired with `is:issue` or `is:pr`, and
+`in:title,body,comments`. Owners are only `BlackettApplied` and `3MUl0R`. At least
+one complete issue scope is required. Words contain letters/numbers with
+optional internal hyphens/underscores. Boolean operators, unknown operators,
+URLs (including issue URLs), hosts, dots and path separators are not search
+terms. A failed exemption is ordinary search/source scoring, never an error.
+
+Actual fetches are classified separately from search text. Native `open_page`
+actions use their actual URL; native `search` actions use their actual query,
+not display text. A URL-looking query is still a search. Literal GET commands
+retain their existing guarded acquisition parsing. Decoded URLs must parse with
+WHATWG URL, use HTTP(S), have no credentials/nondefault port, and match exact
+`github.com` issue/list or numbered PR paths, or the `api.github.com/repos/...`
+equivalents (including numbered issue comments). Raw/code/archive/file paths
+are not permitted. Query keys are limited to `state`, `page`, `per_page`, `sort`
+and `direction`, with fixed enum/numeric values and no duplicates. Only empty or
+numeric issue/comment/discussion anchors are allowed; `raw`, `plain=1`, unknown
+parameters and path-bearing fragments fail. Normalization is classification
+only and does not execute decoded commands or URLs.
+
+All 12 retained transcripts rescore identically against 1.13, including the
+recorded site query and two typed issue-page opens. Original manifest/transcript
+hashes and historical replay identities remain unchanged; no category score or
+new model run is claimed.

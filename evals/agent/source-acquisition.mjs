@@ -4,7 +4,8 @@ import { approvedIssueLookup } from "./issue-lookup.mjs";
 // Remove only the approved request URL. Every other token still gets V8 scanning.
 export function scopeAcquisition(input, allowedPaths) {
   const request = acquisitionParts(input);
-  if (!request) return { input };
+  if (!request)
+    return approvedIssueLookup(input) ? { input: "", issue: true } : { input };
   const target = request.url.startsWith("repos/")
     ? "https://api.github.com/" + request.url
     : request.url;
