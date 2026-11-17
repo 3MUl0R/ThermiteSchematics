@@ -10,7 +10,7 @@ export const criteria = {
   "DQ-07":
     "Full-repeat navigation, coil mirrors and contact-to-coil sheet.zone match IR",
   "DQ-08":
-    "Reciprocal ordered off-page sheet.zone, source-backed conductor aliases and 2.5 mm block gaps; native circuit-terminal/network-port part references resolve reciprocally to measured destination zones",
+    "Reciprocal ordered off-page sheet.zone, source-backed conductor aliases and 2.5 mm block gaps; native circuit-terminal/network-port part references resolve reciprocally to measured destination zones; same-device detached protection/contact elements and each omitted selected communication port have individually named final sheet.zone pointers to measured native appearances",
   "DQ-09": "Four-side zones and all references resolve",
   "DQ-10":
     "Monotone L1-L2-L3(-PE), U-V-W and upright text and graphical AC/DC qualifiers",
