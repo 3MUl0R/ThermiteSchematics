@@ -10,6 +10,7 @@ import { existingCircuitCaption } from "./caption-association.js";
 import { fullyCoincidentCaption } from "./coincident-caption.js";
 import { circuitCaptionPositions } from "./caption-recovery.js";
 import { required } from "../presentation/util.js";
+import { circuitCaptionPlateFits } from "./inline-plate.js";
 
 /** Feed the final, already recovered label reservations to the shared physical
  * segment planner. Native route arrays and fixed terminal geometry never change. */
@@ -54,6 +55,7 @@ function circuitLabelNeedsMove(
   label: CircuitLabelState["labels"][number],
   state: CircuitLabelState,
 ) {
+  if (!circuitCaptionPlateFits(label, state)) return true;
   const own = state.segments
       .filter((s) => s.index === label.index)
       .map((s) => [s.a, s.b]),
