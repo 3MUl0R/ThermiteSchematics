@@ -507,12 +507,41 @@ export async function auditTask1RepositorySources(
   }
 }
 
+export function parseTrackedTestFiles(text) {
+  const tracked = new Map();
+  for (const record of text.split("\0").filter(Boolean)) {
+    const tab = record.indexOf("\t");
+    const [mode, objectId, stage] = record.slice(0, tab).split(" ");
+    const file = record.slice(tab + 1);
+    if (
+      tab < 0 ||
+      !/^[0-9a-f]{40}$/u.test(objectId) ||
+      stage !== "0" ||
+      (mode !== "100644" && mode !== "100755") ||
+      file.includes("\\") ||
+      tracked.has(file)
+    ) {
+      throw new Error(
+        `Tracked test path is not an ordinary stage-zero POSIX file: ${file}.`,
+      );
+    }
+    tracked.set(file, mode);
+  }
+  return tracked;
+}
+
 export async function trackedTestFiles(repositoryRoot = REPOSITORY_ROOT) {
-  const files = execFileSync("git", ["ls-files", "-z", "--", "*.test.ts"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter(Boolean);
-  return new Set(files);
+  const tracked = parseTrackedTestFiles(
+    execFileSync("git", ["ls-files", "--stage", "-z", "--", "*.test.ts"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }),
+  );
+  for (const file of [
+    "packages/compiler/test/package-metadata.test.ts",
+    "packages/core-library/test/package-files.test.ts",
+  ])
+    if (!tracked.has(file))
+      throw new Error(`Required tracked test file is absent: ${file}.`);
+  return tracked;
 }

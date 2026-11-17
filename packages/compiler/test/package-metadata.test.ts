@@ -10,6 +10,7 @@ import {
   auditTask1RepositorySources,
   auditTask1SourceTexts,
   trackedTestFiles,
+  parseTrackedTestFiles,
 } from "../../../scripts/run-vitest-and-audit.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -204,4 +205,24 @@ describe("Source test accommodation guards", () => {
     );
     expect(() => auditTask1SourceTexts(runIfDrift)).toThrow(/Windows-only/u);
   });
+});
+
+it("rejects linked and unmerged test entries in the native Git listing", () => {
+  const row = (mode: string, stage = "0") =>
+    `${mode} ${"1".repeat(40)} ${stage}\tprobe.test.ts\0`;
+  expect([...parseTrackedTestFiles(row("100644"))]).toEqual([
+    ["probe.test.ts", "100644"],
+  ]);
+  expect([...parseTrackedTestFiles(row("100755"))]).toEqual([
+    ["probe.test.ts", "100755"],
+  ]);
+  expect(() => parseTrackedTestFiles(row("120000"))).toThrow(
+    /ordinary stage-zero/u,
+  );
+  expect(() => parseTrackedTestFiles(row("100644", "1"))).toThrow(
+    /ordinary stage-zero/u,
+  );
+  expect(() => parseTrackedTestFiles(row("100644") + row("100644"))).toThrow(
+    /ordinary stage-zero/u,
+  );
 });
