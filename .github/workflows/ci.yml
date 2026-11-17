@@ -60,6 +60,24 @@ jobs:
               "THERMITE_DRAW_CHROMIUM=" + executable + "\n" +
               "THERMITE_TEST_BROWSER=" + executable + "\n");
           '
+      # CI-GREEN2 round 1 only: collect real Linux updater output for review.
+      - name: CI-GREEN2 focused portability probes
+        run: |
+          bun run build
+          bun run test -- evals/layout-flows/inputs.test.mjs scripts/perf-gate evals/contributor/tasks/support.test.mjs
+      - name: CI-GREEN2 collect Linux updater evidence
+        if: runner.os == 'Linux'
+        env:
+          CI_GREEN2_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bun scripts/ci-green2/linux-evidence.mjs "${{ runner.temp }}/ci-green2-linux"
+      - name: CI-GREEN2 retain Linux packets and measured reference
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ci-green2-linux-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/ci-green2-linux
+          if-no-files-found: error
+          retention-days: 7
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python

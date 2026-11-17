@@ -8,6 +8,7 @@ import {
   rmSync,
   symlinkSync,
   realpathSync,
+  lstatSync,
 } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -113,6 +114,33 @@ function dependencyIgnoreFixture(directory) {
   return { repository, worktree, git, ignored };
 }
 
+function assertDependencyLink(directory, repository, git, ignored) {
+  const probe = join(directory, "dependency-target");
+  mkdirSync(probe);
+  rmSync(join(repository, "node_modules"), { recursive: true });
+  symlinkSync(
+    probe,
+    join(repository, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  expect(lstatSync(join(repository, "node_modules")).isSymbolicLink()).toBe(
+    true,
+  );
+  expect(realpathSync(join(repository, "node_modules"))).toBe(
+    realpathSync(probe),
+  );
+  // Git for Windows treats junctions as directories for directory-only ignore
+  // rules; POSIX Git treats symlinks as files. Run 44131278013 proves this
+  // distinction. The ordinary-file and private-worktree assertions stay shared.
+  expect(ignored(repository, "node_modules")).toBe(
+    process.platform === "win32",
+  );
+  if (process.platform === "win32")
+    expect(
+      git(repository, "check-ignore", "-v", "--", "node_modules"),
+    ).toContain("node_modules/");
+}
+
 it("fixture-only exclusions keep linked dependencies clean without hiding ordinary node_modules files", () => {
   const directory = realpathSync(
     mkdtempSync(join(tmpdir(), "thermite-k-ignore-")),
@@ -132,15 +160,7 @@ it("fixture-only exclusions keep linked dependencies clean without hiding ordina
     rmSync(join(repository, "node_modules"));
     mkdirSync(join(repository, "node_modules"));
     expect(ignored(repository, "node_modules")).toBe(true);
-    const probe = join(directory, "dependency-target");
-    mkdirSync(probe);
-    rmSync(join(repository, "node_modules"), { recursive: true });
-    symlinkSync(
-      probe,
-      join(repository, "node_modules"),
-      process.platform === "win32" ? "junction" : "dir",
-    );
-    expect(ignored(repository, "node_modules")).toBe(false);
+    assertDependencyLink(directory, repository, git, ignored);
     rmSync(join(repository, "node_modules"), { recursive: true });
     mkdirSync(join(repository, "node_modules"));
     ignoreFixtureDependencies(repository);
