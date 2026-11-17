@@ -1,14 +1,18 @@
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 import { expectedIdentifierCells } from "./identifier-policy.mjs";
 
 const uncertainty = 0.17; // existing 300 dpi geometry uncertainty, mm
 const whitespace = (s) => /\s/u.test(s ?? "");
 function physicalLines(runs) {
   const lines = [];
+  for (const run of runs)
+    if (!Number.isFinite(run.anchor?.y) || !Number.isFinite(run.anchor?.x))
+      throw new IdentifierMeasurementError(
+        "Identifier measurement: missing physical baseline",
+      );
   for (const run of [...runs].sort(
     (a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x,
   )) {
-    if (!Number.isFinite(run.anchor?.y) || !Number.isFinite(run.anchor?.x))
-      throw Error("Identifier measurement: missing physical baseline");
     let line = lines.find(
       (line) => Math.abs(line.y - run.anchor.y) <= uncertainty,
     );
@@ -77,7 +81,7 @@ function sourceSpans(text, identifiers) {
       const found = [];
       let start = text.indexOf(identifier);
       if (start < 0)
-        throw Error(
+        throw new IdentifierMeasurementError(
           `Identifier measurement: source unit ${JSON.stringify(identifier)} is absent from its query cell`,
         );
       while (start >= 0) {
@@ -96,7 +100,10 @@ function sourceSpans(text, identifiers) {
 }
 function cellRuns(g, expected, cell, medium, pdfRuns) {
   if (medium === "pdf") {
-    if (!pdfRuns) throw Error("Identifier measurement: PDF runs missing");
+    if (!pdfRuns)
+      throw new IdentifierMeasurementError(
+        "Identifier measurement: PDF runs missing",
+      );
     return pdfRuns.filter((run) => {
       const x = run.bbox.x + run.bbox.w / 2;
       return (
@@ -116,7 +123,7 @@ function cellRuns(g, expected, cell, medium, pdfRuns) {
     )
     .flatMap((t) => {
       if (!t.reportRuns)
-        throw Error(
+        throw new IdentifierMeasurementError(
           "Identifier measurement: SVG/HTML character line boxes missing",
         );
       return t.reportRuns;
@@ -133,7 +140,7 @@ export function identifierFindings(
   policy = {},
 ) {
   if (!Array.isArray(g.reportCells))
-    throw Error(
+    throw new IdentifierMeasurementError(
       "Identifier measurement: independently measured cell rectangles missing",
     );
   const findings = [];
@@ -145,7 +152,7 @@ export function identifierFindings(
         cell.row === expected.row && cell.columnIndex === expected.column,
     );
     if (cells.length !== 1)
-      throw Error(
+      throw new IdentifierMeasurementError(
         `Identifier measurement: missing or ambiguous cell ${expected.row}/${expected.column}`,
       );
     const cell = cells[0],

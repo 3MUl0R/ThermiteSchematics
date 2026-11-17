@@ -167,7 +167,7 @@ export function textReportCell(c) {
     const rectangle =
       stacked?.e ?? tableRectangles(reportColumn.parentElement)[columnIndex];
     if (!rectangle)
-      throw Error(
+      throw new c.h.IdentifierMeasurementError(
         "Report column has no independently measurable SVG cell rectangle",
       );
     cell = bounds(rectangle);

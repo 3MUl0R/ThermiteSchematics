@@ -5,7 +5,10 @@ import {
   mediaIdentifiers,
   svgIdentifiers,
 } from "./identifier-observations.mjs";
-import { identifierContext } from "./identifier-errors.mjs";
+import {
+  IdentifierMeasurementError,
+  identifierContext,
+} from "./identifier-errors.mjs";
 import { missingMarkerRow } from "./marker-missing.mjs";
 import { exitCode, assess } from "./assessment.mjs";
 import { seed } from "./marker-authoring.mjs";
@@ -40,8 +43,13 @@ const evaluate = (tables) =>
 it("C6 identifier lookup failure retains all sheet observation IDs and other DQs", () => {
   const good = evaluate([table]),
     bad = evaluate([]);
-  expect(bad.map((r) => r.id)).toEqual(good.map((r) => r.id));
-  const failed = bad.find((r) => r.id.endsWith("DQ-19/sheet-001"));
+  const failed = bad.find((r) =>
+    r.id.endsWith("DQ-19/svg-identifier-infrastructure-1"),
+  );
+  expect(bad.filter((r) => r !== failed).map((r) => r.id)).toEqual(
+    good.map((r) => r.id),
+  );
+  expect(bad).toHaveLength(good.length + 1);
   expect(failed).toMatchObject({
     sheet: 1,
     status: "infrastructure-error",
@@ -67,7 +75,9 @@ it("C6 a PDF identifier extraction failure preserves the independent HTML observ
   const g = geometry(),
     pdf = {
       getTextContent: async () => {
-        throw Error("PDF extraction failed");
+        throw Object.assign(Error("PDF extraction failed"), {
+          name: "FormatError",
+        });
       },
     };
   const rows = await mediaIdentifiers(
@@ -129,7 +139,7 @@ it("C6 failed identifier scopes receive neither repair credit nor unmet-pin casc
 });
 it("C6 browser identifier errors retain their precise sheet and medium", () => {
   const e = identifierContext(
-    Error("Identifier measurement: broken cell"),
+    new IdentifierMeasurementError("Identifier measurement: broken cell"),
     7,
     "html",
   );
@@ -207,7 +217,7 @@ it.each([false, true])(
 );
 it("C6 fatal identifier geometry errors remain explicit sheet infrastructure in the case receipt", () => {
   const error = identifierContext(
-      Error("Identifier measurement: broken geometry"),
+      new IdentifierMeasurementError("Identifier measurement: broken geometry"),
       3,
       "svg",
     ),

@@ -1,3 +1,4 @@
+export { requireReportCells } from "./identifier-errors.mjs";
 import { netLabelFindings } from "./net-label-oracle.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import {
@@ -895,11 +896,6 @@ export function reportInventory(table, packet, geometries) {
       ]
     : [];
 }
-export function requireReportCells(g) {
-  if (g.texts.some((t) => t.row && !t.cell))
-    throw Error("Report text lacks an independently measured cell bbox");
-}
-
 // Zone boundaries are reconstructed from the printed grid anchors. No renderer
 // xMm/yMm or zone estimate participates in this calculation.
 export function zoneAt(g, p) {

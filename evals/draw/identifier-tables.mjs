@@ -1,3 +1,4 @@
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 import { tableForSheet } from "./m3-documents.mjs";
 // Index/reference tables are packet-owned; public query tables cover all other
 // reports. Values below come from packet references and IR, never printed text.
@@ -24,7 +25,9 @@ function referenceContent(packet, content) {
     !["all", "drawings"].includes(selection.appearances) ||
     !Array.isArray(selection.deviceUids)
   )
-    throw Error("Identifier measurement: invalid reference selection");
+    throw new IdentifierMeasurementError(
+      "Identifier measurement: invalid reference selection",
+    );
   const selected = new Set(selection.deviceUids);
   return content
     .filter(
@@ -44,7 +47,9 @@ export function identifierTable(sheet, packet, g, ir, tables) {
   if (table) return table;
   if (!["index", "references"].includes(kind)) {
     if (g.reportRows.length)
-      throw Error(`Identifier measurement: source table missing for ${kind}`);
+      throw new IdentifierMeasurementError(
+        `Identifier measurement: source table missing for ${kind}`,
+      );
     return null;
   }
   const content = packet.sheets.filter(
@@ -72,7 +77,7 @@ export function identifierTable(sheet, packet, g, ir, tables) {
           const [uid, functions, representation] = JSON.parse(key);
           const device = ir.devices.find((d) => d.uid === uid);
           if (!device)
-            throw Error(
+            throw new IdentifierMeasurementError(
               `Identifier measurement: unknown reference device ${uid}`,
             );
           const entries = appearances.flatMap((s) =>
@@ -86,7 +91,7 @@ export function identifierTable(sheet, packet, g, ir, tables) {
               .map((r) => `${s.number} / ${r.zone}`),
           );
           if (!entries.length)
-            throw Error(
+            throw new IdentifierMeasurementError(
               `Identifier measurement: reference source missing for ${key}`,
             );
           return {

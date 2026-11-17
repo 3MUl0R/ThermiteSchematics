@@ -307,14 +307,18 @@ export const geometry = {
     }
     return undefined;
   },
-  reportRuns: (e, rendered, { matrix, bounds, continuationOwner, point }) => {
+  reportRuns: (
+    e,
+    rendered,
+    { matrix, bounds, continuationOwner, point, h },
+  ) => {
     if (!e.closest("[data-report-row]") && !continuationOwner(e))
       return undefined;
     const count = e.getNumberOfChars(),
       points = Array.from(rendered);
     const utf16 = count === rendered.length;
     if (!utf16 && count !== points.length)
-      throw Error(
+      throw new h.IdentifierMeasurementError(
         "Identifier measurement: SVG character inventory differs from rendered text",
       );
     const runs = [];

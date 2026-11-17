@@ -3,7 +3,7 @@ import { tranche3Observations } from "./tranche3-observations.mjs";
 import { withRelationLandingSource } from "./relation-landing-sources.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 const wireLocatorAudits = new WeakMap();
-import { documentInventory, requestedTerminalPlan } from "./m3-documents.mjs";
+import { documentInventory } from "./m3-documents.mjs";
 import { navigationObservations } from "./navigation-observations.mjs";
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
 import { continuationTypography } from "./continuation-typography.mjs";
@@ -18,7 +18,10 @@ import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import * as checks from "./checks.mjs";
-import { svgIdentifiers } from "./identifier-observations.mjs";
+import {
+  terminalPlanObservation,
+  documentObservations,
+} from "./document-observations.mjs";
 const reasons = {
   "DQ-24":
     "Needs exported configured wire-numbering policy and number-to-conductor assignments; authored connection labels are not a numbering policy.",
@@ -357,56 +360,24 @@ function evaluateDocuments(
     }),
   );
   out.push(obs("DQ-17", checks.terminalText(g)));
-  out.push(
-    obs(
-      "DQ-23",
-      requestedTerminalPlan(s, g, tables) && g.reportRows.length
-        ? [
-            {
-              kind: "terminal-plan-is-table",
-              element: "terminal-plan",
-              designation: s.view.title ?? "terminals",
-              sheetLevel: true,
-              rows: g.reportRows.length,
-            },
-          ]
-        : [],
-      {
-        scope:
-          "Requested terminal plan must contain graphical strip geometry; report-row cells identify current table-only output.",
-      },
-    ),
-  );
+  out.push(terminalPlanObservation(s, g, tables, obs));
   out.push(obs("DQ-18", checks.titleFields(g)));
   if (!wireLocatorAudits.has(packet))
     wireLocatorAudits.set(packet, wireLocatorAudit(packet, geometries, ir));
-  const identifiers = svgIdentifiers(
-    s,
-    packet,
-    g,
-    ir,
-    tables,
-    identifierPolicy,
-  );
   out.push(
-    obs(
-      "DQ-19",
-      [
-        ...wireLocatorAudits
-          .get(packet)
-          .findings.filter((f) => f.sheet === s.number),
-        ...identifiers.findings,
-        ...checks
-          .textBounds({ ...g, texts: g.texts.filter((t) => t.row) })
-          .filter((x) => x.kind === "text-outside-cell"),
-        ...cohort(checks.reports(g, s, packet, identifiers.table), (f) =>
-          f.kind === "report-null-placeholder"
-            ? [f.kind, f.columnIndex]
-            : [f.kind, f.element],
-        ),
-      ],
-      identifiers.extra,
-    ),
+    ...documentObservations({
+      s,
+      g,
+      packet,
+      ir,
+      tables,
+      policy: identifierPolicy,
+      wireFindings: wireLocatorAudits
+        .get(packet)
+        .findings.filter((f) => f.sheet === s.number),
+      obs,
+      cohort,
+    }),
   );
 }
 

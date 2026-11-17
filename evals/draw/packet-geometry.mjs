@@ -5,7 +5,7 @@ import { retainLostText } from "./lost-text.mjs";
 import { viewKey } from "./locators.mjs";
 import {
   identifierContext,
-  identifierErrorPattern,
+  IdentifierMeasurementError,
 } from "./identifier-errors.mjs";
 export async function measurePacketGeometry(
   page,
@@ -17,7 +17,7 @@ export async function measurePacketGeometry(
   await page.setContent(await readFile(htmlPath, "utf8"));
   await page.evaluate(() => document.fonts.ready);
   const measured = await page.evaluate(
-    ({ source, pattern }) => {
+    ({ source }) => {
       const measure = (0, eval)(`(${source})`);
       return Array.from(document.querySelectorAll("section>svg")).map((_, i) =>
         (() => {
@@ -29,16 +29,25 @@ export async function measurePacketGeometry(
               }),
             };
           } catch (error) {
-            if (!new RegExp(pattern).test(error.message)) throw error;
+            if (
+              error.name !== "IdentifierMeasurementError" ||
+              error.code !== "THERMITE_IDENTIFIER_MEASUREMENT"
+            )
+              throw error;
             return { error: error.message, sheet: i + 1 };
           }
         })(),
       );
     },
-    { source: sheetMeasurementSource(), pattern: identifierErrorPattern },
+    { source: sheetMeasurementSource() },
   );
   const htmlGeometry = measured.map((r) => {
-    if (r.error) throw identifierContext(Error(r.error), r.sheet, "html");
+    if (r.error)
+      throw identifierContext(
+        new IdentifierMeasurementError(r.error),
+        r.sheet,
+        "html",
+      );
     return r.geometry;
   });
   const htmlSvgs = await page.evaluate(() =>
