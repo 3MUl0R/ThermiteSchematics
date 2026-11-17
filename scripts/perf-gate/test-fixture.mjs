@@ -44,11 +44,13 @@ export function fixture(timing = false) {
   put(
     join(head, "build.mjs"),
     `
-import { cpSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, appendFileSync, renameSync } from 'node:fs';
 import { join, basename } from 'node:path';
 if (process.env.PERF_BUILD_ORDER) appendFileSync(process.env.PERF_BUILD_ORDER, basename(process.cwd())+'\\n');
 if (process.env.PERF_PAUSE_FILE && basename(process.cwd()) === 'base') {
-  writeFileSync(process.env.PERF_PAUSE_FILE, JSON.stringify({base:process.cwd(),pid:process.pid}));
+  const ready=process.env.PERF_PAUSE_FILE;
+  writeFileSync(ready+'.writing', JSON.stringify({base:process.cwd(),pid:process.pid}));
+  renameSync(ready+'.writing', ready);
   await new Promise(() => setInterval(() => {}, 1000));
 }
 for (const name of ['compiler','render']) {
