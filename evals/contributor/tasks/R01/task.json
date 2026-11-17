@@ -7,7 +7,6 @@
   "requiredTopics": [],
   "expectedWarnings": [],
   "reference": "reference.mjs",
-  "rubric": [],
   "guideCopy": {
     "from": "engine",
     "to": "worktree"
