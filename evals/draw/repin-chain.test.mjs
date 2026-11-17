@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordFixture, recordPadding } from "./repin-record-fixture.mjs";
+import { RECORD_LIMIT } from "./repin-record-policy.mjs";
 import { writeRecord } from "./repin-record-write.mjs";
 import { verifyRecord } from "./repin-record.mjs";
 import { verifyRecordChain, readRecordChain } from "./repin-record-chain.mjs";
@@ -54,11 +55,11 @@ it("pins metadata even when an attacker rebinds the signed file and receipt", ()
 });
 it("the pin cannot increase the v2 record cap", () => {
   const c = fixture(),
-    b = Buffer.alloc(3000000);
+    b = Buffer.alloc(RECORD_LIMIT);
   recordPadding(c.r, b.length);
   c.r.files.set("record.json", Buffer.from(json(c.r.record)));
   c.pin.recordSha256 = hash(c.r.files.get("record.json"));
-  c.pin.maxBytes = 4000000;
+  c.pin.maxBytes = RECORD_LIMIT + 1000000;
   c.pin.reason = "Synthetic reviewed exception";
   expect(() => verifyRecordChain(c.pins, c.records, hash("after"))).toThrow(
     /size cap/,
@@ -107,11 +108,11 @@ it("directory reader applies the v2 cap despite a larger pin", async () => {
   const root = await mkdtemp(join(tmpdir(), "repin-chain-budget-"));
   try {
     const c = fixture(),
-      b = Buffer.alloc(2000000);
+      b = Buffer.alloc(RECORD_LIMIT - 1000000);
     recordPadding(c.r, b.length);
     c.r.files.set("record.json", Buffer.from(json(c.r.record)));
     c.pin.recordSha256 = hash(c.r.files.get("record.json"));
-    c.pin.maxBytes = 4000000;
+    c.pin.maxBytes = RECORD_LIMIT + 1000000;
     c.pin.reason = "Synthetic reviewed larger record";
     await writeRecord(join(root, "7"), { ...c.r, pin: c.pin });
     await writeFile(join(root, "pins.json"), json(c.pins));

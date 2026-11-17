@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { recordFixture } from "./repin-record-fixture.mjs";
+import { RECORD_LIMIT } from "./repin-record-policy.mjs";
 import {
   verifyRecord,
   readRecord,
@@ -391,17 +392,23 @@ it("enforces the v2 cap even with an explicit per-PR size exception", () => {
     "countersignatures.json",
     Buffer.concat([
       c.files.get("countersignatures.json"),
-      Buffer.alloc(3000000, 32),
+      Buffer.alloc(RECORD_LIMIT, 32),
     ]),
   );
   expect(() => verifyRecord(c.record, c.files)).toThrow(/size cap/);
   expect(() =>
     verifyRecord(c.record, c.files, {
-      pin: { pr: 7, maxBytes: 4000000, reason: "Synthetic reviewed exception" },
+      pin: {
+        pr: 7,
+        maxBytes: RECORD_LIMIT + 1000000,
+        reason: "Synthetic reviewed exception",
+      },
     }),
   ).toThrow(/size cap/);
   expect(() =>
-    verifyRecord(c.record, c.files, { pin: { pr: 7, maxBytes: 4000000 } }),
+    verifyRecord(c.record, c.files, {
+      pin: { pr: 7, maxBytes: RECORD_LIMIT + 1000000 },
+    }),
   ).toThrow(/explicit larger cap and reason/);
   expect(() => verifyRecord(c.record, c.files, { pin: { pr: 8 } })).toThrow(
     /belongs to another PR/,
@@ -563,7 +570,8 @@ it("allows exactly 256 KiB of raw text and requires gzip above it", async () => 
     payloadBytes(r, "d", new Map([["d", Buffer.alloc(TEXT_LIMIT + 1)]])),
   ).toThrow(/over 256 KiB/);
 });
-it("allows exactly 3000000 bytes and refuses one byte more", () => {
+it(`allows exactly ${RECORD_LIMIT} bytes and refuses one byte more`, () => {
+  expect(RECORD_LIMIT).toBe(8000000);
   const c = recordFixture();
   side(c);
   c.files.set("record.json", Buffer.from(json(c.record)));
@@ -571,7 +579,7 @@ it("allows exactly 3000000 bytes and refuses one byte more", () => {
     original = c.files.get("countersignatures.json");
   c.files.set(
     "countersignatures.json",
-    Buffer.concat([original, Buffer.alloc(3000000 - base, 32)]),
+    Buffer.concat([original, Buffer.alloc(RECORD_LIMIT - base, 32)]),
   );
   expect(verifyRecord(c.record, c.files).entries).toBe(1);
   c.files.set(

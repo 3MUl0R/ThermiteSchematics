@@ -12,6 +12,7 @@ import { recordFixture } from "./repin-record-fixture.mjs";
 import { pngFixture } from "./png-fixture.mjs";
 import { recordFor, writeRecord } from "./repin-record-write.mjs";
 import { readRecord, verifyRecord } from "./repin-record.mjs";
+import { RECORD_LIMIT } from "./repin-record-policy.mjs";
 import { hash, json } from "./support.mjs";
 import { drawingHash } from "./png-ink.mjs";
 async function fixture(notMove = false) {
@@ -171,11 +172,11 @@ it("cannot downgrade a new archive by changing the source format to v1", async (
   c.args.receipt = Buffer.from(json(c.receipt));
   expect(() => recordFor(c.args)).toThrow(/Bind crop/);
 });
-it("counts verification files under the existing 3 MB cap", async () => {
+it("counts verification files under the policy cap", async () => {
   const { recordPadding } = await import("./repin-record-fixture.mjs"),
     c = recordFixture();
   const size = [...c.files.values()].reduce((s, b) => s + b.length, 0);
-  recordPadding(c, 3000001 - size);
+  recordPadding(c, RECORD_LIMIT + 1 - size);
   expect(() => verifyRecord(c.record, c.files)).toThrow(/size cap/);
 });
 

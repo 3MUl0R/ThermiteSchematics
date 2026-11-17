@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { recordFor, writeRecord } from "./repin-record-write.mjs";
 import { recordFixture } from "./repin-record-fixture.mjs";
 import { verifyRecord, deterministicReceipt } from "./repin-record.mjs";
-import { recordBudget } from "./repin-record-policy.mjs";
+import { recordBudget, RECORD_LIMIT } from "./repin-record-policy.mjs";
 import { hash, json } from "./support.mjs";
 function args() {
   const c = recordFixture();
@@ -73,8 +73,9 @@ it("reader checks compressed text flags independently of the file manifest", () 
   );
 });
 it.each([
-  { maxBytes: 3000001 },
+  { maxBytes: RECORD_LIMIT + 1 },
   { maxBytes: 3000000, reason: "not a raise" },
+  { maxBytes: RECORD_LIMIT, reason: "not a raise" },
   { maxBytes: Infinity, reason: "invalid" },
   { reason: "unused" },
 ])("requires a meaningful explicit cap exception %j", (pin) => {
