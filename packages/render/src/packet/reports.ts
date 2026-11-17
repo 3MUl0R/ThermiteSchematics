@@ -32,6 +32,11 @@ import { n, text } from "./svg.js";
 import { reportNoteLines } from "./report-note-wrapping.js";
 import { reportDocumentContext } from "./document-report.js";
 import type { DocumentRowDraft } from "./document-types.js";
+import {
+  terminalStrip,
+  stripRowReference,
+  stripDraft,
+} from "./terminal-strip.js";
 
 export function documentationDrafts(
   ir: Readonly<ElectricalIr>,
@@ -77,13 +82,12 @@ function reportTitle(
     presentation,
   );
 }
-export function tableDrafts(
+function prepareReport(
   ir: Readonly<ElectricalIr>,
   table: DocumentationTable,
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
-): RenderOutcome<Draft[]> {
-  table = reserveWireLocations(table);
+) {
   if (unprintableReportText(ir, table, presentation))
     return failure(
       "unprintable-layout",
@@ -97,20 +101,44 @@ export function tableDrafts(
   const title = reportTitle(ir, table, presentation);
   const capacity = headingCapacity(title, presentation);
   if (capacity) return capacity;
-  const b = bounds(title, page),
-    drafts: Draft[] = [];
+  const fullBounds = bounds(title, page),
+    b = {
+      ...fullBounds,
+      w:
+        fullBounds.w -
+        (table.kind === "terminals" && table.rows.length ? 20 : 0),
+    };
   if (b.w < 60 || b.h < 50)
     return failure(
       "unprintable-layout",
       "Insufficient report area. Shorten title lines or select a larger sheet.",
     );
   let measured: ReturnType<typeof paginatedReportCells>, header: string[][];
+  let strip: ReturnType<typeof terminalStrip>;
   try {
+    strip = terminalStrip(ir, table, fullBounds);
     measured = paginatedReportCells(ir, table, b.w, b.h, page, b.y);
     header = measured.split(table.columns, "header");
   } catch (error) {
     return failure("unprintable-layout", (error as Error).message);
   }
+  return {
+    ok: true as const,
+    value: { view, title, fullBounds, b, strip, measured, header },
+  };
+}
+export function tableDrafts(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+): RenderOutcome<Draft[]> {
+  table = reserveWireLocations(table);
+  const prepared = prepareReport(ir, table, presentation, page);
+  if (!prepared.ok) return prepared;
+  const { view, title, fullBounds, b, strip, measured, header } =
+    prepared.value;
+  const drafts: Draft[] = [];
   const {
     widths,
     cellSize,
@@ -131,7 +159,7 @@ export function tableDrafts(
     header,
     headerH,
   );
-  const notes = reportNotes(table, b.w, measured.allocationFallback);
+  const notes = reportNotes(table, fullBounds.w, measured.allocationFallback);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
   const paginator = reportPaginator(b.y, b.h, headerH, notes.length);
   if (!paginator.headerFits) {
@@ -173,6 +201,7 @@ export function tableDrafts(
     content.push('<g id="document-header">');
     row(header, headerH, true);
     content.push("</g>");
+    if (strip) content.push(text(b.x + b.w + 2, b.y + 12, "Strip row", 2.5));
   }
   function finish(end: number) {
     content.push(...reportNoteSvg(notes, b));
@@ -219,11 +248,19 @@ export function tableDrafts(
     }
     refs.push(...documents.references(i, y, height));
     content.push(
-      `<g id="document-row-${i}" data-report-row="${attr(source.key)}" data-row-designation="${attr(rowDesignation(i))}">`,
+      `<g id="document-row-${i}" data-report-row="${attr(source.key)}" data-row-designation="${attr(rowDesignation(i))}"${strip ? ` data-strip-ref="${attr(strip.facts.terminals.get(source.key)?.ref ?? "")}"` : ""}>`,
     );
     documentRows.push(documents.row(i, cells, y, height, rowDesignation(i)));
     row(cells, height);
     content.push("</g>");
+    content.push(
+      stripRowReference(
+        strip?.facts.terminals.get(source.key)?.ref,
+        source.key,
+        b.x + b.w + 2,
+        y - height / 2 + 1,
+      ),
+    );
     if (drafts.length > 100)
       return failure(
         "unprintable-layout",
@@ -233,7 +270,45 @@ export function tableDrafts(
   if (!table.rows.length)
     content.push(text(b.x + 2, y + 7, "No matching records", 3));
   finish(table.rows.length);
+  appendStripReport(
+    ir,
+    table,
+    fullBounds,
+    bottom,
+    y,
+    drafts,
+    strip,
+    view,
+    title,
+  );
   return { ok: true, value: drafts };
+}
+
+function appendStripReport(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  fullBounds: ReturnType<typeof bounds>,
+  bottom: number,
+  y: number,
+  drafts: Draft[],
+  strip: ReturnType<typeof terminalStrip>,
+  view: NormalizedDocumentationView,
+  title: SchematicTitleContext,
+) {
+  if (!strip) return;
+  let inline: ReturnType<typeof terminalStrip>;
+  try {
+    inline = terminalStrip(ir, table, {
+      ...fullBounds,
+      y: y + 6,
+      h: bottom - y - 9,
+    });
+  } catch {
+    /* A complete extra sheet is the bounded fallback. */
+  }
+  const last = drafts[drafts.length - 1];
+  if (inline && last) last.content += `\n${inline.content}`;
+  else drafts.push(stripDraft({ view, title }, strip.content));
 }
 
 /** Native query tables have no packet geometry; reserve endpoint cells here. */

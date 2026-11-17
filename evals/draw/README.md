@@ -59,6 +59,22 @@ assessment after real SVG remeasurement. No corpus case or pin is added.
 The 5.23 full checkpoint is replayed before adoption, per scorecard §2; 5.23
 summaries remain readable with their complete counters.
 
+The #336 terminal-strip oracle is a separate **non-strict exposure** check:
+
+```sh
+nice -n 19 bun evals/draw/terminal-strip-exposure.mjs --capture evals/out/draw/CHECKPOINT --out evals/out/terminal-strip-exposure.json
+```
+
+It reconstructs requested terminal selection, authored order, explicit jumper
+endpoints and conductor incidences from native IR. Chromium measures terminal
+rectangles, jumper/stub paths and visible text; identity attributes locate ink
+but do not establish coverage. Missing/extra bridges, wrong order, invented
+shapes, wrong peers and missing reciprocal row references fail the exposure.
+The receipt binds input artifacts, strict report, checker and Chromium, with
+`strict: false` and `repinNow: false`. It does not alter the existing strict
+DQ-23 observation or pins. This SVG oracle does not certify HTML/PDF; those
+require separate print review. Existing refusals remain not measured.
+
 Version **5.23** fixes #395: a missing identifier table keeps table-dependent
 report-placeholder pins as infrastructure, shared sheet furniture is checked
 once against the complete nonempty sheet, and PDF painted measurement guards

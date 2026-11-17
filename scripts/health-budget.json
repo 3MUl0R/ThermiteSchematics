@@ -396,7 +396,7 @@
     "packages/render/src/packet/page.ts#frame": 130,
     "packages/render/src/packet/references.ts#referenceTables": 108,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
-    "packages/render/src/packet/reports.ts#tableDrafts": 158,
+    "packages/render/src/packet/reports.ts#tableDrafts": 156,
     "packages/render/src/packet/topology.ts#topologyDrafts": 172,
     "packages/render/src/packet/topology.ts#topologyDrafts/compose": 136,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,

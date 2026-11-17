@@ -971,3 +971,11 @@ attachment, including strokes not inventoried by the drawing checker.
 `SchematicViewRequest` union and compiler-owned presentation through to this
 renderer, then returns the renderer DTOs and R-errors unchanged. It does not add
 agent-owned view syntax, selection, layout, geometry, or another R-code.
+
+Terminal reports include a graphical schematic strip and the original connection
+inventory. Each terminal keeps its native device UID/terminal key; every bridge
+keeps its native jumper UID. Tn/Rn references appear on both the strip and its
+inventory row. Authored order is preserved; missing order, dimensions and
+hardware stay visibly unspecified. Location groups do not assign installation
+sides. The strip uses free space after the inventory when it fits, otherwise at
+most one extra terminal-plan sheet, with text of at least 2.5 mm.
