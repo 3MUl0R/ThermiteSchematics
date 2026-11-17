@@ -45,7 +45,6 @@ Satisfied/substituted names must resolve in manifest-listed validated sources an
 
 Visual inspection is rubric-only: “Visually check at least two outputs: screenshot the HTML packet with playwright-cli (see `playwright-cli --help`) and look at the images yourself; note readability problems.” PDF V1/V5 remain pending without E3 or judges.
 
-
 ### Undesigned PSU input feed
 
 If the PSU input feed is undesigned, do not invent wiring, input ratings or branch protection. Preserve the final diagnostic on the PSU itself and mark the PSU requirement row **deferred**, even when the DC supply and its loads are modeled and drawn. A source-level connectionReview deferral alone does not provide the matrix exception. Use the actual PSU designation and actual final code; the shape below illustrates a final W905 on PS1:

@@ -582,7 +582,7 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
-    expect(task.version).toBe("1.5.0");
+    expect(task.version).toBe("1.5.1");
     expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
       [],
     );

@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.11.0)
+# Fresh-agent evaluator (E2 v1.12.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -553,3 +553,8 @@ engine read or another prohibited URL remains V8, alongside the acquisition
 observation. POST/config/dynamic fetches remain unrecognized and flagged.
 This is a transcript policy, not an execution sandbox. Replays retain the
 original collection identity and write derived records separately.
+
+Eval 1.12 removes one redundant blank line from each D appendix/prompt and
+keeps task.json exactly synchronized (D tasks 1.5.1). Frozen briefs and scoring
+semantics are unchanged. Previous-engine reference and derived artifact replay
+still precede current-engine replay; old model collection versions are retained.
