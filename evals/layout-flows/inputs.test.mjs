@@ -21,6 +21,17 @@ it("covers every tracked library example and every corpus request twice", async 
   ).toEqual(expected);
   expect(actual.filter((s) => s.kind === "corpus")).toHaveLength(108);
   expect(actual.length * 2).toBe((expected.length + 108) * 2);
+  for (const spec of actual.filter((s) => s.kind === "library")) {
+    expect(spec.project).not.toContain("\\");
+    expect([
+      `${spec.project}/packet.request.json`,
+      `${spec.project}/packet.json`,
+    ]).toContain(spec.request);
+    expect(
+      JSON.parse(await readFile(join(resolve("."), spec.request), "utf8"))
+        .views,
+    ).toBeInstanceOf(Array);
+  }
 });
 it("changes only eligible flow fields and preserves the authored paper and selections", async () => {
   const root = resolve("."),

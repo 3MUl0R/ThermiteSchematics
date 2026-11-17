@@ -1,5 +1,5 @@
 import { readdir, readFile, mkdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, posix } from "node:path";
 import assert from "node:assert/strict";
 import { cases, prepare } from "../draw/corpus.mjs";
 
@@ -24,9 +24,10 @@ export async function libraryExamples(root) {
     for (const entry of entries
       .filter((e) => e.isDirectory())
       .sort((a, b) => a.name.localeCompare(b.name))) {
-      const project = join("libraries", vendor, "examples", entry.name);
+      // These are repository identifiers in evidence, not native OS paths.
+      const project = posix.join("libraries", vendor, "examples", entry.name);
       const names = await readdir(join(root, project)),
-        request = join(
+        request = posix.join(
           project,
           names.includes("packet.request.json")
             ? "packet.request.json"
