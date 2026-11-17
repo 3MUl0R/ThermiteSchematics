@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.10.0)
+# Fresh-agent evaluator (E2 v1.11.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -400,9 +400,9 @@ scoring-gate or two-judge requirement is weakened.
 T07's exception permits only literal GET acquisitions from
 `libraries/field-interfaces/` and `libraries/industrial-pilot/` on the
 BlackettApplied/3MUl0R ThermiteSchematics GitHub contents/raw endpoints and scoped blob/tree URLs.
-`metrics.libraryAcquisitions` retains these observations separately. A fetch may be followed by `&& cat` of exactly its downloaded output; extra reads or commands remain source-access evidence. Quoted URL query strings and `--jq` response filters are parsed as arguments, not shell pipelines. Other tasks,
+`metrics.libraryAcquisitions` retains these observations separately. The permitted GET URL is separated from the command remainder, which is still scanned for engine-source reads. Quoted URL query strings and `--jq` response filters are parsed as arguments, not shell pipelines. Other tasks,
 local engine reads (including aliases), root listings/clones, searches,
-implementation/docs paths, other mixed commands and sibling libraries still count as
+implementation/docs paths and sibling libraries still count as
 V8. This permission is task metadata, not a general source-read waiver.
 
 For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
@@ -545,3 +545,11 @@ earlier `invalid_request` or other typed cause survives either wrapper. Progress
 clears the pending cause. `terminal_reason` is not mapped. The two real Claude
 captures used API-key mode with a loopback ANTHROPIC_BASE_URL; the first-party
 OAuth error path remains unverified.
+
+Eval 1.11 separates a permitted literal GET URL from the rest of a shell event.
+Local response formatting (including a Bun JSON summary) does not turn that
+URL into engine-source access. The remainder is still scanned: a subsequent
+engine read or another prohibited URL remains V8, alongside the acquisition
+observation. POST/config/dynamic fetches remain unrecognized and flagged.
+This is a transcript policy, not an execution sandbox. Replays retain the
+original collection identity and write derived records separately.

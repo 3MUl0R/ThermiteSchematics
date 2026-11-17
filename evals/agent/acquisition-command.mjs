@@ -121,16 +121,22 @@ export function literalShellBody(input) {
       "$2",
     );
 }
-export function acquisitionRequest(input) {
+export function acquisitionParts(input) {
   const text = literalShellBody(input);
-  if (/^https:\/\/\S+$/.test(text)) return { url: text };
+  if (/^https:\/\/\S+$/.test(text)) return { url: text, tail: null };
   const words = shellWords(text);
   if (!words) return null;
   const split = words.indexOf("&&");
   const request = fetchArguments(split < 0 ? words : words.slice(0, split));
   if (!request) return null;
-  if (split >= 0) {
-    const tail = words.slice(split + 1);
+  return { ...request, tail: split < 0 ? null : words.slice(split + 1) };
+}
+export function acquisitionRequest(input) {
+  const parts = acquisitionParts(input);
+  if (!parts) return null;
+  const { tail: original, ...request } = parts;
+  if (original !== null) {
+    const tail = [...original];
     if (tail[1] === "--") tail.splice(1, 1);
     if (tail.length !== 2 || tail[0] !== "cat" || !request.output) return null;
     if (posix.normalize(tail[1]) !== posix.normalize(request.output))

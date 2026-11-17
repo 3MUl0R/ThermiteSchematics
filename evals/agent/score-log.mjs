@@ -7,7 +7,7 @@ import { sourceScanInput } from "./source-scan-input.mjs";
 import { approvedIssueLookup } from "./issue-lookup.mjs";
 import { copiedContributorGuide } from "./contributor-policy.mjs";
 import { diff } from "./snapshot.mjs";
-import { allowedLibraryAcquisition } from "./library-acquisition.mjs";
+import { scopeAcquisition } from "./source-acquisition.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 const stable = (value) =>
   value && typeof value === "object"
@@ -297,7 +297,11 @@ export function score({
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
     const values = strings(event.input),
       input = values.join("\n"),
-      scannedInput = sourceScanInput(event.name, values),
+      acquisition = scopeAcquisition(
+        sourceScanInput(event.name, values),
+        allowedLibraryPaths,
+      ),
+      scannedInput = acquisition.input,
       canonicalInput = pathText(scannedInput);
     let readsSource =
       readPattern.some((re) => re.test(canonicalInput)) ||
@@ -344,20 +348,21 @@ export function score({
             readsLocal = true;
         } catch {}
     readsSource ||= readsLocal;
-    if (context === "runtime" && readsSource) {
-      if (
-        !readsLocal &&
-        allowedLibraryAcquisition(values[0] ?? "", allowedLibraryPaths)
-      )
+    if (context === "runtime") {
+      if (!readsLocal && acquisition.library)
         libraryAcquisitions.push({ id: event.id, input });
-      else if (
-        !readsLocal &&
-        approvedIssueLookup(values[0] ?? "", {
-          search: event.name === "web_search",
-        })
-      )
+      if (!readsLocal && acquisition.issue)
         issueLookups.push({ id: event.id, input });
-      else sourceReads.push({ id: event.id, input });
+      if (readsSource) {
+        if (
+          !readsLocal &&
+          approvedIssueLookup(values[0] ?? "", {
+            search: event.name === "web_search",
+          })
+        )
+          issueLookups.push({ id: event.id, input });
+        else sourceReads.push({ id: event.id, input });
+      }
     }
     const guideCommand = /thermite[^\n]*\bguide\b/.test(input);
     const directPath =
