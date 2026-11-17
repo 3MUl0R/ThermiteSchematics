@@ -1,4 +1,5 @@
 import { validateContextInk } from "./context-reference-validation.js";
+import { symbolRectangles } from "./symbol-rectangles.js";
 import {
   validateLeafSize,
   validateReferenceInput,
@@ -128,6 +129,7 @@ function invariant(condition: unknown, message: string): asserts condition {
 export type LayoutFailureKind =
   | "contract-violation"
   | "ambiguous-intersection"
+  | "net-label-intersection"
   | "collinear-overlap"
   | "symbol-intersection";
 export type LayoutValidationOutcome =
@@ -1083,21 +1085,9 @@ function validateNodeAndLabelCollisions(
   captions: ReadonlyMap<string, PresentationLabel>,
 ): void {
   const primitiveBounds = translatedPrimitiveBounds(graph, geometry, catalog);
-  const symbolRectangles = new Map<string, Bounds>();
-  for (const node of graph.nodes) {
-    if (node.kind === "junction") continue;
-    const layout = geometry.nodes.get(node.id);
-    if (layout?.primitiveOrigin === undefined)
-      reject(`node ${node.id} has no primitive origin`);
-    symbolRectangles.set(node.id, {
-      left: layout.primitiveOrigin.x,
-      top: layout.primitiveOrigin.y,
-      right: layout.primitiveOrigin.x + node.symbolSize.width,
-      bottom: layout.primitiveOrigin.y + node.symbolSize.height,
-    });
-  }
+  const rectangles = symbolRectangles(graph, geometry, reject);
   for (const segment of segments) {
-    for (const [nodeId, bounds] of symbolRectangles) {
+    for (const [nodeId, bounds] of rectangles) {
       if (segmentIntersectsInterior(segment, bounds))
         reject(
           `edge ${segment.edge.id} crosses symbol ${nodeId}`,
@@ -1125,6 +1115,7 @@ function validateNodeAndLabelCollisions(
       reject(
         `label ${label.id} overlaps edge ${segment.edge.id}`,
         segment.edge.netId,
+        label.role === "net" ? "net-label-intersection" : undefined,
       );
     }
   }

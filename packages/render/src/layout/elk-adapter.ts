@@ -28,7 +28,12 @@ import type {
   LayoutOptions,
 } from "elkjs/lib/elk-api.js";
 
-import { canonicalSerializable } from "../internal.js";
+import { validateElkRuntimeOptions } from "./elk-contract.js";
+export {
+  validateElkRuntimeOptions,
+  serializeElkAdapterForTest,
+} from "./elk-contract.js";
+import { rootedRecovery, type RootedRecovery } from "./rooted-recovery.js";
 import {
   compareLocationIdentity,
   comparePresentationLabel,
@@ -59,7 +64,6 @@ import {
   DEVICE_PADDING,
   ELK_OPTIONS,
   type ElkOptionAssignment,
-  type ElkOptionMetadataSnapshot,
   LABEL_PORT_HORIZONTAL_SPACING,
   LABEL_PORT_VERTICAL_SPACING,
   LOCATION_LABEL_PADDING,
@@ -69,7 +73,6 @@ import {
   PARENT_SPACING_OPTIONS,
   rootLayoutOptions,
   sortOptionAssignments,
-  validateOptionAssignmentsAgainstMetadata,
 } from "./options.js";
 import {
   normalizeAndValidateLayout,
@@ -539,6 +542,7 @@ function edgeAdapter(
   edge: PresentationEdge,
   prioritizeDirection: boolean,
   assignments: ElkOptionAssignment[],
+  recovery?: RootedRecovery,
 ): ElkExtendedEdge {
   const labels = [edge.label, edge.netLabel]
     .filter((label): label is PresentationLabel => label !== undefined)
@@ -549,7 +553,11 @@ function edgeAdapter(
         targetKind: "edge-label",
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
-            label.role === "net" ? "TAIL" : "CENTER",
+            label.role === "net"
+              ? recovery === "net-label-head"
+                ? "HEAD"
+                : "TAIL"
+              : "CENTER",
           [ELK_OPTIONS.edgeLabelsInline]: "false",
         },
       }),
@@ -732,6 +740,7 @@ function pnpTraceFirstSignalEdgeId(
 export function buildElkAdapterGraph(
   graph: Readonly<PresentationGraph>,
   _selected?: Readonly<SelectedSubgraph>,
+  recovery?: RootedRecovery,
 ): ElkAdapterBuild {
   invariant(
     graph.format === "schematic-presentation/0.1",
@@ -756,6 +765,9 @@ export function buildElkAdapterGraph(
   );
   const rootOptions = {
     ...rootLayoutOptions(graph.view.flow),
+    ...(recovery === "trace-order"
+      ? { [ELK_OPTIONS.considerModelOrderStrategy]: "NONE" }
+      : {}),
     ...(verticalPowerLanes(graph)
       ? { [ELK_OPTIONS.edgeNodeSpacing]: VERTICAL_POWER_EDGE_NODE_SPACING }
       : {}),
@@ -782,7 +794,7 @@ export function buildElkAdapterGraph(
     edges: edges
       .filter((edge) => !terminalContextAttachment(graph, edge))
       .map((edge) =>
-        edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments),
+        edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments, recovery),
       ),
   };
   return Object.freeze({
@@ -791,70 +803,18 @@ export function buildElkAdapterGraph(
   });
 }
 
-export async function validateElkRuntimeOptions(
-  build: Readonly<ElkAdapterBuild>,
-  engine: ElkApi = createElkEngine(),
-): Promise<readonly ElkOptionMetadataSnapshot[]> {
-  const targets: Record<ElkOptionAssignment["targetKind"], Set<string>> = {
-    parent: new Set([build.graph.id]),
-    node: new Set(),
-    port: new Set(),
-    "node-label": new Set(),
-    edge: new Set(),
-    "edge-label": new Set(),
-  };
-  const visit = (node: Readonly<ElkNode>): void => {
-    if (node.id !== build.graph.id) targets.node.add(node.id);
-    if (node.children !== undefined) targets.parent.add(node.id);
-    for (const port of node.ports ?? []) targets.port.add(port.id);
-    for (const label of node.labels ?? []) {
-      invariant(typeof label.id === "string", `node ${node.id} label ID`);
-      targets["node-label"].add(label.id);
-    }
-    for (const edge of node.edges ?? []) {
-      targets.edge.add(edge.id);
-      for (const label of edge.labels ?? []) {
-        invariant(typeof label.id === "string", `edge ${edge.id} label ID`);
-        targets["edge-label"].add(label.id);
-      }
-    }
-    for (const child of node.children ?? []) visit(child);
-  };
-  visit(build.graph);
-  for (const assignment of build.optionAssignments) {
-    invariant(
-      targets[assignment.targetKind].has(assignment.targetId),
-      `${assignment.option} targets non-${assignment.targetKind} ${assignment.targetId}`,
-    );
-  }
-  return validateOptionAssignmentsAgainstMetadata(
-    await engine.knownLayoutOptions(),
-    build.optionAssignments,
-  );
-}
-
-export function serializeElkAdapterForTest(
-  build: Readonly<ElkAdapterBuild>,
-): string {
-  return JSON.stringify(
-    canonicalSerializable({
-      graph: build.graph,
-      optionAssignments: build.optionAssignments,
-    }),
-    undefined,
-    2,
-  );
-}
-
 export async function layoutPresentationGraph(
   graph: Readonly<PresentationGraph>,
   options: Readonly<ElkLayoutRequestOptions> = {},
 ): Promise<LayoutValidationOutcome> {
   const catalog = options.catalog ?? SYMBOL_CATALOG;
   const engine = options.engine ?? createElkEngine();
-  const run = async (candidate: Readonly<PresentationGraph>) => {
+  const run = async (
+    candidate: Readonly<PresentationGraph>,
+    recovery?: RootedRecovery,
+  ) => {
     if (options.packetContinuations) reserveContinuationSources(candidate);
-    const build = buildElkAdapterGraph(candidate, options.selected);
+    const build = buildElkAdapterGraph(candidate, options.selected, recovery);
     await validateElkRuntimeOptions(build, engine);
     const input = structuredClone(build.graph);
     applyLayoutSpacing(input, candidate, options);
@@ -862,6 +822,11 @@ export async function layoutPresentationGraph(
     return normalizeAndValidateLayout(candidate, build.graph, output, catalog);
   };
   const first = await run(graph);
+  const recovery = rootedRecovery(graph, first);
+  if (recovery !== undefined) {
+    const recovered = await run(graph, recovery);
+    if (recovered.ok) return recovered;
+  }
   if (
     first.ok ||
     (!(
