@@ -35,6 +35,15 @@ function assessment() {
   if (!node) throw Error("Missing real assess fixture");
   return node.getText(source) + "\n";
 }
+const assessSource = ts.createSourceFile("assess.ts", assessment(), 99, true);
+const assessNode = assessSource.statements.find(ts.isFunctionDeclaration);
+if (!assessNode?.body) throw Error("Missing assess fixture body");
+const realBodyLines =
+  assessSource.getLineAndCharacterOfPosition(assessNode.body.end - 1).line -
+  assessSource.getLineAndCharacterOfPosition(
+    assessNode.body.getStart(assessSource),
+  ).line +
+  1;
 const statements = (start: number, n: number) =>
   Array.from({ length: n }, (_, i) => `void "line-${start + i}";`).join("\n");
 const body = (name: string, start: number, n: number, extra = 0) =>
@@ -101,8 +110,11 @@ for (const target of ["dev", "release"]) {
     it(`rejects ${section} rename-and-grow on ${target}`, () => {
       const { base, before, current, proposed, to } = fixture(section);
       if (section === "functions") {
-        expect(base.functions[to + "#assess"]).toBe(138);
-        expect(current.functions[to + "#assessGrown"]).toBe(249);
+        expect(realBodyLines).toBeGreaterThan(70);
+        expect(base.functions[to + "#assess"]).toBe(realBodyLines);
+        expect(current.functions[to + "#assessGrown"]).toBe(
+          realBodyLines + 111,
+        );
       } else expect(current.files[to].lines).toBe(2900);
       expect(
         historyRegressions(current, proposed, before, base, target).join("\n"),

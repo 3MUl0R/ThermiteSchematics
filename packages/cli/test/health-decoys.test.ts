@@ -29,6 +29,10 @@ const assess = ast.statements.find(
 );
 if (!assess?.body) throw Error("Missing real assess body");
 const real = assess.getText(ast) + "\n";
+const realBodyLines =
+  ast.getLineAndCharacterOfPosition(assess.body.end - 1).line -
+  ast.getLineAndCharacterOfPosition(assess.body.getStart(ast)).line +
+  1;
 const lines = (start: number, count: number) =>
   Array.from({ length: count }, (_, i) => `void "line-${start + i}";`).join(
     "\n",
@@ -103,7 +107,7 @@ function texts(kind: string) {
     source: shim("assess", 71),
     helper: grown(real, kind === "function-71" ? 111 : 0),
     to: path,
-    sizes: [71, kind === "function-71" ? 249 : 138],
+    sizes: [71, realBodyLines + (kind === "function-71" ? 111 : 0)],
     section: "functions",
   };
 }
@@ -129,7 +133,10 @@ function decoy(kind: string) {
           current.functions[path + "#assessGrown"],
         ];
   expect(sizes).toEqual(text.sizes);
-  expect(base.functions[path + "#assess"]).toBe(138);
+  expect(realBodyLines).toBeGreaterThan(70);
+  expect(base.functions[path + "#assess"]).toBe(
+    kind === "natural-69" ? 138 : realBodyLines,
+  );
   for (const value of [
     text.old,
     text.source + (text.to === path ? text.helper : ""),
