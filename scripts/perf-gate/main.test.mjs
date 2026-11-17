@@ -213,7 +213,8 @@ await main(process.argv.slice(2));`,
         paused.base,
       );
     } finally {
-      run.child.kill("SIGKILL");
+      // Let the registered handler clean a paused builder after any test failure.
+      run.child.kill("SIGTERM");
       await run.closed;
     }
   },
