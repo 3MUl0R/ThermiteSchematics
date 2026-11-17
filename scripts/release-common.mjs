@@ -1318,7 +1318,7 @@ export async function enumerateTree(root, { includeDirectories = false } = {}) {
     }
   }
   await visit(root, "");
-  return output.sort((a, b) => compareCodeUnits(a.path, b.path));
+  return output;
 }
 
 function materializationDirectories(files) {

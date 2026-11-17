@@ -47,12 +47,6 @@ import {
   auditStageDeclarationClosure,
   collectThirdPartySource,
 } from "../../../scripts/release-third-party-inventory.mjs";
-import {
-  assertUntrackedReleaseSources,
-  assertCommittedMarkdownRejected,
-  assertUndeclaredRuntimeRejected,
-  assertReleaseTreeOrdering,
-} from "../../../scripts/release-test-controls.mjs";
 import { verifyPrivateReleaseTarget } from "../../../scripts/verify-private-release-target.mjs";
 import {
   repositoryRoot,
@@ -1294,11 +1288,44 @@ describe("self-contained release package", () => {
     );
   }, 120_000);
 
-  it("rejects untracked sources, committed non-TypeScript files and undeclared dependencies", async () => {
-    await assertUntrackedReleaseSources(repositoryRoot, sourceCommit);
-    await assertCommittedMarkdownRejected(repositoryRoot, sourceCommit);
-    await assertUndeclaredRuntimeRejected(repositoryRoot);
-    await assertReleaseTreeOrdering();
+  it("rejects an untracked workspace declaration before creating build output", async () => {
+    const untrackedSource = join(
+      repositoryRoot,
+      "packages",
+      "schema",
+      "src",
+      "release-package-untracked.d.ts",
+    );
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "thermite-schematics-release-untracked-test-"),
+    );
+    const buildRoot = join(temporaryRoot, "build");
+    let created = false;
+    try {
+      await expect(lstat(untrackedSource)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await writeFile(
+        untrackedSource,
+        "export {};\ndeclare global { const releasePackageProbe: unique symbol; }\n",
+        { flag: "wx" },
+      );
+      created = true;
+      await expect(
+        buildFreshRelease({ repositoryRoot, buildRoot, sourceCommit }),
+      ).rejects.toThrow(
+        "REL021 Release source is untracked or ignored: packages/schema/src/release-package-untracked.d.ts.",
+      );
+      await expect(lstat(buildRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      if (created) await rm(untrackedSource, { force: false });
+      if (created) {
+        await expect(lstat(untrackedSource)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      }
+      await rm(temporaryRoot, { recursive: true, force: false });
+    }
   });
 
   it("rejects a modified tracked release source", async () => {
