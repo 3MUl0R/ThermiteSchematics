@@ -230,6 +230,9 @@ research, evaluation, tooling, fixture and archive links are inside expandable
 groups. Every source document must have an inbound link and be within two links
 of the root README. Planning links cannot satisfy either rule. Code and unused
 reference definitions are not navigation; external URLs are not fetched.
+Keep implementation notes such as the [selection boundary](docs/render-selection.md)
+in `docs/`, outside package `src/` trees: the legacy release collector requires
+every tracked source-tree file to be TypeScript.
 Non-Markdown assets need an existing local target.
 Links into excluded paths fail even when the target exists. When Git is available,
 Git-ignored targets also fail; tracked documents hidden by policy are findings.

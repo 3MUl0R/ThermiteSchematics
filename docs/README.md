@@ -46,6 +46,7 @@
 - [Machine demonstration and first-project pilot](machine-demo.md)
 - [Platform checks](platforms.md)
 - [Ratings, potentials and validation coverage](validation.md)
+- [Semantic selection boundary](render-selection.md)
 - [Source metadata and documentation](source-metadata.md)
 - [Terminal wiring views](terminal-wiring.md)
 
@@ -59,7 +60,6 @@
 - [@thermite/render](../packages/render/README.md)
 - [@thermite/schema](../packages/schema/README.md)
 - [Printable fonts](../packages/cli/assets/fonts/README.md)
-- [Semantic selection boundary](../packages/render/src/selection/README.md)
 - [Thermite Schematics project guide](../packages/cli/assets/THERMITE_AGENTS.md)
 
 ## Examples
