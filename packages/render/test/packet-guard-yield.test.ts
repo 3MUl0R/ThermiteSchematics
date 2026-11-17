@@ -24,6 +24,19 @@ function annotation(distanceMm: number | null, mode: "local" | "self-located") {
   };
 }
 
+it.each(["local", "self-located"] as const)(
+  "absorbs floating-point distance drift but rejects a 0.01 mm increase (%s)",
+  (mode) => {
+    const before = annotation(32.85929999999996, mode);
+    expect(
+      circuitAnnotationGuard(annotation(32.85935323365203, mode), before),
+    ).toBe(true);
+    expect(
+      circuitAnnotationGuard(annotation(32.86929999999996, mode), before),
+    ).toBe(false);
+  },
+);
+
 it("retains absent distance only for unchanged self-located evidence", () => {
   const before = annotation(null, "self-located");
   expect(circuitAnnotationGuard(structuredClone(before), before)).toBe(true);
