@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { classifyToolCall } from "./github-call.mjs";
 import { score } from "./score-log.mjs";
-const cases = ["github-calls.json", "github-calls-r6.json"].flatMap((file) =>
+const cases = [
+  "github-calls.json",
+  "github-calls-r6.json",
+  "local-commands-r7.json",
+  "github-calls-r7.json",
+].flatMap((file) =>
   JSON.parse(
     readFileSync(new URL(`./fixtures/${file}`, import.meta.url), "utf8"),
   ),
@@ -39,6 +44,10 @@ for (const fixture of cases)
               },
             ],
     });
+    if (fixture.libraryAcquisitions !== undefined)
+      expect(result.libraryAcquisitions).toHaveLength(
+        fixture.libraryAcquisitions,
+      );
     expect(result.sourceReads).toBe(Number(fixture.class === "source-read"));
     expect(result.issueLookups).toHaveLength(
       Number(fixture.class === "issue-lookup"),

@@ -1,7 +1,11 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
 import { posix } from "node:path";
-import { couldNetwork, knownLocalCommand } from "./shell-network.mjs";
-import { downloadedJson } from "./downloaded-json.mjs";
+import {
+  networkInvocation,
+  interpreterEvidence,
+  interpreterBody,
+  githubFragment,
+} from "./shell-network.mjs";
 const conversationFields = new Set([
   "title",
   "body",
@@ -122,43 +126,71 @@ function fetchArguments(words) {
   if (target?.startsWith("repos/")) target = `https://api.github.com/${target}`;
   return target ? { target, headers, output } : null;
 }
-function literalTarget(token) {
-  if (token.value.startsWith("-") || !/[/:.]/.test(token.value)) return true;
-  return (
-    token.literal === token.value ||
-    ["'", '"'].some((q) => token.literal === q + token.value + q)
-  );
-}
-export function shellRequest(input, scanned = input) {
-  const text = literalShellBody(input),
-    tokens = shellWords(text, { literal: true });
+export function shellRequest(
+  input,
+  tokens = shellWords(literalShellBody(input), { literal: true }),
+  heredoc,
+) {
   const words = tokens?.map((t) => t.value),
-    wrapper = /^\s*(?:\/[\w/.-]+\/)?(?:zsh|bash|sh)\s+-(?:lc|c)\s/.test(input),
-    network =
-      couldNetwork(scanned, words) ||
-      (wrapper && !knownLocalCommand(shellWords(scanned.trim())));
-  const refused = { text, network, safe: false };
-  if (!tokens || /[\r\n$`]/.test(text) || !tokens.every(literalTarget))
+    text = input;
+  if (heredoc) {
+    const command = posix.basename(words?.[0] ?? "");
+    const interpreter =
+      /^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/.test(command) &&
+      (!words[1] || words[1] === "-" || words[1].startsWith("-"));
+    const code = interpreter || heredoc.executed;
+    const expansion = !heredoc.quoted && /`|\$\(/.test(heredoc.body);
+    const network =
+      networkInvocation(text, words) ||
+      (code &&
+        interpreterEvidence(heredoc.body, ["bun", "-e", heredoc.body])) ||
+      (expansion &&
+        (networkInvocation(heredoc.body, null) ||
+          githubFragment(heredoc.body)));
+    return { text, network, shell: true, safe: false, localBody: !network };
+  }
+  const network = networkInvocation(text, words),
+    api = interpreterEvidence(text, words);
+  const refused = { text, network: network || api, shell: true, safe: false };
+  if (!tokens || tokens.some((t) => t.control && t.value !== ">"))
     return refused;
-  const split = tokens.findIndex((t) => t.control && t.value === "&&");
-  const prefix = split < 0 ? tokens : tokens.slice(0, split);
-  // A plain file output redirection is part of one command; all other control
-  // syntax is refused. The single && exception must match the entire formatter.
-  if (prefix.some((t) => t.control && t.value !== ">")) return refused;
-  const head = prefix.map((t) => t.value);
+  const head = [...words];
   head[0] = posix.basename(head[0] ?? "");
-  const view = split < 0 && issueView(head);
-  if (view) return { text, target: view, headers: [], safe: true, network };
+  const dynamic = tokens.some(
+    (t) => !/^(['"]).*\1$/.test(t.literal) && /\$/.test(t.literal),
+  );
+  // Data variables in a jq expression are literal argv, not target expansion.
+  if (dynamic) return refused;
+  const viewHead = head.at(-2) === ">" ? head.slice(0, -2) : head;
+  const view = issueView(viewHead);
+  if (view)
+    return {
+      text,
+      target: view,
+      headers: [],
+      safe: true,
+      shell: true,
+      network: true,
+    };
   if (
     !["curl", "wget"].includes(head[0]) &&
     !(head[0] === "gh" && head[1] === "api")
-  )
-    return refused;
+  ) {
+    // File tools and local scripts do not fetch source by merely naming data.
+    const command = head[0];
+    const dataTool =
+      /^(?:echo|printf|cat|sed|rg|grep|jq|head|tail|mkdir|ls|pwd|command|which|type|cp|mv|rm|touch|wc|sort|uname)$/.test(
+        command,
+      );
+    const interpreter = interpreterBody(text, words) !== null;
+    return {
+      ...refused,
+      network: network || api,
+      localBody:
+        !network && !api && (dataTool || interpreter || !githubFragment(text)),
+    };
+  }
   const fetch = fetchArguments(head);
-  if (
-    !fetch ||
-    (split >= 0 && !downloadedJson(words.slice(split + 1), fetch.output))
-  )
-    return refused;
-  return { text, ...fetch, safe: true, network };
+  if (!fetch) return refused;
+  return { text, ...fetch, safe: true, shell: true, network: true };
 }

@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.16.0)
+# Fresh-agent evaluator (E2 v1.17.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -611,7 +611,8 @@ read: its MCP query has `repo:` without the required `is:issue`/`is:pr`. Every
 other metric is identical. Original manifests/transcripts and historical replay
 files remain unchanged; these are Codex-only replays, not a category score.
 
-Eval **1.16.0** defines the current V8 threat model and replaces 1.15's incomplete
+Eval **1.16.0** introduced the capability-based policy superseded by 1.17 below.
+It replaced 1.15's incomplete
 compound-command and unknown-network handling. V8 measures honest agents' natural
 source-reading behavior; it is **not a sandbox**. Plausible honest forms must be
 classified correctly. Anything not fully understood never earns an issue
@@ -658,3 +659,37 @@ JSON formatter remain allowed. These defaults are not proof of actual source
 fetches. Original evidence/replay identities and hashes remain unchanged;
 Codex-only replays are not category scores. REPORT.md contains every record's
 delta and event-level explanations.
+
+Eval **1.17.0** corrects that overbroad policy. V8 remains an honest-agent
+behavior metric, not a sandbox. Shell commands that tokenize statically are
+split on unquoted `&&`, `||`, `;`, `|`, background separators and newlines. Each
+part uses the same request classifier; aggregation takes source-read above
+issue lookup/library acquisition above other. A source part suppresses both
+issue and library credit for the whole call. Otherwise each observation is
+credited once per call. GET-then-cat, jq and sed parts are allowed again.
+
+Network defaults require **text evidence**, not executable capability: a
+network-tool invocation with an unlisted/dynamic target, an executable inline
+or heredoc body with network API evidence and a GitHub fragment/dynamic target,
+or an unresolved GitHub host fragment. Hosts/fragments are canonicalized with
+quote/escape removal, including split/concatenated GitHub spellings. Known Git
+network operations are distinguished from status/diff. File tools, the runtime
+CLI, filesystem-only interpreter bodies and the agent's local scripts are
+other, subject to the unchanged local engine-path checks. Data-writing heredocs,
+printed strings, schema URLs and local request collections do not become
+network calls. Known code written and executed in the same call is inspected;
+unknown local scripts are not opened or assumed to network.
+
+Structured fetch URL extraction, WHATWG whitespace/IDNA handling, issue paths,
+JSON-only Accept and fixed GitHub MCP operations remain unchanged. All r2–r5
+reviewer bypass fixtures remain source reads. Opaque targets, redirectors and
+novel obfuscation remain static-analysis limits; the separate runtime-egress
+issue is owned by helm, not implemented here.
+
+The suite retains every **184 r6 false-positive command record** as an `other`
+fixture (182 distinct command strings), with phase/task/event provenance. All
+12 retained transcript metric objects rescore **identically to 1.15**, with no
+remaining delta or new source reads. All 19 issue lookups preserve their class;
+all four prior T07 library acquisitions are restored. Original collection and
+replay identities/hashes remain unchanged. These are Codex-only transcript
+replays, not new model/checker runs or a category score.

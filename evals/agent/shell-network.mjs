@@ -1,96 +1,116 @@
+import { canonicalText } from "./github-canonical.mjs";
 import { posix } from "node:path";
-const clients = new Set(["curl", "wget", "gh", "git"]);
-const interpreter = /^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/;
-export function knownLocalCommand(words) {
-  if (
-    !words ||
-    !words.length ||
-    words.some((word) => ["(", ")", "<", "<<"].includes(word))
-  )
-    return false;
-  const split = words.findIndex((word) =>
-    ["&&", "||", ";", "|", "&"].includes(word),
-  );
-  if (split >= 0)
-    return (
-      knownLocalCommand(words.slice(0, split)) &&
-      knownLocalCommand(words.slice(split + 1))
-    );
-  const command = posix.basename(words[0] ?? "");
+import { interpreterText } from "./interpreter-text.mjs";
+const clients = new Set(["curl", "wget", "gh", "nc", "ssh", "scp", "rsync"]);
+export const shellTool = (name) =>
+  /^(?:command_execution|bash|shell|exec_command)$/i.test(name);
+export function evidenceText(text) {
+  return canonicalText(text).text.replace(/[\\'"+]/g, "");
+}
+export function githubFragment(text) {
+  const normal = canonicalText(text).text;
+  const compact = normal.replace(/[\s\\'"+]/g, "");
   return (
-    [
-      "echo",
-      "printf",
-      "which",
-      "type",
-      "cat",
-      "pwd",
-      "ls",
-      "rg",
-      "uname",
-    ].includes(command) ||
-    (command === "command" && ["-v", "-V"].includes(words[1])) ||
-    (["bun", "node"].includes(command) &&
-      (posix.basename(words[1] ?? "") === "thermite.mjs" ||
-        (words.length === 2 &&
-          ["--version", "--help", "-v"].includes(words[1]))))
+    /github\.(?:com|)|githubuser|raw\.git|(?:codeload|objects|user-images|gist)\.git/.test(
+      compact,
+    ) || /git[\s\\'"+]+hub/.test(normal)
   );
 }
-function segmentNetwork(words) {
-  let i = 0;
-  if (words[i] === "env") i++;
-  while (/^[A-Za-z_]\w*=/.test(words[i] ?? "")) i++;
-  if (words[i] === "command") {
-    if (["-v", "-V"].includes(words[i + 1])) return false;
-    i++;
-  }
-  const command = posix.basename(words[i] ?? ""),
-    args = words.slice(i + 1);
-  if (
-    ["echo", "printf", "which", "type", "cat", "pwd", "ls", "rg"].includes(
-      command,
-    )
-  )
-    return false;
-  if (clients.has(command)) return true;
-  if (interpreter.test(command))
-    return (
-      args.some(
-        (arg) =>
-          /^(?:-[a-z]*[ecp][a-z]*|--(?:eval|command|print)(?:=.*)?)$/i.test(
-            arg,
-          ) ||
-          (arg === "<<" && (args[0] === "-" || args[0] === "<<")),
-      ) ||
-      (command === "deno" && args[0] === "eval")
-    );
-  // Unknown wrappers can run the named clients; no exemption is inferred.
-  return words
-    .slice(i)
-    .some((word) => clients.has(posix.basename(word)) || /\$|`/.test(word));
-}
-// A bounded set of network-capable command forms, not program analysis.
-export function couldNetwork(text, words) {
-  if (!words) {
-    const visible = text.replace(/['"]/g, "");
-    return (
-      /^\s*\$/.test(visible) ||
-      /\b(?:curl|wget|gh|git)\b/i.test(visible) ||
-      /\bdeno\s+eval\b/i.test(visible) ||
-      /\b(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)\b[^\n]*(?:\s-[a-z]*[ecp]|--eval|--command)|\b(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)\s+-?\s*<</i.test(
-        visible,
-      )
-    );
-  }
-  let start = 0;
-  for (let i = 0; i <= words.length; i++) {
+export function networkInvocation(text, words) {
+  if (words?.length) {
+    let i = 0;
+    if (words[i] === "env") i++;
+    while (/^[A-Za-z_]\w*=/.test(words[i] ?? "")) i++;
+    if (words[i] === "command") {
+      if (["-v", "-V"].includes(words[i + 1])) return false;
+      i++;
+    }
+    const command = posix.basename(words[i] ?? ""),
+      args = words.slice(i + 1);
+    if (command === "git") {
+      let j = 0;
+      while (j < args.length && args[j].startsWith("-"))
+        j += ["-C", "-c", "--git-dir", "--work-tree", "--namespace"].includes(
+          args[j],
+        )
+          ? 2
+          : 1;
+      return /^(?:clone|fetch|pull|ls-remote|archive)$/.test(args[j] ?? "");
+    }
+    if (["scp", "rsync"].includes(command))
+      return args.some((arg) => /(?:\w@)?[^/\s:]+:|:\/\//.test(arg));
     if (
-      i === words.length ||
-      ["&&", "||", ";", "|", "&", "(", ")"].includes(words[i])
-    ) {
-      if (segmentNetwork(words.slice(start, i))) return true;
-      start = i + 1;
+      clients.has(command) &&
+      args.length === 1 &&
+      ["--version", "--help", "-V"].includes(args[0])
+    )
+      return false;
+    if (clients.has(command)) return true;
+    if (/^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/.test(command))
+      return false;
+    if (
+      [
+        "echo",
+        "printf",
+        "cat",
+        "sed",
+        "rg",
+        "grep",
+        "jq",
+        "head",
+        "mkdir",
+        "ls",
+        "pwd",
+        "command",
+        "which",
+        "type",
+      ].includes(command)
+    )
+      return false;
+  }
+  const visible = evidenceText(text.replace(/\n/g, ";"));
+  return (
+    /(?:^|[;&|(])\s*(?:[A-Za-z_]\w*=[^\s]+\s+)*(?:\S*\/)?(?:curl|wget|gh|nc|ssh)\b/.test(
+      visible,
+    ) ||
+    /\bgit\s+(?:clone|fetch|pull|ls-remote|archive)\b/.test(visible) ||
+    /\b(?:scp|rsync)\s+[^\n]*[^\s/]+:[^\s]/.test(visible)
+  );
+}
+// Evidence in executable bodies, not the ability of an interpreter to network.
+export function interpreterBody(text, words) {
+  const command = posix.basename(words?.[0] ?? "");
+  const interpreter = /^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/;
+  if (words && !interpreter.test(command)) return null;
+  let body = words ? null : text;
+  if (words) {
+    if (command === "deno" && words[1] === "eval") body = words[2] ?? "";
+    for (let i = 1; i < words.length && words[i].startsWith("-"); i++) {
+      if (/^(?:-[a-z]*[ecp][a-z]*|--(?:eval|command|print))$/i.test(words[i])) {
+        body = words[i + 1] ?? "";
+        break;
+      }
+      if (/^--(?:eval|command|print)=/.test(words[i])) {
+        body = words[i].slice(words[i].indexOf("=") + 1);
+        break;
+      }
     }
   }
-  return false;
+  return body;
+}
+export function interpreterEvidence(text, words) {
+  const body = interpreterBody(text, words);
+  if (body === null) return false;
+  const { code, module, child } = interpreterText(body);
+  const api =
+    /\bfetch\s*\(|\bhttps?\.(?:get|request|connect)\s*\(|\bnet\.connect\b|\bxmlhttprequest\b|\bwebsocket\b|\bbun\.connect\b|\burllib\b|\brequests\.(?:get|post|put|patch|delete|head|request|options|session)\s*\(|\bsocket\b/i.test(
+      code,
+    ) || module;
+  if (child || networkInvocation(code, null)) return true;
+  if (!api) return false;
+  return (
+    githubFragment(body) ||
+    !/https?:\/\/[^\s'"`+\\]+/.test(body) ||
+    /\$|\+|\b(?:url|host|target|endpoint)\b/i.test(code)
+  );
 }

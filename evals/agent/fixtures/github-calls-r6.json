@@ -398,7 +398,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' && cat /tmp/issue.json"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound '&&'",
@@ -406,7 +408,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' && echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound '||'",
@@ -414,7 +418,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' || echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound ';'",
@@ -422,7 +428,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' ; echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound '|'",
@@ -430,7 +438,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' | echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound '&'",
@@ -438,7 +448,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' & echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 compound '\\n'",
@@ -446,7 +458,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' \n echo done"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 unsafe shell (curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367')",
@@ -462,7 +476,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' | bun"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 unsafe shell curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' > >(node)",
@@ -494,7 +510,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' && bun -e 'console.log(1)'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 unsafe shell curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' && bun -e 'const d=await Bun.file(\"/tmp/other.json\").json(); console.log(JSON.stringify(d.map(x=>({name:x.name}))))'",
@@ -502,7 +520,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' && bun -e 'const d=await Bun.file(\"/tmp/other.json\").json(); console.log(JSON.stringify(d.map(x=>({name:x.name}))))'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 unsafe shell curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' -o /tmp/out.json && bun -e 'const d=await Bun.file(\"/tmp/out.json\").json(); console.log(JSON.stringify(d.map(x=>({name:x.name})))); fetch(\"https://example.com\")'",
@@ -510,7 +530,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' -o /tmp/out.json && bun -e 'const d=await Bun.file(\"/tmp/out.json\").json(); console.log(JSON.stringify(d.map(x=>({name:x.name})))); fetch(\"https://example.com\")'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 dynamic/unknown shell curl \"$URL\"",
@@ -590,7 +612,9 @@
       "name": "command_execution",
       "input": "$CLIENT \"$URL\""
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback bun",
@@ -598,7 +622,9 @@
       "name": "command_execution",
       "input": "echo ready && bun -e 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback node",
@@ -606,7 +632,9 @@
       "name": "command_execution",
       "input": "echo ready && node -e 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback python",
@@ -614,7 +642,9 @@
       "name": "command_execution",
       "input": "echo ready && python -c 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback python3",
@@ -622,7 +652,9 @@
       "name": "command_execution",
       "input": "echo ready && python3 -c 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback ruby",
@@ -630,7 +662,9 @@
       "name": "command_execution",
       "input": "echo ready && ruby -e 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback perl",
@@ -638,7 +672,9 @@
       "name": "command_execution",
       "input": "echo ready && perl -e 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback deno",
@@ -646,7 +682,9 @@
       "name": "command_execution",
       "input": "echo ready && deno eval 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback sh",
@@ -654,7 +692,9 @@
       "name": "command_execution",
       "input": "echo ready && sh -c 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 interpreter network fallback bash",
@@ -662,7 +702,9 @@
       "name": "command_execution",
       "input": "echo ready && bash -c 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 local-only compound/data echo done && printf '%s' ok",
@@ -856,7 +898,9 @@
         "prompt": "Summarize"
       }
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 shell URL newline cannot get exemption",
@@ -864,7 +908,9 @@
       "name": "command_execution",
       "input": "curl 'https://git\nhub.com/3MUl0R/ThermiteSchematics/issues/367'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 opaque address/redirector: no exemption https://192.0.2.1/o/r/issues/1",
@@ -913,7 +959,9 @@
       "name": "command_execution",
       "input": "curl 'https://github.com/3MUl0R/ThermiteSchematics/issues/367' -o /tmp/issue.json && bun -e 'const d=await Bun.file(\"/tmp/issue.json\").json(); console.log(JSON.stringify(d.map(x=>({number:x.number,title:x.title,body:x.body})),null,2)); fetch(\"https://example.com\")'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 exact JSON formatter suffix ' && curl https://example.com'",
@@ -945,7 +993,9 @@
       "name": "command_execution",
       "input": "sh -c 'unknown_program()'"
     },
-    "class": "source-read"
+    "class": "other",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 quote-spliced issue host refuses exemption",
@@ -953,7 +1003,9 @@
       "name": "command_execution",
       "input": "curl https://git''hub.com/3MUl0R/ThermiteSchematics/issues/367"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 quote-spliced relative issue URL refuses exemption",
@@ -961,7 +1013,9 @@
       "name": "command_execution",
       "input": "gh api repos/3MUl0R/ThermiteSchematics/iss''ues/367"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 variables in otherwise accepted argv refuse exemption",
@@ -969,7 +1023,9 @@
       "name": "command_execution",
       "input": "gh api repos/3MUl0R/ThermiteSchematics/issues/367 --jq '$unknown'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   },
   {
     "label": "r6 formatter input must equal downloaded output",
@@ -977,6 +1033,8 @@
       "name": "command_execution",
       "input": "curl https://github.com/3MUl0R/ThermiteSchematics/issues/367 -o /tmp/output.json && bun -e 'const d=await Bun.file(\"/tmp/other.json\").json(); console.log(JSON.stringify(d.map(x=>({title:x.title}))))'"
     },
-    "class": "source-read"
+    "class": "issue-lookup",
+    "classAt116": "source-read",
+    "r7Reason": "Static parts aggregate after local-only code/data is classified other; no capability-based fallback."
   }
 ]

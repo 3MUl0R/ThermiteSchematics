@@ -28,12 +28,19 @@ export function shellWords(text, { literal = false } = {}) {
       if (c === quote) quote = null;
       else if (c === "\\" && quote === '"') escaped = true;
       else {
-        if (quote === '"' && /[`$]/.test(c)) return null;
+        if (quote === '"' && (c === "`" || (c === "$" && text[i + 1] === "(")))
+          return null;
         word += c;
       }
       continue;
     }
-    if (/[\r\n`$]/.test(c)) return null;
+    if (c === "`" || (c === "$" && text[i + 1] === "(")) return null;
+    if (c === "\n" || c === "\r") {
+      flush(i);
+      const value = "\n";
+      words.push(literal ? { value, literal: value, control: true } : value);
+      continue;
+    }
     if (c === "\\") {
       escaped = true;
       active = true;

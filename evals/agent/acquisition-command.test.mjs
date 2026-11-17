@@ -4,16 +4,20 @@ import { classifyToolCall } from "./github-call.mjs";
 const allowedLibraryAcquisition = (input, allowedLibraryPaths) =>
   !!classifyToolCall(
     { name: "command_execution", input },
-    { allowedLibraryPaths },
+    { allowedLibraryPaths, engineRoots: ["/engine"] },
   ).libraryAcquisition;
 const paths = ["libraries/field-interfaces", "libraries/industrial-pilot"];
 const url =
   "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/fac3c43/libraries/field-interfaces/library.json";
-it("recognizes simple library GETs, with no compound cat exemption", () => {
+it("recognizes library GETs followed by read-only local parts", () => {
   for (const command of [
     `curl --fail --silent --show-error '${url}' -o artifacts/library.json`,
     `curl '${url}' -o './artifacts/file with space.json'`,
     `gh api --method GET 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces?ref=fac3c43' > artifacts/library.json`,
+    `curl '${url}' -o artifacts/library.json; cat artifacts/library.json`,
+    `curl '${url}' -o artifacts/library.json && cat artifacts/other.json`,
+    `curl '${url}' -o artifacts/library.json && cat artifacts/library.json`,
+    `curl '${url}' -o artifacts/library.json && jq '.' artifacts/library.json | sed -n '1,3p'`,
     `gh api 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces' --jq '.[].name | select(.)'`,
   ])
     expect(allowedLibraryAcquisition(command, paths), command).toBe(true);
@@ -22,10 +26,7 @@ it("does not exempt extra reads, commands, writes, other paths or dynamic progra
   for (const command of [
     `curl '${url}' -o artifacts/library.json && cat /engine/packages/compiler/src/index.ts`,
     `curl '${url}' -o artifacts/library.json && cat artifacts/library.json && cat /engine/file`,
-    `curl '${url}' -o artifacts/library.json; cat artifacts/library.json`,
     `curl '${url}' | gh search code repo:BlackettApplied/ThermiteSchematics`,
-    `curl '${url}' -o artifacts/library.json && cat artifacts/other.json`,
-    `curl '${url}' -o artifacts/library.json && cat artifacts/library.json`,
     `curl -X POST '${url}'`,
     `gh api -f name=x '${url}'`,
     `curl --config /engine/config '${url}'`,

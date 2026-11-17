@@ -8,6 +8,8 @@ import { issueSearch, issueUrl, jsonHeaders } from "./issue-lookup.mjs";
 import { sourceScanInput } from "./source-scan-input.mjs";
 import { readsLocalSource } from "./local-source.mjs";
 import { githubRequest } from "./github-tools.mjs";
+import { shellParts, aggregateParts } from "./shell-parts.mjs";
+import { shellTool, githubFragment } from "./shell-network.mjs";
 import { allowedLibraryUrl } from "./library-acquisition.mjs";
 export { pathText } from "./local-source.mjs";
 export const strings = (value) =>
@@ -46,14 +48,14 @@ function request(event, github) {
           ? input
           : `${input?.repository_full_name ? `repo:${input.repository_full_name} ` : ""}${input?.query ?? ""}`,
     };
-  const shell = /^(?:command_execution|bash|shell|exec_command)$/i.test(name);
+  const shell = shellTool(name);
   const values = strings(
     shell && input && typeof input === "object"
       ? (input.command ?? input.cmd)
       : input,
   );
   const text = sourceScanInput(name, values);
-  if (shell) return { ...shellRequest(values.join("\n"), text), text };
+  if (shell) return { parts: shellParts(text), text, shell: true };
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
 }
@@ -64,14 +66,16 @@ function classifySearch(query, github, engineRoots) {
   return github || touchesGitHub(text) ? "source-read" : "other";
 }
 /**
- * V8 measures honest agents' natural source-reading behavior; it is not a
- * sandbox. Plausible honest forms must be classified correctly. Anything not
- * fully understood never earns an issue exemption; if it might reach the
- * network it is a source read. Static commands cannot defeat deliberate
- * obfuscation in general. Opaque IPs, redirectors and novel encodings are limits;
- * they never earn an exemption. Runtime egress logging is the real adversarial
- * control, tracked separately by the helm, not implemented here. Stop at this
- * threat model: further obfuscated bypasses are follow-ups, not sandbox work.
+ * V8 measures honest agents' natural source reading, not interpreter capability
+ * and not a sandbox. Split static shell commands, classify each part here, and
+ * aggregate source-read > issue/library lookup > other. Local scripts and
+ * filesystem-only bodies are other unless they name a local engine path.
+ * Unknown commands earn no exemption; source defaults require textual network
+ * evidence, an unresolved GitHub fragment, or an unlisted/dynamic network target.
+ * Opaque IPs, redirectors and deliberate obfuscation remain static-analysis
+ * limits. Runtime egress logging is the separate adversarial control, owned by
+ * helm and not implemented here. Obfuscated bypasses are follow-ups under the
+ * stopping rule; honest-form and legitimate-lookup regressions remain blocking.
  */
 export function classifyToolCall(
   event,
@@ -83,6 +87,25 @@ export function classifyToolCall(
   if (!github && /^(?:write|todowrite|todo_list)$/i.test(event.name))
     return { class: "other" };
   const call = request(event, github);
+  if (call.shell) {
+    if (readsLocalSource(call.text, engineRoots))
+      return { class: "source-read" };
+    const parts = call.parts ?? [{ text: call.text, tokens: null }];
+    return aggregateParts(
+      parts.map((part) => {
+        const text = part.text;
+        return classifyRequest(
+          shellRequest(text, part.tokens, part.heredoc),
+          false,
+          [],
+          allowedLibraryPaths,
+        );
+      }),
+    );
+  }
+  return classifyRequest(call, github, engineRoots, allowedLibraryPaths);
+}
+function classifyRequest(call, github, engineRoots, allowedLibraryPaths) {
   if (Object.hasOwn(call, "query"))
     return { class: classifySearch(call.query, github, engineRoots) };
   const canonical = canonicalUrl(call.target);
@@ -102,8 +125,10 @@ export function classifyToolCall(
   const source =
     local ||
     github ||
-    touchesGitHub(text) ||
-    touchesGitHub(canonical.url?.href ?? canonical.text) ||
-    (!understood && call.network);
+    (!call.localBody &&
+      (touchesGitHub(text) ||
+        touchesGitHub(canonical.url?.href ?? canonical.text) ||
+        (call.shell && githubFragment(text)))) ||
+    (call.shell && call.network);
   return { class: source ? "source-read" : "other" };
 }

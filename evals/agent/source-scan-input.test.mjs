@@ -25,7 +25,14 @@ it("preserves real reads around reports and executable/unquoted here-docs", () =
     `cat > helper.sh <<'EOF'\ncurl '${url}'\nEOF\nbash helper.sh`,
     `cat > friction.md <<'EOF'\ncurl '${url}'\nEOF\nbash friction.md`,
     `cat > friction.md <<EOF\n$(cat /engine/source.ts)\nEOF`,
-    `cat > friction.md <<'EOF'\nnotes\nEOF\npython3 - <<'PY'\nprint('write matrix')\nPY`,
   ])
     expect(metric(command).sourceReads, command).toBe(1);
+});
+
+it("keeps a local Python heredoc after an authored report as other", () => {
+  expect(
+    metric(
+      `cat > friction.md <<'EOF'\nnotes\nEOF\npython3 - <<'PY'\nprint('write matrix')\nPY`,
+    ).sourceReads,
+  ).toBe(0);
 });
