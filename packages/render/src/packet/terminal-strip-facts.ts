@@ -1,5 +1,5 @@
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
-import type { DocumentationTable } from "@thermite/query";
+import { buildCableSchedule, type DocumentationTable } from "@thermite/query";
 import { required } from "../presentation/util.js";
 
 export const stripTerminalKey = (t: TerminalId) =>
@@ -121,9 +121,9 @@ export function stripFacts(
         j.uid,
         j.designation ?? `Jumper ${j.uid}`,
       );
-  // Assignments retain single-ended spare cores; graph conductors alone do not.
+  // Use the inventory's physical/assignment union, including single-ended spares.
   for (const c of ir.cables)
-    for (const core of c.assignments ?? [])
+    for (const core of buildCableSchedule(ir, c.uid).cores)
       add(
         core.endpoints.map((e) => e?.terminal ?? null),
         JSON.stringify([c.uid, core.id]),

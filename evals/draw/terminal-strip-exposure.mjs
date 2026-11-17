@@ -12,6 +12,7 @@ import {
   drawingContextOptions,
   drawingLaunchArgs,
 } from "./browser.mjs";
+import { stripInventoryEquality } from "./terminal-strip-inventory.mjs";
 import { nativeStrip } from "./terminal-strip-native.mjs";
 import { stripInkScript } from "./terminal-strip-ink.mjs";
 import { checkTerminalStrip } from "./terminal-strip-check.mjs";
@@ -88,8 +89,10 @@ async function measureView(id, page, packet, ir, v, index) {
     sheetKinds.push(...kinds.map((k) => ({ sheet: s.number, ...k })));
   }
   const checked = checkTerminalStrip(native, ink);
+  const inventoryEquality = stripInventoryEquality(table, ink);
   const findings = [
     ...checked.findings,
+    ...inventoryEquality.findings,
     ...sheetKinds.flatMap((k) =>
       k.issues.map((issue) => ({ sheet: k.sheet, ...issue })),
     ),
@@ -103,6 +106,7 @@ async function measureView(id, page, packet, ir, v, index) {
     findings,
     assessment: findings.length ? "fail" : "pass",
     sheetKinds,
+    inventoryEquality: inventoryEquality.rows,
   };
 }
 async function measureCase(id, page) {

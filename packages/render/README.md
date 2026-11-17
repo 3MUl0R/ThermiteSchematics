@@ -987,3 +987,6 @@ and JSON retain the strip and reciprocal Tn/Rn references. A single-sheet SVG
 export retains the original one-sheet inventory without strip references when
 the appended strip is the only reason for additional sheets; inventories that
 already need multiple sheets keep the existing multi-sheet export diagnostic.
+
+Terminal strips use the inventory cable schedule, including physical cable cores
+and authored single-ended/spare assignments, once per native core identity.

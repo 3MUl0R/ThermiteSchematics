@@ -74,12 +74,23 @@ export function nativeStrip(ir, deviceUids) {
         j.uid,
         j.designation ?? `Jumper ${j.uid}`,
       );
-  for (const c of ir.cables)
-    for (const a of c.assignments ?? [])
-      add(
-        a.endpoints.map((e) => e?.terminal ?? null),
-        JSON.stringify([c.uid, a.id]),
-        `${c.designation}/${a.id}`,
-      );
+  nativeCableIncidences(ir, add);
   return { groups, terminals, bridges, incidences };
+}
+function nativeCableIncidences(ir, add) {
+  for (const c of ir.cables) {
+    const cores = new Map();
+    for (const physical of ir.cableConductors)
+      if (physical.cableUid === c.uid)
+        cores.set(physical.id.conductorId, physical.endpoints);
+    // Authored assignments retain null ends and override the physical projection.
+    for (const assigned of c.assignments ?? [])
+      cores.set(assigned.id, assigned.endpoints);
+    for (const [id, ends] of cores)
+      add(
+        ends.map((e) => e?.terminal ?? null),
+        JSON.stringify([c.uid, id]),
+        `${c.designation}/${id}`,
+      );
+  }
 }

@@ -66,7 +66,7 @@ header, shaping and no-report-text guards. Strip-only sheets instead need
 visible terminal bodies and text at least 2.5 mm, and retain the same shaping
 bounds; missing/hidden ink fails explicitly. Native terminal/jumper coverage and
 reciprocal continuation destinations are checked in the separate exposure.
-Complete 5.23 summaries remain readable.
+Complete 5.23 and 5.24 summaries remain readable.
 
 The #336 terminal-strip oracle is a separate **non-strict exposure** check:
 
@@ -75,7 +75,9 @@ nice -n 19 bun evals/draw/terminal-strip-exposure.mjs --capture evals/out/draw/C
 ```
 
 It reconstructs requested terminal selection, authored order, explicit jumper
-endpoints and conductor incidences from native IR. Chromium measures terminal
+endpoints and conductor incidences from native IR, including the union of physical
+cable conductors and authored assignments. Every measured strip terminal is also
+compared with its linked native inventory row for exact incidence equality. Chromium measures terminal
 rectangles, jumper/stub paths and visible text; identity attributes locate ink
 but do not establish coverage. Missing/extra bridges, wrong order, invented
 shapes, wrong peers and missing reciprocal row references fail the exposure.
