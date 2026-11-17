@@ -1,3 +1,5 @@
+import { measurePacketGeometry } from "./packet-geometry.mjs";
+import { caseInfrastructure } from "./case-infrastructure.mjs";
 import { tranche4Observations } from "./tranche4-observations.mjs";
 import { captureSheets } from "./run-sheet.mjs";
 import { inventoryMediaObservations } from "./inventory-scope-media.mjs";
@@ -8,21 +10,17 @@ import { command, json, hash, readJson, canonical } from "./support.mjs";
 import { prepare } from "./corpus.mjs";
 import { captureSources } from "./source-hashes.mjs";
 import { checkSvgFontBudget } from "./font-budget.mjs";
-import { classifyTextGeometry } from "./text-classification.mjs";
-import { retainLostText } from "./lost-text.mjs";
 import { retainPacket, compactCase, retainingCase } from "./retention.mjs";
 import {
-  openSheet,
   displaySheet,
   cropBox,
   screenshotCrop,
-  sheetMeasurementSource,
   drawingContextOptions,
 } from "./browser.mjs";
 import { loadPdfBytes, PDFJS_VERSION, renderPdf } from "./pdf.mjs";
 import { evaluatePacket, observation } from "./evaluate.mjs";
 import { attachSheetIdentities } from "./sheet-identities.mjs";
-import { svgLocators, attachIdentities, viewKey } from "./locators.mjs";
+import { svgLocators, attachIdentities } from "./locators.mjs";
 import { buildSourceTables, scopeTables } from "./m3-documents.mjs";
 
 export async function renderCase(c, index, env) {
@@ -134,23 +132,7 @@ async function captureCase(c, directory, env) {
       sheets: sheetEvidence,
     };
   } catch (error) {
-    return {
-      case: c.id,
-      spec: c,
-      ok: false,
-      sheets: [],
-      rows: [
-        ...local,
-        {
-          id: `${c.id}/infrastructure`,
-          case: c.id,
-          status: "infrastructure-error",
-          reason: error.message
-            .replaceAll(root, "<evals>")
-            .replaceAll(engine, "<engine>"),
-        },
-      ],
-    };
+    return caseInfrastructure(error, c, local, root, engine);
   } finally {
     await context?.close();
   }
@@ -265,36 +247,6 @@ async function publicArtifacts(args, directory, packet, { cli, native, root }) {
     "PDF page count differs from SVG",
   );
   return { pdfPath, htmlPath, pdf, pdfSource };
-}
-
-async function measurePacketGeometry(page, htmlPath, packet, ir, geometries) {
-  await page.setContent(await readFile(htmlPath, "utf8"));
-  await page.evaluate(() => document.fonts.ready);
-  const htmlGeometry = await page.evaluate((source) => {
-    const measure = (0, eval)(`(${source})`);
-    return Array.from(document.querySelectorAll("section>svg")).map((_, i) =>
-      measure({ selector: `#sheet-${i + 1}>svg`, textOnly: true }),
-    );
-  }, sheetMeasurementSource());
-  const htmlSvgs = await page.evaluate(() =>
-    Array.from(
-      document.querySelectorAll("section>svg"),
-      (svg) => svg.outerHTML,
-    ),
-  );
-  for (const g of htmlGeometry) classifyTextGeometry(g, ir);
-  retainLostText(
-    htmlGeometry,
-    packet.sheets.map((s) => viewKey(s.view)),
-  );
-  // Collect all tiled copies before deciding whether a semantic label was lost.
-  for (const sheet of packet.sheets)
-    geometries.push(await openSheet(page, sheet.svg));
-  retainLostText(
-    geometries,
-    packet.sheets.map((s) => viewKey(s.view)),
-  );
-  return { htmlGeometry, htmlSvgs };
 }
 
 async function capturePacketRows(

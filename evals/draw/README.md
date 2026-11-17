@@ -20,6 +20,27 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.21** fixes two implementation defects exposed by N17 delivery;
+it adds no new oracle predicate and changes no criteria or expected markers.
+Historical complete 5.20 reports remain readable.
+
+- Inline source tables bind by the measured document ID and document kind,
+  independently of the outer graphical sheet kind. Native row values, headers
+  and source bindings still validate delivery. Conflicting or ambiguous table
+  locators cannot select an arbitrary source table.
+- Automatic-document lineage compares each physical per-part dependency with
+  its native sheet/view/note obligation. Several physical parts may share one
+  logical dependency ID. Missing, duplicate or foreign part records refuse;
+  unique logical ID counts do not establish physical completeness.
+- Identifier lookup, character geometry and PDF extraction failures are explicit
+  infrastructure errors on their sheet and medium. Remaining sheet observations
+  and independent media survive identifier-check exceptions. A browser failure
+  that prevents geometry measurement retains sheet/medium context in the case
+  infrastructure receipt. Its unmeasured pins remain infrastructure, with no
+  repair credit or false unmet-pin drawing failures. Other missing-instrumentation
+  behavior is unchanged. Strict and report-only modes both retain exit 2 for
+  infrastructure errors.
+
 Version **5.20** completes the N17 native **issued-documents/1** contract.
 This is an observation change on unchanged output; 5.19 remains a readable
 historical complete-summary schema. No expectations, renderer or corpus change.

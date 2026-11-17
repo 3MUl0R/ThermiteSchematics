@@ -1,4 +1,5 @@
 import { registryRowFindings, sameSet } from "./m3-registry-row.mjs";
+import { autoOriginLineage } from "./m3-auto-lineage.mjs";
 import { packetNativeNeeds } from "./m3-needs-context.mjs";
 // The exported registry is a third set of locators. Neither an entry nor its
 // absence establishes a native fact or suppresses a visible issued row.
@@ -58,18 +59,8 @@ export function registryFindings(
     if (doc.autoOrigin) {
       const auto =
           nav.autoDocuments?.filter((a) => a.documentId === doc.id) ?? [],
-        dependencies =
-          nav.dependencies?.filter((d) =>
-            doc.autoOrigin.dependencyIds?.includes(d.id),
-          ) ?? [],
-        native = allNeeds.filter((n) =>
-          dependencies.some(
-            (d) =>
-              d.need === n.need &&
-              d.owner?.sheet === n.sheet &&
-              d.owner?.noteId === n.noteId,
-          ),
-        ),
+        lineage = autoOriginLineage(doc, nav.dependencies ?? [], allNeeds),
+        native = lineage.native,
         requested = (context.tables ?? []).filter(
           (t) => t.origin === "requested" && t.kind === doc.kind,
         );
@@ -77,8 +68,7 @@ export function registryFindings(
         auto.length !== 1 ||
         !sameSet(auto[0].dependencyIds, doc.autoOrigin.dependencyIds) ||
         !sameSet(auto[0].sheets, [...new Set(actual.map((r) => r.sheet))]) ||
-        dependencies.length !== new Set(doc.autoOrigin.dependencyIds).size ||
-        !native.length
+        !lineage.valid
       )
         add("document-auto-origin-mismatch", { documentId: doc.id });
       for (const row of actual) {

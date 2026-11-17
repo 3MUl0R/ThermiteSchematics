@@ -282,6 +282,7 @@ try {
         {
           status: r.ok ? "rendered" : r.error ? "refused" : "infrastructure",
           sheets: r.sheets.map((s) => s.number),
+          ...(r.instrumentation ? { instrumentation: r.instrumentation } : {}),
         },
       ]),
     ),
