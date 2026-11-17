@@ -3,44 +3,37 @@
 import { expandRegistry } from "./marker-data.mjs";
 // prettier-ignore
 const scopeSets = {
-  "14127662": [{"cases":["network-pagination-{left-to-right,top-to-bottom}"],"sheets":["sheet:2-8"],"media":["svg"]}],
   "07967037": [{"cases":["connector-io-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1-3"]}],
-  "09cc93db": [{"cases":["motor-starter-documentation-top-to-bottom"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "12412a6b": [{"cases":["init-starter-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
   "1671cca0": [{"cases":["functional-symbols-{left-to-right,top-to-bottom}","sweep-functional-symbols-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
   "181992c1": [{"cases":["functional-symbols-left-to-right","sweep-functional-symbols-a3-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-functional-symbols-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-functional-symbols-letter-portrait-{compact,standard}-left-to-right","sweep-functional-symbols-tabloid-{landscape,portrait}-{compact,standard}-left-to-right"],"sheets":["view:circuit/Functional symbol demonstration"],"media":["svg"]}],
   "1b2f0d3c": [{"cases":["machine-demo-left-to-right"],"sheets":["sheet:1","sheet:3-6","sheet:8-9"],"media":["svg"]},{"cases":["machine-demo-top-to-bottom"],"sheets":["sheet:1-5","sheet:7-8"],"media":["svg"]}],
-  "1dcfefbf": [{"cases":["sweep-functional-symbols-letter-landscape-{compact,standard}-top-to-bottom"],"sheets":["sheet:3-5"],"media":["svg"]},{"cases":["sweep-functional-symbols-letter-portrait-{compact,standard}-left-to-right"],"sheets":["sheet:1-2"],"media":["svg"]},{"cases":["sweep-functional-symbols-letter-portrait-{compact,standard}-top-to-bottom","sweep-functional-symbols-tabloid-landscape-{compact,standard}-top-to-bottom"],"sheets":["sheet:3-4"],"media":["svg"]}],
   "2fbc51a2": [{"cases":["analog-output-{left-to-right,top-to-bottom}","assembly-note-bounds-{left-to-right,top-to-bottom}","cap-pagination-{left-to-right,top-to-bottom}","circuit-pagination-{left-to-right,top-to-bottom}","connector-io-{left-to-right,top-to-bottom}","conveyor-line-{left-to-right,top-to-bottom}","ea-f3-wide-label-{left-to-right,top-to-bottom}","functional-symbols-{left-to-right,top-to-bottom}","init-starter-{left-to-right,top-to-bottom}","machine-demo-{left-to-right,top-to-bottom}","motor-starter-{left-to-right,top-to-bottom}","motor-starter-documentation-{left-to-right,top-to-bottom}","network-pagination-{left-to-right,top-to-bottom}","operator-console-{left-to-right,top-to-bottom}","report-filtering-{left-to-right,top-to-bottom}","self-loop-labels-{left-to-right,top-to-bottom}","signal-loop-{left-to-right,top-to-bottom}","sweep-functional-symbols-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-motor-starter-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","topology-coverage-{left-to-right,top-to-bottom}"],"sheets":["packet"],"media":["svg"]}],
   "384f2280": [{"cases":["analog-output-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "3d44f353": [{"cases":["ea-f3-wide-label-{left-to-right,top-to-bottom}","init-starter-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1"]}],
-  "41da05ed": [{"cases":["self-loop-labels-{left-to-right,top-to-bottom}"],"sheets":["view:circuit/Nested external bridges"],"media":["svg"]}],
   "4e0f051e": [{"cases":["report-filtering-{left-to-right,top-to-bottom}","sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:terminals/Terminal plans (filtered)"]}],
   "51b14b4d": [{"cases":["circuit-pagination-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
   "5340d252": [{"cases":["self-loop-labels-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
   "53881b49": [{"cases":["motor-starter-left-to-right"],"media":["svg"],"sheets":["sheet:6"]}],
   "59cd479b": [{"cases":["self-loop-labels-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1-2"]}],
   "5cd3a2c5": [{"cases":["network-pagination-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1-17"]}],
-  "6737a67e": [{"cases":["motor-starter-documentation-left-to-right"],"sheets":["sheet:4"],"media":["svg"]},{"cases":["motor-starter-documentation-top-to-bottom"],"sheets":["sheet:5"],"media":["svg"]},{"cases":["motor-starter-left-to-right"],"sheets":["sheet:1","sheet:3-5","sheet:7"],"media":["svg"]},{"cases":["motor-starter-top-to-bottom"],"sheets":["sheet:1-4","sheet:6"],"media":["svg"]},{"cases":["sweep-motor-starter-a3-landscape-standard-{left-to-right,top-to-bottom}","sweep-motor-starter-tabloid-landscape-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-portrait-standard-top-to-bottom"],"sheets":["sheet:1","sheet:3"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-compact-top-to-bottom"],"sheets":["sheet:2","sheet:7"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-standard-top-to-bottom"],"sheets":["sheet:2","sheet:6"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-portrait-{compact,standard}-top-to-bottom"],"sheets":["sheet:1","sheet:5"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-{landscape,portrait}-{compact,standard}-left-to-right"],"sheets":["sheet:2","sheet:5"],"media":["svg"]},{"cases":["sweep-motor-starter-tabloid-landscape-standard-top-to-bottom","sweep-motor-starter-{a3,tabloid}-portrait-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-{landscape,portrait}-compact-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
+  "5e1ca448": [{"cases":["motor-starter-documentation-{left-to-right,top-to-bottom}"],"sheets":["sheet:4"],"media":["svg"]},{"cases":["motor-starter-left-to-right"],"sheets":["sheet:1","sheet:3-5","sheet:7"],"media":["svg"]},{"cases":["motor-starter-top-to-bottom"],"sheets":["sheet:1-4","sheet:6"],"media":["svg"]},{"cases":["sweep-motor-starter-a3-landscape-standard-{left-to-right,top-to-bottom}","sweep-motor-starter-tabloid-landscape-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-portrait-standard-top-to-bottom"],"sheets":["sheet:1","sheet:3"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-compact-top-to-bottom"],"sheets":["sheet:2","sheet:7"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-standard-top-to-bottom"],"sheets":["sheet:2","sheet:6"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-portrait-{compact,standard}-top-to-bottom"],"sheets":["sheet:1","sheet:5"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-{landscape,portrait}-{compact,standard}-left-to-right"],"sheets":["sheet:2","sheet:5"],"media":["svg"]},{"cases":["sweep-motor-starter-tabloid-landscape-standard-top-to-bottom","sweep-motor-starter-{a3,tabloid}-portrait-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-{landscape,portrait}-compact-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "6f2bf6f6": [{"cases":["conveyor-line-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-11"],"media":["svg"]}],
+  "82807f54": [{"cases":["circuit-pagination-left-to-right"],"sheets":["sheet:1-4"],"media":["svg"]},{"cases":["circuit-pagination-top-to-bottom"],"sheets":["sheet:1-6"],"media":["svg"]}],
   "85a269dd": [{"cases":["motor-starter-left-to-right","motor-starter-documentation-{left-to-right,top-to-bottom}","sweep-motor-starter-letter-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-motor-starter-{a3,tabloid}-landscape-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-portrait-standard-top-to-bottom"],"sheets":["packet"],"media":["svg"]}],
   "869b61f8": [{"cases":["machine-demo-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
-  "87b8d0f8": [{"cases":["motor-starter-left-to-right","motor-starter-documentation-top-to-bottom","sweep-motor-starter-letter-landscape-compact-top-to-bottom"],"sheets":["sheet:1-7"],"media":["svg"]},{"cases":["motor-starter-top-to-bottom","motor-starter-documentation-left-to-right","sweep-motor-starter-letter-landscape-standard-top-to-bottom"],"sheets":["sheet:1-6"],"media":["svg"]},{"cases":["sweep-motor-starter-a3-landscape-standard-{left-to-right,top-to-bottom}","sweep-motor-starter-tabloid-landscape-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-portrait-standard-top-to-bottom"],"sheets":["sheet:1-3"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-{compact,standard}-left-to-right","sweep-motor-starter-letter-portrait-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-5"],"media":["svg"]},{"cases":["sweep-motor-starter-tabloid-landscape-standard-top-to-bottom","sweep-motor-starter-{a3,tabloid}-portrait-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-{landscape,portrait}-compact-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "883123f6": [{"cases":["analog-output-{left-to-right,top-to-bottom}","assembly-note-bounds-{left-to-right,top-to-bottom}","cap-pagination-{left-to-right,top-to-bottom}","circuit-pagination-{left-to-right,top-to-bottom}","connector-io-{left-to-right,top-to-bottom}","conveyor-line-{left-to-right,top-to-bottom}","ea-f3-wide-label-{left-to-right,top-to-bottom}","functional-symbols-{left-to-right,top-to-bottom}","init-starter-{left-to-right,top-to-bottom}","machine-demo-{left-to-right,top-to-bottom}","motor-starter-{left-to-right,top-to-bottom}","motor-starter-documentation-{left-to-right,top-to-bottom}","network-pagination-{left-to-right,top-to-bottom}","operator-console-{left-to-right,top-to-bottom}","report-filtering-{left-to-right,top-to-bottom}","self-loop-labels-{left-to-right,top-to-bottom}","signal-loop-{left-to-right,top-to-bottom}","sweep-functional-symbols-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-motor-starter-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","topology-coverage-{left-to-right,top-to-bottom}"],"sheets":["packet"],"media":["pdf"]}],
   "89d4c799": [{"cases":["analog-output-{left-to-right,top-to-bottom}","assembly-note-bounds-{left-to-right,top-to-bottom}","cap-pagination-{left-to-right,top-to-bottom}","circuit-pagination-{left-to-right,top-to-bottom}","connector-io-{left-to-right,top-to-bottom}","conveyor-line-{left-to-right,top-to-bottom}","ea-f3-wide-label-{left-to-right,top-to-bottom}","functional-symbols-{left-to-right,top-to-bottom}","init-starter-{left-to-right,top-to-bottom}","machine-demo-{left-to-right,top-to-bottom}","motor-starter-{left-to-right,top-to-bottom}","motor-starter-documentation-{left-to-right,top-to-bottom}","network-pagination-{left-to-right,top-to-bottom}","operator-console-{left-to-right,top-to-bottom}","report-filtering-{left-to-right,top-to-bottom}","self-loop-labels-{left-to-right,top-to-bottom}","signal-loop-{left-to-right,top-to-bottom}","sweep-functional-symbols-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-motor-starter-{a3,letter,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-{landscape,portrait}-{compact,standard}-{left-to-right,top-to-bottom}","topology-coverage-{left-to-right,top-to-bottom}"],"sheets":["packet"],"media":["html"]}],
   "92553d31": [{"cases":["assembly-note-bounds-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1"]}],
   "9754017e": [{"cases":["operator-console-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-16"],"media":["svg"]}],
   "a42c1521": [{"cases":["motor-starter-documentation-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:terminals/TB1 terminal plan"]}],
   "a527e4b3": [{"cases":["topology-coverage-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1-9"]}],
-  "a7268184": [{"cases":["report-filtering-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-landscape-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]},{"cases":["sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-portrait-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-3"],"media":["svg"]}],
-  "ae1158d7": [{"cases":["circuit-pagination-left-to-right"],"media":["svg"],"sheets":["sheet:1-4"]},{"cases":["circuit-pagination-top-to-bottom"],"media":["svg"],"sheets":["sheet:1-10"]}],
   "b16a8fee": [{"cases":["signal-loop-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "b5277e36": [{"cases":["operator-console-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["packet"]}],
   "b7359140": [{"cases":["report-filtering-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-landscape-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-8"],"media":["svg"]},{"cases":["sweep-report-filtering-letter-landscape-{compact,standard}-{left-to-right,top-to-bottom}","sweep-report-filtering-{a3,tabloid}-portrait-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-9"],"media":["svg"]}],
   "b7394e4a": [{"cases":["conveyor-line-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-4"],"media":["svg"]}],
   "babe989d": [{"cases":["operator-console-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:terminals/XT-HMI terminal plan"]}],
   "be14ba81": [{"cases":["sweep-functional-symbols-a3-{landscape,portrait}-{compact,standard}-top-to-bottom","sweep-functional-symbols-letter-landscape-{compact,standard}-top-to-bottom"],"sheets":["view:circuit/Functional symbol demonstration"],"media":["svg"]}],
-  "bf0a6290": [{"cases":["self-loop-labels-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:circuit/Nested external bridges"]}],
   "bf607320": [{"cases":["machine-demo-left-to-right"],"sheets":["sheet:1-22"],"media":["svg"]},{"cases":["machine-demo-top-to-bottom"],"sheets":["sheet:1-21"],"media":["svg"]}],
   "c9e2f5d6": [{"cases":["motor-starter-left-to-right","sweep-motor-starter-letter-landscape-compact-left-to-right","sweep-motor-starter-{a3,tabloid}-landscape-standard-left-to-right","sweep-motor-starter-{letter,tabloid}-portrait-{compact,standard}-left-to-right"],"sheets":["view:power/M1/default"],"media":["svg"]}],
   "d13f2c94": [{"cases":["functional-symbols-{left-to-right,top-to-bottom}","sweep-functional-symbols-{a3,tabloid}-landscape-{compact,standard}-left-to-right","sweep-functional-symbols-{a3,tabloid}-portrait-{compact,standard}-top-to-bottom"],"sheets":["sheet:1-6"],"media":["svg"]},{"cases":["sweep-functional-symbols-a3-landscape-{compact,standard}-top-to-bottom","sweep-functional-symbols-letter-portrait-{compact,standard}-left-to-right"],"sheets":["sheet:1-7"],"media":["svg"]},{"cases":["sweep-functional-symbols-letter-landscape-{compact,standard}-left-to-right"],"sheets":["sheet:1-9"],"media":["svg"]},{"cases":["sweep-functional-symbols-letter-landscape-{compact,standard}-top-to-bottom"],"sheets":["sheet:1-13"],"media":["svg"]},{"cases":["sweep-functional-symbols-letter-portrait-{compact,standard}-top-to-bottom","sweep-functional-symbols-tabloid-landscape-{compact,standard}-top-to-bottom"],"sheets":["sheet:1-10"],"media":["svg"]},{"cases":["sweep-functional-symbols-{a3,tabloid}-portrait-{compact,standard}-left-to-right"],"sheets":["sheet:1-5"],"media":["svg"]}],
@@ -48,12 +41,13 @@ const scopeSets = {
   "d909cd5f": [{"cases":["conveyor-line-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:terminals/Terminal plans"]}],
   "e218ef23": [{"cases":["cap-pagination-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["sheet:1-7"]}],
   "e7bb82e4": [{"cases":["machine-demo-left-to-right"],"sheets":["sheet:7"],"media":["svg"]},{"cases":["machine-demo-top-to-bottom"],"sheets":["sheet:6"],"media":["svg"]}],
-  "ec645e7c": [{"cases":["circuit-pagination-left-to-right"],"sheets":["sheet:1-2"],"media":["svg"]},{"cases":["circuit-pagination-top-to-bottom"],"sheets":["sheet:1-8"],"media":["svg"]}],
+  "f49fcd4f": [{"cases":["motor-starter-left-to-right","sweep-motor-starter-letter-landscape-compact-top-to-bottom"],"sheets":["sheet:1-7"],"media":["svg"]},{"cases":["motor-starter-top-to-bottom","motor-starter-documentation-{left-to-right,top-to-bottom}","sweep-motor-starter-letter-landscape-standard-top-to-bottom"],"sheets":["sheet:1-6"],"media":["svg"]},{"cases":["sweep-motor-starter-a3-landscape-standard-{left-to-right,top-to-bottom}","sweep-motor-starter-tabloid-landscape-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-portrait-standard-top-to-bottom"],"sheets":["sheet:1-3"],"media":["svg"]},{"cases":["sweep-motor-starter-letter-landscape-{compact,standard}-left-to-right","sweep-motor-starter-letter-portrait-{compact,standard}-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-5"],"media":["svg"]},{"cases":["sweep-motor-starter-tabloid-landscape-standard-top-to-bottom","sweep-motor-starter-{a3,tabloid}-portrait-standard-left-to-right","sweep-motor-starter-{a3,tabloid}-{landscape,portrait}-compact-{left-to-right,top-to-bottom}"],"sheets":["sheet:1-2"],"media":["svg"]}],
   "fb06d717": [{"cases":["machine-demo-left-to-right"],"media":["svg"],"sheets":["view:power/M2/default"]}],
   "fbec9e81": [{"cases":["machine-demo-{left-to-right,top-to-bottom}"],"media":["svg"],"sheets":["view:terminals/Terminal plans"]}],
 };
 // prettier-ignore
 const severityBands = {
+  "0132ca22": {"utilisation":[0,0.257,0.341,0.4]},
   "0a804d01": {"capHeightMm":[0,1.856,1.856,2.47]},
   "1342971e": {"shortestJogMm":[1.925,1.975,1.975,2.025]},
   "2ac13f7f": {"shortestJogMm":[0.75,0.8,1.6,1.65]},
@@ -64,7 +58,6 @@ const severityBands = {
   "7f6a8c42": {"shortestJogMm":[1.5,1.55,1.55,1.6]},
   "8aa9e094": {"utilisation":[0,0.019,0.368,0.4]},
   "98b566df": {"utilisation":[0,0.107,0.107,0.4]},
-  "9e7e32d8": {"utilisation":[0,0.006,0.257,0.4]},
   "b8064a1f": {"utilisation":[0,0.02,0.242,0.4]},
   "d094f3d1": {"detourExcessMm":[18.39,18.4,78.45,78.46]},
   "e35dd781": {"utilisation":[0,0.032,0.037,0.4]},
@@ -77,29 +70,14 @@ const groups = [
     {"locator":"policy/iso-cap-height/\"Thermite Sans\", \"Thermite Math\", sans-serif/svg","scopes":"2fbc51a2","bands":"0a804d01","count":[41,2138]},
     {"locator":"policy/iso-cap-height/NotoSans/pdf","scopes":"883123f6","bands":"0a804d01","count":[41,2098]},
   ]},
-  {"dq":"DQ-08","family":"examples/circuit-pagination","kind":"native-part-reference-zone-missing","check":"check3c3-native-part-references","coarse":true,"defects":[
-    {"locator":"class/g.unclassified","scopes":"ec645e7c","bands":"44136fa3","count":[2,8]},
-  ]},
   {"dq":"DQ-08","family":"examples/conveyor-line","kind":"conductor-primary-alias-missing","check":"check3c3-conductor-aliases","coarse":true,"defects":[
     {"locator":"class/g.off-view-annotation","scopes":"b7394e4a","bands":"44136fa3","count":[4,6]},
-  ]},
-  {"dq":"DQ-08","family":"examples/functional-symbols","kind":"native-part-reference-zone-missing","check":"check3c3-native-part-references","coarse":true,"defects":[
-    {"locator":"class/g.unclassified","scopes":"1dcfefbf","bands":"44136fa3","count":[2,4]},
   ]},
   {"dq":"DQ-08","family":"examples/machine-demo","kind":"conductor-primary-alias-missing","check":"check3c3-conductor-aliases","coarse":true,"defects":[
     {"locator":"class/g.off-view-annotation","scopes":"1b2f0d3c","bands":"44136fa3","count":[1,4]},
   ]},
   {"dq":"DQ-08","family":"examples/motor-starter","kind":"conductor-primary-alias-missing","check":"check3c3-conductor-aliases","coarse":true,"defects":[
-    {"locator":"class/g.off-view-annotation","scopes":"6737a67e","bands":"44136fa3","count":[1,4]},
-  ]},
-  {"dq":"DQ-08","family":"examples/motor-starter","kind":"native-part-reference-zone-missing","check":"check3c3-native-part-references","coarse":true,"defects":[
-    {"locator":"class/g.unclassified","scopes":"09cc93db","bands":"44136fa3","count":[6,6]},
-  ]},
-  {"dq":"DQ-08","family":"examples/network-pagination","kind":"native-part-reference-zone-missing","check":"check3c3-native-part-references","coarse":true,"defects":[
-    {"locator":"class/g.unclassified","scopes":"14127662","bands":"44136fa3","count":[1,3]},
-  ]},
-  {"dq":"DQ-08","family":"examples/report-filtering","kind":"native-part-reference-zone-missing","check":"check3c3-native-part-references","coarse":true,"defects":[
-    {"locator":"class/g.unclassified","scopes":"a7268184","bands":"44136fa3","count":[1,2]},
+    {"locator":"class/g.off-view-annotation","scopes":"5e1ca448","bands":"44136fa3","count":[1,4]},
   ]},
   {"dq":"DQ-09","family":"examples/assembly-note-bounds","kind":"incomplete-four-side-zones","check":"sheet","coarse":true,"defects":[
     {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"92553d31","bands":"44136fa3"},
@@ -110,8 +88,8 @@ const groups = [
     {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"e218ef23","bands":"44136fa3"},
   ]},
   {"dq":"DQ-09","family":"examples/circuit-pagination","kind":"incomplete-four-side-zones","check":"sheet","coarse":true,"defects":[
-    {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"ae1158d7","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"82807f54","bands":"44136fa3"},
   ]},
   {"dq":"DQ-09","family":"examples/connector-io","kind":"incomplete-four-side-zones","check":"sheet","coarse":true,"defects":[
     {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"07967037","bands":"44136fa3"},
@@ -130,8 +108,8 @@ const groups = [
     {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"bf607320","bands":"44136fa3"},
   ]},
   {"dq":"DQ-09","family":"examples/motor-starter","kind":"incomplete-four-side-zones","check":"sheet","coarse":true,"defects":[
-    {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"87b8d0f8","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"f49fcd4f","bands":"44136fa3"},
   ]},
   {"dq":"DQ-09","family":"examples/network-pagination","kind":"incomplete-four-side-zones","check":"sheet","coarse":true,"defects":[
     {"locator":"sheet/incomplete-four-side-zones/missing/bottom","scopes":"5cd3a2c5","bands":"44136fa3"},
@@ -166,7 +144,7 @@ const groups = [
     {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"3d44f353","bands":"44136fa3"},
   ]},
   {"dq":"DQ-12","family":"examples/circuit-pagination","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
-    {"locator":"packet/median-utilisation-below-40-percent","scopes":"51b14b4d","bands":"9e7e32d8"},
+    {"locator":"packet/median-utilisation-below-40-percent","scopes":"51b14b4d","bands":"0132ca22"},
   ]},
   {"dq":"DQ-12","family":"examples/functional-symbols","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"1671cca0","bands":"b8064a1f"},
@@ -185,15 +163,6 @@ const groups = [
   ]},
   {"dq":"DQ-12","family":"packages/cli/templates/starter-default","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"12412a6b","bands":"556e4455"},
-  ]},
-  {"dq":"DQ-14","family":"examples/self-loop-labels","kind":"junction-dot-without-native-node","check":"check3-native-landings","coarse":false,"defects":[
-    {"locator":"device/D1/terminal/I2/circle.","scopes":"41da05ed","bands":"44136fa3","count":[2,2]},
-  ]},
-  {"dq":"DQ-14","family":"examples/self-loop-labels","kind":"merged-double-landing","check":"sheet","coarse":false,"defects":[
-    {"locator":"device/D1/terminal/I2/circle.","scopes":"bf0a6290","bands":"44136fa3","count":[2,2]},
-  ]},
-  {"dq":"DQ-14","family":"examples/self-loop-labels","kind":"native-conductors-share-landing-ink","check":"check3-native-landings","coarse":false,"defects":[
-    {"locator":"conductor/W2/path.","scopes":"41da05ed","bands":"44136fa3","count":[2,2]},
   ]},
   {"dq":"DQ-15","family":"examples/conveyor-line","kind":"jog-under-3mm","check":"sheet","coarse":false,"defects":[
     {"locator":"conductor/W-PWR-008/path.net-path.wire-path","scopes":"d2871bb3","bands":"41aa2b40"},
@@ -235,13 +204,13 @@ const groups = [
     {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"e218ef23","bands":"44136fa3"},
   ]},
   {"dq":"DQ-18","family":"examples/circuit-pagination","kind":"incomplete-title-block","check":"sheet","coarse":true,"defects":[
-    {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/checked","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/customerOrSite","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/drawingNumber","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/drawn","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/revision","scopes":"ae1158d7","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"ae1158d7","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/checked","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/customerOrSite","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/drawingNumber","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/drawn","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/revision","scopes":"82807f54","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"82807f54","bands":"44136fa3"},
   ]},
   {"dq":"DQ-18","family":"examples/connector-io","kind":"incomplete-title-block","check":"sheet","coarse":true,"defects":[
     {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"07967037","bands":"44136fa3"},
@@ -278,12 +247,12 @@ const groups = [
     {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"bf607320","bands":"44136fa3"},
   ]},
   {"dq":"DQ-18","family":"examples/motor-starter","kind":"incomplete-title-block","check":"sheet","coarse":true,"defects":[
-    {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/checked","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/customerOrSite","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/drawingNumber","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/drawn","scopes":"87b8d0f8","bands":"44136fa3"},
-    {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"87b8d0f8","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/checked","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/customerOrSite","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/drawingNumber","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/drawn","scopes":"f49fcd4f","bands":"44136fa3"},
+    {"locator":"sheet/incomplete-title-block/missing/revisionHistory","scopes":"f49fcd4f","bands":"44136fa3"},
   ]},
   {"dq":"DQ-18","family":"examples/network-pagination","kind":"incomplete-title-block","check":"sheet","coarse":true,"defects":[
     {"locator":"sheet/incomplete-title-block/missing/approved","scopes":"5cd3a2c5","bands":"44136fa3"},
