@@ -385,13 +385,12 @@ function emitNodeGangs(state: EmissionState) {
 }
 
 function emitNodePin(p: Pin, state: EmissionState) {
-  const { conductors, key, out, node, pinLabel, text } = state;
-  const connected = conductors.some((c) =>
-    c.ends.some((t) => key(t) === key(p.terminal)),
-  );
+  const { key, out, node, pinLabel, text } = state;
   out.push(
     `<g ${terminalPortAttribute(p.id)} data-terminal-id="${attr(key(p.terminal))}" data-terminal-key="${attr(p.terminal.terminalKey)}"${p.outside ? ` data-outside-connections="${p.outside}"` : ""}>`,
-    circuitTerminal(p.x, p.y, connected),
+    // A landed conductor is an endpoint, not proof of a three-way junction.
+    // Measured route junctions are emitted separately by the topology pass.
+    circuitTerminal(p.x, p.y, false),
   );
   const label = pinLabel(p);
   if (p.side === "WEST")

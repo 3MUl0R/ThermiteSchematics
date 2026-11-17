@@ -1,4 +1,4 @@
-import { withoutRouteOwnershipMetadata } from "../../render/test/helpers/route-ownership.js";
+import { reviewedTransformerInk } from "../../render/test/helpers/transformer-endpoint-ink.js";
 import { assertRayWeights } from "../../render/test/helpers/attachment-weights.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -67,9 +67,7 @@ it.each(transformerFlows)(
     expect(view.groups[0]!.coverage.functionIds).toHaveLength(6);
     // Preserve the reviewed geometry/complete-ink hash across the intentional
     // frame and attachment style changes. Physical ink is asserted separately.
-    const reviewedContent = withoutRouteOwnershipMetadata(
-      view.groups[0]!.content,
-    );
+    const reviewedContent = reviewedTransformerInk(view.groups[0]!.content);
     expect(view.groups[0]!.content).toContain('data-layout-source-port="');
     // Catalog attachment ink follows selected ports now; retain the original
     // reviewed geometry hash while independently requiring incident wire ink.
