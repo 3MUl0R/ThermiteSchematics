@@ -21,6 +21,8 @@ export interface SymbolGeometry {
   framesMm: readonly Rect[];
   ownerLocation: { sheet: number; zone: string };
   localBandMm?: Rect;
+  /** Shared element locators must remain local to every native source. */
+  sourceAnchorsMm?: readonly { x: number; y: number }[];
 }
 function frameCandidates(all: readonly NavigationGeometry[]) {
   return all.flatMap((g) => {
@@ -126,6 +128,9 @@ export function localNavigationSlot(box: Rect, symbol: SymbolGeometry) {
   const distance = boxDistance(box, symbol.frameMm);
   return (
     anchorDistance(symbol.anchorMm, box) <= 60 &&
+    (symbol.sourceAnchorsMm ?? []).every(
+      (anchor) => anchorDistance(anchor, box) <= 60,
+    ) &&
     (!symbol.localBandMm ||
       (box.x <= symbol.localBandMm.x + symbol.localBandMm.w &&
         box.x + box.w >= symbol.localBandMm.x &&

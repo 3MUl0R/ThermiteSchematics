@@ -85,6 +85,7 @@ export function wrapNavigationText(text: string, width: number): string {
 export function envelopeShapes(
   mode: NavigationShape["mode"],
   forms: string[],
+  narrowWidths: readonly number[] = [],
 ): NavigationShape[] {
   const maximum =
     Math.ceil(
@@ -96,7 +97,7 @@ export function envelopeShapes(
     ...forms.flatMap((f) => f.split(/\s+/).map(measureNavigationText)),
   );
   // Stable wide-to-narrow order, independent of current page/zone values.
-  const widths = [maximum, 84, 70, 56, 42, 28].filter(
+  const widths = [maximum, 84, 70, 56, 42, 28, ...narrowWidths].filter(
     (w, i) => i === 0 || (w < maximum && w >= minimum),
   );
   return widths.map((width, i) => {

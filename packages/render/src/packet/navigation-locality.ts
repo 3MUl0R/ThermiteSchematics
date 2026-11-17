@@ -40,6 +40,7 @@ export function resolveLabelLocality(
   const ink = navigationLabelInk(text, allocated.rect);
   if (
     allocated.sheet !== symbol.ownerLocation.sheet ||
+    (symbol.sourceAnchorsMm && !localNavigationSlot(ink, symbol)) ||
     (mode === "local"
       ? !localNavigationSlot(ink, symbol)
       : !unwrapped.startsWith(selfPrefix))

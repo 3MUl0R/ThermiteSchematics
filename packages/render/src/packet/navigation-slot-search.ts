@@ -103,20 +103,31 @@ export function searchNavigationSlot(
   preferBesideBelow = false,
   families?: readonly NavigationPlacementFamily[],
   localityInkMm?: ReadonlyMap<string, Rect>,
+  fitPrintedInk = false,
 ) {
   const ordered = ["local", "self-located"].flatMap((mode) =>
     shapes.filter((s) => s.mode === mode),
   );
   for (const shape of ordered) {
     const ink = localityInkMm?.get(shape.id);
+    // Keep a 0.01 mm metric/rounding margin around the final fixed-font ink.
+    // Empty emission padding is not printed content or a clearance obstacle.
+    const fit = fitPrintedInk ? ink : undefined;
+    const size = fit
+      ? { x: 0, y: 0, w: fit.w + 0.02, h: fit.h + 0.02 }
+      : shape.inkMm;
+    const envelope = (b: Rect): Rect =>
+      fit
+        ? { ...shape.inkMm, x: b.x - fit.x + 0.01, y: b.y - fit.y + 0.01 }
+        : b;
     const candidates = slotCandidates(
-      shape.inkMm,
+      size,
       area,
       owner,
       obstacles,
       locality,
       texts,
-      ink,
+      fit ? undefined : ink,
       preferBesideBelow && shape.mode === "local",
     );
     const box = candidates.find(
@@ -124,7 +135,7 @@ export function searchNavigationSlot(
         (!families ||
           families.includes(
             navigationPlacementFamily(
-              navigationPlacementInk(b, ink),
+              navigationPlacementInk(envelope(b), ink),
               area,
               owner,
               locality,
@@ -133,11 +144,14 @@ export function searchNavigationSlot(
         inside(b, area) &&
         obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
         texts.every((t) => textSeparated(b, t)) &&
-        (shape.mode !== "local" ||
+        ((shape.mode !== "local" && !locality?.sourceAnchorsMm) ||
           !locality ||
-          localNavigationSlot(navigationPlacementInk(b, ink), locality)),
+          localNavigationSlot(
+            navigationPlacementInk(envelope(b), ink),
+            locality,
+          )),
     );
-    if (box) return { box, shape };
+    if (box) return { box: envelope(box), protectedBox: box, shape };
   }
   return undefined;
 }

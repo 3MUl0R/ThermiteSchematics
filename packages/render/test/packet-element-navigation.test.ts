@@ -5,6 +5,9 @@ import { finalizeNavigation } from "../src/packet/navigation-finalize.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { printedFunction } from "../src/print-projection.js";
+import { readFile } from "node:fs/promises";
+import { navigationLabelInk } from "../src/packet/navigation-label-ink.js";
+import { anchorDistance } from "../src/packet/navigation-symbols.js";
 
 let ir: ElectricalIr, uid: string;
 beforeAll(async () => {
@@ -23,6 +26,7 @@ function finish(
 ) {
   const f = mirrorFixture(ir, pages);
   const result = finalizeNavigation(f.ir, f.drafts, f.sheets);
+  expect(result.ok).toBe(true);
   if (!result.ok) throw Error(JSON.stringify(result.error));
   return { ...result.value, fixture: f };
 }
@@ -76,7 +80,8 @@ it("locates all three power elements reciprocally from the native 95–96 contac
     annotations = r.navigation.annotations.filter(
       (a) => a.role === "element-location",
     );
-  expect(annotations).toHaveLength(2);
+  // These three fixture functions have separate drawn bodies, so each owns a locator.
+  expect(annotations).toHaveLength(4);
   expect(annotations.flatMap((a) => a.ownerOccurrences)).toHaveLength(4);
   for (const owner of r.navigation.occurrences) {
     const a = annotations.find((a) => a.ownerOccurrences.includes(owner.id));
@@ -110,6 +115,74 @@ it("locates all three power elements reciprocally from the native 95–96 contac
   expect(
     r.navigation.annotations.some((a) => ["mirror", "return"].includes(a.role)),
   ).toBe(false);
+});
+it("prints each multi-element role once while retaining every native terminal set and destination", () => {
+  const r = finish([
+    [placement("pole1", 40)],
+    [placement("pole2", 130)],
+    [placement("pole3", 220)],
+    [placement("aux95", 160)],
+  ]);
+  const aux = r.navigation.occurrences.find(
+    (o) => o.source.functionKey === "aux95",
+  );
+  const locator = r.navigation.annotations.find(
+    (a) => a.role === "element-location" && a.ownerOccurrence === aux?.id,
+  );
+  expect(locator).toBeDefined();
+  expect(locator?.text.match(/Overload element/g)).toHaveLength(1);
+  expect(locator?.text.replaceAll("\n", " ")).toBe(
+    "OL1: Overload element 1/L1–2/T1 → 01.B1 3/L2–4/T2 → 02.B3 5/L3–6/T3 → 03.B4",
+  );
+  expect(locator?.targets).toHaveLength(3);
+  const reservation = r.navigation.reservations.find(
+    (s) => s.id === locator?.reservationId,
+  );
+  expect(reservation?.shapes?.length).toBeGreaterThan(0);
+  for (const shape of reservation?.shapes ?? [])
+    for (const form of shape.maximumForms)
+      expect(
+        form.replaceAll("\n", " ").match(/Overload element/g),
+      ).toHaveLength(1);
+});
+it("keeps a shared native locator within 60 mm of every overload pole, not just their centroid", async () => {
+  const compiled = await compileProject("examples/motor-starter");
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const request = JSON.parse(
+    await readFile("examples/alpha/motor-starter.packet.json", "utf8"),
+  );
+  const result = await renderSchematicPacket(compiled.ir, request);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.value.sheets).toHaveLength(7);
+  const navigation = result.value.navigation;
+  if (!navigation) throw Error("Missing native navigation");
+  const device = compiled.ir.devices.find((d) => d.designation === "OL1");
+  const poles = navigation.occurrences.filter(
+    (o) =>
+      o.source.deviceUid === device?.uid && /^pole/.test(o.source.functionKey),
+  );
+  expect(poles).toHaveLength(3);
+  const locatorIds = new Set<string>();
+  for (const pole of poles) {
+    const locator = navigation.annotations.find(
+      (a) =>
+        a.role === "element-location" && a.ownerOccurrences.includes(pole.id),
+    );
+    expect(locator).toBeDefined();
+    const box = navigation.reservations.find(
+      (r) => r.id === locator?.reservationId,
+    )?.allocatedMm?.rect;
+    if (!locator || !box) throw Error("Missing element locator ink");
+    locatorIds.add(locator.id);
+    expect(
+      anchorDistance(
+        pole.destination.anchorMm,
+        navigationLabelInk(locator.text, box),
+      ),
+    ).toBeLessThanOrEqual(60);
+  }
+  expect(locatorIds.size).toBe(1);
 });
 it("does not invent an undrawn auxiliary or connect a similarly tagged different UID", () => {
   const r = finish([[placement("pole1", 40)]]);
