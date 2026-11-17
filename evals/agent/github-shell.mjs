@@ -1,5 +1,7 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
 import { posix } from "node:path";
+import { couldNetwork, knownLocalCommand } from "./shell-network.mjs";
+import { downloadedJson } from "./downloaded-json.mjs";
 const conversationFields = new Set([
   "title",
   "body",
@@ -62,7 +64,7 @@ function issueView(words) {
     words[2] !== "view"
   )
     return null;
-  let repo, number;
+  let repo, number, target;
   for (let i = 3; i < words.length; i++) {
     const word = words[i];
     if (["-R", "--repo"].includes(word)) {
@@ -71,8 +73,10 @@ function issueView(words) {
     } else if (word.startsWith("--repo=")) {
       if (repo) return null;
       repo = word.slice(7);
-    } else if (word === "--json") {
-      const fields = words[++i]?.split(",");
+    } else if (word === "--json" || word.startsWith("--json=")) {
+      const fields = (word === "--json" ? words[++i] : word.slice(7))?.split(
+        ",",
+      );
       if (
         !fields?.length ||
         !fields.every((field) => conversationFields.has(field))
@@ -81,51 +85,22 @@ function issueView(words) {
     } else if (["--jq", "-q"].includes(word)) {
       if (words[++i] === undefined) return null;
     } else if (word === "--comments") continue;
-    else if (/^[1-9][0-9]*$/.test(word) && !number) number = word;
+    else if (/^https?:\/\//i.test(word) && !target && !number) target = word;
+    else if (/^[1-9][0-9]*$/.test(word) && !number && !target) number = word;
     else return null;
   }
+  if (target) return repo ? null : target;
   return repo && number
     ? `https://github.com/${repo}/${words[1] === "pr" ? "pull" : "issues"}/${number}`
     : null;
 }
-export function shellRequest(input) {
-  const text = literalShellBody(input),
-    words = shellWords(text);
-  if (!words) return { text };
-  const github = words.some(
-    (word, i) =>
-      posix.basename(word) === "gh" &&
-      words[i + 1] &&
-      !/^[&|;]$|^&&$|^\|\|$/.test(words[i + 1]),
-  );
-  words[0] = posix.basename(words[0] ?? "");
-  const view = issueView(words);
-  if (view) return { text, target: view, headers: [], rest: "", safe: true };
-  const client = words[0];
-  if (
-    !["curl", "wget"].includes(client) &&
-    !(client === "gh" && words[1] === "api")
-  )
-    return { text, github };
-  const headers = [];
-  let target,
-    output,
-    safe = true,
-    rest = "";
+function fetchArguments(words) {
+  const client = words[0],
+    headers = [];
+  let target, output;
   for (let i = client === "gh" ? 2 : 1; i < words.length;) {
     const word = words[i];
-    if (word === "&&") {
-      rest = words.slice(i + 1).join(" ");
-      const tail = words.slice(i + 1).filter((w) => w !== "--");
-      safe &&=
-        (tail.length === 2 &&
-          tail[0] === "cat" &&
-          !!output &&
-          posix.normalize(tail[1]) === posix.normalize(output)) ||
-        (tail[0] === "bun" && tail[1] === "-e");
-      break;
-    }
-    if (word === ">" && words[i + 1] && output === undefined) {
+    if (word === ">" && i === words.length - 2 && output === undefined) {
       output = words[i + 1];
       i += 2;
       continue;
@@ -136,25 +111,54 @@ export function shellRequest(input) {
       continue;
     }
     const parsed = option(words, i, client);
-    if (!parsed) {
-      safe = false;
-      i++;
-      continue;
-    }
+    if (!parsed) return null;
     if (parsed.header !== undefined) headers.push(parsed.header);
     if (parsed.output !== undefined) {
-      if (output !== undefined) safe = false;
+      if (output !== undefined) return null;
       output = parsed.output;
     }
     i += parsed.count;
   }
   if (target?.startsWith("repos/")) target = `https://api.github.com/${target}`;
-  return {
-    text,
-    target,
-    headers,
-    rest: `${output ?? ""} ${rest}`,
-    safe,
-    github,
-  };
+  return target ? { target, headers, output } : null;
+}
+function literalTarget(token) {
+  if (token.value.startsWith("-") || !/[/:.]/.test(token.value)) return true;
+  return (
+    token.literal === token.value ||
+    ["'", '"'].some((q) => token.literal === q + token.value + q)
+  );
+}
+export function shellRequest(input, scanned = input) {
+  const text = literalShellBody(input),
+    tokens = shellWords(text, { literal: true });
+  const words = tokens?.map((t) => t.value),
+    wrapper = /^\s*(?:\/[\w/.-]+\/)?(?:zsh|bash|sh)\s+-(?:lc|c)\s/.test(input),
+    network =
+      couldNetwork(scanned, words) ||
+      (wrapper && !knownLocalCommand(shellWords(scanned.trim())));
+  const refused = { text, network, safe: false };
+  if (!tokens || /[\r\n$`]/.test(text) || !tokens.every(literalTarget))
+    return refused;
+  const split = tokens.findIndex((t) => t.control && t.value === "&&");
+  const prefix = split < 0 ? tokens : tokens.slice(0, split);
+  // A plain file output redirection is part of one command; all other control
+  // syntax is refused. The single && exception must match the entire formatter.
+  if (prefix.some((t) => t.control && t.value !== ">")) return refused;
+  const head = prefix.map((t) => t.value);
+  head[0] = posix.basename(head[0] ?? "");
+  const view = split < 0 && issueView(head);
+  if (view) return { text, target: view, headers: [], safe: true, network };
+  if (
+    !["curl", "wget"].includes(head[0]) &&
+    !(head[0] === "gh" && head[1] === "api")
+  )
+    return refused;
+  const fetch = fetchArguments(head);
+  if (
+    !fetch ||
+    (split >= 0 && !downloadedJson(words.slice(split + 1), fetch.output))
+  )
+    return refused;
+  return { text, ...fetch, safe: true, network };
 }

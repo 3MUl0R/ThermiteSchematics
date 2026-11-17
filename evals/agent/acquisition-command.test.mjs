@@ -9,11 +9,11 @@ const allowedLibraryAcquisition = (input, allowedLibraryPaths) =>
 const paths = ["libraries/field-interfaces", "libraries/industrial-pilot"];
 const url =
   "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/fac3c43/libraries/field-interfaces/library.json";
-it("recognizes fetch followed only by reading its downloaded output", () => {
+it("recognizes simple library GETs, with no compound cat exemption", () => {
   for (const command of [
-    `curl --fail --silent --show-error '${url}' -o artifacts/library.json && cat artifacts/library.json`,
-    `curl '${url}' -o './artifacts/file with space.json' && cat 'artifacts/file with space.json'`,
-    `gh api --method GET 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces?ref=fac3c43' > artifacts/library.json && cat artifacts/library.json`,
+    `curl --fail --silent --show-error '${url}' -o artifacts/library.json`,
+    `curl '${url}' -o './artifacts/file with space.json'`,
+    `gh api --method GET 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces?ref=fac3c43' > artifacts/library.json`,
     `gh api 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces' --jq '.[].name | select(.)'`,
   ])
     expect(allowedLibraryAcquisition(command, paths), command).toBe(true);
@@ -25,6 +25,7 @@ it("does not exempt extra reads, commands, writes, other paths or dynamic progra
     `curl '${url}' -o artifacts/library.json; cat artifacts/library.json`,
     `curl '${url}' | gh search code repo:BlackettApplied/ThermiteSchematics`,
     `curl '${url}' -o artifacts/library.json && cat artifacts/other.json`,
+    `curl '${url}' -o artifacts/library.json && cat artifacts/library.json`,
     `curl -X POST '${url}'`,
     `gh api -f name=x '${url}'`,
     `curl --config /engine/config '${url}'`,

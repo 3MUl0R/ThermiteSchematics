@@ -1,5 +1,5 @@
 // These values are used for classification only, never for execution.
-export function canonicalText(input) {
+export function canonicalText(input, { url = false } = {}) {
   if (typeof input !== "string") return { text: "", valid: false };
   let text = input,
     previous,
@@ -24,10 +24,17 @@ export function canonicalText(input) {
       });
     }
   } while (text !== previous);
-  return { text: text.replace(/\s+/gu, " ").trim(), valid };
+  return {
+    text: url
+      ? text
+          .replace(/[\t\n\r]/g, "")
+          .replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, "")
+      : text.replace(/\s+/gu, " ").trim(),
+    valid,
+  };
 }
 export function canonicalUrl(input) {
-  const normalized = canonicalText(input);
+  const normalized = canonicalText(input, { url: true });
   try {
     return { ...normalized, url: new URL(normalized.text) };
   } catch {

@@ -1,12 +1,13 @@
 import { literalShellBody } from "./acquisition-command.mjs";
 // Quoted Markdown here-docs are authored report data, not source requests.
 export function sourceScanInput(name, values) {
-  if (!/^(?:command_execution|bash|shell)$/i.test(name))
+  if (!/^(?:command_execution|bash|shell|exec_command)$/i.test(name))
     return values.join("\n");
   return values.map(withoutMarkdownBodies).join("\n");
 }
 function withoutMarkdownBodies(input) {
   const lines = literalShellBody(input).split("\n");
+  let removed = false;
   for (let i = 0; i < lines.length; i++) {
     const header =
       /^\s*cat\s+>\s*(?:'([^']+\.md)'|"([^"]+\.md)"|([^\s<>;&|]+\.md))\s+<<\s*(['"])([A-Za-z_][A-Za-z0-9_]*)\4\s*$/.exec(
@@ -25,8 +26,10 @@ function withoutMarkdownBodies(input) {
         "[\"']?(?:\\s|$)",
     );
     if (executes.test(lines.slice(end + 1).join("\n"))) continue;
-    for (let j = i + 1; j < end; j++) lines[j] = "";
+    removed = true;
+    lines[i] = `cat > ${JSON.stringify(output)}`;
+    for (let j = i + 1; j <= end; j++) lines[j] = "";
     i = end;
   }
-  return lines.join("\n");
+  return (removed ? lines.filter(Boolean) : lines).join("\n");
 }

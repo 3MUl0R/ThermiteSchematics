@@ -2,10 +2,9 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { classifyToolCall } from "./github-call.mjs";
 import { score } from "./score-log.mjs";
-const cases = JSON.parse(
-  readFileSync(
-    new URL("./fixtures/github-calls.json", import.meta.url),
-    "utf8",
+const cases = ["github-calls.json", "github-calls-r6.json"].flatMap((file) =>
+  JSON.parse(
+    readFileSync(new URL(`./fixtures/${file}`, import.meta.url), "utf8"),
   ),
 );
 for (const fixture of cases)
@@ -19,12 +18,26 @@ for (const fixture of cases)
     // Exercise structured Claude arguments and the actual scorer, not only helpers.
     const result = score({
       ...options,
-      transcript: [
-        {
-          type: "assistant",
-          message: { content: [{ ...event, type: "tool_use" }] },
-        },
-      ],
+      transcript:
+        event.server || event.tool
+          ? [
+              {
+                type: "item.completed",
+                item: {
+                  type: "mcp_tool_call",
+                  id: event.id,
+                  server: event.server ?? event.name,
+                  tool: event.tool ?? event.name,
+                  arguments: event.input,
+                },
+              },
+            ]
+          : [
+              {
+                type: "assistant",
+                message: { content: [{ ...event, type: "tool_use" }] },
+              },
+            ],
     });
     expect(result.sourceReads).toBe(Number(fixture.class === "source-read"));
     expect(result.issueLookups).toHaveLength(

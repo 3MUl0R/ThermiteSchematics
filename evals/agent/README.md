@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.15.0)
+# Fresh-agent evaluator (E2 v1.16.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -568,7 +568,7 @@ aliases. Contributor fixtures use a root-only private Git `info/exclude` entry
 for linked dependencies; the engine's `node_modules/` rule still permits an
 ordinary source file with that name.
 
-Eval **1.15.0** classifies each tool call once as `issue-lookup`, `source-read`
+Eval **1.15.0** introduced a classifier that classifies each tool call once as `issue-lookup`, `source-read`
 or `other`. It replaces the independent URL-source detector and issue exemption.
 Structured fetch tools use only their URL, never their prompt; search tools use
 only the query and explicit repository scope. Shell GET requests parse literal
@@ -610,3 +610,51 @@ prior T07-fresh and one to current D-pump. Current D-conveyor adds one source
 read: its MCP query has `repo:` without the required `is:issue`/`is:pr`. Every
 other metric is identical. Original manifests/transcripts and historical replay
 files remain unchanged; these are Codex-only replays, not a category score.
+
+Eval **1.16.0** defines the current V8 threat model and replaces 1.15's incomplete
+compound-command and unknown-network handling. V8 measures honest agents' natural
+source-reading behavior; it is **not a sandbox**. Plausible honest forms must be
+classified correctly. Anything not fully understood never earns an issue
+exemption; if it might reach the network it counts as a source read. Static
+classification cannot defeat deliberate obfuscation in general. Opaque IPs,
+redirectors and novel encodings are limits: they never earn exemptions, but
+static scoring cannot establish where they ultimately connect. Runtime egress
+logging is the actual adversarial control, tracked separately by the helm;
+this scorer does not implement it. Under the helm's stopping rule, subsequent
+obfuscated bypasses are follow-ups; plausible honest misclassifications or
+legitimate-lookup regressions remain blocking.
+
+An issue exemption requires one fully parsed simple command. Compound operators,
+newlines, subshells, variables/expansions, backticks, env-prefix assignments,
+interpreter redirects and heredocs cannot earn it. The sole compound exception
+is a literal GET writing a named output, followed by exactly one `bun -e` program
+that reads that same output with `Bun.file(...).json()` and prints a JSON
+projection of direct object fields. The whole program is matched; extra code,
+other input files, additional commands and download-then-cat are refused.
+Unrecognized network-capable curl/wget/gh/git or interpreter eval/command forms
+count as source reads, including failed tokenization and quote-spliced targets.
+Known literal shell transport wrappers are inspected as commands; local client
+discovery, version checks and simple built CLI commands remain ordinary local calls.
+Unknown transport bodies retain the interpreter's network risk. Quoted Markdown
+report data remains distinct from execution and never creates an issue exemption.
+
+URL normalization strips ASCII tab/LF/CR throughout and trims leading/trailing
+C0 controls and spaces, as WHATWG URL does; it does not turn them into spaces.
+Existing decoding/NFKC/IDNA and exact issue path/media restrictions remain.
+`gh issue view <full URL>` and both `--json fields`/`--json=fields` forms are
+supported with the same fixed conversation-field set. Any server or tool name
+containing `github`, with any casing/separator, defaults to source-read. The
+fixed MCP operation allowlist is `fetch`, `search_issues`, and `issue_read` or
+`pull_request_read` with `get`/`get_comments`; arguments are scoped to their known
+fields. Unknown operations, methods or overrides receive no exemption.
+
+All 12 retained transcripts are rescored against 1.15 before 1.16, previous
+checkpoint first. All **19 issue/PR lookups keep their class**, including the
+recorded JSON formatter. Eight runtime records change conservative source
+counts for unknown network-capable shell calls; the four contributor-context
+records are identical. Four prior T07 GET-then-cat calls lose their library
+exemption under the compound rule; simple permitted library GETs and the exact
+JSON formatter remain allowed. These defaults are not proof of actual source
+fetches. Original evidence/replay identities and hashes remain unchanged;
+Codex-only replays are not category scores. REPORT.md contains every record's
+delta and event-level explanations.

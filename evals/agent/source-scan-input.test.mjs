@@ -13,7 +13,7 @@ const metric = (command) =>
     ],
   });
 it("writing source/issue links into quoted Markdown is not a source read", () => {
-  const command = `/bin/zsh -lc "cat > friction.md <<'EOF'\n# Findings\nSee ${url}\nhttps://github.com/BlackettApplied/ThermiteSchematics/issues/365\nEOF\npython3 - <<'PY'\nprint('write matrix')\nPY"`;
+  const command = `/bin/zsh -lc "cat > friction.md <<'EOF'\n# Findings\nSee ${url}\nhttps://github.com/BlackettApplied/ThermiteSchematics/issues/365\nEOF"`;
   expect(metric(command).sourceReads).toBe(0);
   expect(metric(command).issueLookups).toHaveLength(0);
 });
@@ -25,6 +25,7 @@ it("preserves real reads around reports and executable/unquoted here-docs", () =
     `cat > helper.sh <<'EOF'\ncurl '${url}'\nEOF\nbash helper.sh`,
     `cat > friction.md <<'EOF'\ncurl '${url}'\nEOF\nbash friction.md`,
     `cat > friction.md <<EOF\n$(cat /engine/source.ts)\nEOF`,
+    `cat > friction.md <<'EOF'\nnotes\nEOF\npython3 - <<'PY'\nprint('write matrix')\nPY`,
   ])
     expect(metric(command).sourceReads, command).toBe(1);
 });

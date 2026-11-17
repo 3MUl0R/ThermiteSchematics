@@ -7,6 +7,7 @@ import { shellRequest } from "./github-shell.mjs";
 import { issueSearch, issueUrl, jsonHeaders } from "./issue-lookup.mjs";
 import { sourceScanInput } from "./source-scan-input.mjs";
 import { readsLocalSource } from "./local-source.mjs";
+import { githubRequest } from "./github-tools.mjs";
 import { allowedLibraryUrl } from "./library-acquisition.mjs";
 export { pathText } from "./local-source.mjs";
 export const strings = (value) =>
@@ -19,23 +20,26 @@ export const strings = (value) =>
         : [];
 
 // Extract actual request arguments, never display text or fetch prompts.
-function request(event) {
+function request(event, github) {
+  if (github)
+    return (
+      githubRequest(event) ?? {
+        text: strings(event.input).join("\n"),
+        network: true,
+      }
+    );
   const { name, input, lookupKind } = event;
-  if (
-    /^(?:webfetch|open_page|codex_apps\.github\.fetch)$/i.test(name) ||
-    lookupKind === "fetch"
-  )
+  if (/^(?:webfetch|open_page)$/i.test(name) || lookupKind === "fetch")
     return {
       target: typeof input === "string" ? input : input?.url,
       headers: [],
-      rest: "",
-      safe: true,
+      safe:
+        typeof input === "string" ||
+        (!!input &&
+          Object.keys(input).every((key) => ["url", "prompt"].includes(key))),
+      network: true,
     };
-  if (
-    /^(?:web_search|websearch|search|codex_apps\.github\.search_issues)$/i.test(
-      name,
-    )
-  )
+  if (/^(?:web_search|websearch|search)$/i.test(name))
     return {
       query:
         typeof input === "string"
@@ -49,7 +53,7 @@ function request(event) {
       : input,
   );
   const text = sourceScanInput(name, values);
-  if (shell) return shellRequest(text);
+  if (shell) return { ...shellRequest(values.join("\n"), text), text };
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
 }
@@ -59,32 +63,34 @@ function classifySearch(query, github, engineRoots) {
   if (valid && issueSearch(text)) return "issue-lookup";
   return github || touchesGitHub(text) ? "source-read" : "other";
 }
+/**
+ * V8 measures honest agents' natural source-reading behavior; it is not a
+ * sandbox. Plausible honest forms must be classified correctly. Anything not
+ * fully understood never earns an issue exemption; if it might reach the
+ * network it is a source read. Static commands cannot defeat deliberate
+ * obfuscation in general. Opaque IPs, redirectors and novel encodings are limits;
+ * they never earn an exemption. Runtime egress logging is the real adversarial
+ * control, tracked separately by the helm, not implemented here. Stop at this
+ * threat model: further obfuscated bypasses are follow-ups, not sandbox work.
+ */
 export function classifyToolCall(
   event,
   { engineRoots = [], allowedLibraryPaths = [] } = {},
 ) {
-  if (/^(?:write|todowrite|todo_list)$/i.test(event.name))
+  const github = [event.name, event.server, event.tool].some(
+    (value) => typeof value === "string" && /github/i.test(value),
+  );
+  if (!github && /^(?:write|todowrite|todo_list)$/i.test(event.name))
     return { class: "other" };
-  const call = request(event);
-  const github = /(?:^|[._])github(?:[._]|$)/i.test(event.name);
+  const call = request(event, github);
   if (Object.hasOwn(call, "query"))
     return { class: classifySearch(call.query, github, engineRoots) };
   const canonical = canonicalUrl(call.target);
   const text =
     call.text === undefined ? canonical.text : canonicalText(call.text).text;
-  const rest = canonicalText(call.rest).text;
-  // Any residual access (including a second request) dominates an exemption.
   const local = readsLocalSource(call.text ?? call.target ?? "", engineRoots);
-  const ghCommand = (text) =>
-    /(?:^|[;&|\n])\s*(?:[^\s;&|]*\/)?gh\s+[a-z]/u.test(text);
-  const residual = touchesGitHub(rest) || ghCommand(call.rest ?? rest);
-  const touched =
-    github ||
-    touchesGitHub(text) ||
-    touchesGitHub(canonical.url?.href ?? canonical.text) ||
-    call.github ||
-    ghCommand(call.text ?? text);
-  if (!local && !residual && call.safe && canonical.valid && canonical.url) {
+  const understood = call.safe && canonical.valid && canonical.url;
+  if (!local && understood) {
     if (jsonHeaders(call.headers) && issueUrl(canonical.url))
       return { class: "issue-lookup" };
     if (
@@ -93,5 +99,11 @@ export function classifyToolCall(
     )
       return { class: "other", libraryAcquisition: true };
   }
-  return { class: local || touched || residual ? "source-read" : "other" };
+  const source =
+    local ||
+    github ||
+    touchesGitHub(text) ||
+    touchesGitHub(canonical.url?.href ?? canonical.text) ||
+    (!understood && call.network);
+  return { class: source ? "source-read" : "other" };
 }
