@@ -52,3 +52,30 @@ it("fills Letter companions with all eight atomic native cap rows at the existin
   }
   expect(JSON.stringify(ir)).toBe(before);
 });
+
+it("does not buy density by splitting an ordinary native port state word", async () => {
+  const result = await renderSchematicPacket(ir, {
+    format: "schematic-packet-request/0.1",
+    page: { size: "letter", orientation: "landscape" },
+    views: [
+      {
+        format: "connector-assembly-view-request/0.1",
+        assemblies: ["CAP-X01"],
+      },
+    ],
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const rows = result.value.navigation?.documents.flatMap((d) => d.rows) ?? [];
+  const unoccupied = rows.filter((r) => r.nativeKey.startsWith("["));
+  expect(unoccupied).toHaveLength(3);
+  for (const row of unoccupied) {
+    const doc = parseHTML(
+      result.value.sheets[row.sheet - 1]?.svg ?? "",
+    ).document;
+    const printed = doc.getElementById(row.primitiveId);
+    expect(
+      [...(printed?.querySelectorAll("text") ?? [])].map((t) => t.textContent),
+    ).toContain("Unoccupied");
+  }
+});

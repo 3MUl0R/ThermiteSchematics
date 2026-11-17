@@ -33,6 +33,7 @@ export function denserAssemblyCells(
         if (candidate.cellSize !== baseline.cellSize) continue;
         const count = pages(candidate);
         if (count >= basePages || count > bestPages) continue;
+        if (!preservesAssemblyWords(table, baseline, candidate)) continue;
         const height = table.rows.reduce(
           (sum, row) =>
             sum +
@@ -51,4 +52,29 @@ export function denserAssemblyCells(
     }
   }
   return best;
+}
+
+/** Reallocation may wrap between words, never newly fracture a readable word. */
+function preservesAssemblyWords(
+  table: DocumentationTable,
+  baseline: ReturnType<typeof reportCells>,
+  candidate: ReturnType<typeof reportCells>,
+) {
+  for (const row of table.rows) {
+    const before = baseline.split(row.cells, "probe", row.key);
+    const after = candidate.split(row.cells, "probe", row.key);
+    for (const [i, value] of row.cells.entries()) {
+      const whole = (lines: readonly string[]) =>
+        new Set(lines.flatMap((line) => line.match(/\S+/gu) ?? []));
+      const oldWords = whole(before[i] ?? []),
+        newWords = whole(after[i] ?? []);
+      if (
+        (value.normalize("NFC").match(/\S+/gu) ?? []).some(
+          (word) => oldWords.has(word) && !newWords.has(word),
+        )
+      )
+        return false;
+    }
+  }
+  return true;
 }
