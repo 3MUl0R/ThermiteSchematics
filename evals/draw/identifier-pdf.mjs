@@ -1,8 +1,30 @@
 // Painted PDF extraction, including spaces and PDF-only line breaks. No matching
 // against SVG text strings: exact-line matching would hide a PDF-only defect.
 import { paintedPdfItems } from "./pdf-painted.mjs";
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+async function identifierPdfContent(page) {
+  try {
+    return await page.getTextContent({ disableNormalization: true });
+  } catch (error) {
+    if (
+      ![
+        "AbortException",
+        "FormatError",
+        "InvalidPDFException",
+        "UnexpectedResponseException",
+        "UnknownErrorException",
+        "PasswordException",
+      ].includes(error?.name)
+    )
+      throw error;
+    throw new IdentifierMeasurementError(
+      `Identifier measurement: PDF extraction failed: ${error.message}`,
+      { cause: error },
+    );
+  }
+}
 export async function pdfIdentifierRuns(page) {
-  const content = await page.getTextContent({ disableNormalization: true });
+  const content = await identifierPdfContent(page);
   const viewport = page.getViewport({ scale: 25.4 / 72 });
   const items = content.items
     .filter((item) => typeof item.str === "string" && item.str.length)

@@ -1,4 +1,5 @@
 import { measurementHelpers } from "./measurement-helpers.mjs";
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 // Shared print-capture environment: no page scripts, service workers or network.
 export const drawingContextOptions = Object.freeze({
   deviceScaleFactor: 300 / 96,
@@ -272,11 +273,28 @@ const helperSource =
 export function sheetMeasurementSource() {
   return `(${bindMeasurement})(${measureSheet},${helperSource})`;
 }
-export function evaluateSheetGeometry(page, options = {}) {
-  return page.evaluate(({ source, options }) => (0, eval)(source)(options), {
-    source: sheetMeasurementSource(),
-    options,
-  });
+export async function evaluateSheetGeometry(page, options = {}) {
+  const result = await page.evaluate(
+    ({ source, options }) => {
+      try {
+        return { geometry: (0, eval)(source)(options) };
+      } catch (error) {
+        if (
+          error.name !== "IdentifierMeasurementError" ||
+          error.code !== "THERMITE_IDENTIFIER_MEASUREMENT"
+        )
+          throw error;
+        return { identifierError: error.message };
+      }
+    },
+    {
+      source: sheetMeasurementSource(),
+      options,
+    },
+  );
+  if (result.identifierError !== undefined)
+    throw new IdentifierMeasurementError(result.identifierError);
+  return result.geometry;
 }
 export async function displaySheet(page, svg) {
   await page.setContent(

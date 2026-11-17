@@ -20,6 +20,25 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.22** fixes the four robustness gaps from #376 without adding an
+oracle, changing criteria or moving expected markers. Complete 5.21 reports
+remain readable.
+
+- Requested-terminal-plan lookup is caught on its own sheet. An ambiguous native
+  table binding cannot discard the sheet's later observations or other sheets.
+- Identifier infrastructure gets a separate SVG DQ-19 observation. Wire-locator,
+  text-outside-cell, report and successfully measured identifier findings retain
+  their own failure verdict. An identifier measurement failure cannot mask an
+  unrelated retired/absent defect's pin verdict.
+- Only `IdentifierMeasurementError` is caught as identifier infrastructure.
+  Browser measurement preserves that type through an explicit error envelope;
+  PDF extraction wraps recognized PDF data failures at its API boundary.
+  Programming errors propagate, even with measurement-looking message text.
+- Several measured document identities on one sheet are checked independently,
+  with their native tables, row keys, cells and SVG/HTML/PDF runs. Shared row and
+  column keys cannot borrow another document's geometry. Failure in one document
+  does not erase findings measured in another.
+
 Version **5.21** fixes two implementation defects exposed by N17 delivery;
 it adds no new oracle predicate and changes no criteria or expected markers.
 Historical complete 5.20 reports remain readable.

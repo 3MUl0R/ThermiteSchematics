@@ -1,3 +1,4 @@
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 import { packetNativeNeeds } from "./m3-needs-context.mjs";
 import { sufficient } from "./document-dependencies.mjs";
 import { rowZones } from "./m3-zones.mjs";
@@ -198,7 +199,7 @@ export function tableForSheet(sheet, g, tables) {
     (t) => t.documentId && ids.includes(t.documentId),
   );
   if (bound.length > 1)
-    throw Error(
+    throw new IdentifierMeasurementError(
       "Identifier measurement: ambiguous document table on sheet " +
         sheet.number,
     );

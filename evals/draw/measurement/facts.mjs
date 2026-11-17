@@ -164,7 +164,9 @@ export function sheetFields3(c) {
       })
       .map(({ column, columnIndex, rect }) => {
         if (!rect)
-          throw Error("Identifier measurement: report cell rectangle missing");
+          throw new h.IdentifierMeasurementError(
+            "Identifier measurement: report cell rectangle missing",
+          );
         const { documentKind } = c.documentIdentity(column);
         return {
           row: attr(column, "data-report-row"),

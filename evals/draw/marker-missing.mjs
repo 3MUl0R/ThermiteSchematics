@@ -7,12 +7,17 @@ export function missingMarkerRow(
   compatible,
   state,
 ) {
+  const identifierCheck =
+    marker.kind.startsWith("identifier-") ||
+    marker.kind === "terminal-plan-is-table";
   const infrastructure =
-    compatible.some(
-      (r) =>
-        r.status === "infrastructure-error" &&
-        r.instrumentation === "identifier",
-    ) || state?.instrumentation === "identifier";
+    (identifierCheck &&
+      compatible.some(
+        (r) =>
+          r.status === "infrastructure-error" &&
+          r.instrumentation === "identifier",
+      )) ||
+    state?.instrumentation === "identifier";
   return {
     id: `expectation/${marker.id}/${hash(key).slice(0, 12)}`,
     dq: marker.dq,

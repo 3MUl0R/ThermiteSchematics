@@ -1,3 +1,4 @@
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 function communicationEndpoint(ir, uid, key, policy) {
   const d = ir.devices.find((d) => d.uid === uid);
   return policy.projection === "legacy"
@@ -76,7 +77,9 @@ function portUnits(ir, row, column) {
   const [uid, port] = keyParts(row.key),
     device = ir.devices.find((d) => d.uid === uid);
   if (!device)
-    throw Error(`Identifier measurement: unknown connector row ${row.key}`);
+    throw new IdentifierMeasurementError(
+      `Identifier measurement: unknown connector row ${row.key}`,
+    );
   if (column === 0) return [device.designation];
   if (column === 1) return [port];
   if (column === 3)
@@ -133,7 +136,10 @@ function channelIdentity(ir, row, policy) {
   const fn = ir.functions.find(
     (f) => f.id.deviceUid === uid && f.id.functionKey === key,
   );
-  if (!fn) throw Error(`Identifier measurement: unknown channel ${row.key}`);
+  if (!fn)
+    throw new IdentifierMeasurementError(
+      `Identifier measurement: unknown channel ${row.key}`,
+    );
   if (policy.projection === "legacy") return [key];
   const channels = d?.io?.channels;
   const assignment =
@@ -147,7 +153,10 @@ function channelUnits(ir, row, column) {
   const f = ir.functions.find(
     (f) => f.id.deviceUid === uid && f.id.functionKey === channel,
   );
-  if (!f) throw Error(`Identifier measurement: unknown channel row ${row.key}`);
+  if (!f)
+    throw new IdentifierMeasurementError(
+      `Identifier measurement: unknown channel row ${row.key}`,
+    );
   let terminals = f.terminals;
   if (column === 7) {
     const netIds = new Set(
@@ -183,14 +192,18 @@ function terminalUnits(ir, row, column) {
   const [uid, terminalKey] = keyParts(row.key);
   const owner = ir.devices.find((d) => d.uid === uid);
   if (!owner)
-    throw Error(`Identifier measurement: unknown terminal owner ${row.key}`);
+    throw new IdentifierMeasurementError(
+      `Identifier measurement: unknown terminal owner ${row.key}`,
+    );
   const ends = [...ir.wires, ...ir.jumpers].map((w) =>
     w.endpoints.map((e) => e.terminal),
   );
   for (const cable of ir.cables) {
     const type = ir.cableTypes.find((t) => t.id === cable.typeId);
     if (!type)
-      throw Error(`Identifier measurement: missing cable type ${cable.typeId}`);
+      throw new IdentifierMeasurementError(
+        `Identifier measurement: missing cable type ${cable.typeId}`,
+      );
     for (const definition of type.conductors) {
       const authored = cable.assignments?.find((a) => a.id === definition.id);
       const connected = ir.cableConductors.find(
@@ -215,7 +228,7 @@ function terminalUnits(ir, row, column) {
         return [];
       const device = ir.devices.find((d) => d.uid === peer.deviceUid);
       if (!device)
-        throw Error(
+        throw new IdentifierMeasurementError(
           `Identifier measurement: terminal peer missing for ${row.key}`,
         );
       const local =
@@ -233,7 +246,9 @@ function wireUnits(ir, row, column) {
     cable = ir.cables.find((c) => c.uid === uid);
   if (column === 0) {
     if (!cable)
-      throw Error(`Identifier measurement: unknown conductor row ${row.key}`);
+      throw new IdentifierMeasurementError(
+        `Identifier measurement: unknown conductor row ${row.key}`,
+      );
     return [`${cable.designation}/${core}`];
   }
   const assignment = cable?.assignments?.find((a) => a.id === core);
@@ -246,7 +261,7 @@ function wireUnits(ir, row, column) {
   if (!terminal) return [];
   const device = ir.devices.find((d) => d.uid === terminal.deviceUid);
   if (!device)
-    throw Error(
+    throw new IdentifierMeasurementError(
       `Identifier measurement: endpoint device missing for ${row.key}`,
     );
   return [`${device.designation}.${terminal.terminalKey}`];
@@ -267,7 +282,7 @@ function units(source, ir, row, column, kind, policy) {
 export function expectedIdentifierCells(ir, table, enginePolicy = {}) {
   const policy = identifierColumns[table.kind];
   if (!policy)
-    throw Error(
+    throw new IdentifierMeasurementError(
       `Identifier measurement: report ${table.kind} has no column policy`,
     );
   return table.rows.flatMap((row) =>

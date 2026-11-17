@@ -29,7 +29,7 @@
     "fee96a7d67baab3796f9e86876f3ff1ac988763089f4e36e64e8bc0c36b0e8fe": 2
   },
   "files": {
-    "evals/draw/checks.mjs": 1462,
+    "evals/draw/checks.mjs": 1458,
     "evals/draw/checks.test.mjs": 1072,
     "evals/draw/m3-delivery.test.mjs": 1326,
     "evals/draw/mutate.mjs": 1194,
@@ -111,7 +111,6 @@
     "evals/draw/device-tags.mjs#deviceTagFindings": 158,
     "evals/draw/document-dependencies.mjs#legacyDependencyFindings": 143,
     "evals/draw/document-dependencies.mjs#pointerDependencies": 108,
-    "evals/draw/evaluate.mjs#evaluateDocuments": 101,
     "evals/draw/evaluate.mjs#evaluatePacket": 158,
     "evals/draw/evaluate.mjs#evaluateRoutes": 103,
     "evals/draw/evaluate.mjs#evaluateTextAndSymbols": 116,
