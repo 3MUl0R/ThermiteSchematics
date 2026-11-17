@@ -79,7 +79,6 @@
       "thermite init.*My First Electrical Project",
       "\\brequires?[ \\t]+Node(?:\\.js)?[ \\t]+(?:>=[ \\t]*)?[`^~v]*22\\.12(?:\\.0)?\\b",
       "\\bpnpm\\s+(?:add|install)\\b[^\\n]*(?:--global\\b|(?<!\\S)-g\\b)",
-      "\\bnpm\\s+run\\s+test:legacy-package\\b",
       "Historical private 0\\.2\\.0 packaging",
       "thermite init`?\\s+(?:always targets|targeted)\\s+the\\s+current\\s+(?:existing|empty)\\b",
       "\\bhas no path operand\\b",

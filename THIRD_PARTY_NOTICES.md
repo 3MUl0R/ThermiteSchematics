@@ -30,8 +30,8 @@ The source checkout and `bun run alpha:pack` archive do not bundle `node_modules
 upstream copyright and license; the license files and metadata in its installed
 package directory are authoritative. For example, `png-js` 1.1.0 declares no
 license field but includes an MIT `LICENSE` file, Copyright 2017 Devon Govett.
-The retained `package-lock.json` serves only the frozen private release tooling
-and is not a current dependency inventory.
+The retained `package-lock.json` is a historical dependency snapshot, not the
+current release dependency inventory.
 
 In particular, the renderer uses **elkjs 0.12.0**, whose package declares
 `EPL-2.0 OR GPL-3.0-or-later`. Thermite uses it under **EPL-2.0**. Source and
@@ -53,8 +53,7 @@ packages. Their declarations, origins, transformations and hashes are recorded i
 provides source availability instructions for the unmodified ELK distribution.
 Bun itself is installed separately and is not redistributed in this ZIP.
 
-The `scripts/release-third-party-*` inventories belong to the frozen private
-0.2.0 packager; they are not the current runtime dependency inventory.
+Releases use the runtime ZIP's dependency and license inventory described above.
 
 ## Component research
 

@@ -15,8 +15,8 @@ checks (`python` on Windows, `python3` elsewhere, or set
 then `bun run build`. Use `bun thermite.mjs` from the checkout. For a quick
 feedback loop, run `bun run test -- <affected test file>` (not `bun test`; the
 suite runs on Vitest); run `bun run check` before submitting a change. Commit
-`bun.lock` changes with any dependency change; `package-lock.json` is retained
-only for the frozen historical private release tooling.
+`bun.lock` changes with any dependency change. Releases ship through the
+runtime package described below.
 
 This project is licensed under the [Apache License 2.0](LICENSE). Before your
 first pull request is merged, sign the [Contributor License Agreement](CLA.md)
@@ -190,9 +190,8 @@ current inventory and the limits of each model.
 
 The normal check is the cross-platform source-alpha development check.
 Source engine instructions live in the compact [root guide](AGENTS.md).
-Keep historical private release controls intact. The normal check excludes the
-historical `release-package.test.ts` inventory suite and does not assert protected
-release-evidence audits.
+Releases ship through the runtime package. The former private npm tarball
+pipeline has been retired.
 Source archives are verified separately by extracting, installing, building, and
 running the alpha CLI. Historical checks and former guide context are preserved
 in the [source development archive](docs/legacy/source-development-context.md).
@@ -231,8 +230,8 @@ groups. Every source document must have an inbound link and be within two links
 of the root README. Planning links cannot satisfy either rule. Code and unused
 reference definitions are not navigation; external URLs are not fetched.
 Keep implementation notes such as the [selection boundary](docs/render-selection.md)
-in `docs/`, outside package `src/` trees: the legacy release collector requires
-every tracked source-tree file to be TypeScript.
+in `docs/`, outside package `src/` trees, so implementation documentation stays
+separate from TypeScript compilation inputs.
 Non-Markdown assets need an existing local target.
 Links into excluded paths fail even when the target exists. When Git is available,
 Git-ignored targets also fail; tracked documents hidden by policy are findings.

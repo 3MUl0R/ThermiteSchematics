@@ -56,7 +56,6 @@ const historicalPhrases = [
   ["global Bun install", "bun add -g private-runtime"],
   ["Bun global flag", "bun add --global private-runtime"],
   ["global Yarn install", "yarn global add private-runtime"],
-  ["legacy inventory command", "npm run test:legacy-package"],
   ["private packaging context", "Historical private 0.2.0 packaging"],
   [
     "current-directory init",
@@ -159,7 +158,7 @@ it("permits a factual packaging archive pointer while retaining command checks",
     root,
     "README.md",
     readFileSync(join(root, "README.md"), "utf8") +
-      "\nRun `npm run test:legacy-package`; see the [archive](docs/legacy/history.md).\n",
+      "\nRun `npm install -g retired-runtime`; see the [archive](docs/legacy/history.md).\n",
   );
   expect(await checkDocs(root)).toContainEqual(
     expect.objectContaining({

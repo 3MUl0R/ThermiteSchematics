@@ -4,7 +4,7 @@
     "fileLines": 3000,
     "functionLines": 300,
     "nonNullAssertions": 1003,
-    "skippedTests": 56
+    "skippedTests": 52
   },
   "definiteAssignments": {
     "packages/agent-tools/test/patch-filesystem.test.ts": 1
@@ -12,7 +12,6 @@
   "duplicates": {
     "01a4e060711f5680a96cdc00579810383533b4d64f4c07e06ead9bbc242a9f05": 2,
     "0c866d99863cc93be655dea5af76cc0065a7a07696596052674efb42d8a30b23": 2,
-    "192accb45c1d7944ce7b2931f018754c85d186502809b0f8da71ab10071ee8e9": 2,
     "2cf10173a6b3720c0261338314e4c99259cc13c00802ad43bb0b799c064ef854": 3,
     "39c2e72de7c38508a40ee3b24831dc6e7a23fa44e52847521a761008b11cd1c3": 2,
     "3a3be1df95a9b5567a46ced7f820173df1d6a2ebde93bd70efe05311c22052f8": 2,
@@ -55,10 +54,7 @@
     "packages/cli/test/project-guide/signal-loops.ts": 976,
     "packages/cli/test/project-guide/wiring-circuits.ts": 1028,
     "packages/cli/test/query-cli.test.ts": 1011,
-    "packages/cli/test/release-consumer-closure.ts": 1002,
-    "packages/cli/test/release-package.test.ts": 2383,
     "packages/cli/test/render-cli.test.ts": 2402,
-    "packages/cli/test/workflow-structure.test.ts": 1564,
     "packages/compiler/src/loader.ts": 1467,
     "packages/compiler/test/loader.test.ts": 1079,
     "packages/compiler/test/lock.test.ts": 1242,
@@ -85,21 +81,11 @@
     "packages/render/test/title-data-validation.test.ts": 891,
     "packages/render/test/view-spec.test.ts": 1149,
     "packages/schema/test/schema-registry.test.ts": 1202,
-    "scripts/library-batch/run.check.mjs": 1029,
-    "scripts/release-build.mjs": 1337,
-    "scripts/release-common.mjs": 1529,
-    "scripts/release-evidence-audit.mjs": 1236,
-    "scripts/release-package.mjs": 1522,
-    "scripts/release-third-party-inventory.mjs": 1343,
-    "scripts/run-vitest-and-audit.mjs": 1557
+    "scripts/library-batch/run.check.mjs": 1029
   },
   "fingerprints": {
     "files": {},
-    "functions": {
-      "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "3fc754cb2671a649ec1de306db326eda17dfed202944c836393bf152ba71d32f",
-      "scripts/release-build.mjs#createImmutableCompilerHost": "9f8f10547186bf5e8c38e4009f5ceafd7bdadb1feacb7601c50137a73e9b0e17",
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "fb357e5ad98861193a79375e4be0af54ef0c555ee1547481bc9d37916353d580"
-    }
+    "functions": {}
   },
   "functions": {
     "evals/draw/assessment.mjs#assess": 118,
@@ -308,25 +294,6 @@
     "packages/cli/test/project-guide/guarded-workflows.ts#check~7": 130,
     "packages/cli/test/project-guide/guarded-workflows.ts#check~9": 102,
     "packages/cli/test/project-guide/signal-loops.ts#check~15": 72,
-    "packages/cli/test/release-candidate.ts#classifyCandidateAuthority": 73,
-    "packages/cli/test/release-consumer-closure.ts#assertCandidateDeclarationEdges": 120,
-    "packages/cli/test/release-consumer-closure.ts#assertResolvedCandidateEdge": 79,
-    "packages/cli/test/release-consumer-closure.ts#classifyLoadedProgram": 77,
-    "packages/cli/test/release-consumer-closure.ts#compileStrictCandidateConsumer": 130,
-    "packages/cli/test/release-install-smoke.test.ts#describe callback/it callback": 105,
-    "packages/cli/test/release-package-helpers.ts#assertInProcessLauncherSyntax": 89,
-    "packages/cli/test/release-package-helpers.ts#shellWithoutCommentsAndHeredocs": 97,
-    "packages/cli/test/release-package-helpers.ts#writeSyntheticPack": 100,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~10": 71,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~11": 77,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~25": 144,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~36": 116,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~37": 286,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~39": 160,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~40": 112,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~41": 97,
-    "packages/cli/test/release-package.test.ts#describe callback/it callback~8": 86,
-    "packages/cli/test/release-package.test.ts#stageDeclarationFixture": 78,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~12": 198,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~21": 181,
     "packages/cli/test/render-cli.test.ts#describe callback/it callback~22": 155,
@@ -337,9 +304,6 @@
     "packages/cli/test/title-data-gate.test.ts#describe callback/it callback~5": 77,
     "packages/cli/test/title-data-surface.ts#auditTitleDataSurface": 204,
     "packages/cli/test/title-data-surface.ts#auditTitleDataSurface/visit": 83,
-    "packages/cli/test/workflow-structure.test.ts#createPublisherHarness": 83,
-    "packages/cli/test/workflow-structure.test.ts#describe callback/it callback~16": 97,
-    "packages/cli/test/workflow-structure.test.ts#describe callback/it callback~4": 130,
     "packages/compiler/src/compiler.ts#compileLoadedProjectWithStages": 80,
     "packages/compiler/src/completeness.ts#analyzeCompleteness": 289,
     "packages/compiler/src/completeness.ts#analyzeCompleteness/map callback~2": 180,
@@ -373,7 +337,6 @@
     "packages/compiler/test/deferred-completeness.test.ts#it callback": 97,
     "packages/compiler/test/expansion.test.ts#describe callback/it callback~8": 100,
     "packages/compiler/test/expansion.test.ts#describe callback/it callback~9": 102,
-    "packages/compiler/test/git-index-location.test.ts#gitTools": 74,
     "packages/compiler/test/graph.test.ts#describe callback/it callback": 97,
     "packages/compiler/test/graph.test.ts#describe callback/it callback~4": 201,
     "packages/compiler/test/loader.test.ts#describe callback/it callback~6": 72,
@@ -382,8 +345,6 @@
     "packages/compiler/test/lock.test.ts#describe callback/it callback~2": 84,
     "packages/compiler/test/nets.test.ts#describe callback/it callback~5": 84,
     "packages/compiler/test/nets.test.ts#graphFor": 112,
-    "packages/compiler/test/package-metadata.test.ts#describe callback/it callback~11": 74,
-    "packages/compiler/test/package-metadata.test.ts#describe callback/it callback~7": 74,
     "packages/compiler/test/symbol-profile.test.ts#describe callback/call callback~10": 106,
     "packages/core-library/test/fuse-function-kind.test.ts#it callback": 77,
     "packages/core-library/test/machine-fixtures.ts#machineProbe": 185,
@@ -643,79 +604,20 @@
     "scripts/library-batch/verify.check.mjs#candidate": 96,
     "scripts/library-batch/verify.check.mjs#test callback~2": 72,
     "scripts/library-batch/verify.mjs#assertPacketCoverage": 90,
-    "scripts/release-acceptance.mjs#installCandidate": 81,
-    "scripts/release-build.mjs#buildFreshRelease": 120,
-    "scripts/release-build.mjs#compileOnePackage": 152,
-    "scripts/release-build.mjs#releaseInputsFromCommit": 127,
-    "scripts/release-build.mjs#verifyReleaseSourceInputs": 122,
-    "scripts/release-common.mjs#loadPackState": 83,
-    "scripts/release-common.mjs#parseGitIndexEntries": 139,
-    "scripts/release-common.mjs#parsePackIndex": 106,
-    "scripts/release-common.mjs#readPackedEntry": 119,
-    "scripts/release-evidence-audit.mjs#assertReleaseGateEvidence": 105,
-    "scripts/release-evidence-audit.mjs#createReleaseGateEvidence": 98,
-    "scripts/release-package.mjs#auditRuntimeClosure": 180,
-    "scripts/release-package.mjs#buildDisposableReleaseCandidate": 74,
-    "scripts/release-package.mjs#completeTwinRelease": 76,
-    "scripts/release-package.mjs#createReleaseOutputs": 96,
-    "scripts/release-package.mjs#createReleaseStage": 79,
-    "scripts/release-package.mjs#createTwinStages": 137,
-    "scripts/release-package.mjs#recordOrVerifyReleaseInventories": 82,
-    "scripts/release-package.mjs#stageFirstParty": 164,
-    "scripts/release-package.mjs#trackedAssetEntries": 89,
-    "scripts/release-publish.mjs#createGitHubReleaseClient": 123,
-    "scripts/release-publish.mjs#publishRelease": 149,
-    "scripts/release-publish.mjs#publishVerifiedReleaseAssets": 195,
-    "scripts/release-tar-audit.mjs#parseDeterministicTarball": 112,
-    "scripts/release-third-party-inventory.mjs#auditStageDeclarationClosure": 253,
-    "scripts/release-third-party-inventory.mjs#collectThirdPartySource": 169,
-    "scripts/release-third-party-inventory.mjs#createStageDeclarationHost": 120,
-    "scripts/release-third-party-inventory.mjs#resolveThirdPartyRoots": 153,
-    "scripts/release-third-party-inventory.mjs#stageThirdPartyPackages": 120,
-    "scripts/run-vitest-and-audit.mjs#auditAssertionOccurrences": 146,
-    "scripts/run-vitest-and-audit.mjs#auditTask1SourceTexts": 173,
-    "scripts/run-vitest-and-audit.mjs#parseArguments": 72,
-    "scripts/run-vitest-and-audit.mjs#runVitestAndAudit": 172,
-    "scripts/run-vitest-and-audit.mjs#trackedTestFiles": 92,
+    "scripts/run-vitest-and-audit.mjs#auditTask1SourceTexts": 153,
     "scripts/runtime-package/common.mjs#verifyEntries": 156,
-    "scripts/scan-release-evidence-leaks.mjs#assertD8Evidence": 190,
-    "scripts/scan-release-evidence-leaks.mjs#scanReleaseEvidenceFiles": 95,
     "scripts/update-motor-starter-presentation.mjs#generateOwnedBytes": 82,
-    "scripts/update-shipped-core-goldens.mjs#generateOwnedBytes": 80,
-    "scripts/verify-private-release-target.mjs#verifyPrivateReleaseTarget": 71
+    "scripts/update-shipped-core-goldens.mjs#generateOwnedBytes": 80
   },
   "grandfathered": {
     "files": {},
-    "functions": {
-      "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": 303,
-      "scripts/release-build.mjs#createImmutableCompilerHost": 337,
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": 525
-    }
+    "functions": {}
   },
   "locations": {
     "files": {},
-    "functions": {
-      "scripts/release-acceptance.mjs#runEmptyFolderWorkflow": "scripts/release-acceptance.mjs#runEmptyFolderWorkflow",
-      "scripts/release-build.mjs#createImmutableCompilerHost": "scripts/release-build.mjs#createImmutableCompilerHost",
-      "scripts/release-tar-audit.mjs#auditReleaseOutputs": "scripts/release-tar-audit.mjs#auditReleaseOutputs"
-    }
+    "functions": {}
   },
   "moves": {
-    "packages/cli/test/release-package-helpers.ts#assertInProcessLauncherSyntax": {
-      "section": "functions",
-      "from": "packages/cli/test/release-package.test.ts#assertInProcessLauncherSyntax",
-      "sha256": "89239fc7c8b236055d64cb4dfef6ce1a7aaf7072fec9951f7edf33611fe21b1e"
-    },
-    "packages/cli/test/release-package-helpers.ts#shellWithoutCommentsAndHeredocs": {
-      "section": "functions",
-      "from": "packages/cli/test/release-package.test.ts#shellWithoutCommentsAndHeredocs",
-      "sha256": "85e1b3b7c54b3a2d77fa95f194fa39b73f5c8006a30f481745bbb73296dc8c11"
-    },
-    "packages/cli/test/release-package-helpers.ts#writeSyntheticPack": {
-      "section": "functions",
-      "from": "packages/cli/test/release-package.test.ts#writeSyntheticPack",
-      "sha256": "ca1258ecf824ffd833abd437a7fdec31c981214a2769fe76c20f2bbf6bdecd96"
-    },
     "evals/draw/measurement/geometry.mjs#tagIdentity": {
       "section": "functions",
       "from": "evals/draw/browser.mjs#measureSheet/tagIdentity",
@@ -1326,14 +1228,12 @@
     "packages/cli/test/agent-motor-starter-golden.test.ts": 1,
     "packages/cli/test/alpha-pdf.test.ts": 4,
     "packages/cli/test/cli.test.ts": 4,
-    "packages/cli/test/empty-folder-smoke.test.ts": 2,
     "packages/cli/test/motor-starter-golden.test.ts": 1,
     "packages/cli/test/operator-console-font-r4.test.ts": 1,
     "packages/cli/test/printable-clip-r5.test.ts": 1,
     "packages/cli/test/printable-font-parity.test.ts": 3,
     "packages/cli/test/printable-placement-r4.test.ts": 2,
     "packages/cli/test/query-cli.test.ts": 2,
-    "packages/cli/test/release-install-smoke.test.ts": 2,
     "packages/cli/test/render-cli.test.ts": 4,
     "packages/cli/test/render-motor-starter-golden.test.ts": 2,
     "packages/cli/test/report-text-scale.test.ts": 1,
@@ -1429,9 +1329,6 @@
     "packages/cli/test/project-guide/signal-loops.ts": 2,
     "packages/cli/test/project-guide/wiring-circuits.ts": 1,
     "packages/cli/test/query-cli.test.ts": 3,
-    "packages/cli/test/release-consumer-closure.ts": 3,
-    "packages/cli/test/release-install-smoke.test.ts": 1,
-    "packages/cli/test/release-package.test.ts": 2,
     "packages/cli/test/render-cli.test.ts": 13,
     "packages/cli/test/render-motor-starter-golden.test.ts": 4,
     "packages/cli/test/report-text-scale.test.ts": 1,
@@ -1441,7 +1338,6 @@
     "packages/cli/test/signal-loop.test.ts": 3,
     "packages/cli/test/title-data-gate.test.ts": 1,
     "packages/cli/test/title-data-surface.ts": 2,
-    "packages/cli/test/workflow-structure.test.ts": 6,
     "packages/compiler/src/canonical-json.ts": 1,
     "packages/compiler/src/expansion.ts": 4,
     "packages/compiler/src/loader-lock.ts": 3,

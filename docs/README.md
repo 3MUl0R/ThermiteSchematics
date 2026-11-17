@@ -397,9 +397,9 @@
 <details>
 <summary>Archive</summary>
 
+- [Historical private v0.2.0 Release Checklist](legacy/private-release.md)
 - [Private 0.2.0 agent guide](legacy/private-release-agent-guide.md)
 - [Private runtime command reference](legacy/cli-private-runtime.md)
-- [Private v0.2.0 Release Checklist](legacy/private-release.md)
 - [Source development and release context](legacy/source-development-context.md)
 - [Thermite Schematics Agent Guide](../packages/cli/assets/AGENTS.md)
 
