@@ -3,7 +3,7 @@
     "definiteAssignments": 1,
     "fileLines": 3000,
     "functionLines": 300,
-    "nonNullAssertions": 1003,
+    "nonNullAssertions": 1001,
     "skippedTests": 52
   },
   "definiteAssignments": {
@@ -391,7 +391,7 @@
     "packages/render/src/layout/validate-output.ts#validateFinalBounds": 101,
     "packages/render/src/layout/validate-output.ts#validateRouteInteractions": 71,
     "packages/render/src/packet/cable.ts#cableDrafts": 191,
-    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 188,
+    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 173,
     "packages/render/src/packet/folding.ts#foldDrawingDrafts": 96,
     "packages/render/src/packet/page.ts#frame": 130,
     "packages/render/src/packet/references.ts#referenceTables": 108,
@@ -699,7 +699,7 @@
     "packages/render/src/circuit.ts": 17,
     "packages/render/src/circuit/layout-drawing.ts": 9,
     "packages/render/src/circuit/layout-input.ts": 9,
-    "packages/render/src/circuit/layout-routes.ts": 49,
+    "packages/render/src/circuit/layout-routes.ts": 47,
     "packages/render/src/circuit/make-nodes.ts": 9,
     "packages/render/src/circuit/node-emission.ts": 2,
     "packages/render/src/circuit/node-symbols.ts": 13,

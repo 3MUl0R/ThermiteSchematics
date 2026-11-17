@@ -5,6 +5,7 @@ import { existingCircuitCaption } from "./caption-association.js";
 import { besideCaption } from "../layout/beside-caption.js";
 import { ownedLabelLeader } from "../layout/wire-label-support.js";
 import { required } from "../presentation/util.js";
+import { circuitCaptionPlateFits } from "./inline-plate.js";
 type Label = CircuitLabelState["labels"][number];
 /** The same final glyph and leader admission is used during whole-block search
  * and emission. No candidate changes native paths, plate size or font metrics. */
@@ -14,6 +15,7 @@ export function circuitCaptionPlacement(
   label: Label,
   state: CircuitLabelState,
 ) {
+  if (!circuitCaptionPlateFits(label, state)) return undefined;
   const original = circuitCaptionGeometry(line, i, label, state),
     own = state.segments
       .filter((s) => s.index === label.index)

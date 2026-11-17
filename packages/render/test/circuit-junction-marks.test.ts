@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { threeWayCircuit } from "./helpers/circuit-junction-state.js";
+import { circuitJunctionSvg } from "../src/circuit/junction-identity.js";
 import { readFile } from "node:fs/promises";
 import { compileProject } from "@thermite/compiler";
 import { expect, it } from "vitest";
@@ -33,39 +35,35 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
     ]).toEqual([".3"]);
   });
 
-  it(`retains the real three-way junction and detects hidden routes in ${flow}`, async () => {
-    const c = await compileProject("examples/self-loop-labels");
-    assert.ok(c.ok);
-    const request = JSON.parse(
-      await readFile("examples/self-loop-labels/packet.json", "utf8"),
-    ).views[0];
-    const drawing = await prepareCircuitView(c.ir, { ...request, flow });
-    const group = drawing.groups[0];
-    assert.ok(group);
-    const doc = circuitDocument(group.content);
-    const dots = [...doc.querySelectorAll("[data-circuit-junction]")];
-    expect(dots).toHaveLength(1);
-    const dot = dots[0];
+  it(`retains a measured three-way native junction and rejects false owners in ${flow}`, () => {
+    const state = threeWayCircuit(flow === "top-to-bottom");
+    expect([...state.dots.values()]).toEqual([{ x: 10, y: 10 }]);
+    const p = state.dots.values().next().value;
+    assert.ok(p);
+    const paths = state.routes
+      .map(
+        (r) =>
+          `<g data-circuit-conductor="${r.index}" data-endpoints='${JSON.stringify(state.cs[r.index]?.ends)}'><path stroke="#17212b" d="${r.points.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join(" ")}"/></g>`,
+      )
+      .join("");
+    const doc = circuitDocument(paths + circuitJunctionSvg(p, state));
+    const dot = doc.querySelector("[data-circuit-junction]");
     assert.ok(dot);
     expect(dot.getAttribute("fill")).toBe("#17212b");
-    expect(dot.getAttribute("data-device-uid")).toBe(
-      "65000000-0000-4000-8000-000000000002",
-    );
-    expect(dot.getAttribute("data-terminal-key")).toBe("I2");
+    expect(dot.getAttribute("data-terminal-key")).toBe("T");
     expect(nativeJunctionRays(dot, doc)).toEqual(
       flow === "left-to-right"
         ? ["east", "south", "west"]
         : ["north", "south", "west"],
     );
-    const route = doc.querySelector(
-      '[data-conductor-designation="W2"] path[stroke="#17212b"]',
-    );
+    const route = doc.querySelector('[data-circuit-conductor="0"]');
     assert.ok(route);
     route.remove();
     expect(nativeJunctionRays(dot, doc)).toEqual(
       flow === "left-to-right" ? ["east", "south"] : ["south", "west"],
     );
-    dot.setAttribute("data-terminal-key", "I3");
+    dot.setAttribute("data-terminal-key", "foreign");
     expect(nativeJunctionRays(dot, doc)).toEqual([]);
+    expect(threeWayCircuit(flow === "top-to-bottom", true).dots.size).toBe(0);
   });
 }

@@ -285,6 +285,12 @@ Packet rendering first prepares and validates the complete group. If its measure
 
 Parts retain the original group ID and line reference, with numbered headings. Repeated terminal IDs identify the same physical equipment. A measured reference block lists their other occurrences as `P2/S03.B2` (group part 2, packet sheet 3, zone B2 at the drawn terminal). The final packet resolves the reserved locator from the native terminal identity; titles are not destination keys. These references connect repeated physical terminals, not different terminals that merely share a net. Parts may share a sheet when readable space permits. Packet numbering accounts for preceding views and is independent of the optional index. View notes still print once after the last group.
 
+With one authored group in a single column, top-to-bottom parts may also sit
+side by side. The renderer keeps their native routes, symbols and text sizes,
+measures the complete reference blocks and view notes, and uses the arrangement
+only when it saves a circuit sheet. Other group and column layouts retain their
+existing placement.
+
 Paginated sheets expose additive `circuitContinuations` metadata: original `group`, `fromPart`, `toPart`, `toSheet`, JSON-encoded `[deviceUid, terminalKey]` `terminalId`, and the derived `netId` or `null`. The printed reference rows use `data-circuit-continuation`, `data-from-part`, `data-continuation-terminal`, `data-destination-parts` and `data-destination-sheets`; physical terminal marks keep their existing audit attributes. Circuit coverage retains the original group ID, counts each conductor identity once, and records repeated function appearances. This does not assert conduction through a device function or add physical nets.
 
 Fitting groups retain their original output. The single-drawing `prepareCircuitView` API remains unpaginated. Invalid original routing or unsupported symbols fail before partitioning; a bad part also fails explicitly. If a complete conductor, coupled symbol or continuation block cannot fit, use larger paper, another orientation/flow or a narrower source selection. No partial packet is returned. Partitioning reserves reference space conservatively and does not promise a minimum page count. See the [synthetic circuit pagination example](../examples/circuit-pagination/README.md).

@@ -1,6 +1,7 @@
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
 import { supportedCircuitLabels } from "./label-support.js";
+import { circuitLandingAnchors } from "./landing-anchors.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
@@ -19,6 +20,7 @@ export function circuitDrawingContents(
   const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode } = state;
   const contents = [
     ...wireSvg,
+    circuitLandingAnchors(state),
     ...[...dots.values()].map((p) => circuitJunctionSvg(p, state)),
     ...labels.map((l) =>
       circuitWireLabel(l, state, supported.baseFallbacks.has(l.index)),
