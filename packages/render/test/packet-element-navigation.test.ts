@@ -4,6 +4,7 @@ import { mirrorFixture } from "./packet-mirror-fixture.js";
 import { finalizeNavigation } from "../src/packet/navigation-finalize.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { parseSvg } from "./off-view-fixtures.js";
+import { printedFunction } from "../src/print-projection.js";
 
 let ir: ElectricalIr, uid: string;
 beforeAll(async () => {
@@ -25,6 +26,51 @@ function finish(
   if (!result.ok) throw Error(JSON.stringify(result.error));
   return { ...result.value, fixture: f };
 }
+it.each([
+  {
+    tag: "K1",
+    keys: ["pole1", "pole2", "pole3"],
+    roles: [
+      "NO contact 1/L1–2/T1",
+      "NO contact 3/L2–4/T2",
+      "NO contact 5/L3–6/T3",
+    ],
+    locators: 0,
+  },
+  {
+    tag: "OL1",
+    keys: ["pole1", "aux95"],
+    roles: ["Overload element 1/L1–2/T1", "NC contact 95–96"],
+    locators: 2,
+  },
+])(
+  "distinguishes contactor main contacts from protection elements ($tag)",
+  ({ tag, keys, roles, locators }) => {
+    const device = ir.devices.find((d) => d.designation === tag);
+    expect(device).toBeDefined();
+    if (!device) throw Error("Missing native role-boundary fixture device");
+    const type = ir.deviceTypes.find((t) => t.id === device.typeId);
+    expect(
+      keys.map((key) => {
+        const fn = ir.functions.find(
+          (f) => f.id.deviceUid === device.uid && f.id.functionKey === key,
+        );
+        if (!fn) throw Error("Missing native role-boundary fixture function");
+        return printedFunction(fn, type);
+      }),
+    ).toEqual(roles);
+    const r = finish(
+      keys.map((key) => [{ uid: device.uid, key, x: 160, y: 100 }]),
+    );
+    expect(r.navigation.occurrences).toHaveLength(keys.length);
+    expect(
+      r.navigation.occurrences.every((o) => o.role === "full-function"),
+    ).toBe(true);
+    expect(
+      r.navigation.annotations.filter((a) => a.role === "element-location"),
+    ).toHaveLength(locators);
+  },
+);
 it("locates all three power elements reciprocally from the native 95–96 contact without implying actuation", () => {
   const r = finish(),
     annotations = r.navigation.annotations.filter(
