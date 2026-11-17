@@ -571,7 +571,7 @@ it("allows exactly 256 KiB of raw text and requires gzip above it", async () => 
   ).toThrow(/over 256 KiB/);
 });
 it(`allows exactly ${RECORD_LIMIT} bytes and refuses one byte more`, () => {
-  expect(RECORD_LIMIT).toBe(5000000);
+  expect(RECORD_LIMIT).toBe(8000000);
   const c = recordFixture();
   side(c);
   c.files.set("record.json", Buffer.from(json(c.record)));

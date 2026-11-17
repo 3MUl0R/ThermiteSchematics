@@ -4,7 +4,7 @@ export const legacyRecord = (pr, sha) =>
   pr === 92 &&
   sha === "b56690d45cae4a53beef6dfe39b68221d00d00842cce36445cd6c175b7094da5";
 export const TEXT_LIMIT = 256 * 1024;
-export const RECORD_LIMIT = 5000000;
+export const RECORD_LIMIT = 8000000;
 export function recordBudget(pin) {
   if (pin?.maxBytes === undefined) {
     assert(pin?.reason === undefined, "Unused record size exception reason");
