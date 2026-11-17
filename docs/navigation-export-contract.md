@@ -194,6 +194,9 @@ keys, source sheets and failed measured attempts. The 100-sheet limit applies.
 Omitted-port captions retain each port's precise row destination; a packed block
 keeps their individual declarations and locators. Drawn-port pointers pair every
 named port with its own measured landing and use no inventory wording.
+Their compact form is `Port R1.X01 → 02.B3; Port R1.X02 → 03.C4.`:
+each port retains its own qualified identity and destination, with 2.5 mm text
+measured before bounded slot placement. A pointer never adds a graphical page.
 
 A dependency's `caption` has visible `text`, `primitiveId` and `rectMm` on
 `owner.sheet`. The corresponding SVG group carries `data-document-dependency`

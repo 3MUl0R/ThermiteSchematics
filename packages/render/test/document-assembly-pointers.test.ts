@@ -5,6 +5,8 @@ import { dependencyDraft, documentPaper } from "./document-fixture.js";
 import type { RenderedSheet } from "../src/packet/types.js";
 import { assemblyPortPointers } from "../src/packet/document-assembly-pointers.js";
 import { parseHTML } from "linkedom";
+import { readFile } from "node:fs/promises";
+import { renderSchematicPacket } from "../src/sheets.js";
 
 it("pairs each drawn port with its own native sheet and zone, never an inventory", async () => {
   const c = await compileProject("examples/assembly-note-bounds");
@@ -55,9 +57,38 @@ it("pairs each drawn port with its own native sheet and zone, never an inventory
   const caption = parseHTML(first.svg)
     .document.querySelector("[data-assembly-port-destinations]")
     ?.textContent.replace(/\s+/gu, " ");
-  expect(caption).toContain("Port R1.X2 → drawn connector 02.B3;");
-  expect(caption).toContain("Port R1.X3 → drawn connector 03.D6.");
+  expect(caption).toContain("Port R1.X2 → 02.B3;");
+  expect(caption).toContain("Port R1.X3 → 03.D6.");
   expect(caption).not.toMatch(/inventory|schedule/u);
   expect(caption).not.toContain("Port R1.X4");
   expect(JSON.stringify(c.ir)).toBe(source);
+});
+
+it("fits every drawn-port pointer on the existing A4 compact cap source sheets", async () => {
+  const c = await compileProject("examples/cap-pagination");
+  if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+  const request = JSON.parse(
+    await readFile("examples/cap-pagination/packet.json", "utf8"),
+  );
+  const result = await renderSchematicPacket(c.ir, {
+    ...request,
+    page: { size: "a4", orientation: "landscape" },
+    layout: "compact",
+    views: [request.views[0]],
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  // Six native graphical parts remain; no extra graphical page buys a pointer slot.
+  expect(
+    result.value.sheets.filter((s) => s.view.kind === "connector-assembly"),
+  ).toHaveLength(6);
+  const sixth = result.value.sheets[5];
+  expect(sixth?.view.kind).toBe("connector-assembly");
+  const pointer = parseHTML(sixth?.svg ?? "").document.querySelector(
+    "[data-assembly-port-destinations]",
+  );
+  expect(pointer).not.toBeNull();
+  expect(pointer?.textContent).toMatch(/Port R1\.X01 → \d{2}\.[A-D][1-6]/u);
+  for (const text of pointer?.querySelectorAll("text") ?? [])
+    expect(Number(text.getAttribute("font-size"))).toBe(2.5);
 });

@@ -64,8 +64,6 @@ function pointerTokens(
       "Port",
       `${port.designation}.${port.key}`,
       "→",
-      "drawn",
-      "connector",
       destinationToken(target),
     );
   }
