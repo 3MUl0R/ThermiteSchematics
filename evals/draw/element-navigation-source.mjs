@@ -1,6 +1,7 @@
 import { fullFunctionAppearances } from "./repeat-appearances.mjs";
 import { finding, painted } from "./review-geometry.mjs";
 import { nativeContactRole } from "./contact-role-oracle.mjs";
+import { rootedElementGaps } from "./element-navigation-rooted.mjs";
 const same = (a, b) =>
   a.deviceUid === b.deviceUid && a.functionKey === b.functionKey;
 export function elementPopulation(packet, geometries, ir, request) {
@@ -31,7 +32,15 @@ export function elementPopulation(packet, geometries, ir, request) {
   const appearances = fullFunctionAppearances(packet, geometries, ir, request);
   selectedGaps(request, ir, appearances, fail);
   bodyGaps(packet, geometries, ir, failures);
-  return { appearances, failures };
+  const rooted = rootedElementGaps(
+    packet,
+    geometries,
+    ir,
+    request,
+    appearances,
+  );
+  failures.push(...rooted.failures);
+  return { appearances, failures, findings: rooted.findings };
 }
 function selectedGaps(request, ir, appearances, fail) {
   for (const [view, v] of request.views.entries())

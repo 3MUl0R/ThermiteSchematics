@@ -43,13 +43,11 @@ function detachedProtectionPair(a, b, ir) {
   );
 }
 export function elementNavigationAudit(packet, geometries, ir, request) {
-  const { appearances, failures } = elementPopulation(
-      packet,
-      geometries,
-      ir,
-      request,
-    ),
-    findings = [],
+  const {
+      appearances,
+      failures,
+      findings = [],
+    } = elementPopulation(packet, geometries, ir, request),
     obligations = [];
   unresolvedElementPointers(appearances, geometries, ir, findings);
   for (const a of appearances) {

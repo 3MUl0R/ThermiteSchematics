@@ -44,12 +44,14 @@ export function visibleNativePort(part, p, ir) {
 export function portNavigationPopulation(packet, geometries, ir, request) {
   const native = nativePartPopulation(packet, geometries, ir, request),
     parts = native.parts.filter((p) => p.kind === "communication"),
-    failures = native.findings.map((f) => ({
-      ...f,
-      kind: "port-navigation-" + f.kind,
-    })),
+    failures = native.findings
+      .filter((f) => f.kind.endsWith("-unavailable"))
+      .map((f) => ({
+        ...f,
+        kind: "port-navigation-" + f.kind,
+      })),
     selected = [];
-  if (!native.parts.length && native.findings.length)
+  if (!native.parts.length && failures.length)
     return { parts, failures, selected };
   for (const [view, v] of request.views.entries()) {
     if (v.format !== "communication-view-request/0.1") continue;
