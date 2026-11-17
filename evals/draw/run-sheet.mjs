@@ -22,9 +22,7 @@ import { pdfPageMetadata } from "./pdf-source-policy.mjs";
 import { attachSheetIdentities } from "./sheet-identities.mjs";
 import { svgLocators } from "./locators.mjs";
 import { requireReportCells } from "./checks.mjs";
-import { identifierFindings } from "./identifier-checks.mjs";
-import { identifierTable } from "./identifier-tables.mjs";
-import { pdfIdentifierRuns } from "./identifier-pdf.mjs";
+import { mediaIdentifiers } from "./identifier-observations.mjs";
 
 export async function captureSheets(packet, env, local, sheetEvidence) {
   const { values, native, relativeEvidence, htmlPath, pdfPath } = env;
@@ -189,34 +187,20 @@ async function measureSheetEvidence(
       "Real CLI HTML document in Chromium, independently measured from standalone SVG.",
   });
   measured.push(htmlRow);
-  const identifierSource = identifierTable(s, packet, g, ir, tables);
-  if (identifierSource) {
-    const identifierPdf = await pdfIdentifierRuns(pdfPage);
-    for (const medium of ["html", "pdf"]) {
-      const geometry = medium === "html" ? htmlGeometry[s.number - 1] : g;
-      measured.push(
-        observation(
-          c,
-          s,
-          "DQ-19",
-          identifierFindings(
-            geometry,
-            identifierSource,
-            ir,
-            medium,
-            identifierPdf,
-            identifierPolicy,
-          ),
-          {
-            id: `${c.id}/DQ-19/${medium}-${s.number}`,
-            medium,
-            scope:
-              "Complete source identifier units on one independently measured physical line.",
-          },
-        ),
-      );
-    }
-  }
+  measured.push(
+    ...(await mediaIdentifiers(
+      c,
+      s,
+      packet,
+      g,
+      htmlGeometry[s.number - 1],
+      ir,
+      tables,
+      pdfPage,
+      identifierPolicy,
+      observation,
+    )),
+  );
   attachSheetIdentities(measured, locatorIndexes, s.view, ir, c.project);
   return { measured, htmlRow };
 }

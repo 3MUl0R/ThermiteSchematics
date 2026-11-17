@@ -8,6 +8,13 @@ export function packetNativeNeeds(packet, geometries, ir, catalog, request) {
       catalog,
       nativeRequestForSheet(packet, geometries, request, s),
       { packet, geometries, request },
-    ).map((n) => ({ ...n, sheet: s.number })),
+    ).map((n) => ({
+      ...n,
+      sheet: s.number,
+      viewKey:
+        geometries[i]?.navigationViews?.length === 1
+          ? geometries[i].navigationViews[0]
+          : undefined,
+    })),
   );
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { missingMarkerRow } from "./marker-missing.mjs";
 import { hash, json, canonical, round } from "./support.mjs";
 import { identityKey, markerId, checkKey } from "./locators.mjs";
 import { units, unitKey } from "./marker-scopes.mjs";
@@ -242,27 +243,7 @@ export function assess(rows, registry, selectedCases, context = {}) {
         state?.status === "infrastructure" ||
         (state?.status === "refused" && marker.kind !== "render-refusal") ||
         (!measured && !eliminatedSheet && !rendered);
-      rows.push({
-        id: `expectation/${marker.id}/${hash(key).slice(0, 12)}`,
-        dq: marker.dq,
-        case: u.case,
-        sheet: u.sheet,
-        check: marker.check,
-        status: missing ? "fail" : "xpass",
-        reason: missing
-          ? "Pinned observation was not measured; instrumentation, view or render missing"
-          : "Pinned defect is absent: review and retire this scope",
-        ...(marker.kind === "iso-cap-height-policy"
-          ? { classification: "policy-gap" }
-          : {}),
-        expectation: {
-          marker: marker.id,
-          scope: u,
-          kind: marker.kind,
-          locator: marker.locator,
-        },
-        evidence: { findingCount: 0, findings: [] },
-      });
+      rows.push(missingMarkerRow(marker, key, u, missing, compatible, state));
     }
     recordDrift(entry, selectedCases, drift);
   }

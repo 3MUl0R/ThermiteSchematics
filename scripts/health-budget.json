@@ -102,7 +102,7 @@
     }
   },
   "functions": {
-    "evals/draw/assessment.mjs#assess": 138,
+    "evals/draw/assessment.mjs#assess": 118,
     "evals/draw/authored-report-fields.mjs#authoredReportFields": 105,
     "evals/draw/bind-exhaustion.test.mjs#call callback": 168,
     "evals/draw/browser.mjs#measureSheet": 223,
@@ -149,7 +149,7 @@
     "evals/draw/m3-delivery.test.mjs#it callback~9": 92,
     "evals/draw/m3-documents.mjs#scopeTables": 72,
     "evals/draw/m3-fixture.mjs#fixture": 125,
-    "evals/draw/m3-registry.mjs#registryFindings": 132,
+    "evals/draw/m3-registry.mjs#registryFindings": 121,
     "evals/draw/marker-authoring.mjs#serializeRegistry": 88,
     "evals/draw/measurement/geometry.mjs#identity": 71,
     "evals/draw/measurement/geometry.mjs#shapeClips": 72,
@@ -201,7 +201,7 @@
     "evals/draw/review1-predicates.test.mjs#it callback~5": 76,
     "evals/draw/review1-predicates.test.mjs#it callback~6": 106,
     "evals/draw/routing-hygiene.mjs#attachmentAudit": 78,
-    "evals/draw/run-case.mjs#captureCase": 119,
+    "evals/draw/run-case.mjs#captureCase": 103,
     "evals/draw/run-sheet.mjs#readSheetEvidence": 99,
     "evals/draw/symbol-fidelity.mjs#markFindings": 120,
     "evals/draw/symbol-fidelity.mjs#polarityFindings": 120,

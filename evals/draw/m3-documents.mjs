@@ -187,10 +187,23 @@ export function tableForSheet(sheet, g, tables) {
   const ids = [
     ...new Set((g.texts ?? []).map((t) => t.documentId).filter(Boolean)),
   ];
-  const candidates = tables.filter((t) => t.kind === sheet.view.kind);
+  const rows = issuedRows({ sheets: [sheet] }, [g]);
+  const candidates = tables.filter((t) => {
+    const own = rows.filter((r) => r.documentId === t.documentId);
+    return own.length
+      ? own.every((r) => r.kind === t.kind)
+      : t.kind === sheet.view.kind;
+  });
+  const bound = candidates.filter(
+    (t) => t.documentId && ids.includes(t.documentId),
+  );
+  if (bound.length > 1)
+    throw Error(
+      "Identifier measurement: ambiguous document table on sheet " +
+        sheet.number,
+    );
   return (
-    candidates.find((t) => t.documentId && ids.includes(t.documentId)) ??
-    candidates.find((t) => !t.documentId && t.origin !== "auto")
+    bound[0] ?? candidates.find((t) => !t.documentId && t.origin !== "auto")
   );
 }
 export function documentInventory(table, packet, geometries) {
