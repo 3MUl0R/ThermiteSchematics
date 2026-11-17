@@ -60,13 +60,35 @@ The 5.23 full checkpoint is replayed before adoption, per scorecard §2; 5.23
 summaries remain readable with their complete counters.
 
 Version **5.25** adds independent strip-only sheet classification and measured
-strip text/geometry exposure. This remains **non-strict**: current table-only
-DQ-23 observations and pins are unchanged. Report sheets retain their complete
+strip text/geometry exposure. At 5.25 this was **non-strict**; 5.26 adopts it below.
+Report sheets retain their complete
 header, shaping and no-report-text guards. Strip-only sheets instead need
 visible terminal bodies and text at least 2.5 mm, and retain the same shaping
 bounds; missing/hidden ink fails explicitly. Native terminal/jumper coverage and
 reciprocal continuation destinations are checked in the separate exposure.
-Complete 5.23 and 5.24 summaries remain readable.
+Complete 5.23, 5.24 and 5.25 summaries remain readable.
+
+Version **5.26** adopts native strip geometry in strict **DQ-23** (CHECK7, #336).
+The unit is a nonempty requested terminal-plan **view**, including every sibling
+inventory and strip sheet. A table page passes only if the complete view has
+measured native terminal order, explicit jumper paths, wire/cable-core incidences,
+exact inventory incidence equality, reciprocal continuations and visible Tn/Rn
+references. Attributes and native registry identities locate candidate ink only;
+actual Chromium rectangles, sampled paths and painted text discharge obligations.
+Missing or incorrect ink fails with a native view/terminal/jumper locator. Missing
+measurement is explicit infrastructure. SVG-root/ancestor opacity is included in
+paint visibility. This does not certify HTML/PDF strip geometry.
+
+Not applicable means no requested terminal plan (including automatic inventories)
+or an empty native terminal selection. `terminalPlanAudits` reports that state
+explicitly. Legacy empty conditional per-sheet DQ-23 rows, IDs and scope text are
+preserved outside this obligation population; they assert no strip coverage.
+View assessment is mirrored onto its sibling sheet rows, preserving the existing
+pin protocol. A nonempty request cannot lose its obligations when strips vanish:
+even a wholly absent view fails on the first issued sheet. Refused packets retain
+their structured R004/R006 refusal and non-pass DQ-23 rows; no issued ink is never
+a strip pass. The five historical table-only defect families become xpasses for
+REP5 review; no pins or expectations are changed here.
 
 The #336 terminal-strip oracle is a separate **non-strict exposure** check:
 
@@ -82,8 +104,9 @@ rectangles, jumper/stub paths and visible text; identity attributes locate ink
 but do not establish coverage. Missing/extra bridges, wrong order, invented
 shapes, wrong peers and missing reciprocal row references fail the exposure.
 The receipt binds input artifacts, strict report, checker and Chromium, with
-`strict: false` and `repinNow: false`. It does not alter the existing strict
-DQ-23 observation or pins. This SVG oracle does not certify HTML/PDF; those
+`strict: false` and `repinNow: false`. The replay receipt remains non-strict;
+5.26 strict assessment uses the shared predicates through `terminal-plan-strict.mjs`.
+This SVG oracle does not certify HTML/PDF; those
 require separate print review. Existing refusals remain not measured.
 
 Version **5.23** fixes #395: a missing identifier table keeps table-dependent

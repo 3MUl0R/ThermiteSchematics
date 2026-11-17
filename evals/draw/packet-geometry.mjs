@@ -3,6 +3,7 @@ import { sheetMeasurementSource, openSheet } from "./browser.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { retainLostText } from "./lost-text.mjs";
 import { viewKey } from "./locators.mjs";
+import { stripInkScript } from "./terminal-strip-ink.mjs";
 import {
   identifierContext,
   IdentifierMeasurementError,
@@ -62,16 +63,22 @@ export async function measurePacketGeometry(
     packet.sheets.map((s) => viewKey(s.view)),
   );
   // Collect all tiled copies before deciding whether a semantic label was lost.
-  for (const sheet of packet.sheets) {
-    try {
-      geometries.push(await openSheet(page, sheet.svg));
-    } catch (error) {
-      throw identifierContext(error, sheet.number, "svg");
-    }
-  }
+  await measureSvgSheets(page, packet, geometries);
   retainLostText(
     geometries,
     packet.sheets.map((s) => viewKey(s.view)),
   );
   return { htmlGeometry, htmlSvgs };
+}
+async function measureSvgSheets(page, packet, geometries) {
+  for (const sheet of packet.sheets) {
+    try {
+      const geometry = await openSheet(page, sheet.svg);
+      if (["terminals", "terminal-strip"].includes(sheet.view.kind))
+        geometry.terminalStripInk = await page.evaluate(stripInkScript);
+      geometries.push(geometry);
+    } catch (error) {
+      throw identifierContext(error, sheet.number, "svg");
+    }
+  }
 }

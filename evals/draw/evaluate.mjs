@@ -360,8 +360,38 @@ function evaluateDocuments(
     }),
   );
   out.push(obs("DQ-17", checks.terminalText(g)));
-  out.push(terminalPlanObservation(s, g, tables, obs));
+  out.push(
+    terminalPlanObservation(s, g, tables, obs, {
+      packet,
+      geometries,
+      ir,
+      request: request ?? tables.request,
+    }),
+  );
   out.push(obs("DQ-18", checks.titleFields(g)));
+  evaluateInventory(
+    s,
+    g,
+    packet,
+    geometries,
+    ir,
+    tables,
+    identifierPolicy,
+    obs,
+    out,
+  );
+}
+function evaluateInventory(
+  s,
+  g,
+  packet,
+  geometries,
+  ir,
+  tables,
+  identifierPolicy,
+  obs,
+  out,
+) {
   if (!wireLocatorAudits.has(packet))
     wireLocatorAudits.set(packet, wireLocatorAudit(packet, geometries, ir));
   out.push(

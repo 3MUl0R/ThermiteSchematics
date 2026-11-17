@@ -5,7 +5,7 @@ function stripInkHelpers() {
   const all = (s) => [...root.querySelectorAll(s)],
     attr = (e, s) => e?.getAttribute(s);
   const painted = (e) => {
-    for (let p = e; p && p !== root; p = p.parentElement) {
+    for (let p = e; p; p = p.parentElement) {
       const s = getComputedStyle(p);
       if (s.display === "none" || s.visibility === "hidden" || +s.opacity < 0.2)
         return false;
@@ -178,6 +178,9 @@ function stripDetails(h) {
       .map((t) => t.text)
       .join(" ");
   return {
+    viewKeys: all("[data-navigation-view]").map((e) =>
+      attr(e, "data-navigation-view"),
+    ),
     rows: all("[data-report-row]").map((e) => ({
       key: attr(e, "data-report-row"),
       ref: attr(e, "data-strip-ref"),

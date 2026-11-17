@@ -6,13 +6,16 @@ import {
   svgIdentifiers,
 } from "./identifier-observations.mjs";
 import { isIdentifierError } from "./identifier-errors.mjs";
-export function terminalPlanObservation(s, g, tables, obs) {
+import { terminalPlanFindings } from "./terminal-plan-strict.mjs";
+export function terminalPlanObservation(s, g, tables, obs, context) {
   const scope =
     "Requested terminal plan must contain graphical strip geometry; report-row cells identify current table-only output.";
   try {
     const requested = documentGeometries(g).map((part) =>
       requestedTerminalPlan(s, part, tables),
     );
+    if (context?.request)
+      return obs("DQ-23", terminalPlanFindings(s, context), { scope });
     return obs(
       "DQ-23",
       requested.some(Boolean) && g.reportRows.length
