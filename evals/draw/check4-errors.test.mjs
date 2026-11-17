@@ -33,7 +33,6 @@ it("CHECK4 missing measured cells fail with the explicit type", () => {
 it.each([
   "wire-locator-missing",
   "text-outside-cell",
-  "report-null-placeholder",
 ])("CHECK4 identifier infrastructure never masks an absent %s pin", (kind) => {
   const marker = { id: "pin", dq: "DQ-19", check: "sheet", kind };
   const unit = { case: "fixture", sheet: "sheet:1", medium: "svg" };

@@ -9,6 +9,7 @@ export function missingMarkerRow(
 ) {
   const identifierCheck =
     marker.kind.startsWith("identifier-") ||
+    marker.kind === "report-null-placeholder" ||
     marker.kind === "terminal-plan-is-table";
   const infrastructure =
     (identifierCheck &&

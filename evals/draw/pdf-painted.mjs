@@ -1,6 +1,9 @@
 import { nativeAdvanceItem } from "./pdf-advance-geometry.mjs";
 // Associate extraction items to native glyph placement by geometry/font only.
-import assert from "node:assert/strict";
+import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+const assert = (condition, message) => {
+  if (!condition) throw new IdentifierMeasurementError(message);
+};
 import { pdfGlyphRuns } from "./pdf-ink-operators.mjs";
 import { embeddedGlyphMetric } from "./pdf-glyph-metrics.mjs";
 import {

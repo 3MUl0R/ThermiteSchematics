@@ -20,6 +20,12 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.23** fixes #395: a missing identifier table keeps table-dependent
+report-placeholder pins as infrastructure, shared sheet furniture is checked
+once against the complete sheet, and PDF painted-identifier measurement guards
+raise the typed measurement error. Healthy corpus observations are unchanged;
+complete 5.22 reports remain readable. No expected markers are changed.
+
 Version **5.22** fixes the four robustness gaps from #376 without adding an
 oracle, changing criteria or moving expected markers. Complete 5.21 reports
 remain readable.
