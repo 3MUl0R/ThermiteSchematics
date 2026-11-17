@@ -165,7 +165,7 @@ describe("protective-cap packet pagination", () => {
     },
   );
 
-  it("keeps single-cap geometry and grows 1→3 sheets to close every omitted native port", async () => {
+  it("keeps single-cap geometry and grows 1→2 sheets to close every omitted native port", async () => {
     const request: ConnectorAssemblyViewRequest = {
       format: "connector-assembly-view-request/0.1",
       assemblies: ["CAP-X01"],
@@ -177,8 +177,8 @@ describe("protective-cap packet pagination", () => {
     });
     if (!result.ok) throw new Error(result.error.message);
     // The original one-sheet view omitted eleven native port statuses. Their
-    // complete measured inventory needs two same-paper companion sheets.
-    expect(result.value.sheets).toHaveLength(3);
+    // complete measured inventory fits one same-paper companion after density allocation.
+    expect(result.value.sheets).toHaveLength(2);
     expect(result.value.sheets[0]!.svg).toContain(original.content);
     expect(result.value.sheets[0]!.view.title).not.toContain("Part ");
     expect(result.value.sheets[0]!.svg).toContain(

@@ -88,7 +88,9 @@ it("fits every drawn-port pointer on the existing A4 compact cap source sheets",
     "[data-assembly-port-destinations]",
   );
   expect(pointer).not.toBeNull();
-  expect(pointer?.textContent).toMatch(/Port R1\.X01 → \d{2}\.[A-D][1-6]/u);
+  expect(pointer?.textContent).toBe(
+    "Port R1.X01 → 01.B3; Port R1.X02 → 01.C3; Port R1.X03 → 02.B3; Port R1.X04 → 02.C3; Port R1.X05 → 03.B3; Port R1.X06 → 03.C3; Port R1.X07 → 04.B3; Port R1.X08 → 04.C3.",
+  );
   for (const text of pointer?.querySelectorAll("text") ?? [])
     expect(Number(text.getAttribute("font-size"))).toBe(2.5);
 });

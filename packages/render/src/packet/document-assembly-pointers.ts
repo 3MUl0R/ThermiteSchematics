@@ -1,5 +1,10 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import type { Draft, PaperPage, RenderedSheet } from "./types.js";
+import type {
+  Draft,
+  PaperPage,
+  RenderedSheet,
+  DrawingBounds,
+} from "./types.js";
 import type { DocumentDependency } from "./document-types.js";
 import type {
   AnnotationReservation,
@@ -11,7 +16,11 @@ import {
 } from "./document-assembly-geometry.js";
 import { wrapDocumentTokens } from "./document-caption-text.js";
 import { destinationToken } from "./navigation-location.js";
-import { allocateNavigationSlots } from "./navigation-slots.js";
+import {
+  allocateNavigationSlots,
+  NavigationSlotFailure,
+} from "./navigation-slots.js";
+import { DocumentDependencyError } from "./document-error.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import { text } from "./svg.js";
 import { required } from "../presentation/util.js";
@@ -37,6 +46,13 @@ function pointerReservation(
       wrapWidthMm: w - 2,
     });
   }
+  if (!shapes.length)
+    throw new NavigationSlotFailure("No complete port pointer entry fits", {
+      widthMm: width,
+      entryWidthsMm: tokens.map(
+        (t) => printableTextMetrics(t, 2.5).advance + 2,
+      ),
+    });
   return {
     id,
     ownerAppearance: id,
@@ -61,14 +77,56 @@ function pointerTokens(
     if (port.deviceUid !== uid || local.has(id) || !target) continue;
     if (tokens.length) tokens[tokens.length - 1] += ";";
     tokens.push(
-      "Port",
-      `${port.designation}.${port.key}`,
-      "→",
-      destinationToken(target),
+      `Port ${port.designation}.${port.key} → ${destinationToken(target)}`,
     );
   }
   if (tokens.length) tokens[tokens.length - 1] += ".";
   return tokens;
+}
+function pointerSlot(
+  id: string,
+  tokens: readonly string[],
+  field: DrawingBounds,
+  sheet: RenderedSheet,
+  claims: readonly DrawingBounds[],
+  dependencies: readonly DocumentDependency[],
+) {
+  let reservation: AnnotationReservation | undefined;
+  try {
+    reservation = pointerReservation(id, tokens, field.w);
+    return required(
+      allocateNavigationSlots(
+        [{ reservation, owner: field }],
+        field,
+        sheet.svg,
+        sheet.number,
+        claims,
+      )[0],
+      "Missing assembly pointer allocation",
+    );
+  } catch (error) {
+    if (!(error instanceof NavigationSlotFailure)) throw error;
+    const needed = reservation?.inkMm ?? {
+      x: 0,
+      y: 0,
+      w:
+        Math.max(...tokens.map((t) => printableTextMetrics(t, 2.5).advance)) +
+        2,
+      h: 5.6,
+    };
+    throw new DocumentDependencyError(
+      `Connector port pointers at sheet ${sheet.number} (${tokens.join(" ")}): require ${needed.w.toFixed(2)} × ${needed.h.toFixed(2)} mm; available ${field.w.toFixed(2)} × ${field.h.toFixed(2)} mm. ${error.message}`,
+      dependencies.filter((d) => d.owner.sheet === sheet.number),
+      {
+        sheet: sheet.number,
+        profile: "assembly-port-pointer/1",
+        availableMm: field,
+        requiredMm: needed,
+        placementSearch: error.search,
+        pointerEntries: tokens,
+      },
+    );
+  }
 }
 /** Named per-port pointers to painted landings; these are never M3 inventories. */
 export function assemblyPortPointers(
@@ -93,20 +151,13 @@ export function assemblyPortPointers(
       const tokens = pointerTokens(geometry, part, uid);
       if (!tokens.length) continue;
       const id = `assembly-port-pointers/${sheet.number}/${uid}`;
-      const slot = required(
-        allocateNavigationSlots(
-          [
-            {
-              reservation: pointerReservation(id, tokens, part.field.w),
-              owner: part.field,
-            },
-          ],
-          part.field,
-          svg,
-          sheet.number,
-          claims,
-        )[0],
-        "Missing assembly pointer allocation",
+      const slot = pointerSlot(
+        id,
+        tokens,
+        part.field,
+        { ...sheet, svg },
+        claims,
+        dependencies,
       );
       const box = required(
         slot.allocatedMm,
