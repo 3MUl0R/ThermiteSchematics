@@ -28,6 +28,20 @@ const overlap = (a: Box, b: Box) =>
   a.y + a.height > b.y + 0.01;
 const numbers = (text: string) => text.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
 
+function circuitDeviceBoxes(document: Document) {
+  return [
+    ...document.querySelectorAll("g[data-device-uid][data-layout-width]"),
+  ].map((e) => {
+    const [x, y] = numbers(e.getAttribute("transform")!);
+    return {
+      x: x!,
+      y: y!,
+      width: Number(e.getAttribute("data-layout-width")),
+      height: Number(e.getAttribute("data-layout-height")),
+    };
+  });
+}
+
 describe("nested external bridge labels", () => {
   it.each([
     ["left-to-right", false],
@@ -100,17 +114,8 @@ describe("nested external bridge labels", () => {
             })),
           };
         });
-        const deviceBoxes = [
-          ...document.querySelectorAll("[data-device-uid]"),
-        ].map((e) => {
-          const [x, y] = numbers(e.getAttribute("transform")!);
-          return {
-            x: x!,
-            y: y!,
-            width: Number(e.getAttribute("data-layout-width")),
-            height: Number(e.getAttribute("data-layout-height")),
-          };
-        });
+        const deviceBoxes = circuitDeviceBoxes(document);
+        expect(deviceBoxes).toHaveLength(source.devices.length);
         const labels = [...document.querySelectorAll("[data-wire-label]")].map(
           (e) => {
             const rect = e.querySelector("rect")!;

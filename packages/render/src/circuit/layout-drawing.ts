@@ -1,4 +1,5 @@
 import { plannedCircuitCaption } from "./caption-plan.js";
+import { circuitJunctionSvg } from "./junction-identity.js";
 import { supportedCircuitLabels } from "./label-support.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
@@ -15,13 +16,10 @@ export function circuitDrawingContents(
 ) {
   const supported = supportedCircuitLabels(state);
   state = { ...state, labels: supported.labels };
-  const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode, n } = state;
+  const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode } = state;
   const contents = [
     ...wireSvg,
-    ...[...dots.values()].map(
-      (p) =>
-        `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
-    ),
+    ...[...dots.values()].map((p) => circuitJunctionSvg(p, state)),
     ...labels.map((l) =>
       circuitWireLabel(l, state, supported.baseFallbacks.has(l.index)),
     ),
