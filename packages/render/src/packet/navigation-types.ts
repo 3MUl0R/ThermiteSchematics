@@ -86,7 +86,8 @@ export interface NavigationAnnotation {
     | "mirror"
     | "return"
     | "association-unspecified"
-    | "contact-notice";
+    | "contact-notice"
+    | "element-location";
   mirror?: {
     coil: FunctionId;
     rows: readonly MirrorRow[];
