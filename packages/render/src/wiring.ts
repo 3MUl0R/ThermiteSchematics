@@ -1,3 +1,9 @@
+import { wiringStrokeMm } from "./layout/wiring-landing-ink.js";
+import { labelLeaderArrow } from "./layout/wire-label-support.js";
+import {
+  ownedWiringLabels,
+  wiringLabelLeaders,
+} from "./layout/wiring-label-support.js";
 import {
   drawingDeviceTag,
   deviceHeaderSvg,
@@ -17,6 +23,11 @@ import {
   terminalPortAttribute,
 } from "./layout/port-attributes.js";
 import { layoutWiring } from "./layout/wiring-layout.js";
+import { required } from "./presentation/util.js";
+import {
+  WIRING_LANDING_SUFFIX,
+  WIRING_TERMINAL_RADIUS_SVG,
+} from "./layout/wiring-landings.js";
 import {
   wiringHiddenIncidences,
   omittedTerminalNeed,
@@ -80,16 +91,47 @@ type WiringState = ReturnType<typeof wiringGraphState>;
 export async function prepareWiringDrawing(
   ir: Readonly<ElectricalIr>,
   request: WiringViewRequest,
+  admit?: (
+    candidate: CommunicationDrawing,
+    original: CommunicationDrawing,
+  ) => boolean,
 ): Promise<CommunicationDrawing> {
   validateWiringRequest(request);
   const state = wiringGraphState(selectWiringDrawing(ir, request));
   const children = state.ordered.map((uid) => wiringNode(uid, state));
-  const graph = await layoutWiring(children, wiringEdges(state));
+  const edges = wiringEdges(state);
+  const graph = await layoutWiring(
+    children,
+    edges,
+    admit
+      ? (candidate, baseline) => {
+          const original = wiringDrawing(baseline, state, request);
+          let proposed: CommunicationDrawing;
+          try {
+            proposed = wiringDrawing(candidate, state, request);
+          } catch {
+            return false;
+          }
+          return admit(proposed, original);
+        }
+      : undefined,
+    new Map(state.selected.map((c, i) => [`e${i}`, wiringStrokeMm(c.jumper)])),
+  );
+  return wiringDrawing(graph, state, request);
+}
+
+function wiringDrawing(
+  graph: ElkNode,
+  state: WiringState,
+  request: WiringViewRequest,
+): CommunicationDrawing {
   if (![graph.width, graph.height].every(Number.isFinite))
     throw new Error("Invalid wiring layout bounds.");
+  graph = ownedWiringLabels(graph);
   const out: string[] = [];
   const nodes = graph.children ?? [];
   const routes = appendWiringRoutes(graph, state.selected, nodes, out);
+  appendWiringLabelLeaders(graph, state.selected, out);
   const segments = appendWiringJunctions(routes, state.selected, out);
   assertWiringLabels(graph, nodes, segments);
   const references = appendWiringDevices(nodes, state, out);
@@ -383,10 +425,12 @@ function appendWiringRoutes(
   out: string[],
 ) {
   const routes: WiringRoute[] = [];
-  for (const [i, edge] of (graph.edges ?? []).entries()) {
+  for (const edge of graph.edges ?? []) {
+    const i = Number(edge.id.slice(1));
+    const conductor = required(selected[i], "Missing native wiring identity");
     if (!edge.sections?.length) throw new Error("Incomplete wiring route.");
     out.push(
-      `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(selected[i]!.id)}" data-endpoints="${attr(JSON.stringify(selected[i]!.ends))}"><title>${xml(selected[i]!.name + (selected[i]!.detail ? " / " + selected[i]!.detail : ""))}</title>`,
+      `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(conductor.id)}" data-endpoints="${attr(JSON.stringify(conductor.ends))}"><title>${xml(conductor.name + (conductor.detail ? " / " + conductor.detail : ""))}</title>`,
     );
     for (const section of edge.sections)
       appendWiringSection(section, i, selected, nodes, routes, out);
@@ -439,7 +483,7 @@ function appendWiringSection(
     }
   }
   out.push(
-    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${selected[i]!.jumper ? 0.7 : 0.35}"/>`,
+    `<path d="${points.map((p, j) => `${j ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ")}" fill="none" stroke="#344054" stroke-width="${wiringStrokeMm(selected[i]!.jumper)}"/>`,
   );
 }
 
@@ -458,6 +502,25 @@ function appendWiringLabels(
       selected[i]!.detail
         ? text(l.x! + 1, l.y! + 6.5, selected[i]!.detail)
         : "",
+    );
+  }
+}
+
+function appendWiringLabelLeaders(
+  graph: ElkNode,
+  selected: WiringConductor[],
+  out: string[],
+) {
+  const path = (points: readonly Point[]) =>
+    points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ");
+  for (const leader of wiringLabelLeaders(graph)) {
+    const conductor = required(
+      selected[Number(leader.edgeId.slice(1))],
+      "Missing wiring label owner",
+    );
+    out.push(
+      `<path class="wire-label-leader" data-label-leader-owner="${attr(conductor.id)}" d="${path(leader.points)}" fill="none" stroke="#475467" stroke-width=".15" stroke-dasharray=".5 .375"/>`,
+      `<path class="wire-label-leader-arrow" d="${path(labelLeaderArrow(leader.points, 0.75))}" fill="none" stroke="#475467" stroke-width=".15"/>`,
     );
   }
 }
@@ -589,9 +652,9 @@ function assertWiringLabels(
   nodes: ElkNode[],
   segments: WiringSegment[],
 ) {
-  const edgeLabels = (graph.edges ?? []).flatMap((e, index) =>
+  const edgeLabels = (graph.edges ?? []).flatMap((e) =>
     (e.labels ?? []).map((l) => ({
-      index,
+      index: Number(e.id.slice(1)),
       x: l.x!,
       y: l.y!,
       width: l.width!,
@@ -683,7 +746,8 @@ function wiringPortSvg(
     const id = portIds.get(key({ deviceUid, terminalKey: p.key }));
     if (!id) throw new Error("Missing declared wiring terminal.");
     result.push(
-      `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`,
+      `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r="${WIRING_TERMINAL_RADIUS_SVG}" fill="white" stroke="#344054" stroke-width=".3"/>`,
+      ...wiringLandingAnchors(node, id, p.key),
       text(
         p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
         p.y + 1,
@@ -692,4 +756,20 @@ function wiringPortSvg(
     );
   }
   return result;
+}
+
+function wiringLandingAnchors(
+  node: ElkNode,
+  physical: string,
+  terminalKey: string,
+) {
+  // Nonpainting attachment locators inside the one physical terminal mark.
+  // A nonempty native geometry supports SVG path sampling; explicit no-fill and
+  // no-stroke ensure these locators never add terminal symbols or hardware.
+  return (node.ports ?? [])
+    .filter((p) => p.id.startsWith(physical + WIRING_LANDING_SUFFIX))
+    .map(
+      (p) =>
+        `<circle ${terminalPortAttribute(p.id)} data-wiring-landing-for="${attr(physical)}" data-terminal-key="${attr(terminalKey)}" cx="${n(required(p.x, "Unplaced wiring landing"))}" cy="${n(required(p.y, "Unplaced wiring landing"))}" r=".001" fill="none" stroke="none"/>`,
+    );
 }

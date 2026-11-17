@@ -4,10 +4,13 @@ import {
   assertTopologyRouteEndpoints,
 } from "./topology-conservation.js";
 import { createElkEngine } from "./elk-runtime.js";
+import { chooseIndependentWiring } from "./wiring-independent.js";
 
 export async function layoutWiring(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
+  admit?: (candidate: ElkNode, original: ElkNode) => boolean,
+  strokes?: ReadonlyMap<string, number>,
 ): Promise<ElkNode> {
   const owners = new Map(
     children.flatMap((node) => (node.ports ?? []).map((p) => [p.id, node.id])),
@@ -46,8 +49,9 @@ export async function layoutWiring(
     edges,
   };
   const expected = structuredClone(input);
-  const graph = await createElkEngine().layout(input);
+  const engine = createElkEngine();
+  const graph = await engine.layout(input);
   assertTopologyIdentities(graph, expected);
   assertTopologyRouteEndpoints(graph);
-  return graph;
+  return chooseIndependentWiring(expected, graph, engine, admit, strokes);
 }

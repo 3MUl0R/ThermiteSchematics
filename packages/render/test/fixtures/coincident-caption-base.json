@@ -1,0 +1,137 @@
+{
+  "base": "3f93d6c",
+  "provenance": "Fresh built 3f93d6c public example requests; independent interval coverage selects literal caption groups.",
+  "cases": [
+    {
+      "name": "6es7131-4rd02-0ab0",
+      "pages": 2,
+      "sourceSha256": [
+        "86236f71e2975b7e2eeb88dde56146e0fa6cc096f94bd912e69996f37090be3e",
+        "6e99839f7775cf751a93a54a7d13c11fa74b084f65d6a2b9d98dea4795a0611f"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200001",
+          "group": "g5",
+          "sheet": 2,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200001\"><rect x=\"120.975\" y=\"48.327\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"121.979\" y=\"51.477\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED2</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200002",
+          "group": "g5",
+          "sheet": 2,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200002\"><rect x=\"93.787\" y=\"103.102\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"94.797\" y=\"105.562\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED3</text></g>"
+        }
+      ]
+    },
+    {
+      "name": "6es7132-4bb31-0aa0",
+      "pages": 2,
+      "sourceSha256": [
+        "87e0bda5453a5a907032ff0c08872da70fb9e0ee24879287be7a8f0577ece24e",
+        "139333dfbc6d521f4161505f43e1d8ab6c1341517502d3bf70eabf38149669c6"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200002",
+          "group": "g2",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200002\"><rect x=\"92.662\" y=\"87.529\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"93.672\" y=\"90.654\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED3</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200000",
+          "group": "g3",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200000\"><rect x=\"92.15\" y=\"87.508\" width=\"9.65\" height=\"3.8\" fill=\"white\" /><text x=\"92.997\" y=\"90.658\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED1</text></g>"
+        }
+      ]
+    },
+    {
+      "name": "6es7132-4bd32-0aa0",
+      "pages": 2,
+      "sourceSha256": [
+        "c1cde9bceb01757dab1d4f94c9cf830594cf039f6b6bdab9c8c56105db88c169",
+        "829b7be93344a0c33b0bb01484009e4799a2c9fd174705dd58fd695b463dc463"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200001",
+          "group": "g5",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200001\"><rect x=\"94.662\" y=\"36.652\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"95.666\" y=\"39.802\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED2</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200002",
+          "group": "g5",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200002\"><rect x=\"94.662\" y=\"40.452\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"95.672\" y=\"42.912\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED3</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200003",
+          "group": "g5",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200003\"><rect x=\"94.662\" y=\"44.252\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"95.626\" y=\"46.697\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED4</text></g>"
+        }
+      ]
+    },
+    {
+      "name": "6es7134-4gb11-0ab0",
+      "pages": 2,
+      "sourceSha256": [
+        "ec428b18b16ddb468474fd0a971b3cc4ea6db1c5d6f32c29f67061b9fa7f74df",
+        "92820e75a2acc2e3ca62bfa53ad10ea4666d3d49993d1f00f6313a420bd1ae4d"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200001",
+          "group": "g3",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200001\"><rect x=\"92.662\" y=\"87.505\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"93.666\" y=\"90.655\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED2</text></g>"
+        }
+      ]
+    },
+    {
+      "name": "6es7138-4ca01-0aa0",
+      "pages": 2,
+      "sourceSha256": [
+        "d733471c76ebdbb61d89a3fbcaacad274fae7e06421c0fa895ef5f91485f1837",
+        "df20fe51a5845f67cd848d2922d770055ddf74832a8e676add6af5c814b63c17"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200001",
+          "group": "g1",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200001\"><rect x=\"91.787\" y=\"91.308\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"92.791\" y=\"93.768\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED2</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200003",
+          "group": "g2",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200003\"><rect x=\"91.787\" y=\"91.308\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"92.751\" y=\"93.753\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED4</text></g>"
+        },
+        {
+          "uid": "cba70000-0000-4000-8000-000000200005",
+          "group": "g3",
+          "sheet": 2,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200005\"><rect x=\"91.787\" y=\"91.302\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"92.785\" y=\"93.762\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED6</text></g>"
+        }
+      ]
+    },
+    {
+      "name": "6es7193-4cd30-0aa0",
+      "pages": 1,
+      "sourceSha256": [
+        "6226ee91f64609afc0adc36ee952c830fd7a3039353e5637560ed0e80b77ba69"
+      ],
+      "labels": [
+        {
+          "uid": "cba70000-0000-4000-8000-000000200003",
+          "group": "g3",
+          "sheet": 1,
+          "svg": "<g data-wire-label=\"cba70000-0000-4000-8000-000000200003\"><rect x=\"91.787\" y=\"91.302\" width=\"10.375\" height=\"3.8\" fill=\"white\" /><text x=\"92.751\" y=\"93.747\" text-anchor=\"start\" font-family=\"Thermite Sans, Thermite Math, sans-serif\" font-size=\"2.5\" font-weight=\"400\" fill=\"#17212b\">FIXED4</text></g>"
+        }
+      ]
+    }
+  ]
+}

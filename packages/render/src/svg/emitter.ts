@@ -1,3 +1,6 @@
+import { emitMechanicalGangs } from "./mechanical-gangs.js";
+import { tagLabelAttributes } from "./tag-label-attributes.js";
+import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
 import { redundantNetLabelIds } from "./net-labels.js";
@@ -8,7 +11,6 @@ export { orthogonalPathData } from "./edge-path.js";
 import { terminalContextAttachment } from "../terminal-context-reference.js";
 import { contextJunctionInk } from "../layout/context-reference-ink.js";
 import { graphSemanticOrder } from "../semantic-order.js";
-import { printableLabelGeometry } from "../symbols/printable-label.js";
 import { rootedGangEmission } from "../symbols/rooted-gangs.js";
 import {
   boundedPrintableAdvance,
@@ -887,7 +889,8 @@ function emitLabels(
   labels: readonly LayoutLabel[],
   registry: RenderSourceRegistry,
   layout: Readonly<NormalizedSchematicLayout>,
-): void {
+  mmPerUnit: number,
+): RenderOutcome<void> {
   const semantic = presentationLabelIndex(graph);
   const hiddenTerminalCaptions = duplicateTerminalCaptionIds(
     graph,
@@ -916,39 +919,19 @@ function emitLabels(
       emitEmptyCaption(writer, label);
       continue;
     }
-    const position = printableLabelGeometry(
+    const emitted = emitLabelInk(
+      writer,
       label,
       printed,
       presentation.textLength,
-      label.ownerKind === "edge"
-        ? [layout.edges.find((e) => e.id === label.ownerId)?.points ?? []]
-        : undefined,
+      layout,
+      mmPerUnit,
+      tagLabelAttributes(presentation, graph.view),
+      graph.view,
     );
-    writer.element(1, "rect", {
-      class: `label-background label-${label.role}`,
-      x: global(position.ink.left),
-      y: global(position.ink.top),
-      width: position.ink.right - position.ink.left,
-      height: position.ink.bottom - position.ink.top,
-    });
-    writer.element(
-      1,
-      "text",
-      {
-        class: `label-text label-${label.role}`,
-        ...tagLabelAttributes(presentation, graph.view),
-        "clip-path": `url(#${svgSemanticId("clip", [label.id])})`,
-        x: global(position.x),
-        y: global(position.baseline),
-        "font-family": "Thermite Sans, Thermite Math, sans-serif",
-        "font-size": 10,
-        "text-anchor": "start",
-        "dominant-baseline": "alphabetic",
-        ...printableFitAttributes(printed, 10, presentation.textLength),
-      },
-      printed,
-    );
+    if (!emitted.ok) return emitted;
   }
+  return { ok: true, value: undefined };
 }
 
 function emitEmptyCaption(writer: SvgWriter, label: LayoutLabel): void {
@@ -1109,15 +1092,7 @@ export function emitSchematicSvg(
     blockHeight,
     noticeHeight,
   } = canvasDimensions(graph, layout, titleContext, diagramOnly);
-  const rootDesignation = sourceValue(
-    registry,
-    graph.view.format === "schematic-view/0.2" &&
-      graph.view.intent === "conductors"
-      ? "cable.designation"
-      : "device.designation",
-    graph.view.root.designation,
-    "root designation",
-  );
+  const rootDesignation = rootTitleDesignation(graph, registry);
   const title = `${graph.view.format === "schematic-view/0.2" ? graph.view.intent : graph.view.family} schematic: ${rootDesignation}`;
 
   const writer = new SvgWriter();
@@ -1180,20 +1155,7 @@ export function emitSchematicSvg(
   emitFrames(writer, graph, nodeLayouts, registry);
   emitEdges(writer, graph, layout, registry);
   emitJunctions(writer, graph, nodeLayouts, registry);
-  for (const segment of gangs.value)
-    writer.element(1, "line", {
-      class: "mechanical-gang",
-      "data-ganged-group": segment.groupId,
-      "data-mechanical-association": "ganged",
-      "data-ganged-functions": JSON.stringify(segment.functions),
-      x1: global(segment.from.x),
-      y1: global(segment.from.y),
-      x2: global(segment.to.x),
-      y2: global(segment.to.y),
-      stroke: "#17212b",
-      "stroke-width": 0.25 / mmPerUnit,
-      "stroke-dasharray": `${1.5 / mmPerUnit} ${1 / mmPerUnit}`,
-    });
+  emitMechanicalGangs(writer, gangs.value, mmPerUnit, global);
   emitSymbols(
     writer,
     graph,
@@ -1204,7 +1166,15 @@ export function emitSchematicSvg(
     mmPerUnit,
     ir,
   );
-  emitLabels(writer, graph, labels, registry, layout);
+  const emittedLabels = emitLabels(
+    writer,
+    graph,
+    labels,
+    registry,
+    layout,
+    mmPerUnit,
+  );
+  if (!emittedLabels.ok) return emittedLabels;
   if (!diagramOnly) writer.close(1, "g");
   if (!diagramOnly)
     emitTitleBlock(
@@ -1219,22 +1189,17 @@ export function emitSchematicSvg(
   return { ok: true, value: writer.finish() };
 }
 
-function tagLabelAttributes(
-  presentation: PresentationLabel,
-  view: PresentationGraph["view"],
-): SvgAttributes {
-  const source =
-    presentation.role === "device"
-      ? presentation.textSources.find((s) => s.field === "device.designation")
-      : undefined;
-  if (!source) return {};
-  const owner = decodeSvgSemanticId("device", source.ownerId)[0];
-  return {
-    "data-tag-owner-uid": owner,
-    ...(view.format === "schematic-view/0.2" && view.intent === "conductors"
-      ? { "data-tag-field": "designation" }
-      : { "data-tag-key": presentation.text }),
-    "data-tag-kind": "body",
-    "data-tag-block": owner,
-  };
+function rootTitleDesignation(
+  graph: Readonly<PresentationGraph>,
+  registry: RenderSourceRegistry,
+) {
+  return sourceValue(
+    registry,
+    graph.view.format === "schematic-view/0.2" &&
+      graph.view.intent === "conductors"
+      ? "cable.designation"
+      : "device.designation",
+    graph.view.root.designation,
+    "root designation",
+  );
 }

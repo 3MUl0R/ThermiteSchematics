@@ -4,6 +4,7 @@ import { prepareWiringDrawing } from "../src/wiring.js";
 import { directFixture } from "./direct-loop-fixture.js";
 import { wire } from "./series-loop-fixture.js";
 import { points } from "./helpers/route-quality.js";
+import { required } from "./fixtures.js";
 
 it.each([false, true])(
   "lands on fractional-header terminal rows with self-loop=%s",
@@ -33,7 +34,20 @@ it.each([false, true])(
             `[data-layout-port="${route.getAttribute(`data-layout-${end}-port`)}"]`,
           )!;
           const declaredY = Number(port.getAttribute("cy"));
-          expect(declaredY).toBe(Math.round(declaredY));
+          const physicalId =
+            port.getAttribute("data-wiring-landing-for") ??
+            port.getAttribute("data-layout-port");
+          const mark = required(
+            doc.querySelector(`[data-layout-port="${physicalId}"]`),
+          );
+          const physicalY = Number(mark.getAttribute("cy"));
+          expect(physicalY).toBe(Math.round(physicalY));
+          expect(
+            Math.hypot(
+              Number(port.getAttribute("cx")) - Number(mark.getAttribute("cx")),
+              declaredY - physicalY,
+            ),
+          ).toBeLessThanOrEqual(Number(mark.getAttribute("r")));
           const translation = port
             .parentElement!.getAttribute("transform")!
             .match(/translate\(([-\d.]+) ([-\d.]+)\)/)!;

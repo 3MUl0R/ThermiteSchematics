@@ -38,6 +38,24 @@ export function circuitHasJogs(graph: ElkNode) {
  * populations are identical. Edge IDs are physical wire/jumper or individual core
  * occurrences in this group; no cable designation or undefined wire key is used. */
 export function circuitConductorGuard(candidate: ElkNode, original: ElkNode) {
+  const compared = conductorComparison(candidate, original);
+  if (!compared) return false;
+  const { before, after } = compared;
+  return (
+    [...after.values()].reduce((n, a) => n + Number(a.jogs.length > 0), 0) <
+    [...before.values()].reduce((n, a) => n + Number(a.jogs.length > 0), 0)
+  );
+}
+
+/** The same safety envelope, without imposing the caller's improvement goal. */
+export function circuitConductorNonRegression(
+  candidate: ElkNode,
+  original: ElkNode,
+) {
+  return conductorComparison(candidate, original) !== undefined;
+}
+
+function conductorComparison(candidate: ElkNode, original: ElkNode) {
   const before = new Map(
     (original.edges ?? []).map((e) => [e.id, circuitRouteMetrics(e)]),
   );
@@ -48,8 +66,8 @@ export function circuitConductorGuard(candidate: ElkNode, original: ElkNode) {
     before.size !== after.size ||
     [...before.keys()].some((id) => !after.has(id))
   )
-    return false;
-  if (defectGrowth(after, before).some((n) => n > 1e-7)) return false;
+    return undefined;
+  if (defectGrowth(after, before).some((n) => n > 1e-7)) return undefined;
   for (const [id, a] of after) {
     const b = required(before.get(id), "Missing native circuit geometry");
     const repaired =
@@ -58,10 +76,7 @@ export function circuitConductorGuard(candidate: ElkNode, original: ElkNode) {
       a.bends > b.bends ||
       (!repaired && a.length - b.length > Math.max(10, b.length * 0.25) + 1e-7)
     )
-      return false;
+      return undefined;
   }
-  return (
-    [...after.values()].reduce((n, a) => n + Number(a.jogs.length > 0), 0) <
-    [...before.values()].reduce((n, a) => n + Number(a.jogs.length > 0), 0)
-  );
+  return { before, after };
 }

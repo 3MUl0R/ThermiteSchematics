@@ -1,4 +1,5 @@
-import { printableLabelGeometry } from "../symbols/printable-label.js";
+import { plannedCircuitCaption } from "./caption-plan.js";
+import { supportedCircuitLabels } from "./label-support.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
@@ -12,6 +13,8 @@ export function circuitDrawingContents(
   weights: ReadonlyMap<string, number>,
   diagnostics: Diagnostic[],
 ) {
+  const supported = supportedCircuitLabels(state);
+  state = { ...state, labels: supported.labels };
   const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode, n } = state;
   const contents = [
     ...wireSvg,
@@ -19,7 +22,9 @@ export function circuitDrawingContents(
       (p) =>
         `<circle data-circuit-junction="true" cx="${n(p.x)}" cy="${n(p.y)}" r=".55" fill="#17212b"/>`,
     ),
-    ...labels.map((l) => circuitWireLabel(l, state)),
+    ...labels.map((l) =>
+      circuitWireLabel(l, state, supported.baseFallbacks.has(l.index)),
+    ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
       return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
@@ -28,30 +33,20 @@ export function circuitDrawingContents(
   return contents;
 }
 
-function circuitWireLabel(l: Label, state: CircuitLabelState) {
-  const { cs, n } = state;
-  return `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${l.text
-    .split("\n")
-    .map((line, i) => circuitWireLabelLine(line, i, l, state))
-    .join("")}</g>`;
-}
-
-function circuitWireLabelLine(
-  line: string,
-  i: number,
+function circuitWireLabel(
   l: Label,
   state: CircuitLabelState,
+  basePlacementFallback: boolean,
 ) {
-  const { segments, text } = state;
-  const p = printableLabelGeometry(
-    { x: l.x, y: l.y + i * 3.1, width: l.width, height: 3.8 },
+  const { cs, n, text } = state;
+  const plans = l.text.split("\n").map((line, i) => ({
     line,
-    l.width - 1.5,
-    segments.filter((s) => s.index === l.index).map((s) => [s.a, s.b]),
-    2.5,
-    false,
+    ...plannedCircuitCaption(line, i, l, state, basePlacementFallback),
+  }));
+  return (
+    plans.map((p) => p.leader).join("") +
+    `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
   );
-  return text(p.x, p.baseline, line);
 }
 
 export function circuitDrawingResult(
