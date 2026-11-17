@@ -1,5 +1,3 @@
-import { acquisitionRequest } from "./acquisition-command.mjs";
-
 const repositories = [
   "blackettapplied/thermiteschematics",
   "3mul0r/thermiteschematics",
@@ -17,14 +15,14 @@ const operators = new Set([
 ]);
 const word = /^[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)*$/u;
 const booleans = new Set(["or", "and", "not"]);
-const repository = "(?:blackettapplied|3mul0r)/thermiteschematics";
+const repository = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/[a-z0-9_][a-z0-9_.-]*";
 const webIssuePath = new RegExp(
   "^/" + repository + "/(?:issues(?:/[1-9][0-9]*)?|pull/[1-9][0-9]*)/?$",
 );
 const apiIssuePath = new RegExp(
   "^/repos/" +
     repository +
-    "/(?:issues(?:/[1-9][0-9]*(?:/comments)?)?|pulls/[1-9][0-9]*)/?$",
+    "/(?:issues(?:/[1-9][0-9]*(?:/comments)?|/comments(?:/[1-9][0-9]*)?)?|pulls/[1-9][0-9]*)/?$",
 );
 const filters = {
   state: /^(?:open|closed|all)$/,
@@ -33,26 +31,6 @@ const filters = {
   sort: /^(?:created|updated|comments)$/,
   direction: /^(?:asc|desc)$/,
 };
-
-// Classification only; no normalization is executed as a shell command or URL.
-function normalize(input) {
-  if (typeof input !== "string") return null;
-  try {
-    let previous,
-      value = input;
-    do {
-      previous = value;
-      value = decodeURIComponent(value)
-        .normalize("NFKC")
-        .toLowerCase()
-        .replace(/\s+/gu, " ")
-        .trim();
-    } while (value !== previous);
-    return value;
-  } catch {
-    return null;
-  }
-}
 
 // Quotes are whole tokens, never a way to discard unparsed query text.
 function tokenize(query) {
@@ -67,8 +45,7 @@ function plainTerm(token) {
     .split(" ")
     .every((term) => word.test(term));
 }
-function approvedIssueSearch(input) {
-  const query = normalize(input);
+export function issueSearch(query) {
   if (!query) return false;
   const tokens = tokenize(query);
   if (!tokens || !tokens.every((t) => operators.has(t) || plainTerm(t)))
@@ -92,36 +69,26 @@ function issueParameters(url) {
     url.hash,
   );
 }
-function issueUrl(input) {
-  const target = normalize(input);
-  if (!target) return false;
-  try {
-    const url = new URL(target);
-    if (
-      !["https:", "http:"].includes(url.protocol) ||
-      url.username ||
-      url.password
-    )
-      return false;
-    const path =
-      url.host === "github.com"
-        ? webIssuePath.test(url.pathname)
-        : url.host === "api.github.com" && apiIssuePath.test(url.pathname);
-    return path && issueParameters(url);
-  } catch {
+export function issueUrl(url) {
+  if (
+    !["https:", "http:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
     return false;
-  }
+  const path =
+    url.host === "github.com"
+      ? webIssuePath.test(url.pathname)
+      : url.host === "api.github.com" && apiIssuePath.test(url.pathname);
+  return path && issueParameters(url);
 }
-
-// Search text and actual fetches have different allowlists.
-export function approvedIssueLookup(input, { search = false } = {}) {
-  if (search) return approvedIssueSearch(input);
-  if (typeof input !== "string") return false;
-  const request = acquisitionRequest(input);
-  const target = request?.url ?? input;
-  return issueUrl(
-    request?.url.startsWith("repos/")
-      ? "https://api.github.com/" + target
-      : target,
+export function jsonHeaders(headers = [], library = false) {
+  return headers.every(
+    (header) =>
+      /^accept:\s*(?:application\/json|application\/vnd\.github\+json)\s*$/i.test(
+        header,
+      ) ||
+      (library &&
+        /^accept:\s*application\/vnd\.github\.raw\+json\s*$/i.test(header)),
   );
 }

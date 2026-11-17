@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { score } from "./score-log.mjs";
-import { approvedIssueLookup } from "./issue-lookup.mjs";
+import { classifyToolCall } from "./github-call.mjs";
+const approvedIssueLookup = (input, { search = false } = {}) =>
+  classifyToolCall({ name: search ? "web_search" : "open_page", input })
+    .class === "issue-lookup";
 const metric = (command) =>
   score({
     engineRoots: ["/engine"],

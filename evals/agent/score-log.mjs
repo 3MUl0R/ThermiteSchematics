@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 // Port of the GI scorer, extended to independently verify both run boundaries.
-import { readFileSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sourceScanInput } from "./source-scan-input.mjs";
-import { approvedIssueLookup } from "./issue-lookup.mjs";
+import { classifyToolCall, pathText, strings } from "./github-call.mjs";
+import { sourceRoots } from "./local-source.mjs";
 import { copiedContributorGuide } from "./contributor-policy.mjs";
 import { diff } from "./snapshot.mjs";
-import { scopeAcquisition } from "./source-acquisition.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 const stable = (value) =>
   value && typeof value === "object"
@@ -262,103 +261,21 @@ export function score({
       .filter((e) => e.type === "tool-result")
       .map((e) => [e.id, e.output]),
   );
-  const strings = (value) =>
-    typeof value === "string"
-      ? [value]
-      : Array.isArray(value)
-        ? value.flatMap(strings)
-        : value && typeof value === "object"
-          ? Object.values(value).flatMap(strings)
-          : [];
-  const pathText = (text) =>
-    text
-      .replaceAll("\\", "/")
-      .replaceAll("/private/tmp/", "/tmp/")
-      .replaceAll("/private/var/", "/var/")
-      .toLowerCase();
-  const roots = engineRoots
-    .flatMap((root) => {
-      try {
-        return [root, realpathSync(root)];
-      } catch {
-        return [root];
-      }
-    })
-    .map(pathText);
-  const readPattern = roots.map(
-    (root) =>
-      new RegExp(
-        root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=[/\\s'\";)&\\]]|$)",
-      ),
-  );
-  const sourceUrl =
-    /(?:https?|ssh):\/\/(?:(?:git@)?github\.com\/[^/\s]+\/thermiteschematics(?=[/.?#\s'"\)]|$)|raw\.githubusercontent\.com\/[^/\s]+\/thermiteschematics\/|api\.github\.com\/repos\/[^/\s]+\/thermiteschematics(?:\/|$))/i;
+  const roots = sourceRoots(engineRoots);
   for (const event of normalized.events.filter((e) => e.type === "tool")) {
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
-    const values = strings(event.input),
-      input = values.join("\n"),
-      search = event.name === "web_search" && event.lookupKind !== "fetch",
-      scanInput = sourceScanInput(event.name, values),
-      acquisition = search
-        ? { input: scanInput }
-        : scopeAcquisition(scanInput, allowedLibraryPaths),
-      scannedInput = acquisition.input,
-      canonicalInput = pathText(scannedInput);
-    let readsSource =
-      readPattern.some((re) => re.test(canonicalInput)) ||
-      sourceUrl.test(scannedInput) ||
-      (event.name === "web_search" &&
-        /(?:github\.com\/[^/\s]+\/thermiteschematics(?=[/\s?#]|$)|\brepo:[^/\s]+\/thermiteschematics(?=[/\s]|$))/i.test(
-          scannedInput,
-        )) ||
-      /git@github\.com:[^/\s]+\/thermiteschematics(?:\.git)?(?=[/\s'";)]|$)/i.test(
-        scannedInput,
-      ) ||
-      /\bgh\s+(?:repo\s+(?:clone|view)|api)\b[^\n]*\b[^/\s]+\/thermiteschematics(?:\.git)?(?=[/\s'";)]|$)/i.test(
-        scannedInput,
-      ) ||
-      (/\bgh\s+search\s+code\b/i.test(scannedInput) &&
-        !/(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))/.test(scannedInput)) ||
-      (/\bgh\s+(?:search\s+code|browse)\b/i.test(scannedInput) &&
-        /(?:\brepo:|(?:^|\s)(?:-R|--repo)(?:=|\s+))[^/\s'";]+\/thermiteschematics(?=[/\s'";)]|$)/i.test(
-          scannedInput,
-        )) ||
-      (/\bgh\s+api\s+graphql\b/i.test(scannedInput) &&
-        (/(?:^|\s)(?:-F|--field)(?:=|\s+)[\w-]+=["']?thermiteschematics(?=[\s"';)]|$)/i.test(
-          scannedInput,
-        ) ||
-          /repository\s*\([^)]*\bname\s*:\s*\\?["']thermiteschematics\\?["']/i.test(
-            scannedInput,
-          ) ||
-          /(?:\brepo:|\brepository\s*[:=]\s*)[^/\s'";]+\/thermiteschematics(?=[\s'";)]|$)/i.test(
-            scannedInput,
-          )));
-    let readsLocal = readPattern.some((re) => re.test(canonicalInput));
-    if (!readsLocal)
-      for (const token of scannedInput.match(
-        /(?:[a-zA-Z]:[\\/]|\/)[^\s'";&)]+/g,
-      ) ?? [])
-        try {
-          if (
-            roots.some(
-              (root) =>
-                pathText(realpathSync(token)) === root ||
-                pathText(realpathSync(token)).startsWith(root + "/"),
-            )
-          )
-            readsLocal = true;
-        } catch {}
-    readsSource ||= readsLocal;
+    const input = strings(event.input).join("\n");
+    const classified = classifyToolCall(event, {
+      engineRoots,
+      allowedLibraryPaths,
+    });
     if (context === "runtime") {
-      if (!readsLocal && acquisition.library)
+      if (classified.libraryAcquisition)
         libraryAcquisitions.push({ id: event.id, input });
-      if (!readsLocal && acquisition.issue)
+      if (classified.class === "issue-lookup")
         issueLookups.push({ id: event.id, input });
-      if (readsSource || search) {
-        if (!readsLocal && approvedIssueLookup(input, { search }))
-          issueLookups.push({ id: event.id, input });
-        else if (readsSource) sourceReads.push({ id: event.id, input });
-      }
+      if (classified.class === "source-read")
+        sourceReads.push({ id: event.id, input });
     }
     const guideCommand = /thermite[^\n]*\bguide\b/.test(input);
     const directPath =

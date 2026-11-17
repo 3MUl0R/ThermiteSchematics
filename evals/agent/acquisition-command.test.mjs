@@ -1,6 +1,11 @@
 import { score } from "./score-log.mjs";
 import { expect, it } from "vitest";
-import { allowedLibraryAcquisition } from "./library-acquisition.mjs";
+import { classifyToolCall } from "./github-call.mjs";
+const allowedLibraryAcquisition = (input, allowedLibraryPaths) =>
+  !!classifyToolCall(
+    { name: "command_execution", input },
+    { allowedLibraryPaths },
+  ).libraryAcquisition;
 const paths = ["libraries/field-interfaces", "libraries/industrial-pilot"];
 const url =
   "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/fac3c43/libraries/field-interfaces/library.json";

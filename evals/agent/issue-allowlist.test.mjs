@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { approvedIssueLookup } from "./issue-lookup.mjs";
+import { classifyToolCall } from "./github-call.mjs";
+const approvedIssueLookup = (input, { search = false } = {}) =>
+  classifyToolCall({ name: search ? "web_search" : "open_page", input })
+    .class === "issue-lookup";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 

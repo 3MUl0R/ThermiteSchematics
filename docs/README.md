@@ -379,7 +379,7 @@
 - [ELK source availability](../scripts/runtime-package/third-party/ELK-SOURCE.md)
 - [Engine observations (unpublished evals v1.0)](../evals/engine/BASELINE.md)
 - [Fixed engine evaluations (unpublished v1.0)](../evals/README.md)
-- [Fresh-agent evaluator (E2 v1.14.0)](../evals/agent/README.md)
+- [Fresh-agent evaluator (E2 v1.15.0)](../evals/agent/README.md)
 - [Installed CLI protocol evidence](../evals/agent/fixtures/cli/README.md)
 - [One component research assignment](../scripts/library-batch/WORKER.md)
 - [RM1 minimal loads regression](../packages/core-library/test/fixtures/rm1/README.md)

@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.14.0)
+# Fresh-agent evaluator (E2 v1.15.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -568,32 +568,45 @@ aliases. Contributor fixtures use a root-only private Git `info/exclude` entry
 for linked dependencies; the engine's `node_modules/` rule still permits an
 ordinary source file with that name.
 
-Eval **1.14.0** grants issue-lookup exemptions by an allowlist. Search text is
-iteratively percent-decoded, Unicode NFKC-normalized, lowercased and whitespace
-collapsed until stable; malformed encodings are refused. Every token must be a
-plain word, a whole quoted phrase of plain words, or a fixed operator:
+Eval **1.15.0** classifies each tool call once as `issue-lookup`, `source-read`
+or `other`. It replaces the independent URL-source detector and issue exemption.
+Structured fetch tools use only their URL, never their prompt; search tools use
+only the query and explicit repository scope. Shell GET requests parse literal
+curl/wget/gh argv, headers and flags. Unknown flags or dynamic commands cannot
+acquire an exemption. Local engine reads or a second source access dominate an
+otherwise permitted issue fetch.
+
+URLs are iteratively percent-decoded, Unicode NFKC-normalized and lowercased,
+with IDNA/fullwidth-dot folding and WHATWG dot-segment resolution. GitHub hosts
+(including API, raw, codeload, objects, user-images and gist) and unrecognized
+GitHub tools default to source reads. Malformed encodings cannot hide a visible
+GitHub host. Normalization is classification only; it never executes input.
+
+Search tokens retain the 1.14 allowlist: plain words/whole quoted phrases or
 `site:github.com/<owner>/ThermiteSchematics/issues`,
 `repo:<owner>/ThermiteSchematics` paired with `is:issue` or `is:pr`, and
-`in:title,body,comments`. Owners are only `BlackettApplied` and `3MUl0R`. At least
-one complete issue scope is required. Words contain letters/numbers with
-optional internal hyphens/underscores. Boolean operators, unknown operators,
-URLs (including issue URLs), hosts, dots and path separators are not search
-terms. A failed exemption is ordinary search/source scoring, never an error.
+`in:title,body,comments`; owners are `BlackettApplied` and `3MUl0R`. Boolean
+operators, URLs, unknown operators, hosts, dots and path separators are refused.
+Refusal produces ordinary/source classification, never an execution error.
 
-Actual fetches are classified separately from search text. Native `open_page`
-actions use their actual URL; native `search` actions use their actual query,
-not display text. A URL-looking query is still a search. Literal GET commands
-retain their existing guarded acquisition parsing. Decoded URLs must parse with
-WHATWG URL, use HTTP(S), have no credentials/nondefault port, and match exact
-`github.com` issue/list or numbered PR paths, or the `api.github.com/repos/...`
-equivalents (including numbered issue comments). Raw/code/archive/file paths
-are not permitted. Query keys are limited to `state`, `page`, `per_page`, `sort`
-and `direction`, with fixed enum/numeric values and no duplicates. Only empty or
-numeric issue/comment/discussion anchors are allowed; `raw`, `plain=1`, unknown
-parameters and path-bearing fragments fail. Normalization is classification
-only and does not execute decoded commands or URLs.
+Fetched HTTP(S) URLs must have no credentials/nondefault port and exactly match
+GitHub issue/list or numbered PR conversation paths, or their REST equivalents
+(including issue comments). Files, commits, diff/patch suffixes, raw/plain/diff
+parameters and path-bearing fragments cannot acquire an exemption. Metadata
+query keys remain limited to `state`, `page`, `per_page`, `sort`, `direction`,
+with fixed values and no duplicates. Numeric issue/comment anchors are allowed.
+Shell issue requests accept no header override or only `application/json` and
+`application/vnd.github+json` Accept values; diff, patch and `.raw+json` media
+are refused. Literal `gh issue view`/`gh pr view` requests with explicit repo and
+number use the same conversation URL policy. Their `--json` fields are limited
+to conversation metadata; files/commits are refused. T07 alone still permits GET of its
+declared optional-library paths, including their raw JSON representation;
+engine paths never receive that permission.
 
-All 12 retained transcripts rescore identically against 1.13, including the
-recorded site query and two typed issue-page opens. Original manifest/transcript
-hashes and historical replay identities remain unchanged; no category score or
-new model run is claimed.
+All 12 retained transcripts are rescored before/after without rewriting their
+collection identities. Eight have identical full transcript metrics. Newly
+structured MCP issue searches add two issue lookups to prior D-pump, three to
+prior T07-fresh and one to current D-pump. Current D-conveyor adds one source
+read: its MCP query has `repo:` without the required `is:issue`/`is:pr`. Every
+other metric is identical. Original manifests/transcripts and historical replay
+files remain unchanged; these are Codex-only replays, not a category score.
