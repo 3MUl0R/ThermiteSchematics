@@ -85,7 +85,7 @@ describe("alpha reference help", () => {
       "write .csv, .html, .pdf, single-sheet .svg, or .json",
     );
     expect(help).toContain(
-      "return the report packet (SVG sheets and metadata) as JSON",
+      "return the report packet (SVG sheets, printable HTML and metadata) as JSON",
     );
     await expect(
       execFile(process.execPath, [cli, "report", "invalid"]),

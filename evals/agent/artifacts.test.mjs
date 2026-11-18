@@ -65,13 +65,17 @@ it("regeneration rejects forged packet metadata and a header-only unrelated PDF"
     }));
     expect((await regeneratePacket(ctx)).pass).toBe(false);
     mkdirSync(join(ctx.project, "drawings"), { recursive: true });
-    for (const ext of ["json", "html", "pdf"])
+    for (const ext of ["json", "pdf"])
       writeFileSync(
         join(ctx.project, `drawings/packet.${ext}`),
         readFileSync(join(ctx.evidence, `regenerated-packet.${ext}`)),
       );
-    expect((await comparePacketArtifacts(ctx)).pass).toBe(true);
     const original = readFileSync(join(ctx.project, "drawings/packet.json"));
+    writeFileSync(
+      join(ctx.project, "drawings/packet.html"),
+      JSON.parse(original).html,
+    );
+    expect((await comparePacketArtifacts(ctx)).pass).toBe(true);
     write(join(ctx.project, "drawings/packet.json"), {
       sheets: [
         { view: { kind: "terminals" } },

@@ -137,7 +137,9 @@ hinting; SVG/HTML delivery additionally removes hinting.
 CLI SVG file delivery embeds a deterministic per-document WOFF subset; packet
 HTML has one shared font block in its head. Fontkit 2.0.4 supplies glyph selection
 and compound closure; pure-JS pako 0.2.9 avoids native/platform compression
-variation. Raw render/agent JSON and goldens contain family names only. PDFKit
+variation. The packet JSON's `html` contains the standalone HTML export,
+including that font block. Individual sheet SVGs in packet JSON, agent
+`create-view` SVGs and SVG goldens carry font family names only. PDFKit
 embeds its own subsets from the same feature-free TTF faces. The full multi-face
 block is hash-pinned, and each standalone SVG is limited to 61,440 font bytes.
 The shipped-example test and E3 independently check that limit. Original OFL
@@ -150,7 +152,8 @@ and outlines remain unchanged. The pinned JavaScript encoder and compressor
 produce deterministic bytes without platform font APIs. PDFKit continues to
 subset the full feature-free bundled faces itself; this SVG hint removal does
 not change that PDF path. Font-budget overflow returns `R007`, exit 1; export
-`.html` or `.pdf` for SVG overflow; use `.pdf` for HTML overflow.
+`.html` or `.pdf` for SVG overflow. For HTML overflow, both packet `.html` and
+`.json` exports refuse. Use `.pdf` instead.
 
 Thermite Math is subset only from the document's NFC characters that Regular
 lacks; ASCII and other primary-face text are not duplicated into the fallback.

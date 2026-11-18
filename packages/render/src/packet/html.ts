@@ -1,4 +1,5 @@
 import { PACKET_VIEWER_SCRIPT } from "../packet-viewer.js";
+import { embedPrintableFont } from "../printable-font.js";
 
 import {
   escapeXmlAttribute as attr,
@@ -10,6 +11,14 @@ import { n } from "./svg.js";
 import { sheetLabel } from "./page.js";
 
 export function printPacketHtml(
+  sheets: readonly RenderedSheet[],
+  page: PaperPage,
+  title: string,
+): string {
+  return embedPrintableFont(packetMarkup(sheets, page, title));
+}
+
+function packetMarkup(
   sheets: readonly RenderedSheet[],
   page: PaperPage,
   title: string,

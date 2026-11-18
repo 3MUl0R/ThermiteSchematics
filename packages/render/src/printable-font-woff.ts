@@ -1,8 +1,10 @@
 import { createRequire } from "node:module";
 // Pure JS compression, pinned along with fontkit: no native zlib/platform variation.
-const { deflate } = createRequire(import.meta.url)("pako") as {
+const {
+  deflate,
+}: {
   deflate(bytes: Uint8Array, options: { level: number }): Uint8Array;
-};
+} = createRequire(import.meta.url)("pako");
 export const align = (n: number) => (n + 3) & ~3;
 const checksum = (b: Buffer) => {
   let sum = 0;

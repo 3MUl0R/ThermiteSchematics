@@ -172,8 +172,8 @@ function printingOptions(command: Command, report = false): Command {
     .option(
       "--json",
       report
-        ? "return the report packet (SVG sheets and metadata) as JSON"
-        : "return all SVG sheets and metadata as JSON",
+        ? "return the report packet (SVG sheets, printable HTML and metadata) as JSON"
+        : "return all SVG sheets, printable HTML and metadata as JSON",
     )
     .addOption(
       new Option("--paper <size>", "override project paper size").choices([
@@ -533,7 +533,7 @@ async function producePacket(
       content = await packetPdf(result.value, compiled.ir.project.name);
     else if (extension === ".csv")
       throw new Error("Use thermite report <kind> to export a CSV schedule.");
-    else content = embedPrintableFont(result.value.html);
+    else content = result.value.html;
   } catch (error) {
     const failure = fontBudgetFailure(error);
     if (!failure) throw error;

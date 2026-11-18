@@ -34,7 +34,6 @@ export async function terminalPlanFixture(
   const result = await renderSchematicPacket(c.ir, request);
   if (!result.ok) throw Error(JSON.stringify(result.error));
   const packet = result.value;
-  for (const s of packet.sheets) s.svg = embedPrintableFont(s.svg);
   const directory = await mkdtemp(join(tmpdir(), "thermite-check7-"));
   return measureTerminalPlan({ packet, ir: c.ir, request, directory }, page);
 }
@@ -46,7 +45,17 @@ export async function measureTerminalPlan(x, page) {
     printPacketHtml(x.packet.sheets, x.packet.page, "CHECK7"),
   );
   const geometries = [];
-  await measurePacketGeometry(page, html, x.packet, x.ir, geometries);
+  const standaloneSheets = x.packet.sheets.map((sheet) => ({
+    ...sheet,
+    svg: embedPrintableFont(sheet.svg),
+  }));
+  await measurePacketGeometry(
+    page,
+    html,
+    { ...x.packet, sheets: standaloneSheets },
+    x.ir,
+    geometries,
+  );
   const tables = scopeTables(
     x.packet,
     geometries,

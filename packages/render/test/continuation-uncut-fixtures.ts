@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
-import type { SchematicPacketRequest } from "../src/sheets.js";
+import type { RenderedPacket, SchematicPacketRequest } from "../src/sheets.js";
 
 // Bun 1.4.2 Linux x64 returns one-ULP differences from Math.hypot in the raw
 // returnLocality.distanceMm metadata. Both Ubuntu jobs in run 43777116134
-// agree; every SVG and every other packet field matches the shared reference.
-// Keep whole-packet byte equality, with reviewed hashes for that platform.
+// agree. Each SVG and the other layout data match the shared reference.
+// Keep the reviewed layout hashes for that platform.
 export function uncutReferenceKey(
   name: "init-starter" | "motor-starter",
   platform = process.platform,
@@ -13,6 +14,15 @@ export function uncutReferenceKey(
   return name === "motor-starter" && platform === "linux" && arch === "x64"
     ? "motor-starter-linux-x64"
     : name;
+}
+
+/** Hash the layout bytes, including HTML markup, without the print font payload. */
+export function uncutLayoutDigest(packet: RenderedPacket): string {
+  const fontStyle = /<style data-thermite-font="[^"]+">[^<]*<\/style>/gu;
+  if (packet.html.match(fontStyle)?.length !== 1)
+    throw Error("Expected one packet HTML font block");
+  const layout = { ...packet, html: packet.html.replace(fontStyle, "") };
+  return createHash("sha256").update(JSON.stringify(layout)).digest("hex");
 }
 
 export async function uncutFixture(name: "init-starter" | "motor-starter") {

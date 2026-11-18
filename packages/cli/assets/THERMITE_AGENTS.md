@@ -92,6 +92,7 @@ Info exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at added sources.
 
 Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.
+The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.
 
 ## Offline project workflows
 

@@ -163,7 +163,8 @@ HTML is a self-contained packet of vector SVG sheets. It fits the browser window
 printing keeps the physical paper dimensions. Use matching paper, 100% scale,
 and disable browser headers and footers. Export a PDF directly by choosing a `.pdf` output filename; no browser or
 external converter is needed. The PDF embeds its fonts and physical page sizes. A `.svg` output is available for single-sheet views. A `.json` output
-contains all sheet SVGs, page settings, and continuation metadata. The CLI refuses
+contains all sheet SVGs, page settings, continuation metadata, and the same
+HTML document with embedded print fonts in its `html` field. The CLI refuses
 to silently truncate a multi-sheet drawing to one SVG.
 
 Use `--layout compact` to search three base ELK spacing profiles, additional
