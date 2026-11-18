@@ -1,21 +1,17 @@
 import { measureText } from "../text-metrics.js";
 import type { NavigationGeometry } from "./navigation-walk.js";
-import type { ElectricalIr, ConductiveElementId } from "@thermite/compiler";
+import type { ElectricalIr } from "@thermite/compiler";
 import type { ScheduleReferences, EndpointSheetZones } from "@thermite/query";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
 import { wireScheduleTerminalKeys } from "./wire-schedule-terminals.js";
-import { sourceIncidences } from "./navigation-incidence.js";
+import { incidenceKey, sourceIncidences } from "./navigation-incidence.js";
+import { scheduleConductorKey } from "./terminal-strip-landings.js";
 import { navigationGeometry } from "./navigation-walk.js";
 import { project, inside, expand } from "../device-legend/geometry.js";
 import { bounds } from "./page.js";
 import { destinationToken, navigationZone } from "./navigation-location.js";
 import { escapeXmlText } from "../svg/escape.js";
 import { required } from "../presentation/util.js";
-
-const rowKey = (id: ConductiveElementId) =>
-  id.kind === "cable_conductor"
-    ? JSON.stringify([id.cableUid, id.conductorId])
-    : id.uid;
 
 /** Exact native terminal markers supply endpoint landings across every issued
  * drawing. A device, net peer or inventory row never supplies a landing. */
@@ -24,6 +20,7 @@ export function wireScheduleLocations(
   drafts: readonly Draft[],
   sheets: readonly RenderedSheet[],
   page: PaperPage,
+  stripLocations?: ReadonlyMap<string, string>,
 ): ReadonlyMap<string, readonly (string | undefined)[]> {
   const terminals = new Map<string, string>();
   const incidences = sourceIncidences(ir);
@@ -61,14 +58,15 @@ export function wireScheduleLocations(
   }
   const result = new Map<string, (string | undefined)[]>();
   for (const incidence of incidences) {
-    const location = terminals.get(
-      JSON.stringify([
-        incidence.terminal.deviceUid,
-        incidence.terminal.terminalKey,
-      ]),
-    );
+    const location =
+      terminals.get(
+        JSON.stringify([
+          incidence.terminal.deviceUid,
+          incidence.terminal.terminalKey,
+        ]),
+      ) ?? stripLocations?.get(incidenceKey(incidence));
     if (location === undefined) continue;
-    const key = rowKey(incidence.element),
+    const key = scheduleConductorKey(incidence.element),
       ends = result.get(key) ?? [];
     ends[incidence.end] = location;
     result.set(key, ends);
@@ -123,27 +121,27 @@ function scheduleReferences(
 }
 
 /** Replace reserved single-line cells without moving any row or sheet. */
+const isWireSchedule = (d: Draft) =>
+  d.view.format === "documentation-view/0.1" && d.view.kind === "wires";
+
 export function finalizeWireSchedules(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
   sheets: RenderedSheet[],
   page: PaperPage,
+  stripLocations: ReadonlyMap<string, string>,
 ) {
-  if (
-    !drafts.some(
-      (d) =>
-        d.view.format === "documentation-view/0.1" && d.view.kind === "wires",
-    )
-  )
-    return;
-  const locations = wireScheduleLocations(ir, drafts, sheets, page);
+  if (!drafts.some(isWireSchedule)) return;
+  const locations = wireScheduleLocations(
+    ir,
+    drafts,
+    sheets,
+    page,
+    stripLocations,
+  );
   const references = scheduleReferences(ir, locations);
   for (const [i, draft] of drafts.entries()) {
-    if (
-      draft.view.format !== "documentation-view/0.1" ||
-      draft.view.kind !== "wires"
-    )
-      continue;
+    if (!isWireSchedule(draft)) continue;
     draft.scheduleReferences = references;
     const sheet = required(sheets[i], "Missing wire schedule sheet");
     let svg = sheet.svg;

@@ -155,12 +155,16 @@ export function buildPacketCoverage(
 /** Every drawing family uses sheet references; report/index references are kept
  * separate. This audits device presence, independently of the narrower conductor
  * and function coverage above. */
+type CoverageReference = Pick<
+  import("./packet/types.js").SheetReference,
+  "deviceUid" | "representation"
+>;
 export function packetDeviceCoverageDiagnostics(
   ir: Readonly<ElectricalIr>,
   sheets: readonly {
     number: number;
     schematic: boolean;
-    references: readonly { deviceUid: string; representation?: "terminal" }[];
+    references: readonly CoverageReference[];
   }[],
 ): Diagnostic[] {
   // Reports make no schematic coverage claim. Every actual drawing family counts.

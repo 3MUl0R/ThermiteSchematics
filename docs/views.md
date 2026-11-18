@@ -505,7 +505,9 @@ Each sheet includes references identifying the visible device/function and its
 A-D / 1-6 zone. Cable endpoints and schedule rows also contribute references.
 `index: true` appends a final-sheet index and a device/function reference
 section. The index includes its own pages and the reference pages; its device
-column describes content sheets only. Repeated titles are qualified by their
+column describes content sheets only. Graphical terminal strips list their
+painted devices in the index. Device references list those locations under
+`Terminal strip`, including in drawings-only references. Repeated titles are qualified by their
 final sheet number, which is a destination rather than an authored-view identity.
 Index capacity is reserved within the 100-sheet packet limit; a packet that
 cannot close within that bound refuses. `references: false` omits the reference

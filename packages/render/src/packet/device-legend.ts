@@ -22,6 +22,7 @@ import { LEGEND_PACKET_SHEET_LIMIT } from "./legend-search-limits.js";
 import { centroidReferences } from "./navigation-occurrences.js";
 import { finalizeNavigation } from "./navigation-finalize.js";
 import { finalizeWireSchedules } from "./wire-schedule-locations.js";
+import { locateStripSheets } from "./terminal-strip-landings.js";
 export interface LegendViewDrafts {
   navigationView?: import("./navigation-types.js").NavigationView;
   drafts: Draft[];
@@ -79,7 +80,8 @@ export function legendSheets(
     sheets[i] = { ...sheet, svg: legend.value };
   }
   const finalizedDrafts = structuredClone(drafts);
-  finalizeWireSchedules(ir, finalizedDrafts, sheets, page);
+  const stripLocations = locateStripSheets(ir, finalizedDrafts, sheets, page);
+  finalizeWireSchedules(ir, finalizedDrafts, sheets, page, stripLocations);
   const finalized = finalizeNavigation(ir, finalizedDrafts, sheets, {
     notice: includeNotice,
     page,
@@ -108,7 +110,9 @@ function locatedSheets(
   centroidReferences(located, finalized.navigation.occurrences);
   return finalized.sheets.map((sheet, i) => ({
     ...sheet,
-    references: located[i]?.references ?? sheet.references,
+    references: drafts[i]?.terminalStrip
+      ? sheet.references
+      : (located[i]?.references ?? sheet.references),
   }));
 }
 
