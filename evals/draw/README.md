@@ -20,6 +20,36 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b),
+without changing current corpus rows or pins. Rooted power requests now have
+independent native topology coverage: conductor incidences and two-terminal
+power/protection functions connect the selected native load terminals to native
+sources. These are symbolic traversal edges, never electrical net joins.
+Declared supply terminals and native potential sources end the traversal, so a
+rooted view does not acquire obligations from another load on a shared supply.
+An eligible protection function lies on a simple path from a load terminal to
+one of these boundaries. A dead-end branch or a loop attached at one bus
+junction cannot contribute a protection obligation. A connected load with no
+reachable supply or protection candidate is outside this check when a supply is
+declared elsewhere. This covers unmodeled transformer or drive stages without
+inferring connectivity. A disconnected root or an unresolved reachable
+protection candidate still reports infrastructure.
+An unavoidable protection function with a detached native contact must have a
+full measured appearance in that authored view, even if its ink and all its
+locators disappear together. A known omission fails with the native UID/function,
+request-view and issued-sheet locator; no missing box is invented. Ambiguous
+branch selection or unavailable source/topology/view measurement is explicit
+infrastructure. Another authored view cannot discharge the missing appearance.
+
+The #398 population forwards only shared native-part `*-unavailable` findings as
+infrastructure. Real drawing defects remain failures of the existing native-part
+DQ-08 rows, while per-port navigation is still judged independently, as pass or
+fail. Completely missing parts still diagnose unavailable selected port ink.
+Complete historical 5.25 and 5.26 summaries remain readable. This is checker maintenance,
+not a new navigation convention or permission to re-pin. Positive, missing-ink,
+ambiguous-path, missing-data and cross-view controls supplement the existing
+navigation mutants; the compiled packing fixture is checked in both flows.
+
 Version **5.24** adopts the repaired #396 and #398 oracles in strict **DQ-08**
 (CHECK6, #406.1). This explicitly extends DQ-08 from terminal/part references to
 same-device detached protection/contact function navigation and individually
