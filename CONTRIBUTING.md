@@ -156,9 +156,9 @@ separate [performance gate](evals/README.md#required-performance-gate-for-render
 compares compile and packet medians against the PR parent: by default the
 merge-base of HEAD with `origin/dev`, or an explicit `--base-rev <revision>`.
 It takes 21 compile and five packet samples per engine, confirms a failing row
-once, and fails when both exceed +20%. The committed baseline is historical
-context only; category 7's anchor is separate. Keep both measurements and load
-evidence with the review.
+once, and fails when both exceed +20%. The dated dev baseline anchors category 7
+and supplies historical context for the live gate. Keep both measurements and
+load evidence with the review.
 
 ## Component library submissions
 

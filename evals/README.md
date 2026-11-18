@@ -221,12 +221,11 @@ noise. Run timing trials separately from tests and other heavy jobs. High load
 (1-minute average above half the logical CPU count) prints a warning, never
 raises the threshold. Load averages are zero on platforms without them.
 
-The committed [historical baseline](../scripts/perf-baseline.json), measured on
-dev `fac3c432dcc7ae63014fa1a5d1f7df2842b9d8b5`, is printed as context only. It
-neither selects the PR base nor changes category 7's historical scoring anchor
-(DECISIONS #26). Different historical CPU/memory/OS/Bun metadata warns instead
-of preventing live base/head measurement. `--record-baseline <file.json>` is an
-explicit context collection mode, not a scoring or per-PR baseline update.
+Category 7 uses a dated dev baseline (Decision #26). Use
+`--record-baseline <file.json>` on a clean dev checkout to refresh it. The
+per-PR gate prints the dated medians alongside its live base and head
+measurements. A machine or runtime mismatch emits a warning and the live
+comparison proceeds. See the [recorded dev baseline](../scripts/perf-baseline.json).
 
 Exit codes: **0** passes; **1** is a confirmed timing regression; **2** is setup,
 protocol, invalid timing data or base-side failure; **3** is head correctness
