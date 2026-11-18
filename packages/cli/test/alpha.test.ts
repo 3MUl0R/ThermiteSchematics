@@ -69,7 +69,7 @@ describe("alpha reference help", () => {
     ]);
     expect(stderr).toBe("");
     expect(stdout).toContain(
-      "thermite view <designation> --conductors -o drawings/cable.pdf",
+      "thermite view <designation> --conductors -o <file>.pdf",
     );
   });
   it("lists report kinds, CSV output and report-packet JSON with clean help streams", async () => {

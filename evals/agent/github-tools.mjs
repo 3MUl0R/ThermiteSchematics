@@ -23,22 +23,61 @@ const fields = {
     "perPage",
   ],
 };
-const writes = new Set([
-  "create_issue",
-  "update_issue",
-  "issue_write",
-  "add_issue_comment",
-  "create_pull_request",
-  "update_pull_request",
-  "merge_pull_request",
-  "add_comment_to_pending_review",
-  "pull_request_review_write",
+// This allowlist identifies reads for write accounting. It does not grant
+// a source-read exemption (for example, search_code and get_file_contents).
+const reads = new Set([
+  ...Object.keys(fields),
+  "get_file_contents",
+  "get_repository",
+  "get_commit",
+  "list_branches",
+  "list_commits",
+  "list_issues",
+  "list_pull_requests",
+  "get_pull_request",
+  "get_issue",
+  "get_issue_comments",
+  "get_pull_request_comments",
+  "get_pull_request_files",
+  "get_pull_request_diff",
+  "get_pull_request_reviews",
+  "get_release",
+  "get_latest_release",
+  "list_releases",
+  "list_tags",
+  "list_workflows",
+  "list_workflow_runs",
+  "get_workflow_run",
+  "get_me",
+  "search",
+  "search_code",
+  "search_repositories",
+  "search_users",
+  "search_commits",
+  "search_branches",
+  "search_pull_requests",
 ]);
 const deniedMessage =
   "MCP tool call requires approval, but approval policy is never";
 
 function namedOperation(event) {
   return /^codex_apps\.github\.(\w+)$/.exec(event.name ?? "")?.[1];
+}
+function connectorOperation(event) {
+  const name = event.name ?? "";
+  const operation = namedOperation(event);
+  if (operation) return operation;
+  if (
+    (/^mcp__/i.test(name) &&
+      /github/i.test(name.split("__").slice(1, -1).join("__"))) ||
+    (event.mcp && /github/i.test(name)) ||
+    /github/i.test(event.server ?? "")
+  )
+    return (event.tool ?? name.split("__").at(-1))
+      .split(/[.:/]/)
+      .at(-1)
+      .toLowerCase();
+  return null;
 }
 function matchingReceipt(event, receipt, operation) {
   return (
@@ -111,19 +150,21 @@ function conversationResult(issue, repository, pullOnly) {
     return false;
   // Conversation bodies can contain prose and snippets. Source locators or a
   // separate payload field are not evidence for this exemption.
-  if (/^\s*(?:```|~~~)/m.test(issue.body ?? "")) return false;
-  const text = canonicalText(JSON.stringify(issue)).text;
-  return !/(?:githubusercontent\.com|\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.diff\b|\.patch\b|\/(?:packages\/[^/]+\/src|evals\/agent)\/)/u.test(
+  if (/^\s*(?:```|~~~)|^(?: {4}|\t)[^\S\r\n]*\S/m.test(issue.body ?? ""))
+    return false;
+  const text = canonicalText(JSON.stringify(issue).replaceAll("\\", "/")).text;
+  return !/(?:githubusercontent\.com|\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.diff\b|\.patch\b|(?:^|[^\p{L}\p{N}_.-])(?:packages\/[^/\s]+\/src|evals\/agent)\/)/u.test(
     text,
   );
 }
 
 // Structured receipts are supplied only by transcript normalization, never
 // extracted from tool arguments or inferred from agent-authored messages.
-export function githubEvidence(event, receipt) {
-  const operation = namedOperation(event);
-  const matches = matchingReceipt(event, receipt, operation);
-  if (writes.has(operation)) {
+export function githubEvidence(event, result) {
+  const receipt = result?.mcp;
+  const operation = connectorOperation(event);
+  const matches = matchingReceipt(event, receipt, namedOperation(event));
+  if (operation && !reads.has(operation)) {
     const denied =
       matches &&
       receipt.status === "failed" &&
@@ -132,14 +173,21 @@ export function githubEvidence(event, receipt) {
       receipt.error.message === deniedMessage;
     return {
       class: denied ? "attempted-write" : "source-read",
-      attemptedWrite: denied
-        ? "denied-before-execution"
-        : matches && receipt.status === "completed"
-          ? "completed"
-          : "unverified",
+      attemptedWrites: [
+        denied
+          ? "denied-before-execution"
+          : matches && ["completed", "failed"].includes(receipt.status)
+            ? receipt.status
+            : result?.toolError === true
+              ? "failed"
+              : result?.toolError === false
+                ? "completed"
+                : "unverified",
+      ],
     };
   }
   if (
+    !namedOperation(event) ||
     !["search_issues", "search_prs"].includes(operation) ||
     (!event.mcp && !receipt)
   )

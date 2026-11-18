@@ -207,6 +207,7 @@ export function normalizeTranscript(
             type: "tool-result",
             id: block.tool_use_id,
             output: block.content,
+            toolError: block.is_error === true,
           });
     if (row.type === "result") {
       const typed = (value) => {

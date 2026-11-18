@@ -1,23 +1,22 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
-import { executedOutput } from "./shell-parts.mjs";
+import { decodedShellBody, executedOutput } from "./shell-parts.mjs";
 // Quoted Markdown here-docs are authored report data, not source requests.
-export function sourceScanInput(name, values, completed = false) {
+export function sourceScanInput(
+  name,
+  values,
+  completed = false,
+  laterShell = "",
+) {
   if (!/^(?:command_execution|bash|shell|exec_command)$/i.test(name))
     return values.join("\n");
   return values
-    .map((input) => withoutMarkdownBodies(input, completed))
+    .map((input) => withoutMarkdownBodies(input, completed, laterShell))
     .join("\n");
 }
-function withoutMarkdownBodies(input, completed) {
-  const words = completed && !/[\\$]/.test(input) ? shellWords(input) : null;
-  // Codex's command display quotes individual pieces of its one shell body.
-  // Decode just the three literal argv words and keep every executable line.
-  const wrapped =
-    words?.length === 3 &&
-    /^(?:\/[\w/.-]+\/)?(?:zsh|bash|sh)$/.test(words[0]) &&
-    ["-lc", "-c"].includes(words[1]);
+function withoutMarkdownBodies(input, completed, laterShell) {
   const original = literalShellBody(input);
-  const lines = (wrapped ? words[2] : original).split("\n");
+  const decoded = decodedShellBody(input);
+  const lines = decoded.split("\n");
   let removed = false,
     recognized = false;
   for (let i = 0; i < lines.length; i++) {
@@ -51,7 +50,15 @@ function withoutMarkdownBodies(input, completed) {
     while (end < lines.length && lines[end] !== delimiter) end++;
     if (end === lines.length) continue;
     recognized = true;
-    if (executedOutput(lines[i], lines.slice(end + 1).join("\n"))) {
+    if (
+      executedOutput(
+        lines[i],
+        lines
+          .slice(end + 1)
+          .concat(laterShell)
+          .join("\n"),
+      )
+    ) {
       i = end;
       continue;
     }
@@ -60,7 +67,5 @@ function withoutMarkdownBodies(input, completed) {
     for (let j = i + 1; j <= end; j++) lines[j] = "";
     i = end;
   }
-  return removed || (wrapped && recognized)
-    ? lines.filter(Boolean).join("\n")
-    : original;
+  return removed || recognized ? lines.filter(Boolean).join("\n") : original;
 }

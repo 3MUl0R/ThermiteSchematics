@@ -51,3 +51,45 @@ it("recognizes a completed Markdown append and the Codex wrapper's spliced delim
     expect(metric(wrap(script + "\n" + tail)).sourceReads, tail).toBe(1);
   }
 });
+
+it.each([
+  "bash -x notes.md",
+  "sh -eu notes.md",
+  "env bash notes.md",
+  "cat notes.md | sh",
+  "perl notes.md",
+  "cp notes.md run.sh && sh run.sh",
+  "xargs -a notes.md -I{} sh -c {}",
+])(
+  "keeps sourced Markdown in either wrapper or a later command: %s",
+  (tail) => {
+    const script = `cat > notes.md <<'EOF'\ncurl -s ${url}\nEOF`;
+    const quote = (body) =>
+      "/bin/zsh -lc '" + body.replaceAll("'", "'\"'\"'") + "'";
+    expect(metric(quote(script + "\n" + tail)).sourceReads).toBe(1);
+    expect(
+      metric('/bin/zsh -lc "' + script + "\n" + tail + '"').sourceReads,
+    ).toBe(1);
+    const shell = (id, command) => ({
+      type: "item.completed",
+      item: {
+        id,
+        type: "command_execution",
+        command,
+        exit_code: 0,
+      },
+    });
+    expect(
+      score({ transcript: [shell("write", quote(script)), shell("run", tail)] })
+        .sourceReads,
+    ).toBe(1);
+    expect(
+      score({
+        transcript: [
+          shell("write", quote(script)),
+          shell("read", "cat notes.md"),
+        ],
+      }).sourceReads,
+    ).toBe(0);
+  },
+);

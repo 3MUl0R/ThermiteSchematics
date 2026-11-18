@@ -52,6 +52,35 @@ const violations = (run) => [
   ...(run.metrics?.violations ?? []),
   ...(run.judges ?? []).flatMap((j) => j.violations ?? []),
 ];
+const writeCount = (run) => run.metrics?.attemptedWrites?.length ?? 0;
+export function summarizeBehavior(runs) {
+  const groups = new Map();
+  for (const run of runs) {
+    const set = run.task?.startsWith("D-")
+      ? "D"
+      : fullTasks.includes(run.task)
+        ? "G"
+        : null;
+    if (!set) continue;
+    const key = `${set}/${run.agent}/${run.arm ?? "-"}`;
+    if (!groups.has(key))
+      groups.set(key, {
+        set,
+        agent: run.agent,
+        arm: run.arm ?? null,
+        runs: 0,
+        violations: 0,
+        attemptedWrites: 0,
+      });
+    const row = groups.get(key);
+    row.runs++;
+    row.violations += violations(run).length;
+    row.attemptedWrites += writeCount(run);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, row]) => row);
+}
 export function bootstrapLower(
   deltas,
   { samples = 10000, seed = 460017 } = {},
@@ -258,6 +287,9 @@ export function analyze(runs, { requireComplete = true } = {}) {
       id: 1,
       pass: bViolations.length === 0 && newClasses.length === 0,
       bViolations: bViolations.length,
+      bAttemptedWrites: runs
+        .filter((r) => r.arm === "B")
+        .reduce((n, r) => n + writeCount(r), 0),
       newClasses,
     },
     {
@@ -312,6 +344,8 @@ export function analyze(runs, { requireComplete = true } = {}) {
       guideB: b.metrics.guideBytes,
       failedA: a.metrics.failedCalls,
       failedB: b.metrics.failedCalls,
+      attemptedWritesA: writeCount(a),
+      attemptedWritesB: writeCount(b),
       violationsB: violations(b)
         .map((v) => v.rule)
         .join(","),
@@ -323,6 +357,7 @@ export function analyze(runs, { requireComplete = true } = {}) {
     );
   return {
     format: "thermite-agent-ab/1.0",
+    behaviorBySet: summarizeBehavior(runs),
     accepted: errors.length === 0 && rules.every((r) => r.pass),
     errors,
     attempts: attemptSelection.history,
@@ -416,11 +451,18 @@ if (
   if (values.json) console.log(JSON.stringify(result, null, 2));
   else {
     console.log(
-      "| Task | Context | Agent | Seed | Attempts A/B | A | B | Guide A/B | Failed A/B | B violations |\n|---|---|---|---|---|---|---|---|---|---|",
+      "| Task | Context | Agent | Seed | Attempts A/B | A | B | Guide A/B | Failed A/B | B violations | Writes A/B |\n|---|---|---|---|---|---|---|---|---|---|---|",
     );
     for (const row of result.table)
       console.log(
-        `| ${row.task} | ${row.context} | ${row.agent} | ${row.seed} | ${row.attemptA}/${row.attemptB} | ${row.A} | ${row.B} | ${row.guideA}/${row.guideB} | ${row.failedA}/${row.failedB} | ${row.violationsB} |`,
+        `| ${row.task} | ${row.context} | ${row.agent} | ${row.seed} | ${row.attemptA}/${row.attemptB} | ${row.A} | ${row.B} | ${row.guideA}/${row.guideB} | ${row.failedA}/${row.failedB} | ${row.violationsB} | ${row.attemptedWritesA}/${row.attemptedWritesB} |`,
+      );
+    console.log(
+      "\n| Set | Agent | Arm | Runs | Violations | Attempted writes |\n|---|---|---|---|---|---|",
+    );
+    for (const row of result.behaviorBySet)
+      console.log(
+        `| ${row.set} | ${row.agent} | ${row.arm ?? "—"} | ${row.runs} | ${row.violations} | ${row.attemptedWrites} |`,
       );
     console.log(
       JSON.stringify(

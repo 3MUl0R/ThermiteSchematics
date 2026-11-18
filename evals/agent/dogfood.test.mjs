@@ -142,7 +142,8 @@ function fixture(taskName = "D-conveyor") {
   const matrix = task.deliverables.requirements.map((r) => ({
     id: r.id,
     status: "satisfied",
-    designations: r.roles.map((role) => roleTags[role]),
+    designations:
+      r.id === "C-CHANGE" ? ["M1"] : r.roles.map((role) => roleTags[role]),
     requirement: r.id.toLowerCase(),
     evidence: {
       summary: "Validated source and sheet 1 show the specified role.",
@@ -587,7 +588,7 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
-    expect(task.version).toBe("1.6.0");
+    expect(task.version).toBe(name === "D-conveyor" ? "1.6.1" : "1.6.0");
     expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
       [],
     );
@@ -662,27 +663,91 @@ it.each(["D-pump", "D-conveyor"])(
   },
 );
 
-it("requires schematic wire ink for a change-row conductor and scores coverage independently", () => {
+function changeFixture() {
   const x = fixture();
-  x.matrix.find((r) => r.id === "C-CHANGE").designations = ["PLC1", "W-PSU-L"];
-  const wire =
-    '<path class="net-path wire-path" data-designation="W-PSU-L" d="M 0 0 H 10"/>';
-  x.packet.sheets[0].svg = `<svg>${wire}</svg>`;
+  const row = x.matrix.find((r) => r.id === "C-CHANGE");
+  row.designations = ["PLC1", "W-PSU-L"];
+  const after = x.sourceObjects.find((o) => o.uid === "w1");
+  const before = { ...after, properties: { label: "previous label" } };
+  const path = "source.json";
+  const beforeHash = "a".repeat(64),
+    afterHash = "b".repeat(64);
+  const integrity = (hash) =>
+    "sha256-" + Buffer.from(hash, "hex").toString("base64");
+  Object.assign(x.calls[0], {
+    request: JSON.stringify({ dryRun: false, files: [{ path }] }),
+    patchFiles: [
+      {
+        path,
+        changed: true,
+        beforeIntegrity: integrity(beforeHash),
+        afterIntegrity: integrity(afterHash),
+      },
+    ],
+    before: {
+      files: { [path]: beforeHash },
+      documents: { [path]: { objects: [before] } },
+    },
+    after: {
+      files: { [path]: afterHash },
+      documents: { [path]: { objects: [after] } },
+    },
+  });
+  const wire = (uid) =>
+    `<path class="net-path wire-path" data-designation="label" data-wire-uid="${uid}" d="M 0 0 H 10"/>`;
+  x.packet.sheets[0].svg = `<svg>${wire("w1")}</svg>`;
+  return { x, row, wire };
+}
+
+it("accepts a changed wire by UID from schematic ink or a trusted reference", () => {
+  const { x } = changeFixture();
   expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
-  // A label, inventory entry, reference, or a path on a report is not wire ink.
-  x.packet.sheets[0].svg =
-    '<svg><text data-designation="W-PSU-L">W-PSU-L</text></svg>';
-  x.packet.sheets[0].references.push({ designation: "W-PSU-L" });
-  x.packet.sheets[2].svg = `<svg>${wire}</svg>`;
+  x.packet.sheets[0].svg = "<svg/>";
+  x.packet.sheets[0].references.push({
+    deviceUid: "w1",
+    designation: "different-label",
+  });
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+});
+
+it("rejects an empty change row and an untouched wire", () => {
+  const { x, row } = changeFixture();
+  row.designations = [];
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+  row.designations = ["W-PSU-L"];
+  x.calls[0].before.documents["source.json"] =
+    x.calls[0].after.documents["source.json"];
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+});
+
+it("rejects an unverified patch receipt and a matching label with the wrong wire UID", () => {
+  const { x, wire } = changeFixture();
+  x.packet.sheets[0].svg = `<svg>${wire("another-uid").replace('designation="label"', 'designation="W-PSU-L"')}</svg>`;
+  x.packet.sheets[0].references.push({
+    deviceUid: "another-uid",
+    designation: "W-PSU-L",
+  });
+  x.packet.sheets[2].svg = `<svg>${wire("w1")}</svg>`;
   const missing = assessDogfood(x);
   expect(missing.checks.requirementMatrix).toBe(false);
   expect(missing.checks.coverage).toBe(true);
-  expect(missing.pass).toBe(false);
+  x.packet.sheets[0].svg = `<svg>${wire("w1")}</svg>`;
+  x.calls[0].patchFiles[0].afterIntegrity =
+    x.calls[0].patchFiles[0].beforeIntegrity;
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
 });
-it("makes an attempted GitHub write fail the D counts item", () => {
+it("gates writes only for the recorded prompt version that stated the rule", () => {
   const x = fixture();
   x.counts.attemptedWrites = 1;
-  const result = assessDogfood(x);
-  expect(result.checks.counts).toBe(false);
-  expect(result.pass).toBe(false);
+  for (const promptVersion of ["1.6.0", "1.6.1", "2.0.0"]) {
+    const result = assessDogfood({ ...x, promptVersion });
+    expect(result.checks.counts).toBe(false);
+    expect(result.pass).toBe(false);
+  }
+  for (const promptVersion of ["1.5.1", null]) {
+    const result = assessDogfood({ ...x, promptVersion });
+    expect(result.checks.counts).toBe(true);
+    expect(result.counts.attemptedWrites).toBe(1);
+    expect(result.pass).toBe(true);
+  }
 });

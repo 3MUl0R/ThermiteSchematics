@@ -55,19 +55,17 @@ export function drawingNames(packet) {
   return names;
 }
 // Packet coverage covers only audited circuit/wiring views. Continuous
-// schematic exports also emit physical wire paths with source designations.
+// schematic exports also emit physical wire paths with source UIDs.
 function drawnWires(packet) {
-  const names = new Set();
+  const uids = new Set();
   for (const sheet of schematicSheets(packet)) {
     if (!sheet.svg) continue;
     const svg = new DOMParser().parseFromString(sheet.svg, "image/svg+xml");
-    for (const path of svg.querySelectorAll(
-      "path.wire-path[data-designation][d]",
-    ))
+    for (const path of svg.querySelectorAll("path.wire-path[data-wire-uid][d]"))
       if (path.getAttribute("d").trim())
-        names.add(path.getAttribute("data-designation"));
+        uids.add(path.getAttribute("data-wire-uid"));
   }
-  return names;
+  return uids;
 }
 export function fitsRole(object, type, role) {
   if (role === "cable") return object?.kind === "cable";
@@ -173,8 +171,62 @@ function gapExists(gap, requirement, types) {
     fitsRole({ kind: "device" }, type, gap.capability),
   );
 }
+function applyRequest(call) {
+  if (
+    call.argv?.[0] !== "agent" ||
+    call.argv?.[1] !== "apply-source-patch" ||
+    call.exit !== 0
+  )
+    return null;
+  try {
+    const request = JSON.parse(call.request ?? "null");
+    return request?.dryRun === false ? request : null;
+  } catch {
+    return null;
+  }
+}
+function recordedDigest(value) {
+  return typeof value === "string" && value.startsWith("sha256-")
+    ? Buffer.from(value.slice(7), "base64").toString("hex")
+    : null;
+}
+function changedWireUids(applies) {
+  const touched = new Set();
+  for (const { call, request } of applies) {
+    const targets = new Set(request.files?.map(({ path }) => path));
+    for (const file of call.patchFiles ?? []) {
+      if (
+        !file.changed ||
+        !targets.has(file.path) ||
+        !call.before?.files?.[file.path] ||
+        !call.after?.files?.[file.path] ||
+        recordedDigest(file.beforeIntegrity) !== call.before.files[file.path] ||
+        recordedDigest(file.afterIntegrity) !== call.after.files[file.path]
+      )
+        continue;
+      const before = call.before.documents?.[file.path]?.objects;
+      const after = call.after.documents?.[file.path]?.objects;
+      if (!Array.isArray(before) || !Array.isArray(after)) continue;
+      const prior = new Map(before.map((object) => [object.uid, object]));
+      for (const object of after)
+        if (
+          object.kind === "wire" &&
+          object.uid &&
+          canonical(prior.get(object.uid)) !== canonical(object)
+        )
+          touched.add(object.uid);
+    }
+  }
+  return touched;
+}
+function needsNoWrites(version) {
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version ?? "");
+  return !!match && (+match[1] > 1 || (+match[1] === 1 && +match[2] >= 6));
+}
+
 export function assessDogfood({
   task,
+  promptVersion = task.version,
   validationExit,
   files,
   packet,
@@ -193,7 +245,20 @@ export function assessDogfood({
     byType = new Map(types.map((t) => [t.id, t])),
     drawn = drawingNames(packet),
     wireInk = drawnWires(packet),
+    drawnUids = new Set(
+      schematicSheets(packet).flatMap((sheet) =>
+        (sheet.references ?? []).map(
+          (reference) =>
+            reference.wireUid ?? reference.uid ?? reference.deviceUid,
+        ),
+      ),
+    ),
     requirements = spec.requirements;
+  const applies = calls.flatMap((call) => {
+    const request = applyRequest(call);
+    return request && call.editsByThisCall?.length ? [{ call, request }] : [];
+  });
+  const changedWires = changedWireUids(applies);
   const uidNames = new Map(sourceObjects.map((o) => [o.uid, o.designation]));
   const warnings = diagnostics.map((d) => ({
     ...d,
@@ -236,9 +301,14 @@ export function assessDogfood({
       changeRow = /^(?:C|P)-CHANGE$/.test(requirement.id),
       represented =
         known &&
+        (requirement.id !== "C-CHANGE" || names.length > 0) &&
         names.every((tag) => {
-          if (changeRow && byTag.get(tag)?.kind === "wire")
-            return wireInk.has(tag);
+          const object = byTag.get(tag);
+          if (changeRow && object.kind === "wire")
+            return (
+              changedWires.has(object.uid) &&
+              (wireInk.has(object.uid) || drawnUids.has(object.uid))
+            );
           return drawn.has(tag);
         });
     const declaredGap =
@@ -416,26 +486,13 @@ export function assessDogfood({
           if (deferredInput(psu, terminal)) return true;
           return inputConductors(psu, terminal).some(
             (o) =>
-              wireInk.has(o.designation) ||
+              wireInk.has(o.uid) ||
               drawnConductors.has(o.designation ?? o.uid) ||
               powerView,
           );
         })
       );
     });
-  const applied = calls.some((c) => {
-    try {
-      return (
-        c.argv?.[0] === "agent" &&
-        c.argv?.[1] === "apply-source-patch" &&
-        c.exit === 0 &&
-        JSON.parse(c.request ?? "null")?.dryRun === false &&
-        c.editsByThisCall?.length > 0
-      );
-    } catch {
-      return false;
-    }
-  });
   const checks = {
     validation: validationExit === 0,
     viewsAndPacket:
@@ -445,7 +502,7 @@ export function assessDogfood({
       ) &&
       packet?.sheets?.some((s) => s.view?.kind === "index"),
     guardedChange:
-      applied &&
+      applies.length > 0 &&
       files["drawings/before.json"] === true &&
       files["drawings/review.json"] === true,
     reports:
@@ -461,9 +518,10 @@ export function assessDogfood({
     requirementMatrix:
       rows.length === requirements.length && decisions.every((d) => d.pass),
     counts:
-      ["localTypes", "sourceReads", "failedCalls", "attemptedWrites"].every(
+      ["localTypes", "sourceReads", "failedCalls"].every(
         (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
-      ) && counts.attemptedWrites === 0,
+      ) &&
+      (!needsNoWrites(promptVersion) || counts.attemptedWrites === 0),
   };
   const expectedNames = new Set(
     decisions
@@ -634,6 +692,7 @@ export async function checkDogfood(ctx) {
         drawEvidence = { ...drawEvidence, V1: false, V5: false, stale: true };
   return assessDogfood({
     task: ctx.task,
+    promptVersion: ctx.promptVersion,
     validationExit: cli(clean, "validate", ".").status,
     files,
     packet,
@@ -960,6 +1019,7 @@ export function referenceDogfood(ctx) {
     SENSOR: ["PX1"],
     JUNCTION: ["JB1"],
     SPARE: ["CBL1"],
+    CHANGE: ["M1"],
   };
   const matrix = ctx.task.deliverables.requirements.map((requirement) => {
     const key = requirement.id.slice(2),

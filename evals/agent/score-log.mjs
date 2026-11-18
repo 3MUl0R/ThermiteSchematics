@@ -3,6 +3,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { decodedShellBody } from "./shell-parts.mjs";
+import { shellTool } from "./shell-network.mjs";
 import { classifyToolCall, pathText, strings } from "./github-call.mjs";
 import { sourceRoots } from "./local-source.mjs";
 import { copiedContributorGuide } from "./contributor-policy.mjs";
@@ -263,20 +265,28 @@ export function score({
   for (const event of normalized.events.filter((e) => e.type === "tool-result"))
     results.set(event.id, results.has(event.id) ? null : event);
   const roots = sourceRoots(engineRoots);
-  for (const event of normalized.events.filter((e) => e.type === "tool")) {
+  const tools = normalized.events.filter((e) => e.type === "tool");
+  for (const [index, event] of tools.entries()) {
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
     const input = strings(event.input).join("\n");
     const classified = classifyToolCall(event, {
       engineRoots,
       allowedLibraryPaths,
       result: results.get(event.id),
+      laterShell:
+        shellTool(event.name) && input.includes("<<")
+          ? tools
+              .slice(index + 1)
+              .filter((row) => shellTool(row.name))
+              .flatMap((row) =>
+                strings(row.input?.command ?? row.input?.cmd ?? row.input),
+              )
+              .map(decodedShellBody)
+              .join("\n")
+          : "",
     });
-    if (classified.attemptedWrite)
-      attemptedWrites.push({
-        id: event.id,
-        tool: event.name,
-        status: classified.attemptedWrite,
-      });
+    for (const status of classified.attemptedWrites ?? [])
+      attemptedWrites.push({ id: event.id, tool: event.name, status });
     if (context === "runtime") {
       if (classified.libraryAcquisition)
         libraryAcquisitions.push({ id: event.id, input });

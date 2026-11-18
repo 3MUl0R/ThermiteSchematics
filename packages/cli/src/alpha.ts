@@ -384,7 +384,7 @@ function registerAlphaCable(command: Command, state: AlphaState) {
     .option("--json", "structured core inventory")
     .addHelpText(
       "after",
-      "\nPrint the conductors with thermite view <designation> --conductors -o drawings/cable.pdf.",
+      "\nPrint the conductors with thermite view <designation> --conductors -o <file>.pdf.",
     )
     .action(async (designation: string, flags: Flags) => {
       const compiled = await compileProject(flags.project);

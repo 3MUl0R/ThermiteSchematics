@@ -1563,7 +1563,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Draft issues locally unless the user asks you to file them (search and public library GET examples in `thermite guide libraries`).",
+      "For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it (search and public library GET examples in `thermite guide libraries`).",
       "Contribution process; no runtime behavior.",
     ],
     [

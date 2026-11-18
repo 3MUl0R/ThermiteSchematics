@@ -41,8 +41,9 @@ List the actual source designations supported by each row. For the guarded
 change row, cite the saved snapshot, dry-run, apply and semantic review in
 the summary. A changed wire can be listed when its path is visible on a
 schematic sheet. A wire schedule or a label alone does not establish this.
-The output and change rows may use an empty designation list when their
-evidence is a deliverable. Drawn-device coverage and the matrix are checked
+The output row may use an empty designation list. The change row must name
+at least one subject. Each listed wire must have been changed by the
+applied patch. Drawn-device coverage and the matrix are checked
 separately and both are required.
 
 Draft issues locally. Do not post or attempt external writes during a run.

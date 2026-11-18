@@ -247,6 +247,7 @@ export function shellRequest(
       networkInvocation(text, words) ||
       (code &&
         interpreterEvidence(heredoc.body, ["bun", "-e", heredoc.body])) ||
+      (heredoc.executed && githubFragment(heredoc.body)) ||
       (expansion &&
         (networkInvocation(heredoc.body, null) ||
           githubFragment(heredoc.body)));

@@ -23,21 +23,72 @@ function split(text) {
   }
   return parts;
 }
-export function executedOutput(header, tail) {
-  const words = shellWords(header),
-    index = words?.findIndex((word) => word === ">" || word === ">>");
-  if (index === undefined || index < 0) return false;
-  const file = words[index + 1]
-    ?.replace(/^\.\//, "")
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return (
-    !!file &&
-    new RegExp(
-      `(?:^|[;&|\\n])\\s*(?:(?:[^\\s]+/)?(?:bash|sh|zsh|python[\\d.]*|node|bun|source|\\.)\\s+(?:(?:--|-e)\\s+)?(?:<\\s*)?["']?(?:\\./)?|(?:(?:exec|command)\\s+)?["']?\\./)${file}(?:["'\\s]|$)`,
-    ).test(tail)
-  );
+const readOnlyFileTools = new Set([
+  "cat",
+  "head",
+  "tail",
+  "rg",
+  "grep",
+  "wc",
+  "stat",
+  "ls",
+  "test",
+]);
+
+export function decodedShellBody(input) {
+  if (!/[\\$]/.test(input)) {
+    const words = shellWords(input);
+    if (
+      words?.length === 3 &&
+      /^(?:\/[\w/.-]+\/)?(?:zsh|bash|sh)$/.test(words[0]) &&
+      ["-lc", "-c"].includes(words[1])
+    )
+      return words[2];
+  }
+  return literalShellBody(input);
 }
-export function shellParts(input) {
+
+// Only a plain file inspection is safe when a subsequent shell command names
+// the output. Pipelines, copies and wrapped interpreters can consume its code.
+export function executedOutput(header, tail) {
+  const words = shellWords(header);
+  const index = words?.findIndex((word) => word === ">" || word === ">>");
+  if (index === undefined || index < 0 || !words[index + 1]) return false;
+  const file = words[index + 1]
+    .replace(/^\.\//, "")
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const mentions = new RegExp(`(?:^|[\\s"'=/<>])${file}(?=$|[\\s"';&|<>),])`);
+  const lines = tail.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (mentions.test(line)) {
+      const parts = split(line);
+      if (!parts || /[|<>]/.test(line)) return true;
+      if (
+        parts.some(
+          (part) =>
+            mentions.test(part.text) &&
+            !readOnlyFileTools.has(part.tokens[0].value.split("/").at(-1)),
+        )
+      )
+        return true;
+    }
+    const here = /<<\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1\s*$/.exec(line);
+    if (here) {
+      const end = lines.indexOf(here[2], i + 1);
+      if (end < 0) continue;
+      const body = lines.slice(i + 1, end).join("\n");
+      if (
+        mentions.test(body) &&
+        /\b(?:exec|eval|source|system|spawn|subprocess)\b/.test(body)
+      )
+        return true;
+      i = end;
+    }
+  }
+  return false;
+}
+export function shellParts(input, laterShell = "") {
   const text = literalShellBody(input),
     lines = text.split("\n"),
     parts = [];
@@ -64,7 +115,13 @@ export function shellParts(input) {
     selected.at(-1).heredoc = {
       body: lines.slice(i + 1, end).join("\n"),
       quoted: /^["']/.test(delimiter.literal),
-      executed: executedOutput(head, lines.slice(end + 1).join("\n")),
+      executed: executedOutput(
+        head,
+        lines
+          .slice(end + 1)
+          .concat(laterShell)
+          .join("\n"),
+      ),
     };
     parts.push(...selected);
     pending = [];

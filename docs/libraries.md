@@ -136,7 +136,7 @@ curl -fsSL -o libraries/field-interfaces/types.json https://raw.githubuserconten
 
 Use the revision and library paths authorized by the task. Check existing issues
 with a simple query such as `repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces`.
-Draft issues locally unless the user asks you to file them.
+For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it. Include the use case and expected and actual behavior.
 
 For engine changes, the [engine guide](../AGENTS.md) and
 [contribution workflow](../CONTRIBUTING.md) are source references. A human must
