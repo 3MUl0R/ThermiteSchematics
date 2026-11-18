@@ -747,9 +747,13 @@ Issue lookups and original records stay unchanged.
 Replay retained runs under each measurement version and keep the collection
 records immutable. Scoring now pairs the pinned Codex GitHub connector's typed
 repo-scoped issue or PR search with its matching completed result. An explicit empty
-issue list is a completed conversation search. Missing, mixed, unexpected or
-source-bearing payloads stay fail-closed. The existing request allowlists for
-other tools and optional library GETs still apply.
+issue list is a completed conversation search. Relative and absolute file path
+mentions in issue or PR conversation titles, bodies and comments are conversation
+text and keep the issue lookup. Fenced and indented code blocks, including blocks
+containing only a path, and links to code blobs or raw files count as V8. Code
+endpoints and selectors such as `search_code`, the contents API and `in:file`
+also count as V8. Missing, mixed and unexpected payloads stay fail-closed. The
+existing request allowlists for other tools and optional library GETs still apply.
 
 A matching pre-execution approval denial is recorded in
 `metrics.attemptedWrites`, apart from V8. An executed or unverified recognized

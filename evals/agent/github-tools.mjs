@@ -120,6 +120,26 @@ const nullableText = [
   "display_title",
 ];
 const absentMetadata = ["user", "assignees", "labels", "milestone", "comments"];
+
+function containsSourceContent(value) {
+  if (/^\s*(?:```|~~~)|^(?: {4}|\t)[^\S\r\n]*\S/m.test(value)) return true;
+  const text = canonicalText(value).text.replaceAll("\\", "/");
+  // A source locator must be a GitHub link. Bare file paths are prose.
+  const links = text.matchAll(
+    /(?:https?:\/*|(?<![\w./-])(?:\/\/)?)(?:[a-z0-9-]+\.)*(github\.com|githubusercontent\.com)(?=([/:?#][^\s<>"'`()\[\]{}]*))/gu,
+  );
+  for (const [, host, target] of links) {
+    if (
+      host === "githubusercontent.com" ||
+      /\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.(?:diff|patch)\b/u.test(
+        target,
+      )
+    )
+      return true;
+  }
+  return false;
+}
+
 function conversationResult(issue, repository, pullOnly) {
   if (
     !onlyKeys(issue, conversationFields) ||
@@ -148,13 +168,8 @@ function conversationResult(issue, repository, pullOnly) {
     primary.url.href !== display.url?.href
   )
     return false;
-  // Conversation bodies can contain prose and snippets. Source locators or a
-  // separate payload field are not evidence for this exemption.
-  if (/^\s*(?:```|~~~)|^(?: {4}|\t)[^\S\r\n]*\S/m.test(issue.body ?? ""))
-    return false;
-  const text = canonicalText(JSON.stringify(issue).replaceAll("\\", "/")).text;
-  return !/(?:githubusercontent\.com|\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.diff\b|\.patch\b|(?:^|[^\p{L}\p{N}_.-])(?:packages\/[^/\s]+\/src|evals\/agent)\/)/u.test(
-    text,
+  return !Object.values(issue).some(
+    (value) => typeof value === "string" && containsSourceContent(value),
   );
 }
 

@@ -54,10 +54,12 @@ it.each([
   { result: undefined },
   { status: "failed" },
   { tool: "github.search_code" },
+  { tool: "github.get_file_contents" },
   { tool: "github.unknown_search" },
   { server: "other-github", tool: "search_issues" },
   { arguments: { query: "label review" } },
   { arguments: { query: `repo:${repository} is:issue (OR inurl:blob)` } },
+  { arguments: { query: `repo:${repository} compile in:file` } },
   {
     arguments: {
       query: `repo:${repository} is:issue https:raw%2egithubusercontent%2ecom/x`,
@@ -76,6 +78,22 @@ it.each([
       {
         ...issue,
         body: `See https://github．com/${repository}/%2562lob/main/file.ts`,
+      },
+    ]),
+  },
+  {
+    result: result([
+      {
+        ...issue,
+        body: `See [source](https://api.github.com/repos/${repository}/contents/file.ts).`,
+      },
+    ]),
+  },
+  {
+    result: result([
+      {
+        ...issue,
+        body: `See raw.githubusercontent.com/${repository}/main/file.ts`,
       },
     ]),
   },
@@ -209,8 +227,36 @@ it("uses only PR-conversation results from the typed PR search", () => {
 it.each([
   "See packages/compiler/src/index.ts line 10",
   "See evals/agent/checkpoint.mjs",
+  "See `/work/packages/compiler/src/index.ts` or `C:\\work\\packages\\compiler\\src\\index.ts`.",
+  "See docs/raw/example.ts, /work/contents/main.ts, and fixes/motor.patch.",
+])("credits path mentions in an issue body: %s", (body) => {
+  const m = metric({ result: result([{ ...issue, body }]) });
+  expect(m.sourceReads).toBe(0);
+  expect(m.issueLookups).toHaveLength(1);
+});
+
+it("credits path mentions in PR titles and conversation text", () => {
+  const m = metric({
+    tool: "github.search_prs",
+    result: result([
+      {
+        ...issue,
+        url: issue.url.replace("/issues/", "/pull/"),
+        title: "Update packages/compiler/src/index.ts",
+        body: "See /work/evals/agent/score-log.mjs.",
+      },
+    ]),
+  });
+  expect(m.sourceReads).toBe(0);
+  expect(m.issueLookups).toHaveLength(1);
+});
+
+it.each([
+  "Repro:\n\n```ts\nexport function compile() {}\n```",
   "Repro:\n\n    export function compile(x) {\n      return parse(x);\n    }",
   "Repro:\n\treturn parse(x);",
+  "Path:\n\n```\npackages/compiler/src/index.ts\n```",
+  "Path:\n\n    /work/packages/compiler/src/index.ts",
 ])("keeps code-bearing issue body fail-closed: %s", (body) => {
   const m = metric({ result: result([{ ...issue, body }]) });
   expect(m.sourceReads).toBe(1);
