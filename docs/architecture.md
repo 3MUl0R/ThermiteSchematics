@@ -85,9 +85,9 @@ one `project_presentation` document. Presentation is removed from source-glob
 dispatch if the same canonical file matches a source pattern. Alias and reparse
 escapes remain invalid.
 
-`presentation.json` supports `project-presentation/0.1` and `/0.2`, with revision,
-one lowercase six-digit canvas color, and up to four title lines. Optional page
-settings control printable paper size, orientation and margins. The compiler
+`presentation.json` supports `project-presentation/0.1`, `/0.2`, and `/0.3`.
+Version 0.2 adds page settings for size, orientation and margins. Version 0.3
+also supports [compact frames and supplied title data](drawing-frames.md). The compiler
 returns normalized presentation beside IR. Defaults are revision `UNSPECIFIED`,
 background `#ffffff`, and no authored lines; printable pages default to Tabloid
 landscape with a 10 mm margin. See [formats and compatibility](formats-and-compatibility.md).
@@ -199,9 +199,8 @@ hashes. Source users install from the frozen Bun lock and build locally. Both
 workflows initialize a separate electrical project with the same JSON formats.
 See [runtime packaging](runtime-package.md) and [platform checks](platforms.md).
 
-The historical private v0.2.0 tarball and its protected publisher remain separate.
-Their [legacy release contract](legacy/private-release.md) does not govern the
-current runtime ZIP workflow.
+The private v0.2.0 tarball pipeline and its protected publisher were retired.
+The [legacy release archive](legacy/private-release.md) preserves that workflow.
 
 ## Standards posture
 

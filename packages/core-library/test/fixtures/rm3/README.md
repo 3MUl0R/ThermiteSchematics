@@ -16,10 +16,11 @@ The transmitter-to-AI harness has two separate nets through the single-pair cabl
 and terminal strip. It is deliberately unpowered. It demonstrates two-ended
 interface continuity and the existing signal-loop profile; it does not assert
 loop power, a current shunt, a configured AI mode or electrical compatibility.
-A normal passive-input loop wired through an external power supply fails R006,
-with or without an auxiliary supply pair; only the direct TX-to-AI harness draws
-today. This is a renderer gap, not a reason to substitute the unpowered harness
-for a complete machine loop. Select and review actual loop hardware before service.
+In the separately wired [series-loop fixture](../series-loop/rm3.request.json),
+the externally powered passive-input loop renders left-to-right and top-to-bottom
+when `loopPower` selects `PS1.dc_output`. The plain signal-loop request for the
+powered reproduction returns R006 with or without an auxiliary supply pair.
+Select and review actual loop hardware before service.
 
 `specimens.json` contains the remaining 1P/2P breakers, 2P/3P fuses and a separate
 three-pole disconnect. These optional-pole inventory specimens are unconnected;
@@ -34,13 +35,14 @@ isolation suitability, load-break, ratings and operation means remain unassessed
 RM3 tests draw every circuit-supported device function, the transmitter signal
 loop, all cable cores and the Ethernet link in both flows. The matrix separately
 pins every catalog family and the rooted successes/gaps, including the
-disconnector's power binding and control parity. The packet audit covers circuit/wiring drawings;
-it does not yet count signal-loop or conductor-inventory sheets. Tests check
-the actual SVG records for those views separately.
+disconnector's power binding and control parity. The packet's conductor and
+function counts cover circuit and wiring drawings. Tests check the actual
+signal-loop and conductor-inventory SVG records separately.
 
-Validation has zero errors and warnings, with one honest I304 notice about an
-unassessed rated net. Completeness has zero missing required points and I003;
-generic and optional/spare connection information remains visible.
+Validation has zero errors and warnings. I304 and I305 report unassessed
+voltage compatibility on multi-rated and single-rated nets. Completeness has
+zero missing required points and no I003. Generic and optional/spare
+connection information remains visible.
 
 PLC/HMI supplies declare DC class without a voltage magnitude. Each supply has
 a loads binding. The complete PS1 loads view draws B1, HMI1 and PLC1 in both

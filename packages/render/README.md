@@ -927,8 +927,8 @@ failure. It does not add a new R-code. The CLI converts those failures to E001/e
 ## Determinism and future seams
 
 The source and IR contracts remain `electrical-system/0.1` and
-`electrical-ir/0.1`. Presentation is the separate compatible
-`project-presentation/0.1` context. Request/view formats remain
+`electrical-ir/0.1`. Presentation is a separate compiled context. Continuous
+request and view formats remain
 `schematic-view-request/0.1`, `schematic-view-request/0.2`,
 `schematic-view/0.1`, and its `0.2` revision; symbol and layout versions remain
 `ais-symbols/0.3` and `elk-layered/0.4+elkjs-0.12.0`.
@@ -943,7 +943,8 @@ All consumed collections cross semantic boundaries as freshly sorted arrays. ELK
 receives a fresh deep DTO; results and summaries do not alias later renders. No
 mutable singleton, layout array order, path, clock, Git state, locale, timezone,
 process ID, random value, environment value, or output filename enters SVG. ELK is
-0.12.0, seed is `1`, both merge options are false, and no cache exists.
+0.12.0, seed is `1`, and both merge options are false. Packet and standalone
+rooted searches can reuse exact ELK inputs within the current render.
 Semantic IR keys are rebuilt for each render, outside selection comparators;
 editing an IR in place gives the same result as rendering its fresh clone.
 Ordered paths and graph comparison keys belong to that render's objects;
@@ -972,9 +973,9 @@ attachment, including strokes not inventoried by the drawing checker.
 renderer, then returns the renderer DTOs and R-errors unchanged. It does not add
 agent-owned view syntax, selection, layout, geometry, or another R-code.
 
-Terminal reports include a graphical schematic strip and the original connection
-inventory. Each terminal keeps its native device UID/terminal key; every bridge
-keeps its native jumper UID. Tn/Rn references appear on both the strip and its
+Nonempty requested terminal plans include a graphical schematic strip and the
+original connection inventory. Each terminal keeps its native device UID/terminal
+key and every bridge keeps its native jumper UID. Tn/Rn references appear on both the strip and its
 inventory row. Authored order is preserved; missing order, dimensions and
 hardware stay visibly unspecified. Location groups do not assign installation
 sides. Requested strips paginate at device boundaries and split oversized devices between

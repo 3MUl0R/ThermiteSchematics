@@ -240,11 +240,9 @@ fact sets as truth. Check headers, exact native rows/columns, statuses, source
 snapshot/presentation, every location and actual visible caption. A missing seed,
 stripped ownership, forged row, wrong scope or stale locator must fail.
 
-Checker 5.8 has known gaps in automatic query-table discovery, new caption
-recognition, typed fact adaptation, per-document filtered inventory reconciliation
-and row anchoring. Its 36 DQ-09 fail→pass rows are not delivery credit. The E3 lane
-owns checker 5.9; NAV3 does not alter the checker, expectations or re-pins and must
-not reach release until E3 is green.
+The [E3 checker](../evals/draw/README.md) has measured the M3 export since version
+5.9. DQ-19 checks issued documents, native facts and caption delivery. DQ-09
+checks destination sheet zones against measured row regions.
 
 The authored-note browser test population excludes automatic inventory pages:
 generated inventories do not inherit requested view notes. Only that test's page

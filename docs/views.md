@@ -216,8 +216,8 @@ select actual functions and conductors explicitly.
 ## Paper and packets
 
 `project-presentation/0.2` adds an optional `page` object. The loader also accepts
-the original presentation format. Page settings are a backward-compatible
-extension; omitted settings resolve to Tabloid landscape with a 10 mm margin.
+0.1 and [0.3 for compact frames](drawing-frames.md). Omitted page settings resolve
+to Tabloid landscape with a 10 mm margin.
 
 ```json
 {
@@ -234,7 +234,8 @@ Sizes are `letter`, `tabloid`, `a4`, and `a3`; orientation is `landscape` or
 Printable output uses a white drawing sheet for print legibility. The continuous
 POC SVG renderer retains its presentation background behavior.
 
-`schematic-packet-request/0.1` contains `views` (1–40 requests). The accepted
+`schematic-packet-request/0.1` contains `views` (1–40 requests). Version 0.2
+also accepts [packet title data](drawing-frames.md#packet-metadata). The accepted
 request formats are `schematic-view-request/0.1`, `schematic-view-request/0.2`,
 `documentation-view-request/0.1`, `communication-view-request/0.1`,
 `connector-assembly-view-request/0.1`, `signal-loop-view-request/0.1`,
@@ -783,9 +784,8 @@ facts and repeated resolution rows. Every named device is printed in the target
 rows. Exact group row locators remain in the additive export. Only failure of
 both forms causes caption-capacity R006; neither form changes native geometry.
 
-The additive M3 locators and row-region anchor are specified in the
-[navigation export contract](navigation-export-contract.md). They are locators,
-not an electrical or visibility oracle. Checker 5.8 cannot measure these new
-contracts; NAV3 must not reach release before the independent E3 checker is green.
+The [navigation export contract](navigation-export-contract.md) defines the
+M3 locators and row-region anchor. E3 uses them to locate ink and checks the
+printed result against native source facts.
 
 Opt-in presentation 0.3 uses the compact 6×4 frame. See [drawing frames](drawing-frames.md) for title fields, sheet keys, capacity and packet request 0.2.

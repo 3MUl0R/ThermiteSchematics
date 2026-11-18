@@ -89,7 +89,7 @@ outcome with diagnostics and `error: null`, never `valid: false`.
 
 `createView` accepts the renderer's `schematic-view-request/0.1` and
 `schematic-view-request/0.2` union verbatim. It passes the successful compiler's
-detached `project-presentation/0.1` context to the renderer, so the SVG receives the
+detached presentation context to the renderer, so the SVG receives the
 authored/default canvas and title identity. Agent tools add no view syntax, intent
 inference, selection rule, geometry, or renderer error.
 

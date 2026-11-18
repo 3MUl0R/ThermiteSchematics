@@ -48,8 +48,7 @@ tests of graceful signal-handler cleanup invoke the JavaScript handler directly.
 Package acceptance exercises both project templates, validation, all six agent
 commands, guarded patch dry-run/apply/stale rejection, deterministic SVG/HTML/PDF,
 embedded fonts, source/package drawing parity, and unchanged runtime files.
-Capability-dependent and historical private-release skips remain visible in the
-test output; they are not replaced with unconditional platform skips.
+Capability-dependent skips remain visible in the test output.
 
 ## Repeat the checks
 

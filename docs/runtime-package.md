@@ -101,8 +101,7 @@ macOS uses its network sandbox; Windows reports `not-enforced`.
 
 Inspect all three job results and their printed verification reports before
 announcing the release. Reports include the downloaded ZIP digest and source
-commit. This workflow neither builds replacement packages nor publishes a
-release, changes visibility, or invokes the historical private release gates.
+commit. This is a verification-only workflow.
 Linux ARM64, when distributed, needs its own matching-host download acceptance.
 
 ## Publish and upgrade deliberately
@@ -115,7 +114,6 @@ instructions in the release notes. Build and verify each target on that target;
 the packer does not cross-compile or establish support for untested systems.
 The SHA-256 detects changed bytes; it is not a signature authenticating a publisher.
 Download the published assets and run the verifier again before announcing them.
-The historical private release workflows are separate and must not be repurposed.
 
 The README contains separate agent prompts for runtime users and source
 contributors. Runtime users extract upgrades into new folders and deliberately

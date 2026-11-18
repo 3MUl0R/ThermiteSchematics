@@ -126,8 +126,9 @@ pair. `buildCableSchedule(ir, cableUid, sheetZones)` accepts the core map and ad
 wire/jumper endpoint order or the cable schedule's authored/canonical end order;
 they assert no electrical direction. The wire/core table appends `From sheet.zone`
 and `To sheet.zone` only when at least one retained endpoint has a nonempty value.
-Absent entries are blank. No reference is assigned to an unterminated end. These
-APIs reserve support for X2; the renderer does not yet supply packet locations.
+Absent query entries are blank. No reference is assigned to an unterminated end.
+Printed packet wire inventories fill their location columns from the final
+sheet locations and print `not drawn` when no location is available.
 
 Visible function-reference cells show function kind, authored normal state for
 contacts, and the bound terminal set (for example `NO contact 13–14` or
@@ -167,6 +168,12 @@ bun thermite.mjs report bom --project <project> --filter main.filter.json -o bom
 
 `--filter -` reads the same JSON object from standard input. The same selection
 is used for CSV, HTML, PDF and JSON packet output.
+
+Nonempty requested terminal plans include a graphical strip and a connection
+inventory with reciprocal Tn/Rn references. Automatically added terminal
+inventories are tables. Standalone terminal reports keep both parts in HTML,
+PDF and JSON. CSV exports the table. When the inventory fits on one sheet,
+standalone SVG exports that sheet without the strip or its references.
 
 - Terminal, terminal-channel I/O and connector I/O rows select their owning
   device. Peer mentions do not select somebody else's rows. All terminals,
