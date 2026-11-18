@@ -18,24 +18,32 @@ export function measuredStripAppearances(packet, geometries, ir, rows) {
   const devices = new Map(
     ir.devices.map((device) => [device.uid, device.designation]),
   );
+  const jumperNames = new Map(
+    (ir.jumpers ?? []).map((j) => [j.uid, j.designation ?? `Jumper ${j.uid}`]),
+  );
   for (const row of rows)
     for (const [end, terminal] of row.ends.entries()) {
       if (!terminal) continue;
-      const appearances = stripLandings(strips, devices, row, end, terminal);
+      const label =
+        row.element.kind === "jumper" ? jumperNames.get(row.key) : row.name;
+      const appearances = stripLandings(
+        strips,
+        devices,
+        row,
+        end,
+        terminal,
+        label,
+      );
       if (appearances.length)
         result.set(JSON.stringify([row.key, end]), appearances);
     }
   return result;
 }
 
-function stripLandings(strips, devices, row, end, endpoint) {
+function stripLandings(strips, devices, row, end, endpoint, label) {
   const terminalKey = key(endpoint);
   const peer = row.ends[1 - end];
   const nameOf = (t) => `${devices.get(t.deviceUid)}.${t.terminalKey}`;
-  const label =
-    row.element.kind === "jumper" && row.name === "Jumper"
-      ? `Jumper ${row.key}`
-      : row.name;
   return strips.flatMap(({ sheet, ink }) => {
     const terminal = stripTerminalBody(
       ink,
@@ -76,11 +84,11 @@ function stripLandings(strips, devices, row, end, endpoint) {
         conductor: row.key,
         terminal: [endpoint.deviceUid, endpoint.terminalKey],
         printedIncidence:
-          stub?.text ??
+          stub?.visibleText ??
           ink.bridgeLabels.find(
             (b) =>
               b.uid === row.key && b.at === terminalKey && b.sheet === sheet,
-          )?.text,
+          )?.visibleText,
         vertices: path.vertices,
       },
     ];

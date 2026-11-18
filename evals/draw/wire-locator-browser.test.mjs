@@ -280,7 +280,7 @@ const stripPacket = {
 async function auditStripCells(
   printed,
   markup,
-  { diagram = false, rect = true, renameRow = false } = {},
+  { diagram = false, rect = true, renameRow = false, ir = native() } = {},
 ) {
   const schematic = await openSheet(
     page,
@@ -295,8 +295,8 @@ async function auditStripCells(
   );
   const strip = await openSheet(page, stripSource(markup, rect));
   strip.terminalStripInk = await page.evaluate(stripInkScript);
-  const ir = native();
-  ir.wires.push({ ...ir.wires[0], uid: "decoy", designation: "W2" });
+  if (ir.wires.length)
+    ir.wires.push({ ...ir.wires[0], uid: "decoy", designation: "W2" });
   return wireLocatorAudit(stripPacket, [schematic, report, strip], ir);
 }
 
@@ -378,3 +378,24 @@ it("keeps a real schematic landing, and rejects a mislabeled inventory row", asy
     ).findings.map((f) => f.kind),
   ).toEqual(["wire-locator-measurement-gap"]);
 });
+
+it.each([
+  ["Jumper", "Jumper"],
+  [undefined, "Jumper w"],
+])(
+  "uses the native jumper designation (authored %s)",
+  async (designation, caption) => {
+    const ir = native();
+    ir.jumpers = [{ ...ir.wires[0], designation }];
+    ir.wires = [];
+    const markup = validStub.replace("W1 → B.1", `${caption} → B.1`);
+    expect((await auditStripCells("03.A2", markup, { ir })).findings).toEqual(
+      [],
+    );
+    expect(
+      (await auditStripCells("not drawn", markup, { ir })).findings.map(
+        (f) => f.kind,
+      ),
+    ).toEqual(["wire-locator-undrawn-claim"]);
+  },
+);
