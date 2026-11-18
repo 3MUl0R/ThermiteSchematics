@@ -13,7 +13,7 @@ import {
   shellParts,
   aggregateParts,
 } from "./shell-parts.mjs";
-import { shellGitHubWrite } from "./github-writes.mjs";
+import { shellGitHubWrites } from "./github-writes.mjs";
 import { shellWords } from "./acquisition-command.mjs";
 import { shellTool, githubFragment } from "./shell-network.mjs";
 import { allowedLibraryUrl } from "./library-acquisition.mjs";
@@ -70,11 +70,11 @@ function request(event, github, result, laterShell) {
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
 }
-function classifySearch(query, github, engineRoots) {
+function classifySearch({ query, repoOnly, network }, github, engineRoots) {
   const { text, valid } = canonicalText(query);
   if (readsLocalSource(text, engineRoots)) return "source-read";
-  if (valid && issueSearch(text)) return "issue-lookup";
-  return github || touchesGitHub(text) ? "source-read" : "other";
+  if (valid && issueSearch(text, { repoOnly })) return "issue-lookup";
+  return github || network || touchesGitHub(text) ? "source-read" : "other";
 }
 function shellWriteStatus(event, result) {
   if (
@@ -125,13 +125,10 @@ export function classifyToolCall(
     const outcomes = parts.map(({ text, tokens, heredoc }) => {
       const words =
         tokens ?? shellWords(decodedShellBody(text), { literal: true });
-      if (shellGitHubWrite(words)) {
-        attemptedWrites.push(status);
+      const writes = shellGitHubWrites(words, heredoc);
+      if (writes) {
+        for (let i = 0; i < writes; i++) attemptedWrites.push(status);
         return { class: "source-read" };
-      }
-      if (heredoc?.executed) {
-        for (const part of shellParts(heredoc.body) ?? [])
-          if (shellGitHubWrite(part.tokens)) attemptedWrites.push(status);
       }
       return classifyRequest(
         shellRequest(text, tokens, heredoc),
@@ -158,7 +155,7 @@ function classifyRequest(call, github, engineRoots, allowedLibraryPaths) {
       ),
     );
   if (Object.hasOwn(call, "query"))
-    return { class: classifySearch(call.query, github, engineRoots) };
+    return { class: classifySearch(call, github, engineRoots) };
   const canonical = canonicalUrl(call.target);
   const text =
     call.text === undefined ? canonical.text : canonicalText(call.text).text;

@@ -710,10 +710,25 @@ it("accepts a changed wire by UID from schematic ink or a trusted reference", ()
   expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
 });
 
-it("rejects an empty change row and an untouched wire", () => {
+it("requires C-CHANGE subjects only from prompt version 1.6.1", () => {
   const { x, row } = changeFixture();
   row.designations = [];
-  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+  for (const promptVersion of [null, "1.5.1", "1.6.0"])
+    expect(
+      assessDogfood({ ...x, promptVersion }).checks.requirementMatrix,
+    ).toBe(true);
+  for (const promptVersion of ["1.6.1", "1.7.0", "2.0.0"])
+    expect(
+      assessDogfood({ ...x, promptVersion }).checks.requirementMatrix,
+    ).toBe(false);
+  row.status = "deferred";
+  expect(
+    assessDogfood(x).requirements.find((r) => r.id === "C-CHANGE").pass,
+  ).toBe(false);
+});
+
+it("rejects an untouched wire", () => {
+  const { x, row } = changeFixture();
   row.designations = ["W-PSU-L"];
   x.calls[0].before.documents["source.json"] =
     x.calls[0].after.documents["source.json"];

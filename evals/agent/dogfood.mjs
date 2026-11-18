@@ -219,9 +219,14 @@ function changedWireUids(applies) {
   }
   return touched;
 }
-function needsNoWrites(version) {
-  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version ?? "");
-  return !!match && (+match[1] > 1 || (+match[1] === 1 && +match[2] >= 6));
+function hasRule(version, patch) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version ?? "");
+  return (
+    !!match &&
+    (+match[1] > 1 ||
+      (+match[1] === 1 &&
+        (+match[2] > 6 || (+match[2] === 6 && +match[3] >= patch))))
+  );
 }
 
 export function assessDogfood({
@@ -301,7 +306,6 @@ export function assessDogfood({
       changeRow = /^(?:C|P)-CHANGE$/.test(requirement.id),
       represented =
         known &&
-        (requirement.id !== "C-CHANGE" || names.length > 0) &&
         names.every((tag) => {
           const object = byTag.get(tag);
           if (changeRow && object.kind === "wire")
@@ -344,7 +348,10 @@ export function assessDogfood({
       ["satisfied", "substituted", "deferred"].includes(row?.status) &&
       typeof summary === "string" &&
       summary.trim().length >= 8 &&
-      (known || (row?.status === "deferred" && gapSubjects));
+      (known || (row?.status === "deferred" && gapSubjects)) &&
+      (requirement.id !== "C-CHANGE" ||
+        !hasRule(promptVersion, 1) ||
+        names.length > 0);
     let deferredJustified = false;
     if (row?.status === "deferred") {
       const diagnosis = typeof evidence === "object" && evidence.diagnostic;
@@ -521,7 +528,7 @@ export function assessDogfood({
       ["localTypes", "sourceReads", "failedCalls"].every(
         (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
       ) &&
-      (!needsNoWrites(promptVersion) || counts.attemptedWrites === 0),
+      (!hasRule(promptVersion, 0) || counts.attemptedWrites === 0),
   };
   const expectedNames = new Set(
     decisions

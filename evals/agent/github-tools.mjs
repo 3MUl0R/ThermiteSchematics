@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { fromMarkdown } from "mdast-util-from-markdown";
 import { canonicalText, canonicalUrl } from "./github-canonical.mjs";
 import { conversationQuery } from "./issue-lookup.mjs";
 
@@ -121,23 +122,47 @@ const nullableText = [
 ];
 const absentMetadata = ["user", "assignees", "labels", "milestone", "comments"];
 
-function containsSourceContent(value) {
-  if (/^\s*(?:```|~~~)|^(?: {4}|\t)[^\S\r\n]*\S/m.test(value)) return true;
+function containsSourceLink(value, linked = false) {
   const text = canonicalText(value).text.replaceAll("\\", "/");
   // A source locator must be a GitHub link. Bare file paths are prose.
   const links = text.matchAll(
     /(?:https?:\/*|(?<![\w./-])(?:\/\/)?)(?:[a-z0-9-]+\.)*(github\.com|githubusercontent\.com)(?=([/:?#][^\s<>"'`()\[\]{}]*))/gu,
   );
   for (const [, host, target] of links) {
+    const directFile =
+      host === "githubusercontent.com" || /\/contents(?:[/?#]|$)/u.test(target);
     if (
-      host === "githubusercontent.com" ||
-      /\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.(?:diff|patch)\b/u.test(
-        target,
-      )
+      directFile
+        ? linked
+        : /\/(?:blobs?|raw|tree|commits?|archive)\/|\.(?:diff|patch)\b/u.test(
+            target,
+          )
     )
       return true;
   }
   return false;
+}
+
+function containsSourceContent(value) {
+  const lines = value.split(/\r\n?|\n/);
+  const hasBlock = (node, topLevel) => {
+    if (node.type === "code") {
+      const { line, column } = node.position.start;
+      return (
+        /^\s*(?:```|~~~)/.test(lines[line - 1].slice(column - 1)) ||
+        (topLevel && line > 1 && /^\s*$/.test(lines[line - 2]))
+      );
+    }
+    if (
+      ["link", "definition"].includes(node.type) &&
+      containsSourceLink(node.url, true)
+    )
+      return true;
+    return node.children?.some((child) =>
+      hasBlock(child, node.type === "root"),
+    );
+  };
+  return hasBlock(fromMarkdown(value), false) || containsSourceLink(value);
 }
 
 function conversationResult(issue, repository, pullOnly) {
@@ -179,7 +204,11 @@ export function githubEvidence(event, result) {
   const receipt = result?.mcp;
   const operation = connectorOperation(event);
   const matches = matchingReceipt(event, receipt, namedOperation(event));
-  if (operation && !reads.has(operation)) {
+  if (
+    operation &&
+    !reads.has(operation) &&
+    !/^(?:get|list|search|read|fetch)_/.test(operation)
+  ) {
     const denied =
       matches &&
       receipt.status === "failed" &&

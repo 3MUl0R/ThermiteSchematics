@@ -93,3 +93,94 @@ it.each([
     ).toBe(0);
   },
 );
+
+const report = `cat > report.md <<'EOF'\ncurl -s ${url}\nEOF`;
+const transports = {
+  Claude: (command) => ({
+    type: "assistant",
+    message: {
+      content: [
+        { type: "tool_use", id: command, name: "Bash", input: { command } },
+      ],
+    },
+  }),
+  "Codex single-quoted wrapper": (command) =>
+    codex("/bin/zsh -lc '" + command.replaceAll("'", "'\"'\"'") + "'"),
+  "Codex double-quoted wrapper": (command) =>
+    codex('/bin/zsh -lc "' + command.replaceAll('"', '\\"') + '"'),
+};
+function codex(command) {
+  return {
+    type: "item.completed",
+    item: { id: command, type: "command_execution", command, exit_code: 0 },
+  };
+}
+function scoreReportCases(label, transport, tails, expected) {
+  it.each(tails)(label + " %s", (tail) => {
+    expect(
+      score({ transcript: [transport(report + "\n" + tail)] }).sourceReads,
+    ).toBe(expected);
+    expect(
+      score({ transcript: [transport(report), transport(tail)] }).sourceReads,
+    ).toBe(expected);
+  });
+}
+
+for (const [label, transport] of Object.entries(transports)) {
+  scoreReportCases(
+    label + " keeps reports inert for",
+    transport,
+    [
+      "cp report.md drawings/",
+      "mv report.md drawings/",
+      "cp report.md drawings/friction.md && cat drawings/friction.md",
+      "sed -n 1,5p report.md",
+      "sed -n -e '1,5p' report.md",
+      "sed -n 'w backup.md' report.md",
+      "cat report.md | grep compile | wc -l",
+      "cat report.md > duplicate.md",
+      "head report.md; tail report.md; less report.md; wc -l report.md; grep title report.md",
+      "git add report.md",
+      "git diff --stat -- report.md",
+      "git commit -m 'Draft report' -- report.md",
+      "git show HEAD:report.md",
+      "bash -c 'cat report.md'",
+      "chmod +x report.md",
+    ],
+    0,
+  );
+  scoreReportCases(
+    label + " keeps the body in scope for",
+    transport,
+    [
+      "bash -x report.md",
+      "sh -eu report.md",
+      "env bash report.md",
+      "env -i python3 -u report.md",
+      "env -u PYTHONPATH python3 -u report.md",
+      "zsh report.md",
+      "node --trace-warnings report.md",
+      "perl report.md",
+      "ruby report.md",
+      "source report.md",
+      ". report.md",
+      "sh -c 'source report.md'",
+      "bash -c '$(cat report.md)'",
+      'sh -c "$(cat report.md)"',
+      "xargs -a report.md -I{} sh -c {}",
+      "cat report.md | grep curl | sh",
+      "cat report.md | python3",
+      "git show HEAD:report.md | sh",
+      "git -C . show :report.md | sh",
+      "cp report.md run.sh && sh run.sh",
+      "mv report.md drafts/ && env bash drafts/report.md",
+      "cp report.md run.sh && chmod +x run.sh && ./run.sh",
+      "chmod +x report.md && ./report.md",
+      "cat report.md > copy && sh copy",
+      "sed 'e' report.md",
+      "sed 's/^curl/curl/e' report.md",
+      "sed -n 'w copy' report.md && sh copy",
+    ],
+    1,
+  );
+}

@@ -45,14 +45,17 @@ function plainTerm(token) {
     .split(" ")
     .every((term) => word.test(term));
 }
-export function issueSearch(query) {
+export function issueSearch(query, { repoOnly = false } = {}) {
   if (!query) return false;
   const tokens = tokenize(query);
   if (!tokens || !tokens.every((t) => operators.has(t) || plainTerm(t)))
     return false;
   const repo = tokens.some((t) => repoScopes.has(t));
   const kind = tokens.some((t) => issueKinds.has(t));
-  return repo === kind && (repo || tokens.some((t) => siteScopes.has(t)));
+  return (
+    repo === kind &&
+    (repo || (!repoOnly && tokens.some((t) => siteScopes.has(t))))
+  );
 }
 // Typed search_issues has its own endpoint. It still needs an approved repo
 // and ordinary search terms. Permit a literal Boolean group of plain words.

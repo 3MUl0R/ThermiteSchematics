@@ -1,4 +1,6 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
+import { posix } from "node:path";
+import { gitOperation } from "./repository-command.mjs";
 const separators = new Set(["&&", "||", ";", "|", "&", "\n"]);
 function split(text) {
   const tokens = shellWords(text, { literal: true });
@@ -16,6 +18,7 @@ function split(text) {
         parts.push({
           tokens: selected,
           text: selected.map((t) => t.literal).join(" "),
+          separator: tokens[i]?.value,
         });
       }
       start = i + 1;
@@ -23,10 +26,11 @@ function split(text) {
   }
   return parts;
 }
-const readOnlyFileTools = new Set([
+const fileReaders = new Set([
   "cat",
   "head",
   "tail",
+  "less",
   "rg",
   "grep",
   "wc",
@@ -34,6 +38,7 @@ const readOnlyFileTools = new Set([
   "ls",
   "test",
 ]);
+const interpreters = /^(?:sh|bash|zsh|python[\d.]*|node|bun|perl|ruby|deno)$/;
 
 export function decodedShellBody(input) {
   if (!/[\\$]/.test(input)) {
@@ -48,30 +53,156 @@ export function decodedShellBody(input) {
   return literalShellBody(input);
 }
 
-// Only a plain file inspection is safe when a subsequent shell command names
-// the output. Pipelines, copies and wrapped interpreters can consume its code.
-export function executedOutput(header, tail) {
-  const words = shellWords(header);
-  const index = words?.findIndex((word) => word === ">" || word === ">>");
-  if (index === undefined || index < 0 || !words[index + 1]) return false;
-  const file = words[index + 1]
-    .replace(/^\.\//, "")
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const mentions = new RegExp(`(?:^|[\\s"'=/<>])${file}(?=$|[\\s"';&|<>),])`);
+function literalReferences(text, files) {
+  return [...files].some((file) => {
+    const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `(?:^|[\\s"'=<>:(])(?:\\./)?${escaped}(?=$|[\\s"';&|<>),])`,
+    ).test(text);
+  });
+}
+
+function commandsOf(tokens) {
+  const words = tokens
+    .filter((token) => !token.control)
+    .map((token) => token.value);
+  let head = 0;
+  while (words[head]) {
+    if (["-u", "--unset"].includes(words[head]) && head > 0) head += 2;
+    else if (
+      ["env", "command"].includes(posix.basename(words[head])) ||
+      /^(?:-i|--ignore-environment|--|--unset=.+|[A-Za-z_]\w*=.*)$/.test(
+        words[head],
+      )
+    )
+      head++;
+    else break;
+  }
+  return words.slice(head);
+}
+
+function copyOutput(command, args, files) {
+  const operands = args.filter((arg) => !arg.startsWith("-"));
+  const output = operands.pop();
+  if (!output) return;
+  for (const input of operands.map((path) => posix.normalize(path))) {
+    if (!files.has(input)) continue;
+    if (command === "mv") files.delete(input);
+    if (!output.endsWith("/")) files.add(posix.normalize(output));
+    files.add(posix.join(output, posix.basename(input)));
+  }
+}
+
+function sedScripts(args) {
+  const scripts = [];
+  let positional;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--") {
+      positional ??= args[i + 1];
+      break;
+    }
+    if (arg === "--expression" || /^-[Einr]*e$/.test(arg))
+      scripts.push(args[++i]);
+    else if (arg.startsWith("--expression=")) scripts.push(arg.slice(13));
+    else if (/^-[Einr]*e.+/.test(arg))
+      scripts.push(arg.replace(/^-[Einr]*e/, ""));
+    else if (arg === "-f" || arg === "--file") return [];
+    else if (!arg.startsWith("-")) positional ??= arg;
+  }
+  return scripts.length ? scripts : [positional];
+}
+
+function sedExecutes(args, files) {
+  for (const script of sedScripts(args)) {
+    for (const instruction of script?.split(/[;\n]/) ?? []) {
+      const text = instruction
+        .trim()
+        .replace(
+          /^(?:(?:[\d$]+|\/[^/]*\/)(?:\s*,\s*(?:[\d$]+|\/[^/]*\/))?)\s*!?\s*/,
+          "",
+        );
+      if (/^e(?:\s|$)/.test(text)) return true;
+      const flags = /^s(.)(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1(.*)$/.exec(
+        text,
+      )?.[2];
+      if (flags && /^[a-z0-9]*e/.test(flags)) return true;
+      const output =
+        /^w\s+(.+)$/.exec(text)?.[1] ??
+        /^[a-z0-9]*w\s+(.+)$/.exec(flags ?? "")?.[1];
+      if (output) files.add(posix.normalize(output));
+    }
+  }
+  return false;
+}
+
+function executesIn(tail, files, executable) {
   const lines = tail.split("\n");
+  let pipeInput = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (mentions.test(line)) {
-      const parts = split(line);
-      if (!parts || /[|<>]/.test(line)) return true;
+    const parts = split(line);
+    if (
+      !parts &&
+      (/^\s*(?:\$\(|`)/.test(line) ||
+        /\b(?:bash|sh|zsh)\s+-[\w]*c\b.*(?:\$\(|`)/.test(line)) &&
+      literalReferences(line, files)
+    )
+      return true;
+    for (const part of parts ?? []) {
+      const [head = "", ...args] = commandsOf(part.tokens);
+      const command = posix.basename(head);
+      const [gitVerb, ...gitArgs] = command === "git" ? gitOperation(args) : [];
+      const named =
+        args.some((arg) => files.has(posix.normalize(arg))) ||
+        (gitVerb === "show" &&
+          gitArgs.some((arg) => {
+            const colon = arg.indexOf(":");
+            return (
+              colon >= 0 && files.has(posix.normalize(arg.slice(colon + 1)))
+            );
+          }));
+      const input = named || pipeInput;
       if (
-        parts.some(
-          (part) =>
-            mentions.test(part.text) &&
-            !readOnlyFileTools.has(part.tokens[0].value.split("/").at(-1)),
-        )
+        files.has(posix.normalize(head)) &&
+        (head.includes("/") || executable.has(posix.normalize(head)))
       )
         return true;
+      if (["cp", "mv"].includes(command)) copyOutput(command, args, files);
+      if (command === "chmod")
+        for (const arg of args) {
+          const name = posix.normalize(arg);
+          if (files.has(name)) executable.add(name);
+        }
+      if (
+        interpreters.test(command) ||
+        ["source", ".", "xargs"].includes(command)
+      ) {
+        const index = /^(?:sh|bash|zsh)$/.test(command)
+          ? args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg))
+          : -1;
+        const script = index >= 0 ? (args[index + 1] ?? "") : "";
+        if (
+          input ||
+          (script &&
+            ((/(?:\$\(|`)/.test(script) && literalReferences(script, files)) ||
+              executesIn(script, files, executable)))
+        )
+          return true;
+      }
+      if (input && command === "sed" && sedExecutes(args, files)) return true;
+      const data =
+        fileReaders.has(command) ||
+        command === "sed" ||
+        ["diff", "show"].includes(gitVerb);
+      if (data && input) {
+        const redirect = part.tokens.findIndex(
+          (token) => token.control && [">", ">>"].includes(token.value),
+        );
+        if (redirect >= 0 && part.tokens[redirect + 1])
+          files.add(posix.normalize(part.tokens[redirect + 1].value));
+      }
+      pipeInput = part.separator === "|" && input && data;
     }
     const here = /<<\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1\s*$/.exec(line);
     if (here) {
@@ -79,7 +210,7 @@ export function executedOutput(header, tail) {
       if (end < 0) continue;
       const body = lines.slice(i + 1, end).join("\n");
       if (
-        mentions.test(body) &&
+        literalReferences(body, files) &&
         /\b(?:exec|eval|source|system|spawn|subprocess)\b/.test(body)
       )
         return true;
@@ -87,6 +218,19 @@ export function executedOutput(header, tail) {
     }
   }
   return false;
+}
+
+// Track a literal Markdown output and copies through subsequent shell commands.
+// Reading or staging file data keeps it inert until it reaches an execution sink.
+export function executedOutput(header, tail) {
+  const tokens = shellWords(header, { literal: true });
+  const index = tokens?.findIndex(
+    (token) => token.control && [">", ">>"].includes(token.value),
+  );
+  const output = index >= 0 && tokens[index + 1]?.value;
+  return output
+    ? executesIn(tail, new Set([posix.normalize(output)]), new Set())
+    : false;
 }
 export function shellParts(input, laterShell = "") {
   const text = literalShellBody(input),
