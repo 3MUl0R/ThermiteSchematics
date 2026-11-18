@@ -156,6 +156,8 @@ function fragmentLandings(
 function terminalAnchor(body: Rect, field: Rect) {
   const xMm = body.x + body.w / 2,
     yMm = body.y + body.h / 2;
+  if (!inside({ x: xMm, y: yMm, w: 0, h: 0 }, field))
+    throw Error("Drawn strip landing is outside its navigation field");
   return { xMm, yMm, zone: navigationZone(xMm, yMm, field) };
 }
 
