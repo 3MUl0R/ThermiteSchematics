@@ -604,12 +604,8 @@ const pristineHashes = new Map<Template, Map<string, string>>();
 
 beforeAll(async () => {
   await setUpSuite();
-  for (const template of TEMPLATES) {
-    expect(await readFile(join(ctx.pristine[template], "AGENTS.md"))).toEqual(
-      guideBytes,
-    );
+  for (const template of TEMPLATES)
     pristineHashes.set(template, await hashTree(ctx.pristine[template]));
-  }
   const kinds = await thermite(["report", "bogus"], ctx.pristine.starter);
   cliWords = new Set([
     ...ctx.tree.commands.keys(),
@@ -639,7 +635,11 @@ describe("generated project guide", () => {
     "keeps safety and registered-source rules in the core",
     verifyCoreAuthoringRules,
   );
-  it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
+  it("matches init, fits its budget, resolves offline pointers and names the pinned runtime", async () => {
+    for (const template of TEMPLATES)
+      expect(await readFile(join(ctx.pristine[template], "AGENTS.md"))).toEqual(
+        guideBytes,
+      );
     await verifyGuideBudgets();
     expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);
     const pointers = [
