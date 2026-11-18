@@ -36,6 +36,21 @@ function mutateInk(root, name) {
     }
     return 1;
   }
+  if (name === "stub-crosses-bridge") {
+    const stub = all("[data-strip-incidence]").find((group) =>
+      group.textContent.includes("CBL1/1+ → JB1.X1.1"),
+    );
+    const path = stub?.querySelector("path");
+    if (!path) return 0;
+    // Restore the premature bend while leaving the source binding and
+    // endpoints intact. The first bridge track is 6 mm from TB1's edge.
+    const elbow = path.getPointAtLength(0).x + 3.5;
+    const original = path.getAttribute("d");
+    const crossing = original.replace(/ H [-\d.]+ V /u, ` H ${elbow} V `);
+    if (crossing === original) return 0;
+    path.setAttribute("d", crossing);
+    return 1;
+  }
   if (name === "missing-continuation") {
     const markers = all("[data-strip-continuation]");
     for (const m of markers) m.remove();
