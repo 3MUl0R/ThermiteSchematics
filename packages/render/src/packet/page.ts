@@ -1,4 +1,5 @@
 import { hasCompactFrame } from "./frame-profile.js";
+import { boundaryCaptionContent } from "./boundary-captions.js";
 import { compactFramePlan } from "./frame-plan.js";
 import { compactFrame } from "./frame-compact.js";
 import { legacyFooterNote } from "./legacy-footer.js";
@@ -150,7 +151,7 @@ export function frame(
     bottom = page.heightMm - m;
   const titleTop = bottom - titleHeight(draft.title, page);
   const label = sheetLabel(draft.view);
-  const content = namespaceSheetContent(draft.content, number);
+  const content = namespaceSheetContent(boundaryCaptionContent(draft), number);
   const out = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(page.widthMm)}mm" height="${n(page.heightMm)}mm" viewBox="0 0 ${n(page.widthMm)} ${n(page.heightMm)}" role="img" aria-label="${attr(`${label}, sheet ${number} of ${total}`)}" data-sheet="${number}" data-total-sheets="${total}"${rootedLegendView(draft.view) ? ` data-view-format="${attr(draft.view.format)}" data-view-family="${attr("family" in draft.view ? draft.view.family : "")}"` : ""} data-paper="${page.size}">`,

@@ -356,7 +356,7 @@ function evaluateDocuments(
         "Visible printed promises, native scoped dependency facts, and actual issued visible rows; document kind alone proves nothing.",
     }),
   );
-  out.push(obs("DQ-17", checks.terminalText(g)));
+  out.push(obs("DQ-17", checks.terminalText(g, ir)));
   out.push(
     terminalPlanObservation(s, g, tables, obs, {
       packet,

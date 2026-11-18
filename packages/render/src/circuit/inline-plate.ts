@@ -1,5 +1,9 @@
 import type { CircuitLabelState } from "./layout-routes.js";
-import { rectInkBox, segmentTouchesBox } from "../layout/ink-geometry.js";
+import {
+  rectInkBox,
+  segmentTouchesBox,
+  pointInsideBox,
+} from "../layout/ink-geometry.js";
 
 /** #399: the whole opaque plate needs one straight owned approach through
  * opposite sides. Glyph support alone cannot reveal a bend hidden by its margin.
@@ -9,6 +13,8 @@ export function circuitCaptionPlateFits(
   state: CircuitLabelState,
 ) {
   const box = rectInkBox(label);
+  if ([...state.dots.values()].some((point) => pointInsideBox(point, box)))
+    return false;
   const hidden = state.segments.filter(
     (s) => s.index === label.index && segmentTouchesBox(s.a, s.b, box),
   );

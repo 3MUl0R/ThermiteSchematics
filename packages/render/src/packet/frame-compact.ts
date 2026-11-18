@@ -15,6 +15,7 @@ import {
 } from "./frame-plan.js";
 import { admitFinalBanks } from "./frame-banks.js";
 import { continuationLabelSvg } from "./continuation-label.js";
+import { boundaryCaptionContent } from "./boundary-captions.js";
 import { rootedLegendView } from "../device-legend.js";
 import { rootedSheetNoticeSvg, rootedSheetView } from "../off-view/notice.js";
 import { sheetLabel } from "./page.js";
@@ -50,7 +51,7 @@ export function compactFrame(
     `<rect width="${n(page.widthMm)}" height="${n(page.heightMm)}" fill="white"/>`,
     `<rect x="${n(m)}" y="${n(m)}" width="${n(w)}" height="${n(bottom - m)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
     ...frameHeader(page, number, total),
-    namespaceSheetContent(draft.content, number),
+    namespaceSheetContent(boundaryCaptionContent(draft), number),
   ];
   const notice = rootedSheetNoticeSvg(draft.view, page);
   if (notice) out.push(notice);

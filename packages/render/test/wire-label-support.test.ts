@@ -10,6 +10,7 @@ import { prepareWiringDrawing } from "../src/wiring.js";
 import { consoleWiringFixture } from "./wiring-landings-fixture.js";
 import { required } from "./fixtures.js";
 import { points } from "./helpers/route-quality.js";
+import { clearOwnedPlate } from "../src/layout/label-plate.js";
 
 import {
   nativePath,
@@ -132,6 +133,22 @@ it("supports every console wiring caption on its native conductor or an actual l
         x = Number(t.getAttribute("x")),
         y = Number(t.getAttribute("y"));
       expect(t.getAttribute("font-size")).toBe("2.7");
+      const plate = required(group.querySelector("rect"));
+      const left = Number(plate.getAttribute("x")),
+        top = Number(plate.getAttribute("y"));
+      expect(
+        clearOwnedPlate(
+          {
+            left,
+            top,
+            right: left + Number(plate.getAttribute("width")),
+            bottom: top + Number(plate.getAttribute("height")),
+          },
+          [route],
+          1.2,
+        ),
+        t.textContent ?? "",
+      ).toBe(true);
       const leader = [
         ...doc.querySelectorAll("[data-label-leader-owner]"),
       ].find((e) => e.getAttribute("data-label-leader-owner") === id);

@@ -15,6 +15,7 @@ import {
   conductorIdentity,
 } from "./tranche3-identities.mjs";
 import { nativeLabelIdentity } from "./wire-label-source.mjs";
+import { wireLabelMaskFinding } from "./wire-label-mask.mjs";
 function supportSegments(s, g, inline) {
   return inline
     ? segments(routePoints(s))
@@ -148,16 +149,19 @@ export function wireLabelSupportAudit(input, ir) {
   for (const ts of groups.values()) {
     const own = routes.filter((r) => r.wire === ts[0].wire),
       ends = source.get(ts[0].wire);
-    if (
-      !ends ||
-      ts.some((t) => t.identityConflict) ||
-      !nativeLabelIdentity(ts, ir) ||
-      own.some(
+    const nativeOwner =
+      !!ends &&
+      !ts.some((t) => t.identityConflict) &&
+      nativeLabelIdentity(ts, ir) &&
+      own.every(
         (r) =>
-          JSON.stringify((r.endpoints ?? []).map(terminalKey).sort()) !==
-          JSON.stringify(ends.map(terminalKey).sort()),
-      )
-    )
+          !r.identityConflict &&
+          JSON.stringify((r.endpoints ?? []).map(terminalKey).sort()) ===
+            JSON.stringify(ends.map(terminalKey).sort()),
+      );
+    const mask = wireLabelMaskFinding(ts, g, routes, nativeOwner);
+    if (mask) findings.push(mask);
+    if (!nativeOwner)
       findings.push(
         finding("wire-label-native-owner-unavailable", ts[0], {
           wire: ts[0].wire,

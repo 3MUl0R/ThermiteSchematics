@@ -5,7 +5,10 @@ import {
   ownedLabelLeader,
   labelLeaderArrow,
 } from "../src/layout/wire-label-support.js";
-import { ownedWiringLabels } from "../src/layout/wiring-label-support.js";
+import {
+  ownedWiringLabels,
+  wiringLabelLeaders,
+} from "../src/layout/wiring-label-support.js";
 import { required } from "./fixtures.js";
 
 const ink = { left: 0, right: 20, top: 10, bottom: 15 };
@@ -145,8 +148,8 @@ it("places distinct same-text wire captions independently on their actual native
       e.labels?.map((l) => ({ x: l.x, y: l.y, text: l.text })),
     ),
   ).toEqual([
-    [{ x: 10, y: 36, text: "SAME" }],
-    [{ x: 10, y: 56, text: "SAME" }],
+    [{ x: 70, y: 36, text: "SAME" }],
+    [{ x: 70, y: 56, text: "SAME" }],
   ]);
   expect(after.edges?.map((e) => e.sections)).toEqual(
     before.edges?.map((e) => e.sections),
@@ -167,8 +170,25 @@ it("selects the longest free owned segment and preserves a valid old inline plat
   const result = ownedWiringLabels(graph),
     label = required(result.edges?.[0]?.labels?.[0]);
   expect(label.y).toBe(76);
-  expect(label.x).toBe(80);
+  expect(label.x).toBeCloseTo(105);
   expect(ownedWiringLabels(result)).toEqual(result);
+});
+
+it("uses a checked leader when no straight horizontal segment can host the plate", () => {
+  const graph = fixture(),
+    edge = required(graph.edges?.[0]);
+  graph.edges = [edge];
+  edge.sections = [
+    { id: "s0", startPoint: { x: 90, y: 10 }, endPoint: { x: 90, y: 75 } },
+  ];
+  edge.labels = [{ text: "SAME", x: 70, y: 20, width: 60, height: 8 }];
+  const result = ownedWiringLabels(graph);
+  const label = required(result.edges?.[0]?.labels?.[0]);
+  const [leader] = wiringLabelLeaders(result);
+  expect(leader?.edgeId).toBe("e0");
+  expect(leader?.points.at(-1)?.x).toBe(90);
+  expect(required(label.x) + required(label.width)).toBeLessThan(90);
+  expect(result.edges?.[0]?.sections).toEqual(edge.sections);
 });
 
 it("moves touching glyph ink inside the 0.5–1 mm beside default, preserving its size and reserving leaders for competing physical ink", async () => {

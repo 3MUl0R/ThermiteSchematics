@@ -268,6 +268,12 @@ used. An owner that cannot fit with its tag produces R006.
 
 All printed text uses at least 2.5 mm vertical physical em in SVG, HTML and PDF, including symbol legends, wire labels, conductor details, terminal labels, PLC channel addresses, secondary references, boundary/contact/relation captions, frame furniture, zones, notes, footers and the version stamp. Device designation tags retain their 2.7 mm floor. The separate ISO cap-height policy is unchanged. Long labels are measured before routing and pagination; an unreadable block or group is rejected rather than clipped.
 
+Follow a wire label along its own straight run or along its dashed drafting
+leader. Inline plates leave visible conductor ink on both sides and clear
+terminal approaches, elbows and junctions. A local rail or continuation
+caption may supply an identical native boundary fact once while retaining
+the conductor identity and destination.
+
 Vertical device designations, and relation footers in both flows, use pinned
 font ink to find
 the nearest clear position inside their owning device. They clear the owner's

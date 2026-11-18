@@ -1,6 +1,7 @@
 // Native SVG geometry, never renderer label planners or sourcePortId helpers.
 import { pointDistance } from "./review-geometry.mjs";
 import { sourceOrderedRoute } from "./net-route-geometry.mjs";
+import { survivingRailCaption } from "./net-rail-caption.mjs";
 export const normalizedNetText = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -81,7 +82,7 @@ function tailPosition(route, label, issue) {
       labelDistanceAlongRoute: at,
     });
 }
-export function netLabelFindings(g, captionOwnershipFinding, issue) {
+export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
   const out = [];
   for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
     const routes = routesFor(g, label),
@@ -103,6 +104,7 @@ export function netLabelFindings(g, captionOwnershipFinding, issue) {
       routes,
       captionOwnershipFinding,
       issue,
+      ir,
     );
     if (repeated) out.push(repeated);
   }
@@ -114,6 +116,7 @@ function netRepetitionFinding(
   routes,
   captionOwnershipFinding,
   issue,
+  ir,
 ) {
   const names = [
     ...new Set(
@@ -142,7 +145,11 @@ function netRepetitionFinding(
         ),
       ),
   );
-  if (label.omitted && !caption)
+  if (
+    label.omitted &&
+    !caption &&
+    !survivingRailCaption(g, label, routes, text, ir)
+  )
     return issue("net-label-suppressed-without-source-caption", label, {
       text,
       edgeOwnerKey: label.labelOwnerKey,

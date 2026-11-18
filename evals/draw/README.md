@@ -527,6 +527,17 @@ remains manual.
   Semantic net/potential names are not physical wire identity captions.
   Explicit nonconductive `data-wire-label-leader` paths locate candidates only:
   its continuous painted path must actually reach the label and its own conductor.
+  Checker 5.29 also measures the opaque caption rectangle in paint order. An
+  inline interruption can pass when exactly one native owned straight stroke
+  crosses the plate and extends beyond both sides in the visible viewport.
+  The existing 0.01 mm coordinate coincidence tolerance applies. A covered
+  route end, bend, junction or foreign stroke fails independently of the
+  label-distance findings. The manual block-centre review rule remains.
+- **DQ-17 rail substitution:** an empty source net reservation can be supplied
+  by the painted rail caption at the same measured source terminal when it
+  names the IR potential for that terminal and net. A remote, clipped, wrong
+  potential or absent caption cannot supply the omission. The existing
+  terminal-caption repetition test keeps its scope.
 - **DQ-04 / N5 extension:** owned function/report NC/NO contact captions must
   agree with native contact state or explicit circuit-symbol class. Native
   power-input/output roles on breaker/overload/fuse profiles identify protection

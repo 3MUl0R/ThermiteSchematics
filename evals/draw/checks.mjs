@@ -329,7 +329,7 @@ function captionOwnershipFinding(t) {
     });
 }
 
-export function terminalText(g) {
+export function terminalText(g, ir) {
   const netLabel = (t) =>
     t.labelRole ? t.labelRole === "net" : t.role?.includes("label-net");
   const caption = (t) => !netLabel(t) && t.tagKind !== "reference";
@@ -340,7 +340,7 @@ export function terminalText(g) {
         netLabel(t) ||
         t.terminal,
     ),
-    out = netLabelRepetition(g);
+    out = netLabelRepetition(g, ir);
   for (let i = 0; i < ts.length; i++) {
     const a = ts[i];
     const ownership = captionOwnershipFinding(a);
@@ -385,8 +385,8 @@ export function terminalText(g) {
 }
 // V5.1: TAIL net labels belong at the route source. Target captions cannot
 // replace source ink. Audit declared empty reservations as well as painted names.
-export function netLabelRepetition(g) {
-  return netLabelFindings(g, captionOwnershipFinding, issue);
+export function netLabelRepetition(g, ir) {
+  return netLabelFindings(g, captionOwnershipFinding, issue, ir);
 }
 
 export { titleFields } from "./title-fields.mjs";

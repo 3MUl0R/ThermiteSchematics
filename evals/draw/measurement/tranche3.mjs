@@ -41,6 +41,7 @@ export function trancheGeometry(c) {
     tranche3: {
       routeInk,
       leaders,
+      wirePlatePaint: c.h.wirePlateGeometry(c),
       circuitJunctions: c.h.trancheCircuitJunctions(c),
     },
   };
