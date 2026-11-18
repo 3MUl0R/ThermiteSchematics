@@ -23,9 +23,9 @@ function split(text) {
   }
   return parts;
 }
-function executedOutput(header, tail) {
+export function executedOutput(header, tail) {
   const words = shellWords(header),
-    index = words?.indexOf(">");
+    index = words?.findIndex((word) => word === ">" || word === ">>");
   if (index === undefined || index < 0) return false;
   const file = words[index + 1]
     ?.replace(/^\.\//, "")
@@ -33,7 +33,7 @@ function executedOutput(header, tail) {
   return (
     !!file &&
     new RegExp(
-      `\\b(?:bash|sh|zsh|python[\\d.]*|node|bun)\\s+(?:--\\s+)?["']?(?:\\./)?${file}(?:["'\\s]|$)`,
+      `(?:^|[;&|\\n])\\s*(?:(?:[^\\s]+/)?(?:bash|sh|zsh|python[\\d.]*|node|bun|source|\\.)\\s+(?:(?:--|-e)\\s+)?(?:<\\s*)?["']?(?:\\./)?|(?:(?:exec|command)\\s+)?["']?\\./)${file}(?:["'\\s]|$)`,
     ).test(tail)
   );
 }

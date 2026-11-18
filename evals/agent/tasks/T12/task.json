@@ -7,7 +7,8 @@
   "requiredTopics": [
     {
       "topic": "modeling",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "source-change"
     }
   ],
   "expectedWarnings": [],

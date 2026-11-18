@@ -7,11 +7,15 @@
   "requiredTopics": [
     {
       "topic": "libraries",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "library-choice",
+      "equivalents": ["project-workflows"]
     },
     {
       "topic": "modeling",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "source-change",
+      "equivalents": ["project-workflows"]
     }
   ],
   "expectedWarnings": [],

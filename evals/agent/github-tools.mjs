@@ -1,24 +1,206 @@
+import { isDeepStrictEqual } from "node:util";
+import { canonicalText, canonicalUrl } from "./github-canonical.mjs";
+import { conversationQuery } from "./issue-lookup.mjs";
+
+const fields = {
+  fetch: ["url", "prompt"],
+  search_issues: ["query", "repository_full_name", "sort", "order", "topn"],
+  search_prs: [
+    "query",
+    "repository_full_name",
+    "sort",
+    "order",
+    "topn",
+    "state",
+  ],
+  issue_read: ["owner", "repo", "issue_number", "method", "page", "perPage"],
+  pull_request_read: [
+    "owner",
+    "repo",
+    "pullNumber",
+    "method",
+    "page",
+    "perPage",
+  ],
+};
+const writes = new Set([
+  "create_issue",
+  "update_issue",
+  "issue_write",
+  "add_issue_comment",
+  "create_pull_request",
+  "update_pull_request",
+  "merge_pull_request",
+  "add_comment_to_pending_review",
+  "pull_request_review_write",
+]);
+const deniedMessage =
+  "MCP tool call requires approval, but approval policy is never";
+
+function namedOperation(event) {
+  return /^codex_apps\.github\.(\w+)$/.exec(event.name ?? "")?.[1];
+}
+function matchingReceipt(event, receipt, operation) {
+  return (
+    receipt?.server === "codex_apps" &&
+    receipt.tool === "github." + operation &&
+    isDeepStrictEqual(receipt.arguments, event.input)
+  );
+}
+function record(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function onlyKeys(value, keys) {
+  return record(value) && Object.keys(value).every((key) => keys.includes(key));
+}
+const conversationFields = [
+  "id",
+  "url",
+  "display_url",
+  "title",
+  "display_title",
+  "issue_number",
+  "body",
+  "state",
+  "user",
+  "assignees",
+  "labels",
+  "milestone",
+  "state_reason",
+  "comments",
+  "created_at",
+  "updated_at",
+  "closed_at",
+];
+const nullableText = [
+  "state",
+  "state_reason",
+  "created_at",
+  "updated_at",
+  "closed_at",
+  "display_title",
+];
+const absentMetadata = ["user", "assignees", "labels", "milestone", "comments"];
+function conversationResult(issue, repository, pullOnly) {
+  if (
+    !onlyKeys(issue, conversationFields) ||
+    typeof issue.title !== "string" ||
+    !Number.isSafeInteger(issue.issue_number) ||
+    issue.issue_number <= 0 ||
+    (issue.body !== null && typeof issue.body !== "string") ||
+    nullableText.some(
+      (key) => issue[key] != null && typeof issue[key] !== "string",
+    ) ||
+    absentMetadata.some((key) => issue[key] != null) ||
+    (issue.id != null && !Number.isSafeInteger(issue.id))
+  )
+    return false;
+  const root = `https://github.com/${repository}`;
+  const destinations = new Set([
+    `${root}/pull/${issue.issue_number}`,
+    ...(!pullOnly ? [`${root}/issues/${issue.issue_number}`] : []),
+  ]);
+  const primary = canonicalUrl(issue.url);
+  const display = canonicalUrl(issue.display_url ?? issue.url);
+  if (
+    !primary.valid ||
+    !display.valid ||
+    !destinations.has(primary.url?.href) ||
+    primary.url.href !== display.url?.href
+  )
+    return false;
+  // Conversation bodies can contain prose and snippets. Source locators or a
+  // separate payload field are not evidence for this exemption.
+  if (/^\s*(?:```|~~~)/m.test(issue.body ?? "")) return false;
+  const text = canonicalText(JSON.stringify(issue)).text;
+  return !/(?:githubusercontent\.com|\/(?:blobs?|raw|tree|contents|commits?|archive)\/|\.diff\b|\.patch\b|\/(?:packages\/[^/]+\/src|evals\/agent)\/)/u.test(
+    text,
+  );
+}
+
+// Structured receipts are supplied only by transcript normalization, never
+// extracted from tool arguments or inferred from agent-authored messages.
+export function githubEvidence(event, receipt) {
+  const operation = namedOperation(event);
+  const matches = matchingReceipt(event, receipt, operation);
+  if (writes.has(operation)) {
+    const denied =
+      matches &&
+      receipt.status === "failed" &&
+      receipt.result == null &&
+      onlyKeys(receipt.error, ["message"]) &&
+      receipt.error.message === deniedMessage;
+    return {
+      class: denied ? "attempted-write" : "source-read",
+      attemptedWrite: denied
+        ? "denied-before-execution"
+        : matches && receipt.status === "completed"
+          ? "completed"
+          : "unverified",
+    };
+  }
+  if (
+    !["search_issues", "search_prs"].includes(operation) ||
+    (!event.mcp && !receipt)
+  )
+    return null;
+  if (!matches) return { class: "source-read" };
+  const input = event.input;
+  if (
+    !record(input) ||
+    typeof input.query !== "string" ||
+    (input.repository_full_name !== undefined &&
+      typeof input.repository_full_name !== "string") ||
+    (input.sort !== undefined &&
+      ![
+        "updated",
+        "created",
+        "comments",
+        "best-match",
+        "reactions",
+        "interactions",
+      ].includes(input.sort)) ||
+    (input.order !== undefined && !["asc", "desc"].includes(input.order)) ||
+    (input.state !== undefined &&
+      !["all", "open", "closed"].includes(input.state)) ||
+    (input.topn !== undefined &&
+      (!Number.isSafeInteger(input.topn) || input.topn <= 0))
+  )
+    return { class: "source-read" };
+  const query = githubRequest(event, true)?.query;
+  const { text, valid } = canonicalText(query);
+  const repository = valid && conversationQuery(text);
+  const usable =
+    receipt.status === "completed" &&
+    receipt.error == null &&
+    onlyKeys(receipt.result, ["content", "structured_content"]) &&
+    Array.isArray(receipt.result.content) &&
+    receipt.result.content.length === 1 &&
+    onlyKeys(receipt.result.content[0], ["type", "text"]) &&
+    receipt.result.content[0].type === "text" &&
+    receipt.result.content[0].text === "Action completed." &&
+    onlyKeys(receipt.result.structured_content, ["issues"]) &&
+    Array.isArray(receipt.result.structured_content.issues);
+  if (
+    repository &&
+    usable &&
+    receipt.result.structured_content.issues.every((issue) =>
+      conversationResult(issue, repository, operation === "search_prs"),
+    )
+  )
+    return { class: "issue-lookup", evidence: "typed-conversation-result" };
+  return { class: "source-read" };
+}
+
 // Fixed operations, never an exemption inferred from an arbitrary GitHub name.
-export function githubRequest(event) {
+export function githubRequest(event, typedEvidence = false) {
   const name =
       event.tool ?? event.name?.split("__").at(-1)?.split(/[.:/]/).at(-1),
     input = event.input;
   const operation = name?.toLowerCase();
-  const fields = {
-    fetch: ["url", "prompt"],
-    search_issues: ["query", "repository_full_name", "sort", "order", "topn"],
-    issue_read: ["owner", "repo", "issue_number", "method", "page", "perPage"],
-    pull_request_read: [
-      "owner",
-      "repo",
-      "pullNumber",
-      "method",
-      "page",
-      "perPage",
-    ],
-  };
   if (
     !Object.hasOwn(fields, operation ?? "") ||
+    (operation === "search_prs" && !typedEvidence) ||
     !input ||
     typeof input !== "object" ||
     !Object.keys(input).every((key) => fields[operation].includes(key))
@@ -26,7 +208,7 @@ export function githubRequest(event) {
     return null;
   if (operation === "fetch")
     return { target: input?.url, headers: [], safe: true, network: true };
-  if (operation === "search_issues")
+  if (["search_issues", "search_prs"].includes(operation))
     return {
       query: `${input?.repository_full_name ? `repo:${input.repository_full_name} ` : ""}${input?.query ?? ""}`,
     };

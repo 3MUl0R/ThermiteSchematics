@@ -161,7 +161,12 @@ it("required retrieval topics match G3's public topic index", async () => {
         "utf8",
       ),
     );
-    for (const r of t.requiredTopics ?? []) expect(ids).toContain(r.topic);
+    for (const r of t.requiredTopics ?? []) {
+      expect(ids).toContain(r.topic);
+      expect(r.before).toBeTruthy();
+      for (const equivalent of r.equivalents ?? [])
+        expect(ids).toContain(equivalent);
+    }
   }
 });
 

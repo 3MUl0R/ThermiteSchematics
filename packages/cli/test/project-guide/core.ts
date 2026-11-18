@@ -1559,11 +1559,11 @@ const module: FactModule = {
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
-      "When using a runtime package, check issues; report bugs, gaps or unclear docs at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
+      "When using a runtime package, check existing issues at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
       "Contribution process; no runtime behavior.",
     ],
     [
-      "No GitHub: draft an issue.",
+      "Draft issues locally unless the user asks you to file them (search and public library GET examples in `thermite guide libraries`).",
       "Contribution process; no runtime behavior.",
     ],
     [

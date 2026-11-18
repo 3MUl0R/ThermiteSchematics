@@ -7,6 +7,7 @@ import { classifyToolCall, pathText, strings } from "./github-call.mjs";
 import { sourceRoots } from "./local-source.mjs";
 import { copiedContributorGuide } from "./contributor-policy.mjs";
 import { diff } from "./snapshot.mjs";
+import { retrieveTopics } from "./retrieval.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 const stable = (value) =>
   value && typeof value === "object"
@@ -75,6 +76,7 @@ export function score({
   expectedWarnings = [],
   actualWarnings = [],
   requiredTopics = [],
+  taskOutcome,
   allowedUnused = [],
   allowedLibraryPaths = [],
   guideCopy,
@@ -254,13 +256,12 @@ export function score({
   const sourceReads = [],
     libraryAcquisitions = [],
     issueLookups = [],
+    attemptedWrites = [],
     documentReads = [],
     seenDocuments = new Set();
-  const results = new Map(
-    normalized.events
-      .filter((e) => e.type === "tool-result")
-      .map((e) => [e.id, e.output]),
-  );
+  const results = new Map();
+  for (const event of normalized.events.filter((e) => e.type === "tool-result"))
+    results.set(event.id, results.has(event.id) ? null : event);
   const roots = sourceRoots(engineRoots);
   for (const event of normalized.events.filter((e) => e.type === "tool")) {
     if (/^(?:write|todowrite|todo_list)$/i.test(event.name)) continue;
@@ -268,12 +269,23 @@ export function score({
     const classified = classifyToolCall(event, {
       engineRoots,
       allowedLibraryPaths,
+      result: results.get(event.id),
     });
+    if (classified.attemptedWrite)
+      attemptedWrites.push({
+        id: event.id,
+        tool: event.name,
+        status: classified.attemptedWrite,
+      });
     if (context === "runtime") {
       if (classified.libraryAcquisition)
         libraryAcquisitions.push({ id: event.id, input });
       if (classified.class === "issue-lookup")
-        issueLookups.push({ id: event.id, input });
+        issueLookups.push({
+          id: event.id,
+          input,
+          ...(classified.evidence ? { evidence: classified.evidence } : {}),
+        });
       if (classified.class === "source-read")
         sourceReads.push({ id: event.id, input });
     }
@@ -299,7 +311,7 @@ export function score({
       const key = JSON.stringify(event.input);
       if (seenDocuments.has(key)) continue;
       seenDocuments.add(key);
-      const output = results.get(event.id),
+      const output = results.get(event.id)?.output,
         bytes =
           output === undefined
             ? null
@@ -318,20 +330,13 @@ export function score({
   const agentCalls = calls.filter(
     (c) => c.phase !== "flush" && c.phase !== "setup",
   );
-  const topics = requiredTopics.map((entry) => {
-    const topic = typeof entry === "string" ? entry : entry.topic;
-    const beforeCommand =
-      typeof entry === "string" ? "agent" : entry.beforeCommand;
-    const firstRelated = agentCalls.findIndex(
-      (c) => c.argv[0] === beforeCommand,
-    );
-    const fetched = agentCalls.findIndex(
-      (c) => c.argv[0] === "guide" && c.argv[1] === topic && c.exit === 0,
-    );
-    return {
-      topic,
-      retrieved: fetched >= 0 && (firstRelated < 0 || fetched < firstRelated),
-    };
+  const topics = retrieveTopics(agentCalls, requiredTopics, {
+    final,
+    completed: normalized.successfulCompletion,
+    guarded,
+    acceptedIssueDraft:
+      taskOutcome?.checks?.issueOrHookup === true &&
+      !final?.files?.["drawings/hookup.pdf"],
   });
   const guideOutputBytes = agentCalls
     .filter((c) => c.argv[0] === "guide" && c.exit === 0)
@@ -367,6 +372,7 @@ export function score({
     sourceReads: sourceReads.length,
     libraryAcquisitions,
     issueLookups,
+    attemptedWrites,
     retrieval: topics,
     finalMessage: normalized.finalMessage,
   };

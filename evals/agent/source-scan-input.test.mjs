@@ -36,3 +36,18 @@ it("keeps a local Python heredoc after an authored report as other", () => {
     ).sourceReads,
   ).toBe(0);
 });
+
+it("recognizes a completed Markdown append and the Codex wrapper's spliced delimiter", () => {
+  const script = `cp work/issue-draft.md issue-draft.md\ncat >> issue-draft.md <<'EOF'\ncurl ${url}\nEOF\ncat > friction.md <<'EOF'\ncurl ${url}\nEOF\npython3 - <<'PY'\nprint('local output')\nPY\ngit status --short`;
+  const wrap = (body) =>
+    "/bin/zsh -lc '" + body.replaceAll("'", "'\"'\"'") + "'";
+  expect(metric(wrap(script)).sourceReads).toBe(0);
+  for (const tail of [
+    `curl ${url}`,
+    "bash issue-draft.md",
+    "sh < friction.md",
+    "chmod +x friction.md\n./friction.md",
+  ]) {
+    expect(metric(wrap(script + "\n" + tail)).sourceReads, tail).toBe(1);
+  }
+});

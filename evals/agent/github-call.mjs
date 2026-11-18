@@ -7,7 +7,7 @@ import { shellRequest } from "./github-shell.mjs";
 import { issueSearch, issueUrl, jsonHeaders } from "./issue-lookup.mjs";
 import { sourceScanInput } from "./source-scan-input.mjs";
 import { readsLocalSource } from "./local-source.mjs";
-import { githubRequest } from "./github-tools.mjs";
+import { githubEvidence, githubRequest } from "./github-tools.mjs";
 import { shellParts, aggregateParts } from "./shell-parts.mjs";
 import { shellTool, githubFragment } from "./shell-network.mjs";
 import { allowedLibraryUrl } from "./library-acquisition.mjs";
@@ -22,7 +22,7 @@ export const strings = (value) =>
         : [];
 
 // Extract actual request arguments, never display text or fetch prompts.
-function request(event, github) {
+function request(event, github, result) {
   if (github)
     return (
       githubRequest(event) ?? {
@@ -54,7 +54,11 @@ function request(event, github) {
       ? (input.command ?? input.cmd)
       : input,
   );
-  const text = sourceScanInput(name, values);
+  const text = sourceScanInput(
+    name,
+    values,
+    result?.exit === 0 && values.length === 1 && result.command === values[0],
+  );
   if (shell) return { parts: shellParts(text), text, shell: true };
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
@@ -81,14 +85,18 @@ function classifySearch(query, github, engineRoots) {
  */
 export function classifyToolCall(
   event,
-  { engineRoots = [], allowedLibraryPaths = [] } = {},
+  { engineRoots = [], allowedLibraryPaths = [], result } = {},
 ) {
   const github = [event.name, event.server, event.tool].some(
     (value) => typeof value === "string" && /github/i.test(value),
   );
   if (!github && /^(?:write|todowrite|todo_list)$/i.test(event.name))
     return { class: "other" };
-  const call = request(event, github);
+  if (github) {
+    const proven = githubEvidence(event, result?.mcp);
+    if (proven) return proven;
+  }
+  const call = request(event, github, result);
   if (call.shell) {
     if (readsLocalSource(call.text, engineRoots))
       return { class: "source-read" };

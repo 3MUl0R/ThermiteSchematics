@@ -1,6 +1,7 @@
 import { cableListingMatches } from "./cable-listing.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DOMParser } from "linkedom";
 import { sha256 } from "./snapshot.mjs";
 import { libraryTypes, canonical } from "./source-files.mjs";
 import {
@@ -51,6 +52,21 @@ export function drawingNames(packet) {
   for (const sheet of schematicSheets(packet))
     if (sheet.view?.root?.kind === "cable")
       names.add(sheet.view.root.designation);
+  return names;
+}
+// Packet coverage covers only audited circuit/wiring views. Continuous
+// schematic exports also emit physical wire paths with source designations.
+function drawnWires(packet) {
+  const names = new Set();
+  for (const sheet of schematicSheets(packet)) {
+    if (!sheet.svg) continue;
+    const svg = new DOMParser().parseFromString(sheet.svg, "image/svg+xml");
+    for (const path of svg.querySelectorAll(
+      "path.wire-path[data-designation][d]",
+    ))
+      if (path.getAttribute("d").trim())
+        names.add(path.getAttribute("data-designation"));
+  }
   return names;
 }
 export function fitsRole(object, type, role) {
@@ -176,6 +192,7 @@ export function assessDogfood({
     ),
     byType = new Map(types.map((t) => [t.id, t])),
     drawn = drawingNames(packet),
+    wireInk = drawnWires(packet),
     requirements = spec.requirements;
   const uidNames = new Map(sourceObjects.map((o) => [o.uid, o.designation]));
   const warnings = diagnostics.map((d) => ({
@@ -185,6 +202,24 @@ export function assessDogfood({
       uidNames.get(d.uid) ??
       /^([^:]+):/.exec(d.message ?? "")?.[1],
   }));
+  const psuInputs = (psu) =>
+    Object.values(byType.get(psu?.type)?.functions ?? {})
+      .filter((f) => f.kind === "load")
+      .flatMap((f) => f.terminals);
+  const inputConductors = (psu, terminal) =>
+    sourceObjects.filter(
+      (o) =>
+        ["wire", "jumper"].includes(o.kind) &&
+        o.endpoints?.some(
+          (e) => e?.device === psu.designation && e.terminal === terminal,
+        ),
+    );
+  const deferredInput = (psu, terminal) =>
+    psu.connectionReview?.terminals?.[terminal]?.status === "deferred" &&
+    inputConductors(psu, terminal).length === 0 &&
+    warnings.some(
+      (d) => d.designation === psu.designation && d.code === "W905",
+    );
   const rows = Array.isArray(matrix) ? matrix : [];
   const decisions = requirements.map((requirement) => {
     const matches = rows.filter(
@@ -198,7 +233,14 @@ export function assessDogfood({
       known =
         Array.isArray(names) &&
         names.every((tag) => typeof tag === "string" && byTag.has(tag)),
-      represented = known && names.every((tag) => drawn.has(tag));
+      changeRow = /^(?:C|P)-CHANGE$/.test(requirement.id),
+      represented =
+        known &&
+        names.every((tag) => {
+          if (changeRow && byTag.get(tag)?.kind === "wire")
+            return wireInk.has(tag);
+          return drawn.has(tag);
+        });
     const declaredGap =
       names?.length > 0 && gapExists(evidence?.libraryGap, requirement, types);
     const ownsSubject = (tag, role) => {
@@ -277,6 +319,15 @@ export function assessDogfood({
             fitsRole(byTag.get(tag), byType.get(byTag.get(tag)?.type), role),
           ),
         );
+      if (requirement.roles.includes("psu"))
+        pass =
+          pass &&
+          !names.some((tag) => {
+            const psu = byTag.get(tag);
+            return psuInputs(psu).some((terminal) =>
+              deferredInput(psu, terminal),
+            );
+          });
       if (requirement.normalState)
         pass =
           pass &&
@@ -353,41 +404,23 @@ export function assessDogfood({
   const feedDrawn =
     psus.length > 0 &&
     psus.every((psu) => {
-      if (
-        decisions.some(
-          (d) =>
-            d.pass &&
-            d.row?.status === "deferred" &&
-            d.row.designations.includes(psu.designation) &&
-            d.row.evidence?.diagnostic?.designation === psu.designation &&
-            requirements.find((r) => r.id === d.id)?.roles.includes("psu"),
-        )
-      )
-        return true;
-      const inputs = Object.values(byType.get(psu.type).functions)
-        .filter((f) => f.kind === "load")
-        .flatMap((f) => f.terminals);
+      const inputs = psuInputs(psu);
+      const powerView = schematicSheets(packet).some(
+        (s) =>
+          s.view.family === "power" &&
+          s.view.root?.designation === psu.designation,
+      );
       return (
         inputs.length > 0 &&
-        inputs.every(
-          (terminal) =>
-            sourceObjects.some((o) => {
-              const ends = o.endpoints ?? [];
-              return (
-                ["wire", "jumper"].includes(o.kind) &&
-                ends.some(
-                  (e) =>
-                    e?.device === psu.designation && e.terminal === terminal,
-                ) &&
-                drawnConductors.has(o.designation ?? o.uid)
-              );
-            }) ||
-            schematicSheets(packet).some(
-              (s) =>
-                s.view.family === "power" &&
-                s.view.root?.designation === psu.designation,
-            ),
-        )
+        inputs.every((terminal) => {
+          if (deferredInput(psu, terminal)) return true;
+          return inputConductors(psu, terminal).some(
+            (o) =>
+              wireInk.has(o.designation) ||
+              drawnConductors.has(o.designation ?? o.uid) ||
+              powerView,
+          );
+        })
       );
     });
   const applied = calls.some((c) => {
@@ -419,7 +452,7 @@ export function assessDogfood({
       spec.reports.every((kind) => files[`drawings/${kind}.csv`] === true) &&
       files["drawings/diagnostics.json"] === true &&
       files["drawings/cable.json"] === true,
-    coverage: allDeviceCoverage && feedDrawn && decisions.every((d) => d.pass),
+    coverage: allDeviceCoverage && feedDrawn,
     pdfV1V5: drawEvidence
       ? drawEvidence.format === "thermite-agent-draw-evidence/1.0" &&
         drawEvidence.V1 === true &&
@@ -427,9 +460,10 @@ export function assessDogfood({
       : null,
     requirementMatrix:
       rows.length === requirements.length && decisions.every((d) => d.pass),
-    counts: ["localTypes", "sourceReads", "failedCalls"].every(
-      (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
-    ),
+    counts:
+      ["localTypes", "sourceReads", "failedCalls", "attemptedWrites"].every(
+        (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
+      ) && counts.attemptedWrites === 0,
   };
   const expectedNames = new Set(
     decisions
@@ -582,6 +616,7 @@ export async function checkDogfood(ctx) {
     counts = {
       localTypes: types.filter((t) => t.library !== "core").length,
       sourceReads: ctx.metrics?.sourceReads ?? 0,
+      attemptedWrites: ctx.metrics?.attemptedWrites?.length ?? 0,
       failedCalls: (ctx.calls ?? []).filter(
         (c) => c.phase === "agent" && c.exit !== 0,
       ).length,

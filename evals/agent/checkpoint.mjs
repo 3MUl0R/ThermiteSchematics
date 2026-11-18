@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { snapshot, sha256 } from "./snapshot.mjs";
-export const evalVersion = "1.18.1";
+export const evalVersion = "1.19.0";
 export function harnessIdentity({ tasksDir } = {}) {
   const hash = snapshot(fileURLToPath(new URL("./", import.meta.url)), {
     documents: false,

@@ -1,17 +1,20 @@
 {
   "id": "T04",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "template": "starter",
   "setup": "setup.mjs",
-  "prompt": "Connect the supplied PX1 PNP sensor signal to PLC1 DI0. Its 0 V destination is unknown. Preserve that gap and explain it in your final message.",
+  "prompt": "Connect the supplied PX1 PNP sensor signal to PLC1 DI0. Its 0 V destination is unknown. Preserve that gap. In your final message, name the missing 0 V destination and ask the user where it should connect.",
   "requiredTopics": [
     {
       "topic": "modeling",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "source-change"
     },
     {
       "topic": "completeness",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "source-change",
+      "equivalents": ["project-workflows"]
     }
   ],
   "expectedWarnings": [

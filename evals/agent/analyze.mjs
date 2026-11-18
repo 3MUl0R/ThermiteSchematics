@@ -235,8 +235,10 @@ export function analyze(runs, { requireComplete = true } = {}) {
     )
       collapses.push(task);
   }
-  const topics = [...B, ...source.map((p) => p.b)].flatMap(
-      (r) => r.metrics.retrieval ?? [],
+  const topics = [...B, ...source.map((p) => p.b)].flatMap((r) =>
+      (r.metrics.retrieval ?? []).filter(
+        (t) => t.applicability !== "draft-only",
+      ),
     ),
     retrieval = topics.length
       ? topics.filter((t) => t.retrieved).length / topics.length

@@ -124,6 +124,20 @@ validate. That acquisition requires source access; the guide itself works
 offline. Without the files or verified hardware facts, report the limitation
 and retain the unresolved engineering work. Do not invent a substitute pinout.
 
+For the public field-interfaces library, use literal GET URLs at the supplied
+revision. Fetch the manifest, read its `sources`, then fetch each declared file
+separately. This example requires network access.
+
+```text
+mkdir -p libraries/field-interfaces
+curl -fsSL -o libraries/field-interfaces/library.json https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/d58b6d6357e4b3107d4938d80c3bcbdc20f3988d/libraries/field-interfaces/library.json
+curl -fsSL -o libraries/field-interfaces/types.json https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/d58b6d6357e4b3107d4938d80c3bcbdc20f3988d/libraries/field-interfaces/types.json
+```
+
+Use the revision and library paths authorized by the task. Check existing issues
+with a simple query such as `repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces`.
+Draft issues locally unless the user asks you to file them.
+
 For engine changes, the [engine guide](../AGENTS.md) and
 [contribution workflow](../CONTRIBUTING.md) are source references. A human must
 read and accept the CLA. Runtime agents can prepare an issue draft without

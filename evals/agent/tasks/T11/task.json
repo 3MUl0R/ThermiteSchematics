@@ -7,11 +7,14 @@
   "requiredTopics": [
     {
       "topic": "review",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "review",
+      "equivalents": ["project-workflows"]
     },
     {
       "topic": "agent-requests",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "guarded-patch"
     }
   ],
   "expectedWarnings": [],

@@ -209,7 +209,12 @@ function fixture(taskName = "D-conveyor") {
       V1: true,
       V5: true,
     },
-    counts: { localTypes: 4, sourceReads: 0, failedCalls: 0 },
+    counts: {
+      localTypes: 4,
+      sourceReads: 0,
+      failedCalls: 0,
+      attemptedWrites: 0,
+    },
     diagnostics: [],
   };
 }
@@ -582,7 +587,7 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
-    expect(task.version).toBe("1.5.1");
+    expect(task.version).toBe("1.6.0");
     expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
       [],
     );
@@ -623,13 +628,16 @@ it("C-COIL requires the named overload as well as the PLC and contactor", () => 
   }
 });
 it.each(["D-pump", "D-conveyor"])(
-  "%s PSU feed exception needs the own-device final code and deferred row",
+  "%s scores a documented PSU deferral independently of the matrix",
   (name) => {
     const x = fixture(name),
       row = x.matrix.find((r) => r.id.endsWith("-PSU"));
     x.sourceObjects = x.sourceObjects.filter(
       (o) => !["W-PSU-L", "W-PSU-N"].includes(o.designation),
     );
+    x.sourceObjects.find((o) => o.designation === "PS1").connectionReview = {
+      terminals: { L: { status: "deferred" }, N: { status: "deferred" } },
+    };
     row.status = "deferred";
     row.evidence = {
       summary: "Undesigned input feed, no ratings invented",
@@ -642,10 +650,39 @@ it.each(["D-pump", "D-conveyor"])(
       { code: "W905", designation: "M1" },
     ]) {
       row.evidence.diagnostic = diagnostic;
-      expect(assessDogfood(x).checks.coverage).toBe(false);
+      expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+      expect(assessDogfood(x).checks.coverage).toBe(true);
     }
     row.evidence.diagnostic = { code: "W905", designation: "PS1" };
     row.status = "satisfied";
+    expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+    expect(assessDogfood(x).checks.coverage).toBe(true);
+    x.diagnostics = [{ code: "W905", designation: "M1", severity: "warning" }];
     expect(assessDogfood(x).checks.coverage).toBe(false);
   },
 );
+
+it("requires schematic wire ink for a change-row conductor and scores coverage independently", () => {
+  const x = fixture();
+  x.matrix.find((r) => r.id === "C-CHANGE").designations = ["PLC1", "W-PSU-L"];
+  const wire =
+    '<path class="net-path wire-path" data-designation="W-PSU-L" d="M 0 0 H 10"/>';
+  x.packet.sheets[0].svg = `<svg>${wire}</svg>`;
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+  // A label, inventory entry, reference, or a path on a report is not wire ink.
+  x.packet.sheets[0].svg =
+    '<svg><text data-designation="W-PSU-L">W-PSU-L</text></svg>';
+  x.packet.sheets[0].references.push({ designation: "W-PSU-L" });
+  x.packet.sheets[2].svg = `<svg>${wire}</svg>`;
+  const missing = assessDogfood(x);
+  expect(missing.checks.requirementMatrix).toBe(false);
+  expect(missing.checks.coverage).toBe(true);
+  expect(missing.pass).toBe(false);
+});
+it("makes an attempted GitHub write fail the D counts item", () => {
+  const x = fixture();
+  x.counts.attemptedWrites = 1;
+  const result = assessDogfood(x);
+  expect(result.checks.counts).toBe(false);
+  expect(result.pass).toBe(false);
+});

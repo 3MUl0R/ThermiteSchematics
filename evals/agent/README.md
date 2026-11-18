@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.18.1)
+# Fresh-agent evaluator (E2 v1.19.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -265,13 +265,16 @@ appearances. A deferred must row needs non-empty source designations and a final
 may be deferred with a reason. Blanket `deferred: n/a` fails. Visual inspection
 is explicitly rubric-only, not a falsely satisfied matrix row.
 
-Coverage is role-based: matrix-mapped brief devices must be drawn; every modeled
-non-cable/non-terminal device must appear on a schematic; and the PSU input
-conductors must be represented when designed; a specific final diagnostic on the PSU itself can justify its deferred feed without inventing wiring. Report/index/reference-table mentions do not
-count. XT1/Q2/HL1/PX1 and other valid tags work. The packet used for coverage is
+Coverage requires every modeled non-terminal device on a schematic and drawn
+PSU input feeds where designed. A source-level deferral and the PSU's own
+final W905 justify an undesigned input. The separately required matrix checks
+the brief roles and their on-drawing evidence. The guarded change row accepts a
+source wire designation on a drawn schematic path. Report, index and
+reference-table mentions do not count. XT1/Q2/HL1/PX1 and other valid tags work. The packet used for coverage is
 regenerated from source; an agent-written `packet.json` is never authority.
 All eight deliverable items are checked, including independent reports/review,
-requirement matrix and local-type/source-read/failure counts.
+requirement matrix and local-type/source-read/failure counts. The counts item
+also requires zero attempted GitHub writes, including denied attempts.
 
 A separate analog device is not automatically a PLC expansion module. The checker's existing non-failing `pending` channel flags its integration for judge review; it does not verify a modeled link to the controlling PLC or infer a backplane. This is a known automation limit, not an additional must.
 
@@ -737,3 +740,31 @@ Read-only replay of all 11 retained C1 attempt transcripts changes only the two
 literal curl write-out GETs in Claude T07. Source reads per that transcript
 fall from four to two, and library acquisitions rise from zero to two.
 Issue lookups and original records stay unchanged.
+
+## E2 1.19.0
+
+Replay retained runs under each measurement version and keep the collection
+records immutable. Scoring now pairs the pinned Codex GitHub connector's typed
+repo-scoped issue or PR search with its matching completed result. An explicit empty
+issue list is a completed conversation search. Missing, mixed, unexpected or
+source-bearing payloads stay fail-closed. The existing request allowlists for
+other tools and optional library GETs still apply.
+
+A matching pre-execution approval denial is recorded in
+`metrics.attemptedWrites`, apart from V8. An executed or unverified recognized
+write remains fail-closed and retains its attempted-write record. Quoted
+Markdown writes and appends in the completed shell envelope are inert file
+data. Commands that execute the written file or access source in another part
+of the same call still count.
+
+The dogfood checker recognizes conductor ink in regenerated schematics for
+change-row evidence and reports coverage independently of the required
+matrix (D tasks 1.6.0). T04 1.2.0 explicitly asks for the missing 0 V
+destination to match its rubric.
+
+Required topic declarations pin a source edit, guarded patch, real render,
+review, diagnostic report or the task's explicit branch. The scorer records
+the legacy exact-command result alongside the new result, the cutoff and the
+timely read or equivalent topic. Help, malformed requests and undeclared
+equivalents earn no timely credit. The T07 hookup topic is inapplicable when
+the checker accepted the issue-only branch and no hookup request was made.

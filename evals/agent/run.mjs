@@ -789,6 +789,7 @@ export async function runOne({
         outcome.actualWarnings ??
         ctx.validationDiagnostics.filter((d) => d.severity === "warning"),
       requiredTopics: task.requiredTopics,
+      taskOutcome: outcome,
       allowedUnused: task.allowedUnused,
       allowedLibraryPaths: task.allowedLibraryPaths,
       guideCopy: task.guideCopy,
@@ -1040,6 +1041,7 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       outcome.actualWarnings ??
       stored.validationDiagnostics.filter((d) => d.severity === "warning"),
     requiredTopics: task.requiredTopics,
+    taskOutcome: outcome,
     allowedUnused: task.allowedUnused,
     allowedLibraryPaths: task.allowedLibraryPaths,
     guideCopy: task.guideCopy,
@@ -1569,6 +1571,7 @@ async function main() {
       checkpointOverride: r.checkpointOverride ?? null,
       pass: r.outcome?.pass,
       violations: r.metrics?.violations.length,
+      attemptedWrites: r.metrics?.attemptedWrites?.length ?? 0,
     })),
   });
   if (
