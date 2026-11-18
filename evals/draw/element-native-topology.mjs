@@ -1,4 +1,5 @@
 import { nativeContactRole } from "./contact-role-oracle.mjs";
+import { onRootedPowerPath } from "./element-power-path.mjs";
 import { terminalId } from "./tranche4-source.mjs";
 export class RootedTopologyUnavailable extends Error {}
 const valid = (t) =>
@@ -80,6 +81,24 @@ function reachable({ graph, sources }, start, skip) {
   }
   return seen;
 }
+
+function detachedProtectionEdges(ir, topology, reached) {
+  return topology.edges.filter(
+    ({ fn, keys }) =>
+      fn &&
+      keys.every((k) => reached.has(k)) &&
+      keys.some((k) => !topology.sources.has(k)) &&
+      ["overload", "breaker", "fuse"].includes(
+        nativeContactRole(ir, fn).role,
+      ) &&
+      ir.functions.some(
+        (f) =>
+          f.id.deviceUid === fn.id.deviceUid &&
+          nativeContactRole(ir, f).role === "contact",
+      ),
+  );
+}
+
 export function rootedProtectionNeeds(ir, root, topology) {
   const starts = ir.functions
     .filter((f) => f.id.deviceUid === root.uid && f.kind === "load")
@@ -92,31 +111,22 @@ export function rootedProtectionNeeds(ir, root, topology) {
   for (const start of starts) {
     const key = terminalId(start),
       all = reachable(topology, key),
-      sources = [...topology.sources].filter((k) => all.has(k));
-    if (!sources.length)
+      sources = [...topology.sources].filter((k) => all.has(k)),
+      candidates = detachedProtectionEdges(ir, topology, all);
+    if (!sources.length) {
+      // A wired segment can end at a nonconductive stage. With a declared
+      // supply elsewhere and no local protection candidate there is no need
+      // to judge. Never infer continuity or a pin mapping through the stage.
+      if (all.size > 1 && topology.sources.size && !candidates.length) continue;
       throw new RootedTopologyUnavailable(
         "Native root-to-source topology unavailable",
       );
-    for (const edge of topology.edges.filter(
-      (e) =>
-        e.fn &&
-        e.keys.every((k) => all.has(k)) &&
-        e.keys.some((k) => !topology.sources.has(k)),
-    )) {
-      const fn = edge.fn;
-      if (
-        !["overload", "breaker", "fuse"].includes(
-          nativeContactRole(ir, fn).role,
-        ) ||
-        !ir.functions.some(
-          (f) =>
-            f.id.deviceUid === fn.id.deviceUid &&
-            nativeContactRole(ir, f).role === "contact",
-        )
-      )
-        continue;
+    }
+    for (const edge of candidates) {
+      const { fn } = edge;
       const remaining = reachable(topology, key, edge),
         mandatory = !sources.some((s) => remaining.has(s));
+      if (!mandatory && !onRootedPowerPath(topology, all, key, edge)) continue;
       const id = JSON.stringify(fn.id),
         previous = needs.get(id);
       if (!previous || mandatory)

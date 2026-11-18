@@ -5,6 +5,7 @@ import { nativePartAudit } from "./native-part-references.mjs";
 import { navigationStrictObservations } from "./navigation-strict.mjs";
 import { observation } from "./evaluate.mjs";
 import { viewBindings } from "./tranche4-views.mjs";
+import { terminalId } from "./tranche4-source.mjs";
 const rows = (x) =>
   navigationStrictObservations(
     { id: "check7b" },
@@ -134,6 +135,13 @@ it.each(["supply terminal", "potential source"])(
         uid: `other-${i}`,
         endpoints: [terminal, pole.terminals[0]].map((t) => ({ terminal: t })),
       });
+      const beyond = { deviceUid: "S", terminalKey: `reserve-${i}` };
+      ir.potentials ??= [];
+      ir.potentials.push({ terminal: beyond });
+      ir.wires.push({
+        uid: `reserve-${i}`,
+        endpoints: [terminal, beyond].map((t) => ({ terminal: t })),
+      });
     }
     const judged = () => rows(x).filter((r) => r.owner === "#396");
     expect(judged().map((r) => r.status)).toEqual(["pass", "pass"]);
@@ -145,6 +153,11 @@ it.each(["supply terminal", "potential source"])(
       "D",
       "D",
     ]);
+    expect(
+      omissions[0].evidence.findings
+        .flatMap((f) => f.nativeWitness.sources)
+        .sort(),
+    ).toEqual(source.terminals.map(terminalId).sort());
   },
 );
 it("FU1 parallel native paths stay explicit infrastructure instead of inventing a selected branch", () => {

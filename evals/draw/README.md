@@ -27,6 +27,13 @@ power/protection functions connect the selected native load terminals to native
 sources. These are symbolic traversal edges, never electrical net joins.
 Declared supply terminals and native potential sources end the traversal, so a
 rooted view does not acquire obligations from another load on a shared supply.
+An eligible protection function lies on a simple path from a load terminal to
+one of these boundaries. A dead-end branch or a loop attached at one bus
+junction cannot contribute a protection obligation. A connected load with no
+reachable supply or protection candidate is outside this check when a supply is
+declared elsewhere. This covers unmodeled transformer or drive stages without
+inferring connectivity. A disconnected root or an unresolved reachable
+protection candidate still reports infrastructure.
 An unavoidable protection function with a detached native contact must have a
 full measured appearance in that authored view, even if its ink and all its
 locators disappear together. A known omission fails with the native UID/function,
