@@ -1,3 +1,4 @@
+import { bindsStripReference } from "./strip-reference-vocabulary.mjs";
 import { isAuthoredReportText } from "./authored-report-fields.mjs";
 import { isRoleReferenceCaption } from "./contact-role-vocabulary.mjs";
 // Independent visible projection oracle. Never import renderer/query formatters.
@@ -250,12 +251,32 @@ function terminalNoteVocabulary(g, context, issue) {
     ],
   };
 }
-function vocabularyCells(cells, ir, context, issue, handled, findings) {
+function vocabularyCells(cells, g, ir, context, issue, handled, findings) {
   for (const texts of cells.values()) {
     const source = ownedCell(ir, texts[0].row, texts[0].columnIndex, context);
     if (!source) continue;
     texts.forEach((t) => handled.add(t));
     const printed = combined(texts);
+    if (
+      context.sheet?.view.kind === "references" &&
+      texts[0].columnIndex === 1 &&
+      normal(printed) === "Terminal strip"
+    ) {
+      const [uid, keys] = parts(texts[0].row);
+      if (!bindsStripReference(g, texts, context, ir, uid, keys, combined))
+        findings.push(
+          fieldIssue(
+            issue,
+            {
+              expected: "Terminal strip at its measured native sheet / zone",
+              mechanism: "terminal-strip-reference",
+              family: "function",
+            },
+            texts,
+          ),
+        );
+      continue;
+    }
     const nativeRole =
       source.mechanism === "function-reference" &&
       isRoleReferenceCaption(
@@ -279,7 +300,7 @@ export function ownedVocabulary(g, ir, context, issue) {
       if (!cells.has(key)) cells.set(key, []);
       cells.get(key).push(t);
     }
-  vocabularyCells(cells, ir, context, issue, handled, findings);
+  vocabularyCells(cells, g, ir, context, issue, handled, findings);
   // Recover caption ownership from routed source relations as well as the
   // optional caption marker. Dropping that marker must not hide a changed label.
   const routed = new Map();

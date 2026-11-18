@@ -44,6 +44,12 @@ DQ-23 reports a geometry gap when a candidate approach cannot be measured.
 This extension is SVG-scoped. The existing strict rows are used and
 complete 5.27 summary files remain readable.
 
+DQ-05 accepts `Terminal strip` in a device-reference representation cell
+when the same printed row names the native device and every final sheet /
+zone points to a visible, labeled native terminal body on a graphical strip
+sheet. The checker reads the printed row and the destination independently.
+An issued inventory row or an exported reference alone supplies no body.
+
 Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b).
 The checker change preserved corpus rows and pins. The later
 [REP5 record for #421](repins/421/record.json) records the reviewed pin updates
