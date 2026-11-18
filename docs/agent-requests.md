@@ -165,8 +165,10 @@ Generate UUIDs for new objects with `bun -e 'console.log(crypto.randomUUID())'`.
 
 ### Extend a starter
 
-Work in an initialized starter. Keep the first source edits separate from adding
-a file. Inspect PLC1 using the exact request under **Find the patch guard**,
+Work in an initialized starter. Write new files completely before listing them in `sources` in `system.json`.
+Once listed, use guarded patches for every edit, including E011 repairs, except for JSON syntax repair.
+
+Inspect PLC1 using the exact request under **Find the patch guard**,
 with `"value": "PLC1"` in place of `"value": "PS1"`. Use
 `thermite agent inspect --input inspect-source.request.json`. The subcommand
 selects the tool. An extra `tool` field in the request fails A001 at `/tool`.
@@ -178,9 +180,11 @@ Capture `value.object.source` and keep its file, pointer, UID and byte integrity
    Ethernet port with an unspecified connector. Add the local library to
    `system.json`, keep the existing devices using their old types for now, and
    run `thermite lock .`. This records the new library bytes before any source
-   refers to them. Leave the library files and lock alone during the patch.
+   refers to them. See [Local libraries](#local-libraries) for the `library.json`
+   manifest and `sources` shape. Leave the library files and lock alone during the patch.
 2. **Add and register a new source.** Put the new HMI in a new source file with
-   a fresh UUID and a reviewed HMI type. Register that file in `system.json`
+   a fresh UUID and the shipped generic `core:hmi` type for this example.
+   Register that file in `system.json`
    `sources` and validate the intermediate project. Keep the new relationship
    out until both ports will be present. Re-inspect PLC1 and the HMI after
    this staging step to get current source guards.
@@ -199,6 +203,8 @@ Capture `value.object.source` and keep its file, pointer, UID and byte integrity
    whole candidate blocks the patch. If recovering from a wrong direct edit,
    inspect or hash the current bytes and use a guarded repair or inverse patch.
    Never use `git checkout` or `rm` to undo edits to registered sources.
+
+To undo registration of a new file, remove it from `sources` in `system.json`, confirm no source glob still matches it, then delete the unregistered file.
 
 ### Query
 

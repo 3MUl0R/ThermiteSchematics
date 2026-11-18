@@ -28,14 +28,46 @@ export async function verifyGuideBudgets() {
   expect(delivered.stdout).toBe(workflows.text);
 }
 
+const coreAdvice: [string, string][] = [
+  [
+    "Invent no pins, ratings, spares or title/revision data.",
+    "Safety rule for authored facts.",
+  ],
+  [
+    "Mark terminals unused or deferred only with explicit user intent.",
+    "Authoring policy for connection dispositions.",
+  ],
+  [
+    "After library edits, run `thermite lock .` before validation.",
+    "The guard recipe tests the required order.",
+  ],
+  [
+    "Snapshot before edits with `thermite snapshot -o drawings/before.json`.",
+    "The command runs separately and the workflow facts test snapshots.",
+  ],
+  [
+    "To undo registration of a new file, remove it from `sources` in `system.json`, confirm no source glob still matches it, then delete the unregistered file.",
+    "The guarded starter recipe exercises removal in that order.",
+  ],
+];
+
+export function verifyCoreAuthoringRules() {
+  expect(projectGuide.sentences).toEqual(
+    expect.arrayContaining([
+      ...coreAdvice.map(([sentence]) => sentence),
+      "For R006, narrow selection or use larger paper.",
+      "Never change connectivity or shrink text to fit.",
+      "Write new files completely before listing them in `sources` in `system.json`.",
+      "Once listed, use guarded patches for every edit, including E011 repairs, except for JSON syntax repair.",
+    ]),
+  );
+}
+
 export const workflowAdvice: [string, string][] = [
+  ...coreAdvice,
   [
     "Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**.",
     "The CLI guide suite executes this topic's starter recipe.",
-  ],
-  [
-    "Create and register new files.",
-    "Authoring rule exercised in the starter recipe.",
   ],
   [
     "Guard existing files from inspection through dry-run and apply, including any undo.",
@@ -46,7 +78,7 @@ export const workflowAdvice: [string, string][] = [
     "Authoring prohibition shared with the starter recipe.",
   ],
   [
-    "Run `thermite guide project-workflows` for tested printing, reports, review, cabling, communication, field hookups and circuit recipes.",
+    "Run `thermite guide project-workflows` for printing, reports, review, libraries/lock, connection completeness, wiring records, cables, communication, field hookups and circuits.",
     "This topic is run by the project workflow fences and existing fact checks.",
   ],
   [

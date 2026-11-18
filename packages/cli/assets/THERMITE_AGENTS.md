@@ -24,9 +24,13 @@ Humans accept the CLA; agents never sign it.
 
 ## Authority and workflow
 
-Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**. Create and register new files. Guard existing files from inspection through dry-run and apply, including any undo. Never use git checkout or rm to undo an edit to a registered source.
+Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**. Guard existing files from inspection through dry-run and apply, including any undo. Never use git checkout or rm to undo an edit to a registered source.
 
 Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author schematic geometry, infer engineering repairs or suppress compiler diagnostics. Functions never automatically join physical nets.
+
+Invent no pins, ratings, spares or title/revision data. Mark terminals unused
+or deferred only with explicit user intent. After library edits, run `thermite lock .`
+before validation. Snapshot before edits with `thermite snapshot -o drawings/before.json`.
 
 To edit existing source/presentation files:
 
@@ -44,7 +48,7 @@ authored/expected failure; 2: usage/infrastructure failure. Diagnostics may carr
   each with `path`, current `expectedIntegrity` and JSON Patch `operations`
   (`test`, `add`, `remove`, `replace` only). Dry-run first, review the result,
   then apply the same request with `dryRun: false`. Only existing referenced source/presentation files qualify (else A003): not `system.json`, library lock, libraries or this guide. Per-file atomicity/snapshot guards apply.
-- `create-view`: `spec`, one schematic view request without `page`. Returns original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use the printing topic below.
+- `create-view`: `spec`, one schematic view request without `page`. Returns original continuous SVG or complete cable core sheet; multi-sheet views fail R006: see `thermite guide project-workflows` (Printing). For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` at canonical project root through revalidation/commit/rollback; distinct from library lock. Never commit it (alpha `init` gitignores it). A005/exit 1 contention: exact path, owner PID/hostname/version, creation time, age.
 Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity. On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then
@@ -66,7 +70,10 @@ bun -e "const b=require('fs').readFileSync(process.argv[1]);console.log('sha256-
 bun -e "console.log(crypto.randomUUID())"
 ```
 
-Edit new files, `system.json` and libraries directly; list new source files in `system.json` `sources`, then run `thermite validate .`. Every new object needs a fresh
+Write new files completely before listing them in `sources` in `system.json`. Once listed, use guarded patches for every edit, including E011 repairs, except for JSON syntax repair. Then run `thermite validate .`.
+To undo registration of a new file, remove it from `sources` in `system.json`, confirm no source glob still matches it, then delete the unregistered file.
+
+Every new object needs a fresh
 lowercase UUID `uid` (uppercase fails E013). Wire, jumper and cable-core
 endpoints and potential `at` are `{"device": "PLC1", "terminal": "X2.0"}`: a
 designation and an exact, case-sensitive terminal key (E101/E102 otherwise).
@@ -86,7 +93,8 @@ Save large outputs to files: `create-view` returns tens of KB, `inspect` several
 
 ## Offline project workflows
 
-Run `thermite guide project-workflows` for tested printing, reports, review,
-cabling, communication, field hookups and circuit recipes. For exact shapes use
+Run `thermite guide project-workflows` for printing, reports, review, libraries/lock,
+connection completeness, wiring records, cables, communication, field hookups
+and circuits. For exact shapes use
 `thermite guide schema`. Use `thermite guide drawing-frames` before changing paper
 frames or title data.

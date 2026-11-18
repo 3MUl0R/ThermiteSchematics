@@ -71,6 +71,7 @@ import {
   projectGuide,
   live,
   workflowAdvice,
+  verifyCoreAuthoringRules,
   verifyGuideBudgets,
   verifyWorkflowExamples,
 } from "./project-guide/workflows.js";
@@ -633,6 +634,10 @@ it(
 );
 
 describe("generated project guide", () => {
+  it(
+    "keeps safety and registered-source rules in the core",
+    verifyCoreAuthoringRules,
+  );
   it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
     await verifyGuideBudgets();
     expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);

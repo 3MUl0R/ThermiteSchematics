@@ -13,7 +13,8 @@
     "file": "docs/project-workflows.md",
     "title": "Project workflow recipes",
     "readBefore": [
-      "before producing views and reports or reviewing a project"
+      "before producing views and reports or reviewing a project",
+      "before documenting cables, communication, field hookups or circuits"
     ]
   },
   {

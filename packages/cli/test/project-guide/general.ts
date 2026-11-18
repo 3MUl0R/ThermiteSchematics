@@ -978,7 +978,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Edit new files, `system.json` and libraries directly; list new source files in `system.json` `sources`, then run `thermite validate .`.",
+        "Write new files completely before listing them in `sources` in `system.json`. Once listed, use guarded patches for every edit, including E011 repairs, except for JSON syntax repair. Then run `thermite validate .`.",
       async check() {
         const project = await plant();
         const [manifest, unlisted, valid, linked, schema] = await Promise.all([

@@ -79,7 +79,8 @@ describe("TB2 atomic compact publication", () => {
         "packages/cli/test/fixtures/title-frame-guide-addition.txt",
       ),
     );
-    expect(guide.length).toBeLessThanOrEqual(20500);
+    const liveGuide = await readFile("packages/cli/assets/THERMITE_AGENTS.md");
+    expect(liveGuide.length).toBeLessThanOrEqual(8000);
     expect(PROJECT_GUIDE_BYTE_LIMIT).toBe(8000);
     expect(() => assertProjectGuideBudget("a".repeat(8000))).not.toThrow();
     expect(() => assertProjectGuideBudget("a".repeat(8001))).toThrow(/8001/);
