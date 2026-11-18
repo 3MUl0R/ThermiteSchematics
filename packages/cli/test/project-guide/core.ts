@@ -1188,18 +1188,18 @@ const module: FactModule = {
             [name, ".", ...flags],
             ctx.pristine.starter,
           );
-          const alias = await ok(
-            [name, "--project", ".", ...flags],
-            ctx.pristine.starter,
-          );
-          expect(alias.stdout, name).toBe(positional.stdout);
-          expect(alias.stderr, name).toBe(positional.stderr);
-          const equal = await ok(
-            [name, ".", "--project", ctx.pristine.starter, ...flags],
-            ctx.pristine.starter,
-          );
-          expect(equal.stdout, name).toBe(positional.stdout);
-          expect(equal.stderr, name).toBe(positional.stderr);
+          for (const paths of [
+            [],
+            ["--project", "."],
+            [".", "--project", ctx.pristine.starter],
+          ]) {
+            const run = await ok(
+              [name, ...paths, ...flags],
+              ctx.pristine.starter,
+            );
+            expect(run.stdout, name).toBe(positional.stdout);
+            expect(run.stderr, name).toBe(positional.stderr);
+          }
           const conflict = await thermite(
             [name, ".", "--project", "missing"],
             ctx.pristine.starter,

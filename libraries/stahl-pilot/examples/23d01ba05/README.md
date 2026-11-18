@@ -7,14 +7,14 @@ example, not installation wiring or a complete 8040 enclosure.
 From the repository root, using the built TypeScript alpha and Node 24:
 
 ```sh
-node libraries/stahl-pilot/examples/23d01ba05/verify.mjs
+bun libraries/stahl-pilot/examples/23d01ba05/verify.mjs
 ```
 
 Pass an optional output directory to retain the generated SVG, diagnostics and
 verification record:
 
 ```sh
-node libraries/stahl-pilot/examples/23d01ba05/verify.mjs .codex-reviews/component-review/23d01ba05/verification
+bun libraries/stahl-pilot/examples/23d01ba05/verify.mjs .codex-reviews/component-review/23d01ba05/verification
 ```
 
 Normal verification compiles the committed example and checks its library lock.

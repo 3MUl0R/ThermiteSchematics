@@ -752,8 +752,8 @@ in both flows. RB's exact diagnostic snapshots remain forced-exhaustion controls
 Update and inspect diffs with:
 
 ```sh
-VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update
-VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/load-layout.test.ts --update
+VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update --no-cache --configLoader=native
+VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/load-layout.test.ts --update --no-cache --configLoader=native
 bun scripts/update-render-ordering-goldens.mjs --write
 ```
 

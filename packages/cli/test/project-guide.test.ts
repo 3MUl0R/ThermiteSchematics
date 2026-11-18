@@ -16,6 +16,7 @@
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { topicExecution } from "../../../scripts/docs-example-evidence.mjs";
 import {
   agent,
   copyProject,
@@ -702,20 +703,21 @@ describe("generated project guide", () => {
     );
   const inlineWords = (span: string) => splitWords(span, true).words.slice(1);
 
-  // Blocks are independent, so they run concurrently; the harness bounds the
-  // processes they start.
-  it.concurrent.each(
-    live.fences
-      .slice(0, projectGuide.fences.length)
-      .map(
-        (fence) =>
-          [`${fence.lang} block at line ${fence.line}`, fence] as const,
-      ),
-  )(
-    "executes the %s",
-    async (_, fence) => {
-      expect(await runFence(fence, live)).toBeGreaterThan(0);
-      executedFences.add(fence.index);
+  it.concurrent(
+    "executes every fenced project-guide block",
+    async () => {
+      const execution = topicExecution(
+        "packages/cli/assets/THERMITE_AGENTS.md",
+        projectGuide.text,
+        ["json", "sh"],
+      );
+      execution.checkLanguages(projectGuide.fences);
+      for (const fence of projectGuide.fences)
+        await execution.run(fence, async () => {
+          expect(await runFence(fence, live)).toBeGreaterThan(0);
+          executedFences.add(fence.index);
+        });
+      execution.finish(projectGuide.fences);
     },
     240_000,
   );

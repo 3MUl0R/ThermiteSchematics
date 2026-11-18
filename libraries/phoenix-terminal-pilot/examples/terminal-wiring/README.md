@@ -19,8 +19,8 @@ From the repository root, after the normal source build:
 
 ```sh
 bun thermite.mjs validate libraries/phoenix-terminal-pilot/examples/terminal-wiring
-node libraries/phoenix-terminal-pilot/examples/terminal-wiring/verify.mjs
-bun thermite.mjs packet --project libraries/phoenix-terminal-pilot/examples/terminal-wiring --input libraries/phoenix-terminal-pilot/examples/terminal-wiring/packet.json --output /tmp/phoenix-terminal-example.html
+bun libraries/phoenix-terminal-pilot/examples/terminal-wiring/verify.mjs
+bun thermite.mjs packet --project libraries/phoenix-terminal-pilot/examples/terminal-wiring --input libraries/phoenix-terminal-pilot/examples/terminal-wiring/packet.json --output alpha-out/phoenix-terminal-example.html
 ```
 
 Use an output path outside any component library. The packet contains four

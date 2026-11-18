@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, symlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { watchArguments } from "./docs-example-command.mjs";
-import { put, shell } from "./docs-example-context.mjs";
+import { json, put, shell } from "./docs-example-context.mjs";
 
 export async function cabinetsShell(c, fence) {
   return shell(c, fence.body);
@@ -19,6 +19,17 @@ export async function repoShell(c, fence) {
     };
   }
   await c.copy("examples", join(c.work, "examples"));
+  if (
+    fence.file.startsWith("libraries/") ||
+    fence.file === "scripts/library-batch/README.md"
+  ) {
+    await c.copy("libraries", join(c.work, "libraries"));
+    await linkDependencies(c);
+  }
+  if (fence.file.startsWith("packages/") && fence.file.includes("/fixtures/")) {
+    const fixture = dirname(fence.file);
+    await c.copy(fixture, join(c.work, fixture));
+  }
   await c.copy(
     "scripts/demo-change.mjs",
     join(c.work, "scripts/demo-change.mjs"),
@@ -32,6 +43,47 @@ export async function repoShell(c, fence) {
     scripts: { "demo:change": "bun scripts/demo-change.mjs" },
   });
   if (fence.body.includes(" watch ")) return watchShell(c, fence);
+  return shell(c, fence.body);
+}
+function linkDependencies(c) {
+  return (c.dependencyLink ??= symlink(
+    join(c.root, "node_modules"),
+    join(c.work, "node_modules"),
+    "junction",
+  ));
+}
+
+export async function runtimeShell(c, fence) {
+  await linkDependencies(c);
+  const entry = await c.copy(
+    "scripts/runtime-package/thermite.mjs",
+    join(c.work, "thermite.mjs"),
+  );
+  return shell({ ...c, entry }, fence.body);
+}
+
+export async function goldenShell(c, fence) {
+  // Updating snapshots and building stay inside the scratch checkout.
+  const topicsFile = "docs/topics.json";
+  const topics = await json(join(c.root, topicsFile));
+  for (const path of [
+    "packages",
+    "scripts",
+    "examples",
+    "package.json",
+    "tsconfig.json",
+    "tsconfig.base.json",
+    "vitest.config.mjs",
+    ".prettierrc.json",
+    topicsFile,
+    ...topics.map((topic) => topic.file),
+  ])
+    await c.copy(path, join(c.work, path));
+  await linkDependencies(c);
+  const { commit } = await json(
+    join(c.root, "packages/cli/assets/guide/source.json"),
+  );
+  await put(join(c.work, "scripts/source-commit.txt"), `${commit}\n`);
   return shell(c, fence.body);
 }
 async function watchShell(c, fence) {

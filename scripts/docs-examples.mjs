@@ -23,7 +23,7 @@ const help = `Classify one reviewed README/live-doc code block (ordinal is 1-bas
   bun scripts/docs-examples.mjs --classify docs/example.md#1 --as illustrative --reason "Why this is a fragment"
   bun scripts/docs-examples.mjs --classify docs/example.md#1 --as platform-only --setup "Named OS/setup" --reason "Required resources"
 Executed classification runs the recipe or the exact bound test BEFORE writing.
-Topic recipe IDs and their named tests are in scripts/docs-examples.json bindings.
+Bound recipe IDs and their named tests are in scripts/docs-examples.json bindings.
 --measure prints file/language counts. --root <tree> supports source archives.
 No command automatically approves a changed executed example.`;
 export async function classify(root, target, options) {

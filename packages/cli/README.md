@@ -7,9 +7,15 @@ Bun 1.4.2. These source-checkout commands start at the repository root. See the
 
 ## Source alpha: initialize and inspect
 
+Install the pinned dependencies in a fresh checkout.
+
 ```sh
 bun install --frozen-lockfile
-bun run build
+```
+
+After `bun run build`, initialize and inspect a project.
+
+```sh
 bun thermite.mjs --help
 bun thermite.mjs init ../electrical-project --name "My Electrical Project" --revision A
 bun thermite.mjs validate ../electrical-project

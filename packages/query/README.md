@@ -285,6 +285,6 @@ CSV API still emits CRLF. After an intentional report change, update and review:
 
 ```sh
 bun run build
-VITEST_MAX_WORKERS=2 bun run test -- packages/query/test/documentation-goldens.test.ts -u
-VITEST_MAX_WORKERS=2 bun run test -- packages/query/test/documentation-goldens.test.ts
+VITEST_MAX_WORKERS=2 bun run test -- packages/query/test/documentation-goldens.test.ts -u --no-cache --configLoader=native
+VITEST_MAX_WORKERS=2 bun run test -- packages/query/test/documentation-goldens.test.ts --no-cache --configLoader=native
 ```

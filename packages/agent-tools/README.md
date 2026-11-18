@@ -188,10 +188,10 @@ Compilation failures retain their existing diagnostics and failure classificatio
 Files outside the admitted snapshot are not reread or listed, and they are not
 patchable (A003). When the project fails to compile, inspect and resolve return
 no guards; only then, to patch the repair, calculate the guard explicitly from
-the file's raw bytes (adjust the path):
+the file's raw bytes. This source-checkout example hashes the motor-starter equipment file.
 
 ```sh
-bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' path/to/file.json
+bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha256-"+c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("base64"))' examples/motor-starter/devices/equipment.json
 ```
 
 That fallback does not make new or unreferenced files patch eligible; admit them

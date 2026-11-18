@@ -9,8 +9,8 @@ From the repository root, after the normal source build:
 
 ```sh
 bun thermite.mjs validate libraries/siemens-et200pro-pilot/examples/connector-wiring
-node libraries/siemens-et200pro-pilot/examples/connector-wiring/verify.mjs
-bun thermite.mjs packet --project libraries/siemens-et200pro-pilot/examples/connector-wiring --input libraries/siemens-et200pro-pilot/examples/connector-wiring/packet.json --output /tmp/thermite-et200pro-example.html
+bun libraries/siemens-et200pro-pilot/examples/connector-wiring/verify.mjs
+bun thermite.mjs packet --project libraries/siemens-et200pro-pilot/examples/connector-wiring --input libraries/siemens-et200pro-pilot/examples/connector-wiring/packet.json --output alpha-out/thermite-et200pro-example.html
 ```
 
 The example chooses the first SITOP +24 V/0 V duplicate screws and marks those

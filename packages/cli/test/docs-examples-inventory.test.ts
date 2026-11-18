@@ -7,7 +7,7 @@ import {
   mkdir,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import {
   exampleFences,
@@ -15,7 +15,11 @@ import {
   exampleKey,
   fenceHash,
 } from "../../../scripts/docs-examples-lib.mjs";
-import { parseDocument, sha256 } from "../../../scripts/docs-lib.mjs";
+import {
+  loadCorpus,
+  parseDocument,
+  sha256,
+} from "../../../scripts/docs-lib.mjs";
 import { classify } from "../../../scripts/docs-examples.mjs";
 import { context } from "../../../scripts/docs-example-context.mjs";
 import { recipes } from "../../../scripts/docs-example-recipes.mjs";
@@ -30,6 +34,7 @@ afterEach(async () => {
 });
 async function fixture(
   text = "# Test\n\n```sh\nbun -e 'console.log(123)'\n```\n",
+  file = "README.md",
 ) {
   const root = await mkdtemp(
     join(await realpath(tmpdir()), "thermite-example-inventory-"),
@@ -37,7 +42,8 @@ async function fixture(
   roots.push(root);
   await mkdir(join(root, "scripts"));
   await mkdir(join(root, "docs"));
-  await writeFile(join(root, "README.md"), text);
+  await mkdir(dirname(join(root, file)), { recursive: true });
+  await writeFile(join(root, file), text);
   await writeFile(join(root, "docs/topics.json"), "[]");
   await writeFile(
     join(root, "scripts/docs-policy.json"),
@@ -47,7 +53,7 @@ async function fixture(
   );
   const corpus = {
     root,
-    documents: new Map([["README.md", parseDocument(text)]]),
+    documents: new Map([[file, parseDocument(text)]]),
   };
   return { root, corpus };
 }
@@ -88,24 +94,39 @@ it("fails first for an unclassified fence, then passes only with a classificatio
     expect.stringContaining("unclassified or changed"),
   ]);
 });
-it("uses indexed live documents, includes unknown languages and indented code, and excludes archives and other guides", async () => {
+it("includes every live docs/ and project-guide block, plus shell blocks in source READMEs", async () => {
   const { corpus } = await fixture();
   for (const file of [
     "docs/new.md",
     "docs/legacy/old.md",
     "packages/cli/assets/THERMITE_AGENTS.md",
+    "packages/query/README.md",
+    "examples/model/README.md",
+    "libraries/vendor/examples/model/README.md",
+    "scripts/runtime-package/README.md",
+    "packages/cli/assets/AGENTS.md",
     "evals/draw/README.md",
   ])
     corpus.documents.set(
       file,
       parseDocument(
-        "# Doc\n\n~~~new-language\nnew instruction\n~~~\n\n    indented program\n",
+        "# Doc\n\n~~~new-language\nnew instruction\n~~~\n\n    indented program\n\n```sh\nbun thermite.mjs --help\n```\n",
       ),
     );
-  expect(exampleFences(corpus).map((f) => `${f.file}:${f.lang}`)).toEqual([
-    "README.md:sh",
-    "docs/new.md:new-language",
-    "docs/new.md:",
+  expect(
+    exampleFences(corpus).map((f) => `${f.file}#${f.ordinal}:${f.lang}`),
+  ).toEqual([
+    "README.md#1:sh",
+    "docs/new.md#1:new-language",
+    "docs/new.md#2:",
+    "docs/new.md#3:sh",
+    "packages/cli/assets/THERMITE_AGENTS.md#1:new-language",
+    "packages/cli/assets/THERMITE_AGENTS.md#2:",
+    "packages/cli/assets/THERMITE_AGENTS.md#3:sh",
+    "packages/query/README.md#3:sh",
+    "examples/model/README.md#3:sh",
+    "libraries/vendor/examples/model/README.md#3:sh",
+    "scripts/runtime-package/README.md#3:sh",
   ]);
 });
 it("hashes language and exact body but tolerates line shifts and CRLF", async () => {
@@ -144,23 +165,37 @@ it("refuses a broken executed classification without changing the inventory", as
     before,
   );
 });
-it("running a fence forcibly marked executed exposes its failure", async () => {
-  const { root, corpus } = await fixture(
-    "# Test\n\n```sh\nbun -e 'process.exit(7)'\n```\n",
+it("rejects a broken example README fence even if its new hash is marked executed", async () => {
+  const file = "examples/model/README.md";
+  const original = "# Example\n\n```sh\nbun -e 'console.log(123)'\n```\n";
+  const { root, corpus } = await fixture(original, file);
+  await writeFile(join(root, "scripts/demo-change.mjs"), "");
+  const entry = {
+    file,
+    hash: exampleFences(corpus)[0].hash,
+    kind: "executed",
+    recipe: "repo-shell",
+  };
+  await inventory(root, [entry]);
+  expect(await exampleFindings(corpus)).toEqual([]);
+  await writeFile(
+    join(root, file),
+    original.replace("console.log(123)", "process.exit(7)"),
   );
-  const fence = exampleFences(corpus)[0];
-  await inventory(root, [
-    {
-      file: fence.file,
-      hash: fence.hash,
-      kind: "executed",
-      recipe: "cabinets-shell",
-    },
+  const mutated = await loadCorpus(root);
+  expect((await exampleFindings(mutated)).map((f) => f.reason)).toEqual([
+    expect.stringContaining("stale example"),
+    expect.stringContaining("unclassified or changed"),
   ]);
-  expect(await exampleFindings(corpus)).toEqual([]); // Freshness deliberately does not execute.
+
+  const [fence] = exampleFences(mutated);
+  await inventory(root, [{ ...entry, hash: fence.hash }]);
+  expect(await exampleFindings(mutated)).toEqual([]);
   const c = await context(root);
   try {
-    await expect(recipes["cabinets-shell"](c, fence)).rejects.toThrow();
+    await expect(recipes["repo-shell"](c, fence)).rejects.toThrow(
+      /process\.exit\(7\)/,
+    );
   } finally {
     await c.cleanup();
   }

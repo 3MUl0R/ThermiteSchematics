@@ -117,6 +117,16 @@
       ],
       "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521"
     },
+    "project-guide": {
+      "file": "packages/cli/assets/THERMITE_AGENTS.md",
+      "testFile": "packages/cli/test/project-guide.test.ts",
+      "testName": "generated project guide executes every fenced project-guide block",
+      "testHash": "37bf6d84745c791528343804f65736c242bc8596b2ceff2c66d00e073d8952e5",
+      "consumedHashes": [
+        "00950de8f913d37ea13ec1d87c29d5a3d30aa30538a06e90966d1f79a4274e29",
+        "14cc0742fd3f27238f71c8bd0a9e26075e81445d861d670a84d37d522f5009fc"
+      ]
+    },
     "topic-project-workflows": {
       "file": "docs/project-workflows.md",
       "testFile": "packages/cli/test/project-guide.test.ts",
@@ -128,7 +138,7 @@
         "f4e2ed412782ee5e7fd502ec4f48338bd3aed99a24d1a02d4227fed8cbbb08d9",
         "b74abfd7a2710245a5ef678668345e635d32551f35ac0dfc96d041ad798def09"
       ],
-      "testHash": "f9d4e5bbaf549a74456c0c6d1e5674c125bb5ee7e5ee0d658bf4709e8886c352"
+      "testHash": "37bf6d84745c791528343804f65736c242bc8596b2ceff2c66d00e073d8952e5"
     }
   },
   "entries": [
@@ -728,6 +738,278 @@
       "hash": "bdfbb417e7be3a191ef1b8d55560c4ac09543b55931a2a3f0b1d04d663ec8210",
       "kind": "executed",
       "recipe": "topic-views"
+    },
+    {
+      "file": "examples/assembly-note-bounds/README.md",
+      "hash": "98fcfb0b5a4f9cd73cb9d8ce6e860516c8063af0ea562176a71b261f91144bdf",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/cap-pagination/README.md",
+      "hash": "6976cc45b9ebccc79dfa5424dc07ce6d8604b008c86aedeb350c4f21976f91f3",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/circuit-pagination/README.md",
+      "hash": "d22194f7e8a59e5108d432ee97970a292f847c89abdcc61e8901967f749ded49",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/connector-io/README.md",
+      "hash": "a8c0f0f122c188069d9971d412a4e7bef9dfe8058e02ac85c916046920833e6c",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/functional-symbols/README.md",
+      "hash": "116ad0181ce9332cfb7d429d0be8c81ee00f4a920f8ea34609543322e2730936",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/network-pagination/README.md",
+      "hash": "f63e8bd7c5e3c06df05c52ed52abcddc4b0220f59d4d8f4e30d5b18efe7c9c39",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/report-filtering/README.md",
+      "hash": "f70e3c9307f82f9b93f3d74fcb5657357be8ab79d93057b8ab738e94cb63f605",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/self-loop-labels/README.md",
+      "hash": "682c2a53dfdf669a81400a26e5a6ae5c193e6ca09f60d495b818d55b7d03f570",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "examples/topology-coverage/README.md",
+      "hash": "57fd7b422f7bb76eeb9714037ec3ef48980f1dba3e0a9a52217a15dc95e8ab51",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/COMPONENT_EXAMPLES.md",
+      "hash": "48a19db047c5a66074fd458cf61a9d7cc4c3255aca70c2f71f3ecd11cdc046c7",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/COMPONENT_EXAMPLES.md",
+      "hash": "d92d92994ff686848afff74c6de9bb96efe9f73f24c63de2591cd19ac76de48b",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/phoenix-terminal-pilot/README.md",
+      "hash": "9617f1b2a7074ff540cece7bc73fa571783150fce9c491cc0385944a1b77c9b1",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/phoenix-terminal-pilot/examples/terminal-wiring/README.md",
+      "hash": "2aab371ff55c5f056343a58d8330e986a146e1286fde67adc85cc82d9fef3d17",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/phoenix-terminal-pilot/examples/terminal-wiring/README.md",
+      "hash": "53986835761904f1f14fb89fe85240d25505201c2af55fa717c8e327f950771f",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/siemens-et200pro-pilot/examples/connector-wiring/README.md",
+      "hash": "9bb107e963b5fbb210f20e2afe5c6c069c018425763baa207737bc4ab7ac6d45",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/siemens-et200pro-pilot/examples/connector-wiring/README.md",
+      "hash": "6b5765c2f86e2bd7d075421f12d2b84507878c9da499c7d9626f988995a24bf5",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/siemens-pilot/examples/candidate-wiring/README.md",
+      "hash": "ddb0e3c1685c57802083d4332387bfe6c0c16f43b0e1ada736b7f09aee61fc22",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/README.md",
+      "hash": "c5b8bcda99510dc4c0d9dbd5e4f5939fca779a9141a0413cd139cf916dfab34f",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/23d01ba05/README.md",
+      "hash": "13b8956f3213fceaa94399a7bee4ee977661bc24284999d2d470ce8933cf11d9",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/23d01ba05/README.md",
+      "hash": "a21d1c999eeb38d73a16244b15f7fa2e4922b1a47eee7979a6d9ae3f09dcd443",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/8570-11-407/README.md",
+      "hash": "9feb04e911a477390474a34ccde47d9b58f2bb8c80e3c70f1d70d15cb0525606",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/8570-11-407/README.md",
+      "hash": "810555ce60b8715d0c088c19a4c348ba43eb1b0b735d128e1da44a3ad19cde4a",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/8570-12-407/README.md",
+      "hash": "ad0013fae3b00c67cb62fe88df5cab75ac2a6f25d9cdbe2b0d4a24b7e69f0f77",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/8570-12-407/README.md",
+      "hash": "7ace77c7309c71ba8b18ffe14f3a4df12be0d0e50628f6b42f84562fa5fe2f96",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/component-check/README.md",
+      "hash": "068fdaafa7ef5ab8361dd0a76df45cb4c61f36d66a8cf260a711c85c49e116c1",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "libraries/stahl-pilot/examples/component-check/README.md",
+      "hash": "76d490f18538650f74069b2cef78d9a036049447dc47823b61de4979411c2efc",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/agent-tools/README.md",
+      "hash": "205ec6a89a62a5ec6ac3ec6f4cd3f0bb0cc65881a7ae198044846e804d4be407",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/cli/README.md",
+      "hash": "ad042bccb11e6de10a61254eca936e6c593b76ee9ec933da81b22cb2620ca8d2",
+      "kind": "platform-only",
+      "setup": "Fresh checkout with Bun and a package registry or a populated package cache",
+      "reason": "Installs pinned dependencies. A fresh offline checkout cannot acquire missing dependencies."
+    },
+    {
+      "file": "packages/cli/README.md",
+      "hash": "fe409026cdcf591fdf130e338f5e4854d7557e044f7b3ae87d5baa740467f02e",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/cli/README.md",
+      "hash": "154e57d4706edae8dac3e770d6acb1b4ea60aa9e77f3dfcbca4c89f56a625a3f",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/cli/README.md",
+      "hash": "ae581b6b7333943b06c71996241d39536358da3060416375788953c0fe257593",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/cli/README.md",
+      "hash": "83147326c3308e56d38d4350a2dae5b7957294b1cf2efba0c59441d86ec0e9be",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/cli/assets/THERMITE_AGENTS.md",
+      "hash": "00950de8f913d37ea13ec1d87c29d5a3d30aa30538a06e90966d1f79a4274e29",
+      "kind": "executed",
+      "recipe": "project-guide"
+    },
+    {
+      "file": "packages/cli/assets/THERMITE_AGENTS.md",
+      "hash": "14cc0742fd3f27238f71c8bd0a9e26075e81445d861d670a84d37d522f5009fc",
+      "kind": "executed",
+      "recipe": "project-guide"
+    },
+    {
+      "file": "packages/cli/fixtures/completeness/README.md",
+      "hash": "9401dd9c8b805b7d5f5ff812531f91b9eba2c7cfdaebecbe6c5432fea67362cd",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/core-library/test/fixtures/rm1/README.md",
+      "hash": "e20587312b405afab669065ae77002bd5303798dad7c9a4482bbae7f98a09979",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "packages/query/README.md",
+      "hash": "523975184b32e3bdded78b4833baa6ff4e24d8a8da81bbf5a229f6da49835345",
+      "kind": "executed",
+      "recipe": "golden-shell"
+    },
+    {
+      "file": "packages/render/README.md",
+      "hash": "4d6e42b297a66218a6f16839e2ce686f684eed5299ede77f2854f7c311df1d2c",
+      "kind": "executed",
+      "recipe": "golden-shell"
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "86f6584e770cfd6bf1c266bfa40ae0bc9038755eadf220c657e6814db0bc6ca4",
+      "kind": "illustrative",
+      "reason": "The absolute paths stand for a contributor's inventory, selection, new batch and installed worker executables."
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "2ab03302d153845448238480d37eb446445578ecc8359142c9d9f6cef27d717f",
+      "kind": "illustrative",
+      "reason": "Requires a selected source manual, its page geometry and a Python interpreter path. The page and crop coordinates are example inputs."
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "ddcd9ce5b3bf9193a751893c65ae3e066b40e9fafee8cc2237d058a7048e4c3e",
+      "kind": "platform-only",
+      "setup": "Prepared research batch, review limits and authenticated model workers",
+      "reason": "The block previews and starts a model-worker batch from caller-supplied research inputs."
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "9c68adee194dc7b7434c9f794531b5c1a14730a5da1ef484a3cc3f368012dc42",
+      "kind": "illustrative",
+      "reason": "The job path stands for an already prepared research job with source evidence and candidates."
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "d63dc90672ed6bc0be45f968b58710de5567b171d60a1caf3eb1cf3491a5cda7",
+      "kind": "illustrative",
+      "reason": "The paths stand for a completed research job, verifier result and human review for an intentional catalog promotion."
+    },
+    {
+      "file": "scripts/library-batch/README.md",
+      "hash": "d92d92994ff686848afff74c6de9bb96efe9f73f24c63de2591cd19ac76de48b",
+      "kind": "executed",
+      "recipe": "repo-shell"
+    },
+    {
+      "file": "scripts/runtime-package/README.md",
+      "hash": "2fd47ca4f93d04fe689833e218a732161c64d5f75172965244e42ec1ab874cac",
+      "kind": "executed",
+      "recipe": "runtime-shell"
     }
   ]
 }

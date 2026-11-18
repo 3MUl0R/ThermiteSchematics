@@ -10,19 +10,43 @@ export const fenceHash = (lang, body, meta = "") =>
 
 // Use exactly the source discovery/policy used by the index. Planning is already
 // excluded there; archives are navigable but are not current runnable guidance.
+const projectGuide = "packages/cli/assets/THERMITE_AGENTS.md";
+const shellLanguages = new Set([
+  "sh",
+  "shell",
+  "bash",
+  "zsh",
+  "console",
+  "shell-session",
+  "powershell",
+  "pwsh",
+  "ps1",
+  "cmd",
+  "bat",
+]);
+
 export function exampleFences({ documents }) {
   const fences = [];
   for (const [file, document] of documents) {
-    if (file !== "README.md" && !file.startsWith("docs/")) continue;
     if (file.startsWith("docs/legacy/")) continue;
+    const allBlocks =
+      file === "README.md" || file.startsWith("docs/") || file === projectGuide;
+    if (
+      !allBlocks &&
+      file !== "libraries/COMPONENT_EXAMPLES.md" &&
+      !/^(packages|examples|libraries|scripts)\/(?:.*\/)?README\.md$/.test(file)
+    )
+      continue;
     let ordinal = 0;
     const visit = (node) => {
       if (node.type === "code") {
         const lang = node.lang ?? "";
         const meta = node.meta ?? "";
+        ordinal++;
+        if (!allBlocks && !shellLanguages.has(lang)) return;
         fences.push({
           file,
-          ordinal: ++ordinal,
+          ordinal,
           line: node.position.start.line,
           lang,
           meta,
