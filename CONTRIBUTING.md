@@ -241,13 +241,14 @@ Findings are sorted as `file:line target reason`; exits are 0 (clean), 1
 checking a separate source tree.
 
 `check:docs` also checks the [runnable-example inventory](scripts/docs-examples.json).
-It covers every code block in the root README and indexed live `docs/`, excluding
-the archive and planning. All languages are inventoried, including diagrams and
-fragments. Entries use the file path and a SHA-256 of language, metadata and body;
-moving a fence down the page does not invalidate it. Each entry is executed,
-illustrative with a reason, or limited to a named platform/setup with a reason.
+It covers every code block in indexed READMEs, live `docs/` and the generated
+project guide source. It also covers shell fences in the library component
+examples and the CLA. The archive and planning are excluded. Entries use the
+file path and a SHA-256 of language, metadata and body. Moving a fence down
+the page does not invalidate it. Each entry is executed, illustrative with a
+reason, or limited to a named setup with a reason.
 Freshness checks run no examples. The test suite executes current Markdown bodies
-in temporary projects. Existing topic examples name their exact test, pin its
+in temporary projects. Bound examples name their exact test, pin its
 source bytes, and require evidence that the test parser consumed the selected
 fence hash. A passing test that omitted that fence cannot approve it.
 

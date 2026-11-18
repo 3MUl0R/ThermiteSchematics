@@ -195,17 +195,21 @@ Human `validate`, `--help` and other calls cannot revoke a valid repair exceptio
 The current generated guide is normative. Updating its edit permissions requires
 a reviewed scorer change and eval-version bump.
 
-| File/change                                         | Direct edit permission                                       | Guide provenance                                                                                                                   |
-| --------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Existing referenced source/presentation             | Guarded dry-run then apply                                   | “To change existing source or presentation files:” followed by the guarded workflow.                                               |
-| New source files and `system.json` source listing   | Ordinary edits; later edits to admitted files become guarded | “New files, `system.json` and libraries are ordinary file edits; list new source files in `system.json` `sources`, then validate.” |
-| Libraries, including visible core                   | Ordinary edits, then CLI lock                                | Same sentence; “After an intentional library change run `thermite lock .`, then validate”.                                         |
-| JSON-invalid existing source/presentation           | Ordinary repair while its before-state has E002/E003 (A006)  | “Invalid JSON needs an ordinary edit, then validation”; `thermite guide agent-requests` includes duplicate keys.                   |
-| Schema-invalid existing source/presentation         | Guarded repair; explicit raw-byte hash permitted             | “When compilation fails (no guards returned), hash the raw source bytes and guard a schema or semantic repair with UID tests”.     |
-| Schema-valid source with a compile error, e.g. E102 | Guarded repair; explicit byte hash permitted                 | Same current guide sentence; a compile error does not authorize a direct edit.                                                     |
-| Library lock                                        | Successful CLI `lock` writes only                            | “referenced by system.json and pinned by electrical-system.lock.json”; “run `thermite lock .`”.                                    |
-| Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                       | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                        |
-| Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                 | “Electrical JSON is authoritative. PDF, SVG and HTML are generated outputs. Never hand-author schematic geometry”.                 |
+> Write new files completely before listing them in `sources` in `system.json`.
+> Once listed, use guarded patches for every edit, including E011 repairs,
+> except for JSON syntax repair. Then run `thermite validate .`.
+
+| File/change                                         | Direct edit permission                                      | Guide provenance                                                                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Existing referenced source/presentation             | Guarded dry-run then apply                                  | “To edit existing source/presentation files:” followed by the guarded workflow.                                                    |
+| New source files and `system.json` source listing   | Ordinary edits to write and register new files              | The quoted rule requires validation after registration and guarded patches for later edits.                                        |
+| Libraries, including visible core                   | Ordinary edits, then CLI lock                               | “After library edits, run `thermite lock .` before validation.”                                                                    |
+| JSON-invalid existing source/presentation           | Ordinary repair while its before-state has E002/E003 (A006) | “An E002 syntax error or a duplicate key needs an ordinary syntax repair, then validation.”                                        |
+| Schema-invalid existing source/presentation         | Guarded repair; explicit raw-byte hash permitted            | “For E011 shape errors, patch the parsed value.” The guide prescribes raw-byte guards and UID tests when compilation fails.        |
+| Schema-valid source with a compile error, e.g. E102 | Guarded repair; explicit byte hash permitted                | The guide prescribes raw-byte guards and UID tests for semantic repairs when compilation fails.                                    |
+| Library lock                                        | Successful CLI `lock` writes only                           | The guide calls for `thermite lock .`. The offline project workflows topic explains that `electrical-system.lock.json` pins bytes. |
+| Project `AGENTS.md` and Claude import wrapper       | Frozen after arm setup                                      | The guide excludes itself from patch eligibility; the evaluator freezes instructions as V3.                                        |
+| Requests, notes and generated artifacts             | Ordinary files; source remains authoritative                | “Electrical JSON is authoritative. PDF/SVG/HTML are generated.”                                                                    |
 
 | Rule | Meaning                                                                                                                                                                                                                                                                           |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -448,9 +452,16 @@ compares direct/shimmed validation inside the Codex workspace sandbox. An
 unwritable lock path must exit 2 without CLI stdout and record a `lock` marker
 within 10 seconds. A separate failed log append, with a writable lock, must
 preserve the direct CLI's streams and exit status and record a `logging` marker.
-Normal tests use synthetic transcripts, fake auth CLIs,
-policy negatives and one reference pipeline smoke with checker-only recovery. Full reference,
-auth-readiness and sandbox probes stay outside the normal check. Verification
+Normal tests use synthetic transcripts, fake auth CLIs, policy negatives and an
+offline reference pipeline smoke test with checker-only recovery. Run that test
+on its own from a built checkout.
+
+```sh
+VITEST_MAX_WORKERS=2 bun run test -- evals/agent/runner.test.mjs -t 'reference pipeline rechecks' --no-cache --configLoader=native
+```
+
+Full reference runs prepare a pinned engine context. They, auth-readiness and
+sandbox probes run separately from the normal check. Verification
 timings and the final harness hash are recorded in the worktree's `PR.md`.
 The synthetic closed-pipe fixture prints the kernel code and errno on one line,
 because Bun's unhandled write stack can vary. Every exact errno

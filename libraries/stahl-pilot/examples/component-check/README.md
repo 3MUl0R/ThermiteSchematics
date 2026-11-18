@@ -13,7 +13,7 @@ From the Thermite source checkout, after `bun install --frozen-lockfile` and `bu
 
 ```sh
 bun thermite.mjs validate libraries/stahl-pilot/examples/component-check
-node libraries/stahl-pilot/examples/component-check/verify.mjs
+bun libraries/stahl-pilot/examples/component-check/verify.mjs
 bun thermite.mjs packet --project libraries/stahl-pilot/examples/component-check --input libraries/stahl-pilot/examples/component-check/packet.json --paper tabloid --index -o alpha-out/component-review/stahl.html
 ```
 

@@ -15,6 +15,10 @@ const run = (name) =>
 export const recipes = {
   "cabinets-shell": run("cabinetsShell"),
   "repo-shell": run("repoShell"),
+  "runtime-shell": run("runtimeShell"),
+  "workspace-shell": run("workspaceShell"),
+  "sdk-example": run("sdkExample"),
+  "signoff-shell": run("signoffShell"),
   "agent-workflow": run("agentWorkflow"),
   "json-project": run("jsonProject"),
   "json-packet": run("jsonPacket"),

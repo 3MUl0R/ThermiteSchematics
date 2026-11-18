@@ -118,6 +118,7 @@ it("watch deadline awaits termination before its temporary tree is removed", asy
   const c = await context(directory, { timeoutMs: 50 });
   try {
     const error = await repoShell(c, {
+      file: "docs/review.md",
       body: "bun thermite.mjs watch --project . --input packet.json -o drawing.html",
     }).catch((e) => e);
     expect(error.message).toContain("deadline");
