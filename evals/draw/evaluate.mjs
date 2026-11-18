@@ -47,14 +47,12 @@ export function textGeometryIssues(g) {
 function evaluateTextAndSymbols(
   c,
   s,
-  packet,
   g,
   ir,
   pdf,
   parity,
   symbols,
-  tables,
-  request,
+  vocabularyContext,
   interference,
   obs,
   out,
@@ -144,7 +142,6 @@ function evaluateTextAndSymbols(
         "Two reviewers compare selected-standard glyphs and qualifiers to the fixed checklist.",
     }),
   );
-  const vocabularyContext = { sheet: s, packet, tables, request };
   out.push(obs("DQ-05", checks.functionKeys(g, ir, vocabularyContext)));
   out.push(
     obs("DQ-05", checks.internalVocabulary(g, ir, vocabularyContext), {
@@ -481,14 +478,12 @@ function evaluateSheet(
   evaluateTextAndSymbols(
     c,
     s,
-    packet,
     g,
     ir,
     pdf,
     parity,
     symbols,
-    tables,
-    request,
+    { sheet: s, packet, tables, request, geometries },
     interference,
     obs,
     out,

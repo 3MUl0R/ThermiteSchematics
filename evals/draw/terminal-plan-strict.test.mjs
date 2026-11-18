@@ -135,7 +135,10 @@ it("keeps native terminal views separate even with identical titles", async () =
   const x = await terminalPlanFixture(page, "motor-starter", request);
   try {
     const audits = terminalPlanAudits(x.packet, x.geometries, x.ir, x.request);
-    expect(audits.map((a) => a.assessment)).toEqual(["pass", "pass"]);
+    expect(audits.map((a) => a.findings.map((f) => f.kind))).toEqual([
+      ["strip-approach-conductor-bridge"],
+      [],
+    ]);
     expect(audits[0].sheets.every((s) => !audits[1].sheets.includes(s))).toBe(
       true,
     );
@@ -143,10 +146,19 @@ it("keeps native terminal views separate even with identical titles", async () =
     await rm(x.directory, { recursive: true, force: true });
   }
 });
-it("strict DQ-23 accepts complete native strip geometry on sibling sheets", () => {
+it("strict DQ-23 assigns the real crossing to the painted sheet alone", () => {
   const rows = strictTerminalRows(fixture);
   expect(
     fixture.packet.sheets.some((s) => s.view.kind === "terminal-strip"),
   ).toBe(true);
-  expect(rows.every((r) => r.status === "pass")).toBe(true);
+  const failed = rows.filter((r) => r.status === "fail");
+  expect(failed).toHaveLength(1);
+  expect(failed[0].sheet).toBe(
+    fixture.packet.sheets.find((s) => s.view.kind === "terminal-strip").number,
+  );
+  expect(failed[0].evidence).toMatchObject({
+    findingCount: 1,
+    findings: [{ kind: "strip-approach-conductor-bridge" }],
+    approachCounts: [{ conductorBridgePairs: expect.any(Number) }],
+  });
 });

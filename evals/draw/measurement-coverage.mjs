@@ -33,5 +33,21 @@ export function measurementCoverage(rows, g, wireAudit, sheet) {
         nativeAbsence,
       }),
     );
+  if (report) {
+    const landed = report.evidence.findings.filter(
+      (f) => f.stripLandings?.length,
+    );
+    if (landed.length)
+      report.evidence.stripLandingCounts = {
+        endpointCells: landed.length,
+        measuredLandings: landed.reduce(
+          (sum, f) => sum + f.stripLandings.length,
+          0,
+        ),
+        undrawnClaims: landed.filter(
+          (f) => f.kind === "wire-locator-undrawn-claim",
+        ).length,
+      };
+  }
   return rows;
 }

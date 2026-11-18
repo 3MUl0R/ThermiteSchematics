@@ -4,8 +4,8 @@ import {
   destination,
   continuationCoverage,
 } from "./terminal-strip-continuations.mjs";
+import { stripApproachAudit } from "./terminal-strip-approaches.mjs";
 // Attributes locate ink. Native IR defines obligations; measured shapes discharge them.
-const close = (a, b, t = 0.3) => Math.abs(a - b) <= t;
 const pointAt = (p, b) =>
   p &&
   p.x >= b.x - 0.3 &&
@@ -170,8 +170,11 @@ export function checkTerminalStrip(native, ink) {
   for (const t of ink.texts)
     if (t.size < 2.499 || !t.painted)
       findings.push({ kind: "strip-unprintable-text", text: t.text });
+  const approach = stripApproachAudit(native, ink);
+  findings.push(...approach.findings);
   return {
     dq: "DQ-23",
+    approachCounts: Object.fromEntries(approach.countsBySheet),
     owner: "#336",
     strict: false,
     repinNow: false,
