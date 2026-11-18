@@ -61,7 +61,7 @@ assert.equal(packet.ok, true);
 const [power, thermocouple, ...companions] = packet.value.sheets;
 assert.equal(power?.view.kind, "wiring");
 assert.equal(thermocouple?.view.kind, "wiring");
-assert(companions.length > 0);
+assert.equal(companions.length, 5);
 assert(companions.every((sheet) => sheet.view.kind === "terminals"));
 assert(thermocouple.svg.includes("X10.4"));
 assert(thermocouple.svg.includes("X10.5"));

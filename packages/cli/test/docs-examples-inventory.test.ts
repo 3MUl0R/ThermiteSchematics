@@ -94,7 +94,7 @@ it("fails first for an unclassified fence, then passes only with a classificatio
     expect.stringContaining("unclassified or changed"),
   ]);
 });
-it("includes every live docs/ and project-guide block, plus shell blocks in source READMEs", async () => {
+it("includes live README and project guide blocks, plus CLA and component-example shell fences", async () => {
   const { corpus } = await fixture();
   for (const file of [
     "docs/new.md",
@@ -106,6 +106,9 @@ it("includes every live docs/ and project-guide block, plus shell blocks in sour
     "scripts/runtime-package/README.md",
     "packages/cli/assets/AGENTS.md",
     "evals/draw/README.md",
+    "evals/agent/fixtures/cli/README.md",
+    "CLA.md",
+    "libraries/COMPONENT_EXAMPLES.md",
   ])
     corpus.documents.set(
       file,
@@ -123,10 +126,26 @@ it("includes every live docs/ and project-guide block, plus shell blocks in sour
     "packages/cli/assets/THERMITE_AGENTS.md#1:new-language",
     "packages/cli/assets/THERMITE_AGENTS.md#2:",
     "packages/cli/assets/THERMITE_AGENTS.md#3:sh",
+    "packages/query/README.md#1:new-language",
+    "packages/query/README.md#2:",
     "packages/query/README.md#3:sh",
+    "examples/model/README.md#1:new-language",
+    "examples/model/README.md#2:",
     "examples/model/README.md#3:sh",
+    "libraries/vendor/examples/model/README.md#1:new-language",
+    "libraries/vendor/examples/model/README.md#2:",
     "libraries/vendor/examples/model/README.md#3:sh",
+    "scripts/runtime-package/README.md#1:new-language",
+    "scripts/runtime-package/README.md#2:",
     "scripts/runtime-package/README.md#3:sh",
+    "evals/draw/README.md#1:new-language",
+    "evals/draw/README.md#2:",
+    "evals/draw/README.md#3:sh",
+    "evals/agent/fixtures/cli/README.md#1:new-language",
+    "evals/agent/fixtures/cli/README.md#2:",
+    "evals/agent/fixtures/cli/README.md#3:sh",
+    "CLA.md#3:sh",
+    "libraries/COMPONENT_EXAMPLES.md#3:sh",
   ]);
 });
 it("hashes language and exact body but tolerates line shifts and CRLF", async () => {
@@ -165,41 +184,44 @@ it("refuses a broken executed classification without changing the inventory", as
     before,
   );
 });
-it("rejects a broken example README fence even if its new hash is marked executed", async () => {
-  const file = "examples/model/README.md";
-  const original = "# Example\n\n```sh\nbun -e 'console.log(123)'\n```\n";
-  const { root, corpus } = await fixture(original, file);
-  await writeFile(join(root, "scripts/demo-change.mjs"), "");
-  const entry = {
-    file,
-    hash: exampleFences(corpus)[0].hash,
-    kind: "executed",
-    recipe: "repo-shell",
-  };
-  await inventory(root, [entry]);
-  expect(await exampleFindings(corpus)).toEqual([]);
-  await writeFile(
-    join(root, file),
-    original.replace("console.log(123)", "process.exit(7)"),
-  );
-  const mutated = await loadCorpus(root);
-  expect((await exampleFindings(mutated)).map((f) => f.reason)).toEqual([
-    expect.stringContaining("stale example"),
-    expect.stringContaining("unclassified or changed"),
-  ]);
-
-  const [fence] = exampleFences(mutated);
-  await inventory(root, [{ ...entry, hash: fence.hash }]);
-  expect(await exampleFindings(mutated)).toEqual([]);
-  const c = await context(root);
-  try {
-    await expect(recipes["repo-shell"](c, fence)).rejects.toThrow(
-      /process\.exit\(7\)/,
+it.each(["examples/model/README.md", "evals/README.md"])(
+  "rejects a broken %s fence even if its new hash is marked executed",
+  async (file) => {
+    const original = "# Example\n\n```sh\nbun -e 'console.log(123)'\n```\n";
+    const { root, corpus } = await fixture(original, file);
+    await mkdir(join(root, "examples"), { recursive: true });
+    await writeFile(join(root, "scripts/demo-change.mjs"), "");
+    const entry = {
+      file,
+      hash: exampleFences(corpus)[0].hash,
+      kind: "executed",
+      recipe: "repo-shell",
+    };
+    await inventory(root, [entry]);
+    expect(await exampleFindings(corpus)).toEqual([]);
+    await writeFile(
+      join(root, file),
+      original.replace("console.log(123)", "process.exit(7)"),
     );
-  } finally {
-    await c.cleanup();
-  }
-});
+    const mutated = await loadCorpus(root);
+    expect((await exampleFindings(mutated)).map((f) => f.reason)).toEqual([
+      expect.stringContaining("stale example"),
+      expect.stringContaining("unclassified or changed"),
+    ]);
+
+    const [fence] = exampleFences(mutated);
+    await inventory(root, [{ ...entry, hash: fence.hash }]);
+    expect(await exampleFindings(mutated)).toEqual([]);
+    const c = await context(root);
+    try {
+      await expect(recipes["repo-shell"](c, fence)).rejects.toThrow(
+        /process\.exit\(7\)/,
+      );
+    } finally {
+      await c.cleanup();
+    }
+  },
+);
 it("fails when an executed binding is deleted or its actual test source changes", async () => {
   const { root, corpus } = await fixture();
   const fence = exampleFences(corpus)[0];

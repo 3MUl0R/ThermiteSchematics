@@ -30,11 +30,14 @@ export function exampleFences({ documents }) {
   for (const [file, document] of documents) {
     if (file.startsWith("docs/legacy/")) continue;
     const allBlocks =
-      file === "README.md" || file.startsWith("docs/") || file === projectGuide;
+      file === "README.md" ||
+      file.endsWith("/README.md") ||
+      file.startsWith("docs/") ||
+      file === projectGuide;
     if (
       !allBlocks &&
       file !== "libraries/COMPONENT_EXAMPLES.md" &&
-      !/^(packages|examples|libraries|scripts)\/(?:.*\/)?README\.md$/.test(file)
+      file !== "CLA.md"
     )
       continue;
     let ordinal = 0;

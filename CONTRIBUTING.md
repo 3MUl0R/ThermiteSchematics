@@ -241,13 +241,12 @@ Findings are sorted as `file:line target reason`; exits are 0 (clean), 1
 checking a separate source tree.
 
 `check:docs` also checks the [runnable-example inventory](scripts/docs-examples.json).
-It covers every code block in the root README, indexed live `docs/` and the
-generated project guide source. It also covers shell fences in package, example,
-library and tooling READMEs and the library component examples. The archive and
-planning are excluded. Entries use the file path and a SHA-256 of language,
-metadata and body. Moving a fence down the page does not invalidate it. Each
-entry is executed, illustrative with a reason, or limited to a named setup
-with a reason.
+It covers every code block in indexed READMEs, live `docs/` and the generated
+project guide source. It also covers shell fences in the library component
+examples and the CLA. The archive and planning are excluded. Entries use the
+file path and a SHA-256 of language, metadata and body. Moving a fence down
+the page does not invalidate it. Each entry is executed, illustrative with a
+reason, or limited to a named setup with a reason.
 Freshness checks run no examples. The test suite executes current Markdown bodies
 in temporary projects. Bound examples name their exact test, pin its
 source bytes, and require evidence that the test parser consumed the selected

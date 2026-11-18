@@ -4,7 +4,7 @@ One `stahl-pilot:23d01ba05` operator position and a synthetic four-point boundar
 demonstrate the historical contact diagram. This is an unenergized component
 example, not installation wiring or a complete 8040 enclosure.
 
-From the repository root, using the built TypeScript alpha and Node 24:
+After building the source checkout, run this check from the repository root with Bun 1.4.2.
 
 ```sh
 bun libraries/stahl-pilot/examples/23d01ba05/verify.mjs

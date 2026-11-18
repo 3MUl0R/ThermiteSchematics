@@ -6,10 +6,22 @@ designs. **`evals/` is excluded from runtime packages.** Runtime allowlist tests
 reject evaluation documentation, fixtures and output even when an archive
 manifest lists their hashes.
 
+In a fresh checkout, install and build first.
+
 ```sh
 bun install --frozen-lockfile
 bun run build
-VITEST_MAX_WORKERS=2 bun run test -- evals/engine/oracle.test.mjs packages/cli/test/runtime-package.test.ts
+```
+
+Run the offline oracle and runtime-boundary tests.
+
+```sh
+VITEST_MAX_WORKERS=2 bun run test -- evals/engine/oracle.test.mjs packages/cli/test/runtime-package.test.ts --no-cache --configLoader=native
+```
+
+Run a full engine checkpoint separately.
+
+```sh
 bun evals/run.mjs --checkpoint C0-r5
 ```
 

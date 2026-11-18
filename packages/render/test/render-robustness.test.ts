@@ -61,7 +61,7 @@ const loads = {
 
 // The golden migration manifest is closed; test-only fixtures use native Vitest
 // byte snapshots outside that inventory. Review SVG/JSON diffs
-// after: VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update
+// after: VITEST_MAX_WORKERS=2 bun run test -- packages/render/test/render-robustness.test.ts -t 'direct pair golden|#60' --update --no-cache --configLoader=native
 it.each(["external", "same-location"] as const)(
   "locks the %s direct pair golden in both flows",
   async (location) => {

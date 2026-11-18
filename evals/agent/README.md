@@ -448,9 +448,16 @@ compares direct/shimmed validation inside the Codex workspace sandbox. An
 unwritable lock path must exit 2 without CLI stdout and record a `lock` marker
 within 10 seconds. A separate failed log append, with a writable lock, must
 preserve the direct CLI's streams and exit status and record a `logging` marker.
-Normal tests use synthetic transcripts, fake auth CLIs,
-policy negatives and one reference pipeline smoke with checker-only recovery. Full reference,
-auth-readiness and sandbox probes stay outside the normal check. Verification
+Normal tests use synthetic transcripts, fake auth CLIs, policy negatives and an
+offline reference pipeline smoke test with checker-only recovery. Run that test
+on its own from a built checkout.
+
+```sh
+VITEST_MAX_WORKERS=2 bun run test -- evals/agent/runner.test.mjs -t 'reference pipeline rechecks' --no-cache --configLoader=native
+```
+
+Full reference runs prepare a pinned engine context. They, auth-readiness and
+sandbox probes run separately from the normal check. Verification
 timings and the final harness hash are recorded in the worktree's `PR.md`.
 The synthetic closed-pipe fixture prints the kernel code and errno on one line,
 because Bun's unhandled write stack can vary. Every exact errno
