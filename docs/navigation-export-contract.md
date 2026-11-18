@@ -268,9 +268,9 @@ Wire and core schedules always reserve `From sheet.zone` and `To sheet.zone`,
 including requested, filtered and automatic inventories. Each cell locates that
 native endpoint's actual terminal landing in the finalized packet, using the
 same decimal half-up quantization, half-open zone grid and zero-padded
-`sheet.zone` formatter as navigation. For multiply-drawn terminals, **the first issued sheet wins** (issued sheet
-order); within it, the first painted appearance in SVG document order wins.
-Later appearances never overwrite that choice. Any zone spanned by that landing is acceptable.
+`sheet.zone` formatter as navigation. An established schematic landing takes
+precedence over a strip. Within the preferred drawing kind, the first issued
+sheet and first painted appearance in SVG document order win.
 The native endpoint slot determines the column, even when the path is reversed.
 
 The explicit unresolved form is `not drawn`: it may print only when that native
@@ -281,6 +281,8 @@ wire but draws the same physical terminal through another conductor. A pin-list 
 the measured ink center of its first printed line. A nearby
 device, a different same-net terminal, an inventory row, hidden ink or a clipped
 marker supplies no location. This does not imply an absent electrical connection.
+On a strip sheet the conductor's own painted stub or jumper path must reach
+the native terminal rectangle. The rectangle center supplies the zone.
 Singly terminated, spare and unassigned cores retain their native endpoint slots.
 Location columns reserve the widest printed locator, including `not drawn`, with
 2 mm cell insets. Allocation first tries seven real columns with the native line-count capacity.

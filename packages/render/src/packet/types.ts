@@ -66,7 +66,7 @@ export interface SheetReference {
   readonly deviceUid: string;
   readonly designation: string;
   readonly functions: readonly string[];
-  readonly representation?: "terminal";
+  readonly representation?: "terminal" | "terminal-strip";
   readonly zone: string;
   readonly xMm?: number;
   readonly yMm?: number;

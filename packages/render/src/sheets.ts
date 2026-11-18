@@ -21,6 +21,7 @@ import { centroidReferences } from "./packet/navigation-occurrences.js";
 import { seedCircuitNavigation } from "./packet/navigation-circuit.js";
 import { appendDocumentCompanions } from "./packet/document-companions.js";
 import { appendTerminalStrips } from "./packet/terminal-strip.js";
+import { required } from "./presentation/util.js";
 
 import {
   circuitFunctionAppearances,
@@ -305,6 +306,12 @@ function packetReferences(
   const located = legendSheets(ir, drafts, page);
   if (!located.ok) return located;
   centroidReferences(drafts, located.navigation?.occurrences ?? []);
+  for (const [index, draft] of drafts.entries())
+    if (draft.terminalStrip)
+      draft.references = required(
+        located.value[index],
+        "Missing located strip sheet",
+      ).references.slice();
   const indexes = finalReferenceDrafts(
     ir,
     drafts,
@@ -409,7 +416,7 @@ function assemblePacket(
           sheets.map((sheet, i) => ({
             number: sheet.number,
             schematic: !drafts[i]!.documentationTable,
-            references: sheet.references,
+            references: drafts[i]?.terminalStrip ? [] : sheet.references,
           })),
         )
       : [];

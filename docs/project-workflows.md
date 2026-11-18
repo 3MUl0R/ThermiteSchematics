@@ -240,3 +240,4 @@ unknown revision stays `UNSPECIFIED` and remains unmet at issue review.
 Preview the whole packet after frame changes; handle R006 honestly.
 
 Terminal plans link strips to inventory rows; single-sheet SVG exports retain the inventory without strip references.
+Schedules can point to painted strip landings.

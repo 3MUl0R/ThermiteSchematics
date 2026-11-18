@@ -59,6 +59,42 @@ const module: FactModule = {
       },
     },
     {
+      claim: "Schedules can point to painted strip landings.",
+      async check() {
+        const source = await compileProject(
+          join(repositoryRoot, "examples/motor-starter"),
+        );
+        if (!source.ok) throw Error(JSON.stringify(source.diagnostics));
+        const packet = await renderSchematicPacket(source.ir, {
+          format: "schematic-packet-request/0.1",
+          views: [
+            { format: "documentation-view-request/0.1", kind: "wires" },
+            {
+              format: "documentation-view-request/0.1",
+              kind: "terminals",
+              device: "TB1",
+            },
+          ],
+        });
+        if (!packet.ok) throw Error(packet.error.message);
+        const strip = packet.value.sheets.find(
+          (s) => s.view.kind === "terminal-strip",
+        );
+        expect(strip).toBeDefined();
+        const token = String(strip!.number).padStart(2, "0") + ".";
+        const cells = packet.value.sheets
+          .filter((s) => s.view.kind === "wires")
+          .flatMap((s) => [
+            ...parseHTML(s.svg).document.querySelectorAll(
+              '[data-report-column="6"],[data-report-column="7"]',
+            ),
+          ]);
+        expect(
+          cells.some((cell) => cell.textContent?.trim().startsWith(token)),
+        ).toBe(true);
+      },
+    },
+    {
       claim:
         "Packets may append required companion inventories; requested filters stay unchanged.",
       async check() {

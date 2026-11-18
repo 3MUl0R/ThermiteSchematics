@@ -1,8 +1,14 @@
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { buildDocumentation } from "@thermite/query";
+import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { createTerminalIr } from "../../query/test/fixtures.js";
+import { readFile } from "node:fs/promises";
+import type {
+  RenderedSheet,
+  SchematicPacketRequest,
+} from "../src/packet/types.js";
 
 function fixture() {
   const keys = ["3", "1", "2"];
@@ -51,6 +57,117 @@ const view = {
   kind: "terminals" as const,
   device: "XT1",
 };
+
+function locationCells(sheets: readonly RenderedSheet[], key: string) {
+  return sheets
+    .filter((s) => s.view.kind === "wires")
+    .flatMap((s) =>
+      [...parseHTML(s.svg).document.querySelectorAll("[data-report-row]")]
+        .filter((r) => r.getAttribute("data-report-row") === key)
+        .map((r) =>
+          [6, 7].map((i) =>
+            r.querySelector(`[data-report-column="${i}"]`)?.textContent?.trim(),
+          ),
+        ),
+    )[0];
+}
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "fills exact strip-only wire, jumper and core cells while retaining established schematic destinations in %s",
+  async (flow) => {
+    const c = await compileProject("examples/conveyor-line");
+    if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+    const power = {
+      format: "schematic-view-request/0.1" as const,
+      family: "power" as const,
+      flow,
+      root: { by: "designation" as const, value: "M1" },
+    };
+    const request: SchematicPacketRequest = {
+      format: "schematic-packet-request/0.1",
+      index: false,
+      page: { size: "tabloid", orientation: "landscape" },
+      views: [
+        power,
+        { format: "documentation-view-request/0.1", kind: "wires" },
+      ],
+    };
+    const before = await renderSchematicPacket(c.ir, request, c.presentation);
+    const after = await renderSchematicPacket(
+      c.ir,
+      {
+        ...request,
+        views: [...request.views, { ...view, device: "TB1" }],
+      },
+      c.presentation,
+    );
+    if (!before.ok || !after.ok)
+      throw Error(JSON.stringify({ before: before.ok, after: after.ok }));
+    const strip = after.value.sheets.find(
+      (s) => s.view.kind === "terminal-strip",
+    )!;
+    const sheetPrefix = String(strip.number).padStart(2, "0");
+    const cable = c.ir.cables.find((x) => x.designation === "CBL1")!;
+    for (const key of [
+      c.ir.wires.find((w) => w.designation === "W-CTL-004")!.uid,
+      c.ir.jumpers.find((j) => j.designation === "JP1")!.uid,
+      JSON.stringify([cable.uid, "2-"]),
+    ]) {
+      const old = locationCells(before.value.sheets, key)!;
+      const cells = locationCells(after.value.sheets, key)!;
+      expect(old).toContain("not drawn");
+      expect(
+        cells.some(
+          (v, i) => old[i] === "not drawn" && v?.startsWith(sheetPrefix + "."),
+        ),
+      ).toBe(true);
+      for (const [i, value] of old.entries())
+        if (value !== "not drawn") expect(cells[i]).toBe(value);
+    }
+    const core = locationCells(
+      after.value.sheets,
+      JSON.stringify([cable.uid, "2-"]),
+    );
+    expect(core).toContain("not drawn"); // JB1 is outside this strip's filter.
+  },
+);
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "routes split XT-HMI jumper endpoints to the physical fragment in %s",
+  async (flow) => {
+    const c = await compileProject("examples/operator-console");
+    if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+    const request: SchematicPacketRequest = JSON.parse(
+      await readFile("examples/operator-console/packet.request.json", "utf8"),
+    );
+    const views = request.views.map((v) => ("flow" in v ? { ...v, flow } : v));
+    const r = await renderSchematicPacket(
+      c.ir,
+      { ...request, index: false, views },
+      c.presentation,
+    );
+    if (!r.ok) throw Error(JSON.stringify(r.error));
+    const strips = r.value.sheets.filter(
+      (s) => s.view.kind === "terminal-strip",
+    );
+    expect(strips).toHaveLength(2);
+    for (const name of ["J-HMI-4-13", "J-HMI-12-14"]) {
+      const jumper = c.ir.jumpers.find((j) => j.designation === name)!;
+      const cells = locationCells(r.value.sheets, jumper.uid)!;
+      const remoteEnd = jumper.endpoints.findIndex((e) =>
+        ["13", "14"].includes(e.terminal.terminalKey),
+      );
+      const remote = cells[remoteEnd];
+      // The opposite endpoint has a schematic landing as well as a strip body.
+      expect(cells[1 - remoteEnd]).toMatch(/^0[1-9]\.[A-D][1-6]$/u);
+      expect(remote).toMatch(
+        new RegExp(
+          `^${String(strips[1]!.number).padStart(2, "0")}\\.[A-D][1-6]$`,
+        ),
+      );
+    }
+  },
+);
 async function drawing(ir = fixture()) {
   const before = JSON.stringify(ir);
   const result = await renderSchematicPacket(ir, {

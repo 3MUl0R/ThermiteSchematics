@@ -56,6 +56,7 @@ function referenceRepresentation(
   ir: Readonly<ElectricalIr>,
   r: SheetReference,
 ): string {
+  if (r.representation === "terminal-strip") return "Terminal strip";
   return r.representation === "terminal"
     ? "Terminal context (coil outside view)"
     : r.functions
@@ -74,6 +75,21 @@ function referenceRepresentation(
 
 function isDeviceReference(r: SheetReference): boolean {
   return !r.functions.length && !r.representation;
+}
+
+function retainAppearance(
+  options: SchematicPacketRequest["references"],
+  draft: ReferenceDraft,
+  reference: SheetReference,
+  selected: ReadonlySet<string>,
+) {
+  return (
+    options !== false &&
+    selected.has(reference.deviceUid) &&
+    (options?.appearances !== "drawings" ||
+      !draft.documentationTable ||
+      reference.representation === "terminal-strip")
+  );
 }
 
 /** Content drafts already carry final terminal-centroid locations from the
@@ -117,16 +133,13 @@ export function referenceTables(
       g.locations.push(`${i + 1} / ${r.zone}`);
       groups.set(key, g);
       if (
-        request.references !== false &&
-        selectedReferenceDevices.has(r.deviceUid) &&
-        !(
-          request.references?.appearances === "drawings" && d.documentationTable
-        )
+        retainAppearance(request.references, d, r, selectedReferenceDevices)
       ) {
         const retained = retainedGroups.get(key) ?? {
           ...g,
           functions:
-            request.references?.appearances === "drawings" &&
+            request.references &&
+            request.references.appearances === "drawings" &&
             isDeviceReference(r)
               ? "Device / terminal / port"
               : g.functions,

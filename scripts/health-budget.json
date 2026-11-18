@@ -394,7 +394,7 @@
     "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 173,
     "packages/render/src/packet/folding.ts#foldDrawingDrafts": 96,
     "packages/render/src/packet/page.ts#frame": 130,
-    "packages/render/src/packet/references.ts#referenceTables": 108,
+    "packages/render/src/packet/references.ts#referenceTables": 105,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
     "packages/render/src/packet/reports.ts#tableDrafts": 152,
     "packages/render/src/packet/topology.ts#topologyDrafts": 172,
