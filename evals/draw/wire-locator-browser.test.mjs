@@ -2,6 +2,7 @@ import { beforeAll, afterAll, it, expect } from "vitest";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { fixture } from "./m3-fixture.mjs";
+import { stripInkScript } from "./terminal-strip-ink.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 let browser, context, page;
 beforeAll(async () => {
@@ -253,4 +254,127 @@ it("D1b cable circles are matched by nearby painted endpoint identities after DO
   expect(wireLocatorAudit(packet, [wrong, report], ir).findings[0].kind).toBe(
     "wire-locator-without-appearance",
   );
+});
+
+const stripSource = (stub, rect = true) =>
+  drawing()
+    .replace(/<g data-device-uid="[^"]+">.*?<\/g>/gu, "")
+    .replace(
+      "</svg>",
+      `<g data-sheet-kind="terminal-strip"><g data-terminal-strip="a">
+     ${text(50, 29, "A — authored order")}
+     <g data-strip-terminal="[&quot;a&quot;,&quot;1&quot;]">
+      ${rect ? '<rect x="54" y="40" width="12" height="8" fill="white" stroke="black"/>' : ""}
+      ${text(56, 44, "1")}
+     </g>
+     ${stub}
+    </g></g></svg>`,
+    )
+    .replace("<svg ", '<svg data-sheet="3" ');
+const validStub = `<g data-strip-incidence="w" data-strip-at="[&quot;a&quot;,&quot;1&quot;]">
+  <path d="M66 44 H78" fill="none" stroke="black"/>${text(80, 44, "W1 → B.1")}
+</g>`;
+const stripPacket = {
+  sheets: [...packet.sheets, { number: 3, view: { kind: "terminal-strip" } }],
+};
+async function auditStripCells(
+  printed,
+  markup,
+  { diagram = false, rect = true, renameRow = false } = {},
+) {
+  const schematic = await openSheet(
+    page,
+    diagram ? drawing() : drawing(false, true),
+  );
+  const reportSvg = schedule(false, printed);
+  const report = await openSheet(
+    page,
+    renameRow
+      ? reportSvg.replace('data-report-row="w"', 'data-report-row="invented"')
+      : reportSvg,
+  );
+  const strip = await openSheet(page, stripSource(markup, rect));
+  strip.terminalStripInk = await page.evaluate(stripInkScript);
+  const ir = native();
+  ir.wires.push({ ...ir.wires[0], uid: "decoy", designation: "W2" });
+  return wireLocatorAudit(stripPacket, [schematic, report, strip], ir);
+}
+
+it.each([
+  ["03.A2", null],
+  ["not drawn", "wire-locator-undrawn-claim"],
+  ["04.A2", "wire-locator-mismatch"],
+  ["03.B2", "wire-locator-mismatch"],
+])(
+  "reconciles a measured strip-only landing with printed %s",
+  async (printed, kind) => {
+    const result = await auditStripCells(printed, validStub);
+    expect(result.findings.map((f) => f.kind)).toEqual(kind ? [kind] : []);
+    const endpoint = result.measurements.find((entry) => entry.end === 0);
+    expect(endpoint.allowed).toEqual(["03.A2"]);
+  },
+);
+
+it.each([
+  [
+    "wrong conductor",
+    validStub.replace(
+      'data-strip-incidence="w"',
+      'data-strip-incidence="decoy"',
+    ),
+    true,
+  ],
+  [
+    "wrong terminal key",
+    validStub.replace("&quot;1&quot;", "&quot;2&quot;"),
+    true,
+  ],
+  ["wrong path", validStub.replace("M66 44 H78", "M66 54 H78"), true],
+  ["hidden path", validStub.replace("<path", '<path opacity="0"'), true],
+  [
+    "clipped path",
+    validStub.replace(
+      "<path",
+      '<clipPath id="cut"><rect width="1" height="1"/></clipPath><path clip-path="url(#cut)"',
+    ),
+    true,
+  ],
+  ["wrong caption", validStub.replace("W1 → B.1", "W10 → B.1"), true],
+  ["missing stub", validStub.replace(/<path[^>]+\/>/, ""), true],
+  [
+    "definition-only path",
+    validStub.replace(/<path[^>]+\/>/, (path) => `<defs>${path}</defs>`),
+    true,
+  ],
+  [
+    "nested viewport hides the path",
+    validStub.replace(
+      /<path[^>]+\/>/,
+      (path) => `<svg width="1" height="1">${path}</svg>`,
+    ),
+    true,
+  ],
+  ["no terminal body", validStub, false],
+  [
+    "caption only inside the body",
+    validStub.replace("M66 44 H78", "M59 44 H64"),
+    true,
+  ],
+])("rejects a strip pointer with %s", async (_, stub, rect) => {
+  expect(
+    (await auditStripCells("03.A2", stub, { rect })).findings.map(
+      (f) => f.kind,
+    ),
+  ).toEqual(["wire-locator-without-appearance"]);
+});
+
+it("keeps a real schematic landing, and rejects a mislabeled inventory row", async () => {
+  expect(
+    (await auditStripCells("01.A1", validStub, { diagram: true })).findings,
+  ).toEqual([]);
+  expect(
+    (
+      await auditStripCells("03.A2", validStub, { renameRow: true })
+    ).findings.map((f) => f.kind),
+  ).toEqual(["wire-locator-measurement-gap"]);
 });

@@ -28,11 +28,12 @@ export const criteria = {
   "DQ-17": "No duplicate/overlapping terminal text",
   "DQ-18": "Title-block fields and revision table present",
   "DQ-19":
-    "Report bounds, explicit native empty states, endpoint sheet.zone, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope; final index includes its own and reference pages, with own-sheet qualifiers exactly for repeated captions; assembly notes deliver native reasons to sufficient issued rows and off-part ports to their individually named measured drawn destinations; port-status needs apply only when no issued sheet draws the port; M3 reconstructs selected assembly disposition/reason needs and distinct connector-port-status facts from native IR, with no invented cap pins or unoccupied-port cables",
+    "Report bounds, explicit native empty states, endpoint sheet.zone reconciled to painted native strip or schematic landings, complete index, sufficient printed document dependencies and truthful partial/complete wire-inventory scope; final index includes its own and reference pages, with own-sheet qualifiers exactly for repeated captions; assembly notes deliver native reasons to sufficient issued rows and off-part ports to their individually named measured drawn destinations; port-status needs apply only when no issued sheet draws the port; M3 reconstructs selected assembly disposition/reason needs and distinct connector-port-status facts from native IR, with no invented cap pins or unoccupied-port cables",
   "DQ-20": "One font family and one symbol catalog per packet",
   "DQ-21": "PDF and SVG font metrics identical",
   "DQ-22": "Two blind independent drafter reviews, material/minor red-lines",
-  "DQ-23": "Graphical terminal-strip diagram available",
+  "DQ-23":
+    "Graphical terminal-strip diagram available; native conductor stubs and bridges do not join outside a common terminal body, and distinct native bridges do not share outside-body approach ink",
   "DQ-24":
     "Configured wire numbers unique and consistently placed; printed stroke/inventory conductor aliases agree with native identity (not a configured-numbering-policy claim)",
 };

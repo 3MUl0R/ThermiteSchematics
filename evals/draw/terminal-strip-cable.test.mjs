@@ -50,7 +50,13 @@ it.each(["examples/motor-starter", "examples/conveyor-line"])(
       kind: "terminals",
     });
     expect(stripInventoryEquality(table, ink).findings).toEqual([]);
-    expect(checkTerminalStrip(native, ink).findings).toEqual([]);
+    expect(checkTerminalStrip(native, ink).findings).toMatchObject([
+      {
+        kind: "strip-approach-conductor-bridge",
+        other: { id: JSON.stringify([cable.uid, "1+"]) },
+        point: { x: expect.closeTo(318.85, 3), y: expect.closeTo(64.5, 3) },
+      },
+    ]);
     for (const mutate of [
       (x) => {
         x.incidences = x.incidences.filter((i) => i.id !== coreId);

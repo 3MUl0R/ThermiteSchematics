@@ -2,6 +2,7 @@ import { buildDocumentation } from "../../packages/query/dist/index.js";
 import { nativeStrip } from "./terminal-strip-native.mjs";
 import { checkTerminalStrip } from "./terminal-strip-check.mjs";
 import { stripInventoryEquality } from "./terminal-strip-inventory.mjs";
+import { isStripApproachFinding } from "./terminal-strip-approaches.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 
 const inkFields = [
@@ -62,7 +63,9 @@ function locatedFinding(finding, index, title, ink) {
     designation: nativeLocator,
     view: index,
     title,
-    ...(drawn?.rect ? { bbox: drawn.rect, sourceSheet: drawn.sheet } : {}),
+    ...(!finding.bbox && drawn?.rect
+      ? { bbox: drawn.rect, sourceSheet: drawn.sheet }
+      : {}),
   };
 }
 function measureView(packet, geometries, ir, view, index) {
@@ -93,6 +96,7 @@ function measureView(packet, geometries, ir, view, index) {
     strict: true,
     findings,
     obligations: checked.obligations,
+    approachCounts: checked.approachCounts,
     terminals: native.terminals.map((t) => t.key),
     bridges: native.bridges.map((b) => b.uid),
     inventoryEquality: equality.rows,
@@ -117,17 +121,29 @@ export function terminalPlanAudits(packet, geometries, ir, request) {
   );
 }
 
-export function terminalPlanFindings(sheet, context) {
+export function terminalPlanSheet(sheet, context) {
   const audits = terminalPlanAudits(
     context.packet,
     context.geometries,
     context.ir,
     context.request,
   );
-  return audits.flatMap((a) =>
-    a.sheets.includes(sheet.number) ||
-    (!a.sheets.length && sheet.number === context.packet.sheets[0]?.number)
-      ? (a.findings ?? [])
-      : [],
+  const matches = audits.filter(
+    (a) =>
+      a.sheets.includes(sheet.number) ||
+      (!a.sheets.length && sheet.number === context.packet.sheets[0]?.number),
   );
+  const findings = matches.flatMap((a) =>
+    (a.findings ?? []).filter(
+      (f) => !isStripApproachFinding(f) || f.sourceSheet === sheet.number,
+    ),
+  );
+  const approachCounts = matches
+    .filter((a) =>
+      a.findings?.some(
+        (f) => isStripApproachFinding(f) && f.sourceSheet === sheet.number,
+      ),
+    )
+    .map((a) => ({ view: a.view, ...a.approachCounts[sheet.number] }));
+  return { findings, approachCounts };
 }

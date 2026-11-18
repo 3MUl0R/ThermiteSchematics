@@ -4,6 +4,7 @@ import {
   wireCoverageGaps,
   endApplicability,
 } from "./wire-source-contract.mjs";
+import { measuredStripAppearances } from "./wire-strip-appearances.mjs";
 import { cableEndBindings } from "./cable-end-identities.mjs";
 // Native IR and Chromium ink only. Never imports the renderer's locator planner.
 import { issuedRows } from "./m3-documents.mjs";
@@ -97,7 +98,7 @@ export function measuredWireAppearances(
   );
   for (const [index, sheet] of packet.sheets.entries()) {
     const g = geometries[index];
-    if (!g) continue;
+    if (!g || sheet.view.kind === "terminal-strip") continue;
     for (const item of [
       ...(g.wireTerminals ?? []),
       ...pinListAppearances(g, ir),
@@ -153,6 +154,7 @@ export function wireLocatorAudit(packet, geometries, ir) {
     native,
     cable.owners,
   );
+  const strip = measuredStripAppearances(packet, geometries, ir, native);
   const findings = [...kindFindings, ...cable.findings],
     measurements = [];
   for (const row of inventory) {
@@ -162,60 +164,75 @@ export function wireLocatorAudit(packet, geometries, ir) {
       continue;
     }
     for (const end of [0, 1]) {
-      const endpoint = source.ends[end],
-        appearances = endpoint ? (drawn.get(terminalKey(endpoint)) ?? []) : [];
-      const value = row.texts
-        .filter((t) => t.columnIndex === end + 5 && painted(t))
-        .sort(
-          (a, b) =>
-            (a.anchor?.y ?? a.bbox.y) - (b.anchor?.y ?? b.bbox.y) ||
-            a.bbox.x - b.bbox.x,
-        )
-        .map((t) => t.text)
-        .join(" ")
-        .trim();
-      const allowed = [
-        ...new Set(
-          appearances.flatMap((a) =>
-            a.zones.map((z) => `${String(a.sheet).padStart(2, "0")}.${z}`),
-          ),
-        ),
-      ];
-      const kind = !value
-        ? "wire-locator-missing"
-        : value === "not drawn"
-          ? allowed.length
-            ? "wire-locator-undrawn-claim"
-            : null
-          : !allowed.length
-            ? "wire-locator-without-appearance"
-            : !allowed.includes(value)
-              ? "wire-locator-mismatch"
-              : null;
-      const cell =
-        row.texts.find((t) => t.columnIndex === end + 5) ?? row.texts[0];
-      measurements.push({
+      const { measurement, issue } = reconcileWireEnd(row, source, end, {
+        drawn,
+        strip,
+        absence,
+      });
+      measurements.push(measurement);
+      if (issue) findings.push(issue);
+    }
+  }
+  return { findings, measurements, notMeasured: cable.notMeasured };
+}
+
+function reconcileWireEnd(row, source, end, { drawn, strip, absence }) {
+  const endpoint = source.ends[end];
+  const stripLandings = strip.get(JSON.stringify([row.key, end])) ?? [];
+  const appearances = endpoint
+    ? [...(drawn.get(terminalKey(endpoint)) ?? []), ...stripLandings]
+    : [];
+  const value = row.texts
+    .filter((t) => t.columnIndex === end + 5 && painted(t))
+    .sort(
+      (a, b) =>
+        (a.anchor?.y ?? a.bbox.y) - (b.anchor?.y ?? b.bbox.y) ||
+        a.bbox.x - b.bbox.x,
+    )
+    .map((t) => t.text)
+    .join(" ")
+    .trim();
+  const allowed = [
+    ...new Set(
+      appearances.flatMap((a) =>
+        a.zones.map((z) => `${String(a.sheet).padStart(2, "0")}.${z}`),
+      ),
+    ),
+  ];
+  const kind = !value
+    ? "wire-locator-missing"
+    : value === "not drawn"
+      ? allowed.length
+        ? "wire-locator-undrawn-claim"
+        : null
+      : !allowed.length
+        ? "wire-locator-without-appearance"
+        : !allowed.includes(value)
+          ? "wire-locator-mismatch"
+          : null;
+  const cell = row.texts.find((t) => t.columnIndex === end + 5) ?? row.texts[0];
+  const measurement = {
+    sheet: row.sheet,
+    row: row.key,
+    end,
+    endpoint,
+    ...endApplicability(source, end, absence),
+    printed: value,
+    allowed,
+    appearances,
+  };
+  const issue = kind
+    ? finding(kind, cell, {
         sheet: row.sheet,
         row: row.key,
         end,
         endpoint,
-        ...endApplicability(source, end, absence),
         printed: value,
         allowed,
-        appearances,
-      });
-      if (kind)
-        findings.push(
-          finding(kind, cell, {
-            sheet: row.sheet,
-            row: row.key,
-            end,
-            endpoint,
-            printed: value,
-            allowed,
-          }),
-        );
-    }
-  }
-  return { findings, measurements, notMeasured: cable.notMeasured };
+        ...(stripLandings.length
+          ? { nativeConductor: source.element, stripLandings }
+          : {}),
+      })
+    : null;
+  return { measurement, issue };
 }

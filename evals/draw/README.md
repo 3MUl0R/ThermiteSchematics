@@ -21,6 +21,29 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.28** extends **DQ-19** and **DQ-23** for native terminal strips
+(CHECK8, #428 and #427). SVG schedule endpoint cells reconcile with the
+union of qualified schematic and strip appearances. A strip location has
+a painted native strip heading, terminal label and body, and a visible path
+of the same wire, core or jumper ending at that body with its native
+incidence caption. The printed grid gives the destination at the center
+of the measured terminal body on the final issued sheet. An inventory
+entry or another conductor's landing on the same terminal grants no
+location. `not drawn` is valid when neither population supplies a landing.
+Named destinations must resolve to one of the measured sheet.zone values.
+
+DQ-23 compares visible straight path segments of stubs and bridges at
+their common native terminal. An intersection or shared run outside that
+body fails for a stub and bridge. Distinct bridges fail for coincident
+outside-body runs within 0.01 mm measurement precision. Ordinary contact
+within the common body is valid. Separate physical sheets are never
+compared. The measured failure records carry native endpoints, a local
+intersection or overlap witness, and the audit counts on the affected
+sheet. Unsupported or clipped straight-path evidence grants no landing;
+DQ-23 reports a geometry gap when a candidate approach cannot be measured.
+This extension is SVG-scoped. The existing strict rows are used and
+complete 5.27 summary files remain readable.
+
 Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b).
 The checker change preserved corpus rows and pins. The later
 [REP5 record for #421](repins/421/record.json) records the reviewed pin updates

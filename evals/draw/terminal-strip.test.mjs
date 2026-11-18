@@ -52,14 +52,20 @@ afterAll(async () => {
   await context?.close();
   await browser?.close();
 });
-it("measures native order, terminal and jumper coverage from painted SVG", () => {
+it("measures native order and coverage and exposes the real TB1.2 crossing", () => {
   expect(native.terminals.length).toBeGreaterThan(0);
   expect(native.bridges.length).toBeGreaterThan(0);
   expect(checkTerminalStrip(native, ink)).toMatchObject({
-    assessment: "pass",
+    assessment: "fail",
     strict: false,
     repinNow: false,
-    findings: [],
+    findings: [
+      {
+        kind: "strip-approach-conductor-bridge",
+        terminal: native.terminals[1].key,
+        point: { x: expect.closeTo(222.9, 3), y: expect.closeTo(64.5, 3) },
+      },
+    ],
   });
 });
 it.each([
