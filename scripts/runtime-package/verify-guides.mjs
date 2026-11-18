@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { verifyGuardedStarter } from "./verify-guarded-starter.mjs";
 import {
   assertGuideLinksResolved,
   rewriteGuideLinks,
@@ -144,4 +145,11 @@ export async function verifyOfflineGuides(context) {
   const guides = await readGuideContext(context);
   await verifyGuideTopics({ ...context, ...guides });
   await verifyGuideCatalogs(context);
+  await verifyGuardedStarter(
+    context.invoke,
+    join(context.temporary, "guarded starter"),
+  );
+  context.check(
+    "offline starter recipe: inspect, lock, register, guard, dry-run, apply and validate",
+  );
 }

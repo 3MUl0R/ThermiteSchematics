@@ -1,4 +1,4 @@
-export const PROJECT_GUIDE_BYTE_LIMIT = 20_500;
+export const PROJECT_GUIDE_BYTE_LIMIT = 8_000;
 export function assertProjectGuideBudget(value: string | Uint8Array): void {
   const bytes =
     typeof value === "string"

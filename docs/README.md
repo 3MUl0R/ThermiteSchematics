@@ -17,6 +17,7 @@
 ## Guide topics
 
 - [Agent request examples](agent-requests.md) — Agent requests, selectors and integrity. Command: `thermite guide agent-requests`. Read before writing an agent request; before patching source or presentation.
+- [Project workflow recipes](project-workflows.md) — Project workflow recipes. Command: `thermite guide project-workflows`. Read before producing views and reports or reviewing a project; before documenting cables, communication, field hookups or circuits.
 - [Data Model](data-model.md) — Objects, I/O, cables and potentials. Command: `thermite guide modeling`. Read before adding devices, wires, cables, io or potentials; use guide schema for exact shapes.
 - [Libraries and type shapes](libraries.md) — Types, profiles, locks and optional libraries. Command: `thermite guide libraries`. Read before creating or editing a type; before adding an optional library.
 - [View requests and printable packets](views.md) — View roots, requests, packets and paper. Command: `thermite guide views`. Read before writing a view or packet request; before handling R001 or R006.

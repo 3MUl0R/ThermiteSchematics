@@ -13,7 +13,6 @@
 // guide, so expectations live here and in ./project-guide, never in the guide.
 // The observation gates run after every execution in this file, so run the
 // whole file, not a filtered subset.
-import { readFileSync } from "node:fs";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -43,6 +42,7 @@ import {
   type Template,
 } from "./project-guide/harness.js";
 import {
+  documentedWords,
   flatten,
   guideModel,
   leadIn,
@@ -66,14 +66,16 @@ import drawingFrames from "./project-guide/drawing-frames.js";
 import documentCompanions from "./project-guide/document-companions.js";
 import { repairControls } from "./project-guide/repair-controls.js";
 
-const guidePath = join(
-  repositoryRoot,
-  "packages/cli/assets/THERMITE_AGENTS.md",
-);
-const guideBytes = readFileSync(guidePath);
-const live = guideModel(guideBytes.toString("utf8"));
-/** Interim ceiling until G6, per the 2026-11-13 helm ruling. */
-const GUIDE_BYTE_BUDGET = 20_500;
+import {
+  guideBytes,
+  projectGuide,
+  live,
+  workflowAdvice,
+  verifyCoreAuthoringRules,
+  verifyGuideBudgets,
+  verifyWorkflowExamples,
+} from "./project-guide/workflows.js";
+
 /** Concrete inline commands checked against the CLI tree but not executed. */
 const INLINE_NOT_RUN = new Map<string, string>([
   [
@@ -97,9 +99,10 @@ const FACTS = Object.entries(MODULES).flatMap(([module, { facts }]) =>
 );
 // The advice ledger. Moving a sentence here from a checked fact is a reviewed
 // change: justify each moved sentence in the pull request.
-const UNEXECUTED = new Map(
-  Object.values(MODULES).flatMap(({ unexecuted }) => [...unexecuted]),
-);
+const UNEXECUTED = new Map([
+  ...Object.values(MODULES).flatMap(({ unexecuted }) => [...unexecuted]),
+  ...workflowAdvice,
+]);
 /** Sentences proven by executing fenced blocks, and the recipes that prove them. */
 const VERIFIED_BY_BLOCKS = new Map<string, readonly string[]>([
   [
@@ -129,13 +132,9 @@ const FLAG_BINDINGS: readonly {
   },
   {
     sentence:
-      "Commands default to `--project .`; `validate`/`lock` also take a path, never both (`thermite validate . --strict`).",
-    fragment: "--project .",
-    commands: () => [
-      ...ctx.tree.alpha.filter((name) => !["init", "guide"].includes(name)),
-      "validate",
-      "lock",
-    ],
+      "`validate`/`lock` accept a positional path or `--project <path>`.",
+    fragment: "--project <path>",
+    commands: () => ["validate", "lock"],
   },
   {
     sentence:
@@ -579,33 +578,6 @@ function codeProblems(model: GuideModel) {
     .map((code) => `${code} is never produced by a run`);
 }
 
-const SKIPPED_SPANS = [
-  /^(thermite|bun)\b/, // command lines: checked against the CLI tree
-  /^-/, // flags and `-` stdin: bound to their commands
-  /^<[^<>]*>$/, // placeholders
-  /→/, // the workflow line; each step is a tool
-  /^\[ \+N \]$/, // a drawing marker
-  /^(~|~0|~1|\/)$/, // JSON Pointer escape characters
-  /^\d+(\.\d+)*$/, // version numbers
-  /^\.(html|pdf|json|svg)$/, // output extensions: checked by printing facts
-  /^[\w.-]*\.(json|lock|md)$|^\.gitignore$|^(docs|libraries)\//, // files
-];
-const FIELD_PATH = /^\.?[A-Za-z_]\w*(\[\])?(\.[A-Za-z_]\w*)*$/;
-/** The keys, values and identifiers an inline span documents. */
-function documentedWords(span: string): string[] {
-  if (SKIPPED_SPANS.some((p) => p.test(span))) return [];
-  if (/^[a-z]+:[\w-]+$/.test(span)) return [span];
-  if (FIELD_PATH.test(span)) return span.split(/\.|\[\]/).filter(Boolean);
-  if (!/[{}[\]":|]/.test(span)) return [span];
-  const words = new Set<string>();
-  for (const m of span.matchAll(/"([^"]*)"(\s*:)?/g))
-    if (m[2] !== undefined || !/<|\.\.\./.test(m[1]!)) words.add(m[1]!);
-  const bare = span.replace(/"[^"]*"/g, '""');
-  for (const m of bare.matchAll(/([A-Za-z_]\w*)\s*:/g)) words.add(m[1]!);
-  for (const m of bare.matchAll(/[{,]\s*([A-Za-z_]\w*)\s*(?=[,}])/g))
-    words.add(m[1]!);
-  return [...words];
-}
 let cliWords = new Set<string>();
 function vocabularyProblems(model: GuideModel) {
   const problems = new Set<string>();
@@ -655,9 +627,19 @@ afterAll(async () => {
   await tearDownSuite();
 });
 
+it(
+  "executes every offline project workflow fence",
+  () => verifyWorkflowExamples(runFence, executedFences),
+  240_000,
+);
+
 describe("generated project guide", () => {
+  it(
+    "keeps safety and registered-source rules in the core",
+    verifyCoreAuthoringRules,
+  );
   it("fits its budget, resolves offline guide pointers and names the pinned runtime", async () => {
-    expect(live.bytes).toBeLessThanOrEqual(GUIDE_BYTE_BUDGET);
+    await verifyGuideBudgets();
     expect(live.text.match(/docs\/[\w./-]+\.md/g) ?? []).toEqual([]);
     const pointers = [
       ...new Set(
@@ -667,7 +649,6 @@ describe("generated project guide", () => {
       ),
     ];
     expect(pointers).toContain("drawing-frames");
-    expect(pointers.length).toBeGreaterThan(0);
     for (const pointer of pointers) await ok(["guide", pointer], ctx.work);
     const pinned = (await readJson(join(repositoryRoot, "package.json")))
       .packageManager as string;
@@ -724,9 +705,12 @@ describe("generated project guide", () => {
   // Blocks are independent, so they run concurrently; the harness bounds the
   // processes they start.
   it.concurrent.each(
-    live.fences.map(
-      (fence) => [`${fence.lang} block at line ${fence.line}`, fence] as const,
-    ),
+    live.fences
+      .slice(0, projectGuide.fences.length)
+      .map(
+        (fence) =>
+          [`${fence.lang} block at line ${fence.line}`, fence] as const,
+      ),
   )(
     "executes the %s",
     async (_, fence) => {
@@ -750,17 +734,8 @@ describe("generated project guide", () => {
         const line = live.spans.find((s) => s.text === span)!.line;
         await materializeInput(words, project, template, line, live);
         const run = await thermite(words, project);
-        if (
-          template === "starter" &&
-          words.join(" ") === "validate . --strict"
-        ) {
-          expect(run.code, describeRun(words, run)).toBe(1);
-          expect(run.stdout.match(/ W\d{3} /g)).toEqual([" W905 "]);
-          expect(run.stderr).toBe("");
-        } else {
-          expect(run.code, describeRun(words, run)).toBe(0);
-          await checkOutput(words, project);
-        }
+        expect(run.code, describeRun(words, run)).toBe(0);
+        await checkOutput(words, project);
       }
     },
     240_000,

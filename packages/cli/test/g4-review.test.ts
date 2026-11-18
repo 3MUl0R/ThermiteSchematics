@@ -51,7 +51,7 @@ it("keeps the topic index discoverable from the project guide", async () => {
     "utf8",
   );
   expect(guide).toMatch(/`thermite guide` lists topics/);
-  expect(Buffer.byteLength(guide)).toBeLessThanOrEqual(20500);
+  expect(Buffer.byteLength(guide)).toBeLessThanOrEqual(8000);
   const index = JSON.parse((await ok(["guide", "--json"], ctx.work)).stdout);
   expect(index.map((item: any) => item.id)).toContain("schema");
 });

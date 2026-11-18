@@ -161,3 +161,31 @@ export function leadIn(model: GuideModel, fence: Fence): string {
   for (; i >= 0 && prose(lines[i]!); i -= 1) above.unshift(lines[i]!);
   return flatten(above.join(" "));
 }
+
+const SKIPPED_SPANS = [
+  /^(thermite|bun)\b/, // command lines: checked against the CLI tree
+  /^-/, // flags and `-` stdin: bound to their commands
+  /^<[^<>]*>$/, // placeholders
+  /→/, // the workflow line; each step is a tool
+  /^\[ \+N \]$/, // a drawing marker
+  /^(~|~0|~1|\/)$/, // JSON Pointer escape characters
+  /^\d+(\.\d+)*$/, // version numbers
+  /^\.(html|pdf|json|svg)$/, // output extensions: checked by printing facts
+  /^[\w.-]*\.(json|lock|md)$|^\.gitignore$|^(docs|libraries)\//, // files
+];
+const FIELD_PATH = /^\.?[A-Za-z_]\w*(\[\])?(\.[A-Za-z_]\w*)*$/;
+/** The keys, values and identifiers an inline span documents. */
+export function documentedWords(span: string): string[] {
+  if (SKIPPED_SPANS.some((p) => p.test(span))) return [];
+  if (/^[a-z]+:[\w-]+$/.test(span)) return [span];
+  if (FIELD_PATH.test(span)) return span.split(/\.|\[\]/).filter(Boolean);
+  if (!/[{}[\]":|]/.test(span)) return [span];
+  const words = new Set<string>();
+  for (const m of span.matchAll(/"([^"]*)"(\s*:)?/g))
+    if (m[2] !== undefined || !/<|\.\.\./.test(m[1]!)) words.add(m[1]!);
+  const bare = span.replace(/"[^"]*"/g, '""');
+  for (const m of bare.matchAll(/([A-Za-z_]\w*)\s*:/g)) words.add(m[1]!);
+  for (const m of bare.matchAll(/[{,]\s*([A-Za-z_]\w*)\s*(?=[,}])/g))
+    words.add(m[1]!);
+  return [...words];
+}

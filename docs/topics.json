@@ -9,6 +9,15 @@
     ]
   },
   {
+    "id": "project-workflows",
+    "file": "docs/project-workflows.md",
+    "title": "Project workflow recipes",
+    "readBefore": [
+      "before producing views and reports or reviewing a project",
+      "before documenting cables, communication, field hookups or circuits"
+    ]
+  },
+  {
     "id": "modeling",
     "file": "docs/data-model.md",
     "title": "Objects, I/O, cables and potentials",

@@ -83,30 +83,51 @@ async function topicFixture() {
   await cp(join(repositoryRoot, series), join(root, series), {
     recursive: true,
   });
+  const coreGuide = "packages/cli/assets/THERMITE_AGENTS.md";
+  await mkdir(join(root, "packages/cli/assets"), { recursive: true });
+  await cp(join(repositoryRoot, coreGuide), join(root, coreGuide));
+  return { root, ...(await fixtureBindings(root)) };
+}
+
+async function fixtureBindings(root: string) {
+  const inventory: {
+    bindings: Record<
+      string,
+      { file: string; testFile: string; testName: string }
+    >;
+  } = JSON.parse(
+    await readFile(join(repositoryRoot, "scripts/docs-examples.json"), "utf8"),
+  );
   const harness = join(
     repositoryRoot,
     "packages/cli/test/project-guide/harness.ts",
   );
-  const source = `import { vi } from "vitest";
+  const runners = new Map<string, { testFile: string; testHash: string }>();
+  const bindings = Object.fromEntries(
+    await Promise.all(
+      Object.entries(inventory.bindings).map(async ([recipe, binding]) => {
+        let runner = runners.get(binding.testFile);
+        if (!runner) {
+          const source = `import { vi } from "vitest";
 vi.mock(${JSON.stringify(harness)}, async (original) => ({
  ...await original(), repositoryRoot: ${JSON.stringify(root)}
 }));
-import ${JSON.stringify(pathToFileURL(join(repositoryRoot, "packages/cli/test/guide.test.ts")).href)};\n`;
-  await writeFile(join(root, "bound.test.ts"), source);
-  const bindings = Object.fromEntries(
-    topics
-      .filter((topic: { id: string }) => topic.id !== "agent-requests")
-      .map((topic: { id: string; file: string }) => [
-        `topic-${topic.id}`,
-        {
-          file: topic.file,
-          testFile: "bound.test.ts",
-          testName: `executes every json/sh fence in '${topic.id}'`,
-          testHash: sha256(source),
-        },
-      ]),
+import ${JSON.stringify(pathToFileURL(join(repositoryRoot, binding.testFile)).href)};\n`;
+          runner = {
+            testFile: `bound-${runners.size}.test.ts`,
+            testHash: sha256(source),
+          };
+          runners.set(binding.testFile, runner);
+          await writeFile(join(root, runner.testFile), source);
+        }
+        return [recipe, { ...binding, ...runner }] as const;
+      }),
+    ),
   );
-  return { root, bindings };
+  return {
+    bindings,
+    testFiles: [...runners.values()].map(({ testFile }) => testFile),
+  };
 }
 
 it("refuses an exit-7 shell fence in the real modeling topic instead of reporting it consumed", async () => {
@@ -129,7 +150,7 @@ it("refuses an exit-7 shell fence in the real modeling topic instead of reportin
 });
 
 it("every real topic recipe records successful fences only, excluding a failing fence and its unexecuted successor", async () => {
-  const { root, bindings } = await topicFixture();
+  const { root, bindings, testFiles } = await topicFixture();
   const originals = new Map<string, ReturnType<typeof exampleFences>>();
   for (const binding of Object.values(bindings)) {
     const text = await readFile(join(root, binding.file), "utf8");
@@ -153,9 +174,13 @@ it("every real topic recipe records successful fences only, excluding a failing 
     const run = await owner.run(
       [
         join(repositoryRoot, "scripts/test.mjs"),
-        "bound.test.ts",
+        ...testFiles,
         "-t",
-        "^executes every json/sh fence in ",
+        `^(?:${Object.values(bindings)
+          .map((binding) =>
+            binding.testName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          )
+          .join("|")})$`,
         "--reporter=json",
         `--outputFile=${report}`,
       ],

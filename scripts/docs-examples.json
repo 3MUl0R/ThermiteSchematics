@@ -5,7 +5,7 @@
       "file": "docs/circuit-symbols.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'circuit-symbols'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "c6a62354e8c7c07e2e3e42d9e3a9d7c5727ef2f30aa015c92bee6f7b076e2b94"
       ]
@@ -14,7 +14,7 @@
       "file": "docs/circuit-views.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'circuit-views'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "e6e39668067c723f28b5bf239ad8d42c0fa9076600f4b09c6e70ac995ac2c71b",
         "44116775927065c381addfdd729b4881afea480b3a04fbbabd991a0a56000b4d",
@@ -25,7 +25,7 @@
       "file": "docs/completeness.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'completeness'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "fc74a75bbaf971dcad5cb5b4da8031993429b0b0e72c24629f0739662b755c1b",
         "5439aafd418cd153cbc6fa2d3fd1cf9f1133b9e1a62cbe71e9bf4af9c818828d",
@@ -36,7 +36,7 @@
       "file": "docs/data-model.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'modeling'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "9a851fde5d66bdd643023eaf98e3e7253c2294d49215e44910211bd2597e99f1",
         "9112980ee28867bf9e4ab0add400f218369b897b920414f6f447c96d35fb983a",
@@ -54,7 +54,7 @@
       "file": "docs/libraries.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'libraries'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "73aac4a32ba7a2adee8a27cdddc295292f901b8f1a5e9c64f6bdbe1665475563",
         "b85ccd30c72d2d99dcf8c203f39c63b83e400cd65fc50341091efbc0e8c030a6",
@@ -65,7 +65,7 @@
       "file": "docs/report-filtering.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'report-filtering'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "31ffe79fe892c16c125a375416522d990268f80bb62e6d0ae3f7210dedc6721a",
         "0f67c6e9349a96176424413e00094b6b0a0f2704f44615fe661bad0930bd505a",
@@ -77,7 +77,7 @@
       "file": "docs/review.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'review'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "5f456f5940d272c3a3bab614092dc3afe0d6ebcab91c6dcf783522c8d856de73"
       ]
@@ -86,7 +86,7 @@
       "file": "docs/signal-loops.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'signal-loops'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "b2b3d1b82aa1456fef73ad8e838fcacac8af6cbcaa2baec9dde1fe65ead8d476",
         "0eacea81184fdaad19fe84bfcebb5526182e0e46c3f3d9ef91e93d3a1a2703ff",
@@ -99,7 +99,7 @@
       "file": "docs/views.md",
       "testFile": "packages/cli/test/guide.test.ts",
       "testName": "executes every json/sh fence in 'views'",
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5",
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521",
       "consumedHashes": [
         "e07a4a200aa591311550195895677746eb622360fc723b8ae0da91854c87dd63",
         "33d7163fb82854b11e9d1802b453d3bafdc592d9c9560b694a818c963485ec8a",
@@ -115,7 +115,20 @@
         "2ae31439296ba38a03dc4629d10e03507115c6dff6473f091440117e8ae2b4a8",
         "f4876a92553ce84d9ce5b46a4a6fcaca9d69bc3569905c61d57820ef4ed60e81"
       ],
-      "testHash": "ea4783691dcbab4740176b3847f49c2eecc5285e01090b8ed2b3156759060fc5"
+      "testHash": "6cf1fd10e2a03500f70d641e98cf469dde63cc4d612bc099348aa7e32a0fe521"
+    },
+    "topic-project-workflows": {
+      "file": "docs/project-workflows.md",
+      "testFile": "packages/cli/test/project-guide.test.ts",
+      "testName": "executes every offline project workflow fence",
+      "consumedHashes": [
+        "453956110a35a2d6afbf5e1664e72d9356a35f58defa7e3f804e4eb14fdd9ddf",
+        "383b1b43e3aea581cb6f9d69f9e220eee5ae66ebf7a92228284021283876d231",
+        "50cee6a6415dc2613003cc50ea9232d05b24740989a768527d674ddb1b2e56a7",
+        "f4e2ed412782ee5e7fd502ec4f48338bd3aed99a24d1a02d4227fed8cbbb08d9",
+        "b74abfd7a2710245a5ef678668345e635d32551f35ac0dfc96d041ad798def09"
+      ],
+      "testHash": "f9d4e5bbaf549a74456c0c6d1e5674c125bb5ee7e5ee0d658bf4709e8886c352"
     }
   },
   "entries": [
@@ -550,6 +563,36 @@
       "kind": "platform-only",
       "setup": "Docker Engine with matching Linux architecture",
       "reason": "Builds and verifies the entire source/runtime, including networked dependency installation; the Linux commands require Docker and target-architecture support."
+    },
+    {
+      "file": "docs/project-workflows.md",
+      "hash": "453956110a35a2d6afbf5e1664e72d9356a35f58defa7e3f804e4eb14fdd9ddf",
+      "kind": "executed",
+      "recipe": "topic-project-workflows"
+    },
+    {
+      "file": "docs/project-workflows.md",
+      "hash": "383b1b43e3aea581cb6f9d69f9e220eee5ae66ebf7a92228284021283876d231",
+      "kind": "executed",
+      "recipe": "topic-project-workflows"
+    },
+    {
+      "file": "docs/project-workflows.md",
+      "hash": "50cee6a6415dc2613003cc50ea9232d05b24740989a768527d674ddb1b2e56a7",
+      "kind": "executed",
+      "recipe": "topic-project-workflows"
+    },
+    {
+      "file": "docs/project-workflows.md",
+      "hash": "f4e2ed412782ee5e7fd502ec4f48338bd3aed99a24d1a02d4227fed8cbbb08d9",
+      "kind": "executed",
+      "recipe": "topic-project-workflows"
+    },
+    {
+      "file": "docs/project-workflows.md",
+      "hash": "b74abfd7a2710245a5ef678668345e635d32551f35ac0dfc96d041ad798def09",
+      "kind": "executed",
+      "recipe": "topic-project-workflows"
     },
     {
       "file": "docs/report-filtering.md",

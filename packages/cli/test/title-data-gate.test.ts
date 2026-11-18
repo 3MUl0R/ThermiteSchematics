@@ -79,11 +79,12 @@ describe("TB2 atomic compact publication", () => {
         "packages/cli/test/fixtures/title-frame-guide-addition.txt",
       ),
     );
-    expect(guide.length).toBeLessThanOrEqual(20500);
-    expect(PROJECT_GUIDE_BYTE_LIMIT).toBe(20500);
-    expect(() => assertProjectGuideBudget("a".repeat(20500))).not.toThrow();
-    expect(() => assertProjectGuideBudget("a".repeat(20501))).toThrow(/20501/);
-    expect(() => assertProjectGuideBudget("é".repeat(10251))).toThrow(/20502/);
+    const liveGuide = await readFile("packages/cli/assets/THERMITE_AGENTS.md");
+    expect(liveGuide.length).toBeLessThanOrEqual(8000);
+    expect(PROJECT_GUIDE_BYTE_LIMIT).toBe(8000);
+    expect(() => assertProjectGuideBudget("a".repeat(8000))).not.toThrow();
+    expect(() => assertProjectGuideBudget("a".repeat(8001))).toThrow(/8001/);
+    expect(() => assertProjectGuideBudget("é".repeat(4001))).toThrow(/8002/);
   });
   it("keeps private functions out of root APIs and audits the released graph", async () => {
     for (const api of [schemaApi, renderApi])
