@@ -5,6 +5,11 @@ import { measureText } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
 import { stripFacts, stripTerminalKey } from "./terminal-strip-facts.js";
 import {
+  stripApproaches,
+  stripStubElbow,
+  type StripApproaches,
+} from "./terminal-strip-approaches.js";
+import {
   fragmentAnchors,
   paginateStrip,
   stripLines,
@@ -39,6 +44,7 @@ function rowLabels(
   cy: number,
   y: number,
   locate: Locate,
+  approaches: StripApproaches,
 ) {
   const m = part.model,
     out: string[] = [];
@@ -63,10 +69,13 @@ function rowLabels(
         index < half
           ? (-3.2 * (half - index)) / (half + 1)
           : (3.2 * (index - half + 1)) / (side.length - half + 1);
-      const anchor = cy + offset;
+      const separate = approaches.rightStubs.get(label);
+      const anchor = separate ?? cy + offset;
       const elbow =
-        start +
-        (i === 0 ? -1 : 1) * (2 + (3 * (index + 1)) / (side.length + 1));
+        separate === undefined
+          ? start +
+            (i === 0 ? -1 : 1) * (2 + (3 * (index + 1)) / (side.length + 1))
+          : stripStubElbow(end, index, side.length, anchor, baseline - 1);
       out.push(labelGroup(label, row.terminal.key, !!remote));
       if (!label.bridge || remote)
         out.push(
@@ -99,6 +108,7 @@ function terminalSvg(
   row: StripRow,
   y: number,
   locate: Locate,
+  approaches: StripApproaches,
 ) {
   const m = part.model,
     t = row.terminal,
@@ -110,33 +120,25 @@ function terminalSvg(
     text(x + m.terminalW / 2, cy - 0.5, t.id.terminalKey, 2.5, "middle", 700),
     text(x + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle"),
     "</g>",
-    ...rowLabels(part, row, x, cy, y, locate),
+    ...rowLabels(part, row, x, cy, y, locate, approaches),
   ].join("\n");
 }
-function bridgeSvg(part: StripFragment) {
-  const anchors = new Map(fragmentAnchors(part).map((a) => [a.key, a]));
-  const lanes = new Map(
-    part.model.bridges
-      .flatMap((j, index) => {
-        const a = anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
-          b = anchors.get(stripTerminalKey(j.endpoints[1].terminal));
-        return a && b ? [{ uid: j.uid, span: Math.abs(a.y - b.y), index }] : [];
-      })
-      .sort((a, b) => a.span - b.span || a.index - b.index)
-      .map((j, index) => [j.uid, index + 1]),
-  );
-  return part.model.bridges
-    .flatMap((j, i) => {
-      const a = anchors.get(stripTerminalKey(j.endpoints[0].terminal)),
-        b = anchors.get(stripTerminalKey(j.endpoints[1].terminal));
-      if (!a || !b) return [];
-      const edge = a.x + part.model.terminalW / 2,
-        lane = edge + 6 * required(lanes.get(j.uid), "Missing bridge lane");
+function bridgeSvg(part: StripFragment, { bridges }: StripApproaches) {
+  const edge = part.x + part.model.labelW + 8 + part.model.terminalW;
+  return bridges
+    .map(({ uid, number, lane, from, to }) => {
+      const x = edge + 6 * lane;
       return [
-        `<g data-strip-jumper="${attr(j.uid)}"><path d="M ${n(edge)} ${n(a.y)} H ${n(lane)} V ${n(b.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
-        text(lane, Math.min(a.y, b.y) - 5, `B${i + 1}`, 2.5, "middle"),
+        `<g data-strip-jumper="${attr(uid)}"><path d="M ${n(edge)} ${n(from.y)} H ${n(x)} V ${n(to.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
+        text(
+          x,
+          Math.min(from.centreY, to.centreY) - 5,
+          `B${number}`,
+          2.5,
+          "middle",
+        ),
         "</g>",
-      ];
+      ].join("\n");
     })
     .join("\n");
 }
@@ -180,14 +182,19 @@ function fragmentSvg(part: StripFragment, locate: Locate) {
       ),
     ),
   );
+  const approaches = stripApproaches(part);
   let y = part.y + m.headerH;
   out.push(...orderMarker(part, "from", y, locate));
   if (part.from) y += m.markerH;
   for (const row of part.rows) {
-    out.push(terminalSvg(part, row, y, locate));
+    out.push(terminalSvg(part, row, y, locate, approaches));
     y += row.height;
   }
-  out.push(bridgeSvg(part), ...orderMarker(part, "on", y + 1, locate), "</g>");
+  out.push(
+    bridgeSvg(part, approaches),
+    ...orderMarker(part, "on", y + 1, locate),
+    "</g>",
+  );
   return out.join("\n");
 }
 function stripContent(

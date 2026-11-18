@@ -122,6 +122,22 @@ it("defines no requested terminal plan and an empty native selection as not appl
     reason: "Empty native terminal selection",
   });
 });
+async function withCrossing(source) {
+  const packet = structuredClone(source.packet);
+  let changed = 0;
+  for (const sheet of packet.sheets) {
+    if (sheet.view.kind !== "terminal-strip") continue;
+    const mutant = await mutateTerminalSvg(
+      page,
+      sheet.svg,
+      "stub-crosses-bridge",
+    );
+    sheet.svg = mutant.svg;
+    changed += mutant.changed;
+  }
+  expect(changed).toBe(1);
+  return measureTerminalPlan({ ...source, packet }, page);
+}
 it("keeps native terminal views separate even with identical titles", async () => {
   const request = {
     format: "schematic-packet-request/0.1",
@@ -134,7 +150,8 @@ it("keeps native terminal views separate even with identical titles", async () =
   };
   const x = await terminalPlanFixture(page, "motor-starter", request);
   try {
-    const audits = terminalPlanAudits(x.packet, x.geometries, x.ir, x.request);
+    const { packet, geometries, ir } = await withCrossing(x);
+    const audits = terminalPlanAudits(packet, geometries, ir, x.request);
     expect(audits.map((a) => a.findings.map((f) => f.kind))).toEqual([
       ["strip-approach-conductor-bridge"],
       [],
@@ -146,8 +163,11 @@ it("keeps native terminal views separate even with identical titles", async () =
     await rm(x.directory, { recursive: true, force: true });
   }
 });
-it("strict DQ-23 assigns the real crossing to the painted sheet alone", () => {
-  const rows = strictTerminalRows(fixture);
+it("strict DQ-23 assigns an injected crossing to the painted sheet alone", async () => {
+  expect(
+    strictTerminalRows(fixture).filter((r) => r.status === "fail"),
+  ).toEqual([]);
+  const rows = strictTerminalRows(await withCrossing(fixture));
   expect(
     fixture.packet.sheets.some((s) => s.view.kind === "terminal-strip"),
   ).toBe(true);
