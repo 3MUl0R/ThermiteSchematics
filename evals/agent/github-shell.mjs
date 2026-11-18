@@ -25,43 +25,111 @@ const conversationFields = new Set([
   "isDraft",
 ]);
 
-function option(words, index, client) {
+// Short flags are client-specific: curl -H sets a header, wget -H spans hosts.
+const fetchOptions = {
+  curl: {
+    short: {
+      s: "flag",
+      S: "flag",
+      f: "flag",
+      L: "flag",
+      w: "write-out",
+      o: "output",
+      D: "side-output",
+      H: "header",
+      X: "method",
+      I: "head",
+    },
+    long: {
+      silent: "flag",
+      "show-error": "flag",
+      fail: "flag",
+      location: "flag",
+      compressed: "flag",
+      "retry-all-errors": "flag",
+      "retry-connrefused": "flag",
+      retry: "integer",
+      "retry-delay": "integer",
+      "retry-max-time": "integer",
+      "max-time": "seconds",
+      "write-out": "write-out",
+      output: "output",
+      "dump-header": "side-output",
+      header: "header",
+      request: "method",
+      head: "head",
+    },
+  },
+  wget: {
+    short: { q: "flag", S: "flag", O: "output" },
+    long: {
+      quiet: "flag",
+      "server-response": "flag",
+      "output-document": "output",
+      header: "header",
+      method: "method",
+    },
+  },
+  gh: {
+    short: { H: "header", X: "method", q: "side-output" },
+    long: {
+      header: "header",
+      method: "method",
+      jq: "side-output",
+      paginate: "flag",
+    },
+  },
+};
+function optionValue(kind, value, count) {
+  if (!value) return null;
+  switch (kind) {
+    case "header":
+      return { count, header: value };
+    case "output":
+      return { count, output: value };
+    case "side-output":
+      return { count };
+    case "write-out":
+      return value.startsWith("@") ? null : { count };
+    case "method":
+      return value === "GET" ? { count } : null;
+    case "integer":
+      return /^\d+$/.test(value) && Number.isFinite(Number(value))
+        ? { count }
+        : null;
+    case "seconds":
+      return /^(?:\d+|\d*\.\d+)$/.test(value) && Number.isFinite(Number(value))
+        ? { count }
+        : null;
+    default:
+      // HEAD is an explicit non-GET request, even alongside -X GET.
+      return null;
+  }
+}
+function option(words, index, { short, long }) {
   const value = words[index],
     next = words[index + 1];
-  if (["-H", "--header"].includes(value))
-    return next ? { count: 2, header: next } : null;
-  if (value.startsWith("--header="))
-    return { count: 1, header: value.slice(9) };
-  if (value.startsWith("-H") && value.length > 2)
-    return { count: 1, header: value.slice(2) };
-  if (["-X", "--method", "--request"].includes(value))
-    return next === "GET" ? { count: 2 } : null;
-  if (/^--(?:method|request)=GET$/.test(value)) return { count: 1 };
-  if (
-    (client === "curl" && ["-o", "--output"].includes(value)) ||
-    (client === "wget" && ["-O", "--output-document"].includes(value))
-  )
-    return next ? { count: 2, output: next } : null;
-  if (/^--(?:output|output-document)=.+$/.test(value))
-    return { count: 1, output: value.slice(value.indexOf("=") + 1) };
-  if (client === "gh" && ["-q", "--jq"].includes(value))
-    return next !== undefined ? { count: 2 } : null;
-  if (client === "gh" && value === "--paginate") return { count: 1 };
-  if (
-    client === "curl" &&
-    (/^-+[fsSL]+$/.test(value) ||
-      [
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--location",
-        "--compressed",
-      ].includes(value))
-  )
-    return { count: 1 };
-  if (client === "wget" && ["-q", "--quiet"].includes(value))
-    return { count: 1 };
-  return null;
+  if (value.startsWith("--")) {
+    const equals = value.indexOf("=");
+    const key = value.slice(2, equals < 0 ? undefined : equals);
+    if (!Object.hasOwn(long, key)) return null;
+    const kind = long[key];
+    if (kind === "flag") return equals < 0 ? { count: 1 } : null;
+    return equals < 0
+      ? optionValue(kind, next, 2)
+      : optionValue(kind, value.slice(equals + 1), 1);
+  }
+  if (!value.startsWith("-") || value.length < 2) return null;
+  for (let i = 1; i < value.length; i++) {
+    const kind = short[value[i]];
+    if (!kind) return null;
+    if (kind === "flag") continue;
+    const attached = value.slice(i + 1);
+    return attached
+      ? optionValue(kind, attached, 1)
+      : optionValue(kind, next, 2);
+  }
+  return { count: 1 };
 }
 function issueView(words) {
   if (
@@ -100,24 +168,53 @@ function issueView(words) {
     ? `https://github.com/${repo}/${words[1] === "pr" ? "pull" : "issues"}/${number}`
     : null;
 }
-function fetchArguments(words) {
+function hasBraceExpansion(literal) {
+  // Quoting and escaping protect shell punctuation. Keep those spans apart
+  // so adjacent unquoted dots cannot form a range across a protected span.
+  const unquoted = literal.replace(
+    /\\[\s\S]|'[^']*'|"(?:\\[\s\S]|[^"\\])*"/g,
+    " ",
+  );
+  const groups = [];
+  for (const mark of unquoted.match(/\.\.|[{},]/g) ?? []) {
+    if (mark === "{") {
+      groups.push(false);
+    } else if (mark === "}") {
+      if (groups.pop()) return true;
+    } else if (groups.length) {
+      groups[groups.length - 1] = true;
+    }
+  }
+  return false;
+}
+function fetchArguments(words, tokens) {
+  if (tokens.some(({ literal }) => hasBraceExpansion(literal))) return null;
   const client = words[0],
     headers = [];
   let target, output;
   for (let i = client === "gh" ? 2 : 1; i < words.length;) {
     const word = words[i];
-    if (word === ">" && i === words.length - 2 && output === undefined) {
+    if (tokens[i].control) {
+      if (
+        i !== words.length - 2 ||
+        output !== undefined ||
+        tokens[i + 1].control
+      )
+        return null;
       output = words[i + 1];
       i += 2;
       continue;
     }
-    if (/^(?:[a-z]+:|repos\/)/i.test(word) && !target) {
+    if (
+      !target &&
+      (/^https?:/i.test(word) || (client === "gh" && word.startsWith("repos/")))
+    ) {
       target = word;
       i++;
       continue;
     }
-    const parsed = option(words, i, client);
-    if (!parsed) return null;
+    const parsed = option(words, i, fetchOptions[client]);
+    if (!parsed || (parsed.count === 2 && tokens[i + 1].control)) return null;
     if (parsed.header !== undefined) headers.push(parsed.header);
     if (parsed.output !== undefined) {
       if (output !== undefined) return null;
@@ -125,8 +222,10 @@ function fetchArguments(words) {
     }
     i += parsed.count;
   }
-  if (target?.startsWith("repos/")) target = `https://api.github.com/${target}`;
-  return target ? { target, headers, output } : null;
+  // curl expands braces and ranges even when the shell quotes the URL.
+  if (!target || /[{}[\]*$]/.test(target)) return null;
+  if (target.startsWith("repos/")) target = `https://api.github.com/${target}`;
+  return { target, headers, output };
 }
 export function shellRequest(
   input,
@@ -197,7 +296,7 @@ export function shellRequest(
         !network && !api && (dataTool || interpreter || !githubFragment(text)),
     };
   }
-  const fetch = fetchArguments(head);
+  const fetch = fetchArguments(head, tokens);
   if (!fetch) return refused;
   return { text, ...fetch, safe: true, shell: true, network: true };
 }
