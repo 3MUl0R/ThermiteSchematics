@@ -3,7 +3,7 @@ import {
   inTerminalBody,
   stripBridge,
   stripStub,
-  stripTerminalBody,
+  stripTerminalIdentity,
 } from "./terminal-strip-landing.mjs";
 import { segments, segmentOverlap } from "./tranche3-geometry.mjs";
 import { extent } from "./review-geometry.mjs";
@@ -91,6 +91,32 @@ function inspectMeetings(terminal, { bridges, stubs }, counts, findings) {
   }
 }
 
+function countsForSheet(countsBySheet, sheet) {
+  const counts = countsBySheet.get(sheet) ?? {
+    terminals: 0,
+    conductorBridgePairs: 0,
+    bridgePairs: 0,
+    unmeasurablePaths: 0,
+  };
+  countsBySheet.set(sheet, counts);
+  return counts;
+}
+
+function recordIdentityGaps(uncorroborated, countsBySheet, findings) {
+  for (const terminal of uncorroborated) {
+    const counts = countsForSheet(countsBySheet, terminal.sheet);
+    counts.unmeasurableTerminals = (counts.unmeasurableTerminals ?? 0) + 1;
+    findings.push({
+      kind: "strip-approach-unmeasurable",
+      terminal: terminal.key,
+      sourceSheet: terminal.sheet,
+      bbox: terminal.rect,
+      reason:
+        "Drawn terminal lacks a unique body with a corroborated native heading and caption",
+    });
+  }
+}
+
 export const isStripApproachFinding = (f) =>
   f.kind.startsWith("strip-approach-");
 export function stripApproachAudit(native, ink) {
@@ -98,15 +124,17 @@ export function stripApproachAudit(native, ink) {
   const countsBySheet = new Map();
   for (const group of native.groups) {
     for (const t of group.terminals) {
-      const terminal = stripTerminalBody(ink, t.key, t.label, group.name);
-      if (!terminal) continue;
-      const counts = countsBySheet.get(terminal.sheet) ?? {
-        terminals: 0,
-        conductorBridgePairs: 0,
-        bridgePairs: 0,
-        unmeasurablePaths: 0,
-      };
-      countsBySheet.set(terminal.sheet, counts);
+      const { body: terminal, uncorroborated } = stripTerminalIdentity(
+        ink,
+        t.key,
+        t.label,
+        group.name,
+      );
+      if (!terminal) {
+        recordIdentityGaps(uncorroborated, countsBySheet, findings);
+        continue;
+      }
+      const counts = countsForSheet(countsBySheet, terminal.sheet);
       counts.terminals++;
       const { bridges, stubs } = candidates(native, ink, terminal);
       for (const candidate of [...bridges, ...stubs]) {

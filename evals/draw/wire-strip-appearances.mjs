@@ -2,7 +2,7 @@ import {
   hasStripApproach,
   stripBridge,
   stripStub,
-  stripTerminalBody,
+  stripTerminalIdentity,
 } from "./terminal-strip-landing.mjs";
 
 const key = (terminal) =>
@@ -26,16 +26,9 @@ export function measuredStripAppearances(packet, geometries, ir, rows) {
       if (!terminal) continue;
       const label =
         row.element.kind === "jumper" ? jumperNames.get(row.key) : row.name;
-      const appearances = stripLandings(
-        strips,
-        devices,
-        row,
-        end,
-        terminal,
-        label,
-      );
-      if (appearances.length)
-        result.set(JSON.stringify([row.key, end]), appearances);
+      const landing = stripLandings(strips, devices, row, end, terminal, label);
+      if (landing.appearances.length || landing.identityGaps.length)
+        result.set(JSON.stringify([row.key, end]), landing);
     }
   return result;
 }
@@ -44,13 +37,20 @@ function stripLandings(strips, devices, row, end, endpoint, label) {
   const terminalKey = key(endpoint);
   const peer = row.ends[1 - end];
   const nameOf = (t) => `${devices.get(t.deviceUid)}.${t.terminalKey}`;
-  return strips.flatMap(({ sheet, ink }) => {
-    const terminal = stripTerminalBody(
+  const identityGaps = [];
+  const appearances = strips.flatMap(({ sheet, ink }) => {
+    const { body: terminal, uncorroborated } = stripTerminalIdentity(
       ink,
       terminalKey,
       endpoint.terminalKey,
       devices.get(endpoint.deviceUid),
     );
+    if (uncorroborated.length) {
+      identityGaps.push(
+        ...uncorroborated.map(({ rect }) => ({ sheet, bbox: rect })),
+      );
+      return [];
+    }
     if (!terminal?.zone || terminal.sheet !== sheet) return [];
     const stub = stripStub(
       ink,
@@ -93,4 +93,5 @@ function stripLandings(strips, devices, row, end, endpoint, label) {
       },
     ];
   });
+  return { appearances, identityGaps };
 }

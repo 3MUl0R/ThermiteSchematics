@@ -151,3 +151,64 @@ it.each([
     expect(checked.findings.map((f) => f.kind)).toEqual([kind]);
   },
 );
+
+it.each([
+  [
+    "misprinted heading",
+    (source) => source.replace("TB — authored order", "TX — authored order"),
+  ],
+  [
+    "clipped caption",
+    (source) =>
+      source
+        .replace(
+          "<g data-sheet-kind=",
+          '<defs><clipPath id="cut"><rect width="1" height="1"/></clipPath></defs><g data-sheet-kind=',
+        )
+        .replace(
+          text(62, 43, "1"),
+          text(62, 43, "1").replace("<text", '<text clip-path="url(#cut)"'),
+        ),
+  ],
+  [
+    "hidden caption",
+    (source) =>
+      source.replace(
+        text(62, 43, "1"),
+        text(62, 43, "1").replace("<text", '<text opacity="0"'),
+      ),
+  ],
+])("fails closed on a drawn crossing terminal with a %s", async (_, mutate) => {
+  await displaySheet(page, mutate(svg("M72 44 H96", separateBridge)));
+  const ink = await page.evaluate(stripInkScript);
+  expect(ink.terminals[0].rect).not.toBeNull();
+  expect(checkTerminalStrip(native(), ink)).toMatchObject({
+    assessment: "fail",
+    findings: expect.arrayContaining([
+      expect.objectContaining({
+        kind: "strip-approach-unmeasurable",
+        terminal: '["strip","1"]',
+        sourceSheet: 2,
+      }),
+    ]),
+  });
+});
+
+it.each([
+  ["no painted stroke", 'stroke="none"'],
+  ["a rotated body", 'stroke="black" transform="rotate(8 66 44)"'],
+])("rejects a terminal rectangle with %s", async (_, stroke) => {
+  const source = svg(separateStub, separateBridge).replace(
+    '<rect x="60" y="40" width="12" height="8" stroke="black"',
+    `<rect x="60" y="40" width="12" height="8" ${stroke}`,
+  );
+  await displaySheet(page, source);
+  const ink = await page.evaluate(stripInkScript);
+  expect(ink.terminals[0].rect).toBeNull();
+  expect(checkTerminalStrip(native(), ink).findings).toContainEqual(
+    expect.objectContaining({
+      kind: "strip-terminal-coverage",
+      terminal: '["strip","1"]',
+    }),
+  );
+});

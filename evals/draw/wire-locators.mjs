@@ -178,7 +178,8 @@ export function wireLocatorAudit(packet, geometries, ir) {
 
 function reconcileWireEnd(row, source, end, { drawn, strip, absence }) {
   const endpoint = source.ends[end];
-  const stripLandings = strip.get(JSON.stringify([row.key, end])) ?? [];
+  const { appearances: stripLandings = [], identityGaps = [] } =
+    strip.get(JSON.stringify([row.key, end])) ?? {};
   const appearances = endpoint
     ? [...(drawn.get(terminalKey(endpoint)) ?? []), ...stripLandings]
     : [];
@@ -199,17 +200,19 @@ function reconcileWireEnd(row, source, end, { drawn, strip, absence }) {
       ),
     ),
   ];
-  const kind = !value
-    ? "wire-locator-missing"
-    : value === "not drawn"
-      ? allowed.length
-        ? "wire-locator-undrawn-claim"
-        : null
-      : !allowed.length
-        ? "wire-locator-without-appearance"
-        : !allowed.includes(value)
-          ? "wire-locator-mismatch"
-          : null;
+  const kind = identityGaps.length
+    ? "wire-locator-strip-identity-unmeasurable"
+    : !value
+      ? "wire-locator-missing"
+      : value === "not drawn"
+        ? allowed.length
+          ? "wire-locator-undrawn-claim"
+          : null
+        : !allowed.length
+          ? "wire-locator-without-appearance"
+          : !allowed.includes(value)
+            ? "wire-locator-mismatch"
+            : null;
   const cell = row.texts.find((t) => t.columnIndex === end + 5) ?? row.texts[0];
   const measurement = {
     sheet: row.sheet,
@@ -229,6 +232,7 @@ function reconcileWireEnd(row, source, end, { drawn, strip, absence }) {
         endpoint,
         printed: value,
         allowed,
+        ...(identityGaps.length ? { stripIdentityGaps: identityGaps } : {}),
         ...(stripLandings.length
           ? { nativeConductor: source.element, stripLandings }
           : {}),

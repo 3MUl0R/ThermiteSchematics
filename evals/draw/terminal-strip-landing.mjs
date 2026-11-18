@@ -12,11 +12,12 @@ export const inTerminalBody = (point, rect) =>
   point.y >= rect.y - tolerance &&
   point.y <= rect.y + rect.h + tolerance;
 
-export function stripTerminalBody(ink, key, label, device) {
+export function stripTerminalIdentity(ink, key, label, device) {
   const candidates = ink.terminals.filter((t) => t.key === key);
-  if (candidates.length !== 1) return null;
-  const t = candidates[0];
-  return t.rect &&
+  const [t] = candidates;
+  const body =
+    candidates.length === 1 &&
+    t.rect &&
     t.deviceHeading === device &&
     t.texts.some(
       (text) =>
@@ -24,8 +25,18 @@ export function stripTerminalBody(ink, key, label, device) {
         compact(text.text) === compact(label) &&
         inTerminalBody(text.center, t.rect),
     )
-    ? t
-    : null;
+      ? t
+      : null;
+  return {
+    body,
+    uncorroborated: body
+      ? []
+      : candidates.filter((candidate) => candidate.rect),
+  };
+}
+
+export function stripTerminalBody(ink, key, label, device) {
+  return stripTerminalIdentity(ink, key, label, device).body;
 }
 
 export function stripStub(ink, terminal, id, label, peer) {
