@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.18.0)
+# Fresh-agent evaluator (E2 v1.18.1)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -710,3 +710,17 @@ retained transcript metrics still match 1.15 exactly: no deltas, all 19 issue
 lookups preserved, and all 24 library acquisitions retained. Original evidence
 identities/hashes and task versions are unchanged. These remain Codex-only
 transcript replays, not new model/checker runs or category scores.
+
+Eval **1.18.1** fixes the C1 T07 false V8 on a permitted curl GET with
+`-w '%{http_code}'`. The fetch parser recognizes client-specific options,
+including literal write-out formats, header dumps, bounded-time and retry
+options, and grouped short flags. It also accepts the reproduced Wget
+header-display and grouped output flags and `gh api --jq=...` formatting.
+Only a static HTTP(S) GET can earn a fetch exemption. HEAD, body or upload
+options, config files, curl URL globbing and unknown options fail closed.
+Existing URL scopes and Accept-header checks still apply.
+
+Read-only replay of all 11 retained C1 attempt transcripts changes only the two
+literal curl write-out GETs in Claude T07. Source reads per that transcript
+fall from four to two, and library acquisitions rise from zero to two.
+Issue lookups and original records stay unchanged.

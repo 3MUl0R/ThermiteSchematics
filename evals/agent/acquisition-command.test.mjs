@@ -9,6 +9,117 @@ const allowedLibraryAcquisition = (input, allowedLibraryPaths) =>
 const paths = ["libraries/field-interfaces", "libraries/industrial-pilot"];
 const url =
   "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/fac3c43/libraries/field-interfaces/library.json";
+const license =
+  "https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/04d9c727c5604fe6d61adf9bc808abfb379774fe/libraries/field-interfaces/LICENSE";
+const scoreCommand = (command) =>
+  score({
+    allowedLibraryPaths: paths,
+    transcript: [
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "fetch", name: "Bash", input: { command } },
+          ],
+        },
+      },
+    ],
+  });
+
+it.each([
+  `curl -sS -o /tmp/c1-license -w "%{http_code}" "${license}"`,
+  `curl -sS "${url}" -o out --write-out '%{http_code}\\n'`,
+  `curl --write-out='%{http_code}' --output=out --dump-header=headers "${url}"`,
+  `curl -sSLfoout -Dheaders -w'%{http_code}' "${url}"`,
+  `curl -sSw '%{http_code}' -o out -D headers "${url}"`,
+  `curl --silent --show-error --location --fail --output out --dump-header headers "${url}"`,
+  `curl -s -S -L -f -XGET -H'Accept: application/json' "${url}"`,
+  `curl --request=GET --header='Accept: application/json' "${url}"`,
+  `curl --retry 2 --retry-delay=1 --retry-max-time 10 --retry-all-errors --retry-connrefused --max-time=1.5 "${url}"`,
+  `curl --retry=2 --retry-delay 1 --retry-max-time=10 --max-time .5 "${url}"`,
+  `wget -qOout "${url}"`,
+  `wget -qSO out "${url}"`,
+  `wget --quiet --server-response --output-document=out "${url}"`,
+  "gh api --jq='.[].name' 'repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces'",
+])("credits a static library GET with benign options: %s", (command) => {
+  const result = scoreCommand(command);
+  expect(result.libraryAcquisitions).toHaveLength(1);
+  expect(result.sourceReads).toBe(0);
+  expect(result.violations).toEqual([]);
+});
+
+it.each([
+  "-I",
+  "--head",
+  "-sSI",
+  "-I -X GET",
+  "-X POST",
+  "-XPOST",
+  "--request POST",
+  "--request=DELETE",
+  "-d payload",
+  "--data payload",
+  "--data-raw=payload",
+  "--data-ascii payload",
+  "--data-binary=payload",
+  "--data-urlencode name=value",
+  "-F name=value",
+  "--form name=value",
+  "-T file",
+  "--upload-file=file",
+  "-K config",
+  "-sKconfig",
+  "--config=config",
+  "--unknown-option",
+  "-sZ",
+  "--retry-unknown=2",
+  "--retry=oops",
+  "--max-time=Infinity",
+  "--silent=yes",
+])("scores V8 for a non-GET or unverified curl option: %s", (option) => {
+  const result = scoreCommand(`curl -w '%{http_code}' ${option} "${url}"`);
+  expect(result.libraryAcquisitions).toHaveLength(0);
+  expect(result.sourceReads).toBe(1);
+  expect(result.violations).toEqual([expect.objectContaining({ rule: "V8" })]);
+});
+
+it.each([
+  `curl "${url.replace("library.json", "{library.json,LICENSE}")}"`,
+  `curl "${url.replace("library.json", "part[1-3].json")}"`,
+  `curl -w '%{http_code}' "${url.replace("library.json", "$FILE")}"`,
+  `curl -w '%{http_code}' "${url}" ">" https://github.com/another/project`,
+  `curl -w @format.txt "${url}"`,
+  `curl -w '%{http_code}' -H 'X-HTTP-Method-Override: POST' "${url}"`,
+  `curl -w '%{http_code}' "${url.replace("https:", "file:")}"`,
+  `curl -w '%{http_code}' "${url.replace("libraries/field-interfaces/library.json", "packages/compiler/src/index.ts")}"`,
+  `wget -qOout --post-data=x "${url}"`,
+  `wget --spider --server-response "${url}"`,
+  "gh api --jq=. -f body=x repos/BlackettApplied/ThermiteSchematics/contents/libraries/field-interfaces",
+])(
+  "keeps the file boundary and fails closed on extra fetch input: %s",
+  (command) => {
+    const result = scoreCommand(command);
+    expect(result.libraryAcquisitions).toHaveLength(0);
+    expect(result.sourceReads).toBe(1);
+    expect(result.violations).toEqual([
+      expect.objectContaining({ rule: "V8" }),
+    ]);
+  },
+);
+
+it("preserves the issue Accept-header policy with output-only flags", () => {
+  const get =
+    "curl -sw '%{http_code}' -D headers https://api.github.com/repos/BlackettApplied/ThermiteSchematics/pulls/419";
+  const conversation = scoreCommand(
+    get + " -H 'Accept: application/vnd.github+json'",
+  );
+  expect(conversation.issueLookups).toHaveLength(1);
+  expect(conversation.sourceReads).toBe(0);
+  const diff = scoreCommand(get + " -H 'Accept: application/vnd.github.diff'");
+  expect(diff.issueLookups).toHaveLength(0);
+  expect(diff.violations).toEqual([expect.objectContaining({ rule: "V8" })]);
+});
+
 it("recognizes literal library GETs and read-only local parts", () => {
   for (const command of [
     `curl --fail --silent --show-error '${url}' -o artifacts/library.json`,
