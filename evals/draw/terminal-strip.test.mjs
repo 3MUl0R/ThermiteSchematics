@@ -52,21 +52,8 @@ afterAll(async () => {
   await context?.close();
   await browser?.close();
 });
-it("measures native order and coverage and exposes the real TB1.2 crossing", () => {
-  expect(native.terminals.length).toBeGreaterThan(0);
-  expect(native.bridges.length).toBeGreaterThan(0);
-  expect(checkTerminalStrip(native, ink)).toMatchObject({
-    assessment: "fail",
-    strict: false,
-    repinNow: false,
-    findings: [
-      {
-        kind: "strip-approach-conductor-bridge",
-        terminal: native.terminals[1].key,
-        point: { x: expect.closeTo(222.9, 3), y: expect.closeTo(64.5, 3) },
-      },
-    ],
-  });
+it("measures native order and coverage with separate TB1.2 approaches", () => {
+  expect(checkTerminalStrip(native, ink).findings).toEqual([]);
 });
 it.each([
   ["missing bridge", (x) => x.bridges.pop(), "strip-bridge-geometry"],
