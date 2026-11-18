@@ -718,6 +718,8 @@ options, and grouped short flags. It also accepts the reproduced Wget
 header-display and grouped output flags and `gh api --jq=...` formatting.
 Only a static HTTP(S) GET can earn a fetch exemption. HEAD, body or upload
 options, config files, curl URL globbing and unknown options fail closed.
+Shell brace lists and ranges also fail closed in fetch arguments. Quoted or
+escaped braces and the plain `%{http_code}` format remain literal.
 Existing URL scopes and Accept-header checks still apply.
 
 Read-only replay of all 11 retained C1 attempt transcripts changes only the two

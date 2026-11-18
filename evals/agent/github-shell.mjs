@@ -168,7 +168,27 @@ function issueView(words) {
     ? `https://github.com/${repo}/${words[1] === "pr" ? "pull" : "issues"}/${number}`
     : null;
 }
+function hasBraceExpansion(literal) {
+  // Quoting and escaping protect shell punctuation. Keep those spans apart
+  // so adjacent unquoted dots cannot form a range across a protected span.
+  const unquoted = literal.replace(
+    /\\[\s\S]|'[^']*'|"(?:\\[\s\S]|[^"\\])*"/g,
+    " ",
+  );
+  const groups = [];
+  for (const mark of unquoted.match(/\.\.|[{},]/g) ?? []) {
+    if (mark === "{") {
+      groups.push(false);
+    } else if (mark === "}") {
+      if (groups.pop()) return true;
+    } else if (groups.length) {
+      groups[groups.length - 1] = true;
+    }
+  }
+  return false;
+}
 function fetchArguments(words, tokens) {
+  if (tokens.some(({ literal }) => hasBraceExpansion(literal))) return null;
   const client = words[0],
     headers = [];
   let target, output;
