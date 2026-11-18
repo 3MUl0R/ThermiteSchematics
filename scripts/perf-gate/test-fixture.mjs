@@ -30,7 +30,7 @@ export function put(path, value) {
     typeof value === "string" ? value : `${JSON.stringify(value)}\n`,
   );
 }
-export function fixture(timing = false) {
+export function fixture(timing = false, { autocrlf } = {}) {
   const temporary = mkdtempSync(
     join(realpathSync(tmpdir()), "thermite-perf-test-"),
   );
@@ -41,6 +41,9 @@ export function fixture(timing = false) {
     scripts: { build: "bun build.mjs" },
   });
   put(join(head, ".gitignore"), "**/dist/\nnode_modules/\nbun.lock\n");
+  // Match the real repository's EOL policy in every linked checkout. Otherwise
+  // core.autocrlf changes the base's JSON bytes but not the authored head's.
+  put(join(head, ".gitattributes"), "* text=auto eol=lf\n");
   put(
     join(head, "build.mjs"),
     `
@@ -81,6 +84,7 @@ for (const name of ['compiler','render']) {
   });
   put(join(head, "examples/conveyor-line/system.json"), {});
   git(head, "init", "--quiet");
+  if (autocrlf !== undefined) git(head, "config", "core.autocrlf", autocrlf);
   git(head, "add", ".");
   git(head, "commit", "-qm", "base");
   const baseRevision = git(head, "rev-parse", "HEAD");

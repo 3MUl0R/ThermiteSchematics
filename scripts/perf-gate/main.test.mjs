@@ -7,8 +7,8 @@ import { cleanupResource } from "./lifecycle.mjs";
 import { entry, fixture, git, put, until } from "./test-fixture.mjs";
 
 const fixtures = [];
-const create = (timing = false) => {
-  const f = fixture(timing);
+const create = (timing = false, options) => {
+  const f = fixture(timing, options);
   fixtures.push(f);
   return f;
 };
@@ -38,7 +38,7 @@ function cli(args, env = {}, script = entry) {
   return { child, closed };
 }
 test("defaults to the PR merge-base, rather than the advancing origin/dev tip", async () => {
-  const f = create();
+  const f = create(false, { autocrlf: "true" });
   git(f.head, "checkout", "--detach", f.baseRevision);
   put(join(f.head, "dev.txt"), "merged independently\n");
   git(f.head, "add", ".");
@@ -107,7 +107,7 @@ test("classifies a head module-initialization defect as correctness exit 3", asy
   expect(result.stderr).toContain("synthetic import failure");
 });
 test("a synthetic +25% duration exits 1 after two failed measurements per row", async () => {
-  const f = create(true);
+  const f = create(true, { autocrlf: "true" });
   const source = join(f.head, "packages/compiler/src/index.js");
   put(
     source,
@@ -132,6 +132,16 @@ test("a synthetic +25% duration exits 1 after two failed measurements per row", 
       .split("\n")
       .filter((line) => line.startsWith("worktree ")),
   ).toHaveLength(1);
+});
+test("still rejects changed workload bytes with LF attributes and autocrlf enabled", async () => {
+  const f = create(true, { autocrlf: "true" }),
+    path = join(f.head, "examples/machine-demo/packet.request.json"),
+    packet = JSON.parse(readFileSync(path, "utf8"));
+  packet.views[0].changed = true;
+  put(path, packet);
+  const result = await cli(["--head-engine", f.head]).closed;
+  expect(result.code, result.stderr).toBe(3);
+  expect(result.stderr).toContain("workload differs from the PR base");
 });
 test("removes files and prunes a partial registration even when worktree remove fails", () => {
   const f = create(),
