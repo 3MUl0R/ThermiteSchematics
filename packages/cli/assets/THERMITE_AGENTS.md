@@ -84,8 +84,8 @@ Save large outputs to files: `create-view` returns tens of KB, `inspect` several
 
 ## Printing
 
-Commands default to `--project .`; `validate`/`lock` also take a path, never both
-(`thermite validate . --strict`).
+Commands default to the current project. `validate`/`lock` accept a positional
+path or `--project <path>`. If supplied together, both must resolve to the same path.
 
 ```sh
 thermite view PS1 --loads -o drawings/ps1-loads.pdf

@@ -24,7 +24,7 @@ Dirty runs are previews. Scoring still requires a pinned commit and green check.
 
 | Evaluation    | Assertions and scope                                                                                                                                                                                                                                                                                         | Scorecard                          | Run location                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ----------------------------- |
-| oracle        | Independent authored-document union-find versus compiler terminal partitions and potential attachment. All 13 examples, valid fixed fixture, generated 300/1,500 graph and all 12 clean baseline variants. Unknown object kinds fail loudly. Example diagnostics must match a reviewed classification table. | 4 Validation                       | `check` and checkpoint runner |
+| oracle        | Independent authored-document union-find checks compiler terminal partitions and potential attachment on discovered examples, a fixed topology fixture, a generated 300/1,500 graph and 12 baseline variants. Unknown object kinds fail loudly. Example and baseline diagnostics match reviewed inventories. | 4 Validation                       | `check` and checkpoint runner |
 | P-validation  | 60 mutations across 31 classes with exact code, severity, file and pointer, including declared secondary diagnostics. Eleven baselines require zero diagnostics; without-potentials pins one I304 and its nets. Rating-only mutation requires W303 naming both declared-rated terminals.                     | 4 Validation                       | Checkpoint runner             |
 | P-diag        | 72 scenarios, each with an explicit actionability predicate and provenance. Hard location, stream, exit, code, pointer, loading and relock assertions precede gap assessment. Reports actionable/total and percentage.                                                                                       | 2 Tool contract; 1/9 recovery      | Checkpoint runner             |
 | P-contract    | Six-tool success/authored-error/infrastructure-error matrix; serial guards, no-op/dry-run/stale/presentation; staged rejection; rollback outside sentinel; held/abandoned reservations and owner state; separate-process conflicts. All WS-C probes are required ordinary passes.                            | 2 Tool contract; 7 defect evidence | Checkpoint runner             |
@@ -32,12 +32,10 @@ Dirty runs are previews. Scoring still requires a pinned commit and green check.
 | P-perf        | Separate compile and render loops: one warmup plus median of N. Synthetic complete inventory, machine-demo authored 12-view packet and conveyor four-view packet. Compile and packet byte determinism are required; elapsed time is informational.                                                           | 7 Code health, EA 400 ms gate      | Checkpoint runner             |
 
 Vitest's normal include set is preserved, plus `evals/**/*.test.mjs`; output and
-local project directories are excluded. **Every evaluation test included in `check` must pass
-normally: no `test.fails`, skip or expected-fail annotations.** Oracle probes
-have no gap registry entries. Ordinary unit assertions exercise the classifier's
-failure states without exempting any check test. Only the oracle, integrity and
-small checker self-tests run in `check`; process grids, conflict repetitions and
-performance stay outside it.
+local project directories are excluded. Engine oracle probes have no gap
+registry entries. Ordinary unit assertions exercise the classifier's failure
+states. The fixed engine checkpoint's process grids, conflict repetitions and
+timing runs are invoked separately from `check`.
 
 ## Open gaps and strict policy
 
@@ -117,7 +115,8 @@ example as clean or as carrying authored model obligations. W903 records an
 omitted required connection, W904 an explicitly partial model, and W905 deferred
 review work. Exact reviewed warning inventories are preserved, not suppressed;
 any other diagnostic, changed message, or missing expected warning fails. The
-12 separate baseline variants must emit no diagnostics and also pass the oracle.
+12 separate baseline variants must match their pinned diagnostic inventory and
+also pass the oracle.
 
 For intentional fixture edits, the **complete committed regeneration command**
 formats library bytes before relocking and re-seals the reviewed manifest:

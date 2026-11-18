@@ -2,8 +2,9 @@
 
 The source-only kit invokes the built CLI and measures the resulting SVG, real
 CLI HTML and direct PDF independently of the renderer's layout estimates.
-It does not join `bun run check`: only the browser-free synthetic `*.test.mjs`
-files run there. No engine source or electrical project is changed.
+Run full checkpoints separately from `bun run check`. The check runs the
+drawing `*.test.mjs` suites, including Chromium-backed tests. No engine source
+or electrical project is changed.
 
 ```sh
 bun install --frozen-lockfile
@@ -20,8 +21,10 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
-Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b),
-without changing current corpus rows or pins. Rooted power requests now have
+Version **5.27** fixes #414's two latent navigation-oracle holes (CHECK7b).
+The checker change preserved corpus rows and pins. The later
+[REP5 record for #421](repins/421/record.json) records the reviewed pin updates
+at 5.27. Rooted power requests now have
 independent native topology coverage: conductor incidences and two-terminal
 power/protection functions connect the selected native load terminals to native
 sources. These are symbolic traversal edges, never electrical net joins.
@@ -117,8 +120,8 @@ View assessment is mirrored onto its sibling sheet rows, preserving the existing
 pin protocol. A nonempty request cannot lose its obligations when strips vanish:
 even a wholly absent view fails on the first issued sheet. Refused packets retain
 their structured R004/R006 refusal and non-pass DQ-23 rows; no issued ink is never
-a strip pass. The five historical table-only defect families become xpasses for
-REP5 review; no pins or expectations are changed here.
+a strip pass. The 5.26 checker change exposed five historical table-only defect
+families as xpasses for REP5 review.
 
 The #336 terminal-strip oracle is a separate **non-strict exposure** check:
 
@@ -988,9 +991,9 @@ Missing Chromium exits 2 with an installation/path instruction; no silent skips.
 A run uses at most two browser pages/case workers.
 
 Strict markers are calibrated on darwin-arm64. Other platforms use
-`--report-only`; their font substitutions are not calibrated. Every E3 unit test
-is portable and imports no browser, canvas, pdf.js or PDFKit. Seal tests create a
-synthetic temporary git repository; check never reads the live corpus.
+`--report-only`; their font substitutions are not calibrated. The
+[test browser setup](../../CONTRIBUTING.md#browser-for-tests) covers
+Chromium-backed suites. Seal tests create a synthetic temporary Git repository.
 
 pdf.js supplies text positions, operators and raster parity. PDFKit is an
 optional macOS cross-check (`--pdfkit`); `THERMITE_DRAW_PDFKIT=0` disables it.

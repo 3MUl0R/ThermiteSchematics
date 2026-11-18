@@ -4,9 +4,8 @@ The current source workflow uses Bun 1.4.2. See the [repository quick start](../
 
 This private package contains the canonical JSON Schemas, schema-derived TypeScript
 source types, strict JSON parser, schema registry, and source-location-aware
-diagnostic infrastructure used by Thermite Schematics 0.2.0. It is bundled inside the
-private CLI artifact and is not published to a public registry.
-The current public Bun runtime and source checkout also use this schema package.
+diagnostic infrastructure used by the source checkout and bundled in the Bun
+runtime ZIP.
 
 The canonical definitions are the ordinary files in the
 [schemas directory](./schemas/).
@@ -35,7 +34,7 @@ An explicit dependency `path` retains the original local-library meaning for eve
 accepted value. Omitting `path` requests a shipped library by exact name and
 version; the shipped set is `core@0.1.0` and `core@0.2.0`.
 
-The referenced presentation uses `project-presentation/0.1`:
+This example uses the original `project-presentation/0.1` format:
 
 ```json
 {

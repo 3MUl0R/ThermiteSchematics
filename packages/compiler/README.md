@@ -2,7 +2,7 @@
 
 The compiler turns one locked `electrical-system/0.1` project into deterministic
 `electrical-ir/0.1`, evaluates the fixed engineering rules, and returns detached
-compiled `project-presentation/0.1` context beside the IR.
+compiled presentation context beside the IR.
 
 ```ts
 import { compileProject, evaluateRules, serializeIr } from "@thermite/compiler";
@@ -23,28 +23,16 @@ authoritative input or persistent cache.
 
 ## Successful result
 
-A successful `CompileResult` contains:
-
-```ts
-interface CompiledProjectPresentation {
-  readonly format: "project-presentation/0.1";
-  readonly revision: string;
-  readonly backgroundColor: string;
-  readonly titleBlockLines: readonly string[];
-}
-
-interface CompileSuccess {
-  readonly ok: true;
-  readonly diagnostics: Diagnostic[];
-  readonly ir: ElectricalIr;
-  readonly presentation: CompiledProjectPresentation;
-}
-```
+A successful `CompileResult` contains `ok: true`, `diagnostics`, `ir`, and
+`presentation`. The exported `CompiledProjectPresentation` includes the
+effective format, revision, background color and title lines, plus page
+settings and compact frame data when authored.
 
 Presentation stays beside `electrical-ir/0.1` because canvas and title policy are not
 electrical topology. When `system.json` omits a presentation reference, compilation
-returns revision `UNSPECIFIED`, background `#ffffff`, and an empty title-line
-array. Successful IR and presentation values are detached and frozen.
+returns format `project-presentation/0.1`, revision `UNSPECIFIED`, background
+`#ffffff`, and an empty title-line array. Successful IR and presentation values
+are detached and frozen.
 
 ## Compiler pipeline
 
@@ -94,8 +82,8 @@ their authored path; shipped core uses internal provenance locator
 ## Presentation loading
 
 The optional manifest `presentation` member names one safe project-contained file.
-The loader gives it owner `project`, kind `project_presentation`, stable
-project-relative provenance, and schema `project-presentation/0.1`. If a source glob
+The loader gives it owner `project`, kind `project_presentation`, and stable
+project-relative provenance. It validates versions 0.1, 0.2 and 0.3. If a source glob
 also matches the same canonical file, that one file is validated only as
 presentation. Aliases, reparse escapes, unsafe paths, missing files, and structural
 errors are rejected deterministically.

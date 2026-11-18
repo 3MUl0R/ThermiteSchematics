@@ -18,7 +18,7 @@ libraries and research.
 ## How to use
 
 You can choose a **runtime package** to start designing, or a **source checkout** to
-work on the engine too. Both initialize the same electrical project in its own
+work on the engine too. Both initialize a new electrical project in its own
 folder. Thermite is Apache-2.0, and agent-authored improvements are welcome. See instructions
 below for each workflow.
 
@@ -168,9 +168,10 @@ to silently truncate a multi-sheet drawing to one SVG.
 
 Use `--layout compact` to search three base ELK spacing profiles, additional
 placement arrangements and jog repairs, validating the resulting layouts and
-fitting horizontal circuit sections on the same sheet where possible. The default
-`standard` preserves the initial layout. Search the HTML by device designation
-and follow clickable conductor continuations.
+fitting horizontal circuit sections on the same sheet where possible. In rooted
+views, the default `standard` uses standard ELK spacing and can try bounded
+placement changes and jog repair. Search the HTML by device designation and
+follow clickable conductor continuations.
 
 Pagination keeps devices and labels intact. Every printed text run in SVG, HTML
 and PDF uses at least 2.5 mm vertical physical em, including frame furniture,
