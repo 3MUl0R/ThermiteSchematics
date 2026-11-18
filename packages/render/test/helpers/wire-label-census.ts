@@ -18,6 +18,7 @@ import {
   foreignRoutes,
 } from "./wire-label-support.js";
 import { points } from "./route-quality.js";
+import { hasSourceCaption } from "./source-caption.js";
 type Prepared = Extract<
   Awaited<ReturnType<typeof prepareSchematicDrawing>>,
   { ok: true }
@@ -119,7 +120,7 @@ export function assertRootedCaptionCensus(
     );
   if (!emitted.ok) throw Error(JSON.stringify(emitted.error));
   const doc = parseHTML(emitted.value).document;
-  const captions = layout.labels
+  const labels = layout.labels
     .filter((l) => l.ownerKind === "edge")
     .map((label) => ({
       label,
@@ -128,8 +129,26 @@ export function assertRootedCaptionCensus(
           `text[clip-path="url(#${svgSemanticId("clip", [label.id])})"]`,
         ),
       ),
-    }))
-    .filter(({ text }) => Boolean(text.textContent));
+    }));
+  const captions = labels.filter(({ text }) => Boolean(text.textContent));
+  const railReplacements = labels.filter(({ label, text }) => {
+    if (text.textContent || label.role !== "net") return false;
+    const edge = graph.edges.find((e) => e.id === label.ownerId);
+    return (
+      edge &&
+      hasSourceCaption(
+        graph,
+        edge,
+        label.text,
+        ir,
+        (id) =>
+          doc.querySelector(
+            `text[clip-path="url(#${svgSemanticId("clip", [id])})"]`,
+          )?.textContent,
+        "rail",
+      )
+    );
+  });
   const owned = captions.filter(({ label }) =>
       layout.edges.some((e) => e.id === label.ownerId),
     ),
@@ -147,5 +166,9 @@ export function assertRootedCaptionCensus(
       layout,
     );
   for (const { label } of contexts) assertNativeContext(label, doc, layout);
-  return { count: captions.length, nativeContexts: contexts.length };
+  return {
+    count: captions.length,
+    railReplacements: railReplacements.length,
+    nativeContexts: contexts.length,
+  };
 }

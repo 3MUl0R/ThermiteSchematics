@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { compileProject } from "@thermite/compiler";
 import { parseHTML } from "linkedom";
 import { renderSchematicPacket } from "../src/sheets.js";
-import { boundaryCaptionContent } from "../src/packet/boundary-captions.js";
+import { boundaryCaptionContents } from "../src/packet/boundary-captions.js";
 import { continuationLabel } from "../src/packet/continuation-label.js";
 import { svgSemanticId } from "../src/svg/escape.js";
 import type { Link } from "../src/packet/types.js";
@@ -48,14 +48,20 @@ it("retains the native C013 pair and removes its adjacent same-wire caption", as
     ),
   );
   const doc = parseHTML(sheet.svg).document;
-  expect([
+  const paired = [
     ...doc.querySelectorAll('a[data-conductor-id="OL1-NC-K1-A1"]'),
-  ]).toHaveLength(2);
+  ];
+  expect(
+    paired.map((entry) => entry.querySelector("text")?.textContent),
+  ).toEqual(["C013 / 03.A2", "C013 / 03.D1"]);
+  expect(
+    paired.map((entry) => entry.querySelector("text:last-child")?.textContent),
+  ).toEqual(["OL1-NC-K1-A1", "OL1-NC-K1-A1"]);
   expect(
     [...doc.querySelectorAll("text.label-conductor")].filter(
       (t) => t.textContent === "OL1-NC-K1-A1",
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
 });
 
 function fixture() {
@@ -82,9 +88,9 @@ function fixture() {
 
 it("suppresses only a matching, resolved, adjacent surviving continuation name", () => {
   const { content, link } = fixture();
-  expect(boundaryCaptionContent({ content, links: [link] })).not.toContain(
-    ">W1</text>",
-  );
+  expect(
+    boundaryCaptionContents([{ content, links: [link] }])[0],
+  ).not.toContain(">W1</text>");
   for (const other of [
     { ...link, provenance: { kind: "wire" as const, uid: "other" } },
     { ...link, x: 50 },
@@ -92,5 +98,36 @@ it("suppresses only a matching, resolved, adjacent surviving continuation name",
     { ...link, toZone: undefined },
     { ...link, conductor: "different" },
   ])
-    expect(boundaryCaptionContent({ content, links: [other] })).toBe(content);
+    expect(boundaryCaptionContents([{ content, links: [other] }])[0]).toBe(
+      content,
+    );
+});
+
+it("keeps tiled caption positions and only clears fully clipped replicas from the same view", () => {
+  const { content, link } = fixture();
+  const pane = (key: string, svg: string) =>
+    `<g data-navigation-view="${key}">${svg}</g>`;
+  const visible = pane("native-view", content);
+  const clipped = content.replace(
+    'viewBox="0 20 100 100"',
+    'viewBox="0 40 100 100"',
+  );
+  const sameView = pane("native-view", clipped);
+  const otherView = pane("another-view", clipped);
+  const result = boundaryCaptionContents([
+    { content: visible, links: [link] },
+    { content: sameView, links: [] },
+    { content: otherView, links: [] },
+    { content: visible, links: [] },
+  ]);
+  expect(result).toEqual([
+    visible
+      .replace("<rect ", '<rect visibility="hidden" ')
+      .replace(">W1</text>", "></text>"),
+    sameView
+      .replace("<rect ", '<rect visibility="hidden" ')
+      .replace(">W1</text>", "></text>"),
+    otherView,
+    visible,
+  ]);
 });

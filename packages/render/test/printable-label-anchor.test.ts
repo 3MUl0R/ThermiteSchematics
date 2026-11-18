@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { compileProject } from "@thermite/compiler";
+import { hasSourceCaption } from "./helpers/source-caption.js";
 import { prepareSchematicDrawing } from "../src/renderer.js";
 import { emitSchematicSvg } from "../src/svg/emitter.js";
 import { svgSemanticId } from "../src/svg/escape.js";
@@ -111,26 +112,15 @@ it("keeps every own-wire ink distance no worse than dev across 50 requests and b
         const edge = graph.edges.find((e) => e.id === label.ownerId)!;
         // An absent net ink distance needs actual replacement ink on its own
         // landing body. Keep the reviewed numeric baseline for every other label.
-        const replacement = graph.nodes.some(
-          (node) =>
-            node.kind !== "junction" &&
-            node.ports.some(
-              (landing) =>
-                edge.sourcePortId === landing.id &&
-                node.labels.some(
-                  (caption) =>
-                    caption.role === "terminal" &&
-                    node.ports.some(
-                      (p) =>
-                        p.id === caption.ownerId &&
-                        p.terminal.deviceUid === landing.terminal.deviceUid &&
-                        p.terminal.terminalKey === landing.terminal.terminalKey,
-                    ) &&
-                    doc.querySelector(
-                      `text[clip-path="url(#${svgSemanticId("clip", [caption.id])})"]`,
-                    )?.textContent === label.text,
-                ),
-            ),
+        const replacement = hasSourceCaption(
+          graph,
+          edge,
+          label.text,
+          compiled.ir,
+          (id) =>
+            doc.querySelector(
+              `text[clip-path="url(#${svgSemanticId("clip", [id])})"]`,
+            )?.textContent,
         );
         expect(replacement, c.key + " " + label.text).toBe(true);
         count++;

@@ -13,6 +13,7 @@ import type {
   SchematicPacketRequest,
 } from "./types.js";
 import { frame, zone, sheetLabel } from "./page.js";
+import { boundaryCaptionContents } from "./boundary-captions.js";
 import { n, namespaceContentIds } from "./svg.js";
 import { navigationDraftInputs } from "./navigation-seeds.js";
 import { escapeXmlAttribute } from "../svg/escape.js";
@@ -148,6 +149,7 @@ export function assembleSheets(
         draft.communicationBlock,
       );
   resolveRootedContinuations(drafts, page);
+  const contents = boundaryCaptionContents(drafts);
   const sheets = drafts.map((draft, index) => ({
     ...(draft.resolvedTitle ? { sheetKey: draft.resolvedTitle.sheetKey } : {}),
     number: index + 1,
@@ -155,7 +157,8 @@ export function assembleSheets(
     references: draft.references ?? [],
     svg: (() => {
       try {
-        return frame(draft, page, index + 1, drafts.length);
+        const framed = { ...draft, content: contents[index] ?? draft.content };
+        return frame(framed, page, index + 1, drafts.length);
       } catch (error) {
         throw new PacketDraftError(
           error instanceof Error ? error.message : "Sheet assembly failed.",

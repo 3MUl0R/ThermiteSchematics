@@ -1,4 +1,5 @@
 import { compileProject } from "@thermite/compiler";
+import { wiringAdvice } from "./wiring-advice.js";
 import {
   buildDocumentation,
   printedPort,
@@ -1014,23 +1015,6 @@ const module: FactModule = {
       },
     },
   ],
-  unexecuted: new Map([
-    [
-      "At print review, check visible wire approaches at terminals, elbows and junctions.",
-      "Manual print review; the actual SVG masks are checked by wire-label-masks.test.mjs.",
-    ],
-    [
-      "A dashed wire-label leader points to the owning conductor and carries no electrical connection.",
-      "Drafting convention; leader ownership and separation from conductor ink are checked by wire-label-support.test.ts.",
-    ],
-    [
-      "Add terminal/wire schedules for complete detail.",
-      "Advice for explicit full inventories; required companions cover only the concrete hidden-detail scope.",
-    ],
-    [
-      "Also read `thermite guide circuit-views`; never guess marks; check links/earth/DC ink in both flows.",
-      "Manual drawing review advice; geometry and mutations are checked in polarity-qualifiers.test.ts and circuit-operator-fidelity.test.ts.",
-    ],
-  ]),
+  unexecuted: wiringAdvice,
 };
 export default module;

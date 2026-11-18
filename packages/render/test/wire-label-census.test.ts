@@ -26,7 +26,8 @@ it("retains every printed edge caption across 50 requests and supports its full 
     Awaited<ReturnType<typeof compileProject>>
   >();
   let count = 0,
-    nativeContexts = 0;
+    nativeContexts = 0,
+    railReplacements = 0;
   for (const c of fixture.cases) {
     if (!projects.has(c.project))
       projects.set(c.project, await compileProject(c.project));
@@ -47,8 +48,10 @@ it("retains every printed edge caption across 50 requests and supports its full 
       c.key,
     );
     count += observed.count;
+    railReplacements += observed.railReplacements;
     nativeContexts += observed.nativeContexts;
   }
-  expect(count).toBe(292);
+  expect(count + railReplacements).toBe(292);
+  expect(railReplacements).toBe(6);
   expect(nativeContexts).toBe(2);
 }, 60000);

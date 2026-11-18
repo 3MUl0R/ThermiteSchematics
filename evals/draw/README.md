@@ -21,6 +21,11 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.29** adds independent **DQ-16** paint-mask checks for wire
+label plates and **DQ-17** corroboration for a shared source-rail caption
+(LABEL1, #338 and #350). The 5.28 terminal-strip and schedule rules remain
+in force.
+
 Version **5.28** extends **DQ-19** and **DQ-23** for native terminal strips
 (CHECK8, #428 and #427). SVG schedule endpoint cells reconcile with the
 union of qualified schematic and strip appearances. A strip location has

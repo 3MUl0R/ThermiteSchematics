@@ -1,4 +1,9 @@
-import { inside, project, expand } from "../device-legend/geometry.js";
+import {
+  inside,
+  intersection,
+  project,
+  expand,
+} from "../device-legend/geometry.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import { decodeSvgSemanticId, svgSemanticId } from "../svg/escape.js";
 import { conductorEndpoints } from "./navigation-incidence.js";
@@ -33,6 +38,21 @@ function captionEdge(clip: string) {
     : undefined;
 }
 
+function captionInk(caption: NavigationGeometry) {
+  const { x, y, "font-size": size, textLength } = caption.node.attrs;
+  const font = printableTextMetrics(caption.node.text, Number(size));
+  const ratio = textLength ? Number(textLength) / font.advance : 1;
+  return project(
+    {
+      x: Number(x) + font.left * ratio,
+      y: Number(y) - font.top,
+      w: (font.right - font.left) * ratio,
+      h: font.top - font.bottom,
+    },
+    caption.matrix,
+  );
+}
+
 function nearSameCut(
   link: Link,
   caption: NavigationGeometry,
@@ -54,18 +74,7 @@ function nearSameCut(
   )
     return false;
   const vertical = link.side === "top" || link.side === "bottom";
-  const { x, y, "font-size": size, textLength } = caption.node.attrs;
-  const font = printableTextMetrics(caption.node.text, Number(size));
-  const ratio = textLength ? Number(textLength) / font.advance : 1;
-  const ink = project(
-    {
-      x: Number(x) + font.left * ratio,
-      y: Number(y) - font.top,
-      w: (font.right - font.left) * ratio,
-      h: font.top - font.bottom,
-    },
-    caption.matrix,
-  );
+  const ink = captionInk(caption);
   if (!inside(ink, expand(caption.clip, 0.002))) return false;
   const run = vertical ? [a.y, b.y] : [a.x, b.x],
     across = vertical ? [a.x, b.x, link.x] : [a.y, b.y, link.y],
@@ -88,12 +97,10 @@ function nearSameCut(
   );
 }
 
-/** A resolved continuation may replace the adjacent copy of its exact native
- * conductor name. Keep both reservations and remove only the redundant ink. */
-export function boundaryCaptionContent(
-  draft: Pick<Draft, "content" | "links">,
-) {
-  const candidates = draft.links.filter(
+type CaptionDraft = Pick<Draft, "content" | "links">;
+
+function continuationCandidates(links: readonly Link[]) {
+  return links.filter(
     (link) =>
       link.toZone &&
       link.label &&
@@ -104,27 +111,25 @@ export function boundaryCaptionContent(
           (link.label?.single && r.text.endsWith(` / ${link.conductor}`)),
       ),
   );
-  if (!candidates.length || !draft.content.includes("label-conductor"))
-    return draft.content;
-  const geometry = navigationGeometry(draft.content),
-    omitted = new Set<string>();
-  for (const [index, g] of geometry.entries()) {
+}
+
+function conductorCaptions(draft: CaptionDraft, candidates: readonly Link[]) {
+  if (!draft.content.includes("label-conductor")) return [];
+  const geometry = navigationGeometry(draft.content);
+  return geometry.flatMap((g, index) => {
     if (
       !g.visible ||
       g.node.name !== "text" ||
       !g.node.attrs.class?.split(" ").includes("label-conductor")
     )
-      continue;
+      return [];
     const clip = /url\(#([^)]+)\)/u.exec(g.node.attrs["clip-path"] ?? "")?.[1];
-    if (!clip) continue;
+    if (!clip) return [];
     const edge = captionEdge(clip);
-    if (
-      !edge ||
-      geometry[index - 2]?.node.attrs.class === "wire-label-leader-arrow"
-    )
-      continue;
+    if (!edge) return [];
     const key = svgSemanticId("edge", [edge]);
-    if (
+    const replacement =
+      geometry[index - 2]?.node.attrs.class !== "wire-label-leader-arrow" &&
       candidates.some(
         (link) =>
           link.conductor === g.node.text &&
@@ -137,13 +142,56 @@ export function boundaryCaptionContent(
               r.node.attrs["data-net-id"] === link.netId &&
               nearSameCut(link, g, r),
           ),
-      )
-    )
-      omitted.add(clip);
-  }
-  if (!omitted.size) return draft.content;
-  return draft.content.replace(
-    /<rect\b[^>]*\bclass="label-background label-conductor"[^>]*\/>\s*<text\b[^>]*\bclip-path="url\(#([^"]+)\)"[^>]*>[^<]*<\/text>/gu,
-    (block, clip: string) => (omitted.has(clip) ? "" : block),
+      );
+    return [
+      {
+        clip,
+        source: g.viewKey && JSON.stringify([g.viewKey, edge, g.node.text]),
+        replacement,
+        clipped: !intersection(captionInk(g), expand(g.clip, 0.01)),
+      },
+    ];
+  });
+}
+
+function blankCaptionInk(content: string, clips: ReadonlySet<string>) {
+  if (!clips.size) return content;
+  return content.replace(
+    /(<rect\b[^>]*\bclass="label-background label-conductor"[^>]*\/>\s*)(<text\b[^>]*\bclip-path="url\(#([^"]+)\)"[^>]*>)[^<]*<\/text>/gu,
+    (block, plate: string, text: string, clip: string) =>
+      clips.has(clip)
+        ? plate.replace("<rect ", '<rect visibility="hidden" ') +
+          text +
+          "</text>"
+        : block,
+  );
+}
+
+/** Keep the elements in their original order across tiled copies. When a
+ * continuation carries the source caption, discard only its redundant ink
+ * and the fully clipped replicas of that caption in the same authored view. */
+export function boundaryCaptionContents(drafts: readonly CaptionDraft[]) {
+  const candidates = drafts.map((draft) => continuationCandidates(draft.links));
+  if (!candidates.some((links) => links.length))
+    return drafts.map((draft) => draft.content);
+  const captions = drafts.map((draft, i) =>
+    conductorCaptions(draft, candidates[i] ?? []),
+  );
+  const replaced = new Set(
+    captions
+      .flat()
+      .flatMap((c) => (c.replacement && c.source ? [c.source] : [])),
+  );
+  return drafts.map((draft, i) =>
+    blankCaptionInk(
+      draft.content,
+      new Set(
+        (captions[i] ?? []).flatMap((c) =>
+          c.replacement || (c.clipped && replaced.has(c.source))
+            ? [c.clip]
+            : [],
+        ),
+      ),
+    ),
   );
 }
