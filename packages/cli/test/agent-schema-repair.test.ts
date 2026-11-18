@@ -162,3 +162,91 @@ it.each([true, false])(
     }
   },
 );
+
+async function addMalformedRelation(project: string) {
+  const file = "connections/relationship.json";
+  const manifestPath = join(project, "system.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.sources.push(file);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const uid = "fe25e5be-64d7-45ff-b43d-7d5919d62e9c";
+  await writeFile(
+    join(project, file),
+    JSON.stringify({
+      objects: [
+        {
+          uid,
+          kind: "relation",
+          relation: "associated_with",
+          from: "PLC1",
+          to: { device: "PS1" },
+        },
+      ],
+    }),
+  );
+  return { file, uid };
+}
+
+it("points E011 relation shapes to offline guarded repair", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "thermite-schema-shape-"));
+  const project = join(directory, "project");
+  try {
+    await execute("bun", [launcher, "init", project]);
+    const { file, uid } = await addMalformedRelation(project);
+    const request = { format: "agent-tool-request/0.1", project: "." };
+    const invalid = await cli(project, "validate", request);
+    expect(invalid.code).toBe(1);
+    expect(invalid.stdout).toBe("");
+    expect(invalid.report.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "E011",
+        file,
+        jsonPointer: "/objects/0/from",
+        message:
+          "Expected object value. Repair this source shape with a guarded patch. See thermite guide agent-requests (Repair schema errors through the guarded loop).",
+      }),
+    );
+    const topic = await execute("bun", [launcher, "guide", "agent-requests"], {
+      cwd: project,
+    });
+    expect(topic.stdout).toContain(
+      "### Repair schema errors through the guarded loop",
+    );
+    const endpoint = /"from": (\{"device": "PLC1"\})/.exec(topic.stdout)?.[1];
+    expect(endpoint).toBeDefined();
+
+    const before = await snapshot(project);
+    const patch = {
+      ...request,
+      patchFormat: "json-patch/0.1",
+      dryRun: true,
+      files: [
+        {
+          path: file,
+          expectedIntegrity: before[file],
+          operations: [
+            { op: "test", path: "/objects/0/uid", value: uid },
+            {
+              op: "replace",
+              path: "/objects/0/from",
+              value: JSON.parse(endpoint!),
+            },
+          ],
+        },
+      ],
+    };
+    const dry = await cli(project, "apply-source-patch", patch);
+    expect(dry.code, dry.stderr).toBe(0);
+    expect(await snapshot(project)).toEqual(before);
+    const applied = await cli(project, "apply-source-patch", {
+      ...patch,
+      dryRun: false,
+    });
+    expect(applied.code, applied.stderr).toBe(0);
+    const valid = await cli(project, "validate", request);
+    expect(valid.code, valid.stderr).toBe(0);
+    expect(JSON.parse(valid.stdout).value.valid).toBe(true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

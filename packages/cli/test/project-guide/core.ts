@@ -690,7 +690,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`create-view`: `spec`, one schematic view request without `page`. Returns original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use printing commands below.",
+        "`create-view`: `spec`, one schematic view request without `page`. Returns original continuous SVG or complete cable core sheet; multi-sheet views fail R006: use the printing topic below.",
       async check() {
         const svg = /^(<\?xml[^>]*>\s*)?<svg[\s>]/;
         expect((await createViewLoads()).result.value.svg).toMatch(svg);
@@ -1172,7 +1172,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Commands default to `--project .`; `validate`/`lock` also take a path, never both (`thermite validate . --strict`).",
+        "Commands default to the current project. `validate`/`lock` accept a positional path or `--project <path>`. If supplied together, both must resolve to the same path.",
       async check() {
         for (const name of ctx.tree.alpha.filter(
           (n) => !["init", "guide"].includes(n),
@@ -1194,10 +1194,8 @@ const module: FactModule = {
           );
           expect(alias.stdout, name).toBe(positional.stdout);
           expect(alias.stderr, name).toBe(positional.stderr);
-          // The guide advises one form ("never both"); a matching pair is also
-          // accepted, and a conflicting pair still fails (#44).
           const equal = await ok(
-            [name, ".", "--project", ".", ...flags],
+            [name, ".", "--project", ctx.pristine.starter, ...flags],
             ctx.pristine.starter,
           );
           expect(equal.stdout, name).toBe(positional.stdout);

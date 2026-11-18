@@ -536,7 +536,7 @@ export const guardedWorkflows: FactModule["facts"] = [
   },
   {
     claim:
-      "When compilation fails (no guards returned), hash raw source bytes and UID-test a schema/semantic repair; see `thermite guide agent-requests`. Invalid JSON needs an ordinary edit, then validation.",
+      "When compilation fails (no guards returned), hash raw source bytes and UID-test a schema/semantic repair; see `thermite guide agent-requests`. For E011 shape errors, patch the parsed value. An E002 syntax error or a duplicate key needs an ordinary syntax repair, then validation.",
     async check() {
       const project = await freshProject("starter");
       // A wire to a missing device: the sources load but do not compile.

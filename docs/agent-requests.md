@@ -163,6 +163,43 @@ bun -e 'const fs=require("node:fs"), c=require("node:crypto"); console.log("sha2
 
 Generate UUIDs for new objects with `bun -e 'console.log(crypto.randomUUID())'`.
 
+### Extend a starter
+
+Work in an initialized starter. Keep the first source edits separate from adding
+a file. Inspect PLC1 using the exact request under **Find the patch guard**,
+with `"value": "PLC1"` in place of `"value": "PS1"`. Use
+`thermite agent inspect --input inspect-source.request.json`. The subcommand
+selects the tool. An extra `tool` field in the request fails A001 at `/tool`.
+Capture `value.object.source` and keep its file, pointer, UID and byte integrity.
+
+1. **Stage the library first.** For a planned link, the starter's compact PLC
+   needs a declared Ethernet port. Clone its existing type under a new local
+   type ID. Preserve the original terminal definitions and use a logical
+   Ethernet port with an unspecified connector. Add the local library to
+   `system.json`, keep the existing devices using their old types for now, and
+   run `thermite lock .`. This records the new library bytes before any source
+   refers to them. Leave the library files and lock alone during the patch.
+2. **Add and register a new source.** Put the new HMI in a new source file with
+   a fresh UUID and a reviewed HMI type. Register that file in `system.json`
+   `sources` and validate the intermediate project. Keep the new relationship
+   out until both ports will be present. Re-inspect PLC1 and the HMI after
+   this staging step to get current source guards.
+3. **Patch the coupled changes together.** Retype PLC1 and add the planned
+   relationship to the now-registered HMI source in the same request. Use each
+   file's inspected integrity and a `test` on each inspected object's UID.
+   A concrete relation uses `"from": {"device": "PLC1"}` and
+   `"to": {"device": "HMI1"}`, with `kind` set to `relation` and `relation` set
+   to `associated_with`. Use the actual declared `fromPort` and `toPort` in
+   `connection`. For this generic example both are `ETH`, with
+   `medium: "ethernet"`, `protocol: "unspecified"` and `status: "planned"`. This declares no physical
+   wiring or verified communication.
+4. **Verify and apply.** Dry-run the complete request, inspect the result,
+   change only `dryRun` to `false` and apply. Validate and check the lock
+   with `thermite lock . --check`. Any schema, reference or lock error in the
+   whole candidate blocks the patch. If recovering from a wrong direct edit,
+   inspect or hash the current bytes and use a guarded repair or inverse patch.
+   Never use `git checkout` or `rm` to undo edits to registered sources.
+
 ### Query
 
 Unlike `resolve.target` and `inspect.selector`, operation and selector are nested
@@ -243,8 +280,15 @@ Expected response: both calls exit `0`; the patch result reports `dryRun: false`
 
 ### Repair schema errors through the guarded loop
 
-When validation reports E012 (an unexpected property), E013 (such as an uppercase
-UUID), or a repairable source schema error, inspect and resolve cannot return guards.
+E011 means the JSON parsed but a value has the wrong shape. Repair a field in
+a registered source through the guarded loop. For example, a relation endpoint
+`"from": "PLC1"` has the wrong shape. If PLC1 is the reviewed endpoint, use
+`"from": {"device": "PLC1"}`. The diagnostic supplies a location and expected
+type. Use the project facts to choose the value.
+
+When validation reports an E011 shape error, E012 (an unexpected property),
+E013 (such as an uppercase UUID), or a repairable source schema error, inspect
+and resolve cannot return guards.
 Read the named source file as raw JSON and review the diagnostic pointers and
 intended values. Hash its current bytes with the recipe above, test the existing
 UID, and dry-run a patch that fixes all errors together. The patch operates on
@@ -308,7 +352,7 @@ the remaining diagnostics and no source writes. Use multiple operations/files in
 one request when errors must be fixed together. Byte guards, operation tests,
 snapshot revalidation and writer reservations still apply.
 
-JSON syntax errors and duplicate keys cannot be patched: A006 names the file and
+E002 syntax errors and E003 duplicate keys cannot be patched: A006 names the file and
 the parser's line and column, alongside the original E002/E003 diagnostics. Make
 an ordinary edit to source, presentation, manifest or library JSON, then validate
 again and resume the guarded loop where eligible. For a corrupt

@@ -112,8 +112,13 @@ it("waits 1000 ms after slow rebuilds and detects edits made while rebuilding", 
 });
 
 it("keeps guide and review watch claims portable and tied to finished work", () => {
-  const guide = readFileSync(
+  const core = readFileSync(
     new URL("../assets/THERMITE_AGENTS.md", import.meta.url),
+    "utf8",
+  );
+  expect(core).toContain("thermite guide project-workflows");
+  const guide = readFileSync(
+    new URL("../../../docs/project-workflows.md", import.meta.url),
     "utf8",
   ).replace(/\s+/g, " ");
   const review = readFileSync(

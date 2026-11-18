@@ -43,6 +43,7 @@ import {
 } from "./project-guide/harness.js";
 import { checkCommand, splitWords } from "./project-guide/commands.js";
 import { guideModel } from "./project-guide/guide-model.js";
+import { verifyGuardedStarter } from "../../../scripts/runtime-package/verify-guarded-starter.mjs";
 import { topicExecution } from "../../../scripts/docs-example-evidence.mjs";
 import { executeModelingExamples } from "./docs-example-modeling.js";
 
@@ -94,6 +95,23 @@ const guideOutput = (id: string) => {
   if (!guideOutputs.has(id)) guideOutputs.set(id, ok(["guide", id], ctx.work));
   return guideOutputs.get(id)!;
 };
+
+it("executes the offline guarded starter recipe through the source launcher", async () => {
+  const folder = await scratch("guarded-starter");
+  await verifyGuardedStarter(
+    async (
+      args: string[],
+      input: string | undefined,
+      expected = 0,
+      cwd = folder,
+    ) => {
+      const run = await thermite(args, cwd, input);
+      expect(run.code, describeRun(args, run)).toBe(expected);
+      return run;
+    },
+    join(folder, "starter"),
+  );
+});
 
 it("resolves the runtime documentation index offline", async () => {
   const result = await ok(["guide", "--json"], ctx.work);
@@ -201,7 +219,7 @@ it("builds fresh guide assets from an exported source archive without Git", asyn
   );
   await mkdir(join(root, "packages/cli/assets"), { recursive: true });
   const guide = join(root, "packages/cli/assets/THERMITE_AGENTS.md");
-  await writeFile(guide, "a".repeat(20500));
+  await writeFile(guide, "a".repeat(8000));
   const script = join(root, "scripts/build-guide.mjs");
   await cp(join(repositoryRoot, "scripts/build-guide.mjs"), script);
   const commit = "c".repeat(40);
@@ -222,11 +240,11 @@ it("builds fresh guide assets from an exported source archive without Git", asyn
   ).toEqual({ commit });
   run = await exec([script, "--check"], root);
   expect(run.code, run.stderr).toBe(0);
-  await writeFile(guide, "a".repeat(20501));
+  await writeFile(guide, "a".repeat(8001));
   run = await exec([script], root);
   expect(run.code).toBe(1);
-  expect(run.stderr).toContain("20501 bytes");
-  await writeFile(guide, "a".repeat(20500));
+  expect(run.stderr).toContain("8001 bytes");
+  await writeFile(guide, "a".repeat(8000));
   await writeFile(join(root, "scripts/source-commit.txt"), "$Format:%H$\n");
   run = await exec([script], root);
   expect(run.code).toBe(1);
@@ -738,7 +756,11 @@ async function shellLine(line: string, project: string, id: string) {
     ).toBeGreaterThan(0);
 }
 
-it.each(documents.filter(({ topic }) => topic.id !== "agent-requests"))(
+it.each(
+  documents.filter(
+    ({ topic }) => !["agent-requests", "project-workflows"].includes(topic.id),
+  ),
+)(
   "executes every json/sh fence in $topic.id",
   async ({ topic, model }) => {
     const fences = model.fences.filter((f) => ["json", "sh"].includes(f.lang));

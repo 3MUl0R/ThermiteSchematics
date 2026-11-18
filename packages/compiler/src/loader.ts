@@ -25,7 +25,6 @@ import {
   normalizeDiagnostics,
   parseJson,
   validateProjectManifest,
-  validateSourceDocument,
   validateUniqueUids,
   type Diagnostic,
   type JsonPointerNodeMap,
@@ -62,6 +61,7 @@ import type {
 import { loadLibraryLockSnapshot } from "./loader-lock.js";
 import { errorCode, errorDetail } from "./loader-errors.js";
 import { sourcePatchFailureSnapshot } from "./loader-source-patch.js";
+import { validateProjectSource } from "./loader-source-diagnostics.js";
 
 interface LoadedValidationDiagnostics {
   diagnostics: Diagnostic[];
@@ -1049,7 +1049,7 @@ async function loadProjectDocuments(
     state.projectSources.push(parsed.document);
     state.documents.push(parsed.document);
     state.documentDiagnostics.push(
-      ...validateSourceDocument(registry, parsed.document),
+      ...validateProjectSource(registry, parsed.document),
     );
   }
 }
