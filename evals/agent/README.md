@@ -268,7 +268,8 @@ is explicitly rubric-only, not a falsely satisfied matrix row.
 Coverage requires every modeled non-terminal device on a schematic and drawn
 PSU input feeds where designed. A source-level deferral and the PSU's own
 final W905 justify an undesigned input. The separately required matrix checks
-the brief roles and their on-drawing evidence. C-CHANGE accepts a changed source wire UID with visible schematic route ink. Report, index and
+the brief roles and their on-drawing evidence. Both change rows accept a changed
+source wire UID with visible schematic route ink. Report, index and
 reference-table mentions do not count. XT1/Q2/HL1/PX1 and other valid tags work. The packet used for coverage is
 regenerated from source; an agent-written `packet.json` is never authority.
 All eight deliverable items are checked, including independent reports/review,
@@ -813,11 +814,21 @@ their declared equivalences and individual cutoffs are satisfied.
 
 ## E2 1.19.1
 
-C-CHANGE matches applied wire UIDs to painted schematic paths. The checker
+C-CHANGE and P-CHANGE match applied wire UIDs to painted schematic paths. The checker
 recognizes standalone wire paths and the circuit, wiring and signal-loop
-conductor groups emitted by the renderer. It uses the renderer’s SVG geometry
-reader for transforms and rectangular clips. A label, sheet reference, white
-halo or fully hidden, clipped or zero-length path supplies no wire ink. The
-recorded prompt version still controls whether the subject list must be
-nonempty. Replay the retained inputs under both checker versions and preserve
-the original manifests.
+conductor groups emitted by the renderer, including nested route paths. It
+uses the renderer’s SVG geometry reader for transforms and rectangular clips.
+A label, sheet reference, white halo or fully hidden, clipped or zero-length
+path supplies no wire ink. The recorded prompt version still controls whether
+the C-CHANGE subject list must be nonempty.
+
+This is a generated-SVG check. Route colors come from the renderer palette
+and generated dash lengths are positive. Near-white `#fefefe`, zero-length
+dash patterns and exact viewport-edge runs are outside that output contract.
+The centerline check credits a positive-length run along the viewport edge,
+where part of the stroke remains visible.
+
+The checker identity includes the complete renderer `dist` tree, including
+transitive helpers. Checkpoint creation, normal runs and checker-only rechecks
+use that identity. Replay retained inputs under both checker versions and
+preserve the original manifests.

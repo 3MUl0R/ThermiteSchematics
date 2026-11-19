@@ -2,16 +2,32 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { snapshot, sha256 } from "./snapshot.mjs";
 export const evalVersion = "1.19.1";
-export function harnessIdentity({ tasksDir } = {}) {
+const rendererDist = fileURLToPath(
+  new URL("../../packages/render/dist/", import.meta.url),
+);
+
+export function harnessIdentity({ tasksDir, renderDist = rendererDist } = {}) {
   const hash = snapshot(fileURLToPath(new URL("./", import.meta.url)), {
     documents: false,
   }).hash;
+  // Take the built tree so transitive imports of the paint and geometry
+  // helpers are covered even when no harness source file changes.
+  const renderer = snapshot(renderDist, { documents: false });
+  assert(
+    Object.hasOwn(renderer.files, "packet/navigation-walk.js"),
+    "Build packages/render before pinning the checker identity",
+  );
+  const checkerHarnessHash = sha256(hash + "\n" + renderer.hash);
   return {
     harnessHash: hash,
-    checkerHarnessHash: hash,
+    checkerHarnessHash,
     checkerHash: tasksDir
-      ? sha256(hash + "\n" + snapshot(tasksDir, { documents: false }).hash)
-      : hash,
+      ? sha256(
+          checkerHarnessHash +
+            "\n" +
+            snapshot(tasksDir, { documents: false }).hash,
+        )
+      : checkerHarnessHash,
     evalVersion,
   };
 }

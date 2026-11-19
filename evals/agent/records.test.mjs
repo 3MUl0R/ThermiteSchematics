@@ -1,8 +1,14 @@
 import { it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pinCheckpoint } from "./checkpoint.mjs";
+import { harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
 import { readRun, adjudicateRun } from "./records.mjs";
 import { planAttempt, selectAttempts } from "./attempts.mjs";
 it("checkpoint creation pins both hashes and version; overrides are explicit and persistent", () => {
@@ -65,8 +71,7 @@ for (const resolution of ["infrastructure", "agent-failure"])
       rmSync(work, { recursive: true, force: true });
     }
   });
-it("external checker catalogs are pinned independently of the framework", async () => {
-  const { harnessIdentity } = await import("./checkpoint.mjs");
+it("external checker catalogs are pinned independently of the framework", () => {
   const work = mkdtempSync(join(tmpdir(), "eval-checker-catalog-"));
   try {
     writeFileSync(join(work, "check.mjs"), "export default ()=>true;");
@@ -78,5 +83,30 @@ it("external checker catalogs are pinned independently of the framework", async 
     expect(() => pinCheckpoint(a, b)).toThrow(/mismatch/);
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+});
+
+it("pins renderer build bytes independently of the scorer and task catalog", () => {
+  const renderDist = mkdtempSync(join(tmpdir(), "eval-render-checker-"));
+  try {
+    const options = { renderDist };
+    expect(() => harnessIdentity(options)).toThrow(/Build packages\/render/);
+    mkdirSync(join(renderDist, "packet"));
+    writeFileSync(
+      join(renderDist, "packet/navigation-walk.js"),
+      'export { visible } from "./paint.js";',
+    );
+    const helper = join(renderDist, "packet/paint.js");
+    writeFileSync(helper, "export const visible = true;");
+    const first = harnessIdentity(options);
+    expect(harnessIdentity(options)).toEqual(first);
+    writeFileSync(helper, "export const visible = false;");
+    const changed = harnessIdentity(options);
+    expect(changed.harnessHash).toBe(first.harnessHash);
+    expect(changed.checkerHarnessHash).not.toBe(first.checkerHarnessHash);
+    expect(changed.checkerHash).not.toBe(first.checkerHash);
+    expect(() => pinCheckpoint(first, changed)).toThrow(/mismatch/);
+  } finally {
+    rmSync(renderDist, { recursive: true, force: true });
   }
 });

@@ -251,21 +251,13 @@ export function assessDogfood({
     byType = new Map(types.map((t) => [t.id, t])),
     drawn = drawingNames(packet),
     wireInk = drawnWires(packet),
-    drawnUids = new Set(
-      schematicSheets(packet).flatMap((sheet) =>
-        (sheet.references ?? []).map(
-          (reference) =>
-            reference.wireUid ?? reference.uid ?? reference.deviceUid,
-        ),
-      ),
-    ),
     requirements = spec.requirements;
   const applies = calls.flatMap((call) => {
     const request = applyRequest(call);
     return request && call.editsByThisCall?.length ? [{ call, request }] : [];
   });
   const changedWires = changedWireUids(applies);
-  let conveyorWireInk;
+  let paintedChangeWires;
   const uidNames = new Map(sourceObjects.map((o) => [o.uid, o.designation]));
   const warnings = diagnostics.map((d) => ({
     ...d,
@@ -313,13 +305,11 @@ export function assessDogfood({
           if (changeRow && object.kind === "wire")
             return (
               changedWires.has(object.uid) &&
-              (requirement.id === "C-CHANGE"
-                ? (conveyorWireInk ??= new Set(
-                    schematicSheets(packet).flatMap((sheet) =>
-                      sheet.svg ? [...paintedWireUids(sheet.svg)] : [],
-                    ),
-                  )).has(object.uid)
-                : wireInk.has(object.uid) || drawnUids.has(object.uid))
+              (paintedChangeWires ??= new Set(
+                schematicSheets(packet).flatMap((sheet) =>
+                  sheet.svg ? [...paintedWireUids(sheet.svg)] : [],
+                ),
+              )).has(object.uid)
             );
           return drawn.has(tag);
         });

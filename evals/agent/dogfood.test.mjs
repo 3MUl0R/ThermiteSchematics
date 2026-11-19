@@ -663,9 +663,9 @@ it.each(["D-pump", "D-conveyor"])(
   },
 );
 
-function changeFixture() {
-  const x = fixture();
-  const row = x.matrix.find((r) => r.id === "C-CHANGE");
+function changeFixture(taskName = "D-conveyor") {
+  const x = fixture(taskName);
+  const row = x.matrix.find((r) => /^(?:C|P)-CHANGE$/.test(r.id));
   row.designations = ["PLC1", "W-PSU-L"];
   const after = x.sourceObjects.find((o) => o.uid === "w1");
   const before = { ...after, properties: { label: "previous label" } };
@@ -727,6 +727,41 @@ it.each([
   const { x } = changeFixture();
   x.packet.sheets[0].svg = canvas(route(attribute, "w1", halo + darkRoute));
   expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+});
+
+it("accepts painted circuit ink for an applied P-CHANGE wire", () => {
+  const { x, row } = changeFixture("D-pump");
+  x.packet.sheets[0].svg = canvas(
+    route("data-circuit-conductor", "w1", darkRoute),
+  );
+  const result = assessDogfood(x);
+  expect(result.requirements.find((r) => r.id === row.id).pass).toBe(true);
+  expect(result.checks.requirementMatrix).toBe(true);
+});
+
+it("rejects a P-CHANGE wire that appears only as a sheet reference", () => {
+  const { x, row } = changeFixture("D-pump");
+  x.packet.sheets[0].svg = "<svg/>";
+  x.packet.sheets[0].references.push({ wireUid: "w1", designation: "W-PSU-L" });
+  const result = assessDogfood(x);
+  expect(result.requirements.find((r) => r.id === row.id).pass).toBe(false);
+  expect(result.checks.requirementMatrix).toBe(false);
+});
+
+it("inherits the conductor UID through nested groups and stops at a new conductor", () => {
+  const { x } = changeFixture();
+  x.packet.sheets[0].svg = canvas(
+    route("data-circuit-conductor", "w1", `<g><g>${darkRoute}</g></g>`),
+  );
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+  x.packet.sheets[0].svg = canvas(
+    route(
+      "data-circuit-conductor",
+      "w1",
+      `<g>${route("data-circuit-conductor", "other-uid", darkRoute)}</g>`,
+    ),
+  );
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
 });
 
 it("accepts a conductor with a visible run across the viewport", () => {

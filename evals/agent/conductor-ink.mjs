@@ -79,7 +79,8 @@ function visibleRun(g) {
   const [a, b, c, d] = g.matrix;
   if (!(Math.abs(a * d - b * c) > 0)) return false;
   // Route paths are orthogonal. Requiring a positive-length run after
-  // projecting and clipping excludes moves, zero-length paths and edge touches.
+  // projecting and clipping excludes moves and point contacts. The generated
+  // route palette and dash patterns have contrast and positive dash lengths.
   try {
     return pathInk(g.node.attrs.d ?? "").some((segment) =>
       intersectsClip(segment, g),
@@ -135,8 +136,9 @@ export function paintedWireUids(svg) {
       visibleRun(g)
     )
       uids.add(uid);
+    const childUid = groupedConductor(node) ?? groupUid;
     for (const child of node.children)
-      visit(child, g.style?.["clip-path"], groupedConductor(node));
+      visit(child, g.style?.["clip-path"], childUid);
   }
   visit(root);
   return uids;
