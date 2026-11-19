@@ -694,12 +694,12 @@ function changeFixture() {
     },
   });
   const wire = (uid) =>
-    `<path class="net-path wire-path" data-designation="label" data-wire-uid="${uid}" d="M 0 0 H 10"/>`;
+    `<path class="net-path wire-path" data-designation="label" data-wire-uid="${uid}" d="M 0 0 H 10" fill="none" stroke="#17212b" stroke-width="0.32"/>`;
   x.packet.sheets[0].svg = `<svg>${wire("w1")}</svg>`;
   return { x, row, wire };
 }
 
-it("accepts a changed wire by UID from schematic ink or a trusted reference", () => {
+it("requires painted C-CHANGE wire ink even when the UID has a sheet reference", () => {
   const { x } = changeFixture();
   expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
   x.packet.sheets[0].svg = "<svg/>";
@@ -707,7 +707,167 @@ it("accepts a changed wire by UID from schematic ink or a trusted reference", ()
     deviceUid: "w1",
     designation: "different-label",
   });
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+});
+
+// Sheet 3 of the retained C2 D-conveyor packet binds two strokes to the
+// conductor UID on the group. Its white halo alone is not conductor ink.
+const circuitPath = 'd="M 188.175 123.613 L 218.975 123.613"';
+const canvas = (body) => `<svg viewBox="0 0 420 297">${body}</svg>`;
+const route = (attribute, uid, ink, attributes = "") =>
+  `<g ${attribute}="${uid}" data-conductor-designation="W-PSU-L" ${attributes}><title>W-PSU-L</title>${ink}</g>`;
+const darkRoute = `<path ${circuitPath} fill="none" stroke="#17212b" stroke-width="0.32"/>`;
+const halo = `<path ${circuitPath} fill="none" stroke="white" stroke-width="1.1"/>`;
+
+it.each([
+  "data-circuit-conductor",
+  "data-wiring-conductor",
+  "data-loop-conductor",
+])("proves an applied wire UID from painted paths under %s", (attribute) => {
+  const { x } = changeFixture();
+  x.packet.sheets[0].svg = canvas(route(attribute, "w1", halo + darkRoute));
   expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+});
+
+it("accepts a conductor with a visible run across the viewport", () => {
+  const { x } = changeFixture();
+  x.packet.sheets[0].svg = canvas(
+    route(
+      "data-circuit-conductor",
+      "w1",
+      darkRoute,
+      'transform="translate(-200 0)"',
+    ),
+  );
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+});
+
+it.each([
+  [
+    "wrong UID",
+    canvas(route("data-circuit-conductor", "other-uid", halo + darkRoute)),
+  ],
+  [
+    "label only",
+    canvas(route("data-circuit-conductor", "w1", "<text>W-PSU-L</text>")),
+  ],
+  ["white halo only", canvas(route("data-circuit-conductor", "w1", halo))],
+  [
+    "zero stroke width",
+    canvas(
+      route(
+        "data-circuit-conductor",
+        "w1",
+        halo + darkRoute.replace("0.32", "0"),
+      ),
+    ),
+  ],
+  [
+    "unstroked path",
+    canvas(
+      route(
+        "data-circuit-conductor",
+        "w1",
+        darkRoute.replace("#17212b", "none"),
+      ),
+    ),
+  ],
+  [
+    "move only",
+    canvas(
+      route(
+        "data-circuit-conductor",
+        "w1",
+        darkRoute.replace(" L 218.975 123.613", ""),
+      ),
+    ),
+  ],
+  [
+    "zero-length segment",
+    canvas(
+      route(
+        "data-circuit-conductor",
+        "w1",
+        darkRoute.replace("218.975", "188.175"),
+      ),
+    ),
+  ],
+  [
+    "hidden ancestor",
+    canvas(
+      `<g style="display:none">${route("data-circuit-conductor", "w1", darkRoute)}</g>`,
+    ),
+  ],
+  [
+    "zero opacity",
+    canvas(route("data-circuit-conductor", "w1", darkRoute, 'opacity="0"')),
+  ],
+  [
+    "zero stroke opacity",
+    canvas(
+      route("data-circuit-conductor", "w1", darkRoute, 'stroke-opacity="0"'),
+    ),
+  ],
+  [
+    "outside the viewport",
+    canvas(
+      route(
+        "data-circuit-conductor",
+        "w1",
+        darkRoute,
+        'transform="translate(500 0)"',
+      ),
+    ),
+  ],
+  [
+    "outside an ancestor clip",
+    canvas(
+      `<defs><clipPath id="crop"><rect x="0" y="0" width="50" height="50"/></clipPath></defs><g clip-path="url(#crop)">${route("data-circuit-conductor", "w1", darkRoute)}</g>`,
+    ),
+  ],
+  [
+    "white halo with a colored label leader",
+    canvas(
+      route(
+        "data-wiring-conductor",
+        "w1",
+        halo +
+          darkRoute.replace("<path", '<path class="wire-label-leader-arrow"'),
+      ),
+    ),
+  ],
+  [
+    "zero ancestor opacity even when the path supplies its own opacity",
+    canvas(
+      `<g opacity="0.0">${route("data-circuit-conductor", "w1", darkRoute, 'opacity="1"')}</g>`,
+    ),
+  ],
+  [
+    "empty clip",
+    canvas(
+      `<defs><clipPath id="crop"><rect x="180" y="100" width="50" height="0"/></clipPath></defs>${route("data-circuit-conductor", "w1", darkRoute, 'clip-path="url(#crop)"')}`,
+    ),
+  ],
+  [
+    "hidden clipping rectangle",
+    canvas(
+      `<defs><clipPath id="crop"><rect x="180" y="100" width="60" height="60" display="none"/></clipPath></defs>${route("data-circuit-conductor", "w1", darkRoute, 'clip-path="url(#crop)"')}`,
+    ),
+  ],
+  [
+    "clipping shape outside the generated rectangle contract",
+    canvas(
+      `<defs><clipPath id="crop"><circle cx="8" cy="5" r="3"/></clipPath></defs>${route("data-circuit-conductor", "w1", darkRoute, 'clip-path="url(#crop)"')}`,
+    ),
+  ],
+  [
+    "inside definitions only",
+    canvas(`<defs>${route("data-circuit-conductor", "w1", darkRoute)}</defs>`),
+  ],
+])("refuses a represented wire with %s", (_, svg) => {
+  const { x } = changeFixture();
+  x.packet.sheets[0].svg = svg;
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
 });
 
 it("requires C-CHANGE subjects only from prompt version 1.6.1", () => {

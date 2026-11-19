@@ -1,3 +1,4 @@
+import { paintedWireUids } from "./conductor-ink.mjs";
 import { cableListingMatches } from "./cable-listing.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -264,6 +265,7 @@ export function assessDogfood({
     return request && call.editsByThisCall?.length ? [{ call, request }] : [];
   });
   const changedWires = changedWireUids(applies);
+  let conveyorWireInk;
   const uidNames = new Map(sourceObjects.map((o) => [o.uid, o.designation]));
   const warnings = diagnostics.map((d) => ({
     ...d,
@@ -311,7 +313,13 @@ export function assessDogfood({
           if (changeRow && object.kind === "wire")
             return (
               changedWires.has(object.uid) &&
-              (wireInk.has(object.uid) || drawnUids.has(object.uid))
+              (requirement.id === "C-CHANGE"
+                ? (conveyorWireInk ??= new Set(
+                    schematicSheets(packet).flatMap((sheet) =>
+                      sheet.svg ? [...paintedWireUids(sheet.svg)] : [],
+                    ),
+                  )).has(object.uid)
+                : wireInk.has(object.uid) || drawnUids.has(object.uid))
             );
           return drawn.has(tag);
         });
