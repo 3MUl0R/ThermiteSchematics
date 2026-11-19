@@ -369,12 +369,17 @@ layout.
 ## Issued peer and inventory references
 
 A conductor peer names both native terminals and the drawn peer's final
-sheet.zone. Relay interface pointers in terminal wiring views identify painted
+sheet.zone when space allows. Relay interface pointers in terminal wiring views identify painted
 counterpart terminals. They carry no claim about the presence of a function
 symbol. Connector attachment pointers use the occupied native port on the
 sheet with the painted attachment. When the attachment has no drawing, an
 inventory pointer names the exact assembly and locates its issued row. Pin
 mapping and occupancy retain their authored status.
+
+Peer notes first try the full text, then keep only the peer and its address.
+A bare address requires a unique peer obligation at that address on the sheet.
+Where these forms cannot fit, two measured lines retain the full text. Each
+form uses the same 2.5 mm type floor and the existing navigation clearance.
 
 Strip terminals print their existing Tn/Rn key with an inventory sheet
 number. The matching key on the inventory has its own space beside the table.

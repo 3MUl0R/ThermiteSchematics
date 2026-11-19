@@ -6,6 +6,48 @@ import type { SchematicPacketRequest } from "../src/packet/types.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { createTerminalIr } from "../../query/test/fixtures.js";
 
+import { conveyorRequest } from "./packet-navigation-review-fixture.js";
+import { repeatRequest } from "./wire-column-search-fixture.js";
+
+it.each([
+  {
+    project: "conveyor-line",
+    request: conveyorRequest(),
+    pages: 20,
+    token: "→ CB2.5/L3 04.D3",
+  },
+  {
+    project: "machine-demo",
+    request: repeatRequest("left-to-right"),
+    pages: 37,
+    token: "→ CB1.3/L2 02.B4",
+  },
+])(
+  "retains the issued Letter portrait $project packet with peer notes",
+  async ({ project, request, pages, token }) => {
+    const c = await compileProject(`examples/${project}`);
+    if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
+    const r = await renderSchematicPacket(
+      c.ir,
+      {
+        ...request,
+        layout: "standard",
+        page: { size: "letter", orientation: "portrait" },
+      },
+      c.presentation,
+    );
+    if (!r.ok) throw Error(JSON.stringify(r.error));
+    expect(r.value.sheets).toHaveLength(pages);
+    const notes = r.value.sheets.flatMap((sheet) =>
+      Array.from(
+        parseSvg(sheet.svg).querySelectorAll("[data-peer-reference]"),
+        (t) => t.textContent,
+      ),
+    );
+    expect(notes).toContain(token);
+  },
+);
+
 async function example(name: string, file = "packet.json") {
   const root = `examples/${name}`;
   const source = await compileProject(root);

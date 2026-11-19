@@ -175,12 +175,16 @@ function cardPeers(
           identity: [owner, elementId, other],
           owner: ink.rect,
           value: `${designation} · ${name(owner)} → ${name(other)} ${destinationToken(target)}`,
+          compact: `→ ${name(other)} ${destinationToken(target)}`,
+          destination: destinationToken(target),
         });
         receiver.entries.push({
           kind: "conductor-peer",
           identity: [other, elementId, owner],
           owner: target.point,
           value: `${designation} · ${name(other)} → ${name(owner)} ${destinationToken(origin)}`,
+          compact: `→ ${name(owner)} ${destinationToken(origin)}`,
+          destination: destinationToken(origin),
         });
       }
     }
@@ -243,6 +247,8 @@ function interfacePeers(
           identity: [origin.terminal, target.terminal],
           owner: origin.landing.point,
           value: `${names.get(relay.deviceUid)} · ${origin.kind} terminal ${origin.terminal.terminalKey} → ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
+          compact: `→ ${names.get(relay.deviceUid)} ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
+          destination: destinationToken(target.landing),
         });
       }
   }

@@ -145,3 +145,72 @@ it("rejects a dangling, stale or erased circuit footer", () => {
       "circuit-footer-reference-disagrees",
     );
 });
+
+const shortReference = {
+  kind: reference.peerReference,
+  source: ["R1", "X2", "CAP"],
+  values: [reference.text],
+  compactValues: ["→ CAP-X2 02.B4"],
+};
+const marker = (text) => ({ ...reference, text, fontSize: 2.5 });
+
+it("accepts a named compact peer and an unambiguous locator", () => {
+  for (const text of ["→ CAP-X2 02.B4", "→ 02.B4"]) {
+    expect(
+      peerReferenceFindings(1, { texts: [marker(text)] }, [shortReference]),
+    ).toEqual([]);
+  }
+});
+
+it.each([
+  ["wrong peer", marker("→ CAP-X4 02.B4"), [shortReference]],
+  ["wrong zone", marker("→ 02.B5"), [shortReference]],
+  [
+    "undersized locator",
+    { ...marker("→ 02.B4"), fontSize: 2.49 },
+    [shortReference],
+  ],
+  [
+    "ambiguous locator",
+    marker("→ 02.B4"),
+    [
+      shortReference,
+      {
+        ...shortReference,
+        source: ["R1", "X4", "DIFFERENT"],
+      },
+    ],
+  ],
+])("rejects a %s from measured short ink", (_, text, expected) => {
+  expect(peerReferenceFindings(1, { texts: [text] }, expected)[0].kind).toBe(
+    "issued-peer-reference-unbound",
+  );
+});
+
+it("requires the visible, aligned, complete two-line form", () => {
+  const lines = [
+    {
+      ...marker("R1.X2 · CAP-X2"),
+      peerGroup: "g1",
+      anchor: { x: 12, y: 15 },
+      bbox: { x: 12, y: 13, w: 22, h: 2 },
+    },
+    {
+      ...marker("→ 02.B4"),
+      peerGroup: "g1",
+      anchor: { x: 12, y: 18.5 },
+      bbox: { x: 12, y: 16.5, w: 12, h: 2 },
+    },
+  ];
+  const audit = (texts) =>
+    peerReferenceFindings(1, { texts }, [shortReference]);
+  expect(audit(lines)).toEqual([]);
+  for (const mutation of [
+    [lines[1]],
+    [lines[0], { ...lines[1], painted: false }],
+    [lines[0], { ...lines[1], text: "→ 02.B5" }],
+    [lines[0], { ...lines[1], anchor: { x: 13, y: 18.5 } }],
+    [lines[0], { ...lines[1], anchor: { x: 12, y: 15.3 } }],
+  ])
+    expect(audit(mutation)[0].kind).toBe("issued-peer-reference-unbound");
+});

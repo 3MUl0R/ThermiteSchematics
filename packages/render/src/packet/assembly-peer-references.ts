@@ -106,7 +106,8 @@ function attachmentEntries(
       .flatMap((p) =>
         p.ports.filter((candidate) => candidate.id === port.id),
       )[0];
-    const names = `${native.designation}.${native.key} · ${assembly.designation ?? assembly.uid}`;
+    const assemblyName = assembly.designation ?? assembly.uid;
+    const names = `${native.designation}.${native.key} · ${assemblyName}`;
     const identity = [port.deviceUid, port.portKey, assembly.uid];
     if (remote)
       return [
@@ -115,6 +116,8 @@ function attachmentEntries(
           identity,
           owner: port.point,
           value: `${names} → ${destinationToken(remote)}`,
+          compact: `→ ${assemblyName} ${destinationToken(remote)}`,
+          destination: destinationToken(remote),
         },
       ];
     if (local || [...drawn.values()].some((ids) => ids.has(assembly.uid)))
@@ -127,6 +130,8 @@ function attachmentEntries(
             identity,
             owner: port.point,
             value: `${names} inventory → ${destinationToken(row)}`,
+            compact: `→ ${assemblyName} inventory ${destinationToken(row)}`,
+            destination: destinationToken(row),
           },
         ]
       : [];

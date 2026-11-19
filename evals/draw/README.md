@@ -25,7 +25,12 @@ Version **5.30 (TEXT-NAV9)** extends **DQ-19** to reconcile direct peer and
 connector-inventory pointers, strip inventory sheet addresses, and circuit
 footer references against native identities and measured issued ink
 (#397, #429, #431, #434). The base can expose missing or dangling references
-that passed before this rule set.
+that passed before this rule set. The TEXT-NAV9 fit controls also measure
+compact peer names, unambiguous bare locators, and complete painted two-line
+notes against the same native destinations. Run the renderer fit comparison
+with `bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout>`.
+It adds paper and orientation variants and the narrow wire-field fixtures to
+the standing corpus without changing the strict checkpoint's case set.
 
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption

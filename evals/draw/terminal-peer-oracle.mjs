@@ -85,6 +85,9 @@ function cardObligations(ir, parts, wires, name) {
               (z) =>
                 `${label} · ${name(a)} → ${name(b)} ${loc(dest.sheet.number, z)}`,
             ),
+            compactValues: [...zones].map(
+              (z) => `→ ${name(b)} ${loc(dest.sheet.number, z)}`,
+            ),
           });
         };
         add(p, destination, owner, mate);
@@ -142,6 +145,10 @@ function interfaceObligations(ir, parts, names) {
             values: [...zones].map(
               (z) =>
                 `${names.get(r.deviceUid)} · ${p.kind} terminal ${p.terminal.terminalKey} → ${q.kind} terminal ${q.terminal.terminalKey} ${loc(q.part.sheet.number, z)}`,
+            ),
+            compactValues: [...zones].map(
+              (z) =>
+                `→ ${names.get(r.deviceUid)} ${q.kind} terminal ${q.terminal.terminalKey} ${loc(q.part.sheet.number, z)}`,
             ),
           },
         ];
