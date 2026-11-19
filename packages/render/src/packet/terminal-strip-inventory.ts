@@ -84,11 +84,11 @@ function inventoryLabelPair(
   const token = `S${String(target.sheet).padStart(2, "0")}`;
   const rowInk = printableTextMetrics(target.ref, 2.5);
   const sheetInk = printableTextMetrics(token, 2.5);
-  if (rowInk.advance + sheetInk.advance + 1.5 <= w) {
+  if (rowInk.advance + sheetInk.advance + 2.1 <= w) {
     return {
       labels:
-        text(x + 0.4, baseline, target.ref, 2.5) +
-        inventoryLabel(target.sheet, token, x + w - 0.4, baseline, "end"),
+        text(x + 0.7, baseline, target.ref, 2.5) +
+        inventoryLabel(target.sheet, token, x + w - 0.7, baseline, "end"),
     };
   }
   // Fit three lines using painted extents, between the existing 0.35 mm rules.

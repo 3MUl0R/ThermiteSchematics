@@ -69,7 +69,9 @@ export function sourceIncidences(
   }
   return out;
 }
-function pathElement(g: NavigationGeometry): ConductiveElementId | undefined {
+export function pathElement(
+  g: NavigationGeometry,
+): ConductiveElementId | undefined {
   const a = g.node.attrs;
   if (a["data-wire-uid"]) return { kind: "wire", uid: a["data-wire-uid"] };
   if (a["data-jumper-uid"])

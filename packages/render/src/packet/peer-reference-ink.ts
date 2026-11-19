@@ -2,13 +2,17 @@ import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import type { Rect } from "../device-legend/geometry.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import { required } from "../presentation/util.js";
-import { allocateNavigationSlots } from "./navigation-slots.js";
+import {
+  placePeerNotes,
+  type PeerNotePlacement,
+} from "./peer-note-placement.js";
 import type { NavigationShape } from "./navigation-types.js";
 import { text } from "./svg.js";
 import type { RenderedSheet } from "./types.js";
 
 const FONT_MM = 2.5;
 const LINE_MM = 3.5;
+const METRIC_PAD_MM = 0.02;
 
 export interface PeerReference {
   kind:
@@ -21,6 +25,9 @@ export interface PeerReference {
   compact: string;
   destination: string;
   owner: Rect;
+  along?: readonly Rect[];
+  captions?: readonly Rect[];
+  ownerLabel?: string;
 }
 
 const advance = (value: string) => printableTextMetrics(value, FONT_MM).advance;
@@ -39,23 +46,55 @@ function twoLines(value: string) {
   return result;
 }
 
+function printedBounds(lines: readonly string[]) {
+  const metrics = lines.map((line) => printableTextMetrics(line, FONT_MM));
+  const left = Math.min(...metrics.map((ink) => ink.left));
+  const right = Math.max(...metrics.map((ink) => ink.right));
+  const top = Math.min(...metrics.map((ink, i) => i * LINE_MM - ink.top));
+  const bottom = Math.max(...metrics.map((ink, i) => i * LINE_MM - ink.bottom));
+  return { left, top, w: right - left, h: bottom - top };
+}
+
 function shape(id: string, lines: readonly string[]): NavigationShape {
-  const width = Math.max(...lines.map(advance));
+  const ink = printedBounds(lines);
   return {
     id,
     mode: "local",
-    inkMm: { x: 0, y: 0, w: width + 2, h: 4.6 + LINE_MM * (lines.length - 1) },
+    inkMm: {
+      x: 0,
+      y: 0,
+      w: ink.w + 2 * METRIC_PAD_MM,
+      h: ink.h + 2 * METRIC_PAD_MM,
+    },
     maximumForms: lines,
-    wrapWidthMm: width,
+    wrapWidthMm: ink.w,
   };
 }
 
-function noteShapes(entry: PeerReference, unique: boolean) {
+function noteShapes(
+  entry: PeerReference,
+  unique: boolean,
+  uniqueForOwner: boolean,
+) {
   const forms = [
     shape("full", [entry.value]),
     shape("compact", [entry.compact]),
   ];
+  if (entry.ownerLabel)
+    forms.push(
+      shape("named-compact", [`${entry.ownerLabel} ${entry.compact}`]),
+    );
   if (unique) forms.push(shape("locator", [`→ ${entry.destination}`]));
+  if (uniqueForOwner && entry.ownerLabel) {
+    const destination = `→ ${entry.destination}`;
+    forms.push(shape("qualified", [`${entry.ownerLabel} ${destination}`]));
+    forms.push(shape("qualified-wrapped", [entry.ownerLabel, destination]));
+  }
+  if (entry.ownerLabel) {
+    const wrappedCompact = twoLines(`${entry.ownerLabel} ${entry.compact}`);
+    if (wrappedCompact.length)
+      forms.push(shape("named-compact-wrapped", wrappedCompact));
+  }
   const wrapped = twoLines(entry.value);
   if (wrapped.length) forms.push(shape("wrapped", wrapped));
   return forms;
@@ -63,12 +102,17 @@ function noteShapes(entry: PeerReference, unique: boolean) {
 
 function noteInk(
   { kind, identity }: PeerReference,
-  lines: readonly string[],
-  box: Rect,
+  { lines, box }: PeerNotePlacement,
 ) {
   const claims = `data-peer-reference="${kind}" data-peer-source="${attr(JSON.stringify(identity))}"`;
+  const printed = printedBounds(lines);
   const ink = lines.map((line, i) =>
-    text(box.x + 1, box.y + 3 + i * LINE_MM, line, FONT_MM),
+    text(
+      box.x - printed.left + METRIC_PAD_MM,
+      box.y - printed.top + METRIC_PAD_MM + i * LINE_MM,
+      line,
+      FONT_MM,
+    ),
   );
   return ink.length === 1
     ? required(ink[0], "Missing peer reference line").replace(
@@ -84,42 +128,14 @@ export function emitPeerReferences(
   entries: readonly PeerReference[],
 ): RenderedSheet {
   if (!entries.length) return sheet;
-  const uses = new Map<string, number>();
-  for (const { destination } of entries)
-    uses.set(destination, (uses.get(destination) ?? 0) + 1);
-  const requests = entries.map((entry, i) => {
-    const id = `peer-reference/${sheet.number}/${i}`;
-    const shapes = noteShapes(entry, uses.get(entry.destination) === 1);
-    const full = required(shapes[0], "Missing peer reference full form");
-    return {
-      owner: entry.owner,
-      reservation: {
-        id,
-        ownerAppearance: id,
-        ownerOccurrence: id,
-        profileId: entry.kind,
-        space: "sheet-slot" as const,
-        inkMm: full.inkMm,
-        maximumForms: full.maximumForms,
-        shapes,
-      },
-    };
-  });
-  const slots = allocateNavigationSlots(
-    requests,
-    field,
-    sheet.svg,
-    sheet.number,
-  );
+  const placements = placePeerNotes(sheet, field, entries, noteShapes);
   const markup = entries
-    .map((entry, i) => {
-      const slot = required(slots[i], "Missing peer reference slot");
-      return noteInk(
+    .map((entry, i) =>
+      noteInk(
         entry,
-        slot.maximumForms,
-        required(slot.allocatedMm, "Missing peer reference placement").rect,
-      );
-    })
+        required(placements[i], "Missing peer reference placement"),
+      ),
+    )
     .join("");
   return {
     ...sheet,

@@ -214,3 +214,69 @@ it("requires the visible, aligned, complete two-line form", () => {
   ])
     expect(audit(mutation)[0].kind).toBe("issued-peer-reference-unbound");
 });
+
+// Chromium measurements from 8b9c63b, conveyor Letter portrait, LTR, sheet 1.
+it.each([
+  [
+    "CB1.3/L2",
+    "→ SRC1.L2 04.A4",
+    [99.785, 194.063, 1, 1],
+    [57.672, 216.95, 18.997, 1.848],
+  ],
+  [
+    "SRC1.PE",
+    "→ M2.PE 05.C3",
+    [138.995, 110.688, 31.007, 8.337],
+    [165.722, 174.426, 16.812, 1.848],
+  ],
+  [
+    "SRC1.L3",
+    "→ CB2.5/L3 04.D3",
+    [94.226, 109.188, 34.769, 8.337],
+    [56.387, 141.573, 20.19, 1.848],
+  ],
+])(
+  "rejects the reviewed displacement from %s",
+  (ownerLabel, compact, owner, old) => {
+    const box = ([x, y, w, h]) => ({ x, y, w, h });
+    const obligation = {
+      ...shortReference,
+      ownerLabel,
+      owners: [box(owner)],
+      values: [`W-901 · ${ownerLabel} ${compact}`],
+      compactValues: [compact],
+    };
+    const legal = [owner[0], owner[1] + owner[3] + 1.7, old[2], old[3]];
+    const audit = (bbox) =>
+      peerReferenceFindings(
+        1,
+        { texts: [{ ...marker(compact), bbox: box(bbox) }] },
+        [obligation],
+      );
+    expect(audit(legal)).toEqual([]);
+    expect(audit(old)).toEqual([
+      expect.objectContaining({
+        kind: "issued-peer-reference-owner-distance",
+        gapMm: expect.any(Number),
+      }),
+    ]);
+  },
+);
+
+it("requires a source name outside the directly adjacent band", () => {
+  const obligation = {
+    ...shortReference,
+    ownerLabel: "R1.X2",
+    owners: [{ x: 10, y: 10, w: 20, h: 8 }],
+  };
+  const bbox = { x: 10, y: 22, w: 20, h: 2 };
+  const audit = (text) =>
+    peerReferenceFindings(1, { texts: [{ ...marker(text), bbox }] }, [
+      obligation,
+    ]);
+  for (const note of ["R1.X2 → 02.B4", "R1.X2 → CAP-X2 02.B4"])
+    expect(audit(note)).toEqual([]);
+  for (const note of ["→ 02.B4", "→ CAP-X2 02.B4"])
+    expect(audit(note)[0].kind).toBe("issued-peer-reference-owner-distance");
+  expect(audit("R1.X4 → 02.B4")[0].kind).toBe("issued-peer-reference-unbound");
+});

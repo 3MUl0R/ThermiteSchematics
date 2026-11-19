@@ -44,7 +44,7 @@ it.each([
         (t) => t.textContent,
       ),
     );
-    expect(notes).toContain(token);
+    expect(notes.some((note) => note?.endsWith(token))).toBe(true);
   },
 );
 
@@ -197,9 +197,7 @@ it("points an undrawn assembly at its exact issued inventory row (#429)", async 
       '[data-peer-reference="assembly-inventory"]',
     ),
   ].find((el) => el.textContent?.includes("R1.X09"));
-  expect(note?.textContent).toMatch(
-    /^R1\.X09 · CBL1 inventory → 04\.[A-D][1-6]$/u,
-  );
+  expect(note?.textContent).toMatch(/^R1\.X09 · CBL1 inventory → 04\.D3$/u);
   expect(
     sheets[1]!.document.querySelector('[data-connector-port="X09"]')
       ?.textContent,

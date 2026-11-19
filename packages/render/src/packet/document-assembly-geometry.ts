@@ -1,14 +1,44 @@
 import type { ElectricalIr } from "@thermite/compiler";
 import { buildConnectorAssemblyInventory } from "@thermite/query";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
-import { navigationGeometry } from "./navigation-walk.js";
+import {
+  navigationGeometry,
+  type NavigationGeometry,
+} from "./navigation-walk.js";
 import { navigationZone } from "./navigation-location.js";
 import { bounds } from "./page.js";
 import { inside, project } from "../device-legend/geometry.js";
+import { textInk } from "../device-legend/svg-ink.js";
 import { required } from "../presentation/util.js";
 
 export const connectorPortKey = (uid: string, key: string) =>
   JSON.stringify([uid, key]);
+function portCircle(a: Record<string, string>) {
+  const r = Number(a.r);
+  return {
+    x: Number(a.cx ?? 0) - r,
+    y: Number(a.cy ?? 0) - r,
+    w: 2 * r,
+    h: 2 * r,
+  };
+}
+
+function printedPortKey(
+  port: NavigationGeometry,
+  key: string,
+  geometry: ReadonlyMap<NavigationGeometry["node"], NavigationGeometry>,
+) {
+  const label = port.node.children.find(
+    (n) => n.name === "text" && n.text.trim() === key,
+  );
+  const mark = label && geometry.get(label);
+  const ink =
+    mark?.visible && mark.style ? textInk(mark.node, mark.style) : undefined;
+  if (!mark || !ink) return;
+  const box = project(ink, mark.matrix);
+  return inside(box, mark.clip) ? box : undefined;
+}
+
 export function assemblyPortGeometry(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
@@ -58,6 +88,8 @@ export function assemblyPortGeometry(
           sheet: sheet.number,
           zone: navigationZone(point.x, point.y, field),
           point,
+          label: printedPortKey(g, key, byNode),
+          owner: project(portCircle(circle.attrs), mark.matrix),
         },
       ];
     });

@@ -1,4 +1,9 @@
-import type { ElectricalIr, IrFunction, TerminalId } from "@thermite/compiler";
+import type {
+  ConductiveElementId,
+  ElectricalIr,
+  IrFunction,
+  TerminalId,
+} from "@thermite/compiler";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
 import { authoredTerminalIncidence } from "../off-view/incidence.js";
 import { functionIdKey, terminalIdKey } from "../ordering.js";
@@ -12,7 +17,9 @@ import {
   type NavigationGeometry,
 } from "./navigation-walk.js";
 import { destinationToken, navigationZone } from "./navigation-location.js";
+import { textInk } from "../device-legend/svg-ink.js";
 import { bounds } from "./page.js";
+import { peerRouteIndex, landsOnMarks } from "./peer-route-ink.js";
 import { paintedStroke } from "./document-assembly-geometry.js";
 import {
   emitPeerReferences,
@@ -23,6 +30,8 @@ interface Landing {
   sheet: number;
   zone: string;
   point: Rect;
+  owner: Rect;
+  marks: Rect[];
 }
 function paintedFill(g: NavigationGeometry) {
   const s = g.style ?? g.node.attrs;
@@ -65,6 +74,20 @@ function peerTerminalKeys(
   return keys;
 }
 
+function markerRegion(mark: NavigationGeometry) {
+  const { cx, cy, r } = mark.node.attrs;
+  const radius = Number(r);
+  return project(
+    {
+      x: Number(cx ?? 0) - radius,
+      y: Number(cy ?? 0) - radius,
+      w: 2 * radius,
+      h: 2 * radius,
+    },
+    mark.matrix,
+  );
+}
+
 function terminalLandings(
   ir: Readonly<ElectricalIr>,
   draft: Draft,
@@ -76,16 +99,24 @@ function terminalLandings(
   const terminals = new Map<string, Landing>();
   for (const mark of geometry) {
     const key = keys.get(mark.node);
-    if (!key || terminals.has(key)) continue;
+    if (!key) continue;
     const circle = mark.node.name === "circle";
     if (circle && Number(mark.node.attrs.r) <= 0) continue;
     if (!paintedFill(mark) && !(circle && paintedStroke(mark))) continue;
     const point = drawnTerminalAnchor(mark);
     if (!inside(point, mark.clip) || !inside(point, field)) continue;
+    const owner = circle ? markerRegion(mark) : point;
+    const existing = terminals.get(key);
+    if (existing) {
+      existing.marks.push(owner);
+      continue;
+    }
     terminals.set(key, {
       sheet: sheet.number,
       zone: navigationZone(point.x, point.y, field),
       point,
+      owner,
+      marks: [owner],
     });
   }
   return terminals;
@@ -124,7 +155,58 @@ type TerminalSheet = {
   geometry: readonly NavigationGeometry[];
   landings: ReadonlyMap<string, Landing>;
   entries: PeerReference[];
+  route: ReturnType<typeof peerRouteIndex>;
 };
+function conductorCaptions(part: TerminalSheet, element: ConductiveElementId) {
+  const key = JSON.stringify(element);
+  const calls = new Set(
+    part.sheet.continuations
+      .filter((c) => JSON.stringify(c.provenance) === key)
+      .map((c) => c.id),
+  );
+  return part.geometry.flatMap((g) => {
+    if (
+      g.node.name !== "text" ||
+      !paintedFill(g) ||
+      !g.style ||
+      !calls.has(g.style["data-continuation-id"] ?? "")
+    )
+      return [];
+    const ink = textInk(g.node, g.style);
+    if (!ink) return [];
+    const box = project(ink, g.matrix);
+    return inside(box, g.clip) ? [box] : [];
+  });
+}
+
+function conductorNote(
+  part: TerminalSheet,
+  from: TerminalId,
+  to: TerminalId,
+  connection: { elementId: ConductiveElementId; designation: string },
+  owner: Rect,
+  target: Landing,
+  name: (t: TerminalId) => string,
+) {
+  const { elementId, designation } = connection;
+  const route = part.route(elementId);
+  const marks = part.landings.get(terminalIdKey(from))?.marks;
+  const opposite = part.landings.get(terminalIdKey(to))?.marks;
+  if (landsOnMarks(route, marks) && landsOnMarks(route, opposite)) return;
+  const destination = destinationToken(target);
+  part.entries.push({
+    kind: "conductor-peer",
+    identity: [from, elementId, to],
+    owner,
+    along: route.runs,
+    captions: conductorCaptions(part, elementId),
+    ownerLabel: name(from),
+    value: `${designation} · ${name(from)} → ${name(to)} ${destination}`,
+    compact: `→ ${name(to)} ${destination}`,
+    destination,
+  });
+}
+
 function cardPeers(
   parts: readonly TerminalSheet[],
   ir: Readonly<ElectricalIr>,
@@ -170,22 +252,16 @@ function cardPeers(
         );
         const target = receiver?.landings.get(terminalIdKey(other));
         if (!receiver || !target) continue;
-        part.entries.push({
-          kind: "conductor-peer",
-          identity: [owner, elementId, other],
-          owner: ink.rect,
-          value: `${designation} · ${name(owner)} → ${name(other)} ${destinationToken(target)}`,
-          compact: `→ ${name(other)} ${destinationToken(target)}`,
-          destination: destinationToken(target),
-        });
-        receiver.entries.push({
-          kind: "conductor-peer",
-          identity: [other, elementId, owner],
-          owner: target.point,
-          value: `${designation} · ${name(other)} → ${name(owner)} ${destinationToken(origin)}`,
-          compact: `→ ${name(owner)} ${destinationToken(origin)}`,
-          destination: destinationToken(origin),
-        });
+        conductorNote(part, owner, other, connection, ink.rect, target, name);
+        conductorNote(
+          receiver,
+          other,
+          owner,
+          connection,
+          target.owner,
+          origin,
+          name,
+        );
       }
     }
 }
@@ -245,13 +321,20 @@ function interfacePeers(
         origin.part.entries.push({
           kind: "terminal-interface",
           identity: [origin.terminal, target.terminal],
-          owner: origin.landing.point,
+          owner: origin.landing.owner,
+          ownerLabel: `${names.get(relay.deviceUid)} ${origin.terminal.terminalKey}`,
           value: `${names.get(relay.deviceUid)} · ${origin.kind} terminal ${origin.terminal.terminalKey} → ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
           compact: `→ ${names.get(relay.deviceUid)} ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
           destination: destinationToken(target.landing),
         });
       }
   }
+}
+
+function peerNoteField(draft: Draft, page: PaperPage) {
+  const field = bounds(draft.title, page);
+  const x = page.marginMm + 6;
+  return { ...field, x, w: page.widthMm - 2 * x };
 }
 
 export function terminalPeerReferences(
@@ -280,17 +363,23 @@ export function terminalPeerReferences(
         geometry,
         landings: terminalLandings(ir, draft, sheet, field, geometry),
         entries: [],
+        route: peerRouteIndex(geometry),
       },
     ];
   });
   cardPeers(parts, ir);
   interfacePeers(parts, ir);
   const changes = new Map(
-    parts.map(({ sheet, field, entries }) => [
+    parts.map(({ sheet, entries }) => [
       sheet.number,
-      emitPeerReferences(sheet, field, [
-        ...new Map(entries.map((entry) => [entry.value, entry])).values(),
-      ]),
+      emitPeerReferences(
+        sheet,
+        peerNoteField(
+          required(drafts[sheet.number - 1], "Missing peer note drawing"),
+          page,
+        ),
+        [...new Map(entries.map((entry) => [entry.value, entry])).values()],
+      ),
     ]),
   );
   return sheets.map((sheet) => changes.get(sheet.number) ?? sheet);

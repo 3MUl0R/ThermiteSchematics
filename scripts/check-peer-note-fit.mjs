@@ -1,9 +1,10 @@
 // Compare the public renderer across the drawing corpus and narrow wire-field fixtures.
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { parseArgs } from "node:util";
 import { cases, prepare } from "../evals/draw/corpus.mjs";
 import { command, canonical } from "../evals/draw/support.mjs";
@@ -12,12 +13,14 @@ import { repeatRequest } from "../packages/render/test/wire-column-search-fixtur
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const { values } = parseArgs({
-  options: { "base-engine": { type: "string" } },
+  options: {
+    "base-engine": { type: "string" },
+    "base-checkpoint": { type: "string" },
+    "head-checkpoint": { type: "string" },
+  },
 });
 assert(values["base-engine"], "Use --base-engine <built base checkout>");
 const baseRoot = resolve(values["base-engine"]);
-const paperSizes = ["tabloid", "a3", "letter"];
-const orientations = ["landscape", "portrait"];
 const flows = ["left-to-right", "top-to-bottom"];
 
 async function engine(checkout) {
@@ -32,18 +35,20 @@ async function engine(checkout) {
 }
 
 function requestsFor(c, request) {
-  const requests = [{ id: c.id, request, standing: !c.browserFixture }];
-  if (!c.sweep)
-    for (const size of paperSizes)
-      for (const orientation of orientations)
-        requests.push({
-          id: `${c.id}/${size}-${orientation}`,
-          request: {
-            ...request,
-            page: { ...request.page, size, orientation },
-          },
-          standing: false,
-        });
+  const variants = [
+    ["a4-portrait-same", "a4", "portrait", request.layout],
+    ["a4-landscape-same", "a4", "landscape", request.layout],
+    ["letter-portrait-compact", "letter", "portrait", "compact"],
+    ["a4-portrait-compact", "a4", "portrait", "compact"],
+  ];
+  const requests = variants.map(([id, size, orientation, layout]) => ({
+    id: `${c.id}/${id}`,
+    request: {
+      ...request,
+      ...(layout ? { layout } : {}),
+      page: { ...request.page, size, orientation },
+    },
+  }));
   const distinct = new Map();
   for (const entry of requests) {
     const key = JSON.stringify(canonical(entry.request));
@@ -66,9 +71,39 @@ function browserFixtures() {
         page: { size: "letter", orientation: "portrait" },
       },
       flow,
-      browserFixture: true,
     })),
   );
+}
+
+async function assertStrictPair(engines) {
+  const base = values["base-checkpoint"],
+    head = values["head-checkpoint"];
+  if (!base && !head) return;
+  assert(base && head, "Supply both strict checkpoint summaries");
+  const results = await Promise.all(
+    [base, head].map(async (path) => {
+      const bytes = await readFile(path);
+      return JSON.parse(path.endsWith(".gz") ? gunzipSync(bytes) : bytes);
+    }),
+  );
+  const [old, current] = results;
+  assert.deepEqual(
+    results.map((r) => r.engine.commit),
+    engines.map((e) => e.commit),
+  );
+  assert.deepEqual(old.cases, current.cases);
+  assert.equal(old.cases.length, cases().length);
+  assert.equal(old.corpusSha256, current.corpusSha256);
+  assert.deepEqual(
+    results.map((r) => r.sourceHashes.sheets.length),
+    [715, 715],
+  );
+  const issued = (r) => new Set(r.sourceHashes.sheets.map((s) => s.case));
+  assert.deepEqual(issued(old), issued(current));
+  const unexpected = current.results.filter((r) =>
+    ["fail", "xpass", "infrastructure-error"].includes(r.status),
+  );
+  assert.deepEqual(unexpected, [], "Unexpected strict head observations");
 }
 
 function result(output) {
@@ -109,7 +144,7 @@ async function compareFixture(c, directory, engines) {
         );
       }),
     );
-    const row = { id: v.id, standing: v.standing, base, head };
+    const row = { id: v.id, base, head };
     console.log(JSON.stringify(row));
     rows.push(row);
   }
@@ -119,27 +154,22 @@ async function compareFixture(c, directory, engines) {
 const directory = await mkdtemp(join(tmpdir(), "thermite-peer-fit-"));
 try {
   const engines = await Promise.all([engine(baseRoot), engine(root)]);
+  await assertStrictPair(engines);
   console.log(JSON.stringify({ commits: engines.map((e) => e.commit) }));
   const measurements = [];
   for (const c of [...cases(), ...browserFixtures()])
     measurements.push(...(await compareFixture(c, directory, engines)));
   const losses = measurements.filter((r) => r.base.sheets && r.head.refusal);
-  const standing = measurements.filter((r) => r.standing);
-  assert.equal(standing.length, cases().length);
-  const refusals = standing.filter((r) => r.base.refusal);
+  assert.equal(measurements.length, 402);
   console.log(
     JSON.stringify({
       cases: measurements.length,
       basePositive: measurements.filter((r) => r.base.sheets).length,
       headPositive: measurements.filter((r) => r.head.sheets).length,
-      standing: standing.length,
-      standingRefusals: refusals.map((r) => r.id),
       positiveToRefusal: losses.map((r) => r.id),
     }),
   );
   assert.deepEqual(losses, [], "An issued base packet refused at head");
-  for (const row of refusals)
-    assert.deepEqual(row.head.refusal, row.base.refusal, row.id);
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

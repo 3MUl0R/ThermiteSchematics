@@ -24,13 +24,23 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 Version **5.30 (TEXT-NAV9)** extends **DQ-19** to reconcile direct peer and
 connector-inventory pointers, strip inventory sheet addresses, and circuit
 footer references against native identities and measured issued ink
-(#397, #429, #431, #434). The base can expose missing or dangling references
-that passed before this rule set. The TEXT-NAV9 fit controls also measure
-compact peer names, unambiguous bare locators, and complete painted two-line
-notes against the same native destinations. Run the renderer fit comparison
-with `bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout>`.
-It adds paper and orientation variants and the narrow wire-field fixtures to
-the standing corpus without changing the strict checkpoint's case set.
+(#397, #429, #431, #434). The checker compares the ink of each peer
+note with the source's painted card or terminal. Text without a source name
+must be directly adjacent (2.1 mm). Named text can sit within 6.1 mm of the
+owner, its conductor stroke, or its continuation caption. Chromium comparisons
+allow 0.15 mm for measurement. A conductor which already reaches both native
+endpoints on a sheet needs no peer note.
+
+Run the strict pair fit assertion after both captures.
+
+```sh
+bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout> \
+  --base-checkpoint <base-summary.json.gz> --head-checkpoint <head-summary.json.gz>
+```
+
+It checks issuance across all 108 standing captures (715 sheets) and renders
+402 additional A4, Letter and compact variants of the corpus and the narrow
+browser wire-field fixtures.
 
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption

@@ -80,7 +80,10 @@ function viewport(node: SvgNode, state: State, nested: boolean): State {
     ) ?? { x: 0, y: 0, w: 0, h: 0 },
   };
 }
-function textInk(n: SvgNode, css: Record<string, string>): Rect | undefined {
+export function textInk(
+  n: SvgNode,
+  css: Record<string, string>,
+): Rect | undefined {
   const size = number(css, "font-size", 10),
     value =
       n.attrs["xml:space"] === "preserve"

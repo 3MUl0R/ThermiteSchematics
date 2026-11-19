@@ -141,6 +141,19 @@ function localSourceAxes(
     ),
   };
 }
+function laneLocal(
+  shape: NavigationShape,
+  box: Rect,
+  ink: Rect | undefined,
+  locality: SymbolGeometry | undefined,
+) {
+  return (
+    !locality ||
+    (!locality.sourceAnchorsMm && shape.mode !== "local") ||
+    localNavigationSlot(navigationPlacementInk(box, ink), locality)
+  );
+}
+
 /** All local shapes precede all self-located shapes; preserve authored shape order within each mode. */
 export function searchNavigationSlot(
   shapes: readonly NavigationShape[],
@@ -153,6 +166,7 @@ export function searchNavigationSlot(
   families?: readonly NavigationPlacementFamily[],
   localityInkMm?: ReadonlyMap<string, Rect>,
   fitPrintedInk = false,
+  accept?: (box: Rect, shape: NavigationShape) => boolean,
 ) {
   const fitArea = fitPrintedInk ? elementDrawingArea(area) : area;
   const textVerticalClearanceMm = fitPrintedInk
@@ -196,15 +210,10 @@ export function searchNavigationSlot(
           ),
         )) &&
       inside(b, fitArea) &&
-      // Reject remote/ambiguous slots before scanning every protected rectangle.
-      ((shape.mode !== "local" && !locality?.sourceAnchorsMm) ||
-        !locality ||
-        localNavigationSlot(
-          navigationPlacementInk(envelope(b), ink),
-          locality,
-        )) &&
+      laneLocal(shape, envelope(b), ink, locality) &&
       obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm));
+      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm)) &&
+      (!accept || accept(envelope(b), shape));
     const box = fitPrintedInk
       ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
       : candidates.find(legal);
