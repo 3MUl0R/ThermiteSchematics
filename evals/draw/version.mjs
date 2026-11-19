@@ -1,2 +1,2 @@
 // Shared report/decision protocol version for this checker implementation.
-export const EVALS_VERSION = "5.31";
+export const EVALS_VERSION = "5.32";

@@ -51,7 +51,7 @@ async function captureCase(c, directory, env) {
       generated.stdout + generated.stderr,
     );
     if (generated.code !== 0) return refusedCase(c, generated, local);
-    let { packet, ir, tables, binding } = await nativeInputs(
+    let { packet, ir, tables, binding, presentation } = await nativeInputs(
       c,
       packetPath,
       directory,
@@ -78,7 +78,7 @@ async function captureCase(c, directory, env) {
       geometries,
     );
     tables = scopeTables(packet, geometries, ir, tables, request);
-    Object.assign(tables, { binding, request });
+    Object.assign(tables, { binding, request, presentation });
     await captureSheets(
       packet,
       {
@@ -218,7 +218,7 @@ async function nativeInputs(
   };
   let tables = buildSourceTables(ir, request, query.buildDocumentation);
   await writeFile(join(directory, "query-reports.json"), json(tables));
-  return { packet, ir, tables, binding };
+  return { packet, ir, tables, binding, presentation: source.presentation };
 }
 
 async function publicArtifacts(args, directory, packet, { cli, native, root }) {

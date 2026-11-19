@@ -5,6 +5,7 @@ import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { continuationTypography } from "./continuation-typography.mjs";
 import { repeatNavigation } from "./repeat-navigation.mjs";
 import { titleFields } from "./title-fields.mjs";
+import { compactRevisionSource } from "./title-revision-source.mjs";
 import { evaluateSheet } from "./evaluate.mjs";
 let browser, context, page;
 beforeAll(async () => {
@@ -90,6 +91,46 @@ it("DQ-18 actual NAV-like 'not drawn' ink above the title rule cannot credit a f
       ),
     ),
   ).toEqual([]);
+});
+it("DQ-18 #459 requires the measured revision cell and the authored revision", async () => {
+  const frame =
+    '<rect x="10" y="10" width="180" height="180" fill="none" stroke="black"/><path d="M10 25 H190" stroke="black"/><path d="M10 170 H190" stroke="black"/>';
+  const cell = (y) =>
+    `<rect x="124" y="${y}" width="66" height="5" fill="none" stroke="black"/>`;
+  const otherCells = [170, 175, 185].map(cell).join("");
+  const furniture =
+    '<text x="13" y="174" font-size="2.5">Drawing number: 1 Drawn by: A Checked: B Approved: C</text><text x="13" y="186" font-size="2.5">Customer: D Revision history REV DEMO A</text>';
+  const heading = '<text x="126" y="183.5" font-size="2.5">REV:</text>';
+  const ink = (value) =>
+    `<text x="149" y="183.5" font-size="2.7">${value}</text>`;
+  const revision = compactRevisionSource(
+    { format: "project-presentation/0.3", revision: "DEMO A" },
+    {},
+    { number: 1, view: {} },
+    {},
+  );
+  const observe = async (revisionInk) =>
+    titleFields(
+      await measure(frame + otherCells + furniture + revisionInk),
+      revision,
+    );
+  expect(await observe(cell(180) + heading + ink("DEMO A"))).toEqual([]);
+  for (const mutant of [
+    heading + ink("DEMO A"),
+    cell(180) + heading,
+    cell(180) + heading + ink("DEMO B"),
+    cell(180) + heading + ink("UNSPECIFIED"),
+  ])
+    expect(await observe(mutant)).toEqual([
+      expect.objectContaining({
+        missing: ["revision"],
+        bbox: expect.objectContaining({
+          w: expect.any(Number),
+          h: expect.any(Number),
+        }),
+        revision: { expected: "DEMO A" },
+      }),
+    ]);
 });
 const native = {
   devices: [{ uid: "d", designation: "D" }],

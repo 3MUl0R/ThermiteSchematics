@@ -261,5 +261,48 @@ export function indexReportText(c) {
     headerRule,
     titleRule,
     titleBlock,
+    revisionCell: c.h.measuredRevisionCell(c, titleBlock),
   });
+}
+
+export function measuredRevisionCell(c, panel) {
+  if (!panel) return undefined;
+  const close = (a, b) => Math.abs(a - b) <= 0.001;
+  const right = panel.x + panel.w;
+  const cells = [...c.root.children]
+    .filter((e) => e.matches("rect"))
+    .filter((e) => {
+      const css = getComputedStyle(e);
+      return (
+        css.fill === "none" &&
+        css.stroke !== "none" &&
+        Number(css.opacity) > 0 &&
+        parseFloat(css.strokeWidth) > 0 &&
+        Number(css.strokeOpacity) > 0 &&
+        c.visible(e) &&
+        c.h.reportRegionVisible({ ...c, rect: e })
+      );
+    })
+    .map((e) => c.bounds(e))
+    .filter(
+      (b) =>
+        b.w < panel.w / 2 &&
+        b.w > 0 &&
+        b.h > 0 &&
+        close(b.x + b.w, right) &&
+        b.y >= panel.y - 0.001,
+    )
+    .sort((a, b) => a.y - b.y);
+  if (cells.length !== 4 || !close(cells[0].y, panel.y)) return undefined;
+  const first = cells[0];
+  if (
+    !cells.every(
+      (b, i) =>
+        close(b.x, first.x) &&
+        close(b.h, first.h) &&
+        close(b.y, first.y + i * first.h),
+    )
+  )
+    return undefined;
+  return cells[2];
 }

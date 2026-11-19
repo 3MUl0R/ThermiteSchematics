@@ -21,6 +21,13 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.32 (P03-CORPUS)** fixes **DQ-18** on presentation 0.3 (#459).
+The checker measures the compact frame's revision cell and requires its
+painted label and exact authored value on the same baseline. A missing cell,
+missing paint or incorrect value fails with the measured cell or panel bounds.
+Earlier presentation formats keep their existing checks and row bytes.
+Complete 5.31 summaries remain readable.
+
 Version **5.31 (C2-RENDER)** fixes **DQ-05** for the I/O schedule (#453).
 The Direction cell is checked against the native channel direction for its
 own row. An authored direction such as `output` remains valid when a

@@ -19,6 +19,7 @@ import { dependencyFindings } from "./document-dependencies.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
+import { titleBlockObservation } from "./title-fields.mjs";
 import * as checks from "./checks.mjs";
 import {
   terminalPlanObservation,
@@ -367,7 +368,7 @@ function evaluateDocuments(
       request: request ?? tables.request,
     }),
   );
-  out.push(obs("DQ-18", checks.titleFields(g)));
+  out.push(titleBlockObservation(g, tables, packet, s, request, obs));
   evaluateInventory(
     s,
     g,
