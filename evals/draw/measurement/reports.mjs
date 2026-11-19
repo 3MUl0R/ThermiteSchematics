@@ -267,6 +267,7 @@ export function indexReportText(c) {
 
 export function measuredRevisionCell(c, panel) {
   if (!panel) return undefined;
+  // frame-compact.ts lays out four right-side title cells, with revision third.
   const close = (a, b) => Math.abs(a - b) <= 0.001;
   const right = panel.x + panel.w;
   const cells = [...c.root.children]

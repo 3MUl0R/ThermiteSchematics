@@ -1,6 +1,6 @@
 {
   "issue": 454,
-  "checker": "5.31",
+  "checker": "5.32",
   "base": "debd2fe62a72f44ab45d2c880c820682b48262cc",
   "originalCases": 108,
   "originalSheets": 715,
@@ -158,6 +158,19 @@
         "classification": "oracle-defect",
         "issue": 461
       }
-    ]
+    ],
+    "checker": "5.31"
+  },
+  "standingRep": {
+    "record": 454,
+    "scopeAdditions": 70,
+    "newDefectScopes": 9,
+    "measuredReferences": 5,
+    "affectedRows": {
+      "DQ-02": 48,
+      "DQ-08": 18,
+      "DQ-12": 7,
+      "DQ-15": 5
+    }
   }
 }

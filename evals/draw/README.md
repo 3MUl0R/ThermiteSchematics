@@ -27,6 +27,8 @@ painted label and exact authored value on the same baseline. A missing cell,
 missing paint or incorrect value fails with the measured cell or panel bounds.
 Earlier presentation formats keep their existing checks and row bytes.
 Complete 5.31 summaries remain readable.
+The [#454 re-pin record](repins/454/record.json) records the independent review
+of the new compact-frame scopes and the measured reference updates.
 
 Version **5.31 (C2-RENDER)** fixes **DQ-05** for the I/O schedule (#453).
 The Direction cell is checked against the native channel direction for its
