@@ -103,11 +103,15 @@ it("upgrades the cloned presentation and keeps the source project intact", async
       marginMm: 5,
     });
     expect(prepared.request.layout).toBe("standard");
-    expect(
-      prepared.request.views
-        .filter((v) => v.flow)
-        .every((v) => v.flow === "top-to-bottom"),
-    ).toBe(true);
+    expect(prepared.request.index).toBe(false);
+    expect(prepared.request.views).toEqual([
+      {
+        format: "schematic-view-request/0.1",
+        root: { by: "designation", value: "M1" },
+        family: "power",
+        flow: "top-to-bottom",
+      },
+    ]);
   } finally {
     await rm(dest, { recursive: true, force: true });
   }

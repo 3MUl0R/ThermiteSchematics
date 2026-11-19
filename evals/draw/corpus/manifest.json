@@ -1,6 +1,6 @@
 {
-  "base": "debd2fe62a72f44ab45d2c880c820682b48262cc",
-  "casesSha256": "426192dfd2147f5974e6f5f0d99829c347bbf913e0fc9dbe874aa0331d7a7522",
+  "base": "32df923703454c71177be053395410f0bad4dc9e",
+  "casesSha256": "920d1a9cc5a2a8a4c5c62002a76269442a64b3f72e22a01f6d00b8e4c0feb9b3",
   "deferred": ["D1/D2 agent-produced packets: E2 checkpoint outputs pending"],
   "files": {
     "examples/alpha/motor-starter-documentation.packet.json": "4c3ae701b99391e10824751a686c0f61ae05372a7d7cfe3626ee6e54a0b0f9e5",

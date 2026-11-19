@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { hash, json, readJson, command } from "./support.mjs";
 import * as requests from "./corpus/requests.mjs";
 import {
+  applyCompactFrameRequest,
   compactFrameCases,
   useCompactPresentation,
 } from "./corpus/compact-frames.mjs";
@@ -277,5 +278,5 @@ function applyPacketVariant(c, request) {
     };
     request.layout = c.sweep.layout;
   }
-  if (c.frameRequest) Object.assign(request, c.frameRequest);
+  if (c.recipe === "compact-frame") applyCompactFrameRequest(c, request);
 }
