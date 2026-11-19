@@ -19,8 +19,8 @@ it("covers every tracked library example and every corpus request twice", async 
       .map((s) => s.project)
       .sort(),
   ).toEqual(expected);
-  expect(actual.filter((s) => s.kind === "corpus")).toHaveLength(108);
-  expect(actual.length * 2).toBe((expected.length + 108) * 2);
+  expect(actual.filter((s) => s.kind === "corpus")).toHaveLength(124);
+  expect(actual.length * 2).toBe((expected.length + 124) * 2);
   for (const spec of actual.filter((s) => s.kind === "library")) {
     expect(spec.project).not.toContain("\\");
     expect([
