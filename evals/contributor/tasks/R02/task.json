@@ -1,10 +1,16 @@
 {
   "id": "R02",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "template": "starter",
   "setup": "setup.mjs",
-  "prompt": "Fix the seeded query ordering regression in engine/. The existing focused test exposes it. Keep test assertions, fixtures and configuration unchanged; fix only query implementation. Rebuild and verify the built comparator too. Use bun run test -- packages/query/test/views-and-ordering.test.ts with VITEST_MAX_WORKERS=2, then bun run build. This is a source-contributor task: the engine/ copy is editable; the supplied runtime is immutable. Do not edit electrical project sources. Record commands, outcomes and friction in contributor-friction.md. Do not push or publish.",
+  "prompt": "Fix the seeded query regression in engine/. Reproduce it with bun scripts/test.mjs packages/query/test/views-and-ordering.test.ts in that checkout. Make the smallest query implementation fix that restores the original alias ordering. Keep other behavior, tests, snapshots and configuration unchanged. Run that focused test again and rebuild with bun run build. Record the commands, their results and any friction in contributor-friction.md at the project root. Do not edit the electrical project or the supplied runtime. Do not push or publish.",
   "requiredTopics": [],
   "expectedWarnings": [],
-  "reference": "reference.mjs"
+  "reference": "reference.mjs",
+  "context": "source",
+  "contributor": {
+    "checkout": "engine",
+    "focused": "packages/query/test/views-and-ordering.test.ts"
+  },
+  "preserveSource": true
 }

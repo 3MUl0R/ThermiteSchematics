@@ -847,10 +847,10 @@
     },
     {
       "file": "evals/agent/README.md",
-      "hash": "efdf5607795336be01b24a49dff574a34f097647efddb38b71a50358b29072fd",
+      "hash": "d845363535dd9e1ddca1e9ba737a418993dfe5777a9bc57883bc20f91b81ad10",
       "kind": "platform-only",
-      "setup": "Authenticated Codex model access and dependencies for the chosen commit",
-      "reason": "Runs the full contributor task catalog using the specified historical source and subscription or API route."
+      "setup": "A source checkout at the chosen commit and its frozen dependencies",
+      "reason": "Runs both contributor references with fresh installs, focused tests and build verification."
     },
     {
       "file": "evals/agent/README.md",
