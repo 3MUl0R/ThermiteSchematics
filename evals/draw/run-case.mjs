@@ -29,8 +29,11 @@ export async function renderCase(c, index, env) {
   process.stdout.write(`[${index + 1}/${specs.length}] ${c.id}\n`);
   const directory = join(dest, c.id);
   await mkdir(directory, { recursive: true });
-  return retainingCase(directory, values.artifacts, () =>
-    captureCase(c, directory, env),
+  return retainingCase(
+    directory,
+    values.artifacts,
+    () => captureCase(c, directory, env),
+    { temporaryProject: c.recipe === "compact-frame" },
   );
 }
 

@@ -1089,6 +1089,9 @@ on-sheet regions receive 300 dpi crops. Sheet-level or wholly off-sheet findings
 have no invented crop. `--artifacts` opts into full-sheet PNGs and uncompressed
 HTML, waiving the aggregate budget.
 
+Default compact-frame cases discard the temporary project copies after capture.
+The sealed source, case recipe, request and compiled IR preserve replay inputs.
+
 Every SVG has a separate 61,440-byte embedded-font guard, enforced at CLI delivery
 and independently for every sheet in this runner; tests cover all shipped
 examples. No shaping features unmodelled by the shared cmap/hmtx metrics, or

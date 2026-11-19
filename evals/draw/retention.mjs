@@ -48,10 +48,17 @@ export async function compactCase(directory, artifacts) {
     }
   }
 }
-export async function retainingCase(directory, artifacts, work) {
+export async function retainingCase(
+  directory,
+  artifacts,
+  work,
+  { temporaryProject = false } = {},
+) {
   try {
     return await work();
   } finally {
     await compactCase(directory, artifacts);
+    if (temporaryProject && !artifacts)
+      await rm(join(directory, "project"), { recursive: true, force: true });
   }
 }
