@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { contributorRealpath } from "../../../agent/contributor-bun.mjs";
 import { join } from "node:path";
 import { write } from "../../../agent/task-support.mjs";
 import {
@@ -13,7 +13,7 @@ import { confinedRepair } from "./confinement.mjs";
 import { queryProof } from "./query-proof.mjs";
 
 export default function check(ctx) {
-  const repository = join(realpathSync(ctx.project), "engine");
+  const repository = join(contributorRealpath(ctx.project), "engine");
   const { revision } = contributorState(ctx);
   const checks = {
     confined: confinedRepair(ctx, repository, revision),

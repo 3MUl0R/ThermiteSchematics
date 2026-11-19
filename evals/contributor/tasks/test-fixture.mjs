@@ -11,7 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import {
+  contributorBuildOutputs,
+  contributorRealpath,
+} from "../../agent/contributor-bun.mjs";
 import { contributorCommandEnvironment } from "../../agent/contributor-commands.mjs";
 import { focus, git, ordering, run, seedPatch } from "./support.mjs";
 
@@ -67,10 +70,11 @@ function initializeFixture(ctx, engine, seeded) {
 }
 
 export function fixture(seeded = false) {
-  const project = temp(),
+  const projectInput = temp();
+  const project = contributorRealpath(projectInput),
     evidence = join(project, "evidence"),
     engine = join(project, "engine"),
-    ctx = { project, evidence, env: process.env };
+    ctx = { project: projectInput, evidence, env: process.env };
   const clean = initializeFixture(ctx, engine, seeded);
   put(project, "contributor-friction.md", "Run receipts recorded.");
   const repository = seeded ? engine : join(project, "worktree");
@@ -129,14 +133,9 @@ export function copy(dir, path) {
 }
 
 export function observeIn(f, cwd, ...args) {
-  return run(
-    f.ctx,
-    cwd,
-    process.platform === "win32" ? process.execPath : "bun",
-    process.platform === "win32"
-      ? [f.ctx.env.THERMITE_CONTRIBUTOR_BUN, ...args]
-      : args,
-  );
+  return process.platform === "win32"
+    ? run(f.ctx, cwd, "cmd.exe", ["/d", "/c", "bun", ...args])
+    : run(f.ctx, cwd, "bun", args);
 }
 
 export function observer(f, checkout) {

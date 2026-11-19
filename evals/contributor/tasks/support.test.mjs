@@ -2,13 +2,18 @@ import { expect, it } from "vitest";
 import {
   existsSync,
   readFileSync,
+  lstatSync,
+  realpathSync,
   readdirSync,
   rmSync,
   symlinkSync,
   utimesSync,
 } from "node:fs";
-import { join } from "node:path";
-import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import { join, sep } from "node:path";
+import {
+  contributorBuildOutputs,
+  contributorRealpath,
+} from "../../agent/contributor-bun.mjs";
 import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
 import { fixture, put, temp } from "./test-fixture.mjs";
 import { completedWorkflow } from "./receipts.mjs";
@@ -16,7 +21,76 @@ import checkR01 from "./R01/check.mjs";
 import checkR02 from "./R02/check.mjs";
 
 it("R01 accepts a registered checkout with matching test and build receipts", () => {
-  expect(checkR01(fixture().ctx).pass).toBe(true);
+  const f = fixture();
+  const outcome = checkR01(f.ctx);
+  const gitDirectories = () =>
+    ["--show-toplevel", "--absolute-git-dir", "--git-common-dir"].map(
+      (option) => [
+        option,
+        git(f.ctx, f.repository, "rev-parse", option).trimEnd(),
+      ],
+    );
+  const evidence = outcome.pass
+    ? undefined
+    : JSON.stringify({
+        checkout: f.repository,
+        realpath: realpathSync(f.repository),
+        nativeProject: contributorRealpath(f.ctx.project),
+        gitDirectories: gitDirectories(),
+        engineCommon: git(
+          f.ctx,
+          f.engine,
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ).trimEnd(),
+        listed: git(
+          f.ctx,
+          f.engine,
+          "worktree",
+          "list",
+          "--porcelain",
+          "-z",
+        ).split("\0"),
+      });
+  expect(outcome, evidence).toMatchObject({
+    pass: true,
+    checks: { worktree: true },
+  });
+});
+
+it("R01 accepts temp directory aliases and Git-style path separators in receipts", () => {
+  const f = fixture();
+  const fromTemp = join(f.ctx.project, "worktree");
+  const fromGit = git(
+    f.ctx,
+    f.repository,
+    "rev-parse",
+    "--show-toplevel",
+  ).trimEnd();
+  expect(contributorRealpath(fromTemp)).toBe(contributorRealpath(fromGit));
+  for (const row of f.rows) {
+    row.cwd = fromTemp.split(sep).join("/");
+    if (row.tests)
+      row.tests.files = [join(fromTemp, focus).split(sep).join("/")];
+  }
+  f.save();
+  expect(checkR01(f.ctx)).toMatchObject({
+    pass: true,
+    checks: { worktree: true, focused: true },
+  });
+});
+
+it("R01 rejects a checkout with a stale Git worktree backlink", () => {
+  const f = fixture();
+  const admin = git(
+    f.ctx,
+    f.repository,
+    "rev-parse",
+    "--absolute-git-dir",
+  ).trimEnd();
+  put(admin, "gitdir", join(f.engine, ".git") + "\n");
+  expect(checkR01(f.ctx)).toEqual({ pass: false, checks: { worktree: false } });
 });
 
 it("R01 accepts an incremental rebuild after a fresh observed build", () => {
@@ -90,6 +164,11 @@ it.each([
         join(engine, "node_modules"),
         join(repository, "node_modules"),
         process.platform === "win32" ? "junction" : "dir",
+      );
+      const link = join(repository, "node_modules");
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(realpathSync(link)).toBe(
+        realpathSync(join(engine, "node_modules")),
       );
     },
   ],

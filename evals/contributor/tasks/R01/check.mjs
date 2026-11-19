@@ -1,5 +1,9 @@
-import { existsSync, realpathSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import {
+  contributorRealpath,
+  sameContributorPath,
+} from "../../../agent/contributor-bun.mjs";
 import {
   contributorState,
   git,
@@ -9,36 +13,60 @@ import {
 } from "../support.mjs";
 import { completedWorkflow } from "../receipts.mjs";
 
+function gitPath(ctx, repository, option) {
+  const path = git(
+    ctx,
+    repository,
+    "rev-parse",
+    "--path-format=absolute",
+    option,
+  ).trimEnd();
+  return contributorRealpath(resolve(repository, path));
+}
+
 function registered(ctx, engine, checkout) {
+  const marker = join(checkout, ".git");
+  if (
+    !existsSync(marker) ||
+    !lstatSync(checkout).isDirectory() ||
+    !lstatSync(marker).isFile()
+  )
+    return false;
+
+  const engineCommon = gitPath(ctx, engine, "--git-common-dir");
+  const admin = gitPath(ctx, checkout, "--absolute-git-dir");
+  const backlink = join(admin, "gitdir");
+  // A linked checkout has a private Git directory in the engine's registry.
+  // Git records a pointer back to the checkout's .git file in that directory.
+  if (
+    !sameContributorPath(dirname(admin), join(engineCommon, "worktrees")) ||
+    !existsSync(backlink) ||
+    !lstatSync(backlink).isFile()
+  )
+    return false;
+  const registeredMarker = resolve(
+    admin,
+    readFileSync(backlink, "utf8").trimEnd(),
+  );
   return (
-    existsSync(join(checkout, ".git")) &&
-    realpathSync(checkout) === checkout &&
-    git(ctx, engine, "worktree", "list", "--porcelain", "-z")
-      .split("\0")
-      .filter((entry) => entry.startsWith("worktree "))
-      .map((entry) => entry.slice("worktree ".length))
-      .some((path) => existsSync(path) && realpathSync(path) === checkout) &&
-    realpathSync(git(ctx, checkout, "rev-parse", "--show-toplevel").trim()) ===
-      checkout &&
-    git(
-      ctx,
-      engine,
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ) ===
-      git(
-        ctx,
-        checkout,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      )
+    existsSync(registeredMarker) &&
+    sameContributorPath(
+      contributorRealpath(registeredMarker),
+      contributorRealpath(marker),
+    ) &&
+    sameContributorPath(
+      gitPath(ctx, checkout, "--show-toplevel"),
+      contributorRealpath(checkout),
+    ) &&
+    sameContributorPath(
+      gitPath(ctx, checkout, "--git-common-dir"),
+      engineCommon,
+    )
   );
 }
 
 export default function check(ctx) {
-  const project = realpathSync(ctx.project),
+  const project = contributorRealpath(ctx.project),
     engine = join(project, "engine"),
     repository = join(project, "worktree"),
     worktree = registered(ctx, engine, repository);
