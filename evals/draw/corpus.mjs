@@ -2,6 +2,11 @@ import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { hash, json, readJson, command } from "./support.mjs";
 import * as requests from "./corpus/requests.mjs";
+import {
+  applyCompactFrameRequest,
+  compactFrameCases,
+  useCompactPresentation,
+} from "./corpus/compact-frames.mjs";
 const flows = ["left-to-right", "top-to-bottom"];
 export function cases(quick = false) {
   const list = [];
@@ -108,7 +113,7 @@ export function cases(quick = false) {
               flow,
               sweep: { project, size, orientation, layout },
             });
-  return list;
+  return [...list, ...compactFrameCases(flows)];
 }
 export async function sourceFiles(root, selection = {}) {
   const roots = selection.roots ?? [
@@ -183,7 +188,8 @@ export async function prepare(c, root, dest, cli) {
   if (c.recipe) {
     project = join(dest, "project");
     await cp(join(root, c.project), project, { recursive: true });
-    if (["starter", "wide"].includes(c.recipe)) {
+    if (c.recipe === "compact-frame") await useCompactPresentation(project);
+    else if (["starter", "wide"].includes(c.recipe)) {
       // Fixed template UUIDs; init's only electrical transformation is a local core copy.
       const starterSystem = await readJson(join(project, "system.json"));
       const version = starterSystem.libraries.find(
@@ -256,6 +262,14 @@ export async function prepare(c, root, dest, cli) {
       delete v.flow;
   if (c.recipe === "field" && c.flow === "top-to-bottom")
     request.page = { ...request.page, orientation: "portrait" };
+  applyPacketVariant(c, request);
+  await mkdir(dest, { recursive: true });
+  const input = join(dest, "request.json");
+  await writeFile(input, json(request));
+  return { project, input, request, source: relative(root, project) };
+}
+
+function applyPacketVariant(c, request) {
   if (c.sweep) {
     request.page = {
       ...request.page,
@@ -264,8 +278,5 @@ export async function prepare(c, root, dest, cli) {
     };
     request.layout = c.sweep.layout;
   }
-  await mkdir(dest, { recursive: true });
-  const input = join(dest, "request.json");
-  await writeFile(input, json(request));
-  return { project, input, request, source: relative(root, project) };
+  if (c.recipe === "compact-frame") applyCompactFrameRequest(c, request);
 }

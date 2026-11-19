@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { titleFields } from "./title-fields.mjs";
+import { compactRevisionSource } from "./title-revision-source.mjs";
 import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
 import { continuationTypography } from "./continuation-typography.mjs";
 const panel = { x: 10, y: 80, w: 180, h: 20 };
@@ -11,6 +12,41 @@ const t = (text, y = 85) => ({
 });
 const title =
   "Drawing number: 1 Drawn by: A Checked: B Approved by: C Customer: D REV A Revision history";
+it("DQ-18 reads the revision from authored metadata with sheet override precedence", () => {
+  const presentation = { format: "project-presentation/0.3", revision: "P" };
+  const packet = {
+    navigation: {
+      occurrences: [
+        {
+          destination: { sheet: 7 },
+          provenance: { view: { authoredOrder: 1 } },
+        },
+      ],
+    },
+  };
+  const sheet = { number: 7, sheetKey: "exact", view: {} };
+  const request = {
+    views: [{}, {}],
+    titleData: {
+      defaults: { revision: "D" },
+      byView: [{ viewIndex: 2, revision: "V" }],
+      bySheet: [{ sheetKey: "exact", revision: null }],
+    },
+  };
+  expect(compactRevisionSource(presentation, packet, sheet, request)).toEqual({
+    label: "REV:",
+    value: null,
+  });
+  request.titleData.bySheet = [];
+  expect(compactRevisionSource(presentation, packet, sheet, request)).toEqual({
+    label: "REV:",
+    value: "V",
+  });
+  expect(compactRevisionSource(presentation, {}, sheet, request)).toEqual({
+    label: "REV:",
+    unavailable: true,
+  });
+});
 it("DQ-18 only painted labelled fields in the measured title panel count", () => {
   const g = { height: 100, titleBlock: panel, texts: [t(title)] };
   expect(titleFields(g)).toEqual([]);

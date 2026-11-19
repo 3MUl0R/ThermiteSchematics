@@ -2,7 +2,13 @@ import { it, expect } from "vitest";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sourceFiles, createSeal, verifyCorpus } from "./corpus.mjs";
+import {
+  cases,
+  prepare,
+  sourceFiles,
+  createSeal,
+  verifyCorpus,
+} from "./corpus.mjs";
 import { command, json } from "./support.mjs";
 it("seals tracked drawing inputs, ignores output, and reports tracked drift without failing", async () => {
   const root = await mkdtemp(join(tmpdir(), "draw-seal-")),
@@ -39,5 +45,74 @@ it("seals tracked drawing inputs, ignores output, and reports tracked drift with
     expect(drift.actual.base).toMatch(/^[a-f0-9]{40}$/);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("adds 16 compact-frame cases to the full corpus only", () => {
+  const full = cases();
+  const compact = full.filter((spec) => spec.recipe === "compact-frame");
+  expect(full).toHaveLength(124);
+  expect(compact).toHaveLength(16);
+  expect(new Set(full.map((spec) => spec.id)).size).toBe(full.length);
+  expect(cases(true).some((spec) => spec.recipe === "compact-frame")).toBe(
+    false,
+  );
+  for (const project of ["examples/conveyor-line", "examples/machine-demo"])
+    for (const flow of ["left-to-right", "top-to-bottom"])
+      expect(
+        compact
+          .filter((spec) => spec.project === project && spec.flow === flow)
+          .map(({ frameRequest }) => [
+            frameRequest.page.size,
+            frameRequest.layout,
+          ]),
+      ).toEqual([
+        ["tabloid", "standard"],
+        ["tabloid", "compact"],
+        ["letter", "standard"],
+        ["letter", "compact"],
+      ]);
+});
+
+it("upgrades the cloned presentation and keeps the source project intact", async () => {
+  const root = process.cwd();
+  const spec = cases().find(
+    (c) => c.id === "p03-conveyor-line-letter-portrait-standard-top-to-bottom",
+  );
+  const dest = await mkdtemp(join(tmpdir(), "draw-compact-frame-"));
+  try {
+    const source = join(root, spec.project, "presentation.json");
+    const original = await readFile(source, "utf8");
+    const prepared = await prepare(spec, root, dest, async (args) => {
+      expect(args).toEqual(["lock", join(dest, "project")]);
+      return { code: 0 };
+    });
+    expect(await readFile(source, "utf8")).toBe(original);
+    const { $schema, ...authored } = JSON.parse(original);
+    expect(
+      JSON.parse(
+        await readFile(join(prepared.project, "presentation.json"), "utf8"),
+      ),
+    ).toEqual({
+      ...authored,
+      format: "project-presentation/0.3",
+    });
+    expect(prepared.request.page).toEqual({
+      size: "letter",
+      orientation: "portrait",
+      marginMm: 5,
+    });
+    expect(prepared.request.layout).toBe("standard");
+    expect(prepared.request.index).toBe(false);
+    expect(prepared.request.views).toEqual([
+      {
+        format: "schematic-view-request/0.1",
+        root: { by: "designation", value: "M1" },
+        family: "power",
+        flow: "top-to-bottom",
+      },
+    ]);
+  } finally {
+    await rm(dest, { recursive: true, force: true });
   }
 });

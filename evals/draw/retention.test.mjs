@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -39,3 +39,35 @@ it("a case exception retains every delivered SVG and losslessly compacts audit a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it.each([
+  { temporaryProject: true, artifacts: false, retained: false },
+  { temporaryProject: true, artifacts: true, retained: true },
+  { temporaryProject: false, artifacts: false, retained: true },
+])(
+  "retains the prepared project only when requested or needed (%j)",
+  async ({ temporaryProject, artifacts, retained }) => {
+    const root = await mkdtemp(join(tmpdir(), "draw-prepared-project-"));
+    try {
+      const presentation = join(root, "project", "presentation.json");
+      await retainingCase(
+        root,
+        artifacts,
+        async () => {
+          await mkdir(join(root, "project"));
+          await writeFile(presentation, "{}\n");
+          await writeFile(join(root, "request.json"), "{}\n");
+        },
+        { temporaryProject },
+      );
+      if (retained) expect(await readFile(presentation, "utf8")).toBe("{}\n");
+      else
+        await expect(readFile(presentation)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      expect(await readFile(join(root, "request.json"), "utf8")).toBe("{}\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

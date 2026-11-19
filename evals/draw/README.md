@@ -21,6 +21,15 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.32 (P03-CORPUS)** fixes **DQ-18** on presentation 0.3 (#459).
+The checker measures the compact frame's revision cell and requires its
+painted label and exact authored value on the same baseline. A missing cell,
+missing paint or incorrect value fails with the measured cell or panel bounds.
+Earlier presentation formats keep their existing checks and row bytes.
+Complete 5.31 summaries remain readable.
+The [#454 re-pin record](repins/454/record.json) records the independent review
+of the new compact-frame scopes and the measured reference updates.
+
 Version **5.31 (C2-RENDER)** fixes **DQ-05** for the I/O schedule (#453).
 The Direction cell is checked against the native channel direction for its
 own row. An authored direction such as `output` remains valid when a
@@ -44,8 +53,8 @@ bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout> \
   --base-checkpoint <base-summary.json.gz> --head-checkpoint <head-summary.json.gz>
 ```
 
-The script checks issuance across all 108 standing captures (715 sheets) and
-renders 402 additional A4, Letter and compact variants of the corpus and the
+The script checks issuance across all 124 standing cases (746 sheets) and
+renders 458 additional A4, Letter and compact variants of the corpus and the
 narrow browser wire-field fixtures. The full check runs a 16-row representative
 guard that checks issuance, exact sheet counts and peer-note proximity for
 conveyor-line and machine-demo on Letter and A4, in both flows.
@@ -1089,6 +1098,9 @@ on-sheet regions receive 300 dpi crops. Sheet-level or wholly off-sheet findings
 have no invented crop. `--artifacts` opts into full-sheet PNGs and uncompressed
 HTML, waiving the aggregate budget.
 
+Default compact-frame cases discard the temporary project copies after capture.
+The sealed source, case recipe, request and compiled IR preserve replay inputs.
+
 Every SVG has a separate 61,440-byte embedded-font guard, enforced at CLI delivery
 and independently for every sheet in this runner; tests cover all shipped
 examples. No shaping features unmodelled by the shared cmap/hmtx metrics, or
@@ -1121,12 +1133,21 @@ projects and requests by path:
   locally and byte-locked; field TTB sheets use the shipped portrait convention.
 - EA F3: the starter's first wire gets a 120-ASCII-W display label; the requested
   output is the wire schedule. Electrical facts and UUIDs are preserved.
+- The presentation 0.3 cases (#454) run machine-demo and conveyor-line in both
+  flows, on Tabloid landscape (10 mm margins) and Letter portrait (5 mm margins),
+  in standard and compact layouts. The recipe upgrades the copied presentation
+  and retains the authored title fields and electrical sources. The Letter
+  margins let the narrow layouts exercise the frame on issued sheets. Each
+  packet selects one existing power view (machine-demo M2 or conveyor-line M1)
+  so the standing capture fits its output budget. The
+  [compact-frame ledger](corpus/compact-frame-ledger.json) records the
+  full-packet exploration and the new strict cases' scope.
 - D1/D2 packets have a documented deferred E2 slot, never substituted or scored.
 
 The 36-cell sweep is three projects × tabloid/A3/letter × landscape/portrait ×
 standard/compact, each executed in both flows (72 cases). Motor-starter covers
 power/control; functional-symbols covers circuit/report sheets; report-filtering
-covers filtered reports. Full corpus: 108 cases. Flow-neutral schemas are replayed
+covers filtered reports. Full corpus: 124 cases. Flow-neutral schemas are replayed
 unchanged rather than receiving an unsupported flow field. Each successful case
 runs the built CLI for JSON/SVG, HTML and direct PDF and compiles unchanged IR;
 expected report identities/multiplicities come from the public query API.

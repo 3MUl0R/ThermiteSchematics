@@ -96,7 +96,7 @@ async function assertStrictPair(engines) {
   assert.equal(old.corpusSha256, current.corpusSha256);
   assert.deepEqual(
     results.map((r) => r.sourceHashes.sheets.length),
-    [715, 715],
+    [746, 746],
   );
   const issued = (r) => new Set(r.sourceHashes.sheets.map((s) => s.case));
   assert.deepEqual(issued(old), issued(current));
@@ -160,7 +160,7 @@ try {
   for (const c of [...cases(), ...browserFixtures()])
     measurements.push(...(await compareFixture(c, directory, engines)));
   const losses = measurements.filter((r) => r.base.sheets && r.head.refusal);
-  assert.equal(measurements.length, 402);
+  assert.equal(measurements.length, 458);
   console.log(
     JSON.stringify({
       cases: measurements.length,
