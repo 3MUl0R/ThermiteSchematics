@@ -56,20 +56,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isPlainObject(value: unknown): boolean {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isArrayValue(value: unknown): boolean {
-  return Array.isArray(value);
-}
-
+const isArrayValue: (value: unknown) => boolean = Array.isArray;
 function hasExactKeys(value: object, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
   return (
-    actual.length === wanted.length &&
-    actual.every((key, index) => key === wanted[index])
+    Object.keys(value).length === expected.length &&
+    expected.every((key) =>
+      Object.prototype.propertyIsEnumerable.call(value, key),
+    )
   );
 }
 
@@ -110,20 +103,21 @@ function validateLinePrimitive(
   height: number,
   context: string,
 ): void {
+  const { qualifier: q, uprightOrigin } = primitive;
   assertCatalog(
     hasExactKeys(primitive, [
       "kind",
       "from",
       "to",
       "style",
-      ...(primitive.qualifier === undefined ? [] : ["qualifier"]),
+      ...(q === undefined ? [] : ["qualifier"]),
+      ...(uprightOrigin === undefined ? [] : ["uprightOrigin"]),
     ]),
     `${context} has unknown fields.`,
   );
   validatePoint(primitive.from, width, height, `${context}.from`);
   validatePoint(primitive.to, width, height, `${context}.to`);
-  if (primitive.qualifier !== undefined) {
-    const q = primitive.qualifier;
+  if (q !== undefined) {
     assertCatalog(
       primitive.style === "annotation" &&
         isRecord(q) &&
@@ -139,6 +133,13 @@ function validateLinePrimitive(
       `${context}.qualifier requires a port ID.`,
     );
     validatePoint(q.center, width, height, `${context}.qualifier.center`);
+  }
+  if (uprightOrigin !== undefined) {
+    assertCatalog(
+      q === undefined && primitive.style === "annotation",
+      `${context}.uprightOrigin must be annotation geometry.`,
+    );
+    validatePoint(uprightOrigin, width, height, `${context}.uprightOrigin`);
   }
   assertCatalog(
     primitive.from.x !== primitive.to.x || primitive.from.y !== primitive.to.y,
@@ -295,7 +296,7 @@ export function validateSymbolCatalog(
   catalog.forEach((definition, symbolIndex) => {
     const context = `symbols[${symbolIndex}]`;
     assertCatalog(
-      isPlainObject(definition) &&
+      isRecord(definition) &&
         hasExactKeys(definition, [
           "format",
           "id",
@@ -320,7 +321,7 @@ export function validateSymbolCatalog(
     );
     symbolIds.add(definition.id);
     assertCatalog(
-      isPlainObject(definition.size) &&
+      isRecord(definition.size) &&
         hasExactKeys(definition.size, ["width", "height"]),
       `${context}.size must have width and height.`,
     );
@@ -340,8 +341,7 @@ export function validateSymbolCatalog(
     definition.ports.forEach((port, portIndex) => {
       const portContext = `${context}.ports[${portIndex}]`;
       assertCatalog(
-        isPlainObject(port) &&
-          hasExactKeys(port, ["id", "side", "offset", "order"]),
+        isRecord(port) && hasExactKeys(port, ["id", "side", "offset", "order"]),
         `${portContext} must have the exact port fields.`,
       );
       assertCatalog(

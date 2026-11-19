@@ -4,6 +4,10 @@ export const wiringAdvice = new Map([
     "Manual print review; the actual SVG masks are checked by wire-label-masks.test.mjs.",
   ],
   [
+    "See `thermite guide circuit-symbols`.",
+    "The generated guide test resolves this offline topic. Default-symbol-roles tests cover its printed roles.",
+  ],
+  [
     "Add terminal/wire schedules for complete detail.",
     "Advice for explicit full inventories; required companions cover only the concrete hidden-detail scope.",
   ],

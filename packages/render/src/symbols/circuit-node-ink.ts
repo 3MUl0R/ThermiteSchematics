@@ -1,3 +1,7 @@
+import {
+  conversionQualifierSpan,
+  interfaceLeadEnd,
+} from "./circuit-interface.js";
 import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import {
@@ -35,12 +39,11 @@ function interfaceSegments(
     return row.f.terminals.map((t) => {
       const p = node.pins.find((p) => same(p.terminal, t));
       if (!p) throw Error("Missing interface caption pin");
-      const end =
-        row.f.kind === "source"
-          ? 6
-          : row.mark === "sensor-3wire" && row.f.terminals.length === 1
-            ? 10 / 3
-            : 5;
+      const end = interfaceLeadEnd(
+        row.mark,
+        row.f.kind === "source",
+        row.f.terminals.length,
+      );
       return [
         { x: p.x, y: p.y },
         vertical
@@ -101,6 +104,27 @@ function attachmentSegments(
   });
 }
 
+function rowMarkSegments(
+  node: Node,
+  row: Row,
+  center: CaptionPoint,
+  vertical: boolean,
+) {
+  if (row.mark !== "ac-input" && row.mark !== "dc-output")
+    return circuitMarkSegments(row.mark, center.x, center.y, vertical);
+  const positions = row.f.terminals.map((t) => {
+    const pin = node.pins.find((p) => same(p.terminal, t));
+    if (!pin) throw Error("Missing conversion caption pin");
+    return vertical ? pin.x : pin.y;
+  });
+  const span = conversionQualifierSpan(
+    row.mark,
+    vertical ? center.x : center.y,
+    positions,
+  );
+  return circuitMarkSegments(row.mark, center.x, center.y, vertical, span);
+}
+
 /** Preserve the existing optional contact-caption obstacles. Required captions
  * additionally check actual interface leads, excluding unpainted attachments. */
 export function nodeCaptionSegments(
@@ -109,21 +133,15 @@ export function nodeCaptionSegments(
   vertical: boolean,
   oneSided: (f: IrFunction, mark: CircuitMark) => boolean,
 ) {
-  const captionSegments = centers.flatMap((c, i) => {
+  const marks = centers.map((c, i) => {
     const row = node.rows[i];
     if (!row) throw Error("Missing caption owner row");
-    return circuitMarkSegments(row.mark, c.x, c.y, vertical);
+    return rowMarkSegments(node, row, c, vertical);
   });
+  const captionSegments = marks.flat();
   const ownerSegments = [
-    ...centers.flatMap((c, i) =>
-      node.rows[i]?.mark === "winding"
-        ? []
-        : circuitMarkSegments(
-            node.rows[i]?.mark as CircuitMark,
-            c.x,
-            c.y,
-            vertical,
-          ),
+    ...marks.flatMap((segments, i) =>
+      node.rows[i]?.mark === "winding" ? [] : segments,
     ),
     ...ownerExtraSegments(node, centers, vertical),
     ...interfaceSegments(node, centers, vertical),

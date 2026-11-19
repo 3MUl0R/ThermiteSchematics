@@ -88,8 +88,8 @@ it.each(transformerFlows)(
     expect(originalOutlineInk).not.toBe(reviewedContent);
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
-        ? "a7b671b133353676cbcfebd9f251a6f4381cabff488d2a9651786550fe047d90"
-        : "38533e5e7448dbd83d93c6e3f5ee614b5b16783e4b02f73a98bb521d19bb5ed4",
+        ? "e9d8fc41133ff295005f7a83877e09c16326e6f21a9eba84e593b7b1d94ac00c"
+        : "ffdb1a46186da48a93d745be679841eced74a2589027d6f38fa5dd30df974141",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);

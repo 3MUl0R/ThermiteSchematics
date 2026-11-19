@@ -30,6 +30,8 @@ export type SymbolPrimitive =
       readonly to: SymbolPoint;
       readonly style: SymbolStyle;
       readonly qualifier?: SymbolPolarityQualifier;
+      /** This origin follows the symbol, while stroke offsets stay in page axes. */
+      readonly uprightOrigin?: SymbolPoint;
     }
   | {
       readonly kind: "polyline";

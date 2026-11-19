@@ -133,13 +133,24 @@ Circuit views preserve compatible explicit marks; an unmarked open fuse contact
 draws as contact-no there too. If any selected circuit function cannot be drawn,
 the whole view refuses with R006 and names the selected keys; it is never omitted.
 
-Rooted and circuit views use independently authored, IEC-informed marks from the
-printable policy. A coil is a rectangle; AC/DC appears only from its authored
-coil-terminal voltage class. A breaker uses a blade and cross without inferred
-trip technology. Aligned authored breaker and disconnector gangs get a nonconductive mechanical
-link where the corridor is clear. Unmarked overload power poles use a stepped thermal
-element; their auxiliary contact uses its own authored normal state. Protection
-elements have no NC/NO caption. NO/NC contacts differ by the NC stroke.
+### Default glyph convention
+
+The catalog uses Thermite’s independently drawn, IEC-informed vocabulary in
+rooted and circuit views. The marks describe authored functions and terminal
+roles. Spacing and orientation carry the following meanings in both flows.
+
+| Role | Default mark |
+| --- | --- |
+| NO and NC contact | Two parallel contact bars. The diagonal state stroke identifies an authored NC contact. Actuated contacts retain the same bars and their own operator marks. |
+| Breaker and disconnector | A blade and cross identify a breaker pole, with no trip technology implied. An open blade and fixed-contact bar identify a declared disconnector. An aligned authored gang can add a mechanical link where the corridor is clear. |
+| Coil and transformer winding | A coil is a rectangle. An authored coil voltage class can add upright AC or DC text. A transformer winding is a zigzag between its own two leads. Paired core lines stand clear of the windings and indicate magnetic association. Explicit wiring and jumpers determine the physical nets. |
+| AC input and DC output | An upright wave identifies AC. A solid line above a broken line identifies DC. Inside a circuit converter each outline brackets its own terminal group, with a clear gap to each separate stub. |
+| Protective earth | A descending stem above three horizontal bars of decreasing length, upright in both flows. On a motor it follows the PE lead and stays separate from phase ink. |
+| Receptacle | An upright circular face with two slots and a lower earth mark. The two supply stubs stop clear of the outline. Native terminals and connections determine the pin identities and any PE connection. |
+| Generic interface | A boxed, upright `I/F` identifies a generic interface. Its authored terminals are listed individually. The mark specifies no contact state, pinout or internal connections. |
+
+Unmarked overload power poles use a stepped thermal element. Their auxiliary
+contacts use their own authored state. Protection elements have no NC/NO caption.
 
 Rooted DC source and load polarity qualifiers stay upright in both flows, with
 owned annotation ink reserved inside the symbol size and offset from the leads.
@@ -158,9 +169,8 @@ operator/link ink envelope is reserved before layout, including its stroke, and
 participates in caption clearance. These links stay inside their own authored
 function.
 
-Earth marks remain upright in both flows. In left-to-right flow the original
-attachment lead turns once into a descending stem; all three decreasing bars sit
-below the lead. Top-to-bottom earth geometry is unchanged. SVG primitives export
+In left-to-right flow a circuit earth lead turns once into the descending stem.
+SVG primitives export
 `data-circuit-role` values `operator`, `operating-link`, `contact-moving`,
 `contact-fixed`, `contact-state`, `lead`, `earth-stem` and `earth-bar` where
 applicable. The enclosing `data-function-id` owns the mark; neither mechanical
