@@ -15,6 +15,26 @@ export function shellWords(text, { literal = false } = {}) {
       active = false;
     }
   };
+  const pushControl = (i) => {
+    const c = text[i];
+    const descriptor =
+      c === ">" && /^\d+$/.test(word) && text.slice(start, i) === word
+        ? word
+        : "";
+    if (descriptor) {
+      word = "";
+      active = false;
+    } else flush(i);
+    // Keep a descriptor duplication in one token. Its ampersand does not
+    // end the command or put it in the background.
+    const next = text[i + 1];
+    const value = c + (next === c || (c === ">" && next === "&") ? next : "");
+    const spelling = descriptor + value;
+    words.push(
+      literal ? { value, literal: spelling, control: true } : spelling,
+    );
+    return i + value.length - 1;
+  };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (!active && !/\s/.test(c)) start = i;
@@ -56,9 +76,7 @@ export function shellWords(text, { literal = false } = {}) {
       continue;
     }
     if (/[&|;<>()]/.test(c)) {
-      flush(i);
-      const value = c + (text[i + 1] === c ? text[++i] : "");
-      words.push(literal ? { value, literal: value, control: true } : value);
+      i = pushControl(i);
       continue;
     }
     word += c;

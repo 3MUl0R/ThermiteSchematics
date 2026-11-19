@@ -2,6 +2,7 @@ import { canonical, sourceDocuments } from "./source-files.mjs";
 import {
   regeneratePacket,
   regenerateView,
+  findRegeneratedView,
   cleanChecker,
 } from "./artifacts.mjs";
 // Synthetic user facts and reference actions. No manufacturer pinout is asserted.
@@ -252,6 +253,7 @@ export function reference(id, ctx) {
   return "Reference deliverables are ready; no electrical approval is implied.";
 }
 export async function check(id, ctx) {
+  let hookupPdf;
   const checks = {},
     all = objects(ctx.project),
     get = (tag) => all.find((o) => o.designation === tag);
@@ -389,17 +391,15 @@ export async function check(id, ctx) {
     const supplied = manifest.libraries.some(
       (l) => l.name === "field-interfaces",
     );
-    checks.issueOrHookup =
-      (existsSync(join(ctx.project, "issue.md")) &&
-        readFileSync(join(ctx.project, "issue.md"), "utf8").trim().length >=
-          100) ||
-      (supplied &&
-        cli(ctx, "lock", ".", "--check").status === 0 &&
-        (
-          await regenerateView(ctx, "drawings/hookup.pdf", null, {
-            allowedKinds: ["signal-loop", "wiring", "circuit"],
-          })
-        ).pass);
+    const issuePath = join(ctx.project, "issue.md");
+    const issueDraft =
+      existsSync(issuePath) &&
+      readFileSync(issuePath, "utf8").trim().length >= 100;
+    if (supplied && cli(ctx, "lock", ".", "--check").status === 0)
+      hookupPdf = await findRegeneratedView(ctx, {
+        allowedKinds: ["signal-loop", "wiring", "circuit"],
+      });
+    checks.issueOrHookup = issueDraft || !!hookupPdf;
   }
   if (id === "T09a") {
     checks.endpoint = get("W-CTL-001")?.endpoints.some(
@@ -481,6 +481,7 @@ export async function check(id, ctx) {
   return {
     pass: Object.values(checks).every(Boolean),
     checks,
+    ...(hookupPdf ? { hookupPdf } : {}),
     rubricPending: !!ctx.task?.rubric,
     actualWarnings:
       ctx.validationDiagnostics?.filter((d) => d.severity === "warning") ?? [],

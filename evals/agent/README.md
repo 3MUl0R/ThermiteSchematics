@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.19.1)
+# Fresh-agent evaluator (E2 v1.19.2)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -832,3 +832,18 @@ The checker identity includes the complete renderer `dist` tree, including
 transitive helpers. Checkpoint creation, normal runs and checker-only rechecks
 use that identity. Replay retained inputs under both checker versions and
 preserve the original manifests.
+
+## E2 1.19.2
+
+The classifier parses literal local shell output redirects, appends and
+descriptor duplication separately from the fetch arguments. An allowlisted GET
+still counts as an acquisition, and an engine-source GET still counts as V8.
+The project snapshot checks still record writes to guarded project files,
+including writes made through a redirect. Dynamic fetch targets retain the
+existing fail-closed classification.
+
+T07 checks the delivered hookup PDF in `drawings/` under its actual filename.
+The successful print command must reproduce the PDF byte for byte from the
+final project. The PDF must contain at least one signal-loop, wiring or circuit
+view, as verified by regenerated metadata. The checker keeps the accepted PDF
+path as evidence.

@@ -1,6 +1,8 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
+  readdirSync,
   readFileSync,
   mkdirSync,
   rmSync,
@@ -125,10 +127,10 @@ function remap(argv, ctx, out) {
   return result;
 }
 export async function regenerateView(ctx, artifact, fallback, expected = {}) {
-  const clean = cleanChecker(ctx),
-    output = join(ctx.evidence, "regenerated-" + artifact.split("/").at(-1));
   const command = commandFor(ctx, artifact, fallback);
   if (!command) return { pass: false, reason: "missing-view-command" };
+  const clean = cleanChecker(ctx),
+    output = join(ctx.evidence, "regenerated-" + artifact.split("/").at(-1));
   const mapped = remap(command, ctx, output);
   if (!mapped) return { pass: false, reason: "missing-input-request" };
   const kind =
@@ -209,6 +211,21 @@ export async function regenerateView(ctx, artifact, fallback, expected = {}) {
         sha256(readFileSync(output)),
     exit: result.status,
   };
+}
+// The judge receives delivered files from the top level of drawings/.
+export async function findRegeneratedView(ctx, expected) {
+  const drawings = join(ctx.project, "drawings");
+  if (!lstatSync(drawings, { throwIfNoEntry: false })?.isDirectory())
+    return null;
+  const pdfs = readdirSync(drawings, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".pdf"))
+    .map((entry) => `drawings/${entry.name}`)
+    .sort();
+  for (const artifact of pdfs) {
+    if ((await regenerateView(ctx, artifact, null, expected)).pass)
+      return artifact;
+  }
+  return null;
 }
 export async function regeneratePacket(
   ctx,
