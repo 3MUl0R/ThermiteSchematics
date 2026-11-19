@@ -841,3 +841,8 @@ still counts as an acquisition, and an engine-source GET still counts as V8.
 The project snapshot checks still record writes to guarded project files,
 including writes made through a redirect. Dynamic fetch targets retain the
 existing fail-closed classification.
+
+T07 checks the delivered hookup PDF in `drawings/` under its actual filename.
+The successful print command must reproduce the PDF byte for byte from the
+final project, and regenerated metadata must identify a signal-loop, wiring
+or circuit view. The checker keeps the accepted PDF path as evidence.

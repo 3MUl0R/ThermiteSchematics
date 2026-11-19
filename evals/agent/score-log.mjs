@@ -345,8 +345,7 @@ export function score({
     completed: normalized.successfulCompletion,
     guarded,
     acceptedIssueDraft:
-      taskOutcome?.checks?.issueOrHookup === true &&
-      !final?.files?.["drawings/hookup.pdf"],
+      taskOutcome?.checks?.issueOrHookup === true && !taskOutcome.hookupPdf,
   });
   const guideOutputBytes = agentCalls
     .filter((c) => c.argv[0] === "guide" && c.exit === 0)
