@@ -14,10 +14,11 @@ import { read, write } from "../../agent/task-support.mjs";
 
 import {
   contributorRealpath,
+  ordering,
   sameContributorPath,
 } from "../../agent/contributor-bun.mjs";
 
-export const ordering = "packages/query/src/ordering.ts";
+export { ordering };
 export const focus = "packages/query/test/views-and-ordering.test.ts";
 export const seedPatch = fileURLToPath(
   new URL("./R02/seed.patch", import.meta.url),

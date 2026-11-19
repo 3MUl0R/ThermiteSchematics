@@ -25,7 +25,7 @@ export default function check(ctx) {
   };
   if (!Object.values(checks).every(Boolean)) return { pass: false, checks };
   const focused = bun(
-    ctx,
+    { ...ctx, env: { ...ctx.env, THERMITE_CONTRIBUTOR_BUN: "" } },
     repository,
     "scripts/test.mjs",
     focus,

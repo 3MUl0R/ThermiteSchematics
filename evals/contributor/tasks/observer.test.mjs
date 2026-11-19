@@ -1,9 +1,17 @@
 import { expect, it } from "vitest";
+import { existsSync, rmSync, symlinkSync, utimesSync } from "node:fs";
 import { join } from "node:path";
-import { bun, focus } from "./support.mjs";
-import { fixture, observeIn, observer, put } from "./test-fixture.mjs";
+import { contributorSourceDigest } from "../../agent/contributor-bun.mjs";
+import { bun, focus, ordering } from "./support.mjs";
+import {
+  copy,
+  fixture,
+  observeIn,
+  observer,
+  put,
+  root,
+} from "./test-fixture.mjs";
 import { completedWorkflow, observedCommands } from "./receipts.mjs";
-import checkR01 from "./R01/check.mjs";
 
 it("records real install and test outcomes for the alternate PATH-shim invocations", () => {
   const f = fixture();
@@ -62,12 +70,48 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
     focus,
   ]);
   expect(rows[2].tests.passed).toBe(7);
+  expect(rows[2].sourceSha256).toBe(contributorSourceDigest(f.repository));
   expect(rows[3].tests).toBeNull();
   f.rows.push(rows[0], rows[3]);
   f.save();
   expect(
     completedWorkflow(f.ctx, f.repository, { install: true }).focused,
   ).toBe(false);
+});
+
+it("records and rejects unsupported focused flags before running the test script", () => {
+  const f = fixture();
+  observer(f, "worktree");
+  put(
+    f.repository,
+    "scripts/test.mjs",
+    'await Bun.write("ran-focused", "unexpected invocation");\n',
+  );
+  const rejected = [
+    ["--config", "other.mjs"],
+    ["--root=other"],
+    ["--outputFile.json=other.json"],
+    ["--outputFile", "other.json"],
+    ["--setupFiles", "other.mjs"],
+    ["-t", "--config=other.mjs"],
+    ["other.test.ts"],
+  ];
+  for (const args of rejected) {
+    const run = observeIn(f, f.repository, "scripts/test.mjs", focus, ...args);
+    expect(run.exit).toBe(1);
+    expect(run.stderr).toContain(
+      "Unsupported contributor focused test argument",
+    );
+  }
+  expect(existsSync(join(f.repository, "ran-focused"))).toBe(false);
+  expect(observedCommands(f.ctx, f.repository)).toMatchObject(
+    rejected.map((args) => ({
+      kind: "focused",
+      exit: 1,
+      rejected: args[0],
+      requestedArgv: ["scripts/test.mjs", focus, ...args],
+    })),
+  );
 });
 
 function writeTranscript(f, invocations, agent = "codex") {
@@ -119,17 +163,83 @@ function writeTranscript(f, invocations, agent = "codex") {
   );
 }
 
+function prepareDirect(f, checkout) {
+  const dir = f.repository;
+  observer(f, checkout);
+  copy(dir, "scripts/test.mjs");
+  put(
+    dir,
+    "node_modules/vitest/vitest.mjs",
+    `
+    import { join } from "node:path";
+    await Bun.write("coverage/test-timings.json", JSON.stringify({
+      numPassedTests: 7, numTotalTests: 7, numFailedTests: 0,
+      testResults: [{ name: join(process.cwd(), "${focus}") }],
+    }));
+  `,
+  );
+  put(
+    dir,
+    "package.json",
+    JSON.stringify({
+      type: "module",
+      scripts: { build: "bun node_modules/typescript/lib/tsc.js -b" },
+    }),
+  );
+  const typescript = join(dir, "node_modules/typescript");
+  rmSync(typescript, { recursive: true });
+  symlinkSync(
+    join(root, "node_modules/typescript"),
+    typescript,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const projects = ["packages/cli", "packages/query"];
+  put(
+    dir,
+    "tsconfig.json",
+    JSON.stringify({
+      files: [],
+      references: projects.map((path) => ({ path })),
+    }),
+  );
+  for (const project of projects)
+    put(
+      dir,
+      join(project, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          composite: true,
+          declaration: true,
+          rootDir: "src",
+          outDir: "dist",
+          types: [],
+        },
+        include: ["src/*.ts"],
+      }),
+    );
+  put(dir, ordering, "export const rank = 1;\n");
+  const build = () => bun(f.ctx, dir, "run", "build");
+  const test = (...args) =>
+    bun(f.ctx, dir, join(dir, "scripts/test.mjs"), ...args, join(dir, focus));
+  return { build, test };
+}
+
+// PowerShell uses the call operator for a quoted executable path.
+const binary = `${process.platform === "win32" ? "& " : ""}"${process.execPath}"`;
+
 it.each(["codex", "claude"])(
   "binds %s absolute Bun commands to test and build artifacts",
   (agent) => {
     const f = fixture();
-    f.rows.splice(0);
-    f.save();
-    // PowerShell uses the call operator for a quoted executable path.
-    const binary = `${process.platform === "win32" ? "& " : ""}"${process.execPath}"`;
+    const { build, test } = prepareDirect(f, "worktree");
+    const workflow = () =>
+      completedWorkflow(f.ctx, f.repository, { install: true });
     const commands = [
       [`${binary} --cwd worktree i --frozen-lockfile`, 0],
-      [`cd worktree && ${binary} ./scripts/test.mjs "./${focus}"`, 0],
+      [
+        `cd worktree && ${binary} "${join(f.ctx.project, "worktree", "scripts/test.mjs")}" "${join(f.ctx.project, "worktree", focus)}"`,
+        0,
+      ],
       [`${binary} --cwd=worktree run build`, 0],
     ];
     const write = (rows) =>
@@ -141,29 +251,58 @@ it.each(["codex", "claude"])(
         agent,
       );
     write(commands);
-    expect(checkR01(f.ctx).checks).toMatchObject({
-      worktree: true,
-      focused: false,
-    });
-    put(
-      f.repository,
-      "coverage/test-timings.json",
-      JSON.stringify({
-        numPassedTests: 7,
-        numTotalTests: 7,
-        numFailedTests: 0,
-        testResults: [{ name: join(f.repository, focus) }],
-      }),
-    );
-    expect(checkR01(f.ctx).pass).toBe(true);
-    write([commands[0], commands[2], commands[1]]);
-    expect(checkR01(f.ctx).checks.freshBuild).toBe(false);
+    expect(workflow().focused).toBe(false);
+    const built = build();
+    expect(built.exit, built.stdout + built.stderr).toBe(0);
     expect(
-      completedWorkflow(f.ctx, f.repository, { queryRepair: true }).freshBuild,
-    ).toBe(true);
+      test("--testNamePattern=focused", "--no-color", "--silent").exit,
+    ).toBe(0);
+    expect(observedCommands(f.ctx, f.repository).at(-1).argv).toEqual([
+      "scripts/test.mjs",
+      "--testNamePattern=focused",
+      "--no-color",
+      "--silent=true",
+      focus,
+    ]);
+    const emitted = join(f.repository, "packages/query/dist/ordering.js");
+    utimesSync(emitted, new Date(0), new Date(0));
+    expect(workflow()).toEqual({
+      installed: true,
+      focused: true,
+      freshBuild: true,
+    });
+    write([commands[0], commands[2], commands[1]]);
+    expect(workflow().freshBuild).toBe(true);
     write([...commands.slice(0, 2), [commands[2][0], 1]]);
-    expect(checkR01(f.ctx).checks.freshBuild).toBe(false);
+    expect(workflow().freshBuild).toBe(false);
     write([...commands.slice(0, 2), [commands[2][0] + " ; true", 0]]);
-    expect(checkR01(f.ctx).checks.freshBuild).toBe(false);
+    expect(workflow().freshBuild).toBe(false);
+    write(commands);
+    put(f.repository, "packages/query/dist/ordering.js", "stale output\n");
+    const future = new Date(Date.now() + 10000);
+    utimesSync(emitted, future, future);
+    expect(workflow().freshBuild).toBe(false);
   },
 );
+
+it("requires a direct R02 focused receipt from the final source even after a successful rebuild", () => {
+  const f = fixture(true);
+  const { build, test } = prepareDirect(f, "engine");
+  const workflow = () =>
+    completedWorkflow(f.ctx, f.repository, { queryRepair: true });
+  writeTranscript(f, [
+    [`${binary} --cwd=engine scripts/test.mjs "${focus}"`, 0],
+    [`${binary} --cwd=engine run build`, 0],
+  ]);
+  expect(test("--outputFile=other.json").exit).toBe(1);
+  expect(observedCommands(f.ctx, f.repository).at(-1).rejected).toBe(
+    "--outputFile=other.json",
+  );
+  expect(test().exit).toBe(0);
+  put(f.repository, ordering, "export const rank = 2;\n");
+  const built = build();
+  expect(built.exit, built.stdout + built.stderr).toBe(0);
+  expect(workflow()).toEqual({ focused: false, freshBuild: false });
+  expect(test().exit).toBe(0);
+  expect(workflow()).toEqual({ focused: true, freshBuild: true });
+});

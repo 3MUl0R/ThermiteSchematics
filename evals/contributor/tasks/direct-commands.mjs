@@ -37,7 +37,9 @@ function invocation(command, project, repository) {
     return null;
   const from = cwd ?? (args[0]?.startsWith("--cwd") ? project : repository);
   const result = contributorInvocation(args, from, focus);
-  return result.kind && sameContributorPath(result.cwd, repository)
+  return result.kind &&
+    result.rejected === undefined &&
+    sameContributorPath(result.cwd, repository)
     ? { kind: result.kind, direct: isAbsolute(executable) }
     : null;
 }

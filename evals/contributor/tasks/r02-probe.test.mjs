@@ -8,7 +8,10 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import {
+  contributorBuildOutputs,
+  contributorSourceDigest,
+} from "../../agent/contributor-bun.mjs";
 import { normalizeTranscript } from "../../agent/transcript.mjs";
 import { ordering } from "./support.mjs";
 import { copy, fixture, observer, put, root } from "./test-fixture.mjs";
@@ -57,6 +60,7 @@ function runnable(f) {
 }
 
 function refreshBuildReceipt(f) {
+  f.rows[1].sourceSha256 = contributorSourceDigest(f.repository);
   f.rows.at(-1).outputs = contributorBuildOutputs(f.repository);
   f.save();
 }

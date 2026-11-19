@@ -13,6 +13,7 @@ import { join, sep } from "node:path";
 import {
   contributorBuildOutputs,
   contributorRealpath,
+  contributorSourceDigest,
 } from "../../agent/contributor-bun.mjs";
 import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
 import { fixture, put, temp } from "./test-fixture.mjs";
@@ -93,23 +94,23 @@ it("R01 rejects a checkout with a stale Git worktree backlink", () => {
   expect(checkR01(f.ctx)).toEqual({ pass: false, checks: { worktree: false } });
 });
 
-it("R01 accepts an incremental rebuild after a fresh observed build", () => {
+it("R01 accepts a matching build before the focused test, with or without an incremental rebuild", () => {
   const f = fixture();
   const [install, test, build] = f.rows;
   const latest = Math.max(...build.outputs.map((file) => file.modified)) + 1000;
-  f.rows.splice(
-    0,
-    3,
-    install,
-    build,
-    { ...test, started: latest, ended: latest + 1 },
-    { ...build, started: latest + 1 },
-  );
+  f.rows.splice(0, 3, install, build, {
+    ...test,
+    started: latest,
+    ended: latest + 1,
+  });
+  f.save();
+  expect(checkR01(f.ctx).pass).toBe(true);
+  f.rows.push({ ...build, started: latest + 1 });
   f.save();
   expect(checkR01(f.ctx).pass).toBe(true);
 });
 
-it("accepts a fresh R02 build before the focused test and rejects output from the seeded source", () => {
+it("R02 binds both the build and the passing test to the delivered repair", () => {
   const f = fixture(true);
   put(f.repository, ordering, f.clean);
   const [, test, build] = f.rows;
@@ -119,12 +120,16 @@ it("accepts a fresh R02 build before the focused test and rejects output from th
   f.rows.splice(0, 3, build, { ...test, started, ended: started + 1 });
   f.save();
   expect(completedWorkflow(f.ctx, f.repository, { queryRepair: true })).toEqual(
+    { focused: false, freshBuild: false },
+  );
+  f.rows[1].sourceSha256 = contributorSourceDigest(f.repository);
+  f.save();
+  expect(completedWorkflow(f.ctx, f.repository, { queryRepair: true })).toEqual(
     {
       focused: true,
       freshBuild: true,
     },
   );
-  expect(completedWorkflow(f.ctx, f.repository).freshBuild).toBe(false);
   put(
     f.repository,
     ordering,
@@ -133,9 +138,11 @@ it("accepts a fresh R02 build before the focused test and rejects output from th
       "compareText(right.id.terminalKey, left.id.terminalKey)",
     ),
   );
-  expect(
-    completedWorkflow(f.ctx, f.repository, { queryRepair: true }).freshBuild,
-  ).toBe(false);
+  f.rows[1].sourceSha256 = contributorSourceDigest(f.repository);
+  f.save();
+  expect(completedWorkflow(f.ctx, f.repository, { queryRepair: true })).toEqual(
+    { focused: true, freshBuild: false },
+  );
 });
 
 it.each([
