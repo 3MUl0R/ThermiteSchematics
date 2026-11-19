@@ -7,8 +7,14 @@ import { shellRequest } from "./github-shell.mjs";
 import { issueSearch, issueUrl, jsonHeaders } from "./issue-lookup.mjs";
 import { sourceScanInput } from "./source-scan-input.mjs";
 import { readsLocalSource } from "./local-source.mjs";
-import { githubRequest } from "./github-tools.mjs";
-import { shellParts, aggregateParts } from "./shell-parts.mjs";
+import { githubEvidence, githubRequest } from "./github-tools.mjs";
+import {
+  decodedShellBody,
+  shellParts,
+  aggregateParts,
+} from "./shell-parts.mjs";
+import { shellGitHubWrites } from "./github-writes.mjs";
+import { shellWords } from "./acquisition-command.mjs";
 import { shellTool, githubFragment } from "./shell-network.mjs";
 import { allowedLibraryUrl } from "./library-acquisition.mjs";
 export { pathText } from "./local-source.mjs";
@@ -22,7 +28,7 @@ export const strings = (value) =>
         : [];
 
 // Extract actual request arguments, never display text or fetch prompts.
-function request(event, github) {
+function request(event, github, result, laterShell) {
   if (github)
     return (
       githubRequest(event) ?? {
@@ -54,16 +60,32 @@ function request(event, github) {
       ? (input.command ?? input.cmd)
       : input,
   );
-  const text = sourceScanInput(name, values);
-  if (shell) return { parts: shellParts(text), text, shell: true };
+  const text = sourceScanInput(
+    name,
+    values,
+    result?.exit === 0 && values.length === 1 && result.command === values[0],
+    laterShell,
+  );
+  if (shell) return { parts: shellParts(text, laterShell), text, shell: true };
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
 }
-function classifySearch(query, github, engineRoots) {
+function classifySearch({ query, repoOnly, network }, github, engineRoots) {
   const { text, valid } = canonicalText(query);
   if (readsLocalSource(text, engineRoots)) return "source-read";
-  if (valid && issueSearch(text)) return "issue-lookup";
-  return github || touchesGitHub(text) ? "source-read" : "other";
+  if (valid && issueSearch(text, { repoOnly })) return "issue-lookup";
+  return github || network || touchesGitHub(text) ? "source-read" : "other";
+}
+function shellWriteStatus(event, result) {
+  if (
+    result?.command ===
+      (event.input?.command ?? event.input?.cmd ?? event.input) &&
+    Number.isInteger(result?.exit)
+  )
+    return result.exit === 0 ? "completed" : "failed";
+  if (typeof result?.toolError === "boolean")
+    return result.toolError ? "failed" : "completed";
+  return "unverified";
 }
 /**
  * V8 measures honest agents' natural source reading, not interpreter capability
@@ -81,29 +103,47 @@ function classifySearch(query, github, engineRoots) {
  */
 export function classifyToolCall(
   event,
-  { engineRoots = [], allowedLibraryPaths = [] } = {},
+  { engineRoots = [], allowedLibraryPaths = [], result, laterShell = "" } = {},
 ) {
   const github = [event.name, event.server, event.tool].some(
     (value) => typeof value === "string" && /github/i.test(value),
   );
   if (!github && /^(?:write|todowrite|todo_list)$/i.test(event.name))
     return { class: "other" };
-  const call = request(event, github);
+  if (github) {
+    const proven = githubEvidence(event, result);
+    if (proven) return proven;
+  }
+  const call = request(event, github, result, laterShell);
   if (call.shell) {
-    if (readsLocalSource(call.text, engineRoots))
-      return { class: "source-read" };
     const parts = call.parts ?? [{ text: call.text, tokens: null }];
-    return aggregateParts(
-      parts.map((part) => {
-        const text = part.text;
-        return classifyRequest(
-          shellRequest(text, part.tokens, part.heredoc),
-          false,
-          [],
-          allowedLibraryPaths,
-        );
-      }),
-    );
+    const attemptedWrites = [];
+    const status =
+      parts.length === 1 && !parts[0].heredoc
+        ? shellWriteStatus(event, result)
+        : "unverified";
+    const outcomes = parts.map(({ text, tokens, heredoc }) => {
+      const words =
+        tokens ?? shellWords(decodedShellBody(text), { literal: true });
+      const writes = shellGitHubWrites(words, heredoc);
+      if (writes) {
+        for (let i = 0; i < writes; i++) attemptedWrites.push(status);
+        return { class: "source-read" };
+      }
+      return classifyRequest(
+        shellRequest(text, tokens, heredoc),
+        false,
+        [],
+        allowedLibraryPaths,
+      );
+    });
+    const classified =
+      readsLocalSource(call.text, engineRoots) || attemptedWrites.length
+        ? { class: "source-read" }
+        : aggregateParts(outcomes);
+    return attemptedWrites.length
+      ? { ...classified, attemptedWrites }
+      : classified;
   }
   return classifyRequest(call, github, engineRoots, allowedLibraryPaths);
 }
@@ -115,7 +155,7 @@ function classifyRequest(call, github, engineRoots, allowedLibraryPaths) {
       ),
     );
   if (Object.hasOwn(call, "query"))
-    return { class: classifySearch(call.query, github, engineRoots) };
+    return { class: classifySearch(call, github, engineRoots) };
   const canonical = canonicalUrl(call.target);
   const text =
     call.text === undefined ? canonical.text : canonicalText(call.text).text;

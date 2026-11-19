@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { flatten, type GuideModel } from "./guide-model.js";
 
 const runtimeSentence =
-  "When using a runtime package, check issues; report bugs, gaps or unclear docs at\nhttps://github.com/BlackettApplied/ThermiteSchematics/issues.";
+  "When using a runtime package, check existing issues at\nhttps://github.com/BlackettApplied/ThermiteSchematics/issues.";
 const frameSentence =
   "For packet frames, use presentation 0.3 named slots; see `thermite guide drawing-frames`.";
 const oldFrameSentence =

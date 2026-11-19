@@ -61,6 +61,17 @@ async function editCable(path: string, edit: (value: any) => void) {
 }
 
 describe("alpha reference help", () => {
+  it("points cable inventory users to the printable conductors view", async () => {
+    const { stdout, stderr } = await execFile(process.execPath, [
+      cli,
+      "cable",
+      "--help",
+    ]);
+    expect(stderr).toBe("");
+    expect(stdout).toContain(
+      "thermite view <designation> --conductors -o <file>.pdf",
+    );
+  });
   it("lists report kinds, CSV output and report-packet JSON with clean help streams", async () => {
     const { stdout, stderr } = await execFile(process.execPath, [
       cli,

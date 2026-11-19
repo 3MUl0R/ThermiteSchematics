@@ -7,7 +7,9 @@
   "requiredTopics": [
     {
       "topic": "views",
-      "beforeCommand": "packet"
+      "beforeCommand": "packet",
+      "before": "packet",
+      "equivalents": ["project-workflows"]
     }
   ],
   "expectedWarnings": [],

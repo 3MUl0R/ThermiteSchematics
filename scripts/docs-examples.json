@@ -535,6 +535,12 @@
       "recipe": "topic-libraries"
     },
     {
+      "file": "docs/libraries.md",
+      "hash": "dfeb71124cd35839c4aac907c06a33216593bc08da40b3c4eb951ddb1ca12a40",
+      "kind": "illustrative",
+      "reason": "Literal GET template for a pinned public dependency. Executing it requires external network access and a task-authorized revision."
+    },
+    {
       "file": "docs/machine-demo.md",
       "hash": "f8ed7467d0e6bff4f561fbb55d98fa06acbb683b92d8b0b1823661b55a885789",
       "kind": "platform-only",

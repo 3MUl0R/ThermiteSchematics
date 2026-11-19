@@ -1,6 +1,7 @@
 import { cableListingMatches } from "./cable-listing.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DOMParser } from "linkedom";
 import { sha256 } from "./snapshot.mjs";
 import { libraryTypes, canonical } from "./source-files.mjs";
 import {
@@ -52,6 +53,19 @@ export function drawingNames(packet) {
     if (sheet.view?.root?.kind === "cable")
       names.add(sheet.view.root.designation);
   return names;
+}
+// Packet coverage covers only audited circuit/wiring views. Continuous
+// schematic exports also emit physical wire paths with source UIDs.
+function drawnWires(packet) {
+  const uids = new Set();
+  for (const sheet of schematicSheets(packet)) {
+    if (!sheet.svg) continue;
+    const svg = new DOMParser().parseFromString(sheet.svg, "image/svg+xml");
+    for (const path of svg.querySelectorAll("path.wire-path[data-wire-uid][d]"))
+      if (path.getAttribute("d").trim())
+        uids.add(path.getAttribute("data-wire-uid"));
+  }
+  return uids;
 }
 export function fitsRole(object, type, role) {
   if (role === "cable") return object?.kind === "cable";
@@ -157,8 +171,67 @@ function gapExists(gap, requirement, types) {
     fitsRole({ kind: "device" }, type, gap.capability),
   );
 }
+function applyRequest(call) {
+  if (
+    call.argv?.[0] !== "agent" ||
+    call.argv?.[1] !== "apply-source-patch" ||
+    call.exit !== 0
+  )
+    return null;
+  try {
+    const request = JSON.parse(call.request ?? "null");
+    return request?.dryRun === false ? request : null;
+  } catch {
+    return null;
+  }
+}
+function recordedDigest(value) {
+  return typeof value === "string" && value.startsWith("sha256-")
+    ? Buffer.from(value.slice(7), "base64").toString("hex")
+    : null;
+}
+function changedWireUids(applies) {
+  const touched = new Set();
+  for (const { call, request } of applies) {
+    const targets = new Set(request.files?.map(({ path }) => path));
+    for (const file of call.patchFiles ?? []) {
+      if (
+        !file.changed ||
+        !targets.has(file.path) ||
+        !call.before?.files?.[file.path] ||
+        !call.after?.files?.[file.path] ||
+        recordedDigest(file.beforeIntegrity) !== call.before.files[file.path] ||
+        recordedDigest(file.afterIntegrity) !== call.after.files[file.path]
+      )
+        continue;
+      const before = call.before.documents?.[file.path]?.objects;
+      const after = call.after.documents?.[file.path]?.objects;
+      if (!Array.isArray(before) || !Array.isArray(after)) continue;
+      const prior = new Map(before.map((object) => [object.uid, object]));
+      for (const object of after)
+        if (
+          object.kind === "wire" &&
+          object.uid &&
+          canonical(prior.get(object.uid)) !== canonical(object)
+        )
+          touched.add(object.uid);
+    }
+  }
+  return touched;
+}
+function hasRule(version, patch) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version ?? "");
+  return (
+    !!match &&
+    (+match[1] > 1 ||
+      (+match[1] === 1 &&
+        (+match[2] > 6 || (+match[2] === 6 && +match[3] >= patch))))
+  );
+}
+
 export function assessDogfood({
   task,
+  promptVersion = task.version,
   validationExit,
   files,
   packet,
@@ -176,7 +249,21 @@ export function assessDogfood({
     ),
     byType = new Map(types.map((t) => [t.id, t])),
     drawn = drawingNames(packet),
+    wireInk = drawnWires(packet),
+    drawnUids = new Set(
+      schematicSheets(packet).flatMap((sheet) =>
+        (sheet.references ?? []).map(
+          (reference) =>
+            reference.wireUid ?? reference.uid ?? reference.deviceUid,
+        ),
+      ),
+    ),
     requirements = spec.requirements;
+  const applies = calls.flatMap((call) => {
+    const request = applyRequest(call);
+    return request && call.editsByThisCall?.length ? [{ call, request }] : [];
+  });
+  const changedWires = changedWireUids(applies);
   const uidNames = new Map(sourceObjects.map((o) => [o.uid, o.designation]));
   const warnings = diagnostics.map((d) => ({
     ...d,
@@ -185,6 +272,24 @@ export function assessDogfood({
       uidNames.get(d.uid) ??
       /^([^:]+):/.exec(d.message ?? "")?.[1],
   }));
+  const psuInputs = (psu) =>
+    Object.values(byType.get(psu?.type)?.functions ?? {})
+      .filter((f) => f.kind === "load")
+      .flatMap((f) => f.terminals);
+  const inputConductors = (psu, terminal) =>
+    sourceObjects.filter(
+      (o) =>
+        ["wire", "jumper"].includes(o.kind) &&
+        o.endpoints?.some(
+          (e) => e?.device === psu.designation && e.terminal === terminal,
+        ),
+    );
+  const deferredInput = (psu, terminal) =>
+    psu.connectionReview?.terminals?.[terminal]?.status === "deferred" &&
+    inputConductors(psu, terminal).length === 0 &&
+    warnings.some(
+      (d) => d.designation === psu.designation && d.code === "W905",
+    );
   const rows = Array.isArray(matrix) ? matrix : [];
   const decisions = requirements.map((requirement) => {
     const matches = rows.filter(
@@ -198,7 +303,18 @@ export function assessDogfood({
       known =
         Array.isArray(names) &&
         names.every((tag) => typeof tag === "string" && byTag.has(tag)),
-      represented = known && names.every((tag) => drawn.has(tag));
+      changeRow = /^(?:C|P)-CHANGE$/.test(requirement.id),
+      represented =
+        known &&
+        names.every((tag) => {
+          const object = byTag.get(tag);
+          if (changeRow && object.kind === "wire")
+            return (
+              changedWires.has(object.uid) &&
+              (wireInk.has(object.uid) || drawnUids.has(object.uid))
+            );
+          return drawn.has(tag);
+        });
     const declaredGap =
       names?.length > 0 && gapExists(evidence?.libraryGap, requirement, types);
     const ownsSubject = (tag, role) => {
@@ -232,7 +348,10 @@ export function assessDogfood({
       ["satisfied", "substituted", "deferred"].includes(row?.status) &&
       typeof summary === "string" &&
       summary.trim().length >= 8 &&
-      (known || (row?.status === "deferred" && gapSubjects));
+      (known || (row?.status === "deferred" && gapSubjects)) &&
+      (requirement.id !== "C-CHANGE" ||
+        !hasRule(promptVersion, 1) ||
+        names.length > 0);
     let deferredJustified = false;
     if (row?.status === "deferred") {
       const diagnosis = typeof evidence === "object" && evidence.diagnostic;
@@ -277,6 +396,15 @@ export function assessDogfood({
             fitsRole(byTag.get(tag), byType.get(byTag.get(tag)?.type), role),
           ),
         );
+      if (requirement.roles.includes("psu"))
+        pass =
+          pass &&
+          !names.some((tag) => {
+            const psu = byTag.get(tag);
+            return psuInputs(psu).some((terminal) =>
+              deferredInput(psu, terminal),
+            );
+          });
       if (requirement.normalState)
         pass =
           pass &&
@@ -353,56 +481,25 @@ export function assessDogfood({
   const feedDrawn =
     psus.length > 0 &&
     psus.every((psu) => {
-      if (
-        decisions.some(
-          (d) =>
-            d.pass &&
-            d.row?.status === "deferred" &&
-            d.row.designations.includes(psu.designation) &&
-            d.row.evidence?.diagnostic?.designation === psu.designation &&
-            requirements.find((r) => r.id === d.id)?.roles.includes("psu"),
-        )
-      )
-        return true;
-      const inputs = Object.values(byType.get(psu.type).functions)
-        .filter((f) => f.kind === "load")
-        .flatMap((f) => f.terminals);
+      const inputs = psuInputs(psu);
+      const powerView = schematicSheets(packet).some(
+        (s) =>
+          s.view.family === "power" &&
+          s.view.root?.designation === psu.designation,
+      );
       return (
         inputs.length > 0 &&
-        inputs.every(
-          (terminal) =>
-            sourceObjects.some((o) => {
-              const ends = o.endpoints ?? [];
-              return (
-                ["wire", "jumper"].includes(o.kind) &&
-                ends.some(
-                  (e) =>
-                    e?.device === psu.designation && e.terminal === terminal,
-                ) &&
-                drawnConductors.has(o.designation ?? o.uid)
-              );
-            }) ||
-            schematicSheets(packet).some(
-              (s) =>
-                s.view.family === "power" &&
-                s.view.root?.designation === psu.designation,
-            ),
-        )
+        inputs.every((terminal) => {
+          if (deferredInput(psu, terminal)) return true;
+          return inputConductors(psu, terminal).some(
+            (o) =>
+              wireInk.has(o.uid) ||
+              drawnConductors.has(o.designation ?? o.uid) ||
+              powerView,
+          );
+        })
       );
     });
-  const applied = calls.some((c) => {
-    try {
-      return (
-        c.argv?.[0] === "agent" &&
-        c.argv?.[1] === "apply-source-patch" &&
-        c.exit === 0 &&
-        JSON.parse(c.request ?? "null")?.dryRun === false &&
-        c.editsByThisCall?.length > 0
-      );
-    } catch {
-      return false;
-    }
-  });
   const checks = {
     validation: validationExit === 0,
     viewsAndPacket:
@@ -412,14 +509,14 @@ export function assessDogfood({
       ) &&
       packet?.sheets?.some((s) => s.view?.kind === "index"),
     guardedChange:
-      applied &&
+      applies.length > 0 &&
       files["drawings/before.json"] === true &&
       files["drawings/review.json"] === true,
     reports:
       spec.reports.every((kind) => files[`drawings/${kind}.csv`] === true) &&
       files["drawings/diagnostics.json"] === true &&
       files["drawings/cable.json"] === true,
-    coverage: allDeviceCoverage && feedDrawn && decisions.every((d) => d.pass),
+    coverage: allDeviceCoverage && feedDrawn,
     pdfV1V5: drawEvidence
       ? drawEvidence.format === "thermite-agent-draw-evidence/1.0" &&
         drawEvidence.V1 === true &&
@@ -427,9 +524,11 @@ export function assessDogfood({
       : null,
     requirementMatrix:
       rows.length === requirements.length && decisions.every((d) => d.pass),
-    counts: ["localTypes", "sourceReads", "failedCalls"].every(
-      (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
-    ),
+    counts:
+      ["localTypes", "sourceReads", "failedCalls"].every(
+        (key) => Number.isInteger(counts?.[key]) && counts[key] >= 0,
+      ) &&
+      (!hasRule(promptVersion, 0) || counts.attemptedWrites === 0),
   };
   const expectedNames = new Set(
     decisions
@@ -582,6 +681,7 @@ export async function checkDogfood(ctx) {
     counts = {
       localTypes: types.filter((t) => t.library !== "core").length,
       sourceReads: ctx.metrics?.sourceReads ?? 0,
+      attemptedWrites: ctx.metrics?.attemptedWrites?.length ?? 0,
       failedCalls: (ctx.calls ?? []).filter(
         (c) => c.phase === "agent" && c.exit !== 0,
       ).length,
@@ -599,6 +699,7 @@ export async function checkDogfood(ctx) {
         drawEvidence = { ...drawEvidence, V1: false, V5: false, stale: true };
   return assessDogfood({
     task: ctx.task,
+    promptVersion: ctx.promptVersion,
     validationExit: cli(clean, "validate", ".").status,
     files,
     packet,
@@ -925,6 +1026,7 @@ export function referenceDogfood(ctx) {
     SENSOR: ["PX1"],
     JUNCTION: ["JB1"],
     SPARE: ["CBL1"],
+    CHANGE: ["M1"],
   };
   const matrix = ctx.task.deliverables.requirements.map((requirement) => {
     const key = requirement.id.slice(2),

@@ -1,4 +1,5 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
+import { jsonHeaders } from "./issue-lookup.mjs";
 import { posix } from "node:path";
 import { localCommand } from "./repository-command.mjs";
 import { interpreterFetches } from "./interpreter-fetch.mjs";
@@ -71,10 +72,18 @@ const fetchOptions = {
     },
   },
   gh: {
-    short: { H: "header", X: "method", q: "side-output" },
+    short: {
+      H: "header",
+      X: "method",
+      q: "side-output",
+      f: "field",
+      F: "typed-field",
+    },
     long: {
       header: "header",
       method: "method",
+      "raw-field": "field",
+      field: "typed-field",
       jq: "side-output",
       paginate: "flag",
     },
@@ -92,7 +101,12 @@ function optionValue(kind, value, count) {
     case "write-out":
       return value.startsWith("@") ? null : { count };
     case "method":
-      return value === "GET" ? { count } : null;
+      return value === "GET" ? { count, explicitGet: true } : null;
+    case "typed-field":
+      if (/=@/.test(value)) return null;
+      return { count, field: value };
+    case "field":
+      return { count, field: value };
     case "integer":
       return /^\d+$/.test(value) && Number.isFinite(Number(value))
         ? { count }
@@ -190,8 +204,11 @@ function hasBraceExpansion(literal) {
 function fetchArguments(words, tokens) {
   if (tokens.some(({ literal }) => hasBraceExpansion(literal))) return null;
   const client = words[0],
-    headers = [];
-  let target, output;
+    headers = [],
+    fields = [];
+  let target,
+    output,
+    explicitGet = false;
   for (let i = client === "gh" ? 2 : 1; i < words.length;) {
     const word = words[i];
     if (tokens[i].control) {
@@ -207,7 +224,9 @@ function fetchArguments(words, tokens) {
     }
     if (
       !target &&
-      (/^https?:/i.test(word) || (client === "gh" && word.startsWith("repos/")))
+      (/^https?:/i.test(word) ||
+        (client === "gh" &&
+          (word.startsWith("repos/") || word === "search/issues")))
     ) {
       target = word;
       i++;
@@ -216,6 +235,8 @@ function fetchArguments(words, tokens) {
     const parsed = option(words, i, fetchOptions[client]);
     if (!parsed || (parsed.count === 2 && tokens[i + 1].control)) return null;
     if (parsed.header !== undefined) headers.push(parsed.header);
+    if (parsed.explicitGet) explicitGet = true;
+    if (parsed.field !== undefined) fields.push(parsed.field);
     if (parsed.output !== undefined) {
       if (output !== undefined) return null;
       output = parsed.output;
@@ -224,6 +245,25 @@ function fetchArguments(words, tokens) {
   }
   // curl expands braces and ranges even when the shell quotes the URL.
   if (!target || /[{}[\]*$]/.test(target)) return null;
+  if (target === "search/issues") {
+    if (
+      !explicitGet ||
+      fields.length !== 1 ||
+      !fields[0].startsWith("q=") ||
+      !jsonHeaders(headers)
+    )
+      return null;
+    return { query: fields[0].slice(2), repoOnly: true, headers, output };
+  }
+  if (fields.length) {
+    if (
+      !explicitGet ||
+      !target.startsWith("repos/") ||
+      !fields.every((field) => /^[a-z_]+=[a-z0-9]+$/i.test(field))
+    )
+      return null;
+    target += (target.includes("?") ? "&" : "?") + fields.join("&");
+  }
   if (target.startsWith("repos/")) target = `https://api.github.com/${target}`;
   return { target, headers, output };
 }
@@ -247,6 +287,7 @@ export function shellRequest(
       networkInvocation(text, words) ||
       (code &&
         interpreterEvidence(heredoc.body, ["bun", "-e", heredoc.body])) ||
+      (heredoc.executed && githubFragment(heredoc.body)) ||
       (expansion &&
         (networkInvocation(heredoc.body, null) ||
           githubFragment(heredoc.body)));

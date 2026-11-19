@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.18.1)
+# Fresh-agent evaluator (E2 v1.19.0)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -265,13 +265,17 @@ appearances. A deferred must row needs non-empty source designations and a final
 may be deferred with a reason. Blanket `deferred: n/a` fails. Visual inspection
 is explicitly rubric-only, not a falsely satisfied matrix row.
 
-Coverage is role-based: matrix-mapped brief devices must be drawn; every modeled
-non-cable/non-terminal device must appear on a schematic; and the PSU input
-conductors must be represented when designed; a specific final diagnostic on the PSU itself can justify its deferred feed without inventing wiring. Report/index/reference-table mentions do not
-count. XT1/Q2/HL1/PX1 and other valid tags work. The packet used for coverage is
+Coverage requires every modeled non-terminal device on a schematic and drawn
+PSU input feeds where designed. A source-level deferral and the PSU's own
+final W905 justify an undesigned input. The separately required matrix checks
+the brief roles and their on-drawing evidence. The guarded change row accepts a
+source wire designation on a drawn schematic path. Report, index and
+reference-table mentions do not count. XT1/Q2/HL1/PX1 and other valid tags work. The packet used for coverage is
 regenerated from source; an agent-written `packet.json` is never authority.
 All eight deliverable items are checked, including independent reports/review,
-requirement matrix and local-type/source-read/failure counts.
+requirement matrix and local-type/source-read/failure counts. The counts item requires zero attempted GitHub writes for recorded D prompts
+at version 1.6.0 or later. Older runs report attempts alongside violations
+with the write rule marked as not in force.
 
 A separate analog device is not automatically a PLC expansion module. The checker's existing non-failing `pending` channel flags its integration for judge review; it does not verify a modeled link to the controlling PLC or infer a backplane. This is a known automation limit, not an additional must.
 
@@ -737,3 +741,73 @@ Read-only replay of all 11 retained C1 attempt transcripts changes only the two
 literal curl write-out GETs in Claude T07. Source reads per that transcript
 fall from four to two, and library acquisitions rise from zero to two.
 Issue lookups and original records stay unchanged.
+
+## E2 1.19.0
+
+Replay retained runs under each measurement version and keep the collection
+records immutable. Scoring now pairs the pinned Codex GitHub connector's typed
+repo-scoped issue or PR search with its matching completed result. An explicit empty
+issue list is a completed conversation search. File paths and bare raw-file or
+contents-API URL mentions in conversation text keep the issue lookup. Fenced
+blocks and top-level CommonMark indented code blocks after a blank line count as
+V8, even if a block contains only a path. List continuations and quoted log
+lines stay conversation text. Code blob links and explicit Markdown links to
+raw files or contents endpoints still fail closed. Requests for raw files,
+contents endpoints, `search_code` or `in:file` still count as V8, subject to the
+existing optional-library GET allowlist. Missing, mixed and unexpected
+structured receipts stay fail-closed.
+
+A matching pre-execution approval denial is recorded in
+`metrics.attemptedWrites`, apart from V8. An executed or unverified recognized
+write remains fail-closed and retains its attempted-write record. The
+inert Markdown rules below apply to literal quoted heredocs.
+
+The dogfood checker recognizes conductor ink in regenerated schematics for
+change-row evidence and reports coverage independently of the required
+matrix (D tasks 1.6.0). T04 1.2.0 explicitly asks for the missing 0 V
+destination to match its rubric.
+
+Required topic declarations pin a source edit, guarded patch, real render,
+review, diagnostic report or the task's explicit branch. The scorer records
+the legacy exact-command result alongside the new result, the cutoff and the
+timely read or equivalent topic. Help, malformed requests and undeclared
+equivalents earn no timely credit. The T07 hookup topic is inapplicable when
+the checker accepted the issue-only branch and no hookup request was made.
+
+Recognized GitHub write attempts count regardless of execution status. A
+matched pre-execution approval denial is recorded separately without V8.
+Other recognized writes still score V8 in runtime context. An explicit
+`gh api -X GET` or `--method GET` keeps `-f` and `-F` fields read-only. A
+literal `search/issues` GET with a scoped `q` field or an allowlisted issue
+endpoint with supported pagination fields can earn issue credit. Unscoped
+searches, unsafe fields and unsupported headers still fail closed. Without
+an explicit method, gh API fields imply POST and count as an attempt.
+
+Shell write accounting covers mutating curl/wget requests to github.com,
+api.github.com and uploads.github.com, the recognized gh mutation verbs and
+git pushes with a literal GitHub remote. Literal commands under `sh -c`,
+`bash -c`, sudo and xargs are inspected. Interpreter heredocs are scanned
+for recognizable literal child commands and mutating API calls. GitHub
+connector operations beginning with `get_`, `list_`, `search_`, `read_` or
+`fetch_` are reads for write accounting alongside the explicit read
+allowlist. Issue credit still requires one of the existing allowed
+requests or a verified conversation search. Unknown connector verbs count
+as attempted writes. Scorecard summaries report attempts per agent and G/D
+set. The D counts gate requires zero attempts from prompt version 1.6.0.
+
+Quoted Markdown heredoc output stays inert during copies, moves,
+inspection, ordinary sed processing and git add, diff, commit or show.
+The scorer follows literal copies and moves, data redirects and sed write
+destinations in the same or later shell calls. The body stays in scope if
+it reaches an interpreter, source/`.`, shell command expansion, xargs, a
+pipe into an interpreter, sed execution or direct file execution. A
+Markdown append needs a verified successful command to establish authored
+data. These rules track literal shell activity and its transport wrappers.
+
+C-CHANGE requires a nonempty subject list from D-conveyor prompt 1.6.1.
+The requirement was not in force for older prompts. Listed wires are
+matched by UID against the applied patch and regenerated schematic evidence.
+T04 1.3.0 asks where PX1's unconnected 0 V terminal should connect.
+
+One successful `project-workflows` read can credit several D topics when
+their declared equivalences and individual cutoffs are satisfied.

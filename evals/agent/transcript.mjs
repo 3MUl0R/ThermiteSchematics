@@ -207,6 +207,7 @@ export function normalizeTranscript(
             type: "tool-result",
             id: block.tool_use_id,
             output: block.content,
+            toolError: block.is_error === true,
           });
     if (row.type === "result") {
       const typed = (value) => {
@@ -311,6 +312,7 @@ export function normalizeTranscript(
               ? `${item.server}.${item.tool}`
               : item.type,
           input: item.command ?? item.arguments ?? item.changes ?? item.query,
+          ...(item.type === "mcp_tool_call" ? { mcp: true } : {}),
           time: row.timestamp ?? null,
         });
         if (item.type === "web_search") webLookup(events, item);
@@ -324,12 +326,21 @@ export function normalizeTranscript(
             id: item.id,
             output: item.aggregated_output,
             exit: item.exit_code,
+            command: item.command,
           });
         if (item?.type === "mcp_tool_call")
           events.push({
             type: "tool-result",
             id: item.id,
             output: item.result?.content ?? item.result ?? item.error,
+            mcp: {
+              server: item.server,
+              tool: item.tool,
+              arguments: item.arguments,
+              status: item.status,
+              result: item.result,
+              error: item.error,
+            },
           });
         if (item?.type === "agent_message") {
           finalMessage = item.text;

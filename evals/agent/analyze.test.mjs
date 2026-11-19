@@ -305,3 +305,51 @@ it("analysis warnings summarize every reopen, pending/recorded decision and shut
   ])
     expect(result.warnings.join(" ")).toContain(text);
 });
+
+it("shows attempts separately from violations by agent and G/D set", () => {
+  const runs = fixture();
+  const g = runs.find(
+    (r) => r.task === "T03" && r.agent === "codex" && r.arm === "B",
+  );
+  g.metrics.attemptedWrites = [{ status: "denied-before-execution" }];
+  const metrics = {
+    ...g.metrics,
+    violations: [{ rule: "V8" }],
+    attemptedWrites: [{ status: "completed" }],
+  };
+  runs.push({ ...g, task: "D-conveyor", metrics });
+  const summary = analyze(runs, { requireComplete: false });
+  expect(summary.behaviorBySet).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        set: "G",
+        agent: "codex",
+        arm: "B",
+        violations: 0,
+        attemptedWrites: 1,
+      }),
+      expect.objectContaining({
+        set: "D",
+        agent: "codex",
+        arm: "B",
+        runs: 1,
+        violations: 1,
+        attemptedWrites: 1,
+      }),
+      expect.objectContaining({
+        set: "G",
+        agent: "claude",
+        arm: "B",
+        violations: 0,
+        attemptedWrites: 0,
+      }),
+    ]),
+  );
+  expect(
+    summary.table.find((r) => r.task === "T03" && r.agent === "codex"),
+  ).toMatchObject({
+    violationsB: "",
+    attemptedWritesA: 0,
+    attemptedWritesB: 1,
+  });
+});

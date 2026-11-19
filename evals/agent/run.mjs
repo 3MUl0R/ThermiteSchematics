@@ -789,6 +789,7 @@ export async function runOne({
         outcome.actualWarnings ??
         ctx.validationDiagnostics.filter((d) => d.severity === "warning"),
       requiredTopics: task.requiredTopics,
+      taskOutcome: outcome,
       allowedUnused: task.allowedUnused,
       allowedLibraryPaths: task.allowedLibraryPaths,
       guideCopy: task.guideCopy,
@@ -873,6 +874,7 @@ export async function runOne({
       outcome,
       metrics,
       judgement: task.rubric ? "pending-two-judges" : "not-required",
+      taskVersion: task.version,
       taskHash: sha256(readFileSync(join(taskDir, "task.json"))),
       taskTreeHash: snapshot(taskDir, { documents: false }).hash,
       ...runIdentity,
@@ -1012,13 +1014,27 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
     snapshot(stored.project).hash === stored.final.hash,
     "Kept agent sources changed; refusing recheck",
   );
+  const transcript = readFileSync(join(evidence, "transcript.jsonl"), "utf8");
+  const promptVersion =
+    original.taskVersion ??
+    (original.taskHash ===
+    sha256(readFileSync(join(stored.taskDir, "task.json")))
+      ? task.version
+      : null);
   const ctx = {
     ...stored,
     task,
+    promptVersion,
     evidence: live,
     env: freshEnvironment(join(work, `recheck-config-${revision}`), {}, {}),
     thermite: join(stored.runtime, "thermite.real.mjs"),
-    metrics: original.metrics,
+    metrics: score({
+      calls: stored.calls,
+      transcript,
+      context: stored.context,
+      engineRoots: stored.engineRoots,
+      allowedLibraryPaths: task.allowedLibraryPaths,
+    }),
   };
   const outcome = await evaluateTask(stored.taskDir, ctx);
   const metrics = score({
@@ -1027,7 +1043,7 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
     final: stored.final,
     runtimeBefore: original.runtimeHash.before,
     runtimeAfter: snapshot(stored.runtime, { documents: false }).hash,
-    transcript: readFileSync(join(evidence, "transcript.jsonl"), "utf8"),
+    transcript,
     context: stored.context,
     engineRoots: stored.engineRoots,
     guideBytes: readFileSync(join(stored.project, "AGENTS.md")).length,
@@ -1040,6 +1056,7 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       outcome.actualWarnings ??
       stored.validationDiagnostics.filter((d) => d.severity === "warning"),
     requiredTopics: task.requiredTopics,
+    taskOutcome: outcome,
     allowedUnused: task.allowedUnused,
     allowedLibraryPaths: task.allowedLibraryPaths,
     guideCopy: task.guideCopy,
@@ -1569,6 +1586,7 @@ async function main() {
       checkpointOverride: r.checkpointOverride ?? null,
       pass: r.outcome?.pass,
       violations: r.metrics?.violations.length,
+      attemptedWrites: r.metrics?.attemptedWrites?.length ?? 0,
     })),
   });
   if (

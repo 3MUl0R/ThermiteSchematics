@@ -14,8 +14,10 @@ thermite init ../cabinets --template cabinets
 
 `init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
-When using a runtime package, check issues; report bugs, gaps or unclear docs at
-https://github.com/BlackettApplied/ThermiteSchematics/issues. Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths. No GitHub: draft an issue. Never patch downloaded runtimes.
+When using a runtime package, check existing issues at
+https://github.com/BlackettApplied/ThermiteSchematics/issues.
+For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it (search and public library GET examples in `thermite guide libraries`).
+Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths. Never patch downloaded runtimes.
 
 Fix a separate engine checkout; follow its AGENTS.md/CONTRIBUTING.md for PRs.
 No private data/credentials in issues/PRs.

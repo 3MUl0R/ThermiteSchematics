@@ -271,3 +271,9 @@ fields; the existing `ratings-voltage` mutation now also expects W303 for missin
 only, preserving the requirement, state and reason. Baseline recipes, fixture
 bytes and I304 membership are unchanged. Regenerate and verify with the existing
 `reseed.mjs` commands; the manifest records the added provenance.
+
+### E2 measurement version
+
+The fresh-agent scorer and task contract are at 1.19.0. Replay 1.18.1 and
+1.19.0 against the retained inputs before comparing checkpoints, with the
+original scores preserved. See [the E2 changelog](agent/README.md#e2-1190).

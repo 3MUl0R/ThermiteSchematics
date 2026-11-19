@@ -7,11 +7,13 @@
   "requiredTopics": [
     {
       "topic": "modeling",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "source-change"
     },
     {
       "topic": "agent-requests",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "guarded-patch"
     }
   ],
   "expectedWarnings": [],

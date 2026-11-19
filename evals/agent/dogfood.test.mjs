@@ -142,7 +142,8 @@ function fixture(taskName = "D-conveyor") {
   const matrix = task.deliverables.requirements.map((r) => ({
     id: r.id,
     status: "satisfied",
-    designations: r.roles.map((role) => roleTags[role]),
+    designations:
+      r.id === "C-CHANGE" ? ["M1"] : r.roles.map((role) => roleTags[role]),
     requirement: r.id.toLowerCase(),
     evidence: {
       summary: "Validated source and sheet 1 show the specified role.",
@@ -209,7 +210,12 @@ function fixture(taskName = "D-conveyor") {
       V1: true,
       V5: true,
     },
-    counts: { localTypes: 4, sourceReads: 0, failedCalls: 0 },
+    counts: {
+      localTypes: 4,
+      sourceReads: 0,
+      failedCalls: 0,
+      attemptedWrites: 0,
+    },
     diagnostics: [],
   };
 }
@@ -582,7 +588,7 @@ it("published gap objects exactly match task metadata in both appendices", () =>
     const format = readFileSync(new URL("deliverable-format.md", dir), "utf8");
     expect(task.prompt).toBe(prompt);
     expect(prompt.endsWith(format)).toBe(true);
-    expect(task.version).toBe("1.5.1");
+    expect(task.version).toBe(name === "D-conveyor" ? "1.6.1" : "1.6.0");
     expect(task.deliverables.requirements.filter((r) => r.allowedGap)).toEqual(
       [],
     );
@@ -623,13 +629,16 @@ it("C-COIL requires the named overload as well as the PLC and contactor", () => 
   }
 });
 it.each(["D-pump", "D-conveyor"])(
-  "%s PSU feed exception needs the own-device final code and deferred row",
+  "%s scores a documented PSU deferral independently of the matrix",
   (name) => {
     const x = fixture(name),
       row = x.matrix.find((r) => r.id.endsWith("-PSU"));
     x.sourceObjects = x.sourceObjects.filter(
       (o) => !["W-PSU-L", "W-PSU-N"].includes(o.designation),
     );
+    x.sourceObjects.find((o) => o.designation === "PS1").connectionReview = {
+      terminals: { L: { status: "deferred" }, N: { status: "deferred" } },
+    };
     row.status = "deferred";
     row.evidence = {
       summary: "Undesigned input feed, no ratings invented",
@@ -642,10 +651,118 @@ it.each(["D-pump", "D-conveyor"])(
       { code: "W905", designation: "M1" },
     ]) {
       row.evidence.diagnostic = diagnostic;
-      expect(assessDogfood(x).checks.coverage).toBe(false);
+      expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+      expect(assessDogfood(x).checks.coverage).toBe(true);
     }
     row.evidence.diagnostic = { code: "W905", designation: "PS1" };
     row.status = "satisfied";
+    expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+    expect(assessDogfood(x).checks.coverage).toBe(true);
+    x.diagnostics = [{ code: "W905", designation: "M1", severity: "warning" }];
     expect(assessDogfood(x).checks.coverage).toBe(false);
   },
 );
+
+function changeFixture() {
+  const x = fixture();
+  const row = x.matrix.find((r) => r.id === "C-CHANGE");
+  row.designations = ["PLC1", "W-PSU-L"];
+  const after = x.sourceObjects.find((o) => o.uid === "w1");
+  const before = { ...after, properties: { label: "previous label" } };
+  const path = "source.json";
+  const beforeHash = "a".repeat(64),
+    afterHash = "b".repeat(64);
+  const integrity = (hash) =>
+    "sha256-" + Buffer.from(hash, "hex").toString("base64");
+  Object.assign(x.calls[0], {
+    request: JSON.stringify({ dryRun: false, files: [{ path }] }),
+    patchFiles: [
+      {
+        path,
+        changed: true,
+        beforeIntegrity: integrity(beforeHash),
+        afterIntegrity: integrity(afterHash),
+      },
+    ],
+    before: {
+      files: { [path]: beforeHash },
+      documents: { [path]: { objects: [before] } },
+    },
+    after: {
+      files: { [path]: afterHash },
+      documents: { [path]: { objects: [after] } },
+    },
+  });
+  const wire = (uid) =>
+    `<path class="net-path wire-path" data-designation="label" data-wire-uid="${uid}" d="M 0 0 H 10"/>`;
+  x.packet.sheets[0].svg = `<svg>${wire("w1")}</svg>`;
+  return { x, row, wire };
+}
+
+it("accepts a changed wire by UID from schematic ink or a trusted reference", () => {
+  const { x } = changeFixture();
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+  x.packet.sheets[0].svg = "<svg/>";
+  x.packet.sheets[0].references.push({
+    deviceUid: "w1",
+    designation: "different-label",
+  });
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(true);
+});
+
+it("requires C-CHANGE subjects only from prompt version 1.6.1", () => {
+  const { x, row } = changeFixture();
+  row.designations = [];
+  for (const promptVersion of [null, "1.5.1", "1.6.0"])
+    expect(
+      assessDogfood({ ...x, promptVersion }).checks.requirementMatrix,
+    ).toBe(true);
+  for (const promptVersion of ["1.6.1", "1.7.0", "2.0.0"])
+    expect(
+      assessDogfood({ ...x, promptVersion }).checks.requirementMatrix,
+    ).toBe(false);
+  row.status = "deferred";
+  expect(
+    assessDogfood(x).requirements.find((r) => r.id === "C-CHANGE").pass,
+  ).toBe(false);
+});
+
+it("rejects an untouched wire", () => {
+  const { x, row } = changeFixture();
+  row.designations = ["W-PSU-L"];
+  x.calls[0].before.documents["source.json"] =
+    x.calls[0].after.documents["source.json"];
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+});
+
+it("rejects an unverified patch receipt and a matching label with the wrong wire UID", () => {
+  const { x, wire } = changeFixture();
+  x.packet.sheets[0].svg = `<svg>${wire("another-uid").replace('designation="label"', 'designation="W-PSU-L"')}</svg>`;
+  x.packet.sheets[0].references.push({
+    deviceUid: "another-uid",
+    designation: "W-PSU-L",
+  });
+  x.packet.sheets[2].svg = `<svg>${wire("w1")}</svg>`;
+  const missing = assessDogfood(x);
+  expect(missing.checks.requirementMatrix).toBe(false);
+  expect(missing.checks.coverage).toBe(true);
+  x.packet.sheets[0].svg = `<svg>${wire("w1")}</svg>`;
+  x.calls[0].patchFiles[0].afterIntegrity =
+    x.calls[0].patchFiles[0].beforeIntegrity;
+  expect(assessDogfood(x).checks.requirementMatrix).toBe(false);
+});
+it("gates writes only for the recorded prompt version that stated the rule", () => {
+  const x = fixture();
+  x.counts.attemptedWrites = 1;
+  for (const promptVersion of ["1.6.0", "1.6.1", "2.0.0"]) {
+    const result = assessDogfood({ ...x, promptVersion });
+    expect(result.checks.counts).toBe(false);
+    expect(result.pass).toBe(false);
+  }
+  for (const promptVersion of ["1.5.1", null]) {
+    const result = assessDogfood({ ...x, promptVersion });
+    expect(result.checks.counts).toBe(true);
+    expect(result.counts.attemptedWrites).toBe(1);
+    expect(result.pass).toBe(true);
+  }
+});

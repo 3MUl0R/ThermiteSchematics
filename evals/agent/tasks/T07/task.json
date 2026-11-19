@@ -7,11 +7,14 @@
   "requiredTopics": [
     {
       "topic": "libraries",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "acquire-or-draft"
     },
     {
       "topic": "views",
-      "beforeCommand": "agent"
+      "beforeCommand": "agent",
+      "before": "hookup",
+      "equivalents": ["signal-loops", "project-workflows"]
     }
   ],
   "expectedWarnings": [],

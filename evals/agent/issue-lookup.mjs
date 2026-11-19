@@ -45,14 +45,35 @@ function plainTerm(token) {
     .split(" ")
     .every((term) => word.test(term));
 }
-export function issueSearch(query) {
+export function issueSearch(query, { repoOnly = false } = {}) {
   if (!query) return false;
   const tokens = tokenize(query);
   if (!tokens || !tokens.every((t) => operators.has(t) || plainTerm(t)))
     return false;
   const repo = tokens.some((t) => repoScopes.has(t));
   const kind = tokens.some((t) => issueKinds.has(t));
-  return repo === kind && (repo || tokens.some((t) => siteScopes.has(t)));
+  return (
+    repo === kind &&
+    (repo || (!repoOnly && tokens.some((t) => siteScopes.has(t))))
+  );
+}
+// Typed search_issues has its own endpoint. It still needs an approved repo
+// and ordinary search terms. Permit a literal Boolean group of plain words.
+export function conversationQuery(query) {
+  const simple = query.replace(
+    /\(([\p{L}\p{N}_-]+(?: or [\p{L}\p{N}_-]+)+)\)/gu,
+    (_, group) => group.split(" or ").join(" "),
+  );
+  const tokens = tokenize(simple);
+  if (!tokens || tokens.filter((t) => repoScopes.has(t)).length !== 1)
+    return null;
+  if (
+    !tokens.every(
+      (t) => (operators.has(t) && !siteScopes.has(t)) || plainTerm(t),
+    )
+  )
+    return null;
+  return tokens.find((t) => repoScopes.has(t)).slice(5);
 }
 function issueParameters(url) {
   const seen = new Set();
