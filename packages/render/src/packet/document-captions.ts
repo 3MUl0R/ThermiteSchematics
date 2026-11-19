@@ -18,6 +18,9 @@ import { required } from "../presentation/util.js";
 import { DocumentDependencyError } from "./document-error.js";
 import { documentCaptionInk } from "./document-caption-ink.js";
 import { placeDocumentCaption } from "./document-caption-place.js";
+import { terminalInventoryPointers } from "./terminal-strip-inventory.js";
+import { assemblyPeerReferences } from "./assembly-peer-references.js";
+import { terminalPeerReferences } from "./terminal-peer-references.js";
 function captionSheet(
   ir: Readonly<ElectricalIr>,
   sheet: RenderedSheet,
@@ -95,7 +98,22 @@ export function finalizeDocuments(
     ),
   );
   return {
-    sheets: assemblyPortPointers(ir, drafts, result, page, dependencies),
+    sheets: terminalInventoryPointers(
+      drafts,
+      terminalPeerReferences(
+        ir,
+        drafts,
+        assemblyPeerReferences(
+          ir,
+          drafts,
+          assemblyPortPointers(ir, drafts, result, page, dependencies),
+          page,
+          documents,
+        ),
+        page,
+      ),
+      documents,
+    ),
     navigation: {
       ...navigation,
       documentFormat: "issued-documents/1",

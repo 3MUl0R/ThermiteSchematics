@@ -34,7 +34,7 @@ export class NavigationSlotFailure extends Error {
     super(message);
   }
 }
-function navigationObstacles(svg: string) {
+export function navigationObstacles(svg: string, openDeviceFrames = false) {
   const measured = generatedSvgInk(svg, 1, cachedNavigationTree(svg));
   const ink = [
     ...measured.ink,
@@ -51,9 +51,10 @@ function navigationObstacles(svg: string) {
               h: Number(a["data-cell-height"]),
             }
           : g.node.name === "rect" &&
-              /device-frame|off-view-card|device-legend-frame/.test(
-                a.class ?? "",
-              )
+              (openDeviceFrames
+                ? /off-view-card|device-legend-frame/
+                : /device-frame|off-view-card|device-legend-frame/
+              ).test(a.class ?? "")
             ? {
                 x: Number(a.x ?? 0),
                 y: Number(a.y ?? 0),

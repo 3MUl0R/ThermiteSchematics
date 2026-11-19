@@ -75,7 +75,7 @@ export function wireScheduleLocations(
 }
 
 /** Pin rows use the measured ink center of their first painted line. */
-function drawnTerminalAnchor(g: NavigationGeometry) {
+export function drawnTerminalAnchor(g: NavigationGeometry) {
   const a = g.node.attrs;
   if (g.node.name === "circle")
     return project({ x: Number(a.cx), y: Number(a.cy), w: 0, h: 0 }, g.matrix);

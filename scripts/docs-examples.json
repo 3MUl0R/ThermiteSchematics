@@ -888,6 +888,12 @@
     },
     {
       "file": "evals/draw/README.md",
+      "hash": "800f497beeaf66a13bdf6dc06e0f16cab89a83eadb4742486f96320178f61c90",
+      "kind": "illustrative",
+      "reason": "The two checkpoint paths and built baseline checkout come from the exact draw pair being reviewed."
+    },
+    {
+      "file": "evals/draw/README.md",
       "hash": "ec268c78ec6a1180da04a674a755abafbfe64b4751c12fff00af680086606f2f",
       "kind": "platform-only",
       "setup": "Completed terminal-strip drawing capture and Chromium",

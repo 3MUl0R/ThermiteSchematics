@@ -118,7 +118,10 @@ function terminalSvg(
     `<g data-strip-terminal="${attr(t.key)}" data-device-uid="${attr(t.id.deviceUid)}" data-terminal-key="${attr(t.id.terminalKey)}" data-strip-ref="${attr(t.ref)}" data-inventory-row="${attr(t.key)}">`,
     `<rect x="${n(x)}" y="${n(cy - 4)}" width="${n(m.terminalW)}" height="8" fill="#fff" stroke="#344054" stroke-width="0.35"/>`,
     text(x + m.terminalW / 2, cy - 0.5, t.id.terminalKey, 2.5, "middle", 700),
-    text(x + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle"),
+    text(x + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle").replace(
+      "<text ",
+      `<text data-strip-inventory-label="${attr(t.key)}" `,
+    ),
     "</g>",
     ...rowLabels(part, row, x, cy, y, locate, approaches),
   ].join("\n");
@@ -230,7 +233,7 @@ export function stripRowReference(
   y: number,
 ) {
   return ref
-    ? text(x - 2 - measureText(ref, 2.5).width, y, ref, 2.5).replace(
+    ? text(x - 0.7 - measureText(ref, 2.5).width, y, ref, 2.5).replace(
         "<text ",
         `<text data-strip-row="${attr(key)}" data-strip-ref="${attr(ref)}" `,
       )
@@ -261,7 +264,7 @@ export function stripDraft(
     content: "",
     links: [],
     references: [],
-    note: "Graphical strip; inventory references Tn/Rn",
+    note: "Graphical strip · Tn/Rn: inventory row · Snn: inventory sheet",
     documentationTable: true,
   };
 }

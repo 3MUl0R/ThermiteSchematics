@@ -21,6 +21,29 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.30 (TEXT-NAV9)** extends **DQ-19** to reconcile direct peer and
+connector-inventory pointers, strip inventory sheet addresses, and circuit
+footer references against native identities and measured issued ink
+(#397, #429, #431, #434). The checker compares the ink of each peer
+note with the source's painted card or terminal. Text without a source name
+must be directly adjacent (2.1 mm). Named text can sit within 6.1 mm of the
+owner, its conductor stroke, or its continuation caption. Chromium comparisons
+allow 0.15 mm for measurement. A conductor which already reaches both native
+endpoints on a sheet needs no peer note.
+
+Run the manual pre-merge fit sweep after both strict captures.
+
+```sh
+bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout> \
+  --base-checkpoint <base-summary.json.gz> --head-checkpoint <head-summary.json.gz>
+```
+
+The script checks issuance across all 108 standing captures (715 sheets) and
+renders 402 additional A4, Letter and compact variants of the corpus and the
+narrow browser wire-field fixtures. The full check runs a 16-row representative
+guard that checks issuance, exact sheet counts and peer-note proximity for
+conveyor-line and machine-demo on Letter and A4, in both flows.
+
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption
 (LABEL1, #338 and #350). The mask check measures painted fills in any colour

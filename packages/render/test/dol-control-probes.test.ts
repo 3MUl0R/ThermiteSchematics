@@ -106,6 +106,35 @@ it.each(
   }
 });
 
+it("fits the named W35 peer beside its grouped circuit route", async () => {
+  const fixture = await dolProbeFixture("p6");
+  try {
+    const w35 = required(
+      fixture.ir.wires.find((wire) => wire.designation === "W35"),
+    );
+    const outcome = await renderSchematicPacket(
+      fixture.ir,
+      dolPackets("p6", "left-to-right").combined,
+    );
+    if (!outcome.ok) throw Error(outcome.error.message);
+    const { svg } = required(outcome.value.sheets[3]);
+    const drawing = parseSvg(svg);
+    expect(
+      drawing.querySelector(
+        `[data-circuit-conductor="${w35.uid}"] path[stroke="#17212b"]`,
+      ),
+    ).not.toBeNull();
+    const note = [
+      ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+    ].find((note) => note.getAttribute("data-peer-source")?.includes(w35.uid));
+    expect(note?.textContent).toMatch(
+      /^W35 · R1\.11 → OL1\.96 0[12]\.[A-D][1-6]$/u,
+    );
+  } finally {
+    await fixture.dispose();
+  }
+});
+
 it.each(flows)("rejects circuit coil ink mutant in %s", async (flow) => {
   const f = await dolProbeFixture("saved");
   try {

@@ -36,6 +36,9 @@ export function assemblyAppearances(packet, geometries, ir) {
         zones: rowZones(g, box),
         element: p.element,
         bbox: box,
+        keyBox:
+          p.texts?.find((t) => painted(t) && t.text.trim() === p.key)?.bbox ??
+          box,
       });
     }
     for (const a of g.tranche4?.assemblies ?? []) {

@@ -182,6 +182,7 @@ export const geometry = {
   },
   documentIdentity: ({ e, attr, ids }) => {
     const kind = attr(e, "data-document-kind");
+    const peer = e.closest("[data-peer-reference]");
     return {
       row: attr(e, "data-report-row"),
       documentId: attr(e, "data-document-id"),
@@ -189,6 +190,13 @@ export const geometry = {
       columnName: attr(e, "data-column-name"),
       reportRowScope: ids.get(e.closest("[data-report-row]")),
       ...(typeof kind === "string" ? { documentKind: kind } : {}),
+      ...(peer
+        ? {
+            peerReference: peer.getAttribute("data-peer-reference"),
+            peerSource: peer.getAttribute("data-peer-source"),
+            ...(peer !== e ? { peerGroup: ids.get(peer) } : {}),
+          }
+        : {}),
     };
   },
   identity: ({ e, ancestors, attr, ids, documentIdentity }) => ({
