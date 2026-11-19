@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { wirePlacement } from "./checks.mjs";
 import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { end, nativeIr, wire } from "./tranche3-fixtures.mjs";
 import { wireLabelSupportAudit } from "./wire-label-support.mjs";
@@ -194,4 +195,36 @@ it("DQ-16 sees actual paint order, fill and viewport", async () => {
       ),
     ),
   ).toEqual([]);
+});
+
+const offsetPlate = label("A", 30, 19.25);
+const leaderPath = (d, attrs = "") =>
+  `<path class="wire-label-leader" data-label-leader-owner="A" d="${d}" fill="none" stroke="#475467" stroke-width=".15" stroke-dasharray=".5 .375" ${attrs}/>`;
+const landing = leaderPath("M44 28 L44 30");
+
+it("the DQ-16 distance rule accepts a measured dashed leader to the native wire", async () => {
+  const g = await openSheet(page, svg(straight + offsetPlate + landing));
+  expect(wirePlacement(g)).toEqual([]);
+  expect(wireLabelSupportAudit(g, ir).findings).toEqual([]);
+});
+
+it.each([
+  [
+    "owner attribute only",
+    '<g class="wire-label-leader" data-label-leader-owner="A"/>',
+  ],
+  ["missing paint", leaderPath("M44 28 L44 30", 'opacity="0"')],
+  ["detached plate", leaderPath("M44 29.5 L44 30")],
+  ["wrong tip", leaderPath("M44 28 L44 32") + route("B", "M10 32 L110 32")],
+  ["disconnected leader", leaderPath("M44 28 L44 28.25 M44 29.75 L44 30")],
+  [
+    "clipped tip",
+    leaderPath("M44 28 L44 30", 'clip-path="url(#c)"') +
+      '<defs><clipPath id="c"><rect x="30" y="27" width="30" height="2.5"/></clipPath></defs>',
+  ],
+])("the DQ-16 distance rule rejects a %s", async (_name, invalid) => {
+  const g = await openSheet(page, svg(straight + offsetPlate + invalid));
+  expect(wirePlacement(g)).toContainEqual(
+    expect.objectContaining({ kind: "ambiguous-wire-label", wire: "A" }),
+  );
 });

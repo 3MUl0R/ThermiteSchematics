@@ -14,6 +14,8 @@ import {
   requirePdfFont,
 } from "./continuation-labels.mjs";
 import { straightPath } from "./path.mjs";
+import { measuredPlateLeader, wireLabelBlock } from "./wire-plate-leader.mjs";
+export { wirePlacementCoverage } from "./wire-plate-leader.mjs";
 export { utilisation } from "./utilisation.mjs";
 // Browser-free predicates. Inputs are measured DOM geometry, PDF text/raster
 // observations, and unchanged compiled IR. No renderer layout estimator is used.
@@ -679,25 +681,6 @@ export function routeQuality(g) {
   }
   return out;
 }
-export function wirePlacementCoverage(g) {
-  if (g.texts.some((t) => t.wire) || !g.shapes.some((s) => s.conductor))
-    return {};
-  const unowned = g.texts.some(
-    (t) =>
-      ["net", "conductor"].includes(t.labelRole) ||
-      /(?:^|\s)label-(?:net|conductor)(?:\s|$)/.test(t.role ?? "") ||
-      t.wireBlock,
-  );
-  return {
-    status: "not-implemented",
-    reasonCode: unowned
-      ? "label-identity-unavailable"
-      : "no-visible-conductor-labels",
-    reason: unowned
-      ? "Visible conductor labels need exported label-to-conductor identity."
-      : "No visible conductor labels to measure on this sheet.",
-  };
-}
 export function wirePlacement(g) {
   const routes = g.shapes.filter((s) => s.conductor && s.wire),
     out = [];
@@ -731,9 +714,7 @@ export function wirePlacement(g) {
       own = routes.filter((s) => s.wire === t.wire),
       others = routes.filter((s) => s.wire !== t.wire);
     if (!own.length) continue;
-    const block = t.wireBlock
-      ? g.texts.filter((q) => q.wireBlock === t.wireBlock && q.wire === t.wire)
-      : [t];
+    const block = wireLabelBlock(g, t);
     const inline = block.some(
       (q) =>
         q.plate &&
@@ -750,7 +731,10 @@ export function wirePlacement(g) {
     // Rooted-label offsets near 2.17 mm are threshold-sensitive: 2.147 passes,
     // 2.195 fails. These distance-only hits do not establish visual ambiguity.
     // See README; keep the calibrated uncertainty rather than moving the limit.
-    if (d > 2 + INK_ACCURACY_MM || other + INK_ACCURACY_MM < d)
+    if (
+      (d > 2 + INK_ACCURACY_MM || other + INK_ACCURACY_MM < d) &&
+      !measuredPlateLeader(g, block, own, others, distance)
+    )
       out.push(
         issue("ambiguous-wire-label", t, {
           ownDistanceMm: d,

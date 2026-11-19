@@ -12,13 +12,18 @@ export function wirePlateGeometry(c) {
       if (paint) plates.push({ ...paint, text: t.element });
     }
   }
-  if (!plates.length) return { plates, strokes: {}, markers: [] };
+  if (!plates.length) return { plates, strokes: {}, markers: [], leaders: [] };
   const strokes = Object.fromEntries(
     c.shapes
       .filter((s) => s.conductor && s.stroke > 0)
       .map((s) => [s.element, c.h.wirePlateStroke(c, s)]),
   );
-  return { plates, strokes, markers: c.h.wirePlateMarkers(c) };
+  return {
+    plates,
+    strokes,
+    markers: c.h.wirePlateMarkers(c),
+    leaders: c.h.wirePlateLeaders(c),
+  };
 }
 
 export function wirePlateShapes(e) {
@@ -104,6 +109,35 @@ export function wirePlateMarkers(c) {
         ),
         order: c.orders.get(e),
         clip: c.h.wirePlateClip(c, e, v.clip),
+      },
+    ];
+  });
+}
+
+export function wirePlateLeaders(c) {
+  const selector = "path.wire-label-leader[data-label-leader-owner]";
+  return [...c.root.querySelectorAll(selector)].flatMap((e) => {
+    const v = c.visible(e);
+    if (!v || e.closest("[data-circuit-conductor],[data-wiring-conductor]"))
+      return [];
+    // An annotation is one open path. A disconnected pair of dashes cannot
+    // establish a connection just by putting both subpaths in one element.
+    const d = e.getAttribute("d") ?? "";
+    if (d.match(/[Mm]/g)?.length !== 1 || /[Zz]/.test(d)) return [];
+    const m = e.getScreenCTM(),
+      length = e.getTotalLength(),
+      end = (distance) => {
+        const p = e.getPointAtLength(distance).matrixTransform(m);
+        return c.point(p.x, p.y);
+      },
+      segments = c.strokeInk(e, v.clip, m);
+    if (!segments.length) return [];
+    return [
+      {
+        wire: e.getAttribute("data-label-leader-owner"),
+        start: end(0),
+        end: end(length),
+        segments,
       },
     ];
   });
