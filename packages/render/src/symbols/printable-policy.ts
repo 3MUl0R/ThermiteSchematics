@@ -59,6 +59,7 @@ export const PRINTABLE_SYMBOL_POLICY = Object.freeze({
   deviceOutlineColor: "#667085",
   enclosureDashMm: Object.freeze([0.6, 0.6] as const),
   minimumGapMm: 0.3,
+  separateStubGapMm: 1,
   color: "#17212b",
   rootedMmPerUnit: 0.25,
   // R4 may list a word here only after that mark carries the same fact in ink.

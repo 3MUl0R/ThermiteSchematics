@@ -326,7 +326,7 @@ export function circuitTerminal(
   return `<circle cx="${n(x)}" cy="${n(y)}" r=".65" fill="${connected ? "#17212b" : "white"}" stroke="#17212b" stroke-width=".3"/>`;
 }
 
-/** Motor load ports end on the circle at distinct points; the mark never joins its phases. */
+/** The motor face stays clear of the independent incoming leads. */
 export function circuitMotor(
   width: number,
   top: number,
@@ -336,11 +336,12 @@ export function circuitMotor(
 ): string {
   const cx = width / 2,
     cy = top + span / 2,
-    r = Math.min(width / 2 - 2, Math.max(5, span / 2 - 2));
+    r = Math.min(width / 2 - 2, Math.max(5, span / 2 - 2)),
+    leadRadius = r + PRINTABLE_SYMBOL_POLICY.separateStubGapMm;
   return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portYs
     .map((y) => {
       const dy = Math.max(-r, Math.min(r, y - cy)),
-        x = cx - Math.sqrt(r * r - dy * dy);
+        x = cx - Math.sqrt(leadRadius ** 2 - dy ** 2);
       return `<line x1="0" y1="${n(y)}" x2="${n(x)}" y2="${n(y)}"/>`;
     })
     .join(
@@ -355,11 +356,12 @@ export function circuitMotorVertical(
   portXs: readonly number[],
   threePhase = false,
 ): string {
-  const r = Math.max(5, span / 2 - 2);
+  const r = Math.max(5, span / 2 - 2),
+    leadRadius = r + PRINTABLE_SYMBOL_POLICY.separateStubGapMm;
   return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portXs
     .map((x) => {
       const dx = Math.max(-r, Math.min(r, x - cx)),
-        y = cy - Math.sqrt(r * r - dx * dx);
+        y = cy - Math.sqrt(leadRadius ** 2 - dx ** 2);
       return `<line x1="${n(x)}" y1="0" x2="${n(x)}" y2="${n(y)}"/>`;
     })
     .join(

@@ -9,6 +9,8 @@ import { geometry as group7 } from "./measurement/geometry.mjs";
 import * as group8 from "./measurement/terminals.mjs";
 import * as group9 from "./measurement/reports.mjs";
 import * as group10 from "./measurement/outline.mjs";
+import { cableCaptionMarks } from "./measurement/cable-caption-marks.mjs";
+import * as faceStrokes from "./measurement/face-strokes.mjs";
 import * as preparation from "./measurement/prepare.mjs";
 import * as tranche3 from "./measurement/tranche3.mjs";
 import * as tranche4 from "./measurement/tranche4.mjs";
@@ -16,6 +18,8 @@ import * as wirePlates from "./measurement/wire-plates.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 export const measurementHelpers = Object.freeze({
   IdentifierMeasurementError,
+  cableCaptionMarks,
+  ...faceStrokes,
   ...wirePlates,
   ...preparation,
   ...tranche3,

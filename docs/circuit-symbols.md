@@ -144,13 +144,18 @@ roles. Spacing and orientation carry the following meanings in both flows.
 | NO and NC contact | Two parallel contact bars. The diagonal state stroke identifies an authored NC contact. Actuated contacts retain the same bars and their own operator marks. |
 | Breaker and disconnector | A blade and cross identify a breaker pole, with no trip technology implied. An open blade and fixed-contact bar identify a declared disconnector. An aligned authored gang can add a mechanical link where the corridor is clear. |
 | Coil and transformer winding | A coil is a rectangle. An authored coil voltage class can add upright AC or DC text. A transformer winding is a zigzag between its own two leads. Paired core lines stand clear of the windings and indicate magnetic association. Explicit wiring and jumpers determine the physical nets. |
-| AC input and DC output | An upright wave identifies AC. A solid line above a broken line identifies DC. Inside a circuit converter each outline brackets its own terminal group, with a clear gap to each separate stub. |
+| AC input and DC output | An upright wave identifies AC. A solid line above a broken line identifies DC. Inside a circuit converter each outline brackets its own terminal group. |
 | Protective earth | A descending stem above three horizontal bars of decreasing length, upright in both flows. On a motor it follows the PE lead and stays separate from phase ink. |
-| Receptacle | An upright circular face with two slots and a lower earth mark. The two supply stubs stop clear of the outline. Native terminals and connections determine the pin identities and any PE connection. |
+| Receptacle | An upright circular face with two slots and a lower earth mark. Native terminals and connections determine the pin identities and any PE connection. |
 | Generic interface | A boxed, upright `I/F` identifies a generic interface. Its authored terminals are listed individually. The mark specifies no contact state, pinout or internal connections. |
 
 Unmarked overload power poles use a stepped thermal element. Their auxiliary
 contacts use their own authored state. Protection elements have no NC/NO caption.
+
+When two or more independent terminal stubs approach the same symbol face edge,
+end each stub about 1 mm short of the outline in both flows. This keeps the
+outline visually separate from the leads. Native terminals and conductors
+determine electrical connectivity.
 
 Rooted DC source and load polarity qualifiers stay upright in both flows, with
 owned annotation ink reserved inside the symbol size and offset from the leads.

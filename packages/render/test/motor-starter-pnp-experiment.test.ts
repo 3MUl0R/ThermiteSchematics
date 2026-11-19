@@ -1649,8 +1649,8 @@ describe("Amendment B2 collision-free real-layout evidence", () => {
   });
 });
 
-describe("M6 Task 7 reviewed PNP bytes and unchanged catalog contract", () => {
-  it("keeps the PNP symbol, mapping, and exactly-once coverage unchanged", () => {
+describe("M6 Task 7 reviewed PNP bytes and catalog contract", () => {
+  it("gaps the PNP supply stubs and preserves the mapping and exactly-once coverage", () => {
     expect(
       required(SYMBOL_CATALOG.find(({ id }) => id === "ais:switch-sensor-pnp")),
     ).toEqual({
@@ -1666,13 +1666,13 @@ describe("M6 Task 7 reviewed PNP bytes and unchanged catalog contract", () => {
         {
           kind: "line",
           from: { x: 0, y: 10 },
-          to: { x: 8, y: 10 },
+          to: { x: 4, y: 10 },
           style: "body",
         },
         {
           kind: "line",
           from: { x: 0, y: 30 },
-          to: { x: 8, y: 30 },
+          to: { x: 4, y: 30 },
           style: "body",
         },
         {

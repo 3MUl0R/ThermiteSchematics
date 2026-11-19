@@ -1,4 +1,5 @@
 import {
+  PRINTABLE_SYMBOL_POLICY,
   sharedMarkPrimitives,
   sourceEnclosure,
   windingPolyline,
@@ -22,6 +23,12 @@ export const LABEL_GAP = 4;
 export const ROOT_LOCATION_SIDE_PADDING = 16;
 export const DEVICE_GROUP_SIDE_PADDING = 8;
 export const OUTER_SVG_PADDING = 20;
+const SEPARATE_STUB_GAP =
+  PRINTABLE_SYMBOL_POLICY.separateStubGapMm /
+  PRINTABLE_SYMBOL_POLICY.rootedMmPerUnit;
+const LOAD_STUB_TIP = 8 - SEPARATE_STUB_GAP;
+const THREE_PHASE_MOTOR_SIDE_TIP =
+  Math.floor(28 - Math.sqrt(18 ** 2 - 12 ** 2)) - SEPARATE_STUB_GAP;
 
 function point(x: number, y: number): SymbolPoint {
   return { x, y };
@@ -200,8 +207,8 @@ const CATALOG_DEFINITIONS = [
     64,
     [port("positive", "west", 1 / 8, 0), port("return", "west", 7 / 8, 1)],
     [
-      line(0, 8, 8, 8, "body"),
-      line(0, 56, 8, 56, "body"),
+      line(0, 8, LOAD_STUB_TIP, 8, "body"),
+      line(0, 56, LOAD_STUB_TIP, 56, "body"),
       rect(8, 4, 24, 56, "body", 2),
       ...polarityQualifier("positive", "positive", 18, 16, 3),
       ...polarityQualifier("negative", "return", 18, 48, 3),
@@ -285,8 +292,8 @@ const CATALOG_DEFINITIONS = [
       port("signal", "east", 1 / 2, 2),
     ],
     [
-      line(0, 10, 8, 10, "body"),
-      line(0, 30, 8, 30, "body"),
+      line(0, 10, LOAD_STUB_TIP, 10, "body"),
+      line(0, 30, LOAD_STUB_TIP, 30, "body"),
       rect(8, 4, 30, 32, "body", 2),
       circle(21, 20, 6, "actuator"),
       line(27, 20, 48, 20, "body"),
@@ -344,21 +351,21 @@ const CATALOG_DEFINITIONS = [
         [
           [0, 12],
           [28, 12],
-          [28, 32],
+          [28, 30 - SEPARATE_STUB_GAP],
         ],
         "body",
       ),
       polyline(
         [
           [0, 36],
-          [16, 36],
+          [THREE_PHASE_MOTOR_SIDE_TIP, 36],
         ],
         "body",
       ),
       polyline(
         [
           [0, 60],
-          [16, 60],
+          [THREE_PHASE_MOTOR_SIDE_TIP, 60],
         ],
         "body",
       ),
@@ -490,8 +497,8 @@ const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
     64,
     [port("line", "west", 1 / 8, 0), port("neutral", "west", 7 / 8, 1)],
     [
-      line(0, 8, 8, 8, "body"),
-      line(0, 56, 8, 56, "body"),
+      line(0, 8, LOAD_STUB_TIP, 8, "body"),
+      line(0, 56, LOAD_STUB_TIP, 56, "body"),
       rect(8, 4, 28, 56, "body"),
     ],
   ),
@@ -502,9 +509,9 @@ const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
     [port("positive", "west", 1 / 8, 0), port("return", "west", 7 / 8, 1)],
     [
       line(0, 8, 24, 8, "body"),
-      line(24, 8, 24, 14, "body"),
+      line(24, 8, 24, 14 - SEPARATE_STUB_GAP, "body"),
       line(0, 56, 24, 56, "body"),
-      line(24, 56, 24, 50, "body"),
+      line(24, 56, 24, 50 + SEPARATE_STUB_GAP, "body"),
       circle(24, 32, 18, "body"),
     ],
   ),
@@ -515,9 +522,9 @@ const ADDITIONAL_DEFINITIONS: SymbolDefinition[] = [
     [port("positive", "west", 1 / 8, 0), port("return", "west", 7 / 8, 1)],
     [
       line(0, 8, 24, 8, "body"),
-      line(24, 8, 24, 14, "body"),
+      line(24, 8, 24, 14 - SEPARATE_STUB_GAP, "body"),
       line(0, 56, 24, 56, "body"),
-      line(24, 56, 24, 50, "body"),
+      line(24, 56, 24, 50 + SEPARATE_STUB_GAP, "body"),
       circle(24, 32, 18, "body"),
       line(12, 20, 36, 44, "operator"),
       line(12, 44, 36, 20, "operator"),

@@ -173,7 +173,7 @@ export async function cableDrafts(
       );
     for (const row of corePage.rows) {
       const { core, cards, height } = row,
-        { a, z, centerRows, usage, midOffset } = row.plan;
+        { a, z, usage, midOffset } = row.plan;
       const midY = y + midOffset;
       const dashed = core.usage === "spare" || core.status === "unassigned";
       content.push(
@@ -186,12 +186,11 @@ export async function cableDrafts(
           dashed ? 'stroke-dasharray="2 1"' : "",
         ),
       );
-      const rowLabels = cableRowLabels(a, z, centerRows, usage, {
-        left,
-        right,
-        y,
-        midY,
-      });
+      const rowLabels = cableRowLabels(
+        row.plan,
+        { left, right, y, midY },
+        core.endpoints,
+      );
       cableEndpointOwnership(
         rowLabels,
         core,

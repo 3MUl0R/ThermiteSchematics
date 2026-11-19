@@ -366,7 +366,7 @@ describe("D3 original symbol catalog", () => {
         [8, 56].map((y) => ({
           kind: "line",
           from: { x: side === "east" ? 8 : 0, y },
-          to: { x: side === "east" ? 36 : 8, y },
+          to: { x: side === "east" ? 36 : 4, y },
           style: "body",
         })),
       );
@@ -389,7 +389,7 @@ describe("D3 original symbol catalog", () => {
     }
   });
 
-  it("connects every three-phase motor lead to the motor outline", () => {
+  it("keeps the three-phase motor port anchors and separates the leads from the face", () => {
     const motor = SYMBOL_CATALOG.find(({ id }) => id === "ais:motor-3ph")!;
     const circle = motor.primitives.find(
       (primitive) => primitive.kind === "circle" && primitive.style === "body",
@@ -403,39 +403,23 @@ describe("D3 original symbol catalog", () => {
       { x: 0, y: 36 },
       { x: 0, y: 60 },
     ];
-    const epsilon = 1e-9;
     for (const [index, lead] of leads.entries()) {
       if (lead?.kind !== "polyline") continue;
       expect(lead.points[0]).toEqual(anchors[index]);
-      const intersections = lead.points.slice(1).flatMap((to, pointIndex) => {
+      const clearance = lead.points.slice(1).map((to, pointIndex) => {
         const from = lead.points[pointIndex]!;
         const dx = to.x - from.x;
         const dy = to.y - from.y;
         const fx = from.x - circle.center.x;
         const fy = from.y - circle.center.y;
-        const a = dx * dx + dy * dy;
-        const b = 2 * (fx * dx + fy * dy);
-        const c = fx * fx + fy * fy - circle.radius * circle.radius;
-        const discriminant = b * b - 4 * a * c;
-        if (discriminant < -epsilon) return [];
-        const root = Math.sqrt(Math.max(0, discriminant));
-        return [(-b - root) / (2 * a), (-b + root) / (2 * a)]
-          .filter((value) => value >= -epsilon && value <= 1 + epsilon)
-          .map((value) => ({
-            x: from.x + value * dx,
-            y: from.y + value * dy,
-          }));
+        const t = Math.min(
+          1,
+          Math.max(0, -(fx * dx + fy * dy) / (dx * dx + dy * dy)),
+        );
+        return Math.hypot(fx + t * dx, fy + t * dy) - circle.radius;
       });
-      expect(intersections.length).toBeGreaterThan(0);
-      expect(
-        intersections.some(
-          ({ x, y }) =>
-            Math.abs(
-              Math.hypot(x - circle.center.x, y - circle.center.y) -
-                circle.radius,
-            ) <= epsilon,
-        ),
-      ).toBe(true);
+      expect(Math.min(...clearance)).toBeGreaterThan(3);
+      expect(Math.min(...clearance)).toBeLessThan(5);
     }
   });
 

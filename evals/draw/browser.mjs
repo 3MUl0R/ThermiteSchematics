@@ -73,6 +73,7 @@ export function measureSheet(options = {}, h) {
     const id = identity(e),
       symbol = attr(e, "data-symbol-id"),
       mark = attr(e, "data-circuit-mark"),
+      functionInterface = attr(e, "data-function-interface"),
       cls = e.getAttribute("class") ?? "";
     const conductor =
       e.matches("path,line,polyline") &&
@@ -94,30 +95,19 @@ export function measureSheet(options = {}, h) {
         e.parentElement.hasAttribute("data-device-uid") &&
         !e.parentElement.hasAttribute("data-symbol-id") &&
         !conductor);
-    // Table rules/backgrounds do not participate in symbol or conductor checks.
-    // Their actual cell boxes are already measured above; avoid flattening ink
-    // that no checker consumes, especially on long report packets.
-    if (
-      !conductor &&
-      !lead &&
-      !id.primitiveRole &&
-      !id.qualifier &&
-      !id.attachment &&
-      !id.attachmentCandidate &&
-      !id.loopConductor &&
-      !id.loopCandidate &&
-      !outline &&
-      !symbol &&
-      !mark &&
-      !id.terminal &&
-      !id.glyphBody &&
-      !hasRepeatLabels &&
-      !id.navigationAnnotation &&
-      !id.mechanicalAssociation &&
-      !cls.includes("junction-dot") &&
-      !e.hasAttribute("data-wiring-junction")
-    )
-      return [];
+    const candidate = {
+      e,
+      id,
+      conductor,
+      lead,
+      outline,
+      symbol,
+      mark,
+      cls,
+      hasRepeatLabels,
+    };
+    const included = h.sheetShapeCandidate(candidate);
+    if (!included && !functionInterface) return [];
     let points = [];
     if (typeof e.getTotalLength === "function") {
       const length = e.getTotalLength(),
@@ -197,6 +187,15 @@ export function measureSheet(options = {}, h) {
         viewport: v.clip,
         ...utilisationGeometry,
         mark,
+        faceOnly: !included || undefined,
+        faceSegments: h.faceSegments(
+          c,
+          candidate,
+          functionInterface,
+          css,
+          v.clip,
+          m,
+        ),
         conductor,
         lead,
         outline,
@@ -249,9 +248,9 @@ export function measureSheet(options = {}, h) {
       },
     ];
   });
-  c.shapes = shapes;
+  c.shapes = shapes.filter((s) => !s.faceOnly);
   h.relationLandingRows(c);
-  return h.trancheSheetFields(c);
+  return h.sheetWithClearanceGeometry(c, shapes);
 }
 function bindMeasurement(measure, helpers) {
   return (options = {}) => measure(options, helpers);

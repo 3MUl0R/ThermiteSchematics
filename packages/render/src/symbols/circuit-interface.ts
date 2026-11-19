@@ -1,4 +1,5 @@
 import { composedCircuitMark, type CircuitMark } from "./circuit-mark.js";
+import { PRINTABLE_SYMBOL_POLICY } from "./printable-policy.js";
 
 type InterfacePin = { x: number; y: number; side: string };
 const n = (v: number) => String(Number(v.toFixed(3)));
@@ -17,14 +18,30 @@ export function conversionQualifierSpan(
   ];
 }
 
-export function interfaceLeadEnd(
+export function interfaceLeadTip(
   mark: CircuitMark,
+  pin: InterfacePin,
+  pins: readonly InterfacePin[],
+  cx: number,
+  cy: number,
+  vertical: boolean,
   source: boolean,
-  count: number,
 ) {
-  if (mark === "ac-input" || mark === "dc-output") return 13 / 3;
-  if (source || mark === "receptacle") return 6;
-  return mark === "sensor-3wire" && count === 1 ? 10 / 3 : 5;
+  const gap = PRINTABLE_SYMBOL_POLICY.separateStubGapMm;
+  const depth =
+    mark === "ac-input" || mark === "dc-output"
+      ? 10 / 3 + gap
+      : mark === "sensor-3wire" && pins.length === 1 && !source
+        ? 10 / 3
+        : 5 +
+          (source ||
+          mark === "receptacle" ||
+          pins.some((p) => p !== pin && p.side === pin.side)
+            ? gap
+            : 0);
+  return vertical
+    ? { x: pin.x, y: cy + (pin.side === "NORTH" ? -depth : depth) }
+    : { x: cx + (pin.side === "WEST" ? -depth : depth), y: pin.y };
 }
 
 /** Interface leads and the presentation outline are independent for conversion. */
@@ -44,13 +61,14 @@ export function circuitInterfaceMark(
     ? `<rect x="${n(low)}" y="${n(cy - 5)}" width="${n(high - low)}" height="10"/>`
     : `<rect x="${n(cx - 5)}" y="${n(low)}" width="10" height="${n(high - low)}"/>`;
   const sensorOutput = mark === "sensor-3wire" && pins.length === 1;
-  const leadEnd = interfaceLeadEnd(mark, source, pins.length);
   const leads = pins
-    .map((p) =>
-      vertical
-        ? `<line${source ? ' data-source-stub="true"' : ""} x1="${n(p.x)}" x2="${n(p.x)}" y1="${n(p.y)}" y2="${n(cy + (p.side === "NORTH" ? -leadEnd : leadEnd))}"/>`
-        : `<line${source ? ' data-source-stub="true"' : ""} y1="${n(p.y)}" y2="${n(p.y)}" x1="${n(p.x)}" x2="${n(cx + (p.side === "WEST" ? -leadEnd : leadEnd))}"/>`,
-    )
+    .map((p) => {
+      const tip = interfaceLeadTip(mark, p, pins, cx, cy, vertical, source);
+      const role = source ? ' data-source-stub="true"' : "";
+      return vertical
+        ? `<line${role} x1="${n(p.x)}" x2="${n(tip.x)}" y1="${n(p.y)}" y2="${n(tip.y)}"/>`
+        : `<line${role} y1="${n(p.y)}" y2="${n(tip.y)}" x1="${n(p.x)}" x2="${n(tip.x)}"/>`;
+    })
     .join("");
   return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput || span ? "" : outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;
 }
