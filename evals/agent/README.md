@@ -881,6 +881,7 @@ Eval **1.20.0** qualifies the source-contributor R01/R02 tasks at version 2.0.1.
 
 ## E2 1.20.1
 
-Contributor scoring compares Git-reported worktree paths and local evidence
+Contributor scoring verifies the linked worktree through its Git
+administrative directory and checkout backlink. It compares local evidence
 using native filesystem path rules. The direct Bun fallback preserves
 Windows path separators in command receipts. T and D scoring is unchanged.

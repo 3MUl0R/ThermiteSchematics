@@ -18,7 +18,41 @@ import checkR01 from "./R01/check.mjs";
 import checkR02 from "./R02/check.mjs";
 
 it("R01 accepts a registered checkout with matching test and build receipts", () => {
-  expect(checkR01(fixture().ctx).pass).toBe(true);
+  const f = fixture();
+  const outcome = checkR01(f.ctx);
+  const gitDirectories = () =>
+    ["--show-toplevel", "--absolute-git-dir", "--git-common-dir"].map(
+      (option) => [
+        option,
+        git(f.ctx, f.repository, "rev-parse", option).trimEnd(),
+      ],
+    );
+  const evidence = outcome.pass
+    ? undefined
+    : JSON.stringify({
+        checkout: f.repository,
+        realpath: realpathSync(f.repository),
+        gitDirectories: gitDirectories(),
+        engineCommon: git(
+          f.ctx,
+          f.engine,
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ).trimEnd(),
+        listed: git(
+          f.ctx,
+          f.engine,
+          "worktree",
+          "list",
+          "--porcelain",
+          "-z",
+        ).split("\0"),
+      });
+  expect(outcome, evidence).toMatchObject({
+    pass: true,
+    checks: { worktree: true },
+  });
 });
 
 it("R01 accepts Git-style separators in recorded checkout and test paths", () => {
@@ -35,6 +69,18 @@ it("R01 accepts Git-style separators in recorded checkout and test paths", () =>
     pass: true,
     checks: { worktree: true, focused: true },
   });
+});
+
+it("R01 rejects a checkout with a stale Git worktree backlink", () => {
+  const f = fixture();
+  const admin = git(
+    f.ctx,
+    f.repository,
+    "rev-parse",
+    "--absolute-git-dir",
+  ).trimEnd();
+  put(admin, "gitdir", join(f.engine, ".git") + "\n");
+  expect(checkR01(f.ctx)).toEqual({ pass: false, checks: { worktree: false } });
 });
 
 it("R01 accepts an incremental rebuild after a fresh observed build", () => {
