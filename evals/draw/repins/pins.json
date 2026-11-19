@@ -45,6 +45,11 @@
       "pr": 421,
       "baseCommit": "fb9299d01c65cb9637a3c3778d18ee8698f4bf0f",
       "recordSha256": "d6fd21cc0a896068d0a05f83a8e61d21d79f5e53ac969efca8411e71d1ebb11f"
+    },
+    {
+      "pr": 454,
+      "baseCommit": "70530dd11e42dc5a27108e4052ec28692b2ed412",
+      "recordSha256": "24238b170b951e84450a9f720060f2a33e7c0a155f2b3ab0c219284ac9328e62"
     }
   ]
 }
