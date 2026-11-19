@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { cli, read, write } from "./task-support.mjs";
 import { check } from "./tasks.mjs";
 import { score } from "./score-log.mjs";
+import { snapshot } from "./snapshot.mjs";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const thermite = join(repo, "thermite.mjs");
@@ -26,7 +27,7 @@ const loopView = {
 };
 let root, project, loop, wrongView;
 
-function render(output, view) {
+function render(project, output, view) {
   const request = {
     format: "schematic-packet-request/0.1",
     page: { size: "tabloid", orientation: "landscape" },
@@ -61,11 +62,11 @@ beforeAll(() => {
   });
   const result = cli({ project, thermite }, "lock", ".");
   expect(result.status, result.stderr).toBe(0);
-  wrongView = render(report, {
+  wrongView = render(project, report, {
     format: "documentation-view-request/0.1",
     kind: "terminals",
   });
-  loop = render(artifact, loopView);
+  loop = render(project, artifact, loopView);
 });
 
 afterAll(() => {
@@ -140,17 +141,44 @@ it("rejects a recorded print with no delivered PDF", async () => {
   expect(result.pass).toBe(false);
 });
 
-it("reports an accepted hookup with an incidental issue file as requiring view guidance", () => {
-  const options = {
-    final: { files: { "issue.md": "hash" } },
-    requiredTopics: [{ topic: "views", before: "hookup" }],
-  };
-  const draft = { checks: { issueOrHookup: true } };
-  expect(
-    score({ ...options, taskOutcome: draft }).retrieval[0].applicability,
-  ).toBe("draft-only");
-  const hookup = { ...draft, hookupPdf: artifact };
-  expect(
-    score({ ...options, taskOutcome: hookup }).retrieval[0].applicability,
-  ).toBe("required");
-});
+it.each([
+  { name: "issue and hookup", hasHookup: true, applicability: "required" },
+  { name: "issue only", hasHookup: false, applicability: "draft-only" },
+])(
+  "scores views guidance for a delivered $name",
+  async ({ name, hasHookup, applicability }) => {
+    const ctx = delivery(name, []);
+    rmSync(join(ctx.project, artifact));
+    rmSync(join(ctx.project, report));
+    write(
+      join(ctx.project, "issue.md"),
+      "Please review the proposed transmitter hookup and confirm the selected devices, connector pin assignments and available loop power before installation.",
+    );
+
+    const hookup = "drawings/transmitter-wiring.pdf";
+    if (hasHookup) {
+      ctx.calls.push(
+        render(ctx.project, hookup, {
+          format: "wiring-view-request/0.1",
+          title: "Transmitter hookup wiring",
+          conductors: ["W1", "W2", "W3", "W4"],
+        }),
+      );
+    }
+
+    const taskOutcome = await check("T07", ctx);
+    const task = read(join(repo, "evals/agent/tasks/T07/task.json"));
+    const { retrieval } = score({
+      calls: ctx.calls,
+      final: snapshot(ctx.project),
+      requiredTopics: task.requiredTopics,
+      taskOutcome,
+    });
+    expect(taskOutcome.pass).toBe(true);
+    expect(taskOutcome.hookupPdf).toBe(hasHookup ? hookup : undefined);
+    expect(retrieval.find(({ topic }) => topic === "views")).toMatchObject({
+      applicability,
+      retrieved: false,
+    });
+  },
+);

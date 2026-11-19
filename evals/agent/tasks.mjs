@@ -395,11 +395,7 @@ export async function check(id, ctx) {
     const issueDraft =
       existsSync(issuePath) &&
       readFileSync(issuePath, "utf8").trim().length >= 100;
-    if (
-      !issueDraft &&
-      supplied &&
-      cli(ctx, "lock", ".", "--check").status === 0
-    )
+    if (supplied && cli(ctx, "lock", ".", "--check").status === 0)
       hookupPdf = await findRegeneratedView(ctx, {
         allowedKinds: ["signal-loop", "wiring", "circuit"],
       });

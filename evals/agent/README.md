@@ -844,5 +844,6 @@ existing fail-closed classification.
 
 T07 checks the delivered hookup PDF in `drawings/` under its actual filename.
 The successful print command must reproduce the PDF byte for byte from the
-final project, and regenerated metadata must identify a signal-loop, wiring
-or circuit view. The checker keeps the accepted PDF path as evidence.
+final project. The PDF must contain at least one signal-loop, wiring or circuit
+view, as verified by regenerated metadata. The checker keeps the accepted PDF
+path as evidence.
