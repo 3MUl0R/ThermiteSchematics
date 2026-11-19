@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/sheets.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
 import { parseSvg } from "./off-view-fixtures.js";
+import { createTerminalIr } from "../../query/test/fixtures.js";
 
 async function example(name: string, file = "packet.json") {
   const root = `examples/${name}`;
@@ -74,6 +75,53 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     );
     expect(notes).toContainEqual(
       expect.stringMatching(/^W-CTL-004 · TB1\.4 → PS1\.- \d+\.[A-D][1-6]$/u),
+    );
+  },
+);
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "links a cable card with the painted circuit boundary terminal in %s (#397)",
+  async (flow) => {
+    const render = await example(
+      "motor-starter",
+      "../alpha/motor-starter-documentation.packet.json",
+    );
+    const sheets = await render((request) => ({
+      ...request,
+      views: request.views.map((view) =>
+        view.format === "schematic-view-request/0.1" ||
+        view.format === "circuit-view-request/0.1"
+          ? { ...view, flow }
+          : view,
+      ),
+    }));
+    const circuit = sheets.find((sheet) => sheet.view.kind === "circuit");
+    const cable = sheets.find(
+      (sheet) => "intent" in sheet.view && sheet.view.intent === "conductors",
+    );
+    expect(circuit).toBeDefined();
+    expect(cable).toBeDefined();
+    const notes = (sheet: typeof circuit) =>
+      [
+        ...sheet!.document.querySelectorAll(
+          '[data-peer-reference="conductor-peer"]',
+        ),
+      ].map((entry) => entry.textContent);
+    expect(notes(circuit)).toContainEqual(
+      expect.stringMatching(
+        new RegExp(
+          `^W-CTL-004 · PS1\\.- → TB1\\.4 ${String(cable!.number).padStart(2, "0")}\\.[A-D][1-6]$`,
+          "u",
+        ),
+      ),
+    );
+    expect(notes(cable)).toContainEqual(
+      expect.stringMatching(
+        new RegExp(
+          `^W-CTL-004 · TB1\\.4 → PS1\\.- ${String(circuit!.number).padStart(2, "0")}\\.[A-D][1-6]$`,
+          "u",
+        ),
+      ),
     );
   },
 );
@@ -150,6 +198,63 @@ it("prints the matching inventory sheet alongside every strip row key (#431)", a
     }
   }
   expect([...referenced]).toEqual(inventories.map((s) => s.number));
+});
+
+it("fits a long inventory key and its sheet locator at 2.5 mm (#431)", async () => {
+  const keys = Array.from({ length: 105 }, (_, i) => String(i + 1));
+  const ir = createTerminalIr(
+    Array.from({ length: 10 }, (_, i) => ({
+      uid: `strip-${i}`,
+      designation: `XT${String(i + 1).padStart(2, "0")}`,
+      terminalKeys: i === 9 ? keys : ["1"],
+    })),
+  );
+  const type = ir.deviceTypes[0]!;
+  type.category = "terminal-strip";
+  type.terminals = [{ key: "1", source: type.source }];
+  type.terminalOrder = ["1"];
+  ir.deviceTypes.push({
+    ...type,
+    id: "type:wide-strip",
+    terminals: keys.map((key) => ({ key, source: type.source })),
+    terminalOrder: keys,
+  });
+  ir.devices[9]!.typeId = "type:wide-strip";
+  const result = await renderSchematicPacket(ir, {
+    format: "schematic-packet-request/0.1",
+    page: { size: "tabloid", orientation: "landscape" },
+    index: false,
+    views: [{ format: "documentation-view-request/0.1", kind: "terminals" }],
+  });
+  if (!result.ok) throw Error(JSON.stringify(result.error));
+  const key = "T10/R100";
+  const inventory = result.value.sheets.find((sheet) =>
+    [...parseSvg(sheet.svg).querySelectorAll("[data-strip-row]")].some(
+      (t) => t.textContent === key,
+    ),
+  );
+  const body = result.value.sheets
+    .map((sheet) =>
+      parseSvg(sheet.svg).querySelector(
+        `[data-strip-ref="${key}"][data-strip-terminal]`,
+      ),
+    )
+    .find((value) => value);
+  expect(result.value.sheets).toHaveLength(9);
+  expect(inventory).toBeDefined();
+  expect(body).toBeDefined();
+  const labels = Array.from(body!.querySelectorAll("text"));
+  expect(labels.map((label) => label.textContent)).toEqual([
+    "100",
+    key,
+    `S${String(inventory!.number).padStart(2, "0")}`,
+  ]);
+  expect(labels.map((label) => label.getAttribute("font-size"))).toEqual([
+    "2.5",
+    "2.5",
+    "2.5",
+  ]);
+  expect(new Set(labels.map((label) => label.getAttribute("y"))).size).toBe(3);
 });
 
 it("only names device and function references after they are issued (#434)", async () => {

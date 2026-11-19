@@ -36,6 +36,35 @@ function paintedFill(g: NavigationGeometry) {
   );
 }
 
+function peerTerminalKeys(
+  ir: Readonly<ElectricalIr>,
+  draft: Draft,
+  geometry: readonly NavigationGeometry[],
+) {
+  const base = wireScheduleTerminalKeys(ir, draft, geometry);
+  if (!("kind" in draft.view) || draft.view.kind !== "circuit") return base;
+  const keys = new Map(base);
+  const native = new Map(
+    ir.terminals.map(({ id }) => [terminalIdKey(id), id.deviceUid]),
+  );
+  for (const port of geometry) {
+    const a = port.node.attrs;
+    const key = a["data-terminal-id"];
+    if (
+      port.node.name !== "g" ||
+      !a["data-layout-port"] ||
+      !key ||
+      !port.deviceUid ||
+      native.get(key) !== port.deviceUid
+    )
+      continue;
+    // A circuit boundary can carry native identity on the port group.
+    const circle = port.node.children.find((n) => n.name === "circle");
+    if (circle && !keys.has(circle)) keys.set(circle, key);
+  }
+  return keys;
+}
+
 function terminalLandings(
   ir: Readonly<ElectricalIr>,
   draft: Draft,
@@ -43,7 +72,7 @@ function terminalLandings(
   field: Rect,
   geometry: readonly NavigationGeometry[],
 ) {
-  const keys = wireScheduleTerminalKeys(ir, draft, geometry);
+  const keys = peerTerminalKeys(ir, draft, geometry);
   const terminals = new Map<string, Landing>();
   for (const mark of geometry) {
     const key = keys.get(mark.node);

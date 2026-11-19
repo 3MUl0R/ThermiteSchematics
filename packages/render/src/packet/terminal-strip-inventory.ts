@@ -2,7 +2,7 @@ import type { Draft, RenderedSheet } from "./types.js";
 import type { IssuedDocument } from "./document-types.js";
 import { navigationGeometry } from "./navigation-walk.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
-import { text } from "./svg.js";
+import { n, text } from "./svg.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 
 function scope(draft: Draft) {
@@ -50,11 +50,71 @@ export function terminalInventoryPointers(
   });
 }
 
+interface StripPointerInk {
+  labels: string;
+  terminalBaseline?: number;
+}
+
+function inventoryLabel(
+  sheet: number,
+  value: string,
+  x: number,
+  y: number,
+  anchor: "end" | "middle",
+) {
+  return text(x, y, value, 2.5, anchor).replace(
+    "<text ",
+    `<text data-strip-inventory="${sheet}" `,
+  );
+}
+
+interface StripLabelFrame {
+  x: number;
+  w: number;
+  y: number;
+  h: number;
+  baseline: number;
+}
+
+function inventoryLabelPair(
+  target: { sheet: number; ref: string },
+  { x, w, y, h, baseline }: StripLabelFrame,
+  terminal: string,
+): StripPointerInk {
+  const token = `S${String(target.sheet).padStart(2, "0")}`;
+  const rowInk = printableTextMetrics(target.ref, 2.5);
+  const sheetInk = printableTextMetrics(token, 2.5);
+  if (rowInk.advance + sheetInk.advance + 1.5 <= w) {
+    return {
+      labels:
+        text(x + 0.4, baseline, target.ref, 2.5) +
+        inventoryLabel(target.sheet, token, x + w - 0.4, baseline, "end"),
+    };
+  }
+  // Fit three lines using painted extents, between the existing 0.35 mm rules.
+  const terminalInk = printableTextMetrics(terminal, 2.5, true);
+  const height = [terminalInk, rowInk, sheetInk].reduce(
+    (sum, ink) => sum + ink.top - ink.bottom,
+    0,
+  );
+  const gap = (h - 0.35 - height) / 4;
+  const terminalBaseline = y + 0.175 + gap + terminalInk.top;
+  const rowBaseline = terminalBaseline - terminalInk.bottom + gap + rowInk.top;
+  const sheetBaseline = rowBaseline - rowInk.bottom + gap + sheetInk.top;
+  const center = x + w / 2;
+  return {
+    terminalBaseline,
+    labels:
+      text(center, rowBaseline, target.ref, 2.5, "middle") +
+      inventoryLabel(target.sheet, token, center, sheetBaseline, "middle"),
+  };
+}
+
 function stripInventoryInk(
   svg: string,
   targets: ReadonlyMap<string, { sheet: number; ref: string }>,
 ) {
-  const replacements = new Map<string, string>();
+  const replacements = new Map<string, StripPointerInk>();
   for (const { node, visible } of navigationGeometry(svg)) {
     const key = node.attrs["data-strip-terminal"];
     const target = key === undefined ? undefined : targets.get(key);
@@ -63,32 +123,48 @@ function stripInventoryInk(
       (n) => n.attrs["data-strip-inventory-label"] === key,
     );
     const body = node.children.find((n) => n.name === "rect")?.attrs;
+    const terminal = node.children.find(
+      (n) => n.name === "text" && n !== label,
+    );
     const ref = node.attrs["data-strip-ref"];
-    if (!body || !ref || label?.text !== ref || target.ref !== ref) continue;
-    const token = `S${String(target.sheet).padStart(2, "0")}`;
-    const x = Number(body.x),
-      y = Number(label.attrs.y),
-      w = Number(body.width);
     if (
-      printableTextMetrics(ref, 2.5).advance +
-        printableTextMetrics(token, 2.5).advance +
-        1.5 >
-      w
+      !body ||
+      !terminal?.text ||
+      !ref ||
+      label?.text !== ref ||
+      target.ref !== ref
     )
-      throw Error(`Strip row ${ref} cannot show its inventory sheet at 2.5 mm`);
+      continue;
     replacements.set(
       attr(key),
-      text(x + 0.4, y, ref, 2.5) +
-        text(x + w - 0.4, y, token, 2.5, "end").replace(
-          "<text ",
-          `<text data-strip-inventory="${target.sheet}" `,
-        ),
+      inventoryLabelPair(
+        target,
+        {
+          x: Number(body.x),
+          w: Number(body.width),
+          y: Number(body.y),
+          h: Number(body.height),
+          baseline: Number(label.attrs.y),
+        },
+        terminal.text,
+      ),
     );
   }
-  // The marker locates the exact generated Tn/Rn baseline without changing
-  // the terminal body, labels, conductor stubs, or jumper approach geometry.
+  // The marker selects the generated Tn/Rn and the terminal label beside it.
+  // The terminal body, conductor stubs and jumper approaches stay in place.
   return svg.replace(
-    /<text\b[^>]*data-strip-inventory-label="([^"]*)"[^>]*>[^<]*<\/text>/gu,
-    (match, key: string) => replacements.get(key) ?? match,
+    /(<text\b[^>]*>[^<]*<\/text>)(\s*)<text\b[^>]*data-strip-inventory-label="([^"]*)"[^>]*>[^<]*<\/text>/gu,
+    (match, terminal: string, space: string, key: string) => {
+      const replacement = replacements.get(key);
+      if (!replacement) return match;
+      const top =
+        replacement.terminalBaseline === undefined
+          ? terminal
+          : terminal.replace(
+              /\by="[^"]+"/u,
+              `y="${n(replacement.terminalBaseline)}"`,
+            );
+      return top + space + replacement.labels;
+    },
   );
 }
