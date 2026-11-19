@@ -77,3 +77,43 @@ it("222.3 coherent false source ownership cannot substitute a far-end caption", 
     "net-label-source-geometry-mismatch",
   );
 });
+it("DQ-17 credits only a painted rail at the measured native potential source", () => {
+  const { g, label, route } = fixture();
+  const ir = {
+    potentials: [
+      {
+        name: "L1",
+        netId: "native",
+        terminal: { deviceUid: "a", terminalKey: "L1" },
+      },
+    ],
+  };
+  route.net = "native";
+  route.ownedLandings[0].appearanceScope = "drawing";
+  g.shapes.push({
+    element: "marker-a",
+    symbol: "ais:rail-source",
+    appearanceScope: "drawing",
+  });
+  const rail = {
+    ...g.texts[0],
+    labelRole: "rail",
+    labelOwnerKind: "rail",
+    labelOwnerKey: ["rail", "a", "L1", "potential"],
+  };
+  label.omitted = true;
+  g.omittedNetLabels = [label];
+  g.texts = [rail];
+  expect(netLabelRepetition(g, ir)).toEqual([]);
+  for (const mutation of [
+    { ...rail, reviewPainted: false },
+    { ...rail, labelOwnerKey: ["rail", "b", "L1", "potential"] },
+    { ...rail, appearanceScope: "other" },
+    { ...rail, text: "0VDC" },
+  ]) {
+    g.texts = [mutation];
+    expect(netLabelRepetition(g, ir).map((f) => f.kind)).toContain(
+      "net-label-suppressed-without-source-caption",
+    );
+  }
+});

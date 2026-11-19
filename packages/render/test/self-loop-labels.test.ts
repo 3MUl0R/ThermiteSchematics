@@ -159,8 +159,8 @@ describe("nested external bridge labels", () => {
             (e) => e.textContent,
           ),
         ).toEqual(details ? ["BRIDGE", "18 AWG / Blue"] : ["BRIDGE"]);
-        // A recovered self-loop caption stays beside an actual routed segment,
-        // including centered overhang on a short segment in the vertical flow.
+        // A recovered caption stays on or beside its owned route. Measure
+        // zero separation for an inline plate that straddles the stroke.
         expect(
           routes[0]!.segments.some((s) => {
             const cx = bridge.x + bridge.width / 2;
@@ -168,16 +168,12 @@ describe("nested external bridge labels", () => {
             return s.width === 0
               ? cy >= s.y &&
                   cy <= s.y + s.height &&
-                  Math.min(
-                    Math.abs(bridge.x - s.x),
-                    Math.abs(bridge.x + bridge.width - s.x),
-                  ) <= 1.001
+                  Math.max(bridge.x - s.x, s.x - bridge.x - bridge.width, 0) <=
+                    1.001
               : cx >= s.x &&
                   cx <= s.x + s.width &&
-                  Math.min(
-                    Math.abs(bridge.y - s.y),
-                    Math.abs(bridge.y + bridge.height - s.y),
-                  ) <= 1.001;
+                  Math.max(bridge.y - s.y, s.y - bridge.y - bridge.height, 0) <=
+                    1.001;
           }),
         ).toBe(true);
         expect(await prepareCircuitView(source, { ...view, flow })).toEqual(

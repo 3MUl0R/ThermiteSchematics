@@ -1,3 +1,5 @@
+import { circuitCaptionPlate } from "./inline-plate.js";
+import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
 import { supportedCircuitLabels } from "./label-support.js";
@@ -43,9 +45,18 @@ function circuitWireLabel(
     line,
     ...plannedCircuitCaption(line, i, l, state, basePlacementFallback),
   }));
+  const plate = circuitCaptionPlate(
+    l,
+    state,
+    plans.map((p) => p.ink),
+  );
+  if (!plate)
+    throw new InlineLabelCollisionError(
+      `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`,
+    );
   return (
     plans.map((p) => p.leader).join("") +
-    `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(l.x)}" y="${n(l.y)}" width="${n(l.width)}" height="${n(l.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
+    `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
   );
 }
 

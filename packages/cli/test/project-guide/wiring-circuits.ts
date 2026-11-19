@@ -1,4 +1,5 @@
 import { compileProject } from "@thermite/compiler";
+import { wiringAdvice } from "./wiring-advice.js";
 import {
   buildDocumentation,
   printedPort,
@@ -1014,15 +1015,6 @@ const module: FactModule = {
       },
     },
   ],
-  unexecuted: new Map([
-    [
-      "Add terminal/wire schedules for complete detail.",
-      "Advice for explicit full inventories; required companions cover only the concrete hidden-detail scope.",
-    ],
-    [
-      "Also read `thermite guide circuit-views`; never guess marks; check links/earth/DC ink in both flows.",
-      "Manual drawing review advice; geometry and mutations are checked in polarity-qualifiers.test.ts and circuit-operator-fidelity.test.ts.",
-    ],
-  ]),
+  unexecuted: wiringAdvice,
 };
 export default module;

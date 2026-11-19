@@ -5,7 +5,10 @@ import {
   ownedLabelLeader,
   labelLeaderArrow,
 } from "../src/layout/wire-label-support.js";
-import { ownedWiringLabels } from "../src/layout/wiring-label-support.js";
+import {
+  ownedWiringLabels,
+  wiringLabelLeaders,
+} from "../src/layout/wiring-label-support.js";
 import { required } from "./fixtures.js";
 
 const ink = { left: 0, right: 20, top: 10, bottom: 15 };
@@ -145,8 +148,8 @@ it("places distinct same-text wire captions independently on their actual native
       e.labels?.map((l) => ({ x: l.x, y: l.y, text: l.text })),
     ),
   ).toEqual([
-    [{ x: 10, y: 36, text: "SAME" }],
-    [{ x: 10, y: 56, text: "SAME" }],
+    [{ x: 70, y: 36, text: "SAME" }],
+    [{ x: 70, y: 56, text: "SAME" }],
   ]);
   expect(after.edges?.map((e) => e.sections)).toEqual(
     before.edges?.map((e) => e.sections),
@@ -167,8 +170,52 @@ it("selects the longest free owned segment and preserves a valid old inline plat
   const result = ownedWiringLabels(graph),
     label = required(result.edges?.[0]?.labels?.[0]);
   expect(label.y).toBe(76);
-  expect(label.x).toBe(80);
+  expect(label.x).toBeCloseTo(105);
   expect(ownedWiringLabels(result)).toEqual(result);
+});
+
+it("uses leaders for close parallel runs whose inline plates would crowd either landing", () => {
+  const graph = fixture();
+  for (const [i, edge] of (graph.edges ?? []).entries()) {
+    const y = 26 + i * 6;
+    edge.sections = [
+      { id: `s${i}`, startPoint: { x: 50, y }, endPoint: { x: 90, y } },
+    ];
+    edge.labels = [{ text: "Native", x: 52, y: y - 4, width: 24, height: 8 }];
+  }
+  const after = ownedWiringLabels(graph);
+  const leaders = wiringLabelLeaders(after);
+  expect(leaders.map((l) => l.edgeId)).toEqual(["e0", "e1"]);
+  expect(after.edges?.map((e) => e.sections)).toEqual(
+    graph.edges?.map((e) => e.sections),
+  );
+  for (const [i, edge] of (after.edges ?? []).entries()) {
+    const y = 26 + i * 6;
+    const label = required(edge.labels?.[0]);
+    expect(
+      [26, 32].some(
+        (line) => line >= Number(label.y) && line <= Number(label.y) + 8,
+      ),
+    ).toBe(false);
+    expect(required(leaders[i]).points.at(-1)?.y).toBe(y);
+  }
+});
+
+it("uses a checked leader when no straight horizontal segment can host the plate", () => {
+  const graph = fixture(),
+    edge = required(graph.edges?.[0]);
+  graph.edges = [edge];
+  edge.sections = [
+    { id: "s0", startPoint: { x: 90, y: 10 }, endPoint: { x: 90, y: 75 } },
+  ];
+  edge.labels = [{ text: "SAME", x: 70, y: 20, width: 60, height: 8 }];
+  const result = ownedWiringLabels(graph);
+  const label = required(result.edges?.[0]?.labels?.[0]);
+  const [leader] = wiringLabelLeaders(result);
+  expect(leader?.edgeId).toBe("e0");
+  expect(leader?.points.at(-1)?.x).toBe(90);
+  expect(required(label.x) + required(label.width)).toBeLessThan(90);
+  expect(result.edges?.[0]?.sections).toEqual(edge.sections);
 });
 
 it("moves touching glyph ink inside the 0.5–1 mm beside default, preserving its size and reserving leaders for competing physical ink", async () => {

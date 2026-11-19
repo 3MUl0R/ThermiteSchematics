@@ -9,6 +9,7 @@ import {
   horizontalLabelSupport,
   type LabelSupportContext,
 } from "./wire-label-support.js";
+import { clearOwnedPlate } from "./label-plate.js";
 export function captionAssociation(
   ink: InkBox,
   own: readonly (readonly LayoutPoint[])[],
@@ -105,6 +106,7 @@ export function besideCaption(
     );
   if (
     horizontalLabelSupport(ink, own, 0, context.foreign) &&
+    clearOwnedPlate(ink, own, stroke / 2 + 0.01 / mmPerUnit, true) &&
     association.foreign > 0
   )
     return { ink, inline: true, needsLeader: false };
