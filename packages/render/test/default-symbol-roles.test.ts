@@ -103,6 +103,19 @@ function auditConversionOrientation(
 
 function auditOutlet(outlet: Element) {
   const body = outlet.closest("[data-device-uid]")!;
+  const frame = paintedShape(
+    body,
+    body.querySelector('[data-function-interface="receptacle"] rect')!,
+  );
+  const leads = [
+    ...body.querySelectorAll('[data-function-interface="receptacle"] line'),
+  ];
+  expect(leads.length).toBe(2);
+  for (const lead of leads)
+    expect(
+      inkClearance(frame, paintedShape(body, lead)),
+      "outlet frame clears its separate stubs",
+    ).toBeGreaterThanOrEqual(0.3);
   const slots = [...outlet.querySelectorAll("line")].map((e) =>
     paintedShape(body, e),
   );

@@ -23,7 +23,7 @@ export function interfaceLeadEnd(
   count: number,
 ) {
   if (mark === "ac-input" || mark === "dc-output") return 13 / 3;
-  if (source) return 6;
+  if (source || mark === "receptacle") return 6;
   return mark === "sensor-3wire" && count === 1 ? 10 / 3 : 5;
 }
 
