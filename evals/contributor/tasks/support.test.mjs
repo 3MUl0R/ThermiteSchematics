@@ -1,125 +1,18 @@
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import {
-  mkdtempSync,
-  mkdirSync,
+  existsSync,
   readFileSync,
-  realpathSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   utimesSync,
-  writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { sha256 } from "../../agent/snapshot.mjs";
+import { join } from "node:path";
 import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
-import { focus, git, ordering, seedPatch, setup } from "./support.mjs";
+import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
+import { fixture, put, temp } from "./test-fixture.mjs";
 import checkR01 from "./R01/check.mjs";
 import checkR02 from "./R02/check.mjs";
-
-const roots = [];
-afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
-});
-function temp() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "thermite-k-")));
-  roots.push(root);
-  return root;
-}
-function put(dir, file, text) {
-  const path = join(dir, file);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text);
-}
-function fixture(seeded = false) {
-  const project = temp(),
-    evidence = join(project, "evidence"),
-    engine = join(project, "engine"),
-    ctx = { project, evidence, env: process.env };
-  mkdirSync(engine);
-  git(ctx, engine, "init", "--quiet");
-  const clean = readFileSync(new URL("../../../" + ordering, import.meta.url));
-  put(engine, ordering, clean);
-  put(
-    engine,
-    focus,
-    'it("ascending", () => expect(compareAlias("A", "B")).toBeLessThan(0));\n',
-  );
-  put(engine, ".gitignore", "node_modules/\ndist/\n");
-  if (seeded) git(ctx, engine, "apply", seedPatch);
-  git(ctx, engine, "add", ".");
-  git(
-    ctx,
-    engine,
-    "-c",
-    "user.name=Eval",
-    "-c",
-    "user.email=eval@invalid",
-    "commit",
-    "--quiet",
-    "--no-gpg-sign",
-    "-m",
-    "fixture",
-  );
-  put(
-    evidence,
-    "contributor-seed.json",
-    JSON.stringify({
-      revision: git(ctx, engine, "rev-parse", "HEAD").trim(),
-      cleanSource: sha256(clean),
-    }),
-  );
-  put(project, "contributor-friction.md", "Run receipts recorded.");
-  const repository = seeded ? engine : join(project, "worktree");
-  if (!seeded) git(ctx, engine, "worktree", "add", "--detach", repository);
-  for (const root of new Set([repository, engine]))
-    for (const name of ["typescript", "vitest", "elkjs"])
-      put(root, `node_modules/${name}/package.json`, "{}\n");
-  const at = Date.now() - 1000;
-  for (const { file } of contributorBuildOutputs(repository))
-    put(repository, file, "built\n");
-  const rows = [
-    {
-      cwd: repository,
-      kind: "install",
-      argv: ["install", "--frozen-lockfile"],
-      exit: 0,
-      started: at,
-      ended: at + 1,
-    },
-    {
-      cwd: repository,
-      kind: "focused",
-      argv: ["scripts/test.mjs", focus],
-      exit: 0,
-      started: at + 1,
-      ended: at + 2,
-      tests: {
-        total: 7,
-        passed: 7,
-        failed: 0,
-        files: [join(repository, focus)],
-      },
-    },
-    {
-      cwd: repository,
-      kind: "build",
-      argv: ["run", "build"],
-      exit: 0,
-      started: at + 2,
-      outputs: contributorBuildOutputs(repository),
-    },
-  ];
-  const save = () =>
-    put(
-      evidence,
-      "contributor-commands.jsonl",
-      rows.map((r) => JSON.stringify(r)).join("\n") + "\n",
-    );
-  save();
-  return { ctx, engine, repository, rows, save, clean };
-}
 
 it("R01 accepts a registered checkout with matching test and build receipts", () => {
   expect(checkR01(fixture().ctx).pass).toBe(true);
@@ -208,16 +101,16 @@ it.each([
     },
   ],
   [
-    "unrelated untracked edit",
+    "unrelated tracked edit",
     "confined",
     (f) => {
       put(f.repository, ordering, f.clean);
-      put(f.repository, "unrelated.txt", "outside the repair\n");
+      put(f.repository, "README.md", "outside the repair\n");
     },
   ],
   [
     "wrong function",
-    "originalBehavior",
+    "confined",
     (f) => {
       const seed = readFileSync(join(f.repository, ordering), "utf8");
       put(
@@ -228,6 +121,53 @@ it.each([
           "function compareNumber(left: number, right: number): number {\n  return right < left ? -1 : right > left ? 1 : 0;",
         ),
       );
+    },
+  ],
+  [
+    "imported scratch code",
+    "confined",
+    (f) => {
+      put(
+        f.repository,
+        "packages/query/src/scratch.js",
+        "export const order = () => 0;",
+      );
+      put(
+        f.repository,
+        ordering,
+        f.clean.replace(
+          "export function compareTerminalView(",
+          "import { order } from './scratch.js';\nexport function compareTerminalView(",
+        ),
+      );
+    },
+  ],
+  [
+    "scratch required inside the changed function",
+    "confined",
+    (f) => {
+      put(
+        f.repository,
+        "packages/query/src/scratch.js",
+        "export const order = () => 0;",
+      );
+      put(
+        f.repository,
+        ordering,
+        f.clean.replace(
+          "compareText(left.deviceDesignation, right.deviceDesignation) ||",
+          'require("./scratch.js").order(left, right) ||',
+        ),
+      );
+    },
+  ],
+  [
+    "staged scratch code",
+    "confined",
+    (f) => {
+      put(f.repository, ordering, f.clean);
+      put(f.repository, "scratch.txt", "Tracked despite being a scratch file.");
+      git(f.ctx, f.repository, "add", "scratch.txt");
     },
   ],
 ])("R02 rejects %s", (_name, key, change) => {
@@ -241,4 +181,26 @@ it.each([
 
 it("rejects a runtime archive in place of a source checkout", () => {
   expect(() => setup({ runtime: temp() })).toThrow("--context source");
+});
+
+it("hides the clean runtime source and map files after applying the fixture seed", () => {
+  const f = fixture(true);
+  const runtime = temp();
+  for (const path of [
+    ordering,
+    "packages/query/dist/ordering.js.map",
+    "packages/query/dist/ordering.d.ts.map",
+  ]) {
+    put(runtime, path, "pristine fixture content");
+  }
+  put(f.repository, ordering, f.clean);
+  put(runtime, "packages/query/dist/ordering.js", "compiled CLI support");
+  seedQuery({ ...f.ctx, runtime }, f.repository);
+  expect(readFileSync(join(f.repository, ordering), "utf8")).toContain(
+    "  right: TerminalView,\n  left: TerminalView,",
+  );
+  expect(existsSync(join(runtime, ordering))).toBe(false);
+  expect(readdirSync(join(runtime, "packages/query/dist"))).toEqual([
+    "ordering.js",
+  ]);
 });

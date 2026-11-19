@@ -1,12 +1,13 @@
 diff --git a/packages/query/src/ordering.ts b/packages/query/src/ordering.ts
 --- a/packages/query/src/ordering.ts
 +++ b/packages/query/src/ordering.ts
-@@ -43,7 +43,7 @@
-   return compare(left, right);
+@@ -71,8 +71,8 @@
  }
 
--export const compareAlias = compareText;
-+export const compareAlias = (left: string, right: string) => compareText(right, left);
-
- const PROJECT_OBJECT_KIND_ORDER: Readonly<Record<ProjectObjectKind, number>> = {
-   device: 0,
+ export function compareTerminalView(
++  right: TerminalView,
+   left: TerminalView,
+-  right: TerminalView,
+ ): number {
+   return (
+     compareText(left.deviceDesignation, right.deviceDesignation) ||

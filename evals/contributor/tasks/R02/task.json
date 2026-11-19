@@ -1,9 +1,9 @@
 {
   "id": "R02",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "template": "starter",
   "setup": "setup.mjs",
-  "prompt": "Fix the seeded query regression in engine/. Reproduce it with bun scripts/test.mjs packages/query/test/views-and-ordering.test.ts in that checkout. Make the smallest query implementation fix that restores the original alias ordering. Keep other behavior, tests, snapshots and configuration unchanged. Run that focused test again and rebuild with bun run build. Record the commands, their results and any friction in contributor-friction.md at the project root. Do not edit the electrical project or the supplied runtime. Do not push or publish.",
+  "prompt": "The built development CLI command bun thermite.mjs inspect K1 --project examples/motor-starter --json in engine/ lists K1 terminals starting with A2, A1 and ending with 1/L1. The list should be ascending by terminal key, starting with 1/L1, 13 and ending with A2. Fix the query result. Keep other behavior, tests, snapshots and configuration unchanged. Run bun scripts/test.mjs packages/query/test/views-and-ordering.test.ts and rebuild with bun run build. Record the commands, their results and any friction in contributor-friction.md at the project root. Do not edit the electrical project or the supplied runtime. Do not push or publish.",
   "requiredTopics": [],
   "expectedWarnings": [],
   "reference": "reference.mjs",

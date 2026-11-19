@@ -7,7 +7,7 @@ import {
   reported,
   sourceChanges,
 } from "../support.mjs";
-import { completedWorkflow, observedCommands } from "../receipts.mjs";
+import { completedWorkflow } from "../receipts.mjs";
 
 function registered(ctx, engine, checkout) {
   return (
@@ -50,7 +50,7 @@ export default function check(ctx) {
       (dir) => sourceChanges(ctx, dir, revision).length === 0,
     ),
     ownInstall: ownInstall(repository),
-    ...completedWorkflow(observedCommands(ctx, repository), repository, {
+    ...completedWorkflow(ctx, repository, {
       install: true,
     }),
     report: reported(ctx),

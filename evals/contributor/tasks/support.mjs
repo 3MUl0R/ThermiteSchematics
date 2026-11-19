@@ -5,13 +5,13 @@ import {
   lstatSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { read, write } from "../../agent/task-support.mjs";
-import { sha256 } from "../../agent/snapshot.mjs";
 
 export const ordering = "packages/query/src/ordering.ts";
 export const focus = "packages/query/test/views-and-ordering.test.ts";
@@ -61,8 +61,7 @@ export function setup(ctx, seeded = false) {
   cpSync(join(ctx.runtime, "thermite.real.mjs"), join(engine, "thermite.mjs"));
   cpSync(join(engine, "AGENTS.md"), join(ctx.project, "AGENTS.md"));
   git(ctx, engine, "init", "--quiet");
-  const cleanSource = sha256(readFileSync(join(engine, ordering)));
-  if (seeded) git(ctx, engine, "apply", seedPatch);
+  if (seeded) seedQuery(ctx, engine);
   git(ctx, engine, "add", ".");
   git(
     ctx,
@@ -90,37 +89,58 @@ export function setup(ctx, seeded = false) {
   }
   write(join(ctx.evidence, "contributor-seed.json"), {
     revision: git(ctx, engine, "rev-parse", "HEAD").trim(),
-    cleanSource,
     seeded,
   });
+}
+
+export function seedQuery(ctx, engine) {
+  git(ctx, engine, "apply", seedPatch);
+  // The runtime's compiled CLI remains available to the harness. Hide the
+  // clean source and its maps before taking the read-only runtime snapshot.
+  for (const file of [
+    ordering,
+    "packages/query/dist/ordering.js.map",
+    "packages/query/dist/ordering.d.ts.map",
+  ])
+    rmSync(join(ctx.runtime, file), { force: true });
 }
 
 export function contributorState(ctx) {
   return read(join(ctx.evidence, "contributor-seed.json"));
 }
+export function trackedChanges(ctx, repository, revision) {
+  const paths = (flags) =>
+    git(
+      ctx,
+      repository,
+      "diff",
+      "--no-ext-diff",
+      "--no-renames",
+      "--name-only",
+      "-z",
+      ...flags,
+      revision,
+    ).split("\0");
+  return [
+    ...new Set([...paths([]), ...paths(["--cached"])].filter(Boolean)),
+  ].sort();
+}
+
 export function sourceChanges(ctx, repository, revision) {
   return [
-    ...new Set(
-      [
-        ...git(
-          ctx,
-          repository,
-          "diff",
-          "--no-ext-diff",
-          "--name-only",
-          "-z",
-          revision,
-        ).split("\0"),
-        ...git(
-          ctx,
-          repository,
-          "ls-files",
-          "--others",
-          "--exclude-standard",
-          "-z",
-        ).split("\0"),
-      ].filter(Boolean),
-    ),
+    ...new Set([
+      ...trackedChanges(ctx, repository, revision),
+      ...git(
+        ctx,
+        repository,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+      )
+        .split("\0")
+        .filter(Boolean),
+    ]),
   ].sort();
 }
 export function regularInside(repository, path) {

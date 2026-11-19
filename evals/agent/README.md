@@ -400,17 +400,28 @@ names. A reference run evaluates the task infrastructure without a model.
   the local installation, and binds the actual command results to executed
   Vitest cases and fresh build artifacts. The setup warms only the isolated
   Bun cache. Each installation belongs to its own checkout.
-- R02 starts with a fixture-only reversal of alias ordering. Its focused test
-  reproduces the seed. The checker requires the original implementation bytes
-  with exactly the seeded source path changed, reruns the focused test and
-  adjacent query inspection tests, and checks the built comparator on an
-  independent alias set. Tests, snapshots and configuration stay unchanged.
-- Both tasks request a local friction report. The report describes results.
-  Command outcomes come from the evaluator's Bun observer, which forwards the
-  documented commands and records their exits, test execution and build output.
-  Reference `totalToolCalls` counts the four actual setup or repair commands
-  performed by each reference. `thermiteCalls` remains zero for these tasks.
-  The same V1–V8 scoring and byte-identical contributor guide-copy rule apply.
+- R02 starts with a fixture-only regression in terminal ordering. The built
+  `thermite inspect` command returns the motor-starter K1 terminal keys in
+  descending order. The checker reruns the focused and neighboring inspection
+  tests, checks the built CLI's terminal and function output, and covers every
+  comparison branch independently. A structural TypeScript check confines the
+  repair to the seeded declaration and allows equivalent implementations.
+  Scratch files are ignored unless tracked or imported into the repair.
+- The editable checkout's Git history starts at the seed. The supplied runtime
+  omits the clean source file and its emitted maps. Its compiled CLI is still
+  present for evaluation, so reference behavior can be inferred from compiled
+  JavaScript.
+- Both tasks request a local friction report. The Bun observer records command
+  outcomes and binds them to test results and build artifacts. It normalizes
+  relative and absolute test paths, `--cwd`, and the `bun i` install alias. A
+  successful direct Bun invocation can also be verified using the tool
+  transcript and on-disk test and build evidence. The observer log lives in a
+  writable run directory. Version 1 trusts agents to leave the receipts intact.
+- Reference `totalToolCalls` counts five calls for R01 and seven for R02,
+  including writing the friction report. R02 diagnoses the focused failure,
+  edits the comparator and verifies the rebuilt CLI. Shim `thermiteCalls`
+  remains zero for both tasks. The same V1–V8 scoring and byte-identical
+  contributor guide-copy rule apply.
 
 C-01…C-30, R03/R04 and held-out H1/H2 remain unimplemented or scorer-owned slots.
 
@@ -869,4 +880,4 @@ path as evidence.
 
 ## E2 1.20.0
 
-Eval **1.20.0** qualifies the source-contributor R01/R02 tasks at version 2.0.0. Their own installations, observed test/build outcomes, fixture-only seed and negative checker controls support measurement for either agent. Existing T/D rules and task definitions are unchanged.
+Eval **1.20.0** qualifies the source-contributor R01/R02 tasks at version 2.0.1. Their own installations, observed test/build outcomes, fixture-only seed and negative checker controls support measurement for either agent. Existing T/D rules and task definitions are unchanged.
