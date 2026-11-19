@@ -66,7 +66,7 @@ for (const [i, left] of ordered.entries()) {
   for (const [j, right] of ordered.entries()) {
     assert.equal(Math.sign(compareTerminalView(left, right)) || 0, Math.sign(i - j));
   }
-  assert.equal(compareTerminalView(left, structuredClone(left)), 0);
+  assert.equal(Math.sign(compareTerminalView(left, structuredClone(left))) || 0, 0);
 }
 assert.deepEqual(ordered, snapshot);
 

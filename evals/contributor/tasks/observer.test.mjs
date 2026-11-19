@@ -21,6 +21,9 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
     "scripts/test.mjs",
     `
     import { mkdirSync, writeFileSync } from "node:fs";
+    const flags = process.argv.slice(2);
+    if (flags.includes("-t") && flags[flags.indexOf("-t") + 1] !== "focused cases")
+      process.exit(3);
     mkdirSync("coverage", { recursive: true });
     if (process.env.THERMITE_TEST_TIMINGS !== "1") process.exit(2);
     writeFileSync("coverage/test-timings.json", JSON.stringify({
@@ -38,6 +41,8 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
       f,
       f.repository,
       join(f.repository, "scripts/test.mjs"),
+      "-t",
+      "focused cases",
       join(f.repository, focus),
     ).exit,
   ).toBe(0);
@@ -49,6 +54,12 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
     ["focused", 0],
     ["focused", 0],
     ["focused", 1],
+  ]);
+  expect(rows[2].argv).toEqual([
+    "scripts/test.mjs",
+    "-t",
+    "focused cases",
+    focus,
   ]);
   expect(rows[2].tests.passed).toBe(7);
   expect(rows[3].tests).toBeNull();

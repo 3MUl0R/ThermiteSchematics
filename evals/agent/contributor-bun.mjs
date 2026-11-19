@@ -72,12 +72,16 @@ export function contributorInvocation(args, from, focused) {
   )
     return { cwd, argv: ["install", "--frozen-lockfile"], kind: "install" };
   if (argv[0] === "run") argv.shift();
-  if (
-    argv.length === 2 &&
-    resolve(cwd, argv[0]) === join(cwd, "scripts/test.mjs") &&
-    resolve(cwd, argv[1]) === join(cwd, focused)
-  )
-    return { cwd, argv: ["scripts/test.mjs", focused], kind: "focused" };
+  if (argv[0] && resolve(cwd, argv[0]) === join(cwd, "scripts/test.mjs")) {
+    const test = argv.findIndex(
+      (arg, index) => index > 0 && resolve(cwd, arg) === join(cwd, focused),
+    );
+    if (test >= 0) {
+      argv[0] = "scripts/test.mjs";
+      argv[test] = focused;
+      return { cwd, argv, kind: "focused" };
+    }
+  }
   return { cwd };
 }
 

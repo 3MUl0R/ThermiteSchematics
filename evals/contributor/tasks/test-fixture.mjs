@@ -32,11 +32,7 @@ export function put(dir, file, text) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 }
-export function fixture(seeded = false) {
-  const project = temp(),
-    evidence = join(project, "evidence"),
-    engine = join(project, "engine"),
-    ctx = { project, evidence, env: process.env };
+function initializeFixture(ctx, engine, seeded) {
   mkdirSync(engine);
   git(ctx, engine, "init", "--quiet");
   const clean = readFileSync(new URL("../../../" + ordering, import.meta.url));
@@ -61,12 +57,21 @@ export function fixture(seeded = false) {
     "fixture",
   );
   put(
-    evidence,
+    ctx.evidence,
     "contributor-seed.json",
     JSON.stringify({
       revision: git(ctx, engine, "rev-parse", "HEAD").trim(),
     }),
   );
+  return clean.toString();
+}
+
+export function fixture(seeded = false) {
+  const project = temp(),
+    evidence = join(project, "evidence"),
+    engine = join(project, "engine"),
+    ctx = { project, evidence, env: process.env };
+  const clean = initializeFixture(ctx, engine, seeded);
   put(project, "contributor-friction.md", "Run receipts recorded.");
   const repository = seeded ? engine : join(project, "worktree");
   if (!seeded) git(ctx, engine, "worktree", "add", "--detach", repository);
@@ -115,7 +120,7 @@ export function fixture(seeded = false) {
       rows.map((r) => JSON.stringify(r)).join("\n") + "\n",
     );
   save();
-  return { ctx, engine, repository, rows, save, clean: clean.toString() };
+  return { ctx, engine, repository, rows, save, clean };
 }
 
 export function copy(dir, path) {

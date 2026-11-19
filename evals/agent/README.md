@@ -400,17 +400,14 @@ names. A reference run evaluates the task infrastructure without a model.
   the local installation, and binds the actual command results to executed
   Vitest cases and fresh build artifacts. The setup warms only the isolated
   Bun cache. Each installation belongs to its own checkout.
-- R02 starts with a fixture-only regression in terminal ordering. The built
-  `thermite inspect` command returns the motor-starter K1 terminal keys in
-  descending order. The checker reruns the focused and neighboring inspection
-  tests, checks the built CLI's terminal and function output, and covers every
-  comparison branch independently. A structural TypeScript check confines the
-  repair to the seeded declaration and allows equivalent implementations.
-  Scratch files are ignored unless tracked or imported into the repair.
+- R02 starts with a fixture-only regression on a documented CLI path. Its
+  brief gives a reproduction and the expected result. The checker reruns
+  focused tests, checks the built CLI independently, and uses the TypeScript
+  structure to verify that the repair stays in scope. Scratch files are
+  ignored unless tracked or imported into the repair.
 - The editable checkout's Git history starts at the seed. The supplied runtime
-  omits the clean source file and its emitted maps. Its compiled CLI is still
-  present for evaluation, so reference behavior can be inferred from compiled
-  JavaScript.
+  omits the corresponding clean source and emitted maps. Its compiled CLI
+  remains available to the evaluator.
 - Both tasks request a local friction report. The Bun observer records command
   outcomes and binds them to test results and build artifacts. It normalizes
   relative and absolute test paths, `--cwd`, and the `bun i` install alias. A
@@ -419,7 +416,7 @@ names. A reference run evaluates the task infrastructure without a model.
   writable run directory. Version 1 trusts agents to leave the receipts intact.
 - Reference `totalToolCalls` counts five calls for R01 and seven for R02,
   including writing the friction report. R02 diagnoses the focused failure,
-  edits the comparator and verifies the rebuilt CLI. Shim `thermiteCalls`
+  edits the source and verifies the rebuilt CLI. Shim `thermiteCalls`
   remains zero for both tasks. The same V1–V8 scoring and byte-identical
   contributor guide-copy rule apply.
 

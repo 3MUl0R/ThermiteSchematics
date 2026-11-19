@@ -61,11 +61,18 @@ function refreshBuildReceipt(f) {
   f.save();
 }
 
-const ascending = "  left: TerminalView,\n  right: TerminalView,";
 const descending = "  right: TerminalView,\n  left: TerminalView,";
 
 const fixes = [
   ["exact revert", (clean) => clean],
+  [
+    "negated seeded result, including negative zero for equality",
+    (_clean, seed) =>
+      seed.replace(
+        /(export function compareTerminalView\([\s\S]+?return )\(/,
+        "$1-(",
+      ),
+  ],
   [
     "argument swap",
     (_clean, seed) =>
