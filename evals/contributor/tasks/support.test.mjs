@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
 import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
 import { fixture, put, temp } from "./test-fixture.mjs";
+import { completedWorkflow } from "./receipts.mjs";
 import checkR01 from "./R01/check.mjs";
 import checkR02 from "./R02/check.mjs";
 
@@ -32,6 +33,35 @@ it("R01 accepts an incremental rebuild after a fresh observed build", () => {
   );
   f.save();
   expect(checkR01(f.ctx).pass).toBe(true);
+});
+
+it("accepts a fresh R02 build before the focused test and rejects output from the seeded source", () => {
+  const f = fixture(true);
+  put(f.repository, ordering, f.clean);
+  const [, test, build] = f.rows;
+  build.outputs = contributorBuildOutputs(f.repository);
+  const started =
+    Math.max(...build.outputs.map(({ modified }) => modified)) + 1000;
+  f.rows.splice(0, 3, build, { ...test, started, ended: started + 1 });
+  f.save();
+  expect(completedWorkflow(f.ctx, f.repository, { queryRepair: true })).toEqual(
+    {
+      focused: true,
+      freshBuild: true,
+    },
+  );
+  expect(completedWorkflow(f.ctx, f.repository).freshBuild).toBe(false);
+  put(
+    f.repository,
+    ordering,
+    f.clean.replace(
+      "compareText(left.id.terminalKey, right.id.terminalKey)",
+      "compareText(right.id.terminalKey, left.id.terminalKey)",
+    ),
+  );
+  expect(
+    completedWorkflow(f.ctx, f.repository, { queryRepair: true }).freshBuild,
+  ).toBe(false);
 });
 
 it.each([

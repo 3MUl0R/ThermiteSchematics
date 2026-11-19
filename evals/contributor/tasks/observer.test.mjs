@@ -152,6 +152,11 @@ it.each(["codex", "claude"])(
       }),
     );
     expect(checkR01(f.ctx).pass).toBe(true);
+    write([commands[0], commands[2], commands[1]]);
+    expect(checkR01(f.ctx).checks.freshBuild).toBe(false);
+    expect(
+      completedWorkflow(f.ctx, f.repository, { queryRepair: true }).freshBuild,
+    ).toBe(true);
     write([...commands.slice(0, 2), [commands[2][0], 1]]);
     expect(checkR01(f.ctx).checks.freshBuild).toBe(false);
     write([...commands.slice(0, 2), [commands[2][0] + " ; true", 0]]);

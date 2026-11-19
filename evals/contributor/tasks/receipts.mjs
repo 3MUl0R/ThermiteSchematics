@@ -40,7 +40,7 @@ function sameFile(current, observed) {
 function matchingFreshBuilds(rows, outputs) {
   const builds = rows.filter((r) => r.kind === "build" && r.exit === 0);
   // Check each artifact's origin, then bind the current inputs and bytes to
-  // the build after the focused test. Incremental builds can retain outputs.
+  // the observed build. Incremental builds can retain outputs.
   const fresh = outputs.every(
     (file) =>
       file.sha256 &&
@@ -58,7 +58,7 @@ function matchingFreshBuilds(rows, outputs) {
     : [];
 }
 
-function observedWorkflow(rows, builds, repository) {
+function observedWorkflow(rows, builds, repository, queryRepair) {
   const tests = rows.filter(
     (r) =>
       r.kind === "focused" && r.exit === 0 && passedFocus(r.tests, repository),
@@ -67,7 +67,7 @@ function observedWorkflow(rows, builds, repository) {
     focused: tests.length > 0,
     installed: tests.some((test) => installedBefore(rows, test.started)),
     freshBuild: tests.some((test) =>
-      builds.some((build) => build.started >= test.ended),
+      builds.some((build) => queryRepair || build.started >= test.ended),
     ),
   };
 }
@@ -77,7 +77,7 @@ const installedBefore = (rows, time) =>
     (row) => row.kind === "install" && row.exit === 0 && row.ended <= time,
   );
 
-function directWorkflow(ctx, repository, rows, outputs, builds) {
+function directWorkflow(ctx, repository, rows, outputs, builds, queryRepair) {
   const invocations = transcriptInvocations(ctx, repository);
   if (!invocations.some(({ direct }) => direct)) return {};
   const start = statSync(join(ctx.evidence, "contributor-seed.json")).mtimeMs;
@@ -87,9 +87,12 @@ function directWorkflow(ctx, repository, rows, outputs, builds) {
   if (testedAt < start) return {};
   const testIndex = invocations.findLastIndex(({ kind }) => kind === "focused");
   if (testIndex < 0) return {};
-  const directBuild = invocations
-    .slice(testIndex + 1)
-    .some(({ kind, direct }) => direct && kind === "build");
+  const buildInvocations = queryRepair
+    ? invocations
+    : invocations.slice(testIndex + 1);
+  const directBuild = buildInvocations.some(
+    ({ kind, direct }) => direct && kind === "build",
+  );
   return {
     focused: invocations[testIndex].direct,
     installed:
@@ -98,7 +101,7 @@ function directWorkflow(ctx, repository, rows, outputs, builds) {
         .slice(0, testIndex)
         .some(({ kind, direct }) => direct && kind === "install"),
     freshBuild:
-      builds.some(({ started }) => started >= testedAt - 1) ||
+      builds.some(({ started }) => queryRepair || started >= testedAt - 1) ||
       (directBuild &&
         outputs.every(
           (file) =>
@@ -121,8 +124,17 @@ export function completedWorkflow(
   );
   const rows = observedCommands(ctx, repository);
   const builds = matchingFreshBuilds(rows, outputs);
-  const observed = observedWorkflow(rows, builds, repository);
-  const direct = directWorkflow(ctx, repository, rows, outputs, builds);
+  // R01 exercises the sequence. R02 may build before the focused test so
+  // long as its artifact is tied to the delivered repair.
+  const observed = observedWorkflow(rows, builds, repository, queryRepair);
+  const direct = directWorkflow(
+    ctx,
+    repository,
+    rows,
+    outputs,
+    builds,
+    queryRepair,
+  );
   return {
     ...(install && { installed: observed.installed || !!direct.installed }),
     focused: observed.focused || !!direct.focused,
