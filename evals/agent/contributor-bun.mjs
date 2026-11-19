@@ -6,7 +6,7 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { createHash } from "node:crypto";
 
 const outputs = [
@@ -15,11 +15,20 @@ const outputs = [
   ["packages/query/dist/ordering.d.ts", "packages/query/src/ordering.ts"],
 ];
 
+export function sameContributorPath(path, expected) {
+  return (
+    typeof path === "string" &&
+    isAbsolute(path) &&
+    relative(expected, path) === ""
+  );
+}
+
 function fileEvidence(checkout, file) {
   const path = join(checkout, file);
   try {
     const stat = lstatSync(path);
-    if (!stat.isFile() || realpathSync(path) !== path) return { file };
+    if (!stat.isFile() || !sameContributorPath(realpathSync(path), path))
+      return { file };
     return {
       file,
       modified: stat.mtimeMs,
@@ -72,9 +81,13 @@ export function contributorInvocation(args, from, focused) {
   )
     return { cwd, argv: ["install", "--frozen-lockfile"], kind: "install" };
   if (argv[0] === "run") argv.shift();
-  if (argv[0] && resolve(cwd, argv[0]) === join(cwd, "scripts/test.mjs")) {
+  if (
+    argv[0] &&
+    sameContributorPath(resolve(cwd, argv[0]), join(cwd, "scripts/test.mjs"))
+  ) {
     const test = argv.findIndex(
-      (arg, index) => index > 0 && resolve(cwd, arg) === join(cwd, focused),
+      (arg, index) =>
+        index > 0 && sameContributorPath(resolve(cwd, arg), join(cwd, focused)),
     );
     if (test >= 0) {
       argv[0] = "scripts/test.mjs";
@@ -94,7 +107,9 @@ function observe(argv) {
     realpathSync(process.cwd()),
     config.focused,
   );
-  const { cwd, kind } = invocation.cwd === config.checkout ? invocation : {};
+  const { cwd, kind } = sameContributorPath(invocation.cwd, config.checkout)
+    ? invocation
+    : {};
   const timing =
     kind === "focused" ? join(cwd, "coverage/test-timings.json") : null;
   if (timing) rmSync(timing, { force: true });

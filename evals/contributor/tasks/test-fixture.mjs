@@ -129,14 +129,9 @@ export function copy(dir, path) {
 }
 
 export function observeIn(f, cwd, ...args) {
-  return run(
-    f.ctx,
-    cwd,
-    process.platform === "win32" ? process.execPath : "bun",
-    process.platform === "win32"
-      ? [f.ctx.env.THERMITE_CONTRIBUTOR_BUN, ...args]
-      : args,
-  );
+  return process.platform === "win32"
+    ? run(f.ctx, cwd, "cmd.exe", ["/d", "/c", "bun", ...args])
+    : run(f.ctx, cwd, "bun", args);
 }
 
 export function observer(f, checkout) {

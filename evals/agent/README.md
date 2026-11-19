@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.0)
+# Fresh-agent evaluator (E2 v1.20.1)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -878,3 +878,9 @@ path as evidence.
 ## E2 1.20.0
 
 Eval **1.20.0** qualifies the source-contributor R01/R02 tasks at version 2.0.1. Their own installations, observed test/build outcomes, fixture-only seed and negative checker controls support measurement for either agent. Existing T/D rules and task definitions are unchanged.
+
+## E2 1.20.1
+
+Contributor scoring compares Git-reported worktree paths and local evidence
+using native filesystem path rules. The direct Bun fallback preserves
+Windows path separators in command receipts. T and D scoring is unchanged.

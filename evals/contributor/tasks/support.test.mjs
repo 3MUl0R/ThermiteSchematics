@@ -2,12 +2,14 @@ import { expect, it } from "vitest";
 import {
   existsSync,
   readFileSync,
+  lstatSync,
+  realpathSync,
   readdirSync,
   rmSync,
   symlinkSync,
   utimesSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
 import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
 import { fixture, put, temp } from "./test-fixture.mjs";
@@ -17,6 +19,22 @@ import checkR02 from "./R02/check.mjs";
 
 it("R01 accepts a registered checkout with matching test and build receipts", () => {
   expect(checkR01(fixture().ctx).pass).toBe(true);
+});
+
+it("R01 accepts Git-style separators in recorded checkout and test paths", () => {
+  const f = fixture();
+  for (const row of f.rows) {
+    row.cwd = row.cwd.split(sep).join("/");
+    if (row.tests)
+      row.tests.files = row.tests.files.map((file) =>
+        file.split(sep).join("/"),
+      );
+  }
+  f.save();
+  expect(checkR01(f.ctx)).toMatchObject({
+    pass: true,
+    checks: { worktree: true, focused: true },
+  });
 });
 
 it("R01 accepts an incremental rebuild after a fresh observed build", () => {
@@ -90,6 +108,11 @@ it.each([
         join(engine, "node_modules"),
         join(repository, "node_modules"),
         process.platform === "win32" ? "junction" : "dir",
+      );
+      const link = join(repository, "node_modules");
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(realpathSync(link)).toBe(
+        realpathSync(join(engine, "node_modules")),
       );
     },
   ],

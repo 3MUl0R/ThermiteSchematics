@@ -1,5 +1,8 @@
 // Recognize literal read-only fetches, not arbitrary shell programs.
-export function shellWords(text, { literal = false } = {}) {
+export function shellWords(
+  text,
+  { literal = false, escapeBackslash = true } = {},
+) {
   const words = [];
   let word = "",
     quote = null,
@@ -46,7 +49,7 @@ export function shellWords(text, { literal = false } = {}) {
     }
     if (quote) {
       if (c === quote) quote = null;
-      else if (c === "\\" && quote === '"') escaped = true;
+      else if (escapeBackslash && c === "\\" && quote === '"') escaped = true;
       else {
         if (quote === '"' && (c === "`" || (c === "$" && text[i + 1] === "(")))
           return null;
@@ -61,7 +64,7 @@ export function shellWords(text, { literal = false } = {}) {
       words.push(literal ? { value, literal: value, control: true } : value);
       continue;
     }
-    if (c === "\\") {
+    if (escapeBackslash && c === "\\") {
       escaped = true;
       active = true;
       continue;

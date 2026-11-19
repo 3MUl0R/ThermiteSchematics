@@ -125,7 +125,8 @@ it.each(["codex", "claude"])(
     const f = fixture();
     f.rows.splice(0);
     f.save();
-    const binary = `"${process.execPath}"`;
+    // PowerShell uses the call operator for a quoted executable path.
+    const binary = `${process.platform === "win32" ? "& " : ""}"${process.execPath}"`;
     const commands = [
       [`${binary} --cwd worktree i --frozen-lockfile`, 0],
       [`cd worktree && ${binary} ./scripts/test.mjs "./${focus}"`, 0],
@@ -140,7 +141,10 @@ it.each(["codex", "claude"])(
         agent,
       );
     write(commands);
-    expect(checkR01(f.ctx).checks.focused).toBe(false);
+    expect(checkR01(f.ctx).checks).toMatchObject({
+      worktree: true,
+      focused: false,
+    });
     put(
       f.repository,
       "coverage/test-timings.json",

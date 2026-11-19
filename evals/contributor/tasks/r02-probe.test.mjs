@@ -195,14 +195,8 @@ function miniatureSolution(f) {
   const manifest = JSON.parse(
     readFileSync(join(f.repository, "package.json"), "utf8"),
   );
-  manifest.scripts.build = "bun --bun tsc -b";
+  manifest.scripts.build = "bun node_modules/typescript/lib/tsc.js -b";
   put(f.repository, "package.json", JSON.stringify(manifest));
-  mkdirSync(join(f.repository, "node_modules/.bin"));
-  symlinkSync(
-    join(root, "node_modules/.bin/tsc"),
-    join(f.repository, "node_modules/.bin/tsc"),
-    "file",
-  );
 }
 
 it("observes a real R02 build, edit and incremental rebuild, with a seven-call reference", async () => {

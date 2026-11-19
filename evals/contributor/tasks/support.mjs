@@ -8,10 +8,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, sep } from "node:path";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { read, write } from "../../agent/task-support.mjs";
+
+import { sameContributorPath } from "../../agent/contributor-bun.mjs";
 
 export const ordering = "packages/query/src/ordering.ts";
 export const focus = "packages/query/test/views-and-ordering.test.ts";
@@ -147,7 +149,7 @@ export function regularInside(repository, path) {
   const target = join(repository, path);
   return (
     existsSync(target) &&
-    realpathSync(target) === target &&
+    sameContributorPath(realpathSync(target), target) &&
     lstatSync(target).isFile()
   );
 }
@@ -157,13 +159,16 @@ export function ownInstall(repository) {
   return (
     existsSync(dependencies) &&
     lstatSync(dependencies).isDirectory() &&
-    realpathSync(dependencies) === dependencies &&
+    sameContributorPath(realpathSync(dependencies), dependencies) &&
     ["typescript", "vitest", "elkjs"].every((name) => {
       const manifest = join(dependencies, name, "package.json");
+      if (!existsSync(manifest) || !lstatSync(manifest).isFile()) return false;
+      const within = relative(dependencies, realpathSync(manifest));
       return (
-        existsSync(manifest) &&
-        lstatSync(manifest).isFile() &&
-        realpathSync(manifest).startsWith(dependencies + sep)
+        !!within &&
+        within !== ".." &&
+        !within.startsWith(".." + sep) &&
+        !isAbsolute(within)
       );
     })
   );

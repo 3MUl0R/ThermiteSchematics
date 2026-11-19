@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { sameContributorPath } from "../../../agent/contributor-bun.mjs";
 import {
   contributorState,
   git,
@@ -10,30 +11,36 @@ import {
 import { completedWorkflow } from "../receipts.mjs";
 
 function registered(ctx, engine, checkout) {
-  return (
-    existsSync(join(checkout, ".git")) &&
-    realpathSync(checkout) === checkout &&
-    git(ctx, engine, "worktree", "list", "--porcelain", "-z")
-      .split("\0")
-      .filter((entry) => entry.startsWith("worktree "))
-      .map((entry) => entry.slice("worktree ".length))
-      .some((path) => existsSync(path) && realpathSync(path) === checkout) &&
-    realpathSync(git(ctx, checkout, "rev-parse", "--show-toplevel").trim()) ===
-      checkout &&
-    git(
-      ctx,
-      engine,
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ) ===
+  if (
+    !existsSync(join(checkout, ".git")) ||
+    !sameContributorPath(realpathSync(checkout), checkout)
+  )
+    return false;
+
+  const gitDirectory = (repository, option) =>
+    realpathSync(
       git(
         ctx,
-        checkout,
+        repository,
         "rev-parse",
         "--path-format=absolute",
-        "--git-common-dir",
-      )
+        option,
+      ).trim(),
+    );
+  const listed = git(ctx, engine, "worktree", "list", "--porcelain", "-z")
+    .split("\0")
+    .filter((entry) => entry.startsWith("worktree "))
+    .map((entry) => entry.slice("worktree ".length));
+  return (
+    listed.some(
+      (path) =>
+        existsSync(path) && sameContributorPath(realpathSync(path), checkout),
+    ) &&
+    sameContributorPath(gitDirectory(checkout, "--show-toplevel"), checkout) &&
+    sameContributorPath(
+      gitDirectory(checkout, "--git-common-dir"),
+      gitDirectory(engine, "--git-common-dir"),
+    )
   );
 }
 

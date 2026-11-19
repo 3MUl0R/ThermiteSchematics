@@ -2,7 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { shellWords } from "../../agent/acquisition-command.mjs";
 import { decodedShellBody } from "../../agent/shell-parts.mjs";
-import { contributorInvocation } from "../../agent/contributor-bun.mjs";
+import {
+  contributorInvocation,
+  sameContributorPath,
+} from "../../agent/contributor-bun.mjs";
 import { normalizeTranscript } from "../../agent/transcript.mjs";
 import { focus } from "./support.mjs";
 
@@ -10,9 +13,13 @@ import { focus } from "./support.mjs";
 // exit successfully even when Bun failed, so it is not a receipt.
 function invocation(command, project, repository) {
   if (typeof command !== "string") return null;
-  let tokens = shellWords(decodedShellBody(command), { literal: true });
+  const windows = process.platform === "win32";
+  let tokens = shellWords(decodedShellBody(command), {
+    literal: true,
+    escapeBackslash: !windows,
+  });
   if (!tokens) return null;
-  let cwd = tokens[1]?.value.startsWith("--cwd") ? project : repository;
+  let cwd;
   if (
     tokens[0]?.value === "cd" &&
     tokens[2]?.control &&
@@ -21,13 +28,16 @@ function invocation(command, project, repository) {
     cwd = resolve(project, tokens[1].value);
     tokens = tokens.slice(3);
   }
+  if (windows && tokens[0]?.control && tokens[0].value === "&")
+    tokens = tokens.slice(1);
   if (tokens.some(({ control }) => control)) return null;
   const argv = tokens.map(({ value }) => value);
   const [executable, ...args] = argv;
   if (!executable || !/^bun(?:\.exe|\.cmd)?$/i.test(basename(executable)))
     return null;
-  const result = contributorInvocation(args, cwd, focus);
-  return result.kind && result.cwd === repository
+  const from = cwd ?? (args[0]?.startsWith("--cwd") ? project : repository);
+  const result = contributorInvocation(args, from, focus);
+  return result.kind && sameContributorPath(result.cwd, repository)
     ? { kind: result.kind, direct: isAbsolute(executable) }
     : null;
 }

@@ -103,5 +103,8 @@ it.each([
       expect.objectContaining({ kind: "issued-peer-reference-owner-distance" }),
     );
   },
-  30_000,
+  // Each case renders a complete packet, then measures every sheet and its
+  // negative controls in the shared browser. Match the runner's integration
+  // test budget so loaded CI workers can finish all measurements.
+  120_000,
 );
