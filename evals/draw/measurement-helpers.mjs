@@ -12,15 +12,11 @@ import * as group10 from "./measurement/outline.mjs";
 import * as preparation from "./measurement/prepare.mjs";
 import * as tranche3 from "./measurement/tranche3.mjs";
 import * as tranche4 from "./measurement/tranche4.mjs";
-import {
-  wirePlateGeometry,
-  wirePlateJunctions,
-} from "./measurement/wire-plates.mjs";
+import * as wirePlates from "./measurement/wire-plates.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 export const measurementHelpers = Object.freeze({
   IdentifierMeasurementError,
-  wirePlateGeometry,
-  wirePlateJunctions,
+  ...wirePlates,
   ...preparation,
   ...tranche3,
   ...tranche4,

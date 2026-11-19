@@ -115,6 +115,60 @@ it("keeps the console supply caption blocks supported by their own physical cond
   }
 });
 
+it.each([
+  ["W-C08", 1, false],
+  ["W-C11", 2, true],
+  ["W-C12", 2, false],
+] as const)(
+  "keeps both printed landings legible for %s",
+  async (name, index, pointsWithLeader) => {
+    const c = await consoleWiringFixture();
+    const output = await prepareWiringDrawing(c.ir, c.request.views[index]);
+    const doc = parseHTML(`<svg>${output.content}</svg>`).document;
+    const wire = required(c.ir.wires.find((w) => w.designation === name));
+    const group = required(
+      doc.querySelector(`[data-wiring-conductor="${wire.uid}"]`),
+    );
+    const shape = required(group.querySelector("rect")),
+      x = Number(shape.getAttribute("x")),
+      y = Number(shape.getAttribute("y")),
+      w = Number(shape.getAttribute("width")),
+      h = Number(shape.getAttribute("height"));
+    const route = nativePath(
+      required(required(group.querySelector("path")).getAttribute("d")),
+    );
+    const leader = doc.querySelector(`[data-label-leader-owner="${wire.uid}"]`);
+    expect(Boolean(leader)).toBe(pointsWithLeader);
+    if (leader)
+      expect(
+        on(
+          required(nativePath(required(leader.getAttribute("d"))).at(-1)),
+          route,
+        ),
+      ).toBe(true);
+
+    for (const [end, a, b] of [
+      ["source", required(route[0]), required(route[1])],
+      ["target", required(route.at(-1)), required(route.at(-2))],
+    ] as const) {
+      if (a.y !== b.y || a.y < y || a.y > y + h) continue;
+      const side = a.x < b.x ? x - a.x : a.x - (x + w);
+      if (side > Math.abs(b.x - a.x)) continue;
+      const port = group.getAttribute(`data-layout-${end}-port`);
+      const marker = required(
+        doc.querySelector(`circle[data-layout-port="${port}"]`),
+      );
+      const ring =
+        Number(marker.getAttribute("r")) +
+        Number(marker.getAttribute("stroke-width")) / 2;
+      expect(
+        side - ring,
+        `${name} ${end} outside the printed ring`,
+      ).toBeGreaterThanOrEqual(Math.max(2, h));
+    }
+  },
+);
+
 it("supports every console wiring caption on its native conductor or an actual leader without changing the 2.7 mm text", async () => {
   const c = await consoleWiringFixture();
   let count = 0;

@@ -174,6 +174,33 @@ it("selects the longest free owned segment and preserves a valid old inline plat
   expect(ownedWiringLabels(result)).toEqual(result);
 });
 
+it("uses leaders for close parallel runs whose inline plates would crowd either landing", () => {
+  const graph = fixture();
+  for (const [i, edge] of (graph.edges ?? []).entries()) {
+    const y = 26 + i * 6;
+    edge.sections = [
+      { id: `s${i}`, startPoint: { x: 50, y }, endPoint: { x: 90, y } },
+    ];
+    edge.labels = [{ text: "Native", x: 52, y: y - 4, width: 24, height: 8 }];
+  }
+  const after = ownedWiringLabels(graph);
+  const leaders = wiringLabelLeaders(after);
+  expect(leaders.map((l) => l.edgeId)).toEqual(["e0", "e1"]);
+  expect(after.edges?.map((e) => e.sections)).toEqual(
+    graph.edges?.map((e) => e.sections),
+  );
+  for (const [i, edge] of (after.edges ?? []).entries()) {
+    const y = 26 + i * 6;
+    const label = required(edge.labels?.[0]);
+    expect(
+      [26, 32].some(
+        (line) => line >= Number(label.y) && line <= Number(label.y) + 8,
+      ),
+    ).toBe(false);
+    expect(required(leaders[i]).points.at(-1)?.y).toBe(y);
+  }
+});
+
 it("uses a checked leader when no straight horizontal segment can host the plate", () => {
   const graph = fixture(),
     edge = required(graph.edges?.[0]);

@@ -1,8 +1,7 @@
 import { captionPlacementDiagnostic } from "./caption-diagnostic.js";
 import { CircuitRenderError } from "../render-error-context.js";
 import { routeInkDistance, routeSegments } from "./ink-geometry.js";
-import { clearOwnedPlate } from "./label-plate.js";
-import { WIRING_TERMINAL_RADIUS } from "./wiring-landings.js";
+import { wiringPlateFits, wiringPlateRuns } from "./wiring-plate-clearance.js";
 import type { ElkNode, ElkLabel } from "elkjs/lib/elk-api.js";
 import { required } from "../presentation/util.js";
 import {
@@ -12,9 +11,6 @@ import {
 } from "./wire-label-support.js";
 
 type Point = { x: number; y: number };
-// The terminal ring extends 0.15 mm beyond its radius. Leave a regular
-// conductor stroke (0.35 mm) beyond it, plus the SVG rounding tolerance.
-const END_INSET = WIRING_TERMINAL_RADIUS + 0.15 + 0.35 + 0.01;
 function box(label: {
   x?: number;
   y?: number;
@@ -83,42 +79,38 @@ function free(
 function positions(
   label: ElkLabel,
   routes: readonly (readonly Point[])[],
-  inset: number,
-  foreign: readonly (readonly Point[])[],
+  nativeWiring: boolean,
 ) {
   const width = required(label.width, "Missing label width"),
     height = required(label.height, "Missing label height");
-  const segments = routes
-    .flatMap((r) => routeSegments(r))
+  const runs = nativeWiring
+    ? wiringPlateRuns(routes, height)
+    : routes
+        .flatMap((r) => routeSegments(r))
+        .map(({ a, b }) => ({
+          a,
+          b,
+          lo: Math.min(a.x, b.x),
+          hi: Math.max(a.x, b.x),
+        }));
+  const segments = runs
     .filter(
       (s) =>
         Math.abs(s.a.y - s.b.y) < 1e-7 &&
-        Math.abs(s.a.x - s.b.x) > width + 2 * inset,
+        (nativeWiring ? s.hi - s.lo >= width : s.hi - s.lo > width),
     )
     .sort((s, t) => Math.abs(t.a.x - t.b.x) - Math.abs(s.a.x - s.b.x));
-  return segments.flatMap(({ a, b }) => {
-    const left = Math.min(a.x, b.x) + inset,
-      right = Math.max(a.x, b.x) - inset;
+  return segments.flatMap(({ a, b, lo: left, hi: right }) => {
     const x = Math.max(
       left,
       Math.min(right - width, required(label.x, "Unplaced label")),
     );
-    const middle = (left + right - width) / 2;
-    const crowded = foreign.some((route) =>
-      routeSegments(route).some(
-        ({ a: p, b: q }) =>
-          p.y === q.y &&
-          Math.abs(p.y - a.y) < height &&
-          Math.min(p.x, q.x) < right &&
-          Math.max(p.x, q.x) > left,
-      ),
-    );
-    // Centre a repaired wiring plate when possible, keeping staggered slots
-    // for nearby labels. Circuit callers retain their existing search order.
-    const proposals =
-      inset && !crowded
-        ? [middle, x, left, right - width]
-        : [left, right - width, x, middle];
+    const middle = nativeWiring
+      ? Math.max(left, Math.min(right - width, (a.x + b.x - width) / 2))
+      : (left + right - width) / 2;
+    const proposals = nativeWiring
+      ? [middle, x, left, right - width]
+      : [left, right - width, x, middle];
     return [...new Set(proposals)].map((x) => ({ x, y: a.y - height / 2 }));
   });
 }
@@ -208,13 +200,13 @@ export function ownedWiringLabels(
       const supported = () =>
         keep
           ? keep(edge.id, label)
-          : clearOwnedPlate(box(label), edge.routes, END_INSET, true) &&
+          : wiringPlateFits(box(label), edge.routes) &&
             horizontalLabelSupport(box(label), edge.routes, 2, foreign);
       if (supported()) continue;
       const original = { x: label.x, y: label.y };
       let found = false;
       for (const p of [
-        ...positions(label, edge.routes, keep ? 0 : END_INSET + 0.01, foreign),
+        ...positions(label, edge.routes, !keep),
         ...(extraPositions?.(label, edge.routes) ?? []),
       ]) {
         Object.assign(label, p);
@@ -248,7 +240,7 @@ export function wiringLabelLeaders(graph: ElkNode) {
           .flatMap((e) => e.routes),
         ink = box(label);
       if (
-        clearOwnedPlate(ink, own, END_INSET, true) &&
+        wiringPlateFits(ink, own) &&
         horizontalLabelSupport(ink, own, 2, foreign)
       )
         return [];

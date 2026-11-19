@@ -23,8 +23,10 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption
-(LABEL1, #338 and #350). The 5.28 terminal-strip and schedule rules remain
-in force.
+(LABEL1, #338 and #350). The mask check measures painted fills in any colour
+and rejects missing paint or clip measurements. It requires 0.35 mm of ink
+before a bend and the greater of 2 mm or the plate height outside a terminal
+marker. The 5.28 terminal-strip and schedule rules remain in force.
 
 Version **5.28** extends **DQ-19** and **DQ-23** for native terminal strips
 (CHECK8, #428 and #427). SVG schedule endpoint cells reconcile with the
@@ -532,12 +534,15 @@ remains manual.
   Semantic net/potential names are not physical wire identity captions.
   Explicit nonconductive `data-wire-label-leader` paths locate candidates only:
   its continuous painted path must actually reach the label and its own conductor.
-  Checker 5.29 also measures the opaque caption rectangle in paint order. An
-  inline interruption can pass when exactly one native owned straight stroke
-  crosses the plate and extends beyond both sides in the visible viewport.
-  The existing 0.01 mm coordinate coincidence tolerance applies. A covered
-  route end, bend, junction or foreign stroke fails independently of the
-  label-distance findings. The manual block-centre review rule remains.
+  Checker 5.29 measures all caption fills with positive opacity in paint
+  order, including paths and nested groups. An inline interruption can pass
+  when exactly one native owned straight stroke crosses the fill. In the
+  visible viewport there must be 0.35 mm of conductor before a bend and at
+  least the full plate height or 2 mm, whichever is greater, outside each
+  painted terminal marker. The 0.01 mm coordinate coincidence tolerance
+  identifies route ends. Covered junctions, foreign strokes and missing
+  paint or clip measurements fail independently of label-distance findings.
+  The manual block-centre review rule remains.
 - **DQ-17 rail substitution:** an empty source net reservation can be supplied
   by the painted rail caption at the same measured source terminal when it
   names the IR potential for that terminal and net. A remote, clipped, wrong

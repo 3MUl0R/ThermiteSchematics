@@ -36,6 +36,101 @@ const second = route("B", "M 10 50 L 110 50");
 const masks = (findings) =>
   findings.filter((f) => f.kind === "wire-label-plate-masks-conductor");
 
+const ring = (cx, cy) =>
+  `<circle cx="${cx}" cy="${cy}" r=".7" fill="white" stroke="#344054" stroke-width=".3"/>`;
+const vertical = route("A", "M 40 10 L 40 90");
+const corner = route("A", "M 10 10 L 10 30 L 110 30");
+const approach = label("A", 10, 26);
+
+it.each([
+  [
+    "route end with 0.02 mm of ink",
+    straight + label("A", 10.02, 26),
+    "approach",
+  ],
+  [
+    "plate butted against the ring",
+    straight + ring(10, 30) + label("A", 10.86, 26),
+    "approach",
+  ],
+  [
+    "plate inside the ring",
+    straight + ring(10, 30) + label("A", 10.5, 26),
+    "approach",
+  ],
+  [
+    "elbow with 0.02 mm of ink",
+    corner + label("A", 10.02, 26),
+    "elbow-or-branch",
+  ],
+  [
+    "vertical run with 0.02 mm of ink",
+    vertical +
+      approach
+        .replace(
+          'x="10" y="26" width="28" height="8"',
+          'x="36" y="10.02" width="8" height="28"',
+        )
+        .replace('x="11" y="31"', 'x="37" y="15.02"'),
+    "approach",
+  ],
+  [
+    "translucent plate",
+    straight +
+      approach.replace('fill="white"', 'fill="white" fill-opacity=".9"'),
+    "approach",
+  ],
+  ["yellow plate", straight + label("A", 10, 26, "#ffffcc"), "approach"],
+  [
+    "path plate",
+    straight +
+      approach.replace(
+        '<rect x="10" y="26" width="28" height="8"',
+        '<path d="M10 26 h28 v8 h-28 z"',
+      ),
+    "approach",
+  ],
+  [
+    "nested label text",
+    straight +
+      approach
+        .replace("<text", "<g><text")
+        .replace("</text></g>", "</text></g></g>"),
+    "approach",
+  ],
+  [
+    "review control: plate directly over the approach",
+    straight + approach,
+    "approach",
+  ],
+])("DQ-16 rejects %s", async (_name, body, reason) => {
+  expect(masks(await audit(body))).toEqual([
+    expect.objectContaining({ reason }),
+  ]);
+});
+
+it("accepts the review control with a full terminal approach outside a painted ring", async () => {
+  expect(await audit(straight + ring(10, 30) + label("A", 30, 26))).toEqual([]);
+});
+
+it("fails closed if the plate paint or a clip cannot be measured", async () => {
+  const g = await openSheet(page, svg(straight + label("A", 30, 26)));
+  delete g.tranche3.wirePlatePaint;
+  expect(wireLabelSupportAudit(g, ir).findings).toContainEqual(
+    expect.objectContaining({
+      kind: "wire-label-mask-unmeasurable",
+      reason: "missing-paint-measurement",
+    }),
+  );
+  for (const body of [
+    straight + approach.replace("<rect", '<rect clip-path="url(#missing)"'),
+    straight.replace("<path", '<path clip-path="url(#missing)"') + approach,
+  ])
+    expect(await audit(body)).toContainEqual(
+      expect.objectContaining({ kind: "wire-label-mask-unmeasurable" }),
+    );
+});
+
 it.each([
   ["terminal approach", straight, 10, 26, "approach"],
   ["elbow", route("A", "M 10 10 L 10 30 L 110 30"), 10, 26, "elbow-or-branch"],

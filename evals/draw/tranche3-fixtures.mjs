@@ -107,6 +107,7 @@ export function labelFixture(corner = false) {
   g.tranche3.routeInk = Object.fromEntries(
     g.shapes.map((s) => [s.element, segments(s.points)]),
   );
+  g.tranche3.wirePlatePaint = { plates: [], strokes: {}, markers: [] };
   g.texts = [
     {
       element: "label",

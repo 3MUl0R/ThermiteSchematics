@@ -132,7 +132,8 @@ function supportFinding(texts, g, routes) {
 export function wireLabelSupportAudit(input, ir) {
   const g = physicalOracleGeometry(input, ir);
   const groups = new Map(),
-    routes = g.shapes.filter((s) => s.conductor && s.wire);
+    maskRoutes = g.shapes.filter((s) => s.conductor),
+    routes = maskRoutes.filter((s) => s.wire);
   for (const t of g.texts.filter(
     (t) => t.wire && t.labelRole !== "net" && painted(t),
   )) {
@@ -159,7 +160,7 @@ export function wireLabelSupportAudit(input, ir) {
           JSON.stringify((r.endpoints ?? []).map(terminalKey).sort()) ===
             JSON.stringify(ends.map(terminalKey).sort()),
       );
-    const mask = wireLabelMaskFinding(ts, g, routes, nativeOwner);
+    const mask = wireLabelMaskFinding(ts, g, maskRoutes, nativeOwner);
     if (mask) findings.push(mask);
     if (!nativeOwner)
       findings.push(

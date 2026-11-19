@@ -192,6 +192,23 @@ it("N4 positive: valid inline plates retain the continuous owning route", () => 
   const { g, ir } = labelFixture();
   g.texts[0].bbox = { x: 8, y: 9, w: 10, h: 2 };
   g.texts[0].plate = { bbox: { x: 7, y: 8, w: 12, h: 4 } };
+  const clip = { x: 0, y: 0, w: 40, h: 40 };
+  g.shapes[0].stroke = 0.35;
+  g.shapes[0].bbox = { x: 0, y: 10, w: 30, h: 0 };
+  g.shapes[1].bbox = { x: 0, y: 30, w: 30, h: 0 };
+  g.tranche3.wirePlatePaint = {
+    plates: [
+      {
+        text: "label",
+        bbox: g.texts[0].plate.bbox,
+        clip,
+        order: 2,
+        heightMm: 4,
+      },
+    ],
+    strokes: { A: { clip, painted: true, order: 1 } },
+    markers: [],
+  };
   g.tranche3.routeInk.A = [
     [
       { x: 0, y: 10 },
