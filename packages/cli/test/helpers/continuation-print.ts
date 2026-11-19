@@ -94,7 +94,7 @@ export async function assertContinuationBrowser(
   try {
     const page = await browser.newPage();
     await page.emulateMedia({ media: "print" });
-    await page.setContent(embedPrintableFont(packet.html));
+    await page.setContent(packet.html);
     await page.evaluate(() => document.fonts.ready);
     const ems = await page.evaluate(continuationEmSizes);
     expect(ems.length).toBeGreaterThan(4);

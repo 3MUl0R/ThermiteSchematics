@@ -45,10 +45,11 @@ it.each(fontCases)(
       expect(result.error.code).toBe("R006");
       return;
     }
-    expect(
-      Buffer.byteLength(embedPrintableFont(result.value.html)) -
-        Buffer.byteLength(result.value.html),
-    ).toBeLessThanOrEqual(500 * 1024);
+    const style = result.value.html.match(
+      /<style data-thermite-font="[^"]+">[^<]*<\/style>/u,
+    );
+    expect(style?.[0]).toBeDefined();
+    expect(Buffer.byteLength(style?.[0] ?? "")).toBeLessThanOrEqual(500 * 1024);
     for (const sheet of result.value.sheets) {
       const svg = embedPrintableFont(sheet.svg);
       expect(

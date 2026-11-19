@@ -21,6 +21,8 @@ and `--to <device> [--include-power]` a one-NO switch or three-wire sensor
 `--margin <mm>` (5-25), `--layout compact` and `--index` override project page
 settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one
 sheet (R006 otherwise).
+The packet JSON's `html` is byte-identical to the standalone `.html` export,
+including print fonts.
 
 Cards name omissions. Continuations: intact ID + peer `sheet.zone`,
 2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form/bank, 2.5 mm gap. Audit with circuit/wiring views

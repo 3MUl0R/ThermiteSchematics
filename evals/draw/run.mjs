@@ -157,8 +157,8 @@ try {
   const identifierPolicy = {
     projection: typeof query.printedPort === "function" ? "authored" : "legacy",
   };
-  // JSON intentionally carries family references only. Measure standalone SVGs
-  // after the built CLI's deterministic font delivery step, just like file export.
+  // Sheet SVGs in packet JSON carry only font family references. Apply the
+  // built CLI's deterministic font delivery step before measuring standalone SVGs.
   let deliverSvg = (svg) => svg;
   try {
     const delivery = join(engine, "packages/cli/dist/printable-font.js");

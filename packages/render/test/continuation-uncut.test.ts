@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/sheets.js";
 import {
   uncutFixture,
   uncutLabelVariant,
+  uncutLayoutDigest,
   uncutReferenceKey,
 } from "./continuation-uncut-fixtures.js";
 
@@ -46,9 +46,9 @@ it.each(["init-starter", "motor-starter"] as const)(
       );
       if (!result.ok) throw Error(JSON.stringify(result.error));
       expect(result.value.sheets).toHaveLength(name === "init-starter" ? 1 : 7);
-      expect(
-        createHash("sha256").update(JSON.stringify(result.value)).digest("hex"),
-      ).toBe(reference[uncutReferenceKey(name)][index]);
+      expect(uncutLayoutDigest(result.value)).toBe(
+        reference[uncutReferenceKey(name)][index],
+      );
       for (const s of result.value.sheets)
         for (const l of s.continuations)
           expect(

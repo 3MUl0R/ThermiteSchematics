@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { ctx, ok, repositoryRoot } from "./harness.js";
+import { ctx, ok, repositoryRoot, type Fact } from "./harness.js";
 import { guideModel, type Fence, type GuideModel } from "./guide-model.js";
 import { topicExecution } from "../../../../scripts/docs-example-evidence.mjs";
 import { PROJECT_GUIDE_BYTE_LIMIT } from "../../src/project-guide-budget.js";
@@ -18,6 +18,29 @@ const workflows = guideModel(
   readFileSync(join(repositoryRoot, workflowsFile), "utf8"),
 );
 export const live = guideModel(projectGuide.text + "\n" + workflows.text);
+
+export const workflowFacts: readonly Fact[] = [
+  {
+    claim:
+      "The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.",
+    async check() {
+      const packetRequest = workflows.fences.find(
+        (fence) =>
+          fence.lang === "json" &&
+          fence.body.includes('"schematic-packet-request/0.1"'),
+      );
+      if (!packetRequest) throw Error("Missing the guide's packet request");
+      const args = ["packet", "--input", "-"];
+      const project = ctx.pristine.starter;
+      const standalone = await ok(args, project, packetRequest.body);
+      const packet = await ok([...args, "--json"], project, packetRequest.body);
+      const { html } = JSON.parse(packet.stdout);
+      expect(html.match(/<style data-thermite-font=/gu)).toHaveLength(1);
+      expect(html === standalone.stdout, "packet HTML bytes").toBe(true);
+    },
+  },
+];
+
 export async function verifyGuideBudgets() {
   expect(projectGuide.bytes).toBeLessThanOrEqual(PROJECT_GUIDE_BYTE_LIMIT);
   expect(

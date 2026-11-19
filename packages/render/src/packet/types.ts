@@ -127,6 +127,11 @@ export interface RenderedPacket {
   readonly format: "schematic-packet/0.1";
   readonly page: PaperPage;
   readonly sheets: readonly RenderedSheet[];
+  /**
+   * Read-only standalone print document with embedded fonts.
+   * Reading this property or serializing the packet can throw R007 when the
+   * HTML font block exceeds 500 KiB.
+   */
   readonly html: string;
   readonly coverage: PacketCoverage;
   readonly documentationSelections?: readonly (DocumentationSelection & {

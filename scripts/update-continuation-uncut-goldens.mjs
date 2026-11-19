@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomically } from "../packages/compiler/dist/index.js";
@@ -6,10 +5,11 @@ import { renderSchematicPacket } from "../packages/render/dist/index.js";
 import {
   uncutFixture,
   uncutLabelVariant,
+  uncutLayoutDigest,
   uncutReferenceKey,
 } from "../packages/render/test/continuation-uncut-fixtures.ts";
 
-// Build first. Owns this platform's six packet digests, never fixture inputs.
+// Build first. Owns this platform's six packet layout digests.
 // Other platforms' reviewed rows are retained unchanged.
 // Inspect the rendered packets before an intentional --write.
 const mode = process.argv[2];
@@ -52,9 +52,7 @@ for (const name of ["init-starter", "motor-starter"]) {
       result.value.sheets.length !== (name === "init-starter" ? 1 : 7)
     )
       throw Error(`Uncut-label coverage or page contract changed: ${name}`);
-    reference[key].push(
-      createHash("sha256").update(JSON.stringify(result.value)).digest("hex"),
-    );
+    reference[key].push(uncutLayoutDigest(result.value));
   }
 }
 const bytes = Buffer.from(JSON.stringify(reference, null, 2) + "\n");

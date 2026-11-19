@@ -47,7 +47,7 @@ it("pins a deterministic document subset with unchanged selected advances", asyn
     original.layout(text).positions,
   );
 });
-it("keeps raw payloads font-free and bounds SVG/packet font delivery size", async () => {
+it("pins the packet font block and bounds SVG/HTML font delivery size", async () => {
   const c = await compileProject("examples/motor-starter");
   if (!c.ok) throw Error();
   const r = await renderSchematicPacket(c.ir, {
@@ -61,7 +61,9 @@ it("keeps raw payloads font-free and bounds SVG/packet font delivery size", asyn
     ],
   });
   if (!r.ok) throw Error(r.error.message);
-  expect(JSON.stringify(r.value)).not.toMatch(/base64|@font-face/u);
+  expect(
+    r.value.sheets.every((sheet) => !sheet.svg.includes("@font-face")),
+  ).toBe(true);
   const raw = await (
     await import("../../render/src/renderer.js")
   ).renderSchematic(c.ir, {
@@ -72,7 +74,7 @@ it("keeps raw payloads font-free and bounds SVG/packet font delivery size", asyn
   if (!raw.ok) throw Error();
   const svg = raw.value.svg,
     standalone = embedPrintableFont(svg),
-    html = embedPrintableFont(r.value.html);
+    html = r.value.html;
   expect(
     Buffer.byteLength(standalone) - Buffer.byteLength(svg),
   ).toBeLessThanOrEqual(60 * 1024);
@@ -80,9 +82,13 @@ it("keeps raw payloads font-free and bounds SVG/packet font delivery size", asyn
     Buffer.byteLength(embedPrintableFont(r.value.sheets[0]!.svg)) -
       Buffer.byteLength(r.value.sheets[0]!.svg),
   ).toBeLessThanOrEqual(60 * 1024);
-  expect(
-    Buffer.byteLength(html) - Buffer.byteLength(r.value.html),
-  ).toBeLessThanOrEqual(500 * 1024);
+  const style =
+    html.match(/<style data-thermite-font="[^"]+">[^<]*<\/style>/u)?.[0] ?? "";
+  expect(createHash("sha256").update(style).digest("hex")).toBe(
+    "ed3389ea7903709a1f78dba5501eb76e23013ffac659b7e700a02cdd124ef6fd",
+  );
+  expect(Buffer.byteLength(style)).toBeLessThanOrEqual(500 * 1024);
+  expect(() => embedPrintableFont(html)).toThrow("Font already embedded");
   expect(html.match(/data-thermite-font=/gu)).toHaveLength(1);
   expect(html.indexOf("data-thermite-font=")).toBeLessThan(
     html.indexOf("</head>"),

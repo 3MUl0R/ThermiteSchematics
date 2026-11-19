@@ -79,6 +79,27 @@ export { printPacketHtml } from "./packet/html.js";
 
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
 
+function packetDiagnostics(
+  ir: Readonly<ElectricalIr>,
+  drafts: readonly Draft[],
+  sheets: RenderedPacket["sheets"],
+  explicitPacket: boolean,
+) {
+  const diagnostics = explicitPacket
+    ? packetDeviceCoverageDiagnostics(
+        ir,
+        sheets.map((sheet, i) => ({
+          number: sheet.number,
+          schematic: !required(drafts[i], "Missing rendered sheet draft")
+            .documentationTable,
+          references: drafts[i]?.terminalStrip ? [] : sheet.references,
+        })),
+      )
+    : [];
+  diagnostics.push(...drafts.flatMap((draft) => draft.diagnostics ?? []));
+  return diagnostics;
+}
+
 async function renderPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
@@ -410,25 +431,20 @@ function assemblePacket(
         ),
       };
     const sheets = rendered.value;
-    const diagnostics = explicitPacket
-      ? packetDeviceCoverageDiagnostics(
-          ir,
-          sheets.map((sheet, i) => ({
-            number: sheet.number,
-            schematic: !drafts[i]!.documentationTable,
-            references: drafts[i]?.terminalStrip ? [] : sheet.references,
-          })),
-        )
-      : [];
-    diagnostics.push(...drafts.flatMap((d) => d.diagnostics ?? []));
+    const diagnostics = packetDiagnostics(ir, drafts, sheets, explicitPacket);
+    const title = ir.project.name;
+    let html: string | undefined;
     return {
       ok: true,
       value: {
         format: "schematic-packet/0.1",
         ...packetFrameMetadata(page),
-        page: page,
+        page,
         sheets,
-        html: printPacketHtml(sheets, page, ir.project.name),
+        // PDF and SVG consumers do not need an HTML font subset.
+        get html() {
+          return (html ??= printPacketHtml(sheets, page, title));
+        },
         coverage: {
           ...buildPacketCoverage(
             ir,

@@ -72,6 +72,7 @@ import {
   projectGuide,
   live,
   workflowAdvice,
+  workflowFacts,
   verifyCoreAuthoringRules,
   verifyGuideBudgets,
   verifyWorkflowExamples,
@@ -94,6 +95,7 @@ const MODULES: Record<string, FactModule> = {
   continuations,
   "document-companions": documentCompanions,
   "drawing-frames": drawingFrames,
+  "project-workflows": { facts: workflowFacts, unexecuted: new Map() },
 };
 const FACTS = Object.entries(MODULES).flatMap(([module, { facts }]) =>
   facts.map((fact) => ({ module, ...fact })),

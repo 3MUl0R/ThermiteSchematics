@@ -247,6 +247,8 @@ see [reference selection](report-filtering.md#packet-reference-options).
 Individual views cannot change paper size.
 The renderer caps a packet at 100 sheets. The result `schematic-packet/0.1`
 contains normalized `page`, ordered `sheets`, and self-contained `html`.
+The `html` field includes the embedded print fonts and is byte-for-byte the
+same document as the standalone `.html` export for the same request.
 Each sheet includes its SVG, normalized view, number, and continuation records
 with the matching destination sheet, conductor label, and electrical net ID.
 Rooted continuation labels print a generated connector reference and the peer's
@@ -551,9 +553,10 @@ conductors.
 
 A standalone SVG whose embedded font subset exceeds 60 KiB returns `R007`
 (exit 1), including the required and allowed bytes; export `.html` or `.pdf`
-instead. Packet HTML whose font block exceeds 500 KiB returns `R007`; export
-`.pdf` instead. The CLI writes no file on either refusal. JSON and agent results
-remain font-free.
+instead. A packet HTML font block over 500 KiB returns `R007` for both `.html`
+and `.json` exports. Export `.pdf` instead. The CLI writes no file on a refusal.
+The individual sheet SVGs in packet JSON and the agent `create-view` SVG carry
+font family names only.
 
 Packet navigation resolves function locations after sheet composition. Locations
 use the rounded centroid of each function's own visible terminals (0.01 mm,

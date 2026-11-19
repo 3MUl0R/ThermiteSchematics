@@ -75,6 +75,43 @@ function matches(text: string, pattern: RegExp): Set<string> {
   return new Set([...text.matchAll(pattern)].map((match) => match[0]));
 }
 
+async function assertDependencyLicenses(
+  lock: Awaited<ReturnType<typeof readBunLock>>,
+): Promise<void> {
+  const licenses: Record<string, string> = {};
+  for (const name of [
+    "pdfkit",
+    "fontkit",
+    "svg-to-pdfkit",
+    "ajv",
+    "commander",
+    "elkjs",
+    "fast-glob",
+    "jsonc-parser",
+    "mdast-util-from-markdown",
+  ]) {
+    const manifest = JSON.parse(
+      await readFile(
+        join(repositoryRoot, "node_modules", name, "package.json"),
+        "utf8",
+      ),
+    );
+    expect(manifest.version).toBe(lockedPackage(lock, name).version);
+    licenses[name] = manifest.license;
+  }
+  expect(licenses).toEqual({
+    pdfkit: "MIT",
+    fontkit: "MIT",
+    "svg-to-pdfkit": "MIT",
+    ajv: "MIT",
+    commander: "MIT",
+    elkjs: "EPL-2.0 OR GPL-3.0-or-later",
+    "fast-glob": "MIT",
+    "jsonc-parser": "MIT",
+    "mdast-util-from-markdown": "MIT",
+  });
+}
+
 describe("M7 Task 9 final inventories", () => {
   it("locks agent literals, codes, root imports, and direct failure classification", async () => {
     const production = await textInventory([
@@ -101,19 +138,21 @@ describe("M7 Task 9 final inventories", () => {
   });
 
   it("audits the package graph and licenses, including alpha PDF and guide dependencies", async () => {
-    const [agentPackageText, cliPackageText, compilerPackageText, lock] =
-      await Promise.all([
-        readFile(join(packageRoot, "package.json"), "utf8"),
-        readFile(
-          join(repositoryRoot, "packages", "cli", "package.json"),
-          "utf8",
-        ),
-        readFile(
-          join(repositoryRoot, "packages", "compiler", "package.json"),
-          "utf8",
-        ),
-        readBunLock(repositoryRoot),
-      ]);
+    const packageManifest = (name: string) =>
+      readFile(join(repositoryRoot, "packages", name, "package.json"), "utf8");
+    const [
+      agentPackageText,
+      cliPackageText,
+      compilerPackageText,
+      renderPackageText,
+      lock,
+    ] = await Promise.all([
+      packageManifest("agent-tools"),
+      packageManifest("cli"),
+      packageManifest("compiler"),
+      packageManifest("render"),
+      readBunLock(repositoryRoot),
+    ]);
     const agentPackage = JSON.parse(agentPackageText) as {
       private: boolean;
       exports: Record<string, unknown>;
@@ -142,8 +181,6 @@ describe("M7 Task 9 final inventories", () => {
       "@thermite/schema": "0.2.0",
       commander: "^15.0.0",
       micromatch: "^4.0.8",
-      fontkit: "2.0.4",
-      pako: "0.2.9",
       pdfkit: "^0.17.2",
       "svg-to-pdfkit": "^0.1.8",
     });
@@ -155,41 +192,18 @@ describe("M7 Task 9 final inventories", () => {
       "@thermite/schema": "0.2.0",
       "fast-glob": "^3.3.3",
     });
+    const renderDependencies = JSON.parse(renderPackageText).dependencies;
+    expect(renderDependencies).toMatchObject({
+      fontkit: "2.0.4",
+      pako: "0.2.9",
+    });
+    expect(lock.workspaces["packages/render"]?.dependencies).toEqual(
+      renderDependencies,
+    );
     expect(lock.workspaces["packages/agent-tools"]?.dependencies).toEqual(
       agentPackage.dependencies,
     );
-    const licenses: Record<string, string> = {};
-    for (const name of [
-      "pdfkit",
-      "fontkit",
-      "svg-to-pdfkit",
-      "ajv",
-      "commander",
-      "elkjs",
-      "fast-glob",
-      "jsonc-parser",
-      "mdast-util-from-markdown",
-    ]) {
-      const manifest = JSON.parse(
-        await readFile(
-          join(repositoryRoot, "node_modules", name, "package.json"),
-          "utf8",
-        ),
-      );
-      expect(manifest.version).toBe(lockedPackage(lock, name).version);
-      licenses[name] = manifest.license;
-    }
-    expect(licenses).toEqual({
-      pdfkit: "MIT",
-      fontkit: "MIT",
-      "svg-to-pdfkit": "MIT",
-      ajv: "MIT",
-      commander: "MIT",
-      elkjs: "EPL-2.0 OR GPL-3.0-or-later",
-      "fast-glob": "MIT",
-      "jsonc-parser": "MIT",
-      "mdast-util-from-markdown": "MIT",
-    });
+    await assertDependencyLicenses(lock);
   });
 
   it("runs the alpha repository check on macOS, Linux, and Windows", async () => {

@@ -76,15 +76,31 @@ describe("render public package boundaries", () => {
     }
   });
 
-  it("exports only package roots for render and query", () => {
-    for (const path of [
-      join(packageRoot, "package.json"),
-      join(repositoryRoot, "packages", "query", "package.json"),
+  it("exports the package roots and the CLI's internal render font entry", () => {
+    const root = {
+      types: "./dist/index.d.ts",
+      import: "./dist/index.js",
+    };
+    for (const { path, expected } of [
+      {
+        path: join(packageRoot, "package.json"),
+        expected: {
+          ".": root,
+          "./internal/printable-font": {
+            types: "./dist/printable-font.d.ts",
+            import: "./dist/printable-font.js",
+          },
+        },
+      },
+      {
+        path: join(repositoryRoot, "packages", "query", "package.json"),
+        expected: { ".": root },
+      },
     ]) {
       const manifest = JSON.parse(readFileSync(path, "utf8")) as {
         exports: Record<string, unknown>;
       };
-      expect(Object.keys(manifest.exports)).toEqual(["."]);
+      expect(manifest.exports).toEqual(expected);
     }
   });
 });
