@@ -71,7 +71,14 @@ export function tranche4Ports(c) {
     "[data-connector-port],[data-communication-port]",
     (e) => {
       const circle = e.querySelector("circle"),
-        b = circle && c.visible(circle)?.b;
+        visible = circle && c.visible(circle),
+        b =
+          visible &&
+          (c.options.textOnly ||
+            c.strokeInk(circle, visible.clip, circle.getScreenCTM(), true)
+              .length)
+            ? visible.b
+            : null;
       return {
         key:
           e.getAttribute("data-connector-port") ??

@@ -366,6 +366,21 @@ print `not drawn` unless the caller supplies endpoint references. Raw native que
 tables retain their optional location projection; renderers reserve it before
 layout.
 
+## Issued peer and inventory references
+
+A conductor peer names both native terminals and the drawn peer's final
+sheet.zone. Relay interface pointers in terminal wiring views identify painted
+counterpart terminals. They carry no claim about the presence of a function
+symbol. Connector attachment pointers use the occupied native port on the
+sheet with the painted attachment. When the attachment has no drawing, an
+inventory pointer names the exact assembly and locates its issued row. Pin
+mapping and occupancy retain their authored status.
+
+Strip terminals print their existing Tn/Rn key with an inventory sheet
+number. The matching key on the inventory has its own space beside the table.
+Circuit footers name the first issued device and function reference sheet
+when the packet includes that report.
+
 ## Report proof maintenance
 
 Wire-search work-counter pins describe the particular native fixture, font metrics,

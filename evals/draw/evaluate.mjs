@@ -2,7 +2,9 @@ import { measurementCoverage } from "./measurement-coverage.mjs";
 import { tranche3Observations } from "./tranche3-observations.mjs";
 import { withRelationLandingSource } from "./relation-landing-sources.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
+import { issuedReferenceAudit } from "./issued-reference-audit.mjs";
 const wireLocatorAudits = new WeakMap();
+const issuedReferenceAudits = new WeakMap();
 import { documentInventory } from "./m3-documents.mjs";
 import { navigationObservations } from "./navigation-observations.mjs";
 import { polarityFindings, markFindings } from "./symbol-fidelity.mjs";
@@ -391,6 +393,11 @@ function evaluateInventory(
 ) {
   if (!wireLocatorAudits.has(packet))
     wireLocatorAudits.set(packet, wireLocatorAudit(packet, geometries, ir));
+  if (tables.request && !issuedReferenceAudits.has(packet))
+    issuedReferenceAudits.set(
+      packet,
+      issuedReferenceAudit(packet, geometries, ir),
+    );
   out.push(
     ...documentObservations({
       s,
@@ -399,9 +406,10 @@ function evaluateInventory(
       ir,
       tables,
       policy: identifierPolicy,
-      wireFindings: wireLocatorAudits
-        .get(packet)
-        .findings.filter((f) => f.sheet === s.number),
+      wireFindings: [
+        ...wireLocatorAudits.get(packet).findings,
+        ...(issuedReferenceAudits.get(packet) ?? []),
+      ].filter((f) => f.sheet === s.number),
       obs,
       cohort,
     }),

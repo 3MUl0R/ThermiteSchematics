@@ -206,8 +206,8 @@ export function tableDrafts(
     content.push("</g>");
     if (strip)
       content.push(
-        text(b.x - 10, b.y + 12, "Strip", 2.5),
-        text(b.x - 10, b.y + 15.5, "row", 2.5),
+        text(b.x - 9, b.y + 12, "Strip", 2.5),
+        text(b.x - 9, b.y + 15.5, "row", 2.5),
       );
   }
   function finish(end: number) {

@@ -189,6 +189,12 @@ export const geometry = {
       columnName: attr(e, "data-column-name"),
       reportRowScope: ids.get(e.closest("[data-report-row]")),
       ...(typeof kind === "string" ? { documentKind: kind } : {}),
+      ...(e.hasAttribute("data-peer-reference")
+        ? {
+            peerReference: e.getAttribute("data-peer-reference"),
+            peerSource: e.getAttribute("data-peer-source"),
+          }
+        : {}),
     };
   },
   identity: ({ e, ancestors, attr, ids, documentIdentity }) => ({

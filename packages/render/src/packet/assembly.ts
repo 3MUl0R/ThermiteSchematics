@@ -131,6 +131,32 @@ function terminalNetIds(ir: Readonly<ElectricalIr>) {
   );
 }
 
+function frameIssuedSheet(
+  draft: Draft,
+  page: PaperPage,
+  sheet: number,
+  total: number,
+  referenceSheet: number,
+) {
+  const issued =
+    referenceSheet &&
+    draft.view.format === "documentation-view/0.1" &&
+    draft.view.kind === "circuit"
+      ? {
+          ...draft,
+          note: `${draft.note} · Device and function references S${String(referenceSheet).padStart(2, "0")}`,
+        }
+      : draft;
+  try {
+    return frame(issued, page, sheet, total);
+  } catch (error) {
+    throw new PacketDraftError(
+      error instanceof Error ? error.message : "Sheet assembly failed.",
+      draft.views ?? [],
+    );
+  }
+}
+
 /** Final packet sheet numbers also namespace SVG IDs and continuation metadata. */
 export function assembleSheets(
   ir: Readonly<ElectricalIr>,
@@ -150,22 +176,24 @@ export function assembleSheets(
       );
   resolveRootedContinuations(drafts, page);
   const contents = boundaryCaptionContents(drafts);
+  const referenceSheet =
+    drafts.findIndex(
+      (d) =>
+        d.view.format === "documentation-view/0.1" &&
+        d.view.kind === "references",
+    ) + 1;
   const sheets = drafts.map((draft, index) => ({
     ...(draft.resolvedTitle ? { sheetKey: draft.resolvedTitle.sheetKey } : {}),
     number: index + 1,
     view: draft.view,
     references: draft.references ?? [],
-    svg: (() => {
-      try {
-        const framed = { ...draft, content: contents[index] ?? draft.content };
-        return frame(framed, page, index + 1, drafts.length);
-      } catch (error) {
-        throw new PacketDraftError(
-          error instanceof Error ? error.message : "Sheet assembly failed.",
-          draft.views ?? [],
-        );
-      }
-    })(),
+    svg: frameIssuedSheet(
+      { ...draft, content: contents[index] ?? draft.content },
+      page,
+      index + 1,
+      drafts.length,
+      referenceSheet,
+    ),
     ...(draft.circuitBlocks?.length
       ? {
           circuitContinuations: draft.circuitBlocks.flatMap((block) =>

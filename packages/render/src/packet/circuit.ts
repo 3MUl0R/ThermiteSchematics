@@ -115,7 +115,7 @@ async function circuitDraftsUnchecked(
     drawingBounds: b,
     references: [],
     links: [],
-    note: "Source-selected circuits · [+N]: connections outside group · device/function references in index",
+    note: "Source-selected circuits · [+N]: connections outside group",
     coverage: [],
     content: headingLines
       .map((s, i) => text(b.x, b.y + 3.5 + i * 4.5, s, 3.5, "start", 700))

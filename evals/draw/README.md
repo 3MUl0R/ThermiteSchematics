@@ -21,6 +21,12 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.30 (TEXT-NAV9)** extends **DQ-19** to reconcile direct peer and
+connector-inventory pointers, strip inventory sheet addresses, and circuit
+footer references against native identities and measured issued ink
+(#397, #429, #431, #434). The base can expose missing or dangling references
+that passed before this rule set.
+
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption
 (LABEL1, #338 and #350). The mask check measures painted fills in any colour

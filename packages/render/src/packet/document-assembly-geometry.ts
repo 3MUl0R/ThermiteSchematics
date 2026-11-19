@@ -25,6 +25,7 @@ export function assemblyPortGeometry(
     const draft = required(drafts[i], "Missing assembly source sheet");
     const field = draft.drawingBounds ?? bounds(draft.title, page);
     const all = navigationGeometry(sheet.svg);
+    const byNode = new Map(all.map((g) => [g.node, g]));
     const devices = new Set(
       all
         .filter((g) => g.visible && g.node.attrs["data-device-uid"])
@@ -36,7 +37,9 @@ export function assemblyPortGeometry(
       if (!g.visible || !key || !uid || !native.has(connectorPortKey(uid, key)))
         return [];
       const circle = g.node.children.find((n) => n.name === "circle");
-      if (!circle || !(Number(circle.attrs.r) > 0)) return [];
+      const mark = circle && byNode.get(circle);
+      if (!mark || !paintedStroke(mark) || !(Number(circle.attrs.r) > 0))
+        return [];
       const point = project(
         {
           x: Number(circle.attrs.cx ?? 0),
@@ -44,9 +47,9 @@ export function assemblyPortGeometry(
           w: 0,
           h: 0,
         },
-        g.matrix,
+        mark.matrix,
       );
-      if (!inside(point, g.clip) || !inside(point, field)) return [];
+      if (!inside(point, mark.clip) || !inside(point, field)) return [];
       return [
         {
           id: connectorPortKey(uid, key),
@@ -54,6 +57,7 @@ export function assemblyPortGeometry(
           portKey: key,
           sheet: sheet.number,
           zone: navigationZone(point.x, point.y, field),
+          point,
         },
       ];
     });
@@ -64,4 +68,19 @@ export function assemblyPortGeometry(
     for (const port of part.ports)
       if (!targets.has(port.id)) targets.set(port.id, port);
   return { inventory, parts, targets };
+}
+
+export function paintedStroke(
+  g: ReturnType<typeof navigationGeometry>[number],
+) {
+  const s = g.style ?? g.node.attrs;
+  return (
+    g.visible &&
+    Number(s.opacity ?? 1) > 0 &&
+    !["none", "transparent", "white", "#fff", "#ffffff", undefined].includes(
+      s.stroke,
+    ) &&
+    Number(s["stroke-opacity"] ?? 1) > 0 &&
+    Number(s["stroke-width"] ?? 1) > 0
+  );
 }

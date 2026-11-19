@@ -201,6 +201,7 @@ it("draws authored terminal order and only native jumper geometry with reciproca
     expect([...t.querySelectorAll("text")].map((e) => e.textContent)).toEqual([
       key,
       t.getAttribute("data-strip-ref"),
+      "S01",
     ]);
   }
 
