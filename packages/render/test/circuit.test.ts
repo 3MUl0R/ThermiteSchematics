@@ -4,6 +4,7 @@ import type { ElectricalIr } from "@thermite/compiler";
 import { prepareCircuitView, type CircuitViewRequest } from "../src/circuit.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { circuitMark } from "../src/symbols/circuit.js";
+import { printableTextMetrics } from "../src/symbols/printable-font.js";
 import { compileCoreFixture } from "./fixtures.js";
 import {
   controlCircuitView,
@@ -208,11 +209,24 @@ describe("source-selected circuit views", () => {
         "[data-wire-label] text, [data-terminal-id] text, [data-function-key=do0] text",
       ))
         expect(Number(t.getAttribute("font-size"))).toBeGreaterThanOrEqual(2.5);
-      const rect = label(first.uid).querySelector("rect")!;
-      const bottom =
-        Number(rect.getAttribute("y")) + Number(rect.getAttribute("height"));
-      expect(Number(text.at(-1)!.getAttribute("y"))).toBeLessThan(bottom);
-      expect(Number(rect.getAttribute("height"))).toBeGreaterThan(6);
+      const rect = label(first.uid).querySelector("rect"),
+        left = Number(rect?.getAttribute("x")),
+        top = Number(rect?.getAttribute("y")),
+        right = left + Number(rect?.getAttribute("width")),
+        bottom = top + Number(rect?.getAttribute("height"));
+      expect(rect).not.toBeNull();
+      for (const t of text) {
+        const x = Number(t.getAttribute("x")),
+          baseline = Number(t.getAttribute("y")),
+          ink = printableTextMetrics(
+            t.textContent ?? "",
+            Number(t.getAttribute("font-size")),
+          );
+        expect(x + ink.left).toBeGreaterThanOrEqual(left - 0.01);
+        expect(x + ink.right).toBeLessThanOrEqual(right + 0.01);
+        expect(baseline - ink.top).toBeGreaterThanOrEqual(top - 0.01);
+        expect(baseline - ink.bottom).toBeLessThanOrEqual(bottom + 0.01);
+      }
       expect(label(first.uid).getAttribute("data-wire-label")).toBe(first.uid);
     }
   });

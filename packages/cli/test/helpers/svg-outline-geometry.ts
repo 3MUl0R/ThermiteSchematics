@@ -318,12 +318,50 @@ export async function svgOutlineGeometry(
   return { ...raw, texts };
 }
 
+async function wiringLeaderEndpoints(page: Page) {
+  return page.evaluate(() => {
+    const root = document.querySelector("svg");
+    const inverse = root?.getScreenCTM()?.inverse();
+    if (!inverse) throw Error("Missing outline test viewport");
+    return [
+      ...document.querySelectorAll<SVGPathElement>(
+        "path.wire-label-leader[data-label-leader-owner]",
+      ),
+    ].flatMap((path) => {
+      const style = getComputedStyle(path);
+      const matrix = path.getScreenCTM();
+      if (
+        !matrix ||
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.stroke === "none" ||
+        Number(style.opacity) <= 0 ||
+        Number(style.strokeOpacity) <= 0
+      )
+        return [];
+      const transform = inverse.multiply(matrix);
+      const position = (n: number) => {
+        const p = path.getPointAtLength(n).matrixTransform(transform);
+        return { x: p.x, y: p.y };
+      };
+      return [
+        {
+          wire: path.getAttribute("data-label-leader-owner"),
+          start: position(0),
+          tip: position(path.getTotalLength()),
+        },
+      ];
+    });
+  });
+}
+
 export async function wiringOutlineDistances(
   page: Page,
   svg: string,
   legacyFont = false,
 ) {
   const g = await svgOutlineGeometry(page, svg, true, legacyFont);
+  const leaders = await wiringLeaderEndpoints(page);
   return g.texts
     .filter((t) => t.painted)
     .map((t) => {
@@ -333,8 +371,19 @@ export async function wiringOutlineDistances(
         t.plate &&
         inside(t.box, t.plate) &&
         own.some((s) => routeDistance(t.plate!, s.points) === 0);
+      const plate = t.plate;
+      const leader =
+        !!plate &&
+        inside(t.box, plate) &&
+        leaders.some((l) => {
+          const gap = distance(bounds([l.start]), plate),
+            tip = bounds([l.tip]),
+            onStroke = own.some((s) => routeDistance(tip, s.points) <= 0.01);
+          return l.wire === t.wire && gap <= 0.76 && onStroke;
+        });
       return {
         text: t.text,
+        leader,
         distance: inline
           ? 0
           : Math.min(

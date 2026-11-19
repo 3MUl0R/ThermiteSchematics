@@ -11,10 +11,11 @@ import {
 } from "./helpers/svg-outline-geometry.js";
 
 type Row = { file: string; text: string; dev: number };
-type Actual = { file: string; text: string; distance: number };
+type Actual = { file: string; text: string; distance: number; leader: boolean };
+const DISTANCE_WITNESS = "W-C01";
 async function labelMovedAway(page: Page, svg: string, gap: number) {
   const geometry = await svgOutlineGeometry(page, svg, true),
-    label = geometry.texts.find((t) => t.text === "W-C01");
+    label = geometry.texts.find((t) => t.text === DISTANCE_WITNESS);
   if (!label) throw Error("Missing mutation target W-C01");
   const runs = geometry.shapes
     .filter((s) => s.wire === label.wire)
@@ -37,27 +38,47 @@ async function labelMovedAway(page: Page, svg: string, gap: number) {
     );
   const run = runs[0];
   if (!run) throw Error("Mutation target has no supporting horizontal run");
-  // Translate the complete inline plate past the frozen distance, not merely
-  // inside its new inline position. The negative exceeds the same limit by 0.1 mm.
+  // Detach the annotation and translate its plate past the frozen direct
+  // distance by 0.1 mm to exercise the original no-leader limit.
   const shift =
     (run.y - run.stroke / 2 - gap - label.box.bottom) / label.matrix[3];
-  return page.evaluate((shift) => {
-    const text = [
-        ...document.querySelectorAll<SVGTextElement>(
-          "[data-wiring-conductor] text",
-        ),
-      ].find((t) => t.textContent === "W-C01"),
-      plate = text?.previousElementSibling,
-      root = document.querySelector("svg");
-    if (!text || plate?.tagName.toLowerCase() !== "rect" || !root)
-      throw Error("Missing complete mutation target");
-    text.setAttribute("transform", `translate(0 ${shift})`);
-    plate.setAttribute("transform", `translate(0 ${shift})`);
-    return root.outerHTML;
-  }, shift);
+  return page.evaluate(
+    ({ shift, witness }) => {
+      const text = [
+          ...document.querySelectorAll<SVGTextElement>(
+            "[data-wiring-conductor] text",
+          ),
+        ].find((t) => t.textContent === witness),
+        plate = text?.previousElementSibling,
+        root = document.querySelector("svg");
+      if (!text || plate?.tagName.toLowerCase() !== "rect" || !root)
+        throw Error("Missing complete mutation target");
+      const owner = text
+        .closest("[data-wiring-conductor]")
+        ?.getAttribute("data-wiring-conductor");
+      const leader = [
+        ...root.querySelectorAll("[data-label-leader-owner]"),
+      ].find(
+        (candidate) =>
+          candidate.getAttribute("data-label-leader-owner") === owner,
+      );
+      if (
+        leader?.nextElementSibling?.classList.contains(
+          "wire-label-leader-arrow",
+        )
+      )
+        leader.nextElementSibling.remove();
+      leader?.remove();
+      text.setAttribute("transform", `translate(0 ${shift})`);
+      plate.setAttribute("transform", `translate(0 ${shift})`);
+      return root.outerHTML;
+    },
+    { shift, witness: DISTANCE_WITNESS },
+  );
 }
 function assertBaseline(rows: Row[], actual: Actual[]) {
-  let count = 0;
+  let count = 0,
+    led = 0;
   for (const flow of ["left-to-right", "top-to-bottom"]) {
     const used = new Map<string, number>();
     for (const row of rows.filter((r) =>
@@ -69,18 +90,51 @@ function assertBaseline(rows: Row[], actual: Actual[]) {
       used.set(key, n + 1);
       const a = actual.filter((a) => a.file === file && a.text === row.text)[n];
       expect(a, key).toBeDefined();
-      expect(
-        Number((a!.distance - row.dev).toFixed(4)),
-        key,
-      ).toBeLessThanOrEqual(0.0128);
+      if (a?.leader) led++;
+      else
+        expect(
+          Number((a!.distance - row.dev).toFixed(4)),
+          key,
+        ).toBeLessThanOrEqual(0.0128);
       count++;
     }
   }
   expect(count).toBe(132);
+  expect(led).toBe(16); // Four complete two-line leader plates in each flow.
+}
+
+async function assertInlineDistanceControl(
+  page: Page,
+  svg: string,
+  baseline: Row[],
+  actual: Actual[],
+) {
+  const frozen: Row = baseline.find(
+    (row: Row) =>
+      row.file === "operator-console-left-to-right/sheet-001.svg" &&
+      row.text === DISTANCE_WITNESS,
+  );
+  expect(frozen).toBeDefined();
+  const mutated = await labelMovedAway(page, svg, frozen.dev + 0.1);
+  const changed = await wiringOutlineDistances(page, mutated),
+    bad = actual.map((row) =>
+      row.file === "sheet-001.svg" && row.text === DISTANCE_WITNESS
+        ? {
+            ...row,
+            ...changed.find((t) => t.text === DISTANCE_WITNESS)!,
+          }
+        : row,
+    );
+  const target = (rows: Actual[]) =>
+    rows.find(
+      (row) => row.file === "sheet-001.svg" && row.text === DISTANCE_WITNESS,
+    )!;
+  expect(target(bad).distance - frozen.dev).toBeCloseTo(0.1, 5);
+  expect(() => assertBaseline(baseline, bad)).toThrow();
 }
 
 it.skipIf(!browserPath)(
-  "keeps wiring-label outline boxes within 0.0128 mm of their frozen own-conductor layout distance",
+  "preserves frozen inline distances and measures leader attachments to the owning conductor",
   async () => {
     const baseline = JSON.parse(
       await readFile(
@@ -130,32 +184,12 @@ it.skipIf(!browserPath)(
       }
       expect(actual).toHaveLength(66); // Wiring has no flow; both legacy flow captures cover these same instances.
       assertBaseline(baseline.rows, actual);
-      const frozen: Row = baseline.rows.find(
-        (row: Row) =>
-          row.file === "operator-console-left-to-right/sheet-001.svg" &&
-          row.text === "W-C01",
-      );
-      expect(frozen).toBeDefined();
-      const mutated = await labelMovedAway(
+      await assertInlineDistanceControl(
         page,
         r.value.sheets[0]!.svg,
-        frozen.dev + 0.1,
+        baseline.rows,
+        actual,
       );
-      const changed = await wiringOutlineDistances(page, mutated),
-        bad = actual.map((row) =>
-          row.file === "sheet-001.svg" && row.text === "W-C01"
-            ? {
-                ...row,
-                distance: changed.find((t) => t.text === "W-C01")!.distance,
-              }
-            : row,
-        );
-      const target = (rows: Actual[]) =>
-        rows.find(
-          (row) => row.file === "sheet-001.svg" && row.text === "W-C01",
-        )!;
-      expect(target(bad).distance - frozen.dev).toBeCloseTo(0.1, 5);
-      expect(() => assertBaseline(baseline.rows, bad)).toThrow();
     } finally {
       await page.close();
       await browser.close();
