@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { evalVersion, harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
 import { readRun } from "./records.mjs";
+import { contributorCommandEnvironment } from "./contributor-commands.mjs";
 import { fileState, fileStateAsync, auditErrors } from "./audit.mjs";
 import { captureProcess } from "./process.mjs";
 import { pinnedCliVersion } from "./cli-protocol.mjs";
@@ -453,6 +454,15 @@ export async function runOne({
     });
     installShim(runtime);
     task = read(join(taskDir, "task.json"));
+    assert(
+      !task.context || task.context === context,
+      "Task requires --context source",
+    );
+    if (task.contributor)
+      rmSync(join(runtime, "evals/contributor"), {
+        recursive: true,
+        force: true,
+      });
     identity.task = task.id;
     identity.runKey = runKey(identity);
     env = {
@@ -588,6 +598,8 @@ export async function runOne({
     });
     if (existsSync(env.THERMITE_EVAL_ERRORS)) rmSync(env.THERMITE_EVAL_ERRORS);
     env.THERMITE_EVAL_PHASE = "agent";
+    if (task.contributor)
+      Object.assign(env, contributorCommandEnvironment(ctx, join(work, "bin")));
     const prompt = `Thermite is at ${ctx.thermite}.\n\n${task.prompt.replaceAll("{{THERMITE}}", ctx.thermite)}`;
     const command =
       agent === "reference"

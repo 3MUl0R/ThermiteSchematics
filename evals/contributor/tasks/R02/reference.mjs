@@ -1,2 +1,2 @@
-import { reference } from "../support.mjs";
-export default (ctx) => reference(ctx, true);
+import { contributorReference } from "../reference.mjs";
+export default (ctx) => contributorReference(ctx, true);

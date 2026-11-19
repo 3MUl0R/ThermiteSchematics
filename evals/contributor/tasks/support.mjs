@@ -1,92 +1,71 @@
-import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import {
   cpSync,
-  appendFileSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  symlinkSync,
   existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
-const focused = "packages/query/test/views-and-ordering.test.ts";
-const source = "packages/query/src/ordering.ts";
-export const mutation = {
-  before: "export const compareAlias = compareText;",
-  after:
-    "export const compareAlias = (left: string, right: string) => compareText(right, left);",
+import { basename, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { read, write } from "../../agent/task-support.mjs";
+
+export const ordering = "packages/query/src/ordering.ts";
+export const focus = "packages/query/test/views-and-ordering.test.ts";
+export const seedPatch = fileURLToPath(
+  new URL("./R02/seed.patch", import.meta.url),
+);
+const isolatedGit = {
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
 };
-const git = (cwd, ...args) =>
-  execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
-export function ignoreFixtureDependencies(repository) {
-  // Linked contributor worktrees share this private exclusion, not engine policy.
-  const exclude = resolve(
-    repository,
-    git(repository, "rev-parse", "--git-path", "info/exclude"),
-  );
-  appendFileSync(exclude, "\n/node_modules\n");
+export function run(ctx, cwd, executable, argv) {
+  const result = spawnSync(executable, argv, {
+    cwd,
+    encoding: "utf8",
+    timeout: 120000,
+    env: { ...ctx.env, ...isolatedGit, VITEST_MAX_WORKERS: "1" },
+  });
+  if (result.error) throw result.error;
+  return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
 }
-export function dependencyOverlay(runtime, repository) {
-  const dependencies = join(repository, "node_modules");
-  mkdirSync(dependencies, { recursive: true });
-  for (const name of readdirSync(join(runtime, "node_modules"))) {
-    if (name.startsWith(".")) continue;
-    symlinkSync(
-      join(runtime, "node_modules", name),
-      join(dependencies, name),
-      process.platform === "win32" ? "junction" : "dir",
-    );
-  }
-  mkdirSync(join(dependencies, ".bin"));
-  const metadata = JSON.parse(
-    readFileSync(join(runtime, "node_modules/typescript/package.json")),
-  );
-  const target = pathToFileURL(
-    join(runtime, "node_modules/typescript", metadata.bin.tsc),
-  ).href;
-  writeFileSync(
-    join(dependencies, ".bin/tsc"),
-    `#!/usr/bin/env bun\nawait import(${JSON.stringify(target)});\n`,
-    { mode: 0o755 },
-  );
+export function git(ctx, repository, ...args) {
+  const result = run(ctx, repository, "git", args);
+  assert.equal(result.exit, 0, result.stderr);
+  return result.stdout;
 }
+export const bun = (ctx, cwd, ...argv) => run(ctx, cwd, process.execPath, argv);
+
 export function setup(ctx, seeded = false) {
   assert(
-    existsSync(join(ctx.runtime, source)),
+    existsSync(join(ctx.runtime, ordering)),
     "R tasks require --context source",
   );
-  const repository = join(ctx.project, "engine");
-  cpSync(ctx.runtime, repository, {
+  const engine = join(ctx.project, "engine");
+  cpSync(ctx.runtime, engine, {
     recursive: true,
-    filter: (p) =>
-      !["node_modules", "dist", ".git"].includes(basename(p)) &&
-      !p.endsWith(".tsbuildinfo") &&
-      !basename(p).startsWith("eval-"),
+    filter: (p) => {
+      const name = basename(p);
+      return (
+        !["node_modules", "dist", ".git", "coverage"].includes(name) &&
+        !name.endsWith(".tsbuildinfo") &&
+        !name.startsWith("eval-") &&
+        name !== "thermite.real.mjs" &&
+        p !== join(ctx.runtime, "evals/contributor")
+      );
+    },
   });
-  cpSync(
-    join(ctx.runtime, "thermite.real.mjs"),
-    join(repository, "thermite.mjs"),
-  );
-  cpSync(join(repository, "AGENTS.md"), join(ctx.project, "AGENTS.md"));
-  // Private cache/bin roots; package contents remain read-only shared input.
-  dependencyOverlay(ctx.runtime, repository);
-  if (seeded) {
-    const path = join(repository, source),
-      text = readFileSync(path, "utf8");
-    assert(
-      text.includes(mutation.before),
-      "Seed no longer matches pinned source",
-    );
-    writeFileSync(path, text.replace(mutation.before, mutation.after));
-  }
-  git(repository, "init", "--quiet");
-  ignoreFixtureDependencies(repository);
-  git(repository, "add", ".");
+  cpSync(join(ctx.runtime, "thermite.real.mjs"), join(engine, "thermite.mjs"));
+  cpSync(join(engine, "AGENTS.md"), join(ctx.project, "AGENTS.md"));
+  git(ctx, engine, "init", "--quiet");
+  if (seeded) seedQuery(ctx, engine);
+  git(ctx, engine, "add", ".");
   git(
-    repository,
+    ctx,
+    engine,
     "-c",
     "user.name=Eval",
     "-c",
@@ -97,109 +76,103 @@ export function setup(ctx, seeded = false) {
     "-m",
     "Frozen contributor fixture",
   );
+  // Warm only this run's Bun cache. R01 still has to install into its new
+  // worktree. R02 starts with a working install so its first result is red.
+  const installed = bun(ctx, engine, "install", "--frozen-lockfile");
+  assert.equal(installed.exit, 0, installed.stderr);
+  write(join(ctx.evidence, "contributor-setup-install.json"), installed);
   if (seeded) {
-    const result = run(repository, ["run", "test", "--", focused]);
-    writeFileSync(
-      join(ctx.evidence, "contributor-seed-test.json"),
-      JSON.stringify(result, null, 2),
-    );
-    assert.equal(result.exit, 1, "Seeded test must fail before the agent");
-    assert(
-      (result.stdout + result.stderr).includes("to be less than 0"),
-      "Seed must expose alias-order contract failure",
-    );
+    const red = bun(ctx, engine, "scripts/test.mjs", focus);
+    write(join(ctx.evidence, "contributor-seed-test.json"), red);
+    assert.equal(red.exit, 1, "Seeded test must fail before the agent");
+    assert.match(red.stdout + red.stderr, /to be less than 0/);
   }
-  writeFileSync(
-    join(ctx.evidence, "contributor-seed.json"),
-    JSON.stringify({ revision: git(repository, "rev-parse", "HEAD"), seeded }),
-  );
-}
-function run(directory, args) {
-  const result = spawnSync(process.execPath, args, {
-    cwd: directory,
-    encoding: "utf8",
-    timeout: 120000,
-    env: { ...process.env, VITEST_MAX_WORKERS: "2" },
+  write(join(ctx.evidence, "contributor-seed.json"), {
+    revision: git(ctx, engine, "rev-parse", "HEAD").trim(),
+    seeded,
   });
-  return {
-    exit: result.status,
-    signal: result.signal,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
-export async function check(ctx, seeded = false) {
-  const repository = join(ctx.project, seeded ? "engine" : "worktree");
-  if (!existsSync(repository))
-    return { pass: false, checks: { worktree: false } };
-  const baseline = JSON.parse(
-    readFileSync(join(ctx.evidence, "contributor-seed.json")),
-  ).revision;
-  const changes = git(repository, "diff", baseline, "--name-only")
-    .split("\n")
-    .filter(Boolean);
-  const testsUnchanged =
-    readFileSync(join(repository, focused), "utf8") ===
-    readFileSync(join(ctx.runtime, focused), "utf8");
-  const checks = {
-    sourceScope: changes.every((p) => (seeded ? p === source : false)),
-    testsUnchanged,
-  };
-  if (!seeded)
-    checks.worktree =
-      git(repository, "rev-parse", "--git-common-dir") !== ".git" &&
-      git(
-        join(ctx.project, "engine"),
-        "worktree",
-        "list",
-        "--porcelain",
-      ).includes(repository);
-  // Independent reruns do not trust agent-authored success logs or modified tests.
-  if (!testsUnchanged) return { pass: false, checks };
-  const focusedResult = run(repository, ["run", "test", "--", focused]);
-  const buildResult = run(repository, ["run", "build"]);
-  checks.focused = focusedResult.exit === 0;
-  checks.build = buildResult.exit === 0;
-  if (seeded && checks.build) {
-    const { compareAlias } = await import(
-      pathToFileURL(join(repository, "packages/query/dist/ordering.js")).href
-    );
-    checks.regression =
-      compareAlias("A", "B") < 0 &&
-      compareAlias("B", "A") > 0 &&
-      compareAlias("A", "A") === 0;
-  }
-  if (seeded && !checks.build) checks.regression = false;
-  writeFileSync(
-    join(ctx.evidence, "contributor-check.json"),
-    JSON.stringify({ checks, focusedResult, buildResult }, null, 2),
-  );
-  return { pass: Object.values(checks).every(Boolean), checks };
+
+export function seedQuery(ctx, engine) {
+  git(ctx, engine, "apply", seedPatch);
+  // The runtime's compiled CLI remains available to the harness. Hide the
+  // clean source and its maps before taking the read-only runtime snapshot.
+  for (const file of [
+    ordering,
+    "packages/query/dist/ordering.js.map",
+    "packages/query/dist/ordering.d.ts.map",
+  ])
+    rmSync(join(ctx.runtime, file), { force: true });
 }
-export function reference(ctx, seeded = false) {
-  const repository = join(ctx.project, seeded ? "engine" : "worktree");
-  if (!seeded) {
+
+export function contributorState(ctx) {
+  return read(join(ctx.evidence, "contributor-seed.json"));
+}
+export function trackedChanges(ctx, repository, revision) {
+  const paths = (flags) =>
     git(
-      join(ctx.project, "engine"),
-      "worktree",
-      "add",
-      "--detach",
-      "../worktree",
-    );
-    symlinkSync(
-      join(ctx.project, "engine/node_modules"),
-      join(repository, "node_modules"),
-      process.platform === "win32" ? "junction" : "dir",
-    );
-  } else {
-    const path = join(repository, source);
-    writeFileSync(
-      path,
-      readFileSync(path, "utf8").replace(mutation.after, mutation.before),
-    );
-  }
-  const result = run(repository, ["run", "test", "--", focused]);
-  assert.equal(result.exit, 0, result.stderr);
-  assert.equal(run(repository, ["run", "build"]).exit, 0);
-  return "Completed focused tests and source build.";
+      ctx,
+      repository,
+      "diff",
+      "--no-ext-diff",
+      "--no-renames",
+      "--name-only",
+      "-z",
+      ...flags,
+      revision,
+    ).split("\0");
+  return [
+    ...new Set([...paths([]), ...paths(["--cached"])].filter(Boolean)),
+  ].sort();
+}
+
+export function sourceChanges(ctx, repository, revision) {
+  return [
+    ...new Set([
+      ...trackedChanges(ctx, repository, revision),
+      ...git(
+        ctx,
+        repository,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+      )
+        .split("\0")
+        .filter(Boolean),
+    ]),
+  ].sort();
+}
+export function regularInside(repository, path) {
+  const target = join(repository, path);
+  return (
+    existsSync(target) &&
+    realpathSync(target) === target &&
+    lstatSync(target).isFile()
+  );
+}
+
+export function ownInstall(repository) {
+  const dependencies = join(repository, "node_modules");
+  return (
+    existsSync(dependencies) &&
+    lstatSync(dependencies).isDirectory() &&
+    realpathSync(dependencies) === dependencies &&
+    ["typescript", "vitest", "elkjs"].every((name) => {
+      const manifest = join(dependencies, name, "package.json");
+      return (
+        existsSync(manifest) &&
+        lstatSync(manifest).isFile() &&
+        realpathSync(manifest).startsWith(dependencies + sep)
+      );
+    })
+  );
+}
+export function reported(ctx) {
+  const project = realpathSync(ctx.project);
+  return (
+    regularInside(project, "contributor-friction.md") &&
+    readFileSync(join(project, "contributor-friction.md"), "utf8").trim()
+      .length > 0
+  );
 }

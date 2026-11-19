@@ -1,200 +1,236 @@
 import { expect, it } from "vitest";
 import {
-  mkdirSync,
   existsSync,
-  mkdtempSync,
   readFileSync,
-  writeFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
-  realpathSync,
-  lstatSync,
+  utimesSync,
 } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
-import {
-  dependencyOverlay,
-  ignoreFixtureDependencies,
-  mutation,
-  setup,
-} from "./support.mjs";
-it("the seeded alias-ordering mutation reverses the existing comparison contract", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "thermite-k-seed-"));
-  try {
-    const original = readFileSync(
-      new URL("../../../packages/query/src/ordering.ts", import.meta.url),
-      "utf8",
-    );
-    expect(original).toContain(mutation.before);
-    for (const [name, source] of [
-      ["original", original],
-      ["mutant", original.replace(mutation.before, mutation.after)],
-    ])
-      writeFileSync(join(directory, name + ".ts"), source);
-    const normal = await import(
-      pathToFileURL(join(directory, "original.ts")).href
-    );
-    const mutant = await import(
-      pathToFileURL(join(directory, "mutant.ts")).href
-    );
-    expect(normal.compareAlias("A", "B")).toBeLessThan(0);
-    expect(mutant.compareAlias("A", "B")).toBeGreaterThan(0);
-    expect(mutant.compareAlias("A", "A")).toBe(0);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-it("runtime archives cannot masquerade as source contributor contexts", () => {
-  const directory = mkdtempSync(join(tmpdir(), "thermite-k-runtime-"));
-  try {
-    expect(() => setup({ runtime: directory })).toThrow("--context source");
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
+import { fixture, put, temp } from "./test-fixture.mjs";
+import { completedWorkflow } from "./receipts.mjs";
+import checkR01 from "./R01/check.mjs";
+import checkR02 from "./R02/check.mjs";
+
+it("R01 accepts a registered checkout with matching test and build receipts", () => {
+  expect(checkR01(fixture().ctx).pass).toBe(true);
 });
 
-it("fixture cache writes stay local and tsc resolves its real package", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "thermite-k-deps-"));
-  try {
-    const runtime = join(directory, "runtime"),
-      repository = join(directory, "repository");
-    mkdirSync(join(runtime, "node_modules/typescript/bin"), {
-      recursive: true,
-    });
-    writeFileSync(
-      join(runtime, "node_modules/typescript/package.json"),
-      JSON.stringify({ bin: { tsc: "./bin/tsc" } }),
-    );
-    writeFileSync(
-      join(runtime, "node_modules/typescript/bin/tsc"),
-      "globalThis.__k_tsc_test=true;",
-    );
-    dependencyOverlay(runtime, repository);
-    mkdirSync(join(repository, "node_modules/.vite"));
-    writeFileSync(join(repository, "node_modules/.vite/cache.json"), "{}");
-    expect(existsSync(join(runtime, "node_modules/.vite"))).toBe(false);
-    await import(pathToFileURL(join(repository, "node_modules/.bin/tsc")).href);
-    expect(globalThis.__k_tsc_test).toBe(true);
-    delete globalThis.__k_tsc_test;
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+it("R01 accepts an incremental rebuild after a fresh observed build", () => {
+  const f = fixture();
+  const [install, test, build] = f.rows;
+  const latest = Math.max(...build.outputs.map((file) => file.modified)) + 1000;
+  f.rows.splice(
+    0,
+    3,
+    install,
+    build,
+    { ...test, started: latest, ended: latest + 1 },
+    { ...build, started: latest + 1 },
+  );
+  f.save();
+  expect(checkR01(f.ctx).pass).toBe(true);
 });
 
-function dependencyIgnoreFixture(directory) {
-  const repository = join(directory, "engine"),
-    worktree = join(directory, "worktree");
-  mkdirSync(repository);
-  const excludes = join(directory, "global-excludes");
-  writeFileSync(excludes, "");
-  const args = (cwd, ...rest) => [
-    "-c",
-    `core.excludesFile=${excludes}`,
-    "-C",
-    cwd,
-    ...rest,
-  ];
-  const git = (cwd, ...rest) =>
-    execFileSync("git", args(cwd, ...rest), {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  const ignored = (cwd, path) => {
-    const result = spawnSync(
-      "git",
-      args(cwd, "check-ignore", "--no-index", "--", path),
-    );
-    expect(result.error).toBeUndefined();
-    expect([0, 1]).toContain(result.status);
-    return result.status === 0;
-  };
-  git(repository, "init", "--quiet");
-  return { repository, worktree, git, ignored };
-}
+it("accepts a fresh R02 build before the focused test and rejects output from the seeded source", () => {
+  const f = fixture(true);
+  put(f.repository, ordering, f.clean);
+  const [, test, build] = f.rows;
+  build.outputs = contributorBuildOutputs(f.repository);
+  const started =
+    Math.max(...build.outputs.map(({ modified }) => modified)) + 1000;
+  f.rows.splice(0, 3, build, { ...test, started, ended: started + 1 });
+  f.save();
+  expect(completedWorkflow(f.ctx, f.repository, { queryRepair: true })).toEqual(
+    {
+      focused: true,
+      freshBuild: true,
+    },
+  );
+  expect(completedWorkflow(f.ctx, f.repository).freshBuild).toBe(false);
+  put(
+    f.repository,
+    ordering,
+    f.clean.replace(
+      "compareText(left.id.terminalKey, right.id.terminalKey)",
+      "compareText(right.id.terminalKey, left.id.terminalKey)",
+    ),
+  );
+  expect(
+    completedWorkflow(f.ctx, f.repository, { queryRepair: true }).freshBuild,
+  ).toBe(false);
+});
 
-function assertDependencyLink(directory, repository, git, ignored) {
-  const probe = join(directory, "dependency-target");
-  mkdirSync(probe);
-  rmSync(join(repository, "node_modules"), { recursive: true });
-  symlinkSync(
-    probe,
-    join(repository, "node_modules"),
-    process.platform === "win32" ? "junction" : "dir",
-  );
-  expect(lstatSync(join(repository, "node_modules")).isSymbolicLink()).toBe(
-    true,
-  );
-  expect(realpathSync(join(repository, "node_modules"))).toBe(
-    realpathSync(probe),
-  );
-  // Git for Windows treats junctions as directories for directory-only ignore
-  // rules; POSIX Git treats symlinks as files. Run 44131278013 proves this
-  // distinction. The ordinary-file and private-worktree assertions stay shared.
-  expect(ignored(repository, "node_modules")).toBe(
-    process.platform === "win32",
-  );
-  if (process.platform === "win32")
-    expect(
-      git(repository, "check-ignore", "-v", "--", "node_modules"),
-    ).toContain("node_modules/");
-}
+it.each([
+  [
+    "skipped focused test",
+    "focused",
+    ({ rows, save }) => {
+      rows[1].tests.passed--;
+      save();
+    },
+  ],
+  [
+    "omitted focused test with a report",
+    "focused",
+    ({ rows, save }) => {
+      rows.splice(1, 1);
+      save();
+    },
+  ],
+  [
+    "symlinked node_modules",
+    "ownInstall",
+    ({ engine, repository }) => {
+      rmSync(join(repository, "node_modules"), { recursive: true });
+      symlinkSync(
+        join(engine, "node_modules"),
+        join(repository, "node_modules"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+    },
+  ],
+  [
+    "stale build",
+    "freshBuild",
+    ({ repository, rows, save }) => {
+      const file = join(
+        repository,
+        contributorBuildOutputs(repository)[0].file,
+      );
+      utimesSync(file, new Date(0), new Date(0));
+      // The successful command also observed stale outputs. Matching hashes
+      // alone cannot give them a fresh origin.
+      rows[2].outputs = contributorBuildOutputs(repository);
+      save();
+    },
+  ],
+])("R01 rejects %s", (_name, key, change) => {
+  const f = fixture();
+  change(f);
+  expect(checkR01(f.ctx)).toMatchObject({
+    pass: false,
+    checks: { [key]: false },
+  });
+});
 
-it("fixture-only exclusions keep linked dependencies clean without hiding ordinary node_modules files", () => {
-  const directory = realpathSync(
-    mkdtempSync(join(tmpdir(), "thermite-k-ignore-")),
-  );
-  try {
-    const { repository, worktree, git, ignored } =
-      dependencyIgnoreFixture(directory);
-    const policy = readFileSync(
-      new URL("../../../.gitignore", import.meta.url),
-      "utf8",
-    );
-    expect(policy.split("\n")).toContain("node_modules/");
-    expect(policy.split("\n")).not.toContain("node_modules");
-    writeFileSync(join(repository, ".gitignore"), policy);
-    writeFileSync(join(repository, "node_modules"), "ordinary source file");
-    expect(ignored(repository, "node_modules")).toBe(false);
-    rmSync(join(repository, "node_modules"));
-    mkdirSync(join(repository, "node_modules"));
-    expect(ignored(repository, "node_modules")).toBe(true);
-    assertDependencyLink(directory, repository, git, ignored);
-    rmSync(join(repository, "node_modules"), { recursive: true });
-    mkdirSync(join(repository, "node_modules"));
-    ignoreFixtureDependencies(repository);
-    git(repository, "add", ".gitignore");
-    git(
-      repository,
-      "-c",
-      "user.name=Eval",
-      "-c",
-      "user.email=eval@invalid",
-      "commit",
-      "--quiet",
-      "--no-gpg-sign",
-      "-m",
-      "Dependency ignore fixture",
-    );
-    git(repository, "worktree", "add", "--detach", worktree);
-    symlinkSync(
-      join(repository, "node_modules"),
-      join(worktree, "node_modules"),
-      process.platform === "win32" ? "junction" : "dir",
-    );
-    expect(ignored(worktree, "node_modules")).toBe(true);
-    expect(realpathSync(join(worktree, "node_modules"))).toBe(
-      realpathSync(join(repository, "node_modules")),
-    );
-    expect(git(worktree, "status", "--porcelain")).toBe("");
-    mkdirSync(join(worktree, "nested"));
-    writeFileSync(
-      join(worktree, "nested/node_modules"),
-      "ordinary nested source file",
-    );
-    expect(ignored(worktree, "nested/node_modules")).toBe(false);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
+it.each([
+  [
+    "weakened test",
+    "confined",
+    (f) => {
+      put(f.repository, ordering, f.clean);
+      put(
+        f.repository,
+        focus,
+        'it("ascending", () => expect(true).toBe(true));\n',
+      );
+    },
+  ],
+  [
+    "unrelated tracked edit",
+    "confined",
+    (f) => {
+      put(f.repository, ordering, f.clean);
+      put(f.repository, "README.md", "outside the repair\n");
+    },
+  ],
+  [
+    "wrong function",
+    "confined",
+    (f) => {
+      const seed = readFileSync(join(f.repository, ordering), "utf8");
+      put(
+        f.repository,
+        ordering,
+        seed.replace(
+          "function compareNumber(left: number, right: number): number {\n  return left < right ? -1 : left > right ? 1 : 0;",
+          "function compareNumber(left: number, right: number): number {\n  return right < left ? -1 : right > left ? 1 : 0;",
+        ),
+      );
+    },
+  ],
+  [
+    "imported scratch code",
+    "confined",
+    (f) => {
+      put(
+        f.repository,
+        "packages/query/src/scratch.js",
+        "export const order = () => 0;",
+      );
+      put(
+        f.repository,
+        ordering,
+        f.clean.replace(
+          "export function compareTerminalView(",
+          "import { order } from './scratch.js';\nexport function compareTerminalView(",
+        ),
+      );
+    },
+  ],
+  [
+    "scratch required inside the changed function",
+    "confined",
+    (f) => {
+      put(
+        f.repository,
+        "packages/query/src/scratch.js",
+        "export const order = () => 0;",
+      );
+      put(
+        f.repository,
+        ordering,
+        f.clean.replace(
+          "compareText(left.deviceDesignation, right.deviceDesignation) ||",
+          'require("./scratch.js").order(left, right) ||',
+        ),
+      );
+    },
+  ],
+  [
+    "staged scratch code",
+    "confined",
+    (f) => {
+      put(f.repository, ordering, f.clean);
+      put(f.repository, "scratch.txt", "Tracked despite being a scratch file.");
+      git(f.ctx, f.repository, "add", "scratch.txt");
+    },
+  ],
+])("R02 rejects %s", (_name, key, change) => {
+  const f = fixture(true);
+  change(f);
+  expect(checkR02(f.ctx)).toMatchObject({
+    pass: false,
+    checks: { [key]: false },
+  });
+});
+
+it("rejects a runtime archive in place of a source checkout", () => {
+  expect(() => setup({ runtime: temp() })).toThrow("--context source");
+});
+
+it("hides the clean runtime source and map files after applying the fixture seed", () => {
+  const f = fixture(true);
+  const runtime = temp();
+  for (const path of [
+    ordering,
+    "packages/query/dist/ordering.js.map",
+    "packages/query/dist/ordering.d.ts.map",
+  ]) {
+    put(runtime, path, "pristine fixture content");
   }
+  put(f.repository, ordering, f.clean);
+  put(runtime, "packages/query/dist/ordering.js", "compiled CLI support");
+  seedQuery({ ...f.ctx, runtime }, f.repository);
+  expect(readFileSync(join(f.repository, ordering), "utf8")).toContain(
+    "  right: TerminalView,\n  left: TerminalView,",
+  );
+  expect(existsSync(join(runtime, ordering))).toBe(false);
+  expect(readdirSync(join(runtime, "packages/query/dist"))).toEqual([
+    "ordering.js",
+  ]);
 });
