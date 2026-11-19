@@ -1,5 +1,6 @@
-import { copyFileSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { contributorRealpath } from "./contributor-bun.mjs";
 import { shellCommand } from "./launch.mjs";
 
 // Only contributor tasks use the observer. The normal Thermite shim and
@@ -12,7 +13,7 @@ export function contributorCommandEnvironment(ctx, bin) {
   writeFileSync(
     join(bin, "contributor.json"),
     JSON.stringify({
-      checkout: join(realpathSync(ctx.project), checkout),
+      checkout: join(contributorRealpath(ctx.project), checkout),
       focused,
       log: join(ctx.evidence, "contributor-commands.jsonl"),
     }),

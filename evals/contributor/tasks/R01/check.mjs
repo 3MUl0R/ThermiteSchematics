@@ -1,6 +1,9 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { sameContributorPath } from "../../../agent/contributor-bun.mjs";
+import {
+  contributorRealpath,
+  sameContributorPath,
+} from "../../../agent/contributor-bun.mjs";
 import {
   contributorState,
   git,
@@ -18,7 +21,7 @@ function gitPath(ctx, repository, option) {
     "--path-format=absolute",
     option,
   ).trimEnd();
-  return realpathSync(resolve(repository, path));
+  return contributorRealpath(resolve(repository, path));
 }
 
 function registered(ctx, engine, checkout) {
@@ -47,10 +50,13 @@ function registered(ctx, engine, checkout) {
   );
   return (
     existsSync(registeredMarker) &&
-    sameContributorPath(realpathSync(registeredMarker), realpathSync(marker)) &&
+    sameContributorPath(
+      contributorRealpath(registeredMarker),
+      contributorRealpath(marker),
+    ) &&
     sameContributorPath(
       gitPath(ctx, checkout, "--show-toplevel"),
-      realpathSync(checkout),
+      contributorRealpath(checkout),
     ) &&
     sameContributorPath(
       gitPath(ctx, checkout, "--git-common-dir"),
@@ -60,7 +66,7 @@ function registered(ctx, engine, checkout) {
 }
 
 export default function check(ctx) {
-  const project = realpathSync(ctx.project),
+  const project = contributorRealpath(ctx.project),
     engine = join(project, "engine"),
     repository = join(project, "worktree"),
     worktree = registered(ctx, engine, repository);

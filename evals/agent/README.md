@@ -883,5 +883,6 @@ Eval **1.20.0** qualifies the source-contributor R01/R02 tasks at version 2.0.1.
 
 Contributor scoring verifies the linked worktree through its Git
 administrative directory and checkout backlink. It compares local evidence
-using native filesystem path rules. The direct Bun fallback preserves
-Windows path separators in command receipts. T and D scoring is unchanged.
+using native filesystem path rules, including Windows 8.3 aliases in temp
+paths. The direct Bun fallback preserves Windows path separators in command
+receipts. T and D scoring is unchanged.

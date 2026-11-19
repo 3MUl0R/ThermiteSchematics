@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  existsSync,
   lstatSync,
   readFileSync,
   realpathSync,
@@ -15,6 +16,11 @@ const outputs = [
   ["packages/query/dist/ordering.d.ts", "packages/query/src/ordering.ts"],
 ];
 
+// Bun's component walk can retain Windows 8.3 aliases from TEMP. The
+// native filesystem lookup returns the final path that Git also reports.
+const windows = process.platform === "win32";
+export const contributorRealpath = windows ? realpathSync.native : realpathSync;
+
 export function sameContributorPath(path, expected) {
   return (
     typeof path === "string" &&
@@ -23,11 +29,22 @@ export function sameContributorPath(path, expected) {
   );
 }
 
+export function matchesContributorPath(path, expected) {
+  return (
+    sameContributorPath(path, expected) ||
+    (windows &&
+      typeof path === "string" &&
+      isAbsolute(path) &&
+      existsSync(path) &&
+      sameContributorPath(contributorRealpath(path), expected))
+  );
+}
+
 function fileEvidence(checkout, file) {
   const path = join(checkout, file);
   try {
     const stat = lstatSync(path);
-    if (!stat.isFile() || !sameContributorPath(realpathSync(path), path))
+    if (!stat.isFile() || !sameContributorPath(contributorRealpath(path), path))
       return { file };
     return {
       file,
@@ -72,6 +89,7 @@ export function contributorInvocation(args, from, focused) {
   } else if (argv[0]?.startsWith("--cwd=")) {
     cwd = resolve(from, argv.shift().slice("--cwd=".length));
   }
+  if (windows && existsSync(cwd)) cwd = contributorRealpath(cwd);
   if (argv.length === 2 && argv[0] === "run" && argv[1] === "build")
     return { cwd, argv, kind: "build" };
   if (
@@ -83,11 +101,12 @@ export function contributorInvocation(args, from, focused) {
   if (argv[0] === "run") argv.shift();
   if (
     argv[0] &&
-    sameContributorPath(resolve(cwd, argv[0]), join(cwd, "scripts/test.mjs"))
+    matchesContributorPath(resolve(cwd, argv[0]), join(cwd, "scripts/test.mjs"))
   ) {
     const test = argv.findIndex(
       (arg, index) =>
-        index > 0 && sameContributorPath(resolve(cwd, arg), join(cwd, focused)),
+        index > 0 &&
+        matchesContributorPath(resolve(cwd, arg), join(cwd, focused)),
     );
     if (test >= 0) {
       argv[0] = "scripts/test.mjs";
@@ -104,7 +123,7 @@ function observe(argv) {
   );
   const invocation = contributorInvocation(
     argv,
-    realpathSync(process.cwd()),
+    contributorRealpath(process.cwd()),
     config.focused,
   );
   const { cwd, kind } = sameContributorPath(invocation.cwd, config.checkout)

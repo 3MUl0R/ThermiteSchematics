@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   contributorBuildOutputs,
-  sameContributorPath,
+  matchesContributorPath,
   testResult,
 } from "../../agent/contributor-bun.mjs";
 import { transcriptInvocations } from "./direct-commands.mjs";
@@ -17,7 +17,7 @@ export function observedCommands(ctx, repository) {
         .filter(Boolean)
         .map(JSON.parse)
     : [];
-  return rows.filter((r) => sameContributorPath(r.cwd, repository));
+  return rows.filter((r) => matchesContributorPath(r.cwd, repository));
 }
 
 function passedFocus(tests, repository) {
@@ -26,7 +26,7 @@ function passedFocus(tests, repository) {
     tests.total === tests.passed &&
     tests.failed === 0 &&
     tests.files.length === 1 &&
-    sameContributorPath(resolve(tests.files[0]), join(repository, focus))
+    matchesContributorPath(resolve(tests.files[0]), join(repository, focus))
   );
 }
 

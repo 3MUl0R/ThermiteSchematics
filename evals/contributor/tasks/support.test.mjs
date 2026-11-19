@@ -10,7 +10,10 @@ import {
   utimesSync,
 } from "node:fs";
 import { join, sep } from "node:path";
-import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import {
+  contributorBuildOutputs,
+  contributorRealpath,
+} from "../../agent/contributor-bun.mjs";
 import { focus, git, ordering, seedQuery, setup } from "./support.mjs";
 import { fixture, put, temp } from "./test-fixture.mjs";
 import { completedWorkflow } from "./receipts.mjs";
@@ -32,6 +35,7 @@ it("R01 accepts a registered checkout with matching test and build receipts", ()
     : JSON.stringify({
         checkout: f.repository,
         realpath: realpathSync(f.repository),
+        nativeProject: contributorRealpath(f.ctx.project),
         gitDirectories: gitDirectories(),
         engineCommon: git(
           f.ctx,
@@ -55,14 +59,20 @@ it("R01 accepts a registered checkout with matching test and build receipts", ()
   });
 });
 
-it("R01 accepts Git-style separators in recorded checkout and test paths", () => {
+it("R01 accepts temp directory aliases and Git-style path separators in receipts", () => {
   const f = fixture();
+  const fromTemp = join(f.ctx.project, "worktree");
+  const fromGit = git(
+    f.ctx,
+    f.repository,
+    "rev-parse",
+    "--show-toplevel",
+  ).trimEnd();
+  expect(contributorRealpath(fromTemp)).toBe(contributorRealpath(fromGit));
   for (const row of f.rows) {
-    row.cwd = row.cwd.split(sep).join("/");
+    row.cwd = fromTemp.split(sep).join("/");
     if (row.tests)
-      row.tests.files = row.tests.files.map((file) =>
-        file.split(sep).join("/"),
-      );
+      row.tests.files = [join(fromTemp, focus).split(sep).join("/")];
   }
   f.save();
   expect(checkR01(f.ctx)).toMatchObject({
