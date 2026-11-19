@@ -174,7 +174,11 @@ it("checks complete I/O directions only for their native channel rows", () => {
   });
   const data = {
     ...ir,
-    functions: [channel("output", "output"), channel(key, "input")],
+    functions: [
+      channel("output", "output"),
+      channel(key, "input"),
+      { ...ir.functions[0], id: { deviceUid: uid, functionKey: "contact" } },
+    ],
   };
   const inspect = (value, functionKey, columnIndex = 2, kind = "io") =>
     functionKeys(
@@ -198,6 +202,8 @@ it("checks complete I/O directions only for their native channel rows", () => {
   expect(inspect("output", "output", 1)).toMatchObject([
     { mechanism: "io-channel" },
   ]);
+  expect(inspect("output", "output", 3)).toMatchObject([{ key: "output" }]);
+  expect(inspect("output", "contact")).toMatchObject([{ key: "output" }]);
   expect(inspect("output", "missing")).toMatchObject([{ key: "output" }]);
   expect(inspect("output", "output", 2, "bom")).toMatchObject([
     { key: "output" },

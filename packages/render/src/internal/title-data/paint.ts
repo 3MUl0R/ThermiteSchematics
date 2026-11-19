@@ -130,12 +130,7 @@ export function rightTitleCells(
   }
   return out;
 }
-export function historyTitle(
-  draft: Draft,
-  page: PaperPage,
-  number: number,
-  baseline: number,
-) {
+export function revisionHistoryText(draft: Draft): string {
   const rows = draft.resolvedTitle?.revisionRows.value ?? [];
   const value = rows.length
     ? rows
@@ -146,14 +141,7 @@ export function historyTitle(
         )
         .join("; ")
     : "UNSPECIFIED";
-  return titlePaint(
-    number,
-    "revisionRows",
-    page.marginMm + 3,
-    baseline,
-    `Revision history: ${value}`,
-    page.widthMm - 2 * page.marginMm - 72,
-  );
+  return `Revision history: ${value}`;
 }
 export function headingTitle(
   draft: Draft,
