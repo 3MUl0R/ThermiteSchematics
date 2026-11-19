@@ -46,6 +46,23 @@ function paintedRuns(g: NavigationGeometry, masks: readonly Rect[]) {
   });
 }
 
+function routeKey(id: ConductiveElementId) {
+  return id.kind === "cable_conductor"
+    ? JSON.stringify({ cableUid: id.cableUid, conductorId: id.conductorId })
+    : id.uid;
+}
+
+function paintedRouteKey(geometry: NavigationGeometry) {
+  const native = pathElement(geometry);
+  if (native) return routeKey(native);
+  // Circuit and wiring drawing paths inherit the native conductor from a
+  // route group. White halos are filtered before looking up this binding.
+  return (
+    geometry.style?.["data-circuit-conductor"] ??
+    geometry.style?.["data-wiring-conductor"]
+  );
+}
+
 export function peerRouteIndex(geometry: readonly NavigationGeometry[]) {
   const masks = geometry.flatMap((g, index) => {
     const cover = documentCoverRectangle(g, index);
@@ -54,16 +71,15 @@ export function peerRouteIndex(geometry: readonly NavigationGeometry[]) {
   const index = new Map<string, { g: NavigationGeometry; i: number }[]>();
   geometry.forEach((g, i) => {
     if (g.node.name !== "path" || !paintedStroke(g)) return;
-    const id = pathElement(g);
-    if (!id) return;
-    const key = JSON.stringify(id);
+    const key = paintedRouteKey(g);
+    if (!key) return;
     const paths = index.get(key) ?? [];
     paths.push({ g, i });
     index.set(key, paths);
   });
   const cache = new Map<string, RouteInk>();
   return (element: ConductiveElementId): RouteInk => {
-    const key = JSON.stringify(element);
+    const key = routeKey(element);
     const found = cache.get(key);
     if (found) return found;
     const ink: RouteInk = { runs: [], tips: [] };
