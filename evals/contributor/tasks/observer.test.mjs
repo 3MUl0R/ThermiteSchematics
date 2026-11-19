@@ -1,7 +1,9 @@
 import { expect, it } from "vitest";
-import { existsSync, rmSync, symlinkSync, utimesSync } from "node:fs";
+import { rmSync, symlinkSync, utimesSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { contributorSourceDigest } from "../../agent/contributor-bun.mjs";
+import { read } from "../../agent/task-support.mjs";
 import { bun, focus, ordering } from "./support.mjs";
 import {
   copy,
@@ -79,39 +81,63 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
   ).toBe(false);
 });
 
-it("records and rejects unsupported focused flags before running the test script", () => {
+it("passes unsupported focused arguments through with their real outcomes and no credit", () => {
   const f = fixture();
   observer(f, "worktree");
+  f.ctx.env.THERMITE_TEST_TIMINGS = "";
   put(
     f.repository,
     "scripts/test.mjs",
-    'await Bun.write("ran-focused", "unexpected invocation");\n',
+    `
+    const args = process.argv.slice(2);
+    console.log(JSON.stringify({ args, timings: process.env.THERMITE_TEST_TIMINGS }));
+    if (args.includes("--config")) {
+      console.error("fixture config error");
+      process.exitCode = 3;
+    }
+    await Bun.write("coverage/test-timings.json", JSON.stringify({
+      numPassedTests: 7, numTotalTests: 7, numFailedTests: 0,
+      testResults: [{ name: process.cwd() + "/${focus}" }],
+    }));
+  `,
   );
-  const rejected = [
+  const unsupported = [
+    ["--reporter=verbose"],
+    ["--reporter", "verbose"],
+    ["--run", "--bail=1", "--no-coverage", "--watch=false"],
     ["--config", "other.mjs"],
     ["--root=other"],
+    ["--dir", "other"],
+    ["--project=other"],
     ["--outputFile.json=other.json"],
     ["--outputFile", "other.json"],
+    ["--exclude=other"],
+    ["--passWithNoTests"],
     ["--setupFiles", "other.mjs"],
     ["-t", "--config=other.mjs"],
     ["other.test.ts"],
   ];
-  for (const args of rejected) {
-    const run = observeIn(f, f.repository, "scripts/test.mjs", focus, ...args);
-    expect(run.exit).toBe(1);
-    expect(run.stderr).toContain(
-      "Unsupported contributor focused test argument",
-    );
+  for (const args of unsupported) {
+    const argv = ["scripts/test.mjs", focus, ...args];
+    const plain = bun(f.ctx, f.repository, ...argv);
+    expect(observeIn(f, f.repository, ...argv)).toEqual(plain);
+    expect(JSON.parse(plain.stdout)).toEqual({
+      args: [focus, ...args],
+      timings: "",
+    });
   }
-  expect(existsSync(join(f.repository, "ran-focused"))).toBe(false);
   expect(observedCommands(f.ctx, f.repository)).toMatchObject(
-    rejected.map((args) => ({
+    unsupported.map((args) => ({
       kind: "focused",
-      exit: 1,
-      rejected: args[0],
+      exit: args[0] === "--config" ? 3 : 0,
+      uncreditedReason: `Unsupported focused test argument: ${args[0]}`,
       requestedArgv: ["scripts/test.mjs", focus, ...args],
     })),
   );
+  expect(completedWorkflow(f.ctx, f.repository)).toEqual({
+    focused: false,
+    freshBuild: false,
+  });
 });
 
 function writeTranscript(f, invocations, agent = "codex") {
@@ -226,6 +252,12 @@ function prepareDirect(f, checkout) {
 
 // PowerShell uses the call operator for a quoted executable path.
 const binary = `${process.platform === "win32" ? "& " : ""}"${process.execPath}"`;
+const pathBuilds = [
+  ["cd worktree && bun run build", true],
+  ["bun --cwd=worktree run build", true],
+  ["bun run build", false],
+  ["cd engine && bun run build", false],
+];
 
 it.each(["codex", "claude"])(
   "binds %s absolute Bun commands to test and build artifacts",
@@ -273,6 +305,17 @@ it.each(["codex", "claude"])(
     });
     write([commands[0], commands[2], commands[1]]);
     expect(workflow().freshBuild).toBe(true);
+    for (const [command, expected] of pathBuilds) {
+      write([...commands.slice(0, 2), [command, 0]]);
+      expect(workflow().freshBuild, command).toBe(expected);
+    }
+    write([
+      commands[1],
+      commands[0],
+      [commands[1][0] + " --dir=other", 0],
+      commands[2],
+    ]);
+    expect(workflow().installed).toBe(false);
     write([...commands.slice(0, 2), [commands[2][0], 1]]);
     expect(workflow().freshBuild).toBe(false);
     write([...commands.slice(0, 2), [commands[2][0] + " ; true", 0]]);
@@ -294,10 +337,13 @@ it("requires a direct R02 focused receipt from the final source even after a suc
     [`${binary} --cwd=engine scripts/test.mjs "${focus}"`, 0],
     [`${binary} --cwd=engine run build`, 0],
   ]);
-  expect(test("--outputFile=other.json").exit).toBe(1);
-  expect(observedCommands(f.ctx, f.repository).at(-1).rejected).toBe(
-    "--outputFile=other.json",
-  );
+  const uncredited = test("--outputFile=other.json");
+  expect(uncredited.exit, uncredited.stdout + uncredited.stderr).toBe(0);
+  expect(observedCommands(f.ctx, f.repository).at(-1)).toMatchObject({
+    uncreditedReason:
+      "Unsupported focused test argument: --outputFile=other.json",
+  });
+  expect(workflow()).toEqual({ focused: false, freshBuild: false });
   expect(test().exit).toBe(0);
   put(f.repository, ordering, "export const rank = 2;\n");
   const built = build();
@@ -305,4 +351,15 @@ it("requires a direct R02 focused receipt from the final source even after a suc
   expect(workflow()).toEqual({ focused: false, freshBuild: false });
   expect(test().exit).toBe(0);
   expect(workflow()).toEqual({ focused: true, freshBuild: true });
+  const evidence = join(f.ctx.evidence, "contributor-direct-build.json");
+  expect(read(evidence)).toEqual({
+    matches: true,
+    typescript: { source: "checkout", version: ts.version },
+  });
+  rmSync(join(f.repository, "node_modules/typescript"), { recursive: true });
+  expect(workflow()).toEqual({ focused: true, freshBuild: true });
+  expect(read(evidence)).toEqual({
+    matches: true,
+    typescript: { source: "harness", version: ts.version },
+  });
 });

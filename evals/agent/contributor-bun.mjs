@@ -93,6 +93,14 @@ const safeTestFlags = new Set([
   "--silent=passed-only",
 ]);
 
+function uncreditedTest(cwd, arg) {
+  return {
+    cwd,
+    kind: "focused",
+    uncreditedReason: `Unsupported focused test argument: ${arg}`,
+  };
+}
+
 function focusedInvocation(cwd, args, focused, isFocus) {
   const argv = ["scripts/test.mjs"];
   let hasFile = false;
@@ -100,8 +108,7 @@ function focusedInvocation(cwd, args, focused, isFocus) {
     const arg = args[index];
     if (arg === "-t" || arg === "--testNamePattern") {
       const pattern = args[index + 1];
-      if (!pattern || pattern.startsWith("-"))
-        return { cwd, kind: "focused", rejected: arg };
+      if (!pattern || pattern.startsWith("-")) return uncreditedTest(cwd, arg);
       argv.push(arg, pattern);
       index++;
     } else if (arg === "--silent") {
@@ -116,7 +123,7 @@ function focusedInvocation(cwd, args, focused, isFocus) {
       argv.push(focused);
       hasFile = true;
     } else {
-      return { cwd, kind: "focused", rejected: arg };
+      return uncreditedTest(cwd, arg);
     }
   }
   return hasFile ? { cwd, argv, kind: "focused" } : { cwd };
@@ -165,7 +172,7 @@ function observe(argv, execute) {
   );
   if (!invocation.kind || !sameContributorPath(invocation.cwd, config.checkout))
     return execute(argv, { env: process.env });
-  const { cwd, kind, rejected } = invocation;
+  const { cwd, kind, uncreditedReason } = invocation;
   const started = Date.now();
   const log = (details) =>
     appendFileSync(
@@ -180,10 +187,10 @@ function observe(argv, execute) {
         ...details,
       }) + "\n",
     );
-  if (rejected !== undefined) {
-    console.error("Unsupported contributor focused test argument: " + rejected);
-    log({ exit: 1, rejected });
-    return { status: 1 };
+  if (uncreditedReason) {
+    const command = execute(argv, { env: process.env });
+    log({ exit: command.status, signal: command.signal, uncreditedReason });
+    return command;
   }
   const timing =
     kind === "focused" ? join(cwd, "coverage/test-timings.json") : null;

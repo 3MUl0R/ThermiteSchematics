@@ -5,7 +5,8 @@ import {
   contributorSourceDigest,
   matchesContributorPath,
 } from "../../agent/contributor-bun.mjs";
-import { matchesDirectBuild } from "./direct-build.mjs";
+import { write } from "../../agent/task-support.mjs";
+import { verifyDirectBuild } from "./direct-build.mjs";
 import { transcriptInvocations } from "./direct-commands.mjs";
 import { focus } from "./support.mjs";
 
@@ -82,6 +83,7 @@ export function completedWorkflow(
     (r) =>
       r.kind === "focused" &&
       r.exit === 0 &&
+      !r.uncreditedReason &&
       passedFocus(r.tests, repository) &&
       (!queryRepair || (source && r.sourceSha256 === source)),
   );
@@ -93,9 +95,17 @@ export function completedWorkflow(
     invocations
       .slice(0, testIndex)
       .some(({ kind, direct }) => direct && kind === "install");
+  // A PATH lookup can bypass the shim, but the transcript must name its checkout.
   const directBuild = invocations.some(
-    ({ kind, direct }) => direct && kind === "build",
+    ({ kind, direct, explicitCwd }) =>
+      kind === "build" && (direct || explicitCwd),
   );
+  let freshBuild = focused && hasMatchingBuild(rows, outputs);
+  if (directBuild && !freshBuild) {
+    const verification = verifyDirectBuild(repository, outputs);
+    write(join(ctx.evidence, "contributor-direct-build.json"), verification);
+    freshBuild = verification.matches;
+  }
   return {
     ...(install && {
       installed:
@@ -103,9 +113,6 @@ export function completedWorkflow(
         directInstall,
     }),
     focused,
-    freshBuild:
-      focused &&
-      (hasMatchingBuild(rows, outputs) ||
-        (directBuild && matchesDirectBuild(repository, outputs))),
+    freshBuild,
   };
 }

@@ -384,6 +384,7 @@ when the per-run mean looks small. The threshold is not relaxed.
 
 R01 and R02 are in the separate source-only catalog at
 `evals/contributor/tasks`. The default T/D catalog and its scoring are unchanged.
+The pinned `--commit` must support `THERMITE_CONTRIBUTOR_BUN` and `THERMITE_TEST_TIMINGS` in `scripts/test.mjs`.
 Run the two references before scheduling one run per task for each agent.
 
 ```sh
@@ -895,4 +896,6 @@ Both tasks require build artifacts that match the delivered source. R02 also
 requires a passing focused test with the delivered repair's source digest.
 The focused observer forwards test-name patterns, color and silent flags.
 Unsupported arguments, including configuration, root and report overrides,
-are recorded and rejected before the focused test runs.
+run unchanged and are recorded without workflow credit.
+Direct-build verification records the TypeScript source and version used to
+compare emitted artifacts.

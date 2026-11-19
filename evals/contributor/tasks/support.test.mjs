@@ -94,6 +94,19 @@ it("R01 rejects a checkout with a stale Git worktree backlink", () => {
   expect(checkR01(f.ctx)).toEqual({ pass: false, checks: { worktree: false } });
 });
 
+it("R01 reports an unregistered worktree after Git prunes its admin directory", () => {
+  const f = fixture();
+  const admin = git(
+    f.ctx,
+    f.repository,
+    "rev-parse",
+    "--absolute-git-dir",
+  ).trimEnd();
+  rmSync(admin, { recursive: true });
+  expect(existsSync(join(f.repository, ".git"))).toBe(true);
+  expect(checkR01(f.ctx)).toEqual({ pass: false, checks: { worktree: false } });
+});
+
 it("R01 accepts a matching build before the focused test, with or without an incremental rebuild", () => {
   const f = fixture();
   const [install, test, build] = f.rows;
@@ -298,6 +311,23 @@ it.each([
 it("rejects a runtime archive in place of a source checkout", () => {
   expect(() => setup({ runtime: temp() })).toThrow("--context source");
 });
+
+it.each([
+  ["THERMITE_CONTRIBUTOR_BUN", "THERMITE_TEST_TIMINGS"],
+  ["THERMITE_TEST_TIMINGS", "THERMITE_CONTRIBUTOR_BUN"],
+])(
+  "rejects a pinned source checkout missing %s support",
+  (missing, present) => {
+    const runtime = temp();
+    const project = temp();
+    put(runtime, ordering, "export {};\n");
+    put(runtime, "scripts/test.mjs", `void process.env.${present};\n`);
+    expect(() => setup({ runtime, project })).toThrow(
+      `R tasks require a pinned --commit with ${missing} support in scripts/test.mjs`,
+    );
+    expect(existsSync(join(project, "engine"))).toBe(false);
+  },
+);
 
 it("hides the clean runtime source and map files after applying the fixture seed", () => {
   const f = fixture(true);

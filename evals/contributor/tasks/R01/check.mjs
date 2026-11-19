@@ -6,22 +6,26 @@ import {
 } from "../../../agent/contributor-bun.mjs";
 import {
   contributorState,
-  git,
   ownInstall,
   reported,
+  run,
   sourceChanges,
 } from "../support.mjs";
 import { completedWorkflow } from "../receipts.mjs";
 
 function gitPath(ctx, repository, option) {
-  const path = git(
-    ctx,
-    repository,
+  const { exit, stdout } = run(ctx, repository, "git", [
     "rev-parse",
     "--path-format=absolute",
     option,
-  ).trimEnd();
-  return contributorRealpath(resolve(repository, path));
+  ]);
+  if (exit !== 0) return null;
+  try {
+    return contributorRealpath(resolve(repository, stdout.trimEnd()));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function registered(ctx, engine, checkout) {
@@ -35,6 +39,7 @@ function registered(ctx, engine, checkout) {
 
   const engineCommon = gitPath(ctx, engine, "--git-common-dir");
   const admin = gitPath(ctx, checkout, "--absolute-git-dir");
+  if (!engineCommon || !admin) return false;
   const backlink = join(admin, "gitdir");
   // A linked checkout has a private Git directory in the engine's registry.
   // Git records a pointer back to the checkout's .git file in that directory.

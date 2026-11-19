@@ -1,18 +1,29 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import ts from "typescript";
+import harnessTypeScript from "typescript";
 import { sameContributorPath } from "../../agent/contributor-bun.mjs";
 import { sha256 } from "../../agent/snapshot.mjs";
 
-// Absolute Bun commands can bypass the build observer. Re-emit the required
-// artifacts in memory from the delivered source and compare their bytes.
-export function matchesDirectBuild(repository, outputs) {
+function checkoutCompiler(repository) {
+  if (!existsSync(join(repository, "node_modules/typescript/package.json")))
+    return null;
+  const require = createRequire(join(repository, "package.json"));
+  return require("./node_modules/typescript");
+}
+
+// Builds can bypass the observer. Re-emit the required artifacts in memory
+// from the delivered source and compare their bytes.
+export function verifyDirectBuild(repository, outputs) {
   if (
     !outputs.length ||
     outputs.some(({ sha256, input }) => !sha256 || !input.sha256)
   )
-    return false;
+    return { matches: false };
+  const checkout = checkoutCompiler(repository);
+  const ts = checkout ?? harnessTypeScript;
   const bySource = Object.groupBy(outputs, ({ input }) => input.file);
-  return Object.entries(bySource).every(([input, artifacts]) => {
+  const matches = Object.entries(bySource).every(([input, artifacts]) => {
     const source = join(repository, input);
     const project = dirname(dirname(source));
     const configPath = join(project, "tsconfig.json");
@@ -40,4 +51,11 @@ export function matchesDirectBuild(repository, outputs) {
       artifacts.every(({ file, sha256 }) => emitted.get(file) === sha256)
     );
   });
+  return {
+    matches,
+    typescript: {
+      source: checkout ? "checkout" : "harness",
+      version: ts.version,
+    },
+  };
 }
