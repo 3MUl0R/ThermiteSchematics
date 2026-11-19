@@ -5,6 +5,7 @@ import { conveyorRequest } from "../../../packages/render/test/packet-navigation
 import { repeatRequest } from "../../../packages/render/test/wire-column-search-fixture.ts";
 import { drawingContextOptions, launch } from "../browser.mjs";
 import { nativeRows } from "../m3-native.mjs";
+import { inOwnerReach } from "../peer-owner-ink.mjs";
 import { peerOwnerMeasurements } from "./peer-owner-geometry.mjs";
 
 // All packets issued at 5c2914a. Counts document that baseline, so an
@@ -52,9 +53,6 @@ function fixtureRequest(project, flow, size, orientation, layout, marginMm) {
   };
 }
 
-// Chromium's SVG positions and Canvas glyph extents are rounded independently.
-const inkPrecisionMm = 0.01;
-
 function assertDistances(measurements) {
   const beyondReach = [];
   const closerToAnother = [];
@@ -66,10 +64,15 @@ function assertDistances(measurements) {
     for (const { text, named, owner, rival } of notes) {
       const limit = named ? 6.1 : 2.1;
       const note = { sheet, text, owner };
-      if (owner.distance > limit + inkPrecisionMm)
+      if (!inOwnerReach(owner.distance, named))
         beyondReach.push({ ...note, limit });
-      // Ignore ties within 0.01 mm of SVG/browser coordinate rounding.
-      if (!named && rival.distance + inkPrecisionMm < owner.distance)
+      // Put the gap difference at the source-free reach boundary so the
+      // checker applies the same Chromium allowance to ties.
+      if (
+        !named &&
+        Number.isFinite(rival.distance) &&
+        !inOwnerReach(limit + (owner.distance - rival.distance), false)
+      )
         closerToAnother.push({ ...note, rival });
     }
   }
@@ -119,6 +122,9 @@ export function testPeerOwnerPacket(project) {
         throw Error(
           `Base issued ${baseSheets} sheets. Head refused: ${packet.error.message}`,
         );
+      expect(packet.value.sheets.length, "issued sheet count at 5c2914a").toBe(
+        baseSheets,
+      );
       const measured = await peerOwnerMeasurements(page, packet.value, native);
       assertDistances(measured);
     },

@@ -31,16 +31,18 @@ owner, its conductor stroke, or its continuation caption. Chromium comparisons
 allow 0.15 mm for measurement. A conductor which already reaches both native
 endpoints on a sheet needs no peer note.
 
-Run the strict pair fit assertion after both captures.
+Run the manual pre-merge fit sweep after both strict captures.
 
 ```sh
 bun scripts/check-peer-note-fit.mjs --base-engine <built-base-checkout> \
   --base-checkpoint <base-summary.json.gz> --head-checkpoint <head-summary.json.gz>
 ```
 
-It checks issuance across all 108 standing captures (715 sheets) and renders
-402 additional A4, Letter and compact variants of the corpus and the narrow
-browser wire-field fixtures.
+The script checks issuance across all 108 standing captures (715 sheets) and
+renders 402 additional A4, Letter and compact variants of the corpus and the
+narrow browser wire-field fixtures. The full check runs a 16-row representative
+guard that checks issuance, exact sheet counts and peer-note proximity for
+conveyor-line and machine-demo on Letter and A4, in both flows.
 
 Version **5.29** adds independent **DQ-16** paint-mask checks for wire
 label plates and **DQ-17** corroboration for a shared source-rail caption
