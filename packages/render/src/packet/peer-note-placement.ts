@@ -4,7 +4,6 @@ import {
   NavigationSlotFailure,
 } from "./navigation-slots.js";
 import { searchNavigationSlot } from "./navigation-slot-search.js";
-import { boxDistance } from "./navigation-symbols.js";
 import type { PeerReference } from "./peer-reference-ink.js";
 import type { NavigationShape } from "./navigation-types.js";
 import type { RenderedSheet } from "./types.js";
@@ -36,7 +35,8 @@ function place(
 ) {
   const search = (
     forms: readonly NavigationShape[],
-    accepts: (box: Rect, shape: NavigationShape) => boolean,
+    anchors: readonly Rect[],
+    reachMm: (shape: NavigationShape) => number,
   ) => {
     const found = searchNavigationSlot(
       forms,
@@ -49,15 +49,12 @@ function place(
       undefined,
       undefined,
       false,
-      accepts,
+      (shape) => ({ anchors, gap: reachMm(shape) }),
     );
     if (found) return { box: found.box, lines: found.shape.maximumForms };
   };
-  const near = search(
-    shapes,
-    (box, form) =>
-      boxDistance(box, entry.owner) <=
-      (unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM),
+  const near = search(shapes, [entry.owner], (form) =>
+    unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM,
   );
   if (near) return near;
 
@@ -68,9 +65,7 @@ function place(
   const named = alongPreference.flatMap((id) =>
     shapes.filter((s) => s.id === id),
   );
-  return search(named, (box) =>
-    supports.some((r) => boxDistance(box, r) <= PEER_REACH_MM),
-  );
+  return search(named, supports, () => PEER_REACH_MM);
 }
 
 export function placePeerNotes(

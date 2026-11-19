@@ -63,6 +63,24 @@ function slotAxes(
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
   return { xs: xs.sort((a, b) => a - b), ys };
 }
+interface SlotReach {
+  anchors: readonly Rect[];
+  gap: number;
+}
+
+function reachableAxes(
+  { xs, ys }: { xs: readonly number[]; ys: readonly number[] },
+  { w, h }: Rect,
+  { anchors, gap }: SlotReach,
+) {
+  const near = (start: number, length: number, v: number, span: number) =>
+    Math.max(0, start - v - span, v - start - length) <= gap;
+  return {
+    xs: xs.filter((x) => anchors.some((a) => near(x, w, a.x, a.w))),
+    ys: ys.filter((y) => anchors.some((a) => near(y, h, a.y, a.h))),
+  };
+}
+
 function slotCandidates(
   size: Rect,
   area: Rect,
@@ -74,6 +92,7 @@ function slotCandidates(
   preferBesideBelow = false,
   textVerticalClearanceMm = 0,
   withinLocalSources = false,
+  reach?: SlotReach,
 ) {
   const { w, h } = size;
   const axes = slotAxes(
@@ -84,10 +103,13 @@ function slotCandidates(
     texts,
     textVerticalClearanceMm,
   );
-  const { xs, ys } =
+  const localAxes =
     withinLocalSources && locality
       ? localSourceAxes(axes, w, h, locality)
       : axes;
+  // Filter the existing coordinates before their Cartesian product. Exact
+  // distance is checked below, so no accepted candidate or tie changes.
+  const { xs, ys } = reach ? reachableAxes(localAxes, size, reach) : localAxes;
   return ys
     .flatMap((y) =>
       clearNavigationXs(
@@ -104,6 +126,10 @@ function slotCandidates(
         w,
         h,
       })),
+    )
+    .filter(
+      (box) =>
+        !reach || reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
     )
     .map((box) => {
       const printed = navigationPlacementInk(box, ink);
@@ -166,7 +192,7 @@ export function searchNavigationSlot(
   families?: readonly NavigationPlacementFamily[],
   localityInkMm?: ReadonlyMap<string, Rect>,
   fitPrintedInk = false,
-  accept?: (box: Rect, shape: NavigationShape) => boolean,
+  reach?: (shape: NavigationShape) => SlotReach,
 ) {
   const fitArea = fitPrintedInk ? elementDrawingArea(area) : area;
   const textVerticalClearanceMm = fitPrintedInk
@@ -198,6 +224,7 @@ export function searchNavigationSlot(
       preferBesideBelow && shape.mode === "local",
       textVerticalClearanceMm,
       fitPrintedInk && (shape.mode === "local" || !!locality?.sourceAnchorsMm),
+      reach?.(shape),
     );
     const legal = (b: Rect) =>
       (!families ||
@@ -212,8 +239,7 @@ export function searchNavigationSlot(
       inside(b, fitArea) &&
       laneLocal(shape, envelope(b), ink, locality) &&
       obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm)) &&
-      (!accept || accept(envelope(b), shape));
+      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm));
     const box = fitPrintedInk
       ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
       : candidates.find(legal);
