@@ -102,8 +102,14 @@ function ioCell(ir, row, column) {
         f.kind === "channel",
     );
   if (!fn) return null;
-  const names = fn.terminals.map((t) => t.terminalKey);
-  if (column === 6)
+  if (column === 2)
+    return {
+      expected: fn.direction,
+      mechanism: "io-direction",
+      family: "function",
+    };
+  if (column === 6) {
+    const names = fn.terminals.map((t) => t.terminalKey);
     return {
       expected: terminalSet(
         names,
@@ -112,6 +118,7 @@ function ioCell(ir, row, column) {
       mechanism: "io-terminals",
       family: "function",
     };
+  }
   return {
     expected:
       device(ir, uid)?.io?.channels?.[key]?.address ??
@@ -133,7 +140,8 @@ function ownedCell(ir, row, column, context) {
         }
       : { expected, mechanism: "function-reference", family: "function" };
   }
-  if (kind === "io" && [1, 6].includes(column)) return ioCell(ir, row, column);
+  if (kind === "io" && [1, 2, 6].includes(column))
+    return ioCell(ir, row, column);
   if (kind === "network" && [2, 3].includes(column)) {
     const link = ir.relations?.find((r) => r.uid === row && r.connection);
     if (link) {

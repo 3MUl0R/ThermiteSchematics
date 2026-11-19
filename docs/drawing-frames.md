@@ -144,8 +144,9 @@ paper, another orientation or a shorter supplied value. Do not bypass the error
 or silently change the packet preset. Review the whole packet after frame or
 metadata changes, including formerly near-boundary destinations.
 
-`generatorStamp` is `border` by default. `title` places the software stamp inside
-the measured title panel. `metadata` retains the software identity in SVG
+`generatorStamp` is `border` by default and prints the software stamp alongside
+revision history in the footer band inside the frame. Sheet notes use the row
+above. `title` places the software stamp inside the measured title panel. `metadata` retains the software identity in SVG
 metadata without the visible stamp. HTML carries the sheet metadata; PDF keeps
 software Creator/Producer and deterministic epoch dates. Every 0.3 PDF omits
 Author, including when Drawn by is supplied, because a packet can have different

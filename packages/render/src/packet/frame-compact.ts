@@ -2,7 +2,7 @@ import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import {
   authorTitleCells,
   rightTitleCells,
-  historyTitle,
+  revisionHistoryText,
   headingTitle,
   titlePaint,
 } from "../internal/title-data/paint.js";
@@ -24,6 +24,8 @@ import {
 } from "../svg/escape.js";
 import { n, text, line, namespaceSheetContent } from "./svg.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
+
+const FOOTER_HEIGHT_MM = 6;
 
 export function compactFrame(
   draft: Draft,
@@ -68,18 +70,62 @@ export function compactFrame(
   }
   out.push(line(m, top, page.widthMm - m, top));
   out.push(...titleCells(draft, plan, page, number, total));
-  out.push(text(m + 1, bottom + 4, draft.note, 2.5));
-  const stamp =
-    titleFrameContext(page)?.presentation.frame?.generatorStamp ?? "border";
-  if (stamp === "border")
-    out.push(
-      text(page.widthMm - m, bottom + 4, "Thermite 0.3.0-alpha.2", 2.5, "end"),
-    );
+  out.push(...footerRows(draft, page, number));
   out.push(
     `<metadata>${xml(`Generator: Thermite Schematics ${draft.title.toolVersion}`)}</metadata>`,
     "</svg>",
   );
   return out.join("\n") + "\n";
+}
+
+function footerRows(draft: Draft, page: PaperPage, number: number) {
+  const m = page.marginMm,
+    w = page.widthMm - 2 * m,
+    frameBottom = page.heightMm - m;
+  const history = revisionHistoryText(draft);
+  const stampPlacement =
+    titleFrameContext(page)?.presentation.frame?.generatorStamp ?? "border";
+  const stamp = stampPlacement === "border" ? "Thermite 0.3.0-alpha.2" : "";
+  const [noteY, historyY] = footerBaselines(
+    frameBottom,
+    draft.note,
+    history,
+    stamp,
+    number,
+  );
+  const out = [];
+  if (draft.note)
+    out.push(titlePaint(number, "footer", m + 3, noteY, draft.note, w - 6));
+  out.push(
+    titlePaint(number, "revisionRows", m + 3, historyY, history, w - 72),
+  );
+  if (stamp) out.push(text(page.widthMm - m - 3, historyY, stamp, 2.5, "end"));
+  return out;
+}
+
+function footerBaselines(
+  frameBottom: number,
+  note: string,
+  history: string,
+  stamp: string,
+  number: number,
+) {
+  // Work between the inner edges of the 0.25 mm title rule and 0.4 mm frame stroke.
+  const top = frameBottom - FOOTER_HEIGHT_MM + 0.125;
+  const bottom = frameBottom - 0.2;
+  const upper = printableTextMetrics(note, 2.5);
+  const historyInk = printableTextMetrics(history, 2.5);
+  const stampInk = printableTextMetrics(stamp, 2.5);
+  const lowerTop = Math.max(historyInk.top, stampInk.top);
+  const lowerBottom = Math.min(historyInk.bottom, stampInk.bottom);
+  const height = upper.top - upper.bottom + lowerTop - lowerBottom;
+  const available = bottom - top;
+  if (height > available)
+    throw Error(
+      `Sheet ${number} footer needs ${height.toFixed(3)} mm of glyph height; ${available.toFixed(3)} mm are available. Use shorter supplied revision history.`,
+    );
+  const gap = (available - height) / (note ? 3 : 2);
+  return [top + gap + upper.top, bottom - gap + lowerBottom] as const;
 }
 
 function frameHeader(page: PaperPage, number: number, total: number) {
@@ -180,8 +226,16 @@ function titleCells(
   out.push(...rows.map((row, i) => titleRowSvg(row, i, plan, page, number)));
   out.push(
     ...authorTitleCells(draft, page, number),
-    historyTitle(draft, page, number),
-    ...rightTitleCells(draft, page, number, total, top, plan.title.height),
+    // The author cells already stop above the footer. End the right cells at
+    // the same rule so the two footer rows can use the full framed width.
+    ...rightTitleCells(
+      draft,
+      page,
+      number,
+      total,
+      top,
+      plan.title.height - FOOTER_HEIGHT_MM,
+    ),
   );
   return out;
 }

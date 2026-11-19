@@ -165,6 +165,51 @@ it("checks authored I/O identity rather than a selector and detects changed addr
       functionKeys({ texts: [text(value, { row, columnIndex: 1 })] }, data, c),
     ).toHaveLength(1);
 });
+it("checks complete I/O directions only for their native channel rows", () => {
+  const channel = (functionKey, direction) => ({
+    ...ir.functions[0],
+    id: { deviceUid: uid, functionKey },
+    kind: "channel",
+    direction,
+  });
+  const data = {
+    ...ir,
+    functions: [
+      channel("output", "output"),
+      channel(key, "input"),
+      { ...ir.functions[0], id: { deviceUid: uid, functionKey: "contact" } },
+    ],
+  };
+  const inspect = (value, functionKey, columnIndex = 2, kind = "io") =>
+    functionKeys(
+      {
+        texts: [
+          text(value, { row: JSON.stringify([uid, functionKey]), columnIndex }),
+        ],
+      },
+      data,
+      { sheet: { view: { kind } } },
+    );
+  expect(inspect("output", "output")).toEqual([]);
+  expect(inspect("input", key)).toEqual([]);
+  for (const value of ["input", "output output", "output internal"])
+    expect(inspect(value, "output")).toMatchObject([
+      { mechanism: "io-direction", expected: "output" },
+    ]);
+  expect(inspect("output", key)).toMatchObject([
+    { mechanism: "io-direction", expected: "input" },
+  ]);
+  expect(inspect("output", "output", 1)).toMatchObject([
+    { mechanism: "io-channel" },
+  ]);
+  expect(inspect("output", "output", 3)).toMatchObject([{ key: "output" }]);
+  expect(inspect("output", "contact")).toMatchObject([{ key: "output" }]);
+  expect(inspect("output", "missing")).toMatchObject([{ key: "output" }]);
+  expect(inspect("output", "output", 2, "bom")).toMatchObject([
+    { key: "output" },
+  ]);
+});
+
 it("checks communication ownership in drawings and schedules without inventing connectors", () => {
   expect(
     measure([

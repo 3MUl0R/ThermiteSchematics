@@ -21,6 +21,12 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.31 (C2-RENDER)** fixes **DQ-05** for the I/O schedule (#453).
+The Direction cell is checked against the native channel direction for its
+own row. An authored direction such as `output` remains valid when a
+function key has the same spelling. The other columns retain their existing
+function-key checks.
+
 Version **5.30 (TEXT-NAV9)** extends **DQ-19** to reconcile direct peer and
 connector-inventory pointers, strip inventory sheet addresses, and circuit
 footer references against native identities and measured issued ink
