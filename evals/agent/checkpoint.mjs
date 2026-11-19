@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { snapshot, sha256 } from "./snapshot.mjs";
-export const evalVersion = "1.19.1";
+export const evalVersion = "1.19.2";
 const rendererDist = fileURLToPath(
   new URL("../../packages/render/dist/", import.meta.url),
 );

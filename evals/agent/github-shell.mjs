@@ -1,5 +1,6 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
 import { jsonHeaders } from "./issue-lookup.mjs";
+import { argvWithoutOutputRedirects } from "./shell-redirection.mjs";
 import { posix } from "node:path";
 import { localCommand } from "./repository-command.mjs";
 import { interpreterFetches } from "./interpreter-fetch.mjs";
@@ -211,17 +212,6 @@ function fetchArguments(words, tokens) {
     explicitGet = false;
   for (let i = client === "gh" ? 2 : 1; i < words.length;) {
     const word = words[i];
-    if (tokens[i].control) {
-      if (
-        i !== words.length - 2 ||
-        output !== undefined ||
-        tokens[i + 1].control
-      )
-        return null;
-      output = words[i + 1];
-      i += 2;
-      continue;
-    }
     if (
       !target &&
       (/^https?:/i.test(word) ||
@@ -233,7 +223,7 @@ function fetchArguments(words, tokens) {
       continue;
     }
     const parsed = option(words, i, fetchOptions[client]);
-    if (!parsed || (parsed.count === 2 && tokens[i + 1].control)) return null;
+    if (!parsed) return null;
     if (parsed.header !== undefined) headers.push(parsed.header);
     if (parsed.explicitGet) explicitGet = true;
     if (parsed.field !== undefined) fields.push(parsed.field);
@@ -272,9 +262,9 @@ export function shellRequest(
   tokens = shellWords(literalShellBody(input), { literal: true }),
   heredoc,
 ) {
-  const words = tokens?.map((t) => t.value),
-    text = input;
+  const text = input;
   if (heredoc) {
+    const words = tokens?.map((t) => t.value);
     const command = posix.basename(words?.[0] ?? "");
     const interpreter =
       /^(?:bun|node|python[\d.]*|ruby|perl|deno|(?:ba|z)?sh)$/.test(command) &&
@@ -293,14 +283,15 @@ export function shellRequest(
           githubFragment(heredoc.body)));
     return { text, network, shell: true, safe: false, localBody: !network };
   }
+  const argv = argvWithoutOutputRedirects(tokens);
+  const words = (argv ?? tokens)?.map((t) => t.value);
   const network = networkInvocation(text, words),
     api = interpreterEvidence(text, words);
   const refused = { text, network: network || api, shell: true, safe: false };
-  if (!tokens || tokens.some((t) => t.control && t.value !== ">"))
-    return refused;
+  if (!argv) return refused;
   const head = [...words];
   head[0] = posix.basename(head[0] ?? "");
-  const dynamic = tokens.some(
+  const dynamic = argv.some(
     (t) => !/^(['"]).*\1$/.test(t.literal) && /\$/.test(t.literal),
   );
   // Data variables in a jq expression are literal argv, not target expansion.
@@ -308,8 +299,7 @@ export function shellRequest(
   if (localCommand(head)) return { localBody: true, shell: true };
   const requests = interpreterFetches(interpreterBody(text, words));
   if (requests) return { requests };
-  const viewHead = head.at(-2) === ">" ? head.slice(0, -2) : head;
-  const view = issueView(viewHead);
+  const view = issueView(head);
   if (view)
     return {
       text,
@@ -337,7 +327,7 @@ export function shellRequest(
         !network && !api && (dataTool || interpreter || !githubFragment(text)),
     };
   }
-  const fetch = fetchArguments(head, tokens);
+  const fetch = fetchArguments(head, argv);
   if (!fetch) return refused;
   return { text, ...fetch, safe: true, shell: true, network: true };
 }

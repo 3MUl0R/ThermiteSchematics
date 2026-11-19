@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import { canonicalUrl } from "./github-canonical.mjs";
 import { interpreterText } from "./interpreter-text.mjs";
+import { argvWithoutOutputRedirects } from "./shell-redirection.mjs";
 import { shellParts } from "./shell-parts.mjs";
 import { gitOperation } from "./repository-command.mjs";
 
@@ -259,7 +260,7 @@ function shellWritesIn(body) {
 
 export function shellGitHubWrites(tokens, heredoc) {
   const [head, ...args] = unwrapped(
-    (tokens ?? [])
+    (argvWithoutOutputRedirects(tokens) ?? tokens ?? [])
       .filter((token) => !token.control)
       .map((token) => token.value),
   );
