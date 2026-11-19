@@ -3,6 +3,7 @@ import { symbolProfile } from "./profiles.js";
 import type { IrDeviceType, IrFunction } from "@thermite/compiler";
 import { symbolFunctionStateMismatch } from "@thermite/compiler";
 import {
+  COUPLED_WINDING_AMPLITUDE_MM,
   PRINTABLE_SYMBOL_POLICY,
   motorLegend,
   sourceEnclosure,
@@ -11,7 +12,7 @@ import {
 } from "./printable-policy.js";
 import "../svg/escape.js";
 
-import { composedCircuitMark, type CircuitMark } from "./circuit-mark.js";
+import type { CircuitMark } from "./circuit-mark.js";
 export {
   emitCircuitMark,
   composedCircuitMark,
@@ -382,7 +383,7 @@ export function circuitWinding(
     y1,
     y2,
     edge,
-    coupled && source ? -2 : 2,
+    coupled ? (source ? -1 : 1) * COUPLED_WINDING_AMPLITUDE_MM : 2,
     terminalXs,
   );
   return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
@@ -404,7 +405,7 @@ export function circuitWindingVertical(
     x1,
     x2,
     edge,
-    coupled && source ? -2 : 2,
+    coupled ? (source ? -1 : 1) * COUPLED_WINDING_AMPLITUDE_MM : 2,
     terminalYs,
   ).map(([cross, along]): Point => [along, cross]);
   return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
@@ -495,29 +496,4 @@ export function circuitTransformerCore(
   return `<g data-magnetic-association="shared-core" data-presentation-only="true" stroke="#17212b" stroke-width=".35">${lines}</g>`;
 }
 
-/** Interface leads land on their enclosure; isolated source stubs stop clear of the mark. */
-export function circuitInterfaceMark(
-  mark: CircuitMark,
-  cx: number,
-  cy: number,
-  pins: readonly { x: number; y: number; side: string }[],
-  vertical: boolean,
-  source = false,
-): string {
-  const coordinates = pins.map((p) => (vertical ? p.x : p.y));
-  const low = Math.min(...coordinates) - 2,
-    high = Math.max(...coordinates) + 2;
-  const outline = vertical
-    ? `<rect x="${n(low)}" y="${n(cy - 5)}" width="${n(high - low)}" height="10"/>`
-    : `<rect x="${n(cx - 5)}" y="${n(low)}" width="10" height="${n(high - low)}"/>`;
-  const sensorOutput = mark === "sensor-3wire" && pins.length === 1;
-  const leadEnd = source ? 6 : sensorOutput ? 10 / 3 : 5;
-  const leads = pins
-    .map((p) =>
-      vertical
-        ? `<line${source ? ' data-source-stub="true"' : ""} x1="${n(p.x)}" x2="${n(p.x)}" y1="${n(p.y)}" y2="${n(cy + (p.side === "NORTH" ? -leadEnd : leadEnd))}"/>`
-        : `<line${source ? ' data-source-stub="true"' : ""} y1="${n(p.y)}" y2="${n(p.y)}" x1="${n(p.x)}" x2="${n(cx + (p.side === "WEST" ? -leadEnd : leadEnd))}"/>`,
-    )
-    .join("");
-  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput ? "" : outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical)}`;
-}
+export { circuitInterfaceMark } from "./circuit-interface.js";

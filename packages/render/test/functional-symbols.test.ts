@@ -9,7 +9,9 @@ import {
   type SchematicPacketRequest,
 } from "../src/sheets.js";
 import { prepareCircuitView, type CircuitViewRequest } from "../src/circuit.js";
-import { svgTextGeometry } from "./source-isolation.js";
+import { inkClearance, svgTextGeometry } from "./source-isolation.js";
+
+import { paintedShape } from "./circuit-fidelity-oracle.js";
 
 const root = fileURLToPath(
   new URL("../../../examples/functional-symbols/", import.meta.url),
@@ -25,6 +27,26 @@ const request = async (flow = "left-to-right") =>
   JSON.parse(
     await readFile(join(root, `packet-${flow}.request.json`), "utf8"),
   ) as SchematicPacketRequest;
+
+function auditCoreSeparation(
+  transformer: Element,
+  windings: Element[],
+  core: Element[],
+  flow: string,
+) {
+  expect(core).toHaveLength(2);
+  expect(
+    core[0]!.getAttribute(flow === "left-to-right" ? "x1" : "y1"),
+  ).not.toBe(core[1]!.getAttribute(flow === "left-to-right" ? "x1" : "y1"));
+  for (const winding of windings)
+    for (const bar of core)
+      expect(
+        inkClearance(
+          paintedShape(transformer, winding),
+          paintedShape(transformer, bar),
+        ),
+      ).toBeGreaterThanOrEqual(0.3);
+}
 
 describe("functional symbol conveyance", () => {
   it.each(["left-to-right", "top-to-bottom"] as const)(
@@ -181,10 +203,7 @@ describe("functional symbol conveyance", () => {
       const core = [
         ...transformer.querySelectorAll("[data-magnetic-association] line"),
       ];
-      expect(core).toHaveLength(2);
-      expect(
-        core[0]!.getAttribute(flow === "left-to-right" ? "x1" : "y1"),
-      ).not.toBe(core[1]!.getAttribute(flow === "left-to-right" ? "x1" : "y1"));
+      auditCoreSeparation(transformer, windings, core, flow);
       // The series jumper alone joins H2/H3. Neither winding nor magnetic core shorts H1/H4 or X1/X2.
       const uid = ir.devices.find((d) => d.designation === "T1")!.uid;
       const net = (terminalKey: string) =>

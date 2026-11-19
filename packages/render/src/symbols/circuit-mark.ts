@@ -253,7 +253,7 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
       },
       circle(10, 6, 0.7),
     ],
-    interface: [rect(1, 1, 10, 10)],
+    interface: [rect(1, 1, 10, 10), label("I/F")],
     "pressure-no": [...CONTACT, ...pressure, operatingLink],
     "pressure-nc": [...CONTACT, ...pressure, operatingLink, closedState],
     "level-no": [...CONTACT, ...level, operatingLink],
@@ -328,11 +328,23 @@ function uprightQualifier(p: Primitive): Primitive {
   if (p.kind === "polyline") return { ...p, points: p.points.map(turn) };
   return p;
 }
-function markPrimitives(mark: CircuitMark, vertical: boolean) {
+function markPrimitives(
+  mark: CircuitMark,
+  vertical: boolean,
+  span?: readonly [number, number],
+) {
   if (mark === "earth" && !vertical) return EARTH_LTR;
-  if (vertical && (mark === "ac-input" || mark === "dc-output"))
-    return MARKS[mark].map(uprightQualifier);
-  return MARKS[mark];
+  const upright =
+    vertical && ["ac-input", "dc-output", "receptacle"].includes(mark);
+  if (!span && !upright) return MARKS[mark];
+  return MARKS[mark].map((p) => {
+    if (span && p.kind === "rect") {
+      const [low, high] = span;
+      const start = vertical ? 6 - high / MARK_SCALE : 6 + low / MARK_SCALE;
+      return rect(p.x, start, p.width, (high - low) / MARK_SCALE);
+    }
+    return upright ? uprightQualifier(p) : p;
+  });
 }
 const hasExtendedInk = (mark: CircuitMark, vertical: boolean) =>
   mark.startsWith("pressure-") ||
@@ -352,10 +364,12 @@ export function emitCircuitMark(
   mark: CircuitMark,
   vertical: boolean,
   mmPerUnit: number,
+  span?: readonly [number, number],
 ): string {
   return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${hasExtendedInk(mark, vertical) ? ' stroke-linecap="round" stroke-linejoin="round"' : ""}${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${markPrimitives(
     mark,
     vertical,
+    span,
   )
     .map((p) => {
       const role = p.role ? ` data-circuit-role="${p.role}"` : "";
@@ -381,8 +395,9 @@ export function composedCircuitMark(
   cx: number,
   cy: number,
   vertical: boolean,
+  span?: readonly [number, number],
 ): string {
-  return `<g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical, MARK_SCALE)}</g>`;
+  return `<g transform="translate(${n(cx - 4)} ${n(cy - 4)}) scale(.666667)">${emitCircuitMark(mark, vertical, MARK_SCALE, span)}</g>`;
 }
 
 /** Mark-centred counter-rotation leaves the legend ink identical in both flows. Used
@@ -448,6 +463,7 @@ export function circuitMarkSegments(
   cx: number,
   cy: number,
   vertical: boolean,
+  span?: readonly [number, number],
 ) {
   const segments: (readonly [
     { x: number; y: number },
@@ -466,7 +482,7 @@ export function circuitMarkSegments(
     }
   };
   const chain = (ps: readonly Point[]) => append(ps.map(point));
-  for (const p of markPrimitives(mark, vertical)) {
+  for (const p of markPrimitives(mark, vertical, span)) {
     if (p.kind === "line") chain([p.a, p.b]);
     else if (p.kind === "polyline") chain(p.points);
     else if (p.kind === "rect")

@@ -1,7 +1,11 @@
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import type { CaptionPoint, CaptionSegment } from "./circuit-caption.js";
 import type { CircuitMark } from "./circuit.js";
-import { sourceEnclosure, windingPolyline } from "./printable-policy.js";
+import {
+  COUPLED_WINDING_AMPLITUDE_MM,
+  sourceEnclosure,
+  windingPolyline,
+} from "./printable-policy.js";
 import type { SymbolSide } from "./types.js";
 
 export interface InkOwner {
@@ -77,7 +81,7 @@ function windingSegments(
     vertical ? a.x : a.y,
     vertical ? b.x : b.y,
     edge,
-    coupled && source ? -2 : 2,
+    coupled ? (source ? -1 : 1) * COUPLED_WINDING_AMPLITUDE_MM : 2,
     vertical ? [a.y, b.y] : [a.x, b.x],
   ).map(([cross, along]) =>
     vertical ? { x: along, y: cross } : { x: cross, y: along },

@@ -95,6 +95,7 @@ Save large outputs to files: `create-view` returns tens of KB, `inspect` several
 The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.
 
 Check that wire labels leave terminal approaches, bends and junctions visible.
+See `thermite guide circuit-symbols`.
 
 ## Offline project workflows
 

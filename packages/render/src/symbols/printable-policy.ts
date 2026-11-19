@@ -472,6 +472,10 @@ export function motorIsThreePhase(type: IrDeviceType, fn: IrFunction): boolean {
   );
 }
 
+// At a 3 mm winding offset and 0.5 mm core offset, this leaves over
+// 0.5 mm between the printed zigzag tip and the nearest magnetic core line.
+export const COUPLED_WINDING_AMPLITUDE_MM = 1.6;
+
 /** Shared winding points in (cross-axis, along-axis) coordinates. No net effect. */
 export function windingPolyline(
   cross: number,

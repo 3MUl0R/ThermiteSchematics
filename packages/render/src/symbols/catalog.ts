@@ -78,6 +78,18 @@ function polarityQualifier(
   ];
 }
 
+// The lead follows the PE port. From its inner endpoint the stem and bars
+// are drawn in page axes, with no contact to the motor body or a phase lead.
+const MOTOR_EARTH_ORIGIN = point(18, 84);
+function motorEarthBars(): SymbolPrimitive[] {
+  return [
+    line(18, 84, 18, 88, "annotation"),
+    line(13, 88, 23, 88, "annotation"),
+    line(15, 91, 21, 91, "annotation"),
+    line(17, 94, 19, 94, "annotation"),
+  ].map((stroke) => ({ ...stroke, uprightOrigin: MOTOR_EARTH_ORIGIN }));
+}
+
 function rect(
   x: number,
   y: number,
@@ -352,9 +364,7 @@ const CATALOG_DEFINITIONS = [
       ),
       line(0, 84, 18, 84, "body"),
       circle(28, 48, 18, "body"),
-      line(18, 80, 18, 88, "annotation"),
-      line(13, 88, 23, 88, "annotation"),
-      line(15, 91, 21, 91, "annotation"),
+      ...motorEarthBars(),
     ],
   ),
   symbol(
@@ -549,6 +559,28 @@ function verticalPoint(
   return { x: preserveLanes ? value.y : sourceHeight - value.y, y: value.x };
 }
 
+function uprightLine(
+  primitive: Extract<SymbolPrimitive, { kind: "line" }>,
+  transform: (point: SymbolPoint) => SymbolPoint,
+) {
+  const origin = primitive.qualifier?.center ?? primitive.uprightOrigin;
+  if (!origin) return undefined;
+  const center = transform(origin);
+  const upright = (p: SymbolPoint) => ({
+    x: center.x + p.x - origin.x,
+    y: center.y + p.y - origin.y,
+  });
+  return {
+    ...primitive,
+    from: upright(primitive.from),
+    to: upright(primitive.to),
+    ...(primitive.qualifier
+      ? { qualifier: { ...primitive.qualifier, center } }
+      : {}),
+    ...(primitive.uprightOrigin ? { uprightOrigin: center } : {}),
+  };
+}
+
 function verticalPrimitive(
   primitive: SymbolPrimitive,
   sourceHeight: number,
@@ -557,28 +589,15 @@ function verticalPrimitive(
   const transform = (value: SymbolPoint) =>
     verticalPoint(value, sourceHeight, preserveLanes);
   switch (primitive.kind) {
-    case "line": {
-      const qualifier = primitive.qualifier;
-      if (qualifier) {
-        const center = transform(qualifier.center);
-        const upright = (p: SymbolPoint) => ({
-          x: center.x + p.x - qualifier.center.x,
-          y: center.y + p.y - qualifier.center.y,
-        });
-        return {
-          ...primitive,
-          from: upright(primitive.from),
-          to: upright(primitive.to),
-          qualifier: { ...qualifier, center },
-        };
-      }
-      return {
-        kind: "line",
-        from: transform(primitive.from),
-        to: transform(primitive.to),
-        style: primitive.style,
-      };
-    }
+    case "line":
+      return (
+        uprightLine(primitive, transform) ?? {
+          kind: "line",
+          from: transform(primitive.from),
+          to: transform(primitive.to),
+          style: primitive.style,
+        }
+      );
     case "polyline":
       return {
         kind: "polyline",
