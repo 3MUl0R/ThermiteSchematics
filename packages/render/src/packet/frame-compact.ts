@@ -25,6 +25,8 @@ import {
 import { n, text, line, namespaceSheetContent } from "./svg.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 
+const FOOTER_HEIGHT_MM = 6;
+
 export function compactFrame(
   draft: Draft,
   page: PaperPage,
@@ -68,18 +70,44 @@ export function compactFrame(
   }
   out.push(line(m, top, page.widthMm - m, top));
   out.push(...titleCells(draft, plan, page, number, total));
-  out.push(text(m + 1, bottom + 4, draft.note, 2.5));
-  const stamp =
-    titleFrameContext(page)?.presentation.frame?.generatorStamp ?? "border";
-  if (stamp === "border")
-    out.push(
-      text(page.widthMm - m, bottom + 4, "Thermite 0.3.0-alpha.2", 2.5, "end"),
-    );
+  out.push(...footerRows(draft, page, number));
   out.push(
     `<metadata>${xml(`Generator: Thermite Schematics ${draft.title.toolVersion}`)}</metadata>`,
     "</svg>",
   );
   return out.join("\n") + "\n";
+}
+
+function footerRows(draft: Draft, page: PaperPage, number: number) {
+  const m = page.marginMm,
+    bottom = page.heightMm - m,
+    baseline = bottom - 1;
+  const out = [];
+  if (draft.note)
+    out.push(
+      titlePaint(
+        number,
+        "footer",
+        m + 3,
+        bottom - 3.85,
+        draft.note,
+        page.widthMm - 2 * m - 6,
+      ),
+    );
+  out.push(historyTitle(draft, page, number, baseline));
+  const stamp =
+    titleFrameContext(page)?.presentation.frame?.generatorStamp ?? "border";
+  if (stamp === "border")
+    out.push(
+      text(
+        page.widthMm - m - 3,
+        baseline,
+        "Thermite 0.3.0-alpha.2",
+        2.5,
+        "end",
+      ),
+    );
+  return out;
 }
 
 function frameHeader(page: PaperPage, number: number, total: number) {
@@ -180,8 +208,16 @@ function titleCells(
   out.push(...rows.map((row, i) => titleRowSvg(row, i, plan, page, number)));
   out.push(
     ...authorTitleCells(draft, page, number),
-    historyTitle(draft, page, number),
-    ...rightTitleCells(draft, page, number, total, top, plan.title.height),
+    // The author cells already stop above the footer. End the right cells at
+    // the same rule so the two footer rows can use the full framed width.
+    ...rightTitleCells(
+      draft,
+      page,
+      number,
+      total,
+      top,
+      plan.title.height - FOOTER_HEIGHT_MM,
+    ),
   );
   return out;
 }

@@ -130,7 +130,12 @@ export function rightTitleCells(
   }
   return out;
 }
-export function historyTitle(draft: Draft, page: PaperPage, number: number) {
+export function historyTitle(
+  draft: Draft,
+  page: PaperPage,
+  number: number,
+  baseline: number,
+) {
   const rows = draft.resolvedTitle?.revisionRows.value ?? [];
   const value = rows.length
     ? rows
@@ -145,7 +150,7 @@ export function historyTitle(draft: Draft, page: PaperPage, number: number) {
     number,
     "revisionRows",
     page.marginMm + 3,
-    page.heightMm - page.marginMm - 2,
+    baseline,
     `Revision history: ${value}`,
     page.widthMm - 2 * page.marginMm - 72,
   );
