@@ -1036,7 +1036,13 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       allowedLibraryPaths: task.allowedLibraryPaths,
     }),
   };
+  const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
   const outcome = await evaluateTask(stored.taskDir, ctx);
+  assert.equal(
+    harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
+    checker.checkerHash,
+    "Harness changed during recheck; result cannot be scored",
+  );
   const metrics = score({
     calls: stored.calls,
     initial: stored.initial,
@@ -1080,8 +1086,8 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
           ? "infrastructure-failure"
           : "complete",
     checkerRechecks: revision,
-    checkerHarnessHash: snapshot(here, { documents: false }).hash,
-    checkerHash: harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
+    checkerHarnessHash: checker.checkerHarnessHash,
+    checkerHash: checker.checkerHash,
     checkerTaskTreeHash,
     forceRecheck: forceRecheck || original.forceRecheck || false,
     checkerRecheckHistory: [
@@ -1090,7 +1096,7 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
         revision,
         forced: forceRecheck,
         taskTreeHash: checkerTaskTreeHash,
-        harnessHash: snapshot(here, { documents: false }).hash,
+        harnessHash: checker.checkerHarnessHash,
       },
     ],
   };

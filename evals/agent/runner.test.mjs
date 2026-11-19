@@ -141,6 +141,12 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     expect(result.checkerTaskTreeHash).not.toBe(original.taskTreeHash);
     expect(result.checkerRecheckHistory[0].forced).toBe(true);
     expect(result.harnessHash).toBe(original.harnessHash);
+    const { harnessIdentity } = await import("./checkpoint.mjs");
+    const { checkerHarnessHash, checkerHash } = harnessIdentity();
+    expect(result).toMatchObject({ checkerHarnessHash, checkerHash });
+    expect(result.checkerRecheckHistory[0].harnessHash).toBe(
+      checkerHarnessHash,
+    );
     expect(readFileSync(referenceCount, "utf8")).toBe("1");
     expect(
       JSON.parse(readFileSync(join(evidence, "checker-history-001.json")))
