@@ -770,6 +770,21 @@
       "codes": ["R006"]
     },
     {
+      "id": "packages/render/src/packet/rooted-bank-grids.ts:rootedBankGrids:factory-call:1",
+      "path": "packages/render/src/packet/rooted-bank-grids.ts",
+      "owner": "rootedBankGrids",
+      "kind": "factory-call",
+      "factory": "packages/render/src/packet/rooted-bank-grids.ts:withBoundaryRetry",
+      "codes": ["R006"]
+    },
+    {
+      "id": "packages/render/src/packet/rooted-bank-grids.ts:withBoundaryRetry:constructor:1",
+      "path": "packages/render/src/packet/rooted-bank-grids.ts",
+      "owner": "withBoundaryRetry",
+      "kind": "constructor",
+      "codes": ["R006"]
+    },
+    {
       "id": "packages/render/src/packet/rooted-bound.ts:rootedPageCostFailure:constructor:1",
       "path": "packages/render/src/packet/rooted-bound.ts",
       "owner": "rootedPageCostFailure",
@@ -1696,6 +1711,10 @@
       "owner": "legendBoundFailure"
     },
     {
+      "path": "packages/render/src/packet/rooted-bank-grids.ts",
+      "owner": "withBoundaryRetry"
+    },
+    {
       "path": "packages/render/src/packet/rooted-constraint.ts",
       "owner": "rootedDiagnosticError"
     },
@@ -1874,6 +1893,10 @@
     },
     "packages/render/src/packet/reports.ts": {
       "category": "public-boundary"
+    },
+    "packages/render/src/packet/rooted-bank-grids.ts": {
+      "category": "public-boundary",
+      "facts": "Leads with a measured boundary-cut retry failure and retains the original boundary identity."
     },
     "packages/render/src/packet/rooted-bound.ts": {
       "category": "packet-budget"

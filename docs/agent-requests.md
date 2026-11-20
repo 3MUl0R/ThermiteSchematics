@@ -469,9 +469,11 @@ guards, pointers and UUID tests.
 
 Renderer R codes and CLI T001 exceptions are covered in [views](views.md).
 
-R001–R006 retain their original classification and message. Read their structured
-details too: native device, conductor and function identities accompany failures
-where those objects are known. Otherwise `details.diagnosticContext` identifies
+R001–R006 retain their classifications. Read their messages and structured
+details together. For an R006 boundary-cut retry, the message and
+`details.boundaryCutRetry` explain the retry's failure. Native device, conductor
+and function identities accompany failures where those objects are known.
+Otherwise `details.diagnosticContext` identifies
 the authored view by zero-based `viewIndex` and title, together with a valid
 project name and request field. Single-view and packet diagnostic context read
 own data properties only, including array length and elements; they never invoke

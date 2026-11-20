@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { renderSchematic } from "../src/renderer.js";
-import { renderSchematicPacket } from "../src/sheets.js";
+import { renderSchematicPacket, renderSchematicSheets } from "../src/sheets.js";
 import { dolProbeFixture } from "./dol-control-probes-fixture.js";
 import { actuation, flows } from "./dol-control-junctions-fixture.js";
 import diagnostics from "../../core-library/test/fixtures/transformer-control/p7-diagnostics.json";
@@ -28,12 +28,35 @@ it.each(["R1", "K1"].flatMap((root) => flows.map((flow) => ({ root, flow }))))(
       if (!result.ok) {
         expect(result.error.code).toBe("R006");
         expect(result.error.message).toContain(
+          "Continuation labels are too close to print clearly",
+        );
+        expect(result.error.details).toMatchObject({
+          boundaryCutRetry: {
+            continuationSpacing: { minimumMm: 18 },
+            conductorIds: [{ kind: "wire" }, { kind: "wire" }],
+          },
+          compactLayoutAvailable: true,
+        });
+        expect(result.error.message).toContain(
           "presentation-only boundary segment",
         );
         expect(result.error.message).toContain("must remain uncut");
         expect(result.error.message).not.toContain(
           "Provide a usable authored printed identity",
         );
+        const single = await renderSchematicSheets(f.ir, request);
+        expect(single).toMatchObject({
+          ok: false,
+          error: {
+            code: "R006",
+            details: {
+              boundaryCutRetry: result.error.details?.boundaryCutRetry,
+              diagnosticContext: {
+                views: [{ viewIndex: 0, title: "R1 / control" }],
+              },
+            },
+          },
+        });
       } else {
         const authored = new Set(f.ir.wires.map((w) => w.uid));
         for (const sheet of result.value.sheets)

@@ -3,6 +3,8 @@ import { prepareSchematicDrawing } from "../src/renderer.js";
 import type { PreparedSchematicDrawing } from "../src/renderer.js";
 import type { LayoutEdge } from "../src/types.js";
 import { rootedGrids, gridLinks } from "../src/packet/rooted-plans.js";
+import { rootedBankGrids } from "../src/packet/rooted-bank-grids.js";
+import { continuationBanks } from "../src/packet/continuation-bank.js";
 import { rootedCrossings } from "../src/packet/rooted-crossings.js";
 import { continuationIdentity } from "../src/packet/continuation-identity.js";
 import { dolFixture, actuation } from "./dol-control-junctions-fixture.js";
@@ -23,7 +25,7 @@ function inputRoute(
 // Neutral geometry contract, not a circuit golden. Only the saved, unpatched
 // fixture supplies typed metadata. These literal boxes/points are grid input;
 // production routing is neither mocked nor edited by the cut planner.
-async function geometry(axis: "x" | "y", authored = false, crowded = false) {
+async function geometry(axis: "x" | "y", authored = false, extraCount = 0) {
   const f = await dolFixture("saved");
   dispose.push(f.dispose);
   const result = await prepareSchematicDrawing(
@@ -37,9 +39,9 @@ async function geometry(axis: "x" | "y", authored = false, crowded = false) {
   );
   const route = p.layout.edges.find((e) => e.id === semantic?.id);
   if (!semantic || !route) throw new Error("Missing neutral edge metadata");
-  const extra = crowded
-    ? p.graph.edges.filter((e) => !!continuationIdentity(e)).slice(0, 2)
-    : [];
+  const extra = p.graph.edges
+    .filter((e) => !!continuationIdentity(e))
+    .slice(0, extraCount);
   const extraRoutes = extra.map((edge, i) => {
     const original = p.layout.edges.find((e) => e.id === edge.id);
     if (!original) throw new Error("Missing authored neutral route metadata");
@@ -148,7 +150,7 @@ it("keeps the refusal when the uncuttable segment cannot fit any legal strip", a
 });
 
 it("rejects the boundary-safe proposal when authored continuation labels are too close", async () => {
-  const p = await geometry("y", false, true);
+  const p = await geometry("y", false, 2);
   const messages: string[] = [];
   expect(
     rootedGrids(p, { x: 0, y: 0, w: 200, h: 200 }, 1, false, false, (error) =>
@@ -160,4 +162,70 @@ it("rejects the boundary-safe proposal when authored continuation labels are too
       message.includes("Continuation labels are too close"),
     ),
   ).toBe(true);
+});
+
+const field = { x: 0, y: 0, w: 200, h: 200 };
+const planBanks = (p: PreparedSchematicDrawing) =>
+  rootedBankGrids(p, field, 1, continuationBanks(p, field, 1), false);
+
+it("reports the authored conductor that blocks the boundary-safe retry", async () => {
+  const p = await geometry("y", false, 1);
+  const [boundary, wire] = p.graph.edges;
+  if (!boundary || !wire) throw Error("Missing neutral probe edges");
+  const hostile = {
+    ...p,
+    graph: {
+      ...p.graph,
+      edges: [boundary, { ...wire, conductor: undefined }],
+    },
+  };
+  const { grids, cutFailure } = planBanks(hostile);
+  expect(grids).toEqual([]);
+  expect(cutFailure).toMatchObject({
+    code: "R006",
+    root: "packet",
+    reason: "unprintable-layout",
+    details: {
+      continuationIdentity: boundary.id,
+      boundaryCutRetry: { continuationIdentity: wire.id },
+    },
+  });
+  expect(cutFailure?.message).toMatch(
+    /A candidate cut crosses this conductor\..*Use larger paper.*The original grid also failed\..*boundary segment.*must remain uncut/,
+  );
+});
+
+it("reports the label spacing that blocks the boundary-safe retry", async () => {
+  const p = await geometry("y", false, 2);
+  const [boundary, ...wires] = p.graph.edges;
+  const { grids, cutFailure } = planBanks(p);
+  expect(grids).toEqual([]);
+  expect(cutFailure).toMatchObject({
+    code: "R006",
+    root: "packet",
+    reason: "unprintable-layout",
+    details: {
+      continuationIdentity: boundary?.id,
+      boundaryCutRetry: {
+        conductorIds: wires.flatMap((wire) => wire.elementIds),
+        continuationSpacing: { actualMm: 10, minimumMm: 18 },
+      },
+    },
+  });
+  expect(cutFailure?.message).toMatch(
+    /Continuation labels are too close.*10\.00 mm apart, 18 mm required.*Change flow, use a larger sheet.*The original grid also failed\..*boundary segment/,
+  );
+});
+
+it("returns the boundary-safe grid without a failure when the retry succeeds", async () => {
+  const p = await geometry("y");
+  // The original safe search needs nine rows and ten columns, beyond the
+  // 80-cell guard. The protected greedy retry fits in eight rows.
+  const wide = { ...p, layout: { ...p.layout, width: 1960, height: 1524 } };
+  const { grids, cutFailure } = planBanks(wide);
+  expect(grids[0]?.grid).toMatchObject({
+    greedy: true,
+    ys: [0, 164, 364, 564, 764, 964, 1164, 1364, 1564],
+  });
+  expect(cutFailure).toBeUndefined();
 });

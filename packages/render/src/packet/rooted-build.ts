@@ -263,7 +263,7 @@ export function buildRootedCandidates(
       offset,
       true,
     );
-  return failedBuild(p, constraint, captionFailure, search.identityFailure);
+  return failedBuild(p, constraint, captionFailure, search.cutFailure);
 }
 
 export function buildGridCandidates(
@@ -367,17 +367,17 @@ function failedBuild(
   p: PreparedSchematicDrawing,
   constraint: RootedConstraint,
   caption: string | RootedConstraint,
-  identityFailure: RenderFailure | undefined,
+  cutFailure: RenderFailure | undefined,
 ): RootedBuildResult {
   const message = typeof caption === "string" ? caption : caption.message;
   const error =
-    identityFailure ??
+    cutFailure ??
     offViewPacketFailure(p.graph, "unprintable-layout", message).error;
   return {
     ok: false,
     error,
     constraint,
-    ...(!identityFailure && typeof caption !== "string"
+    ...(!cutFailure && typeof caption !== "string"
       ? { gridFailure: { error, suffix: error.message.slice(message.length) } }
       : {}),
   };
