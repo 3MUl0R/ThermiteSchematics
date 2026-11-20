@@ -398,6 +398,10 @@ For live runs use the same catalog and source revision with `--agent claude` or
 `--agent codex`, the appropriate auth recipe above, and distinct checkpoint
 names. A reference run evaluates the task infrastructure without a model.
 
+Contributor checkers run the delivered checkout's tests and build, which is
+agent-written code, with the harness user's privileges. This is a deliberate
+exception to the post-agent boundary; see E2 1.20.4.
+
 - R01 creates a linked Git worktree, runs `bun install --frozen-lockfile` in that
   worktree, runs `bun scripts/test.mjs packages/query/test/views-and-ordering.test.ts`,
   and rebuilds with `bun run build`. The checker verifies Git registration and
@@ -961,21 +965,47 @@ explicit error receipt.
 
 ## E2 1.20.4
 
-Judge packets read deliverables and the `drawings` directory without
-following links, using the same descriptor-relative reads as the visual broker.
-A linked or otherwise unreadable output is left out of the packet and its path
-is listed in `refusedOutputs`; a linked `drawings` directory is listed as
-`drawings`. The packet format is now `thermite-blinded-judge/1.2`. Judge packets
-are refused on Windows, where these reads are unavailable.
+After a sandboxed agent exits, the harness reads its project and runs the CLI
+with the harness user's privileges. Those reads and calls no longer follow or
+execute anything the agent left in its writable roots.
+
+Before the agent starts, the harness opens the project root and keeps that
+descriptor for the run. Judge packets read deliverables and the `drawings`
+directory from it with descriptor-relative reads that follow no links and
+take no `..` components, as the visual broker does. A linked or otherwise
+unreadable output is left out of the packet and its path is listed in
+`refusedOutputs`; a linked `drawings` directory is listed as `drawings`. If
+the root itself was replaced or cannot be inspected, the packet takes nothing
+and lists `.`. The packet format is now `thermite-blinded-judge/1.2`. Rubric
+tasks are refused on Windows before the agent starts, because these reads are
+unavailable there.
 
 The agent's runtime copy sits in its TMPDIR, which a sandboxed agent can write.
 Post-agent CLI calls (the final flush, file-state validation, the checker and
-rechecks) therefore run a second copy of the prepared engine, made at setup in
-the harness home, outside the sandbox's writable roots, and removed when the
-run ends. Bun reads `bunfig.toml` from the working directory, so a project
-config could preload agent code into those calls. They set `BUN_OPTIONS` to an
-empty harness config instead. The harness home path must not contain
-whitespace, because `BUN_OPTIONS` has no quoting. The run's before-and-after
-runtime hash comparison still reports a changed runtime as a V5 violation.
-`recheck.json` now records the prepared engine path, and rechecks rebuild the
-protected copy from it, so runs recorded before 1.20.4 cannot be rechecked.
+rechecks) run a second copy of the prepared engine, made after the agent exits
+in a scratch directory in the harness home and removed when the run ends. Bun
+reads `bunfig.toml` and `.env` files from the working directory, so each of
+those calls names the harness's own config, which disables `.env` loading, as
+its own argument. Their environment is one the harness builds: no credentials,
+no contributor command directory, and a home and TMPDIR in that scratch
+directory. The run's before-and-after runtime hash comparison still reports a
+changed runtime as a V5 violation.
+
+The source diff no longer runs Git in the agent's repository, whose
+configuration and attributes can name programs to run. Before launch the
+harness copies the project's regular files into the scratch directory. After
+the run it reads the selected source paths through the pinned root and runs
+`git diff --no-index` on the two copies there, with no Git configuration,
+attributes or repository. Paths are labelled as before. A deleted source now
+appears as a deletion; staging every path hid it before. A source that is not
+an ordinary file is listed as refused.
+
+`recheck.json` records the project root's identity, and a recheck refuses a
+different root. Rechecks take the prepared engine from the checkpoint's context
+and stage checker receipts in protected scratch, never in the kept run
+directory. Runs recorded before 1.20.4 cannot be rechecked.
+
+Contributor-task checkers are a deliberate exception. They run the delivered
+checkout's own tests and build, which is agent-written code, with the harness
+user's privileges. Holding them to the same boundary would need a sandbox for
+the checker itself.

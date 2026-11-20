@@ -11,7 +11,7 @@ not count as fulfilled requirements. Inspect PDFs/HTML at the stated print size
 for V1 label parity and V5 readability/clipping. If you cannot inspect an item,
 mark it unassessed and do not give a full pass. Outputs named in
 `refusedOutputs` were links or otherwise unreadable without following links;
-treat them as missing.
+treat them as missing. `.` there means no project output could be read.
 
 Return JSON only, using this structure (the coordinator adds your judge identity
 outside the blinded packet):

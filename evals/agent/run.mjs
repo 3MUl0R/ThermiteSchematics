@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { cp as copyAsync } from "node:fs/promises";
 import {
+  copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -179,33 +181,124 @@ async function copyRuntime(prepared, runtime, task) {
       force: true,
     });
 }
+// Scratch in the harness home, outside a sandboxed agent's writable roots.
+const protectedScratch = (prefix) =>
+  realpathSync(mkdtempSync(join(homedir(), prefix)));
 // The agent's runtime copy lives in its writable TMPDIR. Post-agent CLI calls
-// run this copy instead, made from the same prepared engine in the harness
-// home, outside the sandbox's writable roots. Bun reads bunfig.toml from the
-// project, so those calls also name the harness's own empty config.
-async function protectedRuntime(prepared, task) {
-  const root = realpathSync(
-    mkdtempSync(join(homedir(), ".thermite-agent-runtime-")),
-  );
-  const config = join(root, "bunfig.toml");
-  try {
-    // BUN_OPTIONS splits on whitespace and has no quoting.
-    assert(
-      !/\s/.test(config),
-      `Harness home path contains whitespace: ${root}`,
-    );
-    await copyRuntime(prepared, join(root, "runtime"), task);
-    writeFileSync(config, "");
-  } catch (error) {
-    rmSync(root, { recursive: true, force: true });
-    throw error;
-  }
-  return {
-    root,
-    runtime: join(root, "runtime"),
-    bunOptions: `--config=${config}`,
-  };
+// run a copy made in protected scratch from the same prepared engine. Bun reads
+// bunfig.toml and .env files from the project, so those calls name the
+// harness's own config instead (see bunConfig in audit.mjs).
+async function protectedRuntime(prepared, scratch, task) {
+  const runtime = join(scratch, "runtime"),
+    config = join(scratch, "bunfig.toml");
+  await copyRuntime(prepared, runtime, task);
+  writeFileSync(config, "env = false\n");
+  return { runtime, config };
 }
+// The harness's pre-launch copy of the project's regular files. Git metadata
+// and installed dependencies (a contributor checkout's) are never diffed.
+function copyRegularFiles(from, to, rel = "") {
+  for (const entry of readdirSync(join(from, rel), { withFileTypes: true })) {
+    const path = rel ? join(rel, entry.name) : entry.name;
+    if ([".git", "node_modules"].includes(entry.name)) continue;
+    if (entry.isDirectory()) copyRegularFiles(from, to, path);
+    else if (entry.isFile()) {
+      mkdirSync(dirname(join(to, path)), { recursive: true });
+      copyFileSync(join(from, path), join(to, path));
+    }
+  }
+}
+// The diff of selected project paths, from the pre-launch copy to their post-run
+// bytes. `read` returns a path's bytes, null when absent, or throws to refuse
+// it. Git never runs in the agent's repository, whose configuration and
+// attributes can run programs; it compares copies in protected scratch with no
+// configuration, attributes or repository.
+export function selectedDiff({ before, scratch, paths, read }) {
+  const work = join(scratch, "diff"),
+    home = join(work, "home"),
+    refused = [];
+  rmSync(work, { recursive: true, force: true });
+  for (const dir of ["old", "new", "home"])
+    mkdirSync(join(work, dir), { recursive: true });
+  const put = (side, path, bytes) => {
+    mkdirSync(dirname(join(work, side, path)), { recursive: true });
+    writeFileSync(join(work, side, path), bytes);
+  };
+  for (const path of [...new Set(paths)].sort()) {
+    let bytes;
+    try {
+      bytes = read(path);
+    } catch {
+      refused.push(path);
+      continue;
+    }
+    if (bytes) put("new", path, bytes);
+    if (lstatSync(join(before, path), { throwIfNoEntry: false })?.isFile())
+      put("old", path, readFileSync(join(before, path)));
+  }
+  const result = spawnSync(
+    "git",
+    [
+      "diff",
+      "--no-index",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--",
+      "old",
+      "new",
+    ],
+    {
+      cwd: work,
+      encoding: "utf8",
+      maxBuffer: 64 << 20,
+      env: {
+        PATH: process.env.PATH,
+        HOME: home,
+        XDG_CONFIG_HOME: home,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CEILING_DIRECTORIES: scratch,
+      },
+    },
+  );
+  assert(
+    !result.error && [0, 1].includes(result.status),
+    `Source diff failed: ${result.error?.code ?? result.stderr}`,
+  );
+  // Label paths as the project's, as a diff in its repository would.
+  let header = false;
+  const diff = result.stdout
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("diff --git ")) header = true;
+      else if (line.startsWith("@@")) header = false;
+      return header
+        ? line.replace(/(^|[ "])([ab])\/(?:old|new)\//g, "$1$2/")
+        : line;
+    })
+    .join("\n")
+    .trim();
+  return [
+    diff,
+    ...refused.map((path) => `Refused (not an ordinary file): ${path}`),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+// Post-run project reads go through the reader pinned before launch. Windows has
+// no such reader, and plain reads there refuse anything but a regular file.
+function projectBytes(source, project, path) {
+  if (source) return source.has(path) ? source.read(path) : null;
+  const status = lstatSync(join(project, path), { throwIfNoEntry: false });
+  if (!status) return null;
+  assert(status.isFile(), `Not an ordinary project file: ${path}`);
+  return readFileSync(join(project, path));
+}
+const confinedPlatform = ["darwin", "linux"].includes(process.platform);
+const judgeUnavailable =
+  "Judge packets are unavailable on Windows: project files cannot be read there without following links";
 const children = new Set();
 let stoppingSignal = null;
 function captureSetup(binary, args, options = {}) {
@@ -343,17 +436,15 @@ export function judgePacket({
   project,
   runtime,
   task,
+  source,
 }) {
-  // The project is agent-written. Artifacts are read without following links
-  // and only from inside it; anything else is listed as refused.
-  assert(
-    process.platform === "darwin" || process.platform === "linux",
-    "Judge packets are unavailable on Windows: project files cannot be read there without following links",
-  );
+  // The project is agent-written. Artifacts are read without following links,
+  // through a reader whose root was pinned before the agent started; anything
+  // else is listed as refused.
+  assert(confinedPlatform, judgeUnavailable);
   const outputs = {},
     binaryOutputs = [],
     refusedOutputs = [];
-  const source = projectReader(project);
   const take = (rel) => {
     try {
       return source.read(rel);
@@ -393,8 +484,12 @@ export function judgePacket({
         if (file.endsWith(".pdf")) binaryOutputs.push(rel);
       }
     }
-  } finally {
-    source.close();
+  } catch {
+    // An entry that cannot be inspected, or a replaced root, refuses the
+    // project as a whole.
+    for (const key of Object.keys(outputs)) delete outputs[key];
+    binaryOutputs.length = 0;
+    refusedOutputs.splice(0, Infinity, ".");
   }
   const blindText = (text) =>
     text
@@ -552,7 +647,8 @@ export async function runOne({
     task,
     initial,
     runtimeBefore,
-    trusted,
+    scratch,
+    source,
     secretList = [];
   const runStarted = Date.now();
   const save = (file, value) =>
@@ -566,8 +662,8 @@ export async function runOne({
       !task.context || task.context === context,
       "Task requires --context source",
     );
+    assert(!task.rubric || confinedPlatform, judgeUnavailable);
     await copyRuntime(prepared.path, runtime, task);
-    trusted = await protectedRuntime(prepared.path, task);
     identity.task = task.id;
     identity.runKey = runKey(identity);
     env = {
@@ -754,6 +850,12 @@ export async function runOne({
       throw Object.assign(new Error("Authentication pre-flight failed"), {
         stage: "authentication",
       });
+    // Before launch: the harness's copy of the starting sources, and the project
+    // root that every post-run read starts from.
+    scratch = protectedScratch(".thermite-agent-protected-");
+    const before = join(scratch, "before");
+    copyRegularFiles(project, before);
+    if (confinedPlatform) source = projectReader(project);
     const started = Date.now();
     let execution = { exit: 0, stdout: "", stderr: "" };
     if (stoppingSignal || batchControl?.stopped) {
@@ -803,10 +905,22 @@ export async function runOne({
       batchControl.stopped = true;
       batchControl.reason = batchHaltReason(classification);
     }
-    env.THERMITE_EVAL_PHASE = "flush";
     // From here on, CLI calls run with harness privileges: never from the
-    // agent-writable runtime, and never with a project bunfig.toml.
-    env.BUN_OPTIONS = trusted.bunOptions;
+    // agent-writable runtime, never with the project's Bun config or .env
+    // files, and only with environment values the harness selects.
+    const trusted = await protectedRuntime(prepared.path, scratch, task);
+    ctx.env = {
+      ...freshEnvironment(
+        join(scratch, "isolated"),
+        { PATH: process.env.PATH, TERM: process.env.TERM },
+        { engineRoots },
+      ),
+      THERMITE_EVAL_PROJECT: project,
+      THERMITE_EVAL_LOG: env.THERMITE_EVAL_LOG,
+      THERMITE_EVAL_ERRORS: env.THERMITE_EVAL_ERRORS,
+      THERMITE_EVAL_PHASE: "flush",
+      THERMITE_EVAL_BUN_CONFIG: trusted.config,
+    };
     ctx.thermite = join(trusted.runtime, "thermite.mjs");
     const validation = cli(ctx, "validate", ".", "--json");
     writeFileSync(
@@ -820,7 +934,7 @@ export async function runOne({
     const final = fileState(
         project,
         join(trusted.runtime, "thermite.real.mjs"),
-        env,
+        ctx.env,
       ),
       calls = parseCalls(env.THERMITE_EVAL_LOG);
     final.sourceFiles = documents(project).map((doc) => doc.path);
@@ -853,8 +967,12 @@ export async function runOne({
         ),
       ]),
     ];
-    git(project, "add", "--intent-to-add", ".");
-    ctx.sourceDiff = git(project, "diff", "--no-ext-diff", "--", ...paths);
+    ctx.sourceDiff = selectedDiff({
+      before,
+      scratch,
+      paths,
+      read: (path) => projectBytes(source, project, path),
+    });
     ctx.metrics = score({
       calls,
       initial,
@@ -908,11 +1026,8 @@ export async function runOne({
       transcript: execution.stdout,
       context,
       engineRoots,
-      guideBytes: readFileSync(join(project, "AGENTS.md")).length,
-      guideFiles: [
-        join(project, "AGENTS.md"),
-        join(trusted.runtime, "README.md"),
-      ],
+      guideBytes: projectBytes(source, project, "AGENTS.md").length,
+      guideFiles: [join(project, "AGENTS.md"), join(runtime, "README.md")],
       expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
       actualWarnings:
         outcome.actualWarnings ??
@@ -1019,13 +1134,12 @@ export async function runOne({
         tasksRoot,
         project,
         runtime,
-        prepared: prepared.path,
+        projectRoot: source?.identity ?? null,
         initial,
         final,
         calls,
         sourceDiff: ctx.sourceDiff,
         validationDiagnostics: ctx.validationDiagnostics,
-        pinnedTypeScript: ctx.pinnedTypeScript,
         context,
         engineRoots,
         keep,
@@ -1045,6 +1159,7 @@ export async function runOne({
           project,
           runtime,
           task,
+          source,
         }),
       );
     cpSync(project, join(live, "project"), { recursive: true });
@@ -1108,7 +1223,11 @@ export async function runOne({
           save("manifest.json", manifest);
         }
       }
-    if (trusted) rmSync(trusted.root, { recursive: true, force: true });
+    try {
+      source?.close();
+    } finally {
+      if (scratch) rmSync(scratch, { recursive: true, force: true });
+    }
     if (manifest?.status === "checker-error" && !keep)
       rmSync(join(work, "isolated"), { recursive: true, force: true });
     try {
@@ -1120,7 +1239,10 @@ export async function runOne({
       rmSync(work, { recursive: true, force: true });
   }
 }
-export async function recheckRun({ evidence, forceRecheck = false }) {
+// `prepared` is the checkpoint's prepared context, read from the trusted
+// archive; nothing the agent's run directory holds selects what runs here.
+export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
+  assert(prepared?.path, "Recheck needs the checkpoint's prepared context");
   const original = read(join(evidence, "manifest.json"));
   assert(
     original.status === "checker-error",
@@ -1130,50 +1252,58 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
     original.workspace && existsSync(original.workspace),
     "Kept checker workspace is missing; never rerun the agent automatically",
   );
-  const pending = read(join(evidence, "recheck.json"));
-  const checkerTaskTreeHash = snapshot(pending.taskDir, {
-    documents: false,
-  }).hash;
-  assert(
-    forceRecheck ||
-      checkerTaskTreeHash ===
-        (original.checkerTaskTreeHash ?? original.taskTreeHash),
-    "Task directory changed; use --force-recheck to authorize and record the new checker inputs",
-  );
   const stored = read(join(evidence, "recheck.json")),
-    task = read(join(stored.taskDir, "task.json")),
-    revision = (original.checkerRechecks ?? 0) + 1,
-    work = original.workspace,
-    live = join(work, `recheck-${revision}`);
-  mkdirSync(live);
+    task = read(join(stored.taskDir, "task.json"));
+  assert(!task.rubric || confinedPlatform, judgeUnavailable);
   assert(
-    snapshot(stored.project).hash === stored.final.hash,
-    "Kept agent sources changed; refusing recheck",
+    !confinedPlatform || stored.projectRoot,
+    "Recheck needs the project root recorded since E2 1.20.4",
   );
-  const transcript = readFileSync(join(evidence, "transcript.jsonl"), "utf8");
-  const promptVersion =
-    original.taskVersion ??
-    (original.taskHash ===
-    sha256(readFileSync(join(stored.taskDir, "task.json")))
-      ? task.version
-      : null);
-  // Recheck runs the CLI with harness privileges, from a protected copy.
-  assert(
-    stored.prepared,
-    "Recheck needs the prepared engine recorded since E2 1.20.4",
-  );
-  const trusted = await protectedRuntime(stored.prepared, task);
-  const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
-  let ctx, outcome, metrics;
+  // Refuses a project root other than the one pinned before the agent started.
+  const source = confinedPlatform
+    ? projectReader(stored.project, stored.projectRoot)
+    : null;
+  let scratch;
   try {
-    ctx = {
+    const checkerTaskTreeHash = snapshot(stored.taskDir, {
+      documents: false,
+    }).hash;
+    assert(
+      forceRecheck ||
+        checkerTaskTreeHash ===
+          (original.checkerTaskTreeHash ?? original.taskTreeHash),
+      "Task directory changed; use --force-recheck to authorize and record the new checker inputs",
+    );
+    const revision = (original.checkerRechecks ?? 0) + 1,
+      work = original.workspace;
+    assert(
+      snapshot(stored.project).hash === stored.final.hash,
+      "Kept agent sources changed; refusing recheck",
+    );
+    const transcript = readFileSync(join(evidence, "transcript.jsonl"), "utf8");
+    const promptVersion =
+      original.taskVersion ??
+      (original.taskHash ===
+      sha256(readFileSync(join(stored.taskDir, "task.json")))
+        ? task.version
+        : null);
+    // The checker's receipts, its configuration and the CLI it runs are staged
+    // in protected scratch, never in the kept run directory, which a process
+    // the agent left behind can still write.
+    scratch = protectedScratch(".thermite-agent-recheck-");
+    const live = join(scratch, "evidence");
+    mkdirSync(live);
+    const trusted = await protectedRuntime(prepared.path, scratch, task);
+    const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
+    const ctx = {
       ...stored,
       task,
       promptVersion,
+      ...(task.contributor && { pinnedTypeScript: prepared.pinnedTypeScript }),
       evidence: live,
       env: {
-        ...freshEnvironment(join(work, `recheck-config-${revision}`), {}, {}),
-        BUN_OPTIONS: trusted.bunOptions,
+        ...freshEnvironment(join(scratch, "isolated"), {}, {}),
+        THERMITE_EVAL_BUN_CONFIG: trusted.config,
       },
       thermite: join(trusted.runtime, "thermite.real.mjs"),
       metrics: score({
@@ -1184,13 +1314,13 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
         allowedLibraryPaths: task.allowedLibraryPaths,
       }),
     };
-    outcome = await evaluateTask(stored.taskDir, ctx);
+    const outcome = await evaluateTask(stored.taskDir, ctx);
     assert.equal(
       harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
       checker.checkerHash,
       "Harness changed during recheck; result cannot be scored",
     );
-    metrics = score({
+    const metrics = score({
       calls: stored.calls,
       initial: stored.initial,
       final: stored.final,
@@ -1199,10 +1329,10 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       transcript,
       context: stored.context,
       engineRoots: stored.engineRoots,
-      guideBytes: readFileSync(join(stored.project, "AGENTS.md")).length,
+      guideBytes: projectBytes(source, stored.project, "AGENTS.md").length,
       guideFiles: [
         join(stored.project, "AGENTS.md"),
-        join(trusted.runtime, "README.md"),
+        join(stored.runtime, "README.md"),
       ],
       expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
       actualWarnings:
@@ -1217,63 +1347,71 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
       undocumentedShapes: task.undocumentedShapes,
       wallTimeMs: original.timings.wallTimeMs,
     });
-  } finally {
-    rmSync(trusted.root, { recursive: true, force: true });
-  }
-  if (original.agent === "reference") metrics.usage.partial = false;
-  if (original.agentFailure) {
-    outcome.pass = false;
-    outcome.agentFailure = original.agentFailure;
-  }
-  const result = {
-    ...original,
-    outcome,
-    metrics,
-    status:
-      outcome.error?.kind === "checker-error"
-        ? "checker-error"
-        : original.shimErrors?.length
-          ? "infrastructure-failure"
-          : "complete",
-    checkerRechecks: revision,
-    checkerHarnessHash: checker.checkerHarnessHash,
-    checkerHash: checker.checkerHash,
-    checkerTaskTreeHash,
-    forceRecheck: forceRecheck || original.forceRecheck || false,
-    checkerRecheckHistory: [
-      ...(original.checkerRecheckHistory ?? []),
-      {
-        revision,
-        forced: forceRecheck,
-        taskTreeHash: checkerTaskTreeHash,
-        harnessHash: checker.checkerHarnessHash,
-      },
-    ],
-  };
-  write(
-    join(evidence, `checker-history-${String(revision).padStart(3, "0")}.json`),
-    original,
-  );
-  cpSync(live, evidence, { recursive: true });
-  if (task.rubric)
+    if (original.agent === "reference") metrics.usage.partial = false;
+    if (original.agentFailure) {
+      outcome.pass = false;
+      outcome.agentFailure = original.agentFailure;
+    }
+    const result = {
+      ...original,
+      outcome,
+      metrics,
+      status:
+        outcome.error?.kind === "checker-error"
+          ? "checker-error"
+          : original.shimErrors?.length
+            ? "infrastructure-failure"
+            : "complete",
+      checkerRechecks: revision,
+      checkerHarnessHash: checker.checkerHarnessHash,
+      checkerHash: checker.checkerHash,
+      checkerTaskTreeHash,
+      forceRecheck: forceRecheck || original.forceRecheck || false,
+      checkerRecheckHistory: [
+        ...(original.checkerRecheckHistory ?? []),
+        {
+          revision,
+          forced: forceRecheck,
+          taskTreeHash: checkerTaskTreeHash,
+          harnessHash: checker.checkerHarnessHash,
+        },
+      ],
+    };
     write(
-      join(evidence, "judge-packet.json"),
-      judgePacket({
-        finalMessage: metrics.finalMessage,
-        sourceDiff: ctx.sourceDiff,
-        project: ctx.project,
-        runtime: ctx.runtime,
-        task,
-      }),
+      join(
+        evidence,
+        `checker-history-${String(revision).padStart(3, "0")}.json`,
+      ),
+      original,
     );
-  write(join(evidence, "check.json"), outcome);
-  write(join(evidence, "score.json"), metrics);
-  if (result.status !== "checker-error" && !stored.keep) {
-    result.workspace = null;
-    rmSync(work, { recursive: true, force: true });
+    cpSync(live, evidence, { recursive: true });
+    if (task.rubric)
+      write(
+        join(evidence, "judge-packet.json"),
+        judgePacket({
+          finalMessage: metrics.finalMessage,
+          sourceDiff: ctx.sourceDiff,
+          project: ctx.project,
+          runtime: ctx.runtime,
+          task,
+          source,
+        }),
+      );
+    write(join(evidence, "check.json"), outcome);
+    write(join(evidence, "score.json"), metrics);
+    if (result.status !== "checker-error" && !stored.keep) {
+      result.workspace = null;
+      rmSync(work, { recursive: true, force: true });
+    }
+    write(join(evidence, "manifest.json"), result);
+    return result;
+  } finally {
+    try {
+      source?.close();
+    } finally {
+      if (scratch) rmSync(scratch, { recursive: true, force: true });
+    }
   }
-  write(join(evidence, "manifest.json"), result);
-  return result;
 }
 async function retryWait(ms, control) {
   const until = Date.now() + ms;
@@ -1662,6 +1800,7 @@ async function main() {
       if (action.kind === "recheck")
         return recheckRun({
           forceRecheck: values["force-recheck"],
+          prepared,
           evidence: join(
             base,
             `attempt-${String(prior.at(-1).attempt).padStart(3, "0")}`,

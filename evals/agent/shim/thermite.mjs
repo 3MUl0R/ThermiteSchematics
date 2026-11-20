@@ -15,7 +15,7 @@ import {
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { snapshot, diff } from "./eval-snapshot.mjs";
-import { fileState, sealEntry } from "./eval-audit.mjs";
+import { bunConfig, fileState, sealEntry } from "./eval-audit.mjs";
 import { secretValues, redactSecrets } from "./eval-auth.mjs";
 const real = fileURLToPath(new URL("./thermite.real.mjs", import.meta.url)),
   runtime = dirname(real);
@@ -169,7 +169,13 @@ let result;
 try {
   child = spawn(
     process.execPath,
-    ["--preload", join(runtime, "eval-observe.mjs"), real, ...argv],
+    [
+      ...bunConfig(),
+      "--preload",
+      join(runtime, "eval-observe.mjs"),
+      real,
+      ...argv,
+    ],
     {
       stdio: [stdin === null ? "inherit" : "pipe", "inherit", "inherit"],
       env: { ...process.env, THERMITE_EVAL_CAPTURE: capture },

@@ -13,6 +13,7 @@ import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
+import { projectReader } from "./capture-files.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const moduleURL = (path) => pathToFileURL(join(root, path)).href;
@@ -133,10 +134,15 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
         .replace("return {pass:", "return {forcedCode:true,pass:"),
     );
 
-    await expect(recheckRun({ evidence })).rejects.toThrow(
+    const context = { path: prepared, commit: "test-adapter" };
+    await expect(recheckRun({ evidence, prepared: context })).rejects.toThrow(
       /Task directory changed/,
     );
-    const result = await recheckRun({ evidence, forceRecheck: true });
+    const result = await recheckRun({
+      evidence,
+      forceRecheck: true,
+      prepared: context,
+    });
     expect(result).toMatchObject({
       attempt: 1,
       checkerRechecks: 1,
@@ -181,8 +187,9 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
     const binary = Buffer.from("AA/GPT/A", "base64");
     writeFileSync(join(work, "drawings/provider.pdf"), binary);
-    const make = () =>
+    const make = (source = null) =>
       judgePacket({
+        source,
         project: work,
         runtime: "/runtime",
         finalMessage:
@@ -194,7 +201,13 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
       expect(make).toThrow("unavailable on Windows");
       return;
     }
-    const packet = make();
+    const source = projectReader(work);
+    let packet;
+    try {
+      packet = make(source);
+    } finally {
+      source.close();
+    }
     const text = JSON.stringify({
       ...packet,
       outputs: Object.fromEntries(

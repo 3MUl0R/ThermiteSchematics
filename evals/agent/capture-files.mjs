@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { dlopen, FFIType } from "bun:ffi";
+import { CString, dlopen, FFIType } from "bun:ffi";
 import {
   closeSync,
   constants,
   fstatSync,
   lstatSync,
   openSync,
-  readdirSync,
   readFileSync,
   realpathSync,
 } from "node:fs";
@@ -34,26 +33,64 @@ function directoryIdentity(path, expected) {
   return current;
 }
 
-let openat;
-function openRelative(dir, name, flags) {
-  // This read-only call does not take openat's optional creation mode.
-  openat ??= dlopen(
-    process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6",
-    {
-      openat: {
-        args: [FFIType.i32, FFIType.ptr, FFIType.i32],
-        returns: FFIType.i32,
-      },
+let libc;
+const darwin = process.platform === "darwin";
+// Intel macOS names the 64-bit-inode directory calls with a suffix.
+const inode64 = darwin && process.arch === "x64" ? "$INODE64" : "";
+function lib() {
+  // This read-only openat call does not take its optional creation mode.
+  libc ??= dlopen(darwin ? "libSystem.B.dylib" : "libc.so.6", {
+    openat: {
+      args: [FFIType.i32, FFIType.ptr, FFIType.i32],
+      returns: FFIType.i32,
     },
-  ).symbols.openat;
-  const fd = openat(dir, Buffer.from(name + "\0"), flags);
+    ["fdopendir" + inode64]: { args: [FFIType.i32], returns: FFIType.ptr },
+    ["readdir" + inode64]: { args: [FFIType.ptr], returns: FFIType.ptr },
+    closedir: { args: [FFIType.ptr], returns: FFIType.i32 },
+  }).symbols;
+  return libc;
+}
+function openRelative(dir, name, flags) {
+  const fd = lib().openat(dir, Buffer.from(name + "\0"), flags);
   assert(fd >= 0, inputError);
   return fd;
+}
+// Names in an open directory. The directory takes ownership of fd. The name
+// follows d_ino, d_seekoff, d_reclen, d_namlen and d_type on macOS, and
+// d_ino, d_off, d_reclen and d_type on Linux.
+function listDescriptor(fd) {
+  const symbols = lib(),
+    dir = symbols["fdopendir" + inode64](fd);
+  if (!dir) {
+    closeSync(fd);
+    assert.fail("Project directory could not be listed");
+  }
+  const names = [];
+  try {
+    for (let entry; (entry = symbols["readdir" + inode64](dir));) {
+      const name = new CString(entry, darwin ? 21 : 19).toString();
+      if (name !== "." && name !== "..") names.push(name);
+    }
+  } finally {
+    symbols.closedir(dir);
+  }
+  return names;
+}
+// Project-relative components, never empty, "." or "..".
+function components(rel) {
+  const parts = rel.split(sep);
+  assert(
+    parts.every(
+      (part) => part && part !== "." && part !== ".." && !part.includes("\0"),
+    ),
+    inputError,
+  );
+  return parts;
 }
 
 // Cleanup tracks every descriptor before closing another, so a close that
 // throws never strands a child or the opened file.
-function openDescendant(rootFd, parts) {
+function openDescendant(rootFd, parts, finalFlags = 0) {
   let dir = rootFd,
     fd;
   try {
@@ -62,7 +99,7 @@ function openDescendant(rootFd, parts) {
       dir = openRelative(parent, part, readFlags | O_DIRECTORY);
       if (parent !== rootFd) closeSync(parent);
     }
-    fd = openRelative(dir, parts.at(-1), readFlags);
+    fd = openRelative(dir, parts.at(-1), readFlags | finalFlags);
   } finally {
     try {
       if (dir !== rootFd) closeSync(dir);
@@ -74,17 +111,30 @@ function openDescendant(rootFd, parts) {
   return fd;
 }
 
-export function projectReader(project) {
+// `expected` is a root identity recorded earlier; a different root is refused.
+export function projectReader(project, expected) {
   assert(
     process.platform === "darwin" || process.platform === "linux",
     windowsError,
   );
   const root = realpathSync(project);
   const identity = directoryIdentity(root);
+  assert(
+    !expected ||
+      (root === expected.path &&
+        String(identity.dev) === expected.dev &&
+        String(identity.ino) === expected.ino),
+    "Project root was replaced",
+  );
   const rootFd = openSync(root, readFlags | O_DIRECTORY);
   try {
     assert(sameFile(fdStat(rootFd), identity), "Project changed");
     return {
+      identity: {
+        path: root,
+        dev: String(identity.dev),
+        ino: String(identity.ino),
+      },
       path(name) {
         const rel = relative(root, resolve(root, name));
         assert(
@@ -97,11 +147,14 @@ export function projectReader(project) {
         );
         return rel;
       },
+      // Absence is false; any other inspection error throws.
       has(rel) {
+        components(rel);
         directoryIdentity(root, identity);
         return !!stat(join(root, rel));
       },
       read(rel) {
+        const parts = components(rel);
         directoryIdentity(root, identity);
         const path = join(root, rel);
         const expected = stat(path);
@@ -109,7 +162,7 @@ export function projectReader(project) {
           ordinaryFile(expected) && realpathSync(path) === path,
           inputError,
         );
-        const fd = openDescendant(rootFd, rel.split(sep));
+        const fd = openDescendant(rootFd, parts);
         try {
           const opened = fdStat(fd);
           const verifyPath = () => {
@@ -138,31 +191,12 @@ export function projectReader(project) {
           closeSync(fd);
         }
       },
-      // Names in a project directory reached without following links. Node
-      // cannot list a descriptor, so the listing is bracketed by checks that
-      // the pathname is still that directory; read() confines each entry.
+      // Names in a project directory reached without following links, read
+      // from its descriptor; read() confines each entry.
       list(rel) {
-        directoryIdentity(root, identity);
-        const path = join(root, rel);
-        const fd = openDescendant(rootFd, rel.split(sep));
-        try {
-          const opened = fdStat(fd);
-          const verifyPath = () => {
-            directoryIdentity(root, identity);
-            assert(
-              opened.isDirectory() &&
-                sameFile(stat(path), opened) &&
-                realpathSync(path) === path,
-              "Project directory must be ordinary inside project",
-            );
-          };
-          verifyPath();
-          const names = readdirSync(path);
-          verifyPath();
-          return names;
-        } finally {
-          closeSync(fd);
-        }
+        return listDescriptor(
+          openDescendant(rootFd, components(rel), O_DIRECTORY),
+        );
       },
       close() {
         closeSync(rootFd);

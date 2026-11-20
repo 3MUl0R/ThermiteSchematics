@@ -1,4 +1,5 @@
 import { sourceDocuments } from "./source-files.mjs";
+import { bunConfig } from "./audit.mjs";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -22,12 +23,17 @@ export const uid = (key) => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 };
 export function cli(ctx, ...args) {
-  const result = spawnSync(process.execPath, [ctx.thermite, ...args], {
-    cwd: ctx.project,
-    env: ctx.env ?? process.env,
-    encoding: "utf8",
-    maxBuffer: 64 << 20,
-  });
+  const env = ctx.env ?? process.env;
+  const result = spawnSync(
+    process.execPath,
+    [...bunConfig(env), ctx.thermite, ...args],
+    {
+      cwd: ctx.project,
+      env,
+      encoding: "utf8",
+      maxBuffer: 64 << 20,
+    },
+  );
   if (result.error) throw result.error;
   return result;
 }
