@@ -332,6 +332,8 @@ function relabel(line, mode) {
 function projectBytes(source, path) {
   return source.absentFile(path) ? null : source.read(path);
 }
+// Test seams for filesystem transitions that cannot otherwise be timed.
+export const runHooks = {};
 // Node offers no descriptor-relative, no-follow open on Windows.
 const confinedPlatform = ["darwin", "linux"].includes(process.platform);
 export const windowsUnavailable =
@@ -474,10 +476,12 @@ export function judgePacket({
   runtime,
   task,
   source,
+  rootRefused = false,
 }) {
   // The project is agent-written. Artifacts are read without following links,
   // through a reader whose root was pinned before the agent started; anything
-  // else is listed as refused.
+  // else is listed as refused. `rootRefused` is a root loss the caller already
+  // detected: the packet refuses the whole root without reading the project.
   assert(confinedPlatform, windowsUnavailable);
   const outputs = {},
     binaryOutputs = [],
@@ -489,45 +493,47 @@ export function judgePacket({
       refusedOutputs.push(rel);
     }
   };
-  try {
-    for (const name of [
-      "drawings",
-      "issue.md",
-      "review-notes.md",
-      "requirement-matrix.json",
-      "friction.md",
-    ]) {
-      if (!source.has(name)) continue;
-      if (name !== "drawings") {
-        const bytes = take(name);
-        if (bytes) outputs[name] = bytes.toString("utf8");
-        continue;
+  if (rootRefused) refusedOutputs.push(".");
+  else
+    try {
+      for (const name of [
+        "drawings",
+        "issue.md",
+        "review-notes.md",
+        "requirement-matrix.json",
+        "friction.md",
+      ]) {
+        if (!source.has(name)) continue;
+        if (name !== "drawings") {
+          const bytes = take(name);
+          if (bytes) outputs[name] = bytes.toString("utf8");
+          continue;
+        }
+        let files;
+        try {
+          files = source.list(name).sort();
+        } catch {
+          refusedOutputs.push(name);
+          continue;
+        }
+        for (const file of files) {
+          if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
+          const rel = `drawings/${file}`,
+            bytes = take(rel);
+          if (!bytes) continue;
+          outputs[rel] = file.endsWith(".pdf")
+            ? bytes.toString("base64")
+            : bytes.toString("utf8");
+          if (file.endsWith(".pdf")) binaryOutputs.push(rel);
+        }
       }
-      let files;
-      try {
-        files = source.list(name).sort();
-      } catch {
-        refusedOutputs.push(name);
-        continue;
-      }
-      for (const file of files) {
-        if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
-        const rel = `drawings/${file}`,
-          bytes = take(rel);
-        if (!bytes) continue;
-        outputs[rel] = file.endsWith(".pdf")
-          ? bytes.toString("base64")
-          : bytes.toString("utf8");
-        if (file.endsWith(".pdf")) binaryOutputs.push(rel);
-      }
+    } catch {
+      // An entry that cannot be inspected, or a replaced root, refuses the
+      // project as a whole.
+      for (const key of Object.keys(outputs)) delete outputs[key];
+      binaryOutputs.length = 0;
+      refusedOutputs.splice(0, Infinity, ".");
     }
-  } catch {
-    // An entry that cannot be inspected, or a replaced root, refuses the
-    // project as a whole.
-    for (const key of Object.keys(outputs)) delete outputs[key];
-    binaryOutputs.length = 0;
-    refusedOutputs.splice(0, Infinity, ".");
-  }
   const blindText = (text) =>
     text
       .replaceAll(project, "<project>")
@@ -954,6 +960,7 @@ export async function runOne({
     // still records the refusal.
     if (!lstatSync(project, { throwIfNoEntry: false })?.isDirectory()) {
       rootLost = true;
+      runHooks.afterRootLoss?.(project);
       throw new Error(
         "Project root is missing or no longer a directory after the agent exited; the run cannot be scored",
       );
@@ -1257,6 +1264,7 @@ export async function runOne({
     // replaced still publishes the whole-root refusal.
     if (task?.rubric && source && finalMessage !== undefined)
       try {
+        // A detected loss stands even if the directory comes back later.
         if (rootLost || !source.intact())
           save(
             "judge-packet.json",
@@ -1267,6 +1275,7 @@ export async function runOne({
               runtime,
               task,
               source,
+              rootRefused: true,
             }),
           );
       } catch {}

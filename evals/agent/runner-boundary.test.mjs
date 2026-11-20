@@ -20,7 +20,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { judgePacket, recheckRun, runOne, selectedDiff } from "./run.mjs";
+import {
+  judgePacket,
+  recheckRun,
+  runHooks,
+  runOne,
+  selectedDiff,
+} from "./run.mjs";
 import { projectReader } from "./capture-files.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -475,6 +481,40 @@ it("a run whose project root was replaced records the whole-root refusal", async
     expect(packet.refusedOutputs).toEqual(["."]);
     expect(JSON.stringify(packet)).not.toContain("copied notes");
   } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}, 60000);
+
+it("a detected root loss stays refused when the directory is restored before collection", async () => {
+  if (!confined) return;
+  const work = temporary("eval-restored-root-");
+  try {
+    const evidence = join(work, "evidence");
+    const { taskDir, context } = fixture(
+      work,
+      { id: "restored-root", rubric: ["Judge the outputs"] },
+      {
+        "reference.mjs": `import{renameSync,writeFileSync}from"node:fs";export default ctx=>{writeFileSync(ctx.project+"/friction.md","restored notes");renameSync(ctx.project,ctx.project+".gone");writeFileSync(ctx.project,"a file now");return "Reference complete";}`,
+        "check.mjs": `export default ()=>({pass:true});`,
+      },
+    );
+    // Between the harness's check and packet collection, the pinned
+    // directory returns to its path.
+    runHooks.afterRootLoss = (project) => {
+      rmSync(project);
+      renameSync(project + ".gone", project);
+    };
+    const run = await runOne({ taskDir, prepared: context, evidence });
+    expect(run.status).toBe("infrastructure-failure");
+    const packet = JSON.parse(
+      readFileSync(join(evidence, "judge-packet.json"), "utf8"),
+    );
+    expect(packet.outputs).toEqual({});
+    expect(packet.sourceDiff).toBeNull();
+    expect(packet.refusedOutputs).toEqual(["."]);
+    expect(JSON.stringify(packet)).not.toContain("restored notes");
+  } finally {
+    delete runHooks.afterRootLoss;
     rmSync(work, { recursive: true, force: true });
   }
 }, 60000);
