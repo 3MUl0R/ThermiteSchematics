@@ -24,12 +24,11 @@ it.each(["text-below-minimum-em", "iso-cap-height-policy"])(
   async (kind) => {
     const c = await cliFixture();
     try {
-      for (const name of ["node_modules", "packages"])
-        await symlink(
-          fileURLToPath(new URL(`../../${name}`, import.meta.url)),
-          join(c.root, name),
-          "junction",
-        );
+      await symlink(
+        fileURLToPath(new URL("../../packages", import.meta.url)),
+        join(c.root, "packages"),
+        "junction",
+      );
       await mkdir(join(c.root, "scripts"));
       await copyFile(
         new URL("../../scripts/stamp-drawing-crop.mjs", import.meta.url),

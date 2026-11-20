@@ -124,16 +124,66 @@ function readLimits(path) {
   return { claude: limits.claude, codex: limits.codex };
 }
 
-function atomicJson(path, value) {
+function refreshLimits(path, status, save) {
+  let next;
+  try {
+    next = readLimits(path);
+  } catch (error) {
+    const message = `Ignoring invalid limits file; retaining last valid limits: ${error.message}`;
+    if (status.limitsFile.warning?.message !== message) {
+      status.limitsFile.warning = { message, at: now() };
+      process.stderr.write(`library-batch: ${message}\n`);
+      save();
+    }
+    return;
+  }
+  if (
+    next.claude !== status.concurrency.claude ||
+    next.codex !== status.concurrency.codex ||
+    status.limitsFile.warning
+  ) {
+    status.concurrency = next;
+    status.limitsFile.updatedAt = now();
+    status.limitsFile.warning = null;
+    save();
+  }
+}
+
+function atomicJson(
+  path,
+  value,
+  { renameStatus = renameSync, platform = process.platform } = {},
+) {
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   const fd = openSync(temporary, "wx", 0o600);
   try {
-    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+    try {
+      writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    for (let attempt = 0; ; attempt++) {
+      try {
+        renameStatus(temporary, path);
+        return;
+      } catch (error) {
+        // Windows readers and scanners can briefly block atomic replacement.
+        if (
+          platform !== "win32" ||
+          !["EACCES", "EBUSY", "EPERM"].includes(error.code) ||
+          attempt === 9
+        )
+          throw error;
+        Bun.sleepSync(Math.min(25 * (attempt + 1), 100));
+      }
+    }
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {}
+    throw error;
   }
-  renameSync(temporary, path);
 }
 
 function alive(pid) {
@@ -508,7 +558,7 @@ async function runJob(job, record, options, save, control) {
 export async function runBatch(options, dependencies = {}) {
   const batch = realpathSync(options.batch);
   const { queue, integrity } = readQueue(batch);
-  let limits = options.limitsFile
+  const limits = options.limitsFile
     ? readLimits(options.limitsFile)
     : { claude: options.claude, codex: options.codex };
   if (options.dryRun) {
@@ -533,7 +583,7 @@ export async function runBatch(options, dependencies = {}) {
   let wakeScheduler;
   const save = () => {
     status.updatedAt = now();
-    atomicJson(statusPath, status);
+    atomicJson(statusPath, status, dependencies);
   };
   const onSignal = (signal) => {
     interrupted = true;
@@ -628,35 +678,14 @@ export async function runBatch(options, dependencies = {}) {
     const counts = { claude: 0, codex: 0 };
     const records = new Map(status.jobs.map((record) => [record.id, record]));
     while (pending.length || active.size) {
-      if (options.limitsFile && !interrupted) {
-        try {
-          const next = readLimits(options.limitsFile);
-          if (
-            next.claude !== limits.claude ||
-            next.codex !== limits.codex ||
-            status.limitsFile.warning
-          ) {
-            limits = next;
-            status.concurrency = limits;
-            status.limitsFile.updatedAt = now();
-            status.limitsFile.warning = null;
-            save();
-          }
-        } catch (error) {
-          const message = `Ignoring invalid limits file; retaining last valid limits: ${error.message}`;
-          if (status.limitsFile.warning?.message !== message) {
-            status.limitsFile.warning = { message, at: now() };
-            process.stderr.write(`library-batch: ${message}\n`);
-            save();
-          }
-        }
-      }
+      if (options.limitsFile && !interrupted)
+        refreshLimits(options.limitsFile, status, save);
       if (!interrupted) {
         for (let index = 0; index < pending.length;) {
           const job = pending[index];
           if (
             status.pausedBackends[job.backend] ||
-            counts[job.backend] >= limits[job.backend]
+            counts[job.backend] >= status.concurrency[job.backend]
           ) {
             index++;
             continue;

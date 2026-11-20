@@ -1,16 +1,19 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Production loading rejects links. macOS /var and /tmp aliases must be
 // canonicalized before creating test fixtures beneath the temporary directory.
 const temporary = realpathSync(tmpdir());
 function runTests(selected, { cwd = process.cwd(), env = process.env } = {}) {
-  // Opt in for focused runs or the full check. coverage/ is already ignored.
-  const timings = env.THERMITE_TEST_TIMINGS === "1";
-  if (timings) mkdirSync(join(cwd, "coverage"), { recursive: true });
+  // CI can write outside a temporary checkout so its report survives cleanup.
+  const { THERMITE_TEST_TIMINGS_FILE: timingFile, ...workerEnv } = env;
+  const timings =
+    timingFile ||
+    (env.THERMITE_TEST_TIMINGS === "1" ? "coverage/test-timings.json" : "");
+  if (timings) mkdirSync(dirname(resolve(cwd, timings)), { recursive: true });
   return spawnSync(
     process.execPath,
     [
@@ -31,7 +34,7 @@ function runTests(selected, { cwd = process.cwd(), env = process.env } = {}) {
         ? [
             "--reporter=default",
             "--reporter=json",
-            "--outputFile.json=coverage/test-timings.json",
+            `--outputFile.json=${resolve(cwd, timings)}`,
           ]
         : []),
       ...selected,
@@ -40,7 +43,8 @@ function runTests(selected, { cwd = process.cwd(), env = process.env } = {}) {
       cwd,
       stdio: "inherit",
       env: {
-        ...env,
+        // Nested contributor and docs runs own their own result files.
+        ...workerEnv,
         TMPDIR: temporary,
         TMP: temporary,
         TEMP: temporary,

@@ -27,6 +27,9 @@ pull requests targeting `release` and pushes to `release`. A parallel
 three systems. Manual runs also
 require the `release` branch. Pull requests and merges into `dev` skip this
 workflow; contributors still run the local checks before submitting changes.
+Both CI jobs upload a Vitest JSON report with per-test durations when the suite
+finishes. Set `THERMITE_TEST_TIMINGS=1` with a local check to write the same
+report to `coverage/test-timings.json`.
 Linux network-disabled acceptance uses a matching-architecture container;
 Windows ARM64 and non-glibc Linux systems have not been validated. The packer
 builds for its current OS and architecture; it does not cross-compile.

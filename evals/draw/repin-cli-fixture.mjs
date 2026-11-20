@@ -5,6 +5,7 @@ import {
   readdir,
   copyFile,
   cp,
+  symlink,
   writeFile,
   rm,
 } from "node:fs/promises";
@@ -24,6 +25,11 @@ export async function cliFixture({ survivor = false } = {}) {
   await mkdir(kit, { recursive: true });
   await mkdir(out);
   const source = fileURLToPath(new URL("./", import.meta.url));
+  await symlink(
+    fileURLToPath(new URL("../../node_modules", import.meta.url)),
+    join(root, "node_modules"),
+    "junction",
+  );
   for (const e of await readdir(source))
     if (e.endsWith(".mjs")) await copyFile(join(source, e), join(kit, e));
   await cp(join(source, "measurement"), join(kit, "measurement"), {
@@ -56,15 +62,18 @@ export async function cliFixture({ survivor = false } = {}) {
   c.reportSha256 = hash(json(c.report));
   await writeFile(join(out, "report.json"), json(c.report));
   await writeFile(join(out, "inventory.json"), json(reviewInventory(c)));
+  const runScript = (script, ...args) =>
+    spawnSync(
+      process.execPath,
+      ["run", "--no-install", join(kit, script), ...args],
+      { cwd: root, encoding: "utf8" },
+    );
   return {
     root,
     out,
     context: c,
-    run: (...args) =>
-      spawnSync("bun", [join(kit, "repin.mjs"), ...args], {
-        cwd: root,
-        encoding: "utf8",
-      }),
+    run: (...args) => runScript("repin.mjs", ...args),
+    runScript,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
 }

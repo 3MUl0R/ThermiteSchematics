@@ -16,6 +16,25 @@ import { readRecordChain, verifyRecordChain } from "./repin-record-chain.mjs";
 import { payloadBytes, legacyRecord } from "./repin-record-policy.mjs";
 import { hash, json } from "./support.mjs";
 import { gunzipSync } from "node:zlib";
+
+let archivedChain;
+async function d1Chain() {
+  // Verify the archive once, then give each mutation test its own metadata.
+  const { pins, records } = await (archivedChain ??= readRecordChain(
+    fileURLToPath(new URL("./repins", import.meta.url)),
+    fileURLToPath(new URL("./expectations.mjs", import.meta.url)),
+  ));
+  const d1 = records.get("92");
+  return {
+    pins: structuredClone(pins),
+    records: new Map(records).set("92", {
+      ...d1,
+      record: structuredClone(d1.record),
+      files: new Map(d1.files),
+    }),
+  };
+}
+
 function grouped() {
   const c = recordFixture(),
     s = c.signed,
@@ -232,12 +251,8 @@ it("D1 raw-text grandfathering needs its exact signed hash", () => {
 it.each(["recordSha256", "baseCommit"])(
   "pins D1's immutable %s even if metadata and row agree",
   async (field) => {
-    const { pins, records } = await readRecordChain(
-      fileURLToPath(new URL("./repins", import.meta.url)),
-      fileURLToPath(new URL("./expectations.mjs", import.meta.url)),
-    );
-    const p = structuredClone(pins),
-      r = records.get("92");
+    const { pins: p, records } = await d1Chain();
+    const r = records.get("92");
     if (field === "baseCommit") {
       r.record.baseCommit = p.records[0].baseCommit = "3".repeat(40);
       r.files.set("record.json", Buffer.from(json(r.record)));
@@ -253,10 +268,7 @@ it.each(["recordSha256", "baseCommit"])(
   },
 );
 it("keeps D1 first even when another record's PR sorts earlier", async () => {
-  const { pins, records } = await readRecordChain(
-    fileURLToPath(new URL("./repins", import.meta.url)),
-    fileURLToPath(new URL("./expectations.mjs", import.meta.url)),
-  );
+  const { pins, records } = await d1Chain();
   pins.records.unshift({ ...pins.records[0], pr: 1 });
   records.set("1", records.get("92"));
   expect(() => verifyRecordChain(pins, records, "irrelevant")).toThrow(
@@ -301,10 +313,7 @@ it("the crop builder refuses repeated paths before constructing an index", async
   ).toThrow(/Duplicate indexed/);
 });
 it("D1 base pin has its own literal refusal", async () => {
-  const { pins, records } = await readRecordChain(
-    fileURLToPath(new URL("./repins", import.meta.url)),
-    fileURLToPath(new URL("./expectations.mjs", import.meta.url)),
-  );
+  const { pins, records } = await d1Chain();
   pins.records[0].baseCommit = "3".repeat(40);
   expect(() =>
     verifyRecordChain(
