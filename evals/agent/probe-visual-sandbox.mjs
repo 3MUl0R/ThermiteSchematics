@@ -1,8 +1,10 @@
-// Non-model preflight: sandbox writes the request and reads the broker's PNGs.
+// Non-model preflight: sandbox writes the request and reads the broker's PNGs,
+// but neither it nor a process it leaves behind can write evidence.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,19 +12,20 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { freshEnvironment } from "./launch.mjs";
 import { visualBroker } from "./visual-capture.mjs";
 export async function probe(output) {
-  const work = realpathSync(
-      mkdtempSync(join(tmpdir(), "thermite-visual-probe-")),
-    ),
+  // The same layout as run.mjs: the run directory under /tmp is the agent's
+  // TMPDIR, and live evidence is in the harness home.
+  const work = realpathSync(mkdtempSync("/tmp/thermite-agent-eval-")),
     project = join(work, "project"),
-    evidence = join(work, "evidence");
+    evidence = realpathSync(
+      mkdtempSync(join(homedir(), ".thermite-agent-evidence-")),
+    );
   mkdirSync(project);
-  mkdirSync(evidence);
   const env = freshEnvironment(join(work, "isolated"));
   delete env.CODEX_API_KEY;
   delete env.OPENAI_API_KEY;
@@ -66,12 +69,34 @@ export async function probe(output) {
       `require('fs').writeFileSync('visual-captures/01.png','agent bytes')`,
     );
     assert.match(written.stderr, /EPERM|EACCES/, "Sandbox wrote broker output");
+    // The run directory is writable, which is why evidence lives elsewhere.
+    const runDir = child(`require('fs').writeFileSync('../run-dir-probe','x')`);
+    assert.equal(runDir.status, 0, runDir.stderr);
+    const evidenceWrite = child(
+      `require('fs').writeFileSync(${JSON.stringify(join(evidence, "probe"))},'x')`,
+    );
+    assert.match(
+      evidenceWrite.stderr,
+      /EPERM|EACCES/,
+      "Sandbox wrote evidence",
+    );
+    // A detached descendant outlives the sandboxed command and stays confined.
+    const late = join(evidence, "late-probe");
+    const survivor = child(
+      `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(
+        `setTimeout(()=>{const fs=require('fs');fs.writeFileSync('../survivor-ran','x');fs.writeFileSync(${JSON.stringify(late)},'x')},1000)`,
+      )}],{detached:true,stdio:'ignore'}).unref()`,
+    );
+    assert.equal(survivor.status, 0, survivor.stderr);
+    await new Promise((r) => setTimeout(r, 3000));
+    assert(existsSync(join(work, "survivor-ran")), "Descendant did not run");
+    assert(!existsSync(late), "A surviving descendant wrote evidence");
     mkdirSync(join(resolve(output), "visual-captures"), { recursive: true });
     for (const path of [
       "visual-captures/result.json",
       ...result.files.map(({ output }) => output),
     ])
-      cpSync(join(project, path), join(resolve(output), path));
+      cpSync(join(evidence, path), join(resolve(output), path));
     writeFileSync(
       join(resolve(output), "probe.json"),
       JSON.stringify(
@@ -80,6 +105,9 @@ export async function probe(output) {
           requestExit: request.status,
           pngReadExit: viewed.status,
           outputWriteExit: written.status,
+          runDirWriteExit: runDir.status,
+          evidenceWriteExit: evidenceWrite.status,
+          survivorWroteEvidence: existsSync(late),
           readBytes: JSON.parse(viewed.stdout),
           capture: result,
         },
@@ -88,11 +116,12 @@ export async function probe(output) {
       ) + "\n",
     );
     console.log(
-      "Sandbox request and both PNG reads passed; broker used Playwright without a listener.",
+      "Sandbox request and both PNG reads passed; neither the sandbox nor a surviving descendant wrote evidence.",
     );
   } finally {
     if (stop) await stop();
     rmSync(work, { recursive: true, force: true });
+    rmSync(evidence, { recursive: true, force: true });
   }
 }
 if (

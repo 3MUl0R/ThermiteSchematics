@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -456,9 +456,13 @@ export async function runOne({
   const work = ownTemp("thermite-agent-eval-"),
     runtime = join(work, "runtime"),
     project = join(work, "project"),
-    live = join(work, "evidence"),
+    // The run directory is the agent's TMPDIR and under /tmp, so a sandboxed
+    // agent or a process it leaves behind can write it. Live evidence stays
+    // in the harness home, outside the sandbox's writable roots.
+    live = realpathSync(
+      mkdtempSync(join(homedir(), ".thermite-agent-evidence-")),
+    ),
     audit = join(work, "audit");
-  mkdirSync(live);
   mkdirSync(audit);
   let authSeed,
     env,
@@ -1019,7 +1023,11 @@ export async function runOne({
       }
     if (manifest?.status === "checker-error" && !keep)
       rmSync(join(work, "isolated"), { recursive: true, force: true });
-    if (existsSync(live)) cpSync(live, evidence, { recursive: true });
+    try {
+      cpSync(live, evidence, { recursive: true });
+    } finally {
+      rmSync(live, { recursive: true, force: true });
+    }
     if (!keep && manifest?.status !== "checker-error")
       rmSync(work, { recursive: true, force: true });
   }

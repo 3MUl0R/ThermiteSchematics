@@ -97,7 +97,9 @@ without an explicit token/key; a paid Claude request was not used for validation
 Fresh environment forwarding is a small allowlist including the five supported
 credential variables. Checkout paths are removed from PATH and asserted absent
 from public agent environment values. Audit paths and TMPDIR point inside the
-run directory, which Codex's workspace sandbox can write. Claude imports the
+run directory, which Codex's workspace sandbox can write. Live evidence is kept
+in the harness home instead; see E2 1.20.3. Claude-agent runs bypass
+permissions as the harness user and have no filesystem boundary. Claude imports the
 project guide through a harness-authored `CLAUDE.md` containing only
 `@AGENTS.md`; Codex loads `AGENTS.md` normally. Assertions reject inherited
 ancestor instructions, user memory/config and unexpected project settings.
@@ -444,8 +446,8 @@ V8. This permission is task metadata, not a general source-read waiver.
 
 For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
 array of 1–4 project-local HTML paths. The running harness writes PNGs and a
-hash-bound receipt to a directory in the harness home, linked from the project
-as `visual-captures/`. The receipt is absent while a capture runs and lists
+hash-bound receipt to `visual-captures/` in the live evidence, which is outside
+the sandbox's writable roots and linked from the project. The receipt is absent while a capture runs and lists
 only the images that capture produced. Wait for it, then open the listed images
 and record findings; crops belong elsewhere, such as `work/`. Chromium loads
 project `.html` snapshots and inline `data:` URLs. Separate CSS, SVG, image and
@@ -920,21 +922,31 @@ origin serves only verified bytes of project `.html` files, each read once per
 request. `data:` URLs still load, and every other request is blocked. The
 receipt hashes the main HTML bytes served to Chromium and the in-memory PNG.
 
-The broker writes only to a directory it creates in the harness home, outside
-the Codex sandbox’s writable roots. Before the agent starts it links
-`visual-captures/` in the project to that directory; an existing entry with
-that name is refused. Each capture removes the old receipt and images, writes
-each new PNG under a temporary name and renames it into place, checks every PNG
-against its hash and writes `result.json` last. The capture format remains
-`thermite-agent-visual-capture/1`. The no-model sandbox probe checks that the
-agent can read the PNGs and cannot write them. A Claude agent runs unsandboxed,
-so this boundary holds only for Codex.
+These boundaries hold only for a sandboxed agent, which today means Codex.
+Claude-agent runs bypass permissions as the harness user, so they have no
+filesystem boundary: the agent can change anything the harness can, including
+evidence and capture outputs.
 
-The run directory, including live evidence, is the agent’s TMPDIR and is
-writable, so the broker copies the receipt and images into evidence only after
-the agent’s process group has exited. That copy creates new files exclusively
-without following links, and checks that the evidence directory is the one
-recorded at launch. A planted name fails the run instead of being trusted.
+A sandboxed agent can write the run directory, because it is the agent's TMPDIR
+and lies under `/tmp`. Live evidence is therefore a separate directory in the
+harness home, outside the sandbox's writable roots, and is copied to the
+evidence output and removed when the run ends. The no-model probe
+(`probe-visual-sandbox.mjs`) records that the sandbox can write the run
+directory but cannot write live evidence or the capture outputs, and that a
+detached descendant still running after the sandboxed command exits cannot
+write evidence either. Keep the evidence output outside `/tmp` for the same
+reason.
+
+The broker publishes into `visual-captures/` in the live evidence, and links
+that directory into the project before the agent starts; an existing
+`visual-captures` entry is refused. Each capture removes the old receipt before
+rendering, then replaces the images, writing each PNG under a temporary name
+and renaming it into place. It checks every PNG against its hash and writes
+`result.json` last, so the evidence never holds a receipt without its images.
+The link is removed when the agent exits. The evidence receipt is now
+`visual-captures/result.json` beside its images, replacing
+`visual-capture.json`. The capture format remains
+`thermite-agent-visual-capture/1`.
 
 On macOS and Linux, the broker reads project files with descriptor-relative
 `openat` calls and `O_NOFOLLOW` on every component. It starts from a project
@@ -943,11 +955,3 @@ link, so a second name for an outside file is refused. This relies on the
 agent being unable to remove that file’s original name. Node offers no
 descriptor-relative open on Windows, so capture is refused there with an
 explicit error receipt.
-
-The source-read scanner still exempts a quoted Markdown here-doc body. When an
-ANSI-C quote, `$[`, a parenthesis or a brace comes before the report header, or
-the text before another here-doc marker is not plain, it also classifies the
-decoded command with the body kept. Each of these constructs can make bash or
-zsh read a fake report header as part of an earlier word or group, so the
-hidden body runs. The second pass can only add a source read, never remove one
-the exempted scan found.

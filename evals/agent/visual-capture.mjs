@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import {
-  closeSync,
-  constants,
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  openSync,
-  readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -15,7 +11,6 @@ import {
   symlinkSync,
   unlinkSync,
   writeFileSync,
-  writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
@@ -24,13 +19,12 @@ import { projectReader, windowsError } from "./capture-files.mjs";
 import { sha256 } from "./snapshot.mjs";
 
 const requestName = "visual-capture.request.json";
-const evidenceName = "visual-capture.json";
 const outputNames = ["01.png", "02.png", "03.png", "04.png"];
 const origin = "https://thermite-capture.invalid";
 const receiptBytes = (result) =>
   Buffer.from(JSON.stringify(result, null, 2) + "\n");
-// Broker-owned directories live in the harness home, outside the agent's
-// writable roots (the project and the run directory used as its TMPDIR).
+// Chromium's profile lives in the harness home, outside the agent's writable
+// roots (the project, the run directory used as its TMPDIR, and /tmp).
 const harnessTemp = (prefix) =>
   mkdtempSync(join(realpathSync(homedir()), prefix));
 
@@ -161,6 +155,7 @@ function publish(outputs, result, captures = []) {
   return result;
 }
 async function captureInto(source, outputs, request) {
+  rmSync(join(outputs, "result.json"), { force: true });
   const captures = await renderHtml(source, request);
   return publish(
     outputs,
@@ -186,44 +181,6 @@ export async function captureHtml(project, request, outputs) {
   }
 }
 
-const { O_CREAT, O_EXCL, O_NOFOLLOW = 0, O_WRONLY } = constants;
-function createExclusive(path, bytes) {
-  const fd = openSync(path, O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY, 0o600);
-  try {
-    for (let offset = 0; offset < bytes.length;)
-      offset += writeSync(fd, bytes, offset, bytes.length - offset);
-  } finally {
-    closeSync(fd);
-  }
-}
-function ordinaryDirectory(path, expected) {
-  const current = lstatSync(path, { bigint: true });
-  assert(
-    current.isDirectory() &&
-      realpathSync(path) === path &&
-      (!expected ||
-        (current.dev === expected.dev && current.ino === expected.ino)),
-    "Visual capture evidence directory changed",
-  );
-  return current;
-}
-// Runs after the agent's process group has exited. Nothing in the run
-// directory may be followed or overwritten: names the agent planted fail.
-function copyEvidence(outputs, evidence, identity) {
-  ordinaryDirectory(evidence, identity);
-  const names = readdirSync(outputs);
-  if (!names.includes("result.json")) return;
-  createExclusive(
-    join(evidence, evidenceName),
-    readFileSync(join(outputs, "result.json")),
-  );
-  const images = join(evidence, "visual-captures");
-  mkdirSync(images);
-  ordinaryDirectory(images);
-  for (const name of outputNames.filter((name) => names.includes(name)))
-    createExclusive(join(images, name), readFileSync(join(outputs, name)));
-}
-
 function linkedOutputs(link, outputs) {
   const current = lstatSync(link, { throwIfNoEntry: false });
   return (
@@ -232,8 +189,9 @@ function linkedOutputs(link, outputs) {
   );
 }
 
-// Before the agent starts, link project/visual-captures to a broker-owned
-// directory. The broker never writes through a path the agent can change.
+// The broker publishes straight into evidence/visual-captures, which the
+// runner keeps outside the sandbox's writable roots, and links it into the
+// project before the agent starts.
 export async function visualBroker(task, project, evidence) {
   if (!task.visualCapture) return async () => {};
   const root = realpathSync(project);
@@ -242,19 +200,14 @@ export async function visualBroker(task, project, evidence) {
     !lstatSync(link, { throwIfNoEntry: false }),
     "visual-captures must not exist before the agent starts",
   );
-  const evidenceDir = realpathSync(evidence);
-  const evidenceIdentity = ordinaryDirectory(evidenceDir);
-  const outputs = harnessTemp(".thermite-visual-out-");
+  const outputs = join(realpathSync(evidence), "visual-captures");
+  mkdirSync(outputs);
   let source, timer, pending, failure;
   const cleanup = () => {
     try {
       if (linkedOutputs(link, outputs)) unlinkSync(link);
     } finally {
-      try {
-        source?.close();
-      } finally {
-        rmSync(outputs, { recursive: true, force: true });
-      }
+      source?.close();
     }
   };
   try {
@@ -285,7 +238,6 @@ export async function visualBroker(task, project, evidence) {
     }
     if (bytes === previous) return;
     previous = bytes;
-    rmSync(join(outputs, "result.json"), { force: true });
     try {
       await captureInto(source, outputs, JSON.parse(bytes));
     } catch (error) {
@@ -308,7 +260,6 @@ export async function visualBroker(task, project, evidence) {
     try {
       await pending;
       if (failure) throw failure;
-      copyEvidence(outputs, evidenceDir, evidenceIdentity);
     } finally {
       cleanup();
     }

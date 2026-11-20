@@ -7,39 +7,18 @@ export function sourceScanInput(
   completed = false,
   laterShell = "",
 ) {
-  return sourceScanInputs(name, values, completed, laterShell).text;
-}
-// `alternate` is the decoded command without the report exemption. It is set
-// when an exempted report header follows a construct that can carry it into
-// an earlier word or group in bash or zsh (ANSI-C quotes, `$[`, parentheses,
-// braces, or one of these or an open quote before another here-doc marker).
-// Callers classify
-// both texts and keep the stronger result, so no read in `text` is lost.
-export function sourceScanInputs(
-  name,
-  values,
-  completed = false,
-  laterShell = "",
-) {
   if (!/^(?:command_execution|bash|shell|exec_command)$/i.test(name))
-    return { text: values.join("\n") };
-  const scans = values.map((input) =>
-    withoutMarkdownBodies(input, completed, laterShell),
-  );
-  const text = scans.map((scan) => scan.text).join("\n");
-  return scans.some((scan) => scan.hidden)
-    ? { text, alternate: values.map(decodedShellBody).join("\n") }
-    : { text };
+    return values.join("\n");
+  return values
+    .map((input) => withoutMarkdownBodies(input, completed, laterShell))
+    .join("\n");
 }
-const opener = /[(){}]|\$['[]/;
 function withoutMarkdownBodies(input, completed, laterShell) {
   const original = literalShellBody(input);
   const decoded = decodedShellBody(input);
   const lines = decoded.split("\n");
   let removed = false,
-    recognized = false,
-    opened = false,
-    hidden = false;
+    recognized = false;
   for (let i = 0; i < lines.length; i++) {
     const header =
       /^\s*cat\s+(>>?)\s*(?:'([^']+\.md)'|"([^"]+\.md)"|([^\s<>;&|]+\.md))\s+<<\s*(['"])([A-Za-z_][A-Za-z0-9_]*)\5\s*$/.exec(
@@ -56,15 +35,13 @@ function withoutMarkdownBodies(input, completed, laterShell) {
           lines[i].indexOf("<<") !== marker.index ||
           lines[i][marker.index - 1] === "<"
         )
-          return { text: original };
-        const prefix = lines[i].slice(0, marker.index);
-        opened ||= opener.test(prefix) || !shellWords(prefix);
+          return original;
         const end = lines.indexOf(marker[2], i + 1);
-        if (end < 0) return { text: original };
+        if (end < 0) return original;
         i = end;
       } else if (!shellWords(lines[i]) || lines[i].endsWith("\\")) {
-        return { text: original };
-      } else opened ||= opener.test(lines[i]);
+        return original;
+      }
       continue;
     }
     const output = header[2] ?? header[3] ?? header[4],
@@ -86,12 +63,9 @@ function withoutMarkdownBodies(input, completed, laterShell) {
       continue;
     }
     removed = true;
-    hidden ||= opened;
     lines[i] = `cat > ${JSON.stringify(output)}`;
     for (let j = i + 1; j <= end; j++) lines[j] = "";
     i = end;
   }
-  return removed || recognized
-    ? { text: lines.filter(Boolean).join("\n"), hidden }
-    : { text: original };
+  return removed || recognized ? lines.filter(Boolean).join("\n") : original;
 }

@@ -50,19 +50,27 @@ function openRelative(dir, name, flags) {
   return fd;
 }
 
+// Cleanup tracks every descriptor before closing another, so a close that
+// throws never strands a child or the opened file.
 function openDescendant(rootFd, parts) {
-  let dir = rootFd;
+  let dir = rootFd,
+    fd;
   try {
     for (const part of parts.slice(0, -1)) {
       const parent = dir;
-      // Track the child first so cleanup closes it if closing the parent throws.
       dir = openRelative(parent, part, readFlags | O_DIRECTORY);
       if (parent !== rootFd) closeSync(parent);
     }
-    return openRelative(dir, parts.at(-1), readFlags);
+    fd = openRelative(dir, parts.at(-1), readFlags);
   } finally {
-    if (dir !== rootFd) closeSync(dir);
+    try {
+      if (dir !== rootFd) closeSync(dir);
+    } catch (error) {
+      if (fd !== undefined) closeSync(fd);
+      throw error;
+    }
   }
+  return fd;
 }
 
 export function projectReader(project) {

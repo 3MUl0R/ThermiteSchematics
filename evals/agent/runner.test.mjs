@@ -1,5 +1,6 @@
 import { it, expect } from "vitest";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
@@ -7,8 +8,8 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { judgePacket } from "./run.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
@@ -62,7 +63,8 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       taskDir = join(work, "task"),
       evidence = join(work, "evidence"),
       ready = join(work, "ready"),
-      referenceCount = join(work, "reference-count");
+      referenceCount = join(work, "reference-count"),
+      paths = join(work, "paths.json");
     mkdirSync(prepared);
     mkdirSync(taskDir);
     writeFileSync(
@@ -81,7 +83,7 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     );
     writeFileSync(
       join(taskDir, "reference.mjs"),
-      `import{replaceObject}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=${JSON.stringify(referenceCount)};writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));replaceObject(ctx,"PS1","description","Pipeline checked");process.exitCode=1;return "Reference complete";}`,
+      `import{replaceObject}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=${JSON.stringify(referenceCount)};writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));writeFileSync(${JSON.stringify(paths)},JSON.stringify({evidence:ctx.evidence,project:ctx.project}));replaceObject(ctx,"PS1","description","Pipeline checked");process.exitCode=1;return "Reference complete";}`,
     );
     writeFileSync(
       join(taskDir, "check.mjs"),
@@ -113,6 +115,13 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       sha256(`Thermite is at {{THERMITE}}.\n\n${task.prompt}`),
     );
     expect(readFileSync(referenceCount, "utf8")).toBe("1");
+    // Live evidence stays outside the run directory and /tmp, which a
+    // sandboxed agent can write, and is removed once copied.
+    const live = JSON.parse(readFileSync(paths, "utf8"));
+    expect(live.evidence.startsWith(realpathSync(homedir()) + sep)).toBe(true);
+    expect(live.evidence.startsWith(dirname(live.project) + sep)).toBe(false);
+    expect(existsSync(live.evidence)).toBe(false);
+    expect(existsSync(join(evidence, "manifest.json"))).toBe(true);
     writeFileSync(ready, "ready");
     writeFileSync(join(taskDir, "changed-context.md"), "Changed checker input");
     const checkFile = join(taskDir, "check.mjs");
