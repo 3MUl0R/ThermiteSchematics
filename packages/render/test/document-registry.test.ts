@@ -1,10 +1,15 @@
+import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { beforeAll, afterAll, expect, it } from "vitest";
+import { compileProject, serializeIr } from "@thermite/compiler";
 import { buildDocumentation } from "@thermite/query";
 import { offViewFixture, parseSvg } from "./off-view-fixtures.js";
 import { tableDrafts } from "../src/packet/reports.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { assembleSheets } from "../src/packet/assembly.js";
 import { issuedDocuments } from "../src/packet/document-registry.js";
+import { renderSchematicPacket } from "../src/sheets.js";
 
 let source: Awaited<ReturnType<typeof offViewFixture>>;
 beforeAll(async () => {
@@ -12,6 +17,62 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await source.dispose();
+});
+
+it("binds requested documents, companions and dependencies to each compiled compact presentation", async () => {
+  const manifestPath = join(source.root, "system.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ ...manifest, presentation: "presentation.json" }),
+  );
+  const hash = (value: unknown) =>
+    createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const digests: string[] = [];
+  for (const value of ["Sample A", "Sample B"]) {
+    await writeFile(
+      join(source.root, "presentation.json"),
+      JSON.stringify({
+        format: "project-presentation/0.3",
+        revision: "TEST A",
+        titleBlock: {
+          fields: { customer: { slot: "customer", label: "CUSTOMER", value } },
+        },
+      }),
+    );
+    const compiled = await compileProject(source.root);
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const result = await renderSchematicPacket(
+      compiled.ir,
+      {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "wiring-view-request/0.1",
+            title: "One wire",
+            conductors: ["W1"],
+          },
+          { format: "documentation-view-request/0.1", kind: "wires" },
+        ],
+      },
+      compiled.presentation,
+    );
+    if (!result.ok) throw Error(JSON.stringify(result.error));
+    const { documents = [], dependencies = [] } = result.value.navigation ?? {};
+    const wires = documents.find((d) => d.kind === "wires" && !d.autoOrigin);
+    expect(wires?.rows.length).toBeGreaterThan(0);
+    expect(documents.some((d) => d.autoOrigin)).toBe(true);
+    expect(dependencies.length).toBeGreaterThan(0);
+    const binding = {
+      snapshotDigest: hash(serializeIr(compiled.ir)),
+      presentationDigest: hash(compiled.presentation),
+      revision: "TEST A",
+    };
+    for (const record of [...documents, ...dependencies])
+      expect(record).toMatchObject(binding);
+    digests.push(wires!.presentationDigest);
+  }
+  expect(new Set(digests).size).toBe(2);
 });
 
 it("requires a visible native header as well as visible body rows", () => {

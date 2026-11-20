@@ -13,10 +13,11 @@ Every dependency and issued document carries `snapshotDigest`,
 `presentationDigest` and `revision`. The snapshot digest uses the existing NAV1
 convention: SHA-256 over `JSON.stringify(serializeIr(ir))`, with the compiler's
 canonical serialized IR string. The presentation digest is SHA-256 over
-`JSON.stringify(compiledPresentation ?? null)`. Revision is the compiled authored
-revision, or exactly `UNSPECIFIED` when absent. It is never an inferred release.
-These digests bind exports; a checker independently loads and verifies the native
-snapshot and presentation.
+`JSON.stringify(compiledPresentation ?? null)`. For compact frames, this is the
+original compiled `project-presentation/0.3`, including its authored title
+fields. Revision is the compiled authored revision, or exactly `UNSPECIFIED`
+when absent. A checker independently loads and verifies the native snapshot and
+presentation.
 
 `dependencies[].id` is `dependency/1/` plus SHA-256 over
 `JSON.stringify([owner.viewKey, owner.noteId])`. The view key uses NAV1's

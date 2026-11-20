@@ -165,6 +165,10 @@ export const workflowAdvice: [string, string][] = [
     "Use `thermite guide drawing-frames` before changing paper frames or title data.",
     "Read-before policy; the topic is resolved offline.",
   ],
+  [
+    "It covers source binding.",
+    "The offline drawing-frames topic links to the document binding contract.",
+  ],
 ];
 
 export async function verifyWorkflowExamples(

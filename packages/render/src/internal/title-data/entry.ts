@@ -45,6 +45,7 @@ export function prepareTitlePacket(
   request: PacketRequest | SchematicPacketRequest,
   presentation: Presentation,
   sources?: TitleSources,
+  authoredPresentation?: Readonly<CompiledProjectPresentation>,
 ) {
   if (
     !record(request) ||
@@ -92,7 +93,7 @@ export function prepareTitlePacket(
     titleBlockLines: source.titleBlock?.lines ?? [],
     ...(source.page ? { page: source.page } : {}),
   };
-  registerTitlePresentation(compiled, context);
+  registerTitlePresentation(compiled, context, authoredPresentation ?? source);
   return { ok: true as const, value: { request: legacy, compiled, context } };
 }
 /** Benchmark entry for the public packet pipeline; absent from root exports. */
@@ -142,12 +143,17 @@ export async function renderTitlePacket(
         titleBlock: { lines: presentation.titleBlockLines },
       })
     : { format: "project-presentation/0.3" };
-  const prepared = prepareTitlePacket(request, raw, {
-    ...(options?.source ? { packet: options.source } : {}),
-    ...(presentation?.compactFrameSource
-      ? { presentation: presentation.compactFrameSource }
-      : {}),
-  });
+  const prepared = prepareTitlePacket(
+    request,
+    raw,
+    {
+      ...(options?.source ? { packet: options.source } : {}),
+      ...(presentation?.compactFrameSource
+        ? { presentation: presentation.compactFrameSource }
+        : {}),
+    },
+    presentation,
+  );
   if (!prepared.ok) return prepared;
   const value = prepared.value;
   return renderPacketWithAdvice(

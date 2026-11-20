@@ -4,7 +4,9 @@ Select `project-presentation/0.3` explicitly in the project's presentation file
 for the compact frame. Existing 0.1, 0.2 and unconfigured projects keep their
 rendering and PDF metadata. Init still creates presentation 0.2. Continuous SVG
 keeps its existing rendering; the frame and packet title data apply to paginated
-SVG, HTML, PDF and JSON exports.
+SVG, HTML, PDF and JSON exports. Issued documents and their dependencies bind to
+the compiled authored presentation, including its compact title fields. See the
+[navigation export contract](navigation-export-contract.md#native-identity-and-source-binding).
 
 Presentation validation can take two passes. If `format` is missing or unknown,
 the first pass returns one E014 naming the accepted versions. Set a supported
