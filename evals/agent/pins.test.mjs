@@ -100,13 +100,18 @@ it("even early infrastructure records retain the effective configuration and key
         agent: "codex",
         ...overrides,
       });
-      const r = await runOne({
+      const attempt = runOne({
         taskDir: join(work, "T01"),
         prepared: { path: join(work, "missing"), commit: "test" },
         evidence,
         agent: "codex",
         ...overrides,
       });
+      if (process.platform === "win32") {
+        await expect(attempt).rejects.toThrow("unavailable on Windows");
+        continue;
+      }
+      const r = await attempt;
       expect(r.status).toBe("infrastructure-failure");
       expect(r).toMatchObject(config);
       expect(r.runKey).toBe(runKey(r));

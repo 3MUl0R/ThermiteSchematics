@@ -208,6 +208,15 @@ function copyRegularFiles(from, to, rel = "") {
     }
   }
 }
+// Whether a regular file is at path; a file where a directory was is absence.
+function fileAt(path) {
+  try {
+    return !!lstatSync(path, { throwIfNoEntry: false })?.isFile();
+  } catch (error) {
+    if (error.code === "ENOTDIR") return false;
+    throw error;
+  }
+}
 // The diff of selected project paths, from the pre-launch copy to their post-run
 // bytes. `read` returns a path's bytes, null when absent, or throws to refuse
 // it. Git never runs in the agent's repository, whose configuration and
@@ -233,7 +242,7 @@ export function selectedDiff({ before, scratch, paths, read }) {
       continue;
     }
     if (bytes) put("new", path, bytes);
-    if (lstatSync(join(before, path), { throwIfNoEntry: false })?.isFile())
+    if (fileAt(join(before, path)))
       put("old", path, readFileSync(join(before, path)));
   }
   const result = spawnSync(
@@ -267,16 +276,15 @@ export function selectedDiff({ before, scratch, paths, read }) {
     !result.error && [0, 1].includes(result.status),
     `Source diff failed: ${result.error?.code ?? result.stderr}`,
   );
-  // Label paths as the project's, as a diff in its repository would.
+  // Label paths as the project's, as a diff in its repository would. Only
+  // header lines name paths; hunks are left alone.
   let header = false;
   const diff = result.stdout
     .split("\n")
     .map((line) => {
       if (line.startsWith("diff --git ")) header = true;
       else if (line.startsWith("@@")) header = false;
-      return header
-        ? line.replace(/(^|[ "])([ab])\/(?:old|new)\//g, "$1$2/")
-        : line;
+      return header ? relabel(line) : line;
     })
     .join("\n")
     .trim();
@@ -287,18 +295,41 @@ export function selectedDiff({ before, scratch, paths, read }) {
     .filter(Boolean)
     .join("\n");
 }
-// Post-run project reads go through the reader pinned before launch. Windows has
-// no such reader, and plain reads there refuse anything but a regular file.
-function projectBytes(source, project, path) {
-  if (source) return source.has(path) ? source.read(path) : null;
-  const status = lstatSync(join(project, path), { throwIfNoEntry: false });
-  if (!status) return null;
-  assert(status.isFile(), `Not an ordinary project file: ${path}`);
-  return readFileSync(join(project, path));
+// A header path field is Git's a/ or b/ prefix, then the synthetic old/ or
+// new/ directory, then the project path, possibly inside C-style quotes. Only
+// that synthetic component is removed; quoting and spaces are kept.
+const field = (text) => text.replace(/^("?[ab]\/)(?:old|new)\//, "$1");
+function relabel(line) {
+  if (line.startsWith("diff --git ")) {
+    // Without renames both fields name one path, so they are equally long.
+    const rest = line.slice(11),
+      half = (rest.length - 1) / 2;
+    return `diff --git ${field(rest.slice(0, half))} ${field(rest.slice(half + 1))}`;
+  }
+  if (line.startsWith("--- ") || line.startsWith("+++ "))
+    return line.slice(0, 4) + field(line.slice(4));
+  const binary = /^Binary files (.*) differ$/.exec(line)?.[1];
+  if (binary === undefined) return line;
+  const empty = "/dev/null",
+    half = (binary.length - 5) / 2;
+  const [from, to] = binary.startsWith(`${empty} and `)
+    ? [empty, binary.slice(empty.length + 5)]
+    : binary.endsWith(` and ${empty}`)
+      ? [binary.slice(0, -empty.length - 5), empty]
+      : [binary.slice(0, half), binary.slice(half + 5)];
+  return `Binary files ${field(from)} and ${field(to)} differ`;
 }
+// Post-run project reads go through the reader pinned before launch. A
+// directory where a file was is an absent file, so a file replaced by a
+// directory, or the reverse, diffs as a deletion and an addition.
+function projectBytes(source, path) {
+  const status = source.has(path);
+  return status && !status.isDirectory() ? source.read(path) : null;
+}
+// Node offers no descriptor-relative, no-follow open on Windows.
 const confinedPlatform = ["darwin", "linux"].includes(process.platform);
-const judgeUnavailable =
-  "Judge packets are unavailable on Windows: project files cannot be read there without following links";
+export const windowsUnavailable =
+  "E2 agent runs and rechecks are unavailable on Windows: project files cannot be read there without following links";
 const children = new Set();
 let stoppingSignal = null;
 function captureSetup(binary, args, options = {}) {
@@ -441,7 +472,7 @@ export function judgePacket({
   // The project is agent-written. Artifacts are read without following links,
   // through a reader whose root was pinned before the agent started; anything
   // else is listed as refused.
-  assert(confinedPlatform, judgeUnavailable);
+  assert(confinedPlatform, windowsUnavailable);
   const outputs = {},
     binaryOutputs = [],
     refusedOutputs = [];
@@ -607,6 +638,8 @@ export async function runOne({
   tasksRoot,
   timeoutMs = 900000,
 }) {
+  // Before any setup or evidence: Windows cannot confine post-run reads.
+  assert(confinedPlatform, windowsUnavailable);
   const runIdentity = harnessIdentity({ tasksDir: tasksRoot });
   if (expectedIdentity)
     assert.deepEqual(
@@ -647,6 +680,7 @@ export async function runOne({
     task,
     initial,
     runtimeBefore,
+    guideBytes,
     scratch,
     source,
     secretList = [];
@@ -662,7 +696,6 @@ export async function runOne({
       !task.context || task.context === context,
       "Task requires --context source",
     );
-    assert(!task.rubric || confinedPlatform, judgeUnavailable);
     await copyRuntime(prepared.path, runtime, task);
     identity.task = task.id;
     identity.runKey = runKey(identity);
@@ -855,7 +888,9 @@ export async function runOne({
     scratch = protectedScratch(".thermite-agent-protected-");
     const before = join(scratch, "before");
     copyRegularFiles(project, before);
-    if (confinedPlatform) source = projectReader(project);
+    source = projectReader(project);
+    // The guide the agent's CLI loads at launch.
+    guideBytes = readFileSync(join(before, "AGENTS.md")).length;
     const started = Date.now();
     let execution = { exit: 0, stdout: "", stderr: "" };
     if (stoppingSignal || batchControl?.stopped) {
@@ -962,8 +997,10 @@ export async function runOne({
         ...(initial.sourceFiles ?? []),
         "system.json",
         "presentation.json",
-        ...Object.keys(final.documents).filter((p) =>
-          p.startsWith("libraries/"),
+        ...[initial, final].flatMap((state) =>
+          Object.keys(state.documents).filter((p) =>
+            p.startsWith("libraries/"),
+          ),
         ),
       ]),
     ];
@@ -971,7 +1008,7 @@ export async function runOne({
       before,
       scratch,
       paths,
-      read: (path) => projectBytes(source, project, path),
+      read: (path) => projectBytes(source, path),
     });
     ctx.metrics = score({
       calls,
@@ -1026,7 +1063,7 @@ export async function runOne({
       transcript: execution.stdout,
       context,
       engineRoots,
-      guideBytes: projectBytes(source, project, "AGENTS.md").length,
+      guideBytes,
       guideFiles: [join(project, "AGENTS.md"), join(runtime, "README.md")],
       expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
       actualWarnings:
@@ -1134,7 +1171,8 @@ export async function runOne({
         tasksRoot,
         project,
         runtime,
-        projectRoot: source?.identity ?? null,
+        projectRoot: source.identity,
+        guideBytes,
         initial,
         final,
         calls,
@@ -1242,6 +1280,7 @@ export async function runOne({
 // `prepared` is the checkpoint's prepared context, read from the trusted
 // archive; nothing the agent's run directory holds selects what runs here.
 export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
+  assert(confinedPlatform, windowsUnavailable);
   assert(prepared?.path, "Recheck needs the checkpoint's prepared context");
   const original = read(join(evidence, "manifest.json"));
   assert(
@@ -1254,15 +1293,12 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
   );
   const stored = read(join(evidence, "recheck.json")),
     task = read(join(stored.taskDir, "task.json"));
-  assert(!task.rubric || confinedPlatform, judgeUnavailable);
   assert(
-    !confinedPlatform || stored.projectRoot,
-    "Recheck needs the project root recorded since E2 1.20.4",
+    stored.projectRoot && Number.isInteger(stored.guideBytes),
+    "Recheck needs the project root and guide size recorded since E2 1.20.4",
   );
   // Refuses a project root other than the one pinned before the agent started.
-  const source = confinedPlatform
-    ? projectReader(stored.project, stored.projectRoot)
-    : null;
+  const source = projectReader(stored.project, stored.projectRoot);
   let scratch;
   try {
     const checkerTaskTreeHash = snapshot(stored.taskDir, {
@@ -1329,7 +1365,7 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       transcript,
       context: stored.context,
       engineRoots: stored.engineRoots,
-      guideBytes: projectBytes(source, stored.project, "AGENTS.md").length,
+      guideBytes: stored.guideBytes,
       guideFiles: [
         join(stored.project, "AGENTS.md"),
         join(stored.runtime, "README.md"),
@@ -1581,6 +1617,7 @@ async function main() {
     await authOnly(values);
     return;
   }
+  assert(confinedPlatform, windowsUnavailable);
   assert(
     values.checkpoint &&
       /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(values.checkpoint),

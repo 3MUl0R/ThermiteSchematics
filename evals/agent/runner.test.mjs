@@ -92,6 +92,16 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       `import{locate,ok}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(moduleURL("evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("checker unavailable");ok(ctx,"validate",".");return {pass:locate(ctx.project,"PS1").object.description==="Pipeline checked"};}`,
     );
     const { runOne, recheckRun } = await import("./run.mjs");
+    if (process.platform === "win32") {
+      await expect(
+        runOne({
+          taskDir,
+          prepared: { path: prepared, commit: "test-adapter" },
+          evidence,
+        }),
+      ).rejects.toThrow("unavailable on Windows");
+      return;
+    }
     const original = await runOne({
       taskDir,
       prepared: { path: prepared, commit: "test-adapter" },
@@ -274,7 +284,11 @@ it("refuses a Codex evidence archive under a temporary directory", () => {
       },
     );
     expect(run.status).not.toBe(0);
-    expect(run.stderr).toContain("which a sandboxed Codex agent can write");
+    expect(run.stderr).toContain(
+      process.platform === "win32"
+        ? "unavailable on Windows"
+        : "which a sandboxed Codex agent can write",
+    );
   } finally {
     rmSync(tasks, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });

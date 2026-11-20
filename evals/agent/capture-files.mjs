@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CString, dlopen, FFIType } from "bun:ffi";
+import { CString, dlopen, FFIType, toArrayBuffer } from "bun:ffi";
 import {
   closeSync,
   constants,
@@ -47,9 +47,11 @@ function lib() {
     ["fdopendir" + inode64]: { args: [FFIType.i32], returns: FFIType.ptr },
     ["readdir" + inode64]: { args: [FFIType.ptr], returns: FFIType.ptr },
     closedir: { args: [FFIType.ptr], returns: FFIType.i32 },
+    [errnoLocation]: { args: [], returns: FFIType.ptr },
   }).symbols;
   return libc;
 }
+const errnoLocation = darwin ? "__error" : "__errno_location";
 function openRelative(dir, name, flags) {
   const fd = lib().openat(dir, Buffer.from(name + "\0"), flags);
   assert(fd >= 0, inputError);
@@ -57,7 +59,8 @@ function openRelative(dir, name, flags) {
 }
 // Names in an open directory. The directory takes ownership of fd. The name
 // follows d_ino, d_seekoff, d_reclen, d_namlen and d_type on macOS, and
-// d_ino, d_off, d_reclen and d_type on Linux.
+// d_ino, d_off, d_reclen and d_type on Linux. readdir returns null both at
+// the end and on an error; only an error sets errno, which is cleared first.
 function listDescriptor(fd) {
   const symbols = lib(),
     dir = symbols["fdopendir" + inode64](fd);
@@ -65,9 +68,16 @@ function listDescriptor(fd) {
     closeSync(fd);
     assert.fail("Project directory could not be listed");
   }
+  const errno = new Int32Array(toArrayBuffer(symbols[errnoLocation](), 0, 4));
   const names = [];
   try {
-    for (let entry; (entry = symbols["readdir" + inode64](dir));) {
+    for (;;) {
+      errno[0] = 0;
+      const entry = symbols["readdir" + inode64](dir);
+      if (!entry) {
+        assert(errno[0] === 0, "Project directory listing failed");
+        break;
+      }
       const name = new CString(entry, darwin ? 21 : 19).toString();
       if (name !== "." && name !== "..") names.push(name);
     }
@@ -147,11 +157,17 @@ export function projectReader(project, expected) {
         );
         return rel;
       },
-      // Absence is false; any other inspection error throws.
+      // The entry's status, or undefined when absent, including below a
+      // component that is a file. Any other inspection error throws.
       has(rel) {
         components(rel);
         directoryIdentity(root, identity);
-        return !!stat(join(root, rel));
+        try {
+          return stat(join(root, rel));
+        } catch (error) {
+          if (error.code === "ENOTDIR") return undefined;
+          throw error;
+        }
       },
       read(rel) {
         const parts = components(rel);

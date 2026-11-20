@@ -18,7 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { judgePacket, recheckRun, runOne, selectedDiff } from "./run.mjs";
 import { projectReader } from "./capture-files.mjs";
@@ -166,6 +166,18 @@ it("source diffs match the repository diff without running its Git configuration
     writeFileSync(join(project, "system.json"), '{"a":1}\n');
     writeFileSync(join(project, "kept.json"), '{"k":1}\n');
     writeFileSync(join(project, "gone.json"), '{"g":1}\n');
+    // Names that contain the synthetic old/ and new/ components, need Git's
+    // quoting, or hold binary bytes.
+    const tricky = [
+      "parts a/old/device.json",
+      "parts b/new/device.json",
+      "naïve.json",
+      "blob.pdf",
+    ];
+    for (const name of tricky) {
+      mkdirSync(dirname(join(project, name)), { recursive: true });
+      writeFileSync(join(project, name), name.endsWith(".pdf") ? "\0a" : "1\n");
+    }
     const env = {
       ...process.env,
       GIT_CONFIG_NOSYSTEM: "1",
@@ -190,7 +202,9 @@ it("source diffs match the repository diff without running its Git configuration
     });
     writeFileSync(join(project, "system.json"), '{"a":2}\n');
     writeFileSync(join(project, "added.json"), '{"n":1}\n');
-    const paths = ["system.json", "kept.json", "added.json"];
+    for (const name of tricky)
+      writeFileSync(join(project, name), name.endsWith(".pdf") ? "\0b" : "2\n");
+    const paths = ["system.json", "kept.json", "added.json", ...tricky];
     const read = (path) =>
       existsSync(join(project, path))
         ? readFileSync(join(project, path))
@@ -198,6 +212,13 @@ it("source diffs match the repository diff without running its Git configuration
     git("add", "--intent-to-add", ".");
     const repository = git("diff", "--no-ext-diff", "--", ...paths);
     expect(repository).toContain("diff --git a/added.json b/added.json");
+    expect(repository).toContain(
+      "--- a/parts a/old/device.json\t\n+++ b/parts a/old/device.json\t",
+    );
+    expect(repository).toContain('"a/na\\303\\257ve.json"');
+    expect(repository).toContain(
+      "Binary files a/blob.pdf and b/blob.pdf differ",
+    );
     expect(selectedDiff({ before, scratch, paths, read })).toBe(repository);
     // A removed source is shown; staging every path hid it before.
     rmSync(join(project, "gone.json"));
@@ -313,17 +334,19 @@ it("rechecks stage receipts outside the run directory and refuse a replaced proj
   }
 }, 60000);
 
-it("rubric runs are refused on Windows before the agent starts", async () => {
-  if (confined) return;
-  const work = temporary("eval-windows-rubric-");
+it("run diffs cover removed library documents and a source replaced by a directory", async () => {
+  if (!confined) return;
+  const work = temporary("eval-diff-selection-");
   try {
-    const started = join(work, "started");
+    const diffFile = join(work, "source-diff.txt");
+    // The "agent" removes a library type, and moves a source below a
+    // directory of the same name, selecting it in the manifest.
     const { taskDir, context } = fixture(
       work,
-      { id: "windows-rubric", rubric: ["Judge the outputs"] },
+      { id: "diff-selection" },
       {
-        "reference.mjs": marker(started) + `export default ()=>"done";`,
-        "check.mjs": `export default ()=>({pass:true});`,
+        "reference.mjs": `import{mkdirSync,readFileSync,rmSync,writeFileSync}from"node:fs";import{join}from"node:path";export default ctx=>{const p=(f)=>join(ctx.project,f);rmSync(p("libraries/core/types/relay-1co.json"));const old=readFileSync(p("devices/equipment.json"));rmSync(p("devices/equipment.json"));mkdirSync(p("devices/equipment.json"));writeFileSync(p("devices/equipment.json/member.json"),old);const system=JSON.parse(readFileSync(p("system.json"),"utf8"));system.sources=system.sources.map(s=>s==="devices/equipment.json"?"devices/equipment.json/member.json":s);writeFileSync(p("system.json"),JSON.stringify(system,null,2)+"\\n");return "Reference complete";}`,
+        "check.mjs": `import{writeFileSync}from"node:fs";export default ctx=>{writeFileSync(${JSON.stringify(diffFile)},ctx.sourceDiff);return {pass:true};}`,
       },
     );
     const run = await runOne({
@@ -331,9 +354,62 @@ it("rubric runs are refused on Windows before the agent starts", async () => {
       prepared: context,
       evidence: join(work, "evidence"),
     });
-    expect(run.status).toBe("infrastructure-failure");
-    expect(run.infrastructureError).toContain("unavailable on Windows");
-    expect(existsSync(started)).toBe(false);
+    expect(run.status, JSON.stringify(run)).toBe("complete");
+    const diff = readFileSync(diffFile, "utf8");
+    for (const [path, change] of [
+      ["libraries/core/types/relay-1co.json", "deleted"],
+      ["devices/equipment.json", "deleted"],
+      ["devices/equipment.json/member.json", "new"],
+    ])
+      expect(diff).toContain(
+        `diff --git a/${path} b/${path}\n${change} file mode`,
+      );
+    expect(diff).not.toContain("Refused");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}, 60000);
+
+it("a run whose project root was replaced records the whole-root refusal", async () => {
+  if (!confined) return;
+  const work = temporary("eval-replaced-root-");
+  try {
+    const evidence = join(work, "evidence");
+    // The "agent" swaps its project for an identical copy at the same path.
+    const { taskDir, context } = fixture(
+      work,
+      { id: "replaced-root", rubric: ["Judge the outputs"] },
+      {
+        "reference.mjs": `import{cpSync,renameSync,writeFileSync}from"node:fs";export default ctx=>{writeFileSync(ctx.project+"/friction.md","copied notes");renameSync(ctx.project,ctx.project+".original");cpSync(ctx.project+".original",ctx.project,{recursive:true});return "Reference complete";}`,
+        "check.mjs": `export default ()=>({pass:true});`,
+      },
+    );
+    const run = await runOne({ taskDir, prepared: context, evidence });
+    expect(run.status, JSON.stringify(run)).toBe("complete");
+    expect(run.judgement).toBe("pending-two-judges");
+    const packet = JSON.parse(
+      readFileSync(join(evidence, "judge-packet.json"), "utf8"),
+    );
+    expect(packet.outputs).toEqual({});
+    expect(packet.refusedOutputs).toEqual(["."]);
+    expect(JSON.stringify(packet)).not.toContain("copied notes");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}, 60000);
+
+it("agent runs and rechecks are refused on Windows before any setup", async () => {
+  if (confined) return;
+  const work = temporary("eval-windows-refusal-");
+  try {
+    const evidence = join(work, "evidence");
+    await expect(
+      runOne({ taskDir: join(work, "task"), prepared: {}, evidence }),
+    ).rejects.toThrow("unavailable on Windows");
+    await expect(
+      recheckRun({ evidence, prepared: { path: work } }),
+    ).rejects.toThrow("unavailable on Windows");
+    expect(existsSync(evidence)).toBe(false);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

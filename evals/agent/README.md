@@ -966,19 +966,28 @@ explicit error receipt.
 ## E2 1.20.4
 
 After a sandboxed agent exits, the harness reads its project and runs the CLI
-with the harness user's privileges. Those reads and calls no longer follow or
-execute anything the agent left in its writable roots.
+with the harness user's privileges. This release confines the paths named
+below: the judge packet, the source diff, the guide size, and the CLI runtime,
+Bun configuration and environment of post-agent calls. Other post-run reads
+and writes still use pathnames the agent can change. These include
+snapshots, source and library document reads, the compiler's own reads during
+validation, checker reads and regeneration, the shim's audit files, project
+archival and the Codex auth refresh. They are pending follow-up work for #491.
+
+E2 agent runs and rechecks are refused on Windows before any setup, launch or
+evidence write. Node offers no descriptor-relative, no-follow open there.
 
 Before the agent starts, the harness opens the project root and keeps that
 descriptor for the run. Judge packets read deliverables and the `drawings`
 directory from it with descriptor-relative reads that follow no links and
 take no `..` components, as the visual broker does. A linked or otherwise
 unreadable output is left out of the packet and its path is listed in
-`refusedOutputs`; a linked `drawings` directory is listed as `drawings`. If
-the root itself was replaced or cannot be inspected, the packet takes nothing
-and lists `.`. The packet format is now `thermite-blinded-judge/1.2`. Rubric
-tasks are refused on Windows before the agent starts, because these reads are
-unavailable there.
+`refusedOutputs`; a linked or unlistable `drawings` directory is listed as
+`drawings`. If the root itself was replaced or cannot be inspected, the run is
+still scored and the packet takes nothing and lists `.`. The packet format is
+now `thermite-blinded-judge/1.2`. Guide bytes count the `AGENTS.md` present at
+launch, measured from the harness's copy, and rechecks reuse the recorded
+count.
 
 The agent's runtime copy sits in its TMPDIR, which a sandboxed agent can write.
 Post-agent CLI calls (the final flush, file-state validation, the checker and
@@ -994,11 +1003,14 @@ changed runtime as a V5 violation.
 The source diff no longer runs Git in the agent's repository, whose
 configuration and attributes can name programs to run. Before launch the
 harness copies the project's regular files into the scratch directory. After
-the run it reads the selected source paths through the pinned root and runs
+the run it reads the selected paths through the pinned root and runs
 `git diff --no-index` on the two copies there, with no Git configuration,
-attributes or repository. Paths are labelled as before. A deleted source now
-appears as a deletion; staging every path hid it before. A source that is not
-an ordinary file is listed as refused.
+attributes or repository. The selection covers sources, the manifest, the
+presentation and library documents present before or after the run. Paths are
+labelled as before, with Git's quoting. A deleted file now appears as a
+deletion; staging every path hid it before. A file replaced by a directory, or
+the reverse, appears as a deletion and an addition. A selected path that is
+not an ordinary file is listed as refused.
 
 `recheck.json` records the project root's identity, and a recheck refuses a
 different root. Rechecks take the prepared engine from the checkpoint's context
