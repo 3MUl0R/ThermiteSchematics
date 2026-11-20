@@ -22,7 +22,8 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Version **5.34 (IDENT1)** extends **DQ-05** (#469). It measures raw UUIDs
-in painted text and circuit group keys in headings and related-function
+in painted text, including wrapped circuit captions and device tags, and
+circuit group keys in headings and related-function
 destinations, using the request's authored labels and references to resolve
 the latter. Complete 5.33 summaries remain readable.
 

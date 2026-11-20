@@ -124,7 +124,7 @@ function sourceContext(
   const device = devices.get(uid ?? "");
   const relation = index.relations.get(row.key);
   const wire = index.wires.get(row.key);
-  const cable = index.cables.get(uid ?? row.key);
+  const cable = index.cables.get((kind === "bom" ? row.key : uid) ?? "");
   const endpoint = (t: TerminalId) =>
     `${deviceName(devices, t.deviceUid)}.${t.terminalKey}`;
   return {

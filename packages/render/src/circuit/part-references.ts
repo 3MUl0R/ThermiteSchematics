@@ -1,7 +1,27 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import type { CircuitViewRequest } from "../circuit.js";
-import { measure } from "../symbols/circuit-text.js";
+import type { CircuitGroupRequest, CircuitViewRequest } from "../circuit.js";
+import {
+  LONG_CIRCUIT_DESTINATION_WIDTH,
+  relatedCaptionWidth,
+} from "../symbols/circuit-relations.js";
 import { required } from "../presentation/util.js";
+
+export function circuitGroupPrintReference(
+  request: CircuitViewRequest,
+  group: CircuitGroupRequest,
+  folded = false,
+) {
+  if (group.lineReference) return group.lineReference;
+  if (!group.label) return request.title;
+  const width = relatedCaptionWidth(group.label);
+  return request.groups.length === 1 &&
+    (folded ||
+      (request.flow === "top-to-bottom" &&
+        width > LONG_CIRCUIT_DESTINATION_WIDTH)) &&
+    relatedCaptionWidth(request.title) < width
+    ? request.title
+    : group.label;
+}
 
 export function circuitPartReferences(
   ir: Readonly<ElectricalIr>,
@@ -34,12 +54,9 @@ export function circuitPartReferences(
       return parts.length ? [{ id, label: terminalName(id), parts }] : [];
     });
   const [group] = request.groups;
-  if (
-    request.groups.length !== 1 ||
-    !group?.label ||
-    group.lineReference ||
-    measure(request.title) >= measure(group.label)
-  )
+  if (!group?.label) return { terminals, appearances };
+  const reference = circuitGroupPrintReference(request, group, true);
+  if (reference === group.label || group.lineReference)
     return { terminals, appearances };
 
   // The printed view title identifies its sole group across the folded parts.
@@ -50,9 +67,7 @@ export function circuitPartReferences(
     if (labels)
       projected.set(id, [
         ...new Set(
-          labels.map((label) =>
-            label === group.label ? request.title : label,
-          ),
+          labels.map((label) => (label === group.label ? reference : label)),
         ),
       ]);
   }

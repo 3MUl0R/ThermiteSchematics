@@ -93,7 +93,7 @@ at PS1; declare potentials at added sources.
 
 Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
 The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.
-Set group `label` or `lineReference` for circuit captions.
+Use a short group `lineReference` for circuit captions.
 
 Keep labels off terminal approaches, bends, junctions and cable-end marks.
 See `thermite guide circuit-symbols`.

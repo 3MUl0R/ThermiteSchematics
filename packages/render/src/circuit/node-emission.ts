@@ -82,12 +82,15 @@ function emitTaggedNode(
 ): string {
   const { node, x, y, vertical, conductors, diagnostics, attachmentWeights } =
     input;
-  const { circuitNodeAttributes, n, emitNode } = hooks;
+  const { circuitNodeAttributes, n, emitNode, text } = hooks;
   const { body, plan, geometry: g } = tagLane;
   const stems = body.pins
     .map((p, i) => emitNodeStem(p, i, node, g, attachmentWeights, hooks))
     .join("");
-  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights)}${stems}</g>`;
+  const captions = node.tagColumnCaptions
+    .map((s, i) => text(g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s))
+    .join("");
+  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights)}${stems}${captions}</g>`;
 }
 
 function emitNodeStem(

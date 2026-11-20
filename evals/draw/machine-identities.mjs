@@ -30,7 +30,14 @@ function uuidFindings(texts, issue) {
   for (const field of textFields(texts, (t) =>
     t.row != null && Number.isInteger(t.columnIndex)
       ? JSON.stringify([t.row, t.columnIndex])
-      : (t.continuationLink ?? t.locatorElement ?? t.element ?? t),
+      : (t.continuationLink ??
+        (t.textContainer && t.tagField
+          ? JSON.stringify([t.textContainer, t.tagOwnerUid, t.tagField])
+          : undefined) ??
+        (t.circuitText?.related ? t.textContainer : undefined) ??
+        t.locatorElement ??
+        t.element ??
+        t),
   )) {
     const match =
       field.map((t) => uuid.exec(t.text)).find(Boolean) ??

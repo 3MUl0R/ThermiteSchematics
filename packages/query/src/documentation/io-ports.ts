@@ -52,7 +52,7 @@ export function appendConnectorPort<T>(
         .filter(Boolean)
         .join("\n"),
       relation
-        ? `${relationPrintIdentity(relation, devices).text} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
+        ? `${relationPrintIdentity(relation, devices).text || "Assembly reference needs review"} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
         : "Unoccupied",
       assembly
         ? `${assembly.pinMapping.status}\n${assembly.pinMapping.reason}`

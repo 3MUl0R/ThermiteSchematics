@@ -3,6 +3,7 @@ import type { IrDevice, IrDeviceType } from "@thermite/compiler";
 import { drawingDeviceTag } from "../device-tag-svg.js";
 import { CAPTION_CLEARANCE_MM, CaptionPlacementError } from "./caption-ink.js";
 import { printableTextMetrics } from "./printable-font.js";
+import { CIRCUIT_TAG_COLUMN_WIDTH } from "./circuit-relations.js";
 
 interface CaptionOwner {
   width: number;
@@ -74,6 +75,7 @@ export function reserveCircuitDeviceTag<
     width: number;
     height: number;
     bodyHeight: number;
+    tagColumnCaptions: readonly string[];
     rows: { center: number }[];
     pins: { x: number; y: number; side: string }[];
   },
@@ -91,7 +93,7 @@ export function reserveCircuitDeviceTag<
     vertical
       ? deviceTagFields(node.device, node.type).length === 1
         ? 7
-        : 34
+        : CIRCUIT_TAG_COLUMN_WIDTH
       : deviceTagFields(node.device, node.type).length === 1
         ? Math.min(50, node.width)
         : Math.max(42, Math.min(50, node.width)),
@@ -100,7 +102,12 @@ export function reserveCircuitDeviceTag<
   const geometry = circuitTagReservation(
     node.width,
     node.height,
-    plan,
+    node.tagColumnCaptions.length
+      ? {
+          widthMm: Math.max(plan.widthMm, CIRCUIT_TAG_COLUMN_WIDTH),
+          heightMm: plan.heightMm + node.tagColumnCaptions.length * 3.1 + 1,
+        }
+      : plan,
     vertical,
   );
   const body = { ...node };

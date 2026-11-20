@@ -24,7 +24,7 @@ export const live = guideModel(projectGuide.text + "\n" + workflows.text);
 
 export const workflowFacts: readonly Fact[] = [
   {
-    claim: "Set group `label` or `lineReference` for circuit captions.",
+    claim: "Use a short group `lineReference` for circuit captions.",
     async check() {
       const { text } = await circuitCaptionFixture();
       expect(text.some((t) => t.endsWith(": 300"))).toBe(true);

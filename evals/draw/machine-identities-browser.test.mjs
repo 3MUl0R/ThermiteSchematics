@@ -47,6 +47,27 @@ it("DQ-05 measures a painted report UUID whole and across wrapped runs", async (
   expect(internalVocabulary(g, ir)).toEqual([]);
 });
 
+it("DQ-05 joins wrapped circuit captions and individual device tag fields", async () => {
+  const first = uid.slice(0, 19),
+    second = uid.slice(19);
+  const tag = (y, value, field = "description") =>
+    line(y, value).replace("<text ", `<text data-tag-field="${field}" `);
+  const g = await openSheet(
+    page,
+    drawing(
+      `<g data-circuit-functions="[]" data-related-functions="[{}]">${line(10, `coil: ${first}`)}${line(14, second)}</g>` +
+        `<g data-tag-owner-uid="${uid}">${tag(23, first)}${tag(27, second)}</g>` +
+        `<g data-tag-owner-uid="${uid}">${tag(36, first)}${tag(40, second, "part")}</g>` +
+        line(50, first) +
+        line(54, second),
+    ),
+  );
+  expect(internalVocabulary(g, ir)).toEqual([
+    expect.objectContaining({ mechanism: "raw-uuid", key: uid }),
+    expect.objectContaining({ mechanism: "raw-uuid", key: uid }),
+  ]);
+});
+
 it("DQ-05 checks printed group headings and relation destinations against the request", async () => {
   const circuit = (caption, heading) =>
     drawing(

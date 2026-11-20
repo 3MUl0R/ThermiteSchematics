@@ -132,6 +132,7 @@ function attachmentEntries(
         p.ports.filter((candidate) => candidate.id === port.id),
       )[0];
     const assemblyName = relationPrintIdentity(assembly, devices).text;
+    const review = "Assembly reference needs review";
     const ownerLabel = `${native.designation}.${native.key}`;
     const owned = {
       identity: [port.deviceUid, port.portKey, assembly.uid],
@@ -139,7 +140,9 @@ function attachmentEntries(
       ownerLabel,
     };
     if (remote)
-      return [assemblyNote("attachment", owned, assemblyName, remote)];
+      return [
+        assemblyNote("attachment", owned, assemblyName || review, remote),
+      ];
     if (local || [...drawn.values()].some((ids) => ids.has(assembly.uid)))
       return [];
     const row = rows.find((r) => r.nativeKey === assembly.uid);
@@ -149,7 +152,7 @@ function attachmentEntries(
           assemblyNote(
             "assembly-inventory",
             owned,
-            `${assemblyName} inventory`,
+            assemblyName ? `${assemblyName} inventory` : review,
             cell,
           ),
         ]

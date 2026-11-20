@@ -3,7 +3,10 @@ import { attachmentStrokeWeights } from "./symbols/attachment-stroke.js";
 import "./layout/port-attributes.js";
 import "./symbols/circuit-route-pitch.js";
 import { circuitConductorFunctions } from "./symbols/circuit-pagination-functions.js";
-import { deviceTagFitDetails } from "./packet/device-tag-fit.js";
+import {
+  deviceTagFitDetails,
+  type RelatedCaptionFit,
+} from "./packet/device-tag-fit.js";
 import "./device-tag-svg.js";
 import type { DeviceTagPlan } from "./device-tags.js";
 import "./device-tag-ownership.js";
@@ -13,7 +16,6 @@ import {
   TERMINAL_TEXT_SIZE,
 } from "./symbols/circuit-text.js";
 export { circuitTextLines } from "./symbols/circuit-text.js";
-import "./symbols/circuit-relations.js";
 import "./symbols/circuit-node-ink.js";
 import "./symbols/circuit-caption-reservation.js";
 import "./symbols/circuit-caption.js";
@@ -68,7 +70,10 @@ import {
   circuitDrawingResult,
 } from "./circuit/layout-drawing.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
-import { circuitPartReferences } from "./circuit/part-references.js";
+import {
+  circuitGroupPrintReference,
+  circuitPartReferences,
+} from "./circuit/part-references.js";
 import type { PhysicalConductor, Pin, DeviceNode } from "./circuit/types.js";
 
 export interface CircuitFunctionSelector {
@@ -101,6 +106,7 @@ export interface CircuitReference {
 export interface CircuitDrawing {
   diagnostics?: Diagnostic[];
   deviceTags?: readonly DeviceTagPlan[];
+  relatedCaption?: RelatedCaptionFit;
   id: string;
   label: string;
   lineReference?: string;
@@ -601,13 +607,14 @@ export function circuitFunctionAppearances(
   const result = new Map<string, string[]>();
   for (const request of requests) {
     validateRequest(request);
-    for (const g of request.groups)
+    for (const g of request.groups) {
+      const label = circuitGroupPrintReference(request, g);
       for (const f of selectedFunctions(ir, g)) {
         const labels = result.get(fkey(f)) ?? [];
-        const label = g.lineReference ?? g.label ?? request.title;
         if (!labels.includes(label)) labels.push(label);
         result.set(fkey(f), labels);
       }
+    }
   }
   return result;
 }
