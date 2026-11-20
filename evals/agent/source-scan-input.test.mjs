@@ -29,6 +29,27 @@ it("preserves real reads around reports and executable/unquoted here-docs", () =
     expect(metric(command).sourceReads, command).toBe(1);
 });
 
+// Each opener leaves bash and zsh inside one word or group across the
+// header line, so the "body" line below really runs `cat`.
+it.each([
+  ["an ANSI-C quote", "echo $'x\\'", "'; cat /engine/source.ts #"],
+  ["a parameter expansion", "echo ${x:-", "}; cat /engine/source.ts"],
+  ["an arithmetic command", "(( 1 +", ")); cat /engine/source.ts"],
+  ["an array assignment", "a=(", "); cat /engine/source.ts"],
+  ["a quoted here-doc marker", "echo 'a <<X\nX", "'; cat /engine/source.ts #"],
+])(
+  "does not treat a report header inside %s as a here-doc",
+  (_, before, hidden) => {
+    const command = `${before}\ncat > notes.md <<"EOF"\n${hidden}\nEOF`;
+    expect(metric(command).sourceReads).toBe(1);
+  },
+);
+
+it("keeps the report exemption after plain commands and an interpreter here-doc", () => {
+  const command = `cd drawings && ls -la\npython3 - <<'PY'\nprint('local output')\nPY\ncat > friction.md <<'EOF'\ncurl -s ${url}\nEOF`;
+  expect(metric(command).sourceReads).toBe(0);
+});
+
 it("keeps a local Python heredoc after an authored report as other", () => {
   expect(
     metric(

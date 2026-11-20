@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -47,22 +46,27 @@ export async function probe(output) {
     assert.equal(request.status, 0, request.stderr);
     const receipt = join(project, "visual-captures/result.json"),
       end = Date.now() + 30000;
-    while (!existsSync(receipt) && Date.now() < end)
-      await new Promise((r) => setTimeout(r, 50));
-    assert(existsSync(receipt), "Capture timed out");
-    const result = JSON.parse(readFileSync(receipt));
+    let result;
+    while (!result && Date.now() < end) {
+      try {
+        result = JSON.parse(readFileSync(receipt));
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    assert(result, "Capture timed out");
     assert(!result.error, result.error);
     assert.equal(result.files.length, 2);
     const viewed = child(
       `const fs=require('fs');console.log(JSON.stringify(['01','02'].map(n=>fs.readFileSync('visual-captures/'+n+'.png').length)))`,
     );
     assert.equal(viewed.status, 0, viewed.stderr);
-    mkdirSync(resolve(output), { recursive: true });
-    cpSync(
-      join(project, "visual-captures"),
-      join(resolve(output), "visual-captures"),
-      { recursive: true },
-    );
+    mkdirSync(join(resolve(output), "visual-captures"), { recursive: true });
+    for (const path of [
+      "visual-captures/result.json",
+      ...result.files.map(({ output }) => output),
+    ])
+      cpSync(join(project, path), join(resolve(output), path));
     writeFileSync(
       join(resolve(output), "probe.json"),
       JSON.stringify(
@@ -78,7 +82,7 @@ export async function probe(output) {
       ) + "\n",
     );
     console.log(
-      "Sandbox request and both PNG reads passed; broker used Playwright file:// without a listener.",
+      "Sandbox request and both PNG reads passed; broker used Playwright without a listener.",
     );
   } finally {
     if (stop) await stop();

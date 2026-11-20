@@ -79,10 +79,10 @@ An unrelated device or a diagnostic absent from final validation does not justif
 
 ### Sandbox visual capture
 
-The quoted Playwright instruction is historical. The harness provides a Playwright file:// capture route outside the agent sandbox, without a listening daemon. Render two actual final outputs to HTML (including drawings/packet.html), then write visual-capture.request.json:
+The quoted Playwright instruction is historical. The harness provides a Playwright broker outside the agent sandbox, without a listening daemon. Render two actual final outputs to HTML (including drawings/packet.html), then write visual-capture.request.json:
 
 ```json
 { "html": ["drawings/packet.html", "drawings/motor-power.html"] }
 ```
 
-Wait for visual-captures/result.json. It records input and PNG hashes or an explicit error. Open and inspect both visual-captures/01.png and 02.png yourself with the image viewer and describe readability findings in friction.md. Capturing images alone is not visual inspection. Only project-local HTML is accepted; network resources are blocked. Rewriting the request with a nonce requests a fresh capture after changes. A failed capture remains an explicit gap; never claim it passed. PDF V1/V5 still need independent evidence or judges.
+Wait for complete JSON in visual-captures/result.json. The harness creates it and 01.png–04.png empty at launch; unused image slots stay empty. The receipt records input and PNG hashes or an explicit error. Open and inspect both visual-captures/01.png and 02.png yourself with the image viewer and describe readability findings in friction.md. Capturing images alone is not visual inspection. Only project-local .html files and inline data: URLs load; separate CSS, SVG, image and font files, network resources and JavaScript are blocked. Use relative paths for local HTML subresources. Rewriting the request with a nonce requests a fresh capture after changes. Keep the broker’s output files in place and wait for the receipt to update before opening the new images. A failed capture remains an explicit gap; never claim it passed. PDF V1/V5 still need independent evidence or judges.

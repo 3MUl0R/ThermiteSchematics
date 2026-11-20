@@ -13,6 +13,17 @@ export function sourceScanInput(
     .map((input) => withoutMarkdownBodies(input, completed, laterShell))
     .join("\n");
 }
+// A recognized report header must start in plain command context. This line
+// check is deliberately coarse: shellWords already rejects open quotes,
+// command substitution and continuations, and these constructs can also carry
+// a header across lines in bash or zsh: ANSI-C quotes, `${`, `$[`,
+// arithmetic `((` and array `=(` groups. Any paren or brace drops the
+// exemption, so the whole command is scanned as before.
+function plainCommand(line) {
+  return (
+    !!shellWords(line) && !line.endsWith("\\") && !/[(){}]|\$['[]/.test(line)
+  );
+}
 function withoutMarkdownBodies(input, completed, laterShell) {
   const original = literalShellBody(input);
   const decoded = decodedShellBody(input);
@@ -33,13 +44,14 @@ function withoutMarkdownBodies(input, completed, laterShell) {
         if (
           !marker ||
           lines[i].indexOf("<<") !== marker.index ||
-          lines[i][marker.index - 1] === "<"
+          lines[i][marker.index - 1] === "<" ||
+          !plainCommand(lines[i].slice(0, marker.index))
         )
           return original;
         const end = lines.indexOf(marker[2], i + 1);
         if (end < 0) return original;
         i = end;
-      } else if (!shellWords(lines[i]) || lines[i].endsWith("\\")) {
+      } else if (!plainCommand(lines[i])) {
         return original;
       }
       continue;

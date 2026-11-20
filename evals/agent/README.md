@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.2)
+# Fresh-agent evaluator (E2 v1.20.3)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -444,8 +444,13 @@ V8. This permission is task metadata, not a general source-read waiver.
 
 For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
 array of 1–4 project-local HTML paths. The running harness writes PNGs and a
-hash-bound receipt in `visual-captures/`; the agent must open the images and
-record findings. Network requests and JavaScript are disabled. Errors remain
+hash-bound receipt in `visual-captures/`. It creates `result.json` and
+`01.png`–`04.png` empty at launch, and unused image slots stay empty. Wait for
+complete JSON, then open the listed images and record findings. Keep the
+broker’s output files in place for refreshes. Chromium loads project-local
+`.html` snapshots and inline `data:` URLs. Separate CSS, SVG, image and font
+files, network resources and JavaScript are blocked. Local HTML subresources
+need relative paths, because pages load from a virtual origin. Errors remain
 explicit, and capture alone never passes visual review or PDF V1/V5. No Claude
 credential is required. The regression test launches the actual pinned browser;
 a non-model sandbox probe should verify request/PNG access before paid D runs.
@@ -902,3 +907,44 @@ Direct-build verification reads the TypeScript version from the pinned Git
 lockfile. It uses the harness compiler when the versions match or the pin
 cannot be read. A different pinned version runs from the prepared dependencies
 in a child process. Evidence records the compiler source, version and execution mode.
+
+## E2 1.20.3
+
+D-conveyor prompt 1.6.2 states the visual broker’s resource limits, its
+empty output slots and receipt polling.
+
+Playwright and Chromium no longer read or write the eval workspace. Chromium
+runs with a fresh profile in the harness home and loads a virtual origin. That
+origin serves only verified bytes of project-local `.html` files, each read
+once per request. `data:` URLs still load, and every other request is blocked.
+The receipt hashes the main HTML bytes served to Chromium and the in-memory PNG.
+
+Before the agent starts, the broker exclusively creates empty `01.png`–`04.png`
+and `result.json` in `visual-captures/`, and holds them open. Existing output
+names are refused. Each capture rewrites these open files: used slots get the
+new PNG, unused slots are emptied and the project receipt is written last.
+Writes go through descriptors for broker-created files, so swapping the
+directory or a file for a link cannot redirect them. Moving or hard-linking
+one of those files needs write access to the destination, which the agent
+already has. Identity checks around each write fail closed. After an output
+name is replaced, captures stop publishing to the project, and the error goes
+to the evidence receipt `visual-capture.json`, which is reserved the same
+way. The capture format remains `thermite-agent-visual-capture/1`.
+
+On macOS and Linux, the broker reads project files with descriptor-relative
+`openat` calls and `O_NOFOLLOW` on every component. It starts from a project
+descriptor opened before the agent starts. Input files must have exactly one
+link, so a second name for an outside file is refused. This relies on the
+agent being unable to remove that file’s original name. On Windows, the reader
+opens by pathname and compares file identity and the canonical path before
+and after the open. An agent that swaps an ancestor for a junction in step
+with those checks can still make the broker read and render an outside file.
+Writes are descriptor-bound on every platform. The broker assumes the agent
+cannot write to the harness home.
+
+The source-read scanner exempts a quoted Markdown here-doc body only when
+each command line around it is plain. ANSI-C quotes, `$[`, parentheses and
+braces now keep the whole command in scope. The same check applies to the text
+before another here-doc marker. Each of these constructs can make bash or zsh
+read a fake report header as part of an earlier word or group, so the hidden
+body runs.
