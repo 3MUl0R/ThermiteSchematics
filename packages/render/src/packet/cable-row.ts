@@ -7,16 +7,22 @@ import {
 import {
   CABLE_ROW_PITCH,
   CABLE_ENDPOINT_BASELINE,
+  CABLE_OPEN_END_CAPTION_LIFT,
   CABLE_CORE_BASELINE,
   CABLE_USAGE_BASELINE,
 } from "./cable-row-metrics.js";
 
+type CableRowLabels = {
+  a: readonly string[];
+  z: readonly string[];
+  centerRows: readonly string[];
+  usage: ReturnType<typeof cableUsagePlan>;
+};
+
 export function cableRowLabels(
-  a: readonly string[],
-  z: readonly string[],
-  centerRows: readonly string[],
-  usage: ReturnType<typeof cableUsagePlan>,
+  { a, z, centerRows, usage }: CableRowLabels,
   position: { left: number; right: number; y: number; midY: number },
+  endpoints: readonly unknown[],
 ): string[] {
   const { left, right, y, midY } = position;
   const result: string[] = [];
@@ -24,7 +30,10 @@ export function cableRowLabels(
     result.push(
       text(
         left,
-        y + index * CABLE_ROW_PITCH + CABLE_ENDPOINT_BASELINE,
+        y +
+          index * CABLE_ROW_PITCH +
+          CABLE_ENDPOINT_BASELINE -
+          (endpoints[0] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0),
         row,
         2.7,
         "start",
@@ -37,7 +46,10 @@ export function cableRowLabels(
     result.push(
       text(
         right,
-        y + index * CABLE_ROW_PITCH + CABLE_ENDPOINT_BASELINE,
+        y +
+          index * CABLE_ROW_PITCH +
+          CABLE_ENDPOINT_BASELINE -
+          (endpoints[1] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0),
         row,
         2.7,
         "end",

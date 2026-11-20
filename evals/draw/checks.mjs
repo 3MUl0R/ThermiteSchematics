@@ -906,7 +906,7 @@ export function capPolicy(texts, medium = "svg") {
     }),
   );
 }
-function lineCross(a, b, c, d) {
+export function lineCross(a, b, c, d) {
   const dx = b.x - a.x,
     dy = b.y - a.y,
     ex = d.x - c.x,

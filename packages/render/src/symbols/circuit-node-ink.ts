@@ -1,6 +1,6 @@
 import {
   conversionQualifierSpan,
-  interfaceLeadEnd,
+  interfaceLeadTip,
 } from "./circuit-interface.js";
 import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
@@ -36,21 +36,26 @@ function interfaceSegments(
       return [];
     const c = centers[i];
     if (!c) throw Error("Missing caption owner center");
-    return row.f.terminals.map((t) => {
+    const pins = row.f.terminals.map((t) => {
       const p = node.pins.find((p) => same(p.terminal, t));
       if (!p) throw Error("Missing interface caption pin");
-      const end = interfaceLeadEnd(
-        row.mark,
-        row.f.kind === "source",
-        row.f.terminals.length,
-      );
-      return [
-        { x: p.x, y: p.y },
-        vertical
-          ? { x: p.x, y: c.y + (p.side === "NORTH" ? -end : end) }
-          : { x: c.x + (p.side === "WEST" ? -end : end), y: p.y },
-      ] as const;
+      return p;
     });
+    return pins.map(
+      (p) =>
+        [
+          { x: p.x, y: p.y },
+          interfaceLeadTip(
+            row.mark,
+            p,
+            pins,
+            c.x,
+            c.y,
+            vertical,
+            row.f.kind === "source",
+          ),
+        ] as const,
+    );
   });
 }
 

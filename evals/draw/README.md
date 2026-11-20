@@ -21,6 +21,13 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.33 (STUB1)** extends **DQ-03** (#463) and **DQ-02** (#470).
+DQ-03 fails when measured continuous symbol strokes connect same-side stubs
+from distinct native nets on a device face. DQ-02 requires 0.34 mm of clearance
+from an open cable-end caption's glyph bounds to the stroke bounds of its own
+mark, using twice the existing 0.17 mm ink measurement allowance. Complete
+5.32 summaries remain readable.
+
 Version **5.32 (P03-CORPUS)** fixes **DQ-18** on presentation 0.3 (#459).
 The checker measures the compact frame's revision cell and requires its
 painted label and exact authored value on the same baseline. A missing cell,

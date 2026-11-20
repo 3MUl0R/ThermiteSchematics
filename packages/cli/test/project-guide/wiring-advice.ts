@@ -1,7 +1,7 @@
 export const wiringAdvice = new Map([
   [
-    "Check that wire labels leave terminal approaches, bends and junctions visible.",
-    "Manual print review; the actual SVG masks are checked by wire-label-masks.test.mjs.",
+    "Keep labels off terminal approaches, bends, junctions and cable-end marks.",
+    "Manual print review. The wire-label masks and face-clearance browser tests check the painted geometry.",
   ],
   [
     "See `thermite guide circuit-symbols`.",

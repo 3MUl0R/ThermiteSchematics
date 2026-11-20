@@ -94,7 +94,7 @@ at PS1; declare potentials at added sources.
 Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.
 The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.
 
-Check that wire labels leave terminal approaches, bends and junctions visible.
+Keep labels off terminal approaches, bends, junctions and cable-end marks.
 See `thermite guide circuit-symbols`.
 
 ## Offline project workflows

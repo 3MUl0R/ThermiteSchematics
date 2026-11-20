@@ -20,6 +20,8 @@ import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import { titleBlockObservation } from "./title-fields.mjs";
+import { captionMarkFindings } from "./caption-mark-clearance.mjs";
+import { faceStubFindings } from "./symbol-face-isolation.mjs";
 import * as checks from "./checks.mjs";
 import {
   terminalPlanObservation,
@@ -45,6 +47,13 @@ export function textGeometryIssues(g) {
   return [
     ...checks.textBounds(g),
     ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
+  ];
+}
+function symbolGeometryIssues(g, ir, symbols, interference) {
+  return [
+    ...checks.symbolIsolation(symbols),
+    ...faceStubFindings(g, ir),
+    ...interference.filter((f) => f.kind === "conductor-through-symbol"),
   ];
 }
 function evaluateTextAndSymbols(
@@ -84,6 +93,7 @@ function evaluateTextAndSymbols(
         ),
       ),
       ...checks.plateOcclusion(g),
+      ...captionMarkFindings(g),
     ]),
   );
   out.push(
@@ -102,17 +112,10 @@ function evaluateTextAndSymbols(
     ),
   );
   out.push(
-    obs(
-      "DQ-03",
-      [
-        ...checks.symbolIsolation(symbols),
-        ...interference.filter((f) => f.kind === "conductor-through-symbol"),
-      ],
-      {
-        scope:
-          "Electrical strokes on independent source ports and foreign routed conductors crossing genuine symbol strokes or independent-net ports. Mechanical enclosures are excluded. Contact/winding meaning remains a visual review.",
-      },
-    ),
+    obs("DQ-03", symbolGeometryIssues(g, ir, symbols, interference), {
+      scope:
+        "Electrical strokes on independent source ports and foreign routed conductors crossing genuine symbol strokes or independent-net ports. Mechanical enclosures are excluded. Contact/winding meaning remains a visual review.",
+    }),
   );
   if (g.catalogs.includes("circuit"))
     out.push(
