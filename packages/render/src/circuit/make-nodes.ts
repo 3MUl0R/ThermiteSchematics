@@ -29,6 +29,7 @@ type NodeHooks = Pick<
   ) => string;
 };
 type SelectionState = NodeContext & { distributed: boolean };
+
 export function makeCircuitNodes(
   ir: Readonly<ElectricalIr>,
   fs: IrFunction[],

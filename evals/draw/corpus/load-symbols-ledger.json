@@ -31,5 +31,26 @@
         "W-PWR-008"
       ]
     }
+  ],
+  "followUps": [
+    {
+      "issue": 501,
+      "case": "motor-starter-documentation-top-to-bottom",
+      "beforeSheets": 7,
+      "afterSheets": 7,
+      "symbolSheet": 1,
+      "symbol": "circuit:motor",
+      "selection": "M1.motor_load",
+      "addedConductors": [],
+      "paper": "tabloid",
+      "beforeOrientation": "landscape",
+      "afterOrientation": "portrait",
+      "splitGroupCoverage": {
+        "case": "circuit-pagination-top-to-bottom",
+        "paper": "tabloid",
+        "orientation": "landscape",
+        "group": "chain"
+      }
+    }
   ]
 }

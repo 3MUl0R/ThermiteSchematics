@@ -261,6 +261,57 @@ describe("source-selected circuit views", () => {
       expect(ir.wires.some((w) => w.uid === id)).toBe(true);
   });
 
+  it.each([
+    ["left-to-right", true],
+    ["top-to-bottom", true],
+    ["top-to-bottom", false],
+  ] as const)(
+    "prints three-phase lanes in reading order in %s flow (motor selected: %s)",
+    async (flow, motor) => {
+      const { groups } = await prepareCircuitView(ir, {
+        ...motorCircuitView(motor),
+        flow,
+      });
+      const doc = parseHTML(groups[0]!.content).document;
+      const axis = flow === "top-to-bottom" ? "x" : "y";
+      const lanes: [string, string[]][] = [
+        ["SRC1", ["L1", "L2", "L3"]],
+        ["CB1", ["1/L1", "3/L2", "5/L3"]],
+        ["CB1", ["2/T1", "4/T2", "6/T3"]],
+        ["K1", ["1/L1", "3/L2", "5/L3"]],
+        ["K1", ["2/T1", "4/T2", "6/T3"]],
+        ["OL1", ["1/L1", "3/L2", "5/L3"]],
+        ["OL1", ["2/T1", "4/T2", "6/T3"]],
+      ];
+      if (motor) lanes.push(["M1", ["U", "V", "W"]]);
+      for (const [designation, keys] of lanes) {
+        const device = ir.devices.find((d) => d.designation === designation)!;
+        const ports = keys.map((terminal) => {
+          const id = JSON.stringify([device.uid, terminal]);
+          return doc.querySelector(`[data-terminal-id='${id}']`)!;
+        });
+        const markers = ports.map((p) =>
+          Number(p.querySelector("circle")!.getAttribute(`c${axis}`)),
+        );
+        expect(markers[0], designation).toBeLessThan(markers[1]!);
+        expect(markers[1], designation).toBeLessThan(markers[2]!);
+        if (designation === "M1") {
+          expect(
+            ports.map((p) => p.querySelector("text")!.textContent),
+          ).toEqual(keys);
+        }
+      }
+      for (const path of doc.querySelectorAll("[data-circuit-conductor]")) {
+        const wire = ir.wires.find(
+          (w) => w.uid === path.getAttribute("data-circuit-conductor"),
+        )!;
+        expect(JSON.parse(path.getAttribute("data-endpoints")!)).toEqual(
+          wire.endpoints.map((endpoint) => endpoint.terminal),
+        );
+      }
+    },
+  );
+
   it("shows exact source wire labels and source-backed outside-view endpoints", async () => {
     const result = await prepareCircuitView(ir, controlCircuitView());
     const group = result.groups[0]!;

@@ -96,6 +96,40 @@ describe("whole-conductor circuit pagination", () => {
             expect.arrayContaining(gang),
           );
   });
+
+  it("keeps upstream phase order on top-to-bottom parts without the motor", async () => {
+    const core = await compileCoreFixture();
+    const result = await renderSchematicPacket(core, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
+      views: [{ ...motorCircuitView(), flow: "top-to-bottom" }],
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    const contactor = core.devices.find((d) => d.designation === "K1")!;
+    const parts = result.value.sheets.flatMap((sheet) => [
+      ...parseHTML(sheet.svg).document.querySelectorAll("[data-circuit-part]"),
+    ]);
+    const upstream = parts.filter(
+      (part) => !part.querySelector('[data-function-key="motor_load"]'),
+    );
+    const lanes = upstream
+      .map((part) =>
+        ["1/L1", "3/L2", "5/L3"].map((terminal) => {
+          const id = JSON.stringify([contactor.uid, terminal]);
+          return part
+            .querySelector(`[data-terminal-id='${id}'] circle`)
+            ?.getAttribute("cx");
+        }),
+      )
+      .filter((positions) => positions.every((x) => x != null));
+    expect(lanes.length).toBeGreaterThan(0);
+    for (const positions of lanes) {
+      const [l1, l2, l3] = positions.map(Number);
+      expect(l1).toBeLessThan(l2!);
+      expect(l2).toBeLessThan(l3!);
+    }
+  });
+
   for (const { flow, size, timeout } of paginationCases)
     it.each([size])(
       `conserves wiring and symbols with reciprocal references: ${flow}, %s`,

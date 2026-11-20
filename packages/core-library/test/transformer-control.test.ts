@@ -90,7 +90,7 @@ it.each(transformerFlows)(
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
         ? "a46ca5c69f56240d3927fb60b2406c62c01ae652dac0ccd1525204cb0361f19b"
-        : "23e56dd3c67ac2a71962689745ee3597e3aba6cc5a2ca14e6d6b38df1a478bf8",
+        : "0839400dd0b1eac2dc575a7a64dacbbcd1b79631d47e201973cead3a6dfa9f60",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);

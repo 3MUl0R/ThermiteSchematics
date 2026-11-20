@@ -228,6 +228,12 @@ rendering refuses with R002. A profile change never changes physical nets.
 Motor marks carry M, with 3~ only for a three-phase profile or a function with
 explicit U/V/W phase-input roles. A three-terminal L/N/PE function does not
 establish three phases.
+Every circuit device's lateral lanes read from top to bottom in left-to-right
+flow and from left to right in top-to-bottom flow. The terminal and symbol
+lanes keep the same order across the printed parts of a circuit group. A
+three-pole device reads L1, L2, L3 and an earthed receptacle reads L, N, PE
+when those are their authored orders.
+
 Core 0.2.0's `estop-nc` uses `thermite:estop` (mushroom head and latch), and
 `selector-2pos` uses `thermite:selector` (rotary handle and maintained detents).
 They inherit the function/family support of `thermite:pushbutton` and

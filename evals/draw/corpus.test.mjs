@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   cases,
   prepare,
+  prepareRequest,
   sourceFiles,
   createSeal,
   verifyCorpus,
@@ -73,6 +74,32 @@ it("adds 16 compact-frame cases to the full corpus only", () => {
         ["letter", "compact"],
       ]);
 });
+
+it.each([
+  ["left-to-right", "landscape"],
+  ["top-to-bottom", "portrait"],
+])(
+  "includes the circuit motor load in the strict %s packet",
+  async (flow, orientation) => {
+    const spec = cases().find(
+      (c) => c.id === `motor-starter-documentation-${flow}`,
+    );
+    const request = await prepareRequest(spec, process.cwd());
+    expect(request.page).toEqual({
+      size: "tabloid",
+      orientation,
+      marginMm: 10,
+    });
+    expect(request.views[0].flow).toBe(flow);
+    expect(request.views[0].groups.map((group) => group.id)).toEqual([
+      "motor-command",
+      "motor-load",
+    ]);
+    expect(request.views[0].groups[1].functions).toEqual([
+      { device: { by: "designation", value: "M1" }, key: "motor_load" },
+    ]);
+  },
+);
 
 it("upgrades the cloned presentation and keeps the source project intact", async () => {
   const root = process.cwd();

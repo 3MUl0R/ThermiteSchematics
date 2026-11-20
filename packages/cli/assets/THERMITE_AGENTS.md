@@ -95,7 +95,7 @@ Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled font
 Use a short group `lineReference` for circuit captions.
 
 Keep labels clear of ink, pin approaches, bends, junctions and cable ends.
-See `thermite guide circuit-symbols` for lead gaps.
+See `thermite guide circuit-symbols` for drafting.
 
 ## Offline project workflows
 

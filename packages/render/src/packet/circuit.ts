@@ -248,7 +248,7 @@ async function circuitDraftsUnchecked(
     );
     if (!noted.ok) return noted;
   }
-  resolveCircuitContinuations(drafts);
+  resolveCircuitContinuations(drafts, request.flow === "top-to-bottom");
   return { ok: true, value: drafts };
 }
 

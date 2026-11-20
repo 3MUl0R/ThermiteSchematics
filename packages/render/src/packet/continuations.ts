@@ -117,11 +117,14 @@ export function emitCircuitContinuationBlock(
   block: CircuitContinuationBlock,
 ): string {
   let y = block.y;
-  const out = circuitTextLines(circuitPartNotice, block.width).map((s) => {
-    const row = text(block.x, y, s, 2.5);
-    y += 3.5;
-    return row;
-  });
+  const out: string[] = [];
+  const notice = () => {
+    for (const s of circuitTextLines(circuitPartNotice, block.width)) {
+      out.push(text(block.x, y, s, 2.5));
+      y += 3.5;
+    }
+  };
+  if (!block.noticeAfterTargets) notice();
   for (const row of block.rows) {
     out.push(
       `<g data-circuit-continuation="${attr(block.group)}" data-from-part="${block.part}" data-continuation-terminal="${attr(row.id)}" data-destination-parts="${attr(JSON.stringify(row.targets.map((t) => t.part)))}" data-destination-sheets="${attr(JSON.stringify(row.targets.map((t) => t.sheet)))}">`,
@@ -140,12 +143,16 @@ export function emitCircuitContinuationBlock(
     }
     out.push("</g>");
   }
+  if (block.noticeAfterTargets) notice();
   return out.join("");
 }
 
 export { drawingContinuations } from "./rooted-links.js";
 
-export function resolveCircuitContinuations(drafts: Draft[]): void {
+export function resolveCircuitContinuations(
+  drafts: Draft[],
+  noticeAfterTargets: boolean,
+): void {
   for (const draft of drafts)
     draft.circuitBlocks = (draft.circuitParts ?? []).map(
       ({ drawing, x, y, width }) => ({
@@ -154,6 +161,7 @@ export function resolveCircuitContinuations(drafts: Draft[]): void {
         x,
         y,
         width,
+        noticeAfterTargets,
         rows: drawing.pagination!.terminals.map((t) => ({
           id: t.id,
           label: t.label,

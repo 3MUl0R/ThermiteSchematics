@@ -87,21 +87,36 @@ export function placePeerNotes(
     const key = ownerDestination(entry);
     ownerUses.set(key, (ownerUses.get(key) ?? 0) + 1);
   }
-  const ink = navigationObstacles(sheet.svg, true);
-  return entries.map((entry) => {
-    const candidates = forms(
+  const candidates = entries.map((entry) => ({
+    entry,
+    shapes: forms(
       entry,
       uses.get(entry.destination) === 1,
       ownerUses.get(ownerDestination(entry)) === 1,
-    );
-    const result = place(entry, candidates, field, ink);
-    if (!result)
-      throw new NavigationSlotFailure(
-        `Navigation ${entry.kind} cannot fit sheet ${sheet.number}: ${entry.value} has no clear slot within ${PEER_REACH_MM} mm of its owner.`,
-        { field, owner: entry.owner },
-      );
-    ink.ink.push(result.box);
-    ink.texts.push(result.box);
-    return result;
-  });
+    ),
+  }));
+  const obstacles = navigationObstacles(sheet.svg, true);
+  const placeInOrder = (order: typeof candidates) => {
+    const ink = { ink: [...obstacles.ink], texts: [...obstacles.texts] };
+    const placements: PeerNotePlacement[] = [];
+    for (const { entry, shapes } of order) {
+      const result = place(entry, shapes, field, ink);
+      if (!result) return { failed: entry };
+      ink.ink.push(result.box);
+      ink.texts.push(result.box);
+      placements.push(result);
+    }
+    return { placements };
+  };
+  const forward = placeInOrder(candidates);
+  if (forward.placements) return forward.placements;
+  // Nearby captions can compete for the same slot. Retry in reverse order
+  // with the original drawing ink before refusing the sheet.
+  const backward = placeInOrder(candidates.reverse());
+  if (backward.placements) return backward.placements.reverse();
+  const entry = forward.failed;
+  throw new NavigationSlotFailure(
+    `Navigation ${entry.kind} cannot fit sheet ${sheet.number}: ${entry.value} has no clear slot within ${PEER_REACH_MM} mm of its owner.`,
+    { field, owner: entry.owner },
+  );
 }
