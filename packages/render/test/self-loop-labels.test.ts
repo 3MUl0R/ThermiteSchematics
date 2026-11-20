@@ -101,8 +101,8 @@ describe("nested external bridge labels", () => {
           ];
           expect(points).toHaveLength(expected.length);
           points.forEach((point, p) => {
-            expect(point.x).toBeCloseTo(expected[p]!.x, 3);
-            expect(point.y).toBeCloseTo(expected[p]!.y, 3);
+            expect(point.x).toBe(Number(expected[p]!.x.toFixed(3)));
+            expect(point.y).toBe(Number(expected[p]!.y.toFixed(3)));
           });
           return {
             id: wire.uid,

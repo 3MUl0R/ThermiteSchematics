@@ -9,7 +9,7 @@ import {
   embedPrintableFont,
   subsetPrintableFont,
 } from "../src/printable-font.js";
-import { PRINTABLE_FONT_FAMILY } from "../../render/src/symbols/printable-font.js";
+import { PRINTABLE_FONT_FAMILY } from "../../render/src/text-metrics.js";
 import { parseHTML } from "linkedom";
 import { packetPdf } from "../src/alpha-pdf.js";
 import {

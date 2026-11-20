@@ -1,5 +1,5 @@
 import { beforeAll, expect, it } from "vitest";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { parseJson } from "@thermite/schema";
 import type {
   ElectricalIr,

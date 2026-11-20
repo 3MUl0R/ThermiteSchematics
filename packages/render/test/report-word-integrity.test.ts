@@ -7,9 +7,8 @@ import { tableDrafts } from "../src/packet/reports.js";
 import { documentPaper } from "./document-fixture.js";
 import { preferWholeStateWords } from "../src/packet/report-state-words.js";
 import { reportColumns } from "../src/packet/report-column-widths.js";
-import { reportNoteLayout } from "../src/packet/report-note-wrapping.js";
-import { wrap } from "../src/packet/svg.js";
-import { measureText, wrapText } from "../src/text-metrics.js";
+import { reportNoteLines } from "../src/packet/report-note-wrapping.js";
+import { measureText } from "../src/text-metrics.js";
 
 const fixture = () => {
   const ir = createTerminalIr([
@@ -85,35 +84,24 @@ it.each(["row", "header"])(
   },
 );
 
-it("retains native note capacity when measured words need more lines", () => {
-  const value = "WWWW WWWW WWWW WWWW",
-    width = 20;
-  const original = wrap(value, Math.floor(width / 1.6));
-  expect(measureText("WWWW", 2.5).width).toBeLessThan(width);
-  expect(wrapText(value, width, 2.5).length).toBeGreaterThan(original.length);
-  expect(reportNoteLayout(value, width)).toEqual({
-    lines: original,
-    fallback: "native note capacity",
-  });
-});
-
-it("retains the native note when an indivisible word exceeds its width", () => {
-  const value = "ENDPOINT123",
-    width = 11;
-  const original = wrap(value, Math.floor(width / 1.6));
-  expect(measureText(value, 2.5).width).toBeGreaterThan(width);
-  expect(wrapText(value, width, 2.5)).not.toEqual(original);
-  expect(wrapText(value, width, 2.5).length).toBe(original.length);
-  expect(reportNoteLayout(value, width)).toEqual({
-    lines: original,
-    fallback: "indivisible word",
-  });
-});
+it.each(["WWWW WWWW WWWW WWWW", "ENDPOINT123", "e\u0301WWWWW"])(
+  "fits wide source text without dropping characters: %j",
+  (value) => {
+    const width = 11;
+    const lines = reportNoteLines(value, width);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join("")).toBe(value);
+    expect(lines.every((line) => measureText(line, 2.5).width <= width)).toBe(
+      true,
+    );
+    expect(lines.every((line) => !/^\p{Mark}/u.test(line))).toBe(true);
+  },
+);
 
 it.each([
   "Cafe\u0301 remains available.",
   "Cafe\u0301 remains available for exact lookup. ".repeat(3) +
     "\r\nKeep authored spacing  here.",
 ])("preserves authored note code points and line separators: %j", (value) => {
-  expect(reportNoteLayout(value, 70).lines.join("")).toBe(value);
+  expect(reportNoteLines(value, 70).join("")).toBe(value);
 });

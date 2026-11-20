@@ -7,7 +7,7 @@ import {
   reportPagination,
 } from "../src/packet/report-layout.js";
 import { searchWireColumns } from "../src/packet/wire-column-search.js";
-import { wrap } from "../src/packet/svg.js";
+import { reportNoteLines } from "../src/packet/report-note-wrapping.js";
 import { reportHeightPagination } from "../src/packet/report-paginator.js";
 
 export const MACHINE_VECTORS = [
@@ -103,7 +103,7 @@ export function countedSearch(f: ReturnType<typeof pruningFixture>) {
   );
   const countedProbe = probeWithCounts(probe, counts);
   const notes = f.table.notes.flatMap((n) =>
-    wrap(n, Math.floor(f.width / 1.6)),
+    reportNoteLines(n, f.width),
   ).length;
   const result = searchWireColumns(
     f.table,
@@ -199,7 +199,7 @@ export function measureVector(
   const headers = measured.split(f.table.columns, "header");
   const headerHeight = measured.geometry(headers, true).height;
   const noteLines = f.table.notes.flatMap((n) =>
-    wrap(n, Math.floor(f.width / 1.6)),
+    reportNoteLines(n, f.width),
   ).length;
   const bottom = f.top + f.height - noteLines * 3.5 - 5;
   const start = f.top + 9 + headerHeight;

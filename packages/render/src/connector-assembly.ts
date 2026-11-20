@@ -1,3 +1,5 @@
+import { circuitTextLines } from "./symbols/circuit-text.js";
+import { printableTextWidth } from "./text-metrics.js";
 import { assemblyDocumentNeeds } from "./connector-assembly/document-needs.js";
 import type { DocumentNeedSeed } from "./packet/document-types.js";
 import { assemblyMappingNote } from "./connector-assembly/mapping-note.js";
@@ -54,43 +56,9 @@ export interface ConnectorAssemblyDrawing {
 }
 const n = (x: number) => String(Number(x.toFixed(3)));
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const width = (s: string) =>
-  [...s].reduce(
-    (v, c) =>
-      v +
-      (/[MW@%]/u.test(c)
-        ? 1
-        : /[ilI1 .,:;'|!]/u.test(c)
-          ? 0.4
-          : c.codePointAt(0)! > 127
-            ? 1.2
-            : 0.75) *
-        2.7,
-    0,
-  );
 const text = (x: number, y: number, s: string, bold = false) =>
   `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
-function wrap(value: string, max = 48): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of value.split(/\s+/u)) {
-    if (line && width(line + " " + word) > max) {
-      lines.push(line);
-      line = "";
-    }
-    if (width(word) > max) {
-      for (const c of word) {
-        if (width(line + c) > max) {
-          lines.push(line);
-          line = "";
-        }
-        line += c;
-      }
-    } else line += (line ? " " : "") + word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
+const wrap = (value: string, max = 48) => circuitTextLines(value, max, 2.7);
 const strings = (v: unknown, maxCount: number, maxLength: number) =>
   Array.isArray(v) &&
   v.length > 0 &&
@@ -444,7 +412,10 @@ function assemblyGraphInput(
       labels: [
         {
           text: edgeCaptions[i]!.join("\n"),
-          width: Math.max(...edgeCaptions[i]!.map(width)) + 2,
+          width:
+            Math.max(
+              ...edgeCaptions[i]!.map((line) => printableTextWidth(line, 2.7)),
+            ) + 2,
           height: edgeCaptions[i]!.length * 3.6 + 1,
         },
       ],

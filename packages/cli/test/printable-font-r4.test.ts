@@ -16,7 +16,7 @@ import { compileProject } from "@thermite/compiler";
 import { renderSchematic } from "@thermite/render";
 import { runRender } from "../src/index.js";
 import { inflateSync } from "node:zlib";
-import { printableTextMetrics } from "../../render/src/symbols/printable-font.js";
+import { printableTextMetrics } from "../../render/src/text-metrics.js";
 import {
   subsetPrintableFont,
   printableFontStyle,

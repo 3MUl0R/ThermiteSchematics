@@ -1,5 +1,5 @@
 import { required } from "../presentation/util.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { wrapIdentity } from "./label-wrap.js";
 
 const cache = new Map<string, ReturnType<typeof printableTextMetrics>>();

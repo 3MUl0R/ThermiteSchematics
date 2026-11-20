@@ -5,7 +5,7 @@ import type {
 } from "./navigation-types.js";
 import type { Rect } from "../device-legend/geometry.js";
 import { required } from "../presentation/util.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { MIRROR_HEADING_MM, MIRROR_ROW_MM } from "./mirror-plan.js";
 import {
   measureNavigationText,

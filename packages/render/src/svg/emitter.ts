@@ -14,9 +14,9 @@ import { graphSemanticOrder } from "../semantic-order.js";
 import { rootedGangEmission } from "../symbols/rooted-gangs.js";
 import {
   boundedPrintableAdvance,
-  printableSlotWidth,
+  continuousLabelSlot,
   printableFitAttributes,
-} from "../symbols/printable-font.js";
+} from "../text-metrics.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 
 import { comparePresentationLabel } from "../ordering.js";
@@ -959,11 +959,7 @@ function assertMatchingInputs(
 }
 
 function titleTextLength(value: string): number {
-  return boundedPrintableAdvance(
-    value,
-    10,
-    printableSlotWidth(value, 6 + 6.2 * [...value].length) - 6,
-  );
+  return boundedPrintableAdvance(value, 10, continuousLabelSlot(value) - 6);
 }
 
 function emitTitleBlock(
@@ -1000,7 +996,7 @@ function emitTitleBlock(
         ...printableFitAttributes(
           line.value,
           10,
-          printableSlotWidth(line.value, 6 + 6.2 * [...line.value].length) - 6,
+          continuousLabelSlot(line.value) - 6,
         ),
       },
       line.value,

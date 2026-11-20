@@ -1,7 +1,7 @@
 import type { ElectricalIr, IrDevice, IrDeviceType } from "@thermite/compiler";
 import type { RenderOutcome, RenderTextSource } from "./types.js";
 import { svgSemanticId } from "./svg/escape.js";
-import { printableTextMetrics } from "./symbols/printable-font.js";
+import { printableTextMetrics } from "./text-metrics.js";
 import { wrappedDeviceTagRows } from "./device-tag-wrap.js";
 
 export type DeviceTagField = "designation" | "description" | "part";

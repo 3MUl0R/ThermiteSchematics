@@ -71,7 +71,7 @@ export const workflowFacts: readonly Fact[] = [
   },
   {
     claim:
-      "The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.",
+      "Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.",
     async check() {
       const packetRequest = workflows.fences.find(
         (fence) =>
@@ -137,6 +137,10 @@ export function verifyCoreAuthoringRules() {
 
 export const workflowAdvice: [string, string][] = [
   ...coreAdvice,
+  [
+    "Circuit bodies reserve space between split terminal captions and symbol strokes.",
+    "The transformer-control and terminal-label clearance suites measure this printed geometry.",
+  ],
   [
     "Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**.",
     "The CLI guide suite executes this topic's starter recipe.",

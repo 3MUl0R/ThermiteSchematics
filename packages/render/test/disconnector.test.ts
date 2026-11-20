@@ -362,14 +362,14 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
             JSON.stringify([f.deviceUid, f.functionKey]),
           )!;
           expect(midpoint).toBeDefined();
-          expect(Number(gang.getAttribute(`x${i + 1}`))).toBeCloseTo(
-            midpoint.x,
-            3,
-          );
-          expect(Number(gang.getAttribute(`y${i + 1}`))).toBeCloseTo(
-            midpoint.y,
-            3,
-          );
+          // The endpoint and translated blade independently round to 0.001
+          // units, and the printed scale independently rounds to 0.000001.
+          for (const axis of ["x", "y"] as const)
+            expect(
+              Math.abs(
+                Number(gang.getAttribute(`${axis}${i + 1}`)) - midpoint[axis],
+              ),
+            ).toBeLessThanOrEqual(0.00101);
         });
       }
     }

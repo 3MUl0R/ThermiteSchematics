@@ -10,7 +10,7 @@ import {
   allocateNavigationSlots,
   type SheetSlotRequest,
 } from "../src/packet/navigation-slots.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 
 it.each(["device-id", "view", "smallest"])(
   "matches the owning frame by %s with literal competing geometry",

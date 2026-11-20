@@ -3,7 +3,7 @@ import {
   documentCaptionTokens,
   wrapDocumentTokens,
 } from "./document-caption-text.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 
 /** Each native need retains its own text and locator within one measured block. */
 export function portCaptionPack(

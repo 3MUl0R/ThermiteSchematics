@@ -10,7 +10,7 @@ import type {
 import type { SvgWriter, SvgAttributes } from "./writer.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import { printableLabelGeometry } from "../symbols/printable-label.js";
-import { printableFitAttributes } from "../symbols/printable-font.js";
+import { printableFitAttributes } from "../text-metrics.js";
 import { svgSemanticId } from "./escape.js";
 const global = (value: number) => value + OUTER_SVG_PADDING;
 export function emitLabelInk(

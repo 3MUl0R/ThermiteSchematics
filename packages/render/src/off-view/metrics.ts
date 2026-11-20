@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 
 const cache = new Map<string, ReturnType<typeof printableTextMetrics>>();
 /** Memoize only pure pinned font tables, never caller geometry or source facts. */

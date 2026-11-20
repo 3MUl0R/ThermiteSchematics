@@ -13,7 +13,7 @@ import {
 } from "./navigation-walk.js";
 import { descendants } from "../device-legend/svg-tree.js";
 import { inside, project, type Rect } from "../device-legend/geometry.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import type { DocumentMeasurements } from "./document-measurements.js";
 export { documentMeasurements } from "./document-measurements.js";
 type Printed = Pick<

@@ -10,7 +10,7 @@ import {
 } from "./navigation-symbols.js";
 import { destinationToken, roundNavigation } from "./navigation-location.js";
 import type { DrawingBounds } from "./types.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { inside, type Rect } from "../device-legend/geometry.js";
 import { required } from "../presentation/util.js";
 import { text, line } from "./svg.js";

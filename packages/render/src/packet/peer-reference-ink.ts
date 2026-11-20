@@ -1,6 +1,6 @@
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import type { Rect } from "../device-legend/geometry.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
 import {
   placePeerNotes,

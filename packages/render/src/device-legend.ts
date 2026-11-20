@@ -3,7 +3,7 @@ import {
   legendFreeRegions,
   legendFitDiagnostic,
 } from "./device-legend/failure.js";
-import { printableTextMetrics } from "./symbols/printable-font.js";
+import { printableTextMetrics } from "./text-metrics.js";
 import { required } from "./presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { planDeviceTag, deviceTagFields } from "./device-tags.js";

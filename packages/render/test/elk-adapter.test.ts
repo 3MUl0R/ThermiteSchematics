@@ -15,7 +15,7 @@ import {
 import { createElkEngine } from "../src/layout/elk-runtime.js";
 import { ELK_OPTIONS } from "../src/layout/options.js";
 import { buildPresentationGraph } from "../src/presentation.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { PresentationGraph, PresentationNode } from "../src/types.js";
 import {
   compileCoreFixture,

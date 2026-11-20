@@ -1,7 +1,7 @@
 import { symbolProfile } from "./profiles.js";
 import { printableCaption } from "./printable-policy.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
-import { printableTextMetrics } from "./printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { CaptionPlacementError } from "./caption-ink.js";
 export type CaptionPoint = { x: number; y: number };
 export type CaptionBox = {

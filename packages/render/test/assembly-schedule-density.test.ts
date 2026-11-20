@@ -24,10 +24,10 @@ it("fills Letter companions with all eight atomic native cap rows at the existin
   });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
-  expect(result.value.sheets).toHaveLength(10);
+  expect(result.value.sheets).toHaveLength(9);
   expect(
     result.value.sheets.filter((s) => s.view.kind === "connector-assembly"),
-  ).toHaveLength(6);
+  ).toHaveLength(5);
   const schedules = result.value.sheets.filter(
     (s) => s.view.kind === "assemblies",
   );

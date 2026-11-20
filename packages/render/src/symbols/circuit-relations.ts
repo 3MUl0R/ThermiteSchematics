@@ -1,6 +1,6 @@
 import type { IrFunction } from "@thermite/compiler";
 import { printableCaption } from "./printable-policy.js";
-import { printableTextMetrics } from "./printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { circuitTextLines, measure } from "./circuit-text.js";
 import { relationCaptionForms } from "./circuit-relation-form.js";
 

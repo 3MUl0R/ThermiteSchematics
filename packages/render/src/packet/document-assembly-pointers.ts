@@ -21,7 +21,7 @@ import {
   NavigationSlotFailure,
 } from "./navigation-slots.js";
 import { DocumentDependencyError } from "./document-error.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { text } from "./svg.js";
 import { required } from "../presentation/util.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";

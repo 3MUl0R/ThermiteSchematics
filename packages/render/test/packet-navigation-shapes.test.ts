@@ -91,7 +91,7 @@ it("uses fixed shape order and returns identical allocations on repeated runs", 
 });
 
 import { maximumRepeatForms } from "../src/packet/navigation-labels.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 it("reserves fixed maximum tokens and multiplicity in every mode and shape", () => {
   const r = maximumRepeatForms("SRC1", "functions", [3, 2], "100.D1");
   expect(

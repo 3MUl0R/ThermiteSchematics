@@ -6,7 +6,7 @@ import { hasSourceCaption } from "./helpers/source-caption.js";
 import { prepareSchematicDrawing } from "../src/renderer.js";
 import { emitSchematicSvg } from "../src/svg/emitter.js";
 import { svgSemanticId } from "../src/svg/escape.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { LayoutPoint, SchematicViewRequest } from "../src/types.js";
 
 function distance(

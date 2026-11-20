@@ -1,4 +1,5 @@
 import { captionInk } from "./caption-ink.js";
+import { strokeMiters } from "./stroke-join.js";
 import {
   PRINTABLE_SYMBOL_POLICY,
   sharedMarkHeight,
@@ -443,17 +444,49 @@ export function circuitLegendReservation(mark: CircuitMark, vertical: boolean) {
 }
 
 /** Exact painted envelope in page axes about the electrical mark centre. */
-export function circuitMarkInkBounds(mark: CircuitMark, vertical: boolean) {
+export function circuitMarkInkBounds(
+  mark: CircuitMark,
+  vertical: boolean,
+  includeMiters = false,
+) {
   const points = circuitMarkSegments(mark, 0, 0, vertical).flatMap((s) => [
     ...s,
   ]);
   const halfStroke =
     (PRINTABLE_SYMBOL_POLICY.conductorStrokeMm * MARK_SCALE) / 2;
+  const miters =
+    includeMiters && !hasExtendedInk(mark, vertical)
+      ? markPrimitives(mark, vertical)
+          .flatMap((p) =>
+            p.kind === "polyline"
+              ? strokeMiters(
+                  p.points,
+                  PRINTABLE_SYMBOL_POLICY.conductorStrokeMm / 2,
+                )
+              : [],
+          )
+          .map(([x, y]) => ({
+            x: (vertical ? 12 - y : x) * MARK_SCALE - 4,
+            y: (vertical ? x : y) * MARK_SCALE - 4,
+          }))
+      : [];
   return {
-    left: Math.min(...points.map((p) => p.x)) - halfStroke,
-    top: Math.min(...points.map((p) => p.y)) - halfStroke,
-    right: Math.max(...points.map((p) => p.x)) + halfStroke,
-    bottom: Math.max(...points.map((p) => p.y)) + halfStroke,
+    left: Math.min(
+      Math.min(...points.map((p) => p.x)) - halfStroke,
+      ...miters.map((p) => p.x),
+    ),
+    top: Math.min(
+      Math.min(...points.map((p) => p.y)) - halfStroke,
+      ...miters.map((p) => p.y),
+    ),
+    right: Math.max(
+      Math.max(...points.map((p) => p.x)) + halfStroke,
+      ...miters.map((p) => p.x),
+    ),
+    bottom: Math.max(
+      Math.max(...points.map((p) => p.y)) + halfStroke,
+      ...miters.map((p) => p.y),
+    ),
   };
 }
 

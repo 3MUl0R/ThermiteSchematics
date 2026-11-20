@@ -3,7 +3,7 @@ import type { PlacedOccurrence, NavigationShape } from "./navigation-types.js";
 import { destinationToken } from "./navigation-location.js";
 import { compareText } from "../ordering.js";
 import { required } from "../presentation/util.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 export const NAVIGATION_FONT_MM = 3.502;
 export const measureNavigationText = (s: string) => {
   const m = printableTextMetrics(s, NAVIGATION_FONT_MM);

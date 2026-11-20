@@ -1,3 +1,4 @@
+import { wrapText } from "../text-metrics.js";
 import {
   communicationPartRows,
   communicationRowLayout,
@@ -17,7 +18,7 @@ import type {
   CommunicationContinuationBlock,
   CircuitContinuationBlock,
 } from "./types.js";
-import { assemblyNoteLines, text } from "./svg.js";
+import { text } from "./svg.js";
 
 const communicationPartNotice =
   "Whole port links; repeated bodies describe the same device with other ports. P = view part, S = packet sheet.";
@@ -26,9 +27,10 @@ function communicationReferenceLines(
   targets: readonly NativePartTarget[],
   width: number,
 ): string[] {
-  return assemblyNoteLines(
+  return wrapText(
     `${label} -> ${targets.map(nativePartToken).join(", ")}`,
     width,
+    2.5,
   );
 }
 export function communicationPartLines(
@@ -38,7 +40,7 @@ export function communicationPartLines(
 ): string[] {
   if (!drawing.pagination) return [];
   return [
-    ...assemblyNoteLines(communicationPartNotice, width),
+    ...wrapText(communicationPartNotice, width, 2.5),
     ...communicationPartRows(drawing, selected, true).flatMap(
       (d) =>
         communicationRowLayout(
@@ -57,13 +59,11 @@ export function emitCommunicationContinuationBlock(
   block: CommunicationContinuationBlock,
 ): string {
   let y = block.y;
-  const out = assemblyNoteLines(communicationPartNotice, block.width).map(
-    (s) => {
-      const row = text(block.x, y, s, 2.5);
-      y += 3.5;
-      return row;
-    },
-  );
+  const out = wrapText(communicationPartNotice, block.width, 2.5).map((s) => {
+    const row = text(block.x, y, s, 2.5);
+    y += 3.5;
+    return row;
+  });
   for (const row of block.rows) {
     out.push(
       `<g data-communication-continuation-device="${attr(row.deviceUid)}" data-communication-view="${block.view}" data-from-part="${block.part}" data-destination-parts="${attr(JSON.stringify(row.targets.map((t) => t.part)))}" data-destination-sheets="${attr(JSON.stringify(row.targets.map((t) => t.sheet)))}">`,

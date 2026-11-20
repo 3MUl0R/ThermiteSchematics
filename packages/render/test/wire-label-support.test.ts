@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { compileProject } from "@thermite/compiler";
 import { svgSemanticId } from "../src/svg/escape.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { prepareWiringDrawing } from "../src/wiring.js";
 import { consoleWiringFixture } from "./wiring-landings-fixture.js";
 import { required } from "./fixtures.js";

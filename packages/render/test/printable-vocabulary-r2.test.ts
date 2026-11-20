@@ -8,7 +8,7 @@ import {
   printableTextMetrics,
   printableSlotWidth,
   boundedPrintableAdvance,
-} from "../src/symbols/printable-font.js";
+} from "../src/text-metrics.js";
 import { prepareCircuitView } from "../src/circuit.js";
 import { contractProject } from "./rooted-profile-contracts.js";
 import { renderSchematic } from "../src/renderer.js";

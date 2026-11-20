@@ -4,7 +4,7 @@ import { measureText } from "../src/text-metrics.js";
 import { reportCells, wireColumnProbe } from "../src/packet/report-cells.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { reportPageCount } from "../src/packet/report-layout.js";
-import { wrap } from "../src/packet/svg.js";
+import { reportNoteLines } from "../src/packet/report-note-wrapping.js";
 
 export function arithmeticFixture(
   source: ElectricalIr,
@@ -77,9 +77,7 @@ function boundaryHeight(
     end += measured.geometry(
       measured.split(row.cells, "boundary", row.key),
     ).height;
-  const notes = table.notes.flatMap((n) =>
-    wrap(n, Math.floor(width / 1.6)),
-  ).length;
+  const notes = table.notes.flatMap((n) => reportNoteLines(n, width)).length;
   const height = end - top + notes * 3.5 + 5;
   if (top + height - notes * 3.5 - 5 !== end)
     throw Error("Boundary fixture is not exact");

@@ -2,7 +2,7 @@ import { deviceTagFields } from "../device-tags.js";
 import type { IrDevice, IrDeviceType } from "@thermite/compiler";
 import { drawingDeviceTag } from "../device-tag-svg.js";
 import { CAPTION_CLEARANCE_MM, CaptionPlacementError } from "./caption-ink.js";
-import { printableTextMetrics } from "./printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { CIRCUIT_TAG_COLUMN_WIDTH } from "./circuit-relations.js";
 
 interface CaptionOwner {

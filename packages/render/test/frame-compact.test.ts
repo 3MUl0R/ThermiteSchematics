@@ -17,7 +17,7 @@ import {
   continuationHeaderWidth,
 } from "../src/packet/continuation-label.js";
 import { compactFrame } from "../src/packet/frame-compact.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { normalizePaperPage, bounds, frame } from "../src/packet/page.js";
 import { useCompactFrame } from "../src/packet/frame-profile.js";
 import type { Draft, Link } from "../src/packet/types.js";
@@ -338,12 +338,23 @@ it("runs final bank admission at the frame boundary", () => {
   expect(() => compactFrame(d, page, 1, 1)).toThrow(/cut-to-ink/);
 });
 
-it("refuses wide title glyphs that would strike the neighbouring column", () => {
+it("wraps bold wide title glyphs before the neighbouring column", () => {
   const d = draft();
-  d.title = { ...d.title, projectName: "M".repeat(160) };
-  expect(() => compactFrame(d, page, 1, 1)).toThrow(
-    /field project requires .* mm; .* mm are available/,
+  const projectName = "M".repeat(160);
+  d.title = { ...d.title, projectName };
+  const rows = compactFramePlan(d.title, page).title.rows.filter(
+    (row) => row.field === "project",
   );
+  const width = page.widthMm - 2 * page.marginMm - 76;
+  expect(rows.length).toBeGreaterThan(1);
+  expect(rows.map((row) => row.value).join("")).toBe(projectName);
+  const svg = compactFrame(d, page, 1, 1);
+  for (const row of rows) {
+    expect(
+      printableTextMetrics(row.value, row.size, row.bold).right,
+    ).toBeLessThanOrEqual(width);
+    expect(svg).toContain(`>${row.value}</text>`);
+  }
 });
 
 it("checks continuous zone lanes after isotonic packing, even if both labels initially fit", () => {

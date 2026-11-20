@@ -146,3 +146,29 @@ it("reserves width and height for opposing and adjacent wrapped port captions", 
   expect(opposing).toBeGreaterThan(0);
   expect(adjacent).toBeGreaterThan(0);
 });
+
+it("keeps narrow port prose together while wrapping wide glyphs", async () => {
+  const fixture = structuredClone(ir);
+  const relation = fixture.relations[0]!;
+  fixture.relations = [relation];
+  const device = fixture.devices.find((d) => d.uid === relation.fromDeviceUid)!;
+  const type = fixture.deviceTypes.find((t) => t.id === device.typeId)!;
+  const key = relation.connection!.fromPort;
+  const port = type.ports![key]!;
+  const narrow = "i".repeat(36),
+    wide = "W".repeat(36);
+  async function lines(description: string) {
+    port.description = description;
+    const { content } = await prepareCommunicationDrawing(fixture, view);
+    const doc = parseHTML(content).document;
+    return [
+      ...doc.querySelectorAll(
+        `[data-device-uid="${device.uid}"] [data-communication-port="${key}"] text`,
+      ),
+    ].map((t) => t.textContent);
+  }
+  expect(await lines(narrow)).toContain(narrow);
+  const wrapped = await lines(wide);
+  expect(wrapped.length).toBeGreaterThan(1);
+  expect(wrapped.join("").split("W").length - 1).toBe(wide.length);
+});

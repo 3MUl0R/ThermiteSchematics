@@ -18,6 +18,7 @@ export {
   composedCircuitMark,
   circuitMarkLegendInk,
   circuitLegendReservation,
+  circuitMarkInkBounds,
   circuitMarkSegments,
   type CircuitMark,
 } from "./circuit-mark.js";
@@ -378,17 +379,37 @@ export function circuitWinding(
   coupled = false,
   terminalXs?: readonly [number, number],
 ): string {
-  const x = width / 2 + (coupled ? (source ? 3 : -3) : 0),
-    edge = source ? width : 0;
-  const points = windingPolyline(
-    x,
+  const points = circuitWindingPoints(
+    width,
     y1,
     y2,
-    edge,
+    source,
+    coupled,
+    terminalXs,
+  );
+  const x = windingAxis(width / 2, source, coupled);
+  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
+}
+
+const windingAxis = (center: number, source: boolean, coupled: boolean) =>
+  center + (coupled ? (source ? 3 : -3) : 0);
+
+export function circuitWindingPoints(
+  width: number,
+  first: number,
+  last: number,
+  source: boolean,
+  coupled: boolean,
+  terminalXs?: readonly [number, number],
+) {
+  return windingPolyline(
+    windingAxis(width / 2, source, coupled),
+    first,
+    last,
+    source ? width : 0,
     coupled ? (source ? -1 : 1) * COUPLED_WINDING_AMPLITUDE_MM : 2,
     terminalXs,
   );
-  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
 }
 
 export function circuitWindingVertical(
@@ -400,7 +421,7 @@ export function circuitWindingVertical(
   center = height / 2,
   terminalYs?: readonly [number, number],
 ): string {
-  const y = center + (coupled ? (source ? 3 : -3) : 0),
+  const y = windingAxis(center, source, coupled),
     edge = source ? height : 0;
   const points = windingPolyline(
     y,

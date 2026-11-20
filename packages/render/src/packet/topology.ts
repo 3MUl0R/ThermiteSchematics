@@ -34,13 +34,7 @@ import type { Draft, PaperPage } from "./types.js";
 import { failure } from "./errors.js";
 import { topologySelectionContext } from "./selection-context.js";
 import { bounds, zone } from "./page.js";
-import {
-  n,
-  text,
-  requestNoteText,
-  wrapReport,
-  assemblyNoteLines,
-} from "./svg.js";
+import { n, text, requestNoteText } from "./svg.js";
 import {
   communicationPartBlock,
   communicationPortSelection,
@@ -54,7 +48,6 @@ type NotedDrawing = CommunicationDrawing & {
 function topologyNoteLines(
   drawing: NotedDrawing,
   width: number,
-  assembly: boolean,
   request: { format: string; notes?: readonly string[] },
 ) {
   const authoredNotes = request.notes ?? [];
@@ -69,16 +62,7 @@ function topologyNoteLines(
   return drawing.note.split("\n").flatMap((line) => {
     const authored = offset >= authoredStart;
     offset += line.length + 1;
-    const split = (value: string) => {
-      const lines = drawing.engineNotes
-        ? wrapText(value, width, 2.5)
-        : wrapReport(value, Math.floor(width / 1.6));
-      return lines.flatMap((line) =>
-        assembly || drawing.pagination
-          ? assemblyNoteLines(line, width)
-          : [line],
-      );
-    };
+    const split = (value: string) => wrapText(value, width, 2.5);
     const replacement =
       !authored && drawing.documentNeeds?.length
         ? line
@@ -162,7 +146,7 @@ export async function topologyDrafts(
         b.w,
         selectedPorts(drawing),
       );
-      const noteLines = topologyNoteLines(drawing, b.w, assembly, request);
+      const noteLines = topologyNoteLines(drawing, b.w, request);
       const noteHeight = (noteLines.length + partLines.length) * 3.5;
       const { scale, reserveNotes } = topologyScale(
         drawing,

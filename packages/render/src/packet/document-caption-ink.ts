@@ -1,6 +1,6 @@
 import type { DocumentDependency } from "./document-types.js";
 import type { AnnotationReservation } from "./navigation-types.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { wrapDocumentTokens } from "./document-caption-text.js";
 import { inside } from "../device-legend/geometry.js";
 import { text, n } from "./svg.js";

@@ -283,11 +283,11 @@ it("keeps every console supply route, including W-C06 and W-C10, at its accepted
     ]),
   );
   expect(measured).toEqual({
-    "W-C07": { length: 96.48, bends: 2 },
-    "W-C08": { length: 129.48, bends: 2 },
-    "W-C06": { length: 124.48, bends: 4 },
-    "W-C09": { length: 58.275, bends: 0 },
-    "W-C10": { length: 281.755, bends: 4 },
+    "W-C07": { length: 89.033, bends: 2 },
+    "W-C08": { length: 122.033, bends: 2 },
+    "W-C06": { length: 117.033, bends: 4 },
+    "W-C09": { length: 54.045, bends: 0 },
+    "W-C10": { length: 270.078, bends: 4 },
   });
 });
 

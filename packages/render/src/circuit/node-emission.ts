@@ -3,6 +3,7 @@ import { terminalPortAttribute } from "../layout/port-attributes.js";
 import { deviceTagSvg } from "../device-tag-svg.js";
 import { ownedTagText, tagAttributes } from "../device-tag-ownership.js";
 import { TERMINAL_TEXT_SIZE } from "../symbols/circuit-text.js";
+import { LATERAL_PIN_INSET_MM } from "./pin-clearance.js";
 import { nodeCaptionSegments } from "../symbols/circuit-node-ink.js";
 import { type CaptionBox } from "../symbols/circuit-caption.js";
 import {
@@ -397,10 +398,23 @@ function emitNodePin(p: Pin, state: EmissionState) {
   );
   const label = pinLabel(p);
   if (p.side === "WEST")
-    out.push(text(1.5, p.y - 1.5, label, TERMINAL_TEXT_SIZE));
+    out.push(
+      text(
+        LATERAL_PIN_INSET_MM,
+        p.y - LATERAL_PIN_INSET_MM,
+        label,
+        TERMINAL_TEXT_SIZE,
+      ),
+    );
   else if (p.side === "EAST")
     out.push(
-      text(node.width - 1.5, p.y - 1.5, label, TERMINAL_TEXT_SIZE, "end"),
+      text(
+        node.width - LATERAL_PIN_INSET_MM,
+        p.y - LATERAL_PIN_INSET_MM,
+        label,
+        TERMINAL_TEXT_SIZE,
+        "end",
+      ),
     );
   else if (p.side === "NORTH")
     out.push(text(p.x + 1, 6, label, TERMINAL_TEXT_SIZE));

@@ -21,6 +21,11 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.35 (TEXTM1)** extends **DQ-02** to require 0.50 mm from terminal
+label ink to painted strokes in its own symbol. Chromium measures the glyphs
+and native SVG strokes, including caps, joins and dashes, in sheet millimetres.
+Mechanical frames and terminal markers are outside this check.
+
 Version **5.34 (IDENT1)** extends **DQ-05** (#469). It measures raw UUIDs
 in painted text, including wrapped circuit captions and device tags, and
 circuit group keys in headings and related-function

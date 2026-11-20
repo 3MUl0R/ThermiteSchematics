@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { viewportSize } from "../src/packet/viewport-size.js";
 import { legacyFooterNote } from "../src/packet/legacy-footer.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 
 it("cannot lose planned em through a rounded viewport dimension", () => {
   for (const span of [100.001, 100.003, 651.721, 1543.387]) {
@@ -61,13 +61,13 @@ it("does not newly abbreviate terminal references when the floor adds a fifth ro
       {
         kind: "relation",
         destination: "100 / 200 / 300 / 400 / 500",
-        functions: Array.from({ length: 37 }, () => fn),
+        functions: Array.from({ length: 41 }, () => fn),
       },
     ],
     28,
   );
   expect(plan.lines.length).toBeGreaterThan(4);
-  expect(plan.lines.join(" ").match(/11–12/gu)).toHaveLength(37);
+  expect(plan.lines.join(" ").match(/11–12/gu)).toHaveLength(41);
   expect(plan.lines.join(" ")).not.toContain("contacts:");
   for (const line of plan.lines)
     expect(printableTextMetrics(line, 2.5).advance + 4).toBeLessThanOrEqual(

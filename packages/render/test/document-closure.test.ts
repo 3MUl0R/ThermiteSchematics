@@ -314,8 +314,7 @@ it("generic selected-path warnings promise no inventory", async () => {
 it("reserves the widest sheet token before allocating a caption", async () => {
   const { documentCaptionReservation } =
     await import("../src/packet/document-caption-ink.js");
-  const { printableTextMetrics } =
-    await import("../src/symbols/printable-font.js");
+  const { printableTextMetrics } = await import("../src/text-metrics.js");
   const { documentDependencies } =
     await import("../src/packet/document-companions.js");
   const need = documentDependencies(source.ir, [

@@ -2,7 +2,7 @@ import { beforeAll, expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematic } from "../src/renderer.js";
 import { parseHTML } from "linkedom";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { nativePath } from "./helpers/wire-label-support.js";
 import { required } from "./fixtures.js";
 let ir: Extract<Awaited<ReturnType<typeof compileProject>>, { ok: true }>["ir"];

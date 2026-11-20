@@ -1,5 +1,5 @@
 import type { Page } from "playwright-core";
-import { printableTextMetrics } from "../../../render/src/symbols/printable-font.js";
+import { printableTextMetrics } from "../../../render/src/text-metrics.js";
 
 export type Point = { x: number; y: number };
 export type Box = { left: number; right: number; top: number; bottom: number };

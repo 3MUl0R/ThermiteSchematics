@@ -9,7 +9,7 @@ import {
 import { deviceTagFitDetails } from "../src/packet/device-tag-fit.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { circuitMark } from "../src/symbols/circuit.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { compileCoreFixture } from "./fixtures.js";
 import {
   controlCircuitView,

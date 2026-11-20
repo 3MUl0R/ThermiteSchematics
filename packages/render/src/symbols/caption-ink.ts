@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "./printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import type { CaptionBox, CaptionSegment } from "./circuit-caption.js";
 
 export const CAPTION_CLEARANCE_MM = 1;

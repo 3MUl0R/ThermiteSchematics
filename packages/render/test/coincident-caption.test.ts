@@ -10,6 +10,7 @@ import { renderSchematicPacket } from "../src/sheets.js";
 import { jumperChainCircuitFixture } from "./circuit-fixture.js";
 import base from "./fixtures/coincident-caption-base.json";
 import { required } from "./fixtures.js";
+import { printableTextWidth } from "../src/text-metrics.js";
 type Segment = CircuitLabelState["segments"][number];
 const segment = (index: number, x: number, end: number): Segment => ({
   index,
@@ -78,7 +79,7 @@ async function example(name: string) {
   );
 }
 it.each(base.cases)(
-  "keeps the coincident captions exactly at 3f93d6c in $name",
+  "keeps the coincident caption identities and leader-free plates in $name",
   async (fixture) => {
     const rendered = await example(fixture.name);
     expect(rendered.ok).toBe(true);
@@ -94,7 +95,19 @@ it.each(base.cases)(
             `[data-circuit-group="${label.group}"] [data-wire-label="${label.uid}"]`,
           ),
         );
-      expect(actual.outerHTML, label.uid).toBe(label.svg);
+      const prior = parseHTML(`<svg>${label.svg}</svg>`).document;
+      const printed = required(actual.querySelector("text"));
+      expect(printed.textContent, label.uid).toBe(
+        prior.querySelector("text")?.textContent,
+      );
+      expect(printed.getAttribute("font-size")).toBe("2.5");
+      const plateWidth = Number(
+        actual.querySelector("rect")?.getAttribute("width"),
+      );
+      expect(plateWidth).toBeGreaterThan(0);
+      expect(plateWidth).toBeLessThanOrEqual(
+        printableTextWidth(printed.textContent ?? "", 2.5) + 1.501,
+      );
       expect(
         doc.querySelectorAll(`[data-label-leader-owner="${label.uid}"]`),
       ).toHaveLength(0);
