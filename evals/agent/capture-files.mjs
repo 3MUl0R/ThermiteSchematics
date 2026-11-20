@@ -4,30 +4,23 @@ import {
   closeSync,
   constants,
   fstatSync,
-  ftruncateSync,
   lstatSync,
-  mkdirSync,
   openSync,
   readFileSync,
   realpathSync,
-  writeSync,
 } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
-const {
-  O_CREAT,
-  O_DIRECTORY,
-  O_EXCL,
-  O_NOFOLLOW = 0,
-  O_NONBLOCK = 0,
-  O_RDONLY,
-  O_WRONLY,
-} = constants;
+const { O_DIRECTORY, O_NOFOLLOW = 0, O_NONBLOCK = 0, O_RDONLY } = constants;
 const stat = (path) => lstatSync(path, { bigint: true, throwIfNoEntry: false });
 const fdStat = (fd) => fstatSync(fd, { bigint: true });
 const sameFile = (a, b) => a?.dev === b.dev && a?.ino === b.ino;
 const ordinaryFile = (s) => s?.isFile() && s.nlink === 1n;
 const inputError = "Capture input must be an ordinary file inside project";
+// Node has no descriptor-relative open on Windows, and pathname checks around
+// an open cannot stop a concurrent junction swap. Refuse instead.
+export const windowsError =
+  "Visual capture is unavailable on Windows: project files cannot be opened there without following links";
 const readFlags = O_RDONLY | O_NOFOLLOW | O_NONBLOCK;
 
 function directoryIdentity(path, expected) {
@@ -61,9 +54,10 @@ function openDescendant(rootFd, parts) {
   let dir = rootFd;
   try {
     for (const part of parts.slice(0, -1)) {
-      const next = openRelative(dir, part, readFlags | O_DIRECTORY);
-      if (dir !== rootFd) closeSync(dir);
-      dir = next;
+      const parent = dir;
+      // Track the child first so cleanup closes it if closing the parent throws.
+      dir = openRelative(parent, part, readFlags | O_DIRECTORY);
+      if (parent !== rootFd) closeSync(parent);
     }
     return openRelative(dir, parts.at(-1), readFlags);
   } finally {
@@ -72,16 +66,15 @@ function openDescendant(rootFd, parts) {
 }
 
 export function projectReader(project) {
+  assert(
+    process.platform === "darwin" || process.platform === "linux",
+    windowsError,
+  );
   const root = realpathSync(project);
   const identity = directoryIdentity(root);
-  const useOpenat =
-    process.platform === "darwin" || process.platform === "linux";
-  const rootFd = useOpenat
-    ? openSync(root, readFlags | O_DIRECTORY)
-    : undefined;
+  const rootFd = openSync(root, readFlags | O_DIRECTORY);
   try {
-    if (useOpenat)
-      assert(sameFile(fdStat(rootFd), identity), "Project changed");
+    assert(sameFile(fdStat(rootFd), identity), "Project changed");
     return {
       path(name) {
         const rel = relative(root, resolve(root, name));
@@ -90,8 +83,7 @@ export function projectReader(project) {
             rel !== ".." &&
             !rel.startsWith(".." + sep) &&
             !isAbsolute(rel) &&
-            !rel.includes("\0") &&
-            (sep !== "\\" || !rel.includes(":")),
+            !rel.includes("\0"),
           inputError,
         );
         return rel;
@@ -108,9 +100,7 @@ export function projectReader(project) {
           ordinaryFile(expected) && realpathSync(path) === path,
           inputError,
         );
-        const fd = useOpenat
-          ? openDescendant(rootFd, rel.split(sep))
-          : openSync(path, readFlags);
+        const fd = openDescendant(rootFd, rel.split(sep));
         try {
           const opened = fdStat(fd);
           const verifyPath = () => {
@@ -140,72 +130,11 @@ export function projectReader(project) {
         }
       },
       close() {
-        if (useOpenat) closeSync(rootFd);
+        closeSync(rootFd);
       },
     };
   } catch (error) {
-    if (useOpenat) closeSync(rootFd);
-    throw error;
-  }
-}
-
-// Reserve fresh inodes before the agent starts. Later writes and truncation
-// use these descriptors exclusively, even if an agent renames an entry.
-export function reserveCaptureFiles(directory, names) {
-  if (!stat(directory)) mkdirSync(directory);
-  const parent = directoryIdentity(directory);
-  const slots = new Map();
-  const close = () => {
-    for (const { fd } of slots.values()) closeSync(fd);
-  };
-  const verify = ({ path, fd, identity }) => {
-    directoryIdentity(directory, parent);
-    const current = fdStat(fd);
-    assert(
-      ordinaryFile(current) &&
-        sameFile(current, identity) &&
-        sameFile(stat(path), identity),
-      "Capture output changed",
-    );
-  };
-  try {
-    for (const name of names)
-      assert(!stat(join(directory, name)), "Capture output already exists");
-    for (const name of names) {
-      const path = join(directory, name);
-      directoryIdentity(directory, parent);
-      const fd = openSync(
-        path,
-        O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY,
-        0o600,
-      );
-      const slot = { path, fd };
-      slots.set(name, slot);
-      slot.identity = fdStat(fd);
-      verify(slot);
-    }
-    return {
-      write(name, bytes) {
-        const slot = slots.get(name);
-        verify(slot);
-        ftruncateSync(slot.fd, 0);
-        for (let offset = 0; offset < bytes.length;) {
-          const count = writeSync(
-            slot.fd,
-            bytes,
-            offset,
-            bytes.length - offset,
-            offset,
-          );
-          assert(count > 0, "Capture output write made no progress");
-          offset += count;
-        }
-        verify(slot);
-      },
-      close,
-    };
-  } catch (error) {
-    close();
+    closeSync(rootFd);
     throw error;
   }
 }

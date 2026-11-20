@@ -1,9 +1,26 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { chromium } from "playwright-core";
-import { projectReader, reserveCaptureFiles } from "./capture-files.mjs";
+import { projectReader, windowsError } from "./capture-files.mjs";
 import { sha256 } from "./snapshot.mjs";
 
 const requestName = "visual-capture.request.json";
@@ -12,6 +29,10 @@ const outputNames = ["01.png", "02.png", "03.png", "04.png"];
 const origin = "https://thermite-capture.invalid";
 const receiptBytes = (result) =>
   Buffer.from(JSON.stringify(result, null, 2) + "\n");
+// Broker-owned directories live in the harness home, outside the agent's
+// writable roots (the project and the run directory used as its TMPDIR).
+const harnessTemp = (prefix) =>
+  mkdtempSync(join(realpathSync(homedir()), prefix));
 
 function htmlPath(source, name) {
   assert(
@@ -30,14 +51,18 @@ export function captureInput(project, name) {
   }
 }
 
-async function renderHtml(source, request) {
+function requestedInputs(source, request) {
   assert(
-    Array.isArray(request.html) &&
+    Array.isArray(request?.html) &&
       request.html.length >= 1 &&
       request.html.length <= outputNames.length,
     "Request 1–4 HTML outputs",
   );
-  const inputs = request.html.map((name) => htmlPath(source, name));
+  return request.html.map((name) => htmlPath(source, name));
+}
+
+async function renderHtml(source, request) {
+  const inputs = requestedInputs(source, request);
   const snapshots = new Map();
   const snapshot = (path) => {
     if (!snapshots.has(path)) snapshots.set(path, source.read(path));
@@ -45,11 +70,7 @@ async function renderHtml(source, request) {
   };
   for (const input of inputs) snapshot(input);
 
-  // The runner's temporary workspace is writable by the agent. Keep Chromium's
-  // profile, artifacts and process temp files outside that workspace.
-  const scratch = mkdtempSync(
-    join(realpathSync(homedir()), ".thermite-visual-"),
-  );
+  const scratch = harnessTemp(".thermite-visual-");
   let context;
   try {
     context = await chromium.launchPersistentContext(join(scratch, "profile"), {
@@ -59,13 +80,8 @@ async function renderHtml(source, request) {
       artifactsDir: scratch,
       env: {
         PATH: process.env.PATH,
-        SystemRoot: process.env.SystemRoot,
-        WINDIR: process.env.WINDIR,
         HOME: scratch,
-        USERPROFILE: scratch,
         TMPDIR: scratch,
-        TMP: scratch,
-        TEMP: scratch,
       },
       acceptDownloads: false,
       offline: true,
@@ -119,107 +135,182 @@ async function renderHtml(source, request) {
   }
 }
 
-function captureSession(project) {
-  const root = realpathSync(project);
-  const source = projectReader(root);
-  let outputs;
-  try {
-    outputs = reserveCaptureFiles(join(root, "visual-captures"), [
-      ...outputNames,
-      "result.json",
-    ]);
-  } catch (error) {
-    source.close();
-    throw error;
-  }
-  return {
-    request() {
-      if (source.has(requestName))
-        return source.read(requestName).toString("utf8");
-    },
-    async capture(request) {
-      const captures = await renderHtml(source, request);
-      // Unused slots are emptied so an older image never outlives its receipt.
-      for (const [index, name] of outputNames.entries())
-        outputs.write(name, captures[index]?.png ?? Buffer.alloc(0));
-      return {
-        format: "thermite-agent-visual-capture/1",
-        files: captures.map(({ file }) => file),
-      };
-    },
-    receipt(bytes) {
-      outputs.write("result.json", bytes);
-    },
-    close() {
-      outputs.close();
-      source.close();
-    },
-  };
+function replaceFile(path, bytes) {
+  const partial = path + ".partial";
+  rmSync(partial, { force: true });
+  writeFileSync(partial, bytes, { flag: "wx" });
+  renameSync(partial, path);
 }
 
-export async function captureHtml(project, request) {
-  const session = captureSession(project);
+// The output directory holds exactly what the receipt describes. The receipt
+// is absent while a capture runs, and every PNG is verified before it lands.
+function clearOutputs(outputs) {
+  for (const name of ["result.json", ...outputNames])
+    rmSync(join(outputs, name), { force: true });
+}
+function publish(outputs, result, captures = []) {
+  clearOutputs(outputs);
+  for (const [index, { png }] of captures.entries())
+    replaceFile(join(outputs, outputNames[index]), png);
+  for (const [index, { file }] of captures.entries())
+    assert(
+      sha256(readFileSync(join(outputs, outputNames[index]))) === file.sha256,
+      "Capture output changed",
+    );
+  replaceFile(join(outputs, "result.json"), receiptBytes(result));
+  return result;
+}
+async function captureInto(source, outputs, request) {
+  const captures = await renderHtml(source, request);
+  return publish(
+    outputs,
+    {
+      format: "thermite-agent-visual-capture/1",
+      files: captures.map(({ file }) => file),
+    },
+    captures,
+  );
+}
+const publishError = (outputs, error) =>
+  publish(outputs, { error: error.message });
+
+// Direct entry point: `outputs` must be a directory the agent cannot write.
+// The request is validated before anything is written.
+export async function captureHtml(project, request, outputs) {
+  const source = projectReader(project);
   try {
-    return await session.capture(request);
+    requestedInputs(source, request);
+    return await captureInto(source, realpathSync(outputs), request);
   } finally {
-    session.close();
+    source.close();
   }
 }
 
+const { O_CREAT, O_EXCL, O_NOFOLLOW = 0, O_WRONLY } = constants;
+function createExclusive(path, bytes) {
+  const fd = openSync(path, O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY, 0o600);
+  try {
+    for (let offset = 0; offset < bytes.length;)
+      offset += writeSync(fd, bytes, offset, bytes.length - offset);
+  } finally {
+    closeSync(fd);
+  }
+}
+function ordinaryDirectory(path, expected) {
+  const current = lstatSync(path, { bigint: true });
+  assert(
+    current.isDirectory() &&
+      realpathSync(path) === path &&
+      (!expected ||
+        (current.dev === expected.dev && current.ino === expected.ino)),
+    "Visual capture evidence directory changed",
+  );
+  return current;
+}
+// Runs after the agent's process group has exited. Nothing in the run
+// directory may be followed or overwritten: names the agent planted fail.
+function copyEvidence(outputs, evidence, identity) {
+  ordinaryDirectory(evidence, identity);
+  const names = readdirSync(outputs);
+  if (!names.includes("result.json")) return;
+  createExclusive(
+    join(evidence, evidenceName),
+    readFileSync(join(outputs, "result.json")),
+  );
+  const images = join(evidence, "visual-captures");
+  mkdirSync(images);
+  ordinaryDirectory(images);
+  for (const name of outputNames.filter((name) => names.includes(name)))
+    createExclusive(join(images, name), readFileSync(join(outputs, name)));
+}
+
+function linkedOutputs(link, outputs) {
+  const current = lstatSync(link, { throwIfNoEntry: false });
+  return (
+    !!current?.isSymbolicLink() &&
+    resolve(readlinkSync(link)) === resolve(outputs)
+  );
+}
+
+// Before the agent starts, link project/visual-captures to a broker-owned
+// directory. The broker never writes through a path the agent can change.
 export async function visualBroker(task, project, evidence) {
   if (!task.visualCapture) return async () => {};
-  const session = captureSession(project);
-  let evidenceOutput;
-  try {
-    evidenceOutput = reserveCaptureFiles(realpathSync(evidence), [
-      evidenceName,
-    ]);
-  } catch (error) {
-    session.close();
-    throw error;
-  }
-
-  let previous, pending;
-  const tick = async () => {
+  const root = realpathSync(project);
+  const link = join(root, "visual-captures");
+  assert(
+    !lstatSync(link, { throwIfNoEntry: false }),
+    "visual-captures must not exist before the agent starts",
+  );
+  const evidenceDir = realpathSync(evidence);
+  const evidenceIdentity = ordinaryDirectory(evidenceDir);
+  const outputs = harnessTemp(".thermite-visual-out-");
+  let source, timer, pending, failure;
+  const cleanup = () => {
     try {
-      const bytes = session.request();
-      if (bytes === undefined || bytes === previous) return;
-      previous = bytes;
-      let result;
+      if (linkedOutputs(link, outputs)) unlinkSync(link);
+    } finally {
       try {
-        result = await session.capture(JSON.parse(bytes));
-      } catch (error) {
-        result = { error: error.message };
+        source?.close();
+      } finally {
+        rmSync(outputs, { recursive: true, force: true });
       }
-      const receipt = receiptBytes(result);
-      session.receipt(receipt);
-      evidenceOutput.write(evidenceName, receipt);
-    } catch (error) {
-      evidenceOutput.write(
-        evidenceName,
-        receiptBytes({ error: error.message }),
-      );
     }
   };
-  let failure;
-  const timer = setInterval(() => {
-    if (!pending && !failure)
-      pending = tick()
-        .catch((error) => {
-          failure = error;
-        })
-        .finally(() => {
-          pending = undefined;
-        });
-  }, 250);
+  try {
+    symlinkSync(
+      outputs,
+      link,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    source = projectReader(root);
+  } catch (error) {
+    if (error.message !== windowsError) {
+      cleanup();
+      throw error;
+    }
+    publishError(outputs, error);
+  }
+
+  let previous;
+  const tick = async () => {
+    let bytes;
+    try {
+      if (!source.has(requestName)) return;
+      bytes = source.read(requestName).toString("utf8");
+    } catch (error) {
+      if (previous !== error.message) publishError(outputs, error);
+      previous = error.message;
+      return;
+    }
+    if (bytes === previous) return;
+    previous = bytes;
+    rmSync(join(outputs, "result.json"), { force: true });
+    try {
+      await captureInto(source, outputs, JSON.parse(bytes));
+    } catch (error) {
+      publishError(outputs, error);
+    }
+  };
+  if (source)
+    timer = setInterval(() => {
+      if (!pending && !failure)
+        pending = tick()
+          .catch((error) => {
+            failure = error;
+          })
+          .finally(() => {
+            pending = undefined;
+          });
+    }, 250);
   return async () => {
     clearInterval(timer);
     try {
       await pending;
       if (failure) throw failure;
+      copyEvidence(outputs, evidenceDir, evidenceIdentity);
     } finally {
-      session.close();
-      evidenceOutput.close();
+      cleanup();
     }
   };
 }

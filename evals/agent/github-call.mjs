@@ -5,7 +5,7 @@ import {
 } from "./github-canonical.mjs";
 import { shellRequest } from "./github-shell.mjs";
 import { issueSearch, issueUrl, jsonHeaders } from "./issue-lookup.mjs";
-import { sourceScanInput } from "./source-scan-input.mjs";
+import { sourceScanInputs } from "./source-scan-input.mjs";
 import { readsLocalSource } from "./local-source.mjs";
 import { githubEvidence, githubRequest } from "./github-tools.mjs";
 import {
@@ -60,13 +60,25 @@ function request(event, github, result, laterShell) {
       ? (input.command ?? input.cmd)
       : input,
   );
-  const text = sourceScanInput(
+  const { text, alternate } = sourceScanInputs(
     name,
     values,
     result?.exit === 0 && values.length === 1 && result.command === values[0],
     laterShell,
   );
-  if (shell) return { parts: shellParts(text, laterShell), text, shell: true };
+  if (shell)
+    return {
+      parts: shellParts(text, laterShell),
+      text,
+      shell: true,
+      ...(alternate !== undefined && {
+        alternate: {
+          parts: shellParts(alternate, laterShell),
+          text: alternate,
+          shell: true,
+        },
+      }),
+    };
   // Other tools can name source files/URLs, but do not acquire an exemption.
   return { text };
 }
@@ -116,36 +128,49 @@ export function classifyToolCall(
   }
   const call = request(event, github, result, laterShell);
   if (call.shell) {
-    const parts = call.parts ?? [{ text: call.text, tokens: null }];
-    const attemptedWrites = [];
-    const status =
-      parts.length === 1 && !parts[0].heredoc
-        ? shellWriteStatus(event, result)
-        : "unverified";
-    const outcomes = parts.map(({ text, tokens, heredoc }) => {
-      const words =
-        tokens ?? shellWords(decodedShellBody(text), { literal: true });
-      const writes = shellGitHubWrites(words, heredoc);
-      if (writes) {
-        for (let i = 0; i < writes; i++) attemptedWrites.push(status);
-        return { class: "source-read" };
-      }
-      return classifyRequest(
-        shellRequest(text, tokens, heredoc),
-        false,
-        [],
-        allowedLibraryPaths,
-      );
-    });
-    const classified =
-      readsLocalSource(call.text, engineRoots) || attemptedWrites.length
-        ? { class: "source-read" }
-        : aggregateParts(outcomes);
-    return attemptedWrites.length
-      ? { ...classified, attemptedWrites }
-      : classified;
+    const options = { engineRoots, allowedLibraryPaths, event, result };
+    const classified = classifyShell(call, options);
+    // A suspect report exemption can only raise the class, never lower it.
+    if (call.alternate && classified.class !== "source-read") {
+      const alternate = classifyShell(call.alternate, options);
+      if (alternate.class === "source-read") return alternate;
+    }
+    return classified;
   }
   return classifyRequest(call, github, engineRoots, allowedLibraryPaths);
+}
+function classifyShell(
+  call,
+  { engineRoots, allowedLibraryPaths, event, result },
+) {
+  const parts = call.parts ?? [{ text: call.text, tokens: null }];
+  const attemptedWrites = [];
+  const status =
+    parts.length === 1 && !parts[0].heredoc
+      ? shellWriteStatus(event, result)
+      : "unverified";
+  const outcomes = parts.map(({ text, tokens, heredoc }) => {
+    const words =
+      tokens ?? shellWords(decodedShellBody(text), { literal: true });
+    const writes = shellGitHubWrites(words, heredoc);
+    if (writes) {
+      for (let i = 0; i < writes; i++) attemptedWrites.push(status);
+      return { class: "source-read" };
+    }
+    return classifyRequest(
+      shellRequest(text, tokens, heredoc),
+      false,
+      [],
+      allowedLibraryPaths,
+    );
+  });
+  const classified =
+    readsLocalSource(call.text, engineRoots) || attemptedWrites.length
+      ? { class: "source-read" }
+      : aggregateParts(outcomes);
+  return attemptedWrites.length
+    ? { ...classified, attemptedWrites }
+    : classified;
 }
 function classifyRequest(call, github, engineRoots, allowedLibraryPaths) {
   if (call.requests)

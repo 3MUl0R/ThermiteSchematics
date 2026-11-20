@@ -61,6 +61,11 @@ export async function probe(output) {
       `const fs=require('fs');console.log(JSON.stringify(['01','02'].map(n=>fs.readFileSync('visual-captures/'+n+'.png').length)))`,
     );
     assert.equal(viewed.status, 0, viewed.stderr);
+    // The broker's output directory is outside the sandbox's writable roots.
+    const written = child(
+      `require('fs').writeFileSync('visual-captures/01.png','agent bytes')`,
+    );
+    assert.match(written.stderr, /EPERM|EACCES/, "Sandbox wrote broker output");
     mkdirSync(join(resolve(output), "visual-captures"), { recursive: true });
     for (const path of [
       "visual-captures/result.json",
@@ -74,6 +79,7 @@ export async function probe(output) {
           format: "thermite-visual-sandbox-probe/1",
           requestExit: request.status,
           pngReadExit: viewed.status,
+          outputWriteExit: written.status,
           readBytes: JSON.parse(viewed.stdout),
           capture: result,
         },

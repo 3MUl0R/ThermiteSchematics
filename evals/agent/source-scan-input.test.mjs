@@ -29,21 +29,41 @@ it("preserves real reads around reports and executable/unquoted here-docs", () =
     expect(metric(command).sourceReads, command).toBe(1);
 });
 
+const zshSingle = (body) =>
+  "/bin/zsh -lc '" + body.replaceAll("'", "'\"'\"'") + "'";
+
 // Each opener leaves bash and zsh inside one word or group across the
 // header line, so the "body" line below really runs `cat`.
-it.each([
-  ["an ANSI-C quote", "echo $'x\\'", "'; cat /engine/source.ts #"],
-  ["a parameter expansion", "echo ${x:-", "}; cat /engine/source.ts"],
-  ["an arithmetic command", "(( 1 +", ")); cat /engine/source.ts"],
-  ["an array assignment", "a=(", "); cat /engine/source.ts"],
-  ["a quoted here-doc marker", "echo 'a <<X\nX", "'; cat /engine/source.ts #"],
-])(
-  "does not treat a report header inside %s as a here-doc",
-  (_, before, hidden) => {
+it.each(
+  [
+    ["an ANSI-C quote", "echo $'x\\'", "'; cat /engine/source.ts #"],
+    ["a parameter expansion", "echo ${x:-", "}; cat /engine/source.ts"],
+    ["an arithmetic command", "(( 1 +", ")); cat /engine/source.ts"],
+    ["an array assignment", "a=(", "); cat /engine/source.ts"],
+    [
+      "a quoted here-doc marker",
+      "echo 'a <<X\nX",
+      "'; cat /engine/source.ts #",
+    ],
+  ].flatMap((row) => [
+    [...row, "raw", (command) => command],
+    [...row, "zsh -lc", zshSingle],
+  ]),
+)(
+  "does not treat a report header inside %s as a here-doc (%s)",
+  (_, before, hidden, _transport, wrap) => {
     const command = `${before}\ncat > notes.md <<"EOF"\n${hidden}\nEOF`;
-    expect(metric(command).sourceReads).toBe(1);
+    expect(metric(wrap(command)).sourceReads).toBe(1);
   },
 );
+
+it("keeps every read the plain scan counted when an opener precedes a report", () => {
+  // The exempted scan keeps command boundaries; the clone's global options
+  // are only recognized there.
+  const body = `echo "(draft)"\ncat > notes.md <<'EOF'\nnotes\nEOF\ngit -c protocol.file.allow=always clone ../reference local-copy`;
+  expect(metric(zshSingle(body)).sourceReads).toBe(1);
+  expect(metric(body).sourceReads).toBe(1);
+});
 
 it("keeps the report exemption after plain commands and an interpreter here-doc", () => {
   const command = `cd drawings && ls -la\npython3 - <<'PY'\nprint('local output')\nPY\ncat > friction.md <<'EOF'\ncurl -s ${url}\nEOF`;

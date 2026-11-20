@@ -2,10 +2,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -13,29 +15,25 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { chromium } from "playwright-core";
 import { captureHtml, captureInput, visualBroker } from "./visual-capture.mjs";
 import { sha256 } from "./snapshot.mjs";
 
-// Race hooks run between the broker's pathname checks and its reads or
-// writes. Wrapping node:fs and Playwright's screenshot puts them at the same
-// point in any implementation, including the pre-fix broker.
-// - A write race swaps `path` once, just before the first write to it.
+// Race hooks run between the broker's checks and its reads or writes.
+// - A write race runs `swap` once, just before the first write to a matching
+//   path.
 // - A read race acts like an agent toggling a link: every realpath check of
 //   `path` sees the project entry, and the link is back right after it.
 const race = vi.hoisted(() => {
-  const state = {
-    pending: null,
-    swapped: false,
-    fired: 0,
-    swapError: null,
-    fds: new Map(),
-  };
+  const state = { pending: null, swapped: false, fired: 0, fds: new Map() };
   const matches = (op, path) =>
-    state.pending?.op === op && state.pending.path === path;
+    state.pending?.op === op &&
+    (typeof state.pending.path === "function"
+      ? state.pending.path(path)
+      : state.pending.path === path);
   return {
     state,
     arm(op, path, swap, restore) {
@@ -43,7 +41,6 @@ const race = vi.hoisted(() => {
         pending: { op, path, swap, restore },
         swapped: false,
         fired: 0,
-        swapError: null,
       });
     },
     beforeCheck(path) {
@@ -62,12 +59,7 @@ const race = vi.hoisted(() => {
       const { swap } = state.pending;
       state.pending = null;
       state.fired++;
-      try {
-        swap();
-      } catch (error) {
-        // Windows refuses to rename a directory holding open files.
-        state.swapError = error;
-      }
+      swap();
     },
   };
 });
@@ -117,34 +109,38 @@ afterEach(() => {
 
 const red = "<!doctype html><body style='margin:0;background:#ff0000'>";
 const blue = "<!doctype html><body style='margin:0;background:#0000ff'>";
+const windowsError =
+  "Visual capture is unavailable on Windows: project files cannot be opened there without following links";
 
 function fixture(html = "<p>Capture fixture</p>") {
   const root = realpathSync(
     mkdtempSync(join(tmpdir(), "thermite-visual-test-")),
   );
   work.push(root);
-  const project = join(root, "project");
-  const evidence = join(root, "evidence");
-  const outside = join(root, "outside");
-  mkdirSync(project);
-  mkdirSync(evidence);
-  mkdirSync(outside);
-  writeFileSync(join(project, "index.html"), html);
-  writeFileSync(join(outside, "sentinel"), "untouched");
-  // A harness-readable page the agent must not be able to capture.
-  writeFileSync(join(outside, "index.html"), blue);
-  writeFileSync(join(outside, "page.html"), blue);
-  return {
-    project,
-    evidence,
-    outside,
-    outputs: join(project, "visual-captures"),
-    sentinel: join(outside, "sentinel"),
+  const paths = {
+    root,
+    project: join(root, "project"),
+    evidence: join(root, "evidence"),
+    outside: join(root, "outside"),
+    // Where a direct caller puts outputs; the broker links its own.
+    outputs: join(root, "harness-out"),
   };
+  for (const dir of ["project", "evidence", "outside", "outputs"])
+    mkdirSync(paths[dir]);
+  writeFileSync(join(paths.project, "index.html"), html);
+  paths.sentinel = join(paths.outside, "sentinel");
+  writeFileSync(paths.sentinel, "untouched");
+  // A harness-readable page the agent must not be able to capture.
+  writeFileSync(join(paths.outside, "index.html"), blue);
+  writeFileSync(join(paths.outside, "page.html"), blue);
+  paths.link = join(paths.project, "visual-captures");
+  return paths;
 }
+const outsideFiles = ["index.html", "page.html", "sentinel"];
 
 const link = (target, path) =>
   symlinkSync(target, path, process.platform === "win32" ? "junction" : "dir");
+const fileLink = (target, path) => symlinkSync(target, path, "file");
 // Replace `path` with a link to `target`, keeping the project entry aside.
 function toggle(path, target, linkTo = link) {
   const aside = path + ".aside";
@@ -180,14 +176,6 @@ function hookScreenshots() {
   vi.spyOn(chromium, "launchPersistentContext").mockImplementation(
     async (...args) => wrapContext(await persistent(...args)),
   );
-  const launch = chromium.launch.bind(chromium);
-  vi.spyOn(chromium, "launch").mockImplementation(async (...args) => {
-    const browser = await launch(...args);
-    const newContext = browser.newContext.bind(browser);
-    browser.newContext = async (...rest) =>
-      wrapContext(await newContext(...rest));
-    return browser;
-  });
 }
 
 function stubScreenshot(duringScreenshot = () => {}) {
@@ -205,270 +193,359 @@ function stubScreenshot(duringScreenshot = () => {}) {
     close: async () => {},
   };
   vi.spyOn(chromium, "launchPersistentContext").mockResolvedValue(context);
-  vi.spyOn(chromium, "launch").mockResolvedValue({
-    newContext: async () => context,
-    close: async () => {},
-  });
   return screenshot;
 }
 
-const outsideEntries = (outside) => readdirSync(outside).sort();
-// Windows needs privileges for file symlinks; a hard link redirects a
-// pathname write or read just as well there.
-const fileLink =
-  process.platform === "win32"
-    ? linkSync
-    : (target, path) => symlinkSync(target, path, "file");
-// Move the output aside (it may not exist yet for the pre-fix broker) and
-// link its name to `target`. Windows allows renaming a file held open.
-const replaceWithLink = (target, path) => {
-  if (existsSync(path)) renameSync(path, path + ".aside");
-  fileLink(target, path);
-};
+const waitFor = (check) => vi.waitFor(check, { timeout: 15000 });
+const readReceipt = (path) =>
+  waitFor(() => JSON.parse(readFileSync(path, "utf8")));
+const request = (project, body) =>
+  writeFileSync(
+    join(project, "visual-capture.request.json"),
+    JSON.stringify(body),
+  );
 
-it.each([
-  [
-    "output directory",
-    ({ project, outputs, outside }) => {
-      renameSync(outputs, join(project, "moved-captures"));
-      link(outside, outputs);
-    },
-  ],
-  [
-    "PNG",
-    ({ outputs, sentinel }) =>
-      replaceWithLink(sentinel, join(outputs, "01.png")),
-  ],
-])(
-  "a %s swapped for a symlink between check and write receives nothing",
-  async (_, swap) => {
-    const paths = fixture(red);
-    hookScreenshots();
-    race.arm("write", join(paths.outputs, "01.png"), () => swap(paths));
-    const error = await captureHtml(paths.project, {
-      html: ["index.html"],
-    }).catch((e) => e);
-    expect(race.state.fired).toBe(1);
-    expect(outsideEntries(paths.outside)).toEqual([
-      "index.html",
-      "page.html",
-      "sentinel",
-    ]);
-    expect(readFileSync(paths.sentinel, "utf8")).toBe("untouched");
-    if (race.state.swapError) {
-      // The broker's open output files already block a directory rename.
-      expect(process.platform).toBe("win32");
-      return;
-    }
-    expect(error).toBeInstanceOf(Error);
-    expect(error.message).toMatch(/^Capture (directory|output)/);
-  },
-);
-
-function readReceipt(path) {
-  return vi.waitFor(() => JSON.parse(readFileSync(path, "utf8")), {
-    timeout: 15000,
-  });
-}
-
-it("a project receipt swapped for a symlink between check and write receives nothing", async () => {
-  const { project, evidence, outputs, sentinel } = fixture(red);
-  hookScreenshots();
-  const receipt = join(outputs, "result.json");
-  const stop = await visualBroker({ visualCapture: true }, project, evidence);
+async function asWindows(run) {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { ...platform, value: "win32" });
   try {
-    race.arm("write", receipt, () => replaceWithLink(sentinel, receipt));
-    writeFileSync(
-      join(project, "visual-capture.request.json"),
-      '{"html":["index.html"]}',
-    );
-    const recorded = await readReceipt(join(evidence, "visual-capture.json"));
-    expect(race.state.fired).toBe(1);
-    expect(race.state.swapError).toBeNull();
-    expect(readFileSync(sentinel, "utf8")).toBe("untouched");
-    expect(recorded).toEqual({ error: "Capture output changed" });
+    return await run();
   } finally {
-    await stop();
+    Object.defineProperty(process, "platform", platform);
   }
-});
-
-async function color(png, x) {
-  const image = await loadImage(png);
-  const canvas = createCanvas(image.width, image.height);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(image, 0, 0);
-  return Array.from(ctx.getImageData(x, 5, 1, 1).data);
 }
 
-// Colours at x of every non-empty PNG the broker left in the project.
-async function capturedColors(outputs, x) {
-  const colors = [];
-  for (const name of existsSync(outputs) ? readdirSync(outputs) : [])
-    if (name.endsWith(".png")) {
-      const png = readFileSync(join(outputs, name));
-      if (png.length) colors.push(await color(png, x));
-    }
-  return colors;
-}
-const outsideBlue = [0, 0, 255, 255];
-
-it.each([
-  ["HTML input", "index.html", "index.html", fileLink],
-  ["input ancestor directory", "drawings/page.html", "drawings", link],
-])(
-  "an %s swapped for a symlink between check and read is never read",
-  async (_, input, entry, linkTo) => {
-    const paths = fixture(red);
-    mkdirSync(join(paths.project, "drawings"));
-    writeFileSync(join(paths.project, "drawings/page.html"), red);
-    hookScreenshots();
-    const target =
-      entry === "drawings" ? paths.outside : join(paths.outside, entry);
-    race.arm(
-      "read",
-      join(paths.project, input),
-      ...toggle(join(paths.project, entry), target, linkTo),
-    );
-    const result = await captureHtml(paths.project, { html: [input] }).catch(
-      (e) => e,
-    );
-    expect(race.state.fired).toBeGreaterThan(0);
-    expect(await capturedColors(paths.outputs, 5)).not.toContainEqual(
-      outsideBlue,
-    );
-    expect(JSON.stringify(result.files ?? [])).not.toContain(sha256(blue));
-    expect(result).toBeInstanceOf(Error);
-    expect(result.message).toBe(
-      "Capture input must be an ordinary file inside project",
-    );
-  },
-);
-
-it("a local HTML subresource swapped for a symlink between check and read is never read", async () => {
-  const html = `<!doctype html><style>
-    body{margin:0;background:#ff0000}
-    iframe{position:absolute;top:0;left:20px;width:12px;height:12px;border:0}
-  </style><iframe src="frame.html"></iframe>`;
-  const paths = fixture(html);
-  const frame = join(paths.project, "frame.html");
-  writeFileSync(frame, '<body style="margin:0;background:#00ff00">');
-  hookScreenshots();
-  race.arm(
-    "read",
-    frame,
-    ...toggle(frame, join(paths.outside, "page.html"), fileLink),
-  );
-  const result = await captureHtml(paths.project, {
-    html: ["index.html"],
-  }).catch((e) => e);
-  expect(race.state.fired).toBeGreaterThan(0);
-  expect(await capturedColors(paths.outputs, 25)).not.toContainEqual(
-    outsideBlue,
-  );
-  expect(result).not.toBeInstanceOf(Error);
-  expect(await color(readFileSync(join(paths.outputs, "01.png")), 5)).toEqual([
-    255, 0, 0, 255,
-  ]);
-});
-
-it("refreshes the reserved outputs, empties unused slots and writes the receipt last", async () => {
-  const { project, evidence, outputs } = fixture();
+// B1: Windows has no descriptor-relative open, so capture fails closed there.
+it("refuses Windows capture before reading project files", async () => {
+  const { project, evidence, outputs, link } = fixture(red);
   const screenshot = stubScreenshot();
-  for (const bytes of ["first page", "first second page", "second"])
-    screenshot.mockResolvedValueOnce(Buffer.from(bytes));
-  const stop = await visualBroker({ visualCapture: true }, project, evidence);
-  try {
-    const slots = ["01.png", "02.png", "03.png", "04.png"];
-    expect(readdirSync(outputs).sort()).toEqual([...slots, "result.json"]);
-    for (const name of [...slots, "result.json"])
-      expect(readFileSync(join(outputs, name), "utf8")).toBe("");
-    const request = join(project, "visual-capture.request.json");
-    const receipt = join(outputs, "result.json");
-    for (const [nonce, expected] of [
-      ["first page", "first second page"],
-      ["second"],
-    ].entries()) {
-      writeFileSync(
-        request,
-        JSON.stringify({ html: expected.map(() => "index.html"), nonce }),
+  await asWindows(async () => {
+    await expect(
+      captureHtml(project, { html: ["index.html"] }, outputs),
+    ).rejects.toThrow(windowsError);
+    expect(() => captureInput(project, "index.html")).toThrow(windowsError);
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    try {
+      request(project, { html: ["index.html"] });
+      expect(await readReceipt(join(link, "result.json"))).toEqual({
+        error: windowsError,
+      });
+    } finally {
+      await stop();
+    }
+  });
+  expect(screenshot).not.toHaveBeenCalled();
+  expect(readdirSync(outputs)).toEqual([]);
+  expect(
+    JSON.parse(readFileSync(join(evidence, "visual-capture.json"), "utf8")),
+  ).toEqual({ error: windowsError });
+});
+
+// The remaining cases exercise capture itself, which Windows refuses.
+if (process.platform !== "win32") {
+  // B2: the broker writes only to a harness-owned directory.
+  it("keeps writing to its own directory after the project link moves outside", async () => {
+    const { project, evidence, outside, link, sentinel } = fixture();
+    const moved = join(outside, "moved");
+    stubScreenshot(() => {
+      if (existsSync(link)) renameSync(link, moved);
+    });
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    try {
+      request(project, { html: ["index.html"] });
+      const receipt = await readReceipt(join(moved, "result.json"));
+      expect(receipt.files[0].sha256).toBe(sha256("synthetic PNG bytes"));
+      // Nothing was written in the agent-writable sibling: the moved entry is
+      // still the broker's link, not a directory of PNGs.
+      expect(lstatSync(moved).isSymbolicLink()).toBe(true);
+      expect(readdirSync(outside).sort()).toEqual(
+        [...outsideFiles, "moved"].sort(),
       );
-      await vi.waitFor(
-        () => {
-          const result = JSON.parse(readFileSync(receipt, "utf8"));
+    } finally {
+      await stop();
+    }
+    expect(readFileSync(sentinel, "utf8")).toBe("untouched");
+    expect(readFileSync(join(evidence, "visual-captures/01.png"), "utf8")).toBe(
+      "synthetic PNG bytes",
+    );
+  });
+
+  it("links a harness-owned output directory and removes it after the run", async () => {
+    const { root, project, evidence, link } = fixture();
+    const screenshot = stubScreenshot();
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    let outputs;
+    try {
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+      outputs = realpathSync(readlinkSync(link));
+      expect(outputs.startsWith(realpathSync(homedir()))).toBe(true);
+      expect(outputs.startsWith(root)).toBe(false);
+      // Nothing is published until a capture completes.
+      expect(readdirSync(link)).toEqual([]);
+      const slots = ["01.png", "02.png", "03.png", "04.png"];
+      for (const [nonce, expected] of [
+        ["first page", "first second page"],
+        ["second"],
+      ].entries()) {
+        // M1: a refresh removes the old receipt before rendering.
+        let receiptDuringCapture;
+        screenshot.mockImplementationOnce(async () => {
+          receiptDuringCapture = existsSync(join(link, "result.json"));
+          return Buffer.from(expected[0]);
+        });
+        for (const bytes of expected.slice(1))
+          screenshot.mockResolvedValueOnce(Buffer.from(bytes));
+        request(project, { html: expected.map(() => "index.html"), nonce });
+        await waitFor(() => {
+          const result = JSON.parse(
+            readFileSync(join(link, "result.json"), "utf8"),
+          );
           expect(result.files.map((file) => file.sha256)).toEqual(
             expected.map(sha256),
           );
-          for (const [index, name] of slots.entries())
-            expect(readFileSync(join(outputs, name), "utf8")).toBe(
-              expected[index] ?? "",
-            );
-          expect(
-            JSON.parse(
-              readFileSync(join(evidence, "visual-capture.json"), "utf8"),
-            ),
-          ).toEqual(result);
-        },
-        { timeout: 5000 },
-      );
+        });
+        expect(receiptDuringCapture).toBe(false);
+        expect(readdirSync(link).sort()).toEqual(
+          [...slots.slice(0, expected.length), "result.json"].sort(),
+        );
+        for (const [index, bytes] of expected.entries())
+          expect(readFileSync(join(link, slots[index]), "utf8")).toBe(bytes);
+        // M3: evidence is copied only after the agent has exited.
+        expect(readdirSync(evidence)).toEqual([]);
+      }
+    } finally {
+      await stop();
     }
-  } finally {
-    await stop();
-  }
-});
+    expect(existsSync(link)).toBe(false);
+    expect(existsSync(outputs)).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(evidence, "visual-capture.json"), "utf8"))
+        .files[0].sha256,
+    ).toBe(sha256("second"));
+    expect(readdirSync(join(evidence, "visual-captures"))).toEqual(["01.png"]);
+  });
 
-it("refuses existing output slots and nonexclusive input files", async () => {
-  const { project, outputs, sentinel } = fixture();
-  mkdirSync(outputs);
-  writeFileSync(join(outputs, "01.png"), "existing");
-  await expect(captureHtml(project, { html: ["index.html"] })).rejects.toThrow(
-    "Capture output already exists",
-  );
-  linkSync(sentinel, join(project, "alias.html"));
-  expect(() => captureInput(project, "alias.html")).toThrow("ordinary file");
-  expect(readFileSync(join(outputs, "01.png"), "utf8")).toBe("existing");
-  expect(readFileSync(sentinel, "utf8")).toBe("untouched");
-});
+  it("refuses a visual-captures entry the agent could have planted", async () => {
+    const { project, evidence, link } = fixture();
+    mkdirSync(link);
+    await expect(
+      visualBroker({ visualCapture: true }, project, evidence),
+    ).rejects.toThrow("visual-captures must not exist");
+  });
 
-it("renders the hashed HTML snapshot, local HTML and data URLs with CSS files blocked", async () => {
-  const data =
-    "data:image/svg+xml," +
-    encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect width="12" height="12" fill="#ffff00"/></svg>',
+  // M1: the receipt is written only after every PNG matches it.
+  it("publishes an error when an earlier PNG changes before the receipt", async () => {
+    const { project, evidence, link } = fixture();
+    const screenshot = stubScreenshot();
+    for (const bytes of ["page one", "page two"])
+      screenshot.mockResolvedValueOnce(Buffer.from(bytes));
+    race.arm(
+      "write",
+      (path) => /02\.png(\.partial)?$/.test(path ?? ""),
+      () => writeFileSync(join(link, "01.png"), "tampered"),
     );
-  const html = `<!doctype html><style>
-    body{background:#ff0000}
-    iframe,img{position:absolute;top:0;width:12px;height:12px;border:0}
-    iframe{left:20px} img{left:40px}
-  </style><link rel="stylesheet" href="outside.css">
-  <iframe src="frame.html"></iframe><img src="${data}">`;
-  const { project } = fixture(html);
-  writeFileSync(
-    join(project, "frame.html"),
-    '<body style="background:#00ff00">',
-  );
-  writeFileSync(
-    join(project, "outside.css"),
-    "body{background:blue !important}",
-  );
-  for (const method of ["launchPersistentContext", "launch"]) {
-    const launch = chromium[method].bind(chromium);
-    vi.spyOn(chromium, method).mockImplementationOnce((...args) => {
-      writeFileSync(join(project, "index.html"), "<p>New HTML</p>");
-      return launch(...args);
-    });
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    try {
+      request(project, { html: ["index.html", "index.html"] });
+      expect(await readReceipt(join(link, "result.json"))).toEqual({
+        error: "Capture output changed",
+      });
+      expect(race.state.fired).toBe(1);
+    } finally {
+      await stop();
+    }
+  });
+
+  // M2: a rejected request leaves nothing behind that blocks a retry.
+  it("validates a direct request before writing, so a retry succeeds", async () => {
+    const { project, outputs } = fixture();
+    stubScreenshot();
+    for (const html of [[], ["https://example.com/"], ["../index.html"]]) {
+      await expect(captureHtml(project, { html }, outputs)).rejects.toThrow();
+      expect(readdirSync(outputs)).toEqual([]);
+    }
+    expect(existsSync(join(project, "visual-captures"))).toBe(false);
+    const result = await captureHtml(
+      project,
+      { html: ["index.html"] },
+      outputs,
+    );
+    expect(result.files[0].sha256).toBe(sha256("synthetic PNG bytes"));
+    expect(readdirSync(outputs).sort()).toEqual(["01.png", "result.json"]);
+  });
+
+  // M3: evidence is created after the agent exits, without following or
+  // reusing anything the agent left in the run directory.
+  it.each([
+    [
+      "a planted evidence receipt",
+      ({ evidence, sentinel }) =>
+        fileLink(sentinel, join(evidence, "visual-capture.json")),
+      /EEXIST/,
+    ],
+    [
+      "a replaced evidence directory",
+      ({ evidence, outside }) => {
+        renameSync(evidence, evidence + ".aside");
+        link(outside, evidence);
+      },
+      "Visual capture evidence directory changed",
+    ],
+  ])("refuses %s when copying evidence", async (_, plant, error) => {
+    const paths = fixture();
+    stubScreenshot();
+    const stop = await visualBroker(
+      { visualCapture: true },
+      paths.project,
+      paths.evidence,
+    );
+    let stopped;
+    try {
+      request(paths.project, { html: ["index.html"] });
+      await readReceipt(join(paths.link, "result.json"));
+      plant(paths);
+    } finally {
+      stopped = stop().catch((e) => e);
+    }
+    expect((await stopped)?.message).toMatch(error);
+    expect(readdirSync(paths.outside).sort()).toEqual(outsideFiles);
+    expect(readFileSync(paths.sentinel, "utf8")).toBe("untouched");
+  });
+
+  async function color(png, x) {
+    const image = await loadImage(png);
+    const canvas = createCanvas(image.width, image.height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return Array.from(ctx.getImageData(x, 5, 1, 1).data);
   }
-  const {
-    files: [capture],
-  } = await captureHtml(project, { html: ["index.html"] });
-  expect(capture.inputSha256).toBe(sha256(html));
-  const png = readFileSync(join(project, capture.output));
-  expect(capture.sha256).toBe(sha256(png));
-  const image = await loadImage(png);
-  const canvas = createCanvas(image.width, image.height);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(image, 0, 0);
-  const pixel = (x) => Array.from(ctx.getImageData(x, 5, 1, 1).data);
-  expect(pixel(5)).toEqual([255, 0, 0, 255]);
-  expect(pixel(25)).toEqual([0, 255, 0, 255]);
-  expect(pixel(45)).toEqual([255, 255, 0, 255]);
-});
+
+  // Colours at x of every non-empty PNG in `outputs`.
+  async function capturedColors(outputs, x) {
+    const colors = [];
+    for (const name of readdirSync(outputs))
+      if (name.endsWith(".png")) {
+        const png = readFileSync(join(outputs, name));
+        if (png.length) colors.push(await color(png, x));
+      }
+    return colors;
+  }
+  const outsideBlue = [0, 0, 255, 255];
+
+  it.each([
+    ["HTML input", "index.html", "index.html", fileLink],
+    ["input ancestor directory", "drawings/page.html", "drawings", link],
+  ])(
+    "an %s swapped for a symlink between check and read is never read",
+    async (_, input, entry, linkTo) => {
+      const paths = fixture(red);
+      mkdirSync(join(paths.project, "drawings"));
+      writeFileSync(join(paths.project, "drawings/page.html"), red);
+      hookScreenshots();
+      const target =
+        entry === "drawings" ? paths.outside : join(paths.outside, entry);
+      race.arm(
+        "read",
+        join(paths.project, input),
+        ...toggle(join(paths.project, entry), target, linkTo),
+      );
+      const result = await captureHtml(
+        paths.project,
+        { html: [input] },
+        paths.outputs,
+      ).catch((e) => e);
+      expect(race.state.fired).toBeGreaterThan(0);
+      expect(await capturedColors(paths.outputs, 5)).not.toContainEqual(
+        outsideBlue,
+      );
+      expect(JSON.stringify(result.files ?? [])).not.toContain(sha256(blue));
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe(
+        "Capture input must be an ordinary file inside project",
+      );
+    },
+  );
+
+  it("a local HTML subresource swapped for a symlink between check and read is never read", async () => {
+    const html = `<!doctype html><style>
+      body{margin:0;background:#ff0000}
+      iframe{position:absolute;top:0;left:20px;width:12px;height:12px;border:0}
+    </style><iframe src="frame.html"></iframe>`;
+    const paths = fixture(html);
+    const frame = join(paths.project, "frame.html");
+    writeFileSync(frame, '<body style="margin:0;background:#00ff00">');
+    hookScreenshots();
+    race.arm(
+      "read",
+      frame,
+      ...toggle(frame, join(paths.outside, "page.html"), fileLink),
+    );
+    const result = await captureHtml(
+      paths.project,
+      { html: ["index.html"] },
+      paths.outputs,
+    ).catch((e) => e);
+    expect(race.state.fired).toBeGreaterThan(0);
+    expect(await capturedColors(paths.outputs, 25)).not.toContainEqual(
+      outsideBlue,
+    );
+    expect(result).not.toBeInstanceOf(Error);
+    expect(await color(readFileSync(join(paths.outputs, "01.png")), 5)).toEqual(
+      [255, 0, 0, 255],
+    );
+  });
+
+  it("refuses hard-linked input files", () => {
+    const { project, sentinel } = fixture();
+    linkSync(sentinel, join(project, "alias.html"));
+    expect(() => captureInput(project, "alias.html")).toThrow("ordinary file");
+    expect(readFileSync(sentinel, "utf8")).toBe("untouched");
+  });
+
+  it("renders the hashed HTML snapshot, local HTML and data URLs with CSS files blocked", async () => {
+    const data =
+      "data:image/svg+xml," +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect width="12" height="12" fill="#ffff00"/></svg>',
+      );
+    // Relative and root-relative project paths both resolve.
+    const html = `<!doctype html><style>
+      body{background:#ff0000}
+      iframe,img{position:absolute;top:0;width:12px;height:12px;border:0}
+      #relative{left:20px} img{left:40px} #rooted{left:60px}
+    </style><link rel="stylesheet" href="outside.css">
+    <iframe id="relative" src="frame.html"></iframe><img src="${data}">
+    <iframe id="rooted" src="/drawings/frame.html"></iframe>`;
+    const { project, outputs } = fixture(html);
+    writeFileSync(
+      join(project, "frame.html"),
+      '<body style="background:#00ff00">',
+    );
+    mkdirSync(join(project, "drawings"));
+    writeFileSync(
+      join(project, "drawings/frame.html"),
+      '<body style="background:#ff00ff">',
+    );
+    writeFileSync(
+      join(project, "outside.css"),
+      "body{background:blue !important}",
+    );
+    const launch = chromium.launchPersistentContext.bind(chromium);
+    vi.spyOn(chromium, "launchPersistentContext").mockImplementationOnce(
+      (...args) => {
+        writeFileSync(join(project, "index.html"), "<p>New HTML</p>");
+        return launch(...args);
+      },
+    );
+    const {
+      files: [capture],
+    } = await captureHtml(project, { html: ["index.html"] }, outputs);
+    expect(capture.inputSha256).toBe(sha256(html));
+    const png = readFileSync(join(outputs, "01.png"));
+    expect(capture.sha256).toBe(sha256(png));
+    expect(await color(png, 5)).toEqual([255, 0, 0, 255]);
+    expect(await color(png, 25)).toEqual([0, 255, 0, 255]);
+    expect(await color(png, 45)).toEqual([255, 255, 0, 255]);
+    expect(await color(png, 65)).toEqual([255, 0, 255, 255]);
+  });
+}
