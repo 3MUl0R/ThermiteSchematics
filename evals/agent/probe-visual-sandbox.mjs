@@ -81,15 +81,27 @@ export async function probe(output) {
       "Sandbox wrote evidence",
     );
     // A detached descendant outlives the sandboxed command and stays confined.
-    const late = join(evidence, "late-probe");
+    // It records its own write outcome in the writable run directory.
+    const late = join(evidence, "late-probe"),
+      outcome = join(work, "survivor-outcome.json");
     const survivor = child(
       `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(
-        `setTimeout(()=>{const fs=require('fs');fs.writeFileSync('../survivor-ran','x');fs.writeFileSync(${JSON.stringify(late)},'x')},1000)`,
+        `setTimeout(()=>{const fs=require('fs');let code='written';try{fs.writeFileSync(${JSON.stringify(late)},'x')}catch(e){code=e.code}fs.writeFileSync('../survivor-outcome.json',JSON.stringify({code}))},1000)`,
       )}],{detached:true,stdio:'ignore'}).unref()`,
     );
     assert.equal(survivor.status, 0, survivor.stderr);
-    await new Promise((r) => setTimeout(r, 3000));
-    assert(existsSync(join(work, "survivor-ran")), "Descendant did not run");
+    let survivorOutcome;
+    for (const end = Date.now() + 15000; !survivorOutcome;) {
+      assert(Date.now() < end, "Descendant did not report its write");
+      await new Promise((r) => setTimeout(r, 100));
+      if (existsSync(outcome))
+        survivorOutcome = JSON.parse(readFileSync(outcome, "utf8"));
+    }
+    assert.match(
+      survivorOutcome.code,
+      /^(EPERM|EACCES)$/,
+      "A surviving descendant wrote evidence",
+    );
     assert(!existsSync(late), "A surviving descendant wrote evidence");
     mkdirSync(join(resolve(output), "visual-captures"), { recursive: true });
     for (const path of [
@@ -107,7 +119,7 @@ export async function probe(output) {
           outputWriteExit: written.status,
           runDirWriteExit: runDir.status,
           evidenceWriteExit: evidenceWrite.status,
-          survivorWroteEvidence: existsSync(late),
+          survivorWriteError: survivorOutcome.code,
           readBytes: JSON.parse(viewed.stdout),
           capture: result,
         },

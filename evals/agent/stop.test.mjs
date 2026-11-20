@@ -8,8 +8,9 @@ import {
   realpathSync,
   rmSync,
   existsSync,
+  symlinkSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, basename, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -36,6 +37,11 @@ function fixture(scenario) {
     exited = join(work, "a-exited"),
     inSetup = join(work, "b-in-setup");
   for (const dir of [prepared, tasks, bin]) mkdirSync(dir);
+  // Codex evidence must be archived outside temporary directories, and this
+  // checkout may itself be in one; keep this checkpoint in the harness home.
+  const archive = mkdtempSync(join(homedir(), ".thermite-stop-test-"));
+  mkdirSync(join(destination, ".."), { recursive: true });
+  symlinkSync(archive, destination, "dir");
   const plan = {
     scenario,
     behavior: scenario === "race" ? "quota" : "unknown",
@@ -157,7 +163,8 @@ function fixture(scenario) {
     update: () => write(control, plan),
     cleanup: () => {
       rmSync(work, { recursive: true, force: true });
-      rmSync(destination, { recursive: true, force: true });
+      rmSync(destination, { force: true });
+      rmSync(archive, { recursive: true, force: true });
     },
   };
 }

@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { evalVersion, harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
@@ -397,6 +397,20 @@ function validationDiagnostics(result) {
       if (value.diagnostics) return value.diagnostics;
     } catch {}
   return [];
+}
+// A sandboxed Codex agent, and any process it leaves running, can write /tmp
+// and the system temporary directory, which hold its run directory and TMPDIR.
+// Its final evidence archive must resolve outside them.
+export function assertArchiveOutsideSandbox(archive) {
+  const resolved = realpathSync(archive);
+  const root = [tmpdir(), "/tmp", "/private/tmp"]
+    .filter((path) => existsSync(path))
+    .map((path) => realpathSync(path))
+    .find((root) => resolved === root || resolved.startsWith(root + sep));
+  assert(
+    !root,
+    `Evidence archive ${resolved} is under ${root}, which a sandboxed Codex agent can write; run Codex evals from a checkout outside temporary directories`,
+  );
 }
 function ownTemp(prefix) {
   return realpathSync(
@@ -1390,6 +1404,9 @@ async function main() {
     );
   const destination = join(root, "evals/out/agent", values.checkpoint);
   mkdirSync(destination, { recursive: true });
+  // Only the Codex sandbox has a write boundary; Claude runs as the harness
+  // user and the reference agent launches nothing.
+  if (values.agent === "codex") assertArchiveOutsideSandbox(destination);
   const preparation = join(destination, "context"),
     contextFile = join(preparation, "context.json"),
     commit = git(

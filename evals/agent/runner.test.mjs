@@ -9,9 +9,10 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { judgePacket } from "./run.mjs";
+import { spawnSync } from "node:child_process";
+import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const moduleURL = (path) => pathToFileURL(join(root, path)).href;
@@ -214,5 +215,49 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+});
+
+it("refuses a Codex evidence archive under a temporary directory", () => {
+  const tasks = realpathSync(mkdtempSync(join(tmpdir(), "eval-archive-")));
+  const checkpoint = "test-archive-" + basename(tasks);
+  const destination = join(root, "evals/out/agent", checkpoint);
+  const home = mkdtempSync(join(homedir(), ".thermite-archive-test-"));
+  try {
+    expect(() => assertArchiveOutsideSandbox(tasks)).toThrow(
+      "which a sandboxed Codex agent can write",
+    );
+    expect(() => assertArchiveOutsideSandbox(home)).not.toThrow();
+    mkdirSync(join(tasks, "T"));
+    writeFileSync(join(tasks, "T", "task.json"), JSON.stringify({ id: "T" }));
+    // Point the CLI's temporary directory at this checkout's parent so its
+    // archive is under it wherever the checkout lives.
+    const run = spawnSync(
+      process.execPath,
+      [
+        join(root, "evals/agent/run.mjs"),
+        ...["--agent", "codex", "--checkpoint", checkpoint, "--task", "T"],
+        ...["--tasks-dir", tasks, "--commit", "not-a-commit"],
+      ],
+      {
+        encoding: "utf8",
+        timeout: 20000,
+        env: {
+          ...process.env,
+          ...Object.fromEntries(
+            ["TMPDIR", "TEMP", "TMP"].map((key) => [
+              key,
+              dirname(realpathSync(root)),
+            ]),
+          ),
+        },
+      },
+    );
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("which a sandboxed Codex agent can write");
+  } finally {
+    rmSync(tasks, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    rmSync(destination, { recursive: true, force: true });
   }
 });

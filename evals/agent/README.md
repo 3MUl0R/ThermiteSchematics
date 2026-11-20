@@ -932,10 +932,12 @@ and lies under `/tmp`. Live evidence is therefore a separate directory in the
 harness home, outside the sandbox's writable roots, and is copied to the
 evidence output and removed when the run ends. The no-model probe
 (`probe-visual-sandbox.mjs`) records that the sandbox can write the run
-directory but cannot write live evidence or the capture outputs, and that a
-detached descendant still running after the sandboxed command exits cannot
-write evidence either. Keep the evidence output outside `/tmp` for the same
-reason.
+directory but cannot write live evidence or the capture outputs. A detached
+descendant still running after the sandboxed command exits reports a
+permission error when it tries to write evidence. For the same reason, the CLI
+refuses a Codex run whose evidence archive under `evals/out/agent` resolves
+inside `/tmp` or the system temporary directory, so run Codex evals from a
+checkout outside them.
 
 The broker publishes into `visual-captures/` in the live evidence, and links
 that directory into the project before the agent starts; an existing
