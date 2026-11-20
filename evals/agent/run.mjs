@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { cp as copyAsync } from "node:fs/promises";
 import {
+  copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -49,6 +51,7 @@ import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 import { visualBroker } from "./visual-capture.mjs";
+import { projectReader } from "./capture-files.mjs";
 import {
   agents,
   agentConfiguration,
@@ -169,6 +172,172 @@ export function installShim(runtime) {
         .replaceAll('"./process.mjs"', '"./eval-process.mjs"'),
     );
 }
+async function copyRuntime(prepared, runtime, task) {
+  await copyAsync(prepared, runtime, { recursive: true, dereference: true });
+  installShim(runtime);
+  if (task.contributor)
+    rmSync(join(runtime, "evals/contributor"), {
+      recursive: true,
+      force: true,
+    });
+}
+// Scratch in the harness home, outside a sandboxed agent's writable roots.
+const protectedScratch = (prefix) =>
+  realpathSync(mkdtempSync(join(homedir(), prefix)));
+// The agent's runtime copy lives in its writable TMPDIR. Post-agent CLI calls
+// run a copy made in protected scratch from the same prepared engine. Bun reads
+// bunfig.toml and .env files from the project, so those calls name the
+// harness's own config instead (see bunConfig in audit.mjs).
+async function protectedRuntime(prepared, scratch, task) {
+  const runtime = join(scratch, "runtime"),
+    config = join(scratch, "bunfig.toml");
+  await copyRuntime(prepared, runtime, task);
+  writeFileSync(config, "env = false\n");
+  return { runtime, config };
+}
+// The harness's pre-launch copy of the project's regular files. Git metadata
+// and installed dependencies (a contributor checkout's) are never diffed.
+function copyRegularFiles(from, to, rel = "") {
+  for (const entry of readdirSync(join(from, rel), { withFileTypes: true })) {
+    const path = rel ? join(rel, entry.name) : entry.name;
+    if ([".git", "node_modules"].includes(entry.name)) continue;
+    if (entry.isDirectory()) copyRegularFiles(from, to, path);
+    else if (entry.isFile()) {
+      mkdirSync(dirname(join(to, path)), { recursive: true });
+      copyFileSync(join(from, path), join(to, path));
+    }
+  }
+}
+// Whether a regular file is at path; a file where a directory was is absence.
+function fileAt(path) {
+  try {
+    return !!lstatSync(path, { throwIfNoEntry: false })?.isFile();
+  } catch (error) {
+    if (error.code === "ENOTDIR") return false;
+    throw error;
+  }
+}
+// The diff of selected project paths, from the pre-launch copy to their post-run
+// bytes. `read` returns a path's bytes, null when absent, or throws to refuse
+// it. Git never runs in the agent's repository, whose configuration and
+// attributes can run programs; it compares copies in protected scratch with no
+// configuration, attributes or repository.
+export function selectedDiff({ before, scratch, paths, read }) {
+  const work = join(scratch, "diff"),
+    home = join(work, "home"),
+    refused = [];
+  rmSync(work, { recursive: true, force: true });
+  for (const dir of ["old", "new", "home"])
+    mkdirSync(join(work, dir), { recursive: true });
+  const put = (side, path, bytes) => {
+    mkdirSync(dirname(join(work, side, path)), { recursive: true });
+    writeFileSync(join(work, side, path), bytes);
+  };
+  for (const path of [...new Set(paths)].sort()) {
+    let bytes;
+    try {
+      bytes = read(path);
+    } catch {
+      refused.push(path);
+      continue;
+    }
+    if (bytes) put("new", path, bytes);
+    if (fileAt(join(before, path)))
+      put("old", path, readFileSync(join(before, path)));
+  }
+  const result = spawnSync(
+    "git",
+    [
+      "diff",
+      "--no-index",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--",
+      "old",
+      "new",
+    ],
+    {
+      cwd: work,
+      encoding: "utf8",
+      maxBuffer: 64 << 20,
+      env: {
+        PATH: process.env.PATH,
+        HOME: home,
+        XDG_CONFIG_HOME: home,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+        GIT_ATTR_NOSYSTEM: "1",
+        GIT_CEILING_DIRECTORIES: scratch,
+      },
+    },
+  );
+  assert(
+    !result.error && [0, 1].includes(result.status),
+    `Source diff failed: ${result.error?.code ?? result.stderr}`,
+  );
+  // Label paths as the project's, as a diff in its repository would. Only
+  // header lines name paths; hunks are left alone.
+  let header = false,
+    mode = null;
+  const diff = result.stdout
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("diff --git ")) [header, mode] = [true, null];
+      else if (line.startsWith("@@")) header = false;
+      if (header && /^(?:new|deleted) file mode /.test(line))
+        mode = line.split(" ")[0];
+      return header ? relabel(line, mode) : line;
+    })
+    .join("\n")
+    .trim();
+  return [
+    diff,
+    ...refused.map((path) => `Refused (not an ordinary file): ${path}`),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+// A header path field is Git's a/ or b/ prefix, then the synthetic old/ or
+// new/ directory, then the project path, possibly inside C-style quotes. Only
+// that synthetic component is removed; quoting and spaces are kept.
+const field = (text) => text.replace(/^("?[ab]\/)(?:old|new)\//, "$1");
+// `mode` is the section's "new" or "deleted" file mode, which alone says
+// whether a binary summary names /dev/null; a path can end in " and /dev/null".
+function relabel(line, mode) {
+  if (line.startsWith("diff --git ")) {
+    // Without renames both fields name one path, so they are equally long.
+    const rest = line.slice(11),
+      half = (rest.length - 1) / 2;
+    return `diff --git ${field(rest.slice(0, half))} ${field(rest.slice(half + 1))}`;
+  }
+  if (line.startsWith("--- ") || line.startsWith("+++ "))
+    return line.slice(0, 4) + field(line.slice(4));
+  const binary = /^Binary files (.*) differ$/.exec(line)?.[1];
+  if (binary === undefined) return line;
+  const empty = "/dev/null",
+    half = (binary.length - 5) / 2;
+  const [from, to] =
+    mode === "new"
+      ? [empty, binary.slice(empty.length + 5)]
+      : mode === "deleted"
+        ? [binary.slice(0, -empty.length - 5), empty]
+        : [binary.slice(0, half), binary.slice(half + 5)];
+  return `Binary files ${field(from)} and ${field(to)} differ`;
+}
+// Post-run project reads go through the reader pinned before launch. A
+// directory where a file was, or a file where a directory was, is an absent
+// file, so the change diffs as a deletion and an addition. Anything reached
+// through a link is refused by read().
+function projectBytes(source, path) {
+  return source.absentFile(path) ? null : source.read(path);
+}
+// Test seams for filesystem transitions that cannot otherwise be timed.
+export const runHooks = {};
+// Node offers no descriptor-relative, no-follow open on Windows.
+const confinedPlatform = ["darwin", "linux"].includes(process.platform);
+export const windowsUnavailable =
+  "E2 agent runs and rechecks are unavailable on Windows: project files cannot be read there without following links";
 const children = new Set();
 let stoppingSignal = null;
 function captureSetup(binary, args, options = {}) {
@@ -306,31 +475,65 @@ export function judgePacket({
   project,
   runtime,
   task,
+  source,
+  rootRefused = false,
 }) {
+  // The project is agent-written. Artifacts are read without following links,
+  // through a reader whose root was pinned before the agent started; anything
+  // else is listed as refused. `rootRefused` is a root loss the caller already
+  // detected: the packet refuses the whole root without reading the project.
+  assert(confinedPlatform, windowsUnavailable);
   const outputs = {},
-    binaryOutputs = [];
-  for (const name of [
-    "drawings",
-    "issue.md",
-    "review-notes.md",
-    "requirement-matrix.json",
-    "friction.md",
-  ]) {
-    const path = join(project, name);
-    if (!existsSync(path)) continue;
-    if (name === "drawings")
-      for (const file of readdirSync(path).sort()) {
-        if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
-        if (file.endsWith(".pdf")) {
-          outputs[`drawings/${file}`] = readFileSync(join(path, file)).toString(
-            "base64",
-          );
-          binaryOutputs.push(`drawings/${file}`);
-        } else
-          outputs[`drawings/${file}`] = readFileSync(join(path, file), "utf8");
+    binaryOutputs = [],
+    refusedOutputs = [];
+  const take = (rel) => {
+    try {
+      return source.read(rel);
+    } catch {
+      refusedOutputs.push(rel);
+    }
+  };
+  if (rootRefused) refusedOutputs.push(".");
+  else
+    try {
+      for (const name of [
+        "drawings",
+        "issue.md",
+        "review-notes.md",
+        "requirement-matrix.json",
+        "friction.md",
+      ]) {
+        if (!source.has(name)) continue;
+        if (name !== "drawings") {
+          const bytes = take(name);
+          if (bytes) outputs[name] = bytes.toString("utf8");
+          continue;
+        }
+        let files;
+        try {
+          files = source.list(name).sort();
+        } catch {
+          refusedOutputs.push(name);
+          continue;
+        }
+        for (const file of files) {
+          if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
+          const rel = `drawings/${file}`,
+            bytes = take(rel);
+          if (!bytes) continue;
+          outputs[rel] = file.endsWith(".pdf")
+            ? bytes.toString("base64")
+            : bytes.toString("utf8");
+          if (file.endsWith(".pdf")) binaryOutputs.push(rel);
+        }
       }
-    else outputs[name] = readFileSync(path, "utf8");
-  }
+    } catch {
+      // An entry that cannot be inspected, or a replaced root, refuses the
+      // project as a whole.
+      for (const key of Object.keys(outputs)) delete outputs[key];
+      binaryOutputs.length = 0;
+      refusedOutputs.splice(0, Infinity, ".");
+    }
   const blindText = (text) =>
     text
       .replaceAll(project, "<project>")
@@ -365,7 +568,7 @@ export function judgePacket({
             )
           : value;
   const packet = blind({
-    format: "thermite-blinded-judge/1.1",
+    format: "thermite-blinded-judge/1.2",
     finalMessage,
     sourceDiff,
     rubric: task.rubric,
@@ -377,6 +580,7 @@ export function judgePacket({
   for (const path of binaryOutputs)
     packet.outputs[blindText(path)] = outputs[path];
   packet.binaryOutputs = binaryOutputs.map(blindText);
+  packet.refusedOutputs = refusedOutputs.map(blindText);
   return packet;
 }
 function parseCalls(path) {
@@ -446,6 +650,8 @@ export async function runOne({
   tasksRoot,
   timeoutMs = 900000,
 }) {
+  // Before any setup or evidence: Windows cannot confine post-run reads.
+  assert(confinedPlatform, windowsUnavailable);
   const runIdentity = harnessIdentity({ tasksDir: tasksRoot });
   if (expectedIdentity)
     assert.deepEqual(
@@ -486,6 +692,11 @@ export async function runOne({
     task,
     initial,
     runtimeBefore,
+    finalMessage,
+    rootLost = false,
+    guideBytes,
+    scratch,
+    source,
     secretList = [];
   const runStarted = Date.now();
   const save = (file, value) =>
@@ -494,21 +705,12 @@ export async function runOne({
       JSON.parse(redactSecrets(JSON.stringify(value), secretList)),
     );
   try {
-    await copyAsync(prepared.path, runtime, {
-      recursive: true,
-      dereference: true,
-    });
-    installShim(runtime);
     task = read(join(taskDir, "task.json"));
     assert(
       !task.context || task.context === context,
       "Task requires --context source",
     );
-    if (task.contributor)
-      rmSync(join(runtime, "evals/contributor"), {
-        recursive: true,
-        force: true,
-      });
+    await copyRuntime(prepared.path, runtime, task);
     identity.task = task.id;
     identity.runKey = runKey(identity);
     env = {
@@ -695,6 +897,14 @@ export async function runOne({
       throw Object.assign(new Error("Authentication pre-flight failed"), {
         stage: "authentication",
       });
+    // Before launch: the harness's copy of the starting sources, and the project
+    // root that every post-run read starts from.
+    scratch = protectedScratch(".thermite-agent-protected-");
+    const before = join(scratch, "before");
+    copyRegularFiles(project, before);
+    source = projectReader(project);
+    // The guide the agent's CLI loads at launch.
+    guideBytes = readFileSync(join(before, "AGENTS.md")).length;
     const started = Date.now();
     let execution = { exit: 0, stdout: "", stderr: "" };
     if (stoppingSignal || batchControl?.stopped) {
@@ -738,13 +948,41 @@ export async function runOne({
         { ...execution, operatorSignal: stoppingSignal },
         normalized,
       ),
-      ended = Date.now(),
-      beforeFlush = snapshot(project);
+      ended = Date.now();
+    // The agent has finished; record that before anything reads the project.
+    finalMessage = normalized.finalMessage ?? null;
     if (batchControl && batchHaltReason(classification)) {
       batchControl.stopped = true;
       batchControl.reason = batchHaltReason(classification);
     }
-    env.THERMITE_EVAL_PHASE = "flush";
+    // Every project-dependent step below needs a directory at the root's
+    // path; without one the run cannot be scored, though its judge packet
+    // still records the refusal.
+    if (!lstatSync(project, { throwIfNoEntry: false })?.isDirectory()) {
+      rootLost = true;
+      runHooks.afterRootLoss?.(project);
+      throw new Error(
+        "Project root is missing or no longer a directory after the agent exited; the run cannot be scored",
+      );
+    }
+    const beforeFlush = snapshot(project);
+    // From here on, CLI calls run with harness privileges: never from the
+    // agent-writable runtime, never with the project's Bun config or .env
+    // files, and only with environment values the harness selects.
+    const trusted = await protectedRuntime(prepared.path, scratch, task);
+    ctx.env = {
+      ...freshEnvironment(
+        join(scratch, "isolated"),
+        { PATH: process.env.PATH, TERM: process.env.TERM },
+        { engineRoots },
+      ),
+      THERMITE_EVAL_PROJECT: project,
+      THERMITE_EVAL_LOG: env.THERMITE_EVAL_LOG,
+      THERMITE_EVAL_ERRORS: env.THERMITE_EVAL_ERRORS,
+      THERMITE_EVAL_PHASE: "flush",
+      THERMITE_EVAL_BUN_CONFIG: trusted.config,
+    };
+    ctx.thermite = join(trusted.runtime, "thermite.mjs");
     const validation = cli(ctx, "validate", ".", "--json");
     writeFileSync(
       join(live, "validate.stdout"),
@@ -754,7 +992,11 @@ export async function runOne({
       join(live, "validate.stderr"),
       redactSecrets(validation.stderr, secretList),
     );
-    const final = fileState(project, join(runtime, "thermite.real.mjs"), env),
+    const final = fileState(
+        project,
+        join(trusted.runtime, "thermite.real.mjs"),
+        ctx.env,
+      ),
       calls = parseCalls(env.THERMITE_EVAL_LOG);
     final.sourceFiles = documents(project).map((doc) => doc.path);
     const shimErrors = existsSync(env.THERMITE_EVAL_ERRORS)
@@ -773,7 +1015,7 @@ export async function runOne({
     ctx.final = final;
     ctx.calls = calls;
     ctx.validationDiagnostics = validationDiagnostics(validation);
-    ctx.thermite = join(runtime, "thermite.real.mjs");
+    ctx.thermite = join(trusted.runtime, "thermite.real.mjs");
     if (task.contributor) ctx.pinnedTypeScript = prepared.pinnedTypeScript;
     const paths = [
       ...new Set([
@@ -781,13 +1023,19 @@ export async function runOne({
         ...(initial.sourceFiles ?? []),
         "system.json",
         "presentation.json",
-        ...Object.keys(final.documents).filter((p) =>
-          p.startsWith("libraries/"),
+        ...[initial, final].flatMap((state) =>
+          Object.keys(state.documents).filter((p) =>
+            p.startsWith("libraries/"),
+          ),
         ),
       ]),
     ];
-    git(project, "add", "--intent-to-add", ".");
-    ctx.sourceDiff = git(project, "diff", "--no-ext-diff", "--", ...paths);
+    ctx.sourceDiff = selectedDiff({
+      before,
+      scratch,
+      paths,
+      read: (path) => projectBytes(source, path),
+    });
     ctx.metrics = score({
       calls,
       initial,
@@ -841,7 +1089,7 @@ export async function runOne({
       transcript: execution.stdout,
       context,
       engineRoots,
-      guideBytes: readFileSync(join(project, "AGENTS.md")).length,
+      guideBytes,
       guideFiles: [join(project, "AGENTS.md"), join(runtime, "README.md")],
       expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
       actualWarnings:
@@ -949,12 +1197,13 @@ export async function runOne({
         tasksRoot,
         project,
         runtime,
+        projectRoot: source.identity,
+        guideBytes,
         initial,
         final,
         calls,
         sourceDiff: ctx.sourceDiff,
         validationDiagnostics: ctx.validationDiagnostics,
-        pinnedTypeScript: ctx.pinnedTypeScript,
         context,
         engineRoots,
         keep,
@@ -974,6 +1223,7 @@ export async function runOne({
           project,
           runtime,
           task,
+          source,
         }),
       );
     cpSync(project, join(live, "project"), { recursive: true });
@@ -1010,6 +1260,25 @@ export async function runOne({
         error.stage === "authentication" ? "authentication" : "harness",
       workspace: keep ? work : null,
     };
+    // A rubric run whose agent finished but whose project root was lost or
+    // replaced still publishes the whole-root refusal.
+    if (task?.rubric && source && finalMessage !== undefined)
+      try {
+        // A detected loss stands even if the directory comes back later.
+        if (rootLost || !source.intact())
+          save(
+            "judge-packet.json",
+            judgePacket({
+              finalMessage,
+              sourceDiff: null,
+              project,
+              runtime,
+              task,
+              source,
+              rootRefused: true,
+            }),
+          );
+      } catch {}
     save("infrastructure-failure.json", {
       status: manifest.status,
       message: manifest.infrastructureError,
@@ -1037,6 +1306,11 @@ export async function runOne({
           save("manifest.json", manifest);
         }
       }
+    try {
+      source?.close();
+    } finally {
+      if (scratch) rmSync(scratch, { recursive: true, force: true });
+    }
     if (manifest?.status === "checker-error" && !keep)
       rmSync(join(work, "isolated"), { recursive: true, force: true });
     try {
@@ -1048,7 +1322,11 @@ export async function runOne({
       rmSync(work, { recursive: true, force: true });
   }
 }
-export async function recheckRun({ evidence, forceRecheck = false }) {
+// `prepared` is the checkpoint's prepared context, read from the trusted
+// archive; nothing the agent's run directory holds selects what runs here.
+export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
+  assert(confinedPlatform, windowsUnavailable);
+  assert(prepared?.path, "Recheck needs the checkpoint's prepared context");
   const original = read(join(evidence, "manifest.json"));
   assert(
     original.status === "checker-error",
@@ -1058,136 +1336,163 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
     original.workspace && existsSync(original.workspace),
     "Kept checker workspace is missing; never rerun the agent automatically",
   );
-  const pending = read(join(evidence, "recheck.json"));
-  const checkerTaskTreeHash = snapshot(pending.taskDir, {
-    documents: false,
-  }).hash;
-  assert(
-    forceRecheck ||
-      checkerTaskTreeHash ===
-        (original.checkerTaskTreeHash ?? original.taskTreeHash),
-    "Task directory changed; use --force-recheck to authorize and record the new checker inputs",
-  );
   const stored = read(join(evidence, "recheck.json")),
-    task = read(join(stored.taskDir, "task.json")),
-    revision = (original.checkerRechecks ?? 0) + 1,
-    work = original.workspace,
-    live = join(work, `recheck-${revision}`);
-  mkdirSync(live);
+    task = read(join(stored.taskDir, "task.json"));
   assert(
-    snapshot(stored.project).hash === stored.final.hash,
-    "Kept agent sources changed; refusing recheck",
+    stored.projectRoot && Number.isInteger(stored.guideBytes),
+    "Recheck needs the project root and guide size recorded since E2 1.20.4",
   );
-  const transcript = readFileSync(join(evidence, "transcript.jsonl"), "utf8");
-  const promptVersion =
-    original.taskVersion ??
-    (original.taskHash ===
-    sha256(readFileSync(join(stored.taskDir, "task.json")))
-      ? task.version
-      : null);
-  const ctx = {
-    ...stored,
-    task,
-    promptVersion,
-    evidence: live,
-    env: freshEnvironment(join(work, `recheck-config-${revision}`), {}, {}),
-    thermite: join(stored.runtime, "thermite.real.mjs"),
-    metrics: score({
+  // Refuses a project root other than the one pinned before the agent started.
+  const source = projectReader(stored.project, stored.projectRoot);
+  let scratch;
+  try {
+    const checkerTaskTreeHash = snapshot(stored.taskDir, {
+      documents: false,
+    }).hash;
+    assert(
+      forceRecheck ||
+        checkerTaskTreeHash ===
+          (original.checkerTaskTreeHash ?? original.taskTreeHash),
+      "Task directory changed; use --force-recheck to authorize and record the new checker inputs",
+    );
+    const revision = (original.checkerRechecks ?? 0) + 1,
+      work = original.workspace;
+    assert(
+      snapshot(stored.project).hash === stored.final.hash,
+      "Kept agent sources changed; refusing recheck",
+    );
+    const transcript = readFileSync(join(evidence, "transcript.jsonl"), "utf8");
+    const promptVersion =
+      original.taskVersion ??
+      (original.taskHash ===
+      sha256(readFileSync(join(stored.taskDir, "task.json")))
+        ? task.version
+        : null);
+    // The checker's receipts, its configuration and the CLI it runs are staged
+    // in protected scratch, never in the kept run directory, which a process
+    // the agent left behind can still write.
+    scratch = protectedScratch(".thermite-agent-recheck-");
+    const live = join(scratch, "evidence");
+    mkdirSync(live);
+    const trusted = await protectedRuntime(prepared.path, scratch, task);
+    const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
+    const ctx = {
+      ...stored,
+      task,
+      promptVersion,
+      ...(task.contributor && { pinnedTypeScript: prepared.pinnedTypeScript }),
+      evidence: live,
+      env: {
+        ...freshEnvironment(join(scratch, "isolated"), {}, {}),
+        THERMITE_EVAL_BUN_CONFIG: trusted.config,
+      },
+      thermite: join(trusted.runtime, "thermite.real.mjs"),
+      metrics: score({
+        calls: stored.calls,
+        transcript,
+        context: stored.context,
+        engineRoots: stored.engineRoots,
+        allowedLibraryPaths: task.allowedLibraryPaths,
+      }),
+    };
+    const outcome = await evaluateTask(stored.taskDir, ctx);
+    assert.equal(
+      harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
+      checker.checkerHash,
+      "Harness changed during recheck; result cannot be scored",
+    );
+    const metrics = score({
       calls: stored.calls,
+      initial: stored.initial,
+      final: stored.final,
+      runtimeBefore: original.runtimeHash.before,
+      runtimeAfter: snapshot(stored.runtime, { documents: false }).hash,
       transcript,
       context: stored.context,
       engineRoots: stored.engineRoots,
+      guideBytes: stored.guideBytes,
+      guideFiles: [
+        join(stored.project, "AGENTS.md"),
+        join(stored.runtime, "README.md"),
+      ],
+      expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
+      actualWarnings:
+        outcome.actualWarnings ??
+        stored.validationDiagnostics.filter((d) => d.severity === "warning"),
+      requiredTopics: task.requiredTopics,
+      taskOutcome: outcome,
+      allowedUnused: task.allowedUnused,
       allowedLibraryPaths: task.allowedLibraryPaths,
-    }),
-  };
-  const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
-  const outcome = await evaluateTask(stored.taskDir, ctx);
-  assert.equal(
-    harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
-    checker.checkerHash,
-    "Harness changed during recheck; result cannot be scored",
-  );
-  const metrics = score({
-    calls: stored.calls,
-    initial: stored.initial,
-    final: stored.final,
-    runtimeBefore: original.runtimeHash.before,
-    runtimeAfter: snapshot(stored.runtime, { documents: false }).hash,
-    transcript,
-    context: stored.context,
-    engineRoots: stored.engineRoots,
-    guideBytes: readFileSync(join(stored.project, "AGENTS.md")).length,
-    guideFiles: [
-      join(stored.project, "AGENTS.md"),
-      join(stored.runtime, "README.md"),
-    ],
-    expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
-    actualWarnings:
-      outcome.actualWarnings ??
-      stored.validationDiagnostics.filter((d) => d.severity === "warning"),
-    requiredTopics: task.requiredTopics,
-    taskOutcome: outcome,
-    allowedUnused: task.allowedUnused,
-    allowedLibraryPaths: task.allowedLibraryPaths,
-    guideCopy: task.guideCopy,
-    preserveSource: task.preserveSource,
-    undocumentedShapes: task.undocumentedShapes,
-    wallTimeMs: original.timings.wallTimeMs,
-  });
-  if (original.agent === "reference") metrics.usage.partial = false;
-  if (original.agentFailure) {
-    outcome.pass = false;
-    outcome.agentFailure = original.agentFailure;
-  }
-  const result = {
-    ...original,
-    outcome,
-    metrics,
-    status:
-      outcome.error?.kind === "checker-error"
-        ? "checker-error"
-        : original.shimErrors?.length
-          ? "infrastructure-failure"
-          : "complete",
-    checkerRechecks: revision,
-    checkerHarnessHash: checker.checkerHarnessHash,
-    checkerHash: checker.checkerHash,
-    checkerTaskTreeHash,
-    forceRecheck: forceRecheck || original.forceRecheck || false,
-    checkerRecheckHistory: [
-      ...(original.checkerRecheckHistory ?? []),
-      {
-        revision,
-        forced: forceRecheck,
-        taskTreeHash: checkerTaskTreeHash,
-        harnessHash: checker.checkerHarnessHash,
-      },
-    ],
-  };
-  write(
-    join(evidence, `checker-history-${String(revision).padStart(3, "0")}.json`),
-    original,
-  );
-  cpSync(live, evidence, { recursive: true });
-  if (task.rubric)
+      guideCopy: task.guideCopy,
+      preserveSource: task.preserveSource,
+      undocumentedShapes: task.undocumentedShapes,
+      wallTimeMs: original.timings.wallTimeMs,
+    });
+    if (original.agent === "reference") metrics.usage.partial = false;
+    if (original.agentFailure) {
+      outcome.pass = false;
+      outcome.agentFailure = original.agentFailure;
+    }
+    const result = {
+      ...original,
+      outcome,
+      metrics,
+      status:
+        outcome.error?.kind === "checker-error"
+          ? "checker-error"
+          : original.shimErrors?.length
+            ? "infrastructure-failure"
+            : "complete",
+      checkerRechecks: revision,
+      checkerHarnessHash: checker.checkerHarnessHash,
+      checkerHash: checker.checkerHash,
+      checkerTaskTreeHash,
+      forceRecheck: forceRecheck || original.forceRecheck || false,
+      checkerRecheckHistory: [
+        ...(original.checkerRecheckHistory ?? []),
+        {
+          revision,
+          forced: forceRecheck,
+          taskTreeHash: checkerTaskTreeHash,
+          harnessHash: checker.checkerHarnessHash,
+        },
+      ],
+    };
     write(
-      join(evidence, "judge-packet.json"),
-      judgePacket({
-        finalMessage: metrics.finalMessage,
-        sourceDiff: ctx.sourceDiff,
-        project: ctx.project,
-        runtime: ctx.runtime,
-        task,
-      }),
+      join(
+        evidence,
+        `checker-history-${String(revision).padStart(3, "0")}.json`,
+      ),
+      original,
     );
-  write(join(evidence, "check.json"), outcome);
-  write(join(evidence, "score.json"), metrics);
-  if (result.status !== "checker-error" && !stored.keep) {
-    result.workspace = null;
-    rmSync(work, { recursive: true, force: true });
+    cpSync(live, evidence, { recursive: true });
+    if (task.rubric)
+      write(
+        join(evidence, "judge-packet.json"),
+        judgePacket({
+          finalMessage: metrics.finalMessage,
+          sourceDiff: ctx.sourceDiff,
+          project: ctx.project,
+          runtime: ctx.runtime,
+          task,
+          source,
+        }),
+      );
+    write(join(evidence, "check.json"), outcome);
+    write(join(evidence, "score.json"), metrics);
+    if (result.status !== "checker-error" && !stored.keep) {
+      result.workspace = null;
+      rmSync(work, { recursive: true, force: true });
+    }
+    write(join(evidence, "manifest.json"), result);
+    return result;
+  } finally {
+    try {
+      source?.close();
+    } finally {
+      if (scratch) rmSync(scratch, { recursive: true, force: true });
+    }
   }
-  write(join(evidence, "manifest.json"), result);
-  return result;
 }
 async function retryWait(ms, control) {
   const until = Date.now() + ms;
@@ -1357,6 +1662,7 @@ async function main() {
     await authOnly(values);
     return;
   }
+  assert(confinedPlatform, windowsUnavailable);
   assert(
     values.checkpoint &&
       /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(values.checkpoint),
@@ -1576,6 +1882,7 @@ async function main() {
       if (action.kind === "recheck")
         return recheckRun({
           forceRecheck: values["force-recheck"],
+          prepared,
           evidence: join(
             base,
             `attempt-${String(prior.at(-1).attempt).padStart(3, "0")}`,

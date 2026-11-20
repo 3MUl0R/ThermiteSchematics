@@ -3,6 +3,12 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { snapshot, sha256 } from "./snapshot.mjs";
 import { captureProcess } from "./process.mjs";
+// Privileged CLI calls name the harness's Bun config, which ignores the
+// project's bunfig.toml and .env files. It is its own argument, so any path works.
+export const bunConfig = (env = process.env) =>
+  env.THERMITE_EVAL_BUN_CONFIG
+    ? [`--config=${env.THERMITE_EVAL_BUN_CONFIG}`]
+    : [];
 export function fileState(project, real, env = process.env, previous) {
   const state = snapshot(project);
   const patterns = state.documents["system.json"]?.sources ?? [];
@@ -52,13 +58,17 @@ export function fileState(project, real, env = process.env, previous) {
     env.THERMITE_EVAL_SCHEMA_VALIDATE === "0"
   )
     return state;
-  const r = spawnSync(process.execPath, [real, "validate", project, "--json"], {
-    cwd: project,
-    env,
-    encoding: "utf8",
-    maxBuffer: 32 << 20,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const r = spawnSync(
+    process.execPath,
+    [...bunConfig(env), real, "validate", project, "--json"],
+    {
+      cwd: project,
+      env,
+      encoding: "utf8",
+      maxBuffer: 32 << 20,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   return validatedState(state, r);
 }
 // The shim keeps synchronous boundary validation. The runner must await the
@@ -83,7 +93,7 @@ export async function fileStateAsync(
     return state;
   const result = await capture(
     process.execPath,
-    [real, "validate", project, "--json"],
+    [...bunConfig(env), real, "validate", project, "--json"],
     {
       cwd: project,
       env,

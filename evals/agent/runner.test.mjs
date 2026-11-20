@@ -13,6 +13,7 @@ import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
+import { projectReader } from "./capture-files.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const moduleURL = (path) => pathToFileURL(join(root, path)).href;
@@ -91,6 +92,16 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       `import{locate,ok}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{CheckerInfrastructureError}from${JSON.stringify(moduleURL("evals/agent/checker.mjs"))};import{existsSync}from"node:fs";export default ctx=>{if(!existsSync(${JSON.stringify(ready)}))throw new CheckerInfrastructureError("checker unavailable");ok(ctx,"validate",".");return {pass:locate(ctx.project,"PS1").object.description==="Pipeline checked"};}`,
     );
     const { runOne, recheckRun } = await import("./run.mjs");
+    if (process.platform === "win32") {
+      await expect(
+        runOne({
+          taskDir,
+          prepared: { path: prepared, commit: "test-adapter" },
+          evidence,
+        }),
+      ).rejects.toThrow("unavailable on Windows");
+      return;
+    }
     const original = await runOne({
       taskDir,
       prepared: { path: prepared, commit: "test-adapter" },
@@ -133,10 +144,15 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
         .replace("return {pass:", "return {forcedCode:true,pass:"),
     );
 
-    await expect(recheckRun({ evidence })).rejects.toThrow(
+    const context = { path: prepared, commit: "test-adapter" };
+    await expect(recheckRun({ evidence, prepared: context })).rejects.toThrow(
       /Task directory changed/,
     );
-    const result = await recheckRun({ evidence, forceRecheck: true });
+    const result = await recheckRun({
+      evidence,
+      forceRecheck: true,
+      prepared: context,
+    });
     expect(result).toMatchObject({
       attempt: 1,
       checkerRechecks: 1,
@@ -181,14 +197,27 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
     const binary = Buffer.from("AA/GPT/A", "base64");
     writeFileSync(join(work, "drawings/provider.pdf"), binary);
-    const packet = judgePacket({
-      project: work,
-      runtime: "/runtime",
-      finalMessage:
-        "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox, xhigh, Codex CLI 0.164.0, Claude Code v2.1.280, 2.1.280 (Claude Code), claude --version printed 2.1.280, CLI version 0.164.0, thermite CLI 0.2.0, thermite CLI version 0.2.0",
-      sourceDiff: "/runtime/example",
-      task: { rubric: ["Preserve unknown facts"] },
-    });
+    const make = (source = null) =>
+      judgePacket({
+        source,
+        project: work,
+        runtime: "/runtime",
+        finalMessage:
+          "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox, xhigh, Codex CLI 0.164.0, Claude Code v2.1.280, 2.1.280 (Claude Code), claude --version printed 2.1.280, CLI version 0.164.0, thermite CLI 0.2.0, thermite CLI version 0.2.0",
+        sourceDiff: "/runtime/example",
+        task: { rubric: ["Preserve unknown facts"] },
+      });
+    if (process.platform === "win32") {
+      expect(make).toThrow("unavailable on Windows");
+      return;
+    }
+    const source = projectReader(work);
+    let packet;
+    try {
+      packet = make(source);
+    } finally {
+      source.close();
+    }
     const text = JSON.stringify({
       ...packet,
       outputs: Object.fromEntries(
@@ -255,7 +284,11 @@ it("refuses a Codex evidence archive under a temporary directory", () => {
       },
     );
     expect(run.status).not.toBe(0);
-    expect(run.stderr).toContain("which a sandboxed Codex agent can write");
+    expect(run.stderr).toContain(
+      process.platform === "win32"
+        ? "unavailable on Windows"
+        : "which a sandboxed Codex agent can write",
+    );
   } finally {
     rmSync(tasks, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });

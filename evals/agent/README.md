@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.3)
+# Fresh-agent evaluator (E2 v1.20.4)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -330,7 +330,8 @@ Required topics must precede the task's declared first related command.
 Manifests include engine commit; harness/task hashes; arm, context, model, effort, seed
 and attempt; prompt/guide/runtime/log hashes; CLI versions; authentication route;
 timings; usage and cost estimate. Judge packets include final message, source
-and library diff, outputs and rubric, without run identity fields. Text/path
+and library diff, outputs and rubric, without run identity fields. Outputs are
+read without following links; see E2 1.20.4. Text/path
 blinding covers provider/model aliases (Anthropic, OpenAI, GPT, Claude, Codex,
 Opus, Sonnet, Haiku, Fable, o-series and peers). Base64 PDF bytes are never redacted.
 Assign neutral packet IDs outside the packet and give `judge-prompt.md` to one
@@ -396,6 +397,10 @@ bun evals/agent/run.mjs --agent reference --tasks-dir evals/contributor/tasks --
 For live runs use the same catalog and source revision with `--agent claude` or
 `--agent codex`, the appropriate auth recipe above, and distinct checkpoint
 names. A reference run evaluates the task infrastructure without a model.
+
+Contributor checkers run the delivered checkout's tests and build, which is
+agent-written code, with the harness user's privileges. This is a deliberate
+exception to the post-agent boundary; see E2 1.20.4.
 
 - R01 creates a linked Git worktree, runs `bun install --frozen-lockfile` in that
   worktree, runs `bun scripts/test.mjs packages/query/test/views-and-ordering.test.ts`,
@@ -957,3 +962,67 @@ link, so a second name for an outside file is refused. This relies on the
 agent being unable to remove that file’s original name. Node offers no
 descriptor-relative open on Windows, so capture is refused there with an
 explicit error receipt.
+
+## E2 1.20.4
+
+After a sandboxed agent exits, the harness reads its project and runs the CLI
+with the harness user's privileges. This release confines the paths named
+below: the judge packet, the source diff, the guide size, and the CLI runtime,
+Bun configuration and environment of post-agent calls. Other post-run reads
+and writes still use pathnames the agent can change. These include
+snapshots, source and library document reads, the compiler's own reads during
+validation, checker reads and regeneration, the shim's audit files, project
+archival and the Codex auth refresh. They are pending follow-up work for #491.
+
+E2 agent runs and rechecks are refused on Windows before any setup, launch or
+evidence write. Node offers no descriptor-relative, no-follow open there.
+
+Before the agent starts, the harness opens the project root and keeps that
+descriptor for the run. Judge packets read deliverables and the `drawings`
+directory from it with descriptor-relative reads that follow no links and
+take no `..` components, as the visual broker does. A linked or otherwise
+unreadable output is left out of the packet and its path is listed in
+`refusedOutputs`; a linked or unlistable `drawings` directory is listed as
+`drawings`. If the root itself was replaced or cannot be inspected, the run is
+still scored and the packet takes nothing and lists `.`. If no directory is
+at the root's path after the agent exits, because it is gone or a file or link
+took its place, no project-dependent step can run: the
+run is an infrastructure failure and is not scored, and a rubric run's packet
+still takes nothing and lists `.`. The packet format is
+now `thermite-blinded-judge/1.2`. Guide bytes count the `AGENTS.md` present at
+launch, measured from the harness's copy, and rechecks reuse the recorded
+count.
+
+The agent's runtime copy sits in its TMPDIR, which a sandboxed agent can write.
+Post-agent CLI calls (the final flush, file-state validation, the checker and
+rechecks) run a second copy of the prepared engine, made after the agent exits
+in a scratch directory in the harness home and removed when the run ends. Bun
+reads `bunfig.toml` and `.env` files from the working directory, so each of
+those calls names the harness's own config, which disables `.env` loading, as
+its own argument. Their environment is one the harness builds: no credentials,
+no contributor command directory, and a home and TMPDIR in that scratch
+directory. The run's before-and-after runtime hash comparison still reports a
+changed runtime as a V5 violation.
+
+The source diff no longer runs Git in the agent's repository, whose
+configuration and attributes can name programs to run. Before launch the
+harness copies the project's regular files into the scratch directory. After
+the run it reads the selected paths through the pinned root and runs
+`git diff --no-index` on the two copies there, with no Git configuration,
+attributes or repository. The selection covers sources, the manifest, the
+presentation and library documents present before or after the run. Paths are
+labelled as before, with Git's quoting. A deleted file now appears as a
+deletion; staging every path hid it before. A file replaced by a directory, or
+the reverse, appears as a deletion and an addition, provided every component
+on the way is a directory reached without a link. A selected path that is not
+an ordinary file, or is reached through a link, is listed as refused.
+
+`recheck.json` records the project root's identity, and a recheck refuses a
+different root. Rechecks take the prepared engine from the checkpoint's context
+and stage checker receipts in protected scratch, never in the kept run
+directory. Runs recorded before 1.20.4 cannot be rechecked.
+
+Contributor-task checkers are a deliberate exception. They run the delivered
+checkout's own tests and build, which is agent-written code, with the harness
+user's privileges. Holding them to the same boundary would need a sandbox for
+the checker itself.
