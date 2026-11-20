@@ -269,8 +269,8 @@ const helperSource =
     .join(",") +
   "}";
 // Serialize both the measurement function and every browser-only dependency.
-export function sheetMeasurementSource() {
-  return `(${bindMeasurement})(${measureSheet},${helperSource})`;
+export function sheetMeasurementSource(measure = measureSheet) {
+  return `(${bindMeasurement})(${measure},${helperSource})`;
 }
 export async function evaluateSheetGeometry(page, options = {}) {
   const result = await page.evaluate(

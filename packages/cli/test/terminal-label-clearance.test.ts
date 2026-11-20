@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { Browser, Page } from "playwright-core";
 import {
+  displaySheet,
   drawingContextOptions,
+  evaluateSheetGeometry,
   launch,
   openSheet,
+  sheetMeasurementSource,
 } from "../../../evals/draw/browser.mjs";
 import { terminalLabelFindings } from "../../../evals/draw/caption-mark-clearance.mjs";
 import { embedPrintableFont } from "../src/printable-font.js";
@@ -89,10 +92,40 @@ it("catches the round-one T1 terminal label next to the secondary winding", asyn
   expect(findings[0].gapMm).toBeLessThan(0.36);
 });
 
+const measureFixtureGap = sheetMeasurementSource((options, h) => {
+  const c = { options, h };
+  h.prepareGeometry(c);
+  h.prepareTerminals(c);
+  h.prepareText(c);
+  h.preparePaint(c);
+  // Calibrate against the same painted ink beyond the review cutoff, too.
+  return h.terminalLabelClearances(c, 0.8)[0]?.gapMm;
+});
+
+async function roundTwoFindingsAtGap(targetGapMm: number) {
+  let labelX = 25.24;
+  await displaySheet(page, transformerSecondary(roundTwoWinding, labelX));
+  const label = page.locator('[data-terminal-key="X2"] text');
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const gapMm: number | undefined = await page.evaluate(
+      (source) => (0, eval)(source)(),
+      measureFixtureGap,
+    );
+    if (gapMm === undefined)
+      throw new Error("Could not measure the X2 ink gap");
+    // Keep each fixture at least 0.045 mm from the 0.50 mm cutoff.
+    if (Math.abs(targetGapMm - gapMm) < 0.005) {
+      return terminalLabelFindings(await evaluateSheetGeometry(page));
+    }
+    // The winding is slanted, so a horizontal move can change the gap by less.
+    labelX += targetGapMm - gapMm;
+    await label.evaluate((e, x) => e.setAttribute("x", String(x)), labelX);
+  }
+  throw new Error(`Could not position X2 at a ${targetGapMm} mm ink gap`);
+}
+
 it("catches an X2 label just inside the 0.50 mm clearance", async () => {
-  const findings = terminalLabelFindings(
-    await openSheet(page, transformerSecondary(roundTwoWinding, 25.225)),
-  );
+  const findings = await roundTwoFindingsAtGap(0.45);
   expect(findings).toEqual([
     expect.objectContaining({
       kind: "terminal-label-body-clearance",
@@ -100,13 +133,10 @@ it("catches an X2 label just inside the 0.50 mm clearance", async () => {
       minimumMm: 0.5,
     }),
   ]);
-  expect(findings[0].gapMm).toBeGreaterThan(0.47);
-  expect(findings[0].gapMm).toBeLessThan(0.5);
+  expect(findings[0].gapMm).toBeCloseTo(0.45, 2);
 });
 
 it("accepts an X2 label just outside the 0.50 mm clearance", async () => {
-  const findings = terminalLabelFindings(
-    await openSheet(page, transformerSecondary(roundTwoWinding, 25.255)),
-  );
+  const findings = await roundTwoFindingsAtGap(0.55);
   expect(findings).toEqual([]);
 });
