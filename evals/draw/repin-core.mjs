@@ -16,7 +16,7 @@ import {
   moveCandidates,
   checkNotMoves,
 } from "./repin-reconcile.mjs";
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { checkerManifestHash } from "./checker-manifest.mjs";
 import { sheetRenameMap, cropClaimTracker, viewKind } from "./repin-policy.mjs";
 // Guarded deltas only. This module never imports or calls seed().
@@ -29,6 +29,7 @@ import { bands } from "./marker-metrics.mjs";
 import { hash, json, canonical } from "./support.mjs";
 
 export const DECISIONS_FORMAT = "thermite-draw-decisions/1.0";
+const LEGACY_CAPTURE_FORMAT = "thermite-draw-eval/1.0";
 function stateContext(rows, specs) {
   return {
     allCases: new Set(specs.map((s) => s.id)),
@@ -86,7 +87,7 @@ function validateReport(
   registry,
   registrySha256,
   specs,
-  checkerSha256,
+  { checkerSha256, baseline = false },
 ) {
   keys(registry, ["format", "markers"], "registry");
   for (const m of registry.markers) {
@@ -113,10 +114,10 @@ function validateReport(
       keys(scope, ["cases", "sheets", "media"], "stored scope");
   }
 
-  assert(
-    report.format === "thermite-draw-eval/1.0",
-    "Unsupported report format",
-  );
+  const supportedFormat =
+    report.format === CAPTURE_FORMAT ||
+    (baseline && report.format === LEGACY_CAPTURE_FORMAT);
+  assert(supportedFormat, "Unsupported report format");
   assert(
     report.mode === "strict" && report.subset === "full",
     "Use a full strict report",
@@ -324,13 +325,9 @@ export function prepareRepin({
     typeof checkerSha256 === "string" && checkerSha256,
     "Current checker bundle is required",
   );
-  const checked = validateReport(
-    report,
-    registry,
-    registrySha256,
-    specs,
+  const checked = validateReport(report, registry, registrySha256, specs, {
     checkerSha256,
-  );
+  });
   const inventory = instanceInventory(report, reportSha256),
     original = new Map(registry.markers.map((m) => [m.id, m]));
   const population = [...inventory.groups.values()].flatMap((g) => g.findings);
@@ -407,7 +404,10 @@ export function prepareRepin({
     claim,
     binding,
     ensureTarget,
-    validateReport,
+    validateBaseline: (baseline) =>
+      validateReport(baseline, registry, registrySha256, specs, {
+        baseline: true,
+      }),
     instanceInventory,
     reassess,
     DECISIONS_FORMAT,
@@ -434,13 +434,9 @@ export function reviewInventory(context) {
     specs,
     baselines = new Map(),
   } = context;
-  const checked = validateReport(
-    report,
-    registry,
-    registrySha256,
-    specs,
+  const checked = validateReport(report, registry, registrySha256, specs, {
     checkerSha256,
-  );
+  });
   const current = instanceInventory(report, reportSha256);
   const population = [...current.groups.values()].flatMap((g) => g.findings);
   return {
@@ -490,7 +486,7 @@ export function reviewInventory(context) {
     drift: [...checked.drift, ...pairDrift(registry, current)],
     fontPairs: fontPairs(registry, current),
     baselines: [...baselines].map(([sha, r]) => {
-      validateReport(r, registry, registrySha256, specs);
+      validateReport(r, registry, registrySha256, specs, { baseline: true });
       return { sha256: sha, instances: instanceInventory(r, sha).instances };
     }),
   };

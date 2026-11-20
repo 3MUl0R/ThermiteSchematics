@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { readdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   launch,
@@ -9,6 +9,7 @@ import {
   drawingContextOptions,
 } from "./browser.mjs";
 import { conductorLengths } from "./conductor-lengths.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 const { values } = parseArgs({
   options: {
     current: { type: "string" },
@@ -23,21 +24,18 @@ assert(
 const browser = await launch(),
   context = await browser.newContext(drawingContextOptions),
   page = await context.newPage();
-const read = (p) => readFile(p, "utf8").then(JSON.parse);
 const current = resolve(values.current),
   reference = resolve(values.reference),
   cases = [];
-async function capture(directory, prior) {
-  const packet = await read(join(directory, "packet.json")),
-    ir = await read(join(directory, "ir.json")),
+async function capture(read, id, packet, prior) {
+  const ir = JSON.parse(await read(id, "ir.json")),
     gs = [];
   for (const s of packet.sheets) {
     await displaySheet(
       page,
-      await readFile(
-        join(directory, `sheet-${String(s.number).padStart(3, "0")}.svg`),
-        "utf8",
-      ),
+      (
+        await read(id, `sheet-${String(s.number).padStart(3, "0")}.svg`)
+      ).toString(),
     );
     gs.push(
       await page.evaluate(
@@ -49,16 +47,24 @@ async function capture(directory, prior) {
   return conductorLengths(packet, gs, ir, prior?.conductors);
 }
 try {
+  const [readCurrent, readReference] = await Promise.all([
+    readCheckpointCaseFiles(current),
+    readCheckpointCaseFiles(reference),
+  ]);
   for (const entry of await readdir(current, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
+    let packet;
     try {
-      await readFile(join(current, entry.name, "packet.json"));
+      packet = JSON.parse(await readCurrent(entry.name, "packet.json"));
     } catch (error) {
       if (error.code === "ENOENT") continue;
       throw error;
     }
-    const base = await capture(join(reference, entry.name)),
-      target = await capture(join(current, entry.name), base);
+    const referencePacket = JSON.parse(
+        await readReference(entry.name, "packet.json"),
+      ),
+      base = await capture(readReference, entry.name, referencePacket),
+      target = await capture(readCurrent, entry.name, packet, base);
     cases.push({ case: entry.name, reference: base, current: target });
     process.stdout.write(
       `${entry.name}: ${target.conductors.length} conductors\n`,

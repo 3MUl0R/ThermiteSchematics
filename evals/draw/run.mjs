@@ -6,8 +6,9 @@ import {
   statusTable,
 } from "./report-status.mjs";
 import { SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
+import { archiveCaseFiles } from "./case-files.mjs";
 import { finalizeOutput } from "./output.mjs";
 import assert from "node:assert/strict";
 import {
@@ -193,7 +194,7 @@ try {
     };
   }
   metadata = {
-    format: "thermite-draw-eval/1.0",
+    format: CAPTURE_FORMAT,
     evalsVersion: EVALS_VERSION,
     evals: {
       commit: await git(root, "rev-parse", "HEAD"),
@@ -330,6 +331,17 @@ for (const [dq] of Object.entries(criteria))
       reason:
         "Infrastructure prevented measurement; see the infrastructure-error observation.",
     });
+if (!values.artifacts) {
+  try {
+    await archiveCaseFiles(dest);
+  } catch (error) {
+    rows.push({
+      id: "harness/case-archive",
+      status: "infrastructure-error",
+      reason: error.message.replaceAll(root, "<evals>"),
+    });
+  }
+}
 for (const row of rows.filter((r) => r.status === "infrastructure-error"))
   process.stderr.write(`${row.id}: ${row.reason}\n`);
 let code = exitCode(rows, values["report-only"]);
@@ -400,7 +412,9 @@ await writeFile(
 );
 const finalized = await finalizeOutput(dest, report, values.artifacts);
 code = finalized.report.exitCode;
+const { outputBytes, budgetBytes } = finalized.cost;
+const headroomBytes = budgetBytes === null ? "n/a" : budgetBytes - outputBytes;
 process.stdout.write(
-  `${JSON.stringify(counts)}\nWall time ${elapsedSeconds.toFixed(2)} s; exit ${code}; ${relative(root, dest)}/${reportFilename(values.artifacts)}\n`,
+  `${JSON.stringify(counts)}\nWall time ${elapsedSeconds.toFixed(2)} s; exit ${code}; outputBytes=${outputBytes}; budgetBytes=${budgetBytes ?? "unlimited"}; headroomBytes=${headroomBytes}; ${relative(root, dest)}/${reportFilename(values.artifacts)}\n`,
 );
 process.exitCode = code;

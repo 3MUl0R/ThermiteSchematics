@@ -5,6 +5,7 @@ import { join, resolve, dirname, basename } from "node:path";
 import { parseArgs } from "node:util";
 import { packetPdf } from "../../packages/cli/dist/alpha-pdf.js";
 import { pdfCalibration } from "./pdf-calibration.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
 import {
   capturePdfCrop,
@@ -28,6 +29,7 @@ assert(
   "Use --report <summary.json> --output <pdf-swaps.json>",
 );
 const c = await pdfCalibration(v.report),
+  readCaseFile = await readCheckpointCaseFiles(c.root),
   sorted = c.samples.toSorted(
     (a, b) => a.bbox.w * a.bbox.h - b.bbox.w * b.bbox.h,
   ),
@@ -122,7 +124,7 @@ try {
   for (const { size, t, at, pairs } of targets) {
     const ref = pinnedSource(c.report, t),
       directory = join(c.root, t.scope.case),
-      packet = JSON.parse(await readFile(join(directory, "packet.json")));
+      packet = JSON.parse(await readCaseFile(t.scope.case, "packet.json"));
     for (const s of packet.sheets)
       s.svg = await readFile(
         join(directory, `sheet-${String(s.number).padStart(3, "0")}.svg`),

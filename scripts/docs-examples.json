@@ -915,6 +915,12 @@
     },
     {
       "file": "evals/draw/README.md",
+      "hash": "05926578ad1329285ed5741eb03038474a636def4b5a9b71f6f8c8a9434ff7e5",
+      "kind": "illustrative",
+      "reason": "Replace CHECKPOINT with the name of an existing drawing capture before reading a case member."
+    },
+    {
+      "file": "evals/draw/README.md",
       "hash": "6b3276d2f118948d23dd7fcffb3cc1f065b8430c716e5d3ec751894b7ef6fe7d",
       "kind": "platform-only",
       "setup": "Captured C1 sheets, browser and calibration fonts",
