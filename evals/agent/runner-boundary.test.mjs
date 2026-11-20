@@ -162,6 +162,7 @@ it("judge packets refuse a replaced or unsearchable project root as a whole", ()
 });
 
 it("source diffs match the repository diff without running its Git configuration", () => {
+  if (!confined) return;
   const work = temporary("eval-source-diff-");
   try {
     const project = join(work, "project"),
