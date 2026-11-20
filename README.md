@@ -259,6 +259,8 @@ bun run check
 ```
 
 Use `bun run test`, not `bun test`: the suite runs on Vitest.
+For drawing changes, the [drawing evaluation guide](evals/draw/README.md)
+covers strict checkpoints and reviewed updates to the expectations registry.
 
 Read the [engine guide](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the
 branch/fork workflow, engineering review expectations, commit sign-off, and

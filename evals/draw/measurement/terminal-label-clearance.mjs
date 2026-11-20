@@ -1,37 +1,84 @@
-// Sample painted glyphs and native SVG stroke hit areas in sheet millimetres.
-// The 0.04 mm grid resolves joins and dash gaps below the DQ-02 accuracy.
-export function terminalLabelStrokeGap(c, label, shape, region, minimum) {
-  const { rr, sx, sy, contains, glyphAt } = c;
-  const step = 0.04;
-  const ink = [];
-  let best = minimum * minimum;
-  for (let x = region.x; x <= region.x + region.w; x += step)
-    for (let y = region.y; y <= region.y + region.h; y += step) {
-      const p = { x, y };
-      if (contains(label.bbox, p) && glyphAt(label, p)) ink.push(p);
+// Store horizontal runs on the common sheet-millimetre grid.
+export function terminalLabelInkRows(box, step, hit) {
+  const rows = [];
+  const firstX = Math.ceil(box.x / step),
+    lastX = Math.floor((box.x + box.w) / step);
+  const firstY = Math.ceil(box.y / step),
+    lastY = Math.floor((box.y + box.h) / step);
+  for (let row = firstY; row <= lastY; row++) {
+    const runs = [];
+    let start;
+    for (let col = firstX; col <= lastX; col++) {
+      if (hit({ x: col * step, y: row * step })) {
+        start ??= col;
+      } else if (start !== undefined) {
+        runs.push([start, col - 1]);
+        start = undefined;
+      }
     }
+    if (start !== undefined) runs.push([start, lastX]);
+    if (runs.length) rows.push({ row, runs });
+  }
+  return rows;
+}
+
+// Compare painted ink runs to avoid pairing individual samples.
+export function terminalLabelStrokeGap(c, label, shape, minimum) {
+  const { rr, sx, sy, contains, glyphAt, intersect, h } = c;
+  const step = 0.005;
+  const labelRegion = intersect(
+    label.bbox,
+    h.expandClearanceBox(shape.bbox, minimum),
+  );
+  const strokeRegion = intersect(
+    shape.bbox,
+    h.expandClearanceBox(label.bbox, minimum),
+  );
+  if (
+    labelRegion.w <= 0 ||
+    labelRegion.h <= 0 ||
+    strokeRegion.w <= 0 ||
+    strokeRegion.h <= 0
+  )
+    return minimum;
+
+  const ink = h.terminalLabelInkRows(labelRegion, step, (p) =>
+    glyphAt(label, p),
+  );
   if (!ink.length) return minimum;
-  for (let x = region.x; x <= region.x + region.w; x += step)
-    for (let y = region.y; y <= region.y + region.h; y += step) {
-      const p = { x, y };
-      if (!shape.clips.every((clip) => contains(clip, p))) continue;
-      const screen = new DOMPoint(rr.x + x / sx, rr.y + y / sy);
-      if (!shape.e.isPointInStroke(screen.matrixTransform(shape.inverse)))
-        continue;
-      if (
-        shape.covers.some(
-          (cover) =>
-            contains(cover.bbox, p) &&
-            cover.clips.every((clip) => contains(clip, p)) &&
-            cover.e.isPointInFill(screen.matrixTransform(cover.inverse)),
-        )
+  const stroke = h.terminalLabelInkRows(strokeRegion, step, (p) => {
+    if (!shape.clips.every((clip) => contains(clip, p))) return false;
+    const screen = new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy);
+    return (
+      shape.e.isPointInStroke(screen.matrixTransform(shape.inverse)) &&
+      !shape.covers.some(
+        (cover) =>
+          contains(cover.bbox, p) &&
+          cover.clips.every((clip) => contains(clip, p)) &&
+          cover.e.isPointInFill(screen.matrixTransform(cover.inverse)),
       )
-        continue;
-      for (const q of ink)
-        best = Math.min(best, (x - q.x) ** 2 + (y - q.y) ** 2);
+    );
+  });
+  const limit = (minimum / step) ** 2;
+  let best = limit,
+    first = 0;
+  for (const { row, runs } of stroke) {
+    while (
+      first < ink.length &&
+      ink[first].row < row &&
+      (row - ink[first].row) ** 2 >= best
+    )
+      first++;
+    for (let i = first; i < ink.length; i++) {
+      const dy = (row - ink[i].row) ** 2;
+      if (dy >= best) break;
+      for (const [a, b] of runs)
+        for (const [x, y] of ink[i].runs)
+          best = Math.min(best, dy + Math.max(0, a - y, x - b) ** 2);
       if (best === 0) return best;
     }
-  return Math.sqrt(best);
+  }
+  return best === limit ? minimum : Math.sqrt(best) * step;
 }
 
 export function expandClearanceBox({ x, y, w, h }, pad) {
@@ -93,7 +140,7 @@ export function terminalLabelBody(c, owner) {
 }
 
 export function terminalLabelClearances(c, minimum) {
-  const { texts, elementsById, ids, intersect, h } = c;
+  const { texts, elementsById, ids, h } = c;
   const bodies = new Map();
   return texts.flatMap((text) => {
     const e = elementsById.get(text.element),
@@ -112,12 +159,7 @@ export function terminalLabelClearances(c, minimum) {
       gapMm = minimum;
     if (!bodies.has(owner)) bodies.set(owner, h.terminalLabelBody(c, owner));
     for (const shape of bodies.get(owner)) {
-      const region = intersect(
-        h.expandClearanceBox(label.bbox, minimum),
-        h.expandClearanceBox(shape.bbox, minimum),
-      );
-      if (region.w <= 0 || region.h <= 0) continue;
-      const gap = h.terminalLabelStrokeGap(c, label, shape, region, gapMm);
+      const gap = h.terminalLabelStrokeGap(c, label, shape, gapMm);
       if (gap < gapMm) {
         gapMm = gap;
         nearest = shape;

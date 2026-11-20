@@ -46,6 +46,19 @@ it("writer requires byte-buffer inputs", () => {
   a.signed = "not bytes";
   expect(() => recordFor(a)).toThrow(/byte buffers/);
 });
+it("binds a named record to the exact signed lane", () => {
+  const a = args(),
+    signed = JSON.parse(a.signed);
+  a.pr = signed.pr = "SAMPLE-LANE";
+  a.signed = Buffer.from(json(signed));
+  expect(recordFor(a).record.pr).toBe("SAMPLE-LANE");
+  expect(() => recordFor({ ...a, pr: "ANOTHER-LANE" })).toThrow(
+    /Decision record PR\/count mismatch/,
+  );
+  expect(() => recordFor({ ...a, pr: "../SAMPLE-LANE" })).toThrow(
+    /Record PR\/base required/,
+  );
+});
 it("writer checks pre-compressed input metadata", () => {
   const a = args(),
     z = Buffer.from(a.receipt);
