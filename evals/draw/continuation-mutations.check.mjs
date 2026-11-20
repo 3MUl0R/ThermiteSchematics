@@ -142,7 +142,7 @@ try {
     [
       "identifier-painted",
       "identifier-pdf",
-      "await paintedPdfItems(page, measured, nonempty)",
+      "await paintedPdfItems(page, measured, nonempty, withPaintedBox)",
       "measured",
     ],
     [

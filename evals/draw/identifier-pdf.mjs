@@ -1,7 +1,16 @@
 // Painted PDF extraction, including spaces and PDF-only line breaks. No matching
 // against SVG text strings: exact-line matching would hide a PDF-only defect.
 import { paintedPdfItems, PaintedPdfMeasurementError } from "./pdf-painted.mjs";
+import { pointBounds } from "./pdf-clip-operators.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+
+function withPaintedBox(item, glyphs) {
+  const points = glyphs
+    .filter((glyph) => glyph.visible && glyph.text.trim())
+    .flatMap((glyph) => glyph.points);
+  return points.length ? { ...item, paintedBox: pointBounds(points) } : item;
+}
+
 async function identifierPdfContent(page) {
   try {
     return await page.getTextContent({ disableNormalization: true });
@@ -49,7 +58,7 @@ export async function pdfIdentifierRuns(page) {
   const measured = items.filter((item) => item.text.trim());
   let painted;
   try {
-    painted = await paintedPdfItems(page, measured, nonempty);
+    painted = await paintedPdfItems(page, measured, nonempty, withPaintedBox);
   } catch (error) {
     if (!(error instanceof PaintedPdfMeasurementError)) throw error;
     throw new IdentifierMeasurementError(error.message, { cause: error });

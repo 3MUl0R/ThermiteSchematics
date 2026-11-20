@@ -84,6 +84,70 @@ it("coalesces multiple same-line extraction runs and subpixel baseline noise", (
   expect(identifierFindings(geometry(runs), table, ir)).toEqual([]);
   expect(identifierFindings(geometry(), table, ir, "pdf", runs)).toEqual([]);
 });
+it("ignores a PDF whitespace run above an intact I/O channel", () => {
+  const key = JSON.stringify(["plc", "input"]);
+  const source = {
+    ...ir,
+    devices: [{ uid: "plc", io: { channels: { input: { address: "I0.5" } } } }],
+    functions: [{ id: { deviceUid: "plc", functionKey: "input" } }],
+  };
+  const schedule = {
+    kind: "io",
+    columns: ["Device", "Channel"],
+    rows: [{ key, cells: ["", "I0.5"] }],
+  };
+  const g = geometry();
+  g.reportRows = [key];
+  Object.assign(g.reportCells[0], {
+    row: key,
+    columnIndex: 1,
+    bbox: { x: 5, y: 102, w: 20, h: 6 },
+  });
+  const padding = run(" ", 104.65, 12);
+  const find = (runs) => identifierFindings(g, schedule, source, "pdf", runs);
+  expect(find([run("I0.5 ", 105.8), padding])).toEqual([]);
+  for (const text of ["I0.6 ", "I0. "])
+    expect(find([run(text, 105.8), padding])).toMatchObject([
+      { kind: "identifier-text-mismatch", identifier: "I0.5" },
+    ]);
+  expect(find([padding])).toMatchObject([
+    { kind: "identifier-text-mismatch", identifier: "I0.5" },
+  ]);
+  expect(find([run("I0. ", 104), run(" 5", 105.8), padding])).toMatchObject([
+    { kind: "identifier-line-break", identifier: "I0.5", lineCount: 2 },
+  ]);
+});
+it("ignores leading and trailing PDF padding around a printed designation", () => {
+  const source = { ...ir, devices: [{ uid: "ol2", designation: "OL2" }] };
+  const bom = {
+    kind: "bom",
+    columns: ["Qty", "Designations"],
+    rows: [{ key: "row", cells: ["1", "OL2"], deviceUids: ["ol2"] }],
+  };
+  const g = geometry();
+  g.reportCells[0].columnIndex = 1;
+  const find = (text) => identifierFindings(g, bom, source, "pdf", [run(text)]);
+  expect(find(" OL2 ")).toEqual([]);
+  expect(find(" O L2 ")).toMatchObject([
+    { kind: "identifier-text-mismatch", identifier: "OL2" },
+  ]);
+  g.reportCells[0].bbox.w = 10;
+  const padded = run(" OL2 ", 20, 10);
+  padded.bbox.w = 25;
+  const paintedBox = { x: 11, y: 18, w: 3, h: 2 };
+  expect(
+    identifierFindings(g, bom, source, "pdf", [{ ...padded, paintedBox }]),
+  ).toEqual([]);
+  expect(
+    identifierFindings(g, bom, source, "pdf", [
+      {
+        ...padded,
+        bbox: run(" OL2 ").bbox,
+        paintedBox: { ...paintedBox, x: 16 },
+      },
+    ]),
+  ).toMatchObject([{ kind: "identifier-text-mismatch", identifier: "OL2" }]);
+});
 it("passes a source list whose complete identifiers occupy separate lines", () => {
   const source = {
     ...ir,
@@ -127,6 +191,29 @@ it("preserves an identifier's internal spaces and Unicode normalization", () => 
   expect(
     identifierFindings(cableGeometry([run("Á/B-C")]), t, ir),
   ).toMatchObject([{ kind: "identifier-text-mismatch" }]);
+});
+it("retains same-line PDF separators and rejects collapsed spacing", () => {
+  const t = {
+    kind: "cables",
+    columns: ["Cable"],
+    rows: [{ key: "row", cells: ["A / B"] }],
+  };
+  const g = geometry();
+  g.reportCells[0].columnIndex = 0;
+  const find = (runs) => identifierFindings(g, t, ir, "pdf", runs);
+  expect(find([run(" A  / B ")])).toMatchObject([
+    { kind: "identifier-text-mismatch" },
+  ]);
+  const space = run(" ", 20, 11);
+  space.bbox.w = 0.1;
+  expect(find([run("A"), space, run("/ B ", 20, 11.1)])).toEqual([]);
+  expect(find([run("A"), run("/ B", 20, 11.1)])).toMatchObject([
+    { kind: "identifier-text-mismatch" },
+  ]);
+  expect(find([run("A"), run("/ B", 20, 12)])).toEqual([]);
+  expect(
+    find([run("A "), run("/ ", 20, 12), run(" ", 20, 12.1), run("B", 20, 14)]),
+  ).toEqual([]);
 });
 it.each(["6ES7212-1AE40-", "6ES7212-1AE40-…", order.toLowerCase(), ""])(
   "flags incomplete or changed rendered text %j",

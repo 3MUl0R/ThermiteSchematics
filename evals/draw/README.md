@@ -23,7 +23,13 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.35** still applies.
+the budget and the remaining headroom. Checker protocol **5.36** applies.
+
+Version **5.36** fixes **DQ-19** for PDF report cells (#461). Native glyph bounds
+locate character-bearing runs in the measured cell. Extraction padding at line
+edges and whitespace-only runs outside same-line gaps do not create printed
+characters or baselines. Same-line separators remain checked. Complete 5.35
+summaries remain readable.
 
 Version **5.35 (TEXTM1)** extends **DQ-02** to require 0.50 mm from terminal
 label ink to painted strokes in its own symbol. Chromium samples the glyphs and
@@ -1516,14 +1522,16 @@ The browser-required clip mutations run with
 DQ-19 also enforces the explicit source identifier fields in
 [`identifier-policy.mjs`](identifier-policy.mjs). SVG and actual CLI HTML use
 independently measured cell rectangles and character baselines, including
-positioned `tspan` runs. Direct PDF uses raw pdf.js text positions, including
-whitespace, rather than requiring a match to an SVG line. Fragments on one
-baseline count as one line within the existing 0.170 mm geometry uncertainty;
-separate complete list members can occupy separate lines. A single source
-identifier spanning lines produces `identifier-line-break`. Lost, changed or
-elided characters produce `identifier-text-mismatch`; missing cell geometry or
-unmeasurable identity is an infrastructure error. Each medium is assessed
-separately. DQ-21's font comparison remains independent.
+positioned `tspan` runs. Direct PDF uses PDF.js extraction with native painted
+glyph bounds to locate runs by cell. PDF line edges ignore extraction whitespace.
+A whitespace-only fragment can supply a separator between painted runs on the
+same baseline. Fragments on one baseline count as one line within the existing
+0.170 mm geometry uncertainty. Separate complete list members can occupy
+separate lines. A single source identifier spanning lines produces
+`identifier-line-break`. Lost, changed or elided characters produce
+`identifier-text-mismatch`. Missing cell geometry or unmeasurable identity is
+an infrastructure error. Each medium is assessed separately. DQ-21's font
+comparison remains independent.
 Both registries' header positions are tested against the public query output and
 packet-only wire reference columns. Terminal-plan connection columns protect
 complete peer endpoint units from authored wires, jumpers and cable cores;

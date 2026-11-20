@@ -119,9 +119,15 @@ function ownedGlyphs(glyphs, raw, p, m, ux, uy) {
   });
 }
 
-export async function paintedPdfItems(page, items, raw) {
+export async function paintedPdfItems(page, items, raw, measure) {
   const data = await paintedInventory(page, items, raw);
-  return paintedItems(data.items, data.raw, data.glyphs, data.viewport);
+  return paintedItems(
+    data.items,
+    data.raw,
+    data.glyphs,
+    data.viewport,
+    measure,
+  );
 }
 export async function paintedPdfMeasurements(page, items) {
   const data = await paintedInventory(page, items);

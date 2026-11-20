@@ -3,8 +3,12 @@ import { expectedIdentifierCells } from "./identifier-policy.mjs";
 
 const uncertainty = 0.17; // existing 300 dpi geometry uncertainty, mm
 const whitespace = (s) => /\s/u.test(s ?? "");
-function physicalLines(runs) {
+const centerX = (box) => box.x + box.w / 2;
+const paintedBox = (run) => run.paintedBox ?? run.bbox;
+
+function physicalLines(runs, medium) {
   const lines = [];
+  const separators = [];
   for (const run of runs)
     if (!Number.isFinite(run.anchor?.y) || !Number.isFinite(run.anchor?.x))
       throw new IdentifierMeasurementError(
@@ -13,6 +17,12 @@ function physicalLines(runs) {
   for (const run of [...runs].sort(
     (a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x,
   )) {
+    // PDF.js can infer a space on a baseline with no painted text in this cell.
+    // Only character-bearing runs establish PDF lines.
+    if (medium === "pdf" && !run.text.trim()) {
+      separators.push(run);
+      continue;
+    }
     let line = lines.find(
       (line) => Math.abs(line.y - run.anchor.y) <= uncertainty,
     );
@@ -22,20 +32,45 @@ function physicalLines(runs) {
     }
     line.runs.push(run);
   }
-  return lines.map((line) => ({
-    ...line,
-    runs: line.runs.sort((a, b) => a.anchor.x - b.anchor.x),
-  }));
+  return lines.map((line) => {
+    const boxes = line.runs.map(paintedBox);
+    const betweenRuns = separators.filter((space) => {
+      const x = centerX(space.bbox);
+      return (
+        Math.abs(line.y - space.anchor.y) <= uncertainty &&
+        boxes.some((box) => box.x + box.w <= x) &&
+        boxes.some((box) => box.x >= x) &&
+        !boxes.some((box) => box.x < x && x < box.x + box.w)
+      );
+    });
+    const position = (run) =>
+      medium !== "pdf"
+        ? run.anchor.x
+        : run.text.trim()
+          ? paintedBox(run).x
+          : centerX(run.bbox);
+    return {
+      ...line,
+      runs: [...line.runs, ...betweenRuns].sort(
+        (a, b) => position(a) - position(b),
+      ),
+    };
+  });
 }
-function alignCell(expected, lines) {
-  const characters = lines.flatMap((line, index) =>
-    line.runs.flatMap((run) =>
+function alignCell(expected, lines, medium) {
+  const characters = lines.flatMap((line, index) => {
+    const chars = line.runs.flatMap((run) =>
       run.text
         .normalize("NFC")
         .split("")
         .map((char) => ({ char, line: index, run })),
-    ),
-  );
+    );
+    if (medium !== "pdf") return chars;
+    return chars.slice(
+      chars.findIndex(({ char }) => !whitespace(char)),
+      chars.findLastIndex(({ char }) => !whitespace(char)) + 1,
+    );
+  });
   const mapping = [];
   let cursor = 0;
   for (let offset = 0; offset < expected.length; offset++) {
@@ -105,7 +140,7 @@ function cellRuns(g, expected, cell, medium, pdfRuns) {
         "Identifier measurement: PDF runs missing",
       );
     return pdfRuns.filter((run) => {
-      const x = run.bbox.x + run.bbox.w / 2;
+      const x = centerX(paintedBox(run));
       return (
         x > cell.bbox.x &&
         x < cell.bbox.x + cell.bbox.w &&
@@ -157,8 +192,8 @@ export function identifierFindings(
       );
     const cell = cells[0],
       runs = cellRuns(g, expected, cell, medium, pdfRuns),
-      lines = physicalLines(runs);
-    const mapping = alignCell(expected.text, lines);
+      lines = physicalLines(runs, medium);
+    const mapping = alignCell(expected.text, lines, medium);
     const first = g.texts.find(
       (t) => t.row === expected.row && t.columnIndex === expected.column,
     );
