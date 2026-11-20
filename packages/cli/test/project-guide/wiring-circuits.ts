@@ -603,12 +603,14 @@ const module: FactModule = {
     },
     {
       claim:
-        "Read `thermite guide circuit-symbols` before disconnector selection.",
+        "Read `thermite guide circuit-symbols` before disconnector or receptacle selection.",
       async check() {
         const guide = await ok(["guide", "circuit-symbols"], ctx.work);
         expect(guide.stdout).toContain("thermite:disconnector");
-        expect(guide.stdout.replace(/\s+/gu, " ")).toContain(
-          "Isolation suitability",
+        const text = guide.stdout.replace(/\s+/gu, " ");
+        expect(text).toContain("Isolation suitability");
+        expect(text).toContain(
+          "exactly one of its terminals has the `protective_earth` role",
         );
       },
     },

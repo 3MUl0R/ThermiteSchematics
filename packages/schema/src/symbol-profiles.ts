@@ -645,7 +645,7 @@ export const SYMBOL_PROFILES: readonly SymbolProfile[] = [
   {
     id: "thermite:receptacle",
     notes:
-      "Two/three-terminal loads; protective earth may be a separate one-terminal bus.",
+      "Two blade slots. The earth opening requires a three-terminal load with exactly one protective_earth role. A separate PE bus has its own earth mark.",
     aliases: [],
     coreAliases: [],
     support: [

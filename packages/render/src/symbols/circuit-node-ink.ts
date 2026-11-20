@@ -6,6 +6,7 @@ import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import {
   circuitAttachmentPoints,
+  circuitMarkName,
   circuitMarkSegments,
   type CircuitMark,
 } from "./circuit.js";
@@ -31,7 +32,7 @@ function interfaceSegments(
         "dc-output",
         "source",
         "sensor-3wire",
-      ].includes(row.mark)
+      ].includes(circuitMarkName(row.mark))
     )
       return [];
     const c = centers[i];

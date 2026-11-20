@@ -2,6 +2,7 @@ import { captionInk } from "../symbols/caption-ink.js";
 import type { CaptionBox } from "../symbols/circuit-caption.js";
 import {
   circuitMarkInkBounds,
+  circuitMarkName,
   circuitWindingPoints,
 } from "../symbols/circuit.js";
 import { TERMINAL_TEXT_SIZE } from "../symbols/circuit-text.js";
@@ -94,7 +95,7 @@ function lateralBody(
       "conductivity-probe",
       "receptacle",
       "sensor-3wire",
-    ].includes(mark) &&
+    ].includes(circuitMarkName(mark)) &&
     f.kind !== "source" &&
     (mark !== "sensor-3wire" || ports.length > 1) &&
     (!channelLines || mark === "sensor-3wire")

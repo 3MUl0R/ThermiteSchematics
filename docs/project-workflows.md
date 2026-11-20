@@ -225,7 +225,7 @@ Attachment/tag-lane rays: lightest incident ink; unused faces: 0.35 mm.
 
 Library `circuitSymbols` maps function keys to closed-catalog marks; main/auxiliary contact marks may differ. E206
 checks function existence, kind, terminal count and contact state.
-Read `thermite guide circuit-symbols` before disconnector selection.
+Read `thermite guide circuit-symbols` before disconnector or receptacle selection.
 Also read `thermite guide circuit-views`; never guess marks; check
 links/earth/DC ink in both flows. Marks create no continuity or bonds.
 

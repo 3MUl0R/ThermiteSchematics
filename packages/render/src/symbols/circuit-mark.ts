@@ -43,6 +43,7 @@ export type CircuitMark =
   | "level-sensor"
   | "conductivity-probe"
   | "receptacle"
+  | "receptacle-with-earth"
   | "ac-input"
   | "dc-output"
   | "sensor-3wire";
@@ -181,6 +182,8 @@ function sharedCircuitPrimitives(mark: SharedMark): Primitive[] {
     }
   });
 }
+const RECEPTACLE_FACE = [circle(6, 6, 5), line(4, 3, 4, 7), line(8, 3, 8, 7)];
+
 const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
   Object.freeze({
     disconnector: sharedCircuitPrimitives("disconnector"),
@@ -273,10 +276,9 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
       },
     ],
     "conductivity-probe": [circle(6, 6, 5), line(4, 3, 4, 9), line(8, 3, 8, 9)],
-    receptacle: [
-      circle(6, 6, 5),
-      line(4, 3, 4, 7),
-      line(8, 3, 8, 7),
+    receptacle: RECEPTACLE_FACE,
+    "receptacle-with-earth": [
+      ...RECEPTACLE_FACE,
       {
         kind: "polyline",
         points: [
@@ -329,6 +331,12 @@ function uprightQualifier(p: Primitive): Primitive {
   if (p.kind === "polyline") return { ...p, points: p.points.map(turn) };
   return p;
 }
+
+/** Both faces share the authored mark name and interface layout. */
+export function circuitMarkName(mark: CircuitMark) {
+  return mark === "receptacle-with-earth" ? "receptacle" : mark;
+}
+
 function markPrimitives(
   mark: CircuitMark,
   vertical: boolean,
@@ -336,7 +344,8 @@ function markPrimitives(
 ) {
   if (mark === "earth" && !vertical) return EARTH_LTR;
   const upright =
-    vertical && ["ac-input", "dc-output", "receptacle"].includes(mark);
+    vertical &&
+    ["ac-input", "dc-output", "receptacle"].includes(circuitMarkName(mark));
   if (!span && !upright) return MARKS[mark];
   return MARKS[mark].map((p) => {
     if (span && p.kind === "rect") {
@@ -367,7 +376,7 @@ export function emitCircuitMark(
   mmPerUnit: number,
   span?: readonly [number, number],
 ): string {
-  return `<g data-circuit-mark="${mark}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${hasExtendedInk(mark, vertical) ? ' stroke-linecap="round" stroke-linejoin="round"' : ""}${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${markPrimitives(
+  return `<g data-circuit-mark="${circuitMarkName(mark)}" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"${hasExtendedInk(mark, vertical) ? ' stroke-linecap="round" stroke-linejoin="round"' : ""}${vertical ? ' transform="translate(12 0) rotate(90)"' : ""}>${markPrimitives(
     mark,
     vertical,
     span,

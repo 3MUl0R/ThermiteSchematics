@@ -95,7 +95,7 @@ Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return k
 Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Use a short group `lineReference` for circuit captions.
 
-Keep labels clear of symbol strokes, terminal approaches, bends, junctions and cable-end marks.
+Keep labels clear of ink, pin approaches, bends, junctions and cable ends.
 See `thermite guide circuit-symbols`.
 
 ## Offline project workflows
