@@ -1,3 +1,4 @@
+import type { CompiledProjectPresentation } from "@thermite/compiler";
 import type { PaperPage } from "../../packet/types.js";
 import type { PacketRequest, Presentation, TitleSources } from "./model.js";
 import { useCompactFrame } from "../../packet/frame-profile.js";
@@ -24,19 +25,31 @@ interface AuthoredTitleContext extends TitleFrameContext {
   readonly viewIndex?: number;
   readonly firstSheet?: number;
 }
-const presentations = new WeakMap<object, AuthoredTitleContext>();
+type SourcePresentation = Readonly<CompiledProjectPresentation> | Presentation;
+const presentations = new WeakMap<
+  object,
+  { context: AuthoredTitleContext; source: SourcePresentation }
+>();
 export function registerTitlePresentation(
   presentation: object,
   context: AuthoredTitleContext,
+  source: SourcePresentation,
 ) {
-  presentations.set(presentation, context);
+  presentations.set(presentation, { context, source });
 }
 export function titlePresentationContext(presentation: object | undefined) {
-  return presentation && presentations.get(presentation);
+  return presentation && presentations.get(presentation)?.context;
+}
+/** Resolve the compiled source even when rendering uses a compatibility copy. */
+export function documentSourcePresentation(
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
+) {
+  return (
+    presentation && (presentations.get(presentation)?.source ?? presentation)
+  );
 }
 export function authoredTitlePresentation(
-  presentation:
-    import("@thermite/compiler").CompiledProjectPresentation | undefined,
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
   page: PaperPage,
   viewIndex: number,
   firstSheet: number,
@@ -44,11 +57,11 @@ export function authoredTitlePresentation(
   const context = titleFrameContext(page);
   if (!context || !presentation) return presentation;
   const authored = { ...presentation };
-  registerTitlePresentation(authored, {
-    ...context,
-    viewIndex: viewIndex + 1,
-    firstSheet,
-  });
+  registerTitlePresentation(
+    authored,
+    { ...context, viewIndex: viewIndex + 1, firstSheet },
+    presentations.get(presentation)?.source ?? presentation,
+  );
   return authored;
 }
 

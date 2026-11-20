@@ -1,4 +1,5 @@
 import { assemblyFactRows } from "./document-assembly-facts.js";
+import { documentSourcePresentation } from "../internal/title-data/frame-context.js";
 import { renderCache } from "./render-cache.js";
 import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
@@ -73,10 +74,11 @@ export function documentIdentity(
   ir: Readonly<ElectricalIr>,
   presentation?: CompiledProjectPresentation,
 ): Omit<DocumentIdentity, "id"> {
+  const source = documentSourcePresentation(presentation);
   return {
     snapshotDigest: navigationSnapshotDigest(ir),
-    presentationDigest: navigationHash(presentation ?? null),
-    revision: presentation?.revision ?? "UNSPECIFIED",
+    presentationDigest: navigationHash(source ?? null),
+    revision: source?.revision ?? "UNSPECIFIED",
   };
 }
 export function factReport(need: DocumentNeed): ReportKind {

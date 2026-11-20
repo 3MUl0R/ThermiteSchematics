@@ -104,4 +104,4 @@ Run `thermite guide project-workflows` for printing, reports, review, libraries/
 connection completeness, wiring records, cables, communication, field hookups
 and circuits. For exact shapes use
 `thermite guide schema`. Use `thermite guide drawing-frames` before changing paper
-frames or title data.
+frames or title data. It covers source binding.
