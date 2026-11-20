@@ -400,7 +400,8 @@ function validationDiagnostics(result) {
 }
 // A sandboxed Codex agent, and any process it leaves running, can write /tmp
 // and the system temporary directory, which hold its run directory and TMPDIR.
-// Its final evidence archive must resolve outside them.
+// Its final evidence archive must resolve outside them. Returns the canonical
+// path, which every later archive write uses so a link cannot redirect it.
 export function assertArchiveOutsideSandbox(archive) {
   const resolved = realpathSync(archive);
   const root = [tmpdir(), "/tmp", "/private/tmp"]
@@ -411,6 +412,7 @@ export function assertArchiveOutsideSandbox(archive) {
     !root,
     `Evidence archive ${resolved} is under ${root}, which a sandboxed Codex agent can write; run Codex evals from a checkout outside temporary directories`,
   );
+  return resolved;
 }
 function ownTemp(prefix) {
   return realpathSync(
@@ -1402,11 +1404,15 @@ async function main() {
       tasks.some((task) => selectedKey(task) === values["reopen-infra"]),
       "--reopen-infra must match a selected run key or all",
     );
-  const destination = join(root, "evals/out/agent", values.checkpoint);
-  mkdirSync(destination, { recursive: true });
+  const requested = join(root, "evals/out/agent", values.checkpoint);
+  mkdirSync(requested, { recursive: true });
   // Only the Codex sandbox has a write boundary; Claude runs as the harness
-  // user and the reference agent launches nothing.
-  if (values.agent === "codex") assertArchiveOutsideSandbox(destination);
+  // user and the reference agent launches nothing. Either way, archive to the
+  // canonical path resolved now, never back through a link.
+  const destination =
+    values.agent === "codex"
+      ? assertArchiveOutsideSandbox(requested)
+      : realpathSync(requested);
   const preparation = join(destination, "context"),
     contextFile = join(preparation, "context.json"),
     commit = git(
