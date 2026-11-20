@@ -25,7 +25,8 @@ coverage warnings. Their optional interfaces and physical equipment details are
 unspecified. The twelve-pin interface shows all pins, including the eight
 unconnected pins; unconnected does not imply spare. The receptacle's two-terminal
 load prints two blade slots, and its unconnected PE terminal prints a separate
-earth symbol. This synthetic fixture exercises drawing and coverage only.
+earth symbol. This synthetic fixture exercises drawing and coverage only. It is
+not a usable electrical design or a reviewed purchasing list.
 
 The original continuous renderer is unchanged. These additional profiles are
 supported by source-selected circuit views, with terminal wiring and schedules

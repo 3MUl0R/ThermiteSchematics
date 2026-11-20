@@ -2,11 +2,15 @@ import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { compileProject } from "@thermite/compiler";
+import { lateralPinClearanceWidth } from "../src/circuit/pin-clearance.js";
+import type { FunctionRow, Pin } from "../src/circuit/types.js";
 import {
   renderSchematicPacket,
   type SchematicPacketRequest,
 } from "../src/sheets.js";
 import { renderSchematic } from "../src/renderer.js";
+import { nodeCaptionSegments } from "../src/symbols/circuit-node-ink.js";
+import { circuitMark } from "../src/symbols/circuit.js";
 import { paintedShape } from "./circuit-fidelity-oracle.js";
 import {
   inkClearance,
@@ -239,31 +243,43 @@ it.each(flows)(
   },
 );
 
-it.each(flows)(
-  "prints an earth opening on a three-terminal receptacle only with an authored earth role in %s",
-  async (flow) => {
-    const compiled = await compileProject(directory);
-    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
-    const ir = structuredClone(compiled.ir);
-    const outlet = ir.devices.find((d) => d.designation === "SO1")!;
-    const type = ir.deviceTypes.find((t) => t.id === outlet.typeId)!;
-    const power = ir.functions.find(
-      (f) => f.id.deviceUid === outlet.uid && f.id.functionKey === "power",
-    )!;
-    const earth = ir.terminals.find(
-      (t) => t.id.deviceUid === outlet.uid && t.id.terminalKey === "PE",
-    )!;
-    // The earth terminal occupies the middle of the authored function order.
-    power.terminals.splice(1, 0, earth.id);
-    type.functions
-      .find((f) => f.key === "power")!
-      .terminalKeys.splice(1, 0, "PE");
+async function outletFixture(terminalKeys: string[]) {
+  const compiled = await compileProject(directory);
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const ir = structuredClone(compiled.ir);
+  const outlet = ir.devices.find((d) => d.designation === "SO1")!;
+  const type = ir.deviceTypes.find((t) => t.id === outlet.typeId)!;
+  const power = ir.functions.find(
+    (f) => f.id.deviceUid === outlet.uid && f.id.functionKey === "power",
+  )!;
+  const terminals = terminalKeys.map((key) =>
+    ir.terminals.find(
+      (t) => t.id.deviceUid === outlet.uid && t.id.terminalKey === key,
+    )!,
+  );
+  power.terminals = terminals.map((t) => t.id);
+  type.functions.find((f) => f.key === "power")!.terminalKeys = terminalKeys;
+
+  function setEarthTerminals(earthKeys: string[]) {
+    for (const terminal of terminals) {
+      const key = terminal.id.terminalKey;
+      const authored = type.terminals.find((t) => t.key === key)!;
+      if (earthKeys.includes(key)) {
+        authored.role = terminal.role = "protective_earth";
+      } else {
+        delete authored.role;
+        delete terminal.role;
+      }
+    }
+  }
+
+  async function audit(flow: (typeof flows)[number], hasEarth: boolean) {
     const request: SchematicPacketRequest = {
       format: "schematic-packet-request/0.1",
       views: [
         {
           format: "circuit-view-request/0.1",
-          title: "Three-terminal outlet",
+          title: "Outlet",
           flow,
           groups: [
             {
@@ -277,28 +293,117 @@ it.each(flows)(
         },
       ],
     };
-    async function audit(hasEarth: boolean) {
-      const result = await renderSchematicPacket(ir, request);
-      if (!result.ok) throw Error(result.error.message);
-      const doc = parseHTML(result.value.html).document;
-      auditOutlet(
-        doc.querySelector('[data-circuit-mark="receptacle"]')!,
-        ["L", "PE", "N"],
-        hasEarth,
-      );
-    }
+    const result = await renderSchematicPacket(ir, request);
+    if (!result.ok) throw Error(result.error.message);
+    const doc = parseHTML(result.value.html).document;
+    auditOutlet(
+      doc.querySelector('[data-circuit-mark="receptacle"]')!,
+      terminalKeys,
+      hasEarth,
+    );
+  }
 
-    await audit(true);
+  return { type, power, setEarthTerminals, audit };
+}
+
+it.each(flows)(
+  "prints an earth opening on a three-terminal receptacle only with an authored earth role in %s",
+  async (flow) => {
+    // The earth terminal occupies the middle of the authored function order.
+    const { type, setEarthTerminals, audit } = await outletFixture([
+      "L",
+      "PE",
+      "N",
+    ]);
+    await audit(flow, true);
     type.circuitSymbols = { power: "receptacle" };
-    await audit(true);
+    await audit(flow, true);
     // A terminal still named PE cannot authorize the earth opening.
-    delete earth.role;
-    delete type.terminals.find((t) => t.key === "PE")!.role;
-    await audit(false);
+    setEarthTerminals([]);
+    await audit(flow, false);
     delete type.circuitSymbols;
-    await audit(false);
+    await audit(flow, false);
   },
 );
+
+it.each([
+  {
+    load: "three-terminal load with two earth roles",
+    terminalKeys: ["L", "PE", "N"],
+    earthKeys: ["PE", "N"],
+  },
+  {
+    load: "two-terminal load with one earth role",
+    terminalKeys: ["L", "PE"],
+    earthKeys: ["PE"],
+  },
+])(
+  "paints no earth opening on a $load",
+  async ({ terminalKeys, earthKeys }) => {
+    const { setEarthTerminals, audit } = await outletFixture(terminalKeys);
+    setEarthTerminals(earthKeys);
+    await audit("left-to-right", false);
+  },
+);
+
+it("reserves the interface lead ink and lateral caption clearance of an earthed receptacle", async () => {
+  const { type, power } = await outletFixture(["L", "PE", "N"]);
+  const mark = circuitMark(type, power);
+  expect(mark).toBe("receptacle-with-earth");
+  const center = { x: 20, y: 14 };
+  const pitch = 10;
+  const pins: Pin[] = power.terminals.map((terminal, i) => ({
+    id: terminal.terminalKey,
+    terminal,
+    x: 0,
+    y: center.y + (i - 1) * pitch,
+    side: "WEST",
+    label: terminal.terminalKey,
+    outside: 0,
+  }));
+  const row: FunctionRow = {
+    f: power,
+    mark,
+    start: 0,
+    slots: 3,
+    center: center.y,
+  };
+  const node = {
+    width: 40,
+    height: 28,
+    boundary: false,
+    type,
+    sourceTerminalKeys: [],
+    rows: [row],
+    pins,
+  };
+  const { ownerSegments } = nodeCaptionSegments(
+    node,
+    [center],
+    false,
+    () => true,
+  );
+  for (const { x, y } of pins) {
+    // The face starts at x=15, leaving a 1 mm gap from the lead tip.
+    expect(ownerSegments).toContainEqual([
+      { x, y },
+      { x: 14, y },
+    ]);
+  }
+
+  const short = lateralPinClearanceWidth(
+    pins,
+    [row],
+    pitch,
+    false,
+    (p) => p.label,
+  );
+  // The outer pin caption lies beyond the circle and still needs clearance from the face outline.
+  const long = lateralPinClearanceWidth(pins, [row], pitch, false, (p) =>
+    p.label === "L" ? "Line terminal" : p.label,
+  );
+  expect(long).toBeGreaterThan(short);
+});
 
 function auditMotorEarth(motor: Element) {
   const pe = motor.querySelector('.terminal-marker[data-terminal-key="PE"]')!;
