@@ -49,6 +49,7 @@ import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 import { visualBroker } from "./visual-capture.mjs";
+import { projectReader } from "./capture-files.mjs";
 import {
   agents,
   agentConfiguration,
@@ -168,6 +169,42 @@ export function installShim(runtime) {
         .replaceAll('"./snapshot.mjs"', '"./eval-snapshot.mjs"')
         .replaceAll('"./process.mjs"', '"./eval-process.mjs"'),
     );
+}
+async function copyRuntime(prepared, runtime, task) {
+  await copyAsync(prepared, runtime, { recursive: true, dereference: true });
+  installShim(runtime);
+  if (task.contributor)
+    rmSync(join(runtime, "evals/contributor"), {
+      recursive: true,
+      force: true,
+    });
+}
+// The agent's runtime copy lives in its writable TMPDIR. Post-agent CLI calls
+// run this copy instead, made from the same prepared engine in the harness
+// home, outside the sandbox's writable roots. Bun reads bunfig.toml from the
+// project, so those calls also name the harness's own empty config.
+async function protectedRuntime(prepared, task) {
+  const root = realpathSync(
+    mkdtempSync(join(homedir(), ".thermite-agent-runtime-")),
+  );
+  const config = join(root, "bunfig.toml");
+  try {
+    // BUN_OPTIONS splits on whitespace and has no quoting.
+    assert(
+      !/\s/.test(config),
+      `Harness home path contains whitespace: ${root}`,
+    );
+    await copyRuntime(prepared, join(root, "runtime"), task);
+    writeFileSync(config, "");
+  } catch (error) {
+    rmSync(root, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    root,
+    runtime: join(root, "runtime"),
+    bunOptions: `--config=${config}`,
+  };
 }
 const children = new Set();
 let stoppingSignal = null;
@@ -307,29 +344,57 @@ export function judgePacket({
   runtime,
   task,
 }) {
+  // The project is agent-written. Artifacts are read without following links
+  // and only from inside it; anything else is listed as refused.
+  assert(
+    process.platform === "darwin" || process.platform === "linux",
+    "Judge packets are unavailable on Windows: project files cannot be read there without following links",
+  );
   const outputs = {},
-    binaryOutputs = [];
-  for (const name of [
-    "drawings",
-    "issue.md",
-    "review-notes.md",
-    "requirement-matrix.json",
-    "friction.md",
-  ]) {
-    const path = join(project, name);
-    if (!existsSync(path)) continue;
-    if (name === "drawings")
-      for (const file of readdirSync(path).sort()) {
-        if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
-        if (file.endsWith(".pdf")) {
-          outputs[`drawings/${file}`] = readFileSync(join(path, file)).toString(
-            "base64",
-          );
-          binaryOutputs.push(`drawings/${file}`);
-        } else
-          outputs[`drawings/${file}`] = readFileSync(join(path, file), "utf8");
+    binaryOutputs = [],
+    refusedOutputs = [];
+  const source = projectReader(project);
+  const take = (rel) => {
+    try {
+      return source.read(rel);
+    } catch {
+      refusedOutputs.push(rel);
+    }
+  };
+  try {
+    for (const name of [
+      "drawings",
+      "issue.md",
+      "review-notes.md",
+      "requirement-matrix.json",
+      "friction.md",
+    ]) {
+      if (!source.has(name)) continue;
+      if (name !== "drawings") {
+        const bytes = take(name);
+        if (bytes) outputs[name] = bytes.toString("utf8");
+        continue;
       }
-    else outputs[name] = readFileSync(path, "utf8");
+      let files;
+      try {
+        files = source.list(name).sort();
+      } catch {
+        refusedOutputs.push(name);
+        continue;
+      }
+      for (const file of files) {
+        if (!/\.(json|csv|html|svg|pdf)$/.test(file)) continue;
+        const rel = `drawings/${file}`,
+          bytes = take(rel);
+        if (!bytes) continue;
+        outputs[rel] = file.endsWith(".pdf")
+          ? bytes.toString("base64")
+          : bytes.toString("utf8");
+        if (file.endsWith(".pdf")) binaryOutputs.push(rel);
+      }
+    }
+  } finally {
+    source.close();
   }
   const blindText = (text) =>
     text
@@ -365,7 +430,7 @@ export function judgePacket({
             )
           : value;
   const packet = blind({
-    format: "thermite-blinded-judge/1.1",
+    format: "thermite-blinded-judge/1.2",
     finalMessage,
     sourceDiff,
     rubric: task.rubric,
@@ -377,6 +442,7 @@ export function judgePacket({
   for (const path of binaryOutputs)
     packet.outputs[blindText(path)] = outputs[path];
   packet.binaryOutputs = binaryOutputs.map(blindText);
+  packet.refusedOutputs = refusedOutputs.map(blindText);
   return packet;
 }
 function parseCalls(path) {
@@ -486,6 +552,7 @@ export async function runOne({
     task,
     initial,
     runtimeBefore,
+    trusted,
     secretList = [];
   const runStarted = Date.now();
   const save = (file, value) =>
@@ -494,21 +561,13 @@ export async function runOne({
       JSON.parse(redactSecrets(JSON.stringify(value), secretList)),
     );
   try {
-    await copyAsync(prepared.path, runtime, {
-      recursive: true,
-      dereference: true,
-    });
-    installShim(runtime);
     task = read(join(taskDir, "task.json"));
     assert(
       !task.context || task.context === context,
       "Task requires --context source",
     );
-    if (task.contributor)
-      rmSync(join(runtime, "evals/contributor"), {
-        recursive: true,
-        force: true,
-      });
+    await copyRuntime(prepared.path, runtime, task);
+    trusted = await protectedRuntime(prepared.path, task);
     identity.task = task.id;
     identity.runKey = runKey(identity);
     env = {
@@ -745,6 +804,10 @@ export async function runOne({
       batchControl.reason = batchHaltReason(classification);
     }
     env.THERMITE_EVAL_PHASE = "flush";
+    // From here on, CLI calls run with harness privileges: never from the
+    // agent-writable runtime, and never with a project bunfig.toml.
+    env.BUN_OPTIONS = trusted.bunOptions;
+    ctx.thermite = join(trusted.runtime, "thermite.mjs");
     const validation = cli(ctx, "validate", ".", "--json");
     writeFileSync(
       join(live, "validate.stdout"),
@@ -754,7 +817,11 @@ export async function runOne({
       join(live, "validate.stderr"),
       redactSecrets(validation.stderr, secretList),
     );
-    const final = fileState(project, join(runtime, "thermite.real.mjs"), env),
+    const final = fileState(
+        project,
+        join(trusted.runtime, "thermite.real.mjs"),
+        env,
+      ),
       calls = parseCalls(env.THERMITE_EVAL_LOG);
     final.sourceFiles = documents(project).map((doc) => doc.path);
     const shimErrors = existsSync(env.THERMITE_EVAL_ERRORS)
@@ -773,7 +840,7 @@ export async function runOne({
     ctx.final = final;
     ctx.calls = calls;
     ctx.validationDiagnostics = validationDiagnostics(validation);
-    ctx.thermite = join(runtime, "thermite.real.mjs");
+    ctx.thermite = join(trusted.runtime, "thermite.real.mjs");
     if (task.contributor) ctx.pinnedTypeScript = prepared.pinnedTypeScript;
     const paths = [
       ...new Set([
@@ -842,7 +909,10 @@ export async function runOne({
       context,
       engineRoots,
       guideBytes: readFileSync(join(project, "AGENTS.md")).length,
-      guideFiles: [join(project, "AGENTS.md"), join(runtime, "README.md")],
+      guideFiles: [
+        join(project, "AGENTS.md"),
+        join(trusted.runtime, "README.md"),
+      ],
       expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
       actualWarnings:
         outcome.actualWarnings ??
@@ -949,6 +1019,7 @@ export async function runOne({
         tasksRoot,
         project,
         runtime,
+        prepared: prepared.path,
         initial,
         final,
         calls,
@@ -1037,6 +1108,7 @@ export async function runOne({
           save("manifest.json", manifest);
         }
       }
+    if (trusted) rmSync(trusted.root, { recursive: true, force: true });
     if (manifest?.status === "checker-error" && !keep)
       rmSync(join(work, "isolated"), { recursive: true, force: true });
     try {
@@ -1085,55 +1157,69 @@ export async function recheckRun({ evidence, forceRecheck = false }) {
     sha256(readFileSync(join(stored.taskDir, "task.json")))
       ? task.version
       : null);
-  const ctx = {
-    ...stored,
-    task,
-    promptVersion,
-    evidence: live,
-    env: freshEnvironment(join(work, `recheck-config-${revision}`), {}, {}),
-    thermite: join(stored.runtime, "thermite.real.mjs"),
-    metrics: score({
+  // Recheck runs the CLI with harness privileges, from a protected copy.
+  assert(
+    stored.prepared,
+    "Recheck needs the prepared engine recorded since E2 1.20.4",
+  );
+  const trusted = await protectedRuntime(stored.prepared, task);
+  const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
+  let ctx, outcome, metrics;
+  try {
+    ctx = {
+      ...stored,
+      task,
+      promptVersion,
+      evidence: live,
+      env: {
+        ...freshEnvironment(join(work, `recheck-config-${revision}`), {}, {}),
+        BUN_OPTIONS: trusted.bunOptions,
+      },
+      thermite: join(trusted.runtime, "thermite.real.mjs"),
+      metrics: score({
+        calls: stored.calls,
+        transcript,
+        context: stored.context,
+        engineRoots: stored.engineRoots,
+        allowedLibraryPaths: task.allowedLibraryPaths,
+      }),
+    };
+    outcome = await evaluateTask(stored.taskDir, ctx);
+    assert.equal(
+      harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
+      checker.checkerHash,
+      "Harness changed during recheck; result cannot be scored",
+    );
+    metrics = score({
       calls: stored.calls,
+      initial: stored.initial,
+      final: stored.final,
+      runtimeBefore: original.runtimeHash.before,
+      runtimeAfter: snapshot(stored.runtime, { documents: false }).hash,
       transcript,
       context: stored.context,
       engineRoots: stored.engineRoots,
+      guideBytes: readFileSync(join(stored.project, "AGENTS.md")).length,
+      guideFiles: [
+        join(stored.project, "AGENTS.md"),
+        join(trusted.runtime, "README.md"),
+      ],
+      expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
+      actualWarnings:
+        outcome.actualWarnings ??
+        stored.validationDiagnostics.filter((d) => d.severity === "warning"),
+      requiredTopics: task.requiredTopics,
+      taskOutcome: outcome,
+      allowedUnused: task.allowedUnused,
       allowedLibraryPaths: task.allowedLibraryPaths,
-    }),
-  };
-  const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
-  const outcome = await evaluateTask(stored.taskDir, ctx);
-  assert.equal(
-    harnessIdentity({ tasksDir: stored.tasksRoot }).checkerHash,
-    checker.checkerHash,
-    "Harness changed during recheck; result cannot be scored",
-  );
-  const metrics = score({
-    calls: stored.calls,
-    initial: stored.initial,
-    final: stored.final,
-    runtimeBefore: original.runtimeHash.before,
-    runtimeAfter: snapshot(stored.runtime, { documents: false }).hash,
-    transcript,
-    context: stored.context,
-    engineRoots: stored.engineRoots,
-    guideBytes: readFileSync(join(stored.project, "AGENTS.md")).length,
-    guideFiles: [
-      join(stored.project, "AGENTS.md"),
-      join(stored.runtime, "README.md"),
-    ],
-    expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
-    actualWarnings:
-      outcome.actualWarnings ??
-      stored.validationDiagnostics.filter((d) => d.severity === "warning"),
-    requiredTopics: task.requiredTopics,
-    taskOutcome: outcome,
-    allowedUnused: task.allowedUnused,
-    allowedLibraryPaths: task.allowedLibraryPaths,
-    guideCopy: task.guideCopy,
-    preserveSource: task.preserveSource,
-    undocumentedShapes: task.undocumentedShapes,
-    wallTimeMs: original.timings.wallTimeMs,
-  });
+      guideCopy: task.guideCopy,
+      preserveSource: task.preserveSource,
+      undocumentedShapes: task.undocumentedShapes,
+      wallTimeMs: original.timings.wallTimeMs,
+    });
+  } finally {
+    rmSync(trusted.root, { recursive: true, force: true });
+  }
   if (original.agent === "reference") metrics.usage.partial = false;
   if (original.agentFailure) {
     outcome.pass = false;

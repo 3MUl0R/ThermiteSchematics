@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.3)
+# Fresh-agent evaluator (E2 v1.20.4)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -330,7 +330,8 @@ Required topics must precede the task's declared first related command.
 Manifests include engine commit; harness/task hashes; arm, context, model, effort, seed
 and attempt; prompt/guide/runtime/log hashes; CLI versions; authentication route;
 timings; usage and cost estimate. Judge packets include final message, source
-and library diff, outputs and rubric, without run identity fields. Text/path
+and library diff, outputs and rubric, without run identity fields. Outputs are
+read without following links; see E2 1.20.4. Text/path
 blinding covers provider/model aliases (Anthropic, OpenAI, GPT, Claude, Codex,
 Opus, Sonnet, Haiku, Fable, o-series and peers). Base64 PDF bytes are never redacted.
 Assign neutral packet IDs outside the packet and give `judge-prompt.md` to one
@@ -957,3 +958,24 @@ link, so a second name for an outside file is refused. This relies on the
 agent being unable to remove that file’s original name. Node offers no
 descriptor-relative open on Windows, so capture is refused there with an
 explicit error receipt.
+
+## E2 1.20.4
+
+Judge packets read deliverables and the `drawings` directory without
+following links, using the same descriptor-relative reads as the visual broker.
+A linked or otherwise unreadable output is left out of the packet and its path
+is listed in `refusedOutputs`; a linked `drawings` directory is listed as
+`drawings`. The packet format is now `thermite-blinded-judge/1.2`. Judge packets
+are refused on Windows, where these reads are unavailable.
+
+The agent's runtime copy sits in its TMPDIR, which a sandboxed agent can write.
+Post-agent CLI calls (the final flush, file-state validation, the checker and
+rechecks) therefore run a second copy of the prepared engine, made at setup in
+the harness home, outside the sandbox's writable roots, and removed when the
+run ends. Bun reads `bunfig.toml` from the working directory, so a project
+config could preload agent code into those calls. They set `BUN_OPTIONS` to an
+empty harness config instead. The harness home path must not contain
+whitespace, because `BUN_OPTIONS` has no quoting. The run's before-and-after
+runtime hash comparison still reports a changed runtime as a V5 violation.
+`recheck.json` now records the prepared engine path, and rechecks rebuild the
+protected copy from it, so runs recorded before 1.20.4 cannot be rechecked.

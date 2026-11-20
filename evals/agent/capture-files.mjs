@@ -6,6 +6,7 @@ import {
   fstatSync,
   lstatSync,
   openSync,
+  readdirSync,
   readFileSync,
   realpathSync,
 } from "node:fs";
@@ -133,6 +134,32 @@ export function projectReader(project) {
             "Capture input changed during snapshot; request again",
           );
           return bytes;
+        } finally {
+          closeSync(fd);
+        }
+      },
+      // Names in a project directory reached without following links. Node
+      // cannot list a descriptor, so the listing is bracketed by checks that
+      // the pathname is still that directory; read() confines each entry.
+      list(rel) {
+        directoryIdentity(root, identity);
+        const path = join(root, rel);
+        const fd = openDescendant(rootFd, rel.split(sep));
+        try {
+          const opened = fdStat(fd);
+          const verifyPath = () => {
+            directoryIdentity(root, identity);
+            assert(
+              opened.isDirectory() &&
+                sameFile(stat(path), opened) &&
+                realpathSync(path) === path,
+              "Project directory must be ordinary inside project",
+            );
+          };
+          verifyPath();
+          const names = readdirSync(path);
+          verifyPath();
+          return names;
         } finally {
           closeSync(fd);
         }

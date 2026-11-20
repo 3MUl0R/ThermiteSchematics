@@ -181,14 +181,20 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
     const binary = Buffer.from("AA/GPT/A", "base64");
     writeFileSync(join(work, "drawings/provider.pdf"), binary);
-    const packet = judgePacket({
-      project: work,
-      runtime: "/runtime",
-      finalMessage:
-        "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox, xhigh, Codex CLI 0.164.0, Claude Code v2.1.280, 2.1.280 (Claude Code), claude --version printed 2.1.280, CLI version 0.164.0, thermite CLI 0.2.0, thermite CLI version 0.2.0",
-      sourceDiff: "/runtime/example",
-      task: { rubric: ["Preserve unknown facts"] },
-    });
+    const make = () =>
+      judgePacket({
+        project: work,
+        runtime: "/runtime",
+        finalMessage:
+          "Anthropic OpenAI GPT Claude Opus 4.5 Codex Opus Sonnet Haiku Fable o-series o3-pro o4-mini-high Gemini DeepSeek Grok Llama Qwen Mistral Copilot arm B. PLC output O1 and O2.1, voltage 4.5, model o1, codex sandbox, xhigh, Codex CLI 0.164.0, Claude Code v2.1.280, 2.1.280 (Claude Code), claude --version printed 2.1.280, CLI version 0.164.0, thermite CLI 0.2.0, thermite CLI version 0.2.0",
+        sourceDiff: "/runtime/example",
+        task: { rubric: ["Preserve unknown facts"] },
+      });
+    if (process.platform === "win32") {
+      expect(make).toThrow("unavailable on Windows");
+      return;
+    }
+    const packet = make();
     const text = JSON.stringify({
       ...packet,
       outputs: Object.fromEntries(
