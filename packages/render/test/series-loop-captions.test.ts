@@ -2,7 +2,7 @@ import { parseHTML } from "linkedom";
 import { expect, it } from "vitest";
 import { prepareSignalLoopDrawing } from "../src/signal-loop.js";
 import { measureText } from "../src/text-metrics.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { seriesFixture, request, uid } from "./series-loop-fixture.js";
 import {
   fieldSeriesFixture,

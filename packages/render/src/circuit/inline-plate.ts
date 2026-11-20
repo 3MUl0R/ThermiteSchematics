@@ -2,6 +2,7 @@ import { circuitCaptionGeometry } from "./caption-geometry.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 import {
   rectInkBox,
+  routeInkDistance,
   segmentTouchesBox,
   pointInsideBox,
   type InkBox,
@@ -65,6 +66,18 @@ function plateFits(
 ) {
   const box = rectInkBox(label);
   if ([...state.dots.values()].some((point) => pointInsideBox(point, box)))
+    return false;
+  if (
+    state.segments.some(
+      (s) =>
+        s.index !== label.index &&
+        routeInkDistance(
+          box,
+          [[s.a, s.b]],
+          state.cs[s.index]?.jumper ? 0.55 : 0.32,
+        ) <= 0.01,
+    )
+  )
     return false;
   const hidden = state.segments.filter(
     (s) => s.index === label.index && segmentTouchesBox(s.a, s.b, box),

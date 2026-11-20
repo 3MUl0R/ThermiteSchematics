@@ -1,6 +1,6 @@
 import type { Draft, PaperPage } from "../../packet/types.js";
 import type { Slot } from "./model.js";
-import { printableTextMetrics } from "../../symbols/printable-font.js";
+import { printableTextMetrics } from "../../text-metrics.js";
 import { n, text } from "../../packet/svg.js";
 
 import { titleLabels as defaults } from "./resolve.js";

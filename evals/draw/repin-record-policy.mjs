@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { gunzipSync } from "node:zlib";
+export const validRecordId = (id) =>
+  (Number.isSafeInteger(id) && id > 0) ||
+  (typeof id === "string" &&
+    id.length <= 64 &&
+    /^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$/.test(id));
 export const legacyRecord = (pr, sha) =>
   pr === 92 &&
   sha === "b56690d45cae4a53beef6dfe39b68221d00d00842cce36445cd6c175b7094da5";

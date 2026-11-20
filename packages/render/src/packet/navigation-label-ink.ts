@@ -5,7 +5,7 @@ import type {
 import type { Rect } from "../device-legend/geometry.js";
 import { unionInk } from "./rooted-ink.js";
 import { required } from "../presentation/util.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { NAVIGATION_FONT_MM, wrapNavigationText } from "./navigation-labels.js";
 
 /** Printed repeat ink; the larger all-role reservation still guards fit. */

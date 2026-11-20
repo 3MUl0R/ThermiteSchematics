@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { hash, json } from "./support.mjs";
 import { readRecord, verifyRecord } from "./repin-record.mjs";
 import { strictJsonBytes } from "./repin-io.mjs";
+import { validRecordId } from "./repin-record-policy.mjs";
 export function verifyRecordChain(pins, records, registrySha256) {
   assert(
     pins.format === "thermite-draw-repin-pins/1.0" &&
@@ -27,8 +28,7 @@ export function verifyRecordChain(pins, records, registrySha256) {
       Object.keys(pin).every((k) =>
         ["pr", "recordSha256", "baseCommit", "maxBytes", "reason"].includes(k),
       ) &&
-        Number.isSafeInteger(pin.pr) &&
-        pin.pr > 0 &&
+        validRecordId(pin.pr) &&
         /^[a-f0-9]{64}$/.test(pin.recordSha256),
       "Invalid record pin",
     );

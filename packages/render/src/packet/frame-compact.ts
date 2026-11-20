@@ -23,7 +23,7 @@ import {
   escapeXmlText as xml,
 } from "../svg/escape.js";
 import { n, text, line, namespaceSheetContent } from "./svg.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 
 const FOOTER_HEIGHT_MM = 6;
 

@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import type { LegendTag } from "./reference.js";
 import type { Rect } from "./geometry.js";
 import { inside, separated } from "./geometry.js";

@@ -3,7 +3,7 @@ import type { IrDevice, IrDeviceType } from "@thermite/compiler";
 import { planDeviceTag, type DeviceTagPlan } from "./device-tags.js";
 import { ownedTagText, tagRowAttributes } from "./device-tag-ownership.js";
 import { CircuitRenderError } from "./render-error-context.js";
-import { printableTextMetrics } from "./symbols/printable-font.js";
+import { printableTextMetrics } from "./text-metrics.js";
 import { text } from "./packet/svg.js";
 
 /** Topology packets may scale by 2.5/2.7; reserve the corresponding larger ink. */

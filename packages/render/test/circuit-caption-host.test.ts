@@ -17,6 +17,7 @@ import {
 import { InlineLabelCollisionError } from "../src/layout/inline-label-error.js";
 import { required } from "./fixtures.js";
 import type { CircuitLabelState } from "../src/circuit/layout-routes.js";
+import { printableTextWidth } from "../src/text-metrics.js";
 type Segment = CircuitLabelState["segments"][number];
 const label = { index: 0, width: 10.375, height: 3.8 };
 function sharedRun(length: number, vertical = false): Segment[] {
@@ -101,10 +102,21 @@ it("keeps the Siemens 4BB31 TTB public positive at three sheets after failed bou
       const doc = parseHTML(
         required(r.value.sheets[expected.sheet - 1]).svg,
       ).document;
+      const placed = required(
+        doc.querySelector(`[data-wire-label="${baseCaption.owner}"]`),
+      );
+      const printed = required(placed.querySelector("text"));
+      const prior = parseHTML(`<svg>${expected.svg}</svg>`).document;
+      expect(printed.textContent).toBe(
+        prior.querySelector("text")?.textContent,
+      );
+      expect(printed.getAttribute("font-size")).toBe("2.5");
       expect(
-        required(doc.querySelector(`[data-wire-label="${baseCaption.owner}"]`))
-          .outerHTML,
-      ).toBe(expected.svg);
+        Number(placed.querySelector("rect")?.getAttribute("width")),
+      ).toBeCloseTo(
+        printableTextWidth(printed.textContent ?? "", 2.5) + 1.5,
+        3,
+      );
     }
     const receipt = required(receipts.find((r) => r.index === 4));
     expect(receipt.fallback).toBe(true);

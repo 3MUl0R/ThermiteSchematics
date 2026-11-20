@@ -11,7 +11,7 @@ import {
   validateDeviceTagSources,
 } from "../src/device-tags.js";
 import { preflightDeviceTagSources } from "../src/svg/escape.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 let ir: ElectricalIr, device: IrDevice, type: IrDeviceType;
 beforeAll(async () => {
   const c = await compileProject("examples/motor-starter");

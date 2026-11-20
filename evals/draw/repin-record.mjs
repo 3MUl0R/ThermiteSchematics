@@ -16,6 +16,7 @@ import {
   payloadBytes,
   recordBudget,
   RECORD_LIMIT,
+  validRecordId,
 } from "./repin-record-policy.mjs";
 import { verifyCrops } from "./repin-record-crops.mjs";
 const digest = (s) => /^[a-f0-9]{64}$/.test(s ?? "");
@@ -168,9 +169,7 @@ export function verifyRecord(record, files, { pin } = {}) {
     "Unknown record format",
   );
   assert(
-    Number.isSafeInteger(record.pr) &&
-      record.pr > 0 &&
-      /^[a-f0-9]{40}$/.test(record.baseCommit),
+    validRecordId(record.pr) && /^[a-f0-9]{40}$/.test(record.baseCommit),
     "Record PR/base required",
   );
   for (const p of [record.signedDecisions, record.receipt, record.cropIndex])
@@ -214,8 +213,10 @@ export function verifyRecord(record, files, { pin } = {}) {
       receipt.registryAfterSha256 === record.registryAfterSha256,
     "Registry receipt binding mismatch",
   );
+  const decisionId =
+    typeof record.pr === "number" ? "#" + record.pr : record.pr;
   assert(
-    signed.pr === "#" + record.pr &&
+    signed.pr === decisionId &&
       receipt.decisions.length === signed.entries.length,
     "Decision record PR/count mismatch",
   );

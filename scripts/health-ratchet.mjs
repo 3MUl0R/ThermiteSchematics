@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { measure } from "./health-measure.mjs";
 import { readHistory, formatHistoryInformation } from "./health-history.mjs";
 import { upgradeBudget } from "./health-budget.mjs";
+import { textMetricRegressions } from "./health-text-metrics.mjs";
 import {
   acceptBudget,
   lowerBudget,
@@ -60,6 +61,9 @@ function main() {
         ? lowerBudget(current, budget, history)
         : budget;
   const failures = [
+    ...textMetricRegressions(Object.keys(current.files), (file) =>
+      readFileSync(join(root, file), "utf8"),
+    ),
     ...regressions(current, next, history),
     ...(history
       ? historyRegressions(

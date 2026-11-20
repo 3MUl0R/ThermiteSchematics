@@ -20,7 +20,10 @@ import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import { titleBlockObservation } from "./title-fields.mjs";
-import { captionMarkFindings } from "./caption-mark-clearance.mjs";
+import {
+  captionMarkFindings,
+  terminalLabelFindings,
+} from "./caption-mark-clearance.mjs";
 import { faceStubFindings } from "./symbol-face-isolation.mjs";
 import * as checks from "./checks.mjs";
 import {
@@ -94,6 +97,7 @@ function evaluateTextAndSymbols(
       ),
       ...checks.plateOcclusion(g),
       ...captionMarkFindings(g),
+      ...terminalLabelFindings(g),
     ]),
   );
   out.push(

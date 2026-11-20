@@ -1,19 +1,10 @@
+import { printableTextWidth, textClusters } from "../text-metrics.js";
+
 export const TERMINAL_TEXT_SIZE = 2.5;
 
-export const measure = (s: string, size = TERMINAL_TEXT_SIZE) =>
-  [...s].reduce(
-    (sum, c) =>
-      sum +
-      (/[ilI1 .,:;'|!]/u.test(c)
-        ? 0.35
-        : /[MW@%]/u.test(c)
-          ? 1
-          : (c.codePointAt(0) ?? 0) > 127
-            ? 1.2
-            : 0.64) *
-        size,
-    0,
-  );
+export const measure = (value: string, size = TERMINAL_TEXT_SIZE) =>
+  printableTextWidth(value, size);
+
 export function circuitTextLines(
   value: string,
   width: number,
@@ -28,8 +19,8 @@ export function circuitTextLines(
       line = "";
     }
     if (lineWidth(word, size) > width) {
-      for (const c of word) {
-        if (lineWidth(line + c, size) > width) {
+      for (const c of textClusters(word)) {
+        if (line && lineWidth(line + c, size) > width) {
           lines.push(line);
           line = "";
         }

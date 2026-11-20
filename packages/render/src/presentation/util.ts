@@ -24,7 +24,7 @@ import type {
 } from "../types.js";
 import type { SymbolSide, SymbolDefinition } from "../symbols/types.js";
 import { preservesVerticalPowerLaneOrder } from "../symbols/catalog.js";
-import { printableSlotWidth } from "../symbols/printable-font.js";
+import { continuousLabelSlot } from "../text-metrics.js";
 import { type SvgSemanticIdPrefix, svgSemanticId } from "../svg/escape.js";
 
 export function cloneTerminal(terminal: TerminalId): TerminalId {
@@ -141,10 +141,7 @@ export function orientedSymbolSize(
 }
 
 export function labelWidth(text: string): number {
-  return printableSlotWidth(
-    text,
-    Math.max(12, Number((6 + 6.2 * [...text].length).toFixed(3))),
-  );
+  return continuousLabelSlot(text);
 }
 
 export function textSource(

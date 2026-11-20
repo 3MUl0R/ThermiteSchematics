@@ -1,28 +1,13 @@
-import { measureText } from "../text-metrics.js";
-import { wrap } from "./svg.js";
-
-/** Notes and pagination use the same measured words at the printed 2.5 mm em.
- * Retain the native layout when an indivisible word or line count cannot fit. */
-export function reportNoteLayout(value: string, width: number) {
-  const original = wrap(value, Math.floor(width / 1.6));
-  if (
-    (value.match(/\S+/gu) ?? []).some(
-      (word) => measureText(word, 2.5).width > width,
-    )
-  )
-    return { lines: original, fallback: "indivisible word" };
-  const lines = measuredNoteWords(value, width);
-  return lines.length <= original.length
-    ? { lines, fallback: undefined }
-    : { lines: original, fallback: "native note capacity" };
-}
-
-export const reportNoteLines = (value: string, width: number) =>
-  reportNoteLayout(value, width).lines;
+import {
+  describeCodePoint,
+  measureText,
+  textClusters,
+} from "../text-metrics.js";
 
 /** Keep original code points, whitespace and explicit paragraph separators. */
-function measuredNoteWords(value: string, width: number) {
+export function reportNoteLines(value: string, width: number) {
   const lines: string[] = [];
+  const fits = (text: string) => measureText(text, 2.5).width <= width;
   let line = "";
   for (const token of value.match(
     /\r\n|[\n\r\u2028\u2029]|[^\S\n\r\u2028\u2029]+|\S+/gu,
@@ -32,11 +17,24 @@ function measuredNoteWords(value: string, width: number) {
       line = "";
     } else if (/^\s+$/u.test(token)) line += token;
     else {
-      if (line && measureText(line + token, 2.5).width > width) {
+      if (line && !fits(line + token)) {
         lines.push(line);
         line = "";
       }
-      line += token;
+      if (fits(token)) line += token;
+      else {
+        for (const cluster of textClusters(token)) {
+          if (!fits(cluster))
+            throw Error(
+              `Report note grapheme ${[...cluster].map(describeCodePoint).join(", ")} cannot fit the available width.`,
+            );
+          if (line && !fits(line + cluster)) {
+            lines.push(line);
+            line = "";
+          }
+          line += cluster;
+        }
+      }
     }
   }
   return [...lines, line];

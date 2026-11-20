@@ -4,7 +4,7 @@ import { compactFrame } from "./frame-compact.js";
 import { legacyFooterNote } from "./legacy-footer.js";
 import { rootedLegendView } from "../device-legend.js";
 import { continuationLabelSvg } from "./continuation-label.js";
-import { circuitTextLines } from "../circuit.js";
+import { wrapPrintableText, wrapText } from "../text-metrics.js";
 import {
   rootedNoticeLines,
   rootedSheetNoticeSvg,
@@ -26,7 +26,7 @@ import type {
   DrawingBounds,
 } from "./types.js";
 import { failure, record } from "./errors.js";
-import { n, text, line, wrap, namespaceSheetContent } from "./svg.js";
+import { n, text, line, namespaceSheetContent } from "./svg.js";
 
 const PAPERS = {
   letter: [215.9, 279.4],
@@ -81,35 +81,15 @@ function titleHeight(title: SchematicTitleContext, page: PaperPage): number {
   const custom = title.lines.filter(
     (entry) => entry.field === "title.authored-line",
   );
-  const max = Math.floor((page.widthMm - 2 * page.marginMm - 76) / 1.6);
+  const width = page.widthMm - 2 * page.marginMm - 76;
   const view =
     title.lines.find((entry) => entry.field === "title.view-line")?.value ?? "";
-  if (
-    title.lines.some(
-      (entry) =>
-        ["circuit", "connector-assembly"].includes(entry.ownerId) &&
-        entry.field === "title.view-line",
-    )
-  ) {
-    const width = page.widthMm - 2 * page.marginMm - 76;
-    return Math.max(
-      28,
-      14 +
-        (circuitTextLines(title.projectName, width, 3.2).length +
-          circuitTextLines(view, width, 2.7).length +
-          custom.flatMap((entry) => circuitTextLines(entry.value, width, 2.5))
-            .length) *
-          4,
-    );
-  }
-  return Math.max(
-    28,
-    14 +
-      (wrap(title.projectName, max).length +
-        wrap(view, max).length +
-        custom.flatMap((entry) => wrap(entry.value, max)).length) *
-        4,
-  );
+  // Authored rows of the standard frame reserve the pinned fallback envelope.
+  const rows =
+    wrapPrintableText(title.projectName, width, 3.2, true).length +
+    wrapPrintableText(view, width, 2.8).length +
+    custom.flatMap((entry) => wrapText(entry.value, width, 2.5)).length;
+  return Math.max(28, 14 + rows * 4);
 }
 export function bounds(
   title: SchematicTitleContext,
@@ -203,37 +183,36 @@ export function frame(
     line(m, titleTop, page.widthMm - m, titleTop),
     line(page.widthMm - m - 66, titleTop, page.widthMm - m - 66, bottom),
   );
-  const max = Math.floor((w - 76) / 1.6);
-  const circuit =
-    draft.view.format === "documentation-view/0.1" &&
-    ["circuit", "connector-assembly"].includes(draft.view.kind);
+  const titleWidth = w - 76;
   let y = titleTop + 5;
-  for (const row of circuit
-    ? circuitTextLines(draft.title.projectName, w - 76, 3.2)
-    : wrap(draft.title.projectName, max)) {
+  for (const row of wrapPrintableText(
+    draft.title.projectName,
+    titleWidth,
+    3.2,
+    true,
+  )) {
     out.push(text(m + 4, y, row, 3.2, "start", 700));
     y += 4;
   }
-  for (const row of circuit
-    ? circuitTextLines(label, w - 76, 2.7)
-    : wrap(label, max)) {
+  for (const row of wrapPrintableText(label, titleWidth, 2.8)) {
     out.push(text(m + 4, y, row));
     y += 4;
   }
   for (const entry of draft.title.lines.filter(
     (entry) => entry.field === "title.authored-line",
   )) {
-    for (const row of circuit
-      ? circuitTextLines(entry.value, w - 76, 2.5)
-      : wrap(entry.value, max)) {
+    for (const row of wrapText(entry.value, titleWidth, 2.5)) {
       out.push(text(m + 4, y, row, 2.5));
       y += 4;
     }
   }
   out.push(...legacyFooterNote(draft.note, m + 4, w - 76, bottom, y));
-  const revisionRows = circuit
-    ? circuitTextLines(`REV ${draft.title.revision}`, 58, 2.6)
-    : wrap(`REV ${draft.title.revision}`, 34);
+  const revisionRows = wrapPrintableText(
+    `REV ${draft.title.revision}`,
+    58,
+    2.6,
+    true,
+  );
   if (revisionRows.length > 3)
     throw new Error(
       "Revision is too long for the sheet title block; use at most 96 characters.",

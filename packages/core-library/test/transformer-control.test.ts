@@ -14,6 +14,8 @@ import {
 } from "../../render/test/transformer-control-fixture.js";
 import p7 from "./fixtures/transformer-control/p7-diagnostics.json";
 import { dolProbeFixture } from "../../render/test/dol-control-probes-fixture.js";
+import { circuitDocument } from "../../render/test/helpers/junction-rays.js";
+import { captionInk } from "../../render/src/symbols/caption-ink.js";
 
 it.each(transformerFlows)(
   "uses shipped unrated facts and preserves the complete circuit in %s",
@@ -65,12 +67,11 @@ it.each(transformerFlows)(
     });
     expect(view.groups[0]!.coverage.conductorIds).toHaveLength(6);
     expect(view.groups[0]!.coverage.functionIds).toHaveLength(6);
-    // Preserve the reviewed geometry/complete-ink hash across the intentional
-    // frame and attachment style changes. Physical ink is asserted separately.
+    // Pin the geometry after measuring caption and terminal widths with Noto.
+    // The physical frame and attachment ink are asserted separately.
     const reviewedContent = reviewedTransformerInk(view.groups[0]!.content);
     expect(view.groups[0]!.content).toContain('data-layout-source-port="');
-    // Catalog attachment ink follows selected ports now; retain the original
-    // reviewed geometry hash while independently requiring incident wire ink.
+    // Normalize attachment style for the geometry hash after checking the ink.
     assertRayWeights(view.groups[0]!.content);
     const originalOutlineInk = reviewedContent
       .replace(
@@ -88,13 +89,59 @@ it.each(transformerFlows)(
     expect(originalOutlineInk).not.toBe(reviewedContent);
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
-        ? "e9d8fc41133ff295005f7a83877e09c16326e6f21a9eba84e593b7b1d94ac00c"
-        : "ffdb1a46186da48a93d745be679841eced74a2589027d6f38fa5dd30df974141",
+        ? "a46ca5c69f56240d3927fb60b2406c62c01ae652dac0ccd1525204cb0361f19b"
+        : "23e56dd3c67ac2a71962689745ee3597e3aba6cc5a2ca14e6d6b38df1a478bf8",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);
   },
 );
+it("reserves painted winding clearance for the suffixed secondary label", async () => {
+  const compiled = await compileProject(transformerRoot);
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const view = await prepareCircuitView(compiled.ir, {
+    format: "circuit-view-request/0.1",
+    title: "Partial transformer control",
+    flow: "left-to-right",
+    groups: [
+      {
+        id: "without-indicator",
+        label: "Primary and relay",
+        functions: [
+          ["XT1", "terminal1"],
+          ["XT1", "terminal2"],
+          ["T1", "primary"],
+          ["T1", "secondary"],
+          ["R1", "coil"],
+        ].map(([value, key]) => ({
+          device: { by: "designation", value: value! },
+          key: key!,
+        })),
+        conductors: ["W1", "W2", "W3", "W4"],
+      },
+    ],
+  });
+  const document = circuitDocument(view.groups[0]!.content);
+  const label = document.querySelector('g[data-terminal-key="X2"] > text')!;
+  expect(label.textContent).toBe("X2 [+1]");
+  const body = document.querySelector(
+    '[data-function-key="secondary"] [data-circuit-mark="winding"] polyline',
+  )!;
+  const [, , , , corner] = body.getAttribute("points")!.split(" ");
+  const shoulder = Number(corner!.split(",")[0]);
+  // With 1 mm rise and 1.6 mm run, the outer miter of this 0.4 mm stroke
+  // extends sqrt(1 + 1.6²) × 0.20 mm past the nominal winding shoulder.
+  const miter = shoulder + 0.2 * Math.hypot(1, 1.6);
+  const ink = captionInk(
+    label.textContent!,
+    Number(label.getAttribute("x")),
+    Number(label.getAttribute("y")),
+    Number(label.getAttribute("font-size")),
+    "end",
+  );
+  expect(ink.left - miter).toBeGreaterThanOrEqual(0.55);
+});
+
 it("keeps P7 validate-only with its exact current I305 diagnostic", async () => {
   const fixture = await dolProbeFixture("p7");
   try {

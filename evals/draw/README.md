@@ -21,6 +21,14 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.35 (TEXTM1)** extends **DQ-02** to require 0.50 mm from terminal
+label ink to painted strokes in its own symbol. Chromium samples the glyphs and
+native SVG strokes, including caps, joins and dashes, on a 0.005 mm grid. The
+finer grid resolves near-threshold gaps that the original 0.04 mm grid could
+miss. Browser fixtures cover both sides of the threshold and the original T1
+secondary-winding geometry. Mechanical frames and terminal markers are outside
+this check.
+
 Version **5.34 (IDENT1)** extends **DQ-05** (#469). It measures raw UUIDs
 in painted text, including wrapped circuit captions and device tags, and
 circuit group keys in headings and related-function
@@ -2343,9 +2351,12 @@ the causal link and sharing reason remain reviewer judgments.
 
 Every applied re-pin commits `evals/draw/repins/<pr>/`: original signed decisions,
 a gzip of the exact receipt, the crop index, one PNG per distinct drawing group and `record.json`.
-The applied chain is **92 → 61 → 84 → 154 → 202**. The latest
-[record 202](repins/202/record.json) retains agent sign-offs; no person countersign is claimed.
-The key is the issue or re-pin number: D1 uses **92**, although it merged as PR 104. `record.json` binds the base commit, original uncompressed signed/receipt/index
+The applied chain is **92 → 61 → 84 → 154 → 202 → 334 → 381 → 408 → 421 → 454 → TEXTM1**.
+The [TEXTM1 record](repins/TEXTM1/record.json) retains seven agent-reviewed
+envelope updates for measured drawing utilisation and short jogs.
+Numeric records use the issue or re-pin number. D1 uses **92** and merged as
+PR 104. A named lane uses the same uppercase identifier in its directory,
+record, pin and signed decisions. `record.json` binds the base commit, original uncompressed signed/receipt/index
 hashes, registry before/after and each original payload file's hash. It excludes
 itself. `pathMap` resolves original crop paths without rewriting signed bytes.
 
@@ -2443,8 +2454,9 @@ archive, refuse an existing destination and clean up failed new writes. After
 review/apply, supply the unchanged signed file, captured receipt, reviewed crop
 index and precisely its indexed buffers. Set `headerPixels: 86` on the index
 rows of R4-style header crops **before** calling the writer; plain crops use 0.
-Original input hashes must match every on-disk file, including non-retained ones. For example, fill in the actual issue
-number, pre-apply base and evidence paths:
+Original input hashes must match every on-disk file, including non-retained ones.
+Fill in the issue number or signed lane identifier, pre-apply base and evidence
+paths:
 
 ```js
 import { readFile } from "node:fs/promises";

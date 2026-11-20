@@ -1,3 +1,5 @@
+import { circuitTextLines } from "./symbols/circuit-text.js";
+import { printableTextWidth } from "./text-metrics.js";
 import { communicationDocumentNeeds } from "./packet/document-producers.js";
 import { printedPort } from "@thermite/query";
 import {
@@ -55,53 +57,9 @@ export interface CommunicationDrawing {
 }
 const n = (v: number) => String(Number(v.toFixed(3)));
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-// Conservative advance bounds for Arial/Noto Sans at 2.7 mm, including wide text.
-const textWidth = (s: string) =>
-  [...s].reduce(
-    (w, c) =>
-      w +
-      (/[MW@%]/u.test(c)
-        ? 1
-        : /[ilI1 .,:;'|!]/u.test(c)
-          ? 0.4
-          : c.codePointAt(0)! > 127
-            ? 1.2
-            : 0.75) *
-        2.7,
-    0,
-  );
 const text = (x: number, y: number, s: string, bold = false) =>
   `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
-function wrap(s: string, limit = 35, width = Infinity): string[] {
-  const words = s.split(/\s+/u),
-    lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    if (
-      line &&
-      (line.length + word.length + 1 > limit ||
-        textWidth(`${line} ${word}`) > width)
-    ) {
-      lines.push(line);
-      line = "";
-    }
-    if (word.length > limit || textWidth(word) > width) {
-      if (line) {
-        lines.push(line);
-        line = "";
-      }
-      for (const character of word) {
-        if (line.length >= limit || textWidth(line + character) > width) {
-          lines.push(line);
-          line = "";
-        }
-        line += character;
-      }
-    } else line += (line ? " " : "") + word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
+const widthOf = (value: string) => printableTextWidth(value, 2.7);
 /** ELK owns port placement and orthogonal paths. Geometry is generated from compiled links. */
 export async function prepareCommunicationDrawing(
   ir: Readonly<ElectricalIr>,
@@ -335,15 +293,11 @@ function communicationCaption(
   device: ElectricalIr["devices"][number],
   nodeWidth: number,
 ) {
-  const { selected, request, projection, selectedLinks, captions } = state;
+  const { selected, projection, selectedLinks, captions } = state;
   const boundary = selected.size > 0 && !selected.has(uid);
   const caption = [
     ...(device.location?.trim()
-      ? wrap(
-          device.location,
-          request.medium === "nrg-bus" ? 24 : 35,
-          nodeWidth - 6,
-        )
+      ? circuitTextLines(device.location, nodeWidth - 6, 2.7)
       : []),
     ...(boundary ? ["Boundary (schedule)"] : []),
     ...(projection &&
@@ -352,14 +306,10 @@ function communicationCaption(
         !projection.relations.has(l.uid) &&
         (l.fromDeviceUid === uid || l.toDeviceUid === uid),
     )
-      ? wrap(
-          "Other ports on other parts",
-          request.medium === "nrg-bus" ? 24 : 35,
-          nodeWidth - 6,
-        )
+      ? circuitTextLines("Other ports on other parts", nodeWidth - 6, 2.7)
       : []),
   ];
-  if (caption.some((line) => textWidth(line) > nodeWidth - 6))
+  if (caption.some((line) => widthOf(line) > nodeWidth - 6))
     throw new Error(
       `Communication caption for ${device.designation} is too wide; use a shorter label.`,
     );
@@ -401,7 +351,7 @@ function communicationGraphInput(
       labels: [
         {
           text: l.designation ?? `Link ${i + 1}`,
-          width: textWidth(l.designation ?? `Link ${i + 1}`) + 2,
+          width: widthOf(l.designation ?? `Link ${i + 1}`) + 2,
           height: 4,
         },
       ],
@@ -528,7 +478,7 @@ function appendCommunicationDevices(
         `<g ${terminalPortAttribute(portIds.get(JSON.stringify([uid, port.key]))!)} data-communication-port="${attr(port.key)}"><circle cx="${n(px)}" cy="${n(port.y)}" r="0.7" fill="white" stroke="#344054" stroke-width="0.3"/>`,
         ...port.lines.map((label, i) =>
           text(
-            port.side === "WEST" ? 2 : node.width! - 2 - textWidth(label),
+            port.side === "WEST" ? 2 : node.width! - 2 - widthOf(label),
             port.y + 1 + (i - (port.lines.length - 1) / 2) * 3.5,
             label,
           ),
@@ -774,12 +724,12 @@ function communicationPortRows(
   const connected = communicationPorts(links, uid).map((p) => {
     const label = printedPort(type, p.key);
     const width = (nodeWidth - 8) / 2;
-    if (textWidth(p.key) > width)
+    if (widthOf(p.key) > width)
       throw new Error(
         `Communication port identity ${p.key} cannot fit on one line.`,
       );
     // The key is an atomic authored identity; only its prose may wrap.
-    const lines = wrap(label, 35, (nodeWidth - 8) / 2);
+    const lines = circuitTextLines(label, width, 2.7);
     if (!lines[0]?.startsWith(p.key))
       throw new Error(`Communication port identity ${p.key} was split.`);
     return { ...p, label, lines };

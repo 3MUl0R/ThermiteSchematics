@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { navigationGeometry } from "../src/packet/navigation-walk.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { SvgNode } from "../src/device-legend/svg-tree.js";
 
 type Box = { x: number; y: number; w: number; h: number };

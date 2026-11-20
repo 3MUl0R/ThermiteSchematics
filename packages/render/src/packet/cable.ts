@@ -1,3 +1,4 @@
+import { printableTextWidth } from "../text-metrics.js";
 import {
   cableEndpointOwnership,
   cableTerminations,
@@ -69,7 +70,7 @@ export async function cableDrafts(
     right = b.x + b.w,
     jacketL = left + b.w * 0.35,
     jacketR = right - b.w * 0.35;
-  const maxEnd = Math.floor((jacketL - left - 8) / 1.55);
+  const endWidth = jacketL - left - 8;
   const annotations = cableEndpointCards(
     ir,
     schedule,
@@ -77,7 +78,7 @@ export async function cableDrafts(
     jacketL - left - 8,
   );
   if (!annotations.ok) return annotations;
-  if (maxEnd < 12 || sources.some((value) => [...value].length > 160))
+  if (endWidth <= 0 || sources.some((value) => [...value].length > 160))
     return failure(
       "unprintable-layout",
       "Cable labels exceed the supported print width. Shorten labels or use a larger page.",
@@ -102,9 +103,9 @@ export async function cableDrafts(
     const a = schedule.fromLocation ?? "END A",
       z = schedule.toLocation ?? "END B";
     if (
-      a.length > maxEnd ||
-      z.length > maxEnd ||
-      typeCaption.length * 1.5 > b.w
+      printableTextWidth(a, 3, true) > endWidth ||
+      printableTextWidth(z, 3, true) > endWidth ||
+      printableTextWidth(typeCaption, 2.6) > b.w
     )
       return false;
     content.push(

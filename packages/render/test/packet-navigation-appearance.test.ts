@@ -106,7 +106,7 @@ it("prints one CB1, K1 and OL1 label per device appearance in the duplicate-M1 p
 });
 
 import { conveyorRequest } from "./packet-navigation-review-fixture.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { symbolGeometry } from "../src/packet/navigation-symbols.js";
 import { resolveLabelLocality } from "../src/packet/navigation-locality.js";
 it("uses native conveyor SRC1’s all-terminal zone for local and self-located forms", async () => {

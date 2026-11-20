@@ -9,9 +9,10 @@ import {
   relatedCaptionWidth,
   relationCaptionPlan,
 } from "../symbols/circuit-relations.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { measureText, printableTextMetrics } from "../text-metrics.js";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "../symbols/profiles.js";
+import { lateralPinClearanceWidth } from "./pin-clearance.js";
 import type {
   ElectricalIr,
   IrDevice,
@@ -368,6 +369,17 @@ function nodeWidth(state: BuildState) {
         8,
     );
   }
+  if (!vertical)
+    width = Math.max(
+      width,
+      lateralPinClearanceWidth(
+        pins,
+        rows,
+        state.pitch,
+        state.coupled,
+        pinLabel,
+      ),
+    );
   if (width > 90)
     throw new Error(
       `Circuit terminal/device labels for ${device.designation} exceed readable block width.`,
@@ -406,7 +418,6 @@ function nodeRelations(state: BuildState, width: number) {
     }
   }
   // Caption width is horizontal ink, not the vertical symbol body's length.
-  const priorWidth = width;
   const captions = [...relationGroups].map(([destination, keys]) => ({
     kind: "relation" as const,
     destination,
@@ -425,14 +436,20 @@ function nodeRelations(state: BuildState, width: number) {
         relatedCaptionWidth(caption.destination) >
         LONG_CIRCUIT_DESTINATION_WIDTH,
     );
-  const related = relationCaptionPlan(
-    captions,
-    width,
-    useTagColumn ? CIRCUIT_TAG_COLUMN_WIDTH : undefined,
-  );
+  // Keep related captions within a standalone channel panel's measured body.
+  const standaloneChannels =
+    !state.vertical &&
+    state.conductors.length === 0 &&
+    functions.some((fn) => fn.kind === "channel");
+  const wrapWidth = useTagColumn
+    ? CIRCUIT_TAG_COLUMN_WIDTH
+    : standaloneChannels
+      ? width
+      : undefined;
+  const related = relationCaptionPlan(captions, width, wrapWidth);
   return {
     width: useTagColumn ? width : related.width,
-    priorWidth,
+    priorWidth: width,
     printableRelated: useTagColumn ? [] : related.lines,
     tagColumnCaptions: useTagColumn ? related.lines : [],
     relations,
@@ -440,10 +457,13 @@ function nodeRelations(state: BuildState, width: number) {
 }
 
 function nodeVerticalScale(state: GeometryState) {
-  const { pins, device, pinLabel } = state;
+  const { pins, device, pinLabel, conductors } = state;
   let { verticalScaleX } = state;
-  // Vertical terminal captions remain horizontal. Reserve their actual
-  // extent between adjacent pins on each caption baseline before routing.
+  const routed = conductors.some((c) =>
+    c.ends.some((terminal) => terminal.deviceUid === device.uid),
+  );
+  // Vertical terminal captions share a horizontal baseline. Routed landings
+  // keep the fallback envelope. Standalone symbols fit the exact print face.
   for (const side of ["WEST", "EAST"] as const) {
     const baseline = pins
       .filter((p) => p.side === side)
@@ -456,10 +476,11 @@ function nodeVerticalScale(state: GeometryState) {
         throw new Error(
           `Circuit terminal labels for ${device.designation} share an unreadable vertical position.`,
         );
-      verticalScaleX = Math.max(
-        verticalScaleX,
-        (measure(pinLabel(left), TERMINAL_TEXT_SIZE) + 2) / gap,
-      );
+      const label = pinLabel(left);
+      const width = routed
+        ? measureText(label, TERMINAL_TEXT_SIZE).width
+        : measure(label, TERMINAL_TEXT_SIZE);
+      verticalScaleX = Math.max(verticalScaleX, (width + 2) / gap);
     }
   }
   return verticalScaleX;

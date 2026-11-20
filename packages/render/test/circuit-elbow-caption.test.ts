@@ -54,6 +54,22 @@ it("keeps a valid straight inline plate", () => {
   ).toBeUndefined();
   expect(circuitCaptionPlacement("103", 0, label, state)).toBeDefined();
 });
+
+it("shrinks plate padding clear of a foreign stroke past its edge", () => {
+  const state = fixture([
+    { x: 0, y: 11.9 },
+    { x: 35, y: 11.9 },
+  ]);
+  state.segments.push({
+    index: 1,
+    a: { x: 22.04, y: 0 },
+    b: { x: 22.04, y: 30 },
+  });
+  const plate = circuitCaptionPlate(label, state);
+  expect(plate).toBeDefined();
+  if (!plate) throw Error("Expected measured plate");
+  expect(plate.x + plate.width).toBeLessThan(22.04 - 0.16);
+});
 it("leaves at least the painted plate height outside the terminal ring", () => {
   const clear = fixture([
     { x: 6, y: 11.9 },

@@ -2,7 +2,7 @@ import type { LayoutLabel, LayoutPoint } from "../types.js";
 import {
   boundedPrintableAdvance,
   printableTextMetrics,
-} from "./printable-font.js";
+} from "../text-metrics.js";
 
 /** Keep the conductor-facing ink edge of the reserved (formerly forced-width)
  * caption. Only text moves inside its existing clip; routes and label DTOs do not. */

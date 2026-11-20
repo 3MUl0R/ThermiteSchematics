@@ -4,7 +4,7 @@ import type {
   IssuedDocumentRow,
 } from "./document-types.js";
 import { destinationToken } from "./navigation-location.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
 
 /** Atoms may contain authored spaces: an identity is never split into words. */

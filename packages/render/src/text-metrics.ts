@@ -1,6 +1,16 @@
+import { cachedFontMetrics } from "./symbols/font-metric-cache.js";
+import { create } from "fontkit";
+import { readFileSync } from "node:fs";
+import { unshapedPrintableFont } from "./symbols/font-shaping.js";
+import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
 import { glyphCount, packedGlyphMetrics } from "./text-metrics-data.js";
 
+// Use printableTextMetrics/Width and wrapPrintableText for geometry tied to
+// the emitted bundled face and weight. Advance positions the glyphs; bearings
+// define their painted extent. Reserve adjoining strokes and clearance separately.
+// Use measureText/wrapText for a multi-face fallback budget or a layout that
+// intentionally preserves the wider reservation across fonts or output media.
 export type TextFace = "sans" | "bold" | "math" | "mono";
 export type TextFamily = "sans-serif" | "monospace";
 const glyphCategories: readonly (readonly [RegExp, string])[] = [
@@ -146,10 +156,34 @@ export function wrapText(
   size: number,
   family: TextFamily = "sans-serif",
 ): string[] {
+  return wrapMeasuredText(
+    value,
+    maxWidth,
+    size,
+    (text) => measureText(text, size, family).width,
+  );
+}
+
+export function wrapPrintableText(
+  value: string,
+  maxWidth: number,
+  size: number,
+  bold = false,
+): string[] {
+  return wrapMeasuredText(value, maxWidth, size, (text) =>
+    printableTextWidth(text, size, bold),
+  );
+}
+
+function wrapMeasuredText(
+  value: string,
+  maxWidth: number,
+  size: number,
+  widthOf: (text: string) => number,
+): string[] {
   if (!(maxWidth > 0) || !Number.isFinite(maxWidth))
     throw Error("Text width must be finite and positive.");
-  const fits = (s: string) =>
-    measureText(s.trimEnd(), size, family).width <= maxWidth;
+  const fits = (s: string) => widthOf(s.trimEnd()) <= maxWidth;
   const result: string[] = [];
   for (const paragraph of value
     .normalize("NFC")
@@ -188,4 +222,143 @@ export function wrapText(
     result.push(line);
   }
   return result;
+}
+
+export const PRINTABLE_FONT_FAMILY = "Thermite Sans, Thermite Math, sans-serif";
+const load = (name: string) => {
+  const face = create(
+    unshapedPrintableFont(
+      readFileSync(
+        fileURLToPath(new URL(`../assets/fonts/${name}.ttf`, import.meta.url)),
+      ),
+    ),
+  );
+  if (!("unitsPerEm" in face))
+    throw Error("Expected a single bundled TrueType face");
+  return face;
+};
+const regular = load("NotoSans-Regular"),
+  boldFace = load("NotoSans-Bold"),
+  math = load("NotoSansMath-Regular");
+function printableRuns(text: string, primary: typeof regular) {
+  const runs: { face: typeof primary; text: string }[] = [];
+  for (const c of text) {
+    const code = c.codePointAt(0) ?? 0;
+    const face =
+      !primary.hasGlyphForCodePoint(code) && math.hasGlyphForCodePoint(code)
+        ? math
+        : primary;
+    const previous = runs.at(-1);
+    if (previous?.face === face) previous.text += c;
+    else runs.push({ face, text: c });
+  }
+  return runs;
+}
+/** Exact, pinned font tables; no host font service, clock or platform measurement.
+ * Fontkit 2.0.4 uses the same feature-free tables as SVG and PDFKit. */
+function measurePrintableText(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  const text = literal
+    ? value
+    : value
+        .normalize("NFC")
+        .replace(/[\t\r\n ]+/gu, " ")
+        .trim();
+  let advance = 0,
+    left = Infinity,
+    right = -Infinity,
+    bottom = Infinity,
+    top = -Infinity;
+  const primary = bold ? boldFace : regular;
+  const runs = printableRuns(text, primary);
+  for (const run of runs) {
+    const scale = size / run.face.unitsPerEm,
+      layout = run.face.layout(run.text);
+    for (const [i, g] of layout.glyphs.entries()) {
+      const p = layout.positions[i];
+      if (!p) throw Error("Missing printable glyph position.");
+      const box = g.bbox;
+      if (Number.isFinite(box.minX) && box.maxX > box.minX) {
+        left = Math.min(left, advance + (p.xOffset + box.minX) * scale);
+        right = Math.max(right, advance + (p.xOffset + box.maxX) * scale);
+        bottom = Math.min(bottom, (p.yOffset + box.minY) * scale);
+        top = Math.max(top, (p.yOffset + box.maxY) * scale);
+      }
+      advance += p.xAdvance * scale;
+    }
+  }
+  return {
+    advance,
+    left: Number.isFinite(left) ? left : 0,
+    right: Number.isFinite(right) ? right : 0,
+    bottom: Number.isFinite(bottom) ? bottom : 0,
+    top: Number.isFinite(top) ? top : 0,
+    middleBaseline: (size * regular.xHeight) / regular.unitsPerEm / 2,
+  };
+}
+/** Cache exact argument tuples only within an explicit rooted-view scope. */
+export function printableTextMetrics(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  return cachedFontMetrics([value, size, bold, literal], () =>
+    measurePrintableText(value, size, bold, literal),
+  );
+}
+/** Keep reservations where possible. Single glyphs print uncompressed. */
+export function printableSlotWidth(text: string, oldWidth: number, size = 10) {
+  const m = printableTextMetrics(text, size),
+    minimum = [...text].length === 1 ? m.advance : m.advance * 0.91;
+  return Math.max(
+    oldWidth,
+    Math.ceil((6 + Math.max(minimum, m.right * 0.91)) * 1000) / 1000,
+  );
+}
+/** Native advance when it fits; compression only, never below 91%. */
+export function boundedPrintableAdvance(
+  value: string,
+  size: number,
+  capacity: number,
+) {
+  const m = printableTextMetrics(value, size);
+  const advance = Math.min(m.advance, capacity);
+  if (advance + 0.002 < m.advance * 0.91)
+    throw Error("Printable text slot is too narrow");
+  return advance === m.advance
+    ? advance
+    : Math.floor(advance * 1000 + 1e-9) / 1000;
+}
+
+/** Omit textLength entirely at natural width: rounding cannot stretch glyphs. */
+export function printableFitAttributes(
+  text: string,
+  size: number,
+  capacity: number,
+) {
+  const natural = printableTextMetrics(text, size).advance;
+  return Number(natural.toFixed(3)) <= Number(capacity.toFixed(3))
+    ? {}
+    : {
+        textLength: boundedPrintableAdvance(text, size, capacity),
+        lengthAdjust: "spacingAndGlyphs" as const,
+      };
+}
+
+/** Natural horizontal extent, including glyph bearings outside the advance. */
+export function printableTextWidth(value: string, size: number, bold = false) {
+  const m = printableTextMetrics(value, size, bold);
+  return Math.max(m.advance, m.right) - Math.min(0, m.left);
+}
+
+/** The original continuous schematic reserves a 6.2-unit slot per code point.
+ * Preserve that layout contract and expand the slot for wider pinned ink. */
+export function continuousLabelSlot(value: string) {
+  const reserved = Math.max(12, 6 + 6.2 * [...value].length);
+  return printableSlotWidth(value, Number(reserved.toFixed(3)));
 }

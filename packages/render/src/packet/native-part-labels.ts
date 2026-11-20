@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
 import type { CommunicationDrawing } from "../communication.js";
 import type { PortIdentity } from "../topology-coverage.js";

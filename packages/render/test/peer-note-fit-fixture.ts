@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { RenderedSheet } from "../src/packet/types.js";
 import type { PeerReference } from "../src/packet/peer-reference-ink.js";
 

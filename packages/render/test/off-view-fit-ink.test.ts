@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { prepareSchematicDrawing } from "../src/renderer.js";
 import { compileProject } from "@thermite/compiler";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { CARD_FONT, CARD_PITCH, CARD_PAD } from "../src/off-view/card.js";
 import { cardInkFits } from "../src/off-view/ink.js";
 import { nativeReservations } from "../src/off-view/native.js";

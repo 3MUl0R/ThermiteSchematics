@@ -8,7 +8,7 @@ import {
   navigationZone,
   roundNavigation,
 } from "../src/packet/navigation-location.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { centroidReferences } from "../src/packet/navigation-occurrences.js";
 
 const request = (w = 20): SheetSlotRequest => ({

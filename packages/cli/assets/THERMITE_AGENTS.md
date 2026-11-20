@@ -92,10 +92,10 @@ Info exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at added sources.
 
 Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
-The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.
+Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Use a short group `lineReference` for circuit captions.
 
-Keep labels off terminal approaches, bends, junctions and cable-end marks.
+Keep labels clear of symbol strokes, terminal approaches, bends, junctions and cable-end marks.
 See `thermite guide circuit-symbols`.
 
 ## Offline project workflows

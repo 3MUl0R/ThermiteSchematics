@@ -1,5 +1,5 @@
 import type { PresentationLabel, SymbolPresentationNode } from "../types.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { CAPTION_CLEARANCE_MM } from "../symbols/caption-ink.js";
 import { GANG_CLEARANCE, gangAnchor } from "../symbols/gang-geometry.js";
 

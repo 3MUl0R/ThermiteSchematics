@@ -3,7 +3,7 @@ import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "../../render/src/sheets.js";
 import { breakerAuxiliaryFixture } from "../../render/test/breaker-auxiliary-fixture.js";
 import { embedPrintableFont } from "../src/printable-font.js";
-import { printableTextMetrics } from "../../render/src/symbols/printable-font.js";
+import { printableTextMetrics } from "../../render/src/text-metrics.js";
 import { launchBrowser, browserPath } from "./helpers/pdf-raster.js";
 import {
   bounds,

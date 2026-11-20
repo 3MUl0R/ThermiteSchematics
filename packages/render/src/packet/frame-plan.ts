@@ -1,10 +1,8 @@
 import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type { NormalizedSchematicView } from "../types.js";
-import { circuitTextLines } from "../circuit.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics, wrapPrintableText } from "../text-metrics.js";
 import { rootedNoticeLines } from "../off-view/notice.js";
-import { wrap } from "./svg.js";
 import type { DrawingBounds, PaperPage } from "./types.js";
 
 export interface FrameText {
@@ -36,25 +34,17 @@ export function compactTitleRows(
   planning = true,
 ): FrameText[] {
   const width = page.widthMm - 2 * page.marginMm - 76;
-  const circuit = title.lines.some(
-    (e) =>
-      ["circuit", "connector-assembly"].includes(e.ownerId) &&
-      e.field === "title.view-line",
-  );
   const rows = (value: string, size: number, bold = false, field = "notes") =>
-    (circuit
-      ? circuitTextLines(value, width, size)
-      : wrap(value, Math.floor(width / 1.6))
-    ).map((value) => Object.freeze({ value, size, bold, field }));
+    wrapPrintableText(value, width, size, bold).map((value) =>
+      Object.freeze({ value, size, bold, field }),
+    );
   const selected =
     title.lines.find((e) => e.field === "title.view-line")?.value ?? "";
   const candidates = planning
     ? [selected, ...(title.titleCandidates ?? [])]
     : [selected];
   const headingRows = candidates.map((value) =>
-    rows(value, 2.7, false, "sheetTitle").map((row) =>
-      Object.freeze({ ...row, size: 2.8 }),
-    ),
+    rows(value, 2.8, false, "sheetTitle"),
   );
   const measured = headingRows.map((lines) => ({
     lines,

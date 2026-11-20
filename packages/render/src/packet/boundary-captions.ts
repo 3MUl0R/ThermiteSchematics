@@ -4,7 +4,7 @@ import {
   project,
   expand,
 } from "../device-legend/geometry.js";
-import { printableTextMetrics } from "../symbols/printable-font.js";
+import { printableTextMetrics } from "../text-metrics.js";
 import { decodeSvgSemanticId, svgSemanticId } from "../svg/escape.js";
 import { conductorEndpoints } from "./navigation-incidence.js";
 import {

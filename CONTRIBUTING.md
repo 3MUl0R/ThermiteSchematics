@@ -335,6 +335,11 @@ from earlier dev PRs. Active grandfathered over-cap entries only fall. Dev check
 content continuity per PR; release compares the admitted entries by value without
 re-deriving cumulative continuity. `health:accept` cannot waive hard invariants.
 
+Renderer layout uses `packages/render/src/text-metrics.ts` for pinned text
+advances and ink bounds. The health check flags local width estimates in
+renderer and CLI source. The drawing checker measures issued output
+independently in Chromium and PDF.js.
+
 Coverage defaults to **all tracked code** (`js/mjs/cjs/jsx`, `ts/mts/cts/tsx`,
 Python, shell and PowerShell), including package fixtures, generators, examples
 and new directories. The explicit generated-code exclusions are

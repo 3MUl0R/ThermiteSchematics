@@ -1,4 +1,4 @@
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import { beforeAll, describe, expect, it } from "vitest";
 

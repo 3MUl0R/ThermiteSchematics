@@ -5,7 +5,7 @@ import { stackSections } from "../src/packet/fold-stack.js";
 import { useCompactFrame } from "../src/packet/frame-profile.js";
 import { frame, normalizePaperPage } from "../src/packet/page.js";
 import type { Draft } from "../src/packet/types.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import {
   control,
   foldedControlFixture,

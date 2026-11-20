@@ -1,3 +1,5 @@
+import { circuitTextLines } from "./symbols/circuit-text.js";
+import { printableTextWidth } from "./text-metrics.js";
 import { wiringStrokeMm } from "./layout/wiring-landing-ink.js";
 import { labelLeaderArrow } from "./layout/wire-label-support.js";
 import {
@@ -43,43 +45,9 @@ export interface WiringViewRequest {
 }
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const n = (v: number) => String(Number(v.toFixed(3)));
-const width = (s: string) =>
-  [...s].reduce(
-    (w, c) =>
-      w +
-      (/[ilI1 .,:;'|!]/u.test(c)
-        ? 0.4
-        : /[MW@%]/u.test(c)
-          ? 1
-          : c.codePointAt(0)! > 127
-            ? 1.2
-            : 0.75) *
-        2.7,
-    0,
-  );
 const text = (x: number, y: number, s: string, bold = false) =>
   `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
-function wrap(s: string, max: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of s.split(/\s+/u)) {
-    if (line && width(line + " " + word) > max) {
-      lines.push(line);
-      line = "";
-    }
-    if (width(word) > max) {
-      for (const c of word) {
-        if (width(line + c) > max) {
-          lines.push(line);
-          line = "";
-        }
-        line += c;
-      }
-    } else line += (line ? " " : "") + word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
+const wrap = (value: string, max: number) => circuitTextLines(value, max, 2.7);
 type Point = { x: number; y: number };
 type WiringRoute = { index: number; points: Point[] };
 type WiringSegment = { index: number; a: Point; b: Point };
@@ -392,7 +360,7 @@ function wiringRows(
       ? ("WEST" as const)
       : ("EAST" as const);
     const label = `${t.terminalKey}${boundary.get(key(t)) ? ` [ +${boundary.get(key(t))} ]` : ""}`;
-    if (width(label) > nodeWidth - 6)
+    if (printableTextWidth(label, 2.7) > nodeWidth - 6)
       throw wiringWidthError(d.designation, t.terminalKey);
     const row = { key: t.terminalKey, label, side, y };
     row.y = Math.round(y);
@@ -411,7 +379,11 @@ function wiringEdges(state: WiringState) {
     labels: [
       {
         text: w.name ?? "Jumper",
-        width: Math.max(width(w.name ?? "Jumper"), width(w.detail)) + 2,
+        width:
+          Math.max(
+            printableTextWidth(w.name ?? "Jumper", 2.7),
+            printableTextWidth(w.detail, 2.7),
+          ) + 2,
         height: w.detail ? 8 : 4,
       },
     ],
@@ -749,7 +721,9 @@ function wiringPortSvg(
       `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r="${WIRING_TERMINAL_RADIUS_SVG}" fill="white" stroke="#344054" stroke-width=".3"/>`,
       ...wiringLandingAnchors(node, id, p.key),
       text(
-        p.side === "WEST" ? 2 : node.width! - 2 - width(p.label),
+        p.side === "WEST"
+          ? 2
+          : node.width! - 2 - printableTextWidth(p.label, 2.7),
         p.y + 1,
         p.label,
       ),

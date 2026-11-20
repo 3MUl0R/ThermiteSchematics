@@ -8,7 +8,7 @@ import type {
   LayoutPoint,
 } from "./types.js";
 import { compareRenderTextSource, structuralTupleId } from "./ordering.js";
-import { printableSlotWidth } from "./symbols/printable-font.js";
+import { continuousLabelSlot } from "./text-metrics.js";
 
 /** Same-terminal context associations are references, never physical conductors. */
 export function terminalContextAttachment(
@@ -71,10 +71,7 @@ function referenceLabel(
   if (!port) throw Error("Terminal context has no real terminal");
   const terminal = port.terminal;
   const text = `${context.designation}.${terminal.terminalKey} (reference, no wire)`;
-  const width = printableSlotWidth(
-    text,
-    Math.max(12, Number((6 + 6.2 * [...text].length).toFixed(3))),
-  );
+  const width = continuousLabelSlot(text);
   const group = graph.deviceGroups.find((g) => g.id === context.deviceGroupId);
   const caption = context.labels.find((l) => l.role === "terminal");
   if (!group || !caption) throw Error("Terminal context identity is missing");

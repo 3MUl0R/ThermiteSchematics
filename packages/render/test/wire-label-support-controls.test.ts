@@ -221,7 +221,7 @@ it("uses a checked leader when no straight horizontal segment can host the plate
 it("moves touching glyph ink inside the 0.5–1 mm beside default, preserving its size and reserving leaders for competing physical ink", async () => {
   const { besideCaption, captionAssociation } =
       await import("../src/layout/beside-caption.js"),
-    { printableTextMetrics } = await import("../src/symbols/printable-font.js"),
+    { printableTextMetrics } = await import("../src/text-metrics.js"),
     m = printableTextMetrics("LS1-SWITCHED-RETURN", 2.5),
     box = {
       left: 20,

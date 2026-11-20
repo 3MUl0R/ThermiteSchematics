@@ -22,7 +22,7 @@ for (const pr of (await readdir(records, { withFileTypes: true }))
     const r = await readRecord(records + pr, {
       pin: pins.records.find((p) => String(p.pr) === pr),
     });
-    expect(r.record.pr).toBe(Number(pr));
+    expect(String(r.record.pr)).toBe(pr);
     if (pr === "92") {
       expect(hash(r.files.get("record.json"))).toBe(
         "c01537abb5a0e2091b5126b53ede2e723068fd7bf5906e11f02c775d266e1ae5",

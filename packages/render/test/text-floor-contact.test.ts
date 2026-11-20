@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { breakerAuxiliaryFixture } from "./breaker-auxiliary-fixture.js";
 import { emitCircuitContactCaption } from "../src/symbols/circuit-caption.js";
 import { reserveCircuitCaptions } from "../src/symbols/circuit-caption-reservation.js";
-import { printableTextMetrics } from "../src/symbols/printable-font.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import { CaptionPlacementError } from "../src/symbols/caption-ink.js";
 
 it("grows a horizontal owner before ELK rather than newly omitting its enlarged caption", async () => {

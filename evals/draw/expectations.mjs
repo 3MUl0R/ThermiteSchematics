@@ -45,24 +45,24 @@ const scopeSets = {
 };
 // prettier-ignore
 const severityBands = {
-  "0132ca22": {"utilisation":[0,0.257,0.341,0.4]},
   "049badd0": {"utilisation":[0,0.202,0.389,0.4]},
   "0a804d01": {"capHeightMm":[0,1.856,1.856,2.47]},
-  "1342971e": {"shortestJogMm":[1.925,1.975,1.975,2.025]},
-  "2ac13f7f": {"shortestJogMm":[0.75,0.8,1.6,1.65]},
+  "0e79ce3d": {"shortestJogMm":[0.75,0.8,1.255,1.305]},
+  "19cbceda": {"shortestJogMm":[2.635,2.685,2.685,2.735]},
+  "28b8f13c": {"utilisation":[0,0.251,0.341,0.4]},
   "2c81013c": {"shortestJogMm":[0.95,1,1,1.05]},
+  "4152938c": {"shortestJogMm":[1.205,1.255,1.255,1.305]},
   "41aa2b40": {"shortestJogMm":[1.45,1.5,1.5,1.55]},
   "44136fa3": {},
   "53c7df2d": {"detourExcessMm":[49.715,49.725,49.725,49.735]},
   "556e4455": {"utilisation":[0,0.025,0.036,0.4]},
   "5c53b091": {"shortestJogMm":[2.5,2.55,2.55,2.6]},
-  "7f6a8c42": {"shortestJogMm":[1.5,1.55,1.55,1.6]},
   "8aa9e094": {"utilisation":[0,0.019,0.368,0.4]},
-  "98b566df": {"utilisation":[0,0.107,0.107,0.4]},
-  "b8064a1f": {"utilisation":[0,0.02,0.242,0.4]},
   "d094f3d1": {"detourExcessMm":[18.39,18.4,78.45,78.46]},
   "de4f2cf2": {"utilisation":[0,0.182,0.333,0.4]},
   "e35dd781": {"utilisation":[0,0.032,0.037,0.4]},
+  "f0d1b2d0": {"utilisation":[0,0.1,0.1,0.4]},
+  "feeb8b41": {"utilisation":[0,0.02,0.24,0.4]},
 };
 // prettier-ignore
 const groups = [
@@ -145,13 +145,13 @@ const groups = [
     {"locator":"sheet/incomplete-four-side-zones/missing/right","scopes":"3d44f353","bands":"44136fa3"},
   ]},
   {"dq":"DQ-12","family":"examples/circuit-pagination","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
-    {"locator":"packet/median-utilisation-below-40-percent","scopes":"51b14b4d","bands":"0132ca22"},
+    {"locator":"packet/median-utilisation-below-40-percent","scopes":"51b14b4d","bands":"28b8f13c"},
   ]},
   {"dq":"DQ-12","family":"examples/conveyor-line","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"06659cd9","bands":"049badd0"},
   ]},
   {"dq":"DQ-12","family":"examples/functional-symbols","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
-    {"locator":"packet/median-utilisation-below-40-percent","scopes":"1671cca0","bands":"b8064a1f"},
+    {"locator":"packet/median-utilisation-below-40-percent","scopes":"1671cca0","bands":"feeb8b41"},
   ]},
   {"dq":"DQ-12","family":"examples/machine-demo","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"b8ef065e","bands":"de4f2cf2"},
@@ -160,7 +160,7 @@ const groups = [
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"85a269dd","bands":"8aa9e094"},
   ]},
   {"dq":"DQ-12","family":"examples/operator-console","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
-    {"locator":"packet/median-utilisation-below-40-percent","scopes":"b5277e36","bands":"98b566df"},
+    {"locator":"packet/median-utilisation-below-40-percent","scopes":"b5277e36","bands":"f0d1b2d0"},
   ]},
   {"dq":"DQ-12","family":"examples/self-loop-labels","kind":"median-utilisation-below-40-percent","check":"packet-median","coarse":false,"defects":[
     {"locator":"packet/median-utilisation-below-40-percent","scopes":"5340d252","bands":"e35dd781"},
@@ -175,10 +175,10 @@ const groups = [
     {"locator":"conductor/W-PWR-008/path.net-path.wire-path","scopes":"d2871bb3","bands":"41aa2b40"},
   ]},
   {"dq":"DQ-15","family":"examples/functional-symbols","kind":"jog-under-3mm","check":"sheet","coarse":false,"defects":[
-    {"locator":"conductor/W11/path.","scopes":"be14ba81","bands":"1342971e"},
-    {"locator":"conductor/W3/path.","scopes":"be14ba81","bands":"7f6a8c42"},
-    {"locator":"conductor/W8/path.","scopes":"181992c1","bands":"2ac13f7f"},
-    {"locator":"conductor/W9/path.","scopes":"181992c1","bands":"2ac13f7f"},
+    {"locator":"conductor/W11/path.","scopes":"be14ba81","bands":"19cbceda"},
+    {"locator":"conductor/W3/path.","scopes":"be14ba81","bands":"4152938c"},
+    {"locator":"conductor/W8/path.","scopes":"181992c1","bands":"0e79ce3d"},
+    {"locator":"conductor/W9/path.","scopes":"181992c1","bands":"0e79ce3d"},
   ]},
   {"dq":"DQ-15","family":"examples/machine-demo","kind":"jog-under-3mm","check":"sheet","coarse":false,"defects":[
     {"locator":"conductor/W-PWR-002-M2/path.net-path.wire-path","scopes":"27aca402","bands":"41aa2b40"},

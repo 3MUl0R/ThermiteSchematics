@@ -19,7 +19,7 @@ export { circuitTextLines } from "./symbols/circuit-text.js";
 import "./symbols/circuit-node-ink.js";
 import "./symbols/circuit-caption-reservation.js";
 import "./symbols/circuit-caption.js";
-import "./symbols/printable-font.js";
+import "./text-metrics.js";
 import "./symbols/caption-ink.js";
 import "./symbols/printable-label.js";
 import { unsupportedProfileError } from "./preflight.js";
