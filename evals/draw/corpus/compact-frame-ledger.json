@@ -156,7 +156,14 @@
         "rows": 128,
         "findings": 207,
         "classification": "oracle-defect",
-        "issue": 461
+        "issue": 461,
+        "resolution": {
+          "checker": "5.36",
+          "case": "p03-machine-demo-tabloid-landscape-standard-left-to-right",
+          "sample": "full packet",
+          "before": { "rows": 9, "findings": 15 },
+          "after": { "rows": 0, "findings": 0 }
+        }
       }
     ],
     "checker": "5.31"

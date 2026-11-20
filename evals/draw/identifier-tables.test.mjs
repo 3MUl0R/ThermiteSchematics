@@ -179,3 +179,32 @@ it("allows complete all-scope references on separate lines", () => {
       identifierFindings(geometry(runs), expected, ir, medium, pdf(runs)),
     ).toEqual([]);
 });
+
+it("allows an intact conductor and alias on separate PDF lines with extraction padding", () => {
+  const source = {
+    ...ir,
+    wires: [
+      { uid: key, designation: "W104", properties: { label: "PUMP-RUN" } },
+    ],
+    jumpers: [],
+  };
+  const g = geometry([run("W104 /"), run("PUMP-RUN", 24)]);
+  g.reportCells.shift();
+  g.texts.shift();
+  g.reportCells[0].columnIndex = g.texts[0].columnIndex = 0;
+  const expected = identifierTable(sheet(7, "wires"), packet(), g, source, [
+    {
+      kind: "wires",
+      columns: ["Conductor / label"],
+      rows: [{ key, cells: ["W104 / PUMP-RUN"] }],
+    },
+  ]);
+  const padding = run(" ", 18.85);
+  const find = (runs) => identifierFindings(g, expected, source, "pdf", runs);
+  expect(find([run(" W104 / "), run(" PUMP-RUN ", 24), padding])).toEqual([]);
+  expect(
+    find([run("W10 "), run(" 4 / ", 24), run("PUMP-RUN", 28)]),
+  ).toMatchObject([
+    { kind: "identifier-line-break", identifier: "W104", lineCount: 2 },
+  ]);
+});
