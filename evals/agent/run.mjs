@@ -687,6 +687,7 @@ export async function runOne({
     initial,
     runtimeBefore,
     finalMessage,
+    rootLost = false,
     guideBytes,
     scratch,
     source,
@@ -941,19 +942,23 @@ export async function runOne({
         { ...execution, operatorSignal: stoppingSignal },
         normalized,
       ),
-      ended = Date.now(),
-      beforeFlush = snapshot(project);
+      ended = Date.now();
+    // The agent has finished; record that before anything reads the project.
+    finalMessage = normalized.finalMessage ?? null;
     if (batchControl && batchHaltReason(classification)) {
       batchControl.stopped = true;
       batchControl.reason = batchHaltReason(classification);
     }
-    finalMessage = normalized.finalMessage ?? null;
-    // Every project-dependent step below needs the root; without it the run
-    // cannot be scored, though its judge packet still records the refusal.
-    assert(
-      lstatSync(project, { throwIfNoEntry: false }),
-      "Project root is missing after the agent exited; the run cannot be scored",
-    );
+    // Every project-dependent step below needs a directory at the root's
+    // path; without one the run cannot be scored, though its judge packet
+    // still records the refusal.
+    if (!lstatSync(project, { throwIfNoEntry: false })?.isDirectory()) {
+      rootLost = true;
+      throw new Error(
+        "Project root is missing or no longer a directory after the agent exited; the run cannot be scored",
+      );
+    }
+    const beforeFlush = snapshot(project);
     // From here on, CLI calls run with harness privileges: never from the
     // agent-writable runtime, never with the project's Bun config or .env
     // files, and only with environment values the harness selects.
@@ -1248,11 +1253,11 @@ export async function runOne({
         error.stage === "authentication" ? "authentication" : "harness",
       workspace: keep ? work : null,
     };
-    // A rubric run whose agent finished but whose project root is gone or
+    // A rubric run whose agent finished but whose project root was lost or
     // replaced still publishes the whole-root refusal.
     if (task?.rubric && source && finalMessage !== undefined)
       try {
-        if (!source.intact())
+        if (rootLost || !source.intact())
           save(
             "judge-packet.json",
             judgePacket({

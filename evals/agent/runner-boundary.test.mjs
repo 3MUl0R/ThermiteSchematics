@@ -417,32 +417,39 @@ it("a source below a linked directory is refused, not diffed as deleted", async 
   }
 }, 60000);
 
-it("a run whose project root is gone still records the whole-root refusal", async () => {
-  if (!confined) return;
-  const work = temporary("eval-missing-root-");
-  try {
-    const evidence = join(work, "evidence");
-    const { taskDir, context } = fixture(
-      work,
-      { id: "missing-root", rubric: ["Judge the outputs"] },
-      {
-        "reference.mjs": `import{renameSync,writeFileSync}from"node:fs";export default ctx=>{writeFileSync(ctx.project+"/friction.md","moved notes");renameSync(ctx.project,ctx.project+".gone");return "Reference complete";}`,
-        "check.mjs": `export default ()=>({pass:true});`,
-      },
-    );
-    const run = await runOne({ taskDir, prepared: context, evidence });
-    expect(run.status).toBe("infrastructure-failure");
-    const packet = JSON.parse(
-      readFileSync(join(evidence, "judge-packet.json"), "utf8"),
-    );
-    expect(packet.outputs).toEqual({});
-    expect(packet.refusedOutputs).toEqual(["."]);
-    expect(JSON.stringify(packet)).not.toContain("moved notes");
-    expect(run.infrastructureError).toContain("Project root is missing");
-  } finally {
-    rmSync(work, { recursive: true, force: true });
-  }
-}, 60000);
+it.each([
+  ["absent", false],
+  ["a regular file", true],
+])(
+  "a run whose project root is gone (%s at its path) still records the whole-root refusal",
+  async (label, occupied) => {
+    if (!confined) return;
+    const work = temporary("eval-missing-root-");
+    try {
+      const evidence = join(work, "evidence");
+      const { taskDir, context } = fixture(
+        work,
+        { id: "missing-root", rubric: ["Judge the outputs"] },
+        {
+          "reference.mjs": `import{renameSync,writeFileSync}from"node:fs";export default ctx=>{writeFileSync(ctx.project+"/friction.md","moved notes");renameSync(ctx.project,ctx.project+".gone");if(${JSON.stringify(occupied)})writeFileSync(ctx.project,"a file now");return "Reference complete";}`,
+          "check.mjs": `export default ()=>({pass:true});`,
+        },
+      );
+      const run = await runOne({ taskDir, prepared: context, evidence });
+      expect(run.status).toBe("infrastructure-failure");
+      const packet = JSON.parse(
+        readFileSync(join(evidence, "judge-packet.json"), "utf8"),
+      );
+      expect(packet.outputs).toEqual({});
+      expect(packet.refusedOutputs).toEqual(["."]);
+      expect(JSON.stringify(packet)).not.toContain("moved notes");
+      expect(run.infrastructureError).toContain("Project root is missing");
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  },
+  60000,
+);
 
 it("a run whose project root was replaced records the whole-root refusal", async () => {
   if (!confined) return;

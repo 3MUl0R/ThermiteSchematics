@@ -984,8 +984,9 @@ take no `..` components, as the visual broker does. A linked or otherwise
 unreadable output is left out of the packet and its path is listed in
 `refusedOutputs`; a linked or unlistable `drawings` directory is listed as
 `drawings`. If the root itself was replaced or cannot be inspected, the run is
-still scored and the packet takes nothing and lists `.`. If the root is gone
-from its path after the agent exits, no project-dependent step can run: the
+still scored and the packet takes nothing and lists `.`. If no directory is
+at the root's path after the agent exits, because it is gone or a file or link
+took its place, no project-dependent step can run: the
 run is an infrastructure failure and is not scored, and a rubric run's packet
 still takes nothing and lists `.`. The packet format is
 now `thermite-blinded-judge/1.2`. Guide bytes count the `AGENTS.md` present at
