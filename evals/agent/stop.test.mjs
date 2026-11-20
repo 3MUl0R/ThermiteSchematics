@@ -8,8 +8,9 @@ import {
   realpathSync,
   rmSync,
   existsSync,
+  symlinkSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, basename, delimiter } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -36,6 +37,11 @@ function fixture(scenario) {
     exited = join(work, "a-exited"),
     inSetup = join(work, "b-in-setup");
   for (const dir of [prepared, tasks, bin]) mkdirSync(dir);
+  // Codex evidence must be archived outside temporary directories, and this
+  // checkout may itself be in one; keep this checkpoint in the harness home.
+  const archive = mkdtempSync(join(homedir(), ".thermite-stop-test-"));
+  mkdirSync(join(destination, ".."), { recursive: true });
+  symlinkSync(archive, destination, "dir");
   const plan = {
     scenario,
     behavior: scenario === "race" ? "quota" : "unknown",
@@ -79,6 +85,7 @@ function fixture(scenario) {
     const args=process.argv.slice(2);
     if(args.includes('--version')){console.log(plan.version);process.exit(plan.versionExit??0);}
     if(args[0]==='login')process.exit(0);
+    if(plan.retarget){fs.unlinkSync(plan.retarget.link);fs.symlinkSync(plan.retarget.to,plan.retarget.link,'dir');}
     const task=JSON.parse(fs.readFileSync('system.json')).project.name;event('agent-'+task);
     if(task==='A'&&plan.behavior!=='ok'){
       if(plan.scenario==='race')await wait(${JSON.stringify(inSetup)});
@@ -124,6 +131,7 @@ function fixture(scenario) {
   return {
     work,
     destination,
+    archive,
     plan,
     invoke: (...extra) =>
       captureProcess(
@@ -157,7 +165,8 @@ function fixture(scenario) {
     update: () => write(control, plan),
     cleanup: () => {
       rmSync(work, { recursive: true, force: true });
-      rmSync(destination, { recursive: true, force: true });
+      rmSync(destination, { force: true });
+      rmSync(archive, { recursive: true, force: true });
     },
   };
 }
@@ -185,6 +194,36 @@ it.skipIf(process.platform === "win32")(
   },
   25000,
 );
+// Needs the same POSIX fake CLI as the cases above.
+if (process.platform !== "win32")
+  it("archives to the checkpoint path resolved before the run, not a retargeted link", async () => {
+    const w = fixture("retarget");
+    const decoy = mkdtempSync(join(homedir(), ".thermite-stop-decoy-"));
+    try {
+      // The agent retargets the checkpoint link after the preflight check.
+      Object.assign(w.plan, {
+        behavior: "ok",
+        retarget: { link: w.destination, to: decoy },
+      });
+      w.update();
+      const r = await w.invoke("--task", "A");
+      expect(r.status, r.stderr).toBe(0);
+      expect(realpathSync(w.destination)).toBe(realpathSync(decoy));
+      expect(readdirSync(decoy)).toEqual([]);
+      expect(existsSync(join(w.archive, "checkpoint.json"))).toBe(true);
+      const runs = readdirSync(w.archive, { withFileTypes: true }).filter(
+        (d) => d.isDirectory() && d.name !== "context",
+      );
+      expect(
+        runs.map((d) =>
+          existsSync(join(w.archive, d.name, "attempt-001/manifest.json")),
+        ),
+      ).toEqual([true]);
+    } finally {
+      w.cleanup();
+      rmSync(decoy, { recursive: true, force: true });
+    }
+  }, 25000);
 it.skipIf(process.platform === "win32").each([
   ["", 0],
   ["codex-cli 0.164.0", 1],

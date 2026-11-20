@@ -14,8 +14,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { evalVersion, harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
@@ -398,6 +398,22 @@ function validationDiagnostics(result) {
     } catch {}
   return [];
 }
+// A sandboxed Codex agent, and any process it leaves running, can write /tmp
+// and the system temporary directory, which hold its run directory and TMPDIR.
+// Its final evidence archive must resolve outside them. Returns the canonical
+// path, which every later archive write uses so a link cannot redirect it.
+export function assertArchiveOutsideSandbox(archive) {
+  const resolved = realpathSync(archive);
+  const root = [tmpdir(), "/tmp", "/private/tmp"]
+    .filter((path) => existsSync(path))
+    .map((path) => realpathSync(path))
+    .find((root) => resolved === root || resolved.startsWith(root + sep));
+  assert(
+    !root,
+    `Evidence archive ${resolved} is under ${root}, which a sandboxed Codex agent can write; run Codex evals from a checkout outside temporary directories`,
+  );
+  return resolved;
+}
 function ownTemp(prefix) {
   return realpathSync(
     mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", prefix)),
@@ -456,9 +472,13 @@ export async function runOne({
   const work = ownTemp("thermite-agent-eval-"),
     runtime = join(work, "runtime"),
     project = join(work, "project"),
-    live = join(work, "evidence"),
+    // The run directory is the agent's TMPDIR and under /tmp, so a sandboxed
+    // agent or a process it leaves behind can write it. Live evidence stays
+    // in the harness home, outside the sandbox's writable roots.
+    live = realpathSync(
+      mkdtempSync(join(homedir(), ".thermite-agent-evidence-")),
+    ),
     audit = join(work, "audit");
-  mkdirSync(live);
   mkdirSync(audit);
   let authSeed,
     env,
@@ -1019,7 +1039,11 @@ export async function runOne({
       }
     if (manifest?.status === "checker-error" && !keep)
       rmSync(join(work, "isolated"), { recursive: true, force: true });
-    if (existsSync(live)) cpSync(live, evidence, { recursive: true });
+    try {
+      cpSync(live, evidence, { recursive: true });
+    } finally {
+      rmSync(live, { recursive: true, force: true });
+    }
     if (!keep && manifest?.status !== "checker-error")
       rmSync(work, { recursive: true, force: true });
   }
@@ -1380,8 +1404,15 @@ async function main() {
       tasks.some((task) => selectedKey(task) === values["reopen-infra"]),
       "--reopen-infra must match a selected run key or all",
     );
-  const destination = join(root, "evals/out/agent", values.checkpoint);
-  mkdirSync(destination, { recursive: true });
+  const requested = join(root, "evals/out/agent", values.checkpoint);
+  mkdirSync(requested, { recursive: true });
+  // Only the Codex sandbox has a write boundary; Claude runs as the harness
+  // user and the reference agent launches nothing. Either way, archive to the
+  // canonical path resolved now, never back through a link.
+  const destination =
+    values.agent === "codex"
+      ? assertArchiveOutsideSandbox(requested)
+      : realpathSync(requested);
   const preparation = join(destination, "context"),
     contextFile = join(preparation, "context.json"),
     commit = git(

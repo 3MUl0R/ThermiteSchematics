@@ -59,31 +59,38 @@ it("T07 permits only declared acquisition GETs, preserving all other V8 reads", 
   ])
     expect(metric(command).sourceReads, command).toBe(1);
 });
+// Visual capture fails closed on Windows; see visual-capture.test.mjs.
+const visual = process.platform !== "win32";
 it("the visual route captures real project HTML and rejects escaping inputs", async () => {
   const project = mkdtempSync(join(tmpdir(), "thermite-u2-visual-"));
+  const outputs = () => mkdtempSync(join(tmpdir(), "thermite-u2-out-"));
   try {
     writeFileSync(
       join(project, "page.html"),
       '<html><body><svg width="300" height="200"><text x="20" y="50">Synthetic packet</text></svg></body></html>',
     );
-    const result = await captureHtml(project, { html: ["page.html"] });
+    if (!visual) {
+      await expect(
+        captureHtml(project, { html: ["page.html"] }, outputs()),
+      ).rejects.toThrow("unavailable on Windows");
+      return;
+    }
+    const output = outputs();
+    const result = await captureHtml(project, { html: ["page.html"] }, output);
     expect(result.files[0].bytes).toBeGreaterThan(1000);
-    expect(
-      readFileSync(join(project, result.files[0].output))
-        .subarray(1, 4)
-        .toString(),
-    ).toBe("PNG");
-    expect(() => captureInput(project, "../outside.html")).toThrow();
-    symlinkSync(
-      join(project, ".."),
-      join(project, "escape"),
-      process.platform === "win32" ? "junction" : "dir",
+    expect(readFileSync(join(output, "01.png")).subarray(1, 4).toString()).toBe(
+      "PNG",
     );
+    expect(() => captureInput(project, "../outside.html")).toThrow();
+    symlinkSync(join(project, ".."), join(project, "escape"), "dir");
     expect(() => captureInput(project, "escape/outside.html")).toThrow();
-    await expect(captureHtml(project, { html: [] })).rejects.toThrow();
+    // Fresh output directories, so only request validation can reject.
+    await expect(captureHtml(project, { html: [] }, outputs())).rejects.toThrow(
+      "Request 1–4 HTML outputs",
+    );
     await expect(
-      captureHtml(project, { html: ["https://example.com/"] }),
-    ).rejects.toThrow();
+      captureHtml(project, { html: ["https://example.com/"] }, outputs()),
+    ).rejects.toThrow("Expected project HTML");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
@@ -105,20 +112,23 @@ it("the visual route works under a symlinked temp root, including macOS /var/fol
         process.platform === "win32" ? "junction" : "dir",
       );
     const project = join(alias, "project");
+    const output = join(alias, "output");
     mkdirSync(project);
+    mkdirSync(output);
     expect(realpathSync(project)).not.toBe(project);
     writeFileSync(
       join(project, "page.html"),
       '<html><body><svg width="300" height="200"><rect width="300" height="200" fill="black"/><text x="20" y="50" fill="white">Alias packet</text></svg></body></html>',
     );
-    const result = await captureHtml(project, { html: ["page.html"] });
+    const capture = captureHtml(project, { html: ["page.html"] }, output);
+    if (!visual)
+      return await expect(capture).rejects.toThrow("unavailable on Windows");
+    const result = await capture;
     expect(result.files[0].input).toBe("page.html");
     expect(result.files[0].bytes).toBeGreaterThan(1000);
-    expect(
-      readFileSync(join(project, result.files[0].output))
-        .subarray(1, 4)
-        .toString(),
-    ).toBe("PNG");
+    expect(readFileSync(join(output, "01.png")).subarray(1, 4).toString()).toBe(
+      "PNG",
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -146,11 +156,10 @@ it("D appendices keep the frozen brief and give the PSU matrix exception exactly
   }
 });
 
-it("capture refuses linked output directories and files", async () => {
+it("capture refuses linked input directories", () => {
   const root = mkdtempSync(join(tmpdir(), "thermite-u2-output-"));
   const outside = mkdtempSync(join(tmpdir(), "thermite-u2-outside-"));
   try {
-    writeFileSync(join(root, "page.html"), "<html>synthetic</html>");
     writeFileSync(join(outside, "private.html"), "outside fixture");
     symlinkSync(
       outside,
@@ -158,15 +167,7 @@ it("capture refuses linked output directories and files", async () => {
       process.platform === "win32" ? "junction" : "dir",
     );
     expect(() => captureInput(root, "linked/private.html")).toThrow(
-      "inside project",
-    );
-    symlinkSync(
-      outside,
-      join(root, "visual-captures"),
-      process.platform === "win32" ? "junction" : "dir",
-    );
-    await expect(captureHtml(root, { html: ["page.html"] })).rejects.toThrow(
-      "ordinary",
+      visual ? "inside project" : "unavailable on Windows",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

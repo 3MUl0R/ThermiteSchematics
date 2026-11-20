@@ -1,156 +1,267 @@
 import assert from "node:assert/strict";
 import {
-  existsSync,
-  mkdirSync,
   lstatSync,
+  mkdirSync,
+  mkdtempSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative, resolve, isAbsolute } from "node:path";
-import { pathToFileURL, fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+import { join, resolve, sep } from "node:path";
 import { chromium } from "playwright-core";
+import { projectReader, windowsError } from "./capture-files.mjs";
 import { sha256 } from "./snapshot.mjs";
 
-export function captureInput(project, name) {
+const requestName = "visual-capture.request.json";
+const outputNames = ["01.png", "02.png", "03.png", "04.png"];
+const origin = "https://thermite-capture.invalid";
+const receiptBytes = (result) =>
+  Buffer.from(JSON.stringify(result, null, 2) + "\n");
+// Chromium's profile lives in the harness home, outside the agent's writable
+// roots (the project, the run directory used as its TMPDIR, and /tmp).
+const harnessTemp = (prefix) =>
+  mkdtempSync(join(realpathSync(homedir()), prefix));
+
+function htmlPath(source, name) {
   assert(
     typeof name === "string" && name.endsWith(".html"),
     "Expected project HTML",
   );
-  const root = realpathSync(project),
-    path = realpathSync(resolve(root, name));
-  const rel = relative(root, path);
-  assert(
-    rel && !rel.startsWith("..") && !isAbsolute(rel),
-    "HTML must stay inside project",
-  );
-  return path;
+  return source.path(name);
 }
-function captureDirectory(project) {
-  const directory = join(project, "visual-captures");
-  mkdirSync(directory, { recursive: true });
-  assert(
-    !lstatSync(directory).isSymbolicLink(),
-    "Capture directory must be ordinary",
-  );
-  for (const name of ["result.json", "01.png", "02.png", "03.png", "04.png"])
-    if (existsSync(join(directory, name)))
-      assert(
-        !lstatSync(join(directory, name)).isSymbolicLink(),
-        "Capture output must be ordinary",
-      );
-  return directory;
+
+export function captureInput(project, name) {
+  const source = projectReader(project);
+  try {
+    return source.read(htmlPath(source, name));
+  } finally {
+    source.close();
+  }
 }
-async function capturePage(context, project, input, name, index) {
-  const inputSha256 = sha256(readFileSync(input));
-  const page = await context.newPage();
-  await page.goto(pathToFileURL(input).href, {
-    waitUntil: "load",
-    timeout: 15000,
-  });
-  const output = `visual-captures/${String(index + 1).padStart(2, "0")}.png`;
-  captureDirectory(project);
-  const png = await page.screenshot({
-    path: join(project, output),
-    fullPage: true,
-    timeout: 15000,
-  });
-  assert.equal(
-    sha256(readFileSync(input)),
-    inputSha256,
-    "HTML changed during capture; request again",
-  );
-  await page.close();
-  return {
-    input: name,
-    inputSha256,
-    output,
-    sha256: sha256(png),
-    bytes: png.length,
-  };
-}
-export async function captureHtml(project, request) {
+
+function requestedInputs(source, request) {
   assert(
-    Array.isArray(request.html) &&
+    Array.isArray(request?.html) &&
       request.html.length >= 1 &&
-      request.html.length <= 4,
+      request.html.length <= outputNames.length,
     "Request 1–4 HTML outputs",
   );
-  const inputs = request.html.map((name) => captureInput(project, name));
-  const directory = captureDirectory(project);
-  const browser = await chromium.launch({
-    executablePath:
-      process.env.THERMITE_TEST_BROWSER || chromium.executablePath(),
-    headless: true,
-    env: { PATH: process.env.PATH, HOME: directory, TMPDIR: directory },
-  });
+  return request.html.map((name) => htmlPath(source, name));
+}
+
+async function renderHtml(source, request) {
+  const inputs = requestedInputs(source, request);
+  const snapshots = new Map();
+  const snapshot = (path) => {
+    if (!snapshots.has(path)) snapshots.set(path, source.read(path));
+    return snapshots.get(path);
+  };
+  for (const input of inputs) snapshot(input);
+
+  const scratch = harnessTemp(".thermite-visual-");
+  let context;
   try {
-    const context = await browser.newContext({
+    context = await chromium.launchPersistentContext(join(scratch, "profile"), {
+      executablePath:
+        process.env.THERMITE_TEST_BROWSER || chromium.executablePath(),
+      headless: true,
+      artifactsDir: scratch,
+      env: {
+        PATH: process.env.PATH,
+        HOME: scratch,
+        TMPDIR: scratch,
+      },
+      acceptDownloads: false,
+      offline: true,
       javaScriptEnabled: false,
+      serviceWorkers: "block",
       viewport: { width: 1600, height: 1200 },
       deviceScaleFactor: 1,
     });
-    const root = realpathSync(project);
     await context.route("**/*", async (route) => {
       const url = new URL(route.request().url());
-      try {
-        if (
-          url.protocol === "data:" ||
-          (url.protocol === "file:" &&
-            captureInput(root, relative(root, fileURLToPath(url))))
-        )
-          return await route.continue();
-      } catch {}
-      await route.abort();
+      if (url.protocol === "data:") return route.continue();
+      let body;
+      if (url.origin === origin) {
+        try {
+          const name = decodeURIComponent(url.pathname.slice(1));
+          body = snapshot(htmlPath(source, name));
+        } catch {}
+      }
+      if (body) return route.fulfill({ body, contentType: "text/html" });
+      return route.abort();
     });
-    const files = [];
+    const captures = [];
     for (const [index, input] of inputs.entries()) {
-      files.push(
-        await capturePage(context, project, input, request.html[index], index),
-      );
+      const page = await context.newPage();
+      const url =
+        origin + "/" + input.split(sep).map(encodeURIComponent).join("/");
+      try {
+        await page.goto(url, { waitUntil: "load", timeout: 15000 });
+        const png = await page.screenshot({ fullPage: true, timeout: 15000 });
+        captures.push({
+          png,
+          file: {
+            input: request.html[index],
+            inputSha256: sha256(snapshot(input)),
+            output: "visual-captures/" + outputNames[index],
+            sha256: sha256(png),
+            bytes: png.length,
+          },
+        });
+      } finally {
+        await page.close();
+      }
     }
-    return { format: "thermite-agent-visual-capture/1", files };
+    return captures;
   } finally {
-    await browser.close();
+    try {
+      await context?.close();
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }
 }
+
+function replaceFile(path, bytes) {
+  const partial = path + ".partial";
+  rmSync(partial, { force: true });
+  writeFileSync(partial, bytes, { flag: "wx" });
+  renameSync(partial, path);
+}
+
+// The output directory holds exactly what the receipt describes. The receipt
+// is absent while a capture runs, and every PNG is verified before it lands.
+function clearOutputs(outputs) {
+  for (const name of ["result.json", ...outputNames])
+    rmSync(join(outputs, name), { force: true });
+}
+function publish(outputs, result, captures = []) {
+  clearOutputs(outputs);
+  for (const [index, { png }] of captures.entries())
+    replaceFile(join(outputs, outputNames[index]), png);
+  for (const [index, { file }] of captures.entries())
+    assert(
+      sha256(readFileSync(join(outputs, outputNames[index]))) === file.sha256,
+      "Capture output changed",
+    );
+  replaceFile(join(outputs, "result.json"), receiptBytes(result));
+  return result;
+}
+async function captureInto(source, outputs, request) {
+  rmSync(join(outputs, "result.json"), { force: true });
+  const captures = await renderHtml(source, request);
+  return publish(
+    outputs,
+    {
+      format: "thermite-agent-visual-capture/1",
+      files: captures.map(({ file }) => file),
+    },
+    captures,
+  );
+}
+const publishError = (outputs, error) =>
+  publish(outputs, { error: error.message });
+
+// Direct entry point: `outputs` must be a directory the agent cannot write.
+// The request is validated before anything is written.
+export async function captureHtml(project, request, outputs) {
+  const source = projectReader(project);
+  try {
+    requestedInputs(source, request);
+    return await captureInto(source, realpathSync(outputs), request);
+  } finally {
+    source.close();
+  }
+}
+
+function linkedOutputs(link, outputs) {
+  const current = lstatSync(link, { throwIfNoEntry: false });
+  return (
+    !!current?.isSymbolicLink() &&
+    resolve(readlinkSync(link)) === resolve(outputs)
+  );
+}
+
+// The broker publishes straight into evidence/visual-captures, which the
+// runner keeps outside the sandbox's writable roots, and links it into the
+// project before the agent starts.
 export async function visualBroker(task, project, evidence) {
   if (!task.visualCapture) return async () => {};
-  const directory = join(project, "visual-captures");
-  mkdirSync(directory, { recursive: true });
-  let previous,
-    pending = Promise.resolve();
-  const tick = async () => {
-    const path = join(project, "visual-capture.request.json");
-    if (!existsSync(path)) return;
-    assert(
-      !lstatSync(path).isSymbolicLink(),
-      "Capture request must be ordinary",
+  const root = realpathSync(project);
+  const link = join(root, "visual-captures");
+  assert(
+    !lstatSync(link, { throwIfNoEntry: false }),
+    "visual-captures must not exist before the agent starts",
+  );
+  const outputs = join(realpathSync(evidence), "visual-captures");
+  mkdirSync(outputs);
+  let source, timer, pending, failure;
+  const cleanup = () => {
+    try {
+      if (linkedOutputs(link, outputs)) unlinkSync(link);
+    } finally {
+      source?.close();
+    }
+  };
+  try {
+    symlinkSync(
+      outputs,
+      link,
+      process.platform === "win32" ? "junction" : "dir",
     );
-    const bytes = readFileSync(path, "utf8");
+    source = projectReader(root);
+  } catch (error) {
+    if (error.message !== windowsError) {
+      cleanup();
+      throw error;
+    }
+    publishError(outputs, error);
+  }
+
+  let previous;
+  const tick = async () => {
+    let bytes;
+    try {
+      if (!source.has(requestName)) return;
+      bytes = source.read(requestName).toString("utf8");
+    } catch (error) {
+      if (previous !== error.message) publishError(outputs, error);
+      previous = error.message;
+      return;
+    }
     if (bytes === previous) return;
     previous = bytes;
-    let result;
     try {
-      result = await captureHtml(project, JSON.parse(bytes));
+      await captureInto(source, outputs, JSON.parse(bytes));
     } catch (error) {
-      result = { error: error.message };
+      publishError(outputs, error);
     }
-    const text = JSON.stringify(result, null, 2) + "\n";
-    captureDirectory(project);
-    writeFileSync(join(directory, "result.json"), text);
-    writeFileSync(join(evidence, "visual-capture.json"), text);
   };
-  const timer = setInterval(() => {
-    pending = pending.then(tick).catch((error) => {
-      writeFileSync(
-        join(evidence, "visual-capture.json"),
-        JSON.stringify({ error: error.message }),
-      );
-    });
-  }, 250);
+  if (source)
+    timer = setInterval(() => {
+      if (!pending && !failure)
+        pending = tick()
+          .catch((error) => {
+            failure = error;
+          })
+          .finally(() => {
+            pending = undefined;
+          });
+    }, 250);
   return async () => {
     clearInterval(timer);
-    await pending;
+    try {
+      await pending;
+      if (failure) throw failure;
+    } finally {
+      cleanup();
+    }
   };
 }

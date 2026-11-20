@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.2)
+# Fresh-agent evaluator (E2 v1.20.3)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -97,7 +97,9 @@ without an explicit token/key; a paid Claude request was not used for validation
 Fresh environment forwarding is a small allowlist including the five supported
 credential variables. Checkout paths are removed from PATH and asserted absent
 from public agent environment values. Audit paths and TMPDIR point inside the
-run directory, which Codex's workspace sandbox can write. Claude imports the
+run directory, which Codex's workspace sandbox can write. Live evidence is kept
+in the harness home instead; see E2 1.20.3. Claude-agent runs bypass
+permissions as the harness user and have no filesystem boundary. Claude imports the
 project guide through a harness-authored `CLAUDE.md` containing only
 `@AGENTS.md`; Codex loads `AGENTS.md` normally. Assertions reject inherited
 ancestor instructions, user memory/config and unexpected project settings.
@@ -444,8 +446,14 @@ V8. This permission is task metadata, not a general source-read waiver.
 
 For D-conveyor visual work, the agent writes `visual-capture.request.json` with an `html`
 array of 1–4 project-local HTML paths. The running harness writes PNGs and a
-hash-bound receipt in `visual-captures/`; the agent must open the images and
-record findings. Network requests and JavaScript are disabled. Errors remain
+hash-bound receipt to `visual-captures/` in the live evidence, which is outside
+the sandbox's writable roots and linked from the project. The receipt is absent while a capture runs and lists
+only the images that capture produced. Wait for it, then open the listed images
+and record findings; crops belong elsewhere, such as `work/`. Chromium loads
+project `.html` snapshots and inline `data:` URLs. Separate CSS, SVG, image and
+font files, network resources and JavaScript are blocked. Pages load from a
+virtual origin, so local HTML subresources use paths relative to the page or to
+the project root. Capture is refused on Windows. Errors remain
 explicit, and capture alone never passes visual review or PDF V1/V5. No Claude
 credential is required. The regression test launches the actual pinned browser;
 a non-model sandbox probe should verify request/PNG access before paid D runs.
@@ -902,3 +910,50 @@ Direct-build verification reads the TypeScript version from the pinned Git
 lockfile. It uses the harness compiler when the versions match or the pin
 cannot be read. A different pinned version runs from the prepared dependencies
 in a child process. Evidence records the compiler source, version and execution mode.
+
+## E2 1.20.3
+
+D-conveyor prompt 1.6.2 describes the visual broker’s output link, its
+resource limits and receipt polling.
+
+Playwright and Chromium no longer read or write the eval workspace. Chromium
+runs with a fresh profile in the harness home and loads a virtual origin. That
+origin serves only verified bytes of project `.html` files, each read once per
+request. `data:` URLs still load, and every other request is blocked. The
+receipt hashes the main HTML bytes served to Chromium and the in-memory PNG.
+
+These boundaries hold only for a sandboxed agent, which today means Codex.
+Claude-agent runs bypass permissions as the harness user, so they have no
+filesystem boundary: the agent can change anything the harness can, including
+evidence and capture outputs.
+
+A sandboxed agent can write the run directory, because it is the agent's TMPDIR
+and lies under `/tmp`. Live evidence is therefore a separate directory in the
+harness home, outside the sandbox's writable roots, and is copied to the
+evidence output and removed when the run ends. The no-model probe
+(`probe-visual-sandbox.mjs`) records that the sandbox can write the run
+directory but cannot write live evidence or the capture outputs. A detached
+descendant still running after the sandboxed command exits reports a
+permission error when it tries to write evidence. For the same reason, the CLI
+refuses a Codex run whose evidence archive under `evals/out/agent` resolves
+inside `/tmp` or the system temporary directory, so run Codex evals from a
+checkout outside them.
+
+The broker publishes into `visual-captures/` in the live evidence, and links
+that directory into the project before the agent starts; an existing
+`visual-captures` entry is refused. Each capture removes the old receipt before
+rendering, then replaces the images, writing each PNG under a temporary name
+and renaming it into place. It checks every PNG against its hash and writes
+`result.json` last, so the evidence never holds a receipt without its images.
+The link is removed when the agent exits. The evidence receipt is now
+`visual-captures/result.json` beside its images, replacing
+`visual-capture.json`. The capture format remains
+`thermite-agent-visual-capture/1`.
+
+On macOS and Linux, the broker reads project files with descriptor-relative
+`openat` calls and `O_NOFOLLOW` on every component. It starts from a project
+descriptor opened before the agent starts. Input files must have exactly one
+link, so a second name for an outside file is refused. This relies on the
+agent being unable to remove that file’s original name. Node offers no
+descriptor-relative open on Windows, so capture is refused there with an
+explicit error receipt.

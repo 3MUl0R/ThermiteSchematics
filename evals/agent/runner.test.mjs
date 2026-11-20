@@ -1,5 +1,6 @@
 import { it, expect } from "vitest";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
@@ -7,10 +8,11 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { judgePacket } from "./run.mjs";
+import { spawnSync } from "node:child_process";
+import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const moduleURL = (path) => pathToFileURL(join(root, path)).href;
@@ -62,7 +64,8 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       taskDir = join(work, "task"),
       evidence = join(work, "evidence"),
       ready = join(work, "ready"),
-      referenceCount = join(work, "reference-count");
+      referenceCount = join(work, "reference-count"),
+      paths = join(work, "paths.json");
     mkdirSync(prepared);
     mkdirSync(taskDir);
     writeFileSync(
@@ -81,7 +84,7 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
     );
     writeFileSync(
       join(taskDir, "reference.mjs"),
-      `import{replaceObject}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=${JSON.stringify(referenceCount)};writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));replaceObject(ctx,"PS1","description","Pipeline checked");process.exitCode=1;return "Reference complete";}`,
+      `import{replaceObject}from${JSON.stringify(moduleURL("evals/agent/task-support.mjs"))};import{readFileSync,existsSync,writeFileSync}from"node:fs";export default ctx=>{const p=${JSON.stringify(referenceCount)};writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,"utf8")):0)+1));writeFileSync(${JSON.stringify(paths)},JSON.stringify({evidence:ctx.evidence,project:ctx.project}));replaceObject(ctx,"PS1","description","Pipeline checked");process.exitCode=1;return "Reference complete";}`,
     );
     writeFileSync(
       join(taskDir, "check.mjs"),
@@ -113,6 +116,13 @@ it("reference pipeline rechecks the kept workspace without another agent attempt
       sha256(`Thermite is at {{THERMITE}}.\n\n${task.prompt}`),
     );
     expect(readFileSync(referenceCount, "utf8")).toBe("1");
+    // Live evidence stays outside the run directory and /tmp, which a
+    // sandboxed agent can write, and is removed once copied.
+    const live = JSON.parse(readFileSync(paths, "utf8"));
+    expect(live.evidence.startsWith(realpathSync(homedir()) + sep)).toBe(true);
+    expect(live.evidence.startsWith(dirname(live.project) + sep)).toBe(false);
+    expect(existsSync(live.evidence)).toBe(false);
+    expect(existsSync(join(evidence, "manifest.json"))).toBe(true);
     writeFileSync(ready, "ready");
     writeFileSync(join(taskDir, "changed-context.md"), "Changed checker input");
     const checkFile = join(taskDir, "check.mjs");
@@ -205,5 +215,49 @@ it("judge packet removes run identities and includes rubric deliverables", () =>
     );
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+});
+
+it("refuses a Codex evidence archive under a temporary directory", () => {
+  const tasks = realpathSync(mkdtempSync(join(tmpdir(), "eval-archive-")));
+  const checkpoint = "test-archive-" + basename(tasks);
+  const destination = join(root, "evals/out/agent", checkpoint);
+  const home = mkdtempSync(join(homedir(), ".thermite-archive-test-"));
+  try {
+    expect(() => assertArchiveOutsideSandbox(tasks)).toThrow(
+      "which a sandboxed Codex agent can write",
+    );
+    expect(() => assertArchiveOutsideSandbox(home)).not.toThrow();
+    mkdirSync(join(tasks, "T"));
+    writeFileSync(join(tasks, "T", "task.json"), JSON.stringify({ id: "T" }));
+    // Point the CLI's temporary directory at this checkout's parent so its
+    // archive is under it wherever the checkout lives.
+    const run = spawnSync(
+      process.execPath,
+      [
+        join(root, "evals/agent/run.mjs"),
+        ...["--agent", "codex", "--checkpoint", checkpoint, "--task", "T"],
+        ...["--tasks-dir", tasks, "--commit", "not-a-commit"],
+      ],
+      {
+        encoding: "utf8",
+        timeout: 20000,
+        env: {
+          ...process.env,
+          ...Object.fromEntries(
+            ["TMPDIR", "TEMP", "TMP"].map((key) => [
+              key,
+              dirname(realpathSync(root)),
+            ]),
+          ),
+        },
+      },
+    );
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("which a sandboxed Codex agent can write");
+  } finally {
+    rmSync(tasks, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    rmSync(destination, { recursive: true, force: true });
   }
 });
