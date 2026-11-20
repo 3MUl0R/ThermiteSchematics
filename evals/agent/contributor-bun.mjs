@@ -126,7 +126,9 @@ function focusedInvocation(cwd, args, focused, isFocus) {
       return uncreditedTest(cwd, arg);
     }
   }
-  return hasFile ? { cwd, argv, kind: "focused" } : { cwd };
+  if (!hasFile) return { cwd };
+  argv.push("--config", "vitest.config.mjs");
+  return { cwd, argv, kind: "focused" };
 }
 
 export function contributorInvocation(args, from, focused) {

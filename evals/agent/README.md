@@ -892,10 +892,13 @@ receipts. T and D scoring is unchanged.
 ## E2 1.20.2
 
 R01 accepts the focused test and build in either order after checkout setup.
-Both tasks require build artifacts that match the delivered source. R02 also
-requires a passing focused test with the delivered repair's source digest.
-The focused observer forwards test-name patterns, color and silent flags.
+Both observed and direct builds earn credit only alongside a passing focused
+test and artifacts that match the delivered source. R02 also binds the focused
+test to the delivered repair's source digest. The focused observer selects
+`vitest.config.mjs` explicitly and forwards test-name patterns, color and silent flags.
 Unsupported arguments, including configuration, root and report overrides,
 run unchanged and are recorded without workflow credit.
-Direct-build verification records the TypeScript source and version used to
-compare emitted artifacts.
+Direct-build verification reads the TypeScript version from the pinned Git
+lockfile. It uses the harness compiler when the versions match or the pin
+cannot be read. A different pinned version runs from the prepared dependencies
+in a child process. Evidence records the compiler source, version and execution mode.

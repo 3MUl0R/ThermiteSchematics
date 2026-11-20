@@ -78,6 +78,25 @@ const run = (cwd, ...args) =>
     env: { ...process.env, COPYFILE_DISABLE: "1" },
     maxBuffer: 64 << 20,
   });
+export function pinnedTypeScriptVersion(engine, commit) {
+  try {
+    const lock = git(
+      engine,
+      "--no-replace-objects",
+      "cat-file",
+      "blob",
+      `${commit}:bun.lock`,
+    );
+    const resolved = Bun.JSONC.parse(lock)?.packages?.typescript?.[0];
+    return typeof resolved === "string"
+      ? (/^typescript@(\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?)$/.exec(
+          resolved,
+        )?.[1] ?? null)
+      : null;
+  } catch {
+    return null;
+  }
+}
 export async function prepareContext({
   engine = root,
   commit = "HEAD",
@@ -85,7 +104,8 @@ export async function prepareContext({
   destination,
 }) {
   const pinned = git(engine, "rev-parse", `${commit}^{commit}`),
-    build = join(destination, "build");
+    build = join(destination, "build"),
+    path = join(destination, "engine");
   git(engine, "worktree", "add", "--detach", build, pinned);
   try {
     if (context === "runtime") {
@@ -99,10 +119,7 @@ export async function prepareContext({
       assert.equal(candidates.length, 1, "Expected exactly one packed runtime");
       const { extractSafeZipArchive } =
         await import("../../scripts/safe-zip-reader.mjs");
-      await extractSafeZipArchive(
-        readFileSync(candidates[0]),
-        join(destination, "engine"),
-      );
+      await extractSafeZipArchive(readFileSync(candidates[0]), path);
     } else {
       // A detached worktree of the pinned commit; dependencies come from the local
       // frozen installation, and are rebuilt before any CLI evidence is trusted.
@@ -115,13 +132,22 @@ export async function prepareContext({
         "Install dependencies for the selected commit before source evaluation",
       );
       run(build, "run", "build");
-      cpSync(build, join(destination, "engine"), {
+      cpSync(build, path, {
         recursive: true,
         dereference: true,
         filter: (p) => basename(p) !== ".git",
       });
     }
-    return { path: join(destination, "engine"), commit: pinned };
+    return {
+      path,
+      commit: pinned,
+      ...(context === "source" && {
+        pinnedTypeScript: {
+          version: pinnedTypeScriptVersion(engine, pinned),
+          module: join(path, "node_modules/typescript/lib/typescript.js"),
+        },
+      }),
+    };
   } finally {
     git(engine, "worktree", "remove", "--force", build);
   }
@@ -728,6 +754,7 @@ export async function runOne({
     ctx.calls = calls;
     ctx.validationDiagnostics = validationDiagnostics(validation);
     ctx.thermite = join(runtime, "thermite.real.mjs");
+    if (task.contributor) ctx.pinnedTypeScript = prepared.pinnedTypeScript;
     const paths = [
       ...new Set([
         ...documents(project).map((d) => d.path),
@@ -907,6 +934,7 @@ export async function runOne({
         calls,
         sourceDiff: ctx.sourceDiff,
         validationDiagnostics: ctx.validationDiagnostics,
+        pinnedTypeScript: ctx.pinnedTypeScript,
         context,
         engineRoots,
         keep,

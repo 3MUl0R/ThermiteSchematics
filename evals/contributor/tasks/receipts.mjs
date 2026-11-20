@@ -67,6 +67,25 @@ const installedBefore = (rows, time) =>
     (row) => row.kind === "install" && row.exit === 0 && row.ended <= time,
   );
 
+function hasFreshBuild(ctx, repository, rows, outputs, invocations) {
+  if (hasMatchingBuild(rows, outputs)) return true;
+  // A PATH lookup can bypass the shim, but the transcript must name its checkout.
+  if (
+    !invocations.some(
+      ({ kind, direct, explicitCwd }) =>
+        kind === "build" && (direct || explicitCwd),
+    )
+  )
+    return false;
+  const verification = verifyDirectBuild(
+    repository,
+    outputs,
+    ctx.pinnedTypeScript,
+  );
+  write(join(ctx.evidence, "contributor-direct-build.json"), verification);
+  return verification.matches;
+}
+
 export function completedWorkflow(
   ctx,
   repository,
@@ -95,17 +114,6 @@ export function completedWorkflow(
     invocations
       .slice(0, testIndex)
       .some(({ kind, direct }) => direct && kind === "install");
-  // A PATH lookup can bypass the shim, but the transcript must name its checkout.
-  const directBuild = invocations.some(
-    ({ kind, direct, explicitCwd }) =>
-      kind === "build" && (direct || explicitCwd),
-  );
-  let freshBuild = focused && hasMatchingBuild(rows, outputs);
-  if (directBuild && !freshBuild) {
-    const verification = verifyDirectBuild(repository, outputs);
-    write(join(ctx.evidence, "contributor-direct-build.json"), verification);
-    freshBuild = verification.matches;
-  }
   return {
     ...(install && {
       installed:
@@ -113,6 +121,7 @@ export function completedWorkflow(
         directInstall,
     }),
     focused,
-    freshBuild,
+    freshBuild:
+      focused && hasFreshBuild(ctx, repository, rows, outputs, invocations),
   };
 }

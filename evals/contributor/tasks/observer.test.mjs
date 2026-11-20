@@ -1,10 +1,15 @@
 import { expect, it } from "vitest";
-import { rmSync, symlinkSync, utimesSync } from "node:fs";
+import { existsSync, rmSync, symlinkSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { contributorSourceDigest } from "../../agent/contributor-bun.mjs";
+import {
+  contributorBuildOutputs,
+  contributorSourceDigest,
+} from "../../agent/contributor-bun.mjs";
+import { pinnedTypeScriptVersion } from "../../agent/run.mjs";
 import { read } from "../../agent/task-support.mjs";
-import { bun, focus, ordering } from "./support.mjs";
+import { verifyDirectBuild } from "./direct-build.mjs";
+import { bun, focus, git, ordering } from "./support.mjs";
 import {
   copy,
   fixture,
@@ -12,6 +17,7 @@ import {
   observer,
   put,
   root,
+  temp,
 } from "./test-fixture.mjs";
 import { completedWorkflow, observedCommands } from "./receipts.mjs";
 
@@ -70,6 +76,8 @@ it("records real install and test outcomes for the alternate PATH-shim invocatio
     "-t",
     "focused cases",
     focus,
+    "--config",
+    "vitest.config.mjs",
   ]);
   expect(rows[2].tests.passed).toBe(7);
   expect(rows[2].sourceSha256).toBe(contributorSourceDigest(f.repository));
@@ -295,6 +303,8 @@ it.each(["codex", "claude"])(
       "--no-color",
       "--silent=true",
       focus,
+      "--config",
+      "vitest.config.mjs",
     ]);
     const emitted = join(f.repository, "packages/query/dist/ordering.js");
     utimesSync(emitted, new Date(0), new Date(0));
@@ -354,12 +364,132 @@ it("requires a direct R02 focused receipt from the final source even after a suc
   const evidence = join(f.ctx.evidence, "contributor-direct-build.json");
   expect(read(evidence)).toEqual({
     matches: true,
-    typescript: { source: "checkout", version: ts.version },
-  });
-  rmSync(join(f.repository, "node_modules/typescript"), { recursive: true });
-  expect(workflow()).toEqual({ focused: true, freshBuild: true });
-  expect(read(evidence)).toEqual({
-    matches: true,
-    typescript: { source: "harness", version: ts.version },
+    typescript: {
+      source: "harness",
+      version: ts.version,
+      execution: "in-process",
+    },
   });
 });
+
+it.each(["observed", "direct"])(
+  "requires focused test success for a %s build",
+  (kind) => {
+    const f = fixture();
+    const { build, test } = prepareDirect(f, "worktree");
+    const built =
+      kind === "observed"
+        ? observeIn(f, f.repository, "run", "build")
+        : build();
+    expect(built.exit, built.stdout + built.stderr).toBe(0);
+    if (kind === "direct")
+      writeTranscript(f, [[`${binary} --cwd=worktree run build`, 0]]);
+    const workflow = () => completedWorkflow(f.ctx, f.repository);
+    expect(workflow()).toEqual({ focused: false, freshBuild: false });
+    expect(test().exit).toBe(0);
+    expect(workflow()).toEqual({ focused: true, freshBuild: true });
+  },
+);
+
+function fakeCheckoutCompiler(repository, artifact) {
+  rmSync(join(repository, "node_modules/typescript"), { recursive: true });
+  put(
+    repository,
+    "node_modules/typescript/package.json",
+    '{"version":"9.9.9","main":"index.cjs"}',
+  );
+  const marker = join(repository, "typescript-ran");
+  const output = join(repository, artifact);
+  put(
+    repository,
+    "node_modules/typescript/index.cjs",
+    `
+    const fs = require("node:fs");
+    fs.writeFileSync(${JSON.stringify(marker)}, "loaded");
+    module.exports = {
+      version: "9.9.9", sys: {},
+      readConfigFile: () => ({}),
+      parseJsonConfigFileContent: () => ({ errors: [] }),
+      createProgram: () => ({
+        getSourceFile: () => ({}),
+        emit: (_source, write) => {
+          write(${JSON.stringify(output)}, fs.readFileSync(${JSON.stringify(output)}, "utf8"));
+          return { emitSkipped: false };
+        },
+      }),
+    };
+  `,
+  );
+  return marker;
+}
+
+function pinCompiler({ ctx, engine }, version) {
+  put(
+    engine,
+    "bun.lock",
+    `{ "packages": { "typescript": ["typescript@${version}"], }, }`,
+  );
+  git(ctx, engine, "add", "bun.lock");
+  git(
+    ctx,
+    engine,
+    "-c",
+    "user.name=Eval",
+    "-c",
+    "user.email=eval@invalid",
+    "commit",
+    "--quiet",
+    "--no-gpg-sign",
+    "-m",
+    "Pin compiler",
+  );
+  const commit = git(ctx, engine, "rev-parse", "HEAD").trim();
+  put(
+    engine,
+    "bun.lock",
+    '{ "packages": { "typescript": ["typescript@9.9.9"] } }',
+  );
+  return pinnedTypeScriptVersion(engine, commit);
+}
+
+it.each([ts.version, "5.0.0", null])(
+  "ignores checkout compiler code with pinned TypeScript %s",
+  (version) => {
+    const f = fixture();
+    const { build } = prepareDirect(f, "worktree");
+    expect(build().exit).toBe(0);
+    const artifact = "packages/query/dist/ordering.js";
+    const marker = fakeCheckoutCompiler(f.repository, artifact);
+    const pinned = version ? { version: pinCompiler(f, version) } : null;
+    if (pinned) expect(pinned.version).toBe(version);
+    if (version === "5.0.0") {
+      const prepared = temp();
+      put(
+        prepared,
+        "typescript.cjs",
+        `
+      if (process.pid === ${process.pid}) throw Error("compiler loaded in checker");
+      const ts = require(${JSON.stringify(join(root, "node_modules/typescript/lib/typescript.js"))});
+      module.exports = { ...ts, version: ${JSON.stringify(version)} };
+    `,
+      );
+      pinned.module = join(prepared, "typescript.cjs");
+    }
+    const verify = () =>
+      verifyDirectBuild(
+        f.repository,
+        contributorBuildOutputs(f.repository).filter(
+          ({ file }) => file === artifact,
+        ),
+        pinned,
+      );
+    const typescript =
+      version === "5.0.0"
+        ? { source: "prepared", version, execution: "child" }
+        : { source: "harness", version: ts.version, execution: "in-process" };
+    expect(verify()).toEqual({ matches: true, typescript });
+    put(f.repository, artifact, "stale output\n");
+    expect(verify()).toEqual({ matches: false, typescript });
+    expect(existsSync(marker)).toBe(false);
+  },
+);
