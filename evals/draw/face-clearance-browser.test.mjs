@@ -81,28 +81,40 @@ it.each([
   },
 );
 
-function cable(captionY) {
+function cable(startY, endY) {
   return drawing(`<g data-cable-uid="cable" data-conductor-id="1" fill="none" stroke="black" stroke-width=".3">
     <path d="M 11 24 L 89 24"/>
-    <text x="10" y="${captionY}" font-size="2.7" text-anchor="start" fill="black" stroke="none">X UNTERMINATED</text>
-    <text x="90" y="22.3" font-size="2.7" text-anchor="end" fill="black" stroke="none">? UNASSIGNED</text>
+    <text x="10" y="${startY}" font-size="2.7" text-anchor="start" fill="black" stroke="none">X UNTERMINATED</text>
+    <text x="90" y="${endY}" font-size="2.7" text-anchor="end" fill="black" stroke="none">? UNASSIGNED</text>
     <path d="M 10 23 L 12 25"/><path d="M 10 25 L 12 23"/>
     <path d="M 88 23 L 90 25"/><path d="M 88 25 L 90 23"/>
   </g>`);
 }
 
 it("DQ-02 requires open-end caption clearance from its own painted X", async () => {
-  const close = await openSheet(page, cable(22.82));
-  expect(captionMarkFindings(close)).toEqual([
-    expect.objectContaining({
-      kind: "caption-mark-clearance",
-      text: "X UNTERMINATED",
-      cableUid: "cable",
-      conductorId: "1",
-      side: "start",
-      minimumMm: 0.34,
-    }),
-  ]);
-  expect(captionMarkFindings(close)[0].gapMm).toBeLessThan(0.05);
-  expect(captionMarkFindings(await openSheet(page, cable(22.32)))).toEqual([]);
+  const closeY = 23;
+  // The stroke box starts at 22.85 mm. Leave room for the 1 mm descent
+  // reported by Chromium's default Linux font as well as the 0.34 mm gap.
+  const clearY = 21.25;
+  for (const [startY, endY, text, side] of [
+    [closeY, clearY, "X UNTERMINATED", "start"],
+    [clearY, closeY, "? UNASSIGNED", "end"],
+  ]) {
+    const geometry = await openSheet(page, cable(startY, endY));
+    const findings = captionMarkFindings(geometry);
+    expect(findings).toEqual([
+      expect.objectContaining({
+        kind: "caption-mark-clearance",
+        text,
+        cableUid: "cable",
+        conductorId: "1",
+        side,
+        minimumMm: 0.34,
+      }),
+    ]);
+    expect(findings[0].gapMm).toBeLessThan(0.05);
+  }
+  expect(
+    captionMarkFindings(await openSheet(page, cable(clearY, clearY))),
+  ).toEqual([]);
 });
