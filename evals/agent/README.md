@@ -984,7 +984,10 @@ take no `..` components, as the visual broker does. A linked or otherwise
 unreadable output is left out of the packet and its path is listed in
 `refusedOutputs`; a linked or unlistable `drawings` directory is listed as
 `drawings`. If the root itself was replaced or cannot be inspected, the run is
-still scored and the packet takes nothing and lists `.`. The packet format is
+still scored and the packet takes nothing and lists `.`. If the root is gone
+from its path after the agent exits, no project-dependent step can run: the
+run is an infrastructure failure and is not scored, and a rubric run's packet
+still takes nothing and lists `.`. The packet format is
 now `thermite-blinded-judge/1.2`. Guide bytes count the `AGENTS.md` present at
 launch, measured from the harness's copy, and rechecks reuse the recorded
 count.
@@ -1009,8 +1012,9 @@ attributes or repository. The selection covers sources, the manifest, the
 presentation and library documents present before or after the run. Paths are
 labelled as before, with Git's quoting. A deleted file now appears as a
 deletion; staging every path hid it before. A file replaced by a directory, or
-the reverse, appears as a deletion and an addition. A selected path that is
-not an ordinary file is listed as refused.
+the reverse, appears as a deletion and an addition, provided every component
+on the way is a directory reached without a link. A selected path that is not
+an ordinary file, or is reached through a link, is listed as refused.
 
 `recheck.json` records the project root's identity, and a recheck refuses a
 different root. Rechecks take the prepared engine from the checkpoint's context

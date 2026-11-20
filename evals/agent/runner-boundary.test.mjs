@@ -173,10 +173,12 @@ it("source diffs match the repository diff without running its Git configuration
       "parts b/new/device.json",
       "naïve.json",
       "blob.pdf",
+      "devices/room and /dev/null",
     ];
+    const binary = (name) => name === "blob.pdf" || name.endsWith("/dev/null");
     for (const name of tricky) {
       mkdirSync(dirname(join(project, name)), { recursive: true });
-      writeFileSync(join(project, name), name.endsWith(".pdf") ? "\0a" : "1\n");
+      writeFileSync(join(project, name), binary(name) ? "\0a" : "1\n");
     }
     const env = {
       ...process.env,
@@ -202,9 +204,17 @@ it("source diffs match the repository diff without running its Git configuration
     });
     writeFileSync(join(project, "system.json"), '{"a":2}\n');
     writeFileSync(join(project, "added.json"), '{"n":1}\n');
+    mkdirSync(join(project, "added and /dev"), { recursive: true });
+    writeFileSync(join(project, "added and /dev/null"), "\0n");
     for (const name of tricky)
-      writeFileSync(join(project, name), name.endsWith(".pdf") ? "\0b" : "2\n");
-    const paths = ["system.json", "kept.json", "added.json", ...tricky];
+      writeFileSync(join(project, name), binary(name) ? "\0b" : "2\n");
+    const paths = [
+      "system.json",
+      "kept.json",
+      "added.json",
+      "added and /dev/null",
+      ...tricky,
+    ];
     const read = (path) =>
       existsSync(join(project, path))
         ? readFileSync(join(project, path))
@@ -218,6 +228,12 @@ it("source diffs match the repository diff without running its Git configuration
     expect(repository).toContain('"a/na\\303\\257ve.json"');
     expect(repository).toContain(
       "Binary files a/blob.pdf and b/blob.pdf differ",
+    );
+    expect(repository).toContain(
+      "Binary files a/devices/room and /dev/null and b/devices/room and /dev/null differ",
+    );
+    expect(repository).toContain(
+      "Binary files /dev/null and b/added and /dev/null differ",
     );
     expect(selectedDiff({ before, scratch, paths, read })).toBe(repository);
     // A removed source is shown; staging every path hid it before.
@@ -365,6 +381,64 @@ it("run diffs cover removed library documents and a source replaced by a directo
         `diff --git a/${path} b/${path}\n${change} file mode`,
       );
     expect(diff).not.toContain("Refused");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}, 60000);
+
+it("a source below a linked directory is refused, not diffed as deleted", async () => {
+  if (!confined) return;
+  const work = temporary("eval-linked-parent-");
+  try {
+    const diffFile = join(work, "source-diff.txt");
+    // The "agent" links the library's types directory to a project directory
+    // where relay-1co.json is itself a directory.
+    const { taskDir, context } = fixture(
+      work,
+      { id: "linked-parent" },
+      {
+        "reference.mjs": `import{mkdirSync,renameSync,symlinkSync}from"node:fs";import{join}from"node:path";export default ctx=>{const p=(f)=>join(ctx.project,f);mkdirSync(p("elsewhere/relay-1co.json"),{recursive:true});renameSync(p("libraries/core/types"),p("types-moved"));symlinkSync(p("elsewhere"),p("libraries/core/types"));return "Reference complete";}`,
+        "check.mjs": `import{writeFileSync}from"node:fs";export default ctx=>{writeFileSync(${JSON.stringify(diffFile)},ctx.sourceDiff);return {pass:true};}`,
+      },
+    );
+    const run = await runOne({
+      taskDir,
+      prepared: context,
+      evidence: join(work, "evidence"),
+    });
+    expect(run.status, JSON.stringify(run)).toBe("complete");
+    const diff = readFileSync(diffFile, "utf8");
+    expect(diff).toContain(
+      "Refused (not an ordinary file): libraries/core/types/relay-1co.json",
+    );
+    expect(diff).not.toContain("diff --git a/libraries/core/types/");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+}, 60000);
+
+it("a run whose project root is gone still records the whole-root refusal", async () => {
+  if (!confined) return;
+  const work = temporary("eval-missing-root-");
+  try {
+    const evidence = join(work, "evidence");
+    const { taskDir, context } = fixture(
+      work,
+      { id: "missing-root", rubric: ["Judge the outputs"] },
+      {
+        "reference.mjs": `import{renameSync,writeFileSync}from"node:fs";export default ctx=>{writeFileSync(ctx.project+"/friction.md","moved notes");renameSync(ctx.project,ctx.project+".gone");return "Reference complete";}`,
+        "check.mjs": `export default ()=>({pass:true});`,
+      },
+    );
+    const run = await runOne({ taskDir, prepared: context, evidence });
+    expect(run.status).toBe("infrastructure-failure");
+    const packet = JSON.parse(
+      readFileSync(join(evidence, "judge-packet.json"), "utf8"),
+    );
+    expect(packet.outputs).toEqual({});
+    expect(packet.refusedOutputs).toEqual(["."]);
+    expect(JSON.stringify(packet)).not.toContain("moved notes");
+    expect(run.infrastructureError).toContain("Project root is missing");
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

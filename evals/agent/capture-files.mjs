@@ -9,9 +9,11 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
+import { constants as osConstants } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const { O_DIRECTORY, O_NOFOLLOW = 0, O_NONBLOCK = 0, O_RDONLY } = constants;
+const { ENOENT } = osConstants.errno;
 const stat = (path) => lstatSync(path, { bigint: true, throwIfNoEntry: false });
 const fdStat = (fd) => fstatSync(fd, { bigint: true });
 const sameFile = (a, b) => a?.dev === b.dev && a?.ino === b.ino;
@@ -52,8 +54,17 @@ function lib() {
   return libc;
 }
 const errnoLocation = darwin ? "__error" : "__errno_location";
+let errnoView;
+// An openat result and, on failure, its errno.
+function tryOpen(dir, name, flags) {
+  const symbols = lib();
+  errnoView ??= new Int32Array(toArrayBuffer(symbols[errnoLocation](), 0, 4));
+  errnoView[0] = 0;
+  const fd = symbols.openat(dir, Buffer.from(name + "\0"), flags);
+  return { fd, errno: fd < 0 ? errnoView[0] : 0 };
+}
 function openRelative(dir, name, flags) {
-  const fd = lib().openat(dir, Buffer.from(name + "\0"), flags);
+  const { fd } = tryOpen(dir, name, flags);
   assert(fd >= 0, inputError);
   return fd;
 }
@@ -68,7 +79,8 @@ function listDescriptor(fd) {
     closeSync(fd);
     assert.fail("Project directory could not be listed");
   }
-  const errno = new Int32Array(toArrayBuffer(symbols[errnoLocation](), 0, 4));
+  errnoView ??= new Int32Array(toArrayBuffer(symbols[errnoLocation](), 0, 4));
+  const errno = errnoView;
   const names = [];
   try {
     for (;;) {
@@ -167,6 +179,46 @@ export function projectReader(project, expected) {
         } catch (error) {
           if (error.code === "ENOTDIR") return undefined;
           throw error;
+        }
+      },
+      // Whether the root is still the pinned directory at its path.
+      intact() {
+        try {
+          directoryIdentity(root, identity);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      // Whether no file is at rel, walking from the root without following
+      // links: a component is missing, the entry is a directory, or an
+      // intermediate component is a regular file. False leaves the decision
+      // to read(), which refuses links and anything else unordinary.
+      absentFile(rel) {
+        const parts = components(rel);
+        directoryIdentity(root, identity);
+        let dir = rootFd;
+        try {
+          for (const [index, part] of parts.entries()) {
+            const opened = tryOpen(dir, part, readFlags | O_DIRECTORY);
+            if (opened.fd >= 0) {
+              if (dir !== rootFd) closeSync(dir);
+              dir = opened.fd;
+              continue;
+            }
+            if (opened.errno === ENOENT) return true;
+            if (index === parts.length - 1) return false;
+            const file = tryOpen(dir, part, readFlags);
+            if (file.fd < 0) return false;
+            try {
+              return fdStat(file.fd).isFile();
+            } finally {
+              closeSync(file.fd);
+            }
+          }
+          return true;
+        } finally {
+          if (dir !== rootFd) closeSync(dir);
         }
       },
       read(rel) {

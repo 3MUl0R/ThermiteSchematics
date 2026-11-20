@@ -278,13 +278,16 @@ export function selectedDiff({ before, scratch, paths, read }) {
   );
   // Label paths as the project's, as a diff in its repository would. Only
   // header lines name paths; hunks are left alone.
-  let header = false;
+  let header = false,
+    mode = null;
   const diff = result.stdout
     .split("\n")
     .map((line) => {
-      if (line.startsWith("diff --git ")) header = true;
+      if (line.startsWith("diff --git ")) [header, mode] = [true, null];
       else if (line.startsWith("@@")) header = false;
-      return header ? relabel(line) : line;
+      if (header && /^(?:new|deleted) file mode /.test(line))
+        mode = line.split(" ")[0];
+      return header ? relabel(line, mode) : line;
     })
     .join("\n")
     .trim();
@@ -299,7 +302,9 @@ export function selectedDiff({ before, scratch, paths, read }) {
 // new/ directory, then the project path, possibly inside C-style quotes. Only
 // that synthetic component is removed; quoting and spaces are kept.
 const field = (text) => text.replace(/^("?[ab]\/)(?:old|new)\//, "$1");
-function relabel(line) {
+// `mode` is the section's "new" or "deleted" file mode, which alone says
+// whether a binary summary names /dev/null; a path can end in " and /dev/null".
+function relabel(line, mode) {
   if (line.startsWith("diff --git ")) {
     // Without renames both fields name one path, so they are equally long.
     const rest = line.slice(11),
@@ -312,19 +317,20 @@ function relabel(line) {
   if (binary === undefined) return line;
   const empty = "/dev/null",
     half = (binary.length - 5) / 2;
-  const [from, to] = binary.startsWith(`${empty} and `)
-    ? [empty, binary.slice(empty.length + 5)]
-    : binary.endsWith(` and ${empty}`)
-      ? [binary.slice(0, -empty.length - 5), empty]
-      : [binary.slice(0, half), binary.slice(half + 5)];
+  const [from, to] =
+    mode === "new"
+      ? [empty, binary.slice(empty.length + 5)]
+      : mode === "deleted"
+        ? [binary.slice(0, -empty.length - 5), empty]
+        : [binary.slice(0, half), binary.slice(half + 5)];
   return `Binary files ${field(from)} and ${field(to)} differ`;
 }
 // Post-run project reads go through the reader pinned before launch. A
-// directory where a file was is an absent file, so a file replaced by a
-// directory, or the reverse, diffs as a deletion and an addition.
+// directory where a file was, or a file where a directory was, is an absent
+// file, so the change diffs as a deletion and an addition. Anything reached
+// through a link is refused by read().
 function projectBytes(source, path) {
-  const status = source.has(path);
-  return status && !status.isDirectory() ? source.read(path) : null;
+  return source.absentFile(path) ? null : source.read(path);
 }
 // Node offers no descriptor-relative, no-follow open on Windows.
 const confinedPlatform = ["darwin", "linux"].includes(process.platform);
@@ -680,6 +686,7 @@ export async function runOne({
     task,
     initial,
     runtimeBefore,
+    finalMessage,
     guideBytes,
     scratch,
     source,
@@ -940,6 +947,13 @@ export async function runOne({
       batchControl.stopped = true;
       batchControl.reason = batchHaltReason(classification);
     }
+    finalMessage = normalized.finalMessage ?? null;
+    // Every project-dependent step below needs the root; without it the run
+    // cannot be scored, though its judge packet still records the refusal.
+    assert(
+      lstatSync(project, { throwIfNoEntry: false }),
+      "Project root is missing after the agent exited; the run cannot be scored",
+    );
     // From here on, CLI calls run with harness privileges: never from the
     // agent-writable runtime, never with the project's Bun config or .env
     // files, and only with environment values the harness selects.
@@ -1234,6 +1248,23 @@ export async function runOne({
         error.stage === "authentication" ? "authentication" : "harness",
       workspace: keep ? work : null,
     };
+    // A rubric run whose agent finished but whose project root is gone or
+    // replaced still publishes the whole-root refusal.
+    if (task?.rubric && source && finalMessage !== undefined)
+      try {
+        if (!source.intact())
+          save(
+            "judge-packet.json",
+            judgePacket({
+              finalMessage,
+              sourceDiff: null,
+              project,
+              runtime,
+              task,
+              source,
+            }),
+          );
+      } catch {}
     save("infrastructure-failure.json", {
       status: manifest.status,
       message: manifest.infrastructureError,
