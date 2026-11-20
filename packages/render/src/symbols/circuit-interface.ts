@@ -1,4 +1,8 @@
-import { composedCircuitMark, type CircuitMark } from "./circuit-mark.js";
+import {
+  circuitMarkName,
+  composedCircuitMark,
+  type CircuitMark,
+} from "./circuit-mark.js";
 import { PRINTABLE_SYMBOL_POLICY } from "./printable-policy.js";
 
 type InterfacePin = { x: number; y: number; side: string };
@@ -35,7 +39,7 @@ export function interfaceLeadTip(
         ? 10 / 3
         : 5 +
           (source ||
-          mark === "receptacle" ||
+          circuitMarkName(mark) === "receptacle" ||
           pins.some((p) => p !== pin && p.side === pin.side)
             ? gap
             : 0);
@@ -70,5 +74,5 @@ export function circuitInterfaceMark(
         : `<line${role} y1="${n(p.y)}" y2="${n(tip.y)}" x1="${n(p.x)}" x2="${n(tip.x)}"/>`;
     })
     .join("");
-  return `<g data-function-interface="${mark}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput || span ? "" : outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;
+  return `<g data-function-interface="${circuitMarkName(mark)}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput || span ? "" : outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;
 }

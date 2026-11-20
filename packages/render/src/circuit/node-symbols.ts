@@ -13,6 +13,7 @@ import {
 import {
   circuitInterfaceMark,
   circuitBlock,
+  circuitMarkName,
   circuitMotor,
   circuitMotorVertical,
   circuitWinding,
@@ -155,7 +156,7 @@ function emitNodeOtherSymbol(state: EmissionRow) {
       "dc-output",
       "source",
       "sensor-3wire",
-    ].includes(mark)
+    ].includes(circuitMarkName(mark))
   ) {
     out.push(
       circuitInterfaceMark(

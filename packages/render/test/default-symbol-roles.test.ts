@@ -101,7 +101,7 @@ function auditConversionOrientation(
   }
 }
 
-function auditOutlet(outlet: Element) {
+function auditOutlet(outlet: Element, terminals: string[], hasEarth: boolean) {
   const body = outlet.closest("[data-device-uid]")!;
   const frame = paintedShape(
     body,
@@ -110,12 +110,22 @@ function auditOutlet(outlet: Element) {
   const leads = [
     ...body.querySelectorAll('[data-function-interface="receptacle"] line'),
   ];
-  expect(leads.length).toBe(2);
-  for (const lead of leads)
+  expect(leads).toHaveLength(terminals.length);
+  const ports = svgGeometry(body).ports;
+  const landed = leads.map((lead) => {
+    const stroke = paintedShape(body, lead);
     expect(
-      inkClearance(frame, paintedShape(body, lead)),
+      inkClearance(frame, stroke),
       "outlet frame clears its separate stubs",
     ).toBeGreaterThanOrEqual(0.3);
+    const [start] = stroke.points;
+    const port = ports.find(
+      ({ point }) => Math.hypot(point.x - start!.x, point.y - start!.y) < 0.001,
+    );
+    expect(port, "outlet stub begins at an authored terminal").toBeDefined();
+    return JSON.parse(port!.id)[1];
+  });
+  expect(landed.sort()).toEqual([...terminals].sort());
   const slots = [...outlet.querySelectorAll("line")].map((e) =>
     paintedShape(body, e),
   );
@@ -126,9 +136,30 @@ function auditOutlet(outlet: Element) {
     expect(x2 - x1).toBeLessThan(0.001);
     expect(y2 - y1).toBeGreaterThan(2);
   }
-  const earth = paintedShape(body, outlet.querySelector("polyline")!);
-  expect(projection(earth.points, "y")[0]).toBeGreaterThan(
-    Math.max(...slots.map((s) => projection(s.points, "y")[1])),
+  const earth = outlet.querySelectorAll("polyline");
+  expect(earth.length).toBe(hasEarth ? 1 : 0);
+  if (hasEarth) {
+    const opening = paintedShape(body, earth[0]!);
+    expect(projection(opening.points, "y")[0]).toBeGreaterThan(
+      Math.max(...slots.map((s) => projection(s.points, "y")[1])),
+    );
+  }
+}
+
+function auditDefaultOutlet(doc: Document) {
+  const outlet = doc.querySelector('[data-circuit-mark="receptacle"]')!;
+  auditOutlet(outlet, ["L", "N"], false);
+  expect(
+    Boolean(
+      doc.querySelector(
+        '[data-function-key="bond"] [data-circuit-mark="earth"]',
+      ),
+    ),
+  ).toBe(true);
+  for (const e of outlet.querySelectorAll("line"))
+    e.setAttribute("transform", "rotate(90 6 6)");
+  expect(() => auditOutlet(outlet, ["L", "N"], false)).toThrowError(
+    expect.objectContaining({ name: "AssertionError" }),
   );
 }
 
@@ -164,8 +195,7 @@ it.each(flows)(
         vertical,
       );
     }
-    const outlet = doc.querySelector('[data-circuit-mark="receptacle"]')!;
-    auditOutlet(outlet);
+    auditDefaultOutlet(doc);
     auditInterface(doc.querySelector('[data-circuit-mark="interface"]')!);
 
     const input = converter.querySelector(
@@ -206,12 +236,67 @@ it.each(flows)(
         expect.objectContaining({ name: "AssertionError" }),
       );
     }
+  },
+);
 
-    for (const e of outlet.querySelectorAll("line,polyline"))
-      e.setAttribute("transform", "rotate(90 6 6)");
-    expect(() => auditOutlet(outlet)).toThrowError(
-      expect.objectContaining({ name: "AssertionError" }),
-    );
+it.each(flows)(
+  "prints an earth opening on a three-terminal receptacle only with an authored earth role in %s",
+  async (flow) => {
+    const compiled = await compileProject(directory);
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const ir = structuredClone(compiled.ir);
+    const outlet = ir.devices.find((d) => d.designation === "SO1")!;
+    const type = ir.deviceTypes.find((t) => t.id === outlet.typeId)!;
+    const power = ir.functions.find(
+      (f) => f.id.deviceUid === outlet.uid && f.id.functionKey === "power",
+    )!;
+    const earth = ir.terminals.find(
+      (t) => t.id.deviceUid === outlet.uid && t.id.terminalKey === "PE",
+    )!;
+    // The earth terminal occupies the middle of the authored function order.
+    power.terminals.splice(1, 0, earth.id);
+    type.functions
+      .find((f) => f.key === "power")!
+      .terminalKeys.splice(1, 0, "PE");
+    const request: SchematicPacketRequest = {
+      format: "schematic-packet-request/0.1",
+      views: [
+        {
+          format: "circuit-view-request/0.1",
+          title: "Three-terminal outlet",
+          flow,
+          groups: [
+            {
+              id: "outlet",
+              functions: [
+                { device: { by: "uid", value: outlet.uid }, key: "power" },
+              ],
+              conductors: [],
+            },
+          ],
+        },
+      ],
+    };
+    async function audit(hasEarth: boolean) {
+      const result = await renderSchematicPacket(ir, request);
+      if (!result.ok) throw Error(result.error.message);
+      const doc = parseHTML(result.value.html).document;
+      auditOutlet(
+        doc.querySelector('[data-circuit-mark="receptacle"]')!,
+        ["L", "PE", "N"],
+        hasEarth,
+      );
+    }
+
+    await audit(true);
+    type.circuitSymbols = { power: "receptacle" };
+    await audit(true);
+    // A terminal still named PE cannot authorize the earth opening.
+    delete earth.role;
+    delete type.terminals.find((t) => t.key === "PE")!.role;
+    await audit(false);
+    delete type.circuitSymbols;
+    await audit(false);
   },
 );
 

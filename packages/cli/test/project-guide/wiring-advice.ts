@@ -1,10 +1,10 @@
 export const wiringAdvice = new Map([
   [
-    "Keep labels clear of symbol strokes, terminal approaches, bends, junctions and cable-end marks.",
+    "Keep labels clear of ink, pin approaches, bends, junctions and cable ends.",
     "Manual print review. The terminal-label clearance, wire-label mask and face-clearance browser tests check painted geometry.",
   ],
   [
-    "See `thermite guide circuit-symbols`.",
+    "See `thermite guide circuit-symbols` for receptacle faces.",
     "The generated guide test resolves this offline topic. Default-symbol-roles tests cover its printed roles.",
   ],
   [

@@ -16,6 +16,7 @@ import type { CircuitMark } from "./circuit-mark.js";
 export {
   emitCircuitMark,
   composedCircuitMark,
+  circuitMarkName,
   circuitMarkLegendInk,
   circuitLegendReservation,
   circuitMarkInkBounds,
@@ -108,6 +109,16 @@ function protectiveContactMark(
     return "disconnector";
 }
 
+function receptacleMark(type: IrDeviceType, f: IrFunction): CircuitMark {
+  if (f.terminals.length !== 3) return "receptacle";
+  const earth = f.terminals.filter(
+    ({ terminalKey }) =>
+      type.terminals.find((t) => t.key === terminalKey)?.role ===
+      "protective_earth",
+  );
+  return earth.length === 1 ? "receptacle-with-earth" : "receptacle";
+}
+
 export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   const count = f.terminals.length;
   const explicit =
@@ -165,7 +176,7 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
       throw new Error(
         `Invalid circuit symbol binding ${type.id}/${f.id.functionKey}: ${explicit} is incompatible with its declared function.`,
       );
-    return explicit as CircuitMark;
+    return explicit === "receptacle" ? receptacleMark(type, f) : explicit;
   }
   const profile = circuitProfile(type);
   if (f.kind === "bus" && count === 1)
@@ -211,7 +222,7 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
       return "heater";
     if (profile === "thermite:lamp" && count === 2) return "lamp";
     if (profile === "thermite:receptacle" && [2, 3].includes(count))
-      return "receptacle";
+      return receptacleMark(type, f);
     if (profile === "thermite:transformer" && count === 2) return "winding";
     if (profile === "thermite:dc-supply" && count === 2) return "dc-output";
     if (

@@ -23,9 +23,9 @@ groups produces an explicit outside-audited-views inventory.
 The local teaching types are deliberately partial and preserve ten W904 model
 coverage warnings. Their optional interfaces and physical equipment details are
 unspecified. The twelve-pin interface shows all pins, including the eight
-unconnected pins; unconnected does not imply spare. No protective bond is
-invented for the receptacle's unconnected PE terminal. This is a drawing and
-coverage fixture, not a usable electrical design or a reviewed purchasing list.
+unconnected pins; unconnected does not imply spare. The receptacle's two-terminal
+load prints two blade slots, and its unconnected PE terminal prints a separate
+earth symbol. This synthetic fixture exercises drawing and coverage only.
 
 The original continuous renderer is unchanged. These additional profiles are
 supported by source-selected circuit views, with terminal wiring and schedules

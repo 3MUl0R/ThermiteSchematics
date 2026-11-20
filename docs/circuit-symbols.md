@@ -146,7 +146,7 @@ roles. Spacing and orientation carry the following meanings in both flows.
 | Coil and transformer winding | A coil is a rectangle. An authored coil voltage class can add upright AC or DC text. A transformer winding is a zigzag between its own two leads. Paired core lines stand clear of the windings and indicate magnetic association. Explicit wiring and jumpers determine the physical nets. |
 | AC input and DC output | An upright wave identifies AC. A solid line above a broken line identifies DC. Inside a circuit converter each outline brackets its own terminal group. |
 | Protective earth | A descending stem above three horizontal bars of decreasing length, upright in both flows. On a motor it follows the PE lead and stays separate from phase ink. |
-| Receptacle | An upright circular face with two slots and a lower earth mark. Native terminals and connections determine the pin identities and any PE connection. |
+| Receptacle | An upright circular face with two blade slots. A three-terminal load adds the lower earth opening only when exactly one of its terminals has the `protective_earth` role. Each terminal keeps its own lead. A separately authored PE bus can be shown with its own earth symbol. |
 | Generic interface | A boxed, upright `I/F` identifies a generic interface. Its authored terminals are listed individually. The mark specifies no contact state, pinout or internal connections. |
 
 Unmarked overload power poles use a stepped thermal element. Their auxiliary
