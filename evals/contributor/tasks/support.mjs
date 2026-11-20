@@ -14,10 +14,11 @@ import { read, write } from "../../agent/task-support.mjs";
 
 import {
   contributorRealpath,
+  ordering,
   sameContributorPath,
 } from "../../agent/contributor-bun.mjs";
 
-export const ordering = "packages/query/src/ordering.ts";
+export { ordering };
 export const focus = "packages/query/test/views-and-ordering.test.ts";
 export const seedPatch = fileURLToPath(
   new URL("./R02/seed.patch", import.meta.url),
@@ -48,6 +49,15 @@ export function setup(ctx, seeded = false) {
     existsSync(join(ctx.runtime, ordering)),
     "R tasks require --context source",
   );
+  const testScript = join(ctx.runtime, "scripts/test.mjs");
+  const testSource = existsSync(testScript)
+    ? readFileSync(testScript, "utf8")
+    : "";
+  for (const feature of ["THERMITE_CONTRIBUTOR_BUN", "THERMITE_TEST_TIMINGS"])
+    assert(
+      testSource.includes(feature),
+      `R tasks require a pinned --commit with ${feature} support in scripts/test.mjs`,
+    );
   const engine = join(ctx.project, "engine");
   cpSync(ctx.runtime, engine, {
     recursive: true,

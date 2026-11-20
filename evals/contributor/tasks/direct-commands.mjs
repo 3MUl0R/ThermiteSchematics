@@ -35,10 +35,17 @@ function invocation(command, project, repository) {
   const [executable, ...args] = argv;
   if (!executable || !/^bun(?:\.exe|\.cmd)?$/i.test(basename(executable)))
     return null;
-  const from = cwd ?? (args[0]?.startsWith("--cwd") ? project : repository);
+  const bunCwd = args[0] === "--cwd" || args[0]?.startsWith("--cwd=");
+  const from = cwd ?? (bunCwd ? project : repository);
   const result = contributorInvocation(args, from, focus);
-  return result.kind && sameContributorPath(result.cwd, repository)
-    ? { kind: result.kind, direct: isAbsolute(executable) }
+  return result.kind &&
+    !result.uncreditedReason &&
+    sameContributorPath(result.cwd, repository)
+    ? {
+        kind: result.kind,
+        direct: isAbsolute(executable),
+        explicitCwd: cwd !== undefined || !!bunCwd,
+      }
     : null;
 }
 

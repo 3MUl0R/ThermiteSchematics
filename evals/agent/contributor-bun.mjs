@@ -10,10 +10,11 @@ import {
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { createHash } from "node:crypto";
 
+export const ordering = "packages/query/src/ordering.ts";
 const outputs = [
   ["packages/cli/dist/alpha.js", "packages/cli/src/alpha.ts"],
-  ["packages/query/dist/ordering.js", "packages/query/src/ordering.ts"],
-  ["packages/query/dist/ordering.d.ts", "packages/query/src/ordering.ts"],
+  ["packages/query/dist/ordering.js", ordering],
+  ["packages/query/dist/ordering.d.ts", ordering],
 ];
 
 // Bun's component walk can retain Windows 8.3 aliases from TEMP. The
@@ -64,7 +65,11 @@ export function contributorBuildOutputs(checkout) {
   }));
 }
 
-export function testResult(path) {
+export function contributorSourceDigest(checkout) {
+  return fileEvidence(checkout, ordering).sha256;
+}
+
+function testResult(path) {
   try {
     const { numPassedTests, numTotalTests, numFailedTests, testResults } =
       JSON.parse(readFileSync(path, "utf8"));
@@ -78,6 +83,52 @@ export function testResult(path) {
     if (error.code !== "ENOENT") throw error;
     return null;
   }
+}
+
+const safeTestFlags = new Set([
+  "--color",
+  "--no-color",
+  "--silent=true",
+  "--silent=false",
+  "--silent=passed-only",
+]);
+
+function uncreditedTest(cwd, arg) {
+  return {
+    cwd,
+    kind: "focused",
+    uncreditedReason: `Unsupported focused test argument: ${arg}`,
+  };
+}
+
+function focusedInvocation(cwd, args, focused, isFocus) {
+  const argv = ["scripts/test.mjs"];
+  let hasFile = false;
+  for (let index = args[0] === "--" ? 1 : 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "-t" || arg === "--testNamePattern") {
+      const pattern = args[index + 1];
+      if (!pattern || pattern.startsWith("-")) return uncreditedTest(cwd, arg);
+      argv.push(arg, pattern);
+      index++;
+    } else if (arg === "--silent") {
+      // Vitest can otherwise consume the following filename as its value.
+      argv.push("--silent=true");
+    } else if (
+      safeTestFlags.has(arg) ||
+      (arg.startsWith("--testNamePattern=") && arg !== "--testNamePattern=")
+    ) {
+      argv.push(arg);
+    } else if (!hasFile && isFocus(arg)) {
+      argv.push(focused);
+      hasFile = true;
+    } else {
+      return uncreditedTest(cwd, arg);
+    }
+  }
+  if (!hasFile) return { cwd };
+  argv.push("--config", "vitest.config.mjs");
+  return { cwd, argv, kind: "focused" };
 }
 
 export function contributorInvocation(args, from, focused) {
@@ -103,21 +154,16 @@ export function contributorInvocation(args, from, focused) {
     argv[0] &&
     matchesContributorPath(resolve(cwd, argv[0]), join(cwd, "scripts/test.mjs"))
   ) {
-    const test = argv.findIndex(
-      (arg, index) =>
-        index > 0 &&
-        matchesContributorPath(resolve(cwd, arg), join(cwd, focused)),
-    );
-    if (test >= 0) {
-      argv[0] = "scripts/test.mjs";
-      argv[test] = focused;
-      return { cwd, argv, kind: "focused" };
-    }
+    const isFocus = (arg) =>
+      matchesContributorPath(resolve(cwd, arg), join(cwd, focused));
+    const testArgs = argv.slice(1);
+    if (testArgs.some(isFocus))
+      return focusedInvocation(cwd, testArgs, focused, isFocus);
   }
   return { cwd };
 }
 
-function observe(argv) {
+function observe(argv, execute) {
   const config = JSON.parse(
     readFileSync(new URL("./contributor.json", import.meta.url), "utf8"),
   );
@@ -126,23 +172,11 @@ function observe(argv) {
     contributorRealpath(process.cwd()),
     config.focused,
   );
-  const { cwd, kind } = sameContributorPath(invocation.cwd, config.checkout)
-    ? invocation
-    : {};
-  const timing =
-    kind === "focused" ? join(cwd, "coverage/test-timings.json") : null;
-  if (timing) rmSync(timing, { force: true });
-  const inputs =
-    kind === "build"
-      ? contributorBuildOutputs(cwd).map((file) => file.input.sha256)
-      : null;
+  if (!invocation.kind || !sameContributorPath(invocation.cwd, config.checkout))
+    return execute(argv, { env: process.env });
+  const { cwd, kind, uncreditedReason } = invocation;
   const started = Date.now();
-  const command = spawnSync(process.execPath, kind ? invocation.argv : argv, {
-    ...(kind && { cwd }),
-    stdio: "inherit",
-    env: timing ? { ...process.env, THERMITE_TEST_TIMINGS: "1" } : process.env,
-  });
-  if (kind)
+  const log = (details) =>
     appendFileSync(
       config.log,
       JSON.stringify({
@@ -152,17 +186,56 @@ function observe(argv) {
         cwd,
         started,
         ended: Date.now(),
-        exit: command.status,
-        signal: command.signal,
-        ...(timing && { tests: testResult(timing) }),
-        ...(inputs && {
-          outputs: contributorBuildOutputs(cwd).filter(
-            ({ input }, index) => input.sha256 === inputs[index],
-          ),
-        }),
+        ...details,
       }) + "\n",
     );
+  if (uncreditedReason) {
+    const command = execute(argv, { env: process.env });
+    log({ exit: command.status, signal: command.signal, uncreditedReason });
+    return command;
+  }
+  const timing =
+    kind === "focused" ? join(cwd, "coverage/test-timings.json") : null;
+  if (timing) rmSync(timing, { force: true });
+  const sourceSha256 = timing ? contributorSourceDigest(cwd) : undefined;
+  const inputs =
+    kind === "build"
+      ? contributorBuildOutputs(cwd).map((file) => file.input.sha256)
+      : null;
+  const command = execute(invocation.argv, {
+    cwd,
+    env: timing ? { ...process.env, THERMITE_TEST_TIMINGS: "1" } : process.env,
+  });
+  log({
+    exit: command.status,
+    signal: command.signal,
+    ...(timing && {
+      tests: testResult(timing),
+      sourceSha256:
+        sourceSha256 === contributorSourceDigest(cwd) ? sourceSha256 : null,
+    }),
+    ...(inputs && {
+      outputs: contributorBuildOutputs(cwd).filter(
+        ({ input }, index) => input.sha256 === inputs[index],
+      ),
+    }),
+  });
+  return command;
+}
+
+export function observeContributorTest(argv, execute) {
+  return observe(argv, (args, options) => execute(args.slice(1), options));
+}
+
+if (import.meta.main) {
+  const command = observe(process.argv.slice(2), (argv, options) =>
+    spawnSync(process.execPath, argv, {
+      ...options,
+      stdio: "inherit",
+      // A test launched by the shim is already being observed.
+      env: { ...options.env, THERMITE_CONTRIBUTOR_BUN: "" },
+    }),
+  );
   if (command.error) throw command.error;
   process.exitCode = command.status ?? 1;
 }
-if (import.meta.main) observe(process.argv.slice(2));

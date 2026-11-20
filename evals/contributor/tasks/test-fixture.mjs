@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import {
   contributorBuildOutputs,
   contributorRealpath,
+  contributorSourceDigest,
 } from "../../agent/contributor-bun.mjs";
 import { contributorCommandEnvironment } from "../../agent/contributor-commands.mjs";
 import { focus, git, ordering, run, seedPatch } from "./support.mjs";
@@ -101,6 +102,7 @@ export function fixture(seeded = false) {
       exit: 0,
       started: at + 1,
       ended: at + 2,
+      sourceSha256: contributorSourceDigest(repository),
       tests: {
         total: 7,
         passed: 7,

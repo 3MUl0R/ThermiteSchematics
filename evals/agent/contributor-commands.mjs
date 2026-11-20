@@ -34,6 +34,5 @@ export function contributorCommandEnvironment(ctx, bin) {
     THERMITE_CONTRIBUTOR_BUN: worker,
     PATH: [bin, ctx.env.PATH].filter(Boolean).join(delimiter),
     VITEST_MAX_WORKERS: "1",
-    THERMITE_TEST_TIMINGS: "1",
   };
 }

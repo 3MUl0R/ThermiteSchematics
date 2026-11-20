@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.1)
+# Fresh-agent evaluator (E2 v1.20.2)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -384,6 +384,7 @@ when the per-run mean looks small. The threshold is not relaxed.
 
 R01 and R02 are in the separate source-only catalog at
 `evals/contributor/tasks`. The default T/D catalog and its scoring are unchanged.
+The pinned `--commit` must support `THERMITE_CONTRIBUTOR_BUN` and `THERMITE_TEST_TIMINGS` in `scripts/test.mjs`.
 Run the two references before scheduling one run per task for each agent.
 
 ```sh
@@ -410,10 +411,11 @@ names. A reference run evaluates the task infrastructure without a model.
   remains available to the evaluator.
 - Both tasks request a local friction report. The Bun observer records command
   outcomes and binds them to test results and build artifacts. It normalizes
-  relative and absolute test paths, `--cwd`, and the `bun i` install alias. A
-  successful direct Bun invocation can also be verified using the tool
-  transcript and on-disk test and build evidence. The observer log lives in a
-  writable run directory. Version 1 trusts agents to leave the receipts intact.
+  relative and absolute test paths, `--cwd`, and the `bun i` install alias.
+  The test wrapper records focused runs from direct Bun calls. For direct
+  builds the checker combines a successful tool transcript entry with
+  content digests from a fresh TypeScript emit. The observer log lives in
+  a writable run directory. Version 1 trusts agents to leave the receipts intact.
 - Reference `totalToolCalls` counts five calls for R01 and seven for R02,
   including writing the friction report. R02 diagnoses the focused failure,
   edits the source and verifies the rebuilt CLI. Shim `thermiteCalls`
@@ -886,3 +888,17 @@ administrative directory and checkout backlink. It compares local evidence
 using native filesystem path rules, including Windows 8.3 aliases in temp
 paths. The direct Bun fallback preserves Windows path separators in command
 receipts. T and D scoring is unchanged.
+
+## E2 1.20.2
+
+R01 accepts the focused test and build in either order after checkout setup.
+Both observed and direct builds earn credit only alongside a passing focused
+test and artifacts that match the delivered source. R02 also binds the focused
+test to the delivered repair's source digest. The focused observer selects
+`vitest.config.mjs` explicitly and forwards test-name patterns, color and silent flags.
+Unsupported arguments, including configuration, root and report overrides,
+run unchanged and are recorded without workflow credit.
+Direct-build verification reads the TypeScript version from the pinned Git
+lockfile. It uses the harness compiler when the versions match or the pin
+cannot be read. A different pinned version runs from the prepared dependencies
+in a child process. Evidence records the compiler source, version and execution mode.

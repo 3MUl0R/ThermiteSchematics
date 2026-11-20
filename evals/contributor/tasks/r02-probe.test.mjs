@@ -8,10 +8,20 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { contributorBuildOutputs } from "../../agent/contributor-bun.mjs";
+import {
+  contributorBuildOutputs,
+  contributorSourceDigest,
+} from "../../agent/contributor-bun.mjs";
 import { normalizeTranscript } from "../../agent/transcript.mjs";
-import { ordering } from "./support.mjs";
-import { copy, fixture, observer, put, root } from "./test-fixture.mjs";
+import { bun, focus, ordering } from "./support.mjs";
+import {
+  copy,
+  fixture,
+  observeIn,
+  observer,
+  put,
+  root,
+} from "./test-fixture.mjs";
 import checkR02 from "./R02/check.mjs";
 import { queryProof } from "./R02/query-proof.mjs";
 import referenceR02 from "./R02/reference.mjs";
@@ -21,6 +31,7 @@ function runnable(f) {
   for (const path of [
     "package.json",
     "scripts/test.mjs",
+    "vitest.config.mjs",
     "thermite.mjs",
     "packages/cli/dist",
     "packages/cli/assets",
@@ -56,7 +67,29 @@ function runnable(f) {
   }
 }
 
+it("runs the repo Vitest config through the shim and direct hook despite an untracked config", () => {
+  const f = fixture(true);
+  runnable(f);
+  const runFocus = () => bun(f.ctx, f.repository, "scripts/test.mjs", focus);
+  const plain = runFocus();
+  expect(plain.exit, plain.stdout + plain.stderr).toBe(0);
+  put(
+    f.repository,
+    "vitest.config.ts",
+    'throw new Error("untracked config loaded");\n',
+  );
+  const unobserved = runFocus();
+  expect(unobserved.exit).not.toBe(0);
+  expect(unobserved.stderr).toContain("untracked config loaded");
+  observer(f, "engine");
+  const direct = runFocus();
+  expect(direct.exit, direct.stdout + direct.stderr).toBe(0);
+  const shim = observeIn(f, f.repository, "scripts/test.mjs", focus);
+  expect(shim.exit, shim.stdout + shim.stderr).toBe(0);
+});
+
 function refreshBuildReceipt(f) {
+  f.rows[1].sourceSha256 = contributorSourceDigest(f.repository);
   f.rows.at(-1).outputs = contributorBuildOutputs(f.repository);
   f.save();
 }
