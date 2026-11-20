@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { assemble, view, it0 } from "./repin-fixture.mjs";
-import { reassess, reviewInventory } from "./repin-core.mjs";
+import { prepareRepin, reassess, reviewInventory } from "./repin-core.mjs";
 import { hash, json } from "./support.mjs";
 
 const fixture = () =>
@@ -76,6 +76,24 @@ it("the current target cannot opt into the historical summary reader", () => {
     /Current report eval version is stale/,
   );
 });
+it.each(["thermite-draw-eval/1.0", "thermite-draw-eval/1.1"])(
+  "accepts a bound %s baseline with a 1.1 target and refuses a 1.0 target",
+  (format) => {
+    const c = fixture();
+    const baseline = { ...c.baselines.values().next().value, format };
+    const sha256 = hash(json(baseline));
+    c.baselines = new Map([[sha256, baseline]]);
+    c.decisions[0].baselineSha256 = sha256;
+    expect(c.report.format).toBe("thermite-draw-eval/1.1");
+    expect(reviewInventory(c).baselines).toEqual([{ sha256, instances: [] }]);
+    expect(prepareRepin(c).expected.exitCode).toBe(0);
+
+    c.report.format = "thermite-draw-eval/1.0";
+    c.reportSha256 = c.decisions[0].summarySha256 = hash(json(c.report));
+    expect(() => reviewInventory(c)).toThrow(/Unsupported report format/);
+    expect(() => prepareRepin(c)).toThrow(/Unsupported report format/);
+  },
+);
 it.each([
   "4.1",
   "4.2",

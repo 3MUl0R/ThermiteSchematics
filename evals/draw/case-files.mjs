@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import { open, readFile, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { strictJsonBytes } from "./strict-json.mjs";
@@ -47,13 +47,34 @@ export async function archiveCaseFiles(root) {
       [constants.ZSTD_c_checksumFlag]: 1,
     },
   });
-  // Keep loose evidence until the complete archive has been written.
-  await writeFile(join(root, CASE_FILES_FILENAME), packed, { flag: "wx" });
-  await Promise.all(paths.map((path) => unlink(join(root, path))));
+  assert(
+    zstdDecompressSync(packed, { maxOutputLength }).equals(raw),
+    "Case file archive failed compression verification",
+  );
+  const archivePath = join(root, CASE_FILES_FILENAME);
+  const archive = await open(archivePath, "wx");
+  try {
+    try {
+      await archive.writeFile(packed);
+    } finally {
+      await archive.close();
+    }
+    assert(
+      (await readFile(archivePath)).equals(packed),
+      "Case file archive failed read-back verification",
+    );
+  } catch (error) {
+    // Let checkpoint readers fall back to the loose evidence.
+    await unlink(archivePath).catch(() => {});
+    throw error;
+  }
+  for (const path of paths) await unlink(join(root, path));
 }
 
 export async function readCheckpointCaseFiles(root) {
   const packed = await readIfPresent(join(root, CASE_FILES_FILENAME));
+  // Bun can decode a truncated frame to partial bytes. Strict JSON parsing
+  // rejects a truncated JSON payload.
   const files =
     packed && strictJsonBytes(zstdDecompressSync(packed, { maxOutputLength }));
   return async (id, name) => {

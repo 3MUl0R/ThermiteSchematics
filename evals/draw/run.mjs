@@ -331,6 +331,17 @@ for (const [dq] of Object.entries(criteria))
       reason:
         "Infrastructure prevented measurement; see the infrastructure-error observation.",
     });
+if (!values.artifacts) {
+  try {
+    await archiveCaseFiles(dest);
+  } catch (error) {
+    rows.push({
+      id: "harness/case-archive",
+      status: "infrastructure-error",
+      reason: error.message.replaceAll(root, "<evals>"),
+    });
+  }
+}
 for (const row of rows.filter((r) => r.status === "infrastructure-error"))
   process.stderr.write(`${row.id}: ${row.reason}\n`);
 let code = exitCode(rows, values["report-only"]);
@@ -350,7 +361,6 @@ const report = {
   ...assessment,
   results: rows,
 };
-if (!values.artifacts) await archiveCaseFiles(dest);
 await gallery(dest, results, rows, reportFilename(values.artifacts));
 await writeFile(
   join(dest, "summary.md"),

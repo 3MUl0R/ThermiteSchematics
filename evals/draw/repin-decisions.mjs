@@ -6,10 +6,7 @@ export function processDecisionFile(context, file) {
   const {
     binding,
     baselines,
-    registry,
-    registrySha256,
-    specs,
-    validateReport,
+    validateBaseline,
     instanceInventory,
     DECISIONS_FORMAT,
   } = context;
@@ -42,7 +39,7 @@ export function processDecisionFile(context, file) {
   if (file.baselineSha256 !== undefined) {
     baseline = baselines.get(file.baselineSha256);
     assert(baseline, "Bound baseline bytes/hash not supplied");
-    validateReport(baseline, registry, registrySha256, specs);
+    validateBaseline(baseline);
   }
   const getOld = () => {
     if (oldInventory) return oldInventory;
@@ -50,9 +47,6 @@ export function processDecisionFile(context, file) {
       file.baselineSha256,
       "Rename/instance retirement needs a hash-bound baseline",
     );
-    baseline = baselines.get(file.baselineSha256);
-    assert(baseline, "Baseline bytes/hash not supplied");
-    validateReport(baseline, registry, registrySha256, specs);
     oldInventory = instanceInventory(baseline, file.baselineSha256);
     return oldInventory;
   };

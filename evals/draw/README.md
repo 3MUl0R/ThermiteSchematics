@@ -1124,7 +1124,10 @@ have no invented crop.
 `case-files.json.zst` stores the compact packet metadata, compiled IR, query
 reports, requests and CLI logs. Its decoded JSON object maps `case/filename`
 to the exact UTF-8 file contents. Packet metadata omits duplicate SVG/HTML
-strings. To read a member using the same reader as the checkpoint tools:
+strings. The runner verifies the compressed bytes in memory and on disk before
+removing the loose copies. An archive failure retains the loose evidence and
+records `harness/case-archive` in the report. To read a member using the same
+reader as the checkpoint tools:
 
 ```sh
 bun -e 'import { readCheckpointCaseFiles } from "./evals/draw/case-files.mjs";
@@ -1670,8 +1673,10 @@ The checker binding hashes a stable sorted list of every drawing-kit `.mjs`, `.j
 files exactly. A changed, removed or added module invalidates the target and its
 decisions; run a fresh full 4.4 report. Apply rechecks the bundle inside its lock.
 Every supplied `baselineSha256` is validated even if that file has no rename.
-Historical full baselines may have older compatible checkers; their raw bytes,
+Historical full baselines accept capture formats `thermite-draw-eval/1.0` and
+`thermite-draw-eval/1.1` and may have older compatible checkers. Their raw bytes,
 registry and full report are validated, including their own bundle when present.
+The active report requires capture format `thermite-draw-eval/1.1`.
 They are stored observations, not permission to run a stale target checker.
 After this hardening change merges, the checker bundle hash matches no existing
 C1, so a re-pin needs a fresh C1 target. Existing C1s can still be compatible
