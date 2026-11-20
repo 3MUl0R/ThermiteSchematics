@@ -183,7 +183,7 @@ export async function verifyCorpus(root, kitRoot, selection) {
     actual,
   };
 }
-export async function prepare(c, root, dest, cli) {
+export async function prepareProject(c, root, dest, cli) {
   let project = join(root, c.project);
   if (c.recipe) {
     project = join(dest, "project");
@@ -244,6 +244,10 @@ export async function prepare(c, root, dest, cli) {
     const lock = await cli(["lock", project]);
     if (lock.code !== 0) throw Error(`Fixture lock failed: ${lock.stderr}`);
   }
+  return project;
+}
+
+export async function prepareRequest(c, root) {
   let request =
     typeof c.request === "string"
       ? await readJson(join(root, c.request))
@@ -263,6 +267,12 @@ export async function prepare(c, root, dest, cli) {
   if (c.recipe === "field" && c.flow === "top-to-bottom")
     request.page = { ...request.page, orientation: "portrait" };
   applyPacketVariant(c, request);
+  return request;
+}
+
+export async function prepare(c, root, dest, cli) {
+  const project = await prepareProject(c, root, dest, cli);
+  const request = await prepareRequest(c, root);
   await mkdir(dest, { recursive: true });
   const input = join(dest, "request.json");
   await writeFile(input, json(request));

@@ -15,7 +15,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { gunzipSync } from "node:zlib";
 import { pngFixture } from "./png-fixture.mjs";
 import { hash, json } from "./support.mjs";
@@ -404,26 +403,18 @@ it.each([0, 86])(
       await writeFile(input, json(draft));
       await writeFile(index, json({ crops: [row] }));
       const run = (dest) =>
-        spawnSync(
-          "bun",
-          [
-            join(c.root, "evals/draw/repin-bind-crops.mjs"),
-            "--decisions",
-            input,
-            "--report",
-            join(c.out, "report.json"),
-            "--crop-index",
-            index,
-            "--output",
-            dest,
-          ],
-          { cwd: c.root, encoding: "utf8" },
+        c.runScript(
+          "repin-bind-crops.mjs",
+          "--decisions",
+          input,
+          "--report",
+          join(c.out, "report.json"),
+          "--crop-index",
+          index,
+          "--output",
+          dest,
         );
-      const noArgs = spawnSync(
-        "bun",
-        [join(c.root, "evals/draw/repin-bind-crops.mjs")],
-        { cwd: c.root, encoding: "utf8" },
-      );
+      const noArgs = c.runScript("repin-bind-crops.mjs");
       expect(noArgs.status).toBe(1);
       expect(noArgs.stderr).toMatch(
         /AssertionError(?: \[ERR_ASSERTION\])?: Supply --decisions/,
@@ -591,18 +582,14 @@ it("bind CLI refuses an evals/out symlink outside the workspace even without cro
     await writeFile(index, json({ crops: [] }));
     await rm(c.out, { recursive: true, force: true });
     await symlink(outside, c.out, "junction");
-    const r = spawnSync(
-      "bun",
-      [
-        join(c.root, "evals/draw/repin-bind-crops.mjs"),
-        "--decisions",
-        input,
-        "--crop-index",
-        index,
-        "--output",
-        join(c.out, "escape.json"),
-      ],
-      { cwd: c.root, encoding: "utf8" },
+    const r = c.runScript(
+      "repin-bind-crops.mjs",
+      "--decisions",
+      input,
+      "--crop-index",
+      index,
+      "--output",
+      join(c.out, "escape.json"),
     );
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("under");

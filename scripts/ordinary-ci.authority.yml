@@ -63,6 +63,16 @@ jobs:
       - run: bun run check
         env:
           THERMITE_RESEARCH_PYTHON: python
+          THERMITE_TEST_TIMINGS_FILE: ${{ runner.temp }}/thermite-test-timings.json
+      - name: Upload check durations
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-durations-check-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/thermite-test-timings.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: bun run package:pack
       - name: Verify Linux candidate without network access
         if: runner.os == 'Linux'
@@ -150,3 +160,13 @@ jobs:
         run: bun scripts/check-worktree.mjs
         env:
           THERMITE_RESEARCH_PYTHON: python
+          THERMITE_TEST_TIMINGS_FILE: ${{ runner.temp }}/thermite-test-timings.json
+      - name: Upload worktree durations
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-durations-worktree-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/thermite-test-timings.json
+          if-no-files-found: ignore
+          retention-days: 7
