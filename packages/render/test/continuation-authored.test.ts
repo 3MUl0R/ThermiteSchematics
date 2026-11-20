@@ -6,7 +6,7 @@ import { continuationOracle } from "./continuation-oracle.js";
 
 for (const jumpers of [false, true])
   it.each(flows)(
-    `preserves complete ${jumpers ? "unnamed jumper UIDs" : "literal printed numbers"} through physical cuts (%s)`,
+    `preserves ${jumpers ? "unnamed jumper provenance" : "literal printed numbers"} through physical cuts (%s)`,
     async (flow) => {
       const c = await continuationFixture(jumpers);
       try {
@@ -21,7 +21,8 @@ for (const jumpers of [false, true])
           links.some((l) =>
             jumpers
               ? l.provenance?.kind === "jumper" &&
-                l.conductor.startsWith("15400000-")
+                l.provenance.uid.startsWith("15400000-") &&
+                l.conductor === "JUMPER"
               : l.conductor === literalNumber,
           ),
         ).toBe(true);

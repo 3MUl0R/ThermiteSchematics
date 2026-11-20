@@ -50,6 +50,7 @@ export type DeviceNode = {
   verticalOffsetX: number;
   verticalScaleX: number;
   relationLabels: string[];
+  tagColumnCaptions: string[];
   sourceTerminalKeys: readonly string[];
   relations: {
     functionId: { deviceUid: string; functionKey: string };

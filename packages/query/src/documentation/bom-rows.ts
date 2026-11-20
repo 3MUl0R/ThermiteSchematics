@@ -1,4 +1,5 @@
 import type { DocumentationContext } from "./context.js";
+import { relationPrintIdentity } from "../print-projection.js";
 export function appendDeviceBom<T>(
   key: string,
   group: DocumentationContext<T>["orderedDevices"],
@@ -68,7 +69,7 @@ export function appendAssemblyBom<T>(
     deviceUids: [relation.fromDeviceUid, relation.toDeviceUid],
     cells: [
       "1",
-      relation.designation ?? relation.uid,
+      relationPrintIdentity(relation, devices).text,
       [
         devices.get(relation.fromDeviceUid)!.location,
         devices.get(relation.toDeviceUid)!.location,

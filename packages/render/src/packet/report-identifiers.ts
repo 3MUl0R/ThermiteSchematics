@@ -1,6 +1,10 @@
 import { reportSourceIndex } from "./report-source-index.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
-import { buildCableSchedule, type DocumentationTable } from "@thermite/query";
+import {
+  buildCableSchedule,
+  relationPrintIdentity,
+  type DocumentationTable,
+} from "@thermite/query";
 
 type Row = DocumentationTable["rows"][number];
 type Source = keyof typeof sources;
@@ -120,7 +124,7 @@ function sourceContext(
   const device = devices.get(uid ?? "");
   const relation = index.relations.get(row.key);
   const wire = index.wires.get(row.key);
-  const cable = uid === undefined ? undefined : index.cables.get(uid);
+  const cable = index.cables.get((kind === "bom" ? row.key : uid) ?? "");
   const endpoint = (t: TerminalId) =>
     `${deviceName(devices, t.deviceUid)}.${t.terminalKey}`;
   return {
@@ -186,7 +190,7 @@ function peer(c: Context): string[] {
     const from = r.fromDeviceUid === c.uid && a.fromPort === c.key;
     if (!from && !(r.toDeviceUid === c.uid && a.toPort === c.key)) return [];
     return [
-      r.designation ?? r.uid,
+      ...relationPrintIdentity(r, c.devices).identifiers,
       `${deviceName(c.devices, from ? r.toDeviceUid : r.fromDeviceUid)}.${from ? a.toPort : a.fromPort}`,
     ];
   });
@@ -225,12 +229,12 @@ function linkEnd(c: Context, column: number): string[] {
 const sources = {
   cell: (c, i) => [c.row.cells[i]],
   bom: (c, i) => {
-    const entity = [...c.ir.cables, ...c.ir.relations].find(
-      (e) => e.uid === c.row.key,
+    if (c.relation)
+      return relationPrintIdentity(c.relation, c.devices).identifiers;
+    if (c.cable) return [c.cable.designation];
+    const names = c.row.deviceUids.map(
+      (uid) => c.devices.get(uid)?.designation,
     );
-    const names = entity
-      ? [entity.designation ?? entity.uid]
-      : c.row.deviceUids.map((uid) => c.devices.get(uid)?.designation);
     // A private, caller-built table can supply a single designation directly.
     return names.length ? names : [c.row.cells[i]];
   },
@@ -261,7 +265,8 @@ const sources = {
     c.key ? c.device?.connectorIo?.ports[c.key]?.address : undefined,
   ],
   peer,
-  link: (c) => (c.relation ? [c.relation.designation ?? c.relation.uid] : []),
+  link: (c) =>
+    c.relation ? relationPrintIdentity(c.relation, c.devices).identifiers : [],
   linkEnd,
   devices: (c) =>
     c.row.deviceUids.map((uid) => c.devices.get(uid)?.designation),

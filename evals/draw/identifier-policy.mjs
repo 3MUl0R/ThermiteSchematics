@@ -1,4 +1,5 @@
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+import { nativeRelationReference } from "./relation-reference.mjs";
 function communicationEndpoint(ir, uid, key, policy) {
   const d = ir.devices.find((d) => d.uid === uid);
   return policy.projection === "legacy"
@@ -73,7 +74,7 @@ function keyParts(key) {
     return [];
   }
 }
-function portUnits(ir, row, column) {
+function portUnits(ir, row, column, policy) {
   const [uid, port] = keyParts(row.key),
     device = ir.devices.find((d) => d.uid === uid);
   if (!device)
@@ -96,7 +97,7 @@ function portUnits(ir, row, column) {
       (d) => d.uid === (isFrom ? r.toDeviceUid : r.fromDeviceUid),
     );
     return [
-      r.designation ?? r.uid,
+      ...nativeRelationReference(ir, r, policy).units,
       `${peer.designation}.${isFrom ? a.toPort : a.fromPort}`,
     ];
   });
@@ -114,7 +115,7 @@ function relationUnits(ir, row, column, kind, policy) {
         ]
       : [];
   }
-  if (column === 0) return [r.designation ?? r.uid];
+  if (column === 0) return nativeRelationReference(ir, r, policy).units;
   const connection = r.assembly ?? r.connection;
   const d = ir.devices.find(
     (d) => d.uid === (column === 2 ? r.fromDeviceUid : r.toDeviceUid),
@@ -180,10 +181,12 @@ function channelUnits(ir, row, column) {
       `${ir.devices.find((d) => d.uid === t.deviceUid).designation}.${t.terminalKey}`,
   );
 }
-function names(ir, row) {
-  const entity = [...ir.cables, ...ir.relations].find((e) => e.uid === row.key);
-  return entity
-    ? [entity.designation ?? entity.uid]
+function names(ir, row, policy) {
+  const relation = ir.relations.find((r) => r.uid === row.key);
+  if (relation) return nativeRelationReference(ir, relation, policy).units;
+  const cable = ir.cables.find((c) => c.uid === row.key);
+  return cable
+    ? [cable.designation]
     : row.deviceUids.map(
         (uid) => ir.devices.find((d) => d.uid === uid)?.designation,
       );
@@ -268,9 +271,9 @@ function wireUnits(ir, row, column) {
 }
 function units(source, ir, row, column, kind, policy) {
   if (source === "cell") return [row.cells[column]];
-  if (source === "names") return names(ir, row);
+  if (source === "names") return names(ir, row, policy);
   if (source === "references") return row.cells[column].split("; "); // engine-generated entries
-  if (source === "port") return portUnits(ir, row, column);
+  if (source === "port") return portUnits(ir, row, column, policy);
   if (source === "relation")
     return relationUnits(ir, row, column, kind, policy);
   if (source === "channel") return channelUnits(ir, row, column);

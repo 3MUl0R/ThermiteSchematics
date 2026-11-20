@@ -7,6 +7,7 @@ import { circuitLandingAnchors } from "./landing-anchors.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { IrFunction } from "@thermite/compiler";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
+import { relatedCaptionWidth } from "../symbols/circuit-relations.js";
 
 import type { CircuitPins } from "./layout-input.js";
 import type { CircuitLabelState } from "./layout-routes.js";
@@ -68,14 +69,24 @@ export function circuitDrawingResult(
   diagnostics: Diagnostic[],
 ) {
   const { graph, group, nodes, laidNodes, circuitDeviceTags } = state;
+  const relatedCaption = nodes
+    .flatMap((node) =>
+      [...node.relationLabels, ...node.tagColumnCaptions].map((text) => ({
+        designation: node.device.designation,
+        text,
+        requiredWidthMm: relatedCaptionWidth(text) + 4,
+      })),
+    )
+    .sort((a, b) => b.requiredWidthMm - a.requiredWidthMm)[0];
   const drawing = {
     id: group.id,
-    label: group.label ?? group.id,
+    label: group.label ?? "",
     ...(diagnostics.length ? { diagnostics } : {}),
     ...(group.lineReference ? { lineReference: group.lineReference } : {}),
     width: graph.width!,
     height: graph.height!,
     deviceTags: circuitDeviceTags(nodes),
+    ...(relatedCaption ? { relatedCaption } : {}),
     content: `<g data-circuit-group="${attr(group.id)}"${group.lineReference ? ` data-source-line-reference="${attr(group.lineReference)}"` : ""}>${contents}</g>`,
     references: nodes.map((d) => {
       const l = laidNodes.get(d.id)!;

@@ -32,6 +32,9 @@ export function documentationBomTable<T>(context: DocumentationContext<T>) {
           : []),
       ].join(" "),
       ...(typeNote() ? [typeNote()] : []),
+      ...(rows.some((r) => !r.cells[1]?.trim())
+        ? ["Blank assembly references need review against the source."]
+        : []),
     ],
   );
 }

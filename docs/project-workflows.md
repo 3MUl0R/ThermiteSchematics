@@ -24,10 +24,11 @@ sheet (R006 otherwise).
 The packet JSON's `html` is byte-identical to the standalone `.html` export,
 including print fonts.
 
-Cards name omissions. Continuations: intact ID + peer `sheet.zone`,
-2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form/bank, 2.5 mm gap. Audit with circuit/wiring views
-and packet coverage.
+Cards name omissions. Continuations print the intact identity and peer `sheet.zone`
+at 2.5 mm. Unnamed jumpers print `JUMPER` with the reciprocal reference.
+Use one form per bank and a 2.5 mm gap. Audit with circuit/wiring views and packet coverage.
 Flows may fold retained strips.
+Network and assembly reports use the authored designation, then the printed endpoint pair, then the authored description. A blank reference needs source review.
 One caption/terminal appearance, nearest its body; keep exact landings and split captions.
 Omit net ink only when its anchored terminal prints the same name.
 

@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import type { ElectricalIr } from "@thermite/compiler";
-import { prepareCircuitView, type CircuitViewRequest } from "../src/circuit.js";
+import {
+  circuitFunctionAppearances,
+  prepareCircuitView,
+  type CircuitViewRequest,
+} from "../src/circuit.js";
+import { deviceTagFitDetails } from "../src/packet/device-tag-fit.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { circuitMark } from "../src/symbols/circuit.js";
 import { printableTextMetrics } from "../src/symbols/printable-font.js";
@@ -18,7 +23,111 @@ beforeAll(async () => {
   ir = await compileCoreFixture();
 });
 
+it.each([
+  ["Contactor command and interlocks", "Contactor command and interlocks"],
+  [undefined, "Motor control"],
+])(
+  "projects a related-function destination using the authored label %s",
+  async (label, caption) => {
+    const view = controlCircuitView();
+    const control = {
+      ...view,
+      groups: view.groups.map(
+        ({ lineReference: _reference, label: _label, ...group }) => ({
+          ...group,
+          ...(label ? { label } : {}),
+        }),
+      ),
+    };
+    const packet = await renderSchematicPacket(ir, {
+      format: "schematic-packet-request/0.1",
+      views: [motorCircuitView(), control],
+    });
+    if (!packet.ok) throw Error(JSON.stringify(packet.error));
+    const motor = parseHTML(packet.value.sheets[0]!.svg).document;
+    const footers = [
+      ...motor.querySelectorAll("[data-related-functions] > text"),
+    ]
+      .map((t) => t.textContent)
+      .join(" ");
+    expect(footers).toContain(`coil: ${caption}`);
+    expect(footers).not.toContain("coil: motor-control");
+    const controlSheet = packet.value.sheets.find(
+      (sheet) => "title" in sheet.view && sheet.view.title === view.title,
+    )!;
+    expect(controlSheet.svg).not.toContain(">motor-control</text>");
+  },
+);
+
 describe("source-selected circuit views", () => {
+  it("wraps the full authored related-function label without widening the vertical symbol body", async () => {
+    const flow = "top-to-bottom";
+    const view = {
+      ...controlCircuitView(),
+      flow,
+      groups: [
+        {
+          id: "coil",
+          functions: [
+            { device: { by: "designation", value: "K1" }, key: "coil" },
+          ],
+          conductors: [],
+        },
+      ],
+    } satisfies CircuitViewRequest;
+    const label =
+      "Contactor auxiliary feedback to the operator station after completion of the starter command";
+    const peer = {
+      ...view,
+      title: label,
+      groups: [
+        {
+          ...view.groups[0]!,
+          id: "aux",
+          label,
+          functions: [
+            { device: { by: "designation", value: "K1" }, key: "aux13" },
+          ],
+        },
+      ],
+    } satisfies CircuitViewRequest;
+    const draw = async (destination: CircuitViewRequest) =>
+      (
+        await prepareCircuitView(
+          ir,
+          view,
+          circuitFunctionAppearances(ir, [view, destination]),
+        )
+      ).groups[0]!;
+    const compact = await draw(peer);
+    const plain = await prepareCircuitView(ir, view);
+    const doc = parseHTML(compact.content).document;
+    const owner = doc.querySelector("[data-circuit-tag-lane]")!;
+    const captions = [...owner.querySelectorAll(":scope > text")];
+    expect(captions.length).toBeGreaterThan(1);
+    expect(captions.map((t) => t.textContent).join(" ")).toBe(
+      `13–14: ${label}`,
+    );
+    expect(owner.getAttribute("data-circuit-body-width")).toBe(
+      parseHTML(plain.groups[0]!.content)
+        .document.querySelector("[data-circuit-tag-lane]")!
+        .getAttribute("data-circuit-body-width"),
+    );
+    expect(compact.width).toBe(plain.groups[0]!.width);
+
+    const widerLine = await draw({
+      ...peer,
+      groups: [{ ...peer.groups[0]!, lineReference: "Separate interlock row" }],
+    });
+    const fit = deviceTagFitDetails(widerLine, 20, 200);
+    expect(fit.relatedCaption).toMatchObject({
+      designation: "K1",
+      text: "13–14: Separate interlock row",
+    });
+    expect(fit.message).toContain("A shorter group lineReference");
+    expect(fit.message).not.toContain("largest tag reservation");
+  });
+
   it("keeps external jumper labels beside their own ELK routes and clear of module return wiring", async () => {
     const f = await jumperChainCircuitFixture();
     try {

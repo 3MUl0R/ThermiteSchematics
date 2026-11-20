@@ -169,18 +169,14 @@ it("reads cable designation and full core ID without display colour/size", () =>
     printedConductor({ conductor: "CBL1.1+" }, { ...r, cables: [] }),
   ).toBeNull();
 });
-it("uses jumper designation, or JUMPER and the full authored UID", () => {
+it("uses jumper designation or JUMPER, with the UID kept in provenance", () => {
   const uid = "0ec3cac2-1423-4d4c-9e50-e1ca2c489ced",
     r = { jumpers: [{ uid, designation: "JP1" }] };
   expect(printedConductor({ conductor: "JP1" }, r).text).toBe("JP1");
   const un = { jumpers: [{ uid }] },
     expected = printedConductor({ conductor: "jumper:" + uid }, un);
   expect(
-    identityMatches(
-      [row("C001 / 02.A1"), row("JUMPER", 44), row(uid, 48)],
-      c,
-      expected,
-    ),
+    identityMatches([row("C001 / 02.A1"), row("JUMPER", 44)], c, expected),
   ).toBe(true);
   expect(
     identityMatches(
@@ -336,19 +332,15 @@ it("requires every associated PDF run to have its own finite font size", () => {
       ),
     ).toThrow(/actual font size/);
 });
-it("accepts a full undesignated jumper identity on one body row", () => {
+it("accepts an undesignated jumper identity on one inline row", () => {
   const uid = "0ec3cac2-1423-4d4c-9e50-e1ca2c489ced",
     expected = printedConductor(
       { conductor: "jumper:" + uid },
       { jumpers: [{ uid }] },
     );
-  expect(
-    identityMatches(
-      [row("C001 / 02.A1"), row("JUMPER " + uid, 44)],
-      c,
-      expected,
-    ),
-  ).toBe(true);
+  expect(identityMatches([row("C001 / 02.A1 / JUMPER")], c, expected)).toBe(
+    true,
+  );
 });
 
 it.each([
@@ -384,8 +376,7 @@ it.each([
   const body = prefix === "JUMPER " ? prefix + uid.slice(0, 8) : prefix + uid;
   expect(
     identityMatches([row("C001 / 02.A1"), row(body, 44)], c, {
-      undesignated: true,
-      uid,
+      text: "JUMPER",
     }),
   ).toBe(false);
 });

@@ -52,8 +52,7 @@ function conductorName(ir, row) {
   if (id.kind === "cable_conductor")
     return `${ir.cables.find((c) => c.uid === id.cableUid)?.designation}.${id.conductorId}`;
   return id.kind === "jumper"
-    ? (ir.jumpers.find((j) => j.uid === id.uid)?.designation ??
-        `jumper:${id.uid}`)
+    ? (ir.jumpers.find((j) => j.uid === id.uid)?.designation ?? "Jumper")
     : row.name;
 }
 

@@ -144,7 +144,7 @@ function conductorLabel(
         "edge",
         edgeId,
         "conductor",
-        jumper.designation ?? `jumper:${jumper.uid}`,
+        jumper.designation ?? "Jumper",
         jumper.designation === undefined
           ? []
           : [

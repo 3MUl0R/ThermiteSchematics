@@ -134,7 +134,7 @@ export function authoredTerminalIncidence(ir: Readonly<ElectricalIr>) {
   for (const j of ir.jumpers)
     builder.add(
       { kind: "jumper", uid: j.uid },
-      j.designation ?? `jumper:${j.uid}`,
+      j.designation ?? "Jumper",
       [j.endpoints[0].terminal, j.endpoints[1].terminal],
       j.designation
         ? [textSource("jumper", [j.uid], "jumper.designation", j.designation)]

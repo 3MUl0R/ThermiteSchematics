@@ -66,7 +66,7 @@ function bridgeLabels(
           identity: j.uid,
           peer,
           sameLocation: group.device.location !== undefined,
-          label: `B${index + 1} ${j.designation ?? `Jumper ${j.uid}`} → ${group.device.designation}.${peer.terminalKey}`,
+          label: `B${index + 1} ${j.designation ?? "Jumper"} → ${group.device.designation}.${peer.terminalKey}`,
           bridge: { uid: j.uid, end, token: `B${index + 1}` },
         },
       ];

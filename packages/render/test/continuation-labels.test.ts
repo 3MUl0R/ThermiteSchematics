@@ -31,7 +31,7 @@ it("uses authored printed wire number with designation kept separately", () => {
   expect(continuationIdentity(wire())?.conductor).toBe("W1");
   expect(continuationIdentity(wire(""))).toBeUndefined();
 });
-it("retains full authored jumper UID without a synthetic designation", () => {
+it("retains the unnamed jumper UID in provenance", () => {
   const edge = {
     ...wire(),
     elementIds: [
@@ -44,8 +44,7 @@ it("retains full authored jumper UID without a synthetic designation", () => {
     },
   } as PresentationEdge;
   expect(continuationIdentity(edge)).toEqual({
-    conductor: edge.conductor!.kind === "jumper" ? edge.conductor!.uid : "",
-    descriptor: "JUMPER",
+    conductor: "JUMPER",
     provenance: edge.elementIds[0],
   });
 });
@@ -191,14 +190,12 @@ it("prints both visible rows of a multiline continuation without a hidden substi
   expect(svg).not.toContain("textLength");
 });
 
-it("prints only JUMPER and the literal full UID on identity rows", () => {
-  const uid = "15400000-0000-4000-8000-000000000201";
+it("prints JUMPER with the continuation reference", () => {
   const link = {
     id: "C001",
     to: 2,
     toZone: "B1",
-    conductor: uid,
-    descriptor: "JUMPER",
+    conductor: "JUMPER",
     netId: "N",
     x: 60,
     y: 70,
@@ -210,7 +207,7 @@ it("prints only JUMPER and the literal full UID on identity rows", () => {
       .slice(1)
       .map((r) => r.text)
       .join(""),
-  ).toBe("JUMPER" + uid);
+  ).toBe("JUMPER");
   const svg = continuationLabelSvg({ ...link, label });
   expect(svg).toContain(">JUMPER</text>");
   expect(svg).not.toContain("no designation");

@@ -32,28 +32,27 @@ function zoneAt(sheet: RenderedSheet, x: number, y: number) {
 function authored(ir: ElectricalIr, c: RenderedSheet["continuations"][number]) {
   const p = c.provenance;
   if (!p) throw Error("No source provenance");
+  let identity: string, designation: string | undefined;
   if (p.kind === "wire") {
     const w = ir.wires.find((w) => w.uid === p.uid);
     if (!w) throw Error("Unknown source wire");
-    return {
-      identity: w.properties?.label ?? w.designation,
-      designation: w.designation,
-    };
-  }
-  if (p.kind === "jumper") {
+    identity = w.properties?.label ?? w.designation;
+    designation = w.designation;
+  } else if (p.kind === "jumper") {
     const j = ir.jumpers.find((j) => j.uid === p.uid);
     if (!j) throw Error("Unknown jumper");
-    return { identity: j.designation ?? j.uid, designation: j.designation };
+    identity = j.designation ?? "JUMPER";
+    designation = j.designation;
+  } else {
+    const cable = ir.cables.find((c) => c.uid === p.cableUid),
+      core = ir.cableConductors.find(
+        (c) =>
+          c.id.cableUid === p.cableUid && c.id.conductorId === p.conductorId,
+      );
+    if (!cable || !core) throw Error("Unknown cable core");
+    identity = designation = `${cable.designation}.${p.conductorId}`;
   }
-  const cable = ir.cables.find((c) => c.uid === p.cableUid),
-    core = ir.cableConductors.find(
-      (c) => c.id.cableUid === p.cableUid && c.id.conductorId === p.conductorId,
-    );
-  if (!cable || !core) throw Error("Unknown cable core");
-  return {
-    identity: `${cable.designation}.${p.conductorId}`,
-    designation: `${cable.designation}.${p.conductorId}`,
-  };
+  return { identity, designation };
 }
 /** Reads actual strings and stroke anchors; neither the formatter nor its zone
  * and identity helpers participate in the expected result. */
@@ -100,19 +99,11 @@ export function continuationOracle(ir: ElectricalIr, packet: RenderedPacket) {
       if (
         c.conductor !== source.identity ||
         c.designation !== source.designation ||
-        body !==
-          (c.provenance?.kind === "jumper" && c.designation === undefined
-            ? "JUMPER" + source.identity
-            : source.identity)
+        body !== source.identity
       )
         throw Error(`Wrong printed source identity ${body}`);
       const identityRows =
-        m[4] !== undefined
-          ? [m[4]]
-          : rows
-              .slice(1)
-              .filter((r) => r.textContent !== "JUMPER")
-              .map((r) => r.textContent);
+        m[4] !== undefined ? [m[4]] : rows.slice(1).map((r) => r.textContent);
       if (identityRows.length !== 1 || identityRows[0] !== source.identity)
         throw Error("Authored conductor identity is not one line unit");
       const forms = [...root.querySelectorAll('a[href^="#sheet-"]')].map(

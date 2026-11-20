@@ -3,7 +3,12 @@ import {
   channelRowSlots,
   TERMINAL_TEXT_SIZE,
 } from "../symbols/circuit-text.js";
-import { relationCaptionPlan } from "../symbols/circuit-relations.js";
+import {
+  CIRCUIT_TAG_COLUMN_WIDTH,
+  LONG_CIRCUIT_DESTINATION_WIDTH,
+  relatedCaptionWidth,
+  relationCaptionPlan,
+} from "../symbols/circuit-relations.js";
 import { printableTextMetrics } from "../symbols/printable-font.js";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "../symbols/profiles.js";
@@ -72,6 +77,7 @@ type GeometryState = BuildState & {
   bodyHeight: number;
   priorWidth: number;
   printableRelated: string[];
+  tagColumnCaptions: string[];
   relations: DeviceNode["relations"];
   height: number;
   verticalOffsetX: number;
@@ -410,10 +416,27 @@ function nodeRelations(state: BuildState, width: number) {
       )!,
     ),
   }));
-  const related = relationCaptionPlan(captions, width);
-  width = related.width;
-  const printableRelated = related.lines;
-  return { width, priorWidth, printableRelated, relations };
+  // In vertical flow, a long caption can share the tag's column without
+  // competing with the lower terminal approaches in the symbol's footer.
+  const useTagColumn =
+    state.vertical &&
+    captions.some(
+      (caption) =>
+        relatedCaptionWidth(caption.destination) >
+        LONG_CIRCUIT_DESTINATION_WIDTH,
+    );
+  const related = relationCaptionPlan(
+    captions,
+    width,
+    useTagColumn ? CIRCUIT_TAG_COLUMN_WIDTH : undefined,
+  );
+  return {
+    width: useTagColumn ? width : related.width,
+    priorWidth,
+    printableRelated: useTagColumn ? [] : related.lines,
+    tagColumnCaptions: useTagColumn ? related.lines : [],
+    relations,
+  };
 }
 
 function nodeVerticalScale(state: GeometryState) {
@@ -595,6 +618,7 @@ function nodeResult(
     verticalOffsetX,
     verticalScaleX,
     printableRelated,
+    tagColumnCaptions,
     selectedSourceTerminals,
     ir,
     uid,
@@ -616,6 +640,7 @@ function nodeResult(
     verticalOffsetX,
     verticalScaleX,
     relationLabels: printableRelated,
+    tagColumnCaptions,
     sourceTerminalKeys: selectedSourceTerminals(ir, uid, type),
     relations,
     gangs,

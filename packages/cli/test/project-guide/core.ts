@@ -1146,7 +1146,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.",
+        "Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.",
       async check() {
         const project = ctx.pristine.starter;
         expect((await createViewLoads()).stdout.length).toBeGreaterThanOrEqual(

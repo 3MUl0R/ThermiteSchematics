@@ -18,17 +18,18 @@ export function circuitTextLines(
   value: string,
   width: number,
   size = TERMINAL_TEXT_SIZE,
+  lineWidth = measure,
 ): string[] {
   const lines: string[] = [];
   let line = "";
   for (const word of value.split(/\s+/u)) {
-    if (line && measure(`${line} ${word}`, size) > width) {
+    if (line && lineWidth(`${line} ${word}`, size) > width) {
       lines.push(line);
       line = "";
     }
-    if (measure(word, size) > width) {
+    if (lineWidth(word, size) > width) {
       for (const c of word) {
-        if (measure(line + c, size) > width) {
+        if (lineWidth(line + c, size) > width) {
           lines.push(line);
           line = "";
         }

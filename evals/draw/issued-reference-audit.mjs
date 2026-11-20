@@ -1,3 +1,4 @@
+import { nativeRelationReference } from "./relation-reference.mjs";
 import { assemblyAppearances } from "./assembly-appearances.mjs";
 import { portId } from "./assembly-note-source.mjs";
 import { issuedRows } from "./m3-documents.mjs";
@@ -49,7 +50,7 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
               candidate.zone &&
               sufficient(candidate, expected),
           );
-        const assembly = r.designation ?? r.uid;
+        const assembly = nativeRelationReference(ir, r).text;
         const ownerLabel = `${ir.devices.find((d) => d.uid === uid)?.designation}.${key}`;
         const label = `${ownerLabel} · ${assembly}`;
         const rowZone = endpointZone(packet, geometries, row, ownerLabel);

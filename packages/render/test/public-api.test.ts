@@ -62,6 +62,7 @@ describe("render public package boundaries", () => {
       "parseProjectSnapshot",
       "printedPort",
       "printedPortEndpoint",
+      "relationPrintIdentity",
       "resolveDeviceFilter",
       "reviewProject",
       "serializeQueryResult",

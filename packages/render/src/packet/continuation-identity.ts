@@ -40,8 +40,7 @@ function authoredIdentity(
           provenance: { ...source },
         }
       : {
-          conductor: c.uid,
-          descriptor: "JUMPER",
+          conductor: "JUMPER",
           provenance: { ...source },
         };
   }

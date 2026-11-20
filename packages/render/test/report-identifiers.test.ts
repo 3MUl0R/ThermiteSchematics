@@ -1,7 +1,11 @@
 import { beforeAll, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
-import { buildDocumentation, type DocumentationTable } from "@thermite/query";
+import {
+  buildDocumentation,
+  relationPrintIdentity,
+  type DocumentationTable,
+} from "@thermite/query";
 import {
   reportIdentifiers,
   REPORT_IDENTIFIER_COLUMNS,
@@ -12,6 +16,64 @@ import { tableDrafts } from "../src/packet/reports.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { wrapReportCell } from "../src/packet/report-wrapping.js";
 import { expectedIdentifierCells } from "../../../evals/draw/identifier-policy.mjs";
+import { renderSchematicPacket } from "../src/sheets.js";
+
+it("issues port references for undesignated network links and assemblies", async () => {
+  const compiled = await compileProject("examples/report-filtering");
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const { ir } = compiled;
+  const network = ir.relations.find((r) => r.designation === "NET1")!;
+  const assembly = ir.relations.find((r) => r.designation === "ASM1")!;
+  delete network.designation;
+  delete assembly.designation;
+  network.description = "Authored link description";
+  const result = await renderSchematicPacket(ir, {
+    format: "schematic-packet-request/0.1",
+    views: (["network", "assemblies", "bom", "io-ports"] as const).map(
+      (kind) => ({
+        format: "documentation-view-request/0.1",
+        kind,
+      }),
+    ),
+  });
+  if (!result.ok) throw Error(JSON.stringify(result.error));
+  for (const [kind, relation, column, units] of [
+    ["network", network, 1, ["PLC1: ETH", "DOC1: IN"]],
+    ["assemblies", assembly, 1, ["PLC1.X1", "S1.P"]],
+    ["bom", assembly, 2, ["PLC1.X1", "S1.P"]],
+  ] as const) {
+    const sheet = result.value.sheets.find(
+      (s) => "kind" in s.view && s.view.kind === kind,
+    )!;
+    const doc = parseHTML(sheet.svg).document;
+    const ink = [
+      ...doc.querySelectorAll(
+        `[data-report-row="${relation.uid}"] [data-report-column="${column}"] text`,
+      ),
+    ]
+      .map((t) => t.textContent)
+      .join(" ");
+    expect(ink).toBe(units.join(" ↔ "));
+  }
+  const ports = result.value.sheets.find(
+    (s) => "kind" in s.view && s.view.kind === "io-ports",
+  )!;
+  expect(ports.svg).toContain("PLC1.X1");
+  expect(ports.svg).toContain("S1.P");
+  expect(ports.svg).not.toContain(`>${assembly.uid}`);
+
+  const missing = new Map();
+  expect(relationPrintIdentity(network, missing)).toEqual({
+    text: network.description,
+    identifiers: [],
+  });
+  expect(
+    relationPrintIdentity({ ...network, description: " " }, missing),
+  ).toEqual({
+    text: "",
+    identifiers: [],
+  });
+});
 
 const orders = [
   "6ES7131-6BF01-0BA0",

@@ -140,8 +140,7 @@ const FLAG_BINDINGS: readonly {
     commands: () => ["validate", "lock"],
   },
   {
-    sentence:
-      "Save large outputs to files: `create-view` returns tens of KB, `inspect` several KB; `view`/`packet`/`report` without `-o` print whole HTML documents.",
+    sentence: "Use `-o` for `view`/`packet`/`report` HTML.",
     fragment: "-o",
     commands: () => ["view", "packet", "report"],
   },

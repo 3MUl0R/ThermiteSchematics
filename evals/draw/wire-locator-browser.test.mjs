@@ -387,8 +387,8 @@ it("keeps a real schematic landing, and rejects a mislabeled inventory row", asy
 });
 
 it.each([
-  ["Jumper", "Jumper"],
-  [undefined, "Jumper w"],
+  ["JP1", "JP1"],
+  [undefined, "Jumper"],
 ])(
   "uses the native jumper designation (authored %s)",
   async (designation, caption) => {

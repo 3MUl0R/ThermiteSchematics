@@ -1,4 +1,5 @@
 export { requireReportCells } from "./identifier-errors.mjs";
+export { internalVocabulary } from "./printed-vocabulary.mjs";
 import { netLabelFindings } from "./net-label-oracle.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
@@ -201,9 +202,6 @@ export function symbolIsolation(symbols) {
 }
 export function functionKeys(g, ir, context = {}) {
   return vocabularyFindings(g, ir, context, issue).functions;
-}
-export function internalVocabulary(g, ir, context = {}) {
-  return vocabularyFindings(g, ir, context, issue).internal;
 }
 export function deviceTags(g, ir, references, schematic, view) {
   return schematic ? deviceTagFindings(g, ir, references, issue, view) : [];

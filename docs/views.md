@@ -259,9 +259,8 @@ are resolved after folding, empty-cell omission and packet composition.
 
 A wire uses its authored `properties.label` when present, otherwise its
 `designation`; cable cores use `cable.core`, and designated jumpers use their
-designation. An undesignated jumper is explicitly identified by its full authored
-UID, preceded only by `JUMPER` and a space or row break. Net names, hashes, color
-and size never substitute for these identities.
+designation. An undesignated jumper prints `JUMPER` beside its reciprocal
+continuation reference. Its UID remains in source-element provenance.
 Continuation metadata retains `conductor` as that printed identity and adds
 `designation` when authored, `toZone`, source-element `provenance` and reciprocal
 `end` (0 or 1). Existing request and packet format versions are unchanged.

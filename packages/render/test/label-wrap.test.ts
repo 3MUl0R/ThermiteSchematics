@@ -156,7 +156,7 @@ it.each([
   ["wire printed number", "LS1-RETURN-PLC1-DI0", undefined],
   ["cable core", "CBL-LONG.1-RETURN", undefined],
   ["jumper designation", "JP-CONTROL-RETURN", undefined],
-  ["undesignated jumper", uuid, "JUMPER"],
+  ["undesignated jumper", "JUMPER", undefined],
 ] as const)(
   "emits exact identity-only rows for %s",
   (_name, conductor, descriptor) => {

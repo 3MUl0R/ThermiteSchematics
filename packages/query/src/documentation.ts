@@ -208,8 +208,8 @@ function buildDocumentationTable(
   };
   for (const w of [...ir.wires, ...ir.jumpers]) {
     const [a, b] = w.endpoints.map((e) => e.terminal);
-    add(a!, b!, w.designation ?? `Jumper ${w.uid}`);
-    add(b!, a!, w.designation ?? `Jumper ${w.uid}`);
+    add(a!, b!, w.designation ?? "Jumper");
+    add(b!, a!, w.designation ?? "Jumper");
   }
   const cables = [...ir.cables]
     .sort((a, b) => compare(a.designation, b.designation))

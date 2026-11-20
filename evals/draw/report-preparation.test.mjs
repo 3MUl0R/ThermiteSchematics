@@ -76,17 +76,25 @@ it("the current target cannot opt into the historical summary reader", () => {
     /Current report eval version is stale/,
   );
 });
-it.each(["4.1", "4.2", "4.9", "5.0", "5.2", "5.14", "5.15", "5.31", "5.32"])(
-  "preserves exact complete-summary baseline support for %s",
-  (version) => {
-    const c = fixture(),
-      baseline = [...c.baselines.values()][0];
-    baseline.evalsVersion = version;
-    expect(() => reviewInventory(c)).not.toThrow();
-    delete baseline.summary["DQ-07"]["not-applicable"];
-    expect(() => reviewInventory(c)).toThrow(/summary does not match/);
-  },
-);
+it.each([
+  "4.1",
+  "4.2",
+  "4.9",
+  "5.0",
+  "5.2",
+  "5.14",
+  "5.15",
+  "5.31",
+  "5.32",
+  "5.33",
+])("preserves exact complete-summary baseline support for %s", (version) => {
+  const c = fixture(),
+    baseline = [...c.baselines.values()][0];
+  baseline.evalsVersion = version;
+  expect(() => reviewInventory(c)).not.toThrow();
+  delete baseline.summary["DQ-07"]["not-applicable"];
+  expect(() => reviewInventory(c)).toThrow(/summary does not match/);
+});
 it.each(["not-applicable", "not-measured"])(
   "missing nonzero historical %s counter refuses",
   (status) => {

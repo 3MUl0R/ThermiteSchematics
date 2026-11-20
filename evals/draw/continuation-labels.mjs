@@ -11,7 +11,7 @@ export function printedConductor(c, ir = {}) {
     ...(ir.jumpers ?? []).map((j) => ({
       kind: "jumper",
       uid: j.uid,
-      text: j.designation,
+      text: j.designation ?? "JUMPER",
       undesignated: !j.designation,
       names: [j.uid, j.designation, "jumper:" + j.uid],
     })),
@@ -151,14 +151,6 @@ export function identityMatches(rows, c, expected) {
     .map((t) => (t === reference ? header.body : (t.renderedString ?? t.text)))
     .filter((t) => t.length);
   const body = parts.join("");
-  if (expected.undesignated) {
-    // A measured row break supplies the separator; UID wrapping preserves bytes.
-    const jumper = parts.join("\n");
-    return (
-      /^JUMPER\s+/.test(jumper) &&
-      jumper.replace(/^JUMPER\s+/, "").replace(/\n/g, "") === expected.uid
-    );
-  }
   return body === expected.text;
 }
 // Associate PDF fragments by physical row geometry, independently of their

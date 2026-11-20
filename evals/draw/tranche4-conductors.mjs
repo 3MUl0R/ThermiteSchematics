@@ -4,7 +4,7 @@ export function wireRecord(w, kind) {
     key: w.uid,
     kind,
     designation: w.designation,
-    primary: w.properties?.label ?? w.designation ?? `JUMPER ${w.uid}`,
+    primary: w.properties?.label ?? w.designation ?? "JUMPER",
     aliases: [
       ...(w.aliases ?? []).filter((x) => typeof x === "string"),
       ...(!w.designation && kind === "jumper" ? ["Jumper", "jumper"] : []),
