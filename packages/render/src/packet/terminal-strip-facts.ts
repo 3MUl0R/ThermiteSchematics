@@ -119,7 +119,7 @@ export function stripFacts(
       add(
         j.endpoints.map((e) => e.terminal),
         j.uid,
-        j.designation ?? `Jumper ${j.uid}`,
+        j.designation ?? "Jumper",
       );
   // Use the inventory's physical/assignment union, including single-ended spares.
   for (const c of ir.cables)

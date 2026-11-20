@@ -156,6 +156,8 @@ try {
   // infer source identifiers from the report cell that is being measured.
   const identifierPolicy = {
     projection: typeof query.printedPort === "function" ? "authored" : "legacy",
+    relationIdentity:
+      typeof query.relationPrintIdentity === "function" ? "authored" : "legacy",
   };
   // Sheet SVGs in packet JSON carry only font family references. Apply the
   // built CLI's deterministic font delivery step before measuring standalone SVGs.

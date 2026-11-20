@@ -21,6 +21,11 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Version **5.34 (IDENT1)** extends **DQ-05** (#469). It measures raw UUIDs
+in painted text and circuit group keys in headings and related-function
+destinations, using the request's authored labels and references to resolve
+the latter. Complete 5.33 summaries remain readable.
+
 Version **5.33 (STUB1)** extends **DQ-03** (#463) and **DQ-02** (#470).
 DQ-03 fails when measured continuous symbol strokes connect same-side stubs
 from distinct native nets on a device face. DQ-02 requires 0.34 mm of clearance
@@ -1415,7 +1420,7 @@ Prefer separate `<text>` rows.
 
 The expected printed identity comes independently from IR: a wire's authored
 `properties.label` when present, otherwise its designation; cable designation
-plus full core ID; a jumper's designation, or `JUMPER`, whitespace/a row break, and its full authored UID.
+plus full core ID; a jumper's designation, or `JUMPER` with the reciprocal continuation reference.
 Unknown/ambiguous/synthetic sources refuse identity; no net/display-detail
 fallback supplies a name. Existing conductor strings can identify an IR element;
 optional `sourceElement: {kind:"wire"|"jumper",uid}` or

@@ -1,3 +1,4 @@
+import { nativeRelationReference } from "./relation-reference.mjs";
 import { m3Delivery } from "./m3-delivery.mjs";
 import { zoneAt } from "./checks.mjs";
 import { createHash } from "node:crypto";
@@ -112,7 +113,7 @@ function portFacts(ir, uids) {
       },
     ],
     required: {
-      0: [r.designation ?? r.uid],
+      0: [nativeRelationReference(ir, r).text],
       1: [r.connection.protocol].filter(Boolean),
 
       4: [r.connection.status ?? "Unspecified"],
@@ -317,7 +318,7 @@ export function pointerDependencies(sheet, g, ir) {
           },
         ],
         required: {
-          0: [r.designation ?? r.uid],
+          0: [nativeRelationReference(ir, r).text],
           4: [
             `${r.assembly.status ?? "Unspecified"}\nPin mapping: ${r.assembly.pinMapping?.status}\n${r.assembly.pinMapping?.reason}`,
           ],

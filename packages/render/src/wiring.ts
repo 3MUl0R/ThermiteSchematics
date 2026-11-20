@@ -197,9 +197,9 @@ function wiringConductors(ir: Readonly<ElectricalIr>) {
     })),
     ...ir.jumpers.map((w) => ({
       id: w.uid,
-      name: w.designation ?? w.uid,
+      name: w.designation,
       ends: w.endpoints.map((e) => e.terminal),
-      detail: "Jumper",
+      detail: w.designation ? "Jumper" : "",
       jumper: true,
     })),
     ...ir.cableConductors.map((w) => ({
@@ -410,8 +410,8 @@ function wiringEdges(state: WiringState) {
     targets: [ports.get(key(w.ends[1]!))!],
     labels: [
       {
-        text: w.name,
-        width: Math.max(width(w.name), width(w.detail)) + 2,
+        text: w.name ?? "Jumper",
+        width: Math.max(width(w.name ?? "Jumper"), width(w.detail)) + 2,
         height: w.detail ? 8 : 4,
       },
     ],
@@ -430,7 +430,7 @@ function appendWiringRoutes(
     const conductor = required(selected[i], "Missing native wiring identity");
     if (!edge.sections?.length) throw new Error("Incomplete wiring route.");
     out.push(
-      `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(conductor.id)}" data-endpoints="${attr(JSON.stringify(conductor.ends))}"><title>${xml(conductor.name + (conductor.detail ? " / " + conductor.detail : ""))}</title>`,
+      `<g ${routePortAttributes(edge)} data-wiring-conductor="${attr(conductor.id)}" data-endpoints="${attr(JSON.stringify(conductor.ends))}"><title>${xml((conductor.name ?? "Jumper") + (conductor.detail ? " / " + conductor.detail : ""))}</title>`,
     );
     for (const section of edge.sections)
       appendWiringSection(section, i, selected, nodes, routes, out);

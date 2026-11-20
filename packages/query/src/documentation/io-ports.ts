@@ -1,4 +1,5 @@
 import { buildConnectorAssemblyInventory } from "../connector-assemblies.js";
+import { relationPrintIdentity } from "../print-projection.js";
 import type { DocumentationContext } from "./context.js";
 export function appendConnectorPort<T>(
   port: ReturnType<typeof buildConnectorAssemblyInventory>["ports"][number],
@@ -51,7 +52,7 @@ export function appendConnectorPort<T>(
         .filter(Boolean)
         .join("\n"),
       relation
-        ? `${relation.designation ?? relation.uid} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
+        ? `${relationPrintIdentity(relation, devices).text} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
         : "Unoccupied",
       assembly
         ? `${assembly.pinMapping.status}\n${assembly.pinMapping.reason}`

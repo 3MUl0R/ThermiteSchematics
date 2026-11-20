@@ -31,7 +31,7 @@ it("uses direct authored identity, including parallel wires, jumpers and every s
         "CBL1.2 → unterminated (spare)",
         "JP1 → TB1.1",
         "W4 → H1.X2",
-        "jumper:84000000-0000-4000-8000-000000000021 → TB1.2",
+        "Jumper → TB1.2",
       ].sort(),
     );
     expect(

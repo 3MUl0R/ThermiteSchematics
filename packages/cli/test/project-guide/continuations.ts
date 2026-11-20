@@ -203,7 +203,7 @@ const module: FactModule = {
 
     {
       claim:
-        "Cards name omissions. Continuations: intact ID + peer `sheet.zone`, 2.5 mm; unnamed jumpers: `JUMPER` + full UID; one form/bank, 2.5 mm gap.",
+        "Cards name omissions. Continuations print the intact identity and peer `sheet.zone` at 2.5 mm. Unnamed jumpers print `JUMPER` with the reciprocal reference. Use one form per bank and a 2.5 mm gap.",
       async check() {
         const c = await compileProject("examples/motor-starter");
         if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
@@ -251,18 +251,13 @@ const module: FactModule = {
             ],
           });
           if (!j.ok) throw Error(JSON.stringify(j.error));
-          noteJson(
-            j.value.sheets.flatMap((s) =>
-              [...parseSvg(s.svg).querySelectorAll("a text")].map(
-                (t) => t.textContent,
-              ),
-            ),
+          const names = j.value.sheets.flatMap((s) =>
+            s.continuations.map((link) => link.conductor),
           );
+          noteJson(names);
+          expect(names).toContain("JUMPER");
           expect(continuationOracle(jumper.ir, j.value).ends).toBeGreaterThan(
             0,
-          );
-          expect(j.value.sheets.map((s) => s.svg).join("\n")).toContain(
-            ">JUMPER</text>",
           );
         } finally {
           await jumper.dispose();

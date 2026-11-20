@@ -1,4 +1,5 @@
 import { buildConnectorAssemblyInventory } from "../connector-assemblies.js";
+import { relationPrintIdentity } from "../print-projection.js";
 import type { DocumentationContext } from "./context.js";
 export function appendAssembly<T>(
   relation: ReturnType<
@@ -14,7 +15,7 @@ export function appendAssembly<T>(
     key: relation.uid,
     deviceUids: [from.uid, to.uid],
     cells: [
-      relation.designation ?? relation.uid,
+      relationPrintIdentity(relation, devices).text,
       [
         a.kind,
         a.cable?.specification,
@@ -70,6 +71,9 @@ export function documentationAssemblies<T>(context: DocumentationContext<T>) {
     [
       "Assembly links reserve connector ports only; they do not create physical conductors or join electrical nets.",
       "Library pin descriptions do not supply a cable's missing pin mapping. Connector compatibility and installation remain engineering review items.",
+      ...(rows.some((r) => !r.cells[0]?.trim())
+        ? ["Blank assembly references need review against the source."]
+        : []),
     ],
   );
 }

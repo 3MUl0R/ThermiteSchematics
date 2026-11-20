@@ -19,7 +19,7 @@ export function measuredStripAppearances(packet, geometries, ir, rows) {
     ir.devices.map((device) => [device.uid, device.designation]),
   );
   const jumperNames = new Map(
-    (ir.jumpers ?? []).map((j) => [j.uid, j.designation ?? `Jumper ${j.uid}`]),
+    (ir.jumpers ?? []).map((j) => [j.uid, j.designation ?? "Jumper"]),
   );
   for (const row of rows)
     for (const [end, terminal] of row.ends.entries()) {

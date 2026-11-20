@@ -18,7 +18,10 @@ import {
 import type { TopologyDrawingCoverage } from "./topology-coverage.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElectricalIr } from "@thermite/compiler";
-import { buildConnectorAssemblyInventory } from "@thermite/query";
+import {
+  buildConnectorAssemblyInventory,
+  relationPrintIdentity,
+} from "@thermite/query";
 import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
@@ -239,7 +242,7 @@ function assemblyLayoutState(
     captions = new Map<string, string[]>(),
     rows = new Map<string, AssemblyRow[]>();
   const tags = new Map<string, DeviceTagPlan>();
-  const edgeCaptions = links.map((r) => assemblyEdgeCaption(r));
+  const edgeCaptions = links.map((r) => assemblyEdgeCaption(r, devices));
   return {
     request,
     selection,
@@ -260,9 +263,12 @@ function assemblyLayoutState(
   };
 }
 
-function assemblyEdgeCaption(r: AssemblyLink) {
+function assemblyEdgeCaption(
+  r: AssemblyLink,
+  devices: ReadonlyMap<string, ElectricalIr["devices"][number]>,
+) {
   return [
-    r.designation ?? r.uid,
+    relationPrintIdentity(r, devices).text || "Assembly reference needs review",
     ...wrap(
       r.assembly.cable?.specification ??
         (r.assembly.kind === "cap" ? "Protective cap" : "Direct mating"),

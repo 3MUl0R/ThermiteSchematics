@@ -68,6 +68,7 @@ import {
   circuitDrawingResult,
 } from "./circuit/layout-drawing.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
+import { circuitPartReferences } from "./circuit/part-references.js";
 import type { PhysicalConductor, Pin, DeviceNode } from "./circuit/types.js";
 
 export interface CircuitFunctionSelector {
@@ -603,7 +604,7 @@ export function circuitFunctionAppearances(
     for (const g of request.groups)
       for (const f of selectedFunctions(ir, g)) {
         const labels = result.get(fkey(f)) ?? [];
-        const label = g.lineReference ?? g.id;
+        const label = g.lineReference ?? g.label ?? request.title;
         if (!labels.includes(label)) labels.push(label);
         result.set(fkey(f), labels);
       }
@@ -760,10 +761,12 @@ export async function paginateCircuitGroup(
           fs.filter((f) => cluster.has(fkey(f))),
         ),
       );
-  const label = (id: string) => {
-    const [uid, terminal] = JSON.parse(id) as [string, string];
-    return `${ir.devices.find((d) => d.uid === uid)!.designation}.${terminal}`;
-  };
+  const references = circuitPartReferences(
+    ir,
+    request,
+    fs.map(fkey),
+    appearances ?? circuitFunctionAppearances(ir, [request]),
+  );
   const widest = Number("8".repeat(String(units.length).length));
   const draw = async (items: Unit[], part: number, total: number) => {
     const chosen = new Set(items.flatMap((u) => u.fs.map(fkey)));
@@ -774,27 +777,18 @@ export async function paginateCircuitGroup(
       items.flatMap((u) => u.cs),
       all,
       request.flow === "top-to-bottom",
-      appearances ?? circuitFunctionAppearances(ir, [request]),
+      references.appearances,
       request.terminalLayout === "distributed",
     );
-    drawing.label = `${original.label} - Part ${part}/${total}`;
+    drawing.label = `${original.label ? original.label + " - " : ""}Part ${part}/${total}`;
     drawing.pagination = {
       part,
       total,
-      terminals: drawing.coverage.terminalIds.flatMap((id) => {
-        const count = units.filter(
-          (u) => !items.includes(u) && u.terminals.has(id),
-        ).length;
-        return count
-          ? [
-              {
-                id,
-                label: label(id),
-                parts: Array.from({ length: count }, () => widest),
-              },
-            ]
-          : [];
-      }),
+      terminals: references.terminals(drawing.coverage.terminalIds, (id) =>
+        units
+          .filter((u) => !items.includes(u) && u.terminals.has(id))
+          .map(() => widest),
+      ),
     };
     return drawing;
   };
@@ -818,13 +812,12 @@ export async function paginateCircuitGroup(
   for (const [i, items] of parts.entries())
     drawings.push(await draw(items, i + 1, parts.length));
   for (const drawing of drawings) {
-    drawing.pagination!.terminals = drawing.coverage.terminalIds.flatMap(
-      (id) => {
-        const targets = drawings
+    drawing.pagination!.terminals = references.terminals(
+      drawing.coverage.terminalIds,
+      (id) =>
+        drawings
           .filter((d) => d !== drawing && d.coverage.terminalIds.includes(id))
-          .map((d) => d.pagination!.part);
-        return targets.length ? [{ id, label: label(id), parts: targets }] : [];
-      },
+          .map((d) => d.pagination!.part),
     );
     drawing.content = `<g data-circuit-part="${drawing.pagination!.part}" data-circuit-parts="${parts.length}">${drawing.content}</g>`;
     if (!fits(drawing)) throw circuitPartFitError(group.id, drawing, fitBounds);

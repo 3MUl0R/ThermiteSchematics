@@ -40,7 +40,7 @@ export function nativeStrip(ir, deviceUids) {
     )
     .map((j) => ({
       uid: j.uid,
-      name: j.designation ?? `Jumper ${j.uid}`,
+      name: j.designation ?? "Jumper",
       peers: j.endpoints.map(
         (e) =>
           `${ir.devices.find((d) => d.uid === e.terminal.deviceUid).designation}.${e.terminal.terminalKey}`,
@@ -72,7 +72,7 @@ export function nativeStrip(ir, deviceUids) {
       add(
         j.endpoints.map((e) => e.terminal),
         j.uid,
-        j.designation ?? `Jumper ${j.uid}`,
+        j.designation ?? "Jumper",
       );
   nativeCableIncidences(ir, add);
   return { groups, terminals, bridges, incidences };

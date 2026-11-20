@@ -23,7 +23,7 @@ it.each(flows)(
       if (o.kind === "wire" || o.kind === "jumper")
         facts.push({
           key: `${o.kind}:${o.uid}`,
-          name: o.designation ?? `jumper:${o.uid}`,
+          name: o.designation ?? "Jumper",
           ends: o.endpoints.map(endpoint),
         });
       if (o.kind === "cable")
@@ -103,17 +103,13 @@ it.each(flows)(
     }
     expect(annotations).toHaveLength(2);
     expect(omitted).toBe(7);
-    for (const text of [
-      "CBL1.1",
-      "CBL1.2",
-      "jumper:84000000-0000-4000-8000-000000000021",
-    ])
-      expect(
-        annotations
-          .flatMap((g) =>
-            [...g.querySelectorAll(".off-view-row")].map((t) => t.textContent),
-          )
-          .join(""),
-      ).toContain(text);
+    const rows = annotations
+      .flatMap((g) =>
+        [...g.querySelectorAll(".off-view-row")].map((t) => t.textContent),
+      )
+      .join("");
+    for (const text of ["CBL1.1", "CBL1.2", "Jumper"])
+      expect(rows).toContain(text);
+    expect(rows).not.toContain("84000000-0000-4000-8000-000000000021");
   },
 );

@@ -70,7 +70,7 @@ export function circuitDrawingResult(
   const { graph, group, nodes, laidNodes, circuitDeviceTags } = state;
   const drawing = {
     id: group.id,
-    label: group.label ?? group.id,
+    label: group.label ?? "",
     ...(diagnostics.length ? { diagnostics } : {}),
     ...(group.lineReference ? { lineReference: group.lineReference } : {}),
     width: graph.width!,

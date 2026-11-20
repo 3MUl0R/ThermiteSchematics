@@ -1,4 +1,7 @@
-import { printedPortEndpoint } from "../print-projection.js";
+import {
+  printedPortEndpoint,
+  relationPrintIdentity,
+} from "../print-projection.js";
 import { buildCommunicationInventory } from "../communication.js";
 import type { DocumentationContext } from "./context.js";
 export function appendNetworkLink<T>(
@@ -12,7 +15,7 @@ export function appendNetworkLink<T>(
   rows.push({
     key: link.uid,
     cells: [
-      link.designation ?? link.uid,
+      relationPrintIdentity(link, devices, options?.output).text,
       [
         c.protocol,
         c.cable?.specification,
@@ -83,6 +86,9 @@ export function documentationNetwork<T>(context: DocumentationContext<T>) {
     [
       "Port-level connections only; no pin wiring, electrical nets, or automatic protocol compatibility.",
       "Unconnected ports are not inferred spare. Planned links require commissioning verification.",
+      ...(rows.some((r) => !r.cells[0]?.trim())
+        ? ["Blank link references need review against the source."]
+        : []),
     ],
   );
 }

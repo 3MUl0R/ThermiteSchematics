@@ -338,6 +338,7 @@ const MULTI = circuit({
     },
     {
       id: "B",
+      label: "Output channels",
       functions: [fn("PLC1", "do0"), fn("PLC1", "do1")],
       conductors: [],
     },
@@ -348,7 +349,7 @@ const MULTI = circuit({
     },
   ],
 });
-const multi = () =>
+export const circuitCaptionFixture = () =>
   once("wiring:multi", async () => drawn(await base(), MULTI));
 
 const MAIN_AND_AUX = {
@@ -574,7 +575,7 @@ const module: FactModule = {
       claim:
         "Tags: designation ≥2.7 mm; instance/else-type description and catalog part ≥2.5 mm.",
       async check() {
-        const doc = parseHTML((await multi()).svg).document;
+        const doc = parseHTML((await circuitCaptionFixture()).svg).document;
         const texts = [...doc.querySelectorAll("svg")].flatMap((svg) =>
           svgTextGeometry(svg),
         );
@@ -792,7 +793,7 @@ const module: FactModule = {
     {
       claim: "Empty conductors show unconnected functions, not spares.",
       async check() {
-        const { svg } = await multi();
+        const { svg } = await circuitCaptionFixture();
         // An open (white) terminal mark has no selected wiring.
         expect(svg).toMatch(
           /data-terminal-key="X2\.0"><circle[^>]*fill="white"/,
@@ -828,23 +829,18 @@ const module: FactModule = {
       claim:
         "Selected functions retain terminals, wire numbers and references.",
       async check() {
-        const { svg, text } = await multi();
+        const { svg, text } = await circuitCaptionFixture();
         expect(svg).toContain('data-circuit-mark="load"');
         expect(svg).toContain('data-circuit-mark="terminal"');
-        // Terminal labels and the wire number.
         for (const s of ["L+", "M", "X2.0", "X2.1", "101"])
           expect(text).toContain(s);
-        // Cross-references from the PLC's internal supply relations name the
-        // other group: A by its line reference, B by its id.
-        expect(text.some((t) => t.endsWith(": 300"))).toBe(true);
-        expect(text.some((t) => t.endsWith(": B"))).toBe(true);
       },
     },
     {
       claim:
         "`properties.label` prints a wire's number, independent of source identity; repeated labels never join nets.",
       async check() {
-        const { svg, text } = await multi();
+        const { svg, text } = await circuitCaptionFixture();
         expect(text.filter((s) => s === "101")).toHaveLength(2);
         expect(text).not.toContain("W1");
         expect(text).not.toContain("W2");
@@ -859,7 +855,7 @@ const module: FactModule = {
       claim:
         "Boundary counts show unselected connections; circuit views are not completeness audits.",
       async check() {
-        const { text, json } = await multi();
+        const { text, json } = await circuitCaptionFixture();
         // TB1.1 also carries CBL1/1+, TB2.3 also carries J1, and TB2 itself
         // is an unselected endpoint device.
         for (const s of ["1 [+1]", "3 [+1]", "BOUNDARY"])

@@ -1,6 +1,8 @@
 import { bindsStripReference } from "./strip-reference-vocabulary.mjs";
 import { isAuthoredReportText } from "./authored-report-fields.mjs";
 import { isRoleReferenceCaption } from "./contact-role-vocabulary.mjs";
+import { machineIdentityFindings } from "./machine-identities.mjs";
+import { reportIssue } from "./report-checks.mjs";
 // Independent visible projection oracle. Never import renderer/query formatters.
 // Metadata identifies a candidate owner, not an exemption. Resolve it to source
 // and require the complete measured field to equal independently derived facts.
@@ -449,7 +451,7 @@ function sourceProse(ir, t, context, g) {
     if (group) {
       const expected = [
         group.lineReference ? `Ref. ${group.lineReference}` : undefined,
-        group.label ?? group.id,
+        group.label,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -649,4 +651,11 @@ export function vocabularyFindings(g, ir, context = {}, issue) {
       );
   }
   return { functions, internal };
+}
+
+export function internalVocabulary(g, ir, context = {}) {
+  return [
+    ...vocabularyFindings(g, ir, context, reportIssue).internal,
+    ...machineIdentityFindings(g, context, reportIssue),
+  ];
 }

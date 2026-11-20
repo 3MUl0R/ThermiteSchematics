@@ -6,7 +6,7 @@ export const criteria = {
   "DQ-04":
     "Glyphs and qualifiers match the selected standard; contact-state captions agree with native function/symbol roles; protection-role captions carry no NO/NC state",
   "DQ-05":
-    "No IR function key printed by default. Terminal strip references bind their printed device and final sheet / zone to a measured native strip body",
+    "No raw UUID, unmapped circuit group key or IR function key printed by default. Terminal strip references bind their printed device and final sheet / zone to a measured native strip body",
   "DQ-06": "Device designation, description and authored rating/part",
   "DQ-07":
     "Full-repeat navigation, coil mirrors and contact-to-coil sheet.zone match IR",

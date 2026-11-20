@@ -5,7 +5,7 @@ import { continuationBanks } from "../src/packet/continuation-bank.js";
 import { continuationLabel } from "../src/packet/continuation-label.js";
 import type { PreparedSchematicDrawing } from "../src/renderer.js";
 
-it("reserves the full identity and keeps one uniform form in each bank", () => {
+it("reserves the printed jumper caption and keeps one uniform form in each bank", () => {
   const uid = "15400000-0000-4000-8000-000000000202";
   const prepared = {
     graph: {
@@ -40,7 +40,10 @@ it("reserves the full identity and keeps one uniform form in each bank", () => {
       0.25,
     );
     expect(banks).toHaveLength(2);
-    expect(banks.every((b) => b.width >= labelMetrics(uid).width)).toBe(true);
+    expect(banks.every((b) => b.width >= labelMetrics("JUMPER").width)).toBe(
+      true,
+    );
+    expect(banks.every((b) => b.width < labelMetrics(uid).width)).toBe(true);
     expect(new Set(banks.map((b) => JSON.stringify(b))).size).toBe(
       banks.length,
     );
@@ -110,7 +113,7 @@ it.each([
   },
 );
 
-it("counts the JUMPER descriptor row in the top bank height", () => {
+it("counts the JUMPER caption row in the top bank height", () => {
   const uid = "15400000-0000-4000-8000-000000000202",
     seed = vi
       .spyOn(plans, "rootedGrids")
@@ -126,8 +129,7 @@ it("counts the JUMPER descriptor row in the top bank height", () => {
         id: "C999",
         to: 100,
         toZone: "D6",
-        conductor: uid,
-        descriptor: "JUMPER",
+        conductor: "JUMPER",
         netId: "N",
         x: 100,
         y: 100,
@@ -136,11 +138,7 @@ it("counts the JUMPER descriptor row in the top bank height", () => {
       bank.width,
       bank.headerWidth,
     );
-    expect(label.rows.map((r) => r.text)).toEqual([
-      "C999 / 100.D6",
-      "JUMPER",
-      uid,
-    ]);
+    expect(label.rows.map((r) => r.text)).toEqual(["C999 / 100.D6", "JUMPER"]);
     const top = Math.min(
         ...label.rows.map((r) => r.y - labelMetrics(r.text).top),
       ),

@@ -18,6 +18,42 @@ beforeAll(async () => {
   ir = await compileCoreFixture();
 });
 
+it.each([
+  ["Contactor command and interlocks", "Contactor command and interlocks"],
+  [undefined, "Motor control"],
+])(
+  "projects a related-function destination using the authored label %s",
+  async (label, caption) => {
+    const view = controlCircuitView();
+    const control = {
+      ...view,
+      groups: view.groups.map(
+        ({ lineReference: _reference, label: _label, ...group }) => ({
+          ...group,
+          ...(label ? { label } : {}),
+        }),
+      ),
+    };
+    const packet = await renderSchematicPacket(ir, {
+      format: "schematic-packet-request/0.1",
+      views: [motorCircuitView(), control],
+    });
+    if (!packet.ok) throw Error(JSON.stringify(packet.error));
+    const motor = parseHTML(packet.value.sheets[0]!.svg).document;
+    const footers = [
+      ...motor.querySelectorAll("[data-related-functions] > text"),
+    ]
+      .map((t) => t.textContent)
+      .join(" ");
+    expect(footers).toContain(`coil: ${caption}`);
+    expect(footers).not.toContain("coil: motor-control");
+    const controlSheet = packet.value.sheets.find(
+      (sheet) => "title" in sheet.view && sheet.view.title === view.title,
+    )!;
+    expect(controlSheet.svg).not.toContain(">motor-control</text>");
+  },
+);
+
 describe("source-selected circuit views", () => {
   it("keeps external jumper labels beside their own ELK routes and clear of module return wiring", async () => {
     const f = await jumperChainCircuitFixture();

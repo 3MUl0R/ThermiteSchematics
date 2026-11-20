@@ -1,3 +1,4 @@
+import { nativeRelationReference } from "./relation-reference.mjs";
 import { terminalKey, factKey } from "./m3-facts.mjs";
 export {
   terminalKey,
@@ -190,20 +191,21 @@ function appendRelationRows(ir, rows) {
     const c = r.connection ?? r.assembly;
     if (!c) continue;
     const network = !!r.connection;
+    const identity = nativeRelationReference(ir, r).text;
     const status = network
       ? { requiredStatus: [c.status ?? nativeEmptyState("unspecified-status")] }
       : assemblyStatus(c);
     rows.push({
       kind: network ? "network" : "assemblies",
       key: r.uid,
-      name: r.designation ?? r.uid,
+      name: identity,
       facts: network
         ? [port(r.fromDeviceUid, c.fromPort), port(r.toDeviceUid, c.toPort)]
         : assemblyFacts(r),
       ownerUid: r.fromDeviceUid,
       ...(status.sourceGap ? { sourceGap: status.sourceGap } : {}),
       required: {
-        0: [r.designation ?? r.uid],
+        0: [identity],
         1: network
           ? [
               [

@@ -6,6 +6,9 @@ import { ctx, ok, repositoryRoot, type Fact } from "./harness.js";
 import { guideModel, type Fence, type GuideModel } from "./guide-model.js";
 import { topicExecution } from "../../../../scripts/docs-example-evidence.mjs";
 import { PROJECT_GUIDE_BYTE_LIMIT } from "../../src/project-guide-budget.js";
+import { compileProject } from "@thermite/compiler";
+import { buildDocumentation, relationPrintIdentity } from "@thermite/query";
+import { circuitCaptionFixture } from "./wiring-circuits.js";
 
 const guidePath = join(
   repositoryRoot,
@@ -20,6 +23,52 @@ const workflows = guideModel(
 export const live = guideModel(projectGuide.text + "\n" + workflows.text);
 
 export const workflowFacts: readonly Fact[] = [
+  {
+    claim: "Set group `label` or `lineReference` for circuit captions.",
+    async check() {
+      const { text } = await circuitCaptionFixture();
+      expect(text.some((t) => t.endsWith(": 300"))).toBe(true);
+      expect(text.some((t) => t.endsWith(": Output channels"))).toBe(true);
+    },
+  },
+  {
+    claim:
+      "Network and assembly reports use the authored designation, then the printed endpoint pair, then the authored description. A blank reference needs source review.",
+    async check() {
+      const result = await compileProject(
+        join(repositoryRoot, "examples/report-filtering"),
+      );
+      if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+      for (const [kind, designation, endpoints] of [
+        ["network", "NET1", "PLC1: ETH ↔ DOC1: IN"],
+        ["assemblies", "ASM1", "PLC1.X1 ↔ S1.P"],
+      ] as const) {
+        const { ir } = result;
+        const relation = ir.relations.find(
+          (r) => r.designation === designation,
+        )!;
+        const cell = () =>
+          buildDocumentation(ir, {
+            format: "documentation-view-request/0.1",
+            kind,
+          }).rows.find((r) => r.key === relation.uid)?.cells[0];
+        expect(cell()).toBe(designation);
+        delete relation.designation;
+        expect(cell()).toBe(endpoints);
+        const unavailable = new Map();
+        expect(
+          relationPrintIdentity(
+            { ...relation, description: "Authored description" },
+            unavailable,
+          ).text,
+        ).toBe("Authored description");
+        expect(
+          relationPrintIdentity({ ...relation, description: "" }, unavailable)
+            .text,
+        ).toBe("");
+      }
+    },
+  },
   {
     claim:
       "The packet JSON's `html` is byte-identical to the standalone `.html` export, including print fonts.",

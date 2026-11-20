@@ -1,4 +1,5 @@
 import type { ElectricalIr } from "@thermite/compiler";
+import { relationPrintIdentity } from "@thermite/query";
 import { bounds } from "./page.js";
 import { required } from "../presentation/util.js";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
@@ -96,12 +97,14 @@ function attachmentEntries(
   {
     parts,
     inventory,
+    devices,
     drawn,
     rows,
     targetCell,
   }: {
     parts: readonly Part[];
     inventory: Geometry["inventory"];
+    devices: ReadonlyMap<string, ElectricalIr["devices"][number]>;
     drawn: ReadonlyMap<number, ReadonlySet<string>>;
     rows: ReturnType<typeof inventoryAssemblyRows>;
     targetCell: (
@@ -128,7 +131,7 @@ function attachmentEntries(
       .flatMap((p) =>
         p.ports.filter((candidate) => candidate.id === port.id),
       )[0];
-    const assemblyName = assembly.designation ?? assembly.uid;
+    const assemblyName = relationPrintIdentity(assembly, devices).text;
     const ownerLabel = `${native.designation}.${native.key}`;
     const owned = {
       identity: [port.deviceUid, port.portKey, assembly.uid],
@@ -217,12 +220,14 @@ export function assemblyPeerReferences(
     ]),
   );
   const rows = inventoryAssemblyRows(documents);
+  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
   return sheets.map((sheet) => {
     const part = parts.find((p) => p.sheet === sheet.number);
     if (!part) return sheet;
     const entries = attachmentEntries(part, {
       parts,
       inventory,
+      devices,
       drawn,
       rows,
       targetCell: (r, n) => assemblyEndpointCell(r, n, drafts, sheets, page),

@@ -41,14 +41,15 @@ const loads = {
   intent: { kind: "loads" },
 } as const;
 
-it("preserves the query-compatible unnamed-jumper label and data designation", async () => {
+it("prints a jumper caption while preserving source identity in attributes", async () => {
   for (const flow of ["left-to-right", "top-to-bottom"] as const) {
     const result = await renderSchematic(ir, { ...loads, flow });
     expect(result.ok, JSON.stringify(result.ok ? null : result.error)).toBe(
       true,
     );
     if (!result.ok) throw Error(result.error.message);
-    expect(result.value.svg).toContain(`>jumper:${jumperUid}</text>`);
+    expect(result.value.svg).toContain(">Jumper</text>");
+    expect(result.value.svg).not.toContain(`>jumper:${jumperUid}</text>`);
     expect(result.value.svg).toContain(
       `data-designation="jumper:${jumperUid}"`,
     );

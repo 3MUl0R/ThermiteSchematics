@@ -87,4 +87,5 @@ export {
   formatTerminalSet,
   printedPort,
   printedPortEndpoint,
+  relationPrintIdentity,
 } from "./print-projection.js";

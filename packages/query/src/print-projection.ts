@@ -1,4 +1,31 @@
-import type { ElectricalIr, IrDeviceType } from "@thermite/compiler";
+import type {
+  ElectricalIr,
+  IrDevice,
+  IrDeviceType,
+  IrProjectRelation,
+} from "@thermite/compiler";
+
+/** Report identity and its indivisible printed markings for a source relation. */
+export function relationPrintIdentity(
+  relation: Readonly<IrProjectRelation>,
+  devices: ReadonlyMap<string, Pick<IrDevice, "designation">>,
+  output?: "print" | "csv",
+) {
+  const designation = relation.designation?.trim();
+  if (designation) return { text: designation, identifiers: [designation] };
+  const ports = relation.assembly ?? relation.connection;
+  const from = devices.get(relation.fromDeviceUid)?.designation;
+  const to = devices.get(relation.toDeviceUid)?.designation;
+  if (from && to && ports?.fromPort && ports.toPort) {
+    const separator = relation.connection && output !== "csv" ? ": " : ".";
+    const identifiers = [
+      `${from}${separator}${ports.fromPort}`,
+      `${to}${separator}${ports.toPort}`,
+    ];
+    return { text: identifiers.join(" ↔ "), identifiers };
+  }
+  return { text: relation.description?.trim() ?? "", identifiers: [] };
+}
 
 /** A shared letter prefix plus separated integer suffixes reads as a range. */
 function rangeLikePair(terminals: readonly string[]) {
