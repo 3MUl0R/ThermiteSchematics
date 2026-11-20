@@ -184,7 +184,7 @@ test("a transient Windows sharing violation preserves atomic status updates", as
   const f = fixture(t, [{}]);
   let blocked = false;
   const code = await runBatch(parseArgs(["--batch", f.batch]), {
-    platform: "win32",
+    statusPlatform: "win32",
     renameStatus(source, destination) {
       if (!blocked && existsSync(destination)) {
         blocked = true;
@@ -204,3 +204,49 @@ test("a transient Windows sharing violation preserves atomic status updates", as
     false,
   );
 });
+
+for (const { name, statusPlatform, expectedAttempts } of [
+  {
+    name: "Windows status replacement stops after exhausting its retries",
+    statusPlatform: "win32",
+    expectedAttempts: 10,
+  },
+  {
+    name: "non-Windows status replacement does not retry EPERM",
+    statusPlatform: "linux",
+    expectedAttempts: 1,
+  },
+]) {
+  test(name, async (t) => {
+    const f = fixture(t, [{}]);
+    const statusPath = join(f.batch, "status.json");
+    const failure = Object.assign(new Error("synthetic replacement failure"), {
+      code: "EPERM",
+    });
+    let snapshot;
+    let attempts = 0;
+    await assert.rejects(
+      runBatch(parseArgs(["--batch", f.batch]), {
+        statusPlatform,
+        renameStatus(source, destination) {
+          if (snapshot === undefined) {
+            renameSync(source, destination);
+            snapshot = readFileSync(destination, "utf8");
+            return;
+          }
+          attempts++;
+          throw failure;
+        },
+      }),
+      (error) => error === failure,
+    );
+    assert.equal(attempts, expectedAttempts);
+    assert.equal(readFileSync(statusPath, "utf8"), snapshot);
+    assert.equal(f.status().jobs[0].state, "queued");
+    assert.equal(existsSync(f.trace), false);
+    assert.equal(
+      readdirSync(f.batch).some((entry) => entry.endsWith(".tmp")),
+      false,
+    );
+  });
+}

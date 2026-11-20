@@ -152,7 +152,7 @@ function refreshLimits(path, status, save) {
 function atomicJson(
   path,
   value,
-  { renameStatus = renameSync, platform = process.platform } = {},
+  { renameStatus = renameSync, statusPlatform = process.platform } = {},
 ) {
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   const fd = openSync(temporary, "wx", 0o600);
@@ -170,7 +170,7 @@ function atomicJson(
       } catch (error) {
         // Windows readers and scanners can briefly block atomic replacement.
         if (
-          platform !== "win32" ||
+          statusPlatform !== "win32" ||
           !["EACCES", "EBUSY", "EPERM"].includes(error.code) ||
           attempt === 9
         )

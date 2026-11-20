@@ -17,8 +17,9 @@ describe("component research batch tools", () => {
         ],
         { cwd: repository, encoding: "utf8", timeout: 120_000 },
       );
-      expect(result.error).toBeUndefined();
-      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+      expect(result.error, output).toBeUndefined();
+      expect(result.status, output).toBe(0);
     },
     125_000,
   );

@@ -65,7 +65,8 @@ jobs:
           THERMITE_RESEARCH_PYTHON: python
           THERMITE_TEST_TIMINGS_FILE: ${{ runner.temp }}/thermite-test-timings.json
       - name: Upload check durations
-        if: ${{ !cancelled() }}
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-durations-check-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
@@ -161,7 +162,8 @@ jobs:
           THERMITE_RESEARCH_PYTHON: python
           THERMITE_TEST_TIMINGS_FILE: ${{ runner.temp }}/thermite-test-timings.json
       - name: Upload worktree durations
-        if: ${{ !cancelled() }}
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-durations-worktree-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}

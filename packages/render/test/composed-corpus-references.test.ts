@@ -95,7 +95,8 @@ for (const entry of corpus)
     // 30.13 s on macOS CI, and the letter-landscape motor sweep took 22.36 s.
     entry.recipe === "compact-frame" ||
       (entry.sweep?.project === "motor-starter" &&
-        entry.sweep.size === "letter")
+        entry.sweep.size === "letter" &&
+        entry.sweep.orientation === "landscape")
       ? 60_000
       : 30_000,
   );
