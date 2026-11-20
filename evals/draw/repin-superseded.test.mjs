@@ -1,4 +1,4 @@
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { it, expect } from "vitest";
 import {
   prepareRepin,
@@ -98,7 +98,7 @@ function fixture({
     );
     const checkers = { "expectations.mjs": registrySha256 },
       r = {
-        format: "thermite-draw-eval/1.0",
+        format: CAPTURE_FORMAT,
         mode: "strict",
         subset: "full",
         cases: [cid],

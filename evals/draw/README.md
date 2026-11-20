@@ -21,6 +21,10 @@ contains no timestamps, absolute paths, checkpoint names or wall timings.
 `timing.json` and `cost.json` are separate. Compare consecutive full summaries
 with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
+Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
+lossless Zstandard archive. The checkpoint's last line prints stored bytes,
+the budget and the remaining headroom. Checker protocol **5.35** still applies.
+
 Version **5.35 (TEXTM1)** extends **DQ-02** to require 0.50 mm from terminal
 label ink to painted strokes in its own symbol. Chromium samples the glyphs and
 native SVG strokes, including caps, joins and dashes, on a 0.005 mm grid. The
@@ -1111,13 +1115,27 @@ optional macOS cross-check (`--pdfkit`); `THERMITE_DRAW_PDFKIT=0` disables it.
 The portable historical detector is a labelled construct audit, described below.
 
 Default retained output has a hard **100,000,000-byte** limit, including
-`cost.json`; excess is infrastructure failure. Every sheet SVG, direct PDF,
-compact IR/query/packet metadata and actual CLI HTML are retained. HTML is measured
-then gzipped as `packet.html.gz`; decompress to inspect it. Duplicate SVG/HTML
-strings are omitted from packet metadata. Only failing observations with real
-on-sheet regions receive 300 dpi crops. Sheet-level or wholly off-sheet findings
-have no invented crop. `--artifacts` opts into full-sheet PNGs and uncompressed
-HTML, waiving the aggregate budget.
+`cost.json`; excess is infrastructure failure. Sheet SVGs, direct PDFs and
+300 dpi crops remain directly accessible. Actual CLI HTML is measured then
+gzipped as `packet.html.gz`; decompress to inspect it. Only failing observations
+with real on-sheet regions receive crops. Sheet-level or wholly off-sheet findings
+have no invented crop.
+
+`case-files.json.zst` stores the compact packet metadata, compiled IR, query
+reports, requests and CLI logs. Its decoded JSON object maps `case/filename`
+to the exact UTF-8 file contents. Packet metadata omits duplicate SVG/HTML
+strings. To read a member using the same reader as the checkpoint tools:
+
+```sh
+bun -e 'import { readCheckpointCaseFiles } from "./evals/draw/case-files.mjs";
+const [checkpoint, id, file] = process.argv.slice(1);
+const read = await readCheckpointCaseFiles(checkpoint);
+process.stdout.write(await read(id, file));' \
+  evals/out/draw/CHECKPOINT machine-demo-left-to-right ir.json
+```
+
+`--artifacts` opts into loose case JSON and logs, full-sheet PNGs and
+uncompressed HTML, waiving the aggregate budget.
 
 Default compact-frame cases discard the temporary project copies after capture.
 The sealed source, case recipe, request and compiled IR preserve replay inputs.

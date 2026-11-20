@@ -2,7 +2,7 @@ import {
   fixtureIdentityEntries,
   fixtureEnvelopeEntries,
 } from "./repin-mixed-entries-fixture.mjs";
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { writeVerification } from "./verification-io.mjs";
 import { verificationFixtures } from "./crop-source-fixture.mjs";
 import {
@@ -115,7 +115,7 @@ function makeReport(registry, items, registrySha256) {
       evidence: { findings: [f] },
     });
   const report = {
-    format: "thermite-draw-eval/1.0",
+    format: CAPTURE_FORMAT,
     mode: "strict",
     subset: "full",
     cases: [cid],

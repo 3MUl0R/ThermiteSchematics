@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { ir4 } from "./tranche4-fixtures.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
+import { archiveCaseFiles, readCheckpointCaseFiles } from "./case-files.mjs";
 const state = vi.hoisted(() => ({ error: null }));
 vi.mock("./browser.mjs", () => ({
   displaySheet: async () => {},
@@ -29,8 +30,9 @@ it.each([{ error: { code: "R006" } }, { diagnostics: [{ code: "R006" }] }])(
   async (log) => {
     const d = await directory();
     await writeFile(join(d, "case/cli.log"), JSON.stringify(log));
+    await archiveCaseFiles(d);
     const rows = await measureExposureCase(
-      d,
+      await readCheckpointCaseFiles(d),
       "case",
       { sourceHashes: { sheets: [] } },
       null,
@@ -48,8 +50,15 @@ it("CHECK5 an unknown no-sheet outcome refuses instead of becoming not applicabl
     join(d, "case/cli.log"),
     JSON.stringify({ error: { code: "R999" } }),
   );
+  const read = await readCheckpointCaseFiles(d);
   await expect(
-    measureExposureCase(d, "case", { sourceHashes: { sheets: [] } }, null, []),
+    measureExposureCase(
+      read,
+      "case",
+      { sourceHashes: { sheets: [] } },
+      null,
+      [],
+    ),
   ).rejects.toThrow("bound R006");
 });
 async function measured() {
@@ -74,12 +83,13 @@ async function measured() {
   }))
     await writeFile(join(d, "case", name), JSON.stringify(value));
   await writeFile(join(d, "case/sheet-001.svg"), svg);
-  return { d, report };
+  await archiveCaseFiles(d);
+  return { read: await readCheckpointCaseFiles(d), report };
 }
 it("CHECK5 typed measurement failure retains explicit sheet evidence", async () => {
-  const { d, report } = await measured();
+  const { read, report } = await measured();
   state.error = new IdentifierMeasurementError("cell unavailable");
-  const rows = await measureExposureCase(d, "case", report, null, []);
+  const rows = await measureExposureCase(read, "case", report, null, []);
   expect(
     rows.every(
       (r) =>
@@ -92,9 +102,9 @@ it("CHECK5 typed measurement failure retains explicit sheet evidence", async () 
   ).toBe(true);
 });
 it("CHECK5 programming errors in exposure measurement propagate", async () => {
-  const { d, report } = await measured();
+  const { read, report } = await measured();
   state.error = new TypeError("Identifier measurement-looking programming bug");
-  await expect(measureExposureCase(d, "case", report, null, [])).rejects.toBe(
-    state.error,
-  );
+  await expect(
+    measureExposureCase(read, "case", report, null, []),
+  ).rejects.toBe(state.error);
 });

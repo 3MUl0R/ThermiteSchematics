@@ -16,7 +16,7 @@ import {
   moveCandidates,
   checkNotMoves,
 } from "./repin-reconcile.mjs";
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { checkerManifestHash } from "./checker-manifest.mjs";
 import { sheetRenameMap, cropClaimTracker, viewKind } from "./repin-policy.mjs";
 // Guarded deltas only. This module never imports or calls seed().
@@ -113,10 +113,7 @@ function validateReport(
       keys(scope, ["cases", "sheets", "media"], "stored scope");
   }
 
-  assert(
-    report.format === "thermite-draw-eval/1.0",
-    "Unsupported report format",
-  );
+  assert(report.format === CAPTURE_FORMAT, "Unsupported report format");
   assert(
     report.mode === "strict" && report.subset === "full",
     "Use a full strict report",

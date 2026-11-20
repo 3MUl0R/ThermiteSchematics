@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import { resolve, relative } from "node:path";
 import { seed, serializeRegistry } from "./marker-authoring.mjs";
 import { cases } from "./corpus.mjs";
+import { CAPTURE_FORMAT } from "./version.mjs";
 const { value: report } = await readReportFile(process.argv[2]);
 assert(
-  report.format === "thermite-draw-eval/1.0" &&
+  report.format === CAPTURE_FORMAT &&
     report.subset === "full" &&
     report.mode === "strict",
   "Seed a full strict measured report",

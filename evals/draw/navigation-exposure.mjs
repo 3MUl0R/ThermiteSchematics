@@ -5,6 +5,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { readReportFile } from "./report-file.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 import {
   launch,
   drawingLaunchArgs,
@@ -23,6 +24,7 @@ assert(
 );
 const directory = resolve(values.capture),
   report = await readReportFile(join(directory, "summary.json.gz")),
+  readCaseFile = await readCheckpointCaseFiles(directory),
   rows = [],
   sources = [];
 let browser, context;
@@ -38,7 +40,7 @@ try {
   for (const id of report.value.cases) {
     rows.push(
       ...(await measureExposureCase(
-        directory,
+        readCaseFile,
         id,
         report.value,
         page,

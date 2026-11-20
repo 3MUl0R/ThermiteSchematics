@@ -1,7 +1,7 @@
 import { EVALS_VERSION } from "./version.mjs";
 // Standalone replay. Strict DQ-23 separately adopts the shared native/ink predicates.
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -17,6 +17,7 @@ import { nativeStrip } from "./terminal-strip-native.mjs";
 import { stripInkScript } from "./terminal-strip-ink.mjs";
 import { checkTerminalStrip } from "./terminal-strip-check.mjs";
 import { readReportFile } from "./report-file.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 import { readCheckers, checkerManifestHash } from "./checker-manifest.mjs";
 import { sheetInkKindScript } from "./sheet-ink-kind.mjs";
 import { hash, json } from "./support.mjs";
@@ -29,10 +30,11 @@ assert(
 );
 const directory = resolve(values.capture),
   report = await readReportFile(join(directory, "summary.json.gz")),
+  readCaseFile = await readCheckpointCaseFiles(directory),
   rows = [],
   sources = [];
 async function read(id, name) {
-  const bytes = await readFile(join(directory, id, name));
+  const bytes = await readCaseFile(id, name);
   sources.push({ case: id, file: name, sha256: hash(bytes) });
   return bytes;
 }

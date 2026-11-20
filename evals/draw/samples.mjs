@@ -1,4 +1,5 @@
 import { readReportFile, readCheckpointReport } from "./report-file.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { gunzipSync } from "node:zlib";
 // Explicit visual acceptance step; never invoked by check or ordinary runs.
@@ -13,7 +14,7 @@ import {
   evaluateSheetGeometry,
 } from "./browser.mjs";
 import { loadPdf, renderPdf } from "./pdf.mjs";
-import { readJson, json } from "./support.mjs";
+import { json } from "./support.mjs";
 const checkpoint = resolve(process.argv[2]),
   name = process.argv[3];
 assert(
@@ -25,6 +26,7 @@ await mkdir(dest, { recursive: true });
 const { value: report } = await (process.argv[4]
     ? readReportFile(process.argv[4])
     : readCheckpointReport(checkpoint)),
+  readCaseFile = await readCheckpointCaseFiles(checkpoint),
   families = new Map();
 for (const row of report.results.filter((r) =>
   ["fail", "xfail"].includes(r.status),
@@ -88,7 +90,7 @@ try {
         ),
         "utf8",
       );
-      const ir = await readJson(join(checkpoint, row.case, "ir.json"));
+      const ir = JSON.parse(await readCaseFile(row.case, "ir.json"));
       let selector = "body>svg",
         g;
       if (row.medium === "html" || f.medium === "html") {

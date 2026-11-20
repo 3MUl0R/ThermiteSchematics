@@ -1,4 +1,4 @@
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 import { it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import { checkerManifestHash, readCheckers } from "./checker-manifest.mjs";
@@ -91,7 +91,7 @@ function sharedFixture(a = 1.08, b = 1.05, both = false) {
     }),
   );
   const report = {
-    format: "thermite-draw-eval/1.0",
+    format: CAPTURE_FORMAT,
     mode: "strict",
     subset: "full",
     cases: [cid],
@@ -251,7 +251,7 @@ function reportFor(registry, findings) {
     });
   });
   const report = {
-    format: "thermite-draw-eval/1.0",
+    format: CAPTURE_FORMAT,
     mode: "strict",
     subset: "full",
     cases: [cid],

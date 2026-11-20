@@ -1,23 +1,20 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { hash } from "./support.mjs";
 import { displaySheet, evaluateSheetGeometry } from "./browser.mjs";
 import { navigationExposure } from "./navigation-exposure-rows.mjs";
 import { isIdentifierError } from "./identifier-errors.mjs";
 export async function measureExposureCase(
-  directory,
+  readCaseFile,
   id,
   report,
   page,
   sources,
 ) {
-  const base = join(directory, id),
-    read = async (name) => {
-      const bytes = await readFile(join(base, name));
-      sources.push({ case: id, file: name, sha256: hash(bytes) });
-      return JSON.parse(bytes.toString());
-    };
+  const read = async (name) => {
+    const bytes = await readCaseFile(id, name);
+    sources.push({ case: id, file: name, sha256: hash(bytes) });
+    return JSON.parse(bytes.toString());
+  };
   if (!report.sourceHashes.sheets.some((s) => s.case === id))
     return refusedExposure(id, read);
   const packet = await read("packet.json"),
@@ -27,7 +24,7 @@ export async function measureExposureCase(
     errors = [];
   for (const s of packet.sheets) {
     const name = `sheet-${String(s.number).padStart(3, "0")}.svg`,
-      bytes = await readFile(join(base, name));
+      bytes = await readCaseFile(id, name);
     const expected = report.sourceHashes.sheets.find(
       (x) => x.case === id && x.sheet === s.number,
     )?.svg.sha256;

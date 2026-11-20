@@ -1,4 +1,4 @@
-import { EVALS_VERSION } from "./version.mjs";
+import { CAPTURE_FORMAT, EVALS_VERSION } from "./version.mjs";
 // Synthetic report/instance fixtures, adapted from the independent reviewer probes.
 import { withSourceHashFixtures } from "./crop-source-fixture.mjs";
 import { prepareRepin, reassess, instanceInventory } from "./repin-core.mjs";
@@ -159,7 +159,7 @@ function make({
     return (
       checkers,
       {
-        format: "thermite-draw-eval/1.0",
+        format: CAPTURE_FORMAT,
         mode: "strict",
         subset: "full",
         cases,

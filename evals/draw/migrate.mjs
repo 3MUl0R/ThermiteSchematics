@@ -1,11 +1,12 @@
 import { readCheckpointReport } from "./report-file.mjs";
+import { readCheckpointCaseFiles } from "./case-files.mjs";
 // Reindex existing measured evidence with source locators. No rendering, altered
 // measurements or engine imports. Keep proposals under ignored evals/out/.
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { readJson, json } from "./support.mjs";
+import { json } from "./support.mjs";
 import { svgLocators, attachIdentities, familyFor } from "./locators.mjs";
 import { cases } from "./corpus.mjs";
 import { seed, serializeRegistry } from "./marker-authoring.mjs";
@@ -17,6 +18,7 @@ assert(
   "Proposals belong under evals/out",
 );
 const { value: report } = await readCheckpointReport(directory),
+  readCaseFile = await readCheckpointCaseFiles(directory),
   specs = cases();
 for (const c of report.cases) {
   const rows = report.results.filter((r) => r.case === c);
@@ -24,9 +26,9 @@ for (const c of report.cases) {
     ir = {},
     tables = [];
   try {
-    packet = await readJson(join(directory, c, "packet.json"));
-    ir = await readJson(join(directory, c, "ir.json"));
-    tables = await readJson(join(directory, c, "query-reports.json"));
+    packet = JSON.parse(await readCaseFile(c, "packet.json"));
+    ir = JSON.parse(await readCaseFile(c, "ir.json"));
+    tables = JSON.parse(await readCaseFile(c, "query-reports.json"));
   } catch (error) {
     assert(
       !rows.some(
