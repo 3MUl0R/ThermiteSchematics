@@ -371,12 +371,10 @@ describe("packet reference ownership", () => {
         root: "packet",
         reason: "unprintable-layout",
         message:
-          "Continuation labels are too close to print clearly. Change flow, use a larger sheet, or narrow the view.",
+          "Continuation labels are too close to print clearly (1.00 mm apart, 3 mm required). Change flow, use a larger sheet, or narrow the view.",
         details: {
-          conductorIds: [
-            { kind: "wire", uid: "wire1" },
-            { kind: "wire", uid: "wire2" },
-          ],
+          conductorIds: graph.edges.flatMap((edge) => edge.elementIds),
+          continuationSpacing: { actualMm: 1, minimumMm: 3 },
         },
       },
     });

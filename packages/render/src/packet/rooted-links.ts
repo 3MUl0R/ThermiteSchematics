@@ -54,17 +54,25 @@ export function drawingContinuations(
     for (let i = 0; i < d.links.length; i++)
       for (const other of d.links.slice(i + 1)) {
         const l = required(d.links[i], "Missing endpoint");
-        if (
-          l.side === other.side &&
-          (l.side === "left" || l.side === "right"
-            ? Math.abs(l.y - other.y) < 3
-            : Math.abs(l.x - other.x) < 18)
-        )
+        if (l.side !== other.side) continue;
+        const vertical = l.side === "left" || l.side === "right";
+        const actualMm = vertical
+          ? Math.abs(l.y - other.y)
+          : Math.abs(l.x - other.x);
+        const minimumMm = vertical ? 3 : 18;
+        if (actualMm < minimumMm) {
+          const rounded = actualMm.toFixed(2);
+          const distance =
+            Number(rounded) < minimumMm ? rounded : `<${minimumMm}`;
           return failure(
             "unprintable-layout",
-            "Continuation labels are too close to print clearly. Change flow, use a larger sheet, or narrow the view.",
-            { conductorIds: [l.provenance, other.provenance] },
+            `Continuation labels are too close to print clearly (${distance} mm apart, ${minimumMm} mm required). Change flow, use a larger sheet, or narrow the view.`,
+            {
+              conductorIds: [l.provenance, other.provenance],
+              continuationSpacing: { actualMm, minimumMm },
+            },
           );
+        }
       }
   return { ok: true, value: undefined };
 }

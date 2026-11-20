@@ -55,13 +55,13 @@ it("retains an identity refusal from a complete fallback grid when greedy cannot
     false,
   );
   expect(result.grids).toEqual([]);
-  expect(result.identityFailure).toMatchObject({
+  expect(result.cutFailure).toMatchObject({
     code: "R006",
     details: { continuationIdentity: "bad-wire" },
   });
-  expect(result.identityFailure?.message).toContain("A candidate cut crosses");
-  expect(result.identityFailure?.message).toContain("W-BAD");
-  expect(result.identityFailure?.message).toContain("whitespace-only");
+  expect(result.cutFailure?.message).toContain("A candidate cut crosses");
+  expect(result.cutFailure?.message).toContain("W-BAD");
+  expect(result.cutFailure?.message).toContain("whitespace-only");
 });
 
 it("keeps an impossible protected-span refusal grid-dependent despite a bad uncut label", () => {
@@ -73,7 +73,7 @@ it("keeps an impossible protected-span refusal grid-dependent despite a bad uncu
     false,
   );
   expect(result.grids).toEqual([]);
-  expect(result.identityFailure).toBeUndefined();
+  expect(result.cutFailure).toBeUndefined();
 });
 
 it("does not let rejected cuts override grids that avoid a bad identity", () => {
@@ -85,5 +85,5 @@ it("does not let rejected cuts override grids that avoid a bad identity", () => 
     true,
   );
   expect(result.grids.length).toBeGreaterThan(0);
-  expect(result.identityFailure).toBeUndefined();
+  expect(result.cutFailure).toBeUndefined();
 });

@@ -277,11 +277,17 @@ Label banks retain 3.5 mm row pitch, a 2.5 mm inter-block gap, and checks
 against fixed captions and the actual zone glyph reservations.
 Within a bank, bounded text placement preserves connector order and leaves
 conductor routes and anchors intact. Only conductors crossed by a candidate cut
-need a printable continuation identity. If no candidate grid succeeds, R006 names
-the crossed conductor and its identity problem, with advice to avoid cutting that
-conductor. A protected width/height shortfall is carried in the message and
-`details.pageConstraint` only when every continuation bank in every tested layout
-falls short. The alternative with the smallest maximum width/height shortfall
+need a printable continuation identity. If no candidate grid succeeds, R006 can
+name a crossed conductor and its identity problem, with advice to avoid cutting
+that conductor. Presentation-only boundary segments must stay whole. If a retry
+that protects them is rejected for an authored conductor's identity or for
+continuation label spacing, R006 leads with the retry's failure and also explains
+the original boundary cut. `details.continuationIdentity` retains the original
+boundary segment ID. `details.boundaryCutRetry` carries the retry's
+`continuationIdentity` or its `conductorIds` and `continuationSpacing`
+(`actualMm` and `minimumMm`). A protected width/height shortfall is carried in
+the message and `details.pageConstraint` only when every continuation bank in
+every tested layout falls short. The alternative with the smallest maximum width/height shortfall
 supplies the measurements; any span-fitting bank or layout clears that claim.
 The ordinary no-candidate message uses the same
 all-bank measurement. This diagnosis never rejects an

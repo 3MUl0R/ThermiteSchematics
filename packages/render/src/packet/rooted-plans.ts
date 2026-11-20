@@ -44,7 +44,7 @@ export function rootedGrids(
   scale: number,
   fallback = true,
   explore = false,
-  onFailure?: (error: RenderFailure) => void,
+  onFailure?: (error: RenderFailure, attempt?: "boundary-retry") => void,
   diagnoseIdentity = false,
 ): RootedGrid[] {
   const existing = originalRootedGrids(
@@ -58,7 +58,10 @@ export function rootedGrids(
   );
   if (existing.length) return existing;
   const grid = boundarySafeGrid(p.layout, b, scale);
-  return grid && gridLinks(p, grid, b, scale, undefined, onFailure)
+  const retryRejected = onFailure
+    ? (error: RenderFailure) => onFailure(error, "boundary-retry")
+    : undefined;
+  return grid && gridLinks(p, grid, b, scale, undefined, retryRejected)
     ? [grid]
     : existing;
 }
