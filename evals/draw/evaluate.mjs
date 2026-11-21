@@ -16,6 +16,7 @@ import {
   routePatternMeasurements,
 } from "./routing-hygiene.mjs";
 import { dependencyFindings } from "./document-dependencies.mjs";
+import { wireCaptionFindings } from "./coincident-wire-labels.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
@@ -333,7 +334,7 @@ function evaluateDocuments(
 ) {
   const labelCoverage = conductorLabelCoverage(s, packet, g, geometries, ir);
   out.push(
-    obs("DQ-16", [...checks.wirePlacement(g), ...labelCoverage.findings], {
+    obs("DQ-16", wireCaptionFindings(g, labelCoverage.findings), {
       ...labelCoverage.extra,
       scope:
         labelCoverage.extra.scope ??

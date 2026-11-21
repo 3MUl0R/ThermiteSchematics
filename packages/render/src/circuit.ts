@@ -1,5 +1,4 @@
 import "./symbols/circuit-attachments.js";
-import { attachmentStrokeWeights } from "./symbols/attachment-stroke.js";
 import "./layout/port-attributes.js";
 import "./symbols/circuit-route-pitch.js";
 import { circuitConductorFunctions } from "./symbols/circuit-pagination-functions.js";
@@ -41,7 +40,6 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import { printableCaption } from "./symbols/printable-policy.js";
-import "./layout/inline-label-error.js";
 import { circuitPortGroups } from "./layout/circuit-port-order.js";
 import { circuitInlineContext } from "./layout/circuit-inline-context.js";
 import { rememberCircuitDrawing } from "./layout/circuit-printed-layouts.js";
@@ -58,18 +56,8 @@ import {
   circuitGraphEdge,
   circuitGraphInput,
 } from "./circuit/layout-input.js";
-import {
-  circuitRouteState,
-  appendCircuitRoute,
-  circuitTopology,
-  circuitLabelChecks,
-  recoverCircuitSelfLabels,
-  assertCircuitLabels,
-} from "./circuit/layout-routes.js";
-import {
-  circuitDrawingContents,
-  circuitDrawingResult,
-} from "./circuit/layout-drawing.js";
+import { circuitRouteState } from "./circuit/layout-routes.js";
+import { renderCircuitLayout } from "./circuit/layout-drawing.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
 import {
   circuitGroupPrintReference,
@@ -555,29 +543,11 @@ async function layoutGroupUnchecked(
     circuitPortGroups(nodes),
   );
   const state = circuitRouteState(graph, nodes, cs, group, hooks);
-  if (graph.edges?.length !== cs.length)
-    throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
-  for (const e of graph.edges ?? []) appendCircuitRoute(e, state);
-  const topology = circuitTopology(state);
-  const checked = circuitLabelChecks(topology);
-  recoverCircuitSelfLabels(checked, selfLoops);
-  assertCircuitLabels(checked);
-  const weights = attachmentStrokeWeights(graph.edges ?? [], cs);
-  const diagnostics: Diagnostic[] = [];
-  const contents = circuitDrawingContents(
-    checked,
-    vertical,
-    weights,
-    diagnostics,
+  return rememberCircuitDrawing(
+    renderCircuitLayout(state, fs, pins, selfLoops, vertical),
+    input,
+    run,
   );
-  const drawing: CircuitDrawing = circuitDrawingResult(
-    checked,
-    fs,
-    pins,
-    contents,
-    diagnostics,
-  );
-  return rememberCircuitDrawing(drawing, input, run);
 }
 
 /** All geometry is derived from compiled source and closed catalog profiles; no source mutation. */

@@ -63,6 +63,7 @@ export function circuitRouteState(
 export function appendCircuitRoute(
   e: ElkExtendedEdge,
   state: CircuitRouteState,
+  fan?: ReadonlySet<Point>,
 ) {
   const { cs, group, routes, wireSvg, labels, n } = state;
   const index = Number(e.id.slice(1)),
@@ -78,11 +79,21 @@ export function appendCircuitRoute(
   assertCircuitSegments(points, c, state);
   assertCircuitEndpoints(e, points, state);
   routes.push({ index, points });
-  const path = points
-    .map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`)
-    .join(" ");
+  // The white stroke clears crossings only along the separate run. Within
+  // the fan it would erase another approach to the same physical terminal.
+  const path = circuitRoutePath(points, n),
+    knockout =
+      points[1] && fan?.has(points[1])
+        ? circuitRoutePath(
+            points.slice(
+              points.findIndex((point, i) => i > 0 && !fan.has(point)) - 1,
+              -2,
+            ),
+            n,
+          )
+        : path;
   wireSvg.push(
-    `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${path}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
+    `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${knockout}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
   );
   for (const l of e.labels ?? []) {
     if (![l.x, l.y, l.width, l.height].every(Number.isFinite))
@@ -96,6 +107,10 @@ export function appendCircuitRoute(
       text: l.text!,
     });
   }
+}
+
+function circuitRoutePath(points: readonly Point[], n: LayoutHooks["n"]) {
+  return points.map((p, i) => `${i ? "L" : "M"} ${n(p.x)} ${n(p.y)}`).join(" ");
 }
 
 export function assertCircuitSegments(
@@ -166,6 +181,7 @@ export function assertCircuitEndpoints(
 
 export function circuitTopology(
   state: CircuitRouteState,
+  fan?: ReadonlySet<Point>,
 ): CircuitTopologyState {
   const { routes, cs, key } = state;
   const segments = routes.flatMap((r) =>
@@ -181,7 +197,7 @@ export function circuitTopology(
     cs[a]!.ends.some((t) => cs[b]!.ends.some((u) => key(t) === key(u)));
   const topology = { ...state, segments, on, common };
   assertCircuitOverlaps(topology);
-  return { ...topology, dots: circuitDots(topology) };
+  return { ...topology, dots: circuitDots(topology, fan) };
 }
 
 function assertCircuitOverlaps(state: Omit<CircuitTopologyState, "dots">) {
@@ -211,6 +227,7 @@ function assertCircuitOverlaps(state: Omit<CircuitTopologyState, "dots">) {
 
 function circuitDots(
   state: Omit<CircuitTopologyState, "dots">,
+  fan: ReadonlySet<Point> | undefined,
 ): Map<string, Point> {
   const { routes, segments, common, on, group, n } = state;
   const dots = new Map<string, Point>();
@@ -234,7 +251,9 @@ function circuitDots(
           throw new InlineLabelCollisionError(
             `Circuit ${group.id}: unrelated wire touches a source-terminal junction.`,
           );
-        dots.set(`${n(p.x)},${n(p.y)}`, p);
+        // A short fan shares the physical terminal mark. Its jogs are
+        // approach geometry and have no additional splice to mark.
+        if (!fan?.has(p)) dots.set(`${n(p.x)},${n(p.y)}`, p);
       }
     }
   return dots;

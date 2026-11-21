@@ -1,5 +1,8 @@
 import { circuitCaptionPlate } from "./inline-plate.js";
-import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
+import {
+  InlineLabelCollisionError,
+  isInlineLabelFailure,
+} from "../layout/inline-label-error.js";
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
 import { supportedCircuitLabels } from "./label-support.js";
@@ -10,23 +13,102 @@ import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { relatedCaptionWidth } from "../symbols/circuit-relations.js";
 
 import type { CircuitPins } from "./layout-input.js";
-import type { CircuitLabelState } from "./layout-routes.js";
+import {
+  appendCircuitRoute,
+  circuitTopology,
+  circuitLabelChecks,
+  recoverCircuitSelfLabels,
+  assertCircuitLabels,
+  type CircuitLabelState,
+  type CircuitRouteState,
+} from "./layout-routes.js";
+import { separateCoincidentLoops } from "./separate-loops.js";
+import { attachmentStrokeWeights } from "../symbols/attachment-stroke.js";
+import type { Point } from "./types.js";
 type Label = CircuitLabelState["labels"][number];
-export function circuitDrawingContents(
+export function renderCircuitLayout(
+  state: CircuitRouteState,
+  fs: IrFunction[],
+  pins: CircuitPins,
+  selfLoops: Set<number>,
+  vertical: boolean,
+) {
+  const separation = separateCoincidentLoops(state.graph, selfLoops);
+  if (separation) {
+    try {
+      return drawCircuit(
+        {
+          ...state,
+          graph: separation.graph,
+          routes: [],
+          labels: [],
+          wireSvg: [],
+        },
+        fs,
+        pins,
+        selfLoops,
+        vertical,
+        separation.fan,
+      );
+    } catch (error) {
+      if (!isInlineLabelFailure(error)) throw error;
+    }
+  }
+  return drawCircuit(state, fs, pins, selfLoops, vertical);
+}
+
+function drawCircuit(
+  state: CircuitRouteState,
+  fs: IrFunction[],
+  pins: CircuitPins,
+  selfLoops: Set<number>,
+  vertical: boolean,
+  fan?: ReadonlySet<Point>,
+) {
+  const { graph, cs, group } = state;
+  if (graph.edges?.length !== cs.length)
+    throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
+  for (const edge of graph.edges ?? []) appendCircuitRoute(edge, state, fan);
+  const checked = circuitLabelChecks(circuitTopology(state, fan));
+  if (!fan) {
+    recoverCircuitSelfLabels(checked, selfLoops);
+    assertCircuitLabels(checked);
+  }
+  const { labels, baseFallbacks } = supportedCircuitLabels(checked),
+    supported = { ...checked, labels };
+  if (fan) {
+    assertCircuitLabels(supported);
+    if (baseFallbacks.size)
+      throw new InlineLabelCollisionError(
+        "Separated circuit loops require owned captions.",
+      );
+  }
+  const weights = attachmentStrokeWeights(graph.edges ?? [], cs),
+    diagnostics: Diagnostic[] = [],
+    contents = circuitDrawingContents(
+      supported,
+      baseFallbacks,
+      vertical,
+      weights,
+      diagnostics,
+    );
+  return circuitDrawingResult(supported, fs, pins, contents, diagnostics);
+}
+
+function circuitDrawingContents(
   state: CircuitLabelState,
+  baseFallbacks: ReadonlySet<number>,
   vertical: boolean,
   weights: ReadonlyMap<string, number>,
   diagnostics: Diagnostic[],
 ) {
-  const supported = supportedCircuitLabels(state);
-  state = { ...state, labels: supported.labels };
   const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode } = state;
   const contents = [
     ...wireSvg,
     circuitLandingAnchors(state),
     ...[...dots.values()].map((p) => circuitJunctionSvg(p, state)),
     ...labels.map((l) =>
-      circuitWireLabel(l, state, supported.baseFallbacks.has(l.index)),
+      circuitWireLabel(l, state, baseFallbacks.has(l.index)),
     ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
@@ -39,12 +121,12 @@ export function circuitDrawingContents(
 function circuitWireLabel(
   l: Label,
   state: CircuitLabelState,
-  basePlacementFallback: boolean,
+  unhostable: boolean,
 ) {
   const { cs, n, text } = state;
   const plans = l.text.split("\n").map((line, i) => ({
     line,
-    ...plannedCircuitCaption(line, i, l, state, basePlacementFallback),
+    ...plannedCircuitCaption(line, i, l, state, unhostable),
   }));
   const plate = circuitCaptionPlate(
     l,
@@ -55,13 +137,14 @@ function circuitWireLabel(
     throw new InlineLabelCollisionError(
       `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`,
     );
+  const fallback = plans[0]?.fallback;
   return (
     plans.map((p) => p.leader).join("") +
-    `<g data-wire-label="${attr(cs[l.index]!.id)}"><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
+    `<g data-wire-label="${attr(cs[l.index]!.id)}"${fallback ? ` data-circuit-caption-fallback="${fallback}"` : ""}><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
   );
 }
 
-export function circuitDrawingResult(
+function circuitDrawingResult(
   state: CircuitLabelState,
   fs: IrFunction[],
   pins: CircuitPins,
