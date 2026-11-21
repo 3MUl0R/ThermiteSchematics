@@ -12,23 +12,54 @@ export function wirePlateGeometry(c) {
       if (paint) plates.push({ ...paint, text: t.element });
     }
   }
-  if (!plates.length) return { plates, strokes: {}, markers: [], leaders: [] };
+  const conductorShapes = c.shapes.filter(
+    (s) =>
+      (s.conductor || s.loopConductor || s.loopCandidate) &&
+      ["path", "line", "polyline"].includes(s.shapeTag) &&
+      s.stroke > 0,
+  );
+  if (!plates.length && !conductorShapes.length)
+    return { plates, strokes: {}, markers: [], leaders: [], occluders: [] };
   const strokes = Object.fromEntries(
-    c.shapes
-      .filter(
-        (s) =>
-          (s.conductor || s.loopConductor || s.loopCandidate) &&
-          ["path", "line", "polyline"].includes(s.shapeTag) &&
-          s.stroke > 0,
-      )
-      .map((s) => [s.element, c.h.wirePlateStroke(c, s)]),
+    conductorShapes.map((s) => [s.element, c.h.wirePlateStroke(c, s)]),
   );
   return {
     plates,
     strokes,
     markers: c.h.wirePlateMarkers(c),
     leaders: c.h.wirePlateLeaders(c),
+    occluders: c.h.wirePlateOccluders(c, fills, conductorShapes, strokes),
   };
+}
+
+export function wirePlateOccluders(c, plateShapes, conductorShapes, strokes) {
+  if (!conductorShapes.length) return [];
+  const boxes = conductorShapes
+    .map((s) => ({
+      order: strokes[s.element]?.order ?? Infinity,
+      pad: (s.stroke ?? 0) / 2,
+      b: s.bbox,
+    }))
+    .filter((s) => s.b);
+  const out = [];
+  for (const e of c.root.querySelectorAll("path,polygon,polyline,rect,use")) {
+    if (plateShapes.has(e) || e.closest("defs,clipPath,mask")) continue;
+    const paint = c.h.wirePlateFill(c, e);
+    if (!paint) continue;
+    const { x, y, w, h } = paint.bbox;
+    if (
+      boxes.some(
+        ({ order, pad, b }) =>
+          paint.order > order &&
+          x < b.x + b.w + pad &&
+          x + w > b.x - pad &&
+          y < b.y + b.h + pad &&
+          y + h > b.y - pad,
+      )
+    )
+      out.push(paint);
+  }
+  return out;
 }
 
 export function wirePlateShapes(e) {

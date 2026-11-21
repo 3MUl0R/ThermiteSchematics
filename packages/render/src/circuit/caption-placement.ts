@@ -7,6 +7,37 @@ import { ownedLabelLeader } from "../layout/wire-label-support.js";
 import { required } from "../presentation/util.js";
 import { circuitCaptionPlateFits } from "./inline-plate.js";
 type Label = CircuitLabelState["labels"][number];
+function multilineBlockLeader(
+  label: Label,
+  own: readonly (readonly { x: number; y: number }[])[],
+  context: ReturnType<typeof circuitCaptionContext>,
+  state: CircuitLabelState,
+) {
+  if (!label.text.includes("\n")) return undefined;
+  const inks = label.text
+    .split("\n")
+    .map((l, j) => circuitCaptionGeometry(l, j, label, state).ink);
+  const blockInk = {
+    left: Math.min(...inks.map((b) => b.left)),
+    right: Math.max(...inks.map((b) => b.right)),
+    top: Math.min(...inks.map((b) => b.top)),
+    bottom: Math.max(...inks.map((b) => b.bottom)),
+  };
+  return ownedLabelLeader(
+    blockInk,
+    {
+      left: label.x,
+      right: label.x + label.width,
+      top: label.y,
+      bottom: label.y + label.height,
+    },
+    own,
+    context,
+    2,
+    0.25,
+  );
+}
+
 /** The same final glyph and leader admission is used during whole-block search
  * and emission. No candidate changes native paths, plate size or font metrics. */
 export function circuitCaptionPlacement(
@@ -34,21 +65,25 @@ export function circuitCaptionPlacement(
       right: label.x + label.width,
       top: label.y + i * 3.1,
       bottom: label.y + (i + 1) * 3.1 + 0.7,
-    },
-    placement = existingCircuitCaption(
-      original.ink,
-      own,
-      others.map((s) => [s.a, s.b]),
-      foreignStrokes,
-      stroke,
-    )
-      ? { ink: original.ink, needsLeader: false }
-      : besideCaption(original.ink, reservation, own, context, 1, stroke);
-  if (!placement) return undefined;
-  const points = placement.needsLeader
+    };
+  let placement = existingCircuitCaption(
+    original.ink,
+    own,
+    others.map((s) => [s.a, s.b]),
+    foreignStrokes,
+    stroke,
+  )
+    ? { ink: original.ink, needsLeader: false }
+    : besideCaption(original.ink, reservation, own, context, 1, stroke);
+  let points = placement?.needsLeader
     ? ownedLabelLeader(placement.ink, reservation, own, context, 2, 0.25)
     : undefined;
-  if (placement.needsLeader && !points) return undefined;
+  if (!placement || (placement.needsLeader && !points)) {
+    const blockPoints = multilineBlockLeader(label, own, context, state);
+    if (!blockPoints) return undefined;
+    placement = { ink: original.ink, needsLeader: true };
+    points = blockPoints;
+  }
   return {
     ...original,
     x: original.x + placement.ink.left - original.ink.left,

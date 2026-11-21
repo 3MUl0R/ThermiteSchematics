@@ -86,14 +86,12 @@ function plateFits(
   const run = hidden[0],
     owner = state.routes.find((r) => r.index === label.index);
   if (hidden.length !== 1 || !run || !owner) return false;
-  const { a, b } = run,
-    horizontal = Math.abs(a.y - b.y) < 1e-7,
-    axis = horizontal ? "x" : "y",
-    [start, end] = a[axis] < b[axis] ? [a, b] : [b, a],
-    low = horizontal ? box.left : box.top,
-    high = horizontal ? box.right : box.bottom;
+  const { a, b } = run;
+  if (Math.abs(a.y - b.y) >= 1e-7) return false;
+  const [start, end] = a.x < b.x ? [a, b] : [b, a];
   return (
-    low - start[axis] >= terminalClearance(start, owner.points, label.height) &&
-    end[axis] - high >= terminalClearance(end, owner.points, label.height)
+    box.left - start.x >=
+      terminalClearance(start, owner.points, label.height) &&
+    end.x - box.right >= terminalClearance(end, owner.points, label.height)
   );
 }

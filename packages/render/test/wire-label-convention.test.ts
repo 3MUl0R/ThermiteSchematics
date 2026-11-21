@@ -267,19 +267,19 @@ function assertLeaderTip(
   expect(on(required(points.at(-1)), foreign)).toBe(false);
 }
 
-it("retains the existing self-loop BRIDGE inline plate only on a complete owned vertical run clear of foreign ink", async () => {
+it("places the self-loop BRIDGE plate clear of its vertical riser and foreign ink in top-to-bottom flow", async () => {
   const { prepareCircuitView } = await import("../src/circuit.js"),
     { readFile } = await import("node:fs/promises"),
     { points } = await import("./helpers/route-quality.js"),
     c = await compileProject("examples/self-loop-labels");
-  expect(c.ok).toBe(true);
   if (!c.ok) throw Error(JSON.stringify(c.diagnostics));
   const request = JSON.parse(
       await readFile("examples/self-loop-labels/packet.json", "utf8"),
     ).views[0],
-    pending = prepareCircuitView(c.ir, { ...request, flow: "top-to-bottom" });
-  await expect(pending).resolves.toHaveProperty("groups");
-  const result = await pending,
+    result = await prepareCircuitView(c.ir, {
+      ...request,
+      flow: "top-to-bottom",
+    }),
     doc = parseHTML(required(result.groups[0]).content).document,
     text = required(
       [...doc.querySelectorAll("[data-wire-label] text")].find(
@@ -289,35 +289,43 @@ it("retains the existing self-loop BRIDGE inline plate only on a complete owned 
     plate = required(text.closest("[data-wire-label]")),
     id = required(plate.getAttribute("data-wire-label")),
     rect = required(plate.querySelector("rect")),
-    m = printableTextMetrics("BRIDGE", 2.5),
-    ink = {
-      left: Number(text.getAttribute("x")) + m.left,
-      right: Number(text.getAttribute("x")) + m.right,
-      top: Number(text.getAttribute("y")) - m.top,
-      bottom: Number(text.getAttribute("y")) - m.bottom,
+    rx = Number(rect.getAttribute("x")),
+    ry = Number(rect.getAttribute("y")),
+    plateBox = {
+      left: rx,
+      right: rx + Number(rect.getAttribute("width")),
+      top: ry,
+      bottom: ry + Number(rect.getAttribute("height")),
     },
-    own = points(
-      required(
-        required(
-          doc.querySelector(
-            `[data-circuit-conductor="${id}"] path[stroke="#17212b"]`,
-          ),
-        ).getAttribute("d"),
+    m = printableTextMetrics("BRIDGE", 2.5),
+    tx = Number(text.getAttribute("x")),
+    ty = Number(text.getAttribute("y")),
+    ink = {
+      left: tx + m.left,
+      right: tx + m.right,
+      top: ty - m.top,
+      bottom: ty - m.bottom,
+    },
+    ownPath = required(
+      doc.querySelector(
+        `[data-circuit-conductor="${id}"] path[stroke="#17212b"]`,
       ),
-    );
+    ),
+    own = points(required(ownPath.getAttribute("d")));
   expect(rect.getAttribute("fill")).toBe("white");
   expect(
     own.slice(1).some((b, i) => {
       const a = required(own[i]);
       return (
         a.x === b.x &&
-        a.x > ink.left &&
-        a.x < ink.right &&
-        Math.min(a.y, b.y) <= ink.top &&
-        Math.max(a.y, b.y) >= ink.bottom
+        a.x + 0.16 > plateBox.left &&
+        a.x - 0.16 < plateBox.right &&
+        Math.max(a.y, b.y) > plateBox.top &&
+        Math.min(a.y, b.y) < plateBox.bottom
       );
     }),
-  ).toBe(true);
+  ).toBe(false);
+  expect(distance(ink, own, 0.32)).toBeLessThanOrEqual(2);
   for (const path of doc.querySelectorAll(
     `[data-circuit-conductor]:not([data-circuit-conductor="${id}"]) path[stroke="#17212b"]`,
   ))

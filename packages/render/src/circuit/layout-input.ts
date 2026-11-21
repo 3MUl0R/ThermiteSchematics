@@ -103,6 +103,46 @@ export function circuitGraphEdge(
   };
 }
 
+function nestedSameSideSelfLoopGap(
+  children: readonly ElkNode[],
+  edges: readonly ElkExtendedEdge[],
+  selfLoops: ReadonlySet<number>,
+) {
+  if (selfLoops.size < 2) return 3;
+  const ports = new Map<string, { nodeId: string; side: string; x: number }>();
+  for (const child of children)
+    for (const port of child.ports ?? [])
+      ports.set(port.id, {
+        nodeId: child.id,
+        side: port.layoutOptions?.["elk.port.side"] ?? "",
+        x: port.x ?? 0,
+      });
+  const loops = edges
+    .filter((_, i) => selfLoops.has(i))
+    .flatMap((edge) => {
+      const a = ports.get(edge.sources[0] ?? ""),
+        b = ports.get(edge.targets[0] ?? "");
+      return a && b && a.nodeId === b.nodeId && a.side === b.side
+        ? [{ edge, nodeId: a.nodeId, side: a.side, span: Math.abs(a.x - b.x) }]
+        : [];
+    });
+  let gap = 3;
+  for (const loop of loops) {
+    if (
+      !loops.some(
+        (o) => o !== loop && o.nodeId === loop.nodeId && o.side === loop.side,
+      )
+    )
+      continue;
+    for (const label of loop.edge.labels ?? []) {
+      const w = label.width ?? 0,
+        h = label.height ?? 0;
+      if (loop.span < w + 2 * Math.max(2, h)) gap = Math.max(gap, h + 2.2);
+    }
+  }
+  return gap;
+}
+
 export function circuitGraphInput(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
@@ -110,6 +150,9 @@ export function circuitGraphInput(
   vertical: boolean,
   conductors: readonly PhysicalConductor[],
 ) {
+  const nestedSelfLoopGap = vertical
+    ? nestedSameSideSelfLoopGap(children, edges, selfLoops)
+    : 3;
   const input: ElkNode = {
     id: "circuit",
     layoutOptions: {
@@ -119,7 +162,7 @@ export function circuitGraphInput(
       "elk.spacing.nodeNode": "5",
       "elk.layered.spacing.nodeNodeBetweenLayers": "7",
       "elk.spacing.edgeNode": "3",
-      "elk.spacing.edgeEdge": "3",
+      "elk.spacing.edgeEdge": String(nestedSelfLoopGap),
       "elk.layered.spacing.edgeEdgeBetweenLayers": "3",
       "elk.layered.spacing.edgeNodeBetweenLayers": "3",
       "elk.spacing.edgeLabel": "1",

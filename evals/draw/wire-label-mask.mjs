@@ -80,7 +80,18 @@ function coveredRun(segment, plate, clip, stroke) {
     hi = Math.min(run.hi, c.hi);
   const covered = Math.min(hi, p.hi) - Math.max(lo, p.lo);
   if (covered <= PRINT_EPSILON_MM) return undefined;
-  return { ...run, lo, hi, covered, beforeMm: p.lo - lo, afterMm: hi - p.hi };
+  return {
+    ...run,
+    rawLo: run.lo,
+    rawHi: run.hi,
+    lo,
+    hi,
+    plateLo: Math.max(lo, p.lo),
+    plateHi: Math.min(hi, p.hi),
+    covered,
+    beforeMm: p.lo - lo,
+    afterMm: hi - p.hi,
+  };
 }
 
 function markerSpan(marker, horizontal, across) {
@@ -92,17 +103,18 @@ function markerSpan(marker, horizontal, across) {
   return [center - half, center + half];
 }
 
-function markerInk(markers, run, end) {
+function markerInk(markers, run, end, minOrder = -Infinity) {
   const lower = end === "before",
-    terminal = lower ? run.lo : run.hi;
+    rawTerminal = lower ? run.rawLo : run.rawHi,
+    boundary = lower ? run.lo : run.hi;
   let hidden = 0;
   for (const marker of markers) {
-    if (marker.junction) continue;
+    if (marker.junction || marker.order <= minOrder) continue;
     const ink = markerSpan(marker, run.horizontal, run.across);
     if (
       !ink ||
-      terminal < ink[0] - COINCIDENCE_MM ||
-      terminal > ink[1] + COINCIDENCE_MM
+      rawTerminal < ink[0] - COINCIDENCE_MM ||
+      rawTerminal > ink[1] + COINCIDENCE_MM
     )
       continue;
     if (!finiteBox(marker.clip)) return null;
@@ -110,41 +122,79 @@ function markerInk(markers, run, end) {
     if (run.across < clip.bottom || run.across > clip.top) continue;
     hidden = Math.max(
       hidden,
-      lower
-        ? Math.min(ink[1], clip.hi) - terminal
-        : terminal - Math.max(ink[0], clip.lo),
+      Math.max(
+        0,
+        lower
+          ? Math.min(ink[1], clip.hi) - boundary
+          : boundary - Math.max(ink[0], clip.lo),
+      ),
     );
   }
   return hidden;
 }
 
-function clearance(run, ends, markers, plate, end) {
+function occludedLength(occluders, run, stroke, from, to) {
+  if (to <= from + PRINT_EPSILON_MM || !occluders?.length) return 0;
+  const half = stroke.width / 2,
+    intervals = [];
+  for (const occ of occluders) {
+    if (occ.order <= stroke.order) continue;
+    if (!finiteBox(occ.clip)) return null;
+    const p = span(occ.bbox, run.horizontal);
+    if (run.across + half <= p.bottom || run.across - half >= p.top) continue;
+    const lo = Math.max(from, p.lo),
+      hi = Math.min(to, p.hi);
+    if (hi > lo + PRINT_EPSILON_MM) intervals.push([lo, hi]);
+  }
+  intervals.sort((a, b) => a[0] - b[0]);
+  let total = 0,
+    end = -Infinity;
+  for (const [lo, hi] of intervals) {
+    if (lo > end) {
+      total += hi - lo;
+      end = hi;
+    } else if (hi > end) {
+      total += hi - end;
+      end = hi;
+    }
+  }
+  return total;
+}
+
+function clearance(run, ends, markers, plate, end, occluders, stroke) {
   const coord = (p) => (run.horizontal ? p.x : p.y);
-  const boundary = end === "before" ? run.lo : run.hi;
+  const rawBoundary = end === "before" ? run.rawLo : run.rawHi;
   const terminal = ends.some(
     (p) =>
-      Math.abs(coord(p) - boundary) <= COINCIDENCE_MM &&
+      Math.abs(coord(p) - rawBoundary) <= COINCIDENCE_MM &&
       Math.abs((run.horizontal ? p.y : p.x) - run.across) <= COINCIDENCE_MM,
   );
   const markerMm = terminal ? markerInk(markers, run, end) : 0;
   const minimumMm = terminal ? Math.max(2, plate.heightMm) : BEND_MM;
+  if (markerMm === null)
+    return { terminal, markerMm, minimumMm, visibleMm: null };
+  const hidden =
+    end === "before"
+      ? occludedLength(occluders, run, stroke, run.lo + markerMm, run.plateLo)
+      : occludedLength(occluders, run, stroke, run.plateHi, run.hi - markerMm);
   return {
     terminal,
     markerMm,
     minimumMm,
     visibleMm:
-      markerMm === null
+      hidden === null
         ? null
-        : (end === "before" ? run.beforeMm : run.afterMm) - markerMm,
+        : (end === "before" ? run.beforeMm : run.afterMm) - markerMm - hidden,
   };
 }
 
-function ownedRuns(route, plate, stroke, markers) {
+function ownedRuns(route, plate, stroke, markers, occluders) {
   const points = routePoints(route);
   if (!points?.length || !finiteBox(stroke?.clip)) return null;
   const ends = [points[0], points.at(-1)];
   const runs = straightRuns(points);
   if (runs.some((s) => !axis(s))) return null;
+  const strokeInfo = { ...stroke, width: route.stroke };
   return runs.flatMap((segment) => {
     const run = coveredRun(segment, plate.bbox, stroke.clip, route.stroke);
     if (!run) return [];
@@ -153,8 +203,24 @@ function ownedRuns(route, plate, stroke, markers) {
         ...run,
         wire: route.wire,
         element: route.element,
-        before: clearance(run, ends, markers, plate, "before"),
-        after: clearance(run, ends, markers, plate, "after"),
+        before: clearance(
+          run,
+          ends,
+          markers,
+          plate,
+          "before",
+          occluders,
+          strokeInfo,
+        ),
+        after: clearance(
+          run,
+          ends,
+          markers,
+          plate,
+          "after",
+          occluders,
+          strokeInfo,
+        ),
       },
     ];
   });
@@ -193,7 +259,13 @@ function plateMask(plate, measurement, routes, wire, nativeOwner) {
     if (!stroke || !finiteBox(stroke.clip))
       return { reason: "missing-conductor-measurement" };
     if (!stroke.painted || stroke.order >= plate.order) continue;
-    const runs = ownedRuns(r, plate, stroke, measurement.markers);
+    const runs = ownedRuns(
+      r,
+      plate,
+      stroke,
+      measurement.markers,
+      measurement.occluders,
+    );
     if (!runs) return { reason: "missing-straight-run-measurement" };
     hits.push(...runs);
   }
@@ -204,6 +276,7 @@ function plateMask(plate, measurement, routes, wire, nativeOwner) {
   if (hits.some((r) => r.wire !== wire))
     return { reason: "foreign-conductor", hits };
   if (hits.length > 1) return { reason: "elbow-or-branch", hits };
+  if (!hits[0].horizontal) return { reason: "vertical-cut", hits };
   const margins = [hits[0].before, hits[0].after];
   if (margins.some((m) => m.visibleMm === null))
     return { reason: "missing-terminal-measurement", hits };
@@ -219,6 +292,81 @@ function plateMask(plate, measurement, routes, wire, nativeOwner) {
         : "elbow-or-branch",
       hits,
     };
+}
+
+function occludesApproach(run, markers, order) {
+  const beforeAbove = run.before.terminal
+      ? markerInk(markers, run, "before", order)
+      : 0,
+    afterAbove = run.after.terminal
+      ? markerInk(markers, run, "after", order)
+      : 0;
+  if (beforeAbove === null || afterAbove === null) return false;
+  const exposed =
+    Math.min(run.plateHi, run.hi - afterAbove) -
+    Math.max(run.plateLo, run.lo + beforeAbove);
+  return (
+    exposed > PRINT_EPSILON_MM &&
+    [run.before, run.after].some(
+      (c) =>
+        c.terminal &&
+        c.visibleMm !== null &&
+        c.visibleMm + PRINT_EPSILON_MM < c.minimumMm,
+    )
+  );
+}
+
+export function conductorApproachOcclusionFindings(g, routes) {
+  const m = g.tranche3?.wirePlatePaint,
+    out = [];
+  if (!m?.occluders?.length) return out;
+  for (const occ of m.occluders) {
+    if (!finiteBox(occ.clip) || !Number.isFinite(occ.heightMm)) {
+      out.push(
+        finding("wire-label-mask-unmeasurable", occ, {
+          reason: "missing-occluder-measurement",
+        }),
+      );
+      continue;
+    }
+    if (plateJunction(m.markers, occ)) {
+      out.push(
+        finding("wire-label-plate-masks-conductor", occ, {
+          reason: "junction",
+          plate: occ.bbox,
+        }),
+      );
+      continue;
+    }
+    for (const r of routes) {
+      if (!r.stroke || !intersects(r.bbox, occ.bbox, r.stroke / 2)) continue;
+      const stroke = m.strokes[r.element];
+      if (!stroke || !finiteBox(stroke.clip)) {
+        out.push(
+          finding("wire-label-mask-unmeasurable", occ, {
+            wire: r.wire,
+            reason: "missing-conductor-measurement",
+          }),
+        );
+        continue;
+      }
+      if (!stroke.painted || stroke.order >= occ.order) continue;
+      const runs = ownedRuns(r, occ, stroke, m.markers, []);
+      const masked = runs?.find((run) =>
+        occludesApproach(run, m.markers, occ.order),
+      );
+      if (masked)
+        out.push(
+          finding("wire-label-plate-masks-conductor", occ, {
+            wire: r.wire,
+            reason: "approach",
+            plate: occ.bbox,
+            hits: [masked],
+          }),
+        );
+    }
+  }
+  return out;
 }
 
 export function wireLabelMaskFinding(texts, g, routes, nativeOwner) {

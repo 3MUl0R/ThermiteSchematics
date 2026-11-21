@@ -87,17 +87,17 @@ it("leaves at least the painted plate height outside the terminal ring", () => {
   expect(circuitCaptionPlacement("103", 0, label, hidden)).toBeUndefined();
 });
 
-it("keeps a straight vertical plate but exposes a terminal hidden in its top margin", () => {
-  const clear = fixture([
+it("rejects any plate interrupting a vertical run even with wide margins and accepts beside placement", () => {
+  const centered = fixture([
     { x: 16, y: 0 },
     { x: 16, y: 30 },
   ]);
-  const hidden = fixture([
-    { x: 16, y: 10.5 },
-    { x: 16, y: 30 },
+  const beside = fixture([
+    { x: 9, y: 0 },
+    { x: 9, y: 30 },
   ]);
-  expect(circuitCaptionPlacement("103", 0, label, clear)).toBeDefined();
-  expect(circuitCaptionPlacement("103", 0, label, hidden)).toBeUndefined();
+  expect(circuitCaptionPlacement("103", 0, label, centered)).toBeUndefined();
+  expect(circuitCaptionPlacement("103", 0, label, beside)).toBeDefined();
 });
 it("does not hide a second owned leg behind an otherwise valid straight host", () => {
   const state = fixture([
