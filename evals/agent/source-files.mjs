@@ -141,6 +141,35 @@ export function libraryTypes(root) {
     });
   });
 }
+export function exportSourcePaths(source) {
+  const manifest = JSON.parse(source.read("system.json"));
+  const files = [
+    "system.json",
+    "electrical-system.lock.json",
+    ...confinedMatches(source, "", manifest.sources),
+  ];
+  if (manifest.presentation) files.push(source.path(manifest.presentation));
+  for (const dependency of manifest.libraries ?? []) {
+    const directory = source.path(
+      dependency.path ?? join("libraries", dependency.name),
+    );
+    const path = join(directory, "library.json");
+    files.push(path);
+    let library;
+    try {
+      library = JSON.parse(source.read(path));
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    files.push(
+      ...confinedMatches(source, directory, library.sources).map((name) =>
+        join(directory, name),
+      ),
+    );
+  }
+  return [...new Set(files)].map((path) => path.replaceAll("\\", "/")).sort();
+}
 function jsonAt(path) {
   try {
     return JSON.parse(readFileSync(path));

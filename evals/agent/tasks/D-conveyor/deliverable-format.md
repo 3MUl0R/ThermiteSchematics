@@ -1,6 +1,6 @@
 ## Deliverable format
 
-Use the already initialized project and supplied launcher; the historical path is provenance only. Save views in drawings/ (motor-power.pdf, contactor-actuation.pdf, ps1-loads.pdf); packet.request.json and generated drawings/packet.{json,html,pdf}; drawings/<kind>.csv reports; drawings/{diagnostics,cable,before,review}.json; friction.md. Final deliverables must reflect the final sources: after the guarded change, regenerate every final output. Pre-change outputs may be kept elsewhere.
+Use the already initialized project and supplied launcher; the historical path is provenance only. Save views in drawings/ (motor-power.pdf, contactor-actuation.pdf, ps1-loads.pdf); packet.request.json and generated drawings/packet.{json,html,pdf}; drawings/<kind>.csv reports; drawings/{diagnostics,cable,before,review}.json; friction.md. After the guarded change, validate the final source and regenerate every final output. Keep pre-change outputs elsewhere.
 
 Write requirement-matrix.json as an array with each ID exactly once, case-insensitive. Fixed statuses: satisfied, substituted, deferred. Shape:
 

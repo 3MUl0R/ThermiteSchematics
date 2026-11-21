@@ -100,8 +100,7 @@ See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 ## Offline project workflows
 
-Run `thermite guide project-workflows` for printing, reports, review, libraries/lock,
-connection completeness, wiring records, cables, communication, field hookups
-and circuits. For exact shapes use
-`thermite guide schema`. Use `thermite guide drawing-frames` before changing paper
-frames or title data. It covers source binding.
+After the last edit, validate, export a bundle, inspect the drawings, and run
+`export check` before handoff. See `thermite guide project-workflows`.
+For exact shapes use `thermite guide schema`. Use `thermite guide drawing-frames`
+before changing paper frames or title data.

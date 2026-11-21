@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.5)
+# Fresh-agent evaluator (E2 v1.20.6)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1085,3 +1085,45 @@ Contributor checkers retain their separate live checkout behavior, including
 Git worktree inspection and running submitted code. A checker sandbox and a
 confined representation of Git worktree and install receipts are separate
 work needed to extend this boundary to those tasks.
+
+## E2 1.20.6
+
+D-conveyor appendix 1.6.3 calls for validation after the guarded change. Its
+frozen brief and 17 matrix rows retain their previous bytes. Both delivery
+routes use the same appendix. The generated project guide supplies the
+finalization pointer used in the guide comparison.
+
+The D-conveyor checker accepts standalone exports or a bundle in
+`drawings/`. For a bundle it uses the named, project-local delivery request
+from the audited invocation, with `delivery.request.json` as the fallback.
+It checks the task's artifact names, drawing roots and intents, full reports,
+cable listing and review baseline. It rebuilds each output with the standalone
+CLI. The freshness manifest binds inputs and bytes. The checker reports
+missing, stale and tampered exports by path and preserves the legacy semantic
+comparison for standalone JSON. A standalone mismatch without freshness
+metadata is reported as stale because its origin is unverified.
+
+`outcome.captureCurrent` and `outcome.capture` report whether the trusted
+broker receipt and PNG hashes match the independently regenerated final
+HTML. For a bundle the manifest must also agree. For standalone HTML a
+present sidecar must agree with a fresh standalone receipt. An unchanged
+HTML export keeps its matching capture. Visual inspection and PDF V1/V5
+still use their existing evidence and judge gates.
+
+D-conveyor run scores expose `metrics.delivery`. Agent Thermite calls are
+counted from the shim, and its CLI process timings exclude shim bookkeeping.
+The final source change is bounded by the shim's before/after observations.
+Finalization calls are validation and export commands after that boundary.
+The broker counts additional capture attempts as retries. Agent wall time,
+setup time and post-agent time are recorded separately.
+
+During the agent phase, the harness samples complete artifact sets with
+matching broker receipts. `delivery-candidates.json` records observed times
+and digests of the source, expected artifacts, capture inputs and available
+bundle marker. The first candidate matching the independently validated
+final delivery gets a time-to-delivery value. Attempts without a qualifying
+candidate by the deadline retain a censor time and explicit timeout status.
+The complete-delivery metric requires independent checker success, a current
+capture chain and no scored workflow violations. Actual inspection remains
+pending judge evidence. Replay the previous checkpoint into separate checker
+evidence and retain original run records.

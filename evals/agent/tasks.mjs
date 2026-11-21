@@ -4,6 +4,7 @@ import {
   regenerateView,
   findRegeneratedView,
   cleanChecker,
+  deliveredPdf,
 } from "./artifacts.mjs";
 // Synthetic user facts and reference actions. No manufacturer pinout is asserted.
 import { join } from "node:path";
@@ -23,7 +24,6 @@ import {
   device,
   wire,
   ep,
-  deliveredPdf,
   docView,
   view,
   packet,

@@ -52,6 +52,10 @@ import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 import { visualBroker } from "./visual-capture.mjs";
+import {
+  conveyorMetrics,
+  observeConveyorDelivery,
+} from "./conveyor-measurement.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import {
   agents,
@@ -916,7 +920,13 @@ export async function runOne({
     // The guide the agent's CLI loads at launch.
     guideBytes = readFileSync(join(before, "AGENTS.md")).length;
     const started = Date.now();
+    const conveyor = task.id === "D-conveyor";
+    const delivery = conveyor
+      ? observeConveyorDelivery(source, task.deliverables)
+      : null;
     let execution = { exit: 0, stdout: "", stderr: "" };
+    let agentEnded,
+      captureRetries = 0;
     if (stoppingSignal || batchControl?.stopped) {
       execution = {
         exit: null,
@@ -938,11 +948,17 @@ export async function runOne({
         timeoutMs,
       );
     } else {
-      const stopCapture = await visualBroker(task, project, live);
+      const stopCapture = await visualBroker(
+        task,
+        project,
+        live,
+        delivery?.observe,
+      );
       try {
         execution = await capturedAgent(command, ctx, timeoutMs);
       } finally {
-        await stopCapture();
+        agentEnded = Date.now();
+        captureRetries = (await stopCapture())?.retries ?? 0;
       }
     }
     execution.stdout = redactAgentOutput(execution.stdout, secretList);
@@ -957,7 +973,7 @@ export async function runOne({
         { ...execution, operatorSignal: stoppingSignal },
         normalized,
       ),
-      ended = Date.now();
+      ended = agentEnded ?? Date.now();
     // The agent has finished; record that before anything reads the project.
     finalMessage = normalized.finalMessage ?? null;
     if (batchControl && batchHaltReason(classification)) {
@@ -1138,6 +1154,7 @@ export async function runOne({
           ? { pass: false, agentFailure: "snapshot-scope", message: scopeError }
           : await evaluateTask(taskDir, ctx);
     outcome = JSON.parse(redactSecrets(JSON.stringify(outcome), secretList));
+    const independentlyChecked = outcome.pass;
     if (classification.taskFailure && !scopeFailure)
       outcome = {
         ...outcome,
@@ -1202,6 +1219,23 @@ export async function runOne({
             : shimErrors.length
               ? "infrastructure-failure"
               : classification.status;
+    if (delivery) {
+      metrics.delivery = conveyorMetrics({
+        ctx,
+        outcome,
+        independentlyChecked,
+        candidates: delivery.candidates,
+        captureRetries,
+        started,
+        ended,
+        runStarted,
+        status,
+        timeoutMs,
+        timedOut: execution.timedOut ?? false,
+        violations: metrics.violations,
+      });
+      save("delivery-candidates.json", delivery.candidates);
+    }
     manifest = {
       ...identity,
       format: "thermite-agent-run/1.1",
@@ -1288,6 +1322,17 @@ export async function runOne({
         context,
         engineRoots,
         keep,
+        ...(delivery && {
+          deliveryTiming: {
+            candidates: delivery.candidates,
+            captureRetries,
+            started,
+            ended,
+            runStarted,
+            timeoutMs,
+            timedOut: execution.timedOut ?? false,
+          },
+        }),
       });
     save("before-flush.json", beforeFlush);
     save("final.json", final);
@@ -1471,6 +1516,7 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       promptVersion,
       ...(task.contributor && { pinnedTypeScript: prepared.pinnedTypeScript }),
       evidence: live,
+      captureEvidence: evidence,
       env: {
         ...freshEnvironment(join(scratch, "isolated"), {}, {}),
         THERMITE_EVAL_BUN_CONFIG: trusted.config,
@@ -1518,10 +1564,24 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       wallTimeMs: original.timings.wallTimeMs,
     });
     if (original.agent === "reference") metrics.usage.partial = false;
+    const independentlyChecked = outcome.pass;
     if (original.agentFailure) {
       outcome.pass = false;
       outcome.agentFailure = original.agentFailure;
     }
+    if (stored.deliveryTiming)
+      metrics.delivery = conveyorMetrics({
+        ...stored.deliveryTiming,
+        ctx,
+        outcome,
+        independentlyChecked,
+        status:
+          original.shimErrors?.length || outcome.error
+            ? original.status
+            : "complete",
+        violations: metrics.violations,
+        postAgentWallTimeMs: original.metrics.delivery?.postAgentWallTimeMs,
+      });
     const result = {
       ...original,
       outcome,

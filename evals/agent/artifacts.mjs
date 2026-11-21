@@ -72,6 +72,7 @@ const printValues = new Set([
   "--layout",
   "--margin",
 ]);
+const reportValues = new Set(["--device", "--filter"]);
 const viewSwitches = new Set([
   "--power",
   "--actuation",
@@ -87,55 +88,64 @@ function parsePrint(argv) {
   if (
     !Array.isArray(argv) ||
     !argv.every((arg) => typeof arg === "string") ||
-    !["view", "packet"].includes(argv[0])
+    !["view", "packet", "report"].includes(argv[0])
   )
     return null;
   const kind = argv[0],
     view = kind === "view",
+    report = kind === "report",
     options = [],
     files = {};
   let root;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
-    if (view && !root && !arg.startsWith("-")) {
+    if ((view || report) && !root && !arg.startsWith("-")) {
       root = arg;
       continue;
     }
     if (
       printSwitches.has(arg) ||
-      (view ? viewSwitches.has(arg) : arg === "--strict")
+      (view ? viewSwitches.has(arg) : !report && arg === "--strict")
     ) {
       options.push(arg);
       continue;
     }
     const equals = arg.indexOf("="),
       key = equals < 0 ? arg : arg.slice(0, equals);
-    if (!printValues.has(key) && !(view && viewValues.has(key))) return null;
+    if (arg === "--receipt") continue;
+    if (
+      !printValues.has(key) &&
+      !(view && viewValues.has(key)) &&
+      !(report && reportValues.has(key))
+    )
+      return null;
     const value = equals < 0 ? argv[++i] : arg.slice(equals + 1);
     if (!value || (value.startsWith("-") && value !== "-")) return null;
     if (key === "-o" || key === "--output") files.output = value;
     else if (key === "--project") files.project = value;
-    else if (key === "--input" && !view) files.input = value;
+    else if (key === "--input" && kind === "packet") files.input = value;
     else if (key === "--input") return null;
+    else if (key === "--filter") files.filter = value;
     else options.push(key, value);
   }
-  if (view ? !root : !files.input) return null;
-  return { argv: [kind, ...(view ? [root] : []), ...options], ...files };
+  if (view || report ? !root : !files.input) return null;
+  return { argv: [kind, ...(root ? [root] : []), ...options], ...files };
 }
-function commandFor(ctx, artifact, fallback) {
+function commandFor(ctx, artifact, fallback, allowReport = false) {
   const project = ctx.originalProject ?? ctx.project;
   for (const call of [...(ctx.calls ?? [])].reverse()) {
     if (call?.phase === "flush" || call?.exit !== 0) continue;
     const parsed = parsePrint(call.argv);
     if (
       parsed?.output &&
+      (allowReport || parsed.argv[0] !== "report") &&
       resolve(project, parsed.output) === resolve(project, artifact)
     )
       return { parsed, argv: call.argv, request: call.request };
   }
   return fallback ? { parsed: parsePrint(fallback), argv: fallback } : null;
 }
-function remap(command, ctx, out) {
+function remap(command, ctx, out, receipt = false) {
   const parsed = command?.parsed;
   if (!parsed) return null;
   const project = ctx.originalProject ?? ctx.project,
@@ -152,7 +162,16 @@ function remap(command, ctx, out) {
       isAbsolute(path)
     )
       return null;
-    if (typeof command.request === "string") {
+    if (receipt) {
+      const named = join(clean.project, path);
+      if (
+        parsed.input === "-" ||
+        (typeof command.request === "string" &&
+          !readFileSync(named).equals(Buffer.from(command.request)))
+      )
+        return null;
+      result.push("--input", named);
+    } else if (typeof command.request === "string") {
       const request = out + ".request.json";
       writeFileSync(request, command.request);
       result.push("--input", request);
@@ -160,14 +179,47 @@ function remap(command, ctx, out) {
       result.push("--input", join(clean.project, path));
     } else return null;
   }
-  return [...result, "--project", clean.project, "-o", out];
+  if (parsed.filter) {
+    const path = relative(project, resolve(project, parsed.filter));
+    if (
+      !path ||
+      path === ".." ||
+      path.startsWith(".." + sep) ||
+      isAbsolute(path)
+    )
+      return null;
+    result.push("--filter", join(clean.project, path));
+  }
+  return [
+    ...result,
+    "--project",
+    clean.project,
+    "-o",
+    out,
+    ...(receipt ? ["--receipt"] : []),
+  ];
 }
-function deliveredBytes(ctx, artifact) {
+export function deliveredBytes(ctx, artifact) {
   const source = projectReader(ctx.project);
   try {
     return source.read(artifact);
   } finally {
     source.close();
+  }
+}
+export function replayHtml(ctx, artifact, fallback, receipt = false) {
+  const command = commandFor(ctx, artifact, fallback, true);
+  const output = join(ctx.evidence, "regenerated-html", ...artifact.split("/"));
+  try {
+    mkdirSync(join(output, ".."), { recursive: true });
+    const mapped = remap(command, ctx, output, receipt);
+    if (!mapped || cli(cleanChecker(ctx), ...mapped).status !== 0) return null;
+    return {
+      bytes: readFileSync(output),
+      ...(receipt && { receipt: readFileSync(output + ".receipt.json") }),
+    };
+  } catch {
+    return null;
   }
 }
 export async function deliveredPdf(ctx, artifact) {
@@ -291,8 +343,8 @@ export async function regeneratePacket(
   const clean = cleanChecker(ctx),
     prefix = join(ctx.evidence, `regenerated-${name}`),
     commands = {};
-  let packet = null,
-    valid = true;
+  let packet = null;
+  const issued = {};
   for (const ext of ["json", "pdf", "html"]) {
     const artifact = `drawings/${name}.${ext}`,
       output = `${prefix}.${ext}`;
@@ -300,38 +352,47 @@ export async function regeneratePacket(
     const command = commandFor(ctx, artifact, fallback);
     commands[ext] = command.argv;
     const mapped = remap(command, ctx, output);
-    if (!mapped) {
-      valid = false;
-      continue;
-    }
+    if (!mapped) continue;
     const result = cli(clean, ...mapped);
-    if (result.status !== 0) {
-      valid = false;
-      continue;
-    }
+    if (result.status !== 0) continue;
+    issued[ext] = true;
     if (ext === "json") packet = read(output);
   }
   const result = await comparePacketArtifacts(ctx, { name, prefix });
-  return { pass: valid && result.pass, packet, commands, prefix };
+  const matches = Object.fromEntries(
+    Object.entries(result.matches).map(([ext, pass]) => [
+      ext,
+      !!issued[ext] && pass,
+    ]),
+  );
+  return {
+    pass: Object.values(matches).every(Boolean),
+    matches,
+    packet,
+    commands,
+    prefix,
+  };
 }
 export async function comparePacketArtifacts(
   ctx,
   { name = "packet", prefix = join(ctx.evidence, `regenerated-${name}`) } = {},
 ) {
-  try {
-    for (const ext of ["json", "pdf", "html"]) {
+  const matches = {};
+  for (const ext of ["json", "pdf", "html"]) {
+    try {
       const output = `${prefix}.${ext}`,
         artifact = deliveredBytes(ctx, `drawings/${name}.${ext}`);
       if (ext === "json") {
-        if (canonical(JSON.parse(artifact)) !== canonical(read(output)))
-          return { pass: false };
+        matches[ext] =
+          canonical(JSON.parse(artifact)) === canonical(read(output));
       } else {
-        if (!readFileSync(output).equals(artifact)) return { pass: false };
-        if (ext === "pdf" && !(await pdf(output))) return { pass: false };
+        matches[ext] =
+          readFileSync(output).equals(artifact) &&
+          (ext !== "pdf" || (await pdf(output)));
       }
+    } catch {
+      matches[ext] = false;
     }
-    return { pass: true };
-  } catch {
-    return { pass: false };
   }
+  return { pass: Object.values(matches).every(Boolean), matches };
 }

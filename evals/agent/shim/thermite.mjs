@@ -141,6 +141,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, handler);
 }
 let result;
+const commandStarted = Date.now();
 try {
   child = spawn(
     process.execPath,
@@ -230,6 +231,7 @@ try {
     sanitize({
       queuedAt,
       started,
+      commandStarted,
       commandEnded,
       ended: Date.now(),
       phase: process.env.THERMITE_EVAL_PHASE ?? "agent",

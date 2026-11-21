@@ -192,7 +192,7 @@ function linkedOutputs(link, outputs) {
 // The broker publishes straight into evidence/visual-captures, which the
 // runner keeps outside the sandbox's writable roots, and links it into the
 // project before the agent starts.
-export async function visualBroker(task, project, evidence) {
+export async function visualBroker(task, project, evidence, observe) {
   if (!task.visualCapture) return async () => {};
   const root = realpathSync(project);
   const link = join(root, "visual-captures");
@@ -226,24 +226,33 @@ export async function visualBroker(task, project, evidence) {
     publishError(outputs, error);
   }
 
-  let previous;
+  let previous, receipt;
+  let attempts = 0;
   const tick = async () => {
     let bytes;
     try {
-      if (!source.has(requestName)) return;
+      if (!source.has(requestName)) {
+        if (receipt) observe?.(receipt);
+        return;
+      }
       bytes = source.read(requestName).toString("utf8");
     } catch (error) {
       if (previous !== error.message) publishError(outputs, error);
       previous = error.message;
+      receipt = null;
       return;
     }
-    if (bytes === previous) return;
-    previous = bytes;
-    try {
-      await captureInto(source, outputs, JSON.parse(bytes));
-    } catch (error) {
-      publishError(outputs, error);
+    if (bytes !== previous) {
+      previous = bytes;
+      attempts++;
+      receipt = null;
+      try {
+        receipt = await captureInto(source, outputs, JSON.parse(bytes));
+      } catch (error) {
+        publishError(outputs, error);
+      }
     }
+    if (receipt) observe?.(receipt);
   };
   if (source)
     timer = setInterval(() => {
@@ -264,5 +273,6 @@ export async function visualBroker(task, project, evidence) {
     } finally {
       cleanup();
     }
+    return { retries: Math.max(0, attempts - 1) };
   };
 }
