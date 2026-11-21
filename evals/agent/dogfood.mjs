@@ -817,6 +817,13 @@ export async function checkDogfood(ctx) {
   };
 }
 export function referenceDogfood(ctx) {
+  prepareDogfoodProject(ctx, { exportDrawings: true });
+  return "Reference deliverables are generated. The matrix distinguishes modeled requirements and disclosed substitutions from specific compiler/library gaps. Unfinished hookups and print-size visual checks remain explicit; this is not electrical approval.";
+}
+
+// Export tests supply their own delivery commands from the same source,
+// packet request, and review baseline as the scripted reference.
+export function prepareDogfoodProject(ctx, { exportDrawings = false } = {}) {
   const pump = ctx.task.id === "D-pump",
     prefix = pump ? "P" : "C",
     base = structuredClone(
@@ -984,20 +991,8 @@ export function referenceDogfood(ctx) {
       },
     ]);
   }
-  ok(ctx, "validate", ".");
-  // Exercise the brief's order: produce, guarded change, then regenerate.
-  const emitOutputs = () => {
-    ok(ctx, "view", "M1", "--power", "-o", "drawings/motor-power.pdf");
-    ok(
-      ctx,
-      "view",
-      "K1",
-      "--actuation",
-      "-o",
-      "drawings/contactor-actuation.pdf",
-    );
-    if (!pump)
-      ok(ctx, "view", "PS1", "--loads", "-o", "drawings/ps1-loads.pdf");
+  if (exportDrawings) ok(ctx, "validate", ".");
+  const writePacketRequest = () => {
     const fields = objects(ctx.project)
       .filter(
         (o) =>
@@ -1068,6 +1063,20 @@ export function referenceDogfood(ctx) {
       index: true,
       views,
     });
+  };
+  const emitOutputs = () => {
+    ok(ctx, "view", "M1", "--power", "-o", "drawings/motor-power.pdf");
+    ok(
+      ctx,
+      "view",
+      "K1",
+      "--actuation",
+      "-o",
+      "drawings/contactor-actuation.pdf",
+    );
+    if (!pump)
+      ok(ctx, "view", "PS1", "--loads", "-o", "drawings/ps1-loads.pdf");
+    writePacketRequest();
     for (const ext of ["json", "html", "pdf"])
       ok(
         ctx,
@@ -1088,7 +1097,13 @@ export function referenceDogfood(ctx) {
       query(ctx, "cable", "CBL1", "--json"),
     );
   };
-  emitOutputs();
+  const emitReview = () =>
+    write(
+      join(ctx.project, "drawings/review.json"),
+      query(ctx, "review", "--before", "drawings/before.json", "--json"),
+    );
+  // Exercise the brief's order: produce, guarded change, then regenerate.
+  if (exportDrawings) emitOutputs();
   ok(ctx, "snapshot", "-o", "drawings/before.json");
   replaceObject(
     ctx,
@@ -1098,19 +1113,15 @@ export function referenceDogfood(ctx) {
       ? "5 HP pump motor requirement; generic 480 VAC model, selected-part protection and nameplate review unfinished"
       : "2 HP 480 V conveyor motor requirement; generic model, selected-part protection and nameplate review unfinished",
   );
-  write(
-    join(ctx.project, "drawings/review.json"),
-    query(ctx, "review", "--before", "drawings/before.json", "--json"),
-  );
+  if (exportDrawings) emitReview();
   replaceObject(ctx, "W-START-INPUT", "properties", {
     ...locate(ctx.project, "W-START-INPUT").object.properties,
     label: "START-INPUT-REVIEWED",
   });
-  write(
-    join(ctx.project, "drawings/review.json"),
-    query(ctx, "review", "--before", "drawings/before.json", "--json"),
-  );
-  emitOutputs();
+  if (exportDrawings) {
+    emitReview();
+    emitOutputs();
+  } else writePacketRequest();
   const mapping = {
     SUPPLY: ["SRC1"],
     BREAKER: ["CB1"],
@@ -1186,6 +1197,7 @@ export function referenceDogfood(ctx) {
     };
   });
   write(join(ctx.project, "requirement-matrix.json"), matrix);
+  if (!exportDrawings) return;
   write(
     join(ctx.project, "friction.md"),
     `Reference uses shipped generic models, not manufacturer-verified equipment. Wire gauge/color claims from the synthetic base were removed. ${pump ? "Core 0.2.0 supplies the transmitter, analog-input PLC, level switch, NO start button and HMI. PT1 is drawn through JB1, CBL1 and TB1 into PLC1.AI0+/AI0-. PLC1 also drives the contactor and links to the HMI; there is no separate analog controller or invented backplane. The two-wire interface is unpowered, following the shipped RM3 interface example: loop power, AI mode, compatibility, range and physical hardware still require engineering selection. PLC1 and HMI1 DC supply magnitudes and interface ratings remain unspecified by their generic types; no compatibility certification is asserted. Level reference condition and actuation meaning are unspecified." : "PNP wiring follows the shipped generic 1/3/4 model through JB1, CBL1 and TB1; physical selected-part review remains. The third PLC input for stop monitoring is deferred with W905. Conditional indicator is omitted, rather than claimed unavailable in core."} ${pump ? "The pump uses shipped core types without authoring local types." : "The generic NO pushbutton local type copies the shipped contact shape and declares the required profile; physical part selection is unverified."} All generated outputs succeeded without recovery calls. Tool-call and failure counts are in the run score. PS1 input is intentionally unwired: the starter feed is not designed, its input rating and branch protection are unverified (W905). Visual inspection of at least two outputs and PDF V1/V5 remain pending independent judgement.\n`,
@@ -1198,5 +1210,4 @@ export function referenceDogfood(ctx) {
         "Scripted reference: no model context; guide policy is implemented by the reference helpers, not claimed as an agent read.",
     });
   }
-  return "Reference deliverables are generated. The matrix distinguishes modeled requirements and disclosed substitutions from specific compiler/library gaps. Unfinished hookups and print-size visual checks remain explicit; this is not electrical approval.";
 }

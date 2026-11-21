@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { checkDogfood, referenceDogfood } from "./dogfood.mjs";
+import { checkDogfood, prepareDogfoodProject } from "./dogfood.mjs";
 import { captureChain, conveyorOutputs } from "./conveyor-exports.mjs";
 import {
   conveyorMetrics,
@@ -143,6 +143,31 @@ function standaloneCall(context, file, args, receipt = false) {
   return { argv, phase: "agent", exit: 0, before, after: { files: files() } };
 }
 
+function standaloneFixture() {
+  if (legacyPrepared) return legacyPrepared;
+  const project = join(root, "standalone");
+  cpSync(prepared, project, { recursive: true });
+  rmSync(join(project, marker));
+  const fixture = { project, thermite, task };
+  const calls = standalone.map(([file, args]) =>
+    standaloneCall(
+      fixture,
+      file,
+      args,
+      ["motor-power.html", "bom.csv"].includes(file),
+    ),
+  );
+  legacyPrepared = { project, calls };
+  return legacyPrepared;
+}
+
+function copyStandaloneFixture() {
+  const fixture = standaloneFixture();
+  rmSync(ctx.project, { recursive: true });
+  cpSync(fixture.project, ctx.project, { recursive: true });
+  return fixture.calls;
+}
+
 function changeSource() {
   const equipmentFile = projectFile("devices/equipment.json");
   const equipment = read(equipmentFile);
@@ -164,7 +189,7 @@ beforeAll(() => {
     if (["PLC1", "PS1"].includes(device.designation))
       device.location = "MAIN-PANEL";
   write(equipmentFile, equipment);
-  referenceDogfood(initial);
+  prepareDogfoodProject(initial);
 
   const before = snapshot(prepared);
   replaceObject(
@@ -186,22 +211,7 @@ beforeAll(() => {
   validationDiagnostics = JSON.parse(ok(initial, "validate", ".", "--json"));
   write(join(prepared, request), plan);
   ok(initial, ...bundleArgs);
-  const project = join(root, "standalone");
-  cpSync(prepared, project, { recursive: true });
-  rmSync(join(project, marker));
-  legacyPrepared = { project, thermite, task };
-  legacyPrepared.calls = [
-    apply,
-    ...standalone.map(([file, args]) =>
-      standaloneCall(
-        legacyPrepared,
-        file,
-        args,
-        ["motor-power.html", "bom.csv"].includes(file),
-      ),
-    ),
-  ];
-}, 60000);
+});
 
 beforeEach(() => {
   if (!supported) return;
@@ -227,16 +237,20 @@ afterAll(() => {
 
 it("accepts independent standalone exports and current captures with and without a receipt", async () => {
   if (!supported) return;
-  rmSync(projectFile(marker));
+  const calls = copyStandaloneFixture();
+  const bom = "drawings/bom.csv";
+  rmSync(projectFile(bom + ".receipt.json"));
+  const plainBom = ["report", "bom", "-o", bom];
+  ok(ctx, ...plainBom);
+  // Exercise calls without audit hashes, including a plain BOM and an HTML receipt.
   ctx.calls = [
     apply,
     { ...bundleCall(), exit: 1 },
-    ...standalone.map(([file, args]) => {
-      const argv = [...args, "-o", "drawings/" + file];
-      if (file === "motor-power.html") argv.push("--receipt");
-      ok(ctx, ...argv);
-      return { argv, phase: "agent", exit: 0 };
-    }),
+    ...calls.map(({ argv }) => ({
+      argv: argv.includes(bom) ? plainBom : argv,
+      phase: "agent",
+      exit: 0,
+    })),
   ];
   const receipt = installCaptures();
   receipt.files[0].input = projectFile(html[0]);
@@ -418,9 +432,7 @@ it.each(
   if (!supported) return;
   const path = "drawings/bom.csv";
   if (route === "legacy") {
-    rmSync(ctx.project, { recursive: true });
-    cpSync(legacyPrepared.project, ctx.project, { recursive: true });
-    ctx.calls = legacyPrepared.calls.slice();
+    ctx.calls = [apply, ...copyStandaloneFixture()];
   } else if (route === "mixed") {
     ctx.calls.push(standaloneCall(ctx, "bom.csv", ["report", "bom"], true));
   }
@@ -598,7 +610,7 @@ it.each(["legacy", "bundle", "mixed"])(
     } else {
       if (route === "legacy") {
         rmSync(projectFile(marker));
-        ctx.calls = legacyPrepared.calls.slice();
+        ctx.calls = [apply, ...standaloneFixture().calls];
       }
       ctx.calls.push(standaloneCall(ctx, "bom.html", report, true));
     }

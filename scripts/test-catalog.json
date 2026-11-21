@@ -6,6 +6,7 @@
   "evals/agent/boundary-policy.test.mjs": 0.007,
   "evals/agent/capture-normalization.test.mjs": 0.001,
   "evals/agent/cli-protocol.test.mjs": 0.012,
+  "evals/agent/conveyor-exports.test.mjs": 362.35,
   "evals/agent/cost.test.mjs": 0.001,
   "evals/agent/dogfood.test.mjs": 0.086,
   "evals/agent/infra.test.mjs": 0.016,
