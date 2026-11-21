@@ -39,7 +39,7 @@ function failure(
 it("retries only the measured failure and the same physical pass-through", async () => {
   const fixture = await agentRefusalFixture("sensor");
   try {
-    const graph = agentPresentation(fixture.ir, {
+    const { graph } = agentPresentation(fixture.ir, {
       ...sensorTrace,
       flow: "left-to-right",
     });
@@ -81,16 +81,38 @@ it("retries only the measured failure and the same physical pass-through", async
   }
 });
 
-it("keeps net-label recovery scoped to failed vertical power ink", async () => {
+it("requires a phase conductor overlap in vertical power views", async () => {
   const fixture = await agentRefusalFixture("pump");
   try {
-    const graph = agentPresentation(fixture.ir, {
+    const { graph, selected } = agentPresentation(fixture.ir, {
       ...pumpPower,
       flow: "top-to-bottom",
     });
+    const overlap = (designation: string) => {
+      const edge = graph.edges.find(
+        (e) =>
+          e.conductor?.kind === "wire" &&
+          e.conductor.designation === designation,
+      );
+      assert.ok(edge?.netLabel);
+      return { labelId: edge.netLabel.id, edgeId: edge.id };
+    };
+    const phase = overlap("W105"),
+      earth = overlap("W113");
+    const failureWithOverlaps = {
+      ...failure(graph, "net-label-intersection"),
+      netLabelOverlaps: [phase, earth],
+    };
+    expect(rootedRecovery(graph, failureWithOverlaps, selected)).toEqual(
+      new Set([phase.labelId, earth.labelId]),
+    );
     expect(
-      rootedRecovery(graph, failure(graph, "net-label-intersection")),
-    ).toBe("net-label-head");
+      rootedRecovery(
+        graph,
+        { ...failureWithOverlaps, netLabelOverlaps: [earth] },
+        selected,
+      ),
+    ).toBeUndefined();
     expect(
       rootedRecovery(graph, failure(graph, "contract-violation")),
     ).toBeUndefined();
@@ -99,7 +121,11 @@ it("keeps net-label recovery scoped to failed vertical power ink", async () => {
       flow: "left-to-right",
     });
     expect(
-      rootedRecovery(horizontal, failure(horizontal, "net-label-intersection")),
+      rootedRecovery(
+        horizontal.graph,
+        failureWithOverlaps,
+        horizontal.selected,
+      ),
     ).toBeUndefined();
   } finally {
     await fixture.dispose();
@@ -109,7 +135,7 @@ it("keeps net-label recovery scoped to failed vertical power ink", async () => {
 it("leaves root fan-out to its existing search budget", async () => {
   const fixture = await agentRefusalFixture("sensor");
   try {
-    const graph = agentPresentation(fixture.ir, {
+    const { graph } = agentPresentation(fixture.ir, {
       ...sensorTrace,
       flow: "left-to-right",
     });
@@ -137,7 +163,7 @@ it("leaves root fan-out to its existing search budget", async () => {
 it("rejects a detached recovered endpoint and preserves the original refusal", async () => {
   const fixture = await agentRefusalFixture("sensor");
   try {
-    const graph = agentPresentation(fixture.ir, {
+    const { graph } = agentPresentation(fixture.ir, {
       ...sensorTrace,
       flow: "left-to-right",
     });

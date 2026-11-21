@@ -10,7 +10,6 @@ import {
 import { buildPresentationGraph } from "../../src/presentation.js";
 import type { SchematicViewRequest } from "../../src/types.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
-import type { RootedRecovery } from "../../src/layout/rooted-recovery.js";
 
 export function observedRecoveryEngine() {
   const engine = createElkEngine(),
@@ -43,12 +42,12 @@ export function restoreRecoveryOptions(candidate: ElkNode, before: ElkNode) {
 export function assertRecoveryInputs(
   before: ElkNode,
   after: ElkNode,
-  mode: RootedRecovery,
+  recovery: "trace-order" | readonly string[],
 ) {
   expect(restoreRecoveryOptions(after, before)).toEqual(before);
   expect(after.layoutOptions).toEqual({
     ...before.layoutOptions,
-    ...(mode === "trace-order"
+    ...(recovery === "trace-order"
       ? { "org.eclipse.elk.layered.considerModelOrder.strategy": "NONE" }
       : {}),
   });
@@ -61,7 +60,9 @@ export function assertRecoveryInputs(
       const net = label.id?.endsWith(',"net"]');
       expect(label.layoutOptions).toEqual({
         ...old.layoutOptions,
-        ...(net && mode === "net-label-head"
+        ...(net &&
+        recovery !== "trace-order" &&
+        recovery.includes(label.text ?? "")
           ? { "org.eclipse.elk.edgeLabels.placement": "HEAD" }
           : {}),
       });
@@ -89,5 +90,5 @@ export function agentPresentation(
   assert.ok(selected.ok);
   const built = buildPresentationGraph({ ir, selected: selected.value });
   assert.ok(built.ok);
-  return built.value.graph;
+  return { graph: built.value.graph, selected: selected.value };
 }

@@ -4,7 +4,7 @@ export const wiringAdvice = new Map([
     "Manual print review. The terminal-label clearance, wire-label mask and face-clearance browser tests check painted geometry.",
   ],
   [
-    "See `thermite guide circuit-symbols` for drafting.",
+    "See `thermite guide circuit-symbols` for terminal marks.",
     "The generated guide test resolves this offline topic. Default-symbol-roles tests cover its printed roles.",
   ],
   [

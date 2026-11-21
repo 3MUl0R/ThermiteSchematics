@@ -48,7 +48,11 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
       if (flow === "top-to-bottom") {
         const [before, after] = observed.inputs;
         assert.ok(before && after);
-        assertRecoveryInputs(before, after, "net-label-head");
+        assertRecoveryInputs(before, after, [
+          "L1 480VAC",
+          "L2 480VAC",
+          "L3 480VAC",
+        ]);
         const netLabels = after.edges
           ?.flatMap((e) => e.labels ?? [])
           .filter((l) => l.id?.endsWith(',"net"]'));
@@ -57,7 +61,7 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
           netLabels?.map(
             (l) => l.layoutOptions?.["org.eclipse.elk.edgeLabels.placement"],
           ),
-        ).toEqual(["HEAD", "HEAD", "HEAD", "HEAD"]);
+        ).toEqual(["HEAD", "HEAD", "HEAD", "TAIL"]);
       }
     } finally {
       await fixture.dispose();

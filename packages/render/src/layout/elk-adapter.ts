@@ -554,7 +554,7 @@ function edgeAdapter(
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
             label.role === "net"
-              ? recovery === "net-label-head"
+              ? recovery !== "trace-order" && recovery?.has(label.id)
                 ? "HEAD"
                 : "TAIL"
               : "CENTER",
@@ -822,31 +822,27 @@ export async function layoutPresentationGraph(
     return normalizeAndValidateLayout(candidate, build.graph, output, catalog);
   };
   const first = await run(graph);
-  const recovery = rootedRecovery(graph, first);
+  if (first.ok) return first;
+  if (
+    (graph.view.format === "schematic-view/0.2" &&
+      graph.view.intent === "loads") ||
+    first.failureKind === "ambiguous-intersection" ||
+    first.failureKind === "collinear-overlap"
+  ) {
+    // Preserve the existing fork and route search before changing model order.
+    for (const alternatives of [
+      contextForkOrderAlternatives(graph),
+      rootedRouteAlternatives(graph),
+    ])
+      for (const candidate of alternatives) {
+        const result = await run(candidate);
+        if (result.ok) return result;
+      }
+  }
+  const recovery = rootedRecovery(graph, first, options.selected);
   if (recovery !== undefined) {
     const recovered = await run(graph, recovery);
     if (recovered.ok) return recovered;
   }
-  if (
-    first.ok ||
-    (!(
-      graph.view.format === "schematic-view/0.2" &&
-      graph.view.intent === "loads"
-    ) &&
-      first.failureKind !== "ambiguous-intersection" &&
-      first.failureKind !== "collinear-overlap")
-  )
-    return first;
-  // Fork alternatives deliberately run first: repair the detached-reference
-  // branch order from incidence before trying broader rooted routing changes.
-  for (const alternatives of [
-    contextForkOrderAlternatives(graph),
-    rootedRouteAlternatives(graph),
-  ])
-    for (const candidate of alternatives) {
-      const result = await run(candidate);
-      // Every alternative passes the complete geometry and topology checks.
-      if (result.ok) return result;
-    }
   return first;
 }
