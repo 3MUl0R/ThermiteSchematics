@@ -3,6 +3,7 @@ export { internalVocabulary } from "./printed-vocabulary.mjs";
 import { netLabelFindings } from "./net-label-oracle.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
+import { circuitFanInJogs, shortRouteJogs } from "./circuit-fan-in.mjs";
 import { minimumTextEmMm } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
 import {
@@ -624,6 +625,7 @@ export function routeQuality(g) {
     // Collapse sampled straight segments; curve samples do not invent jogs.
     const source = routePoints(s);
     if (!source) continue;
+    const fanIn = circuitFanInJogs(s, source, JOG_NUMERICAL_TOLERANCE_MM);
     const frame = intersectBox(
       s.viewport ?? {
         x: 0,
@@ -646,15 +648,12 @@ export function routeQuality(g) {
       const lengths = points
         .slice(1)
         .map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
-      const short = lengths
-        .map((l, i) => ({ lengthMm: l, segment: i }))
-        .filter(
-          (x, i) =>
-            i > 0 &&
-            i < lengths.length - 1 &&
-            x.lengthMm > 0.05 &&
-            x.lengthMm < 3 - JOG_NUMERICAL_TOLERANCE_MM,
-        );
+      const short = shortRouteJogs(
+        lengths,
+        points,
+        fanIn,
+        JOG_NUMERICAL_TOLERANCE_MM,
+      );
       const start = points[0],
         end = points.at(-1),
         manhattan = Math.abs(end.x - start.x) + Math.abs(end.y - start.y),

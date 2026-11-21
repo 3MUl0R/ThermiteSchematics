@@ -23,7 +23,21 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.36** applies.
+the budget and the remaining headroom. Checker protocol **5.38** applies.
+
+Version **5.38** updates **DQ-15** and **DQ-16** (#359). DQ-15 accepts a
+`data-circuit-fan-in` jog when the marked path segment lies within 3 mm of
+the measured physical terminal at the conductor's owned landing. DQ-16
+counts every `data-circuit-caption-fallback` marker as its own finding.
+For route coverage, parallel centrelines within half the thinner stroke
+width count as coincident. Uncovered gaps and tails up to half the owner
+stroke width count as covered. Complete 5.37 summaries remain readable.
+
+Version **5.37** extends **DQ-16** (#359). The checker flags a circuit wire
+caption when foreign conductor centrelines in the same circuit group cover
+every segment of its owning route. Collinear segments can cover a route
+jointly. Short shared terminal approaches remain valid when the route has an
+uncovered run. Complete 5.36 summaries remain readable.
 
 Version **5.36** fixes **DQ-19** for PDF report cells (#461). Native glyph bounds
 locate character-bearing runs in the measured cell. Extraction padding at line
@@ -591,7 +605,7 @@ remains manual.
   no native-node authorization. Legacy shape classes and DQ-13 stay unchanged.
   N3's population is painted routes; existing coverage/endpoint guards retain
   responsibility for native conductors with no painted route.
-- **DQ-16 / N4 remains manual beyond the existing rule:** retain the <=2 mm
+- **DQ-16 / N4** retains the <=2 mm
   ink-box proximity test and 0.17 mm uncertainty unchanged. Native wire/core IDs,
   endpoint sets, source-backed printed identities and painted route data now
   reconcile independently; absent or contradictory data fails closed. A proposed
@@ -600,6 +614,7 @@ remains manual.
   measurements are **manual review witnesses**, never automatic failures or
   passes. No approved attachment convention distinguishes every such case; no
   new width/clearance/2x ratio or parallel-text style requirement is invented.
+  The full-coverage check operates separately on issued route centrelines.
   Inline plates and vertical labels remain permitted. Broader segment ownership
   needs visual review or a separately approved attachment convention.
   Semantic net/potential names are not physical wire identity captions.

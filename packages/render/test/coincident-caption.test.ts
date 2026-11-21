@@ -1,11 +1,9 @@
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { readFile } from "node:fs/promises";
 import { parseHTML } from "linkedom";
 import { fullyCoincidentCaption } from "../src/circuit/coincident-caption.js";
-import * as captions from "../src/circuit/caption-plan.js";
 import type { CircuitLabelState } from "../src/circuit/layout-routes.js";
-import { InlineLabelCollisionError } from "../src/layout/inline-label-error.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { jumperChainCircuitFixture } from "./circuit-fixture.js";
 import base from "./fixtures/coincident-caption-base.json";
@@ -68,86 +66,161 @@ it("admits only complete foreign collinear coverage, including stitched and reve
     ]),
   ).toBe(false);
 });
-async function example(name: string) {
-  const dir = `libraries/siemens-pilot/examples/${name}`,
-    compiled = await compileProject(dir);
-  expect(compiled.ok).toBe(true);
-  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
-  return renderSchematicPacket(
-    compiled.ir,
-    JSON.parse(await readFile(`${dir}/packet.request.json`, "utf8")),
+function measureRoute(
+  drawing: Element,
+  route: Element,
+  name: string,
+  baseline: { ends: string[]; landings?: string; path?: string },
+) {
+  const uid = required(route.getAttribute("data-circuit-conductor"));
+  const caption = required(drawing.querySelector(`[data-wire-label="${uid}"]`));
+  expect(caption.hasAttribute("data-circuit-caption-fallback")).toBe(false);
+  const printed = required(caption.querySelector("text"));
+  expect(printed.textContent).toBe(name);
+  expect(printed.getAttribute("font-size")).toBe("2.5");
+  const width = Number(caption.querySelector("rect")?.getAttribute("width"));
+  expect(width).toBeGreaterThan(0);
+  expect(width).toBeLessThanOrEqual(printableTextWidth(name, 2.5) + 1.501);
+  expect(
+    JSON.parse(required(route.getAttribute("data-endpoints"))).map(
+      (end: { terminalKey: string }) => end.terminalKey,
+    ),
+  ).toEqual(baseline.ends);
+  const path = required(required(route.lastElementChild).getAttribute("d"));
+  const actual = [...path.matchAll(/[ML] ([\d.-]+) ([\d.-]+)/gu)].map(
+    ([, x, y]) => ({ x: Number(x), y: Number(y) }),
   );
+  if (baseline.landings !== undefined) {
+    const first = required(actual[0]),
+      last = required(actual.at(-1));
+    expect(`${first.x} ${first.y} / ${last.x} ${last.y}`).toBe(
+      baseline.landings,
+    );
+    expect(route.querySelector('path[stroke="white"]')).toBeNull();
+    expect(route.lastElementChild?.getAttribute("data-circuit-fan-in")).toBe(
+      `source:1 target:${actual.length - 3}`,
+    );
+  } else expect(path).toBe(baseline.path);
+  return actual;
+}
+
+function expectTerminalFanJunctions(
+  drawing: Element,
+  indexed: ReturnType<typeof measureRoute>[],
+  nested: ReturnType<typeof measureRoute>[],
+) {
+  const fan = nested.flatMap((p) => [
+    required(p[1]),
+    required(p[2]),
+    required(p.at(-2)),
+  ]);
+  const dots = new Map(
+    [...drawing.querySelectorAll("[data-circuit-junction]")].map((e) => [
+      `${e.getAttribute("cx")},${e.getAttribute("cy")}`,
+      e,
+    ]),
+  );
+  for (const p of fan) {
+    const directions = new Set<string>();
+    for (const points of indexed)
+      for (const [i, a] of points.slice(0, -1).entries()) {
+        const b = required(points[i + 1]);
+        if (
+          p.x < Math.min(a.x, b.x) ||
+          p.x > Math.max(a.x, b.x) ||
+          p.y < Math.min(a.y, b.y) ||
+          p.y > Math.max(a.y, b.y)
+        )
+          continue;
+        for (const q of [a, b]) {
+          if (q.x !== p.x) directions.add(q.x < p.x ? "W" : "E");
+          if (q.y !== p.y) directions.add(q.y < p.y ? "N" : "S");
+        }
+      }
+    expect(directions.size).toBeLessThanOrEqual(3);
+    const dot = dots.get(`${p.x},${p.y}`);
+    if (directions.size === 3) {
+      expect(dot?.getAttribute("data-device-uid")).toBeTruthy();
+      expect(dot?.getAttribute("data-terminal-key")).toBeTruthy();
+    } else expect(dot).toBeUndefined();
+  }
 }
 it.each(base.cases)(
-  "keeps the coincident caption identities and leader-free plates in $name",
-  async (fixture) => {
-    const rendered = await example(fixture.name);
-    expect(rendered.ok).toBe(true);
+  "separates the shared routes in $name ($flow) at their original terminals",
+  async ({ name, flow, pages, groups }) => {
+    const dir = `libraries/siemens-pilot/examples/${name}`,
+      compiled = await compileProject(dir);
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const request = JSON.parse(
+      await readFile(`${dir}/packet.request.json`, "utf8"),
+    );
+    for (const view of request.views) view.flow = flow;
+    const before = JSON.stringify([compiled.ir, request]);
+    const rendered = await renderSchematicPacket(
+      compiled.ir,
+      request,
+      compiled.presentation,
+    );
     if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
-    expect(rendered.value.sheets).toHaveLength(fixture.pages);
-    expect(base.cases.map((f) => f.labels.length)).toEqual([2, 2, 3, 1, 3, 1]);
-    for (const label of fixture.labels) {
-      const doc = parseHTML(
-          required(rendered.value.sheets[label.sheet - 1]).svg,
-        ).document,
-        actual = required(
-          doc.querySelector(
-            `[data-circuit-group="${label.group}"] [data-wire-label="${label.uid}"]`,
+    expect(rendered.value.sheets).toHaveLength(pages);
+    expect(JSON.stringify([compiled.ir, request])).toBe(before);
+
+    for (const { sheet, group, routes: expected } of groups) {
+      const { document } = parseHTML(
+        required(rendered.value.sheets[sheet - 1]).svg,
+      );
+      const drawing = required(
+        document.querySelector(`[data-circuit-group="${group}"]`),
+      );
+      const paths = [...drawing.querySelectorAll("[data-circuit-conductor]")];
+      const indexed = Object.entries(expected).map(([name, baseline]) => {
+        const route = required(
+          paths.find(
+            (p) => p.getAttribute("data-conductor-designation") === name,
           ),
         );
-      const prior = parseHTML(`<svg>${label.svg}</svg>`).document;
-      const printed = required(actual.querySelector("text"));
-      expect(printed.textContent, label.uid).toBe(
-        prior.querySelector("text")?.textContent,
+        return measureRoute(drawing, route, name, baseline);
+      });
+      expect(paths).toHaveLength(indexed.length);
+      const nested = paths.filter((path) =>
+        path.lastElementChild?.hasAttribute("data-circuit-fan-in"),
       );
-      expect(printed.getAttribute("font-size")).toBe("2.5");
-      const plateWidth = Number(
-        actual.querySelector("rect")?.getAttribute("width"),
+      expect(nested.length).toBeGreaterThan(1);
+      expect(paths.slice(-nested.length)).toEqual(nested);
+      expectTerminalFanJunctions(
+        drawing,
+        indexed,
+        indexed.filter((_, i) => !!Object.values(expected)[i]?.landings),
       );
-      expect(plateWidth).toBeGreaterThan(0);
-      expect(plateWidth).toBeLessThanOrEqual(
-        printableTextWidth(printed.textContent ?? "", 2.5) + 1.501,
+      const segments = indexed.flatMap((points, index) =>
+        points.slice(1).map((b, i) => ({ index, a: required(points[i]), b })),
       );
-      expect(
-        doc.querySelectorAll(`[data-label-leader-owner="${label.uid}"]`),
-      ).toHaveLength(0);
+      for (const [index, name] of Object.keys(expected).entries())
+        expect(fullyCoincidentCaption(index, segments), name).toBe(false);
     }
   },
 );
-it("still fails closed when an ambiguous coincident owner has a partly uncovered tail", async () => {
-  const original = captions.plannedCircuitCaption;
-  let witness: Parameters<typeof original> | undefined;
-  const spy = vi
-    .spyOn(captions, "plannedCircuitCaption")
-    .mockImplementation((...args) => {
-      const [line, , label, state] = args;
-      if (
-        line === "FIXED2" &&
-        fullyCoincidentCaption(label.index, state.segments)
-      )
-        witness ??= args;
-      return original(...args);
-    });
-  try {
-    expect((await example("6es7131-4rd02-0ab0")).ok).toBe(true);
-  } finally {
-    spy.mockRestore();
-  }
-  const [line, i, label, state] = required(witness),
-    end = required(
-      state.segments.filter((s) => s.index === label.index).at(-1),
-    ).b,
-    partial = {
-      ...state,
-      segments: [
-        ...state.segments,
-        { index: label.index, a: end, b: { x: end.x + 0.25, y: end.y } },
-      ],
-    };
-  expect(fullyCoincidentCaption(label.index, partial.segments)).toBe(false);
-  expect(() => original(line, i, label, partial)).toThrow(
-    InlineLabelCollisionError,
+
+it("records the retained fallback for parallel loops with identical terminal pairs", async () => {
+  const dir = "packages/render/test/fixtures/coincident-loops",
+    compiled = await compileProject(dir);
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const request = JSON.parse(
+    await readFile(`${dir}/packet.request.json`, "utf8"),
   );
+  for (const flow of ["left-to-right", "top-to-bottom"]) {
+    request.views[0].flow = flow;
+    const rendered = await renderSchematicPacket(compiled.ir, request);
+    if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
+    expect(rendered.value.sheets).toHaveLength(1);
+    const { document } = parseHTML(required(rendered.value.sheets[0]).svg);
+    const fallbacks = [
+      ...document.querySelectorAll(
+        '[data-circuit-caption-fallback="fully-coincident"]',
+      ),
+    ].map((label) => label.textContent);
+    expect(fallbacks.sort(), flow).toEqual(["FIXED1", "FIXED2"]);
+  }
 });
 
 it("recovers the ABB and both-flow external jumper positives without a new refusal or page", async () => {

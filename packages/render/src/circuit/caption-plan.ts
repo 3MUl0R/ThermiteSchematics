@@ -14,11 +14,17 @@ export function plannedCircuitCaption(
   state: CircuitLabelState,
   basePlacementFallback = false,
 ) {
-  if (
-    fullyCoincidentCaption(label.index, state.segments) ||
-    basePlacementFallback
-  )
-    return { ...circuitCaptionGeometry(line, i, label, state), leader: "" };
+  const fallback = basePlacementFallback
+    ? "unhostable"
+    : fullyCoincidentCaption(label.index, state.segments)
+      ? "fully-coincident"
+      : undefined;
+  if (fallback)
+    return {
+      ...circuitCaptionGeometry(line, i, label, state),
+      leader: "",
+      fallback,
+    };
   const placement = circuitCaptionPlacement(line, i, label, state),
     owner = required(state.cs[label.index], "Missing circuit caption owner");
   if (!placement)
@@ -33,5 +39,5 @@ export function plannedCircuitCaption(
     leader = points
       ? `<path class="wire-label-leader" data-label-leader-owner="${attr(owner.id)}" d="${path(points)}" fill="none" stroke="#475467" stroke-width=".15" stroke-dasharray=".5 .375"/><path class="wire-label-leader-arrow" d="${path(labelLeaderArrow(points, 0.75))}" fill="none" stroke="#475467" stroke-width=".15"/>`
       : "";
-  return { ...placement, leader };
+  return { ...placement, leader, fallback };
 }

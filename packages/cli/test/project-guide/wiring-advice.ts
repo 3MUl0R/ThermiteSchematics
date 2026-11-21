@@ -1,11 +1,11 @@
 export const wiringAdvice = new Map([
   [
-    "Keep labels clear of ink, pin approaches, bends, junctions and cable ends.",
+    "Keep captions clear of wiring ink.",
     "Manual print review. The terminal-label clearance, wire-label mask and face-clearance browser tests check painted geometry.",
   ],
   [
-    "See `thermite guide circuit-symbols` for terminal marks.",
-    "The generated guide test resolves this offline topic. Default-symbol-roles tests cover its printed roles.",
+    "See `thermite guide circuit-views` for rail crossings and terminal marks.",
+    "The generated guide test resolves this offline topic. Coincident-caption and default-symbol-roles tests cover the drawing conventions.",
   ],
   [
     "Add terminal/wire schedules for complete detail.",

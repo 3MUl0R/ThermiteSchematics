@@ -4,9 +4,9 @@ import {
 } from "./helpers/circuit-caption-host.js";
 import { expect, it, vi } from "vitest";
 import { parseHTML } from "linkedom";
-import baseCaption from "./fixtures/siemens-4bb31-ttb-base.json";
 import * as placement from "../src/circuit/caption-placement.js";
 import * as blocks from "../src/circuit/caption-block.js";
+import * as loops from "../src/circuit/separate-loops.js";
 import { plannedCircuitCaption } from "../src/circuit/caption-plan.js";
 import { unhostableCaptionFallback } from "../src/circuit/caption-fallback.js";
 import { uncoveredCaptionRuns } from "../src/circuit/caption-uncovered.js";
@@ -83,7 +83,22 @@ it("keeps a hostable run fail-closed at the exact unchanged block boundary", () 
     ),
   ).toBe(false);
 });
-it("keeps the Siemens 4BB31 TTB public positive at three sheets after failed bounded recovery", async () => {
+it("uses the native caption fallback after a non-label failure in the separated attempt", async () => {
+  const separate = loops.separateCoincidentLoops;
+  const separationSpy = vi
+    .spyOn(loops, "separateCoincidentLoops")
+    .mockImplementation((...args) => {
+      const separation = separate(...args);
+      if (!separation) return;
+      const bad = structuredClone(separation);
+      const edge = required(
+        bad.graph.edges?.find((edge) => bad.nestedEdges.has(edge.id)),
+      );
+      const section = required(edge.sections?.[0]);
+      section.startPoint.x += 0.5;
+      section.startPoint.y += 0.5;
+      return bad;
+    });
   const original = blocks.recoverLeaderCaptionBlocks;
   const receipts: ReturnType<typeof original>["recoveryReceipts"] = [];
   const spy = vi
@@ -98,36 +113,40 @@ it("keeps the Siemens 4BB31 TTB public positive at three sheets after failed bou
     expect(r.ok).toBe(true);
     if (!r.ok) throw Error(JSON.stringify(r.error));
     expect(r.value.sheets).toHaveLength(3);
-    for (const expected of baseCaption.labels) {
-      const doc = parseHTML(
-        required(r.value.sheets[expected.sheet - 1]).svg,
-      ).document;
-      const placed = required(
-        doc.querySelector(`[data-wire-label="${baseCaption.owner}"]`),
-      );
-      const printed = required(placed.querySelector("text"));
-      const prior = parseHTML(`<svg>${expected.svg}</svg>`).document;
-      expect(printed.textContent).toBe(
-        prior.querySelector("text")?.textContent,
-      );
-      expect(printed.getAttribute("font-size")).toBe("2.5");
-      expect(
-        Number(placed.querySelector("rect")?.getAttribute("width")),
-      ).toBeCloseTo(
-        printableTextWidth(printed.textContent ?? "", 2.5) + 1.5,
-        3,
-      );
-    }
+    expect(
+      separationSpy.mock.results.some(
+        (result) => result.value?.nestedEdges.size,
+      ),
+    ).toBe(true);
+    const { document } = parseHTML(required(r.value.sheets[0]).svg);
+    const group = required(document.querySelector('[data-circuit-group="g2"]'));
+    expect(group.querySelector("[data-circuit-fan-in]")).toBeNull();
+    const owner = required(
+      group.querySelector('[data-conductor-designation="FIXED4"]'),
+    ).getAttribute("data-circuit-conductor");
+    const placed = required(
+      group.querySelector(`[data-wire-label="${owner}"]`),
+    );
+    const printed = required(placed.querySelector("text"));
+    expect(placed.getAttribute("data-circuit-caption-fallback")).toBe(
+      "unhostable",
+    );
+    expect(printed.textContent).toBe("FIXED4");
+    expect(printed.getAttribute("font-size")).toBe("2.5");
+    expect(
+      Number(placed.querySelector("rect")?.getAttribute("width")),
+    ).toBeCloseTo(printableTextWidth("FIXED4", 2.5) + 1.5, 3);
     const receipt = required(receipts.find((r) => r.index === 4));
     expect(receipt.fallback).toBe(true);
     expect(receipt.checkedLeaderFound).toBe(false);
     expect(receipt.attempts).toBeGreaterThan(1);
   } finally {
     spy.mockRestore();
+    separationSpy.mockRestore();
   }
 });
 it("does not fall back for a partly covered owner with a real hostable owned run", async () => {
-  const [line, i, l, state] = await nativeWitness(),
+  const [line, i, l, state] = await nativeWitness(true),
     partial = {
       ...state,
       segments: [
@@ -151,7 +170,7 @@ it("does not fall back for a partly covered owner with a real hostable owned run
   );
 });
 it("admits a checked leader on a short owned run before considering the fallback", async () => {
-  const [, , l, state] = await nativeWitness(),
+  const [, , l, state] = await nativeWitness(true),
     drop = new Set([0, 2]),
     open = {
       ...state,
@@ -199,4 +218,31 @@ it("admits a checked leader on a short owned run before considering the fallback
   expect(positions).toHaveLength(
     CAPTION_POSITIONS_PER_UNCOVERED_RUN * runs.runs.length,
   );
+});
+
+it("uses full coincidence only when the entire owned run is covered", async () => {
+  const [line, i, label, state] = await nativeWitness();
+  const owner = { ...label, x: 145, y: 98.1 };
+  const a = { x: 140, y: 100 },
+    b = { x: 165, y: 100 };
+  const withCoverage = (endX: number) => ({
+    ...state,
+    labels: [owner],
+    segments: [
+      { index: label.index, a, b },
+      { index: 0, a, b: { x: endX, y: 100 } },
+    ],
+  });
+  expect(
+    plannedCircuitCaption(line, i, owner, withCoverage(165)).fallback,
+  ).toBe("fully-coincident");
+  expect(() =>
+    plannedCircuitCaption(line, i, owner, withCoverage(164.75)),
+  ).toThrow(InlineLabelCollisionError);
+  expect(
+    placement.circuitCaptionPlacement(line, i, owner, withCoverage(142)),
+  ).toBeDefined();
+  expect(
+    plannedCircuitCaption(line, i, owner, withCoverage(142)).fallback,
+  ).toBeUndefined();
 });

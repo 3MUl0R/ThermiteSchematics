@@ -46,8 +46,7 @@ function landingPlans(input: ElkNode, wires: ReadonlySet<string>) {
     )
       return [];
     const loop = required(local[0], "Missing circuit self-loop incidence");
-    // #359's fixed-jumper route separation is deferred. This mechanism binds
-    // authored wires, not a device's fixed-link construction or common net.
+    // This mechanism only separates authored wire approaches at the mark.
     if (!wires.has(loop.edge.id)) return [];
     const other = required(
       native.get(loop.other),

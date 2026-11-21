@@ -236,7 +236,7 @@ export function measureSheet(options = {}, h) {
                 (m.f - rr.y) * sy,
               ]
             : undefined,
-        endpoints,
+        ...h.circuitRouteFields(e, endpoints),
         edgeOwnerKey,
         potentialName: attr(e, "data-potential-name"),
         landingOwners: conductor ? landingOwners(e, endpoints) : undefined,
