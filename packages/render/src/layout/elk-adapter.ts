@@ -554,7 +554,7 @@ function edgeAdapter(
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
             label.role === "net"
-              ? recovery === "net-label-head"
+              ? recovery !== "trace-order" && recovery?.has(label.id)
                 ? "HEAD"
                 : "TAIL"
               : "CENTER",
@@ -839,7 +839,7 @@ export async function layoutPresentationGraph(
         if (result.ok) return result;
       }
   }
-  const recovery = rootedRecovery(graph, first);
+  const recovery = rootedRecovery(graph, first, options.selected);
   if (recovery !== undefined) {
     const recovered = await run(graph, recovery);
     if (recovered.ok) return recovered;

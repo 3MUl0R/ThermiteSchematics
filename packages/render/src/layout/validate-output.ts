@@ -11,6 +11,12 @@ import "../terminal-context-reference.js";
 import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { layoutLabelInk } from "./label-bounds.js";
+import {
+  netLabelOverlaps,
+  segmentIntersectsInterior,
+  type NetLabelOverlap,
+  type Segment,
+} from "./label-overlaps.js";
 import type {
   ElkExtendedEdge,
   ElkLabel,
@@ -55,6 +61,7 @@ class LayoutContractViolation extends Error {
     message: string,
     netId?: string,
     readonly failureKind: LayoutFailureKind = "contract-violation",
+    readonly netLabelOverlaps?: readonly NetLabelOverlap[],
   ) {
     super(message);
     this.name = "LayoutContractViolation";
@@ -115,13 +122,6 @@ export interface Padding {
   readonly right: number;
 }
 
-interface Segment {
-  readonly edge: LayoutEdge;
-  readonly start: LayoutPoint;
-  readonly end: LayoutPoint;
-  readonly horizontal: boolean;
-}
-
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Layout input invariant: ${message}`);
 }
@@ -138,14 +138,21 @@ export type LayoutValidationOutcome =
       readonly ok: false;
       readonly error: InvalidLayoutError;
       readonly failureKind: LayoutFailureKind;
+      readonly netLabelOverlaps?: readonly NetLabelOverlap[];
     };
 
 function reject(
   message: string,
   netId?: string,
   failureKind?: LayoutFailureKind,
+  netLabelOverlaps?: readonly NetLabelOverlap[],
 ): never {
-  throw new LayoutContractViolation(message, netId, failureKind);
+  throw new LayoutContractViolation(
+    message,
+    netId,
+    failureKind,
+    netLabelOverlaps,
+  );
 }
 
 function invalidLayoutError(
@@ -1057,25 +1064,6 @@ function edgeSegments(edge: LayoutEdge): readonly Segment[] {
   return result;
 }
 
-function segmentIntersectsInterior(segment: Segment, bounds: Bounds): boolean {
-  if (segment.horizontal) {
-    const left = Math.min(segment.start.x, segment.end.x);
-    const right = Math.max(segment.start.x, segment.end.x);
-    return (
-      segment.start.y > bounds.top &&
-      segment.start.y < bounds.bottom &&
-      Math.min(right, bounds.right) > Math.max(left, bounds.left)
-    );
-  }
-  const top = Math.min(segment.start.y, segment.end.y);
-  const bottom = Math.max(segment.start.y, segment.end.y);
-  return (
-    segment.start.x > bounds.left &&
-    segment.start.x < bounds.right &&
-    Math.min(bottom, bounds.bottom) > Math.max(top, bounds.top)
-  );
-}
-
 function validateNodeAndLabelCollisions(
   graph: Readonly<PresentationGraph>,
   geometry: Readonly<GeometryIndex>,
@@ -1116,6 +1104,7 @@ function validateNodeAndLabelCollisions(
         `label ${label.id} overlaps edge ${segment.edge.id}`,
         segment.edge.netId,
         label.role === "net" ? "net-label-intersection" : undefined,
+        netLabelOverlaps(graph.view, label, labels, segments, inkBounds),
       );
     }
   }
@@ -1579,13 +1568,22 @@ export function normalizeAndValidateLayout(
       }),
     };
   } catch (error) {
-    if (error instanceof LayoutContractViolation) {
-      return {
-        ok: false,
-        error: invalidLayoutError(graph, error),
-        failureKind: error.failureKind,
-      };
-    }
+    if (error instanceof LayoutContractViolation)
+      return layoutFailure(error, invalidLayoutError(graph, error));
     throw error;
   }
+}
+
+function layoutFailure(
+  violation: LayoutContractViolation,
+  error: InvalidLayoutError,
+): LayoutValidationOutcome {
+  return {
+    ok: false,
+    error,
+    failureKind: violation.failureKind,
+    ...(violation.netLabelOverlaps
+      ? { netLabelOverlaps: violation.netLabelOverlaps }
+      : {}),
+  };
 }
