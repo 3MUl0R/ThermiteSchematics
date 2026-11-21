@@ -956,6 +956,7 @@ export async function runOne({
         project,
         live,
         delivery?.observe,
+        { workspace: workSource, project: source },
       );
       try {
         started = Date.now();
