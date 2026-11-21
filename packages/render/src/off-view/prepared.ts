@@ -67,7 +67,9 @@ export async function repaginateDrawing(
   });
   if (!layout.ok) return layout;
   const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
-  return gangs.ok ? { ok: true, value: { ...p, layout: layout.value } } : gangs;
+  return gangs.ok
+    ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }
+    : gangs;
 }
 export async function initialCardLayout(
   graph: PresentationGraph,

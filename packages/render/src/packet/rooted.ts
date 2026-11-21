@@ -135,15 +135,12 @@ async function framedDrawingDrafts(
         referenceOffset,
         reference,
       );
-  if (result.ok) {
-    frameReferences.set(frameCandidate(result.value), reference);
-    const failure = legacy.value[0]?.rootedPaginationFailure;
-    if (failure)
-      required(
-        result.value[0],
-        "Missing framed sheet",
-      ).rootedPaginationFailure = failure;
-  }
+  const failure = legacy.value[0]?.rootedPaginationFailure;
+  if (!result.ok) return failure ? { ok: false, error: failure } : result;
+  frameReferences.set(frameCandidate(result.value), reference);
+  if (failure)
+    required(result.value[0], "Missing framed sheet").rootedPaginationFailure =
+      failure;
   return result;
 }
 

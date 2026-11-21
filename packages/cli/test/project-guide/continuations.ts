@@ -282,7 +282,8 @@ const module: FactModule = {
       },
     },
     {
-      claim: "Top-down print may reflow.",
+      claim:
+        "Top-down can try tighter spacing once after a label or span refusal.",
       async check() {
         const fixture = await dolProbeFixture("p5");
         try {
@@ -293,6 +294,9 @@ const module: FactModule = {
           });
           if (!result.ok) throw Error(JSON.stringify(result.error));
           expect(result.value.sheets.length).toBeGreaterThan(1);
+          expect(result.value.coverage.diagnostics).toContainEqual(
+            expect.objectContaining({ code: "I906", severity: "info" }),
+          );
           expect(result.value.sheets[0]?.continuations).not.toHaveLength(0);
           noteJson({ sheets: result.value.sheets.length });
         } finally {

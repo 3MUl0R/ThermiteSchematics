@@ -22,13 +22,13 @@ export async function readJson(path: string) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
-export async function fixture(name = "conveyor-line") {
+export async function fixture(projectSource = "conveyor-line") {
   const parent = await mkdtemp(
     join(realpathSync.native(tmpdir()), "thermite-fresh-"),
   );
   temporary.push(parent);
   const project = join(parent, "project");
-  await cp(resolve("examples", name), project, { recursive: true });
+  await cp(resolve("examples", projectSource), project, { recursive: true });
   const input = join(project, "delivery.json");
   const out = join(project, "drawings");
   const plan = async (...jobs: unknown[]) =>

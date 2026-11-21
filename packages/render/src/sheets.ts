@@ -68,6 +68,7 @@ import {
   failure,
   record,
   packetViewContext,
+  type PacketViewContext,
   withPacketViews,
   PacketDraftError,
   composedPacketFailure,
@@ -84,6 +85,7 @@ function packetDiagnostics(
   drafts: readonly Draft[],
   sheets: RenderedPacket["sheets"],
   explicitPacket: boolean,
+  reflowedViews: Iterable<PacketViewContext>,
 ) {
   const diagnostics = explicitPacket
     ? packetDeviceCoverageDiagnostics(
@@ -97,6 +99,13 @@ function packetDiagnostics(
       )
     : [];
   diagnostics.push(...drafts.flatMap((draft) => draft.diagnostics ?? []));
+  for (const view of reflowedViews)
+    diagnostics.push({
+      code: "I906",
+      severity: "info",
+      ...ir.project.source,
+      message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
+    });
   return diagnostics;
 }
 
@@ -107,17 +116,16 @@ async function renderPacketPreservingRetry(
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  let original: RenderFailure | undefined;
+  const paginationFailures = new Map<PacketViewContext, RenderFailure>();
   const result = await renderPacket(
     ir,
     request,
     presentation,
     explicitPacket,
-    (error) => {
-      original ??= error;
-    },
+    paginationFailures,
     configurePage,
   );
+  const original = paginationFailures.values().next().value;
   return result.ok || !original ? result : { ok: false, error: original };
 }
 
@@ -126,7 +134,7 @@ async function renderPacket(
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
-  retainPaginationFailure: (error: RenderFailure) => void,
+  paginationFailures: Map<PacketViewContext, RenderFailure>,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
   const contextError: typeof withPacketViews = (error, views) =>
@@ -227,7 +235,7 @@ async function renderPacket(
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
-      retainPaginationFailure(error);
+      paginationFailures.set(context, error);
     }
     const first = result.value[0];
     if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
@@ -320,6 +328,7 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
+    paginationFailures.keys(),
   );
 }
 
@@ -467,6 +476,7 @@ function assemblePacket(
   })[],
   referenceSelection: ReferenceSelection | undefined,
   presentation: CompiledProjectPresentation | undefined,
+  reflowedViews: Iterable<PacketViewContext>,
 ): RenderOutcome<RenderedPacket> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
@@ -486,8 +496,13 @@ function assemblePacket(
         ),
       };
     const sheets = rendered.value;
-    const diagnostics = packetDiagnostics(ir, drafts, sheets, explicitPacket);
-    const title = ir.project.name;
+    const diagnostics = packetDiagnostics(
+      ir,
+      drafts,
+      sheets,
+      explicitPacket,
+      reflowedViews,
+    );
     let html: string | undefined;
     return {
       ok: true,
@@ -498,7 +513,7 @@ function assemblePacket(
         sheets,
         // PDF and SVG consumers do not need an HTML font subset.
         get html() {
-          return (html ??= printPacketHtml(sheets, page, title));
+          return (html ??= printPacketHtml(sheets, page, ir.project.name));
         },
         coverage: {
           ...buildPacketCoverage(

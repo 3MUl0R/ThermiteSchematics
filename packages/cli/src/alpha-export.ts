@@ -12,6 +12,7 @@ import {
   completenessArtifact,
   csvReport,
   drawingArtifact,
+  drawingDiagnostics,
   jsonArtifact,
   type DrawingRenderer,
   type DrawingRecipe,
@@ -177,8 +178,7 @@ async function produce(
       break;
   }
   const packet = await render(recipe);
-  if (recipe.kind === "packet")
-    scope.diagnostics = packet.coverage.diagnostics ?? [];
+  scope.diagnostics = drawingDiagnostics(packet, recipe.kind);
   if (
     recipe.kind === "packet" &&
     recipe.strict &&

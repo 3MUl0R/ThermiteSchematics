@@ -1,13 +1,23 @@
 import assert from "node:assert/strict";
 import { expect, it } from "vitest";
+import { compileProject } from "@thermite/compiler";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { RenderSummary } from "../src/types.js";
 import type { RenderedSheet } from "../src/packet/types.js";
 import { ELK_OPTIONS } from "../src/layout/options.js";
-import { nativeDrawing, repaginateDrawing } from "../src/off-view/prepared.js";
+import {
+  nativeDrawing,
+  repaginateDrawing,
+  repositionDrawing,
+} from "../src/off-view/prepared.js";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { buildRootedCandidates } from "../src/packet/rooted-build.js";
-import { prepareSchematicDrawing } from "../src/renderer.js";
+import { retryRootedPagination } from "../src/packet/rooted-pagination-retry.js";
+import { searchRootedCandidates } from "../src/packet/rooted-search.js";
+import {
+  prepareSchematicDrawing,
+  type PreparedSchematicDrawing,
+} from "../src/renderer.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { agentRefusalFixture, sensorTrace } from "./agent-refusals-fixture.js";
 import { actuation } from "./dol-control-junctions-fixture.js";
@@ -20,12 +30,12 @@ const page = {
   marginMm: 20,
 } as const;
 const packet = { format: "schematic-packet-request/0.1", page } as const;
+const view = actuation("R1", "top-to-bottom");
 
 it("reflows a neutral actuation view after a measured spacing failure", async () => {
   const fixture = await dolProbeFixture("p5");
   try {
     const before = JSON.stringify(fixture.ir);
-    const view = actuation("R1", "top-to-bottom");
     const paper = normalizePaperPage(page);
     assert.ok(paper.ok);
     const observed = observedRecoveryEngine();
@@ -56,9 +66,9 @@ it("reflows a neutral actuation view after a measured spacing failure", async ()
       observed.inputs.at(-1),
       spacing.parentId,
     );
-
     const noCards = await nativeDrawing(drawing);
     assert.ok(noCards.ok);
+    await expectReusableDrawing(changed.value, noCards.value);
     const nativeProposal = await repaginateDrawing(
       noCards.value,
       drawing,
@@ -81,6 +91,7 @@ it("reflows a neutral actuation view after a measured spacing failure", async ()
       index: true,
     });
     assert.ok(result.ok, JSON.stringify(result));
+    expectReflowDiagnostic(result.value);
     expect(result.value.navigation?.occurrences.length).toBeGreaterThan(0);
     expectPrintedWiresAndContinuations(
       result.value.sheets,
@@ -90,6 +101,81 @@ it("reflows a neutral actuation view after a measured spacing failure", async ()
   } finally {
     await fixture.dispose();
   }
+});
+
+async function expectReusableDrawing(
+  proposal: PreparedSchematicDrawing,
+  noCards: PreparedSchematicDrawing,
+) {
+  const moved = await repositionDrawing(proposal, {});
+  assert.ok(moved.ok);
+  expect(moved.value.summary).toEqual(proposal.summary);
+  const proposalWithoutCards = await nativeDrawing(proposal);
+  expect(proposalWithoutCards).toEqual({ ok: true, value: noCards });
+}
+
+function expectReflowDiagnostic(
+  packet: import("../src/packet/types.js").RenderedPacket,
+) {
+  const message =
+    'View 1 "R1 / control": A tighter top-to-bottom placement was used during pagination.';
+  expect(packet.coverage.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "I906", severity: "info", message }),
+  );
+  for (const { svg } of packet.sheets)
+    expect(svg).not.toMatch(/I906|A tighter top-to-bottom placement/);
+}
+
+it("recovers a power view by tightening spacing along an oversized protected width", async () => {
+  const fixture = await compileProject("examples/machine-demo");
+  assert.ok(fixture.ok);
+  const view = {
+    ...actuation("M1", "top-to-bottom"),
+    family: "power",
+  } as const;
+  const paper = normalizePaperPage({
+    size: "tabloid",
+    orientation: "portrait",
+    marginMm: 25,
+  });
+  assert.ok(paper.ok);
+  const search = await searchRootedCandidates(
+    fixture.ir,
+    view,
+    undefined,
+    paper.value,
+    false,
+  );
+  const proposal = search.paginationRetry;
+  assert.ok(proposal);
+  expect(proposal.spacing).toEqual({ axes: ["width"] });
+  expect(search.diagnostics).toContainEqual(
+    expect.objectContaining({
+      constraint: expect.objectContaining({ kind: "protected-span" }),
+    }),
+  );
+  const ordinary = buildRootedCandidates(
+    fixture.ir,
+    proposal.annotated,
+    paper.value,
+  );
+  expect(ordinary).toMatchObject({
+    ok: false,
+    constraint: { kind: "protected-span" },
+  });
+  const reflowed = await retryRootedPagination(
+    fixture.ir,
+    proposal,
+    paper.value,
+    0,
+  );
+  assert.ok(reflowed);
+  expect(reflowed.winner.scale).toBe(0.25);
+  expect(reflowed.native.scale).toBe(0.25);
+  expect(reflowed.winner.prepared.layout.width).toBeLessThan(
+    proposal.annotated.layout.width,
+  );
+  expect(reflowed.winner.prepared.summary).toEqual(proposal.annotated.summary);
 });
 
 function expectOnlyLayerSpacingChanged(
