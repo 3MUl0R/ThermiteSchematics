@@ -456,6 +456,13 @@ function nodeRelations(state: BuildState, width: number) {
   };
 }
 
+export function verticalLaneX(
+  lateralY: number,
+  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
+) {
+  return lateralY * frame.verticalScaleX + frame.verticalOffsetX;
+}
+
 function nodeVerticalScale(state: GeometryState) {
   const { pins, device, pinLabel, conductors } = state;
   let { verticalScaleX } = state;
@@ -467,11 +474,11 @@ function nodeVerticalScale(state: GeometryState) {
   for (const side of ["WEST", "EAST"] as const) {
     const baseline = pins
       .filter((p) => p.side === side)
-      .sort((a, b) => b.y - a.y);
+      .sort((a, b) => a.y - b.y);
     for (let i = 1; i < baseline.length; i++) {
       const left = baseline[i - 1]!,
         right = baseline[i]!;
-      const gap = left.y - right.y;
+      const gap = right.y - left.y;
       if (gap <= 0)
         throw new Error(
           `Circuit terminal labels for ${device.designation} share an unreadable vertical position.`,
@@ -496,7 +503,6 @@ function nodeVerticalBounds(state: GeometryState) {
     pinLabel,
     printableRelated,
   } = state;
-  let { verticalOffsetX } = state;
   const spans = rows.map((row) => {
     const half = row.channelLines
       ? Math.max(
@@ -505,7 +511,7 @@ function nodeVerticalBounds(state: GeometryState) {
       : row.mark === "motor"
         ? Math.max(5, (row.slots * pitch * verticalScaleX) / 2 - 2)
         : 4;
-    const center = (bodyHeight - row.center) * verticalScaleX;
+    const center = verticalLaneX(row.center, state);
     return { left: center - half, right: center + half };
   });
   const leftBound = Math.min(0, ...spans.map((s) => s.left));
@@ -514,16 +520,16 @@ function nodeVerticalBounds(state: GeometryState) {
     ...spans.map((s) => s.right),
     ...pins.map(
       (p) =>
-        (bodyHeight - p.y) * verticalScaleX +
+        verticalLaneX(p.y, state) +
         1 +
         measure(pinLabel(p), TERMINAL_TEXT_SIZE),
     ),
   );
-  verticalOffsetX = 1 - leftBound;
+  const verticalOffsetX = 1 - leftBound;
   const coilRow = rows.find((row) => row.f.kind === "coil");
   const designationLeft =
     printableRelated.length && coilRow
-      ? (bodyHeight - coilRow.center) * verticalScaleX + verticalOffsetX + 3
+      ? verticalLaneX(coilRow.center, state) + verticalOffsetX + 3
       : 0;
   return { leftBound, rightBound, verticalOffsetX, designationLeft };
 }
@@ -550,7 +556,7 @@ function nodeVerticalSize(
     ...printableRelated.map(
       (s) =>
         Math.max(measure(s, 2.5), printableTextMetrics(s, 2.5).advance) +
-        Math.max(4, designationLeft + 2),
+        Math.max(4, designationLeft + 1),
     ),
   );
   height =
@@ -572,10 +578,9 @@ function nodeVerticalSize(
 }
 
 function nodeVerticalPins(state: GeometryState) {
-  const { pins, bodyHeight, verticalScaleX, verticalOffsetX, height } = state;
+  const { pins, height } = state;
   for (const p of pins) {
-    const oldY = p.y;
-    p.x = (bodyHeight - oldY) * verticalScaleX + verticalOffsetX;
+    p.x = verticalLaneX(p.y, state);
     p.y = p.side === "WEST" ? 0 : height;
     p.side = p.side === "WEST" ? "NORTH" : "SOUTH";
   }
@@ -634,7 +639,6 @@ function nodeResult(
     boundary,
     width,
     height,
-    bodyHeight,
     pitch,
     verticalOffsetX,
     verticalScaleX,
@@ -656,7 +660,6 @@ function nodeResult(
     width,
     height,
     rank,
-    bodyHeight,
     pitch,
     verticalOffsetX,
     verticalScaleX,

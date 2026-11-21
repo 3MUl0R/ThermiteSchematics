@@ -54,7 +54,7 @@ it("keeps the LTR sensor group on the original baseline when W10 pays for W8/W9'
   expect(after.value.sheets.length).toBe(before.value.sheets.length);
 });
 it.each(["a3-landscape", "a3-portrait", "letter-landscape"])(
-  "rejects the six TTB page-growth settings (%s, both layouts)",
+  "accepts the top-to-bottom route repair without growing the packet (%s, both layouts)",
   async (setting) => {
     const [size, orientation] = setting.split("-") as [
       "a3" | "letter",
@@ -76,11 +76,12 @@ it.each(["a3-landscape", "a3-portrait", "letter-landscape"])(
       const after = await circuitInlineTrace.run(traces, () =>
         renderSchematicPacket(ir, q),
       );
-      expect(after).toEqual(before);
-      expect(traces[0]!.selected.size).toBe(0);
-      expect(traces[0]!.viewDecisions[0]!.reason).toMatch(
-        /growth|composition fit/,
-      );
+      if (!before.ok || !after.ok)
+        throw Error(JSON.stringify({ before, after }));
+      expect(after.value.sheets.length).toBe(before.value.sheets.length);
+      expect(after.value.coverage).toEqual(before.value.coverage);
+      expect(traces[0]!.selected.size).toBe(1);
+      expect(traces[0]!.viewDecisions[0]!.reason).toBe("accepted");
     }
   },
 );

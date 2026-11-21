@@ -45,7 +45,6 @@ export type DeviceNode = {
   width: number;
   height: number;
   rank: number;
-  bodyHeight: number;
   pitch: number;
   verticalOffsetX: number;
   verticalScaleX: number;

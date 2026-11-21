@@ -22,6 +22,7 @@ import {
 } from "../symbols/circuit.js";
 import type { FunctionRow } from "./types.js";
 import type { EmissionState, EmissionRow } from "./emission-state.js";
+import { verticalLaneX } from "./nodes.js";
 export function emitCircuitRows(state: EmissionState) {
   const { node, out } = state;
   for (const row of node.rows) {
@@ -68,10 +69,7 @@ export function emitCircuitRows(state: EmissionState) {
 function emissionRowState(row: FunctionRow, state: EmissionState) {
   const { node, vertical, diagramCenterY, out, fkey } = state;
   const { f, mark } = row;
-  const cx = vertical
-    ? (node.bodyHeight - row.center) * node.verticalScaleX +
-      node.verticalOffsetX
-    : node.width / 2;
+  const cx = vertical ? verticalLaneX(row.center, node) : node.width / 2;
   const cy = vertical ? diagramCenterY : row.center;
   out.push(
     `<g data-function-key="${attr(f.id.functionKey)}" data-function-id="${attr(fkey(f))}"><title>${xml(`${node.device.designation}/${f.id.functionKey}`)}</title>`,

@@ -32,6 +32,7 @@ import type {
   CaptionCenter,
 } from "./emission-state.js";
 import { emitCircuitRows } from "./node-symbols.js";
+import { verticalLaneX } from "./nodes.js";
 export function emitCircuitNode(
   input: EmissionInput,
   hooks: EmissionHooks,
@@ -150,9 +151,7 @@ function nodeEmissionPlacement(state: EmissionBase): EmissionPlaced {
   const coilRow = node.rows.find((row) => row.f.kind === "coil");
   let designationX =
     vertical && node.relationLabels.length && coilRow
-      ? (node.bodyHeight - coilRow.center) * node.verticalScaleX +
-        node.verticalOffsetX +
-        3
+      ? verticalLaneX(coilRow.center, node) + 3
       : node.width / 2;
   const designationAnchor: "start" | "middle" =
     vertical && node.relationLabels.length && coilRow ? "start" : "middle";
@@ -217,10 +216,7 @@ function nodeCaptionCenter(
   state: EmissionPlaced,
 ): CaptionCenter {
   const { node, vertical, diagramCenterY } = state;
-  const x = vertical
-      ? (node.bodyHeight - row.center) * node.verticalScaleX +
-        node.verticalOffsetX
-      : node.width / 2,
+  const x = vertical ? verticalLaneX(row.center, node) : node.width / 2,
     y = vertical ? diagramCenterY : row.center;
   const segments = circuitMarkSegments(row.mark, x, y, vertical),
     points = segments.flatMap((s) => [s[0], s[1]]);

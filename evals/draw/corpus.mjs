@@ -28,7 +28,7 @@ export function cases(quick = false) {
             : request,
         recipe,
         flow,
-        ...(id === "motor-starter-documentation" && flow === "left-to-right"
+        ...(id === "motor-starter-documentation"
           ? { extraCircuitGroup: requests.motorLoadGroup }
           : {}),
       });
@@ -268,8 +268,11 @@ export async function prepareRequest(c, root) {
   if (c.recipe === "field" && c.flow === "top-to-bottom")
     request.page = { ...request.page, orientation: "portrait" };
   applyPacketVariant(c, request);
-  if (c.extraCircuitGroup)
+  if (c.extraCircuitGroup) {
     request.views[0].groups.push(structuredClone(c.extraCircuitGroup));
+    if (c.flow === "top-to-bottom")
+      request.page = { ...request.page, orientation: "portrait" };
+  }
   return request;
 }
 

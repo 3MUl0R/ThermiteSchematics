@@ -51,6 +51,7 @@ import {
 } from "./layout/circuit-inline.js";
 import { circuitMark, type CircuitMark } from "./symbols/circuit.js";
 import { emitCircuitNode } from "./circuit/node-emission.js";
+import { verticalLaneX } from "./circuit/nodes.js";
 import {
   circuitGraphPins,
   circuitGraphChildren,
@@ -373,36 +374,17 @@ function selectedSourceTerminals(
     .flatMap((f) => f.terminals.map((t) => t.terminalKey));
 }
 
-function makeNodes(
-  ir: Readonly<ElectricalIr>,
-  fs: IrFunction[],
-  conductors: PhysicalConductor[],
-  all: PhysicalConductor[],
-  vertical: boolean,
-  appearances: Map<string, string[]>,
-  distributed: boolean,
-): DeviceNode[] {
-  return makeCircuitNodes(
-    ir,
-    fs,
-    conductors,
-    all,
-    vertical,
-    appearances,
-    distributed,
-    {
-      key,
-      fkey,
-      compare,
-      oneSidedFunction,
-      channelLabelLines,
-      pinLabel,
-      selectedSourceTerminals,
-      conductorLabelLines,
-      emitNode,
-    },
-  );
-}
+const circuitNodeHooks = {
+  key,
+  fkey,
+  compare,
+  oneSidedFunction,
+  channelLabelLines,
+  pinLabel,
+  selectedSourceTerminals,
+  conductorLabelLines,
+  emitNode,
+};
 
 function mechanicalGangs(
   node: DeviceNode,
@@ -435,17 +417,11 @@ function mechanicalGangs(
       if (vertical)
         result.push({
           from: {
-            x:
-              (node.bodyHeight - first.center) * node.verticalScaleX +
-              node.verticalOffsetX +
-              (blade ? 0.7 : 0),
+            x: verticalLaneX(first.center, node) + (blade ? 0.7 : 0),
             y: diagramCenterY - (blade ? 0.3 : 0),
           },
           to: {
-            x:
-              (node.bodyHeight - last.center) * node.verticalScaleX +
-              node.verticalOffsetX +
-              (blade ? 0.7 : 0),
+            x: verticalLaneX(last.center, node) + (blade ? 0.7 : 0),
             y: diagramCenterY - (blade ? 0.3 : 0),
           },
           functions,
@@ -545,7 +521,6 @@ async function layoutGroupUnchecked(
   distributed: boolean,
   run?: CircuitLayoutRun,
 ): Promise<CircuitDrawing> {
-  const nodes = makeNodes(ir, fs, cs, all, vertical, appearances, distributed);
   const hooks = {
     key,
     fkey,
@@ -556,6 +531,16 @@ async function layoutGroupUnchecked(
     circuitDeviceTags,
     emitNode,
   };
+  const nodes = makeCircuitNodes(
+    ir,
+    fs,
+    cs,
+    all,
+    vertical,
+    appearances,
+    distributed,
+    circuitNodeHooks,
+  );
   const pins = circuitGraphPins(nodes, key);
   const children = circuitGraphChildren(nodes);
   const selfLoops = new Set<number>();

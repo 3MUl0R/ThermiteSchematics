@@ -49,6 +49,30 @@ function auditCoreSeparation(
 }
 
 describe("functional symbol conveyance", () => {
+  it("prints the earthed receptacle L, N, PE from left to right in top-to-bottom flow", async () => {
+    const {
+      views: [view],
+    } = await request("top-to-bottom");
+    if (view?.format !== "circuit-view-request/0.1")
+      throw Error("Expected a circuit view");
+    const receptacle = view.groups.find((group) => group.id === "receptacle")!;
+    const { groups } = await prepareCircuitView(ir, {
+      ...view,
+      groups: [receptacle],
+    });
+    const doc = parseHTML(groups[0]!.content).document;
+    const device = ir.devices.find((d) => d.designation === "SO1")!;
+    const labels = ["L", "N", "PE"].map((key) => {
+      const id = JSON.stringify([device.uid, key]);
+      const port = doc.querySelector(`[data-terminal-id='${id}']`)!;
+      const label = port.querySelector("text")!;
+      expect(label.textContent).toBe(key);
+      return Number(label.getAttribute("x"));
+    });
+    expect(labels[0]).toBeLessThan(labels[1]!);
+    expect(labels[1]).toBeLessThan(labels[2]!);
+  });
+
   it.each(["left-to-right", "top-to-bottom"] as const)(
     "prints every composed mark legend at physical 2.5 mm em or larger in %s",
     async (flow) => {

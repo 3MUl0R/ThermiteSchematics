@@ -74,7 +74,6 @@ export function reserveCircuitDeviceTag<
     type: IrDeviceType;
     width: number;
     height: number;
-    bodyHeight: number;
     tagColumnCaptions: readonly string[];
     rows: { center: number }[];
     pins: { x: number; y: number; side: string }[];
@@ -83,7 +82,6 @@ export function reserveCircuitDeviceTag<
   if (!vertical) {
     // The old primary designation band moves into the tag lane.
     node.height -= 4;
-    node.bodyHeight -= 4;
     node.rows = node.rows.map((row) => ({ ...row, center: row.center - 4 }));
     node.pins = node.pins.map((pin) => ({ ...pin, y: pin.y - 4 }));
   }

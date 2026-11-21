@@ -248,6 +248,7 @@ export interface CommunicationContinuationBlock {
   }[];
 }
 export interface CircuitContinuationBlock {
+  noticeAfterTargets: boolean;
   group: string;
   part: number;
   x: number;
