@@ -16,6 +16,9 @@ export function detachLoopLabels(
   return labels;
 }
 
+const SIDE_CLEARANCE = 0.5;
+const WIRE_HALF_STROKE = 0.2;
+
 function longestLoopSegment(edge: ElkExtendedEdge) {
   const segments = (edge.sections ?? []).flatMap((section) => {
     const points = [
@@ -30,6 +33,8 @@ function longestLoopSegment(edge: ElkExtendedEdge) {
             {
               x: (a.x + b.x) / 2,
               y: (a.y + b.y) / 2,
+              top: Math.min(a.y, b.y),
+              bottom: Math.max(a.y, b.y),
               length: Math.abs(a.y - b.y),
             },
           ]
@@ -44,7 +49,69 @@ function longestLoopSegment(edge: ElkExtendedEdge) {
   return segment;
 }
 
+function boxOverlapsWire(
+  box: { x: number; y: number; width: number; height: number },
+  edge: ElkExtendedEdge,
+) {
+  for (const section of edge.sections ?? []) {
+    const points = [
+      section.startPoint,
+      ...(section.bendPoints ?? []),
+      section.endPoint,
+    ];
+    for (let i = 1; i < points.length; i++) {
+      const a = required(points[i - 1], "Missing loop segment start"),
+        b = required(points[i], "Missing loop segment end");
+      if (
+        box.x < Math.max(a.x, b.x) + WIRE_HALF_STROKE - 0.01 &&
+        box.x + box.width > Math.min(a.x, b.x) - WIRE_HALF_STROKE + 0.01 &&
+        box.y < Math.max(a.y, b.y) + WIRE_HALF_STROKE - 0.01 &&
+        box.y + box.height > Math.min(a.y, b.y) - WIRE_HALF_STROKE + 0.01
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
+function besideLoopX(
+  graph: ElkNode,
+  segmentX: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const graphWidth = graph.width ?? Infinity;
+  const boxes = (graph.children ?? []).map((node) => ({
+    x: required(node.x, "Missing loop node x"),
+    y: required(node.y, "Missing loop node y"),
+    width: required(node.width, "Missing loop node width"),
+    height: required(node.height, "Missing loop node height"),
+  }));
+  const clear = (x: number) => {
+    const box = { x, y, width, height };
+    if (x < 0 || x + width > graphWidth + 0.01) return false;
+    if (
+      boxes.some(
+        (b) =>
+          box.x < b.x + b.width - 0.01 &&
+          b.x < box.x + box.width - 0.01 &&
+          box.y < b.y + b.height - 0.01 &&
+          b.y < box.y + box.height - 0.01,
+      )
+    )
+      return false;
+    return !(graph.edges ?? []).some((e) => boxOverlapsWire(box, e));
+  };
+  const right = segmentX + SIDE_CLEARANCE;
+  if (clear(right)) return right;
+  const left = segmentX - SIDE_CLEARANCE - width;
+  if (clear(left)) return left;
+  return right;
+}
+
 /** Only labels move after layout. Routes and fixed terminal ports stay native.
+ * Labels sit beside their vertical run so short spans stay unbroken.
  * Stagger phases alternate distinct route lanes, clamped to the chosen segment.
  * Equal-length segments retain native order, as in the centered placement. */
 export function placeLoopLabels(
@@ -74,10 +141,11 @@ export function placeLoopLabels(
         Math.max(0, (segment.length - height) / 2 - lead),
       );
       const offset = stagger * (lanes.indexOf(segment.x) % 2 ? 1 : -1) * shift;
+      const y = segment.y + offset - height / 2;
       return {
         ...label,
-        x: segment.x - width / 2,
-        y: segment.y + offset - height / 2,
+        x: besideLoopX(graph, segment.x, y, width, height),
+        y,
       };
     });
   }

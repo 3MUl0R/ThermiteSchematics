@@ -228,3 +228,23 @@ it.each([
     expect.objectContaining({ kind: "ambiguous-wire-label", wire: "A" }),
   );
 });
+
+it("DQ-16 catches an old-engine signal-loop plate masking an 8 mm vertical span and accepts beside placement", async () => {
+  const ends = JSON.stringify(ir.wires[0].endpoints.map((e) => e.terminal));
+  const loopWire = (plateX) =>
+    `<g data-loop-conductor="A" data-terminal-ends='${ends}' data-net-id="NET-1">` +
+    `<path d="M 40 20 L 40 28" fill="none" stroke="#23566d" stroke-width="0.4" stroke-linecap="round"/>` +
+    `<rect x="${plateX}" y="21.6" width="7" height="4.8" fill="white"/>` +
+    `<text x="${plateX + 1}" y="24.6" font-size="2.7">A</text>` +
+    `</g>` +
+    `<circle cx="40" cy="20" r="0.8" fill="white" stroke="#23566d" stroke-width="0.3"/>` +
+    `<circle cx="40" cy="28" r="0.8" fill="white" stroke="#23566d" stroke-width="0.3"/>`;
+  // Old-engine failing witness: 4.8 mm plate centered across an 8 mm vertical loop span.
+  expect(masks(await audit(loopWire(36.5)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Passing control: plate sits beside the vertical loop span with the wire unbroken.
+  const clear = await openSheet(page, svg(loopWire(40.5)));
+  expect(wireLabelSupportAudit(clear, ir).findings).toEqual([]);
+  expect(wirePlacement(clear)).toEqual([]);
+});

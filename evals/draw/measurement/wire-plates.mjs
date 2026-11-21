@@ -15,7 +15,12 @@ export function wirePlateGeometry(c) {
   if (!plates.length) return { plates, strokes: {}, markers: [], leaders: [] };
   const strokes = Object.fromEntries(
     c.shapes
-      .filter((s) => s.conductor && s.stroke > 0)
+      .filter(
+        (s) =>
+          (s.conductor || s.loopConductor || s.loopCandidate) &&
+          ["path", "line", "polyline"].includes(s.shapeTag) &&
+          s.stroke > 0,
+      )
       .map((s) => [s.element, c.h.wirePlateStroke(c, s)]),
   );
   return {
@@ -28,7 +33,9 @@ export function wirePlateGeometry(c) {
 
 export function wirePlateShapes(e) {
   const selector = "path,polygon,polyline,rect,circle,ellipse,use";
-  const group = e.closest("[data-wire-label],[data-wiring-conductor]");
+  const group = e.closest(
+    "[data-wire-label],[data-wiring-conductor],[data-loop-conductor]",
+  );
   if (group) return [...group.querySelectorAll(selector)];
   if (!e.classList.contains("label-conductor")) return [];
   // Rooted captions share one SVG layer. A text element terminates each
