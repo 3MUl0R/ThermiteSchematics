@@ -381,32 +381,48 @@ export async function regeneratePacket(
     request = "requests/packet.json",
     name = "packet",
     formats = ["json", "pdf", "html"],
-    finalInput = false,
+    bindRequest = false,
   } = {},
 ) {
   const clean = cleanChecker(ctx),
     prefix = join(ctx.evidence, `regenerated-${name}`),
     commands = {};
   let packet = null;
-  const issued = {};
+  const boundExports = {};
+  const project = ctx.originalProject ?? ctx.project;
   for (const ext of formats) {
     const artifact = `drawings/${name}.${ext}`,
       output = `${prefix}.${ext}`;
     const fallback = ["packet", "--input", request, "-o", artifact];
-    const command = commandFor(ctx, artifact, fallback);
+    const command = commandFor(
+      ctx,
+      artifact,
+      fallback,
+      bindRequest ? ["packet"] : undefined,
+    );
     commands[ext] = command.argv;
-    const mapped = remap(command, ctx, output, false, finalInput);
+    const requestMismatch =
+      bindRequest &&
+      (command.parsed.input === "-" ||
+        resolve(project, command.parsed.input) !== resolve(project, request));
+    // Use audited print options while reading the delivered request.
+    if (bindRequest) command.parsed.input = request;
+    const mapped = remap(command, ctx, output, false, bindRequest);
     if (!mapped) continue;
     const result = cli(clean, ...mapped);
     if (result.status !== 0) continue;
-    issued[ext] = true;
+    boundExports[ext] = !requestMismatch;
     if (ext === "json") packet = read(output);
   }
-  const result = await comparePacketArtifacts(ctx, { name, prefix });
+  const result = await comparePacketArtifacts(ctx, {
+    name,
+    prefix,
+    exactJson: bindRequest,
+  });
   const matches = Object.fromEntries(
     Object.entries(result.matches).map(([ext, pass]) => [
       ext,
-      !!issued[ext] && pass,
+      !!boundExports[ext] && pass,
     ]),
   );
   return {
@@ -419,14 +435,18 @@ export async function regeneratePacket(
 }
 export async function comparePacketArtifacts(
   ctx,
-  { name = "packet", prefix = join(ctx.evidence, `regenerated-${name}`) } = {},
+  {
+    name = "packet",
+    prefix = join(ctx.evidence, `regenerated-${name}`),
+    exactJson = false,
+  } = {},
 ) {
   const matches = {};
   for (const ext of ["json", "pdf", "html"]) {
     try {
       const output = `${prefix}.${ext}`,
         artifact = deliveredBytes(ctx, `drawings/${name}.${ext}`);
-      if (ext === "json") {
+      if (ext === "json" && !exactJson) {
         matches[ext] =
           canonical(JSON.parse(artifact)) === canonical(read(output));
       } else {

@@ -22,7 +22,8 @@ const marker = "drawings/export-manifest.json";
 const packetHtml = "drawings/packet.html";
 const packetJson = "drawings/packet.json";
 const packetPdf = "drawings/packet.pdf";
-const packetInput = "packet.request.json";
+const packetArtifacts = new Set([packetJson, packetHtml, packetPdf]);
+export const conveyorPacketRequest = "packet.request.json";
 export const conveyorBaseline = "drawings/before.json";
 const diagnostics = "drawings/diagnostics.json";
 const cable = "drawings/cable.json";
@@ -118,16 +119,11 @@ function bundleRecipe(job, path, required, views, cableTags) {
   const name = basename(path);
   switch (job.kind) {
     case "packet":
-      if (
-        required &&
-        (![packetJson, packetHtml, packetPdf].includes(path) ||
-          job.input !== packetInput)
-      )
-        break;
+      if (required && !packetArtifacts.has(path)) break;
       return [
         "packet",
         "--input",
-        job.input,
+        required ? conveyorPacketRequest : job.input,
         ...drawingOptions(job),
         ...(job.strict ? ["--strict"] : []),
       ];
@@ -212,10 +208,14 @@ function planBundle(request, required, views, cableTags) {
       const path = directory + "/" + portablePath(name);
       if (plan.has(path))
         throw new Error("Duplicate bundle output " + path + ".");
-      plan.set(
-        path,
-        bundleRecipe(job, path, required.has(path), views, cableTags),
-      );
+      const isRequired = required.has(path);
+      plan.set(path, {
+        argv: bundleRecipe(job, path, isRequired, views, cableTags),
+        requestMismatch:
+          isRequired &&
+          job.kind === "packet" &&
+          job.input !== conveyorPacketRequest,
+      });
     }
   }
   return plan;
@@ -327,7 +327,7 @@ export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
     ...ctx,
     calls: (ctx.calls ?? []).slice(input.index + 1),
   };
-  for (const [path, argv] of plan) {
+  for (const [path, { argv, requestMismatch }] of plan) {
     const delivered = exportFile(ctx, path);
     const specific = checks.filter(
       (finding) => directory + "/" + finding.path === path,
@@ -372,9 +372,9 @@ export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
       delivered.status ??
       (conflicting || ((byteMismatch || changedBytes) && !(stale && equals))
         ? "tampered"
-        : equals
+        : equals && !requestMismatch
           ? "current"
-          : stale || !deliveredMarker.bytes
+          : stale || requestMismatch || !deliveredMarker.bytes
             ? "stale"
             : "tampered");
     if (status === "current")
@@ -423,16 +423,30 @@ export function verifyStandaloneExport(ctx, path, { matches, fallback } = {}) {
   if (!receipt && matches !== undefined)
     return { status: matches ? "current" : "stale", hash };
 
-  const replay = replayExport(ctx, path, fallback, !!receipt);
-  const equals = replay?.bytes.equals(delivered.bytes);
+  let actual;
   if (receipt) {
     try {
-      const actual = readReceiptRecord(readJson(receipt, pathReceipt));
+      actual = readReceiptRecord(readJson(receipt, pathReceipt));
       if (
         actual.artifact.path !== basename(path) ||
         actual.artifact.sha256 !== hash
       )
         return { status: "tampered" };
+      const input = actual.artifact.intent?.inputs?.[0]?.path;
+      if (
+        packetArtifacts.has(path) &&
+        (matches === false ||
+          (typeof input === "string" && input !== conveyorPacketRequest))
+      )
+        return { status: "stale", hash };
+    } catch {
+      return { status: "tampered" };
+    }
+  }
+  const replay = replayExport(ctx, path, fallback, !!receipt);
+  const equals = replay?.bytes.equals(delivered.bytes);
+  if (actual) {
+    try {
       if (!replay?.receipt) return { status: "unverified" };
       const expected = readReceiptRecord(readJson(replay.receipt, pathReceipt));
       const { inputs, ...intent } = actual.artifact.intent;

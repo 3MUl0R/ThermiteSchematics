@@ -127,6 +127,11 @@ it("regeneration rejects forged packet metadata and a header-only unrelated PDF"
     );
     expect((await comparePacketArtifacts(ctx)).pass).toBe(true);
     const delivered = join(ctx.project, "drawings/packet.json");
+    writeFileSync(delivered, JSON.stringify(JSON.parse(original)));
+    expect((await comparePacketArtifacts(ctx)).matches.json).toBe(true);
+    expect(
+      (await comparePacketArtifacts(ctx, { exactJson: true })).matches.json,
+    ).toBe(false);
     const identical = join(ctx.root, "identical.json");
     writeFileSync(identical, readFileSync(delivered));
     rmSync(delivered);

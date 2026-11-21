@@ -410,7 +410,9 @@ it("reports missing delivery bytes, an absent broker receipt and missing or tamp
 
 it.each(
   ["legacy", "bundle", "mixed"].flatMap((route) =>
-    ["fresh", "stale", "tampered"].map((state) => [route, state]),
+    ["fresh", "stale", "tampered", "an alternate packet request"].map(
+      (state) => [route, state],
+    ),
   ),
 )("%s delivery is scored symmetrically when %s", async (route, state) => {
   if (!supported) return;
@@ -418,9 +420,41 @@ it.each(
   if (route === "legacy") {
     rmSync(ctx.project, { recursive: true });
     cpSync(legacyPrepared.project, ctx.project, { recursive: true });
-    ctx.calls = legacyPrepared.calls;
+    ctx.calls = legacyPrepared.calls.slice();
   } else if (route === "mixed") {
     ctx.calls.push(standaloneCall(ctx, "bom.csv", ["report", "bom"], true));
+  }
+  const packetMismatch = state === "an alternate packet request";
+  if (packetMismatch) {
+    const input = "other.request.json";
+    const delivered = read(projectFile("packet.request.json"));
+    write(projectFile(input), {
+      ...delivered,
+      views: delivered.views.slice(0, 1),
+    });
+    if (route === "bundle") {
+      const changed = structuredClone(plan);
+      changed.jobs[0].outputs = { json: "packet.json" };
+      changed.jobs.push({
+        ...changed.jobs[0],
+        input,
+        outputs: { html: "packet.html", pdf: "packet.pdf" },
+      });
+      write(projectFile(request), changed);
+      ok(ctx, ...bundleArgs);
+      expect(cli(ctx, ...checkArgs).status).toBe(0);
+      ctx.calls = [apply, bundleCall()];
+    } else {
+      for (const ext of ["html", "pdf"])
+        ctx.calls.push(
+          standaloneCall(
+            ctx,
+            "packet." + ext,
+            ["packet", "--input", input],
+            ext === "html",
+          ),
+        );
+    }
   }
   installCaptures();
   if (state === "stale") changeSource();
@@ -431,14 +465,21 @@ it.each(
     );
   }
   const outcome = await checkDogfood(ctx);
-  const status = state === "fresh" ? "current" : state;
+  const status =
+    state === "fresh" ? "current" : packetMismatch ? "stale" : state;
   expect(outcome.exports).toMatchObject({
     route,
     status,
-    artifacts: { [path]: status },
+    artifacts: packetMismatch
+      ? {
+          "drawings/packet.json": "current",
+          "drawings/packet.html": "stale",
+          "drawings/packet.pdf": "stale",
+        }
+      : { [path]: status },
   });
   expect(outcome.pass).toBe(state === "fresh");
-  expect(outcome.captureCurrent).toBe(state !== "stale");
+  expect(outcome.captureCurrent).toBe(state !== "stale" && !packetMismatch);
 });
 
 it.each([false, true])(

@@ -19,6 +19,7 @@ import {
 import {
   conveyorOutputs,
   conveyorBaseline,
+  conveyorPacketRequest,
   captureChain,
   exportFile,
   verifyStandaloneExport,
@@ -659,11 +660,9 @@ export async function checkDogfood(ctx) {
   );
   const regenerated = formats.length
     ? await regeneratePacket(ctx, {
-        request: "packet.request.json",
+        request: conveyorPacketRequest,
         formats,
-        finalInput:
-          conveyor &&
-          (!ctx.promptVersion || ctx.promptVersion === ctx.task.version),
+        bindRequest: conveyor,
       })
     : null;
   const fallbacks = new Map();
@@ -678,7 +677,7 @@ export async function checkDogfood(ctx) {
   for (const ext of formats) {
     const path = "drawings/packet." + ext;
     files[path] = regenerated.matches[ext];
-    fallbacks.set(path, ["packet", "--input", "packet.request.json"]);
+    fallbacks.set(path, ["packet", "--input", conveyorPacketRequest]);
   }
   for (const kind of spec.reports) {
     const path = `drawings/${kind}.csv`;

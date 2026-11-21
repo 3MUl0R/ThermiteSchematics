@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.7)
+# Fresh-agent evaluator (E2 v1.20.8)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1141,3 +1141,10 @@ The complete-delivery metric requires independent checker success, a current
 capture chain and no scored workflow violations. Actual inspection remains
 pending judge evidence. Replay the previous checkpoint into separate checker
 evidence and retain original run records.
+
+## E2 1.20.8
+
+D-conveyor regenerates packet JSON, HTML and PDF from the delivered
+`packet.request.json` in the confined checker copy and requires byte equality
+on legacy, bundle and mixed routes. The checker preserves the packet's print
+options and reports outputs published from a different request as stale.
