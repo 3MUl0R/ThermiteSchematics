@@ -176,6 +176,7 @@ export interface SelectedPathEndpoint {
 export interface SelectedPath {
   readonly id: string;
   readonly lane: string;
+  readonly powerRole?: "non-pe" | "protective-earth";
   readonly start: SelectedPathEndpoint;
   readonly steps: readonly (SelectedConductorStep | SelectedFunctionStep)[];
   readonly end: SelectedPathEndpoint;
@@ -191,6 +192,8 @@ export interface SelectedSubgraph {
   readonly netIds: readonly string[];
   /** Terminal context only; owner functions are not selected or covered. */
   readonly terminalOwners?: readonly SelectedTerminalOwner[];
+  /** Selected terminals with authored role "protective_earth". */
+  readonly protectiveEarthTerminals?: readonly TerminalId[];
 }
 
 export interface SelectedTerminalOwner {

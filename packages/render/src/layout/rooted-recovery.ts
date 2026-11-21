@@ -1,33 +1,42 @@
+import { terminalIdKey } from "../ordering.js";
 import { conductorKey } from "../presentation/util.js";
 import type { PresentationGraph, SelectedSubgraph } from "../types.js";
 import type { LayoutValidationOutcome } from "./validate-output.js";
 
 export type RootedRecovery = "trace-order" | ReadonlySet<string>;
 
-const phaseLanes = new Set(["L1", "L2", "L3", "U", "V", "W", "line"]);
-
 function netLabelRecovery(
   graph: Readonly<PresentationGraph>,
   selected: Readonly<SelectedSubgraph> | undefined,
   overlaps: readonly { labelId: string; edgeId: string }[],
 ) {
-  const phaseConductors = new Set(
+  const peTerminals = new Set(
+    selected?.protectiveEarthTerminals?.map(terminalIdKey),
+  );
+  const nonPeConductors = new Set(
     selected?.paths
-      .filter((path) => phaseLanes.has(path.lane))
+      .filter((path) => path.powerRole === "non-pe")
       .flatMap((path) =>
         path.steps.flatMap((step) =>
-          step.kind === "conductor" ? [conductorKey(step.elementId)] : [],
+          step.kind === "conductor" &&
+          !peTerminals.has(terminalIdKey(step.from)) &&
+          !peTerminals.has(terminalIdKey(step.to))
+            ? [conductorKey(step.elementId)]
+            : [],
         ),
       ),
   );
   const crossedEdges = new Set(overlaps.map(({ edgeId }) => edgeId));
-  // A phase crossing admits the retry. Resolve every measured net-label
-  // overlap together, including a phase label that crosses protective earth.
+  // A non-PE crossing admits the retry. Resolve every measured net-label
+  // overlap together, including a non-PE label that crosses protective earth.
   if (
     graph.edges.some(
       (edge) =>
         crossedEdges.has(edge.id) &&
-        edge.elementIds.some((id) => phaseConductors.has(conductorKey(id))),
+        !edge.endpoints.some((terminal) =>
+          peTerminals.has(terminalIdKey(terminal)),
+        ) &&
+        edge.elementIds.some((id) => nonPeConductors.has(conductorKey(id))),
     )
   )
     return new Set(overlaps.map(({ labelId }) => labelId));

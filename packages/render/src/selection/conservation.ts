@@ -344,6 +344,35 @@ function unrepresentedTerminalError(
   };
 }
 
+function selectedSubgraphIdentities(
+  context: SelectionContext,
+  deviceUids: ReadonlySet<string>,
+  terminalIds: ReadonlyMap<string, TerminalId>,
+  functionIds: ReadonlyMap<string, FunctionId>,
+  conductiveIds: ReadonlyMap<string, ConductiveElementId>,
+  netIds: ReadonlySet<string>,
+) {
+  const identities = selectedIdentities(
+    context,
+    deviceUids,
+    terminalIds,
+    functionIds,
+    conductiveIds,
+    netIds,
+  );
+  const terminals = identities.terminalIds.filter(
+    (terminal) =>
+      context.terminalByKey.get(terminalIdKey(terminal))?.role ===
+      "protective_earth",
+  );
+  return {
+    ...identities,
+    ...(terminals.length
+      ? { protectiveEarthTerminals: Object.freeze(terminals) }
+      : {}),
+  };
+}
+
 export function buildSelectedSubgraph(
   context: SelectionContext,
   selections: readonly SearchSuccess[],
@@ -408,7 +437,7 @@ export function buildSelectedSubgraph(
   return Object.freeze({
     view: context.view,
     paths: Object.freeze(selections.map(({ path }) => path)),
-    ...selectedIdentities(
+    ...selectedSubgraphIdentities(
       context,
       deviceUids,
       terminalIds,
