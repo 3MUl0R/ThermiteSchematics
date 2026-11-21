@@ -21,7 +21,7 @@ import {
   conveyorBaseline,
   captureChain,
   exportFile,
-  legacyHtml,
+  verifyStandaloneExport,
   regenerateConveyorBundle,
 } from "./conveyor-exports.mjs";
 import {
@@ -643,72 +643,111 @@ export async function checkDogfood(ctx) {
   }
   const cableRow = spec.requirements.find((r) => r.roles[0] === "cable");
   const cableTags = namesFor(cableRow?.id);
-  const bundle =
-    conveyor &&
-    (await regenerateConveyorBundle(
-      ctx,
-      spec,
-      views,
-      Array.isArray(cableTags)
-        ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
-        : [],
-    ));
-  let regenerated, capture;
-  const html = new Map();
-  if (bundle) {
-    regenerated = bundle;
-    for (const [path, status] of Object.entries(bundle.artifacts))
-      files[path] = status === "current";
-    capture = captureChain(
-      ctx,
-      (path) => bundle.html.get(path) ?? { status: "missing" },
-    );
-  } else {
-    regenerated = await regeneratePacket(ctx, {
-      request: "packet.request.json",
-    });
-    for (const [name, { roots, fallback }] of views)
-      files["drawings/" + name] =
-        roots.length > 0 &&
-        (await regenerateView(ctx, "drawings/" + name, fallback, { roots }))
-          .pass;
-    for (const [ext, pass] of Object.entries(regenerated.matches))
-      files["drawings/packet." + ext] = pass;
-    for (const kind of spec.reports) {
-      const out = join(ctx.evidence, `checker-${kind}.csv`),
-        result = cli(clean, "report", kind, "-o", out);
-      const delivered = exportFile(ctx, `drawings/${kind}.csv`);
-      files[`drawings/${kind}.csv`] =
-        result.status === 0 && !!delivered.bytes?.equals(readFileSync(out));
-    }
+  const bundle = conveyor
+    ? await regenerateConveyorBundle(
+        ctx,
+        spec,
+        views,
+        Array.isArray(cableTags)
+          ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
+          : [],
+      )
+    : null;
+  const legacy = (path) => !bundle?.artifacts.has(path);
+  const formats = ["json", "pdf", "html"].filter((ext) =>
+    legacy("drawings/packet." + ext),
+  );
+  const regenerated = formats.length
+    ? await regeneratePacket(ctx, {
+        request: "packet.request.json",
+        formats,
+        finalInput:
+          conveyor &&
+          (!ctx.promptVersion || ctx.promptVersion === ctx.task.version),
+      })
+    : null;
+  const fallbacks = new Map();
+  for (const [name, { roots, fallback }] of views) {
+    const path = "drawings/" + name;
+    if (!legacy(path)) continue;
+    files[path] =
+      roots.length > 0 &&
+      (await regenerateView(ctx, path, fallback, { roots })).pass;
+    fallbacks.set(path, fallback);
+  }
+  for (const ext of formats) {
+    const path = "drawings/packet." + ext;
+    files[path] = regenerated.matches[ext];
+    fallbacks.set(path, ["packet", "--input", "packet.request.json"]);
+  }
+  for (const kind of spec.reports) {
+    const path = `drawings/${kind}.csv`;
+    if (!legacy(path)) continue;
+    const argv = ["report", kind],
+      out = join(ctx.evidence, `checker-${kind}.csv`);
+    const result = cli(clean, ...argv, "-o", out);
+    const delivered = exportFile(ctx, path);
+    files[path] =
+      result.status === 0 && !!delivered.bytes?.equals(readFileSync(out));
+    fallbacks.set(path, argv);
+  }
+  if (legacy("drawings/diagnostics.json")) {
     const diagnostic = query(clean, "diagnostics", "--json");
     files["drawings/diagnostics.json"] =
       canonical(safeRead("drawings/diagnostics.json")) ===
       canonical(diagnostic);
+    fallbacks.set("drawings/diagnostics.json", ["diagnostics"]);
+  }
+  if (legacy("drawings/cable.json")) {
+    const listing = safeRead("drawings/cable.json");
     files["drawings/cable.json"] = cableListingMatches(
-      safeRead("drawings/cable.json"),
+      listing,
       sourceObjects,
       (designation) => query(clean, "cable", designation, "--json"),
     );
+    if (files["drawings/cable.json"])
+      fallbacks.set("drawings/cable.json", ["cable", listing.designation]);
+  }
+  if (legacy("drawings/review.json")) {
+    const argv = ["review", "--before", conveyorBaseline];
     let reviewed = null;
     try {
-      reviewed = query(clean, "review", "--before", conveyorBaseline, "--json");
+      reviewed = query(clean, ...argv, "--json");
     } catch {}
     files["drawings/review.json"] =
       !!reviewed &&
       canonical(reviewed) === canonical(safeRead("drawings/review.json"));
-    if (conveyor) {
-      const verifyHtml = (path) => {
-        if (!html.has(path))
-          html.set(path, legacyHtml(ctx, path, regenerated, views));
-        return html.get(path);
-      };
-      verifyHtml("drawings/packet.html");
-      capture = captureChain(ctx, verifyHtml);
-    }
+    fallbacks.set("drawings/review.json", argv);
   }
+
+  const required = conveyorOutputs(spec);
+  const verified = new Map(bundle?.artifacts);
+  const verify = (path) => {
+    if (!verified.has(path)) {
+      const fallback =
+        fallbacks.get(path) ??
+        views.get(
+          path
+            .split("/")
+            .at(-1)
+            .replace(/\.html$/, ".pdf"),
+        )?.fallback;
+      verified.set(
+        path,
+        verifyStandaloneExport(ctx, path, {
+          matches: files[path],
+          fallback,
+        }),
+      );
+    }
+    return verified.get(path);
+  };
+  if (conveyor)
+    for (const path of required)
+      files[path] = verify(path).status === "current";
+  const capture = conveyor ? captureChain(ctx, verify) : null;
   files[conveyorBaseline] = !!safeRead(conveyorBaseline);
-  const packet = regenerated.packet;
+  const packet = bundle?.packet ?? regenerated?.packet;
   const counts = {
     localTypes: types.filter((t) => t.library !== "core").length,
     sourceReads: ctx.metrics?.sourceReads ?? 0,
@@ -741,30 +780,37 @@ export async function checkDogfood(ctx) {
     diagnostics: ctx.validationDiagnostics ?? [],
   });
   if (!conveyor) return outcome;
-  const artifacts =
-    bundle?.artifacts ??
-    Object.fromEntries(
-      conveyorOutputs(spec).map((path) => [
-        path,
-        files[path] ? "current" : (exportFile(ctx, path).status ?? "stale"),
-      ]),
-    );
-  if (!bundle)
-    for (const [path, { status }] of html)
-      artifacts[path] = status === "unverified" ? "stale" : status;
+  const artifacts = Object.fromEntries(
+    required.map((path) => [path, verified.get(path).status]),
+  );
+  const extras = Object.fromEntries(
+    [...(bundle?.artifacts ?? [])]
+      .filter(([path]) => !required.includes(path))
+      .map(([path, { status }]) => [path, status]),
+  );
   const status =
-    bundle?.status ??
-    ["missing", "tampered", "stale"].find((value) =>
-      Object.values(artifacts).includes(value),
-    ) ??
-    "current";
+    bundle?.status === "current" || !bundle
+      ? (["tampered", "missing", "stale", "unverified"].find((value) =>
+          Object.values(artifacts).includes(value),
+        ) ?? "current")
+      : bundle.status;
+  const usedBundle = bundle?.artifacts.size > 0;
+  const usedStandalone =
+    required.some(legacy) ||
+    capture.files.some(({ input }) => input && legacy(input));
   return {
     ...outcome,
     pass: outcome.pass && status === "current",
     exports: {
-      route: bundle ? "bundle" : "legacy",
+      route:
+        usedBundle && usedStandalone
+          ? "mixed"
+          : usedBundle || bundle?.status === "invalid-request"
+            ? "bundle"
+            : "legacy",
       status,
       artifacts,
+      ...(Object.keys(extras).length && { extras }),
       ...(bundle && { request: bundle.request, findings: bundle.findings }),
     },
     captureCurrent: capture.status === "current",

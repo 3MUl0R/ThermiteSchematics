@@ -36,14 +36,13 @@ function signature(source, spec, captured, cache) {
   )
     return null;
   const sources = exportSourcePaths(source);
-  const paths = [
+  const deliverables = [
     ...new Set([
       ...conveyorOutputs(spec),
-      conveyorBaseline,
-      "packet.request.json",
       ...captured.map(({ input }) => input),
     ]),
   ].sort();
+  const paths = [...deliverables, conveyorBaseline, "packet.request.json"];
   const artifacts = paths.map((path) => [path, digest(path)]);
   if (artifacts.some(([, hash]) => hash === null)) return null;
   const marker = digest("drawings/export-manifest.json");
@@ -52,11 +51,8 @@ function signature(source, spec, captured, cache) {
       sources.map((path) => [path, digest(path)]),
       artifacts,
       marker,
-      marker
-        ? []
-        : captured
-            .map(({ input }) => [input, digest(input + ".receipt.json")])
-            .sort(),
+      marker,
+      deliverables.map((path) => [path, digest(path + ".receipt.json")]),
     ]),
   );
 }
@@ -103,6 +99,14 @@ function isFinalization({ argv }) {
   );
 }
 
+export function phaseConveyorCalls(calls, started, ended) {
+  return calls.map((call) => {
+    const at = call.queuedAt ?? call.started;
+    const phase = at < started ? "setup" : at <= ended ? "agent" : "flush";
+    return { ...call, phase };
+  });
+}
+
 export function conveyorMetrics({
   ctx,
   outcome,
@@ -118,7 +122,9 @@ export function conveyorMetrics({
   violations = [],
   postAgentWallTimeMs = Date.now() - ended,
 }) {
-  const calls = ctx.calls.filter(({ phase }) => phase === "agent");
+  const calls = phaseConveyorCalls(ctx.calls, started, ended).filter(
+    ({ phase }) => phase === "agent",
+  );
   const successful = calls.filter(({ exit }) => exit === 0).length;
   let paths = [],
     digest = null;
@@ -167,7 +173,10 @@ export function conveyorMetrics({
       after = sourceState(call.after, paths);
     if (before !== previous) finalSourceChangeUpperBound = call.started;
     if (after !== before)
-      finalSourceChangeUpperBound = call.commandEnded ?? call.ended;
+      finalSourceChangeUpperBound = Math.min(
+        ended,
+        call.commandEnded ?? call.ended,
+      );
     previous = after;
   }
   if (previous !== sourceState(ctx.final, paths))
@@ -196,7 +205,7 @@ export function conveyorMetrics({
         ms +
         Math.max(
           0,
-          (call.commandEnded ?? call.ended) -
+          Math.min(ended, call.commandEnded ?? call.ended) -
             (call.commandStarted ?? call.started),
         ),
       0,

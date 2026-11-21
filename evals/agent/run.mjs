@@ -55,6 +55,7 @@ import { visualBroker } from "./visual-capture.mjs";
 import {
   conveyorMetrics,
   observeConveyorDelivery,
+  phaseConveyorCalls,
 } from "./conveyor-measurement.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import {
@@ -919,7 +920,7 @@ export async function runOne({
     runtimeSource = projectReader(runtime);
     // The guide the agent's CLI loads at launch.
     guideBytes = readFileSync(join(before, "AGENTS.md")).length;
-    const started = Date.now();
+    let started = Date.now();
     const conveyor = task.id === "D-conveyor";
     const delivery = conveyor
       ? observeConveyorDelivery(source, task.deliverables)
@@ -942,11 +943,13 @@ export async function runOne({
         module: join(taskDir, task.reference ?? "reference.mjs"),
         context: publicContext,
       });
+      started = Date.now();
       execution = await capturedAgent(
         [process.execPath, join(here, "reference-worker.mjs"), workerContext],
         ctx,
         timeoutMs,
       );
+      agentEnded = Date.now();
     } else {
       const stopCapture = await visualBroker(
         task,
@@ -955,6 +958,7 @@ export async function runOne({
         delivery?.observe,
       );
       try {
+        started = Date.now();
         execution = await capturedAgent(command, ctx, timeoutMs);
       } finally {
         agentEnded = Date.now();
@@ -1054,6 +1058,7 @@ export async function runOne({
     ctx.project = stagedProject;
     let final = { ...beforeFlush, schemaInvalidFiles: [] };
     ctx.validationDiagnostics = [];
+    const flushStarted = Date.now();
     if (trusted) {
       ctx.thermite = join(trusted.runtime, "thermite.mjs");
       const validation = cli(ctx, "validate", ".", "--json");
@@ -1069,7 +1074,10 @@ export async function runOne({
       ctx.validationDiagnostics = validationDiagnostics(validation);
       final = fileState(stagedProject, ctx.thermite, ctx.env);
     }
-    const calls = parseCalls(ctx.env.THERMITE_EVAL_LOG);
+    const rawCalls = parseCalls(ctx.env.THERMITE_EVAL_LOG);
+    const calls = conveyor
+      ? phaseConveyorCalls(rawCalls, started, ended)
+      : rawCalls;
     final.sourceFiles = documents(stagedProject).map((doc) => doc.path);
     const shimErrors = [
       ...auditInputErrors,
@@ -1081,8 +1089,17 @@ export async function runOne({
     } catch {
       shimErrors.push({ kind: "shim-error", stage: "missing-head" });
     }
-    shimErrors.push(...auditErrors(calls, head));
-    if (trusted && !calls.some((call) => call.phase === "flush"))
+    shimErrors.push(...auditErrors(rawCalls, head));
+    if (
+      trusted &&
+      !rawCalls.some(
+        (call) =>
+          call.started >= flushStarted &&
+          call.phase === "flush" &&
+          JSON.stringify(call.argv) ===
+            JSON.stringify(["validate", ".", "--json"]),
+      )
+    )
       shimErrors.push({ kind: "shim-error", stage: "missing-flush" });
     ctx.initial = initial;
     ctx.final = final;
@@ -1508,8 +1525,16 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
     mkdirSync(live);
     const trusted = await protectedRuntime(prepared.path, scratch, task);
     const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
+    const calls = stored.deliveryTiming
+      ? phaseConveyorCalls(
+          stored.calls,
+          stored.deliveryTiming.started,
+          stored.deliveryTiming.ended,
+        )
+      : stored.calls;
     const ctx = {
       ...stored,
+      calls,
       task,
       project: task.contributor ? stored.project : stagedProject,
       originalProject: stored.project,
@@ -1523,7 +1548,7 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       },
       thermite: join(trusted.runtime, "thermite.real.mjs"),
       metrics: score({
-        calls: stored.calls,
+        calls,
         transcript,
         context: stored.context,
         engineRoots: stored.engineRoots,
@@ -1537,7 +1562,7 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       "Harness changed during recheck; result cannot be scored",
     );
     const metrics = score({
-      calls: stored.calls,
+      calls,
       initial: stored.initial,
       final: stored.final,
       runtimeBefore: original.runtimeHash.before,

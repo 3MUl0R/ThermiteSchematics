@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -98,7 +99,7 @@ const plan = {
     },
   ],
 };
-let root, prepared, ctx, apply, validationDiagnostics;
+let root, prepared, legacyPrepared, ctx, apply, validationDiagnostics;
 const archived = () => join(ctx.evidence, "visual-captures/result.json");
 const projectFile = (file) => join(ctx.project, file);
 const bundleCall = () => ({
@@ -107,8 +108,8 @@ const bundleCall = () => ({
   argv: bundleArgs,
   request: readFileSync(projectFile(request), "utf8"),
 });
-function installCaptures() {
-  const files = html.map((input, i) => {
+function installCaptures(inputs = html) {
+  const files = inputs.map((input, i) => {
     // The broker is tested with Chromium separately. These bytes stand for its
     // already-published PNGs and exercise the checker's hash binding.
     const png = Buffer.from("trusted fixture capture " + i);
@@ -125,6 +126,30 @@ function installCaptures() {
   const receipt = { format: "thermite-agent-visual-capture/1", files };
   write(archived(), receipt);
   return receipt;
+}
+
+function standaloneCall(context, file, args, receipt = false) {
+  const path = "drawings/" + file;
+  const argv = [...args, "-o", path, ...(receipt ? ["--receipt"] : [])];
+  const files = () =>
+    Object.fromEntries(
+      [path, path + ".receipt.json"].flatMap((name) => {
+        const target = join(context.project, name);
+        return existsSync(target) ? [[name, sha256(readFileSync(target))]] : [];
+      }),
+    );
+  const before = { files: files() };
+  ok(context, ...argv);
+  return { argv, phase: "agent", exit: 0, before, after: { files: files() } };
+}
+
+function changeSource() {
+  const equipmentFile = projectFile("devices/equipment.json");
+  const equipment = read(equipmentFile);
+  for (const device of equipment.objects)
+    if (["PLC1", "PS1"].includes(device.designation))
+      device.location = "Main panel";
+  write(equipmentFile, equipment);
 }
 
 beforeAll(() => {
@@ -161,6 +186,21 @@ beforeAll(() => {
   validationDiagnostics = JSON.parse(ok(initial, "validate", ".", "--json"));
   write(join(prepared, request), plan);
   ok(initial, ...bundleArgs);
+  const project = join(root, "standalone");
+  cpSync(prepared, project, { recursive: true });
+  rmSync(join(project, marker));
+  legacyPrepared = { project, thermite, task };
+  legacyPrepared.calls = [
+    apply,
+    ...standalone.map(([file, args]) =>
+      standaloneCall(
+        legacyPrepared,
+        file,
+        args,
+        ["motor-power.html", "bom.csv"].includes(file),
+      ),
+    ),
+  ];
 }, 60000);
 
 beforeEach(() => {
@@ -220,8 +260,9 @@ it("accepts all 15 bundle artifacts and validates a trusted capture without pass
     findings: [],
   });
   expect(Object.values(result.exports.artifacts)).toEqual(
-    Array(15).fill("current"),
+    Array(14).fill("current"),
   );
+  expect(result.exports.extras).toEqual({ [html[1]]: "current" });
   expect(result.pass, JSON.stringify(result.requirements)).toBe(true);
   expect(result.checks.viewsAndPacket).toBe(true);
   expect(result.checks.reports).toBe(true);
@@ -230,11 +271,10 @@ it("accepts all 15 bundle artifacts and validates a trusted capture without pass
   expect(result.rubricPending).toBe(true);
 });
 
-it("rejects a request that drops required output or scopes a full report", async () => {
+it("rejects a job that scopes a required full report", async () => {
   if (!supported) return;
   const changed = structuredClone(plan);
   changed.jobs.find(({ report }) => report === "bom").device = "M1";
-  changed.jobs[0].outputs.pdf = "other.pdf";
   write(projectFile(request), changed);
   expect((await checkDogfood(ctx)).exports.status).toBe("invalid-request");
 });
@@ -242,12 +282,7 @@ it("rejects a request that drops required output or scopes a full report", async
 it("detects the stale PLC1/PS1 location edit and reuses only byte-identical capture inputs", async () => {
   if (!supported) return;
   const old = installCaptures();
-  const equipmentFile = projectFile("devices/equipment.json");
-  const equipment = read(equipmentFile);
-  for (const device of equipment.objects)
-    if (["PLC1", "PS1"].includes(device.designation))
-      device.location = "Main panel";
-  write(equipmentFile, equipment);
+  changeSource();
   const stale = await checkDogfood(ctx);
   expect(stale.exports).toMatchObject({
     status: "stale",
@@ -255,7 +290,9 @@ it("detects the stale PLC1/PS1 location edit and reuses only byte-identical capt
       "drawings/bom.csv": "stale",
       "drawings/terminals.csv": "stale",
     },
-    findings: [{ path: "export-manifest.json", code: "source_changed" }],
+    findings: [
+      { path: "export-manifest.json", code: "source_changed", note: true },
+    ],
   });
   expect(stale.capture.status).toBe("stale");
 
@@ -273,6 +310,7 @@ it("detects the stale PLC1/PS1 location edit and reuses only byte-identical capt
     captureEvidence: ctx.evidence,
   });
   expect(refreshed.exports.status).toBe("current");
+  expect(refreshed.pass).toBe(true);
   expect(refreshed.capture).toMatchObject({
     status: "stale",
     files: [
@@ -340,10 +378,12 @@ it("fails independent regeneration when a forged artifact and its self-consisten
   ];
   installCaptures();
   const legacy = await checkDogfood(ctx);
-  expect(legacy.exports).toMatchObject({
-    route: "legacy",
+  expect(legacy.capture).toMatchObject({
     status: "tampered",
-    artifacts: { [file]: "tampered" },
+    files: [
+      { input: html[0], status: "current" },
+      { input: file, status: "tampered" },
+    ],
   });
   expect(legacy.captureCurrent).toBe(false);
 });
@@ -366,6 +406,207 @@ it("reports missing delivery bytes, an absent broker receipt and missing or tamp
   expect(captureChain(ctx, verify).status).toBe("tampered");
   rmSync(join(ctx.evidence, receipt.files[0].output));
   expect(captureChain(ctx, verify).status).toBe("missing");
+});
+
+it.each(
+  ["legacy", "bundle", "mixed"].flatMap((route) =>
+    ["fresh", "stale", "tampered"].map((state) => [route, state]),
+  ),
+)("%s delivery is scored symmetrically when %s", async (route, state) => {
+  if (!supported) return;
+  const path = "drawings/bom.csv";
+  if (route === "legacy") {
+    rmSync(ctx.project, { recursive: true });
+    cpSync(legacyPrepared.project, ctx.project, { recursive: true });
+    ctx.calls = legacyPrepared.calls;
+  } else if (route === "mixed") {
+    ctx.calls.push(standaloneCall(ctx, "bom.csv", ["report", "bom"], true));
+  }
+  installCaptures();
+  if (state === "stale") changeSource();
+  if (state === "tampered") {
+    write(projectFile(path), "forged bill of materials\n");
+    ctx.calls = ctx.calls.map((call) =>
+      call.argv.includes(path) ? { ...call, after: undefined } : call,
+    );
+  }
+  const outcome = await checkDogfood(ctx);
+  const status = state === "fresh" ? "current" : state;
+  expect(outcome.exports).toMatchObject({
+    route,
+    status,
+    artifacts: { [path]: status },
+  });
+  expect(outcome.pass).toBe(state === "fresh");
+  expect(outcome.captureCurrent).toBe(state !== "stale");
+});
+
+it.each([false, true])(
+  "accepts full standalone re-exports after a bundle (deleted marker: %s)",
+  async (deleted) => {
+    if (!supported) return;
+    ctx.calls.push(standaloneCall(ctx, "bom.csv", ["report", "bom"], true));
+    changeSource();
+    for (const [file, args] of standalone)
+      ctx.calls.push(standaloneCall(ctx, file, args));
+    if (deleted) rmSync(projectFile(marker));
+    installCaptures();
+    const outcome = await checkDogfood(ctx);
+    expect(outcome.pass).toBe(true);
+    expect(outcome.captureCurrent).toBe(true);
+    expect(outcome.exports).toMatchObject({
+      route: "legacy",
+      status: "current",
+      findings: expect.arrayContaining([
+        {
+          path: "export-manifest.json",
+          code: deleted ? "missing_manifest" : "source_changed",
+          note: true,
+        },
+      ]),
+    });
+  },
+);
+
+it("accepts a partial bundle and standalone outputs outside the plan", async () => {
+  if (!supported) return;
+  const partial = structuredClone(plan);
+  delete partial.jobs[0].outputs.json;
+  delete partial.jobs[1].outputs.html;
+  write(projectFile(request), partial);
+  ok(ctx, ...bundleArgs);
+  ctx.calls = [
+    apply,
+    bundleCall(),
+    standaloneCall(ctx, "packet.json", packet),
+    standaloneCall(ctx, "motor-power.html", motor),
+  ];
+  installCaptures();
+  const outcome = await checkDogfood(ctx);
+  expect(outcome.exports).toMatchObject({ route: "mixed", status: "current" });
+  expect(outcome.pass).toBe(true);
+  expect(outcome.captureCurrent).toBe(true);
+});
+
+it.each([false, true])(
+  "accepts zero or four optional HTML exports and an extra report (four: %s)",
+  async (optional) => {
+    if (!supported) return;
+    const expanded = structuredClone(plan);
+    if (optional) {
+      expanded.jobs[2].outputs.html = "contactor-actuation.html";
+      expanded.jobs[3].outputs.html = "ps1-loads.html";
+      expanded.jobs.find(({ report }) => report === "bom").outputs.html =
+        "bom.html";
+    } else {
+      delete expanded.jobs[1].outputs.html;
+    }
+    expanded.jobs.push({
+      kind: "report",
+      report: "network",
+      outputs: { csv: "network.csv" },
+    });
+    write(projectFile(request), expanded);
+    ok(ctx, ...bundleArgs);
+    ctx.calls = [apply, bundleCall()];
+    if (!optional)
+      ctx.calls.push(standaloneCall(ctx, "motor-power.html", motor));
+    installCaptures();
+    const outcome = await checkDogfood(ctx);
+    expect(outcome.pass).toBe(true);
+    expect(outcome.captureCurrent).toBe(true);
+    expect(outcome.exports.extras["drawings/network.csv"]).toBe("current");
+    expect(
+      Object.keys(outcome.exports.extras).filter((path) =>
+        path.endsWith(".html"),
+      ),
+    ).toHaveLength(optional ? 4 : 0);
+  },
+);
+
+it("reports an explicitly disallowed job type", async () => {
+  if (!supported) return;
+  const changed = structuredClone(plan);
+  changed.jobs.push({ kind: "validate", outputs: { json: "validation.json" } });
+  write(projectFile(request), changed);
+  const { exports } = await checkDogfood(ctx);
+  expect(exports).toMatchObject({
+    status: "invalid-request",
+    findings: [
+      {
+        code: "invalid_request",
+        message: 'Disallowed bundle job type "validate".',
+      },
+    ],
+  });
+});
+
+it.each(["legacy", "bundle", "mixed"])(
+  "keeps stale optional capture HTML out of %s export pass",
+  async (route) => {
+    if (!supported) return;
+    const optional = "drawings/bom.html";
+    const report = ["report", "bom"];
+    if (route === "bundle") {
+      const expanded = structuredClone(plan);
+      expanded.jobs.find(({ report }) => report === "bom").outputs.html =
+        "bom.html";
+      write(projectFile(request), expanded);
+      ok(ctx, ...bundleArgs);
+      ctx.calls = [apply, bundleCall()];
+    } else {
+      if (route === "legacy") {
+        rmSync(projectFile(marker));
+        ctx.calls = legacyPrepared.calls.slice();
+      }
+      ctx.calls.push(standaloneCall(ctx, "bom.html", report, true));
+    }
+    const earlier = installCaptures([html[0], optional]);
+    changeSource();
+    if (route === "legacy") {
+      for (const [file, args] of standalone)
+        ctx.calls.push(standaloneCall(ctx, file, args));
+    } else {
+      ok(ctx, ...bundleArgs);
+      ctx.calls.push(bundleCall());
+    }
+    const current = installCaptures([html[0], optional]);
+    expect(current.files[0].inputSha256).not.toBe(earlier.files[0].inputSha256);
+    if (route === "bundle") {
+      expect(current.files[1].inputSha256).not.toBe(
+        earlier.files[1].inputSha256,
+      );
+      current.files[1] = earlier.files[1];
+      write(archived(), current);
+    }
+    const outcome = await checkDogfood(ctx);
+    expect(outcome.exports.route).toBe(route);
+    expect(outcome.pass).toBe(true);
+    expect(outcome.capture).toMatchObject({
+      status: "stale",
+      files: [{ status: "current" }, { input: optional, status: "stale" }],
+    });
+  },
+);
+
+it("accepts a standalone re-render with different options from the earlier bundle", async () => {
+  if (!supported) return;
+  const path = "drawings/motor-power.pdf";
+  const earlier = sha256(readFileSync(projectFile(path)));
+  ctx.calls.push(
+    standaloneCall(ctx, "motor-power.pdf", ["view", "M1", "--power"], true),
+  );
+  expect(sha256(readFileSync(projectFile(path)))).not.toBe(earlier);
+  installCaptures();
+  const outcome = await checkDogfood(ctx);
+  expect(outcome.pass).toBe(true);
+  expect(outcome.exports).toMatchObject({
+    route: "mixed",
+    status: "current",
+    findings: [
+      { path: "motor-power.pdf", code: "byte_mismatch", superseded: true },
+    ],
+  });
 });
 
 it("times the first observed complete final candidate and isolates agent-phase command time", () => {
@@ -408,7 +649,7 @@ it("times the first observed complete final candidate and isolates agent-phase c
       ended: 1115,
     },
     {
-      phase: "agent",
+      phase: "flush",
       argv: ["export", "bundle"],
       exit: 0,
       before: starting,
@@ -419,7 +660,7 @@ it("times the first observed complete final candidate and isolates agent-phase c
       ended: 1150,
     },
     {
-      phase: "agent",
+      phase: "setup",
       argv: ["export", "check"],
       exit: 1,
       before: starting,
@@ -429,7 +670,8 @@ it("times the first observed complete final candidate and isolates agent-phase c
       commandEnded: 1180,
       ended: 1189,
     },
-    { phase: "flush", argv: ["validate"], exit: 0 },
+    { phase: "agent", argv: ["validate"], exit: 0, started: 1201 },
+    { phase: "agent", argv: ["init"], exit: 0, started: 999 },
   ];
   expect(timer.candidates.map(({ at }) => at)).toEqual([1050, 1160, 1190]);
   const options = {

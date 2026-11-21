@@ -73,6 +73,15 @@ const printValues = new Set([
   "--margin",
 ]);
 const reportValues = new Set(["--device", "--filter"]);
+const diagnosticValues = new Set(["--device", "--location"]);
+const standaloneCommands = [
+  "view",
+  "packet",
+  "report",
+  "diagnostics",
+  "cable",
+  "review",
+];
 const viewSwitches = new Set([
   "--power",
   "--actuation",
@@ -82,24 +91,25 @@ const viewSwitches = new Set([
 ]);
 const viewValues = new Set(["--to", "--flow"]);
 
-// Rebuild a view/packet invocation from its allowed options. File arguments
+// Rebuild a standalone export invocation from its allowed options. File arguments
 // are always supplied by the checker or resolved inside its staged copy.
-function parsePrint(argv) {
+function parseStandaloneExport(argv) {
   if (
     !Array.isArray(argv) ||
     !argv.every((arg) => typeof arg === "string") ||
-    !["view", "packet", "report"].includes(argv[0])
+    !standaloneCommands.includes(argv[0])
   )
     return null;
   const kind = argv[0],
     view = kind === "view",
     report = kind === "report",
+    hasRoot = view || report || kind === "cable",
     options = [],
     files = {};
   let root;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
-    if ((view || report) && !root && !arg.startsWith("-")) {
+    if (hasRoot && !root && !arg.startsWith("-")) {
       root = arg;
       continue;
     }
@@ -116,7 +126,9 @@ function parsePrint(argv) {
     if (
       !printValues.has(key) &&
       !(view && viewValues.has(key)) &&
-      !(report && reportValues.has(key))
+      !(report && reportValues.has(key)) &&
+      !(kind === "diagnostics" && diagnosticValues.has(key)) &&
+      !(kind === "review" && key === "--before")
     )
       return null;
     const value = equals < 0 ? argv[++i] : arg.slice(equals + 1);
@@ -125,27 +137,52 @@ function parsePrint(argv) {
     else if (key === "--project") files.project = value;
     else if (key === "--input" && kind === "packet") files.input = value;
     else if (key === "--input") return null;
-    else if (key === "--filter") files.filter = value;
+    else if (key === "--filter" || key === "--before")
+      files[key.slice(2)] = value;
     else options.push(key, value);
   }
-  if (view || report ? !root : !files.input) return null;
+  if (
+    (hasRoot && !root) ||
+    (kind === "packet" && !files.input) ||
+    (kind === "review" && !files.before)
+  )
+    return null;
   return { argv: [kind, ...(root ? [root] : []), ...options], ...files };
 }
-function commandFor(ctx, artifact, fallback, allowReport = false) {
+export function standaloneExportCall(
+  ctx,
+  artifact,
+  kinds = standaloneCommands,
+) {
   const project = ctx.originalProject ?? ctx.project;
   for (const call of [...(ctx.calls ?? [])].reverse()) {
-    if (call?.phase === "flush" || call?.exit !== 0) continue;
-    const parsed = parsePrint(call.argv);
+    if (
+      call?.phase === "flush" ||
+      call?.exit !== 0 ||
+      !kinds.includes(call.argv?.[0])
+    )
+      continue;
+    const parsed = parseStandaloneExport(call.argv);
     if (
       parsed?.output &&
-      (allowReport || parsed.argv[0] !== "report") &&
       resolve(project, parsed.output) === resolve(project, artifact)
     )
-      return { parsed, argv: call.argv, request: call.request };
+      return call;
   }
-  return fallback ? { parsed: parsePrint(fallback), argv: fallback } : null;
 }
-function remap(command, ctx, out, receipt = false) {
+function commandFor(ctx, artifact, fallback, kinds = ["view", "packet"]) {
+  const call = standaloneExportCall(ctx, artifact, kinds);
+  if (call)
+    return {
+      parsed: parseStandaloneExport(call.argv),
+      argv: call.argv,
+      request: call.request,
+    };
+  return fallback
+    ? { parsed: parseStandaloneExport(fallback), argv: fallback }
+    : null;
+}
+function remap(command, ctx, out, receipt = false, finalInput = false) {
   const parsed = command?.parsed;
   if (!parsed) return null;
   const project = ctx.originalProject ?? ctx.project,
@@ -162,15 +199,9 @@ function remap(command, ctx, out, receipt = false) {
       isAbsolute(path)
     )
       return null;
-    if (receipt) {
-      const named = join(clean.project, path);
-      if (
-        parsed.input === "-" ||
-        (typeof command.request === "string" &&
-          !readFileSync(named).equals(Buffer.from(command.request)))
-      )
-        return null;
-      result.push("--input", named);
+    if (receipt || (finalInput && parsed.input !== "-")) {
+      if (parsed.input === "-") return null;
+      result.push("--input", join(clean.project, path));
     } else if (typeof command.request === "string") {
       const request = out + ".request.json";
       writeFileSync(request, command.request);
@@ -179,8 +210,9 @@ function remap(command, ctx, out, receipt = false) {
       result.push("--input", join(clean.project, path));
     } else return null;
   }
-  if (parsed.filter) {
-    const path = relative(project, resolve(project, parsed.filter));
+  for (const key of ["filter", "before"]) {
+    if (!parsed[key]) continue;
+    const path = relative(project, resolve(project, parsed[key]));
     if (
       !path ||
       path === ".." ||
@@ -188,7 +220,7 @@ function remap(command, ctx, out, receipt = false) {
       isAbsolute(path)
     )
       return null;
-    result.push("--filter", join(clean.project, path));
+    result.push("--" + key, join(clean.project, path));
   }
   return [
     ...result,
@@ -207,12 +239,19 @@ export function deliveredBytes(ctx, artifact) {
     source.close();
   }
 }
-export function replayHtml(ctx, artifact, fallback, receipt = false) {
-  const command = commandFor(ctx, artifact, fallback, true);
-  const output = join(ctx.evidence, "regenerated-html", ...artifact.split("/"));
+export function replayExport(ctx, artifact, fallback, receipt = false) {
+  const command = commandFor(
+    ctx,
+    artifact,
+    fallback,
+    fallback && !["view", "packet"].includes(fallback[0])
+      ? []
+      : standaloneCommands,
+  );
+  const output = join(ctx.evidence, "regenerated-export", artifact);
   try {
     mkdirSync(join(output, ".."), { recursive: true });
-    const mapped = remap(command, ctx, output, receipt);
+    const mapped = remap(command, ctx, output, receipt, true);
     if (!mapped || cli(cleanChecker(ctx), ...mapped).status !== 0) return null;
     return {
       bytes: readFileSync(output),
@@ -338,20 +377,25 @@ export async function findRegeneratedView(ctx, expected) {
 }
 export async function regeneratePacket(
   ctx,
-  { request = "requests/packet.json", name = "packet" } = {},
+  {
+    request = "requests/packet.json",
+    name = "packet",
+    formats = ["json", "pdf", "html"],
+    finalInput = false,
+  } = {},
 ) {
   const clean = cleanChecker(ctx),
     prefix = join(ctx.evidence, `regenerated-${name}`),
     commands = {};
   let packet = null;
   const issued = {};
-  for (const ext of ["json", "pdf", "html"]) {
+  for (const ext of formats) {
     const artifact = `drawings/${name}.${ext}`,
       output = `${prefix}.${ext}`;
     const fallback = ["packet", "--input", request, "-o", artifact];
     const command = commandFor(ctx, artifact, fallback);
     commands[ext] = command.argv;
-    const mapped = remap(command, ctx, output);
+    const mapped = remap(command, ctx, output, false, finalInput);
     if (!mapped) continue;
     const result = cli(clean, ...mapped);
     if (result.status !== 0) continue;
