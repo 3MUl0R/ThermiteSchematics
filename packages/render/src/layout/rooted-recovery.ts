@@ -4,8 +4,6 @@ import type { LayoutValidationOutcome } from "./validate-output.js";
 
 export type RootedRecovery = "trace-order" | ReadonlySet<string>;
 
-const phaseLanes = new Set(["L1", "L2", "L3", "U", "V", "W", "line"]);
-
 function netLabelRecovery(
   graph: Readonly<PresentationGraph>,
   selected: Readonly<SelectedSubgraph> | undefined,
@@ -13,7 +11,7 @@ function netLabelRecovery(
 ) {
   const phaseConductors = new Set(
     selected?.paths
-      .filter((path) => phaseLanes.has(path.lane))
+      .filter((path) => path.powerRole === "phase")
       .flatMap((path) =>
         path.steps.flatMap((step) =>
           step.kind === "conductor" ? [conductorKey(step.elementId)] : [],

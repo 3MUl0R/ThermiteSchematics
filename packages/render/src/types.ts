@@ -176,6 +176,7 @@ export interface SelectedPathEndpoint {
 export interface SelectedPath {
   readonly id: string;
   readonly lane: string;
+  readonly powerRole?: "phase" | "protective-earth";
   readonly start: SelectedPathEndpoint;
   readonly steps: readonly (SelectedConductorStep | SelectedFunctionStep)[];
   readonly end: SelectedPathEndpoint;

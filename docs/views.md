@@ -328,6 +328,23 @@ connected input target supplied through `--to` and `--include-power`; PLC/RIO
 supply loads receive only circuit advice. Stable
 identity fields remain present; no connection change is implied.
 
+Successful rooted layouts never enter recovery. When an initial rooted layout
+fails with an ambiguous intersection, collinear overlap, or in a `loads` view,
+layout recovery tries existing context-fork order alternatives and then rooted
+route alternatives before any rooted recovery retry. Rooted recovery allows at
+most one additional native ELK request, keeping fixed ports, source inventories,
+text and all final geometry validation guards unchanged; a failed retry
+preserves the original R004 refusal. Two narrow cases qualify: a
+`top-to-bottom` power view whose measured net-label intersection crosses a
+conductor on a selected non-PE power path (matched by authored conductor
+identities, not lane names) retries with `HEAD` placement only on the measured
+overlapping net labels (resolving all measured net-label overlaps together while
+leaving uncrossed net labels at `TAIL`; protective-earth-only overlaps do not
+retry); and a single-signal-path `trace` view with a device root and a two-port
+same-terminal pass-through on the signal net retries with
+`considerModelOrder.strategy` set to `NONE` (root signal fan-out stays on the
+existing route search).
+
 A supported unselected two-terminal coil can contribute an intermediate input-path
 terminal as context only. The mark says “coil outside view”; it does not select
 that coil, its other terminal, return wire or parallel loads. Return paths, loads,

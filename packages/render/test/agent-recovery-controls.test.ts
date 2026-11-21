@@ -1,23 +1,31 @@
 import assert from "node:assert/strict";
-import { expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { compileProject, lockProject } from "@thermite/compiler";
+import { expect, it, vi } from "vitest";
 import {
   agentRefusalFixture,
   pumpPower,
   sensorTrace,
 } from "./agent-refusals-fixture.js";
 import { agentPresentation } from "./helpers/agent-recovery.js";
+import * as contextForkOrder from "../src/layout/context-fork-order.js";
+import * as directLoadRoutes from "../src/layout/direct-load-routes.js";
+import * as recoveryModule from "../src/layout/rooted-recovery.js";
 import { rootedRecovery } from "../src/layout/rooted-recovery.js";
 import {
   buildElkAdapterGraph,
   layoutPresentationGraph,
 } from "../src/layout/elk-adapter.js";
 import { createElkEngine } from "../src/layout/elk-runtime.js";
+import { ELK_OPTIONS } from "../src/layout/options.js";
 import {
   normalizeAndValidateLayout,
   type LayoutFailureKind,
   type LayoutValidationOutcome,
 } from "../src/layout/validate-output.js";
-import type { PresentationGraph } from "../src/types.js";
+import type { PresentationGraph, SelectedSubgraph } from "../src/types.js";
 import { SYMBOL_CATALOG } from "../src/symbols/catalog.js";
 
 function failure(
@@ -196,6 +204,258 @@ it("rejects a detached recovered endpoint and preserves the original refusal", a
     assert.ok(first && !first.ok);
     expect(result).toEqual(first);
     expect(calls).toBe(2);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+async function runRetryOrder(
+  graph: PresentationGraph,
+  selected: SelectedSubgraph,
+  succeedOnCall?: number,
+) {
+  const baseEngine = createElkEngine();
+  const realLayout = baseEngine.layout.bind(baseEngine);
+  const sequence: string[] = [];
+  let calls = 0;
+  const forkSpy = vi
+    .spyOn(contextForkOrder, "contextForkOrderAlternatives")
+    .mockImplementation(function* (candidate) {
+      sequence.push("context-fork");
+      yield candidate;
+    });
+  const routeSpy = vi
+    .spyOn(directLoadRoutes, "rootedRouteAlternatives")
+    .mockImplementation(function* (candidate) {
+      sequence.push("rooted-route");
+      yield candidate;
+    });
+  const realRecovery = recoveryModule.rootedRecovery;
+  const recoverySpy = vi
+    .spyOn(recoveryModule, "rootedRecovery")
+    .mockImplementation((g, outcome, sel) => {
+      sequence.push("rooted-recovery");
+      return realRecovery(g, outcome, sel);
+    });
+  const engine = createElkEngine();
+  engine.layout = async (input, options) => {
+    calls++;
+    const strategy =
+      input.layoutOptions?.[ELK_OPTIONS.considerModelOrderStrategy] ?? "UNSET";
+    sequence.push(`layout:${strategy}`);
+    if (succeedOnCall === calls) {
+      const validInput = structuredClone(input);
+      validInput.layoutOptions = {
+        ...validInput.layoutOptions,
+        [ELK_OPTIONS.considerModelOrderStrategy]: "NONE",
+      };
+      return realLayout(validInput, options);
+    }
+    return realLayout(input, options);
+  };
+  try {
+    const result = await layoutPresentationGraph(graph, { engine, selected });
+    assert.ok(result.ok);
+    return sequence;
+  } finally {
+    forkSpy.mockRestore();
+    routeSpy.mockRestore();
+    recoverySpy.mockRestore();
+  }
+}
+
+it("tries context-fork and rooted-route alternatives before model-order NONE recovery", async () => {
+  const fixture = await agentRefusalFixture("sensor");
+  try {
+    const { graph, selected } = agentPresentation(fixture.ir, {
+      ...sensorTrace,
+      flow: "left-to-right",
+    });
+    expect(await runRetryOrder(graph, selected)).toEqual([
+      "layout:NODES_AND_EDGES",
+      "context-fork",
+      "layout:NODES_AND_EDGES",
+      "rooted-route",
+      "layout:NODES_AND_EDGES",
+      "rooted-recovery",
+      "layout:NONE",
+    ]);
+    expect(await runRetryOrder(graph, selected, 2)).toEqual([
+      "layout:NODES_AND_EDGES",
+      "context-fork",
+      "layout:NODES_AND_EDGES",
+    ]);
+    expect(await runRetryOrder(graph, selected, 3)).toEqual([
+      "layout:NODES_AND_EDGES",
+      "context-fork",
+      "layout:NODES_AND_EDGES",
+      "rooted-route",
+      "layout:NODES_AND_EDGES",
+    ]);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+const TWO_TERMINAL_MOTOR_TYPE = {
+  types: [
+    {
+      kind: "device_type",
+      id: "local:motor-2t",
+      description: "Two-terminal motor load",
+      symbol: "thermite:motor",
+      terminals: {
+        T1: { role: "power_input", required: true },
+        T2: { role: "power_input", required: true },
+      },
+      functions: { motor_load: { kind: "load", terminals: ["T1", "T2"] } },
+      internal_relations: [],
+    },
+  ],
+};
+
+const TWO_TERMINAL_MOTOR_SOURCE = {
+  objects: [
+    {
+      uid: "11111111-1111-4111-8111-111111111111",
+      kind: "device",
+      designation: "SUP1",
+      type: "core:supply-480v-3ph",
+      location: "MAIN-PANEL",
+    },
+    {
+      uid: "22222222-2222-4222-8222-222222222222",
+      kind: "device",
+      designation: "M1",
+      type: "local:motor-2t",
+      location: "FIELD",
+    },
+    {
+      uid: "33333333-3333-4333-8333-333333333333",
+      kind: "wire",
+      designation: "W101",
+      endpoints: [
+        { device: "SUP1", terminal: "L1" },
+        { device: "M1", terminal: "T1" },
+      ],
+      properties: { label: "101" },
+    },
+    {
+      uid: "44444444-4444-4444-8444-444444444444",
+      kind: "wire",
+      designation: "W102",
+      endpoints: [
+        { device: "SUP1", terminal: "L2" },
+        { device: "M1", terminal: "T2" },
+      ],
+      properties: { label: "102" },
+    },
+    {
+      uid: "55555555-5555-4555-8555-555555555555",
+      kind: "potential",
+      name: "L1 480VAC",
+      at: { device: "SUP1", terminal: "L1" },
+      electrical: { nominal_voltage: 480, voltage_type: "AC" },
+    },
+    {
+      uid: "66666666-6666-4666-8666-666666666666",
+      kind: "potential",
+      name: "L2 480VAC",
+      at: { device: "SUP1", terminal: "L2" },
+      electrical: { nominal_voltage: 480, voltage_type: "AC" },
+    },
+  ],
+};
+
+async function twoTerminalMotorFixture() {
+  const root = await mkdtemp(join(tmpdir(), "thermite-motor2t-recovery-"));
+  try {
+    await mkdir(join(root, "libraries/local/types"), { recursive: true });
+    await writeFile(
+      join(root, "libraries/local/library.json"),
+      JSON.stringify({
+        name: "local",
+        version: "0.1.0",
+        sources: ["types/**/*.json"],
+      }),
+    );
+    await writeFile(
+      join(root, "libraries/local/types/motor-2t.json"),
+      JSON.stringify(TWO_TERMINAL_MOTOR_TYPE),
+    );
+    await writeFile(
+      join(root, "source.json"),
+      JSON.stringify(TWO_TERMINAL_MOTOR_SOURCE),
+    );
+    await writeFile(
+      join(root, "system.json"),
+      JSON.stringify({
+        format: "electrical-system/0.1",
+        project: { name: "Synthetic two-terminal motor recovery witness" },
+        sources: ["source.json"],
+        libraries: [
+          { name: "core", version: "0.2.0" },
+          { name: "local", version: "0.1.0", path: "libraries/local" },
+        ],
+      }),
+    );
+    const locked = await lockProject(root);
+    assert.ok(locked.ok, JSON.stringify(locked.diagnostics));
+    const compiled = await compileProject(root);
+    assert.ok(compiled.ok, JSON.stringify(compiled.diagnostics));
+    return { ir: compiled.ir, dispose: () => rm(root, { recursive: true }) };
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+it("admits vertical power HEAD retry by selected power-path conductors regardless of lane names", async () => {
+  const fixture = await twoTerminalMotorFixture();
+  try {
+    const { graph, selected } = agentPresentation(fixture.ir, {
+      format: "schematic-view-request/0.1",
+      root: { by: "designation", value: "M1" },
+      family: "power",
+      flow: "top-to-bottom",
+    });
+    expect(selected.paths.map((p) => p.lane)).toEqual(["positive", "return"]);
+    expect(selected.paths.map((p) => p.powerRole)).toEqual(["phase", "phase"]);
+    const overlapFor = (designation: string) => {
+      const edge = graph.edges.find(
+        (e) =>
+          e.conductor?.kind === "wire" &&
+          e.conductor.designation === designation,
+      );
+      assert.ok(edge?.netLabel);
+      return { labelId: edge.netLabel.id, edgeId: edge.id };
+    };
+    const positive = overlapFor("W101");
+    const ret = overlapFor("W102");
+    for (const [crossed, other] of [
+      [positive, ret],
+      [ret, positive],
+    ] as const) {
+      const recovery = rootedRecovery(
+        graph,
+        {
+          ...failure(graph, "net-label-intersection"),
+          netLabelOverlaps: [crossed],
+        },
+        selected,
+      );
+      expect(recovery).toEqual(new Set([crossed.labelId]));
+      const build = buildElkAdapterGraph(graph, selected, recovery);
+      const netLabels = build.graph.edges
+        ?.flatMap((edge) => edge.labels ?? [])
+        .filter((label) => label.id?.endsWith(',"net"]'));
+      expect(
+        netLabels?.find((label) => label.id === crossed.labelId)?.layoutOptions,
+      ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "HEAD" });
+      expect(
+        netLabels?.find((label) => label.id === other.labelId)?.layoutOptions,
+      ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL" });
+    }
   } finally {
     await fixture.dispose();
   }

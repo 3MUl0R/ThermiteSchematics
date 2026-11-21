@@ -136,6 +136,7 @@ export function selectPowerPaths(
         };
     const result = searchPath(context, lane.terminal, {
       lane: spec.lane,
+      powerRole: spec.kind === "power-pe" ? "protective-earth" : "phase",
       allowFunctions: spec.kind !== "power-pe",
       boundaryAtEnd: false,
       constrainRoot: true,

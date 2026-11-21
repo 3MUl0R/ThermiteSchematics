@@ -22,7 +22,11 @@ import {
   terminalIdKey,
   functionIdKey,
 } from "../ordering.js";
-import type { SelectedConductorStep, SelectedFunctionStep } from "../types.js";
+import type {
+  SelectedConductorStep,
+  SelectedFunctionStep,
+  SelectedPath,
+} from "../types.js";
 import { compareBoundaryCandidate } from "./boundaries.js";
 import { compareCompleteTerminal } from "./context.js";
 import type {
@@ -268,6 +272,23 @@ export function reverseSelectedSteps(
   );
 }
 
+function buildSelectedPath(
+  family: SelectionContext["view"]["family"],
+  policy: RootedPathSearch,
+  start: SelectedPath["start"],
+  steps: SelectedPath["steps"],
+  end: SelectedPath["end"],
+): SelectedPath {
+  return Object.freeze({
+    id: `${family}:${policy.lane}`,
+    lane: policy.lane,
+    ...(policy.powerRole === undefined ? {} : { powerRole: policy.powerRole }),
+    start,
+    steps: Object.freeze(steps),
+    end,
+  });
+}
+
 export function searchPath(
   context: SelectionContext,
   start: TerminalId,
@@ -364,13 +385,13 @@ export function searchPath(
     ok: true,
     value: {
       candidate,
-      path: Object.freeze({
-        id: `${context.view.family}:${policy.lane}`,
-        lane: policy.lane,
-        start: startEndpoint,
-        steps: Object.freeze(orientedSteps),
-        end: endEndpoint,
-      }),
+      path: buildSelectedPath(
+        context.view.family,
+        policy,
+        startEndpoint,
+        orientedSteps,
+        endEndpoint,
+      ),
     },
   };
 }

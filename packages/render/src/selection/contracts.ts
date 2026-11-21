@@ -243,6 +243,7 @@ export type ConductorSearchTreeResult<Stop> =
  * and, when allowed, catalog-approved two-terminal functions. */
 export interface RootedPathSearch {
   readonly lane: string;
+  readonly powerRole?: "phase" | "protective-earth";
   readonly allowFunctions: boolean;
   readonly boundaryAtEnd: boolean;
   readonly constrainRoot: boolean;
