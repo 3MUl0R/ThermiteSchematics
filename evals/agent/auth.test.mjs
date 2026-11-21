@@ -2,9 +2,7 @@ import { it, expect } from "vitest";
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   writeFileSync,
-  readdirSync,
   rmSync,
   existsSync,
 } from "node:fs";
@@ -13,7 +11,6 @@ import { delimiter, join } from "node:path";
 import { freshEnvironment, assertIsolation } from "./launch.mjs";
 import {
   seedCodexAuth,
-  refreshCodexAuth,
   preflightAuth,
   secretValues,
   redactSecrets,
@@ -53,7 +50,7 @@ it("auth allowlist preserves CODEX_API_KEY, excludes config, and removes checkou
     rmSync(w.root, { recursive: true, force: true });
   }
 });
-it("auth-only CODEX_HOME permits exactly auth.json and atomically backs up refreshes", () => {
+it("auth-only CODEX_HOME permits exactly auth.json", () => {
   const w = fixture();
   try {
     const path = join(w.root, "original.json"),
@@ -63,9 +60,10 @@ it("auth-only CODEX_HOME permits exactly auth.json and atomically backs up refre
           access_token: secret,
           refresh_token: "synthetic-refresh-token",
         },
+        last_refresh: new Date().toISOString(),
       });
     writeFileSync(path, before);
-    const seed = seedCodexAuth(w.env, path);
+    expect(seedCodexAuth(w.env, path)).toBe(true);
     expect(
       assertIsolation(w.project, w.env, { codexAuth: true }).asserted,
     ).toBe(true);
@@ -76,30 +74,77 @@ it("auth-only CODEX_HOME permits exactly auth.json and atomically backs up refre
     expect(() =>
       assertIsolation(w.project, w.env, { codexAuth: true }),
     ).toThrow();
-    rmSync(join(w.env.CODEX_HOME, "config.toml"));
-    const after = JSON.stringify({
-      auth_mode: "chatgpt",
-      tokens: {
-        access_token: secret + "-refreshed",
-        refresh_token: "synthetic-refresh-token",
-      },
-    });
-    writeFileSync(join(w.env.CODEX_HOME, "auth.json"), after);
-    expect(refreshCodexAuth(seed, w.env)).toEqual({
-      changed: true,
-      backupCreated: true,
-    });
-    expect(readFileSync(path, "utf8")).toBe(after);
-    const backup = readdirSync(w.root).find((f) =>
-      f.startsWith("original.json.backup-"),
-    );
-    expect(readFileSync(join(w.root, backup), "utf8")).toBe(before);
-    expect(readdirSync(w.root).some((f) => f.includes(".tmp-"))).toBe(false);
   } finally {
     rmSync(w.root, { recursive: true, force: true });
   }
 });
-it("auth rejects instruction data and concurrent write-back changes", () => {
+const authNow = Date.parse("2026-01-20T01:00:00Z"),
+  scheduledRefresh = 8 * 24 * 60 * 60_000,
+  runTimeout = 15 * 60_000;
+const accessToken = (expires) =>
+  `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ exp: expires / 1000 })).toString("base64url")}.synthetic-signature`;
+
+it.each([
+  ["missing refresh date", undefined, secret],
+  ["invalid refresh date", "invalid", secret],
+  ["future refresh date", new Date(authNow + 60_000).toISOString(), secret],
+  [
+    "scheduled refresh during the run",
+    new Date(authNow - scheduledRefresh + runTimeout).toISOString(),
+    secret,
+  ],
+  [
+    "access token expires during the run",
+    new Date(authNow).toISOString(),
+    accessToken(authNow + runTimeout),
+  ],
+  [
+    "access token expires in the setup margin",
+    new Date(authNow).toISOString(),
+    accessToken(authNow + runTimeout + 8 * 60_000),
+  ],
+])(
+  "auth seeding refuses %s before copying ChatGPT credentials",
+  (label, last_refresh, access_token) => {
+    const w = fixture();
+    try {
+      const path = join(w.root, "original.json");
+      writeFileSync(
+        path,
+        JSON.stringify({
+          auth_mode: "chatgpt",
+          last_refresh,
+          tokens: { access_token },
+        }),
+      );
+      expect(() =>
+        seedCodexAuth(w.env, path, { timeoutMs: runTimeout, now: authNow }),
+      ).toThrow(/run your own Codex installation/i);
+      expect(existsSync(join(w.env.CODEX_HOME, "auth.json"))).toBe(false);
+    } finally {
+      rmSync(w.root, { recursive: true, force: true });
+    }
+  },
+);
+it("auth seeding accepts a ChatGPT login fresh for the run", () => {
+  const w = fixture();
+  try {
+    const path = join(w.root, "original.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        last_refresh: new Date(authNow).toISOString(),
+        tokens: { access_token: accessToken(authNow + 60 * 60_000) },
+      }),
+    );
+    expect(
+      seedCodexAuth(w.env, path, { timeoutMs: runTimeout, now: authNow }),
+    ).toBe(true);
+  } finally {
+    rmSync(w.root, { recursive: true, force: true });
+  }
+});
+it("auth rejects instruction data", () => {
   const w = fixture();
   try {
     const path = join(w.root, "auth.json");
@@ -108,14 +153,6 @@ it("auth rejects instruction data and concurrent write-back changes", () => {
       JSON.stringify({ OPENAI_API_KEY: secret, instructions: "not auth" }),
     );
     expect(() => seedCodexAuth(w.env, path)).toThrow(/non-auth/);
-    writeFileSync(path, JSON.stringify({ OPENAI_API_KEY: secret }));
-    const seed = seedCodexAuth(w.env, path);
-    writeFileSync(path, JSON.stringify({ OPENAI_API_KEY: secret + "other" }));
-    writeFileSync(
-      join(w.env.CODEX_HOME, "auth.json"),
-      JSON.stringify({ OPENAI_API_KEY: secret + "refresh" }),
-    );
-    expect(() => refreshCodexAuth(seed, w.env)).toThrow(/conflict/);
   } finally {
     rmSync(w.root, { recursive: true, force: true });
   }

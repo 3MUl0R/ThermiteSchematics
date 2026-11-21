@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { captureProcess } from "./process.mjs";
-import {
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  openSync,
-  closeSync,
-  fsyncSync,
-  existsSync,
-} from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { sha256 } from "./snapshot.mjs";
 export const credentialKeys = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
@@ -18,6 +9,10 @@ export const credentialKeys = [
   "CODEX_API_KEY",
   "OPENAI_API_KEY",
 ];
+const codexRefreshIntervalMs = 8 * 24 * 60 * 60_000;
+// Codex can refresh five minutes before expiry. Allow another five for setup.
+const codexRefreshMarginMs = 10 * 60_000;
+
 export function validateAuth(bytes) {
   let value;
   try {
@@ -42,40 +37,52 @@ export function validateAuth(bytes) {
   );
   return value;
 }
-export function seedCodexAuth(env, source) {
-  if (!source) return null;
-  const path = resolve(source),
-    bytes = readFileSync(path);
-  validateAuth(bytes);
+function accessTokenExpiry(token) {
+  const parts = token?.split(".");
+  if (parts?.length !== 3) return null;
+  try {
+    const expiry = JSON.parse(Buffer.from(parts[1], "base64url")).exp;
+    return Number.isFinite(expiry) ? expiry * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+export function seedCodexAuth(
+  env,
+  source,
+  { timeoutMs = 0, now = Date.now() } = {},
+) {
+  if (!source) return false;
+  const bytes = readFileSync(resolve(source));
+  const auth = validateAuth(bytes);
+  const apiKeyMode =
+    (auth.auth_mode ?? (auth.OPENAI_API_KEY ? "apikey" : "chatgpt")) ===
+    "apikey";
+  if (!apiKeyMode && typeof auth.tokens?.access_token === "string") {
+    const lastRefresh =
+        typeof auth.last_refresh === "string"
+          ? Date.parse(auth.last_refresh)
+          : NaN,
+      expires = accessTokenExpiry(auth.tokens.access_token),
+      horizon = now + timeoutMs + codexRefreshMarginMs;
+    if (
+      !Number.isFinite(lastRefresh) ||
+      lastRefresh > now ||
+      lastRefresh + codexRefreshIntervalMs <= horizon ||
+      (expires !== null && expires <= horizon)
+    )
+      throw Object.assign(
+        new Error(
+          "Codex ChatGPT login may need a refresh during this run. Run your own Codex installation once to refresh the operator login. If it still fails this check, sign in again and retry.",
+        ),
+        { stage: "authentication" },
+      );
+  }
   writeFileSync(join(env.CODEX_HOME, "auth.json"), bytes, {
     mode: 0o600,
     flag: "wx",
   });
-  return { path, hash: sha256(bytes) };
-}
-export function refreshCodexAuth(seed, env) {
-  if (!seed) return { changed: false };
-  const path = join(env.CODEX_HOME, "auth.json");
-  if (!existsSync(path)) return { changed: false };
-  const bytes = readFileSync(path);
-  validateAuth(bytes);
-  if (sha256(bytes) === seed.hash) return { changed: false };
-  assert(
-    sha256(readFileSync(seed.path)) === seed.hash,
-    "Auth write-back conflict; original changed during run",
-  );
-  const backup = seed.path + `.backup-${Date.now()}-${process.pid}`;
-  writeFileSync(backup, readFileSync(seed.path), { mode: 0o600, flag: "wx" });
-  const temporary = seed.path + `.tmp-${process.pid}-${Date.now()}`;
-  const fd = openSync(temporary, "wx", 0o600);
-  try {
-    writeFileSync(fd, bytes);
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
-  renameSync(temporary, seed.path);
-  return { changed: true, backupCreated: true };
+  return true;
 }
 export function secretValues(env) {
   const values = credentialKeys.map((key) => env[key]).filter(Boolean);
@@ -95,6 +102,11 @@ export function redactSecrets(text, values) {
   let out = String(text);
   for (const value of values) out = out.replaceAll(value, "<credential>");
   return out;
+}
+export function redactAgentOutput(text, values) {
+  return redactSecrets(text, values)
+    .replace(/\beyJ[\w-]*\.[\w-]+\.[\w-]+/g, "<credential>")
+    .replace(/\b(?:sk-|rk-|sess-|rt_|at_)[\w-]{12,}/g, "<credential>");
 }
 export async function preflightAuth(
   agent,
