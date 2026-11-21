@@ -98,46 +98,86 @@ const measureFixtureGap = sheetMeasurementSource((options, h) => {
   h.prepareTerminals(c);
   h.prepareText(c);
   h.preparePaint(c);
-  // Calibrate against the same painted ink beyond the review cutoff, too.
-  return h.terminalLabelClearances(c, 0.8)[0]?.gapMm;
+  // Keep 0.49..0.51 mm inside the adaptive 0.001 mm refinement band around 0.515 mm.
+  return h.terminalLabelClearances(c, 0.515)[0]?.gapMm;
 });
 
-async function roundTwoFindingsAtGap(targetGapMm: number, labelX: number) {
+async function roundTwoFindingsAtGap(
+  targetGapMm: number,
+  labelX: number,
+  minGapMm: number,
+  maxGapMm: number,
+) {
   // Start near the target in the embedded font and calibrate against the
   // measured ink to allow for native Chromium differences.
   await displaySheet(page, transformerSecondary(roundTwoWinding, labelX));
   const label = page.locator('[data-terminal-key="X2"] text');
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 12; attempt++) {
     const gapMm: number | undefined = await page.evaluate(
       (source) => (0, eval)(source)(),
       measureFixtureGap,
     );
     if (gapMm === undefined)
       throw new Error("Could not measure the X2 ink gap");
-    // Keep each fixture at least 0.045 mm from the 0.50 mm cutoff.
-    if (Math.abs(targetGapMm - gapMm) < 0.005) {
-      return terminalLabelFindings(await evaluateSheetGeometry(page));
+    if (gapMm >= minGapMm && gapMm <= maxGapMm) {
+      return {
+        labelX,
+        findings: terminalLabelFindings(await evaluateSheetGeometry(page)),
+      };
     }
-    // The winding is slanted, so a horizontal move can change the gap by less.
-    labelX += targetGapMm - gapMm;
+    // The winding is slanted, so damp the horizontal step near the 0.001 mm grid.
+    labelX += (targetGapMm - gapMm) * 0.85;
     await label.evaluate((e, x) => e.setAttribute("x", String(x)), labelX);
   }
   throw new Error(`Could not position X2 at a ${targetGapMm} mm ink gap`);
 }
 
-it("catches an X2 label just inside the 0.50 mm clearance", async () => {
-  const findings = await roundTwoFindingsAtGap(0.45, 25.189);
-  expect(findings).toEqual([
-    expect.objectContaining({
-      kind: "terminal-label-body-clearance",
-      terminalKey: "X2",
-      minimumMm: 0.5,
-    }),
-  ]);
-  expect(findings[0].gapMm).toBeCloseTo(0.45, 2);
-}, 150_000);
-
-it("accepts an X2 label just outside the 0.50 mm clearance", async () => {
-  const findings = await roundTwoFindingsAtGap(0.55, 25.298);
-  expect(findings).toEqual([]);
-}, 150_000);
+it.each([
+  {
+    targetGapMm: 0.49,
+    minGapMm: 0.488,
+    maxGapMm: 0.492,
+    startX: 25.23,
+    fails: true,
+  },
+  {
+    targetGapMm: 0.501,
+    minGapMm: 0.5,
+    maxGapMm: 0.502,
+    startX: 25.245,
+    fails: false,
+  },
+  {
+    targetGapMm: 0.51,
+    minGapMm: 0.508,
+    maxGapMm: 0.512,
+    startX: 25.255,
+    fails: false,
+  },
+])(
+  "resolves the 0.50 mm X2 cutoff at $targetGapMm mm within the expected geometric band (#481)",
+  async ({ targetGapMm, minGapMm, maxGapMm, startX, fails }) => {
+    const { labelX, findings } = await roundTwoFindingsAtGap(
+      targetGapMm,
+      startX,
+      minGapMm,
+      maxGapMm,
+    );
+    // Anchor converged labelX so a uniform measurement bias cannot hide behind calibration.
+    expect(labelX).toBeGreaterThan(25.15);
+    expect(labelX).toBeLessThan(25.35);
+    expect(findings).toEqual(
+      fails
+        ? [
+            expect.objectContaining({
+              kind: "terminal-label-body-clearance",
+              terminalKey: "X2",
+              minimumMm: 0.5,
+            }),
+          ]
+        : [],
+    );
+    if (fails) expect(findings[0].gapMm).toBeCloseTo(targetGapMm, 2);
+  },
+  150_000,
+);

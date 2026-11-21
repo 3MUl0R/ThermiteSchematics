@@ -22,46 +22,11 @@ export function terminalLabelInkRows(box, step, hit) {
   return rows;
 }
 
-// Compare painted ink runs to avoid pairing individual samples.
-export function terminalLabelStrokeGap(c, label, shape, minimum) {
-  const { rr, sx, sy, contains, glyphAt, intersect, h } = c;
-  const step = 0.005;
-  const labelRegion = intersect(
-    label.bbox,
-    h.expandClearanceBox(shape.bbox, minimum),
-  );
-  const strokeRegion = intersect(
-    shape.bbox,
-    h.expandClearanceBox(label.bbox, minimum),
-  );
-  if (
-    labelRegion.w <= 0 ||
-    labelRegion.h <= 0 ||
-    strokeRegion.w <= 0 ||
-    strokeRegion.h <= 0
-  )
-    return minimum;
-
-  const ink = h.terminalLabelInkRows(labelRegion, step, (p) =>
-    glyphAt(label, p),
-  );
-  if (!ink.length) return minimum;
-  const stroke = h.terminalLabelInkRows(strokeRegion, step, (p) => {
-    if (!shape.clips.every((clip) => contains(clip, p))) return false;
-    const screen = new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy);
-    return (
-      shape.e.isPointInStroke(screen.matrixTransform(shape.inverse)) &&
-      !shape.covers.some(
-        (cover) =>
-          contains(cover.bbox, p) &&
-          cover.clips.every((clip) => contains(clip, p)) &&
-          cover.e.isPointInFill(screen.matrixTransform(cover.inverse)),
-      )
-    );
-  });
-  const limit = (minimum / step) ** 2;
+export function terminalLabelRunGap(ink, stroke, step, cutoff) {
+  const limit = (cutoff / step) ** 2;
   let best = limit,
-    first = 0;
+    first = 0,
+    pair;
   for (const { row, runs } of stroke) {
     while (
       first < ink.length &&
@@ -73,12 +38,105 @@ export function terminalLabelStrokeGap(c, label, shape, minimum) {
       const dy = (row - ink[i].row) ** 2;
       if (dy >= best) break;
       for (const [a, b] of runs)
-        for (const [x, y] of ink[i].runs)
-          best = Math.min(best, dy + Math.max(0, a - y, x - b) ** 2);
-      if (best === 0) return best;
+        for (const [x, y] of ink[i].runs) {
+          const dx = Math.max(0, a - y, x - b);
+          const d2 = dy + dx * dx;
+          if (d2 < best) {
+            best = d2;
+            const sx = a > y ? a : x > b ? b : Math.max(a, x);
+            const lx = a > y ? y : x > b ? x : Math.max(a, x);
+            pair = {
+              sx: sx * step,
+              sy: row * step,
+              lx: lx * step,
+              ly: ink[i].row * step,
+            };
+          }
+        }
+      if (best === 0) return { gap: 0, pair };
     }
   }
-  return best === limit ? minimum : Math.sqrt(best) * step;
+  return { gap: best === limit ? cutoff : Math.sqrt(best) * step, pair };
+}
+
+export function terminalLabelStrokeHit(c, shape) {
+  const { rr, sx, sy, contains } = c;
+  return (p) => {
+    if (!shape.clips.every((clip) => contains(clip, p))) return false;
+    const screen = new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy);
+    return (
+      shape.e.isPointInStroke(screen.matrixTransform(shape.inverse)) &&
+      !shape.covers.some(
+        (cover) =>
+          contains(cover.bbox, p) &&
+          cover.clips.every((clip) => contains(clip, p)) &&
+          cover.e.isPointInFill(screen.matrixTransform(cover.inverse)),
+      )
+    );
+  };
+}
+
+// Compare painted ink runs on a 0.005 mm grid and adaptively refine near the
+// cutoff on a local 0.001 mm grid so boundary gaps resolve cleanly (#481).
+export function terminalLabelStrokeGap(c, label, shape, minimum) {
+  const { glyphAt, intersect, h } = c;
+  const coarseStep = 0.005,
+    margin = 0.025,
+    coarseCutoff = minimum + margin;
+  const labelRegion = intersect(
+    label.bbox,
+    h.expandClearanceBox(shape.bbox, coarseCutoff),
+  );
+  const strokeRegion = intersect(
+    shape.bbox,
+    h.expandClearanceBox(label.bbox, coarseCutoff),
+  );
+  if (
+    labelRegion.w <= 0 ||
+    labelRegion.h <= 0 ||
+    strokeRegion.w <= 0 ||
+    strokeRegion.h <= 0
+  )
+    return minimum;
+  const inkHit = (p) => glyphAt(label, p);
+  const strokeHit = h.terminalLabelStrokeHit(c, shape);
+  const ink = h.terminalLabelInkRows(labelRegion, coarseStep, inkHit);
+  if (!ink.length) return minimum;
+  const stroke = h.terminalLabelInkRows(strokeRegion, coarseStep, strokeHit);
+  if (!stroke.length) return minimum;
+  const coarse = h.terminalLabelRunGap(ink, stroke, coarseStep, coarseCutoff);
+  if (coarse.gap >= coarseCutoff || !coarse.pair) return minimum;
+  if (coarse.gap <= minimum - margin) return coarse.gap;
+  const fineStep = 0.001,
+    pad = 0.03;
+  const fineLabel = intersect(
+    labelRegion,
+    h.expandClearanceBox(
+      { x: coarse.pair.lx, y: coarse.pair.ly, w: 0, h: 0 },
+      pad,
+    ),
+  );
+  const fineStroke = intersect(
+    strokeRegion,
+    h.expandClearanceBox(
+      { x: coarse.pair.sx, y: coarse.pair.sy, w: 0, h: 0 },
+      pad,
+    ),
+  );
+  const fineInk = h.terminalLabelInkRows(fineLabel, fineStep, inkHit);
+  const fineStrokeRows = h.terminalLabelInkRows(
+    fineStroke,
+    fineStep,
+    strokeHit,
+  );
+  if (!fineInk.length || !fineStrokeRows.length) return minimum;
+  const fine = h.terminalLabelRunGap(
+    fineInk,
+    fineStrokeRows,
+    fineStep,
+    minimum,
+  );
+  return Math.round(fine.gap * 1000) / 1000 >= minimum ? minimum : fine.gap;
 }
 
 export function expandClearanceBox({ x, y, w, h }, pad) {

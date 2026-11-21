@@ -241,23 +241,25 @@ function nodeCaptionBoxes(
   const { node, pinLabel, mechanicalGangs, vertical, diagramCenterY } = state;
   const box = captionInk;
   const captionBoxes: CaptionBox[] = [
-    ...node.pins.map((p) =>
-      box(
-        pinLabel(p),
-        p.side === "WEST"
-          ? 1.5
-          : p.side === "EAST"
-            ? node.width - 1.5
-            : p.x + 1,
-        p.side === "WEST" || p.side === "EAST"
-          ? p.y - 1.5
-          : p.side === "NORTH"
-            ? 6
-            : node.height - 1.5,
-        TERMINAL_TEXT_SIZE,
-        p.side === "EAST" ? "end" : "start",
+    ...node.pins
+      .filter((p) => !p.omitLabel)
+      .map((p) =>
+        box(
+          pinLabel(p),
+          p.side === "WEST"
+            ? 1.5
+            : p.side === "EAST"
+              ? node.width - 1.5
+              : p.x + 1,
+          p.side === "WEST" || p.side === "EAST"
+            ? p.y - 1.5
+            : p.side === "NORTH"
+              ? 6
+              : node.height - 1.5,
+          TERMINAL_TEXT_SIZE,
+          p.side === "EAST" ? "end" : "start",
+        ),
       ),
-    ),
   ];
   for (const gang of mechanicalGangs(node, vertical, diagramCenterY)) {
     captionSegments.push([gang.from, gang.to]);
@@ -392,29 +394,31 @@ function emitNodePin(p: Pin, state: EmissionState) {
     // Measured route junctions are emitted separately by the topology pass.
     circuitTerminal(p.x, p.y, false),
   );
-  const label = pinLabel(p);
-  if (p.side === "WEST")
-    out.push(
-      text(
-        LATERAL_PIN_INSET_MM,
-        p.y - LATERAL_PIN_INSET_MM,
-        label,
-        TERMINAL_TEXT_SIZE,
-      ),
-    );
-  else if (p.side === "EAST")
-    out.push(
-      text(
-        node.width - LATERAL_PIN_INSET_MM,
-        p.y - LATERAL_PIN_INSET_MM,
-        label,
-        TERMINAL_TEXT_SIZE,
-        "end",
-      ),
-    );
-  else if (p.side === "NORTH")
-    out.push(text(p.x + 1, 6, label, TERMINAL_TEXT_SIZE));
-  else out.push(text(p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE));
+  if (!p.omitLabel) {
+    const label = pinLabel(p);
+    if (p.side === "WEST")
+      out.push(
+        text(
+          LATERAL_PIN_INSET_MM,
+          p.y - LATERAL_PIN_INSET_MM,
+          label,
+          TERMINAL_TEXT_SIZE,
+        ),
+      );
+    else if (p.side === "EAST")
+      out.push(
+        text(
+          node.width - LATERAL_PIN_INSET_MM,
+          p.y - LATERAL_PIN_INSET_MM,
+          label,
+          TERMINAL_TEXT_SIZE,
+          "end",
+        ),
+      );
+    else if (p.side === "NORTH")
+      out.push(text(p.x + 1, 6, label, TERMINAL_TEXT_SIZE));
+    else out.push(text(p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE));
+  }
   if (p.outside)
     out.push(
       `<title>${xml(`${node.device.designation}.${p.terminal.terminalKey}: ${p.outside} other physical connection(s) outside this group. See terminal schedule and circuit references.`)}</title>`,

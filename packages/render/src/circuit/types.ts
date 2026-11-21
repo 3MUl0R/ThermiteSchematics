@@ -25,6 +25,7 @@ export type Pin = {
   side: "WEST" | "EAST" | "NORTH" | "SOUTH";
   label: string;
   outside: number;
+  omitLabel?: boolean;
 };
 export type FunctionRow = {
   f: IrFunction;

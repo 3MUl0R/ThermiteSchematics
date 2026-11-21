@@ -209,6 +209,53 @@ it("rejects duplicate captions on one body and retains separate drawn appearance
   expect(terminalText(split)).toEqual([]);
 });
 
+it("DQ-17 flags pass-through twin labels on one circuit body and accepts single-label dual-port symbols", async () => {
+  const passThrough = (repeatLabel) =>
+    `<g data-device-uid="tb1" data-circuit-functions='["t1"]'>` +
+    `<g data-layout-port="n0p0" data-terminal-id='["tb1","1"]' data-terminal-key="1">` +
+    `<circle cx="10" cy="20" r="0.65" fill="white" stroke="black"/>` +
+    `<text x="11.5" y="18.5" font-size="2.5">1</text></g>` +
+    `<g data-layout-port="n0p1" data-terminal-id='["tb1","1"]' data-terminal-key="1">` +
+    `<circle cx="36" cy="20" r="0.65" fill="white" stroke="black"/>` +
+    (repeatLabel
+      ? `<text x="34.5" y="18.5" text-anchor="end" font-size="2.5">1</text>`
+      : "") +
+    `</g></g>`;
+  // Old-engine failing witness: both pass-through ports print "1" on the same body.
+  const twin = await openSheet(page, svg(passThrough(true)));
+  expect(terminalText(twin)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+      text: "1",
+    }),
+  ]);
+  // Passing control: single label with both routing ports preserved.
+  const single = await openSheet(page, svg(passThrough(false)));
+  expect(terminalText(single)).toEqual([]);
+  // Separate bodies on the same sheet may each label their own terminal, while differing [+N] on one body still fails.
+  const splitBodies = await openSheet(
+    page,
+    svg(
+      passThrough(false) +
+        passThrough(false)
+          .replaceAll("n0p", "n1p")
+          .replace('cx="10"', 'cx="90"')
+          .replace('x="11.5"', 'x="91.5"')
+          .replace('cx="36"', 'cx="116"'),
+    ),
+  );
+  expect(terminalText(splitBodies)).toEqual([]);
+  const twinSuffix = await openSheet(
+    page,
+    svg(passThrough(true).replace(">1</text>", ">1 [+1]</text>")),
+  );
+  expect(terminalText(twinSuffix)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+    }),
+  ]);
+});
+
 it("V5 resolves net repetition through its own wire and exact landing appearance", async () => {
   const port = JSON.stringify([
     "port",

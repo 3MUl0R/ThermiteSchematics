@@ -23,7 +23,18 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.38** applies.
+the budget and the remaining headroom. Checker protocol **5.39** applies.
+
+Version **5.39** updates **DQ-02**, **DQ-16** and **DQ-17** (V5-WIRE, #447,
+#481). DQ-16 collects `[data-loop-conductor]` signal-loop wire plates, rejects
+any wire plate interrupting a vertical run (`vertical-cut`), measures clip-cut
+terminal ends as terminals rather than bends (#447 item 1), and flags plain
+non-label painted fills occluding a conductor approach or junction (#447 item
+2). DQ-17 requires at most one terminal caption per physical `(deviceUid,
+terminalKey)` on the same circuit symbol body (`nativeFunctionScope`), even
+across distinct pass-through routing ports or `[+N]` forms. DQ-02 refines
+near-cutoff terminal-label-to-body ink gaps on a local 0.001 mm grid around the
+0.50 mm threshold (#481). Complete 5.38 summaries remain readable.
 
 Version **5.38** updates **DQ-15** and **DQ-16** (#359). DQ-15 accepts a
 `data-circuit-fan-in` jog when the marked path segment lies within 3 mm of
