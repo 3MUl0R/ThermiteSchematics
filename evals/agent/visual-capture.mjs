@@ -13,12 +13,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { chromium } from "playwright-core";
 import { projectReader, windowsError } from "./capture-files.mjs";
 import { sha256 } from "./snapshot.mjs";
 
 const requestName = "visual-capture.request.json";
+const outputDirectory = "visual-captures";
 const outputNames = ["01.png", "02.png", "03.png", "04.png"];
 const origin = "https://thermite-capture.invalid";
 const receiptBytes = (result) =>
@@ -110,7 +111,7 @@ async function renderHtml(source, request) {
           file: {
             input: request.html[index],
             inputSha256: sha256(snapshot(input)),
-            output: "visual-captures/" + outputNames[index],
+            output: `${outputDirectory}/${outputNames[index]}`,
             sha256: sha256(png),
             bytes: png.length,
           },
@@ -190,25 +191,30 @@ function linkedOutputs(link, outputs) {
 }
 
 // The broker publishes straight into evidence/visual-captures, which the
-// runner keeps outside the sandbox's writable roots, and links it into the
-// project before the agent starts.
+// runner keeps outside the sandbox's writable roots. Its read link is a sibling
+// of the project because guarded source patches require an ordinary project tree.
 export async function visualBroker(task, project, evidence, observe) {
   if (!task.visualCapture) return async () => {};
   const root = realpathSync(project);
-  const link = join(root, "visual-captures");
+  const workspace = dirname(root);
+  const link = join(workspace, outputDirectory);
   assert(
     !lstatSync(link, { throwIfNoEntry: false }),
     "visual-captures must not exist before the agent starts",
   );
-  const outputs = join(realpathSync(evidence), "visual-captures");
+  const outputs = join(realpathSync(evidence), outputDirectory);
   mkdirSync(outputs);
-  let source, timer, pending, failure;
+  let source, workspaceSource, timer, pending, failure;
   const cleanup = () => {
     try {
-      if (source) source.unlinkLink("visual-captures", outputs);
+      if (workspaceSource) workspaceSource.unlinkLink(outputDirectory, outputs);
       else if (linkedOutputs(link, outputs)) unlinkSync(link);
     } finally {
-      source?.close();
+      try {
+        source?.close();
+      } finally {
+        workspaceSource?.close();
+      }
     }
   };
   try {
@@ -217,6 +223,7 @@ export async function visualBroker(task, project, evidence, observe) {
       link,
       process.platform === "win32" ? "junction" : "dir",
     );
+    workspaceSource = projectReader(workspace);
     source = projectReader(root);
   } catch (error) {
     if (error.message !== windowsError) {

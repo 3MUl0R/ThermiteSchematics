@@ -47,7 +47,7 @@ export async function probe(output) {
       `require('fs').writeFileSync('visual-capture.request.json',JSON.stringify({html:['packet.html','power.html']}))`,
     );
     assert.equal(request.status, 0, request.stderr);
-    const receipt = join(project, "visual-captures/result.json"),
+    const receipt = join(work, "visual-captures/result.json"),
       end = Date.now() + 30000;
     let result;
     while (!result && Date.now() < end) {
@@ -61,12 +61,12 @@ export async function probe(output) {
     assert(!result.error, result.error);
     assert.equal(result.files.length, 2);
     const viewed = child(
-      `const fs=require('fs');console.log(JSON.stringify(['01','02'].map(n=>fs.readFileSync('visual-captures/'+n+'.png').length)))`,
+      `const fs=require('fs');console.log(JSON.stringify(['01','02'].map(n=>fs.readFileSync('../visual-captures/'+n+'.png').length)))`,
     );
     assert.equal(viewed.status, 0, viewed.stderr);
     // The broker's output directory is outside the sandbox's writable roots.
     const written = child(
-      `require('fs').writeFileSync('visual-captures/01.png','agent bytes')`,
+      `require('fs').writeFileSync('../visual-captures/01.png','agent bytes')`,
     );
     assert.match(written.stderr, /EPERM|EACCES/, "Sandbox wrote broker output");
     // The run directory is writable, which is why evidence lives elsewhere.

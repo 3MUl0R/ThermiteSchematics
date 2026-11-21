@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   linkSync,
@@ -17,6 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { chromium } from "playwright-core";
 import { captureHtml, captureInput, visualBroker } from "./visual-capture.mjs";
@@ -123,23 +126,27 @@ function fixture(html = "<p>Capture fixture</p>") {
     mkdtempSync(join(tmpdir(), "thermite-visual-test-")),
   );
   work.push(root);
+  const workspace = join(root, "work");
   const paths = {
-    root,
-    project: join(root, "project"),
+    workspace,
+    project: join(workspace, "project"),
     evidence: join(root, "evidence"),
     outside: join(root, "outside"),
     // Where a direct caller puts outputs; the broker links its own.
     outputs: join(root, "harness-out"),
   };
-  for (const dir of ["project", "evidence", "outside", "outputs"])
+  for (const dir of ["workspace", "evidence", "outside", "outputs"])
     mkdirSync(paths[dir]);
-  writeFileSync(join(paths.project, "index.html"), html);
+  if (html !== null) {
+    mkdirSync(paths.project);
+    writeFileSync(join(paths.project, "index.html"), html);
+  }
   paths.sentinel = join(paths.outside, "sentinel");
   writeFileSync(paths.sentinel, "untouched");
   // A harness-readable page the agent must not be able to capture.
   writeFileSync(join(paths.outside, "index.html"), blue);
   writeFileSync(join(paths.outside, "page.html"), blue);
-  paths.link = join(paths.project, "visual-captures");
+  paths.link = join(workspace, "visual-captures");
   return paths;
 }
 const outsideFiles = ["index.html", "page.html", "sentinel"];
@@ -251,8 +258,107 @@ it("refuses Windows capture before reading project files", async () => {
 
 // The remaining cases exercise capture itself, which Windows refuses.
 if (process.platform !== "win32") {
+  it("keeps the broker link outside the guarded patch tree", async () => {
+    const { workspace, project, evidence, outputs } = fixture(null);
+    const launcher = fileURLToPath(
+      new URL("../../thermite.mjs", import.meta.url),
+    );
+    const cli = (args, input, cwd = project) => {
+      const result = spawnSync(process.execPath, [launcher, ...args], {
+        cwd,
+        encoding: "utf8",
+        input: input === undefined ? undefined : JSON.stringify(input),
+      });
+      if (result.error) throw result.error;
+      return result;
+    };
+    const success = (args, input, cwd) => {
+      const result = cli(args, input, cwd);
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout;
+    };
+    success(["init", "project"], undefined, workspace);
+    const sourceFile = "devices/equipment.json";
+    const sourcePath = join(project, sourceFile);
+    const original = readFileSync(sourcePath);
+    const uid = JSON.parse(original).objects[0].uid;
+    const description = "Synthetic broker regression";
+    const agent = { format: "agent-tool-request/0.1", project: "." };
+    const request = {
+      ...agent,
+      patchFormat: "json-patch/0.1",
+      dryRun: true,
+      files: [
+        {
+          path: sourceFile,
+          expectedIntegrity:
+            "sha256-" + createHash("sha256").update(original).digest("base64"),
+          operations: [
+            { op: "test", path: "/objects/0/uid", value: uid },
+            {
+              op: "replace",
+              path: "/objects/0/description",
+              value: description,
+            },
+          ],
+        },
+      ],
+    };
+    const patch = ["agent", "apply-source-patch", "--input", "-"];
+    const before = "before.json";
+    const review = ["review", "--before", before, "--json"];
+    const delivery = "delivery.request.json";
+    writeFileSync(
+      join(project, delivery),
+      JSON.stringify({
+        format: "export-delivery-request/1",
+        jobs: [{ kind: "review", before, outputs: { json: "review.json" } }],
+      }),
+    );
+
+    const projectLink = join(project, "visual-captures");
+    link(outputs, projectLink);
+    const rejected = cli(patch, request);
+    expect(rejected.status, rejected.stderr).toBe(1);
+    expect(rejected.stdout).toBe("");
+    expect(JSON.parse(rejected.stderr).error).toEqual({
+      code: "A003",
+      file: "visual-captures",
+      message:
+        'A003 Unsafe source patch target "visual-captures": reparse point.',
+      reason: "reparse-point",
+    });
+    expect(readFileSync(sourcePath)).toEqual(original);
+    expect(
+      JSON.parse(success(["agent", "validate", "--input", "-"], agent)).value
+        .valid,
+    ).toBe(true);
+    success(["snapshot", "--output", before]);
+    expect(JSON.parse(success(review)).changes).toEqual([]);
+    success(["export", "bundle", "--input", delivery, "--out-dir", "drawings"]);
+    unlinkSync(projectLink);
+
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    try {
+      expect(JSON.parse(success(patch, request)).value).toMatchObject({
+        dryRun: true,
+        applied: false,
+      });
+      expect(readFileSync(sourcePath)).toEqual(original);
+      expect(
+        JSON.parse(success(patch, { ...request, dryRun: false })).value,
+      ).toMatchObject({ dryRun: false, applied: true });
+      expect(JSON.parse(readFileSync(sourcePath)).objects[0].description).toBe(
+        description,
+      );
+      expect(JSON.parse(success(review)).changes).toHaveLength(1);
+    } finally {
+      await stop();
+    }
+  });
+
   // B2: the broker writes only to its own evidence directory.
-  it("keeps writing to its own directory after the project link moves outside", async () => {
+  it("keeps writing to its own directory after the workspace link moves outside", async () => {
     const { project, evidence, outside, link, sentinel } = fixture();
     const moved = join(outside, "moved");
     stubScreenshot(() => {
@@ -278,12 +384,13 @@ if (process.platform !== "win32") {
     );
   });
 
-  it("publishes into evidence through a project link removed after the run", async () => {
+  it("publishes into evidence through a sibling link removed after the run", async () => {
     const { project, evidence, link } = fixture();
     const screenshot = stubScreenshot();
     const outputs = join(evidence, "visual-captures");
     const stop = await visualBroker({ visualCapture: true }, project, evidence);
     try {
+      expect(existsSync(join(project, "visual-captures"))).toBe(false);
       expect(lstatSync(link).isSymbolicLink()).toBe(true);
       expect(realpathSync(readlinkSync(link))).toBe(outputs);
       // Nothing is published until a capture completes.
@@ -337,14 +444,14 @@ if (process.platform !== "win32") {
     ).rejects.toThrow("visual-captures must not exist");
   });
 
-  it("leaves the replacement project alone during broker cleanup", async () => {
-    const { project, evidence, outside } = fixture();
+  it("leaves the replacement workspace alone during broker cleanup", async () => {
+    const { workspace, project, evidence, outside } = fixture();
     const stop = await visualBroker({ visualCapture: true }, project, evidence);
-    const original = project + "-original";
+    const original = workspace + "-original";
     const replacementLink = join(outside, "visual-captures");
     try {
-      renameSync(project, original);
-      link(outside, project);
+      renameSync(workspace, original);
+      link(outside, workspace);
       link(join(evidence, "visual-captures"), replacementLink);
     } finally {
       await stop();

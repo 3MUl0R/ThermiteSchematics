@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.8)
+# Fresh-agent evaluator (E2 v1.20.9)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1148,3 +1148,15 @@ D-conveyor regenerates packet JSON, HTML and PDF from the delivered
 `packet.request.json` in the confined checker copy and requires byte equality
 on legacy, bundle and mixed routes. The checker preserves the packet's print
 options and reports outputs published from a different request as stale.
+
+## E2 1.20.9
+
+D-conveyor task 1.6.4 reads the broker receipt and images at
+`../visual-captures/` from the project. The broker places that link beside the
+project in the run directory. A link inside the project triggers A003 during
+the guarded patch tool's ordinary-tree scan, which protects staging of the
+whole project. See the [guarded patch policy](../../packages/agent-tools/README.md#integrity-guarded-source-patches).
+The request still goes in the project root. Publication goes
+directly to `visual-captures/` in protected live evidence, and the receipt's
+output paths remain relative to that evidence root. The frozen brief and
+scoring rules are unchanged.
