@@ -129,6 +129,16 @@ function circuitDrawingContents(
   return contents;
 }
 
+function leaderLength(points: readonly { x: number; y: number }[]) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1],
+      curr = points[i];
+    if (prev && curr) total += Math.hypot(curr.x - prev.x, curr.y - prev.y);
+  }
+  return total;
+}
+
 function circuitWireLabel(
   l: Label,
   state: CircuitLabelState,
@@ -149,8 +159,16 @@ function circuitWireLabel(
       `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`,
     );
   const fallback = plans[0]?.fallback;
+  const leader =
+    plans
+      .filter(
+        (p): p is typeof p & { points: readonly { x: number; y: number }[] } =>
+          Boolean(p.leader && "points" in p && p.points?.length),
+      )
+      .sort((a, b) => leaderLength(a.points) - leaderLength(b.points))[0]
+      ?.leader ?? "";
   return (
-    plans.map((p) => p.leader).join("") +
+    leader +
     `<g data-wire-label="${attr(cs[l.index]!.id)}"${fallback ? ` data-circuit-caption-fallback="${fallback}"` : ""}><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
   );
 }
