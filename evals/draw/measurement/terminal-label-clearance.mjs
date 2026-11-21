@@ -76,12 +76,186 @@ export function terminalLabelStrokeHit(c, shape) {
   };
 }
 
-// Compare painted ink runs on a 0.005 mm grid and adaptively refine near the
-// cutoff on a local 0.001 mm grid so boundary gaps resolve cleanly (#481).
+export function terminalLabelNearCutoff(ink, stroke, step, cutoff) {
+  const limit = (cutoff / step) ** 2;
+  let first = 0;
+  const inkNear = new Map(),
+    strokeNear = new Map();
+  const add = (map, row, lo, hi) => {
+    let list = map.get(row);
+    if (!list) {
+      list = [];
+      map.set(row, list);
+    }
+    list.push([lo, hi]);
+  };
+  for (const { row, runs } of stroke) {
+    while (
+      first < ink.length &&
+      ink[first].row < row &&
+      (row - ink[first].row) ** 2 >= limit
+    )
+      first++;
+    for (let i = first; i < ink.length; i++) {
+      const dy2 = (row - ink[i].row) ** 2;
+      if (dy2 >= limit) break;
+      const maxDx = Math.floor(Math.sqrt(limit - dy2));
+      for (const [a, b] of runs)
+        for (const [x, y] of ink[i].runs) {
+          const dx = Math.max(0, a - y, x - b);
+          if (dy2 + dx * dx >= limit) continue;
+          add(strokeNear, row, Math.max(a, x - maxDx), Math.min(b, y + maxDx));
+          add(
+            inkNear,
+            ink[i].row,
+            Math.max(x, a - maxDx),
+            Math.min(y, b + maxDx),
+          );
+        }
+    }
+  }
+  return { inkNear, strokeNear };
+}
+
+export function terminalLabelFineRows(
+  box,
+  nearMap,
+  coarseStep,
+  fineStep,
+  pad,
+  hit,
+) {
+  const firstX = Math.ceil(box.x / fineStep),
+    lastX = Math.floor((box.x + box.w) / fineStep),
+    firstY = Math.ceil(box.y / fineStep),
+    lastY = Math.floor((box.y + box.h) / fineStep);
+  if (firstX > lastX || firstY > lastY) return [];
+  const ratio = Math.round(coarseStep / fineStep),
+    padFine = Math.ceil(pad / fineStep),
+    byRow = new Map();
+  const merge = (list) => {
+    list.sort((a, b) => a[0] - b[0]);
+    const out = [];
+    for (const [lo, hi] of list) {
+      const prev = out.at(-1);
+      if (prev && lo <= prev[1] + 1) prev[1] = Math.max(prev[1], hi);
+      else out.push([lo, hi]);
+    }
+    return out;
+  };
+  for (const [coarseRow, intervals] of nearMap) {
+    const merged = merge(intervals);
+    const rLo = Math.max(firstY, coarseRow * ratio - padFine),
+      rHi = Math.min(lastY, coarseRow * ratio + padFine);
+    for (let r = rLo; r <= rHi; r++) {
+      let rowList = byRow.get(r);
+      if (!rowList) {
+        rowList = [];
+        byRow.set(r, rowList);
+      }
+      for (const [lo, hi] of merged) {
+        const cLo = Math.max(firstX, lo * ratio - padFine),
+          cHi = Math.min(lastX, hi * ratio + padFine);
+        if (cLo <= cHi) rowList.push([cLo, cHi]);
+      }
+    }
+  }
+  const rows = [];
+  for (const row of [...byRow.keys()].sort((a, b) => a - b)) {
+    const runs = [];
+    let start;
+    for (const [cLo, cHi] of merge(byRow.get(row))) {
+      for (let col = cLo; col <= cHi; col++) {
+        if (hit({ x: col * fineStep, y: row * fineStep })) {
+          start ??= col;
+        } else if (start !== undefined) {
+          runs.push([start, col - 1]);
+          start = undefined;
+        }
+      }
+      if (start !== undefined) {
+        runs.push([start, cHi]);
+        start = undefined;
+      }
+    }
+    if (runs.length) rows.push({ row, runs });
+  }
+  return rows;
+}
+
+export function terminalLabelDirectFineGap(
+  h,
+  labelRegion,
+  strokeRegion,
+  fineStep,
+  minimum,
+  inkHit,
+  strokeHit,
+) {
+  const fineInk = h.terminalLabelInkRows(labelRegion, fineStep, inkHit);
+  if (!fineInk.length) return minimum;
+  const fineStrokeRows = h.terminalLabelInkRows(
+    strokeRegion,
+    fineStep,
+    strokeHit,
+  );
+  if (!fineStrokeRows.length) return minimum;
+  return h.terminalLabelRunGap(fineInk, fineStrokeRows, fineStep, minimum).gap;
+}
+
+export function terminalLabelRefinedGap(
+  h,
+  ink,
+  stroke,
+  coarse,
+  labelRegion,
+  strokeRegion,
+  coarseStep,
+  fineStep,
+  coarseCutoff,
+  pad,
+  minimum,
+  inkHit,
+  strokeHit,
+) {
+  const { inkNear, strokeNear } = h.terminalLabelNearCutoff(
+    ink,
+    stroke,
+    coarseStep,
+    coarseCutoff,
+  );
+  const fineInk = h.terminalLabelFineRows(
+    labelRegion,
+    inkNear,
+    coarseStep,
+    fineStep,
+    pad,
+    inkHit,
+  );
+  const fineStrokeRows = h.terminalLabelFineRows(
+    strokeRegion,
+    strokeNear,
+    coarseStep,
+    fineStep,
+    pad,
+    strokeHit,
+  );
+  if (!fineInk.length || !fineStrokeRows.length)
+    return Math.min(coarse.gap, minimum);
+  return Math.min(
+    h.terminalLabelRunGap(fineInk, fineStrokeRows, fineStep, minimum).gap,
+    coarse.gap,
+  );
+}
+
+// Compare painted ink runs on a 0.005 mm grid and adaptively refine every
+// near-cutoff approach on a 0.001 mm grid without rounding toward pass (#481).
 export function terminalLabelStrokeGap(c, label, shape, minimum) {
   const { glyphAt, intersect, h } = c;
   const coarseStep = 0.005,
-    margin = 0.025,
+    fineStep = 0.001,
+    margin = 0.03,
+    pad = 0.015,
     coarseCutoff = minimum + margin;
   const labelRegion = intersect(
     label.bbox,
@@ -100,6 +274,21 @@ export function terminalLabelStrokeGap(c, label, shape, minimum) {
     return minimum;
   const inkHit = (p) => glyphAt(label, p);
   const strokeHit = h.terminalLabelStrokeHit(c, shape);
+  if (
+    labelRegion.w < 2 * coarseStep ||
+    labelRegion.h < 2 * coarseStep ||
+    strokeRegion.w < 2 * coarseStep ||
+    strokeRegion.h < 2 * coarseStep
+  )
+    return h.terminalLabelDirectFineGap(
+      h,
+      labelRegion,
+      strokeRegion,
+      fineStep,
+      minimum,
+      inkHit,
+      strokeHit,
+    );
   const ink = h.terminalLabelInkRows(labelRegion, coarseStep, inkHit);
   if (!ink.length) return minimum;
   const stroke = h.terminalLabelInkRows(strokeRegion, coarseStep, strokeHit);
@@ -107,36 +296,21 @@ export function terminalLabelStrokeGap(c, label, shape, minimum) {
   const coarse = h.terminalLabelRunGap(ink, stroke, coarseStep, coarseCutoff);
   if (coarse.gap >= coarseCutoff || !coarse.pair) return minimum;
   if (coarse.gap <= minimum - margin) return coarse.gap;
-  const fineStep = 0.001,
-    pad = 0.03;
-  const fineLabel = intersect(
+  return h.terminalLabelRefinedGap(
+    h,
+    ink,
+    stroke,
+    coarse,
     labelRegion,
-    h.expandClearanceBox(
-      { x: coarse.pair.lx, y: coarse.pair.ly, w: 0, h: 0 },
-      pad,
-    ),
-  );
-  const fineStroke = intersect(
     strokeRegion,
-    h.expandClearanceBox(
-      { x: coarse.pair.sx, y: coarse.pair.sy, w: 0, h: 0 },
-      pad,
-    ),
-  );
-  const fineInk = h.terminalLabelInkRows(fineLabel, fineStep, inkHit);
-  const fineStrokeRows = h.terminalLabelInkRows(
-    fineStroke,
+    coarseStep,
     fineStep,
+    coarseCutoff,
+    pad,
+    minimum,
+    inkHit,
     strokeHit,
   );
-  if (!fineInk.length || !fineStrokeRows.length) return minimum;
-  const fine = h.terminalLabelRunGap(
-    fineInk,
-    fineStrokeRows,
-    fineStep,
-    minimum,
-  );
-  return Math.round(fine.gap * 1000) / 1000 >= minimum ? minimum : fine.gap;
 }
 
 export function expandClearanceBox({ x, y, w, h }, pad) {
@@ -229,7 +403,7 @@ export function terminalLabelClearances(c, minimum) {
         caption: text,
         terminalKey: terminal.getAttribute("data-terminal-key"),
         bodyElement: ids.get(nearest.e),
-        gapMm: Math.round(gapMm * 1000) / 1000,
+        gapMm: Math.floor((gapMm + 1e-12) * 1000) / 1000,
         minimumMm: minimum,
       },
     ];

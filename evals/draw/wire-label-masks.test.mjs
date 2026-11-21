@@ -260,19 +260,33 @@ it("DQ-16 rejects a horizontal plate interrupting a vertical circuit riser even 
   expect(wirePlacement(clear)).toEqual([]);
 });
 
-it("DQ-16 measures clip-cut terminal ends as terminals, not bends (#447 item 1)", async () => {
+it("DQ-16 measures clip-cut terminal ends and clip-hidden bends as full approaches (#447 item 1)", async () => {
+  const clip =
+    '<defs><clipPath id="tile"><rect x="10.5" y="0" width="130" height="100"/></clipPath></defs>';
   const clipped =
-    '<defs><clipPath id="tile"><rect x="10.5" y="0" width="130" height="100"/></clipPath></defs>' +
-    straight.replace("<path", '<path clip-path="url(#tile)"');
+    clip + straight.replace("<path", '<path clip-path="url(#tile)"');
   // Plate 0.5 mm past clip cut (> 0.35 mm bend floor, < 8 mm terminal floor) must fail.
   expect(masks(await audit(clipped + label("A", 11, 26)))).toEqual([
     expect.objectContaining({ wire: "A", reason: "approach" }),
   ]);
   // Passing control: plate clears >= max(2, plate height) past the clipped terminal end.
   expect(await audit(clipped + label("A", 20, 26))).toEqual([]);
+
+  // Clipping hides the first bend at (10, 30); only 0.5 mm of visible approach remains.
+  const clipHiddenBend =
+    clip +
+    route("A", "M 10 15 L 10 30 L 110 30").replace(
+      "<path",
+      '<path clip-path="url(#tile)"',
+    );
+  expect(masks(await audit(clipHiddenBend + label("A", 11, 26)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Passing control: plate clears >= max(2, plate height) past the clip-hidden bend.
+  expect(await audit(clipHiddenBend + label("A", 20, 26))).toEqual([]);
 });
 
-it("DQ-16 rejects plain non-label rects occluding a conductor approach (#447 item 2)", async () => {
+it("DQ-16 rejects plain non-label rects occluding or splitting a conductor approach (#447 item 2)", async () => {
   // Plain rect beside an otherwise valid inline plate hides the terminal approach.
   const plainBesidePlate =
     straight +
@@ -281,6 +295,15 @@ it("DQ-16 rejects plain non-label rects occluding a conductor approach (#447 ite
   expect(masks(await audit(plainBesidePlate))).toContainEqual(
     expect.objectContaining({ wire: "A", reason: "approach" }),
   );
+  // Disconnected stubs: 9 mm [10,19] + 1 mm [29,30] sum to 10 mm >= 8 mm, but the
+  // single connected visible run from the plate is only 1 mm and must fail.
+  const disconnectedStubs =
+    straight +
+    label("A", 30, 26) +
+    '<rect x="19" y="26" width="10" height="8" fill="white"/>';
+  expect(masks(await audit(disconnectedStubs))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
   // Standalone plain rect over the terminal approach when the wire label is offset clear.
   const plainWithOffset =
     straight +

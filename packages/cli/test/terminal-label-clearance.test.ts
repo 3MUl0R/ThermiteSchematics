@@ -9,6 +9,7 @@ import {
   sheetMeasurementSource,
 } from "../../../evals/draw/browser.mjs";
 import { terminalLabelFindings } from "../../../evals/draw/caption-mark-clearance.mjs";
+import * as clearance from "../../../evals/draw/measurement/terminal-label-clearance.mjs";
 import { embedPrintableFont } from "../src/printable-font.js";
 
 let browser: Browser, page: Page;
@@ -181,3 +182,141 @@ it.each([
   },
   150_000,
 );
+
+type ProbeBox = { x: number; y: number; w: number; h: number };
+const probeBox = (x: number, y: number, w: number, h: number): ProbeBox => ({
+  x,
+  y,
+  w,
+  h,
+});
+const probeIntersect = (a: ProbeBox, b: ProbeBox): ProbeBox => {
+  const x = Math.max(a.x, b.x),
+    y = Math.max(a.y, b.y);
+  return probeBox(
+    x,
+    y,
+    Math.min(a.x + a.w, b.x + b.w) - x,
+    Math.min(a.y + a.h, b.y + b.h) - y,
+  );
+};
+const probeInside = (b: ProbeBox, p: { x: number; y: number }) =>
+  b.x <= p.x && p.x <= b.x + b.w && b.y <= p.y && p.y <= b.y + b.h;
+const probeExtent = (boxes: readonly ProbeBox[]): ProbeBox => {
+  const minX = Math.min(...boxes.map((b) => b.x)),
+    minY = Math.min(...boxes.map((b) => b.y));
+  return probeBox(
+    minX,
+    minY,
+    Math.max(...boxes.map((b) => b.x + b.w)) - minX,
+    Math.max(...boxes.map((b) => b.y + b.h)) - minY,
+  );
+};
+
+class ProbeDomPoint {
+  constructor(
+    public x: number,
+    public y: number,
+  ) {}
+  matrixTransform() {
+    return this;
+  }
+}
+
+function measureCutoffProbe(
+  labels: readonly ProbeBox[],
+  strokes: readonly ProbeBox[],
+) {
+  const label = { bbox: probeExtent(labels) },
+    shape = {
+      bbox: probeExtent(strokes),
+      clips: [],
+      covers: [],
+      e: {
+        isPointInStroke: (p: { x: number; y: number }) =>
+          strokes.some((s) => probeInside(s, p)),
+      },
+    },
+    c = {
+      rr: { x: 0, y: 0 },
+      sx: 1,
+      sy: 1,
+      contains: probeInside,
+      intersect: probeIntersect,
+      glyphAt: (_l: unknown, p: { x: number; y: number }) =>
+        labels.some((b) => probeInside(b, p)),
+    };
+  const gap = clearance.terminalLabelStrokeGap(
+    { ...c, h: clearance },
+    label,
+    shape,
+    0.5,
+  );
+  const cap = { element: "label", bbox: label.bbox, reviewPainted: true },
+    terminal = {
+      parentElement: { closest: () => ({}) },
+      getAttribute: () => "X2",
+    },
+    labelEl = {
+      closest: () => terminal,
+      getScreenCTM: () => ({ inverse: () => null }),
+    };
+  const findings = clearance.terminalLabelClearances(
+    {
+      ...c,
+      texts: [cap],
+      elementsById: new Map([["label", labelEl]]),
+      ids: new Map([[shape.e, "shape"]]),
+      h: { ...clearance, terminalLabelBody: () => [shape] },
+    },
+    0.5,
+  );
+  return { gap, findings };
+}
+
+it("never rounds a 0.499625 mm failure to pass and refines every near-cutoff approach (#481)", () => {
+  const savedDomPoint = Reflect.get(globalThis, "DOMPoint");
+  Reflect.set(globalThis, "DOMPoint", ProbeDomPoint);
+  try {
+    for (const [labels, strokes] of [
+      [
+        [probeBox(1 - 0.0001, 1 - 0.0001, 0.0002, 0.0002)],
+        [
+          probeBox(
+            1 + 92 * 0.005 - 0.0001,
+            1 + 39 * 0.005 - 0.0001,
+            0.0002,
+            0.0002,
+          ),
+        ],
+      ],
+      [
+        [probeBox(0.95, 0.95, 0.05, 0.05)],
+        [probeBox(1 + 92 * 0.005, 1 + 39 * 0.005, 0.05, 0.05)],
+      ],
+      [
+        [probeBox(1.0, 1.001, 0.4, 0.003), probeBox(2.0, 1.001, 0.4, 0.003)],
+        [probeBox(1.0, 1.504, 0.4, 0.003), probeBox(2.0, 1.502, 0.4, 0.003)],
+      ],
+      [
+        [probeBox(1.0, 0.984, 0.4, 0.02), probeBox(2.0, 0.984, 0.4, 0.02)],
+        [probeBox(1.0, 1.504, 0.4, 0.02), probeBox(2.0, 1.503, 0.4, 0.02)],
+      ],
+    ] as const) {
+      const result = measureCutoffProbe(labels, strokes);
+      expect(result.gap).toBeLessThan(0.5);
+      expect(result.findings).toHaveLength(1);
+      expect(result.findings[0].gapMm).toBeLessThan(0.5);
+    }
+    for (const strokeY of [1.504, 1.514]) {
+      const result = measureCutoffProbe(
+        [probeBox(1.0, 0.984, 0.4, 0.02)],
+        [probeBox(1.0, strokeY, 0.4, 0.02)],
+      );
+      expect(result.gap).toBe(0.5);
+      expect(result.findings).toEqual([]);
+    }
+  } finally {
+    Reflect.set(globalThis, "DOMPoint", savedDomPoint);
+  }
+});

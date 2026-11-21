@@ -133,10 +133,19 @@ function markerInk(markers, run, end, minOrder = -Infinity) {
   return hidden;
 }
 
-function occludedLength(occluders, run, stroke, from, to) {
-  if (to <= from + PRINT_EPSILON_MM || !occluders?.length) return 0;
-  const half = stroke.width / 2,
-    intervals = [];
+function connectedVisibleLength(
+  occluders,
+  run,
+  stroke,
+  from,
+  to,
+  end,
+  fallbackMm,
+) {
+  if (to <= from + PRINT_EPSILON_MM) return fallbackMm;
+  if (!occluders?.length) return to - from;
+  const half = stroke.width / 2;
+  let bound = end === "before" ? from : to;
   for (const occ of occluders) {
     if (occ.order <= stroke.order) continue;
     if (!finiteBox(occ.clip)) return null;
@@ -144,24 +153,77 @@ function occludedLength(occluders, run, stroke, from, to) {
     if (run.across + half <= p.bottom || run.across - half >= p.top) continue;
     const lo = Math.max(from, p.lo),
       hi = Math.min(to, p.hi);
-    if (hi > lo + PRINT_EPSILON_MM) intervals.push([lo, hi]);
+    if (hi <= lo + PRINT_EPSILON_MM) continue;
+    bound = end === "before" ? Math.max(bound, hi) : Math.min(bound, lo);
   }
-  intervals.sort((a, b) => a[0] - b[0]);
-  let total = 0,
-    end = -Infinity;
-  for (const [lo, hi] of intervals) {
-    if (lo > end) {
-      total += hi - lo;
-      end = hi;
-    } else if (hi > end) {
-      total += hi - end;
-      end = hi;
-    }
-  }
-  return total;
+  return end === "before" ? to - bound : bound - from;
 }
 
-function clearance(run, ends, markers, plate, end, occluders, stroke) {
+function visibleBend(
+  run,
+  end,
+  runs,
+  segmentIndex,
+  clip,
+  half,
+  occluders,
+  stroke,
+) {
+  const clipped =
+    end === "before"
+      ? run.lo > run.rawLo + COINCIDENCE_MM
+      : run.hi < run.rawHi - COINCIDENCE_MM;
+  if (clipped) return false;
+  const rawBoundary = end === "before" ? run.rawLo : run.rawHi;
+  const bx = run.horizontal ? rawBoundary : run.across;
+  const by = run.horizontal ? run.across : rawBoundary;
+  if (
+    occluders?.some((occ) => {
+      if (occ.order <= stroke.order || !finiteBox(occ.clip)) return false;
+      const p = span(occ.bbox, run.horizontal);
+      return (
+        run.across + half > p.bottom &&
+        run.across - half < p.top &&
+        p.lo <= rawBoundary + COINCIDENCE_MM &&
+        p.hi >= rawBoundary - COINCIDENCE_MM
+      );
+    })
+  )
+    return false;
+  for (const neighbor of [runs[segmentIndex - 1], runs[segmentIndex + 1]]) {
+    if (!neighbor) continue;
+    const touches = neighbor.some(
+      (p) =>
+        Math.abs(p.x - bx) <= COINCIDENCE_MM &&
+        Math.abs(p.y - by) <= COINCIDENCE_MM,
+    );
+    if (!touches) continue;
+    const adj = axis(neighbor);
+    if (!adj || adj.horizontal === run.horizontal) continue;
+    const c = span(clip, adj.horizontal);
+    if (adj.across + half <= c.bottom || adj.across - half >= c.top) continue;
+    const adjLo = Math.max(adj.lo, c.lo),
+      adjHi = Math.min(adj.hi, c.hi);
+    if (
+      run.across - adjLo > half + PRINT_EPSILON_MM ||
+      adjHi - run.across > half + PRINT_EPSILON_MM
+    )
+      return true;
+  }
+  return false;
+}
+
+function clearance(
+  run,
+  ends,
+  markers,
+  plate,
+  end,
+  occluders,
+  stroke,
+  runs,
+  segmentIndex,
+) {
   const coord = (p) => (run.horizontal ? p.x : p.y);
   const rawBoundary = end === "before" ? run.rawLo : run.rawHi;
   const terminal = ends.some(
@@ -169,22 +231,49 @@ function clearance(run, ends, markers, plate, end, occluders, stroke) {
       Math.abs(coord(p) - rawBoundary) <= COINCIDENCE_MM &&
       Math.abs((run.horizontal ? p.y : p.x) - run.across) <= COINCIDENCE_MM,
   );
+  const bend =
+    !terminal &&
+    visibleBend(
+      run,
+      end,
+      runs,
+      segmentIndex,
+      stroke.clip,
+      stroke.width / 2,
+      occluders,
+      stroke,
+    );
+  const approach = !bend;
   const markerMm = terminal ? markerInk(markers, run, end) : 0;
-  const minimumMm = terminal ? Math.max(2, plate.heightMm) : BEND_MM;
+  const minimumMm = approach ? Math.max(2, plate.heightMm) : BEND_MM;
   if (markerMm === null)
-    return { terminal, markerMm, minimumMm, visibleMm: null };
-  const hidden =
+    return { terminal, approach, markerMm, minimumMm, visibleMm: null };
+  const visibleMm =
     end === "before"
-      ? occludedLength(occluders, run, stroke, run.lo + markerMm, run.plateLo)
-      : occludedLength(occluders, run, stroke, run.plateHi, run.hi - markerMm);
+      ? connectedVisibleLength(
+          occluders,
+          run,
+          stroke,
+          run.lo + markerMm,
+          run.plateLo,
+          "before",
+          run.beforeMm - markerMm,
+        )
+      : connectedVisibleLength(
+          occluders,
+          run,
+          stroke,
+          run.plateHi,
+          run.hi - markerMm,
+          "after",
+          run.afterMm - markerMm,
+        );
   return {
     terminal,
+    approach,
     markerMm,
     minimumMm,
-    visibleMm:
-      hidden === null
-        ? null
-        : (end === "before" ? run.beforeMm : run.afterMm) - markerMm - hidden,
+    visibleMm,
   };
 }
 
@@ -195,7 +284,7 @@ function ownedRuns(route, plate, stroke, markers, occluders) {
   const runs = straightRuns(points);
   if (runs.some((s) => !axis(s))) return null;
   const strokeInfo = { ...stroke, width: route.stroke };
-  return runs.flatMap((segment) => {
+  return runs.flatMap((segment, segmentIndex) => {
     const run = coveredRun(segment, plate.bbox, stroke.clip, route.stroke);
     if (!run) return [];
     return [
@@ -211,6 +300,8 @@ function ownedRuns(route, plate, stroke, markers, occluders) {
           "before",
           occluders,
           strokeInfo,
+          runs,
+          segmentIndex,
         ),
         after: clearance(
           run,
@@ -220,6 +311,8 @@ function ownedRuns(route, plate, stroke, markers, occluders) {
           "after",
           occluders,
           strokeInfo,
+          runs,
+          segmentIndex,
         ),
       },
     ];
@@ -286,7 +379,7 @@ function plateMask(plate, measurement, routes, wire, nativeOwner) {
   )
     return {
       reason: margins.some(
-        (m) => m.terminal && m.visibleMm + PRINT_EPSILON_MM < m.minimumMm,
+        (m) => m.approach && m.visibleMm + PRINT_EPSILON_MM < m.minimumMm,
       )
         ? "approach"
         : "elbow-or-branch",
@@ -309,7 +402,7 @@ function occludesApproach(run, markers, order) {
     exposed > PRINT_EPSILON_MM &&
     [run.before, run.after].some(
       (c) =>
-        c.terminal &&
+        c.approach &&
         c.visibleMm !== null &&
         c.visibleMm + PRINT_EPSILON_MM < c.minimumMm,
     )
