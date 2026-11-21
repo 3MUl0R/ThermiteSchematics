@@ -23,6 +23,7 @@ interface RootLane {
   readonly lane: string;
   readonly terminal: TerminalId;
   readonly protectiveEarth: boolean;
+  readonly authoredProtectiveEarth: boolean;
 }
 
 function protectiveEarthRoles(
@@ -39,6 +40,24 @@ function protectiveEarthRoles(
   );
 }
 
+function rootLane(
+  context: SelectionContext,
+  deviceUid: string,
+  binding: { readonly portId: string; readonly terminalKey: string },
+  roles: ReadonlySet<string>,
+): RootLane | undefined {
+  const terminal = context.terminalByKey.get(
+    terminalIdKey({ deviceUid, terminalKey: binding.terminalKey }),
+  );
+  if (terminal === undefined) return undefined;
+  return {
+    lane: binding.portId,
+    terminal: terminal.id,
+    protectiveEarth: terminal.role !== undefined && roles.has(terminal.role),
+    authoredProtectiveEarth: terminal.role === "protective_earth",
+  };
+}
+
 function powerRoot(
   context: SelectionContext,
   device: IrDevice,
@@ -51,7 +70,7 @@ function powerRoot(
   const mapping = context.mappingByTypeId.get(device.typeId);
   if (mapping === undefined) return undefined;
   const roles = protectiveEarthRoles(context.mappings);
-  const lanes: Omit<RootLane, "rank">[] = [];
+  const lanes: RootLane[] = [];
   const functionIds = new Map<string, FunctionId>();
   for (const aggregate of mapping.aggregates) {
     if (
@@ -66,19 +85,9 @@ function powerRoot(
       functionIds.set(functionIdKey(id), id);
     }
     for (const binding of aggregate.bindings) {
-      const terminal = context.terminalByKey.get(
-        terminalIdKey({
-          deviceUid: device.uid,
-          terminalKey: binding.terminalKey,
-        }),
-      );
-      if (terminal === undefined) return undefined;
-      lanes.push({
-        lane: binding.portId,
-        terminal: terminal.id,
-        protectiveEarth:
-          terminal.role !== undefined && roles.has(terminal.role),
-      });
+      const lane = rootLane(context, device.uid, binding, roles);
+      if (lane === undefined) return undefined;
+      lanes.push(lane);
     }
   }
   for (const rule of mapping.functions) {
@@ -92,19 +101,9 @@ function powerRoot(
     if (!context.functionByKey.has(functionIdKey(id))) return undefined;
     functionIds.set(functionIdKey(id), id);
     for (const binding of rule.bindings) {
-      const terminal = context.terminalByKey.get(
-        terminalIdKey({
-          deviceUid: device.uid,
-          terminalKey: binding.terminalKey,
-        }),
-      );
-      if (terminal === undefined) return undefined;
-      lanes.push({
-        lane: binding.portId,
-        terminal: terminal.id,
-        protectiveEarth:
-          terminal.role !== undefined && roles.has(terminal.role),
-      });
+      const lane = rootLane(context, device.uid, binding, roles);
+      if (lane === undefined) return undefined;
+      lanes.push(lane);
     }
   }
   if (lanes.length === 0) return undefined;
@@ -136,7 +135,10 @@ export function selectPowerPaths(
         };
     const result = searchPath(context, lane.terminal, {
       lane: spec.lane,
-      powerRole: spec.kind === "power-pe" ? "protective-earth" : "phase",
+      powerRole:
+        spec.kind === "power-pe" || lane.authoredProtectiveEarth
+          ? "protective-earth"
+          : "non-pe",
       allowFunctions: spec.kind !== "power-pe",
       boundaryAtEnd: false,
       constrainRoot: true,
