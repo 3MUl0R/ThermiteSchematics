@@ -690,7 +690,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read any retry reason. See `thermite guide project-workflows`. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.",
+        "`create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read retry reasons. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.",
       async check() {
         const svg = /^(<\?xml[^>]*>\s*)?<svg[\s>]/;
         expect((await createViewLoads()).result.value.svg).toMatch(svg);

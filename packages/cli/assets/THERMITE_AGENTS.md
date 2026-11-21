@@ -49,7 +49,7 @@ authored/expected failure; 2: usage/infrastructure failure. Diagnostics may carr
   each with `path`, current `expectedIntegrity` and JSON Patch `operations`
   (`test`, `add`, `remove`, `replace` only). Dry-run first, review the result,
   then apply the same request with `dryRun: false`. Only existing referenced source/presentation files qualify (else A003): not `system.json`, library lock, libraries or this guide. Per-file atomicity/snapshot guards apply.
-- `create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read any retry reason. See `thermite guide project-workflows`. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.
+- `create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read retry reasons. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` at canonical project root through revalidation/commit/rollback; distinct from library lock. Never commit it (alpha `init` gitignores it). A005/exit 1 contention: exact path, owner PID/hostname/version, creation time, age.
 Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity. On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then
@@ -94,7 +94,8 @@ Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return k
 Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Use a short group `lineReference` for circuit captions.
 
-Keep captions clear of wiring ink.
+Keep captions clear of wires.
+Top-down can try tighter spacing once after a label or span refusal.
 See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 ## Offline project workflows

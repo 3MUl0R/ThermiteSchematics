@@ -30,6 +30,7 @@ import {
   completenessArtifact,
   csvReport,
   drawingArtifact,
+  drawingDiagnostics,
   effectivePacket,
   jsonArtifact,
   makeViewRequest,
@@ -486,10 +487,7 @@ async function producePacket(
     const request = recipe ?? (await packetRecipe(flags, snapshot));
     const result = await renderDrawing(compiled, request);
     if (!result.ok) throw new ArtifactError(result.error);
-    const coverage =
-      request.kind === "packet"
-        ? (result.value.coverage.diagnostics ?? [])
-        : [];
+    const coverage = drawingDiagnostics(result.value, request.kind);
     diagnostics.push(...coverage);
     if (flags.strict && diagnostics.some((d) => d.severity === "warning")) {
       reportDiagnostics(diagnostics);

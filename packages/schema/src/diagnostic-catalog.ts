@@ -527,6 +527,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "A redundant contact-state caption has no clear owner-nearest position and was omitted. The contact mark still depicts the authored normal state; the view remains printable.",
   },
+  I906: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "A top-to-bottom view used a tighter layout during pagination after the ordinary search could not find a printable grid.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCatalogCode = keyof typeof DIAGNOSTIC_CATALOG;

@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { Diagnostic } from "@thermite/schema";
+import { actuation } from "../../render/test/dol-control-junctions-fixture.js";
+import {
+  applyDolRecipe,
+  dolStarter,
+} from "../../render/test/dol-control-probes-fixture.js";
 import {
   fixture,
   makeStandaloneDir,
@@ -128,7 +134,103 @@ function standaloneCommands(f: Fixture): [string, string[]][] {
   ];
 }
 
+function recoveries(diagnostics: readonly Diagnostic[] = []) {
+  return diagnostics.filter(({ code }) => code === "I906");
+}
+
+async function verifyReflowArtifacts(
+  f: Fixture,
+  file: string,
+  outputs: { json: string; html: string },
+  diagnostics: readonly Diagnostic[],
+) {
+  const drawing = await readJson(file);
+  const receipt = await readJson(file + ".receipt.json");
+  expect(diagnostics).toEqual(receipt.artifact.diagnostics);
+  expect(recoveries(diagnostics)).toEqual([
+    expect.objectContaining({ code: "I906", severity: "info" }),
+  ]);
+  expect(recoveries(drawing.coverage.diagnostics)).toEqual(
+    recoveries(diagnostics),
+  );
+  expect(await readFile(join(f.out, outputs.json), "utf8")).toBe(
+    await readFile(file, "utf8"),
+  );
+  expect(await readFile(join(f.out, outputs.html), "utf8")).toBe(drawing.html);
+}
+
 describe("export bundle and standalone byte parity", () => {
+  it("reports each rooted pagination recovery once per producing job", async () => {
+    const f = await fixture(dolStarter);
+    const source = join(f.project, "source.json");
+    await writeJson(source, applyDolRecipe(await readJson(source), "p5"));
+    const page = { size: "tabloid", orientation: "landscape", marginMm: 20 };
+    const flow = "top-to-bottom";
+    const packet = join(f.project, "packet.json");
+    await writeJson(packet, {
+      format: "schematic-packet-request/0.1",
+      views: [actuation("R1", flow)],
+      page,
+    });
+    const packetOutputs = { json: "packet.json", html: "packet.html" };
+    const viewOutputs = { json: "reflow-view.json", html: "reflow-view.html" };
+    const view = { kind: "view", designation: "R1", intent: "actuation", page };
+    await f.plan(
+      { kind: "packet", input: "packet.json", outputs: packetOutputs },
+      { ...view, flow, outputs: viewOutputs },
+      { ...view, flow: "left-to-right", outputs: { json: "horizontal.json" } },
+    );
+    const bundle = await f.bundle();
+    await mustSucceed(bundle);
+    const report = JSON.parse(bundle.stderr);
+    const manifest = await readJson(join(f.out, manifestName));
+    expect(report).toEqual({
+      diagnostics: manifest.diagnostics,
+      jobs: manifest.jobDiagnostics,
+      error: null,
+    });
+    expect(recoveries(report.diagnostics)).toEqual([]);
+    expect(
+      report.jobs.map(({ outputs }: { outputs: string[] }) => outputs),
+    ).toEqual([Object.values(packetOutputs), Object.values(viewOutputs)]);
+
+    const standalone = await makeStandaloneDir(f.project);
+    const commands = [
+      {
+        outputs: packetOutputs,
+        args: ["packet", "--input", packet],
+      },
+      {
+        outputs: viewOutputs,
+        args: [
+          "view",
+          "R1",
+          "--actuation",
+          "--flow",
+          flow,
+          "--paper",
+          page.size,
+          "--orientation",
+          page.orientation,
+          "--margin",
+          String(page.marginMm),
+        ],
+      },
+    ];
+    for (const [index, { outputs, args }] of commands.entries()) {
+      const file = join(standalone, outputs.json);
+      const result = await f.cli(...args, "-o", file, "--receipt");
+      await mustSucceed(result);
+      const { diagnostics } = report.jobs[index];
+      expect(JSON.parse(result.stderr)).toEqual({
+        diagnostics: [...report.diagnostics, ...diagnostics],
+        error: null,
+      });
+      await verifyReflowArtifacts(f, file, outputs, diagnostics);
+    }
+    expect((await f.check()).findings.fresh).toBe(true);
+  });
+
   it("matches every conveyor artifact and verifies the same plan with standalone receipts", async () => {
     const f = await fixture();
     await setupParity(f);

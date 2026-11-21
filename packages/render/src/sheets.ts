@@ -42,7 +42,7 @@ import {
   resolveDeviceFilter,
 } from "@thermite/query";
 
-import type { RenderOutcome } from "./types.js";
+import type { RenderFailure, RenderOutcome } from "./types.js";
 
 import type {
   SchematicPacketRequest,
@@ -68,6 +68,7 @@ import {
   failure,
   record,
   packetViewContext,
+  type PacketViewContext,
   withPacketViews,
   PacketDraftError,
   composedPacketFailure,
@@ -84,6 +85,7 @@ function packetDiagnostics(
   drafts: readonly Draft[],
   sheets: RenderedPacket["sheets"],
   explicitPacket: boolean,
+  reflowedViews: Iterable<PacketViewContext>,
 ) {
   const diagnostics = explicitPacket
     ? packetDeviceCoverageDiagnostics(
@@ -97,7 +99,34 @@ function packetDiagnostics(
       )
     : [];
   diagnostics.push(...drafts.flatMap((draft) => draft.diagnostics ?? []));
+  for (const view of reflowedViews)
+    diagnostics.push({
+      code: "I906",
+      severity: "info",
+      ...ir.project.source,
+      message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
+    });
   return diagnostics;
+}
+
+async function renderPacketPreservingRetry(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicPacketRequest,
+  presentation: Readonly<CompiledProjectPresentation> | undefined,
+  explicitPacket: boolean,
+  configurePage?: (page: import("./packet/types.js").PaperPage) => void,
+): Promise<RenderOutcome<RenderedPacket>> {
+  const paginationFailures = new Map<PacketViewContext, RenderFailure>();
+  const result = await renderPacket(
+    ir,
+    request,
+    presentation,
+    explicitPacket,
+    paginationFailures,
+    configurePage,
+  );
+  const original = paginationFailures.values().next().value;
+  return result.ok || !original ? result : { ok: false, error: original };
 }
 
 async function renderPacket(
@@ -105,6 +134,7 @@ async function renderPacket(
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
+  paginationFailures: Map<PacketViewContext, RenderFailure>,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
   const contextError: typeof withPacketViews = (error, views) =>
@@ -167,28 +197,13 @@ async function renderPacket(
     [];
   let referenceSelection: ReferenceSelection | undefined;
   let referenceNumber = 0;
-  const circuitAppearances = new Map<string, string[]>();
+  const appearances = collectCircuitAppearances(
+    ir,
+    request.views,
+    contextError,
+  );
+  if (!appearances.ok) return appearances;
   const navigationDuplicates = new Map<string, number>();
-  for (const [viewIndex, view] of request.views.entries()) {
-    if (!record(view) || view.format !== "circuit-view-request/0.1") continue;
-    try {
-      for (const [key, labels] of circuitFunctionAppearances(ir, [
-        view as unknown as CircuitViewRequest,
-      ]))
-        circuitAppearances.set(key, [
-          ...new Set([...(circuitAppearances.get(key) ?? []), ...labels]),
-        ]);
-    } catch (error) {
-      const failed = invalidCircuitFailure(ir, view, error);
-      if (!failed.ok)
-        return {
-          ok: false,
-          error: contextError(failed.error, [
-            packetViewContext(view, viewIndex, ir),
-          ]),
-        };
-    }
-  }
   for (const [viewIndex, view] of request.views.entries()) {
     const context = packetViewContext(view, viewIndex, ir);
     if (record(view) && Object.hasOwn(view, "page")) {
@@ -210,29 +225,32 @@ async function renderPacket(
       ),
       paper.value,
       request.layout,
-      circuitAppearances,
+      appearances.value,
       referenceNumber,
     );
-    if (!result.ok)
-      return {
-        ok: false,
-        error: contextError(renderErrorContext(ir, result.error), [context]),
-      };
-    const reportSelection = result.value[0]?.documentationSelection;
+    if (!result.ok || result.value[0]?.rootedPaginationFailure) {
+      const refusal = result.ok
+        ? result.value[0]?.rootedPaginationFailure
+        : result.error;
+      if (!refusal) throw Error("Missing original pagination refusal");
+      const error = contextError(renderErrorContext(ir, refusal), [context]);
+      if (!result.ok) return { ok: false, error };
+      paginationFailures.set(context, error);
+    }
+    const first = result.value[0];
+    if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
+    const reportSelection = first?.documentationSelection;
     if (record(view) && view.format === "circuit-view-request/0.1")
       seedCircuitNavigation(ir, result.value);
-    const normalizedSelection = result.value[0]?.view.format.startsWith(
-      "schematic-view/",
-    )
-      ? result.value[0].view
+    const selection = first?.view.format.startsWith("schematic-view/")
+      ? first.view
       : view;
-    const identityKey = navigationViewKey(ir, normalizedSelection, 0);
-    const ordinal = navigationDuplicates.get(identityKey) ?? 0;
-    navigationDuplicates.set(identityKey, ordinal + 1);
-    const navigationView = {
-      key: navigationViewKey(ir, normalizedSelection, ordinal),
-      authoredOrder: viewIndex,
-    };
+    const navigationView = packetNavigationView(
+      ir,
+      selection,
+      viewIndex,
+      navigationDuplicates,
+    );
     if (reportSelection)
       documentationSelections.push({ ...reportSelection, view: viewIndex + 1 });
     legendViews.push({
@@ -310,8 +328,54 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
+    paginationFailures.keys(),
   );
 }
+
+function collectCircuitAppearances(
+  ir: Readonly<ElectricalIr>,
+  views: SchematicPacketRequest["views"],
+  contextError: typeof withPacketViews,
+): RenderOutcome<Map<string, string[]>> {
+  const circuitAppearances = new Map<string, string[]>();
+  for (const [viewIndex, view] of views.entries()) {
+    if (!record(view) || view.format !== "circuit-view-request/0.1") continue;
+    try {
+      for (const [key, labels] of circuitFunctionAppearances(ir, [
+        view as unknown as CircuitViewRequest,
+      ]))
+        circuitAppearances.set(key, [
+          ...new Set([...(circuitAppearances.get(key) ?? []), ...labels]),
+        ]);
+    } catch (error) {
+      const failed = invalidCircuitFailure(ir, view, error);
+      if (!failed.ok)
+        return {
+          ok: false,
+          error: contextError(failed.error, [
+            packetViewContext(view, viewIndex, ir),
+          ]),
+        };
+    }
+  }
+  return { ok: true, value: circuitAppearances };
+}
+
+function packetNavigationView(
+  ir: Readonly<ElectricalIr>,
+  selection: unknown,
+  viewIndex: number,
+  duplicates: Map<string, number>,
+) {
+  const identityKey = navigationViewKey(ir, selection, 0);
+  const ordinal = duplicates.get(identityKey) ?? 0;
+  duplicates.set(identityKey, ordinal + 1);
+  return {
+    key: navigationViewKey(ir, selection, ordinal),
+    authoredOrder: viewIndex,
+  };
+}
+
 function packetReferences(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
@@ -412,6 +476,7 @@ function assemblePacket(
   })[],
   referenceSelection: ReferenceSelection | undefined,
   presentation: CompiledProjectPresentation | undefined,
+  reflowedViews: Iterable<PacketViewContext>,
 ): RenderOutcome<RenderedPacket> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
@@ -431,8 +496,13 @@ function assemblePacket(
         ),
       };
     const sheets = rendered.value;
-    const diagnostics = packetDiagnostics(ir, drafts, sheets, explicitPacket);
-    const title = ir.project.name;
+    const diagnostics = packetDiagnostics(
+      ir,
+      drafts,
+      sheets,
+      explicitPacket,
+      reflowedViews,
+    );
     let html: string | undefined;
     return {
       ok: true,
@@ -443,7 +513,7 @@ function assemblePacket(
         sheets,
         // PDF and SVG consumers do not need an HTML font subset.
         get html() {
-          return (html ??= printPacketHtml(sheets, page, title));
+          return (html ??= printPacketHtml(sheets, page, ir.project.name));
         },
         coverage: {
           ...buildPacketCoverage(
@@ -544,7 +614,7 @@ export async function renderPacketWithAdvice(
       options,
     );
   }
-  const result = await renderPacket(
+  const result = await renderPacketPreservingRetry(
     ir,
     request,
     presentation,
@@ -563,7 +633,7 @@ export async function renderPacketWithAdvice(
   // Advice is evidence about the complete export, including assembly and the
   // packet page-cost bound. It never substitutes a different drawing.
   try {
-    const compact = await renderPacket(
+    const compact = await renderPacketPreservingRetry(
       ir,
       { ...request, layout: "compact" },
       presentation,

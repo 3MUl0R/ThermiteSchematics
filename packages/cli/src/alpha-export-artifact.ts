@@ -150,6 +150,16 @@ export type DrawingRenderer = (
   recipe: DrawingRecipe,
 ) => ReturnType<typeof renderSchematicPacket>;
 
+export function drawingDiagnostics(
+  packet: RenderedPacket,
+  kind: DrawingRecipe["kind"],
+) {
+  const diagnostics = packet.coverage.diagnostics ?? [];
+  return kind === "packet"
+    ? diagnostics
+    : diagnostics.filter((diagnostic) => diagnostic.code === "I906");
+}
+
 export class ArtifactError extends Error {
   constructor(readonly finding: { code: string; message: string }) {
     super(finding.message);

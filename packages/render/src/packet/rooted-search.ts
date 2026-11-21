@@ -22,7 +22,11 @@ import {
 import { nativeDrawing } from "../off-view/prepared.js";
 import type { SchematicViewRequest, RenderFailure } from "../types.js";
 import type { PaperPage } from "./types.js";
-import { buildRootedCandidates, type RootedCandidate } from "./rooted-build.js";
+import {
+  buildRootedCandidates,
+  type RootedBuildResult,
+  type RootedCandidate,
+} from "./rooted-build.js";
 import {
   recordRootedDiagnostic,
   type RootedDiagnostic,
@@ -35,6 +39,7 @@ import {
   ElkWorkBudgetError,
 } from "../layout/elk-work.js";
 import { withCircuitLayoutCache } from "../layout/circuit-inline-context.js";
+import type { RootedPaginationRetry } from "./rooted-pagination-retry.js";
 
 type Profile = "compact" | "dense" | undefined;
 export interface RootedSearch {
@@ -56,6 +61,7 @@ export interface RootedSearch {
   economyStartedAt?: number;
   validatedCandidate?: RootedCandidate;
   localityReference?: RootedCandidate;
+  paginationRetry?: RootedPaginationRetry;
 }
 async function initial(
   ir: Readonly<ElectricalIr>,
@@ -106,7 +112,26 @@ async function initial(
     run.errors.push(error);
     return;
   }
-  const baseline = build(native.value, true);
+  recordInitialGrids(run, p, native.value, profile, actual, build);
+}
+
+function recordInitialGrids(
+  run: RootedSearch,
+  p: PreparedSchematicDrawing,
+  native: PreparedSchematicDrawing,
+  profile: Profile,
+  actual: RootedBuildResult,
+  build: ReturnType<typeof profileBuilder>,
+) {
+  const baseline = build(native, true);
+  const spacing = baseline.paginationSpacing ?? actual.paginationSpacing;
+  if (spacing && !run.paginationRetry)
+    run.paginationRetry = {
+      annotated: p,
+      native,
+      profile,
+      spacing,
+    };
   if (baseline.ok) {
     run.native.push(...baseline.value);
     if (
@@ -122,7 +147,7 @@ async function initial(
     run.errors.push(baseline.error);
   }
 }
-export function nativeWinner(run: RootedSearch) {
+export function nativeWinner(run: Pick<RootedSearch, "native">) {
   let best: RootedCandidate | undefined;
   for (const candidate of run.native) {
     if (
@@ -137,7 +162,10 @@ export function nativeWinner(run: RootedSearch) {
   }
   return best;
 }
-export function rootedWinner(run: RootedSearch, page: PaperPage) {
+export function rootedWinner(
+  run: Pick<RootedSearch, "candidates" | "native" | "localityReference">,
+  page: PaperPage,
+) {
   const baseline = nativeWinner(run)?.jogs ?? new Map<string, number>();
   return [...run.candidates].sort((a, b) =>
     compareCandidates(

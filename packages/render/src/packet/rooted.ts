@@ -13,11 +13,16 @@ import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
 import { rootedDiagnosticError } from "./rooted-constraint.js";
+import { retryRootedPagination } from "./rooted-pagination-retry.js";
 import type {
   CompiledProjectPresentation,
   ElectricalIr,
 } from "@thermite/compiler";
-import type { RenderOutcome, SchematicViewRequest } from "../types.js";
+import type {
+  RenderFailure,
+  RenderOutcome,
+  SchematicViewRequest,
+} from "../types.js";
 import type { Draft, PaperPage } from "./types.js";
 import {
   searchRootedCandidates,
@@ -130,7 +135,12 @@ async function framedDrawingDrafts(
         referenceOffset,
         reference,
       );
-  if (result.ok) frameReferences.set(frameCandidate(result.value), reference);
+  const failure = legacy.value[0]?.rootedPaginationFailure;
+  if (!result.ok) return failure ? { ok: false, error: failure } : result;
+  frameReferences.set(frameCandidate(result.value), reference);
+  if (failure)
+    required(result.value[0], "Missing framed sheet").rootedPaginationFailure =
+      failure;
   return result;
 }
 
@@ -216,11 +226,25 @@ async function selectedDrawingDrafts(
   if (!winner || !native) {
     const profile = winner ? winner.profile : run.prepared[0]?.profile;
     const error = (!native && run.nativeErrors.get(profile)) || run.errors[0];
-    if (error)
+    if (error) {
+      const original = rootedDiagnosticError(error, run.diagnostics);
+      if (run.paginationRetry && !hasCompactFrame(page)) {
+        const recovered = await retryRootedPagination(
+          ir,
+          run.paginationRetry,
+          page,
+          referenceOffset,
+        );
+        if (recovered) {
+          rootedSearches.set(recovered.winner, run);
+          return drawingResult(recovered.winner, recovered.native, original);
+        }
+      }
       return {
         ok: false,
-        error: rootedDiagnosticError(error, run.diagnostics),
+        error: original,
       };
+    }
     throw Error("Rooted search returned neither drawing nor error");
   }
   const materialized = winner.printableDrafts
@@ -237,14 +261,17 @@ async function selectedDrawingDrafts(
 function drawingResult(
   selected: RootedCandidate,
   native: RootedCandidate,
+  paginationFailure?: RenderFailure,
 ): RenderOutcome<Draft[]> {
   const context = graphCardContext(selected.prepared.graph);
-  selected.drafts[0]!.rootedFit = {
+  const first = required(selected.drafts[0], "Missing rooted sheet");
+  if (paginationFailure) first.rootedPaginationFailure = paginationFailure;
+  first.rootedFit = {
     basePages: native.drafts.length,
     actualPages: selected.drafts.length,
     context,
   };
-  selected.drafts[0]!.rootedLegendSource = {
+  first.rootedLegendSource = {
     prepared: selected.prepared,
     grid: selected.grid,
     scale: selected.scale,

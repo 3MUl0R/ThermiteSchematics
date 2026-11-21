@@ -1,6 +1,7 @@
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { RenderFailure } from "../types.js";
 import { drawingContinuations } from "./continuations.js";
+import type { RootedSpacingWitness } from "./rooted-links.js";
 import { protectedDrawingIntervals } from "./rooted-geometry.js";
 import { cuts } from "./rooted-cuts.js";
 import { safeAxisPlans, MAX_GRID_SHEETS, MAX_GRID_PLANS } from "./safe-cuts.js";
@@ -13,16 +14,32 @@ export interface RootedGrid {
   xs: number[];
   ys: number[];
 }
+
+export interface RootedSpacingCut {
+  edgeIds: RootedSpacingWitness["edgeIds"];
+  y: number;
+}
+
+type GridRejection = (error: RenderFailure, spacing?: RootedSpacingCut) => void;
+type RootedRejection = (
+  error: RenderFailure,
+  attempt?: "boundary-retry",
+  spacing?: RootedSpacingCut,
+) => void;
+
 export function gridLinks(
   p: PreparedSchematicDrawing,
   grid: RootedGrid,
   b: DrawingBounds,
   scale: number,
   drafts?: Draft[],
-  onFailure?: (error: RenderFailure) => void,
+  onFailure?: GridRejection,
+  measureSpacing = false,
 ) {
-  const count = (grid.xs.length - 1) * (grid.ys.length - 1);
+  const columns = grid.xs.length - 1;
+  const count = columns * (grid.ys.length - 1);
   if (count > MAX_GRID_SHEETS) return false;
+  let spacing: RootedSpacingCut | undefined;
   const result = drawingContinuations(
     drafts ??
       Array.from({ length: count }, () => ({ links: [] }) as unknown as Draft),
@@ -32,8 +49,16 @@ export function gridLinks(
     grid.ys,
     b,
     scale,
+    measureSpacing && p.view?.flow === "top-to-bottom"
+      ? (witness) => {
+          const row = Math.floor(witness.draftIndex / columns);
+          const y = grid.ys[row + Number(witness.side === "bottom")];
+          if (y !== undefined)
+            spacing = { edgeIds: witness.edgeIds, y: y - OUTER_SVG_PADDING };
+        }
+      : undefined,
   );
-  if (!result.ok) onFailure?.(result.error);
+  if (!result.ok) onFailure?.(result.error, spacing);
   return result.ok;
 }
 
@@ -44,7 +69,7 @@ export function rootedGrids(
   scale: number,
   fallback = true,
   explore = false,
-  onFailure?: (error: RenderFailure, attempt?: "boundary-retry") => void,
+  onFailure?: RootedRejection,
   diagnoseIdentity = false,
 ): RootedGrid[] {
   const existing = originalRootedGrids(
@@ -53,15 +78,17 @@ export function rootedGrids(
     scale,
     fallback,
     explore,
-    onFailure,
+    onFailure && ((error, spacing) => onFailure(error, undefined, spacing)),
     diagnoseIdentity,
   );
   if (existing.length) return existing;
   const grid = boundarySafeGrid(p.layout, b, scale);
   const retryRejected = onFailure
-    ? (error: RenderFailure) => onFailure(error, "boundary-retry")
+    ? (error: RenderFailure, spacing?: RootedSpacingCut) =>
+        onFailure(error, "boundary-retry", spacing)
     : undefined;
-  return grid && gridLinks(p, grid, b, scale, undefined, retryRejected)
+  return grid &&
+    gridLinks(p, grid, b, scale, undefined, retryRejected, !!onFailure)
     ? [grid]
     : existing;
 }
@@ -72,7 +99,7 @@ function originalRootedGrids(
   scale: number,
   fallback = true,
   explore = false,
-  onFailure?: (error: RenderFailure) => void,
+  onFailure?: GridRejection,
   diagnoseIdentity = false,
 ): RootedGrid[] {
   const w = p.layout.width + 2 * OUTER_SVG_PADDING,
@@ -115,15 +142,24 @@ function gridPredicate(
   p: PreparedSchematicDrawing,
   b: DrawingBounds,
   scale: number,
-  onFailure: ((error: RenderFailure) => void) | undefined,
+  onFailure: GridRejection | undefined,
   diagnoseIdentity: boolean,
 ) {
   return (grid: RootedGrid, axis = false) => {
     let identity = false;
-    const ok = gridLinks(p, grid, b, scale, undefined, (error) => {
-      identity = error.code === "R006" && !!error.details?.continuationIdentity;
-      if (!axis) onFailure?.(error);
-    });
+    const ok = gridLinks(
+      p,
+      grid,
+      b,
+      scale,
+      undefined,
+      (error, spacing) => {
+        identity =
+          error.code === "R006" && !!error.details?.continuationIdentity;
+        if (!axis) onFailure?.(error, spacing);
+      },
+      !axis && !!onFailure,
+    );
     // Diagnostic replay can pass an identity problem through axis pruning, but
     // a complete grid still fails. Never report an incomplete axis probe.
     return ok || (diagnoseIdentity && axis && identity);

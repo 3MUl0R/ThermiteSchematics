@@ -1,10 +1,16 @@
 import { required } from "../presentation/util.js";
 import type { PresentationEdge, LayoutEdge, RenderOutcome } from "../types.js";
-import type { Draft, DrawingBounds } from "./types.js";
+import type { Draft, DrawingBounds, Link } from "./types.js";
 import { continuationIdentity } from "./continuation-identity.js";
 import { continuationCutMessage } from "./continuation-cut-message.js";
 import { rootedCrossings } from "./rooted-crossings.js";
 import { failure } from "./errors.js";
+
+export interface RootedSpacingWitness {
+  edgeIds: readonly [string, string];
+  draftIndex: number;
+  side: "top" | "bottom";
+}
 
 export function drawingContinuations(
   drafts: Draft[],
@@ -21,8 +27,10 @@ export function drawingContinuations(
   ys: readonly number[],
   b: DrawingBounds,
   scale: number,
+  onSpacing?: (witness: RootedSpacingWitness) => void,
 ): RenderOutcome<void> {
   let serial = 0;
+  const edgeIds = onSpacing && new Map<string, string>();
   for (const edge of layout.edges) {
     const semantic = graph.edges.find((e) => e.id === edge.id);
     if (!semantic || semantic.label?.role === "reference") continue;
@@ -35,22 +43,11 @@ export function drawingContinuations(
       });
     for (const c of crossings) {
       const id = `C${String(++serial).padStart(3, "0")}`;
-      const common = { id, ...identity, netId: edge.netId };
-      required(drafts[c.from], "Missing source section").links.push({
-        ...common,
-        end: 0,
-        to: c.to + 1,
-        ...sheetEndpoint(c.a, drafts[c.from], b),
-      });
-      required(drafts[c.to], "Missing peer section").links.push({
-        ...common,
-        end: 1,
-        to: c.from + 1,
-        ...sheetEndpoint(c.z, drafts[c.to], b),
-      });
+      edgeIds?.set(id, edge.id);
+      appendCrossing(drafts, c, b, { id, ...identity, netId: edge.netId });
     }
   }
-  for (const d of drafts)
+  for (const [draftIndex, d] of drafts.entries())
     for (let i = 0; i < d.links.length; i++)
       for (const other of d.links.slice(i + 1)) {
         const l = required(d.links[i], "Missing endpoint");
@@ -61,6 +58,15 @@ export function drawingContinuations(
           : Math.abs(l.x - other.x);
         const minimumMm = vertical ? 3 : 18;
         if (actualMm < minimumMm) {
+          if (edgeIds && onSpacing && (l.side === "top" || l.side === "bottom"))
+            onSpacing({
+              edgeIds: [
+                required(edgeIds.get(l.id), "Missing blocking route"),
+                required(edgeIds.get(other.id), "Missing blocking route"),
+              ],
+              draftIndex,
+              side: l.side,
+            });
           const rounded = actualMm.toFixed(2);
           const distance =
             Number(rounded) < minimumMm ? rounded : `<${minimumMm}`;
@@ -75,6 +81,28 @@ export function drawingContinuations(
         }
       }
   return { ok: true, value: undefined };
+}
+
+function appendCrossing(
+  drafts: Draft[],
+  c: ReturnType<typeof rootedCrossings>[number],
+  b: DrawingBounds,
+  common: Omit<Link, "x" | "y" | "side" | "to">,
+) {
+  const from = required(drafts[c.from], "Missing source section");
+  const to = required(drafts[c.to], "Missing peer section");
+  from.links.push({
+    ...common,
+    end: 0,
+    to: c.to + 1,
+    ...sheetEndpoint(c.a, from, b),
+  });
+  to.links.push({
+    ...common,
+    end: 1,
+    to: c.from + 1,
+    ...sheetEndpoint(c.z, to, b),
+  });
 }
 
 /** Each fallback sheet can release a cut-free side reservation. Construct its

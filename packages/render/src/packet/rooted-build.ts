@@ -17,7 +17,7 @@ import { rootedLocationContent } from "./location-headings.js";
 import { required } from "../presentation/util.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
-import type { RenderOutcome, RenderFailure } from "../types.js";
+import type { RenderOutcome } from "../types.js";
 import type { Draft, DrawingBounds, PaperPage } from "./types.js";
 import { continuationGridConstraint } from "./continuation-constraint.js";
 import type {
@@ -40,6 +40,8 @@ import { emitSchematicSvg } from "../svg/emitter.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
 import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 import { interiorJogs, routeDetours } from "./rooted-ink.js";
+import { paginationSpacing } from "./rooted-pagination-retry.js";
+import type { PaginationSpacing } from "../layout/spacing.js";
 
 export interface RootedCandidate {
   printableDrafts?: Draft[];
@@ -57,7 +59,7 @@ export interface RootedCandidate {
   localityExcess?: number;
 }
 export type RootedBuildResult = RenderOutcome<RootedCandidate[]> &
-  RootedDiagnostic;
+  RootedDiagnostic & { paginationSpacing?: PaginationSpacing };
 export function rootedSpace(
   p: PreparedSchematicDrawing,
   page: PaperPage,
@@ -263,7 +265,7 @@ export function buildRootedCandidates(
       offset,
       true,
     );
-  return failedBuild(p, constraint, captionFailure, search.cutFailure);
+  return failedBuild(p, constraint, captionFailure, search);
 }
 
 export function buildGridCandidates(
@@ -367,16 +369,20 @@ function failedBuild(
   p: PreparedSchematicDrawing,
   constraint: RootedConstraint,
   caption: string | RootedConstraint,
-  cutFailure: RenderFailure | undefined,
+  search: ReturnType<typeof rootedBankGrids>,
 ): RootedBuildResult {
+  const { cutFailure } = search;
   const message = typeof caption === "string" ? caption : caption.message;
   const error =
     cutFailure ??
     offViewPacketFailure(p.graph, "unprintable-layout", message).error;
+  const spacing =
+    !search.grids.length && paginationSpacing(p, constraint, search.spacing);
   return {
     ok: false,
     error,
     constraint,
+    ...(spacing ? { paginationSpacing: spacing } : {}),
     ...(!cutFailure && typeof caption !== "string"
       ? { gridFailure: { error, suffix: error.message.slice(message.length) } }
       : {}),

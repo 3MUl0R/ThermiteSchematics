@@ -19,6 +19,7 @@ import { required } from "../presentation/util.js";
 import { rootedGangSegments } from "../symbols/rooted-gangs.js";
 import { reservePowerJogSpace } from "./power-jog-space.js";
 import type { ELK as ElkApi } from "elkjs/lib/elk-api.js";
+import type { PaginationSpacing } from "../layout/spacing.js";
 
 export interface DrawingContext {
   ir: Readonly<ElectricalIr>;
@@ -48,6 +49,23 @@ export async function relayoutDrawing(
   });
   if (!layout.ok)
     return { ok: false, error: offViewLayoutFailure(p.graph, layout.error) };
+  const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
+  return gangs.ok
+    ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }
+    : gangs;
+}
+
+export async function repaginateDrawing(
+  p: PreparedSchematicDrawing,
+  original: PreparedSchematicDrawing,
+  spacing: PaginationSpacing,
+): Promise<RenderOutcome<PreparedSchematicDrawing>> {
+  const c = required(contexts.get(original), "Missing prepared source context");
+  const layout = await layoutPresentationGraph(p.graph, {
+    ...c.options,
+    paginationRetry: { original: p.layout, spacing },
+  });
+  if (!layout.ok) return layout;
   const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
   return gangs.ok
     ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }

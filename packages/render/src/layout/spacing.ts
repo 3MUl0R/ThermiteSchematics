@@ -6,11 +6,20 @@ import {
 } from "./adapter-ordering.js";
 import { ELK_OPTIONS } from "./options.js";
 
+export interface PaginationSpacing {
+  readonly parentId?: string;
+  readonly axes: readonly ("height" | "width")[];
+}
+
 /** Spacing alternatives leave all fixed ports, ordering and route checks intact. */
 export function applyLayoutSpacing(
   input: ElkNode,
   graph: PresentationGraph,
-  options: { spacingProfile?: "compact" | "dense"; powerTurnSpacing?: number },
+  options: {
+    spacingProfile?: "compact" | "dense";
+    powerTurnSpacing?: number;
+    paginationSpacing?: PaginationSpacing;
+  },
 ) {
   const vertical = verticalPowerLanes(graph);
   const visit = (node: ElkNode): void => {
@@ -39,6 +48,21 @@ export function applyLayoutSpacing(
           ),
         ),
       };
+    }
+    const pagination = options.paginationSpacing;
+    if (
+      pagination &&
+      (!pagination.parentId || pagination.parentId === node.id)
+    ) {
+      const layoutOptions = (node.layoutOptions ??= {});
+      for (const axis of pagination.axes) {
+        const [key, dense] =
+          axis === "height"
+            ? [ELK_OPTIONS.nodeNodeBetweenLayersSpacing, 20]
+            : [ELK_OPTIONS.nodeNodeSpacing, 12];
+        if (Number(layoutOptions[key]) > dense)
+          layoutOptions[key] = String(dense);
+      }
     }
     node.children.forEach(visit);
   };

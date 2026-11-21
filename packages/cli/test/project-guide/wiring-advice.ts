@@ -1,6 +1,6 @@
 export const wiringAdvice = new Map([
   [
-    "Keep captions clear of wiring ink.",
+    "Keep captions clear of wires.",
     "Manual print review. The terminal-label clearance, wire-label mask and face-clearance browser tests check painted geometry.",
   ],
   [
