@@ -151,6 +151,9 @@ export function landingFields1(c) {
     terminal,
     anchorElement: ids.get(anchorElement),
     appearanceScope: ids.get(scope),
+    ...(c.e.hasAttribute("data-circuit-fan-in")
+      ? { physicalTerminal: c.h.fanInPhysicalTerminal(c) }
+      : {}),
     reason: anchor
       ? undefined
       : (reason ??

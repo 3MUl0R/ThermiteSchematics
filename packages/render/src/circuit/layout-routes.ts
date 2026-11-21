@@ -8,6 +8,8 @@ import {
 import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import type { DeviceNode, PhysicalConductor, Point } from "./types.js";
 import type { LayoutGroup, LayoutHooks } from "./layout-input.js";
+import { circuitPointKey } from "./separate-loops.js";
+import { circuitJunctionIdentity } from "./junction-identity.js";
 export type CircuitRouteState = ReturnType<typeof circuitRouteState>;
 type TopologyBase = CircuitRouteState & {
   segments: { index: number; a: Point; b: Point }[];
@@ -63,7 +65,7 @@ export function circuitRouteState(
 export function appendCircuitRoute(
   e: ElkExtendedEdge,
   state: CircuitRouteState,
-  fan?: ReadonlySet<Point>,
+  nested = false,
 ) {
   const { cs, group, routes, wireSvg, labels, n } = state;
   const index = Number(e.id.slice(1)),
@@ -79,21 +81,17 @@ export function appendCircuitRoute(
   assertCircuitSegments(points, c, state);
   assertCircuitEndpoints(e, points, state);
   routes.push({ index, points });
-  // The white stroke clears crossings only along the separate run. Within
-  // the fan it would erase another approach to the same physical terminal.
-  const path = circuitRoutePath(points, n),
-    knockout =
-      points[1] && fan?.has(points[1])
-        ? circuitRoutePath(
-            points.slice(
-              points.findIndex((point, i) => i > 0 && !fan.has(point)) - 1,
-              -2,
-            ),
-            n,
-          )
-        : path;
+  const path = circuitRoutePath(points, n);
+  // Nested rails use plain, dotless crossings to preserve the crossing ink
+  // through the whole nest. Only the two terminal jog segments are marked.
+  const knockout = nested
+    ? ""
+    : `<path d="${path}" fill="none" stroke="white" stroke-width="1.1"/>`;
+  const jogs = nested
+    ? ` data-circuit-fan-in="source:1 target:${points.length - 3}"`
+    : "";
   wireSvg.push(
-    `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title><path d="${knockout}" fill="none" stroke="white" stroke-width="1.1"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"/></g>`,
+    `<g ${routePortAttributes(e)} data-circuit-conductor="${attr(c.id)}" data-conductor-designation="${attr(c.name)}" data-net-id="${attr(c.netId)}" data-endpoints="${attr(JSON.stringify(c.ends))}"><title>${xml([c.name, c.detail].filter(Boolean).join(" | "))}</title>${knockout}<path d="${path}" fill="none" stroke="#17212b" stroke-width="${c.jumper ? 0.55 : 0.32}"${jogs}/></g>`,
   );
   for (const l of e.labels ?? []) {
     if (![l.x, l.y, l.width, l.height].every(Number.isFinite))
@@ -181,7 +179,7 @@ export function assertCircuitEndpoints(
 
 export function circuitTopology(
   state: CircuitRouteState,
-  fan?: ReadonlySet<Point>,
+  fan?: ReadonlySet<string>,
 ): CircuitTopologyState {
   const { routes, cs, key } = state;
   const segments = routes.flatMap((r) =>
@@ -227,9 +225,9 @@ function assertCircuitOverlaps(state: Omit<CircuitTopologyState, "dots">) {
 
 function circuitDots(
   state: Omit<CircuitTopologyState, "dots">,
-  fan: ReadonlySet<Point> | undefined,
+  fan: ReadonlySet<string> | undefined,
 ): Map<string, Point> {
-  const { routes, segments, common, on, group, n } = state;
+  const { routes, segments, common, on, group, n, cs } = state;
   const dots = new Map<string, Point>();
   for (const r of routes)
     for (const p of r.points) {
@@ -251,9 +249,18 @@ function circuitDots(
           throw new InlineLabelCollisionError(
             `Circuit ${group.id}: unrelated wire touches a source-terminal junction.`,
           );
-        // A short fan shares the physical terminal mark. Its jogs are
-        // approach geometry and have no additional splice to mark.
-        if (!fan?.has(p)) dots.set(`${n(p.x)},${n(p.y)}`, p);
+        if (
+          fan?.has(circuitPointKey(p)) &&
+          (directions.size !== 3 ||
+            !circuitJunctionIdentity(p, state) ||
+            touching.some(
+              ({ index }) => cs[index]?.netId !== cs[r.index]?.netId,
+            ))
+        )
+          throw new Error(
+            `Circuit ${group.id}: invalid terminal fan-in junction.`,
+          );
+        dots.set(`${n(p.x)},${n(p.y)}`, p);
       }
     }
   return dots;

@@ -96,15 +96,54 @@ function measureRoute(
     expect(`${first.x} ${first.y} / ${last.x} ${last.y}`).toBe(
       baseline.landings,
     );
-    const knockout = required(route.querySelector('path[stroke="white"]'));
-    expect(required(knockout.getAttribute("d"))).not.toContain(
-      `M ${first.x} ${first.y}`,
-    );
-    expect(required(knockout.getAttribute("d"))).not.toContain(
-      `L ${last.x} ${last.y}`,
+    expect(route.querySelector('path[stroke="white"]')).toBeNull();
+    expect(route.lastElementChild?.getAttribute("data-circuit-fan-in")).toBe(
+      `source:1 target:${actual.length - 3}`,
     );
   } else expect(path).toBe(baseline.path);
   return actual;
+}
+
+function expectTerminalFanJunctions(
+  drawing: Element,
+  indexed: ReturnType<typeof measureRoute>[],
+  nested: ReturnType<typeof measureRoute>[],
+) {
+  const fan = nested.flatMap((p) => [
+    required(p[1]),
+    required(p[2]),
+    required(p.at(-2)),
+  ]);
+  const dots = new Map(
+    [...drawing.querySelectorAll("[data-circuit-junction]")].map((e) => [
+      `${e.getAttribute("cx")},${e.getAttribute("cy")}`,
+      e,
+    ]),
+  );
+  for (const p of fan) {
+    const directions = new Set<string>();
+    for (const points of indexed)
+      for (const [i, a] of points.slice(0, -1).entries()) {
+        const b = required(points[i + 1]);
+        if (
+          p.x < Math.min(a.x, b.x) ||
+          p.x > Math.max(a.x, b.x) ||
+          p.y < Math.min(a.y, b.y) ||
+          p.y > Math.max(a.y, b.y)
+        )
+          continue;
+        for (const q of [a, b]) {
+          if (q.x !== p.x) directions.add(q.x < p.x ? "W" : "E");
+          if (q.y !== p.y) directions.add(q.y < p.y ? "N" : "S");
+        }
+      }
+    expect(directions.size).toBeLessThanOrEqual(3);
+    const dot = dots.get(`${p.x},${p.y}`);
+    if (directions.size === 3) {
+      expect(dot?.getAttribute("data-device-uid")).toBeTruthy();
+      expect(dot?.getAttribute("data-terminal-key")).toBeTruthy();
+    } else expect(dot).toBeUndefined();
+  }
 }
 it.each(base.cases)(
   "separates the shared routes in $name ($flow) at their original terminals",
@@ -143,6 +182,16 @@ it.each(base.cases)(
         return measureRoute(drawing, route, name, baseline);
       });
       expect(paths).toHaveLength(indexed.length);
+      const nested = paths.filter((path) =>
+        path.lastElementChild?.hasAttribute("data-circuit-fan-in"),
+      );
+      expect(nested.length).toBeGreaterThan(1);
+      expect(paths.slice(-nested.length)).toEqual(nested);
+      expectTerminalFanJunctions(
+        drawing,
+        indexed,
+        indexed.filter((_, i) => !!Object.values(expected)[i]?.landings),
+      );
       const segments = indexed.flatMap((points, index) =>
         points.slice(1).map((b, i) => ({ index, a: required(points[i]), b })),
       );

@@ -16,6 +16,7 @@ import * as tranche3 from "./measurement/tranche3.mjs";
 import * as tranche4 from "./measurement/tranche4.mjs";
 import * as wirePlates from "./measurement/wire-plates.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
+import * as circuitMarks from "./measurement/circuit-marks.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 export const measurementHelpers = Object.freeze({
   IdentifierMeasurementError,
@@ -23,6 +24,7 @@ export const measurementHelpers = Object.freeze({
   ...faceStrokes,
   ...wirePlates,
   ...terminalLabels,
+  ...circuitMarks,
   terminalLabelClearanceMm: 0.5,
   ...preparation,
   ...tranche3,

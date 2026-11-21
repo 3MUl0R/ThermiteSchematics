@@ -1,8 +1,5 @@
 import { circuitCaptionPlate } from "./inline-plate.js";
-import {
-  InlineLabelCollisionError,
-  isInlineLabelFailure,
-} from "../layout/inline-label-error.js";
+import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
 import { supportedCircuitLabels } from "./label-support.js";
@@ -22,9 +19,12 @@ import {
   type CircuitLabelState,
   type CircuitRouteState,
 } from "./layout-routes.js";
-import { separateCoincidentLoops } from "./separate-loops.js";
+import {
+  separateCoincidentLoops,
+  type CircuitLoopSeparation,
+} from "./separate-loops.js";
 import { attachmentStrokeWeights } from "../symbols/attachment-stroke.js";
-import type { Point } from "./types.js";
+import { required } from "../presentation/util.js";
 type Label = CircuitLabelState["labels"][number];
 export function renderCircuitLayout(
   state: CircuitRouteState,
@@ -33,9 +33,9 @@ export function renderCircuitLayout(
   selfLoops: Set<number>,
   vertical: boolean,
 ) {
-  const separation = separateCoincidentLoops(state.graph, selfLoops);
-  if (separation) {
-    try {
+  try {
+    const separation = separateCoincidentLoops(state.graph, selfLoops);
+    if (separation)
       return drawCircuit(
         {
           ...state,
@@ -48,11 +48,11 @@ export function renderCircuitLayout(
         pins,
         selfLoops,
         vertical,
-        separation.fan,
+        separation,
       );
-    } catch (error) {
-      if (!isInlineLabelFailure(error)) throw error;
-    }
+  } catch {
+    // The candidate is optional. Re-run the original route and caption
+    // checks with untouched state and propagate any failure of that layout.
   }
   return drawCircuit(state, fs, pins, selfLoops, vertical);
 }
@@ -63,25 +63,36 @@ function drawCircuit(
   pins: CircuitPins,
   selfLoops: Set<number>,
   vertical: boolean,
-  fan?: ReadonlySet<Point>,
+  separation?: CircuitLoopSeparation,
 ) {
   const { graph, cs, group } = state;
   if (graph.edges?.length !== cs.length)
     throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
-  for (const edge of graph.edges ?? []) appendCircuitRoute(edge, state, fan);
-  const checked = circuitLabelChecks(circuitTopology(state, fan));
-  if (!fan) {
+  for (const edge of graph.edges ?? [])
+    appendCircuitRoute(edge, state, separation?.nestedEdges.has(edge.id));
+  const checked = circuitLabelChecks(circuitTopology(state, separation?.fan));
+  if (!separation) {
     recoverCircuitSelfLabels(checked, selfLoops);
     assertCircuitLabels(checked);
   }
   const { labels, baseFallbacks } = supportedCircuitLabels(checked),
     supported = { ...checked, labels };
-  if (fan) {
+  if (separation) {
     assertCircuitLabels(supported);
     if (baseFallbacks.size)
       throw new InlineLabelCollisionError(
         "Separated circuit loops require owned captions.",
       );
+    // Paint these unmasked rails above the native knockouts so both
+    // conductors remain continuous where an unrelated wire crosses a nest.
+    const nested: string[] = [];
+    const native = supported.wireSvg.filter((svg, i) => {
+      const edge = required(graph.edges?.[i], "Missing circuit route");
+      const isNested = separation.nestedEdges.has(edge.id);
+      if (isNested) nested.push(svg);
+      return !isNested;
+    });
+    supported.wireSvg = [...native, ...nested];
   }
   const weights = attachmentStrokeWeights(graph.edges ?? [], cs),
     diagnostics: Diagnostic[] = [],

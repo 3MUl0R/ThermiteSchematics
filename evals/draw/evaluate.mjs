@@ -16,7 +16,7 @@ import {
   routePatternMeasurements,
 } from "./routing-hygiene.mjs";
 import { dependencyFindings } from "./document-dependencies.mjs";
-import { wireCaptionFindings } from "./coincident-wire-labels.mjs";
+import { wireCaptionObservation } from "./coincident-wire-labels.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
@@ -332,14 +332,12 @@ function evaluateDocuments(
   obs,
   out,
 ) {
-  const labelCoverage = conductorLabelCoverage(s, packet, g, geometries, ir);
   out.push(
-    obs("DQ-16", wireCaptionFindings(g, labelCoverage.findings), {
-      ...labelCoverage.extra,
-      scope:
-        labelCoverage.extra.scope ??
-        "Paths with conductor identity; legacy net-edge labels without a wire association need that export before proximity can be proven.",
-    }),
+    wireCaptionObservation(
+      g,
+      conductorLabelCoverage(s, packet, g, geometries, ir),
+      obs,
+    ),
   );
   const dependencies = dependencyFindings(
     s,

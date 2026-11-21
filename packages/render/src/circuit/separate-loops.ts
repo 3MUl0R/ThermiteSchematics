@@ -4,6 +4,7 @@ import {
   circuitNodeClearanceGuard,
 } from "../layout/circuit-native-guard.js";
 import { required } from "../presentation/util.js";
+import { formatSvgNumber } from "../svg/numbers.js";
 import { fullyCoincidentCaption } from "./coincident-caption.js";
 import type { Point } from "./types.js";
 
@@ -19,6 +20,12 @@ const FAN_STEP_MM = 1.25;
 const FAN_LIMIT_MM = 3;
 const near = (a: number, b: number) => Math.abs(a - b) < EPSILON;
 const samePoint = (a: Point, b: Point) => near(a.x, b.x) && near(a.y, b.y);
+export const circuitPointKey = ({ x, y }: Point) =>
+  `${formatSvgNumber(x)},${formatSvgNumber(y)}`;
+
+export type CircuitLoopSeparation = NonNullable<
+  ReturnType<typeof separateCoincidentLoops>
+>;
 
 function segments(graph: ElkNode) {
   return (graph.edges ?? []).flatMap((edge) =>
@@ -85,10 +92,15 @@ function nestLoops(loops: Loop[], graph: ElkNode) {
       (l, r) => lateral(l.section.endPoint) - lateral(r.section.endPoint),
     ),
     inset = (sorted.length - 1) * RAIL_PITCH_MM,
-    halfFan = ((sorted.length - 1) * FAN_STEP_MM) / 2,
+    split = Math.floor(sorted.length / 2),
     exit = axial(startPoint) + FAN_STEP_MM;
+  // Leave room for the dot on the spine and at each branch. Every lane
+  // turns off the spine, so no route continues straight through the launch.
+  const lane = (i: number) =>
+    (i - split + (i >= split ? 1 : 0)) *
+    (sorted.length === 2 ? FAN_STEP_MM / 2 : FAN_STEP_MM);
   if (
-    Math.hypot(FAN_STEP_MM, halfFan) > FAN_LIMIT_MM ||
+    Math.hypot(FAN_STEP_MM, lane(sorted.length - 1)) > FAN_LIMIT_MM ||
     axial(leave) - inset <= exit ||
     sorted.some(({ section: { endPoint }, bends: [, , , arrive] }, i) => {
       const previous = sorted[i - 1];
@@ -104,12 +116,12 @@ function nestLoops(loops: Loop[], graph: ElkNode) {
     return;
 
   const edges = new Map<string, ElkExtendedEdge>(),
-    fan = new Set<Point>(),
+    fan = new Set<string>(),
     width = required(graph.width, "Missing circuit width"),
     height = required(graph.height, "Missing circuit height");
   for (const [i, { edge, section }] of sorted.entries()) {
     const shift = i * RAIL_PITCH_MM,
-      exitLane = lateral(startPoint) + i * FAN_STEP_MM - halfFan,
+      exitLane = lateral(startPoint) + lane(i),
       launch = point(exit, lateral(startPoint)),
       leaveFan = point(exit, exitLane),
       arrival = point(
@@ -126,13 +138,10 @@ function nestLoops(loops: Loop[], graph: ElkNode) {
       point(axial(back) + shift, approach),
       point(axial(arrival), approach),
       arrival,
-    ].filter((p, j, all) => {
-      const previous = all[j - 1];
-      return !previous || !samePoint(p, previous);
-    });
+    ];
     if (bends.some(({ x, y }) => x < 0 || y < 0 || x > width || y > height))
       return;
-    for (const p of [launch, leaveFan, arrival]) fan.add(p);
+    for (const p of [launch, leaveFan, arrival]) fan.add(circuitPointKey(p));
     edges.set(edge.id, {
       ...edge,
       sections: [{ ...section, bendPoints: bends }],
@@ -153,7 +162,7 @@ export function separateCoincidentLoops(
   if (!families.length) return;
   const before = segments(graph),
     replacements = new Map<string, ElkExtendedEdge>(),
-    fan = new Set<Point>();
+    fan = new Set<string>();
   for (const family of families) {
     if (
       !family.some(({ edge }) =>
@@ -180,5 +189,5 @@ export function separateCoincidentLoops(
     )
   )
     return;
-  return { graph: candidate, fan };
+  return { graph: candidate, fan, nestedEdges: new Set(replacements.keys()) };
 }
