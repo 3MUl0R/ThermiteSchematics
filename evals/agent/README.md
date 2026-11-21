@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.5)
+# Fresh-agent evaluator (E2 v1.20.8)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1085,3 +1085,66 @@ Contributor checkers retain their separate live checkout behavior, including
 Git worktree inspection and running submitted code. A checker sandbox and a
 confined representation of Git worktree and install receipts are separate
 work needed to extend this boundary to those tasks.
+
+## E2 1.20.6
+
+D-conveyor appendix 1.6.3 calls for validation after the guarded change. Its
+frozen brief and 17 matrix rows retain their previous bytes. Both delivery
+routes use the same appendix. The generated project guide supplies the
+finalization pointer used in the guide comparison.
+
+## E2 1.20.7
+
+The D-conveyor checker verifies each required artifact from the final project.
+It accepts standalone exports, a bundle in `drawings/`, or a mix of both. The
+audited bundle invocation supplies its named, project-local request, with
+`delivery.request.json` as the fallback. The checker rebuilds the bundle
+recipes with the standalone CLI. A later audited standalone re-export of a
+path uses its own regeneration. Findings from its old bundle entry are
+marked superseded. A missing or outdated marker is a note when the delivered
+artifacts verify. Changes to an audited marker and hash claims that conflict
+with delivered bytes are tampering signals. Each extra bundle output is
+regenerated and reported separately. Required outputs and their intents are
+fixed by the task, and unsupported job types are explicit request errors.
+
+Standalone JSON without a receipt retains the legacy semantic comparison.
+Present standalone sidecars are checked against delivered bytes and an
+independently regenerated receipt. A later audited re-export can supersede
+an old sidecar. An unaudited mismatch without freshness
+metadata is reported as stale because its origin is unverified.
+
+`outcome.captureCurrent` and `outcome.capture` report whether the broker receipt
+and PNG hashes match independently regenerated final HTML, on every route.
+Unchanged HTML keeps its matching capture. Capture currency gates the
+complete-delivery metric. Export pass uses the required artifacts. Visual
+inspection and PDF V1/V5 use their existing evidence and judge gates. The
+broker receipt is trustworthy in sandboxed Codex runs. Non-sandboxed Claude
+runs share the harness user's file permissions.
+
+D-conveyor run scores expose `metrics.delivery`. Agent Thermite calls are
+counted from shim timestamps within the runner’s agent window. CLI process
+timings exclude shim bookkeeping.
+The final source change is bounded by the shim's before/after observations.
+Finalization calls are validation and export commands after that boundary.
+The broker counts additional capture attempts as retries. Agent wall time,
+setup time and post-agent time are recorded separately.
+
+During the agent phase, the harness samples complete artifact sets with
+matching broker receipts. `delivery-candidates.json` records observed times
+and digests of the source, expected artifacts, capture inputs and available
+export manifests and receipts. The first candidate matching the independently validated
+final delivery gets a time-to-delivery value. The timing digest excludes the
+requirement matrix and friction notes. The final matrix still participates in
+the independent checker result. Attempts without a qualifying
+candidate by the deadline retain a censor time and explicit timeout status.
+The complete-delivery metric requires independent checker success, a current
+capture chain and no scored workflow violations. Actual inspection remains
+pending judge evidence. Replay the previous checkpoint into separate checker
+evidence and retain original run records.
+
+## E2 1.20.8
+
+D-conveyor regenerates packet JSON, HTML and PDF from the delivered
+`packet.request.json` in the confined checker copy and requires byte equality
+on legacy, bundle and mixed routes. The checker preserves the packet's print
+options and reports outputs published from a different request as stale.

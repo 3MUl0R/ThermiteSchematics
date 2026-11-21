@@ -52,6 +52,11 @@ import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
 import { normalizeTranscript } from "./transcript.mjs";
 import { visualBroker } from "./visual-capture.mjs";
+import {
+  conveyorMetrics,
+  observeConveyorDelivery,
+  phaseConveyorCalls,
+} from "./conveyor-measurement.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import {
   agents,
@@ -915,8 +920,14 @@ export async function runOne({
     runtimeSource = projectReader(runtime);
     // The guide the agent's CLI loads at launch.
     guideBytes = readFileSync(join(before, "AGENTS.md")).length;
-    const started = Date.now();
+    let started = Date.now();
+    const conveyor = task.id === "D-conveyor";
+    const delivery = conveyor
+      ? observeConveyorDelivery(source, task.deliverables)
+      : null;
     let execution = { exit: 0, stdout: "", stderr: "" };
+    let agentEnded,
+      captureRetries = 0;
     if (stoppingSignal || batchControl?.stopped) {
       execution = {
         exit: null,
@@ -932,17 +943,26 @@ export async function runOne({
         module: join(taskDir, task.reference ?? "reference.mjs"),
         context: publicContext,
       });
+      started = Date.now();
       execution = await capturedAgent(
         [process.execPath, join(here, "reference-worker.mjs"), workerContext],
         ctx,
         timeoutMs,
       );
+      agentEnded = Date.now();
     } else {
-      const stopCapture = await visualBroker(task, project, live);
+      const stopCapture = await visualBroker(
+        task,
+        project,
+        live,
+        delivery?.observe,
+      );
       try {
+        started = Date.now();
         execution = await capturedAgent(command, ctx, timeoutMs);
       } finally {
-        await stopCapture();
+        agentEnded = Date.now();
+        captureRetries = (await stopCapture())?.retries ?? 0;
       }
     }
     execution.stdout = redactAgentOutput(execution.stdout, secretList);
@@ -957,7 +977,7 @@ export async function runOne({
         { ...execution, operatorSignal: stoppingSignal },
         normalized,
       ),
-      ended = Date.now();
+      ended = agentEnded ?? Date.now();
     // The agent has finished; record that before anything reads the project.
     finalMessage = normalized.finalMessage ?? null;
     if (batchControl && batchHaltReason(classification)) {
@@ -1038,6 +1058,7 @@ export async function runOne({
     ctx.project = stagedProject;
     let final = { ...beforeFlush, schemaInvalidFiles: [] };
     ctx.validationDiagnostics = [];
+    const flushStarted = Date.now();
     if (trusted) {
       ctx.thermite = join(trusted.runtime, "thermite.mjs");
       const validation = cli(ctx, "validate", ".", "--json");
@@ -1053,7 +1074,10 @@ export async function runOne({
       ctx.validationDiagnostics = validationDiagnostics(validation);
       final = fileState(stagedProject, ctx.thermite, ctx.env);
     }
-    const calls = parseCalls(ctx.env.THERMITE_EVAL_LOG);
+    const rawCalls = parseCalls(ctx.env.THERMITE_EVAL_LOG);
+    const calls = conveyor
+      ? phaseConveyorCalls(rawCalls, started, ended)
+      : rawCalls;
     final.sourceFiles = documents(stagedProject).map((doc) => doc.path);
     const shimErrors = [
       ...auditInputErrors,
@@ -1065,8 +1089,17 @@ export async function runOne({
     } catch {
       shimErrors.push({ kind: "shim-error", stage: "missing-head" });
     }
-    shimErrors.push(...auditErrors(calls, head));
-    if (trusted && !calls.some((call) => call.phase === "flush"))
+    shimErrors.push(...auditErrors(rawCalls, head));
+    if (
+      trusted &&
+      !rawCalls.some(
+        (call) =>
+          call.started >= flushStarted &&
+          call.phase === "flush" &&
+          JSON.stringify(call.argv) ===
+            JSON.stringify(["validate", ".", "--json"]),
+      )
+    )
       shimErrors.push({ kind: "shim-error", stage: "missing-flush" });
     ctx.initial = initial;
     ctx.final = final;
@@ -1138,6 +1171,7 @@ export async function runOne({
           ? { pass: false, agentFailure: "snapshot-scope", message: scopeError }
           : await evaluateTask(taskDir, ctx);
     outcome = JSON.parse(redactSecrets(JSON.stringify(outcome), secretList));
+    const independentlyChecked = outcome.pass;
     if (classification.taskFailure && !scopeFailure)
       outcome = {
         ...outcome,
@@ -1202,6 +1236,23 @@ export async function runOne({
             : shimErrors.length
               ? "infrastructure-failure"
               : classification.status;
+    if (delivery) {
+      metrics.delivery = conveyorMetrics({
+        ctx,
+        outcome,
+        independentlyChecked,
+        candidates: delivery.candidates,
+        captureRetries,
+        started,
+        ended,
+        runStarted,
+        status,
+        timeoutMs,
+        timedOut: execution.timedOut ?? false,
+        violations: metrics.violations,
+      });
+      save("delivery-candidates.json", delivery.candidates);
+    }
     manifest = {
       ...identity,
       format: "thermite-agent-run/1.1",
@@ -1288,6 +1339,17 @@ export async function runOne({
         context,
         engineRoots,
         keep,
+        ...(delivery && {
+          deliveryTiming: {
+            candidates: delivery.candidates,
+            captureRetries,
+            started,
+            ended,
+            runStarted,
+            timeoutMs,
+            timedOut: execution.timedOut ?? false,
+          },
+        }),
       });
     save("before-flush.json", beforeFlush);
     save("final.json", final);
@@ -1463,21 +1525,30 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
     mkdirSync(live);
     const trusted = await protectedRuntime(prepared.path, scratch, task);
     const checker = harnessIdentity({ tasksDir: stored.tasksRoot });
+    const calls = stored.deliveryTiming
+      ? phaseConveyorCalls(
+          stored.calls,
+          stored.deliveryTiming.started,
+          stored.deliveryTiming.ended,
+        )
+      : stored.calls;
     const ctx = {
       ...stored,
+      calls,
       task,
       project: task.contributor ? stored.project : stagedProject,
       originalProject: stored.project,
       promptVersion,
       ...(task.contributor && { pinnedTypeScript: prepared.pinnedTypeScript }),
       evidence: live,
+      captureEvidence: evidence,
       env: {
         ...freshEnvironment(join(scratch, "isolated"), {}, {}),
         THERMITE_EVAL_BUN_CONFIG: trusted.config,
       },
       thermite: join(trusted.runtime, "thermite.real.mjs"),
       metrics: score({
-        calls: stored.calls,
+        calls,
         transcript,
         context: stored.context,
         engineRoots: stored.engineRoots,
@@ -1491,7 +1562,7 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       "Harness changed during recheck; result cannot be scored",
     );
     const metrics = score({
-      calls: stored.calls,
+      calls,
       initial: stored.initial,
       final: stored.final,
       runtimeBefore: original.runtimeHash.before,
@@ -1518,10 +1589,24 @@ export async function recheckRun({ evidence, forceRecheck = false, prepared }) {
       wallTimeMs: original.timings.wallTimeMs,
     });
     if (original.agent === "reference") metrics.usage.partial = false;
+    const independentlyChecked = outcome.pass;
     if (original.agentFailure) {
       outcome.pass = false;
       outcome.agentFailure = original.agentFailure;
     }
+    if (stored.deliveryTiming)
+      metrics.delivery = conveyorMetrics({
+        ...stored.deliveryTiming,
+        ctx,
+        outcome,
+        independentlyChecked,
+        status:
+          original.shimErrors?.length || outcome.error
+            ? original.status
+            : "complete",
+        violations: metrics.violations,
+        postAgentWallTimeMs: original.metrics.delivery?.postAgentWallTimeMs,
+      });
     const result = {
       ...original,
       outcome,

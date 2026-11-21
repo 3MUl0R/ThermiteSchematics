@@ -34,6 +34,19 @@ export const live = guideModel(projectGuide.text + "\n" + workflows.text);
 
 export const workflowFacts: readonly Fact[] = [
   {
+    claim: "See `thermite guide project-workflows`.",
+    async check() {
+      const result = await ok(
+        ["guide", "project-workflows"],
+        ctx.pristine.starter,
+      );
+      expect(result.stdout).toContain("## Export a delivery");
+      expect(result.stdout).toContain("inspect the drawings");
+      expect(result.stdout).toContain("thermite export bundle ");
+      expect(result.stdout).toContain("thermite export check ");
+    },
+  },
+  {
     claim: "Use a short group `lineReference` for circuit captions.",
     async check() {
       const { text } = await circuitCaptionFixture();
@@ -325,8 +338,8 @@ export const workflowAdvice: [string, string][] = [
     "Authoring prohibition shared with the starter recipe.",
   ],
   [
-    "Run `thermite guide project-workflows` for printing, reports, review, libraries/lock, connection completeness, wiring records, cables, communication, field hookups and circuits.",
-    "This topic is run by the project workflow fences and existing fact checks.",
+    "After the last edit, validate, export a bundle, inspect the drawings, and run `export check` before handoff.",
+    "Workflow ordering and human inspection; the offline topic's delivery fence executes validation, bundle and freshness check.",
   ],
   [
     "For exact shapes use `thermite guide schema`.",
@@ -335,10 +348,6 @@ export const workflowAdvice: [string, string][] = [
   [
     "Use `thermite guide drawing-frames` before changing paper frames or title data.",
     "Read-before policy; the topic is resolved offline.",
-  ],
-  [
-    "It covers source binding.",
-    "The offline drawing-frames topic links to the document binding contract.",
   ],
 ];
 

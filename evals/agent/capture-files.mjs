@@ -82,7 +82,9 @@ function tryOpen(dir, name, flags) {
   return { fd, errno: fd < 0 ? errno[0] : 0 };
 }
 function openRelative(dir, name, flags) {
-  const { fd } = tryOpen(dir, name, flags);
+  const { fd, errno } = tryOpen(dir, name, flags);
+  if (errno === ENOENT)
+    throw Object.assign(new Error(inputError), { code: "ENOENT" });
   assert(fd >= 0, inputError);
   return fd;
 }

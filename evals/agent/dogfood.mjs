@@ -13,8 +13,18 @@ import {
   regeneratePacket,
   regenerateView,
   cleanChecker,
+  deliveredBytes,
   pdf,
 } from "./artifacts.mjs";
+import {
+  conveyorOutputs,
+  conveyorBaseline,
+  conveyorPacketRequest,
+  captureChain,
+  exportFile,
+  verifyStandaloneExport,
+  regenerateConveyorBundle,
+} from "./conveyor-exports.mjs";
 import {
   read,
   write,
@@ -587,130 +597,233 @@ export function assessDogfood({
 export async function checkDogfood(ctx) {
   const safeRead = (path) => {
     try {
-      return read(join(ctx.project, path));
+      return JSON.parse(deliveredBytes(ctx, path));
     } catch {
       return null;
     }
   };
-  const regenerated = await regeneratePacket(ctx, {
-      request: "packet.request.json",
-    }),
-    packet = regenerated.packet,
+  const conveyor = ctx.task.id === "D-conveyor";
+  const spec = ctx.task.deliverables,
+    sourceObjects = objects(ctx.project),
+    types = libraryTypes(ctx.project),
+    matrix = safeRead("requirement-matrix.json"),
+    byTag = new Map(sourceObjects.map((o) => [o.designation, o])),
+    byType = new Map(types.map((t) => [t.id, t])),
     clean = cleanChecker(ctx),
-    files = {};
-  for (const name of ctx.task.deliverables.views) {
-    const role =
-      name === "motor-power.pdf"
-        ? "power"
-        : name === "ps1-loads.pdf"
-          ? "loads"
-          : "actuation";
-    const row = ctx.task.deliverables.requirements.find((r) =>
-      r.roles.includes(
-        name === "motor-power.pdf"
-          ? "motor"
-          : name === "ps1-loads.pdf"
-            ? "psu"
-            : "contactor",
-      ),
-    );
-    const matrixRow = safeRead("requirement-matrix.json")?.find(
-      (r) => r.id === row?.id,
-    );
-    const wantedRole =
-      name === "motor-power.pdf"
-        ? "motor"
-        : name === "ps1-loads.pdf"
-          ? "psu"
-          : "contactor";
-    const byTag = new Map(objects(ctx.project).map((o) => [o.designation, o])),
-      byType = new Map(libraryTypes(ctx.project).map((t) => [t.id, t]));
-    const roots =
-      matrixRow?.designations?.filter((tag) =>
-        fitsRole(byTag.get(tag), byType.get(byTag.get(tag)?.type), wantedRole),
-      ) ?? [];
-    const tag = roots[0];
-    files[`drawings/${name}`] = tag
-      ? (
-          await regenerateView(
-            ctx,
-            `drawings/${name}`,
-            ["view", tag, `--${role}`, "-o", `drawings/${name}`],
-            { roots },
-          )
-        ).pass
-      : false;
+    files = {},
+    views = new Map();
+  const namesFor = (id) =>
+    Array.isArray(matrix)
+      ? matrix.find(
+          (row) => typeof row?.id === "string" && row.id.toUpperCase() === id,
+        )?.designations
+      : undefined;
+  const roleByFile = {
+    "motor-power.pdf": ["motor", "power"],
+    "ps1-loads.pdf": ["psu", "loads"],
+    "contactor-actuation.pdf": ["contactor", "actuation"],
+  };
+  for (const name of spec.views) {
+    const [role, intent] =
+      roleByFile[name] ?? roleByFile["contactor-actuation.pdf"];
+    const row = spec.requirements.find((r) => r.roles.includes(role));
+    const names = namesFor(row?.id);
+    const roots = Array.isArray(names)
+      ? names.filter((tag) =>
+          fitsRole(byTag.get(tag), byType.get(byTag.get(tag)?.type), role),
+        )
+      : [];
+    const fallback = [
+      "view",
+      roots[0],
+      "--" + intent,
+      "-o",
+      "drawings/" + name,
+    ];
+    views.set(name, { roots, intent, fallback });
   }
-  for (const ext of ["html", "json", "pdf"])
-    files[`drawings/packet.${ext}`] = regenerated.pass;
-  for (const kind of ctx.task.deliverables.reports) {
-    const out = join(ctx.evidence, `checker-${kind}.csv`),
-      result = cli(clean, "report", kind, "-o", out);
-    files[`drawings/${kind}.csv`] =
-      result.status === 0 &&
-      existsSync(join(ctx.project, `drawings/${kind}.csv`)) &&
-      readFileSync(out).equals(
-        readFileSync(join(ctx.project, `drawings/${kind}.csv`)),
-      );
-  }
-  const diagnostic = query(clean, "diagnostics", "--json");
-  files["drawings/diagnostics.json"] =
-    canonical(safeRead("drawings/diagnostics.json")) === canonical(diagnostic);
-  files["drawings/cable.json"] = cableListingMatches(
-    safeRead("drawings/cable.json"),
-    objects(ctx.project),
-    (designation) => query(clean, "cable", designation, "--json"),
+  const cableRow = spec.requirements.find((r) => r.roles[0] === "cable");
+  const cableTags = namesFor(cableRow?.id);
+  const bundle = conveyor
+    ? await regenerateConveyorBundle(
+        ctx,
+        spec,
+        views,
+        Array.isArray(cableTags)
+          ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
+          : [],
+      )
+    : null;
+  const legacy = (path) => !bundle?.artifacts.has(path);
+  const formats = ["json", "pdf", "html"].filter((ext) =>
+    legacy("drawings/packet." + ext),
   );
-  files["drawings/before.json"] = !!safeRead("drawings/before.json");
-  let reviewed = null;
-  try {
-    reviewed = query(
-      clean,
-      "review",
-      "--before",
-      join(ctx.project, "drawings/before.json"),
-      "--json",
+  const regenerated = formats.length
+    ? await regeneratePacket(ctx, {
+        request: conveyorPacketRequest,
+        formats,
+        bindRequest: conveyor,
+      })
+    : null;
+  const fallbacks = new Map();
+  for (const [name, { roots, fallback }] of views) {
+    const path = "drawings/" + name;
+    if (!legacy(path)) continue;
+    files[path] =
+      roots.length > 0 &&
+      (await regenerateView(ctx, path, fallback, { roots })).pass;
+    fallbacks.set(path, fallback);
+  }
+  for (const ext of formats) {
+    const path = "drawings/packet." + ext;
+    files[path] = regenerated.matches[ext];
+    fallbacks.set(path, ["packet", "--input", conveyorPacketRequest]);
+  }
+  for (const kind of spec.reports) {
+    const path = `drawings/${kind}.csv`;
+    if (!legacy(path)) continue;
+    const argv = ["report", kind],
+      out = join(ctx.evidence, `checker-${kind}.csv`);
+    const result = cli(clean, ...argv, "-o", out);
+    const delivered = exportFile(ctx, path);
+    files[path] =
+      result.status === 0 && !!delivered.bytes?.equals(readFileSync(out));
+    fallbacks.set(path, argv);
+  }
+  if (legacy("drawings/diagnostics.json")) {
+    const diagnostic = query(clean, "diagnostics", "--json");
+    files["drawings/diagnostics.json"] =
+      canonical(safeRead("drawings/diagnostics.json")) ===
+      canonical(diagnostic);
+    fallbacks.set("drawings/diagnostics.json", ["diagnostics"]);
+  }
+  if (legacy("drawings/cable.json")) {
+    const listing = safeRead("drawings/cable.json");
+    files["drawings/cable.json"] = cableListingMatches(
+      listing,
+      sourceObjects,
+      (designation) => query(clean, "cable", designation, "--json"),
     );
-  } catch {}
-  files["drawings/review.json"] =
-    !!reviewed &&
-    canonical(reviewed) === canonical(safeRead("drawings/review.json"));
-  const types = libraryTypes(ctx.project),
-    counts = {
-      localTypes: types.filter((t) => t.library !== "core").length,
-      sourceReads: ctx.metrics?.sourceReads ?? 0,
-      attemptedWrites: ctx.metrics?.attemptedWrites?.length ?? 0,
-      failedCalls: (ctx.calls ?? []).filter(
-        (c) => c.phase === "agent" && c.exit !== 0,
-      ).length,
-    };
+    if (files["drawings/cable.json"])
+      fallbacks.set("drawings/cable.json", ["cable", listing.designation]);
+  }
+  if (legacy("drawings/review.json")) {
+    const argv = ["review", "--before", conveyorBaseline];
+    let reviewed = null;
+    try {
+      reviewed = query(clean, ...argv, "--json");
+    } catch {}
+    files["drawings/review.json"] =
+      !!reviewed &&
+      canonical(reviewed) === canonical(safeRead("drawings/review.json"));
+    fallbacks.set("drawings/review.json", argv);
+  }
+
+  const required = conveyorOutputs(spec);
+  const verified = new Map(bundle?.artifacts);
+  const verify = (path) => {
+    if (!verified.has(path)) {
+      const fallback =
+        fallbacks.get(path) ??
+        views.get(
+          path
+            .split("/")
+            .at(-1)
+            .replace(/\.html$/, ".pdf"),
+        )?.fallback;
+      verified.set(
+        path,
+        verifyStandaloneExport(ctx, path, {
+          matches: files[path],
+          fallback,
+        }),
+      );
+    }
+    return verified.get(path);
+  };
+  if (conveyor)
+    for (const path of required)
+      files[path] = verify(path).status === "current";
+  const capture = conveyor ? captureChain(ctx, verify) : null;
+  files[conveyorBaseline] = !!safeRead(conveyorBaseline);
+  const packet = bundle?.packet ?? regenerated?.packet;
+  const counts = {
+    localTypes: types.filter((t) => t.library !== "core").length,
+    sourceReads: ctx.metrics?.sourceReads ?? 0,
+    attemptedWrites: ctx.metrics?.attemptedWrites?.length ?? 0,
+    failedCalls: (ctx.calls ?? []).filter(
+      (c) => c.phase === "agent" && c.exit !== 0,
+    ).length,
+  };
   let drawEvidence = existsSync(join(ctx.evidence, "draw-evidence.json"))
     ? read(join(ctx.evidence, "draw-evidence.json"))
     : null;
   if (drawEvidence)
-    for (const path of ["drawings/packet.pdf", "drawings/packet.html"])
-      if (
-        !existsSync(join(ctx.project, path)) ||
-        drawEvidence.files?.[path] !==
-          sha256(readFileSync(join(ctx.project, path)))
-      )
+    for (const path of ["drawings/packet.pdf", "drawings/packet.html"]) {
+      const { bytes } = exportFile(ctx, path);
+      if (!bytes || drawEvidence.files?.[path] !== sha256(bytes))
         drawEvidence = { ...drawEvidence, V1: false, V5: false, stale: true };
-  return assessDogfood({
+    }
+  const outcome = assessDogfood({
     task: ctx.task,
     promptVersion: ctx.promptVersion,
     validationExit: cli(clean, "validate", ".").status,
     files,
     packet,
-    sourceObjects: objects(ctx.project),
+    sourceObjects,
     types,
     calls: ctx.calls ?? [],
-    matrix: safeRead("requirement-matrix.json"),
+    matrix,
     drawEvidence,
     counts,
     diagnostics: ctx.validationDiagnostics ?? [],
   });
+  if (!conveyor) return outcome;
+  const artifacts = Object.fromEntries(
+    required.map((path) => [path, verified.get(path).status]),
+  );
+  const extras = Object.fromEntries(
+    [...(bundle?.artifacts ?? [])]
+      .filter(([path]) => !required.includes(path))
+      .map(([path, { status }]) => [path, status]),
+  );
+  const status =
+    bundle?.status === "current" || !bundle
+      ? (["tampered", "missing", "stale", "unverified"].find((value) =>
+          Object.values(artifacts).includes(value),
+        ) ?? "current")
+      : bundle.status;
+  const usedBundle = bundle?.artifacts.size > 0;
+  const usedStandalone =
+    required.some(legacy) ||
+    capture.files.some(({ input }) => input && legacy(input));
+  return {
+    ...outcome,
+    pass: outcome.pass && status === "current",
+    exports: {
+      route:
+        usedBundle && usedStandalone
+          ? "mixed"
+          : usedBundle || bundle?.status === "invalid-request"
+            ? "bundle"
+            : "legacy",
+      status,
+      artifacts,
+      ...(Object.keys(extras).length && { extras }),
+      ...(bundle && { request: bundle.request, findings: bundle.findings }),
+    },
+    captureCurrent: capture.status === "current",
+    capture,
+  };
 }
 export function referenceDogfood(ctx) {
+  prepareDogfoodProject(ctx, { exportDrawings: true });
+  return "Reference deliverables are generated. The matrix distinguishes modeled requirements and disclosed substitutions from specific compiler/library gaps. Unfinished hookups and print-size visual checks remain explicit; this is not electrical approval.";
+}
+
+// Export tests supply their own delivery commands from the same source,
+// packet request, and review baseline as the scripted reference.
+export function prepareDogfoodProject(ctx, { exportDrawings = false } = {}) {
   const pump = ctx.task.id === "D-pump",
     prefix = pump ? "P" : "C",
     base = structuredClone(
@@ -878,20 +991,8 @@ export function referenceDogfood(ctx) {
       },
     ]);
   }
-  ok(ctx, "validate", ".");
-  // Exercise the brief's order: produce, guarded change, then regenerate.
-  const emitOutputs = () => {
-    ok(ctx, "view", "M1", "--power", "-o", "drawings/motor-power.pdf");
-    ok(
-      ctx,
-      "view",
-      "K1",
-      "--actuation",
-      "-o",
-      "drawings/contactor-actuation.pdf",
-    );
-    if (!pump)
-      ok(ctx, "view", "PS1", "--loads", "-o", "drawings/ps1-loads.pdf");
+  if (exportDrawings) ok(ctx, "validate", ".");
+  const writePacketRequest = () => {
     const fields = objects(ctx.project)
       .filter(
         (o) =>
@@ -962,6 +1063,20 @@ export function referenceDogfood(ctx) {
       index: true,
       views,
     });
+  };
+  const emitOutputs = () => {
+    ok(ctx, "view", "M1", "--power", "-o", "drawings/motor-power.pdf");
+    ok(
+      ctx,
+      "view",
+      "K1",
+      "--actuation",
+      "-o",
+      "drawings/contactor-actuation.pdf",
+    );
+    if (!pump)
+      ok(ctx, "view", "PS1", "--loads", "-o", "drawings/ps1-loads.pdf");
+    writePacketRequest();
     for (const ext of ["json", "html", "pdf"])
       ok(
         ctx,
@@ -982,7 +1097,13 @@ export function referenceDogfood(ctx) {
       query(ctx, "cable", "CBL1", "--json"),
     );
   };
-  emitOutputs();
+  const emitReview = () =>
+    write(
+      join(ctx.project, "drawings/review.json"),
+      query(ctx, "review", "--before", "drawings/before.json", "--json"),
+    );
+  // Exercise the brief's order: produce, guarded change, then regenerate.
+  if (exportDrawings) emitOutputs();
   ok(ctx, "snapshot", "-o", "drawings/before.json");
   replaceObject(
     ctx,
@@ -992,19 +1113,15 @@ export function referenceDogfood(ctx) {
       ? "5 HP pump motor requirement; generic 480 VAC model, selected-part protection and nameplate review unfinished"
       : "2 HP 480 V conveyor motor requirement; generic model, selected-part protection and nameplate review unfinished",
   );
-  write(
-    join(ctx.project, "drawings/review.json"),
-    query(ctx, "review", "--before", "drawings/before.json", "--json"),
-  );
+  if (exportDrawings) emitReview();
   replaceObject(ctx, "W-START-INPUT", "properties", {
     ...locate(ctx.project, "W-START-INPUT").object.properties,
     label: "START-INPUT-REVIEWED",
   });
-  write(
-    join(ctx.project, "drawings/review.json"),
-    query(ctx, "review", "--before", "drawings/before.json", "--json"),
-  );
-  emitOutputs();
+  if (exportDrawings) {
+    emitReview();
+    emitOutputs();
+  } else writePacketRequest();
   const mapping = {
     SUPPLY: ["SRC1"],
     BREAKER: ["CB1"],
@@ -1080,6 +1197,7 @@ export function referenceDogfood(ctx) {
     };
   });
   write(join(ctx.project, "requirement-matrix.json"), matrix);
+  if (!exportDrawings) return;
   write(
     join(ctx.project, "friction.md"),
     `Reference uses shipped generic models, not manufacturer-verified equipment. Wire gauge/color claims from the synthetic base were removed. ${pump ? "Core 0.2.0 supplies the transmitter, analog-input PLC, level switch, NO start button and HMI. PT1 is drawn through JB1, CBL1 and TB1 into PLC1.AI0+/AI0-. PLC1 also drives the contactor and links to the HMI; there is no separate analog controller or invented backplane. The two-wire interface is unpowered, following the shipped RM3 interface example: loop power, AI mode, compatibility, range and physical hardware still require engineering selection. PLC1 and HMI1 DC supply magnitudes and interface ratings remain unspecified by their generic types; no compatibility certification is asserted. Level reference condition and actuation meaning are unspecified." : "PNP wiring follows the shipped generic 1/3/4 model through JB1, CBL1 and TB1; physical selected-part review remains. The third PLC input for stop monitoring is deferred with W905. Conditional indicator is omitted, rather than claimed unavailable in core."} ${pump ? "The pump uses shipped core types without authoring local types." : "The generic NO pushbutton local type copies the shipped contact shape and declares the required profile; physical part selection is unverified."} All generated outputs succeeded without recovery calls. Tool-call and failure counts are in the run score. PS1 input is intentionally unwired: the starter feed is not designed, its input rating and branch protection are unverified (W905). Visual inspection of at least two outputs and PDF V1/V5 remain pending independent judgement.\n`,
@@ -1092,5 +1210,4 @@ export function referenceDogfood(ctx) {
         "Scripted reference: no model context; guide policy is implemented by the reference helpers, not claimed as an agent read.",
     });
   }
-  return "Reference deliverables are generated. The matrix distinguishes modeled requirements and disclosed substitutions from specific compiler/library gaps. Unfinished hookups and print-size visual checks remain explicit; this is not electrical approval.";
 }

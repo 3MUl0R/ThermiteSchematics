@@ -7,6 +7,7 @@ import { relative, sep } from "node:path";
 // 44713734889 (seconds). Adjust estimates when suites change their work.
 const durations = {
   "evals/agent/artifacts.test.mjs": 26,
+  "evals/agent/conveyor-exports.test.mjs": 362, // Local until native timings are available.
   "evals/agent/shim-safety.test.mjs": 32,
   "evals/agent/task-t07.test.mjs": 32,
   "evals/contributor/tasks/observer.test.mjs": 30,

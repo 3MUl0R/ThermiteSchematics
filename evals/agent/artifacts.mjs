@@ -72,6 +72,16 @@ const printValues = new Set([
   "--layout",
   "--margin",
 ]);
+const reportValues = new Set(["--device", "--filter"]);
+const diagnosticValues = new Set(["--device", "--location"]);
+const standaloneCommands = [
+  "view",
+  "packet",
+  "report",
+  "diagnostics",
+  "cable",
+  "review",
+];
 const viewSwitches = new Set([
   "--power",
   "--actuation",
@@ -81,61 +91,98 @@ const viewSwitches = new Set([
 ]);
 const viewValues = new Set(["--to", "--flow"]);
 
-// Rebuild a view/packet invocation from its allowed options. File arguments
+// Rebuild a standalone export invocation from its allowed options. File arguments
 // are always supplied by the checker or resolved inside its staged copy.
-function parsePrint(argv) {
+function parseStandaloneExport(argv) {
   if (
     !Array.isArray(argv) ||
     !argv.every((arg) => typeof arg === "string") ||
-    !["view", "packet"].includes(argv[0])
+    !standaloneCommands.includes(argv[0])
   )
     return null;
   const kind = argv[0],
     view = kind === "view",
+    report = kind === "report",
+    hasRoot = view || report || kind === "cable",
     options = [],
     files = {};
   let root;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
-    if (view && !root && !arg.startsWith("-")) {
+    if (hasRoot && !root && !arg.startsWith("-")) {
       root = arg;
       continue;
     }
     if (
       printSwitches.has(arg) ||
-      (view ? viewSwitches.has(arg) : arg === "--strict")
+      (view ? viewSwitches.has(arg) : !report && arg === "--strict")
     ) {
       options.push(arg);
       continue;
     }
     const equals = arg.indexOf("="),
       key = equals < 0 ? arg : arg.slice(0, equals);
-    if (!printValues.has(key) && !(view && viewValues.has(key))) return null;
+    if (arg === "--receipt") continue;
+    if (
+      !printValues.has(key) &&
+      !(view && viewValues.has(key)) &&
+      !(report && reportValues.has(key)) &&
+      !(kind === "diagnostics" && diagnosticValues.has(key)) &&
+      !(kind === "review" && key === "--before")
+    )
+      return null;
     const value = equals < 0 ? argv[++i] : arg.slice(equals + 1);
     if (!value || (value.startsWith("-") && value !== "-")) return null;
     if (key === "-o" || key === "--output") files.output = value;
     else if (key === "--project") files.project = value;
-    else if (key === "--input" && !view) files.input = value;
+    else if (key === "--input" && kind === "packet") files.input = value;
     else if (key === "--input") return null;
+    else if (key === "--filter" || key === "--before")
+      files[key.slice(2)] = value;
     else options.push(key, value);
   }
-  if (view ? !root : !files.input) return null;
-  return { argv: [kind, ...(view ? [root] : []), ...options], ...files };
+  if (
+    (hasRoot && !root) ||
+    (kind === "packet" && !files.input) ||
+    (kind === "review" && !files.before)
+  )
+    return null;
+  return { argv: [kind, ...(root ? [root] : []), ...options], ...files };
 }
-function commandFor(ctx, artifact, fallback) {
+export function standaloneExportCall(
+  ctx,
+  artifact,
+  kinds = standaloneCommands,
+) {
   const project = ctx.originalProject ?? ctx.project;
   for (const call of [...(ctx.calls ?? [])].reverse()) {
-    if (call?.phase === "flush" || call?.exit !== 0) continue;
-    const parsed = parsePrint(call.argv);
+    if (
+      call?.phase === "flush" ||
+      call?.exit !== 0 ||
+      !kinds.includes(call.argv?.[0])
+    )
+      continue;
+    const parsed = parseStandaloneExport(call.argv);
     if (
       parsed?.output &&
       resolve(project, parsed.output) === resolve(project, artifact)
     )
-      return { parsed, argv: call.argv, request: call.request };
+      return call;
   }
-  return fallback ? { parsed: parsePrint(fallback), argv: fallback } : null;
 }
-function remap(command, ctx, out) {
+function commandFor(ctx, artifact, fallback, kinds = ["view", "packet"]) {
+  const call = standaloneExportCall(ctx, artifact, kinds);
+  if (call)
+    return {
+      parsed: parseStandaloneExport(call.argv),
+      argv: call.argv,
+      request: call.request,
+    };
+  return fallback
+    ? { parsed: parseStandaloneExport(fallback), argv: fallback }
+    : null;
+}
+function remap(command, ctx, out, receipt = false, finalInput = false) {
   const parsed = command?.parsed;
   if (!parsed) return null;
   const project = ctx.originalProject ?? ctx.project,
@@ -152,7 +199,10 @@ function remap(command, ctx, out) {
       isAbsolute(path)
     )
       return null;
-    if (typeof command.request === "string") {
+    if (receipt || (finalInput && parsed.input !== "-")) {
+      if (parsed.input === "-") return null;
+      result.push("--input", join(clean.project, path));
+    } else if (typeof command.request === "string") {
       const request = out + ".request.json";
       writeFileSync(request, command.request);
       result.push("--input", request);
@@ -160,14 +210,55 @@ function remap(command, ctx, out) {
       result.push("--input", join(clean.project, path));
     } else return null;
   }
-  return [...result, "--project", clean.project, "-o", out];
+  for (const key of ["filter", "before"]) {
+    if (!parsed[key]) continue;
+    const path = relative(project, resolve(project, parsed[key]));
+    if (
+      !path ||
+      path === ".." ||
+      path.startsWith(".." + sep) ||
+      isAbsolute(path)
+    )
+      return null;
+    result.push("--" + key, join(clean.project, path));
+  }
+  return [
+    ...result,
+    "--project",
+    clean.project,
+    "-o",
+    out,
+    ...(receipt ? ["--receipt"] : []),
+  ];
 }
-function deliveredBytes(ctx, artifact) {
+export function deliveredBytes(ctx, artifact) {
   const source = projectReader(ctx.project);
   try {
     return source.read(artifact);
   } finally {
     source.close();
+  }
+}
+export function replayExport(ctx, artifact, fallback, receipt = false) {
+  const command = commandFor(
+    ctx,
+    artifact,
+    fallback,
+    fallback && !["view", "packet"].includes(fallback[0])
+      ? []
+      : standaloneCommands,
+  );
+  const output = join(ctx.evidence, "regenerated-export", artifact);
+  try {
+    mkdirSync(join(output, ".."), { recursive: true });
+    const mapped = remap(command, ctx, output, receipt, true);
+    if (!mapped || cli(cleanChecker(ctx), ...mapped).status !== 0) return null;
+    return {
+      bytes: readFileSync(output),
+      ...(receipt && { receipt: readFileSync(output + ".receipt.json") }),
+    };
+  } catch {
+    return null;
   }
 }
 export async function deliveredPdf(ctx, artifact) {
@@ -286,52 +377,86 @@ export async function findRegeneratedView(ctx, expected) {
 }
 export async function regeneratePacket(
   ctx,
-  { request = "requests/packet.json", name = "packet" } = {},
+  {
+    request = "requests/packet.json",
+    name = "packet",
+    formats = ["json", "pdf", "html"],
+    bindRequest = false,
+  } = {},
 ) {
   const clean = cleanChecker(ctx),
     prefix = join(ctx.evidence, `regenerated-${name}`),
     commands = {};
-  let packet = null,
-    valid = true;
-  for (const ext of ["json", "pdf", "html"]) {
+  let packet = null;
+  const boundExports = {};
+  const project = ctx.originalProject ?? ctx.project;
+  for (const ext of formats) {
     const artifact = `drawings/${name}.${ext}`,
       output = `${prefix}.${ext}`;
     const fallback = ["packet", "--input", request, "-o", artifact];
-    const command = commandFor(ctx, artifact, fallback);
+    const command = commandFor(
+      ctx,
+      artifact,
+      fallback,
+      bindRequest ? ["packet"] : undefined,
+    );
     commands[ext] = command.argv;
-    const mapped = remap(command, ctx, output);
-    if (!mapped) {
-      valid = false;
-      continue;
-    }
+    const requestMismatch =
+      bindRequest &&
+      (command.parsed.input === "-" ||
+        resolve(project, command.parsed.input) !== resolve(project, request));
+    // Use audited print options while reading the delivered request.
+    if (bindRequest) command.parsed.input = request;
+    const mapped = remap(command, ctx, output, false, bindRequest);
+    if (!mapped) continue;
     const result = cli(clean, ...mapped);
-    if (result.status !== 0) {
-      valid = false;
-      continue;
-    }
+    if (result.status !== 0) continue;
+    boundExports[ext] = !requestMismatch;
     if (ext === "json") packet = read(output);
   }
-  const result = await comparePacketArtifacts(ctx, { name, prefix });
-  return { pass: valid && result.pass, packet, commands, prefix };
+  const result = await comparePacketArtifacts(ctx, {
+    name,
+    prefix,
+    exactJson: bindRequest,
+  });
+  const matches = Object.fromEntries(
+    Object.entries(result.matches).map(([ext, pass]) => [
+      ext,
+      !!boundExports[ext] && pass,
+    ]),
+  );
+  return {
+    pass: Object.values(matches).every(Boolean),
+    matches,
+    packet,
+    commands,
+    prefix,
+  };
 }
 export async function comparePacketArtifacts(
   ctx,
-  { name = "packet", prefix = join(ctx.evidence, `regenerated-${name}`) } = {},
+  {
+    name = "packet",
+    prefix = join(ctx.evidence, `regenerated-${name}`),
+    exactJson = false,
+  } = {},
 ) {
-  try {
-    for (const ext of ["json", "pdf", "html"]) {
+  const matches = {};
+  for (const ext of ["json", "pdf", "html"]) {
+    try {
       const output = `${prefix}.${ext}`,
         artifact = deliveredBytes(ctx, `drawings/${name}.${ext}`);
-      if (ext === "json") {
-        if (canonical(JSON.parse(artifact)) !== canonical(read(output)))
-          return { pass: false };
+      if (ext === "json" && !exactJson) {
+        matches[ext] =
+          canonical(JSON.parse(artifact)) === canonical(read(output));
       } else {
-        if (!readFileSync(output).equals(artifact)) return { pass: false };
-        if (ext === "pdf" && !(await pdf(output))) return { pass: false };
+        matches[ext] =
+          readFileSync(output).equals(artifact) &&
+          (ext !== "pdf" || (await pdf(output)));
       }
+    } catch {
+      matches[ext] = false;
     }
-    return { pass: true };
-  } catch {
-    return { pass: false };
   }
+  return { pass: Object.values(matches).every(Boolean), matches };
 }
