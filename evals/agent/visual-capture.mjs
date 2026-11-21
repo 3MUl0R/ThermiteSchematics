@@ -7,13 +7,15 @@ import {
   readlinkSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { chromium } from "playwright-core";
 import { projectReader, windowsError } from "./capture-files.mjs";
 import { sha256 } from "./snapshot.mjs";
@@ -182,56 +184,243 @@ export async function captureHtml(project, request, outputs) {
   }
 }
 
-function linkedOutputs(link, outputs) {
-  const current = lstatSync(link, { throwIfNoEntry: false });
-  return (
-    !!current?.isSymbolicLink() &&
-    resolve(readlinkSync(link)) === resolve(outputs)
+const hasIdentity = (entry) =>
+  entry != null && (entry.dev !== 0n || entry.ino !== 0n);
+const sameIdentity = (a, b) =>
+  hasIdentity(a) && hasIdentity(b) && a.dev === b.dev && a.ino === b.ino;
+
+function sameResolvedPath(a, b) {
+  let left = resolve(a),
+    right = resolve(b);
+  try {
+    left = realpathSync(left);
+  } catch {}
+  try {
+    right = realpathSync(right);
+  } catch {}
+  return process.platform === "win32"
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+function linkedOutputs(link, outputs, outputsIdentity, workspaceIdentity) {
+  if (workspaceIdentity) {
+    const parent = lstatSync(dirname(link), {
+      bigint: true,
+      throwIfNoEntry: false,
+    });
+    if (!parent?.isDirectory() || !sameIdentity(parent, workspaceIdentity))
+      return false;
+  }
+  const current = lstatSync(link, { bigint: true, throwIfNoEntry: false });
+  if (!current?.isSymbolicLink()) return false;
+  const targetStat = statSync(link, { bigint: true, throwIfNoEntry: false });
+  const expectedStat =
+    outputsIdentity ??
+    statSync(outputs, { bigint: true, throwIfNoEntry: false });
+  if (targetStat && hasIdentity(targetStat) && hasIdentity(expectedStat))
+    return sameIdentity(targetStat, expectedStat);
+  if (targetStat)
+    return sameResolvedPath(
+      resolve(dirname(link), readlinkSync(link)),
+      outputs,
+    );
+  if (statSync(outputs, { bigint: true, throwIfNoEntry: false })) return false;
+  return sameResolvedPath(resolve(dirname(link), readlinkSync(link)), outputs);
+}
+
+function verifyPinnedHierarchy(workspaceReader, projectReaderObj, projectPath) {
+  assert(workspaceReader.intact(), "Workspace root was replaced");
+  assert(projectReaderObj.intact(), "Project root was replaced");
+  const pinnedProjectPath = projectReaderObj.identity.path;
+  const pinnedWorkspacePath = workspaceReader.identity.path;
+  assert(
+    dirname(pinnedProjectPath) === pinnedWorkspacePath,
+    "Project root is outside pinned workspace",
   );
+  const childName = basename(pinnedProjectPath);
+  const pinnedProjectStat = projectReaderObj.inspect();
+  assert(
+    sameIdentity(workspaceReader.inspect(childName), pinnedProjectStat),
+    "Project root was replaced",
+  );
+  if (projectPath) {
+    const currentProject = lstatSync(projectPath, {
+      bigint: true,
+      throwIfNoEntry: false,
+    });
+    assert(
+      currentProject?.isDirectory() &&
+        sameIdentity(currentProject, pinnedProjectStat),
+      "Project root was replaced",
+    );
+  }
+  return childName;
 }
 
 // The broker publishes straight into evidence/visual-captures, which the
 // runner keeps outside the sandbox's writable roots. Its read link is a sibling
 // of the project because guarded source patches require an ordinary project tree.
-export async function visualBroker(task, project, evidence, observe) {
+export async function visualBroker(
+  task,
+  project,
+  evidence,
+  observe,
+  pins = {},
+) {
   if (!task.visualCapture) return async () => {};
-  const root = realpathSync(project);
-  const workspace = dirname(root);
-  const link = join(workspace, outputDirectory);
-  assert(
-    !lstatSync(link, { throwIfNoEntry: false }),
-    "visual-captures must not exist before the agent starts",
-  );
-  const outputs = join(realpathSync(evidence), outputDirectory);
-  mkdirSync(outputs);
-  let source, workspaceSource, timer, pending, failure;
-  const cleanup = () => {
+  let source = pins.project ?? null,
+    workspaceSource = pins.workspace ?? null,
+    ownsSource = false,
+    ownsWorkspace = false,
+    outputs,
+    outputsIdentity,
+    outputsCreated = false,
+    link,
+    workspaceIdentity,
+    linkCreated = false,
+    timer,
+    pending,
+    failure;
+  const cleanup = ({ rollbackOutputs = false } = {}) => {
     try {
-      if (workspaceSource) workspaceSource.unlinkLink(outputDirectory, outputs);
-      else if (linkedOutputs(link, outputs)) unlinkSync(link);
+      if (linkCreated) {
+        linkCreated = false;
+        if (workspaceSource)
+          workspaceSource.unlinkLink(outputDirectory, outputs, outputsIdentity);
+        else if (
+          linkedOutputs(link, outputs, outputsIdentity, workspaceIdentity)
+        )
+          unlinkSync(link);
+      }
     } finally {
       try {
-        source?.close();
+        if (rollbackOutputs && outputsCreated) {
+          outputsCreated = false;
+          rmdirSync(outputs);
+        }
       } finally {
-        workspaceSource?.close();
+        try {
+          if (ownsSource) source?.close();
+        } finally {
+          if (ownsWorkspace) workspaceSource?.close();
+        }
       }
     }
   };
+  let windowsFallbackError = null;
   try {
-    symlinkSync(
-      outputs,
-      link,
-      process.platform === "win32" ? "junction" : "dir",
-    );
-    workspaceSource = projectReader(workspace);
-    source = projectReader(root);
+    try {
+      if (!source) {
+        source = projectReader(project);
+        ownsSource = true;
+      }
+      if (!workspaceSource) {
+        workspaceSource = projectReader(dirname(source.identity.path));
+        ownsWorkspace = true;
+      }
+    } catch (error) {
+      if (error.message !== windowsError) throw error;
+      if (ownsSource) {
+        source?.close();
+        source = null;
+        ownsSource = false;
+      }
+      if (ownsWorkspace) {
+        workspaceSource?.close();
+        workspaceSource = null;
+        ownsWorkspace = false;
+      }
+      windowsFallbackError = error;
+    }
+
+    if (windowsFallbackError) {
+      const projectStat = lstatSync(project, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      assert(projectStat?.isDirectory(), "Capture directory must be ordinary");
+      const root = realpathSync(project);
+      const workspace = dirname(root);
+      workspaceIdentity = lstatSync(workspace, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      const projectIdentity = lstatSync(root, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      assert(
+        workspaceIdentity?.isDirectory() &&
+          projectIdentity?.isDirectory() &&
+          sameIdentity(projectStat, projectIdentity),
+        "Capture directory must be ordinary",
+      );
+      link = join(workspace, outputDirectory);
+      assert(
+        !lstatSync(link, { throwIfNoEntry: false }),
+        "visual-captures must not exist before the agent starts",
+      );
+      outputs = join(realpathSync(evidence), outputDirectory);
+      mkdirSync(outputs);
+      outputsCreated = true;
+      outputsIdentity = statSync(outputs, { bigint: true });
+      symlinkSync(outputs, link, "junction");
+      linkCreated = true;
+      const parentAfter = lstatSync(workspace, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      const projectAfter = lstatSync(root, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      assert(
+        parentAfter?.isDirectory() &&
+          sameIdentity(parentAfter, workspaceIdentity) &&
+          projectAfter?.isDirectory() &&
+          sameIdentity(projectAfter, projectIdentity) &&
+          linkedOutputs(link, outputs, outputsIdentity, workspaceIdentity),
+        "Visual capture link changed during setup",
+      );
+    } else {
+      verifyPinnedHierarchy(workspaceSource, source, project);
+      assert(
+        !workspaceSource.has(outputDirectory),
+        "visual-captures must not exist before the agent starts",
+      );
+      outputs = join(realpathSync(evidence), outputDirectory);
+      mkdirSync(outputs);
+      outputsCreated = true;
+      outputsIdentity = statSync(outputs, { bigint: true });
+      workspaceSource.symlinkLink(outputDirectory, outputs);
+      linkCreated = true;
+      verifyPinnedHierarchy(workspaceSource, source, project);
+      const linkParent = lstatSync(workspaceSource.identity.path, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      assert(
+        linkParent?.isDirectory() &&
+          sameIdentity(linkParent, workspaceSource.inspect()),
+        "Workspace root was replaced",
+      );
+      assert(
+        workspaceSource.linkedDirectory(outputDirectory, outputsIdentity),
+        "Visual capture link target changed during setup",
+      );
+    }
   } catch (error) {
-    if (error.message !== windowsError) {
+    cleanup({ rollbackOutputs: true });
+    throw error;
+  }
+  if (windowsFallbackError)
+    try {
+      publishError(outputs, windowsFallbackError);
+    } catch (error) {
       cleanup();
       throw error;
     }
-    publishError(outputs, error);
-  }
 
   let previous, receipt;
   let attempts = 0;

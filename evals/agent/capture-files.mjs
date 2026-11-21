@@ -10,6 +10,7 @@ import {
   rmdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { constants as osConstants } from "node:os";
@@ -19,7 +20,19 @@ const { O_DIRECTORY, O_NOFOLLOW = 0, O_NONBLOCK = 0, O_RDONLY } = constants;
 const { ENOENT, EAGAIN, EINTR, EACCES } = osConstants.errno;
 const stat = (path) => lstatSync(path, { bigint: true, throwIfNoEntry: false });
 const fdStat = (fd) => fstatSync(fd, { bigint: true });
-const sameFile = (a, b) => a?.dev === b.dev && a?.ino === b.ino;
+const sameFile = (a, b) =>
+  a != null && b != null && a.dev === b.dev && a.ino === b.ino;
+const errnoName = (number) =>
+  Object.entries(osConstants.errno).find(([, value]) => value === number)?.[0];
+function syscallError(syscall, number, path) {
+  const code = errnoName(number) ?? `ERRNO_${number}`;
+  return Object.assign(new Error(`${code}: ${syscall} failed for ${path}`), {
+    code,
+    errno: -number,
+    syscall,
+    path,
+  });
+}
 const ordinaryFile = (s) => s?.isFile() && s.nlink === 1n;
 const inputError = "Capture input must be an ordinary file inside project";
 // Node has no descriptor-relative open on Windows, and pathname checks around
@@ -58,6 +71,10 @@ function lib() {
     readlinkat: {
       args: [FFIType.i32, FFIType.ptr, FFIType.ptr, FFIType.u64],
       returns: FFIType.i64,
+    },
+    symlinkat: {
+      args: [FFIType.ptr, FFIType.i32, FFIType.ptr],
+      returns: FFIType.i32,
     },
     unlinkat: {
       args: [FFIType.i32, FFIType.ptr, FFIType.i32],
@@ -164,6 +181,32 @@ function components(rel) {
   return parts;
 }
 
+function readLinkAt(dir, name) {
+  const path = Buffer.from(name + "\0");
+  let size = 1024;
+  for (;;) {
+    const buffer = Buffer.alloc(size);
+    const length = Number(lib().readlinkat(dir, path, buffer, buffer.length));
+    if (length < 0) return null;
+    if (length < buffer.length)
+      return buffer.subarray(0, length).toString("utf8");
+    size *= 2;
+    assert(size <= 65536, "Symbolic link target is too long");
+  }
+}
+function statLinkedDirectory(dir, name) {
+  const { fd } = tryOpen(
+    dir,
+    name,
+    O_RDONLY | O_DIRECTORY | O_NONBLOCK | closeOnExec,
+  );
+  if (fd < 0) return null;
+  try {
+    return fdStat(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
 // Cleanup tracks every descriptor before closing another, so a close that
 // throws never strands a child or the opened file.
 function openDescendant(rootFd, parts, finalFlags = 0) {
@@ -308,19 +351,39 @@ export function projectReader(project, expected) {
         if (errno[0] === EAGAIN || errno[0] === EINTR) return false;
         throw new Error("Audit lock could not be acquired");
       },
-      unlinkLink(name, target) {
+      symlinkLink(name, target) {
         assert(components(name).length === 1);
-        const path = Buffer.from(name + "\0"),
-          expected = Buffer.from(target),
-          found = Buffer.alloc(expected.length + 1);
-        const size = Number(
-          lib().readlinkat(rootFd, path, found, found.length),
+        assert(typeof target === "string" && target && !target.includes("\0"));
+        directoryIdentity(root, identity);
+        const errno = nativeErrno();
+        errno[0] = 0;
+        const created = lib().symlinkat(
+          Buffer.from(target + "\0"),
+          rootFd,
+          Buffer.from(name + "\0"),
         );
-        if (
-          size === expected.length &&
-          found.subarray(0, size).equals(expected)
-        )
-          lib().unlinkat(rootFd, path, 0);
+        if (created !== 0) throw syscallError("symlinkat", errno[0], name);
+      },
+      linkedDirectory(name, expectedIdentity) {
+        assert(components(name).length === 1);
+        if (readLinkAt(rootFd, name) === null) return false;
+        const actual = statLinkedDirectory(rootFd, name);
+        return !!actual && sameFile(actual, expectedIdentity);
+      },
+      unlinkLink(name, target, expectedIdentity) {
+        assert(components(name).length === 1);
+        const found = readLinkAt(rootFd, name);
+        if (found === null) return;
+        const targetExists = statSync(target, {
+          bigint: true,
+          throwIfNoEntry: false,
+        });
+        const expected = expectedIdentity ?? targetExists;
+        const actual = statLinkedDirectory(rootFd, name);
+        const matches = actual
+          ? sameFile(actual, expected)
+          : !targetExists && found === target;
+        if (matches) lib().unlinkat(rootFd, Buffer.from(name + "\0"), 0);
       },
       remove(name) {
         assert(components(name).length === 1);

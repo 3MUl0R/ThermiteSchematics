@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -13,15 +14,17 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { chromium } from "playwright-core";
+import { projectReader } from "./capture-files.mjs";
 import { captureHtml, captureInput, visualBroker } from "./visual-capture.mjs";
 import { sha256 } from "./snapshot.mjs";
 
@@ -64,6 +67,13 @@ const race = vi.hoisted(() => {
       state.fired++;
       swap();
     },
+    afterMkdir(path) {
+      if (!matches("mkdir", path)) return;
+      const { swap } = state.pending;
+      state.pending = null;
+      state.fired++;
+      swap();
+    },
   };
 });
 vi.mock("node:fs", async (importOriginal) => {
@@ -79,6 +89,11 @@ vi.mock("node:fs", async (importOriginal) => {
   );
   const hooked = {
     realpathSync,
+    mkdirSync(path, ...rest) {
+      const result = fs.mkdirSync(path, ...rest);
+      race.afterMkdir(String(path));
+      return result;
+    },
     openSync(path, ...rest) {
       const fd = fs.openSync(path, ...rest);
       race.state.fds.set(fd, String(path));
@@ -121,10 +136,8 @@ const blue = "<!doctype html><body style='margin:0;background:#0000ff'>";
 const windowsError =
   "Visual capture is unavailable on Windows: project files cannot be opened there without following links";
 
-function fixture(html = "<p>Capture fixture</p>") {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "thermite-visual-test-")),
-  );
+function fixture(html = "<p>Capture fixture</p>", base = tmpdir()) {
+  const root = realpathSync(mkdtempSync(join(base, "thermite-visual-test-")));
   work.push(root);
   const workspace = join(root, "work");
   const paths = {
@@ -239,6 +252,7 @@ it("refuses Windows capture before reading project files", async () => {
     expect(() => captureInput(project, "index.html")).toThrow(windowsError);
     const stop = await visualBroker({ visualCapture: true }, project, evidence);
     try {
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
       request(project, { html: ["index.html"] });
       expect(await readReceipt(join(link, "result.json"))).toEqual({
         error: windowsError,
@@ -246,7 +260,9 @@ it("refuses Windows capture before reading project files", async () => {
     } finally {
       await stop();
     }
+    expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
   });
+  expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined();
   expect(screenshot).not.toHaveBeenCalled();
   expect(readdirSync(outputs)).toEqual([]);
   expect(
@@ -255,6 +271,95 @@ it("refuses Windows capture before reading project files", async () => {
     ),
   ).toEqual({ error: windowsError });
 });
+
+const darwinTmpAlias =
+  process.platform === "darwin" &&
+  !!lstatSync("/tmp", { throwIfNoEntry: false })?.isSymbolicLink() &&
+  realpathSync("/tmp") === "/private/tmp";
+const canExpressAlternatePath = process.platform === "win32" || darwinTmpAlias;
+
+if (canExpressAlternatePath) {
+  it("cleans up the sibling link by target identity across alternate path spellings", async () => {
+    const base = darwinTmpAlias ? "/private/tmp" : tmpdir();
+    const { project, evidence, outside, link: linkPath } = fixture(red, base);
+    const outputs = join(evidence, "visual-captures");
+    const alternateSpelling = (canonicalPath) => {
+      if (process.platform === "win32") {
+        const parent = dirname(canonicalPath);
+        const dirName = basename(parent);
+        const toggled =
+          dirName === dirName.toUpperCase()
+            ? dirName.toLowerCase()
+            : dirName.toUpperCase();
+        return join(dirname(parent), toggled, basename(canonicalPath));
+      }
+      return canonicalPath.replace(/^\/private\/tmp(?=\/)/, "/tmp");
+    };
+
+    // Windows fallback path (native on Windows, simulated via asWindows on macOS).
+    await asWindows(async () => {
+      const stop = await visualBroker(
+        { visualCapture: true },
+        project,
+        evidence,
+      );
+      try {
+        const altOutputs = alternateSpelling(outputs);
+        expect(altOutputs).not.toBe(outputs);
+        expect(statSync(altOutputs, { bigint: true }).ino).toBe(
+          statSync(outputs, { bigint: true }).ino,
+        );
+        unlinkSync(linkPath);
+        link(altOutputs, linkPath);
+        expect(resolve(readlinkSync(linkPath))).not.toBe(resolve(outputs));
+      } finally {
+        await stop();
+      }
+      expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+    });
+
+    // Negative control: a link repointed to a different directory is left alone.
+    const evidenceOther = join(dirname(evidence), "evidence-other");
+    mkdirSync(evidenceOther);
+    await asWindows(async () => {
+      const stop = await visualBroker(
+        { visualCapture: true },
+        project,
+        evidenceOther,
+      );
+      try {
+        unlinkSync(linkPath);
+        link(outside, linkPath);
+      } finally {
+        await stop();
+      }
+      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      unlinkSync(linkPath);
+    });
+
+    // POSIX descriptor-relative cleanup also matches target identity across /tmp vs /private/tmp.
+    if (process.platform !== "win32") {
+      const evidencePosix = join(dirname(evidence), "evidence-posix");
+      mkdirSync(evidencePosix);
+      const posixOutputs = join(evidencePosix, "visual-captures");
+      const stop = await visualBroker(
+        { visualCapture: true },
+        project,
+        evidencePosix,
+      );
+      try {
+        const altOutputs = alternateSpelling(posixOutputs);
+        expect(altOutputs).not.toBe(posixOutputs);
+        unlinkSync(linkPath);
+        link(altOutputs, linkPath);
+        expect(resolve(readlinkSync(linkPath))).not.toBe(resolve(posixOutputs));
+      } finally {
+        await stop();
+      }
+      expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+    }
+  });
+}
 
 // The remaining cases exercise capture itself, which Windows refuses.
 if (process.platform !== "win32") {
@@ -458,6 +563,161 @@ if (process.platform !== "win32") {
     }
     expect(lstatSync(replacementLink).isSymbolicLink()).toBe(true);
     expect(existsSync(join(original, "visual-captures"))).toBe(false);
+  });
+
+  it.each(["workspace", "project"])(
+    "refuses broker setup when %s is swapped after runner pinning and leaves no outside link",
+    async (swapped) => {
+      const { workspace, project, evidence, outside } = fixture();
+      const workSource = projectReader(workspace);
+      const projectSource = projectReader(project);
+      const original = workspace + "-original";
+      const projectOriginal = join(workspace, "project-original");
+      try {
+        if (swapped === "workspace") {
+          mkdirSync(join(outside, "project"));
+          renameSync(workspace, original);
+          link(outside, workspace);
+        } else {
+          renameSync(project, projectOriginal);
+          link(outside, project);
+        }
+        await expect(
+          visualBroker({ visualCapture: true }, project, evidence, undefined, {
+            workspace: workSource,
+            project: projectSource,
+          }),
+        ).rejects.toThrow(/was replaced/i);
+        expect(
+          lstatSync(join(outside, "visual-captures"), {
+            throwIfNoEntry: false,
+          }),
+        ).toBeUndefined();
+        expect(
+          lstatSync(
+            join(
+              swapped === "workspace" ? original : workspace,
+              "visual-captures",
+            ),
+            { throwIfNoEntry: false },
+          ),
+        ).toBeUndefined();
+        expect(
+          lstatSync(join(evidence, "visual-captures"), {
+            throwIfNoEntry: false,
+          }),
+        ).toBeUndefined();
+      } finally {
+        projectSource.close();
+        workSource.close();
+      }
+    },
+  );
+
+  it("refuses a mid-setup workspace swap after evidence creation and cleans up without linking outside", async () => {
+    const { workspace, project, evidence, outside } = fixture();
+    const workSource = projectReader(workspace);
+    const projectSource = projectReader(project);
+    const original = workspace + "-original";
+    const outputs = join(evidence, "visual-captures");
+    try {
+      race.arm("mkdir", outputs, () => {
+        mkdirSync(join(outside, "project"));
+        renameSync(workspace, original);
+        link(outside, workspace);
+      });
+      await expect(
+        visualBroker({ visualCapture: true }, project, evidence, undefined, {
+          workspace: workSource,
+          project: projectSource,
+        }),
+      ).rejects.toThrow();
+      expect(race.state.fired).toBe(1);
+      expect(
+        lstatSync(join(outside, "visual-captures"), { throwIfNoEntry: false }),
+      ).toBeUndefined();
+      expect(
+        lstatSync(join(original, "visual-captures"), { throwIfNoEntry: false }),
+      ).toBeUndefined();
+      expect(lstatSync(outputs, { throwIfNoEntry: false })).toBeUndefined();
+    } finally {
+      projectSource.close();
+      workSource.close();
+    }
+  });
+
+  it("reuses runner-pinned workspace and project readers without closing them", async () => {
+    const { workspace, project, evidence, link: linkPath } = fixture();
+    stubScreenshot();
+    const workSource = projectReader(workspace);
+    const projectSource = projectReader(project);
+    try {
+      const stop = await visualBroker(
+        { visualCapture: true },
+        project,
+        evidence,
+        undefined,
+        { workspace: workSource, project: projectSource },
+      );
+      try {
+        expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+        request(project, { html: ["index.html"] });
+        const receipt = await readReceipt(join(linkPath, "result.json"));
+        expect(receipt.files[0].sha256).toBe(sha256("synthetic PNG bytes"));
+      } finally {
+        await stop();
+      }
+      expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+      // Caller-owned pins remain open for post-agent staging and cleanup.
+      expect(workSource.intact()).toBe(true);
+      expect(projectSource.intact()).toBe(true);
+      expect(projectSource.has("index.html")).toBe(true);
+    } finally {
+      projectSource.close();
+      workSource.close();
+    }
+  });
+
+  it("rolls back the empty evidence output directory when link creation fails so a retry succeeds", async () => {
+    const { workspace, project, evidence, link: linkPath } = fixture();
+    const outputs = join(evidence, "visual-captures");
+
+    // 1. Read-only workspace: link creation fails after outputs dir is created.
+    if (process.getuid?.() !== 0) {
+      chmodSync(workspace, 0o555);
+      try {
+        await expect(
+          visualBroker({ visualCapture: true }, project, evidence),
+        ).rejects.toThrow();
+        expect(lstatSync(outputs, { throwIfNoEntry: false })).toBeUndefined();
+        expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+      } finally {
+        chmodSync(workspace, 0o755);
+      }
+    }
+
+    // 2. Competing entry planted after the pre-check and before link creation:
+    //    must roll back outputs AND leave the competing link untouched.
+    race.arm("mkdir", outputs, () => {
+      link(outputs, linkPath);
+    });
+    await expect(
+      visualBroker({ visualCapture: true }, project, evidence),
+    ).rejects.toThrow(/EEXIST/);
+    expect(race.state.fired).toBe(1);
+    expect(lstatSync(outputs, { throwIfNoEntry: false })).toBeUndefined();
+    expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    unlinkSync(linkPath);
+
+    // 3. Retry with the same evidence root succeeds without EEXIST.
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    try {
+      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      expect(lstatSync(outputs).isDirectory()).toBe(true);
+    } finally {
+      await stop();
+    }
+    expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
   });
 
   // M1: the receipt is written only after every PNG matches it.
