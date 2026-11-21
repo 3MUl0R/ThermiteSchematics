@@ -5,6 +5,8 @@ import { emitSchematicSvg } from "../../../render/src/svg/emitter.js";
 import { svgSemanticId } from "../../../render/src/svg/escape.js";
 import { SYMBOL_CATALOG } from "../../../render/src/symbols/catalog.js";
 import { continuationFixture } from "../../../render/test/continuation-fixtures.js";
+import { actuation } from "../../../render/test/dol-control-junctions-fixture.js";
+import { dolProbeFixture } from "../../../render/test/dol-control-probes-fixture.js";
 import { expect } from "vitest";
 import { compileProject } from "@thermite/compiler";
 import { renderSchematicPacket } from "../../../render/src/sheets.js";
@@ -277,6 +279,25 @@ const module: FactModule = {
         expect(usage.length).toBe(4);
         for (const t of [...usage, ...texts.filter((t) => t.closest("a"))])
           expect(Number(t.getAttribute("font-size"))).toBe(2.5);
+      },
+    },
+    {
+      claim: "Top-down print may reflow.",
+      async check() {
+        const fixture = await dolProbeFixture("p5");
+        try {
+          const result = await renderSchematicPacket(fixture.ir, {
+            format: "schematic-packet-request/0.1",
+            page: { size: "tabloid", orientation: "landscape", marginMm: 20 },
+            views: [actuation("R1", "top-to-bottom")],
+          });
+          if (!result.ok) throw Error(JSON.stringify(result.error));
+          expect(result.value.sheets.length).toBeGreaterThan(1);
+          expect(result.value.sheets[0]?.continuations).not.toHaveLength(0);
+          noteJson({ sheets: result.value.sheets.length });
+        } finally {
+          await fixture.dispose();
+        }
       },
     },
   ],

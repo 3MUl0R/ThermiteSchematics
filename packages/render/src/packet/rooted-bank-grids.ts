@@ -2,7 +2,7 @@ import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { InvalidSheetError } from "../errors.js";
 import type { DrawingBounds } from "./types.js";
 import { bankBounds, type ContinuationBank } from "./continuation-bank.js";
-import { rootedGrids } from "./rooted-plans.js";
+import { rootedGrids, type RootedSpacingCut } from "./rooted-plans.js";
 
 /** Retain failures from tested cuts, never from uncut source conductors. A grid
  * that passes the cut guards must still report its own later fit constraint. */
@@ -15,6 +15,8 @@ export function rootedBankGrids(
 ) {
   let identityFailure: InvalidSheetError | undefined;
   let retryFailure: InvalidSheetError | undefined;
+  let spacing: RootedSpacingCut | undefined;
+  let boundarySpacing: RootedSpacingCut | undefined;
   const plan = (bank: ContinuationBank, replay = false) => {
     let bankIdentity: string | undefined;
     return rootedGrids(
@@ -23,8 +25,12 @@ export function rootedBankGrids(
       scale,
       true,
       explore || replay,
-      (error, attempt) => {
+      (error, attempt, cut) => {
         if (error.code !== "R006") return;
+        if (cut) {
+          if (attempt === "boundary-retry") boundarySpacing ??= cut;
+          else spacing ??= cut;
+        }
         // Pair the retry with the same bank's original boundary failure.
         if (
           attempt === "boundary-retry" &&
@@ -48,12 +54,14 @@ export function rootedBankGrids(
   const grids = banks.flatMap((bank) => plan(bank));
   if (!grids.length && !identityFailure)
     for (const bank of banks) grids.push(...plan(bank, true));
-  if (grids.length || !identityFailure) return { grids };
+  if (grids.length) return { grids };
   return {
     grids,
-    cutFailure: retryFailure
-      ? withBoundaryRetry(identityFailure, retryFailure)
-      : identityFailure,
+    spacing: boundarySpacing ?? spacing,
+    cutFailure:
+      identityFailure && retryFailure
+        ? withBoundaryRetry(identityFailure, retryFailure)
+        : identityFailure,
   };
 }
 

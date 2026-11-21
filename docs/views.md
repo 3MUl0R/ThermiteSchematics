@@ -292,6 +292,13 @@ boundary segment ID. `details.boundaryCutRetry` carries the retry's
 the message and `details.pageConstraint` only when every continuation bank in
 every tested layout falls short. The alternative with the smallest maximum width/height shortfall
 supplies the measurements; any span-fitting bank or layout clears that claim.
+If the ordinary top-to-bottom search has no printable annotated or no-card
+grid and measures a top/bottom continuation clash or an oversized protected
+span, the renderer can try one tighter ELK placement. For a continuation
+clash, the affected routes and cut locate the compound whose layers can
+move closer. Both layouts must pass pagination at the original scale. The
+packet must also pass its final ink and navigation checks. A rejected placement
+keeps the original R006.
 The ordinary no-candidate message uses the same
 all-bank measurement. This diagnosis never rejects an
 uncut identity before grid search. Other R006

@@ -6,10 +6,8 @@ import {
   verticalPowerLanes,
   VERTICAL_POWER_EDGE_NODE_SPACING,
 } from "./adapter-ordering.js";
-import { applyLayoutSpacing } from "./spacing.js";
 import { contactCaptionRegion } from "../presentation/contact-caption.js";
 import { contextJunctionInk } from "./context-reference-ink.js";
-import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { offViewAdapterLabels } from "./off-view-labels.js";
 import { portPosition, quantizedInput } from "./port-geometry.js";
 import { portBorderOffset } from "./port-geometry.js";
@@ -20,7 +18,6 @@ import {
   type SemanticOrder,
 } from "../semantic-order.js";
 import type {
-  ELK as ElkApi,
   ElkExtendedEdge,
   ElkLabel,
   ElkNode,
@@ -28,12 +25,11 @@ import type {
   LayoutOptions,
 } from "elkjs/lib/elk-api.js";
 
-import { validateLayoutOptions } from "./elk-contract.js";
 export {
   validateElkRuntimeOptions,
   serializeElkAdapterForTest,
 } from "./elk-contract.js";
-import { rootedRecovery, type RootedRecovery } from "./rooted-recovery.js";
+import type { RootedRecovery } from "./rooted-recovery.js";
 import {
   compareLocationIdentity,
   comparePresentationLabel,
@@ -41,8 +37,7 @@ import {
   compareText,
   PRESENTATION_CLASS_RANK,
 } from "../ordering.js";
-import { SYMBOL_CATALOG } from "../symbols/catalog.js";
-import type { SymbolDefinition, SymbolSide } from "../symbols/types.js";
+import type { SymbolSide } from "../symbols/types.js";
 import type {
   DeviceGroup,
   JunctionPresentationNode,
@@ -56,9 +51,6 @@ import type {
   SelectedSubgraph,
   SymbolPresentationNode,
 } from "../types.js";
-import { createElkEngine } from "./elk-runtime.js";
-import { rootedRouteAlternatives } from "./direct-load-routes.js";
-import { contextForkOrderAlternatives } from "./context-fork-order.js";
 import {
   DEVICE_LABEL_PADDING,
   DEVICE_PADDING,
@@ -74,24 +66,16 @@ import {
   rootLayoutOptions,
   sortOptionAssignments,
 } from "./options.js";
-import {
-  normalizeAndValidateLayout,
-  type LayoutValidationOutcome,
-} from "./validate-output.js";
 
 export interface ElkAdapterBuild {
   readonly graph: ElkNode;
   readonly optionAssignments: readonly ElkOptionAssignment[];
 }
 
-export interface ElkLayoutRequestOptions {
-  readonly packetContinuations?: boolean;
-  readonly catalog?: readonly SymbolDefinition[];
-  readonly engine?: ElkApi;
-  readonly selected?: Readonly<SelectedSubgraph>;
-  readonly spacingProfile?: "compact" | "dense";
-  readonly powerTurnSpacing?: number;
-}
+export {
+  layoutPresentationGraph,
+  type ElkLayoutRequestOptions,
+} from "./elk-layout.js";
 
 interface OptionGroup {
   readonly targetKind: ElkOptionAssignment["targetKind"];
@@ -801,48 +785,4 @@ export function buildElkAdapterGraph(
     graph: adapter,
     optionAssignments: sortOptionAssignments(assignments),
   });
-}
-
-export async function layoutPresentationGraph(
-  graph: Readonly<PresentationGraph>,
-  options: Readonly<ElkLayoutRequestOptions> = {},
-): Promise<LayoutValidationOutcome> {
-  const catalog = options.catalog ?? SYMBOL_CATALOG;
-  const engine = options.engine ?? createElkEngine();
-  const run = async (
-    candidate: Readonly<PresentationGraph>,
-    recovery?: RootedRecovery,
-  ) => {
-    if (options.packetContinuations) reserveContinuationSources(candidate);
-    const build = buildElkAdapterGraph(candidate, options.selected, recovery);
-    await validateLayoutOptions(build, engine, options.engine);
-    const input = structuredClone(build.graph);
-    applyLayoutSpacing(input, candidate, options);
-    const output = await engine.layout(input);
-    return normalizeAndValidateLayout(candidate, build.graph, output, catalog);
-  };
-  const first = await run(graph);
-  if (first.ok) return first;
-  if (
-    (graph.view.format === "schematic-view/0.2" &&
-      graph.view.intent === "loads") ||
-    first.failureKind === "ambiguous-intersection" ||
-    first.failureKind === "collinear-overlap"
-  ) {
-    // Preserve the existing fork and route search before changing model order.
-    for (const alternatives of [
-      contextForkOrderAlternatives(graph),
-      rootedRouteAlternatives(graph),
-    ])
-      for (const candidate of alternatives) {
-        const result = await run(candidate);
-        if (result.ok) return result;
-      }
-  }
-  const recovery = rootedRecovery(graph, first, options.selected);
-  if (recovery !== undefined) {
-    const recovered = await run(graph, recovery);
-    if (recovered.ok) return recovered;
-  }
-  return first;
 }
