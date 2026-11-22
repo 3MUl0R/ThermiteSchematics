@@ -161,8 +161,9 @@ it("accepts a named compact peer and rejects a subjectless locator", () => {
     ]),
   ).toEqual([]);
   expect(
-    peerReferenceFindings(1, { texts: [marker("→ 02.B4")] }, [shortReference])[0]
-      .kind,
+    peerReferenceFindings(1, { texts: [marker("→ 02.B4")] }, [
+      shortReference,
+    ])[0].kind,
   ).toBe("issued-peer-reference-subjectless");
 });
 
@@ -299,7 +300,7 @@ it("requires a source name outside the directly adjacent band", () => {
   expect(audit("R1.X4 → 02.B4")[0].kind).toBe("issued-peer-reference-unbound");
 });
 
-it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing bounds, tight stack gap, and foreign-owner proximity", () => {
+it("5.40 rejects card+free-note duplicate and outside drawing bounds", () => {
   const cardObligation = {
     kind: "conductor-peer",
     source: [
@@ -320,9 +321,7 @@ it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing
       text: "W-CTL-004 → PS1.- 03.C5 (also shown 04.B2)",
     },
   };
-  // Passing control: unified card carrying primary + also shown, zero free note.
   expect(peerReferenceFindings(7, { texts: [] }, [cardObligation])).toEqual([]);
-  // Old-engine witness: free note duplicating a card-owned conductor peer.
   const dupFree = {
     peerReference: "conductor-peer",
     peerSource: JSON.stringify(cardObligation.source),
@@ -335,20 +334,34 @@ it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing
     frame: { x: 10, y: 10, w: 259, h: 196 },
     headerRule: { y: 12 },
     texts: [
-      { sheetText: true, painted: true, text: "1", anchor: { x: 42, y: 15 }, bbox: { x: 41, y: 13, w: 2, h: 2 } },
-      { sheetText: true, painted: true, text: "2", anchor: { x: 84, y: 15 }, bbox: { x: 83, y: 13, w: 2, h: 2 } },
+      {
+        sheetText: true,
+        painted: true,
+        text: "1",
+        anchor: { x: 42, y: 15 },
+        bbox: { x: 41, y: 13, w: 2, h: 2 },
+      },
+      {
+        sheetText: true,
+        painted: true,
+        text: "2",
+        anchor: { x: 84, y: 15 },
+        bbox: { x: 83, y: 13, w: 2, h: 2 },
+      },
       dupFree,
     ],
   };
-  const dupFindings = peerReferenceFindings(7, zoneHeader, [cardObligation]);
-  expect(dupFindings.map((f) => f.kind)).toEqual(
+  expect(
+    peerReferenceFindings(7, zoneHeader, [cardObligation]).map((f) => f.kind),
+  ).toEqual(
     expect.arrayContaining([
       "issued-peer-reference-duplicate-card-note",
       "issued-peer-reference-outside-drawing-bounds",
     ]),
   );
+});
 
-  // #450 stack gap < 1.5 mm fails; >= 1.5 mm passes.
+it("5.40 enforces 1.5 mm stack gap (#450) and nearest-owner tie-break (#507)", () => {
   const mkPeer = (key, y) => ({
     kind: "conductor-peer",
     source: ["S", key, "T"],
@@ -366,21 +379,18 @@ it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing
     bbox: { x: 46, y, w: 28, h: 2 },
   });
   expect(
-    peerReferenceFindings(
-      5,
-      { texts: [mkNote("1", 50), mkNote("2", 53.6)] },
-      [mkPeer("1", 50), mkPeer("2", 53.6)],
-    ),
+    peerReferenceFindings(5, { texts: [mkNote("1", 50), mkNote("2", 53.6)] }, [
+      mkPeer("1", 50),
+      mkPeer("2", 53.6),
+    ]),
   ).toEqual([]);
   expect(
-    peerReferenceFindings(
-      5,
-      { texts: [mkNote("1", 50), mkNote("2", 53.0)] },
-      [mkPeer("1", 50), mkPeer("2", 53.0)],
-    ).map((f) => f.kind),
+    peerReferenceFindings(5, { texts: [mkNote("1", 50), mkNote("2", 53.0)] }, [
+      mkPeer("1", 50),
+      mkPeer("2", 53.0),
+    ]).map((f) => f.kind),
   ).toContain("issued-peer-reference-stack-gap");
 
-  // #507 foreign owner: W37 for R1.14 sitting closer to R1.12 fails; sitting closer to R1.14 passes.
   const w37Obligation = {
     kind: "conductor-peer",
     source: ["R1.14", "W37", "S2.14"],
@@ -406,4 +416,89 @@ it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing
       (f) => f.kind,
     ),
   ).toContain("issued-peer-reference-foreign-owner");
+});
+
+const relayInterfaceFixture = () => {
+  const mkInterface = (tag, target) => ({
+    kind: "terminal-interface",
+    source: [tag, "14", "A1"],
+    ownerLabel: `${tag} 14`,
+    owners: [{ x: 230, y: tag === "K-R" ? 75 : 130, w: 3, h: 3 }],
+    values: [`${tag} · contact terminal 14 → coil terminal A1 ${target}`],
+    compactValues: [`→ ${tag} coil terminal A1 ${target}`],
+  });
+  return {
+    obligations: [mkInterface("K-R", "05.B4"), mkInterface("K-Y", "05.C4")],
+    krFull: {
+      peerReference: "terminal-interface",
+      peerSource: JSON.stringify(["K-R", "14", "A1"]),
+      text: "K-R · contact terminal 14 → coil terminal A1 05.B4",
+      painted: true,
+      fontSize: 2.5,
+      bbox: { x: 235, y: 75, w: 60, h: 2 },
+    },
+    kyFullWrapped: [
+      {
+        peerReference: "terminal-interface",
+        peerSource: JSON.stringify(["K-Y", "14", "A1"]),
+        peerGroup: "ky",
+        text: "K-Y · contact terminal 14",
+        painted: true,
+        fontSize: 2.5,
+        anchor: { x: 235, y: 129 },
+        bbox: { x: 235, y: 127, w: 30, h: 2 },
+      },
+      {
+        peerReference: "terminal-interface",
+        peerSource: JSON.stringify(["K-Y", "14", "A1"]),
+        peerGroup: "ky",
+        text: "→ coil terminal A1 05.C4",
+        painted: true,
+        fontSize: 2.5,
+        anchor: { x: 235, y: 132.5 },
+        bbox: { x: 235, y: 130.5, w: 30, h: 2 },
+      },
+    ],
+  };
+};
+
+it("5.40 rejects mixed peer-reference wording forms on a sheet (#483)", () => {
+  const { obligations, krFull, kyFullWrapped } = relayInterfaceFixture();
+  const kyCompactOld = {
+    peerReference: "terminal-interface",
+    peerSource: JSON.stringify(["K-Y", "14", "A1"]),
+    text: "K-Y 14 → K-Y coil terminal A1 05.C4",
+    painted: true,
+    fontSize: 2.5,
+    bbox: { x: 235, y: 130, w: 48, h: 2 },
+  };
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [krFull, kyCompactOld] },
+      obligations,
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-mixed-form");
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [krFull, ...kyFullWrapped] },
+      obligations,
+    ),
+  ).toEqual([]);
+});
+
+it("5.40 rejects split arrows across wrapped peer-note lines (#409)", () => {
+  const { obligations, krFull, kyFullWrapped } = relayInterfaceFixture();
+  const kySplitArrow = [
+    { ...kyFullWrapped[0], text: "K-Y · contact terminal 14 →" },
+    { ...kyFullWrapped[1], text: "coil terminal A1 05.C4" },
+  ];
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [krFull, ...kySplitArrow] },
+      obligations,
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-arrow-split");
 });

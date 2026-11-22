@@ -31,6 +31,34 @@ function stripCardDestination(svg, wireUid) {
   return document.toString();
 }
 
+async function assertRemovedRouteNeedsPeer(packet, geometries, first) {
+  const complete = input.ir.wires.find(
+    (w) => w.designation === "W-PWR-002",
+  ).uid;
+  expect(
+    first.texts.some(
+      (t) =>
+        t.peerReference === "conductor-peer" &&
+        JSON.parse(t.peerSource)[1].uid === complete,
+    ),
+  ).toBe(false);
+  const withoutRoute = packet.sheets[0].svg.replace(
+    new RegExp(`<path(?=[^>]*data-wire-uid="${complete}")[^>]*\/>`, "gu"),
+    "",
+  );
+  expect(withoutRoute).not.toBe(packet.sheets[0].svg);
+  const ink = await measure(withoutRoute);
+  const next = terminalPeerObligations(
+    packet,
+    [ink, ...geometries.slice(1)],
+    input.ir,
+    nativeRows(input.ir),
+  );
+  expect(next.some((o) => o.sheet === 1 && o.source[1]?.uid === complete)).toBe(
+    true,
+  );
+}
+
 it.each([
   ["letter", "standard"],
   ["a4", "standard"],
@@ -58,13 +86,14 @@ it.each([
     expect(peerReferenceFindings(1, first, expected)).toEqual([]);
     const uid = input.ir.wires.find((w) => w.designation === "W-PWR-009").uid;
     const owner = input.ir.devices.find((d) => d.designation === "SRC1").uid;
-    const cardObligation = expected.find(
-      (o) =>
-        o.kind === "conductor-peer" &&
-        o.source[0]?.deviceUid === owner &&
-        o.source[1]?.uid === uid,
-    );
-    expect(cardObligation?.card).toBeDefined();
+    expect(
+      expected.find(
+        (o) =>
+          o.kind === "conductor-peer" &&
+          o.source[0]?.deviceUid === owner &&
+          o.source[1]?.uid === uid,
+      )?.card,
+    ).toBeDefined();
     expect(
       first.texts.some(
         (t) =>
@@ -72,35 +101,8 @@ it.each([
           JSON.parse(t.peerSource)[1]?.uid === uid,
       ),
     ).toBe(false);
-    if (size === "letter") {
-      const complete = input.ir.wires.find(
-        (w) => w.designation === "W-PWR-002",
-      ).uid;
-      expect(
-        first.texts.some(
-          (t) =>
-            t.peerReference === "conductor-peer" &&
-            JSON.parse(t.peerSource)[1].uid === complete,
-        ),
-      ).toBe(false);
-      const withoutRoute = packet.value.sheets[0].svg.replace(
-        new RegExp(`<path(?=[^>]*data-wire-uid="${complete}")[^>]*\/>`, "gu"),
-        "",
-      );
-      expect(withoutRoute).not.toBe(packet.value.sheets[0].svg);
-      const ink = await measure(withoutRoute);
-      const newObligations = terminalPeerObligations(
-        packet.value,
-        [ink, ...geometries.slice(1)],
-        input.ir,
-        nativeRows(input.ir),
-      );
-      expect(
-        newObligations.some(
-          (o) => o.sheet === 1 && o.source[1]?.uid === complete,
-        ),
-      ).toBe(true);
-    }
+    if (size === "letter")
+      await assertRemovedRouteNeedsPeer(packet.value, geometries, first);
     const stripped = await measure(
       stripCardDestination(packet.value.sheets[0].svg, uid),
     );
@@ -110,12 +112,11 @@ it.each([
       input.ir,
       nativeRows(input.ir),
     ).filter((o) => o.sheet === 1);
-    expect(peerReferenceFindings(1, stripped, strippedObligations)).toContainEqual(
+    expect(
+      peerReferenceFindings(1, stripped, strippedObligations),
+    ).toContainEqual(
       expect.objectContaining({ kind: "issued-peer-reference-missing" }),
     );
   },
-  // Each case renders a complete packet, then measures every sheet and its
-  // negative controls in the shared browser. Match the runner's integration
-  // test budget so loaded CI workers can finish all measurements.
   120_000,
 );

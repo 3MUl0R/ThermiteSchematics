@@ -105,14 +105,57 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
   };
 }
 
+function mergeCardRecords(records) {
+  const unique = new Map();
+  for (const r of records) {
+    const key = JSON.stringify([r.sheet, r.source]);
+    const previous = unique.get(key);
+    if (previous) {
+      if (r.card && !previous.card) previous.card = r.card;
+      previous.owners.push(...r.owners);
+      previous.supports.push(...r.supports);
+      for (const [sheet, zones] of r.targets) {
+        if (!previous.targets.has(sheet))
+          previous.targets.set(sheet, new Set());
+        for (const z of zones) previous.targets.get(sheet).add(z);
+      }
+    } else unique.set(key, r);
+  }
+  return [...unique.values()].map((r) => {
+    const combos = destinationCombinations(r.targets);
+    const destinations = [...r.targets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([sheet, zones]) => ({ sheet, zones: [...zones].sort() }));
+    return {
+      sheet: r.sheet,
+      kind: r.kind,
+      source: r.source,
+      label: r.label,
+      peerName: r.peerName,
+      ownerLabel: r.ownerLabel,
+      owners: r.owners,
+      foreignOwners: r.foreignOwners,
+      supports: r.supports,
+      card: r.card,
+      destinations,
+      values: combos.map(
+        (c) =>
+          `${r.label} · ${r.ownerLabel} → ${r.peerName} ${formatDestinationCombo(c)}`,
+      ),
+      compactValues: combos.map(
+        (c) => `→ ${r.peerName} ${formatDestinationCombo(c)}`,
+      ),
+    };
+  });
+}
+
 function cardObligations(ir, parts, wires, name) {
   const native = new Map(wires.map((r) => [elementKey(r.element), r]));
   const records = [];
   for (const p of parts)
     for (const card of p.geometry.tranche4?.cards ?? []) {
       const owner = card.terminalId;
-      const returned = p.terminals.get(terminalKey(owner));
-      if (!returned || !card.bbox) continue;
+      if (!p.terminals.get(terminalKey(owner)) || !card.bbox) continue;
       const text = card.texts
         .filter((t) => painted(t) && !card.headingElements.includes(t.element))
         .map((t) => t.text)
@@ -157,46 +200,7 @@ function cardObligations(ir, parts, wires, name) {
         if (reverse) records.push(reverse);
       }
     }
-  const unique = new Map();
-  for (const r of records) {
-    const key = JSON.stringify([r.sheet, r.source]);
-    const previous = unique.get(key);
-    if (previous) {
-      if (r.card && !previous.card) previous.card = r.card;
-      previous.owners.push(...r.owners);
-      previous.supports.push(...r.supports);
-      for (const [sheet, zones] of r.targets) {
-        if (!previous.targets.has(sheet)) previous.targets.set(sheet, new Set());
-        for (const z of zones) previous.targets.get(sheet).add(z);
-      }
-    } else unique.set(key, r);
-  }
-  return [...unique.values()].map((r) => {
-    const combos = destinationCombinations(r.targets);
-    const destinations = [...r.targets.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([sheet, zones]) => ({ sheet, zones: [...zones].sort() }));
-    return {
-      sheet: r.sheet,
-      kind: r.kind,
-      source: r.source,
-      label: r.label,
-      peerName: r.peerName,
-      ownerLabel: r.ownerLabel,
-      owners: r.owners,
-      foreignOwners: r.foreignOwners,
-      supports: r.supports,
-      card: r.card,
-      destinations,
-      values: combos.map(
-        (c) =>
-          `${r.label} · ${r.ownerLabel} → ${r.peerName} ${formatDestinationCombo(c)}`,
-      ),
-      compactValues: combos.map(
-        (c) => `→ ${r.peerName} ${formatDestinationCombo(c)}`,
-      ),
-    };
-  });
+  return mergeCardRecords(records);
 }
 
 function functionTerminals(ir, parts, fn) {

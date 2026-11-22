@@ -25,6 +25,7 @@ export interface PeerReference {
   compact: string;
   destination: string;
   owner: Rect;
+  owners?: readonly Rect[];
   foreignOwners?: readonly Rect[];
   along?: readonly Rect[];
   captions?: readonly Rect[];
@@ -38,7 +39,7 @@ function twoLines(value: string) {
   let result: string[] = [];
   for (const { index } of value.matchAll(/ (?=\S)/gu)) {
     const lines = [value.slice(0, index).trimEnd(), value.slice(index + 1)];
-    if (!lines[0]) continue;
+    if (!lines[0] || /(?:→|->)$/u.test(lines[0])) continue;
     const width = Math.max(...lines.map(advance));
     if (width >= narrowest) continue;
     narrowest = width;
@@ -95,6 +96,9 @@ function noteShapes(
     if (wrappedCompact.length)
       forms.push(shape("named-compact-wrapped", wrappedCompact));
   }
+  const wrappedCompactOnly = twoLines(entry.compact);
+  if (wrappedCompactOnly.length)
+    forms.push(shape("compact-wrapped", wrappedCompactOnly));
   const wrapped = twoLines(entry.value);
   if (wrapped.length) forms.push(shape("wrapped", wrapped));
   return forms;

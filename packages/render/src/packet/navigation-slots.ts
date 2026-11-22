@@ -101,6 +101,75 @@ const sameRect = (a: Rect, b: Rect) =>
   Math.abs(a.y - b.y) <= 0.05 &&
   Math.abs(a.w - b.w) <= 0.05 &&
   Math.abs(a.h - b.h) <= 0.05;
+function allocateSingleSlot(
+  { reservation, owner, locality, ...options }: SheetSlotRequest,
+  area: Rect,
+  sheet: number,
+  obstacles: Rect[],
+  texts: Rect[],
+  frameObstacles: readonly Rect[],
+): AnnotationReservation {
+  const requestObstacles = options.openOwnerFrame
+    ? [...obstacles, ...frameObstacles.filter((f) => !sameRect(f, owner))]
+    : [...obstacles, ...frameObstacles];
+  const result = searchNavigationSlot(
+    reservation.shapes ?? legacyShapes(reservation),
+    area,
+    owner,
+    requestObstacles,
+    locality,
+    texts,
+    options.preferBesideBelow,
+    options.families,
+    options.localityInkMm,
+    options.fitPrintedInk,
+    options.reach,
+    options.preferRoomiest,
+  );
+  if (!result)
+    throw new NavigationSlotFailure(
+      `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
+      {
+        fieldMm: area,
+        ownerMm: owner,
+        requiredMm: reservation.inkMm,
+        families: measureNavigationVacancy(
+          reservation.inkMm,
+          area,
+          owner,
+          requestObstacles,
+          texts,
+          locality,
+        ),
+      },
+    );
+  const placedInk = options.localityInkMm?.get(result.shape.id);
+  obstacles.push(result.protectedBox);
+  texts.push(result.protectedBox);
+  return {
+    ...reservation,
+    inkMm: result.shape.inkMm,
+    maximumForms: result.shape.maximumForms,
+    allocatedMm: {
+      sheet,
+      rect: result.box,
+      ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
+      ...(locality ? { placement: result.shape.mode } : {}),
+      ...(options.preferBesideBelow
+        ? {
+            family: navigationPlacementFamily(
+              navigationPlacementInk(result.box, placedInk),
+              area,
+              owner,
+              locality,
+            ),
+            familyRule: "approach-or-outer-zone-row/1" as const,
+          }
+        : {}),
+    },
+  };
+}
+
 /** Vacant sheet-mm space after real continuation/legend ink. Never grows an ELK leaf. */
 export function allocateNavigationSlots(
   requests: readonly SheetSlotRequest[],
@@ -115,68 +184,9 @@ export function allocateNavigationSlots(
     texts = measured.texts;
   obstacles.push(...reservedBoxes);
   texts.push(...reservedBoxes);
-  return requests.map(({ reservation, owner, locality, ...options }) => {
-    const legacy = legacyShapes(reservation);
-    const requestObstacles = options.openOwnerFrame
-      ? [...obstacles, ...frameObstacles.filter((f) => !sameRect(f, owner))]
-      : [...obstacles, ...frameObstacles];
-    const result = searchNavigationSlot(
-      reservation.shapes ?? legacy,
-      area,
-      owner,
-      requestObstacles,
-      locality,
-      texts,
-      options.preferBesideBelow,
-      options.families,
-      options.localityInkMm,
-      options.fitPrintedInk,
-      options.reach,
-      options.preferRoomiest,
-    );
-    if (!result)
-      throw new NavigationSlotFailure(
-        `Navigation ${reservation.profileId} cannot fit sheet ${sheet}: required ${reservation.inkMm.w.toFixed(2)} × ${reservation.inkMm.h.toFixed(2)} mm with ${NAVIGATION_CLEARANCE_MM} mm clearance; owner ${reservation.ownerAppearance}`,
-        {
-          fieldMm: area,
-          ownerMm: owner,
-          requiredMm: reservation.inkMm,
-          families: measureNavigationVacancy(
-            reservation.inkMm,
-            area,
-            owner,
-            requestObstacles,
-            texts,
-            locality,
-          ),
-        },
-      );
-    const placedInk = options.localityInkMm?.get(result.shape.id);
-    obstacles.push(result.protectedBox);
-    texts.push(result.protectedBox);
-    return {
-      ...reservation,
-      inkMm: result.shape.inkMm,
-      maximumForms: result.shape.maximumForms,
-      allocatedMm: {
-        sheet,
-        rect: result.box,
-        ...(reservation.shapes ? { shapeId: result.shape.id } : {}),
-        ...(locality ? { placement: result.shape.mode } : {}),
-        ...(options.preferBesideBelow
-          ? {
-              family: navigationPlacementFamily(
-                navigationPlacementInk(result.box, placedInk),
-                area,
-                owner,
-                locality,
-              ),
-              familyRule: "approach-or-outer-zone-row/1" as const,
-            }
-          : {}),
-      },
-    };
-  });
+  return requests.map((request) =>
+    allocateSingleSlot(request, area, sheet, obstacles, texts, frameObstacles),
+  );
 }
 
 function legacyShapes(reservation: AnnotationReservation): NavigationShape[] {

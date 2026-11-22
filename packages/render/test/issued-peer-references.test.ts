@@ -59,9 +59,10 @@ it.each([
         const cardSources = new Set(
           [...doc.querySelectorAll("g.off-view-annotation")].flatMap((g) => {
             const term = g.getAttribute("data-off-view-terminal-id");
-            const conds = JSON.parse(
+            const raw: unknown = JSON.parse(
               g.getAttribute("data-off-view-conductors") ?? "[]",
-            ) as unknown[];
+            );
+            const conds = Array.isArray(raw) ? raw : [];
             return term
               ? conds.map((c) => JSON.stringify([JSON.parse(term), c]))
               : [];
@@ -231,6 +232,32 @@ it("uses counterpart relay terminals in wiring views (#397)", async () => {
       /^K-R · contact terminal 14 → coil terminal A1 05\./u,
     ),
   );
+  // #483: K-Y uses the same full wording family as K-R on sheet 7 (never mixed compact).
+  const s7Groups = [
+    ...sheets[6]!.document.querySelectorAll(
+      '[data-peer-reference="terminal-interface"]',
+    ),
+  ];
+  const s7Texts = s7Groups.map((el) =>
+    el.tagName.toLowerCase() === "g"
+      ? [...el.querySelectorAll("text")].map((t) => t.textContent).join(" ")
+      : (el.textContent ?? ""),
+  );
+  expect(s7Texts).toContainEqual(
+    expect.stringMatching(
+      /^K-Y · contact terminal 14 → coil terminal A1 05\./u,
+    ),
+  );
+  // #409: multi-line peer notes never split after "→".
+  for (const el of s7Groups) {
+    if (el.tagName.toLowerCase() !== "g") continue;
+    const lines = [...el.querySelectorAll("text")].map(
+      (t) => t.textContent ?? "",
+    );
+    expect(lines.slice(0, -1).every((l) => !/(?:→|->)\s*$/u.test(l))).toBe(
+      true,
+    );
+  }
 });
 
 it("points an undrawn assembly at its exact issued inventory row (#429)", async () => {

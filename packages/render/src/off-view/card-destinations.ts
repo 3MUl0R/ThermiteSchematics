@@ -11,6 +11,7 @@ import {
   separated,
   type Rect,
 } from "../device-legend/geometry.js";
+import { required } from "../presentation/util.js";
 import type { NavigationGeometry } from "../packet/navigation-walk.js";
 import { navigationObstacles } from "../packet/navigation-slots.js";
 
@@ -24,6 +25,58 @@ const decodeXml = (value: string) =>
 
 const fmt = (value: number) => Number(value.toFixed(3));
 const MIN_CARD_FONT_MM = 2.52;
+
+type CardHeadingSpec = { tag: string; text: string };
+type CardRowSpec = { baseText: string; destinations: readonly string[] };
+type CardObstacles = { ink: Rect[]; texts: Rect[] };
+type CardPlacement = { x: number; y: number; layout: CardLayout };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseTerminalId(raw: string): TerminalId | undefined {
+  const parsed: unknown = JSON.parse(raw);
+  if (
+    !isRecord(parsed) ||
+    typeof parsed.deviceUid !== "string" ||
+    typeof parsed.terminalKey !== "string"
+  )
+    return undefined;
+  return { deviceUid: parsed.deviceUid, terminalKey: parsed.terminalKey };
+}
+
+function parseConductorId(value: unknown): ConductiveElementId | undefined {
+  if (!isRecord(value) || typeof value.kind !== "string") return undefined;
+  if (
+    (value.kind === "wire" || value.kind === "jumper") &&
+    typeof value.uid === "string"
+  )
+    return { kind: value.kind, uid: value.uid };
+  if (
+    value.kind === "cable_conductor" &&
+    typeof value.cableUid === "string" &&
+    typeof value.conductorId === "string"
+  )
+    return {
+      kind: "cable_conductor",
+      cableUid: value.cableUid,
+      conductorId: value.conductorId,
+    };
+  return undefined;
+}
+
+function parseConductorIds(raw: string): ConductiveElementId[] | undefined {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) return undefined;
+  const out: ConductiveElementId[] = [];
+  for (const item of parsed) {
+    const id = parseConductorId(item);
+    if (!id) return undefined;
+    out.push(id);
+  }
+  return out;
+}
 
 function wrapDestinationWords(
   text: string,
@@ -63,7 +116,8 @@ function rowLinesWithDestinations(
   fontSize: number,
 ): string[] {
   const baseLines = wrapCardText(baseText, innerWidth, fontSize);
-  if (!destinations.length) return baseLines;
+  const [primary, ...alternates] = destinations;
+  if (!primary) return baseLines;
   const formatted = formatPeerDestination(destinations);
   const last = baseLines[baseLines.length - 1] ?? "";
   if (
@@ -73,12 +127,11 @@ function rowLinesWithDestinations(
     return [...baseLines.slice(0, -1), `${last} ${formatted}`];
   if (cardTextMetrics(formatted, fontSize).width <= innerWidth + 0.001)
     return [...baseLines, formatted];
-  const [primary, ...alternates] = destinations;
   if (!alternates.length)
-    return [...baseLines, ...wrapCardText(primary!, innerWidth, fontSize)];
+    return [...baseLines, ...wrapCardText(primary, innerWidth, fontSize)];
   return [
     ...baseLines,
-    primary!,
+    primary,
     ...wrapDestinationWords(
       `also shown ${alternates.join(", ")}`,
       innerWidth,
@@ -89,7 +142,7 @@ function rowLinesWithDestinations(
 
 function attrValue(tag: string, name: string): string | undefined {
   const match = new RegExp(`\\b${name}="([^"]*)"`, "u").exec(tag);
-  return match ? decodeXml(match[1]!) : undefined;
+  return match && match[1] !== undefined ? decodeXml(match[1]) : undefined;
 }
 
 function replaceAttr(tag: string, name: string, value: string | number) {
@@ -114,13 +167,18 @@ interface CardLayout {
   width: number;
   height: number;
   fontSize: number;
-  headingLines: { tag: string; text: string; baseline: number; offsetX: number }[];
+  headingLines: {
+    tag: string;
+    text: string;
+    baseline: number;
+    offsetX: number;
+  }[];
   rowLines: { text: string; baseline: number; offsetX: number }[];
 }
 
 function layoutCard(
-  headingLines: readonly { tag: string; text: string }[],
-  rowSpecs: readonly { baseText: string; destinations: readonly string[] }[],
+  headingLines: readonly CardHeadingSpec[],
+  rowSpecs: readonly CardRowSpec[],
   widthUnscaled: number,
   fontSize: number,
   scale: number,
@@ -159,17 +217,25 @@ function layoutCard(
     width: widthUnscaled * scale,
     height: heightUnscaled * scale,
     fontSize: fontSize * scale,
-    headingLines: headingLines.map((h, i) => ({
-      ...h,
-      baseline: positioned[i]!.baseline * scale,
-      offsetX: (padUnscaled + positioned[i]!.offsetX) * scale,
-    })),
-    rowLines: rows.map((text, j) => ({
-      text,
-      baseline: positioned[headingLines.length + j]!.baseline * scale,
-      offsetX:
-        (padUnscaled + positioned[headingLines.length + j]!.offsetX) * scale,
-    })),
+    headingLines: headingLines.map((h, i) => {
+      const pos = required(positioned[i], "Missing heading line metrics");
+      return {
+        ...h,
+        baseline: pos.baseline * scale,
+        offsetX: (padUnscaled + pos.offsetX) * scale,
+      };
+    }),
+    rowLines: rows.map((text, j) => {
+      const pos = required(
+        positioned[headingLines.length + j],
+        "Missing row line metrics",
+      );
+      return {
+        text,
+        baseline: pos.baseline * scale,
+        offsetX: (padUnscaled + pos.offsetX) * scale,
+      };
+    }),
   };
 }
 
@@ -195,33 +261,22 @@ function cardFitsClear(
   return true;
 }
 
-function chooseCardBox(
-  headingLines: readonly { tag: string; text: string }[],
-  rowSpecs: readonly { baseText: string; destinations: readonly string[] }[],
-  rect: { x: number; y: number; w: number; h: number },
-  scale: number,
+function tryCardBoxes(
+  rect: Rect,
+  layout: CardLayout,
   visibleCard: NavigationGeometry,
+  oldPageRect: Rect,
   field: Rect,
-  obstacles: { ink: Rect[]; texts: Rect[] },
-): { x: number; y: number; layout: CardLayout } | undefined {
-  const pageScale = Math.hypot(visibleCard.matrix[0], visibleCard.matrix[1]);
-  const oldPageRect = project(rect, visibleCard.matrix);
-  const clip = visibleCard.clip;
-  const maxWidthUnscaled = Math.max(
-    rect.w / scale,
-    Math.min(260, (field.w / (pageScale * scale)) * 0.9),
-  );
-  const tryBoxes = (
-    layout: CardLayout,
-    inkGap: number,
-    textGap: number,
-  ): { x: number; y: number; layout: CardLayout } | undefined => {
-    const positions = [
-      { x: rect.x, y: rect.y },
-      { x: rect.x, y: rect.y + rect.h - layout.height },
-      { x: rect.x + rect.w - layout.width, y: rect.y },
-      { x: rect.x + rect.w - layout.width, y: rect.y + rect.h - layout.height },
-    ];
+  obstacles: CardObstacles,
+  gaps: readonly (readonly [number, number])[],
+): CardPlacement | undefined {
+  const positions = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x, y: rect.y + rect.h - layout.height },
+    { x: rect.x + rect.w - layout.width, y: rect.y },
+    { x: rect.x + rect.w - layout.width, y: rect.y + rect.h - layout.height },
+  ];
+  for (const [inkGap, textGap] of gaps) {
     for (const pos of positions) {
       const candidate = project(
         { x: pos.x, y: pos.y, w: layout.width, h: layout.height },
@@ -231,7 +286,7 @@ function chooseCardBox(
         cardFitsClear(
           candidate,
           oldPageRect,
-          clip,
+          visibleCard.clip,
           field,
           obstacles,
           inkGap,
@@ -240,29 +295,146 @@ function chooseCardBox(
       )
         return { x: pos.x, y: pos.y, layout };
     }
-    return undefined;
-  };
+  }
+  return undefined;
+}
 
-  const singleLineWidth = (fontSize: number, pad: number) =>
-    Math.min(
-      maxWidthUnscaled,
-      Math.max(
-        rect.w / scale,
-        ...headingLines.map(
-          (h) => cardTextMetrics(h.text, fontSize, true).width + 2 * pad,
-        ),
-        ...rowSpecs.map((s) => {
-          const dest = s.destinations.length
-            ? ` ${formatPeerDestination(s.destinations)}`
-            : "";
-          return (
-            cardTextMetrics(`${s.baseText}${dest}`, fontSize).width + 2 * pad
-          );
-        }),
+function singleLineCardWidth(
+  headingLines: readonly CardHeadingSpec[],
+  rowSpecs: readonly CardRowSpec[],
+  minWidth: number,
+  maxWidth: number,
+  fontSize: number,
+  pad: number,
+) {
+  return Math.min(
+    maxWidth,
+    Math.max(
+      minWidth,
+      ...headingLines.map(
+        (h) => cardTextMetrics(h.text, fontSize, true).width + 2 * pad,
       ),
-    );
+      ...rowSpecs.map((s) => {
+        const dest = s.destinations.length
+          ? ` ${formatPeerDestination(s.destinations)}`
+          : "";
+        return (
+          cardTextMetrics(`${s.baseText}${dest}`, fontSize).width + 2 * pad
+        );
+      }),
+    ),
+  );
+}
 
-  // 1. Existing card dimensions at full CARD_FONT (zero box change).
+interface CardBoxContext {
+  headingLines: readonly CardHeadingSpec[];
+  rowSpecs: readonly CardRowSpec[];
+  rect: Rect;
+  scale: number;
+  pageScale: number;
+  maxWidthUnscaled: number;
+  visibleCard: NavigationGeometry;
+  oldPageRect: Rect;
+  field: Rect;
+  obstacles: CardObstacles;
+}
+
+function tryCardBox(
+  ctx: CardBoxContext,
+  layout: CardLayout,
+  gaps: readonly (readonly [number, number])[],
+): CardPlacement | undefined {
+  return tryCardBoxes(
+    ctx.rect,
+    layout,
+    ctx.visibleCard,
+    ctx.oldPageRect,
+    ctx.field,
+    ctx.obstacles,
+    gaps,
+  );
+}
+
+function tryCompactCardBox(ctx: CardBoxContext): CardPlacement | undefined {
+  const { headingLines, rowSpecs, rect, scale, pageScale } = ctx;
+  const printedEmMm = CARD_FONT * scale * pageScale;
+  const floorFont = Math.min(
+    CARD_FONT,
+    Math.max(
+      CARD_FONT * (MIN_CARD_FONT_MM / printedEmMm),
+      MIN_CARD_FONT_MM / (scale * pageScale),
+    ),
+  );
+  if (floorFont >= CARD_FONT - 0.05) return undefined;
+  const pad = Math.max(2.5, (CARD_PAD * floorFont) / CARD_FONT);
+  const compactSame = layoutCard(
+    headingLines,
+    rowSpecs,
+    rect.w / scale,
+    floorFont,
+    scale,
+    pad,
+  );
+  if (compactSame.height <= rect.h + 0.05)
+    return { x: rect.x, y: rect.y, layout: { ...compactSame, height: rect.h } };
+  const wideW = singleLineCardWidth(
+    headingLines,
+    rowSpecs,
+    rect.w / scale,
+    ctx.maxWidthUnscaled,
+    floorFont,
+    pad,
+  );
+  const compactWide = layoutCard(
+    headingLines,
+    rowSpecs,
+    wideW,
+    floorFont,
+    scale,
+    pad,
+  );
+  for (const gap of [
+    [1.5, 1.5],
+    [0.8, 1.5],
+    [0.4, 0.8],
+  ] as const) {
+    const fit =
+      tryCardBox(ctx, compactSame, [gap]) ??
+      tryCardBox(ctx, compactWide, [gap]);
+    if (fit) return fit;
+  }
+  return undefined;
+}
+
+function chooseCardBox(
+  headingLines: readonly CardHeadingSpec[],
+  rowSpecs: readonly CardRowSpec[],
+  rect: Rect,
+  scale: number,
+  visibleCard: NavigationGeometry,
+  field: Rect,
+  obstacles: CardObstacles,
+): CardPlacement | undefined {
+  const pageScale = Math.hypot(visibleCard.matrix[0], visibleCard.matrix[1]);
+  const ctx: CardBoxContext = {
+    headingLines,
+    rowSpecs,
+    rect,
+    scale,
+    pageScale,
+    maxWidthUnscaled: Math.max(
+      rect.w / scale,
+      Math.min(260, (field.w / (pageScale * scale)) * 0.9),
+    ),
+    visibleCard,
+    oldPageRect: project(rect, visibleCard.matrix),
+    field,
+    obstacles,
+  };
+  const fullGaps = [
+    [1.5, 1.5],
+    [0.8, 1.5],
+  ] as const;
   const sameWidthFull = layoutCard(
     headingLines,
     rowSpecs,
@@ -274,93 +446,26 @@ function chooseCardBox(
     return {
       x: rect.x,
       y: rect.y,
-      layout: { ...sameWidthFull, height: Math.max(sameWidthFull.height, rect.h) },
+      layout: {
+        ...sameWidthFull,
+        height: Math.max(sameWidthFull.height, rect.h),
+      },
     };
-
-  // 2. Wrap inside existing card width at full CARD_FONT (grow height cleanly).
-  for (const [inkGap, textGap] of [
-    [1.5, 1.5],
-    [0.8, 1.5],
-  ] as const) {
-    const wrapped = tryBoxes(sameWidthFull, inkGap, textGap);
-    if (wrapped) return wrapped;
-  }
-
-  // 3. Single-line at full CARD_FONT (grow width cleanly into open space).
-  const wideFull = layoutCard(
+  const wrapped = tryCardBox(ctx, sameWidthFull, fullGaps);
+  if (wrapped) return wrapped;
+  const wideW = singleLineCardWidth(
     headingLines,
     rowSpecs,
-    singleLineWidth(CARD_FONT, CARD_PAD),
+    rect.w / scale,
+    ctx.maxWidthUnscaled,
     CARD_FONT,
-    scale,
+    CARD_PAD,
   );
-  for (const [inkGap, textGap] of [
-    [1.5, 1.5],
-    [0.8, 1.5],
-  ] as const) {
-    const widened = tryBoxes(wideFull, inkGap, textGap);
-    if (widened) return widened;
-  }
-
-  // 4. Compact 2.52 mm printed font (>= 2.5 mm floor) inside existing rect or clear growth.
-  const printedEmMm = CARD_FONT * scale * pageScale;
-  const floorFont = Math.min(
-    CARD_FONT,
-    Math.max(
-      CARD_FONT * (MIN_CARD_FONT_MM / printedEmMm),
-      MIN_CARD_FONT_MM / (scale * pageScale),
-    ),
-  );
-  if (floorFont < CARD_FONT - 0.05) {
-    const padCompact = Math.max(2.5, (CARD_PAD * floorFont) / CARD_FONT);
-    const compactSame = layoutCard(
-      headingLines,
-      rowSpecs,
-      rect.w / scale,
-      floorFont,
-      scale,
-      padCompact,
-    );
-    if (compactSame.height <= rect.h + 0.05)
-      return {
-        x: rect.x,
-        y: rect.y,
-        layout: { ...compactSame, height: rect.h },
-      };
-    const compactWide = layoutCard(
-      headingLines,
-      rowSpecs,
-      singleLineWidth(floorFont, padCompact),
-      floorFont,
-      scale,
-      padCompact,
-    );
-    for (const [inkGap, textGap] of [
-      [1.5, 1.5],
-      [0.8, 1.5],
-      [0.4, 0.8],
-    ] as const) {
-      const fitSame = tryBoxes(compactSame, inkGap, textGap);
-      if (fitSame) return fitSame;
-      const fitWide = tryBoxes(compactWide, inkGap, textGap);
-      if (fitWide) return fitWide;
-    }
-  }
-  return undefined;
+  const wideFull = layoutCard(headingLines, rowSpecs, wideW, CARD_FONT, scale);
+  return tryCardBox(ctx, wideFull, fullGaps) ?? tryCompactCardBox(ctx);
 }
 
-/** Rewrite packet off-view cards in place to carry resolved sheet.zone destinations
- * with zero ELK reflow, checking sheet obstacles before any box expansion. */
-export function injectOffViewCardDestinations(
-  svg: string,
-  field: Rect,
-  geometry: readonly NavigationGeometry[],
-  byTerminal: ReadonlyMap<string, readonly OffViewConnection[]>,
-  destinationsByRow: ReadonlyMap<string, readonly string[]>,
-): string {
-  if (!destinationsByRow.size || !svg.includes('class="off-view-annotation"'))
-    return svg;
-  const obstacles = navigationObstacles(svg, true);
+function collectVisibleCards(geometry: readonly NavigationGeometry[]) {
   const visibleCards = new Map<string, NavigationGeometry>();
   for (const g of geometry) {
     if (!g.visible || !g.node.attrs["data-off-view-terminal-id"]) continue;
@@ -382,87 +487,139 @@ export function injectOffViewCardDestinations(
     ]);
     if (!visibleCards.has(key)) visibleCards.set(key, g);
   }
-  const placements = new Map<string, { x: number; y: number; layout: CardLayout }>();
+  return visibleCards;
+}
+
+function renderCardMarkup(
+  openTag: string,
+  rectTag: string,
+  chosen: CardPlacement,
+): string {
+  const { x, y, layout } = chosen;
+  let updatedRect = replaceAttr(rectTag, "x", fmt(x));
+  updatedRect = replaceAttr(updatedRect, "y", fmt(y));
+  updatedRect = replaceAttr(updatedRect, "width", fmt(layout.width));
+  updatedRect = replaceAttr(updatedRect, "height", fmt(layout.height));
+  const updatedHeadings = layout.headingLines.map((h) => {
+    let tag = replaceAttr(h.tag, "x", fmt(x + h.offsetX));
+    tag = replaceAttr(tag, "y", fmt(y + h.baseline));
+    tag = replaceAttr(tag, "font-size", fmt(layout.fontSize));
+    return tag;
+  });
+  const updatedRows = layout.rowLines.map((line) => {
+    const lx = fmt(x + line.offsetX);
+    const ly = fmt(y + line.baseline);
+    return `<text class="off-view-row" x="${lx}" y="${ly}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${fmt(layout.fontSize)}" fill="#101828">${xml(line.text)}</text>`;
+  });
+  return `${openTag}\n    ${updatedRect}\n    ${updatedHeadings.join("\n    ")}\n    ${updatedRows.join("\n    ")}\n  </g>`;
+}
+
+function parseCardBlock(
+  block: string,
+  byTerminal: ReadonlyMap<string, readonly OffViewConnection[]>,
+  destinationsByRow: ReadonlyMap<string, readonly string[]>,
+) {
+  const openTag = block.slice(0, block.indexOf(">") + 1);
+  const terminalRaw = attrValue(openTag, "data-off-view-terminal-id");
+  const conductorsRaw = attrValue(openTag, "data-off-view-conductors");
+  if (!terminalRaw || !conductorsRaw) return undefined;
+  const terminal = parseTerminalId(terminalRaw);
+  const conductors = parseConductorIds(conductorsRaw);
+  if (
+    !terminal ||
+    !conductors?.some(
+      (c) => destinationsByRow.get(cardRowKey(terminal, c))?.length,
+    )
+  )
+    return undefined;
+  const rectMatch = /<rect\b[^>]*class="off-view-card"[^>]*\/>/u.exec(block);
+  const headingMatches = [
+    ...block.matchAll(
+      /<text\b[^>]*class="off-view-heading"[^>]*>([\s\S]*?)<\/text>/gu,
+    ),
+  ];
+  const firstHeading = headingMatches[0];
+  if (!rectMatch || !firstHeading) return undefined;
+  const rectTag = rectMatch[0];
+  const rect = {
+    x: Number(attrValue(rectTag, "x")),
+    y: Number(attrValue(rectTag, "y")),
+    w: Number(attrValue(rectTag, "width")),
+    h: Number(attrValue(rectTag, "height")),
+  };
+  const headingFont = Number(
+    attrValue(firstHeading[0], "font-size") ?? CARD_FONT,
+  );
+  if (
+    !Number.isFinite(rect.x) ||
+    !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.w) ||
+    !Number.isFinite(rect.h) ||
+    !Number.isFinite(headingFont) ||
+    headingFont <= 0
+  )
+    return undefined;
+  const connections = byTerminal.get(terminalIdKey(terminal)) ?? [];
+  const rowSpecs: CardRowSpec[] = [];
+  for (const elementId of conductors) {
+    const key = elementKey(elementId);
+    const connection = connections.find((c) => elementKey(c.elementId) === key);
+    if (!connection) return undefined;
+    rowSpecs.push({
+      baseText: `${connection.designation} → ${connection.destination}`,
+      destinations:
+        destinationsByRow.get(cardRowKey(terminal, elementId)) ?? [],
+    });
+  }
+  return {
+    openTag,
+    rectTag,
+    rect,
+    scale: headingFont / CARD_FONT,
+    cardKey: JSON.stringify([terminalRaw, conductorsRaw]),
+    rowSpecs,
+    headingLines: headingMatches.map((m) => ({
+      tag: m[0],
+      text: decodeXml(m[1] ?? ""),
+    })),
+  };
+}
+
+/** Rewrite packet off-view cards in place to carry resolved sheet.zone destinations
+ * with zero ELK reflow, checking sheet obstacles before any box expansion. */
+export function injectOffViewCardDestinations(
+  svg: string,
+  field: Rect,
+  geometry: readonly NavigationGeometry[],
+  byTerminal: ReadonlyMap<string, readonly OffViewConnection[]>,
+  destinationsByRow: ReadonlyMap<string, readonly string[]>,
+  rewrites?: Map<string, string>,
+): string {
+  if (!destinationsByRow.size || !svg.includes('class="off-view-annotation"'))
+    return svg;
+  const obstacles = navigationObstacles(svg, true);
+  const visibleCards = collectVisibleCards(geometry);
+  const placements = new Map<string, CardPlacement>();
   return svg.replace(
     /<g\b[^>]*class="off-view-annotation"[^>]*>[\s\S]*?<\/g>/gu,
     (block) => {
-      const openEnd = block.indexOf(">");
-      const openTag = block.slice(0, openEnd + 1);
-      const terminalRaw = attrValue(openTag, "data-off-view-terminal-id");
-      const conductorsRaw = attrValue(openTag, "data-off-view-conductors");
-      if (!terminalRaw || !conductorsRaw) return block;
-      const terminal = JSON.parse(terminalRaw) as TerminalId;
-      const conductors = JSON.parse(conductorsRaw) as ConductiveElementId[];
-      if (
-        !conductors.some((c) =>
-          destinationsByRow.get(cardRowKey(terminal, c))?.length,
-        )
-      )
-        return block;
-      const rectMatch = /<rect\b[^>]*class="off-view-card"[^>]*\/>/u.exec(
-        block,
-      );
-      const headingMatches = [
-        ...block.matchAll(
-          /<text\b[^>]*class="off-view-heading"[^>]*>([\s\S]*?)<\/text>/gu,
-        ),
-      ];
-      if (!rectMatch || !headingMatches.length) return block;
-      const rectTag = rectMatch[0];
-      const rect = {
-        x: Number(attrValue(rectTag, "x")),
-        y: Number(attrValue(rectTag, "y")),
-        w: Number(attrValue(rectTag, "width")),
-        h: Number(attrValue(rectTag, "height")),
-      };
-      const headingFont = Number(
-        attrValue(headingMatches[0]![0], "font-size") ?? CARD_FONT,
-      );
-      if (
-        !Number.isFinite(rect.x) ||
-        !Number.isFinite(rect.y) ||
-        !Number.isFinite(rect.w) ||
-        !Number.isFinite(rect.h) ||
-        !Number.isFinite(headingFont) ||
-        headingFont <= 0
-      )
-        return block;
-      const scale = headingFont / CARD_FONT;
-      const connections = byTerminal.get(terminalIdKey(terminal)) ?? [];
-      const rowSpecs: { baseText: string; destinations: readonly string[] }[] =
-        [];
-      for (const elementId of conductors) {
-        const key = elementKey(elementId);
-        const connection = connections.find(
-          (c) => elementKey(c.elementId) === key,
-        );
-        if (!connection) return block;
-        rowSpecs.push({
-          baseText: `${connection.designation} → ${connection.destination}`,
-          destinations:
-            destinationsByRow.get(cardRowKey(terminal, elementId)) ?? [],
-        });
-      }
-      const headingLines = headingMatches.map((m) => ({
-        tag: m[0],
-        text: decodeXml(m[1]!),
-      }));
-      const cardKey = JSON.stringify([terminalRaw, conductorsRaw]);
-      let chosen = placements.get(cardKey);
+      const parsed = parseCardBlock(block, byTerminal, destinationsByRow);
+      if (!parsed) return block;
+      let chosen = placements.get(parsed.cardKey);
       if (!chosen) {
-        const visibleCard = visibleCards.get(cardKey);
+        const visibleCard = visibleCards.get(parsed.cardKey);
         if (!visibleCard) return block;
         chosen = chooseCardBox(
-          headingLines,
-          rowSpecs,
-          rect,
-          scale,
+          parsed.headingLines,
+          parsed.rowSpecs,
+          parsed.rect,
+          parsed.scale,
           visibleCard,
           field,
           obstacles,
         );
         if (!chosen) return block;
-        placements.set(cardKey, chosen);
+        placements.set(parsed.cardKey, chosen);
         const newPageRect = project(
           {
             x: chosen.x,
@@ -475,23 +632,35 @@ export function injectOffViewCardDestinations(
         obstacles.ink.push(newPageRect);
         obstacles.texts.push(newPageRect);
       }
-      const { x, y, layout } = chosen;
-      let updatedRect = replaceAttr(rectTag, "x", fmt(x));
-      updatedRect = replaceAttr(updatedRect, "y", fmt(y));
-      updatedRect = replaceAttr(updatedRect, "width", fmt(layout.width));
-      updatedRect = replaceAttr(updatedRect, "height", fmt(layout.height));
-      const updatedHeadings = layout.headingLines.map((h) => {
-        let tag = replaceAttr(h.tag, "x", fmt(x + h.offsetX));
-        tag = replaceAttr(tag, "y", fmt(y + h.baseline));
-        tag = replaceAttr(tag, "font-size", fmt(layout.fontSize));
-        return tag;
-      });
-      const updatedRows = layout.rowLines.map((line) => {
-        const lx = fmt(x + line.offsetX);
-        const ly = fmt(y + line.baseline);
-        return `<text class="off-view-row" x="${lx}" y="${ly}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${fmt(layout.fontSize)}" fill="#101828">${xml(line.text)}</text>`;
-      });
-      return `${openTag}\n    ${updatedRect}\n    ${updatedHeadings.join("\n    ")}\n    ${updatedRows.join("\n    ")}\n  </g>`;
+      const rewritten = renderCardMarkup(
+        parsed.openTag,
+        parsed.rectTag,
+        chosen,
+      );
+      rewrites?.set(parsed.cardKey, rewritten);
+      return rewritten;
+    },
+  );
+}
+
+/** Keep hidden off-screen copies of rewritten off-view cards identical across
+ * sibling tiles of the same multi-sheet view so tiled text reconciliation stays exact. */
+export function syncRewrittenOffViewCards(
+  svg: string,
+  rewrites: ReadonlyMap<string, string>,
+): string {
+  if (!rewrites.size || !svg.includes('class="off-view-annotation"'))
+    return svg;
+  return svg.replace(
+    /<g\b[^>]*class="off-view-annotation"[^>]*>[\s\S]*?<\/g>/gu,
+    (block) => {
+      const openEnd = block.indexOf(">");
+      const openTag = block.slice(0, openEnd + 1);
+      const terminalRaw = attrValue(openTag, "data-off-view-terminal-id");
+      const conductorsRaw = attrValue(openTag, "data-off-view-conductors");
+      if (!terminalRaw || !conductorsRaw) return block;
+      const cardKey = JSON.stringify([terminalRaw, conductorsRaw]);
+      return rewrites.get(cardKey) ?? block;
     },
   );
 }

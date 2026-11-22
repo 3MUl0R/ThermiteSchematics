@@ -1,4 +1,5 @@
 import type { Rect } from "../device-legend/geometry.js";
+import { required } from "../presentation/util.js";
 import {
   navigationObstacles,
   NavigationSlotFailure,
@@ -15,7 +16,7 @@ import type { RenderedSheet } from "./types.js";
 const PEER_REACH_MM = 6.1;
 // Source-free text must start directly beside its owner.
 const UNNAMED_REACH_MM = 2.1;
-const unnamed = new Set(["compact"]);
+const unnamed = new Set(["compact", "compact-wrapped"]);
 const alongPreference = [
   "qualified-wrapped",
   "named-compact-wrapped",
@@ -30,11 +31,14 @@ export interface PeerNotePlacement {
   lines: readonly string[];
 }
 
+const TIGHT_TEXT_CLEARANCE_MM = 0.75;
+
 function place(
   entry: PeerReference,
   shapes: readonly NavigationShape[],
   field: Rect,
   ink: ReturnType<typeof navigationObstacles>,
+  textVerticalClearanceMm = NAVIGATION_CLEARANCE_MM,
 ) {
   const search = (
     forms: readonly NavigationShape[],
@@ -55,7 +59,7 @@ function place(
       (shape) => ({
         anchors,
         gap: reachMm(shape),
-        textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
+        textVerticalClearanceMm,
         ...(entry.foreignOwners?.length
           ? { foreignOwners: entry.foreignOwners }
           : {}),
@@ -63,10 +67,15 @@ function place(
     );
     if (found) return { box: found.box, lines: found.shape.maximumForms };
   };
-  const near = search(shapes, [entry.owner], (form) =>
-    unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM,
-  );
+  const reachFor = (form: NavigationShape) =>
+    unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM;
+  const near = search(shapes, [entry.owner], reachFor);
   if (near) return near;
+  const alternates = entry.owners?.filter((o) => o !== entry.owner) ?? [];
+  if (alternates.length) {
+    const alt = search(shapes, alternates, reachFor);
+    if (alt) return alt;
+  }
 
   // In a tight drawing the same conductor's painted stroke or existing
   // continuation caption supplies a second anchor, always with the source named.
@@ -76,6 +85,121 @@ function place(
     shapes.filter((s) => s.id === id),
   );
   return search(named, supports, () => PEER_REACH_MM);
+}
+
+const WORDING_FAMILIES: readonly (readonly string[])[] = [
+  ["full", "wrapped"],
+  ["named-compact", "named-compact-wrapped"],
+  ["compact", "compact-wrapped"],
+  ["qualified", "qualified-wrapped"],
+];
+
+type PeerCandidate = {
+  index: number;
+  entry: PeerReference;
+  shapes: NavigationShape[];
+};
+
+function tryPeerOrder(
+  order: readonly PeerCandidate[],
+  allowed: ReadonlySet<string>,
+  field: Rect,
+  ink: ReturnType<typeof navigationObstacles>,
+  textVerticalClearanceMm: number,
+) {
+  const localInk = { ink: [...ink.ink], texts: [...ink.texts] };
+  const placed = new Map<number, PeerNotePlacement>();
+  for (const { index, entry, shapes } of order) {
+    const familyShapes = shapes.filter((s) => allowed.has(s.id));
+    if (!familyShapes.length) return { failed: entry };
+    const result = place(
+      entry,
+      familyShapes,
+      field,
+      localInk,
+      textVerticalClearanceMm,
+    );
+    if (!result) return { failed: entry };
+    localInk.ink.push(result.box);
+    localInk.texts.push(result.box);
+    placed.set(index, result);
+  }
+  return { placed, ink: localInk };
+}
+
+function withoutDrawingTextInk(
+  ink: ReturnType<typeof navigationObstacles>,
+  drawingTexts: ReadonlySet<Rect>,
+) {
+  return {
+    ink: ink.ink.filter((box) => !drawingTexts.has(box)),
+    texts: ink.texts,
+  };
+}
+
+function placePeerGroup(
+  group: readonly PeerCandidate[],
+  field: Rect,
+  ink: ReturnType<typeof navigationObstacles>,
+  drawingTexts: ReadonlySet<Rect>,
+) {
+  let firstFailed = required(group[0], "Missing peer group").entry;
+  const passes = [
+    { source: ink, textGap: NAVIGATION_CLEARANCE_MM },
+    {
+      source: withoutDrawingTextInk(ink, drawingTexts),
+      textGap: TIGHT_TEXT_CLEARANCE_MM,
+    },
+  ];
+  for (const { source, textGap } of passes) {
+    for (const family of WORDING_FAMILIES) {
+      const allowed = new Set(family);
+      const forward = tryPeerOrder(group, allowed, field, source, textGap);
+      if (forward.placed) {
+        return {
+          placed: forward.placed,
+          ink: {
+            ink: [
+              ...ink.ink,
+              ...[...forward.placed.values()].map((p) => p.box),
+            ],
+            texts: [
+              ...ink.texts,
+              ...[...forward.placed.values()].map((p) => p.box),
+            ],
+          },
+        };
+      }
+      firstFailed = forward.failed;
+      // Nearby captions can compete for the same slot. Retry in reverse order
+      // within the same wording family before stepping down to a shorter family.
+      if (group.length > 1) {
+        const backward = tryPeerOrder(
+          [...group].reverse(),
+          allowed,
+          field,
+          source,
+          textGap,
+        );
+        if (backward.placed) {
+          return {
+            placed: backward.placed,
+            ink: {
+              ink: [
+                ...ink.ink,
+                ...[...backward.placed.values()].map((p) => p.box),
+              ],
+              texts: [
+                ...ink.texts,
+                ...[...backward.placed.values()].map((p) => p.box),
+              ],
+            },
+          };
+        }
+      }
+    }
+  }
+  return { failed: firstFailed };
 }
 
 export function placePeerNotes(
@@ -97,7 +221,8 @@ export function placePeerNotes(
     const key = ownerDestination(entry);
     ownerUses.set(key, (ownerUses.get(key) ?? 0) + 1);
   }
-  const candidates = entries.map((entry) => ({
+  const candidates: PeerCandidate[] = entries.map((entry, index) => ({
+    index,
     entry,
     shapes: forms(
       entry,
@@ -106,27 +231,27 @@ export function placePeerNotes(
     ),
   }));
   const obstacles = navigationObstacles(sheet.svg, true);
-  const placeInOrder = (order: typeof candidates) => {
-    const ink = { ink: [...obstacles.ink], texts: [...obstacles.texts] };
-    const placements: PeerNotePlacement[] = [];
-    for (const { entry, shapes } of order) {
-      const result = place(entry, shapes, field, ink);
-      if (!result) return { failed: entry };
-      ink.ink.push(result.box);
-      ink.texts.push(result.box);
-      placements.push(result);
+  const drawingTexts = new Set(obstacles.texts);
+  // Enforce one consistent peer-reference wording family per kind per sheet (#483).
+  const byKind = new Map<PeerReference["kind"], PeerCandidate[]>();
+  for (const item of candidates) {
+    const list = byKind.get(item.entry.kind) ?? [];
+    list.push(item);
+    byKind.set(item.entry.kind, list);
+  }
+  let currentInk = { ink: [...obstacles.ink], texts: [...obstacles.texts] };
+  const placements = new Array<PeerNotePlacement>(entries.length);
+  for (const group of byKind.values()) {
+    const result = placePeerGroup(group, field, currentInk, drawingTexts);
+    if ("failed" in result) {
+      const entry = result.failed;
+      throw new NavigationSlotFailure(
+        `Navigation ${entry.kind} cannot fit sheet ${sheet.number}: ${entry.value} has no clear slot within ${PEER_REACH_MM} mm of its owner.`,
+        { field, owner: entry.owner },
+      );
     }
-    return { placements };
-  };
-  const forward = placeInOrder(candidates);
-  if (forward.placements) return forward.placements;
-  // Nearby captions can compete for the same slot. Retry in reverse order
-  // with the original drawing ink before refusing the sheet.
-  const backward = placeInOrder(candidates.reverse());
-  if (backward.placements) return backward.placements.reverse();
-  const entry = forward.failed;
-  throw new NavigationSlotFailure(
-    `Navigation ${entry.kind} cannot fit sheet ${sheet.number}: ${entry.value} has no clear slot within ${PEER_REACH_MM} mm of its owner.`,
-    { field, owner: entry.owner },
-  );
+    currentInk = result.ink;
+    for (const [index, placed] of result.placed) placements[index] = placed;
+  }
+  return placements;
 }

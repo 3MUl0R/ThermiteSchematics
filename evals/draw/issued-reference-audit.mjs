@@ -32,6 +32,70 @@ function endpointZone(packet, geometries, row, name) {
   return b && measuredZone(g, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
 }
 
+function assemblyEndpointObligation(
+  r,
+  uid,
+  key,
+  { ports, portsBySheet, links, rows, native, ir, packet, geometries },
+) {
+  const selfId = portId(uid, key);
+  const landings = ports.get(selfId) ?? [];
+  const drawn = new Set((links.get(r.uid) ?? []).map((a) => a.sheet));
+  const expected = native.find(
+    (n) => n.kind === "assemblies" && n.key === r.uid,
+  );
+  const row =
+    expected &&
+    rows.find(
+      (candidate) =>
+        candidate.visible && candidate.zone && sufficient(candidate, expected),
+    );
+  const assembly = nativeRelationReference(ir, r).text;
+  const ownerLabel = `${ir.devices.find((d) => d.uid === uid)?.designation}.${key}`;
+  const label = `${ownerLabel} · ${assembly}`;
+  const rowZone = endpointZone(packet, geometries, row, ownerLabel);
+  return landings.flatMap((src) => {
+    const ownerBox = src.circleBox ?? src.bbox;
+    const foreignOwners = (portsBySheet.get(src.sheet) ?? [])
+      .filter((p) => p.id !== selfId)
+      .map((p) => p.box);
+    const target = landings.find(
+      (a) => drawn.has(a.sheet) !== drawn.has(src.sheet) && a.zones.length,
+    );
+    if (target)
+      return [
+        {
+          sheet: src.sheet,
+          kind: "attachment",
+          source: [uid, key, r.uid],
+          ownerLabel,
+          owners: [ownerBox],
+          foreignOwners,
+          values: target.zones.map((z) => `${label} → ${at(target.sheet, z)}`),
+          compactValues: target.zones.map(
+            (z) => `→ ${assembly} ${at(target.sheet, z)}`,
+          ),
+        },
+      ];
+    return !drawn.size && rowZone
+      ? [
+          {
+            sheet: src.sheet,
+            kind: "assembly-inventory",
+            source: [uid, key, r.uid],
+            ownerLabel,
+            owners: [ownerBox],
+            foreignOwners,
+            values: [`${label} inventory → ${at(row.sheet, rowZone)}`],
+            compactValues: [
+              `→ ${assembly} inventory ${at(row.sheet, rowZone)}`,
+            ],
+          },
+        ]
+      : [];
+  });
+}
+
 function assemblyObligations(packet, geometries, ir, rows, native) {
   const { ports, links } = assemblyAppearances(packet, geometries, ir);
   const portsBySheet = new Map();
@@ -40,75 +104,23 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
       if (!portsBySheet.has(p.sheet)) portsBySheet.set(p.sheet, []);
       portsBySheet.get(p.sheet).push({ id, box: p.circleBox ?? p.bbox });
     }
+  const ctx = {
+    ports,
+    portsBySheet,
+    links,
+    rows,
+    native,
+    ir,
+    packet,
+    geometries,
+  };
   return ir.relations
     .filter((r) => r.assembly)
     .flatMap((r) =>
       [
         [r.fromDeviceUid, r.assembly.fromPort],
         [r.toDeviceUid, r.assembly.toPort],
-      ].flatMap(([uid, key]) => {
-        const selfId = portId(uid, key);
-        const landings = ports.get(selfId) ?? [];
-        const drawn = new Set((links.get(r.uid) ?? []).map((a) => a.sheet));
-        const expected = native.find(
-          (n) => n.kind === "assemblies" && n.key === r.uid,
-        );
-        const row =
-          expected &&
-          rows.find(
-            (candidate) =>
-              candidate.visible &&
-              candidate.zone &&
-              sufficient(candidate, expected),
-          );
-        const assembly = nativeRelationReference(ir, r).text;
-        const ownerLabel = `${ir.devices.find((d) => d.uid === uid)?.designation}.${key}`;
-        const label = `${ownerLabel} · ${assembly}`;
-        const rowZone = endpointZone(packet, geometries, row, ownerLabel);
-        return landings.flatMap((src) => {
-          const ownerBox = src.circleBox ?? src.bbox;
-          const foreignOwners = (portsBySheet.get(src.sheet) ?? [])
-            .filter((p) => p.id !== selfId)
-            .map((p) => p.box);
-          const target = landings.find(
-            (a) =>
-              drawn.has(a.sheet) !== drawn.has(src.sheet) && a.zones.length,
-          );
-          if (target)
-            return [
-              {
-                sheet: src.sheet,
-                kind: "attachment",
-                source: [uid, key, r.uid],
-                ownerLabel,
-                owners: [ownerBox],
-                foreignOwners,
-                values: target.zones.map(
-                  (z) => `${label} → ${at(target.sheet, z)}`,
-                ),
-                compactValues: target.zones.map(
-                  (z) => `→ ${assembly} ${at(target.sheet, z)}`,
-                ),
-              },
-            ];
-          return !drawn.size && rowZone
-            ? [
-                {
-                  sheet: src.sheet,
-                  kind: "assembly-inventory",
-                  source: [uid, key, r.uid],
-                  ownerLabel,
-                  owners: [ownerBox],
-                  foreignOwners,
-                  values: [`${label} inventory → ${at(row.sheet, rowZone)}`],
-                  compactValues: [
-                    `→ ${assembly} inventory ${at(row.sheet, rowZone)}`,
-                  ],
-                },
-              ]
-            : [];
-        });
-      }),
+      ].flatMap(([uid, key]) => assemblyEndpointObligation(r, uid, key, ctx)),
     );
 }
 
@@ -162,7 +174,8 @@ function cardCarriesDestination(obligation) {
   if (!alternates.length)
     return new RegExp(`^\\s+(?:${primaryPattern})(?:\\s|$)`, "u").test(tail);
   const altPatterns = alternates.map(
-    (alt) => `(?:${alt.zones.map((z) => escapeRegExp(at(alt.sheet, z))).join("|")})`,
+    (alt) =>
+      `(?:${alt.zones.map((z) => escapeRegExp(at(alt.sheet, z))).join("|")})`,
   );
   const pattern = new RegExp(
     `^\\s+(?:${primaryPattern})\\s+(?:\\(\\s*)?also shown\\s+${altPatterns.join("\\s*,\\s*")}\\)?(?:\\s|$)`,
@@ -179,10 +192,10 @@ function nameForm(obligation, note, value, namedCounts) {
   )
     return;
   const { ownerLabel, values, compactValues = [] } = obligation;
-  if (values.includes(value)) return "named";
+  if (values.includes(value)) return "full";
   if (ownerLabel && compactValues.some((v) => value === `${ownerLabel} ${v}`))
-    return "named";
-  if (!note.peerGroup && compactValues.includes(value)) return "bare";
+    return "named-compact";
+  if (!note.peerGroup && compactValues.includes(value)) return "bare-compact";
   const addr = noteAddress(value);
   if (
     addr &&
@@ -191,7 +204,7 @@ function nameForm(obligation, note, value, namedCounts) {
     namedCounts.get(JSON.stringify([ownerLabel, addr])) === 1 &&
     value === `${ownerLabel} → ${addr}`
   )
-    return "named";
+    return "qualified";
 }
 
 function measuredFieldHorizontalBounds(g) {
@@ -240,6 +253,147 @@ function checkPeerStackGaps(sheet, regions, result) {
     }
 }
 
+function auditNoteGeometry(
+  sheet,
+  lines,
+  printed,
+  fieldBounds,
+  paintedRegions,
+  result,
+) {
+  const first = lines[0];
+  if (lines.length > 1 && lines.every((t) => painted(t) && t.anchor)) {
+    const sortedLines = lines.slice().sort((a, b) => a.anchor.y - b.anchor.y);
+    if (sortedLines.slice(0, -1).some((l) => /(?:→|->)\s*$/u.test(l.text)))
+      result.push(
+        finding("issued-peer-reference-arrow-split", first, {
+          sheet,
+          printed,
+          lines: sortedLines.map((l) => l.text),
+        }),
+      );
+  }
+  if (!lines.every((t) => painted(t) && t.bbox)) return;
+  const box = noteRegion(lines);
+  paintedRegions.push({ first, text: printed, box });
+  if (
+    fieldBounds &&
+    (box.x < fieldBounds.left - INK_ACCURACY_MM ||
+      box.x + box.w > fieldBounds.right + INK_ACCURACY_MM)
+  )
+    result.push(
+      finding("issued-peer-reference-outside-drawing-bounds", first, {
+        sheet,
+        printed,
+        noteLeftMm: box.x,
+        fieldLeftMm: fieldBounds.left,
+        fieldRightMm: fieldBounds.right,
+      }),
+    );
+}
+
+function auditMatchedOwnerProximity(
+  sheet,
+  lines,
+  value,
+  obligation,
+  form,
+  result,
+) {
+  if (!obligation.owners) return;
+  const first = lines[0];
+  const named = form !== "bare-compact";
+  const gap = noteOwnerGap(lines, obligation, named);
+  if (!inOwnerReach(gap, named))
+    result.push(
+      finding("issued-peer-reference-owner-distance", first, {
+        sheet,
+        printed: value,
+        source: obligation.source,
+        gapMm: gap,
+        named,
+      }),
+    );
+  if (!obligation.foreignOwners?.length || !lines.every((t) => t.bbox)) return;
+  const box = noteRegion(lines);
+  const foreignGap = Math.min(
+    ...obligation.foreignOwners.map((owner) => boxGap(box, owner)),
+  );
+  if (foreignGap + INK_ACCURACY_MM < gap)
+    result.push(
+      finding("issued-peer-reference-foreign-owner", first, {
+        sheet,
+        printed: value,
+        source: obligation.source,
+        ownerGapMm: gap,
+        foreignGapMm: foreignGap,
+      }),
+    );
+}
+
+function auditFreePeerNote(sheet, lines, state, result) {
+  const first = lines[0];
+  const printed = lines.map((t) => t.text).join(" ");
+  const value = measuredNote(lines);
+  auditNoteGeometry(
+    sheet,
+    lines,
+    printed,
+    state.fieldBounds,
+    state.paintedRegions,
+    result,
+  );
+  if (
+    first.peerReference === "conductor-peer" &&
+    state.cardOwnedSources.has(first.peerSource)
+  ) {
+    result.push(
+      finding("issued-peer-reference-duplicate-card-note", first, {
+        sheet,
+        printed,
+        source: first.peerSource,
+      }),
+    );
+    return;
+  }
+  if (value && /^→\s*\d+\.[A-D][1-6]$/u.test(value)) {
+    result.push(
+      finding("issued-peer-reference-subjectless", first, {
+        sheet,
+        printed: value,
+      }),
+    );
+    return;
+  }
+  const sourceKey = JSON.stringify([first.peerReference, first.peerSource]);
+  if (state.seenFreeSources.has(sourceKey)) {
+    result.push(
+      finding("issued-peer-reference-duplicate", first, {
+        sheet,
+        printed,
+        source: first.peerSource,
+      }),
+    );
+    return;
+  }
+  let form;
+  const index = state.obligations.findIndex(
+    (o) => (form = nameForm(o, first, value, state.namedCounts)),
+  );
+  if (index === -1) {
+    result.push(
+      finding("issued-peer-reference-unbound", first, { sheet, printed }),
+    );
+    return;
+  }
+  state.seenFreeSources.add(sourceKey);
+  const kindForms = state.formsByKind.get(first.peerReference) ?? [];
+  kindForms.push({ form, first, text: value });
+  state.formsByKind.set(first.peerReference, kindForms);
+  const [obligation] = state.obligations.splice(index, 1);
+  auditMatchedOwnerProximity(sheet, lines, value, obligation, form, result);
+}
+
 export function peerReferenceFindings(sheet, g, expected) {
   const result = [];
   const cardOwnedSources = new Set();
@@ -260,127 +414,40 @@ export function peerReferenceFindings(sheet, g, expected) {
         });
     } else obligations.push(o);
   }
-  const namedCounts = addressUses(obligations, true);
-  const fieldBounds = measuredFieldHorizontalBounds(g);
-  const seenFreeSources = new Set();
-  const paintedRegions = [];
+  const state = {
+    cardOwnedSources,
+    obligations,
+    namedCounts: addressUses(obligations, true),
+    fieldBounds: measuredFieldHorizontalBounds(g),
+    seenFreeSources: new Set(),
+    formsByKind: new Map(),
+    paintedRegions: [],
+  };
   const notes = groupBy(
     (g.texts ?? []).filter((t) => t.peerReference),
     (t) => t.peerGroup ?? t,
   );
-  for (const lines of notes.values()) {
-    const first = lines[0];
-    const printed = lines.map((t) => t.text).join(" ");
-    const value = measuredNote(lines);
-    if (lines.every((t) => painted(t) && t.bbox)) {
-      const box = noteRegion(lines);
-      paintedRegions.push({ first, text: printed, box });
-      if (
-        fieldBounds &&
-        (box.x < fieldBounds.left - INK_ACCURACY_MM ||
-          box.x + box.w > fieldBounds.right + INK_ACCURACY_MM)
-      )
-        result.push(
-          finding("issued-peer-reference-outside-drawing-bounds", first, {
-            sheet,
-            printed,
-            noteLeftMm: box.x,
-            fieldLeftMm: fieldBounds.left,
-            fieldRightMm: fieldBounds.right,
-          }),
-        );
-    }
-    if (
-      first.peerReference === "conductor-peer" &&
-      cardOwnedSources.has(first.peerSource)
-    ) {
+  for (const lines of notes.values())
+    auditFreePeerNote(sheet, lines, state, result);
+  for (const [kind, used] of state.formsByKind) {
+    const distinct = [...new Set(used.map((u) => u.form))];
+    if (distinct.length > 1)
       result.push(
-        finding("issued-peer-reference-duplicate-card-note", first, {
+        finding("issued-peer-reference-mixed-form", used[0].first, {
           sheet,
-          printed,
-          source: first.peerSource,
+          referenceKind: kind,
+          forms: distinct,
+          notes: used.map((u) => u.text),
         }),
       );
-      continue;
-    }
-    if (value && /^→\s*\d+\.[A-D][1-6]$/u.test(value)) {
-      result.push(
-        finding("issued-peer-reference-subjectless", first, {
-          sheet,
-          printed: value,
-        }),
-      );
-      continue;
-    }
-    const sourceKey = JSON.stringify([first.peerReference, first.peerSource]);
-    if (seenFreeSources.has(sourceKey)) {
-      result.push(
-        finding("issued-peer-reference-duplicate", first, {
-          sheet,
-          printed,
-          source: first.peerSource,
-        }),
-      );
-      continue;
-    }
-    let form;
-    const index = obligations.findIndex(
-      (o) => (form = nameForm(o, first, value, namedCounts)),
-    );
-    if (index === -1) {
-      result.push(
-        finding("issued-peer-reference-unbound", first, {
-          sheet,
-          printed,
-        }),
-      );
-      continue;
-    }
-    seenFreeSources.add(sourceKey);
-    const [obligation] = obligations.splice(index, 1);
-    if (obligation.owners) {
-      const named = form === "named";
-      const gap = noteOwnerGap(lines, obligation, named);
-      if (!inOwnerReach(gap, named))
-        result.push(
-          finding("issued-peer-reference-owner-distance", first, {
-            sheet,
-            printed: value,
-            source: obligation.source,
-            gapMm: gap,
-            named,
-          }),
-        );
-      if (obligation.foreignOwners?.length && lines.every((t) => t.bbox)) {
-        const box = noteRegion(lines);
-        const foreignGap = Math.min(
-          ...obligation.foreignOwners.map((owner) => boxGap(box, owner)),
-        );
-        if (foreignGap + INK_ACCURACY_MM < gap)
-          result.push(
-            finding("issued-peer-reference-foreign-owner", first, {
-              sheet,
-              printed: value,
-              source: obligation.source,
-              ownerGapMm: gap,
-              foreignGapMm: foreignGap,
-            }),
-          );
-      }
-    }
   }
-  checkPeerStackGaps(sheet, paintedRegions, result);
+  checkPeerStackGaps(sheet, state.paintedRegions, result);
   return result.concat(
     obligations.map((o) => ({
       ...finding(
         "issued-peer-reference-missing",
         {},
-        {
-          sheet,
-          referenceKind: o.kind,
-          source: o.source,
-          expected: o.values,
-        },
+        { sheet, referenceKind: o.kind, source: o.source, expected: o.values },
       ),
       designation: o.values[0],
     })),

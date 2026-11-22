@@ -171,7 +171,9 @@ it("places W37 nearest R1.14 rather than R1.12 in DOL P6 TTB (#507)", async () =
       const port = required(
         geom.find((g) => g.visible && g.node.attrs["data-terminal-id"] === id),
       );
-      const circle = required(port.node.children.find((n) => n.name === "circle"));
+      const circle = required(
+        port.node.children.find((n) => n.name === "circle"),
+      );
       const mark = required(byNode.get(circle));
       const r = Number(circle.attrs.r);
       return project(

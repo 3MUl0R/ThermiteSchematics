@@ -33,7 +33,7 @@ export function communicationPartRows(
 export function nativePartToken(t: NativePartTarget): string {
   return `P${t.part}/S${String(t.sheet).padStart(2, "0")}.${required(t.zone, "Unresolved native part zone")}`;
 }
-/** Atomic native port entries share unused reference-line width at the same em. */
+/** Qualified port pointers start on their own line below the repeated-body pointer (#430). */
 export function communicationRowLayout(
   row: CommunicationContinuationBlock["rows"][number],
   width: number,
@@ -47,17 +47,22 @@ export function communicationRowLayout(
   };
   let line = Math.max(0, lines.length - 1),
     x = measure(lines[line] ?? "");
+  if (row.ports?.length && lines.length > 0 && lines[line]) {
+    line = lines.length;
+    x = 0;
+    lines.push("");
+  }
   for (const port of row.ports ?? []) {
     if (!port.targets.length) throw Error("Unresolved native port destination");
     const value = `${row.label} port ${port.key} → ${port.targets.map((t) => `${String(t.sheet).padStart(2, "0")}.${required(t.zone, "Unresolved native part zone")}`).join(", ")}`;
     const w = measure(value);
     if (w > width)
       throw Error("Native port entry cannot fit the reserved reference width");
-    if (x + 2 + w > width) {
+    if (x > 0 && x + 2 + w > width) {
       line++;
       x = 0;
       lines.push("");
-    } else x += 2;
+    } else if (x > 0) x += 2;
     entries.push({ key: port.key, text: value, x, line });
     lines[line] = `${lines[line] ?? ""}${lines[line] ? "  " : ""}${value}`;
     x += w;

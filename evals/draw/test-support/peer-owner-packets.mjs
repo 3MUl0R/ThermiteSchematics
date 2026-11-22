@@ -27,9 +27,10 @@ const papers = {
     ["left-to-right", "a4", "portrait", "standard", 10, 32],
     ["left-to-right", "a4", "portrait", "compact", 10, 32],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 36],
-    ["top-to-bottom", "letter", "portrait", "compact", 5, 34],
+    // In-frame return placement saves 2 sheets on compact letter portrait and 1 on compact A4 portrait vs 5c2914a (34/31).
+    ["top-to-bottom", "letter", "portrait", "compact", 5, 32],
     ["top-to-bottom", "a4", "landscape", "standard", 5, 31],
-    ["top-to-bottom", "a4", "portrait", "compact", 5, 31],
+    ["top-to-bottom", "a4", "portrait", "compact", 5, 30],
   ],
 };
 

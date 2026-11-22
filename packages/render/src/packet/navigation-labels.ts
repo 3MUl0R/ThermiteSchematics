@@ -64,14 +64,29 @@ export function repeatNoun(
   );
   return fn.kind === "contact" ? "contact" : "function";
 }
-/** Greedy word wrapping; authored tokens are never split. Hard role breaks survive. */
+function atomicNavigationTokens(paragraph: string): string[] {
+  const words = paragraph.split(" ");
+  const tokens: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    if (word === undefined) continue;
+    const next = words[i + 1];
+    if ((word === "→" || word === "->") && next !== undefined) {
+      tokens.push(`${word} ${next}`);
+      i++;
+    } else tokens.push(word);
+  }
+  return tokens;
+}
+
+/** Greedy word wrapping; authored tokens and "→ destination" pairs are never split (#409). */
 export function wrapNavigationText(text: string, width: number): string {
   return text
     .split("\n")
     .flatMap((paragraph) => {
       const lines: string[] = [];
       let line = "";
-      for (const word of paragraph.split(" ")) {
+      for (const word of atomicNavigationTokens(paragraph)) {
         const next = line ? `${line} ${word}` : word;
         if (line && measureNavigationText(next) > width) {
           lines.push(line);
@@ -94,7 +109,11 @@ export function envelopeShapes(
       ) * 1000,
     ) / 1000;
   const minimum = Math.max(
-    ...forms.flatMap((f) => f.split(/\s+/).map(measureNavigationText)),
+    ...forms.flatMap((f) =>
+      f
+        .split("\n")
+        .flatMap((p) => atomicNavigationTokens(p).map(measureNavigationText)),
+    ),
   );
   // Stable wide-to-narrow order, independent of current page/zone values.
   const widths = [maximum, 84, 70, 56, 42, 28, ...narrowWidths].filter(

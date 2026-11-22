@@ -11,27 +11,30 @@ it.each([
   "terminal-interface",
   "attachment",
   "assembly-inventory",
-] as const)("fits %s with the first legal subject-bearing one-line form", (kind) => {
-  for (const form of ["full", "compact"] as const) {
-    const { sheet, field, entries } = peerNoteFitFixture(form);
-    const entry = { ...entries[0]!, kind };
-    const result = emitPeerReferences(sheet, field, [entry]);
-    const note = parseSvg(result.svg).querySelector(
-      `[data-peer-reference="${kind}"]`,
-    );
-    expect(note?.textContent).toBe(
-      {
-        full: entry.value,
-        compact: entry.compact,
-      }[form],
-    );
-    expect(note?.getAttribute("font-size")).toBe("2.5");
-  }
-  const { sheet, field, entries } = peerNoteFitFixture("locator");
-  expect(() =>
-    emitPeerReferences(sheet, field, [{ ...entries[0]!, kind }]),
-  ).toThrow(new RegExp(`Navigation ${kind} cannot fit`, "u"));
-});
+] as const)(
+  "fits %s with the first legal subject-bearing one-line form",
+  (kind) => {
+    for (const form of ["full", "compact"] as const) {
+      const { sheet, field, entries } = peerNoteFitFixture(form);
+      const entry = { ...entries[0]!, kind };
+      const result = emitPeerReferences(sheet, field, [entry]);
+      const note = parseSvg(result.svg).querySelector(
+        `[data-peer-reference="${kind}"]`,
+      );
+      expect(note?.textContent).toBe(
+        {
+          full: entry.value,
+          compact: entry.compact,
+        }[form],
+      );
+      expect(note?.getAttribute("font-size")).toBe("2.5");
+    }
+    const { sheet, field, entries } = peerNoteFitFixture("locator");
+    expect(() =>
+      emitPeerReferences(sheet, field, [{ ...entries[0]!, kind }]),
+    ).toThrow(new RegExp(`Navigation ${kind} cannot fit`, "u"));
+  },
+);
 
 it("keeps two measured lines when two notes make the bare address ambiguous", () => {
   const { sheet, field, entries } = peerNoteFitFixture("wrapped");

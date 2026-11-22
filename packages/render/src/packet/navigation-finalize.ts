@@ -285,7 +285,17 @@ function resolveAnnotations(
           ((slot.inkMm.w - 2) * MIRROR_EM) / 2.7,
         ),
       };
-    if (a.role === "return") return resolveReturnLocality(a, slot, owners);
+    if (a.role === "return") {
+      const wrapped =
+        slot.allocatedMm?.shapeId === "local-wrapped"
+          ? slot.maximumForms[0]
+          : undefined;
+      return resolveReturnLocality(
+        wrapped ? { ...a, text: wrapped } : a,
+        slot,
+        owners,
+      );
+    }
     if (a.role === "association-unspecified") return a;
     return resolveLabelLocality(
       ir,
@@ -299,6 +309,65 @@ function resolveAnnotations(
 type NavigationRequest = SheetSlotRequest & {
   localityGeometry: SymbolGeometry;
 };
+function buildSheetRequest(
+  reservation: AnnotationReservation,
+  annotation: NavigationAnnotation,
+  owner: PlacedOccurrence,
+  occurrences: readonly PlacedOccurrence[],
+  sheet: RenderedSheet,
+  draft: Draft,
+): NavigationRequest {
+  const mirrorService = [
+    "mirror",
+    "return",
+    "association-unspecified",
+  ].includes(annotation.role);
+  const members = occurrences.filter((o) =>
+    annotation.ownerOccurrences.includes(o.id),
+  );
+  const field = required(draft.drawingBounds, "Missing navigation field");
+  const locality = symbolGeometry(
+    owner,
+    mirrorService || annotation.role === "element-location"
+      ? members
+      : occurrences,
+    sheet.svg,
+    field,
+    occurrences,
+  );
+  if (annotation.role === "element-location")
+    locality.sourceAnchorsMm = members.map((o) => o.destination.anchorMm);
+  if (annotation.role === "return" && annotation.ownerOccurrences.length > 1)
+    locality.frameMm = required(
+      unionInk(
+        members.map((o) => symbolGeometry(o, [o], sheet.svg, field).frameMm),
+      ),
+      "Missing gang frames",
+    );
+  if (mirrorService) {
+    locality.anchorMm =
+      annotation.role === "return" && members.length > 1
+        ? {
+            x:
+              members.reduce((sum, o) => sum + o.destination.anchorMm.x, 0) /
+              members.length,
+            y:
+              members.reduce((sum, o) => sum + o.destination.anchorMm.y, 0) /
+              members.length,
+          }
+        : owner.destination.anchorMm;
+    if (annotation.role === "return")
+      locality.sourceAnchorsMm = members.map((o) => o.destination.anchorMm);
+    locality.ownerLocation = {
+      sheet: owner.destination.sheet,
+      zone: owner.destination.zone,
+    };
+  }
+  if (annotation.role === "mirror")
+    locality.localBandMm = mirrorLocalBand(locality, field);
+  return navigationRequest(reservation, annotation, locality, mirrorService);
+}
+
 function sheetRequests(
   plan: RepeatPlan,
   owners: readonly PlacedOccurrence[],
@@ -315,68 +384,15 @@ function sheetRequests(
       plan.annotations.find((a) => a.reservationId === reservation.id),
       "Missing navigation annotation",
     );
-    const mirrorService = [
-      "mirror",
-      "return",
-      "association-unspecified",
-    ].includes(annotation.role);
-    const locality = symbolGeometry(
-      owner,
-      mirrorService || annotation.role === "element-location"
-        ? occurrences.filter((o) => annotation.ownerOccurrences.includes(o.id))
-        : occurrences,
-      sheet.svg,
-      required(draft.drawingBounds, "Missing navigation field"),
-      occurrences,
-    );
-    if (annotation.role === "element-location")
-      locality.sourceAnchorsMm = occurrences
-        .filter((o) => annotation.ownerOccurrences.includes(o.id))
-        .map((o) => o.destination.anchorMm);
-    if (annotation.role === "return" && annotation.ownerOccurrences.length > 1)
-      locality.frameMm = required(
-        unionInk(
-          occurrences
-            .filter((o) => annotation.ownerOccurrences.includes(o.id))
-            .map(
-              (o) =>
-                symbolGeometry(
-                  o,
-                  [o],
-                  sheet.svg,
-                  required(draft.drawingBounds, "Missing gang field"),
-                ).frameMm,
-            ),
-        ),
-        "Missing gang frames",
-      );
-    if (mirrorService) {
-      const members = occurrences.filter((o) =>
-        annotation.ownerOccurrences.includes(o.id),
-      );
-      locality.anchorMm =
-        annotation.role === "return" && members.length > 1
-          ? {
-              x:
-                members.reduce((sum, o) => sum + o.destination.anchorMm.x, 0) /
-                members.length,
-              y:
-                members.reduce((sum, o) => sum + o.destination.anchorMm.y, 0) /
-                members.length,
-            }
-          : owner.destination.anchorMm;
-      locality.ownerLocation = {
-        sheet: owner.destination.sheet,
-        zone: owner.destination.zone,
-      };
-    }
-    if (annotation.role === "mirror")
-      locality.localBandMm = mirrorLocalBand(
-        locality,
-        required(draft.drawingBounds, "Missing mirror field"),
-      );
     return [
-      navigationRequest(reservation, annotation, locality, mirrorService),
+      buildSheetRequest(
+        reservation,
+        annotation,
+        owner,
+        occurrences,
+        sheet,
+        draft,
+      ),
     ];
   });
 }
@@ -389,7 +405,11 @@ function navigationRequest(
   return {
     reservation,
     owner: locality.frameMm,
-    ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
+    ...(!mirrorService ||
+    annotation.role === "mirror" ||
+    annotation.role === "return"
+      ? { locality }
+      : {}),
     preferBesideBelow: annotation.role === "mirror",
     localityGeometry: locality,
     fitPrintedInk:
@@ -411,9 +431,30 @@ function navigationRequest(
         ? mirrorLocalityInk(annotation, reservation)
         : annotation.role === "return"
           ? new Map(
-              (["local", "self-located"] as const).map((id) => [
-                id,
-                mirrorInk(annotation, reservation.inkMm),
+              (
+                reservation.shapes ?? [
+                  {
+                    id: "local",
+                    inkMm: reservation.inkMm,
+                    maximumForms: [annotation.text],
+                  },
+                  {
+                    id: "self-located",
+                    inkMm: reservation.inkMm,
+                    maximumForms: [annotation.text],
+                  },
+                ]
+              ).map((s) => [
+                s.id,
+                mirrorInk(
+                  s.id === "local-wrapped"
+                    ? {
+                        ...annotation,
+                        text: s.maximumForms[0] ?? annotation.text,
+                      }
+                    : annotation,
+                  s.inkMm,
+                ),
               ]),
             )
           : repeatLocalityInk(annotation, reservation),

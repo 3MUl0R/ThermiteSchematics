@@ -28,6 +28,44 @@ function portClauses(part, source, ir, selected) {
       namedPortSubjects(r.text, selected, ir, part.view).includes(source),
     );
 }
+function checkBodyAndPortLineSeparation(part, ir, selected, findings) {
+  const refs = (part.geometry.tranche4?.partRefs ?? []).filter(
+    (r) =>
+      r.kind === "communication" &&
+      r.part === part.part &&
+      r.view === part.view + 1,
+  );
+  for (const r of refs) {
+    const paintedRuns = (r.texts ?? []).filter(painted);
+    const bodyRuns = paintedRuns.filter(
+      (t) =>
+        /(?:->|→)/u.test(t.text) &&
+        namedPortSubjects(t.text, selected, ir, part.view).length === 0,
+    );
+    const portRuns = paintedRuns.filter(
+      (t) => namedPortSubjects(t.text, selected, ir, part.view).length > 0,
+    );
+    for (const body of bodyRuns) {
+      const bodyY = body.anchor?.y ?? body.bbox?.y;
+      if (!Number.isFinite(bodyY)) continue;
+      const sameLine = portRuns.find((p) => {
+        const portY = p.anchor?.y ?? p.bbox?.y;
+        return Number.isFinite(portY) && Math.abs(portY - bodyY) < 1.0;
+      });
+      if (sameLine)
+        findings.push({
+          ...finding("port-navigation-same-line-as-body-pointer", sameLine, {
+            deviceUid: r.uid,
+            bodyText: body.text,
+            portText: sameLine.text,
+            deltaYMm: Math.abs((sameLine.anchor?.y ?? sameLine.bbox.y) - bodyY),
+          }),
+          sheet: part.sheet,
+        });
+    }
+  }
+}
+
 export function portNavigationAudit(packet, geometries, ir, request) {
   const { parts, failures, selected } = portNavigationPopulation(
       packet,
@@ -38,6 +76,7 @@ export function portNavigationAudit(packet, geometries, ir, request) {
     findings = [],
     obligations = [];
   for (const part of parts) {
+    checkBodyAndPortLineSeparation(part, ir, selected, findings);
     const uids = new Set([
       ...part.ports.map((p) => p.deviceUid),
       ...(part.geometry.devices ?? []).map((d) => d.deviceUid),

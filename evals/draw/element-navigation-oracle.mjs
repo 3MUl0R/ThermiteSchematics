@@ -42,6 +42,34 @@ function detachedProtectionPair(a, b, ir) {
     roles.some((r) => ["overload", "breaker", "fuse"].includes(r))
   );
 }
+function splitArrowReferences(packet, geometries, findings) {
+  for (const [i, sheet] of packet.sheets.entries()) {
+    const g = geometries[i];
+    if (!g) continue;
+    const seen = new Set();
+    for (const ink of referenceInk(g)) {
+      const rows = (ink.rows ?? [])
+        .slice()
+        .sort(
+          (a, b) =>
+            (a.anchor?.y ?? a.bbox.y) - (b.anchor?.y ?? b.bbox.y) ||
+            a.bbox.x - b.bbox.x,
+        );
+      if (rows.length < 2) continue;
+      const key = rows.map((r) => r.element).join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (rows.slice(0, -1).some((r) => /(?:→|->)\s*$/u.test(r.text.trim())))
+        findings.push({
+          ...finding("reference-arrow-split", rows[0], {
+            lines: rows.map((r) => r.text),
+          }),
+          sheet: sheet.number,
+        });
+    }
+  }
+}
+
 export function elementNavigationAudit(packet, geometries, ir, request) {
   const {
       appearances,
@@ -50,6 +78,7 @@ export function elementNavigationAudit(packet, geometries, ir, request) {
     } = elementPopulation(packet, geometries, ir, request),
     obligations = [];
   unresolvedElementPointers(appearances, geometries, ir, findings);
+  splitArrowReferences(packet, geometries, findings);
   for (const a of appearances) {
     const peers = appearances.filter(
       (b) =>

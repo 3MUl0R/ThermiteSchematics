@@ -104,7 +104,7 @@ it.each(["left-to-right", "top-to-bottom"])(
       rows
         .filter((r) => r.owner === "#398")
         .flatMap((r) => r.evidence.obligations),
-    ).toHaveLength(16);
+    ).toHaveLength(13);
   },
 );
 

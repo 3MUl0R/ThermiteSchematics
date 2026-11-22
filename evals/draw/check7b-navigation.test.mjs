@@ -2,6 +2,8 @@ import { expect, it } from "vitest";
 import { rootedFixture, eraseProtection } from "./check7b-fixture.mjs";
 import { portFixture } from "./check5-navigation-fixture.mjs";
 import { nativePartAudit } from "./native-part-references.mjs";
+import { elementNavigationAudit } from "./element-navigation-oracle.mjs";
+import { portNavigationAudit } from "./port-navigation-oracle.mjs";
 import { navigationStrictObservations } from "./navigation-strict.mjs";
 import { observation } from "./evaluate.mjs";
 import { viewBindings } from "./tranche4-views.mjs";
@@ -244,4 +246,73 @@ it("FU1 another authored view cannot lend its complete protection appearance", (
         r.evidence.findings.some((f) => f.view === 0),
     ),
   ).toBe(true);
+});
+
+it("5.40 rejects split arrows in wrapped element references (#409)", () => {
+  const x = rootedFixture();
+  const g0 = x.geometries[0];
+  // Replace single-line reference with atomic multi-line control (passes).
+  const baseIdx = g0.texts.findIndex((t) => /→/.test(t.text));
+  const orig = g0.texts[baseIdx];
+  const makeLines = (top, bottom) => [
+    {
+      ...orig,
+      element: "el-line-1",
+      navigationAnnotation: "el-ann",
+      text: top,
+      anchor: { x: orig.bbox.x, y: orig.bbox.y + 2 },
+      bbox: { ...orig.bbox, h: 2.5 },
+    },
+    {
+      ...orig,
+      element: "el-line-2",
+      navigationAnnotation: "el-ann",
+      text: bottom,
+      anchor: { x: orig.bbox.x, y: orig.bbox.y + 6.8 },
+      bbox: { ...orig.bbox, y: orig.bbox.y + 4.8, h: 2.5 },
+    },
+  ];
+  const dest = orig.text.match(/\d{2}\.[A-D]\d/u)[0];
+  const prefix = orig.text.replace(/\s*→.*$/u, "");
+  g0.texts.splice(baseIdx, 1, ...makeLines(prefix, `→ ${dest}`));
+  expect(
+    elementNavigationAudit(x.packet, x.geometries, x.ir, x.request).findings,
+  ).toEqual([]);
+  // Old-engine witness (conveyor TTB s01 OL1: "95–96 →" / "03.B2"): trailing arrow fails.
+  const y = rootedFixture();
+  y.geometries[0].texts.splice(baseIdx, 1, ...makeLines(`${prefix} →`, dest));
+  expect(
+    elementNavigationAudit(
+      y.packet,
+      y.geometries,
+      y.ir,
+      y.request,
+    ).findings.map((f) => f.kind),
+  ).toContain("reference-arrow-split");
+});
+
+it("5.40 rejects repeated-body and qualified port pointers on the same baseline (#430)", () => {
+  const x = portFixture();
+  const ref = x.geometries[0].tranche4.partRefs[0];
+  // Separate baselines (control): repeated-body line above port pointer line passes.
+  const portRun = ref.texts[0];
+  const portY = portRun.anchor?.y ?? portRun.bbox.y;
+  ref.texts.unshift({
+    ...portRun,
+    element: "body-ptr",
+    text: "N05 -> P2/S02.A1, P3/S03.A1",
+    anchor: { x: 28, y: portY - 3.5 },
+    bbox: { x: 28, y: portY - 5.5, w: 34, h: 2 },
+  });
+  expect(
+    portNavigationAudit(x.packet, x.geometries, x.ir, x.request).findings,
+  ).toEqual([]);
+  // Old-engine witness (network-pagination s03 N05): same baseline fails.
+  ref.texts[0].anchor.y = portY;
+  ref.texts[0].bbox.y = portY - 2;
+  expect(
+    portNavigationAudit(x.packet, x.geometries, x.ir, x.request).findings.map(
+      (f) => f.kind,
+    ),
+  ).toContain("port-navigation-same-line-as-body-pointer");
 });

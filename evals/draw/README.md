@@ -23,7 +23,29 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.39** applies.
+the budget and the remaining headroom. Checker protocol **5.40** applies.
+
+Version **5.40** updates **DQ-07** and **DQ-08** (V5-PEER, #450, #483, #507,
+#409, #430). DQ-08 requires one owned annotation per `(terminal, conductor,
+destination)`: card-backed conductor peers carry their resolved primary
+`SS.ZZ` and explicit `(also shown ...)` alternates inside the owning
+`g.off-view-annotation` card with no duplicate free peer note
+(`issued-peer-reference-duplicate-card-note`,
+`issued-peer-reference-duplicate`) while preserving `#239`
+`conductor-primary-alias-missing` traceability. Bare subjectless `→ SS.ZZ`
+locators fail (`issued-peer-reference-subjectless`). Peer notes must remain
+within the measured horizontal drawing bounds
+(`issued-peer-reference-outside-drawing-bounds`), maintain at least a `1.5 mm`
+vertical stack gap (`issued-peer-reference-stack-gap`, #450), sit nearest
+their own terminal or assembly port circle rather than a foreign owner
+(`issued-peer-reference-foreign-owner`, #507, R5 #19), use one wording family
+per kind per sheet (`issued-peer-reference-mixed-form`, #483), and never split
+`→` from its destination across a line break (`reference-arrow-split`,
+`issued-peer-reference-arrow-split`, #409). Repeated communication body
+pointers and qualified port pointers must occupy separate baselines
+(`port-navigation-same-line-as-body-pointer`, #430). DQ-07 checks contact
+return-caption owner locality against the 60 mm / nearest-owner threshold
+(`return-locality`, R4 m16). Complete 5.39 summaries remain readable.
 
 Version **5.39** updates **DQ-02**, **DQ-16** and **DQ-17** (V5-WIRE, #447,
 #481). DQ-16 collects `[data-loop-conductor]` signal-loop wire plates, rejects

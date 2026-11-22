@@ -90,7 +90,12 @@ it("uses fixed shape order and returns identical allocations on repeated runs", 
   ).toEqual(first);
 });
 
-import { maximumRepeatForms } from "../src/packet/navigation-labels.js";
+import {
+  envelopeShapes,
+  maximumRepeatForms,
+  wrapNavigationText,
+} from "../src/packet/navigation-labels.js";
+import { communicationRowLayout } from "../src/packet/native-part-labels.js";
 import { printableTextMetrics } from "../src/text-metrics.js";
 it("reserves fixed maximum tokens and multiplicity in every mode and shape", () => {
   const r = maximumRepeatForms("SRC1", "functions", [3, 2], "100.D1");
@@ -118,4 +123,44 @@ it("reserves fixed maximum tokens and multiplicity in every mode and shape", () 
       Math.max(...s.maximumForms.map((f) => f.split("\n").length)) * 4.8 + 1,
     );
   }
+});
+
+it("keeps '→ SS.ZZ' atomic when wrapping narrow element references (#409)", () => {
+  const wrapped = wrapNavigationText("OL1: NC contact 95–96 → 03.B2", 18);
+  const lines = wrapped.split("\n");
+  expect(lines.every((line) => !/(?:→|->)\s*$/u.test(line))).toBe(true);
+  expect(lines.at(-1)).toBe("→ 03.B2");
+  const shapes = envelopeShapes(
+    "local",
+    ["OL1: NC contact 95–96 → 88.D6"],
+    [22, 18, 14],
+  );
+  for (const s of shapes)
+    for (const form of s.maximumForms)
+      expect(
+        form.split("\n").every((line) => !/(?:→|->)\s*$/u.test(line)),
+      ).toBe(true);
+});
+
+it("puts qualified port pointers on a separate line below repeated-body pointers (#430)", () => {
+  const layout = communicationRowLayout(
+    {
+      deviceUid: "n05",
+      label: "N05",
+      targets: [
+        { part: 1, sheet: 2, zone: "D2" },
+        { part: 3, sheet: 4, zone: "A2" },
+      ],
+      ports: [
+        { key: "B1", targets: [{ part: 1, sheet: 2, zone: "D2" }] },
+        { key: "OUT", targets: [{ part: 3, sheet: 4, zone: "A2" }] },
+      ],
+    },
+    300,
+    ["N05 -> P1/S02.D2, P3/S04.A2"],
+  );
+  expect(layout.lines).toHaveLength(2);
+  expect(layout.lines[0]).toBe("N05 -> P1/S02.D2, P3/S04.A2");
+  expect(layout.entries.every((e) => e.line === 1)).toBe(true);
+  expect(layout.entries[0]!.x).toBe(0);
 });

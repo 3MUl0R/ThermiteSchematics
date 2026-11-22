@@ -10,6 +10,7 @@ import {
   cardRowKey,
   formatPeerDestination,
   injectOffViewCardDestinations,
+  syncRewrittenOffViewCards,
 } from "../off-view/card-destinations.js";
 import { compareText, functionIdKey, terminalIdKey } from "../ordering.js";
 import { required } from "../presentation/util.js";
@@ -262,6 +263,7 @@ function finalizeConductorPeers(
         kind: "conductor-peer",
         identity: [from, elementId, to],
         owner,
+        ...(marks && marks.length > 1 ? { owners: marks } : {}),
         foreignOwners: foreignTerminalOwners(part, from),
         along: route.runs,
         captions: conductorCaptions(part, elementId),
@@ -412,22 +414,13 @@ function peerNoteField(draft: Draft, page: PaperPage) {
   return draft.drawingBounds ?? bounds(draft.title, page);
 }
 
-export function terminalPeerReferences(
+function collectTerminalSheets(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
   sheets: readonly RenderedSheet[],
   page: PaperPage,
-) {
-  if (
-    !sheets.some(
-      (s) =>
-        s.svg.includes("data-off-view-terminal-id=") ||
-        ("kind" in s.view && s.view.kind === "wiring"),
-    )
-  )
-    return [...sheets];
-  const byTerminal = authoredTerminalIncidence(ir);
-  const parts = sheets.flatMap((sheet, i): TerminalSheet[] => {
+): TerminalSheet[] {
+  return sheets.flatMap((sheet, i): TerminalSheet[] => {
     const draft = required(drafts[i], "Missing peer reference source");
     if (draft.documentationTable) return [];
     const field = draft.drawingBounds ?? bounds(draft.title, page);
@@ -445,30 +438,60 @@ export function terminalPeerReferences(
       },
     ];
   });
+}
+
+export function terminalPeerReferences(
+  ir: Readonly<ElectricalIr>,
+  drafts: readonly Draft[],
+  sheets: readonly RenderedSheet[],
+  page: PaperPage,
+) {
+  if (
+    !sheets.some(
+      (s) =>
+        s.svg.includes("data-off-view-terminal-id=") ||
+        ("kind" in s.view && s.view.kind === "wiring"),
+    )
+  )
+    return [...sheets];
+  const byTerminal = authoredTerminalIncidence(ir);
+  const parts = collectTerminalSheets(ir, drafts, sheets, page);
   cardPeers(parts, ir, byTerminal);
   interfacePeers(parts, ir);
+  const viewRewrites = new Map<string, Map<string, string>>();
+  const withCards = parts.map((part) => {
+    const viewId = JSON.stringify(part.sheet.view);
+    const rewrites = viewRewrites.get(viewId) ?? new Map<string, string>();
+    viewRewrites.set(viewId, rewrites);
+    const svg = injectOffViewCardDestinations(
+      part.sheet.svg,
+      part.field,
+      part.geometry,
+      byTerminal,
+      part.cardDestinations,
+      rewrites,
+    );
+    return { ...part, sheet: { ...part.sheet, svg }, viewId };
+  });
   const changes = new Map(
-    parts.map(({ sheet, field, geometry, entries, cardDestinations }) => {
-      const updated = {
+    withCards.map(({ sheet, entries, viewId }) => {
+      const synced = {
         ...sheet,
-        svg: injectOffViewCardDestinations(
+        svg: syncRewrittenOffViewCards(
           sheet.svg,
-          field,
-          geometry,
-          byTerminal,
-          cardDestinations,
+          viewRewrites.get(viewId) ?? new Map(),
         ),
       };
+      const draft = required(
+        drafts[sheet.number - 1],
+        "Missing peer note drawing",
+      );
+      const uniqueEntries = [
+        ...new Map(entries.map((entry) => [entry.value, entry])).values(),
+      ];
       return [
         sheet.number,
-        emitPeerReferences(
-          updated,
-          peerNoteField(
-            required(drafts[sheet.number - 1], "Missing peer note drawing"),
-            page,
-          ),
-          [...new Map(entries.map((entry) => [entry.value, entry])).values()],
-        ),
+        emitPeerReferences(synced, peerNoteField(draft, page), uniqueEntries),
       ];
     }),
   );

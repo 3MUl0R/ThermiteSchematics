@@ -40,24 +40,25 @@ it("CHECK5 T6 multiline element locator carries only its printed group header", 
   expect(a.obligations).toHaveLength(6);
   expect(problems(a)).toEqual([]);
 });
-function wrappedElements() {
+function wrappedElements(splitArrow = false) {
   const x = multiline(),
     g = x.geometries[1];
   const lines = g.texts.filter((t) => t.element.startsWith("nav-"));
   g.texts = g.texts.filter((t) => !t.element.startsWith("nav-"));
+  const tail = splitArrow ? -1 : -2;
   for (const [i, t] of lines.entries()) {
     const words = t.text.split(" ");
     const fragments = i
       ? [
           words.slice(0, 2).join(" "),
-          words.slice(2, -1).join(" "),
-          words.at(-1),
+          words.slice(2, tail).join(" "),
+          words.slice(tail).join(" "),
         ]
       : [
           "OL1: Overload",
           "element",
-          words.slice(3, -1).join(" "),
-          words.at(-1),
+          words.slice(3, tail).join(" "),
+          words.slice(tail).join(" "),
         ];
     g.texts.push(
       ...fragments.map((text, j) => ({
@@ -72,6 +73,9 @@ function wrappedElements() {
 }
 it("CHECK5 an element clause can wrap before its arrow and destination", () => {
   expect(problems(elements(wrappedElements()))).toEqual([]);
+  expect(
+    problems(elements(wrappedElements(true))).map((f) => f.kind),
+  ).toContain("reference-arrow-split");
 });
 it("CHECK5 a missing wrapped destination cannot borrow the next element's pointer", () => {
   const x = wrappedElements();
