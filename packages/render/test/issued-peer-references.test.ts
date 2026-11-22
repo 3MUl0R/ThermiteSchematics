@@ -3,6 +3,10 @@ import { compileProject } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/sheets.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
+import { authoredTerminalIncidence } from "../src/off-view/incidence.js";
+import { cardRowKey } from "../src/off-view/card-destinations.js";
+import { verifyPrintedPeerDestinations } from "../src/packet/terminal-peer-references.js";
+import { escapeXmlAttribute as attr } from "../src/svg/escape.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { createTerminalIr } from "../../query/test/fixtures.js";
 
@@ -38,13 +42,46 @@ it.each([
     );
     if (!r.ok) throw Error(JSON.stringify(r.error));
     expect(r.value.sheets).toHaveLength(pages);
-    const notes = r.value.sheets.flatMap((sheet) =>
-      Array.from(
-        parseSvg(sheet.svg).querySelectorAll("[data-peer-reference]"),
-        (t) => t.textContent,
-      ),
-    );
-    expect(notes.some((note) => note?.endsWith(token))).toBe(true);
+    const texts = r.value.sheets.flatMap((sheet) => {
+      const doc = parseSvg(sheet.svg);
+      return [
+        ...Array.from(
+          doc.querySelectorAll("[data-peer-reference]"),
+          (t) => t.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+        ),
+        ...Array.from(
+          doc.querySelectorAll("g.off-view-annotation"),
+          (g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+        ),
+      ];
+    });
+    expect(texts.some((text) => text.includes(token))).toBe(true);
+    // Card-backed endpoints carry their destination inside the card, never as a duplicate free note.
+    expect(
+      r.value.sheets.every((sheet) => {
+        const doc = parseSvg(sheet.svg);
+        const cardSources = new Set(
+          [...doc.querySelectorAll("g.off-view-annotation")].flatMap((g) => {
+            const term = g.getAttribute("data-off-view-terminal-id");
+            const raw: unknown = JSON.parse(
+              g.getAttribute("data-off-view-conductors") ?? "[]",
+            );
+            const conds = Array.isArray(raw) ? raw : [];
+            return term
+              ? conds.map((c) => JSON.stringify([JSON.parse(term), c]))
+              : [];
+          }),
+        );
+        return [
+          ...doc.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+        ].every((n) => {
+          const [from, cond] = JSON.parse(
+            n.getAttribute("data-peer-source") ?? "[]",
+          );
+          return !cardSources.has(JSON.stringify([from, cond]));
+        });
+      }),
+    ).toBe(true);
   },
 );
 
@@ -105,19 +142,27 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       source.presentation,
     );
     if (!result.ok) throw Error(JSON.stringify(result.error));
-    const notes = result.value.sheets.flatMap((sheet) =>
+    const cards = result.value.sheets.flatMap((sheet) =>
+      [...parseSvg(sheet.svg).querySelectorAll("g.off-view-annotation")].map(
+        (g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+      ),
+    );
+    expect(cards).toContainEqual(
+      expect.stringMatching(/W-CTL-004 → TB1\.4 \d+\.[A-D][1-6]/u),
+    );
+    expect(cards).toContainEqual(
+      expect.stringMatching(
+        /W-CTL-004 → PS1\.- \d+\.[A-D][1-6] \(also shown \d+\.[A-D][1-6]\)/u,
+      ),
+    );
+    const freeWctl004 = result.value.sheets.flatMap((sheet) =>
       [
         ...parseSvg(sheet.svg).querySelectorAll(
           '[data-peer-reference="conductor-peer"]',
         ),
-      ].map((n) => n.textContent),
+      ].filter((n) => n.textContent?.includes("W-CTL-004")),
     );
-    expect(notes).toContainEqual(
-      expect.stringMatching(/^W-CTL-004 · PS1\.- → TB1\.4 \d+\.[A-D][1-6]$/u),
-    );
-    expect(notes).toContainEqual(
-      expect.stringMatching(/^W-CTL-004 · TB1\.4 → PS1\.- \d+\.[A-D][1-6]$/u),
-    );
+    expect(freeWctl004).toEqual([]);
   },
 );
 
@@ -157,14 +202,18 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         ),
       ),
     );
-    expect(notes(cable)).toContainEqual(
+    const cableCards = [
+      ...cable!.document.querySelectorAll("g.off-view-annotation"),
+    ].map((g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "");
+    expect(cableCards).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^W-CTL-004 · TB1\\.4 → PS1\\.- ${String(circuit!.number).padStart(2, "0")}\\.[A-D][1-6]$`,
+          `W-CTL-004 → PS1\\.- ${String(circuit!.number).padStart(2, "0")}\\.[A-D][1-6]`,
           "u",
         ),
       ),
     );
+    expect(notes(cable)).toEqual([]);
   },
 );
 
@@ -187,6 +236,32 @@ it("uses counterpart relay terminals in wiring views (#397)", async () => {
       /^K-R · contact terminal 14 → coil terminal A1 05\./u,
     ),
   );
+  // #483: K-Y uses the same full wording family as K-R on sheet 7 (never mixed compact).
+  const s7Groups = [
+    ...sheets[6]!.document.querySelectorAll(
+      '[data-peer-reference="terminal-interface"]',
+    ),
+  ];
+  const s7Texts = s7Groups.map((el) =>
+    el.tagName.toLowerCase() === "g"
+      ? [...el.querySelectorAll("text")].map((t) => t.textContent).join(" ")
+      : (el.textContent ?? ""),
+  );
+  expect(s7Texts).toContainEqual(
+    expect.stringMatching(
+      /^K-Y · contact terminal 14 → coil terminal A1 05\./u,
+    ),
+  );
+  // #409: multi-line peer notes never split after "→".
+  for (const el of s7Groups) {
+    if (el.tagName.toLowerCase() !== "g") continue;
+    const lines = [...el.querySelectorAll("text")].map(
+      (t) => t.textContent ?? "",
+    );
+    expect(lines.slice(0, -1).every((l) => !/(?:→|->)\s*$/u.test(l))).toBe(
+      true,
+    );
+  }
 });
 
 it("points an undrawn assembly at its exact issued inventory row (#429)", async () => {
@@ -325,4 +400,124 @@ it("only names device and function references after they are issued (#434)", asy
       } else expect(ink).not.toContain("Device and function references");
     }
   }
+});
+
+it("preserves all destinations on repeated views and enforces printed destination invariant", async () => {
+  const source = await compileProject("examples/motor-starter");
+  if (!source.ok) throw Error(JSON.stringify(source.diagnostics));
+  const baseRequest: SchematicPacketRequest = JSON.parse(
+    await readFile("examples/alpha/motor-starter.packet.json", "utf8"),
+  );
+  // Duplicate the CBL1 conductors view (reproduces Codex repeated-view probe).
+  const repeatedRequest: SchematicPacketRequest = {
+    ...baseRequest,
+    views: [...baseRequest.views, baseRequest.views.at(-1)!],
+  };
+  const result = await renderSchematicPacket(
+    source.ir,
+    repeatedRequest,
+    source.presentation,
+  );
+  if (!result.ok) throw Error(JSON.stringify(result.error));
+  expect(result.value.sheets).toHaveLength(8);
+  const cardTexts = (sheetNumber: number) =>
+    [
+      ...parseSvg(result.value.sheets[sheetNumber - 1]!.svg).querySelectorAll(
+        "g.off-view-annotation",
+      ),
+    ].map((g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "");
+  // Sheet 7 must retain BOTH 03.C5 and 04.B2 (not overwritten by sheet 8's rewrite).
+  expect(cardTexts(7)).toContainEqual(
+    expect.stringMatching(/W-CTL-004 → PS1\.- 03\.C5 \(also shown 04\.B2\)/u),
+  );
+  expect(cardTexts(8)).toContainEqual(
+    expect.stringMatching(/W-CTL-004 → PS1\.- 03\.C5/u),
+  );
+  // Renderer-side invariant accepts valid output and throws on dropped or duplicated destinations.
+  const tb1 = source.ir.devices.find((d) => d.designation === "TB1")!;
+  const wCtl004 = source.ir.wires.find((w) => w.designation === "W-CTL-004")!;
+  const byTerminal = authoredTerminalIncidence(source.ir);
+  const expected = new Map([
+    [
+      cardRowKey(
+        { deviceUid: tb1.uid, terminalKey: "4" },
+        { kind: "wire", uid: wCtl004.uid },
+      ),
+      ["03.C5", "04.B2"],
+    ],
+  ]);
+  const s7 = result.value.sheets[6]!;
+  expect(() =>
+    verifyPrintedPeerDestinations(s7, expected, [], byTerminal),
+  ).not.toThrow();
+  const dropped = { ...s7, svg: s7.svg.replace(" (also shown 04.B2)", "") };
+  expect(() =>
+    verifyPrintedPeerDestinations(dropped, expected, [], byTerminal),
+  ).toThrow(/Peer destination invariant violated/u);
+  const duplicated = {
+    ...s7,
+    svg: s7.svg.replace("04.B2", "03.C5, 04.B2"),
+  };
+  expect(() =>
+    verifyPrintedPeerDestinations(duplicated, expected, [], byTerminal),
+  ).toThrow(/Peer destination invariant violated/u);
+});
+
+it("parses printed peer destinations structurally when conductor designations resemble sheet.zone", () => {
+  const entry = {
+    kind: "conductor-peer" as const,
+    identity: [
+      { deviceUid: "R1", terminalKey: "14" },
+      { kind: "wire" as const, uid: "W37" },
+      { deviceUid: "S2", terminalKey: "14" },
+    ],
+    owner: { x: 108, y: 184, w: 1.3, h: 1.3 },
+    ownerLabel: "R1.14",
+    value: "37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3)",
+    compact: "→ S2.14 01.A3 (also shown 02.A3)",
+    destination: "01.A3 (also shown 02.A3)",
+  };
+  const mkSheet = (text: string) => ({
+    number: 5,
+    view: {
+      format: "documentation-view/0.1" as const,
+      kind: "circuit" as const,
+      title: "DOL control",
+    },
+    references: [],
+    continuations: [],
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="215.9mm" height="279.4mm" viewBox="0 0 215.9 279.4"><text x="110" y="188" font-size="2.5" data-peer-reference="conductor-peer" data-peer-source="${attr(JSON.stringify(entry.identity))}">${text}</text></svg>`,
+  });
+  const emptyIncidence = new Map();
+  // Designation "37.D6" is never counted as a destination token.
+  expect(() =>
+    verifyPrintedPeerDestinations(
+      mkSheet("37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3)"),
+      new Map(),
+      [entry],
+      emptyIncidence,
+    ),
+  ).not.toThrow();
+  expect(() =>
+    verifyPrintedPeerDestinations(
+      mkSheet("R1.14 → 01.A3 (also shown 02.A3)"),
+      new Map(),
+      [entry],
+      emptyIncidence,
+    ),
+  ).not.toThrow();
+  // Real dropped, duplicated, or invented destinations still fail.
+  for (const bad of [
+    "37.D6 · R1.14 → S2.14 01.A3",
+    "37.D6 · R1.14 → S2.14 01.A3 (also shown 01.A3, 02.A3)",
+    "37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3, 99.D6)",
+  ])
+    expect(() =>
+      verifyPrintedPeerDestinations(
+        mkSheet(bad),
+        new Map(),
+        [entry],
+        emptyIncidence,
+      ),
+    ).toThrow(/Peer destination invariant violated/u);
 });

@@ -25,8 +25,11 @@ export interface PeerReference {
   compact: string;
   destination: string;
   owner: Rect;
+  owners?: readonly Rect[];
+  foreignOwners?: readonly Rect[];
   along?: readonly Rect[];
   captions?: readonly Rect[];
+  terminalLabels?: readonly Rect[];
   ownerLabel?: string;
 }
 
@@ -37,7 +40,7 @@ function twoLines(value: string) {
   let result: string[] = [];
   for (const { index } of value.matchAll(/ (?=\S)/gu)) {
     const lines = [value.slice(0, index).trimEnd(), value.slice(index + 1)];
-    if (!lines[0]) continue;
+    if (!lines[0] || /(?:→|->)$/u.test(lines[0])) continue;
     const width = Math.max(...lines.map(advance));
     if (width >= narrowest) continue;
     narrowest = width;
@@ -73,7 +76,7 @@ function shape(id: string, lines: readonly string[]): NavigationShape {
 
 function noteShapes(
   entry: PeerReference,
-  unique: boolean,
+  _unique: boolean,
   uniqueForOwner: boolean,
 ) {
   const forms = [
@@ -84,7 +87,6 @@ function noteShapes(
     forms.push(
       shape("named-compact", [`${entry.ownerLabel} ${entry.compact}`]),
     );
-  if (unique) forms.push(shape("locator", [`→ ${entry.destination}`]));
   if (uniqueForOwner && entry.ownerLabel) {
     const destination = `→ ${entry.destination}`;
     forms.push(shape("qualified", [`${entry.ownerLabel} ${destination}`]));
@@ -95,6 +97,9 @@ function noteShapes(
     if (wrappedCompact.length)
       forms.push(shape("named-compact-wrapped", wrappedCompact));
   }
+  const wrappedCompactOnly = twoLines(entry.compact);
+  if (wrappedCompactOnly.length)
+    forms.push(shape("compact-wrapped", wrappedCompactOnly));
   const wrapped = twoLines(entry.value);
   if (wrapped.length) forms.push(shape("wrapped", wrapped));
   return forms;
@@ -102,9 +107,17 @@ function noteShapes(
 
 function noteInk(
   { kind, identity }: PeerReference,
-  { lines, box }: PeerNotePlacement,
+  { lines, box, shapeId, fallback }: PeerNotePlacement,
 ) {
-  const claims = `data-peer-reference="${kind}" data-peer-source="${attr(JSON.stringify(identity))}"`;
+  const reported =
+    fallback ??
+    (shapeId === "qualified" || shapeId === "qualified-wrapped"
+      ? "qualified"
+      : undefined);
+  const marker = reported
+    ? ` data-peer-reference-fallback="${attr(reported)}"`
+    : "";
+  const claims = `data-peer-reference="${kind}" data-peer-source="${attr(JSON.stringify(identity))}"${marker}`;
   const printed = printedBounds(lines);
   const ink = lines.map((line, i) =>
     text(

@@ -56,7 +56,24 @@ function conductorName(ir, row) {
     : row.name;
 }
 
-function conductorNote(src, dest, wire, a, b, label, name, card) {
+function foreignTerminalBoxes(part, ownTerminal) {
+  const ownKey = terminalKey(ownTerminal);
+  const out = [];
+  for (const [key, region] of part.terminals)
+    if (key !== ownKey) out.push(...region.boxes);
+  return out;
+}
+
+function canonicalDestination(destinations) {
+  const [primary, ...alternates] = destinations.map((d) =>
+    loc(d.sheet, d.zones[0]),
+  );
+  return alternates.length
+    ? `${primary} (also shown ${alternates.join(", ")})`
+    : primary;
+}
+
+function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
   const marks = src.terminals.get(terminalKey(a)).boxes;
   const opposite = src.terminals.get(terminalKey(b))?.boxes;
   const ink = conductorInk(src.geometry, wire.element);
@@ -67,19 +84,103 @@ function conductorNote(src, dest, wire, a, b, label, name, card) {
     sheet: src.sheet.number,
     kind: "conductor-peer",
     source: [a, wire.element, b],
+    label,
+    peerName: name(b),
     ownerLabel: name(a),
-    owners: card ? [card] : marks,
+    owners: cardInfo ? [cardInfo.bbox] : marks,
+    foreignOwners: foreignTerminalBoxes(src, a),
     supports: [
       ...runs.map(extent),
       ...continuationInk(src.sheet, src.geometry, wire.element, runs),
     ],
-    values: [...zones].map(
-      (z) => `${label} · ${name(a)} → ${name(b)} ${loc(dest.sheet.number, z)}`,
-    ),
-    compactValues: [...zones].map(
-      (z) => `→ ${name(b)} ${loc(dest.sheet.number, z)}`,
-    ),
+    card: cardInfo,
+    targets: new Map([[dest.sheet.number, new Set(zones)]]),
   };
+}
+
+function mergeCardRecords(records) {
+  const unique = new Map();
+  for (const r of records) {
+    const key = JSON.stringify([r.sheet, r.source]);
+    const previous = unique.get(key);
+    if (previous) {
+      if (r.card && !previous.card) previous.card = r.card;
+      previous.owners.push(...r.owners);
+      previous.supports.push(...r.supports);
+      for (const [sheet, zones] of r.targets) {
+        if (!previous.targets.has(sheet))
+          previous.targets.set(sheet, new Set());
+        for (const z of zones) previous.targets.get(sheet).add(z);
+      }
+    } else unique.set(key, r);
+  }
+  return [...unique.values()].map((r) => {
+    const destinations = [...r.targets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([sheet, zones]) => ({ sheet, zones: [...zones].sort() }));
+    const representative = canonicalDestination(destinations);
+    return {
+      sheet: r.sheet,
+      kind: r.kind,
+      source: r.source,
+      label: r.label,
+      peerName: r.peerName,
+      ownerLabel: r.ownerLabel,
+      owners: r.owners,
+      foreignOwners: r.foreignOwners,
+      supports: r.supports,
+      card: r.card,
+      destinations,
+      values: [
+        `${r.label} · ${r.ownerLabel} → ${r.peerName} ${representative}`,
+      ],
+      compactValues: [`→ ${r.peerName} ${representative}`],
+    };
+  });
+}
+
+function recordCardRow(
+  p,
+  parts,
+  owner,
+  { wire, mate, label },
+  cardInfo,
+  name,
+  records,
+) {
+  const destination = parts.find(
+    (s) => s !== p && s.terminals.has(terminalKey(mate)),
+  );
+  if (!destination) return;
+  const origin = conductorNote(
+    p,
+    destination,
+    wire,
+    owner,
+    mate,
+    label,
+    name,
+    cardInfo,
+  );
+  const reverse = conductorNote(destination, p, wire, mate, owner, label, name);
+  if (origin) records.push(origin);
+  if (reverse) records.push(reverse);
+  if (destination.terminals.has(terminalKey(owner))) {
+    const coTarget =
+      parts.find(
+        (s) => s !== destination && s.terminals.has(terminalKey(mate)),
+      ) ?? destination;
+    const coOwner = conductorNote(
+      destination,
+      coTarget,
+      wire,
+      owner,
+      mate,
+      label,
+      name,
+    );
+    if (coOwner) records.push(coOwner);
+  }
 }
 
 function cardObligations(ir, parts, wires, name) {
@@ -88,14 +189,13 @@ function cardObligations(ir, parts, wires, name) {
   for (const p of parts)
     for (const card of p.geometry.tranche4?.cards ?? []) {
       const owner = card.terminalId;
-      const returned = p.terminals.get(terminalKey(owner));
-      if (!returned || !card.bbox) continue;
+      if (!p.terminals.get(terminalKey(owner)) || !card.bbox) continue;
       const text = card.texts
         .filter((t) => painted(t) && !card.headingElements.includes(t.element))
         .map((t) => t.text)
         .join(" ")
         .replace(/\s+/gu, " ");
-      for (const id of card.conductors ?? []) {
+      const rowEntries = (card.conductors ?? []).flatMap((id) => {
         const wire = native.get(elementKey(id));
         const mate = wire?.ends.find(
           (t) => terminalKey(t) !== terminalKey(owner),
@@ -104,46 +204,31 @@ function cardObligations(ir, parts, wires, name) {
           !mate ||
           !wire.ends.some((t) => terminalKey(t) === terminalKey(owner))
         )
-          continue;
+          return [];
         const label = conductorName(ir, wire);
-        if (!text.includes(`${label} → ${name(mate)}`)) continue;
-        const destination = parts.find(
-          (s) => s !== p && s.terminals.has(terminalKey(mate)),
-        );
-        if (!destination) continue;
-        const origin = conductorNote(
+        return [{ wire, mate, label, prefix: `${label} → ${name(mate)}` }];
+      });
+      const rowPrefixes = rowEntries.map((r) => r.prefix);
+      for (const [rowIndex, entry] of rowEntries.entries()) {
+        if (!text.includes(entry.prefix)) continue;
+        recordCardRow(
           p,
-          destination,
-          wire,
+          parts,
           owner,
-          mate,
-          label,
+          entry,
+          {
+            element: card.element,
+            bbox: card.bbox,
+            text,
+            rowPrefixes,
+            rowIndex,
+          },
           name,
-          card.bbox,
+          records,
         );
-        const reverse = conductorNote(
-          destination,
-          p,
-          wire,
-          mate,
-          owner,
-          label,
-          name,
-        );
-        if (origin) records.push(origin);
-        if (reverse) records.push(reverse);
       }
     }
-  const unique = new Map();
-  for (const r of records) {
-    const key = JSON.stringify([r.sheet, r.source, r.values]);
-    const previous = unique.get(key);
-    if (previous) {
-      previous.owners.push(...r.owners);
-      previous.supports.push(...r.supports);
-    } else unique.set(key, r);
-  }
-  return [...unique.values()];
+  return mergeCardRecords(records);
 }
 
 function functionTerminals(ir, parts, fn) {
@@ -193,6 +278,7 @@ function interfaceObligations(ir, parts, names) {
             source: [p.terminal, q.terminal],
             ownerLabel: `${names.get(r.deviceUid)} ${p.terminal.terminalKey}`,
             owners: p.part.terminals.get(terminalKey(p.terminal)).boxes,
+            foreignOwners: foreignTerminalBoxes(p.part, p.terminal),
             values: [...zones].map(
               (z) =>
                 `${names.get(r.deviceUid)} · ${p.kind} terminal ${p.terminal.terminalKey} → ${q.kind} terminal ${q.terminal.terminalKey} ${loc(q.part.sheet.number, z)}`,

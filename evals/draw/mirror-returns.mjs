@@ -150,7 +150,7 @@ export function mirrorReturns(packet, geometries, ir, request) {
           tag,
           g,
         );
-      else auditReturnCaption(a, needed, direct, emit, destinations, tag);
+      else auditReturnCaption(a, needed, direct, emit, destinations, tag, g);
       if (!native) emit(a, "navigation-native-source-missing");
     }
     for (const t of g.texts.filter(
@@ -555,7 +555,7 @@ function auditMirrorTable(
   }
 }
 
-function auditReturnCaption(a, needed, direct, emit, destinations, tag) {
+function auditReturnCaption(a, needed, direct, emit, destinations, tag, g) {
   const bs = a.blocks.filter((b) => !b.isMirror);
   if (bs.length !== (needed ? 1 : 0))
     emit(a, "return-caption-count", bs[0] ?? a, {
@@ -579,11 +579,19 @@ function auditReturnCaption(a, needed, direct, emit, destinations, tag) {
   for (const b of bs) {
     if (compact(b.text) !== compact(expected))
       emit(a, "return-coil-set", b, { expected, actual: b.text });
+    const distanceMm = anchorDistance(a.anchor, b.bbox);
+    const frames = g ? nearestOwner(g, a, b.bbox) : { ownerNearest: true };
+    if (distanceMm > 60 + EPS + 1e-9 || !frames.ownerNearest)
+      emit(a, "return-locality", b, {
+        distanceMm,
+        ...frames,
+      });
     a.measurements.push({
       bbox: b.bbox,
       anchor: a.anchor,
-      distanceMm: anchorDistance(a.anchor, b.bbox),
-      assessment: "measured-no-threshold",
+      distanceMm,
+      ...frames,
+      assessment: "locality-checked",
     });
   }
 }

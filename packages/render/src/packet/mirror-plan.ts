@@ -204,6 +204,57 @@ function mirrorProfile(
   const maximumForms = [`${heading} /${maximumToken()}`, ...forms];
   return { inkMm, maximumForms };
 }
+function returnWrappedText(value: string): string | undefined {
+  const space = value.indexOf(" ");
+  if (space <= 0 || space >= value.length - 1) return undefined;
+  return `${value.slice(0, space)}\n${value.slice(space + 1)}`;
+}
+
+function returnCaptionShapes(
+  value: string,
+  maximum: string,
+  inkMm: { x: number; y: number; w: number; h: number },
+) {
+  const wrapped = returnWrappedText(value);
+  if (!wrapped) return undefined;
+  const wrappedMax = returnWrappedText(maximum) ?? wrapped;
+  const wrappedWidth = Math.max(
+    ...wrapped.split("\n").map(measureNavigationText),
+  );
+  return [
+    {
+      id: "local",
+      mode: "local" as const,
+      inkMm,
+      maximumForms: [maximum],
+      wrapWidthMm: inkMm.w - 2,
+    },
+    {
+      id: "local-wrapped",
+      mode: "local" as const,
+      inkMm: {
+        x: 0,
+        y: 0,
+        w:
+          Math.max(
+            wrappedWidth,
+            ...wrappedMax.split("\n").map(measureNavigationText),
+          ) + 3,
+        h: 1.5 + 4.5 * wrapped.split("\n").length,
+      },
+      maximumForms: [wrapped],
+      wrapWidthMm: wrappedWidth + 1,
+    },
+    {
+      id: "return-fallback",
+      mode: "self-located" as const,
+      inkMm,
+      maximumForms: [maximum],
+      wrapWidthMm: inkMm.w - 2,
+    },
+  ];
+}
+
 function addCaption(
   plan: MirrorPlan,
   owner: PlacedOccurrence,
@@ -227,6 +278,8 @@ function addCaption(
         : 55,
     h: 1.5 + 4.5 * lines.split("\n").length,
   };
+  const shapes =
+    role === "return" ? returnCaptionShapes(value, maximum, inkMm) : undefined;
   plan.reservations.push({
     id,
     ownerOccurrence: owner.id,
@@ -235,6 +288,7 @@ function addCaption(
     space: "sheet-slot",
     inkMm,
     maximumForms: [maximum],
+    ...(shapes ? { shapes } : {}),
   });
   plan.annotations.push({
     id,

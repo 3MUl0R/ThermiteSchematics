@@ -32,7 +32,7 @@ export function peerNoteFitFixture(
       full: advance(first.value) + 2.1,
       compact: advance(first.compact) + 2.1,
       locator: advance("→ 04.D3") + 2.1,
-      wrapped: advance(first.compact) - 0.25,
+      wrapped: advance(first.compact) + 1,
     }[form],
     h: form === "wrapped" ? 24 : 4.7,
   };

@@ -31,6 +31,7 @@ function slotAxes(
   obstacles: readonly Rect[],
   texts: readonly Rect[],
   textVerticalClearanceMm = 0,
+  tieBreakAnchor?: { x: number; y: number },
 ) {
   const { w, h } = size;
   const xs = [
@@ -39,6 +40,13 @@ function slotAxes(
       area.x + area.w - w,
       owner.x,
       owner.x + owner.w - w,
+      ...(tieBreakAnchor
+        ? [
+            owner.x + 1.51,
+            owner.x + owner.w - w - 1.51,
+            tieBreakAnchor.x - w / 2,
+          ]
+        : []),
       ...texts.flatMap((b) => [
         b.x + b.w + NAVIGATION_TEXT_CLEARANCE_MM + 0.01,
         b.x - w - NAVIGATION_TEXT_CLEARANCE_MM - 0.01,
@@ -52,6 +60,13 @@ function slotAxes(
       area.y + area.h - h,
       owner.y - h - 1.51,
       owner.y + owner.h + 1.51,
+      ...(tieBreakAnchor
+        ? [
+            owner.y + 1.51,
+            owner.y + owner.h - h - 1.51,
+            tieBreakAnchor.y - h / 2,
+          ]
+        : []),
       ...(textVerticalClearanceMm
         ? texts.flatMap((b) => [
             b.y + b.h + textVerticalClearanceMm + 0.01,
@@ -63,9 +78,12 @@ function slotAxes(
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
   return { xs: xs.sort((a, b) => a - b), ys };
 }
-interface SlotReach {
+export interface SlotReach {
   anchors: readonly Rect[];
   gap: number;
+  textVerticalClearanceMm?: number;
+  foreignOwners?: readonly Rect[];
+  tieBreakAnchor?: { x: number; y: number };
 }
 
 function reachableAxes(
@@ -73,11 +91,48 @@ function reachableAxes(
   { w, h }: Rect,
   { anchors, gap }: SlotReach,
 ) {
+  if (!Number.isFinite(gap) || !anchors.length) return { xs, ys };
   const near = (start: number, length: number, v: number, span: number) =>
     Math.max(0, start - v - span, v - start - length) <= gap;
   return {
     xs: xs.filter((x) => anchors.some((a) => near(x, w, a.x, a.w))),
     ys: ys.filter((y) => anchors.some((a) => near(y, h, a.y, a.h))),
+  };
+}
+
+function scoreSlotCandidate(
+  box: Rect,
+  owner: Rect,
+  locality: SymbolGeometry | undefined,
+  ink: Rect | undefined,
+  preferBesideBelow: boolean,
+  reach: SlotReach | undefined,
+) {
+  const printed = navigationPlacementInk(box, ink);
+  const distance = locality
+    ? anchorDistance(locality.anchorMm, printed)
+    : boxDistance(owner, box);
+  const foreignOwners = reach?.foreignOwners;
+  const hasForeign = Boolean(foreignOwners?.length);
+  const foreignDistance = hasForeign
+    ? Math.min(...(foreignOwners ?? []).map((f) => boxDistance(f, box)))
+    : Infinity;
+  const ownerGap = hasForeign
+    ? reach?.anchors.length
+      ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+      : locality
+        ? boxDistance(owner, box)
+        : distance
+    : 0;
+  return {
+    box,
+    distance,
+    foreignCloser: hasForeign ? Number(foreignDistance + 0.02 < ownerGap) : 0,
+    foreignDistance,
+    tieDistance: reach?.tieBreakAnchor
+      ? anchorDistance(reach.tieBreakAnchor, printed)
+      : 0,
+    priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
   };
 }
 
@@ -102,6 +157,7 @@ function slotCandidates(
     obstacles,
     texts,
     textVerticalClearanceMm,
+    reach?.tieBreakAnchor,
   );
   const localAxes =
     withinLocalSources && locality
@@ -120,31 +176,24 @@ function slotCandidates(
         obstacles,
         texts,
         textVerticalClearanceMm,
-      ).map((x) => ({
-        x,
-        y,
-        w,
-        h,
-      })),
+      ).map((x) => ({ x, y, w, h })),
     )
     .filter(
       (box) =>
-        !reach || reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
+        !reach ||
+        !Number.isFinite(reach.gap) ||
+        reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
     )
-    .map((box) => {
-      const printed = navigationPlacementInk(box, ink);
-      return {
-        box,
-        distance: locality
-          ? anchorDistance(locality.anchorMm, printed)
-          : boxDistance(owner, box),
-        priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
-      };
-    })
+    .map((box) =>
+      scoreSlotCandidate(box, owner, locality, ink, preferBesideBelow, reach),
+    )
     .sort(
       (a, b) =>
         a.priority - b.priority ||
+        a.foreignCloser - b.foreignCloser ||
         a.distance - b.distance ||
+        a.tieDistance - b.tieDistance ||
+        b.foreignDistance - a.foreignDistance ||
         a.box.y - b.box.y ||
         a.box.x - b.box.x,
     )
@@ -175,9 +224,69 @@ function laneLocal(
 ) {
   return (
     !locality ||
+    shape.id === "return-fallback" ||
     (!locality.sourceAnchorsMm && shape.mode !== "local") ||
     localNavigationSlot(navigationPlacementInk(box, ink), locality)
   );
+}
+
+function findShapeSlot(
+  shape: NavigationShape,
+  area: Rect,
+  fitArea: Rect,
+  owner: Rect,
+  obstacles: readonly Rect[],
+  texts: readonly Rect[],
+  locality: SymbolGeometry | undefined,
+  preferBesideBelow: boolean,
+  families: readonly NavigationPlacementFamily[] | undefined,
+  ink: Rect | undefined,
+  fitPrintedInk: boolean,
+  verticalClearance: number,
+  shapeReach: SlotReach | undefined,
+  preferRoomiest: boolean,
+) {
+  // Keep a 0.01 mm metric/rounding margin around the final fixed-font ink.
+  // Empty emission padding is not printed content or a clearance obstacle.
+  const fit = fitPrintedInk ? ink : undefined;
+  const size = fit
+    ? { x: 0, y: 0, w: fit.w + 0.02, h: fit.h + 0.02 }
+    : shape.inkMm;
+  const envelope = (b: Rect): Rect =>
+    fit ? { ...shape.inkMm, x: b.x - fit.x + 0.01, y: b.y - fit.y + 0.01 } : b;
+  const candidates = slotCandidates(
+    size,
+    fitArea,
+    owner,
+    obstacles,
+    locality,
+    texts,
+    fit ? undefined : ink,
+    preferBesideBelow && shape.mode === "local",
+    verticalClearance,
+    fitPrintedInk &&
+      (shape.mode === "local" ||
+        (!!locality?.sourceAnchorsMm && shape.id !== "return-fallback")),
+    shapeReach,
+  );
+  const legal = (b: Rect) =>
+    (!families ||
+      families.includes(
+        navigationPlacementFamily(
+          navigationPlacementInk(envelope(b), ink),
+          area,
+          owner,
+          locality,
+        ),
+      )) &&
+    inside(b, fitArea) &&
+    laneLocal(shape, envelope(b), ink, locality) &&
+    obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
+    texts.every((t) => textSeparated(b, t, verticalClearance));
+  const box = preferRoomiest
+    ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
+    : candidates.find(legal);
+  return box ? { box: envelope(box), protectedBox: box, shape } : undefined;
 }
 
 /** All local shapes precede all self-located shapes; preserve authored shape order within each mode. */
@@ -193,6 +302,7 @@ export function searchNavigationSlot(
   localityInkMm?: ReadonlyMap<string, Rect>,
   fitPrintedInk = false,
   reach?: (shape: NavigationShape) => SlotReach,
+  preferRoomiest = fitPrintedInk,
 ) {
   const fitArea = fitPrintedInk ? elementDrawingArea(area) : area;
   const textVerticalClearanceMm = fitPrintedInk
@@ -202,48 +312,27 @@ export function searchNavigationSlot(
     shapes.filter((s) => s.mode === mode),
   );
   for (const shape of ordered) {
-    const ink = localityInkMm?.get(shape.id);
-    // Keep a 0.01 mm metric/rounding margin around the final fixed-font ink.
-    // Empty emission padding is not printed content or a clearance obstacle.
-    const fit = fitPrintedInk ? ink : undefined;
-    const size = fit
-      ? { x: 0, y: 0, w: fit.w + 0.02, h: fit.h + 0.02 }
-      : shape.inkMm;
-    const envelope = (b: Rect): Rect =>
-      fit
-        ? { ...shape.inkMm, x: b.x - fit.x + 0.01, y: b.y - fit.y + 0.01 }
-        : b;
-    const candidates = slotCandidates(
-      size,
+    const shapeReach = reach?.(shape);
+    const found = findShapeSlot(
+      shape,
+      area,
       fitArea,
       owner,
       obstacles,
-      locality,
       texts,
-      fit ? undefined : ink,
-      preferBesideBelow && shape.mode === "local",
-      textVerticalClearanceMm,
-      fitPrintedInk && (shape.mode === "local" || !!locality?.sourceAnchorsMm),
-      reach?.(shape),
+      locality,
+      preferBesideBelow,
+      families,
+      localityInkMm?.get(shape.id),
+      fitPrintedInk,
+      Math.max(
+        textVerticalClearanceMm,
+        shapeReach?.textVerticalClearanceMm ?? 0,
+      ),
+      shapeReach,
+      preferRoomiest,
     );
-    const legal = (b: Rect) =>
-      (!families ||
-        families.includes(
-          navigationPlacementFamily(
-            navigationPlacementInk(envelope(b), ink),
-            area,
-            owner,
-            locality,
-          ),
-        )) &&
-      inside(b, fitArea) &&
-      laneLocal(shape, envelope(b), ink, locality) &&
-      obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm));
-    const box = fitPrintedInk
-      ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
-      : candidates.find(legal);
-    if (box) return { box: envelope(box), protectedBox: box, shape };
+    if (found) return found;
   }
   return undefined;
 }

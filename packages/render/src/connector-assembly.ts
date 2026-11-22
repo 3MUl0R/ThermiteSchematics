@@ -582,7 +582,7 @@ function appendAssemblyDevices(draw: AssemblyRenderState) {
     if (![node.x, node.y, node.width, node.height].every(Number.isFinite))
       throw new Error("Invalid assembly node bounds.");
     out.push(
-      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#fafafa" stroke="#344054" stroke-width=".35"/>${deviceHeaderSvg(tags.get(uid), captions.get(uid)!)}`,
+      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect class="assembly-device-frame" width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#fafafa" stroke="#344054" stroke-width=".35"/>${deviceHeaderSvg(tags.get(uid), captions.get(uid)!)}`,
     );
     out.push(...assemblyPortSvg(node, rows.get(uid)!, portIds, uid));
     out.push("</g>");

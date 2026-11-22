@@ -6,6 +6,13 @@ import {
   terminalName,
 } from "./tranche4-source.mjs";
 import { finding, painted } from "./review-geometry.mjs";
+const CARD_DESTINATION_SUFFIX =
+  /^\d{2,}\.[A-D][1-6](?:\(alsoshown\d{2,}\.[A-D][1-6](?:,\d{2,}\.[A-D][1-6])*\)|alsoshown\d{2,}\.[A-D][1-6](?:,\d{2,}\.[A-D][1-6])*)?/u;
+
+function stripCardDestinationSuffix(text) {
+  return text.replace(CARD_DESTINATION_SUFFIX, "");
+}
+
 function cardMatch(pending, right, identity, end, ir) {
   // nativeConductors4 guarantees exactly two ends; the opposite index preserves self-loops.
   const candidates = pending
@@ -83,7 +90,9 @@ export function cardIdentityFindings(card, catalog, ir) {
         }),
       );
     pending.splice(pending.indexOf(match.w), 1);
-    identity = right.slice(match.destination.length);
+    identity = stripCardDestinationSuffix(
+      right.slice(match.destination.length),
+    );
   }
   if (pending.length || identity)
     result.push(

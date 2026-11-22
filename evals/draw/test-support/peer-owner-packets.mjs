@@ -27,9 +27,10 @@ const papers = {
     ["left-to-right", "a4", "portrait", "standard", 10, 32],
     ["left-to-right", "a4", "portrait", "compact", 10, 32],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 36],
-    ["top-to-bottom", "letter", "portrait", "compact", 5, 34],
+    // In-frame return placement saves 2 sheets on compact letter portrait and 1 on compact A4 portrait vs 5c2914a (34/31).
+    ["top-to-bottom", "letter", "portrait", "compact", 5, 32],
     ["top-to-bottom", "a4", "landscape", "standard", 5, 31],
-    ["top-to-bottom", "a4", "portrait", "compact", 5, 31],
+    ["top-to-bottom", "a4", "portrait", "compact", 5, 30],
   ],
 };
 
@@ -127,6 +128,15 @@ export function testPeerOwnerPacket(project) {
       );
       const measured = await peerOwnerMeasurements(page, packet.value, native);
       assertDistances(measured);
+      const cardDestinations = packet.value.sheets.filter((sheet) =>
+        /<text class="off-view-row"[^>]*>[^<]*\d{2,}\.[A-D][1-6]/u.test(
+          sheet.svg,
+        ),
+      );
+      expect(
+        measured.length + cardDestinations.length,
+        "packet should carry resolved peer destinations in cards or free notes",
+      ).toBeGreaterThan(0);
     },
     // The machine packet renders and measures up to 37 sheets. Native CI
     // timed out at 45 s, and the conveyor packet took as long as 36 s.

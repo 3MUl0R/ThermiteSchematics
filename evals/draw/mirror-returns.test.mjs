@@ -9,7 +9,7 @@ it("DQ-07 one observation per full coil/contact with native NO/NC, terminals, dr
   expect(result.coilAppearances).toHaveLength(1);
   expect(result.contactAppearances).toHaveLength(1);
   expect(result.contactAppearances[0].measurements[0]).toMatchObject({
-    assessment: "measured-no-threshold",
+    assessment: "locality-checked",
   });
 });
 it.each([
@@ -130,11 +130,16 @@ it("DQ-07 zone adjacency and foreign-frame ties require a self-located heading",
   headings[0].text = "K1";
   expect(kinds(f)).toContain("mirror-locality");
 });
-it("DQ-07 returns name every coil destination and have no distance threshold", () => {
+it("DQ-07 returns name every coil destination and enforce owner locality (5.40)", () => {
   const f = mirrorFixture(),
     row = f.geometries[1].texts.at(-1);
-  row.bbox = bbox(180, 180);
+  // Passing control: local return caption next to its contact owner.
   expect(audit(f).findings).toEqual([]);
+  // Old-engine witness (R4 m16, conveyor TTB s02 K2 at 80.7 mm): distant return fails.
+  row.bbox = bbox(180, 180);
+  expect(kinds(f)).toContain("return-locality");
+  // Restore local position and verify coil-set mismatches still fail.
+  row.bbox = bbox(30, 52);
   row.text = "K1 /01.D6";
   expect(kinds(f)).toContain("return-coil-set");
   row.text = "K9 /01.A1";
