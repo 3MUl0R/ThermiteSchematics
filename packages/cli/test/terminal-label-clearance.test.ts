@@ -93,14 +93,64 @@ it("catches the round-one T1 terminal label next to the secondary winding", asyn
   expect(findings[0].gapMm).toBeLessThan(0.36);
 });
 
+const measureFixtureCoarseGap = sheetMeasurementSource((options, h) => {
+  const c = { options, h };
+  h.prepareGeometry(c);
+  h.prepareTerminals(c);
+  h.prepareText(c);
+  h.preparePaint(c);
+  const text = c.texts[0],
+    e = text && c.elementsById.get(text.element),
+    owner = e
+      ?.closest("[data-terminal-key]")
+      ?.parentElement?.closest("[data-circuit-functions],[data-device-uid]"),
+    shape = owner && h.terminalLabelBody(c, owner)[0];
+  if (!text?.reviewPainted || !shape) return undefined;
+  const label = {
+      e,
+      text,
+      bbox: text.bbox,
+      inverse: e.getScreenCTM().inverse(),
+    },
+    step = 0.02,
+    cutoff = 1.5,
+    labelRegion = c.intersect(
+      label.bbox,
+      h.expandClearanceBox(shape.bbox, cutoff),
+    ),
+    strokeRegion = c.intersect(
+      shape.bbox,
+      h.expandClearanceBox(label.bbox, cutoff),
+    );
+  if (
+    labelRegion.w <= 0 ||
+    labelRegion.h <= 0 ||
+    strokeRegion.w <= 0 ||
+    strokeRegion.h <= 0
+  )
+    return undefined;
+  const ink = h.terminalLabelInkRows(labelRegion, step, (p) =>
+      c.glyphAt(label, p),
+    ),
+    stroke = h.terminalLabelInkRows(
+      strokeRegion,
+      step,
+      h.terminalLabelStrokeHit(c, shape),
+    );
+  if (!ink.length || !stroke.length) return undefined;
+  const coarse = h.terminalLabelRunGap(ink, stroke, step, cutoff);
+  return coarse.pair && coarse.gap < cutoff ? coarse.gap : undefined;
+});
+
 const measureFixtureGap = sheetMeasurementSource((options, h) => {
   const c = { options, h };
   h.prepareGeometry(c);
   h.prepareTerminals(c);
   h.prepareText(c);
   h.preparePaint(c);
-  // Keep 0.49..0.51 mm inside the adaptive 0.001 mm refinement band around 0.515 mm.
-  return h.terminalLabelClearances(c, 0.515)[0]?.gapMm;
+  // Keep targetGapMm inside the adaptive 0.001 mm refinement band
+  // (ceilingMm - 0.03 .. ceilingMm).
+  return h.terminalLabelClearances(c, options.ceilingMm)[0]?.gapMm;
 });
 
 async function roundTwoFindingsAtGap(
@@ -110,25 +160,48 @@ async function roundTwoFindingsAtGap(
   maxGapMm: number,
 ) {
   // Start near the target in the embedded font and calibrate against the
-  // measured ink to allow for native Chromium differences.
+  // measured ink to allow for native Chromium rasterization differences
+  // (CoreText vs FreeType / DirectWrite).
   await displaySheet(page, transformerSecondary(roundTwoWinding, labelX));
   const label = page.locator('[data-terminal-key="X2"] text');
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const gapMm: number | undefined = await page.evaluate(
-      (source) => (0, eval)(source)(),
-      measureFixtureGap,
-    );
-    if (gapMm === undefined)
+  const setLabelX = (x: number) =>
+    label.evaluate((e, next) => e.setAttribute("x", String(next)), x);
+  const readCoarseGap = (): Promise<number | undefined> =>
+    page.evaluate((source) => (0, eval)(source)(), measureFixtureCoarseGap);
+  const ceilingMm = targetGapMm + 0.015;
+  const readFineGap = (): Promise<number | undefined> =>
+    page.evaluate(({ source, ceilingMm }) => (0, eval)(source)({ ceilingMm }), {
+      source: measureFixtureGap,
+      ceilingMm,
+    });
+
+  // Fast coarse bracket (0.02 mm grid, 1.5 mm search window) so platforms whose
+  // native glyph rasterization starts above ceilingMm move into the refinement
+  // band without throwing on a narrow cutoff ceiling.
+  for (let bracket = 0; bracket < 4; bracket++) {
+    const coarseGap = await readCoarseGap();
+    if (coarseGap === undefined)
       throw new Error("Could not measure the X2 ink gap");
-    if (gapMm >= minGapMm && gapMm <= maxGapMm) {
+    if (coarseGap >= targetGapMm - 0.005 && coarseGap <= targetGapMm + 0.012)
+      break;
+    labelX += (targetGapMm - coarseGap) * 0.85;
+    await setLabelX(labelX);
+  }
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const fineGap = await readFineGap();
+    if (fineGap !== undefined && fineGap >= minGapMm && fineGap <= maxGapMm) {
       return {
         labelX,
         findings: terminalLabelFindings(await evaluateSheetGeometry(page)),
       };
     }
+    const gapMm = fineGap ?? (await readCoarseGap());
+    if (gapMm === undefined)
+      throw new Error("Could not measure the X2 ink gap");
     // The winding is slanted, so damp the horizontal step near the 0.001 mm grid.
     labelX += (targetGapMm - gapMm) * 0.85;
-    await label.evaluate((e, x) => e.setAttribute("x", String(x)), labelX);
+    await setLabelX(labelX);
   }
   throw new Error(`Could not position X2 at a ${targetGapMm} mm ink gap`);
 }
@@ -138,21 +211,21 @@ it.each([
     targetGapMm: 0.49,
     minGapMm: 0.488,
     maxGapMm: 0.492,
-    startX: 25.23,
+    startX: 25.28,
     fails: true,
   },
   {
     targetGapMm: 0.501,
     minGapMm: 0.5,
     maxGapMm: 0.502,
-    startX: 25.245,
+    startX: 25.28,
     fails: false,
   },
   {
     targetGapMm: 0.51,
     minGapMm: 0.508,
     maxGapMm: 0.512,
-    startX: 25.255,
+    startX: 25.28,
     fails: false,
   },
 ])(
