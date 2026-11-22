@@ -18,7 +18,10 @@ let browser, page, input;
 beforeAll(async () => {
   input = await compileProject("examples/conveyor-line");
   if (!input.ok) throw Error(JSON.stringify(input.diagnostics));
-  browser = await launch();
+  // Accurate Canvas bounds for small-font clearance checks (crbug.com/479240778).
+  browser = await launch([
+    "--enable-blink-features=CanvasTextMetricsPreciseBounds",
+  ]);
   page = await browser.newPage(drawingContextOptions);
 });
 afterAll(async () => browser?.close());
@@ -166,7 +169,10 @@ it("audits DOL P6 TTB s05 W37 at S2.14 in Chromium", async () => {
           b = other.bbox;
         if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) <= 0) continue;
         const gap = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
-        expect(gap).toBeGreaterThanOrEqual(1.5 - 1e-6);
+        expect(
+          gap,
+          `vertical clearance between ${JSON.stringify(p.text)} (${JSON.stringify(a)}) and ${JSON.stringify(other.text)} (${JSON.stringify(b)})`,
+        ).toBeGreaterThanOrEqual(1.5 - 1e-6);
       }
     }
     // Removing the S2.14 W37 peer note (leaving only the generic repeat pointer) must fail.
