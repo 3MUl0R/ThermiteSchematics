@@ -359,4 +359,140 @@ describe("DQ-02 zone-gutter check and bounded left-continuation contract", () =>
       reason: "continuation-rule-clearance",
     });
   });
+
+  it("kills a left continuation whose painted conductor or painted stub is clipped 2 mm short of the edge", () => {
+    // 1. Conductor route extends to anchor, but painted ink (routeInk / paintedBbox) is clipped 2 mm right
+    const {
+      g: gClipCond,
+      context: ctxClipCond,
+      fixture: f,
+    } = validLeftContinuationScenario();
+    gClipCond.tranche3 = {
+      routeInk: {
+        "path-w1": [
+          [
+            { x: f.fieldLeft + 2, y: 106.5 },
+            { x: f.fieldLeft + 40, y: 106.5 },
+          ],
+        ],
+      },
+    };
+    const aClipCond = zoneGutterAudit(gClipCond, ctxClipCond);
+    expect(aClipCond.contracted).toEqual([]);
+    expect(aClipCond.findings[0]).toMatchObject({
+      kind: "text-in-zone-gutter",
+      reason: "continuation-no-edge-conductor",
+    });
+
+    // 2. Stub painted ink clipped 2 mm (empty or disconnected from anchor/stubEnd)
+    const { g: gClipStub, context: ctxClipStub } =
+      validLeftContinuationScenario();
+    gClipStub.continuationStubs = {
+      "a-left-1": { element: "stub-1", bbox: null, stroke: 0.3, ink: [] },
+    };
+    const aClipStub = zoneGutterAudit(gClipStub, ctxClipStub);
+    expect(aClipStub.contracted).toEqual([]);
+    expect(aClipStub.findings[0]).toMatchObject({
+      kind: "text-in-zone-gutter",
+      reason: "continuation-no-edge-conductor",
+    });
+
+    // Control: continuous painted conductor + painted stub passes and counts
+    const { g: gOk, context: ctxOk } = validLeftContinuationScenario();
+    gOk.tranche3 = {
+      routeInk: {
+        "path-w1": [
+          [
+            { x: f.fieldLeft, y: 106.5 },
+            { x: f.fieldLeft + 40, y: 106.5 },
+          ],
+        ],
+      },
+    };
+    gOk.continuationStubs = {
+      "a-left-1": {
+        element: "stub-1",
+        bbox: { x: f.fieldLeft - 2, y: 106.5, w: 2, h: 0 },
+        stroke: 0.3,
+        ink: [
+          [
+            { x: f.fieldLeft, y: 106.5 },
+            { x: f.fieldLeft - 2, y: 106.5 },
+          ],
+        ],
+      },
+    };
+    const aOk = zoneGutterAudit(gOk, ctxOk);
+    expect(aOk.findings).toEqual([]);
+    expect(aOk.contracted).toHaveLength(1);
+  });
+
+  it("kills a left continuation whose stub crosses its own text or foreign glyphs", () => {
+    // 1. Stub extended left through K1-A2-0V text (x=20.35..30.65, y=105.7..107.55)
+    const {
+      g: gOwn,
+      context: ctxOwn,
+      fixture: f,
+    } = validLeftContinuationScenario({
+      stubEnd: { x: 29.0, y: 106.5 },
+      labelY: 102.2,
+    });
+    gOwn.continuationStubs = {
+      "a-left-1": {
+        element: "stub-1",
+        bbox: { x: 29.0, y: 106.5, w: f.fieldLeft - 29.0, h: 0 },
+        stroke: 0.3,
+        ink: [
+          [
+            { x: f.fieldLeft, y: 106.5 },
+            { x: 29.0, y: 106.5 },
+          ],
+        ],
+      },
+    };
+    const aOwn = zoneGutterAudit(gOwn, ctxOwn);
+    expect(aOwn.contracted).toEqual([]);
+    expect(aOwn.findings[0]).toMatchObject({
+      kind: "text-in-zone-gutter",
+      reason: "continuation-collision",
+    });
+
+    // 2. Stub crosses a foreign text glyph in the gutter
+    const { g: gForeign, context: ctxForeign } = validLeftContinuationScenario({
+      extraTexts: [
+        text("FOREIGN", {
+          element: "foreign-text",
+          bbox: { x: 33.5, y: 105.6, w: 5, h: 1.85 },
+        }),
+      ],
+    });
+    const aForeign = zoneGutterAudit(gForeign, ctxForeign);
+    expect(aForeign.contracted).toEqual([]);
+    expect(aForeign.findings).toContainEqual(
+      expect.objectContaining({
+        element: "cont-row-1",
+        kind: "text-in-zone-gutter",
+        reason: "continuation-collision",
+      }),
+    );
+  });
+
+  it("kills a bottom continuation moved into the left margin below the drawing field", () => {
+    // fieldBottom in baseSheetFixture is 60 + 3*44 + 22 = 214; titleBlock.y = 241.
+    // Place bottom continuation at x=18, y=225 (below fieldBottom, above titleBlock).
+    const { g, context } = validLeftContinuationScenario({
+      side: "bottom",
+      labelLeft: 18.0,
+      anchor: { x: 170.0, y: 206.8 },
+      stubEnd: { x: 170.0, y: 208.8 },
+      labelY: 225.0,
+    });
+    const audit = zoneGutterAudit(g, context);
+    expect(audit.contracted).toEqual([]);
+    expect(audit.findings.length).toBeGreaterThanOrEqual(2);
+    expect(audit.findings[0]).toMatchObject({
+      kind: "text-in-zone-gutter",
+      reason: "continuation-not-left-edge",
+    });
+  });
 });

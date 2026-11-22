@@ -571,11 +571,15 @@ describe("DQ-06 local source-device tag on potential reference bars (#432)", () 
     );
   });
 
-  it("accepts a painted legible local source designation tag near the rail bar", () => {
+  it("accepts a painted legible local source designation tag bound to the rail bar", () => {
     const localTag = {
       text: "PS1",
       renderedString: "PS1",
       painted: true,
+      reviewPainted: true,
+      railDeviceTag: true,
+      railOwnerElement: "rail-1",
+      railDeviceUid: "ps1",
       fontSize: 2.5,
       bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
     };
@@ -584,12 +588,16 @@ describe("DQ-06 local source-device tag on potential reference bars (#432)", () 
     ).toEqual([]);
   });
 
-  it("rejects wrong designation, distant text, or sub-legible text", () => {
+  it("rejects wrong designation, detached local text, distant text, or sub-legible text", () => {
     for (const bad of [
       {
         text: "PS2",
         renderedString: "PS2",
         painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
         fontSize: 2.5,
         bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
       },
@@ -597,6 +605,10 @@ describe("DQ-06 local source-device tag on potential reference bars (#432)", () 
         text: "PS1",
         renderedString: "PS1",
         painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
         fontSize: 2.5,
         bbox: { x: 180, y: 137.5, w: 4.5, h: 2.5 },
       },
@@ -604,8 +616,34 @@ describe("DQ-06 local source-device tag on potential reference bars (#432)", () 
         text: "PS1",
         renderedString: "PS1",
         painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
         fontSize: 1.5,
         bbox: { x: 160, y: 137.5, w: 4.5, h: 1.5 },
+      },
+      {
+        // Detached local PS1 text not bound to the rail glyph
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: false,
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+      {
+        // Bound tag with wrong railDeviceUid
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "src1",
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
       },
     ]) {
       expect(
@@ -614,5 +652,37 @@ describe("DQ-06 local source-device tag on potential reference bars (#432)", () 
         expect.objectContaining({ kind: "missing-rail-device-tag" }),
       );
     }
+  });
+
+  it("rejects a wrong SRC1 tag on the rail even with detached PS1 text nearby", () => {
+    const wrongBoundPlusDetached = [
+      {
+        text: "SRC1",
+        renderedString: "SRC1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 6, h: 2.5 },
+      },
+      {
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: false,
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+    ];
+    expect(
+      check([...legendEntry, ...wrongBoundPlusDetached], ir, [], {
+        potentialRails: [rail],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({ kind: "missing-rail-device-tag" }),
+    );
   });
 });

@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
-import { deviceTags } from "./checks.mjs";
+import { deviceTags, wirePlacement } from "./checks.mjs";
 import { locationFragmentCaptionFindings } from "./headings-and-locations.mjs";
+import { junctionRayAudit } from "./junction-rays-oracle.mjs";
 import { compileProject } from "../../packages/compiler/dist/index.js";
-import { renderSchematic } from "../../packages/render/dist/index.js";
+import {
+  renderSchematic,
+  renderSchematicPacket,
+} from "../../packages/render/dist/index.js";
 import { resolve } from "node:path";
 
 let browser, page;
@@ -203,4 +208,46 @@ it("DQ-02 location fragment caption check validates location identity, not posit
       foundCaptions: [],
     }),
   );
+});
+
+it("DQ-06 rejects a wrong SRC1 tag on a rail even with a detached PS1 text nearby", async () => {
+  const { ir, railWithoutTag, sheetLegendOnly, offViewCard } = railTagFixture;
+  const railWithWrongTag = railWithoutTag.replace(
+    "</g>",
+    '<text class="rail-device-tag" data-rail-device-tag="true" data-rail-device-uid="ps1" x="1" y="10.5" font-size="2.5" font-weight="700" fill="#344054">SRC1</text></g>',
+  );
+  const detachedPs1 =
+    '<text transform="translate(80 40)" x="1" y="10.5" font-size="2.5" font-weight="700" fill="#344054">PS1</text>';
+  const mutantG = await openSheet(
+    page,
+    svgDoc(railWithWrongTag + detachedPs1 + sheetLegendOnly + offViewCard),
+  );
+  expect(deviceTags(mutantG, ir, [], true)).toContainEqual(
+    expect.objectContaining({
+      kind: "missing-rail-device-tag",
+      deviceUid: "ps1",
+      expectedDesignation: "PS1",
+    }),
+  );
+});
+
+it("Siemens 6ES7151-3AA23 top-to-bottom FIXED1/FIXED2 captions pass DQ-13, DQ-16, and ownership", async () => {
+  const dir = resolve("libraries/siemens-pilot/examples/6es7151-3aa23-0ab0");
+  const compiled = await compileProject(dir);
+  expect(compiled.ok).toBe(true);
+  const request = JSON.parse(
+    await readFile(resolve(dir, "packet.request.json"), "utf8"),
+  );
+  const packet = await renderSchematicPacket(
+    compiled.ir,
+    {
+      ...request,
+      views: request.views.map((v) => ({ ...v, flow: "top-to-bottom" })),
+    },
+    compiled.presentation,
+  );
+  expect(packet.ok).toBe(true);
+  const g = await openSheet(page, packet.value.sheets[0].svg);
+  expect(junctionRayAudit(g, compiled.ir).findings).toEqual([]);
+  expect(wirePlacement(g, compiled.ir)).toEqual([]);
 });

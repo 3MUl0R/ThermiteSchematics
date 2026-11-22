@@ -512,19 +512,28 @@ function railDeviceTagFindings(g, ir, issue) {
       out.push(ownerIssue);
       if (!potential || !device) continue;
     }
-    const localTag = (g.texts ?? []).some(
+    const boundTags = (g.texts ?? []).filter(
       (t) =>
+        t.railDeviceTag === true &&
+        t.railOwnerElement === rail.element &&
         t.painted !== false &&
+        t.reviewPainted !== false &&
         hasLegibleEm(t) &&
         !t.inDeviceLegend &&
         !t.inOffViewCard &&
         t.tagKind !== "legend" &&
         !t.tagReferenceEntry &&
         t.role !== "off-view" &&
-        rowText(t).trim() === device.designation &&
         t.bbox &&
         boxDistance(t.bbox, rail.bbox) <= RAIL_TAG_MAX_DISTANCE_MM,
     );
+    const localTag =
+      boundTags.length > 0 &&
+      boundTags.every(
+        (t) =>
+          rowText(t).trim() === device.designation &&
+          (!t.railDeviceUid || t.railDeviceUid === device.uid),
+      );
     if (!localTag)
       out.push(
         issue(

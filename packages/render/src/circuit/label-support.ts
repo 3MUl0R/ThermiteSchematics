@@ -33,7 +33,7 @@ export function supportedCircuitLabels(state: CircuitLabelState) {
             },
             current,
           ),
-        circuitCaptionPositions,
+        (l, routes) => circuitCaptionPositions(l, routes, current),
       ),
       occurrences = new Map<number, number>();
     let moved = false;

@@ -119,6 +119,42 @@ export function collectZoneColumnRules(c) {
     });
 }
 
+export function collectContinuationStubs(c) {
+  const { root, visible, ids, strokeInk, sx, sy, options } = c;
+  if (options.textOnly) return {};
+  const stubs = {};
+  for (const a of root.querySelectorAll('a[href^="#sheet-"]')) {
+    const line = a.querySelector("path,line");
+    const key = ids.get(a);
+    if (!line || !key) continue;
+    const v = visible(line);
+    if (!v) {
+      stubs[key] = { element: ids.get(line), bbox: null, stroke: 0, ink: [] };
+      continue;
+    }
+    const css = getComputedStyle(line);
+    const m = line.getScreenCTM();
+    const stroke =
+      css.stroke === "none"
+        ? 0
+        : parseFloat(css.strokeWidth) *
+          Math.max(
+            Math.hypot(m.a * sx, m.b * sy),
+            Math.hypot(m.c * sx, m.d * sy),
+          );
+    const ink = c.h.trancheInkPieces({
+      pieces: strokeInk(line, v.clip, m, true),
+    });
+    stubs[key] = {
+      element: ids.get(line),
+      bbox: v.b,
+      stroke,
+      ink,
+    };
+  }
+  return stubs;
+}
+
 export function layoutRegionFields(c) {
   const { root, visible, ids, texts } = c;
   const visibleRects = (selector) =>
@@ -153,6 +189,7 @@ export function layoutRegionFields(c) {
     assemblyLabelPlates: visibleRects("[data-assembly-label] > rect"),
     locationFragmentFallbacks,
     zoneColumnRules: c.h.collectZoneColumnRules(c),
+    continuationStubs: c.h.collectContinuationStubs(c),
   };
 }
 

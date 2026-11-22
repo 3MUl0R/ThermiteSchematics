@@ -87,6 +87,18 @@ it.each(["6ES7135-4FB01-0AB0", "6ES7135-4GB01-0AB0", "6ES7151-3AA23-0AB0"])(
       expect(barY).toBeLessThanOrEqual(ly + lh);
       expect(lx).toBeGreaterThanOrEqual(barMinX + 0.5);
       expect(lx + lw).toBeLessThanOrEqual(barMaxX - 0.5);
+      // Caption plate must never mask a filled junction dot (r = 0.55 mm) or
+      // its emerging horizontal ray at the bar ends (e.g. 6ES7151-3AA23 1M).
+      for (const dot of doc.querySelectorAll(
+        'circle[data-circuit-junction="true"]',
+      )) {
+        const cx = Number(dot.getAttribute("cx"));
+        const cy = Number(dot.getAttribute("cy"));
+        if (Math.abs(cy - barY) <= 0.05) {
+          const gap = Math.max(lx - cx, cx - (lx + lw), 0);
+          expect(gap).toBeGreaterThanOrEqual(1.05);
+        }
+      }
     }
   },
 );

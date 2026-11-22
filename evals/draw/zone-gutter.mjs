@@ -43,13 +43,128 @@ function zoneColumnRuleRight(g, zones, fieldLeft, fieldTop, fieldBottom) {
   return Math.max(letterRight, ...rules.map((r) => r.right));
 }
 
-function polylineDistanceToPoint(points, p) {
-  let best = Infinity;
-  for (let i = 0; i < points.length; i++) {
-    best = Math.min(best, Math.hypot(points[i].x - p.x, points[i].y - p.y));
-    if (i > 0) best = Math.min(best, distance(p, points[i - 1], points[i]));
+function clipSegmentToRect(a, b, r) {
+  let t0 = 0,
+    t1 = 1;
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  for (const [p, q] of [
+    [-dx, a.x - r.x],
+    [dx, r.x + r.w - a.x],
+    [-dy, a.y - r.y],
+    [dy, r.y + r.h - a.y],
+  ]) {
+    if (p === 0) {
+      if (q < 0) return null;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return null;
+    }
   }
+  return [
+    { x: a.x + t0 * dx, y: a.y + t0 * dy },
+    { x: a.x + t1 * dx, y: a.y + t1 * dy },
+  ];
+}
+
+function segmentsDistanceToPoint(segments, p) {
+  let best = Infinity;
+  for (const [a, b] of segments) best = Math.min(best, distance(p, a, b));
   return best;
+}
+
+function segmentDistanceToSegment(a, b, c, d) {
+  return Math.min(
+    distance(a, c, d),
+    distance(b, c, d),
+    distance(c, a, b),
+    distance(d, a, b),
+  );
+}
+
+function segmentIntersectsBox(a, b, box, pad = 0) {
+  const r = {
+    x: box.x - pad,
+    y: box.y - pad,
+    w: box.w + pad * 2,
+    h: box.h + pad * 2,
+  };
+  return clipSegmentToRect(a, b, r) !== null;
+}
+
+function paintedConductorSegments(shape, shapeGeo) {
+  if (
+    shape.painted === false ||
+    shape.paintedBbox === null ||
+    shape.clips === null
+  )
+    return [];
+  const routeInk = shapeGeo?.tranche3?.routeInk;
+  if (routeInk && Object.prototype.hasOwnProperty.call(routeInk, shape.element))
+    return routeInk[shape.element] ?? [];
+  const pts = routePoints(shape);
+  if (!pts || pts.length < 2) return [];
+  const masks = [
+    shape.viewport,
+    ...(Array.isArray(shape.clips) ? shape.clips : []),
+    shape.paintedBbox,
+  ].filter(Boolean);
+  const segs = [];
+  for (let i = 1; i < pts.length; i++) {
+    let seg = [pts[i - 1], pts[i]];
+    for (const m of masks) {
+      seg = clipSegmentToRect(seg[0], seg[1], m);
+      if (!seg) break;
+    }
+    if (seg) segs.push(seg);
+  }
+  return segs;
+}
+
+function stubMeasurement(source, shapeGeo) {
+  const stubs = shapeGeo?.continuationStubs;
+  if (stubs && Object.prototype.hasOwnProperty.call(stubs, source.element))
+    return stubs[source.element];
+  if (source.stubInk !== undefined)
+    return {
+      ink: source.stubInk,
+      stroke: source.stubStroke ?? 0.3,
+    };
+  if (source.anchor && source.stubEnd)
+    return {
+      ink: [[source.anchor, source.stubEnd]],
+      stroke: source.stubStroke ?? 0.3,
+    };
+  return null;
+}
+
+function continuousInkConnects(segments, start, end, tol) {
+  if (!segments?.length) return false;
+  const visited = new Set();
+  const queue = [];
+  for (let i = 0; i < segments.length; i++) {
+    const [a, b] = segments[i];
+    if (distance(start, a, b) <= tol) {
+      visited.add(i);
+      queue.push(i);
+    }
+  }
+  while (queue.length) {
+    const idx = queue.shift();
+    const [a, b] = segments[idx];
+    if (distance(end, a, b) <= tol) return true;
+    for (let j = 0; j < segments.length; j++) {
+      if (visited.has(j)) continue;
+      const [c, d] = segments[j];
+      if (segmentDistanceToSegment(a, b, c, d) <= tol) {
+        visited.add(j);
+        queue.push(j);
+      }
+    }
+  }
+  return false;
 }
 
 function conductorMatchesShape(shape, c, expected) {
@@ -66,19 +181,31 @@ function conductorMatchesShape(shape, c, expected) {
   return !!(c.netId && shape.net === c.netId);
 }
 
-function conductorLeavesAtAnchor(g, c, expected, anchor, context) {
-  const shapes = context?.shapeGeometry?.shapes ?? g.shapes ?? [];
+function conductorLeavesAtAnchor(g, c, expected, source, context) {
+  const shapeGeo = context?.shapeGeometry ?? g;
+  const shapes = shapeGeo.shapes ?? [];
+  let reachesEdge = false;
   for (const s of shapes) {
     if (!conductorMatchesShape(s, c, expected)) continue;
-    const pts = routePoints(s);
-    if (!pts?.length) continue;
+    const segs = paintedConductorSegments(s, shapeGeo);
+    if (!segs.length) continue;
     if (
-      polylineDistanceToPoint(pts, anchor) <=
+      segmentsDistanceToPoint(segs, source.anchor) <=
       LEFT_CONTINUATION_CONDUCTOR_TOLERANCE_MM
-    )
-      return true;
+    ) {
+      reachesEdge = true;
+      break;
+    }
   }
-  return false;
+  if (!reachesEdge) return false;
+  const stub = stubMeasurement(source, shapeGeo);
+  if (!stub || !source.stubEnd) return false;
+  return continuousInkConnects(
+    stub.ink,
+    source.anchor,
+    source.stubEnd,
+    LEFT_CONTINUATION_CONDUCTOR_TOLERANCE_MM,
+  );
 }
 
 function destinationVerified(c, rows, source, context) {
@@ -115,19 +242,81 @@ function unionBox(boxes) {
   return { x, y, w: right - x, h: bottom - y };
 }
 
-function hasGutterCollision(rows, source, g, fieldLeft, context) {
-  const otherTexts = (g.texts ?? []).filter(
-    (t) =>
-      t.painted !== false && t.bbox && t.continuationLink !== source.element,
+function intersectBox(a, b) {
+  const x = Math.max(a.x, b.x),
+    y = Math.max(a.y, b.y),
+    right = Math.min(a.x + a.w, b.x + b.w),
+    bottom = Math.min(a.y + a.h, b.y + b.h);
+  return right > x && bottom > y ? { x, y, w: right - x, h: bottom - y } : null;
+}
+
+function shapeCollidesWithBox(s, box, shapeGeo, g) {
+  if (s.painted === false || s.paintedBbox === null || s.clips === null)
+    return false;
+  const pad = (s.stroke ?? 0) / 2;
+  const routeInk = shapeGeo?.tranche3?.routeInk;
+  const segs =
+    routeInk && Object.prototype.hasOwnProperty.call(routeInk, s.element)
+      ? routeInk[s.element]
+      : s.inkSegments?.length
+        ? s.inkSegments
+        : s.conductor
+          ? paintedConductorSegments(s, shapeGeo)
+          : null;
+  if (segs) return segs.some(([a, b]) => segmentIntersectsBox(a, b, box, pad));
+  const whiteOrNone =
+    !s.fill || s.fill === "none" || s.fill === "rgb(255, 255, 255)";
+  if (whiteOrNone && !(s.stroke > 0)) return false;
+  let b = s.paintedBbox ?? s.bbox;
+  if (!b) return false;
+  for (const mask of [
+    s.viewport,
+    ...(Array.isArray(s.clips) ? s.clips : []),
+  ].filter(Boolean)) {
+    b = intersectBox(b, mask);
+    if (!b) return false;
+  }
+  const hollowFrame =
+    s.shapeTag === "rect" &&
+    whiteOrNone &&
+    g.width &&
+    g.height &&
+    b.w > g.width * 0.5 &&
+    b.h > g.height * 0.5;
+  return !hollowFrame && overlap(box, b, 0);
+}
+
+function hasGutterCollision(rows, source, g, context) {
+  const allTexts = (g.texts ?? []).filter((t) => t.painted !== false && t.bbox);
+  const otherTexts = allTexts.filter(
+    (t) => t.continuationLink !== source.element,
   );
-  const shapes = context?.shapeGeometry?.shapes ?? g.shapes ?? [];
-  for (const r of rows) {
-    if (otherTexts.some((o) => overlap(r.bbox, o.bbox, 0))) return true;
-    for (const s of shapes) {
-      if (s.painted === false || !s.bbox) continue;
-      if (s.bbox.x + s.bbox.w >= fieldLeft - 0.1) continue;
-      if (overlap(r.bbox, s.bbox, 0)) return true;
+  const shapeGeo = context?.shapeGeometry ?? g;
+  const shapes = shapeGeo.shapes ?? [];
+  const stub = stubMeasurement(source, shapeGeo);
+  if (stub?.ink?.length) {
+    const pad = (stub.stroke ?? 0.3) / 2;
+    for (const t of allTexts) {
+      if (stub.ink.some(([a, b]) => segmentIntersectsBox(a, b, t.bbox, pad)))
+        return true;
     }
+  }
+  const otherStubs = Object.entries(shapeGeo.continuationStubs ?? {}).filter(
+    ([el]) => el !== source.element,
+  );
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (otherTexts.some((o) => overlap(r.bbox, o.bbox, 0))) return true;
+    for (let j = i + 1; j < rows.length; j++) {
+      if (overlap(r.bbox, rows[j].bbox, 0)) return true;
+    }
+    for (const [, st] of otherStubs) {
+      const pad = (st.stroke ?? 0.3) / 2;
+      if (st.ink?.some(([a, b]) => segmentIntersectsBox(a, b, r.bbox, pad)))
+        return true;
+    }
+    if (shapes.some((s) => shapeCollidesWithBox(s, r.bbox, shapeGeo, g)))
+      return true;
   }
   return false;
 }
@@ -169,7 +358,7 @@ function evaluateLeftContinuation(
   const expected = printedConductor(c, context.ir);
   if (!expected || !identityMatches(rows, c, expected))
     return reject("continuation-unverified-conductor");
-  if (!conductorLeavesAtAnchor(g, c, expected, source.anchor, context))
+  if (!conductorLeavesAtAnchor(g, c, expected, source, context))
     return reject("continuation-no-edge-conductor");
   const destZone = destinationVerified(c, rows, source, context);
   if (!destZone) return reject("continuation-unverified-destination");
@@ -196,7 +385,7 @@ function evaluateLeftContinuation(
     LEFT_CONTINUATION_VERTICAL_ALIGN_MM + ZONE_GUTTER_EPSILON_MM
   )
     return reject("continuation-vertical-misalignment");
-  if (hasGutterCollision(rows, source, g, fieldLeft, context))
+  if (hasGutterCollision(rows, source, g, context))
     return reject("continuation-collision");
   return {
     ok: true,
@@ -319,8 +508,7 @@ export function zoneGutterAudit(g, context) {
       !t.bbox ||
       isZoneGridMark(t, zoneSet, fieldRight, fieldBottom) ||
       t.bbox.y + t.bbox.h <= g.headerRule.y + INK_ACCURACY_MM ||
-      (g.titleBlock && t.bbox.y >= g.titleBlock.y - INK_ACCURACY_MM) ||
-      t.bbox.y >= fieldBottom - INK_ACCURACY_MM ||
+      (g.titleBlock && overlap(t.bbox, g.titleBlock, INK_ACCURACY_MM)) ||
       t.bbox.x >= fieldLeft - ZONE_GUTTER_EPSILON_MM ||
       allowedElements.has(t.element)
     )

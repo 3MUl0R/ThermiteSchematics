@@ -121,6 +121,15 @@ export function textFields2(c) {
     font: css.fontFamily,
     fontSize: parseFloat(css.fontSize) * scaleY,
     tagNativeAdvanceMm: nativeSvgAdvance * scaleX,
+    railDeviceTag:
+      e.getAttribute("data-rail-device-tag") === "true" ||
+      e.classList.contains("rail-device-tag"),
+    railOwnerElement: ids.get(
+      e.closest(
+        '[data-symbol-id^="ais:rail-"][data-boundary-kind="potential"]',
+      ),
+    ),
+    railDeviceUid: e.getAttribute("data-rail-device-uid") ?? undefined,
   };
 }
 
