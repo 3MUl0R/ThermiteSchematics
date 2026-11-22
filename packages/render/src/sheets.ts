@@ -78,6 +78,8 @@ export { normalizePaperPage, sheetLabel } from "./packet/page.js";
 import { printPacketHtml } from "./packet/html.js";
 export { printPacketHtml } from "./packet/html.js";
 
+import { hasCompactFrame } from "./packet/frame-profile.js";
+import { controlPrint } from "./packet/rooted-control-print.js";
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
 
 function packetDiagnostics(
@@ -290,6 +292,7 @@ async function renderPacket(
       ),
     };
   drafts = legendFit.value;
+  applyControlPrint(drafts, legendViews.length, paper.value);
   const pageCost = checkedPageCost(drafts, contextError);
   if (!pageCost.ok) return pageCost;
   const companions = packetCompanions(
@@ -330,6 +333,27 @@ async function renderPacket(
     presentation,
     paginationFailures.keys(),
   );
+}
+
+function applyControlPrint(
+  drafts: readonly Draft[],
+  viewCount: number,
+  page: import("./packet/types.js").PaperPage,
+): void {
+  const control = controlPrint.getStore();
+  if (!control) return;
+  if (control.replacement) {
+    if (control.gate && !control.gate(drafts))
+      throw new Error("Control print gate rejected alternate.");
+    return;
+  }
+  if (control.propose && viewCount === 1 && !hasCompactFrame(page)) {
+    try {
+      control.originalDrafts = structuredClone(drafts);
+    } catch {
+      control.snapshotFailed = true;
+    }
+  }
 }
 
 function collectCircuitAppearances(
@@ -623,6 +647,7 @@ export async function renderPacketWithAdvice(
   );
   if (
     result.ok ||
+    controlPrint.getStore()?.replacement ||
     result.error.code !== "R006" ||
     result.error.reason !== "unprintable-layout" ||
     result.error.details?.navigationInvariant ||
