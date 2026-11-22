@@ -3,7 +3,10 @@ import {
   navigationObstacles,
   NavigationSlotFailure,
 } from "./navigation-slots.js";
-import { searchNavigationSlot } from "./navigation-slot-search.js";
+import {
+  NAVIGATION_CLEARANCE_MM,
+  searchNavigationSlot,
+} from "./navigation-slot-search.js";
 import type { PeerReference } from "./peer-reference-ink.js";
 import type { NavigationShape } from "./navigation-types.js";
 import type { RenderedSheet } from "./types.js";
@@ -12,7 +15,7 @@ import type { RenderedSheet } from "./types.js";
 const PEER_REACH_MM = 6.1;
 // Source-free text must start directly beside its owner.
 const UNNAMED_REACH_MM = 2.1;
-const unnamed = new Set(["compact", "locator"]);
+const unnamed = new Set(["compact"]);
 const alongPreference = [
   "qualified-wrapped",
   "named-compact-wrapped",
@@ -49,7 +52,14 @@ function place(
       undefined,
       undefined,
       false,
-      (shape) => ({ anchors, gap: reachMm(shape) }),
+      (shape) => ({
+        anchors,
+        gap: reachMm(shape),
+        textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
+        ...(entry.foreignOwners?.length
+          ? { foreignOwners: entry.foreignOwners }
+          : {}),
+      }),
     );
     if (found) return { box: found.box, lines: found.shape.maximumForms };
   };

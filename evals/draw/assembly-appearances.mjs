@@ -25,17 +25,19 @@ export function assemblyAppearances(packet, geometries, ir) {
     for (const p of ps.filter(
       (p) => p.kind === "assembly" && validAssemblyPort(p, ir),
     )) {
-      const box = p.bbox ?? {
+      const circleBox = {
         x: p.point.x - p.radius,
         y: p.point.y - p.radius,
         w: 2 * p.radius,
         h: 2 * p.radius,
       };
+      const box = p.bbox ?? circleBox;
       add(ports, portId(p.deviceUid, p.key), {
         sheet: s.number,
         zones: rowZones(g, box),
         element: p.element,
         bbox: box,
+        circleBox,
         keyBox:
           p.texts?.find((t) => painted(t) && t.text.trim() === p.key)?.bbox ??
           box,

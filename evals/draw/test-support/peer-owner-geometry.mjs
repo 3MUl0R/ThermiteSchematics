@@ -332,8 +332,8 @@ export async function peerOwnerMeasurements(page, packet, native) {
   const font = packet.html.match(
     /<style data-thermite-font="[^"]+">[^<]*<\/style>/u,
   )?.[0];
-  if (!selected.length || !font)
-    throw Error("Expected issued peer notes and their embedded print font");
+  if (!font) throw Error("Expected embedded print font");
+  if (!selected.length) return [];
   const svg = selected
     .map((sheet) => sheet.svg.replace(/^<\?xml[^>]*>/u, ""))
     .join("");

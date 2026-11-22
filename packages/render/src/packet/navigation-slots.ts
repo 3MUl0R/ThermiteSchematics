@@ -9,6 +9,7 @@ import type {
 import {
   searchNavigationSlot,
   NAVIGATION_CLEARANCE_MM,
+  type SlotReach,
 } from "./navigation-slot-search.js";
 import {
   navigationPlacementFamily,
@@ -25,6 +26,9 @@ export interface SheetSlotRequest {
   families?: readonly NavigationPlacementFamily[];
   localityInkMm?: ReadonlyMap<string, Rect> | undefined;
   fitPrintedInk?: boolean;
+  preferRoomiest?: boolean;
+  openOwnerFrame?: boolean;
+  reach?: (shape: NavigationShape) => SlotReach;
 }
 export class NavigationSlotFailure extends Error {
   constructor(
@@ -53,7 +57,7 @@ export function navigationObstacles(svg: string, openDeviceFrames = false) {
           : g.node.name === "rect" &&
               (openDeviceFrames
                 ? /off-view-card|device-legend-frame/
-                : /device-frame|off-view-card|device-legend-frame/
+                : /device-frame|assembly-device-frame|off-view-card|device-legend-frame/
               ).test(a.class ?? "")
             ? {
                 x: Number(a.x ?? 0),
@@ -68,6 +72,35 @@ export function navigationObstacles(svg: string, openDeviceFrames = false) {
   ];
   return { ink, texts: measured.texts };
 }
+function deviceFrameRects(svg: string): Rect[] {
+  return navigationGeometry(svg).flatMap((g) => {
+    const a = g.node.attrs;
+    if (
+      !g.visible ||
+      g.node.name !== "rect" ||
+      !/device-frame/.test(a.class ?? "")
+    )
+      return [];
+    const visible = intersection(
+      project(
+        {
+          x: Number(a.x ?? 0),
+          y: Number(a.y ?? 0),
+          w: Number(a.width),
+          h: Number(a.height),
+        },
+        g.matrix,
+      ),
+      g.clip,
+    );
+    return visible && visible.w > 0 && visible.h > 0 ? [visible] : [];
+  });
+}
+const sameRect = (a: Rect, b: Rect) =>
+  Math.abs(a.x - b.x) <= 0.05 &&
+  Math.abs(a.y - b.y) <= 0.05 &&
+  Math.abs(a.w - b.w) <= 0.05 &&
+  Math.abs(a.h - b.h) <= 0.05;
 /** Vacant sheet-mm space after real continuation/legend ink. Never grows an ELK leaf. */
 export function allocateNavigationSlots(
   requests: readonly SheetSlotRequest[],
@@ -76,24 +109,30 @@ export function allocateNavigationSlots(
   sheet: number,
   reservedBoxes: readonly Rect[] = [],
 ): AnnotationReservation[] {
-  const measured = navigationObstacles(svg),
+  const measured = navigationObstacles(svg, true),
+    frameObstacles = deviceFrameRects(svg),
     obstacles = measured.ink,
     texts = measured.texts;
   obstacles.push(...reservedBoxes);
   texts.push(...reservedBoxes);
   return requests.map(({ reservation, owner, locality, ...options }) => {
     const legacy = legacyShapes(reservation);
+    const requestObstacles = options.openOwnerFrame
+      ? [...obstacles, ...frameObstacles.filter((f) => !sameRect(f, owner))]
+      : [...obstacles, ...frameObstacles];
     const result = searchNavigationSlot(
       reservation.shapes ?? legacy,
       area,
       owner,
-      obstacles,
+      requestObstacles,
       locality,
       texts,
       options.preferBesideBelow,
       options.families,
       options.localityInkMm,
       options.fitPrintedInk,
+      options.reach,
+      options.preferRoomiest,
     );
     if (!result)
       throw new NavigationSlotFailure(
@@ -106,7 +145,7 @@ export function allocateNavigationSlots(
             reservation.inkMm,
             area,
             owner,
-            obstacles,
+            requestObstacles,
             texts,
             locality,
           ),

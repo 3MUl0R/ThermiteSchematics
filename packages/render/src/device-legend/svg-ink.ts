@@ -124,7 +124,9 @@ function shapeInk(n: SvgNode, css: Record<string, string>): Rect[] {
     stroke = dark(css.stroke) ? number(css, "stroke-width", 1) : 0;
   if (n.name === "rect") {
     const b = { x: get("x"), y: get("y"), w: get("width"), h: get("height") },
-      background = /location-frame|canvas-background/.test(a.class ?? "");
+      background = /location-frame|canvas-background|assembly-device-frame/.test(
+        a.class ?? "",
+      );
     return [
       ...rectangleInk(b, stroke),
       // Cards reserve their entire interior, including blank space between

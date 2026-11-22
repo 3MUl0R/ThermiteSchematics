@@ -11,8 +11,8 @@ it.each([
   "terminal-interface",
   "attachment",
   "assembly-inventory",
-] as const)("fits %s with the first legal one-line form", (kind) => {
-  for (const form of ["full", "compact", "locator"] as const) {
+] as const)("fits %s with the first legal subject-bearing one-line form", (kind) => {
+  for (const form of ["full", "compact"] as const) {
     const { sheet, field, entries } = peerNoteFitFixture(form);
     const entry = { ...entries[0]!, kind };
     const result = emitPeerReferences(sheet, field, [entry]);
@@ -23,11 +23,14 @@ it.each([
       {
         full: entry.value,
         compact: entry.compact,
-        locator: "→ 04.D3",
       }[form],
     );
     expect(note?.getAttribute("font-size")).toBe("2.5");
   }
+  const { sheet, field, entries } = peerNoteFitFixture("locator");
+  expect(() =>
+    emitPeerReferences(sheet, field, [{ ...entries[0]!, kind }]),
+  ).toThrow(new RegExp(`Navigation ${kind} cannot fit`, "u"));
 });
 
 it("keeps two measured lines when two notes make the bare address ambiguous", () => {

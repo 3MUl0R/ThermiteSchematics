@@ -136,7 +136,10 @@ function attachmentEntries(
     const ownerLabel = `${native.designation}.${native.key}`;
     const owned = {
       identity: [port.deviceUid, port.portKey, assembly.uid],
-      owner: port.label ?? port.owner,
+      owner: port.owner,
+      foreignOwners: part.ports
+        .filter((other) => other.id !== port.id)
+        .map((other) => other.owner),
       ownerLabel,
     };
     if (remote)

@@ -3,6 +3,9 @@
 import { beforeAll, expect, it } from "vitest";
 import { renderSchematic } from "../src/renderer.js";
 import { renderSchematicPacket } from "../src/sheets.js";
+import { navigationGeometry } from "../src/packet/navigation-walk.js";
+import { project } from "../src/device-legend/geometry.js";
+import { boxDistance } from "../src/packet/navigation-symbols.js";
 import type { SchematicViewRequest } from "../src/types.js";
 import {
   dolControlInventory,
@@ -128,8 +131,62 @@ it("fits the named W35 peer beside its grouped circuit route", async () => {
       ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
     ].find((note) => note.getAttribute("data-peer-source")?.includes(w35.uid));
     expect(note?.textContent).toMatch(
-      /^W35 · R1\.11 → OL1\.96 0[12]\.[A-D][1-6]$/u,
+      /^W35 · R1\.11 → OL1\.96 01\.[A-D][1-6](?: \(also shown 02\.[A-D][1-6]\))?$/u,
     );
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+it("places W37 nearest R1.14 rather than R1.12 in DOL P6 TTB (#507)", async () => {
+  const fixture = await dolProbeFixture("p6");
+  try {
+    const w37 = required(
+      fixture.ir.wires.find((wire) => wire.designation === "W37"),
+    );
+    const r1 = required(
+      fixture.ir.devices.find((device) => device.designation === "R1"),
+    );
+    const outcome = await renderSchematicPacket(
+      fixture.ir,
+      dolPackets("p6", "top-to-bottom").combined,
+    );
+    if (!outcome.ok) throw Error(outcome.error.message);
+    const { svg } = required(outcome.value.sheets[4]);
+    const drawing = parseSvg(svg);
+    const notes = [
+      ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+    ].filter((el) => el.getAttribute("data-peer-source")?.includes(w37.uid));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.textContent).toMatch(
+      /^W37 · R1\.14 → S2\.14 01\.[A-D][1-6] \(also shown 02\.[A-D][1-6]\)$/u,
+    );
+    const noteX = Number(notes[0]!.getAttribute("x"));
+    const noteY = Number(notes[0]!.getAttribute("y"));
+    const noteBox = { x: noteX, y: noteY - 2, w: 50, h: 2.5 };
+    const geom = navigationGeometry(svg);
+    const byNode = new Map(geom.map((g) => [g.node, g]));
+    const terminalBox = (key: string) => {
+      const id = JSON.stringify([r1.uid, key]);
+      const port = required(
+        geom.find((g) => g.visible && g.node.attrs["data-terminal-id"] === id),
+      );
+      const circle = required(port.node.children.find((n) => n.name === "circle"));
+      const mark = required(byNode.get(circle));
+      const r = Number(circle.attrs.r);
+      return project(
+        {
+          x: Number(circle.attrs.cx ?? 0) - r,
+          y: Number(circle.attrs.cy ?? 0) - r,
+          w: 2 * r,
+          h: 2 * r,
+        },
+        mark.matrix,
+      );
+    };
+    const d14 = boxDistance(noteBox, terminalBox("14"));
+    const d12 = boxDistance(noteBox, terminalBox("12"));
+    expect(d14).toBeLessThan(d12);
   } finally {
     await fixture.dispose();
   }

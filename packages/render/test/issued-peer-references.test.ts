@@ -38,13 +38,45 @@ it.each([
     );
     if (!r.ok) throw Error(JSON.stringify(r.error));
     expect(r.value.sheets).toHaveLength(pages);
-    const notes = r.value.sheets.flatMap((sheet) =>
-      Array.from(
-        parseSvg(sheet.svg).querySelectorAll("[data-peer-reference]"),
-        (t) => t.textContent,
-      ),
-    );
-    expect(notes.some((note) => note?.endsWith(token))).toBe(true);
+    const texts = r.value.sheets.flatMap((sheet) => {
+      const doc = parseSvg(sheet.svg);
+      return [
+        ...Array.from(
+          doc.querySelectorAll("[data-peer-reference]"),
+          (t) => t.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+        ),
+        ...Array.from(
+          doc.querySelectorAll("g.off-view-annotation"),
+          (g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+        ),
+      ];
+    });
+    expect(texts.some((text) => text.includes(token))).toBe(true);
+    // Card-backed endpoints carry their destination inside the card, never as a duplicate free note.
+    expect(
+      r.value.sheets.every((sheet) => {
+        const doc = parseSvg(sheet.svg);
+        const cardSources = new Set(
+          [...doc.querySelectorAll("g.off-view-annotation")].flatMap((g) => {
+            const term = g.getAttribute("data-off-view-terminal-id");
+            const conds = JSON.parse(
+              g.getAttribute("data-off-view-conductors") ?? "[]",
+            ) as unknown[];
+            return term
+              ? conds.map((c) => JSON.stringify([JSON.parse(term), c]))
+              : [];
+          }),
+        );
+        return [
+          ...doc.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+        ].every((n) => {
+          const [from, cond] = JSON.parse(
+            n.getAttribute("data-peer-source") ?? "[]",
+          );
+          return !cardSources.has(JSON.stringify([from, cond]));
+        });
+      }),
+    ).toBe(true);
   },
 );
 
@@ -105,19 +137,27 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       source.presentation,
     );
     if (!result.ok) throw Error(JSON.stringify(result.error));
-    const notes = result.value.sheets.flatMap((sheet) =>
+    const cards = result.value.sheets.flatMap((sheet) =>
+      [...parseSvg(sheet.svg).querySelectorAll("g.off-view-annotation")].map(
+        (g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "",
+      ),
+    );
+    expect(cards).toContainEqual(
+      expect.stringMatching(/W-CTL-004 → TB1\.4 \d+\.[A-D][1-6]/u),
+    );
+    expect(cards).toContainEqual(
+      expect.stringMatching(
+        /W-CTL-004 → PS1\.- \d+\.[A-D][1-6] \(also shown \d+\.[A-D][1-6]\)/u,
+      ),
+    );
+    const freeWctl004 = result.value.sheets.flatMap((sheet) =>
       [
         ...parseSvg(sheet.svg).querySelectorAll(
           '[data-peer-reference="conductor-peer"]',
         ),
-      ].map((n) => n.textContent),
+      ].filter((n) => n.textContent?.includes("W-CTL-004")),
     );
-    expect(notes).toContainEqual(
-      expect.stringMatching(/^W-CTL-004 · PS1\.- → TB1\.4 \d+\.[A-D][1-6]$/u),
-    );
-    expect(notes).toContainEqual(
-      expect.stringMatching(/^W-CTL-004 · TB1\.4 → PS1\.- \d+\.[A-D][1-6]$/u),
-    );
+    expect(freeWctl004).toEqual([]);
   },
 );
 
@@ -157,14 +197,18 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         ),
       ),
     );
-    expect(notes(cable)).toContainEqual(
+    const cableCards = [
+      ...cable!.document.querySelectorAll("g.off-view-annotation"),
+    ].map((g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "");
+    expect(cableCards).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^W-CTL-004 · TB1\\.4 → PS1\\.- ${String(circuit!.number).padStart(2, "0")}\\.[A-D][1-6]$`,
+          `W-CTL-004 → PS1\\.- ${String(circuit!.number).padStart(2, "0")}\\.[A-D][1-6]`,
           "u",
         ),
       ),
     );
+    expect(notes(cable)).toEqual([]);
   },
 );
 

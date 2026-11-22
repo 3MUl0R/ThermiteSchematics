@@ -25,6 +25,7 @@ export interface PeerReference {
   compact: string;
   destination: string;
   owner: Rect;
+  foreignOwners?: readonly Rect[];
   along?: readonly Rect[];
   captions?: readonly Rect[];
   ownerLabel?: string;
@@ -73,7 +74,7 @@ function shape(id: string, lines: readonly string[]): NavigationShape {
 
 function noteShapes(
   entry: PeerReference,
-  unique: boolean,
+  _unique: boolean,
   uniqueForOwner: boolean,
 ) {
   const forms = [
@@ -84,7 +85,6 @@ function noteShapes(
     forms.push(
       shape("named-compact", [`${entry.ownerLabel} ${entry.compact}`]),
     );
-  if (unique) forms.push(shape("locator", [`→ ${entry.destination}`]));
   if (uniqueForOwner && entry.ownerLabel) {
     const destination = `→ ${entry.destination}`;
     forms.push(shape("qualified", [`${entry.ownerLabel} ${destination}`]));

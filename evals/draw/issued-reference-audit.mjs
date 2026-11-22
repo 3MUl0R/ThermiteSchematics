@@ -4,13 +4,17 @@ import { portId } from "./assembly-note-source.mjs";
 import { issuedRows } from "./m3-documents.mjs";
 import { nativeRows } from "./m3-native.mjs";
 import { sufficient } from "./document-dependencies.mjs";
-import { finding, groupBy, painted } from "./review-geometry.mjs";
+import { extent, finding, groupBy, painted } from "./review-geometry.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
-import { inOwnerReach, noteOwnerGap } from "./peer-owner-ink.mjs";
+import { boxGap, inOwnerReach, noteOwnerGap } from "./peer-owner-ink.mjs";
 import { measuredZone } from "./repeat-appearances.mjs";
+import { printedZones } from "./printed-zones.mjs";
+import { INK_ACCURACY_MM } from "./checks.mjs";
 
+const PEER_STACK_GAP_MM = 1.5;
 const address = (n) => String(n).padStart(2, "0");
 const at = (s, zone) => `${address(s)}.${zone}`;
+
 function endpointZone(packet, geometries, row, name) {
   if (!row) return;
   const g = geometries[packet.sheets.findIndex((s) => s.number === row.sheet)];
@@ -30,6 +34,12 @@ function endpointZone(packet, geometries, row, name) {
 
 function assemblyObligations(packet, geometries, ir, rows, native) {
   const { ports, links } = assemblyAppearances(packet, geometries, ir);
+  const portsBySheet = new Map();
+  for (const [id, list] of ports)
+    for (const p of list) {
+      if (!portsBySheet.has(p.sheet)) portsBySheet.set(p.sheet, []);
+      portsBySheet.get(p.sheet).push({ id, box: p.circleBox ?? p.bbox });
+    }
   return ir.relations
     .filter((r) => r.assembly)
     .flatMap((r) =>
@@ -37,7 +47,8 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
         [r.fromDeviceUid, r.assembly.fromPort],
         [r.toDeviceUid, r.assembly.toPort],
       ].flatMap(([uid, key]) => {
-        const landings = ports.get(portId(uid, key)) ?? [];
+        const selfId = portId(uid, key);
+        const landings = ports.get(selfId) ?? [];
         const drawn = new Set((links.get(r.uid) ?? []).map((a) => a.sheet));
         const expected = native.find(
           (n) => n.kind === "assemblies" && n.key === r.uid,
@@ -55,6 +66,10 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
         const label = `${ownerLabel} · ${assembly}`;
         const rowZone = endpointZone(packet, geometries, row, ownerLabel);
         return landings.flatMap((src) => {
+          const ownerBox = src.circleBox ?? src.bbox;
+          const foreignOwners = (portsBySheet.get(src.sheet) ?? [])
+            .filter((p) => p.id !== selfId)
+            .map((p) => p.box);
           const target = landings.find(
             (a) =>
               drawn.has(a.sheet) !== drawn.has(src.sheet) && a.zones.length,
@@ -66,7 +81,8 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
                 kind: "attachment",
                 source: [uid, key, r.uid],
                 ownerLabel,
-                owners: [src.keyBox],
+                owners: [ownerBox],
+                foreignOwners,
                 values: target.zones.map(
                   (z) => `${label} → ${at(target.sheet, z)}`,
                 ),
@@ -82,7 +98,8 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
                   kind: "assembly-inventory",
                   source: [uid, key, r.uid],
                   ownerLabel,
-                  owners: [src.keyBox],
+                  owners: [ownerBox],
+                  foreignOwners,
                   values: [`${label} inventory → ${at(row.sheet, rowZone)}`],
                   compactValues: [
                     `→ ${assembly} inventory ${at(row.sheet, rowZone)}`,
@@ -95,13 +112,16 @@ function assemblyObligations(packet, geometries, ir, rows, native) {
     );
 }
 
-const noteAddress = (value) => / (\d+\.[A-D][1-6])$/u.exec(value)?.[1];
+const noteAddress = (value) =>
+  / (\d+\.[A-D][1-6](?: \(also shown \d+\.[A-D][1-6](?:, \d+\.[A-D][1-6])*\))?)$/u.exec(
+    value,
+  )?.[1];
 
 function addressUses(expected, named = false) {
   const counts = new Map();
   for (const { values, ownerLabel } of expected)
-    for (const address of new Set(values.map(noteAddress).filter(Boolean))) {
-      const key = named ? JSON.stringify([ownerLabel, address]) : address;
+    for (const addr of new Set(values.map(noteAddress).filter(Boolean))) {
+      const key = named ? JSON.stringify([ownerLabel, addr]) : addr;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
   return counts;
@@ -124,7 +144,34 @@ function measuredNote(lines) {
   return top.text + " " + bottom.text;
 }
 
-function nameForm(obligation, note, value, counts, namedCounts) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function cardCarriesDestination(obligation) {
+  const { card, label, peerName, destinations = [] } = obligation;
+  if (!card || !destinations.length) return false;
+  const prefix = `${label} → ${peerName}`;
+  const idx = card.text.indexOf(prefix);
+  if (idx < 0) return false;
+  const tail = card.text.slice(idx + prefix.length);
+  const [primary, ...alternates] = destinations;
+  const primaryPattern = primary.zones
+    .map((z) => escapeRegExp(at(primary.sheet, z)))
+    .join("|");
+  if (!alternates.length)
+    return new RegExp(`^\\s+(?:${primaryPattern})(?:\\s|$)`, "u").test(tail);
+  const altPatterns = alternates.map(
+    (alt) => `(?:${alt.zones.map((z) => escapeRegExp(at(alt.sheet, z))).join("|")})`,
+  );
+  const pattern = new RegExp(
+    `^\\s+(?:${primaryPattern})\\s+(?:\\(\\s*)?also shown\\s+${altPatterns.join("\\s*,\\s*")}\\)?(?:\\s|$)`,
+    "u",
+  );
+  return pattern.test(tail);
+}
+
+function nameForm(obligation, note, value, namedCounts) {
   if (
     !value ||
     obligation.kind !== note.peerReference ||
@@ -136,48 +183,160 @@ function nameForm(obligation, note, value, counts, namedCounts) {
   if (ownerLabel && compactValues.some((v) => value === `${ownerLabel} ${v}`))
     return "named";
   if (!note.peerGroup && compactValues.includes(value)) return "bare";
-  const address = noteAddress(value);
-  if (address && values.some((v) => noteAddress(v) === address)) {
-    if (
-      !note.peerGroup &&
-      counts.get(address) === 1 &&
-      value === `→ ${address}`
-    )
-      return "bare";
-    if (
-      ownerLabel &&
-      namedCounts.get(JSON.stringify([ownerLabel, address])) === 1 &&
-      value === `${ownerLabel} → ${address}`
-    )
-      return "named";
-  }
+  const addr = noteAddress(value);
+  if (
+    addr &&
+    ownerLabel &&
+    values.some((v) => noteAddress(v) === addr) &&
+    namedCounts.get(JSON.stringify([ownerLabel, addr])) === 1 &&
+    value === `${ownerLabel} → ${addr}`
+  )
+    return "named";
+}
+
+function measuredFieldHorizontalBounds(g) {
+  if (!g?.frame || !g?.headerRule) return;
+  const { numbers } = printedZones(g);
+  if (numbers.length < 2) return;
+  const colW = numbers[1].anchor.x - numbers[0].anchor.x;
+  if (!(colW > 0)) return;
+  return {
+    left: numbers[0].anchor.x - colW / 2,
+    right: numbers.at(-1).anchor.x + colW / 2,
+  };
+}
+
+function noteRegion(lines) {
+  return extent(
+    lines.flatMap(({ bbox: b }) => [b, { x: b.x + b.w, y: b.y + b.h }]),
+  );
+}
+
+function checkPeerStackGaps(sheet, regions, result) {
+  for (let i = 0; i < regions.length; i++)
+    for (let j = i + 1; j < regions.length; j++) {
+      const a = regions[i],
+        b = regions[j];
+      const horizontalOverlap =
+        Math.min(a.box.x + a.box.w, b.box.x + b.box.w) -
+          Math.max(a.box.x, b.box.x) >
+        -INK_ACCURACY_MM;
+      if (!horizontalOverlap) continue;
+      const dy = Math.max(
+        0,
+        a.box.y - (b.box.y + b.box.h),
+        b.box.y - (a.box.y + a.box.h),
+      );
+      if (dy < PEER_STACK_GAP_MM - INK_ACCURACY_MM)
+        result.push(
+          finding("issued-peer-reference-stack-gap", a.first, {
+            sheet,
+            printed: a.text,
+            otherText: b.text,
+            gapMm: dy,
+            minimumMm: PEER_STACK_GAP_MM,
+          }),
+        );
+    }
 }
 
 export function peerReferenceFindings(sheet, g, expected) {
-  const obligations = [...expected];
-  const counts = addressUses(expected);
-  const namedCounts = addressUses(expected, true);
   const result = [];
+  const cardOwnedSources = new Set();
+  const obligations = [];
+  for (const o of expected) {
+    if (o.card) {
+      cardOwnedSources.add(JSON.stringify(o.source));
+      if (!cardCarriesDestination(o))
+        result.push({
+          ...finding("issued-peer-reference-missing", o.card, {
+            sheet,
+            referenceKind: o.kind,
+            source: o.source,
+            expected: o.values,
+            cardText: o.card.text,
+          }),
+          designation: o.values[0],
+        });
+    } else obligations.push(o);
+  }
+  const namedCounts = addressUses(obligations, true);
+  const fieldBounds = measuredFieldHorizontalBounds(g);
+  const seenFreeSources = new Set();
+  const paintedRegions = [];
   const notes = groupBy(
-    g.texts.filter((t) => t.peerReference),
+    (g.texts ?? []).filter((t) => t.peerReference),
     (t) => t.peerGroup ?? t,
   );
   for (const lines of notes.values()) {
     const first = lines[0];
+    const printed = lines.map((t) => t.text).join(" ");
     const value = measuredNote(lines);
+    if (lines.every((t) => painted(t) && t.bbox)) {
+      const box = noteRegion(lines);
+      paintedRegions.push({ first, text: printed, box });
+      if (
+        fieldBounds &&
+        (box.x < fieldBounds.left - INK_ACCURACY_MM ||
+          box.x + box.w > fieldBounds.right + INK_ACCURACY_MM)
+      )
+        result.push(
+          finding("issued-peer-reference-outside-drawing-bounds", first, {
+            sheet,
+            printed,
+            noteLeftMm: box.x,
+            fieldLeftMm: fieldBounds.left,
+            fieldRightMm: fieldBounds.right,
+          }),
+        );
+    }
+    if (
+      first.peerReference === "conductor-peer" &&
+      cardOwnedSources.has(first.peerSource)
+    ) {
+      result.push(
+        finding("issued-peer-reference-duplicate-card-note", first, {
+          sheet,
+          printed,
+          source: first.peerSource,
+        }),
+      );
+      continue;
+    }
+    if (value && /^→\s*\d+\.[A-D][1-6]$/u.test(value)) {
+      result.push(
+        finding("issued-peer-reference-subjectless", first, {
+          sheet,
+          printed: value,
+        }),
+      );
+      continue;
+    }
+    const sourceKey = JSON.stringify([first.peerReference, first.peerSource]);
+    if (seenFreeSources.has(sourceKey)) {
+      result.push(
+        finding("issued-peer-reference-duplicate", first, {
+          sheet,
+          printed,
+          source: first.peerSource,
+        }),
+      );
+      continue;
+    }
     let form;
     const index = obligations.findIndex(
-      (o) => (form = nameForm(o, first, value, counts, namedCounts)),
+      (o) => (form = nameForm(o, first, value, namedCounts)),
     );
     if (index === -1) {
       result.push(
         finding("issued-peer-reference-unbound", first, {
           sheet,
-          printed: lines.map((t) => t.text).join(" "),
+          printed,
         }),
       );
       continue;
     }
+    seenFreeSources.add(sourceKey);
     const [obligation] = obligations.splice(index, 1);
     if (obligation.owners) {
       const named = form === "named";
@@ -192,8 +351,25 @@ export function peerReferenceFindings(sheet, g, expected) {
             named,
           }),
         );
+      if (obligation.foreignOwners?.length && lines.every((t) => t.bbox)) {
+        const box = noteRegion(lines);
+        const foreignGap = Math.min(
+          ...obligation.foreignOwners.map((owner) => boxGap(box, owner)),
+        );
+        if (foreignGap + INK_ACCURACY_MM < gap)
+          result.push(
+            finding("issued-peer-reference-foreign-owner", first, {
+              sheet,
+              printed: value,
+              source: obligation.source,
+              ownerGapMm: gap,
+              foreignGapMm: foreignGap,
+            }),
+          );
+      }
     }
   }
+  checkPeerStackGaps(sheet, paintedRegions, result);
   return result.concat(
     obligations.map((o) => ({
       ...finding(

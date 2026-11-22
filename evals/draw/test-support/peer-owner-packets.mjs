@@ -127,6 +127,15 @@ export function testPeerOwnerPacket(project) {
       );
       const measured = await peerOwnerMeasurements(page, packet.value, native);
       assertDistances(measured);
+      const cardDestinations = packet.value.sheets.filter((sheet) =>
+        /<text class="off-view-row"[^>]*>[^<]*\d{2,}\.[A-D][1-6]/u.test(
+          sheet.svg,
+        ),
+      );
+      expect(
+        measured.length + cardDestinations.length,
+        "packet should carry resolved peer destinations in cards or free notes",
+      ).toBeGreaterThan(0);
     },
     // The machine packet renders and measures up to 37 sheets. Native CI
     // timed out at 45 s, and the conveyor packet took as long as 36 s.

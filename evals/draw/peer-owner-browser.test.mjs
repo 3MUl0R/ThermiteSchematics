@@ -20,13 +20,14 @@ afterAll(async () => browser?.close());
 
 const measure = (svg) => openSheet(page, embedPrintableFont(svg));
 
-function moveNote(svg, source, delta) {
+function stripCardDestination(svg, wireUid) {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
-  const note = [...document.querySelectorAll("[data-peer-reference]")].find(
-    (e) => e.getAttribute("data-peer-source") === source,
+  const card = [...document.querySelectorAll("g.off-view-annotation")].find(
+    (e) => (e.getAttribute("data-off-view-conductors") ?? "").includes(wireUid),
   );
-  if (!note) throw Error("Missing issued peer note");
-  note.setAttribute("transform", `translate(0 ${delta})`);
+  if (!card) throw Error("Missing off-view card for wire");
+  for (const row of card.querySelectorAll("text.off-view-row"))
+    row.textContent = row.textContent.replace(/\s*\d{2,}\.[A-D][1-6].*$/u, "");
   return document.toString();
 }
 
@@ -35,7 +36,7 @@ it.each([
   ["a4", "standard"],
   ["a4", "compact"],
 ])(
-  "measures owner proximity in %s portrait %s",
+  "measures card-owned destinations and owner proximity in %s portrait %s",
   async (size, layout) => {
     const packet = await renderSchematicPacket(
       input.ir,
@@ -57,12 +58,20 @@ it.each([
     expect(peerReferenceFindings(1, first, expected)).toEqual([]);
     const uid = input.ir.wires.find((w) => w.designation === "W-PWR-009").uid;
     const owner = input.ir.devices.find((d) => d.designation === "SRC1").uid;
-    const actual = first.texts.find((t) => {
-      if (t.peerReference !== "conductor-peer") return false;
-      const [from, wire] = JSON.parse(t.peerSource);
-      return from.deviceUid === owner && wire.uid === uid;
-    });
-    expect(actual).toBeDefined();
+    const cardObligation = expected.find(
+      (o) =>
+        o.kind === "conductor-peer" &&
+        o.source[0]?.deviceUid === owner &&
+        o.source[1]?.uid === uid,
+    );
+    expect(cardObligation?.card).toBeDefined();
+    expect(
+      first.texts.some(
+        (t) =>
+          t.peerReference === "conductor-peer" &&
+          JSON.parse(t.peerSource)[1]?.uid === uid,
+      ),
+    ).toBe(false);
     if (size === "letter") {
       const complete = input.ir.wires.find(
         (w) => w.designation === "W-PWR-002",
@@ -92,15 +101,17 @@ it.each([
         ),
       ).toBe(true);
     }
-    const moved = await measure(
-      moveNote(
-        packet.value.sheets[0].svg,
-        actual.peerSource,
-        actual.bbox.y > first.height / 2 ? -45 : 45,
-      ),
+    const stripped = await measure(
+      stripCardDestination(packet.value.sheets[0].svg, uid),
     );
-    expect(peerReferenceFindings(1, moved, expected)).toContainEqual(
-      expect.objectContaining({ kind: "issued-peer-reference-owner-distance" }),
+    const strippedObligations = terminalPeerObligations(
+      packet.value,
+      [stripped, ...geometries.slice(1)],
+      input.ir,
+      nativeRows(input.ir),
+    ).filter((o) => o.sheet === 1);
+    expect(peerReferenceFindings(1, stripped, strippedObligations)).toContainEqual(
+      expect.objectContaining({ kind: "issued-peer-reference-missing" }),
     );
   },
   // Each case renders a complete packet, then measures every sheet and its

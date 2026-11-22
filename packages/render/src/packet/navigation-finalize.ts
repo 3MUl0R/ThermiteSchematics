@@ -29,7 +29,7 @@ import { failure } from "./errors.js";
 import type { SheetSlotRequest } from "./navigation-slots.js";
 import type { RepeatPlan } from "./navigation-repeats.js";
 import { repeatLocalityInk } from "./navigation-label-ink.js";
-import { mirrorLocalityInk } from "./mirror-layout.js";
+import { mirrorInk, mirrorLocalityInk } from "./mirror-layout.js";
 import { symbolGeometry, type SymbolGeometry } from "./navigation-symbols.js";
 import { resolveLabelLocality } from "./navigation-locality.js";
 import {
@@ -351,7 +351,20 @@ function sheetRequests(
         "Missing gang frames",
       );
     if (mirrorService) {
-      locality.anchorMm = owner.destination.anchorMm;
+      const members = occurrences.filter((o) =>
+        annotation.ownerOccurrences.includes(o.id),
+      );
+      locality.anchorMm =
+        annotation.role === "return" && members.length > 1
+          ? {
+              x:
+                members.reduce((sum, o) => sum + o.destination.anchorMm.x, 0) /
+                members.length,
+              y:
+                members.reduce((sum, o) => sum + o.destination.anchorMm.y, 0) /
+                members.length,
+            }
+          : owner.destination.anchorMm;
       locality.ownerLocation = {
         sheet: owner.destination.sheet,
         zone: owner.destination.zone,
@@ -379,11 +392,31 @@ function navigationRequest(
     ...(!mirrorService || annotation.role === "mirror" ? { locality } : {}),
     preferBesideBelow: annotation.role === "mirror",
     localityGeometry: locality,
-    fitPrintedInk: annotation.role === "element-location",
+    fitPrintedInk:
+      annotation.role === "element-location" || annotation.role === "return",
+    preferRoomiest: annotation.role === "element-location",
+    ...(annotation.role === "return"
+      ? {
+          openOwnerFrame: true,
+          reach: () => ({
+            anchors: [locality.frameMm],
+            gap: Infinity,
+            foreignOwners: locality.framesMm,
+            tieBreakAnchor: locality.anchorMm,
+          }),
+        }
+      : {}),
     localityInkMm:
       annotation.role === "mirror"
         ? mirrorLocalityInk(annotation, reservation)
-        : repeatLocalityInk(annotation, reservation),
+        : annotation.role === "return"
+          ? new Map(
+              (["local", "self-located"] as const).map((id) => [
+                id,
+                mirrorInk(annotation, reservation.inkMm),
+              ]),
+            )
+          : repeatLocalityInk(annotation, reservation),
   };
 }
 function allocateSheetRequests(

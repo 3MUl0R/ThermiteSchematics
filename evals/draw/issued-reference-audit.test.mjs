@@ -154,24 +154,39 @@ const shortReference = {
 };
 const marker = (text) => ({ ...reference, text, fontSize: 2.5 });
 
-it("accepts a named compact peer and an unambiguous locator", () => {
-  for (const text of ["→ CAP-X2 02.B4", "→ 02.B4"]) {
-    expect(
-      peerReferenceFindings(1, { texts: [marker(text)] }, [shortReference]),
-    ).toEqual([]);
-  }
+it("accepts a named compact peer and rejects a subjectless locator", () => {
+  expect(
+    peerReferenceFindings(1, { texts: [marker("→ CAP-X2 02.B4")] }, [
+      shortReference,
+    ]),
+  ).toEqual([]);
+  expect(
+    peerReferenceFindings(1, { texts: [marker("→ 02.B4")] }, [shortReference])[0]
+      .kind,
+  ).toBe("issued-peer-reference-subjectless");
 });
 
 it.each([
-  ["wrong peer", marker("→ CAP-X4 02.B4"), [shortReference]],
-  ["wrong zone", marker("→ 02.B5"), [shortReference]],
+  [
+    "wrong peer",
+    marker("→ CAP-X4 02.B4"),
+    [shortReference],
+    "issued-peer-reference-unbound",
+  ],
+  [
+    "wrong zone subjectless",
+    marker("→ 02.B5"),
+    [shortReference],
+    "issued-peer-reference-subjectless",
+  ],
   [
     "undersized locator",
     { ...marker("→ 02.B4"), fontSize: 2.49 },
     [shortReference],
+    "issued-peer-reference-unbound",
   ],
   [
-    "ambiguous locator",
+    "subjectless locator",
     marker("→ 02.B4"),
     [
       shortReference,
@@ -180,10 +195,11 @@ it.each([
         source: ["R1", "X4", "DIFFERENT"],
       },
     ],
+    "issued-peer-reference-subjectless",
   ],
-])("rejects a %s from measured short ink", (_, text, expected) => {
+])("rejects a %s from measured short ink", (_, text, expected, kind) => {
   expect(peerReferenceFindings(1, { texts: [text] }, expected)[0].kind).toBe(
-    "issued-peer-reference-unbound",
+    kind,
   );
 });
 
@@ -276,7 +292,118 @@ it("requires a source name outside the directly adjacent band", () => {
     ]);
   for (const note of ["R1.X2 → 02.B4", "R1.X2 → CAP-X2 02.B4"])
     expect(audit(note)).toEqual([]);
-  for (const note of ["→ 02.B4", "→ CAP-X2 02.B4"])
-    expect(audit(note)[0].kind).toBe("issued-peer-reference-owner-distance");
+  expect(audit("→ 02.B4")[0].kind).toBe("issued-peer-reference-subjectless");
+  expect(audit("→ CAP-X2 02.B4")[0].kind).toBe(
+    "issued-peer-reference-owner-distance",
+  );
   expect(audit("R1.X4 → 02.B4")[0].kind).toBe("issued-peer-reference-unbound");
+});
+
+it("5.40 rejects card+free-note duplicate, duplicate free notes, outside drawing bounds, tight stack gap, and foreign-owner proximity", () => {
+  const cardObligation = {
+    kind: "conductor-peer",
+    source: [
+      { deviceUid: "TB1", terminalKey: "4" },
+      { kind: "wire", uid: "W-CTL-004" },
+      { deviceUid: "PS1", terminalKey: "-" },
+    ],
+    label: "W-CTL-004",
+    peerName: "PS1.-",
+    destinations: [
+      { sheet: 3, zones: ["C5"] },
+      { sheet: 4, zones: ["B2"] },
+    ],
+    values: ["W-CTL-004 · TB1.4 → PS1.- 03.C5 (also shown 04.B2)"],
+    card: {
+      element: "card-1",
+      bbox: { x: 40, y: 100, w: 45, h: 10 },
+      text: "W-CTL-004 → PS1.- 03.C5 (also shown 04.B2)",
+    },
+  };
+  // Passing control: unified card carrying primary + also shown, zero free note.
+  expect(peerReferenceFindings(7, { texts: [] }, [cardObligation])).toEqual([]);
+  // Old-engine witness: free note duplicating a card-owned conductor peer.
+  const dupFree = {
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(cardObligation.source),
+    text: "W-CTL-004 · TB1.4 → PS1.- 03.C5",
+    painted: true,
+    fontSize: 2.5,
+    bbox: { x: 15.99, y: 112, w: 30, h: 2 },
+  };
+  const zoneHeader = {
+    frame: { x: 10, y: 10, w: 259, h: 196 },
+    headerRule: { y: 12 },
+    texts: [
+      { sheetText: true, painted: true, text: "1", anchor: { x: 42, y: 15 }, bbox: { x: 41, y: 13, w: 2, h: 2 } },
+      { sheetText: true, painted: true, text: "2", anchor: { x: 84, y: 15 }, bbox: { x: 83, y: 13, w: 2, h: 2 } },
+      dupFree,
+    ],
+  };
+  const dupFindings = peerReferenceFindings(7, zoneHeader, [cardObligation]);
+  expect(dupFindings.map((f) => f.kind)).toEqual(
+    expect.arrayContaining([
+      "issued-peer-reference-duplicate-card-note",
+      "issued-peer-reference-outside-drawing-bounds",
+    ]),
+  );
+
+  // #450 stack gap < 1.5 mm fails; >= 1.5 mm passes.
+  const mkPeer = (key, y) => ({
+    kind: "conductor-peer",
+    source: ["S", key, "T"],
+    ownerLabel: `R1.${key}`,
+    owners: [{ x: 40, y, w: 4, h: 2 }],
+    values: [`W${key} · R1.${key} → S2.${key} 01.A3`],
+    compactValues: [`→ S2.${key} 01.A3`],
+  });
+  const mkNote = (key, y) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(["S", key, "T"]),
+    text: `W${key} · R1.${key} → S2.${key} 01.A3`,
+    painted: true,
+    fontSize: 2.5,
+    bbox: { x: 46, y, w: 28, h: 2 },
+  });
+  expect(
+    peerReferenceFindings(
+      5,
+      { texts: [mkNote("1", 50), mkNote("2", 53.6)] },
+      [mkPeer("1", 50), mkPeer("2", 53.6)],
+    ),
+  ).toEqual([]);
+  expect(
+    peerReferenceFindings(
+      5,
+      { texts: [mkNote("1", 50), mkNote("2", 53.0)] },
+      [mkPeer("1", 50), mkPeer("2", 53.0)],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-stack-gap");
+
+  // #507 foreign owner: W37 for R1.14 sitting closer to R1.12 fails; sitting closer to R1.14 passes.
+  const w37Obligation = {
+    kind: "conductor-peer",
+    source: ["R1.14", "W37", "S2.14"],
+    ownerLabel: "R1.14",
+    owners: [{ x: 100, y: 185, w: 3, h: 3 }],
+    foreignOwners: [{ x: 100, y: 175, w: 3, h: 3 }],
+    values: ["W37 · R1.14 → S2.14 01.A3 (also shown 02.A3)"],
+    compactValues: ["→ S2.14 01.A3 (also shown 02.A3)"],
+  };
+  const w37Note = (y) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(w37Obligation.source),
+    text: w37Obligation.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox: { x: 105, y, w: 34, h: 2 },
+  });
+  expect(
+    peerReferenceFindings(5, { texts: [w37Note(185)] }, [w37Obligation]),
+  ).toEqual([]);
+  expect(
+    peerReferenceFindings(5, { texts: [w37Note(175)] }, [w37Obligation]).map(
+      (f) => f.kind,
+    ),
+  ).toContain("issued-peer-reference-foreign-owner");
 });

@@ -31,6 +31,7 @@ function slotAxes(
   obstacles: readonly Rect[],
   texts: readonly Rect[],
   textVerticalClearanceMm = 0,
+  tieBreakAnchor?: { x: number; y: number },
 ) {
   const { w, h } = size;
   const xs = [
@@ -39,6 +40,9 @@ function slotAxes(
       area.x + area.w - w,
       owner.x,
       owner.x + owner.w - w,
+      ...(tieBreakAnchor
+        ? [owner.x + 1.51, owner.x + owner.w - w - 1.51, tieBreakAnchor.x - w / 2]
+        : []),
       ...texts.flatMap((b) => [
         b.x + b.w + NAVIGATION_TEXT_CLEARANCE_MM + 0.01,
         b.x - w - NAVIGATION_TEXT_CLEARANCE_MM - 0.01,
@@ -52,6 +56,9 @@ function slotAxes(
       area.y + area.h - h,
       owner.y - h - 1.51,
       owner.y + owner.h + 1.51,
+      ...(tieBreakAnchor
+        ? [owner.y + 1.51, owner.y + owner.h - h - 1.51, tieBreakAnchor.y - h / 2]
+        : []),
       ...(textVerticalClearanceMm
         ? texts.flatMap((b) => [
             b.y + b.h + textVerticalClearanceMm + 0.01,
@@ -63,9 +70,12 @@ function slotAxes(
   ].filter((y) => y >= area.y && y + h <= area.y + area.h);
   return { xs: xs.sort((a, b) => a - b), ys };
 }
-interface SlotReach {
+export interface SlotReach {
   anchors: readonly Rect[];
   gap: number;
+  textVerticalClearanceMm?: number;
+  foreignOwners?: readonly Rect[];
+  tieBreakAnchor?: { x: number; y: number };
 }
 
 function reachableAxes(
@@ -73,6 +83,7 @@ function reachableAxes(
   { w, h }: Rect,
   { anchors, gap }: SlotReach,
 ) {
+  if (!Number.isFinite(gap) || !anchors.length) return { xs, ys };
   const near = (start: number, length: number, v: number, span: number) =>
     Math.max(0, start - v - span, v - start - length) <= gap;
   return {
@@ -102,6 +113,7 @@ function slotCandidates(
     obstacles,
     texts,
     textVerticalClearanceMm,
+    reach?.tieBreakAnchor,
   );
   const localAxes =
     withinLocalSources && locality
@@ -129,22 +141,42 @@ function slotCandidates(
     )
     .filter(
       (box) =>
-        !reach || reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
+        !reach ||
+        !Number.isFinite(reach.gap) ||
+        reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
     )
     .map((box) => {
       const printed = navigationPlacementInk(box, ink);
+      const distance = locality
+        ? anchorDistance(locality.anchorMm, printed)
+        : boxDistance(owner, box);
+      const ownerGap =
+        reach?.anchors.length
+          ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+          : boxDistance(owner, box);
+      const foreignDistance = reach?.foreignOwners?.length
+        ? Math.min(...reach.foreignOwners.map((f) => boxDistance(f, box)))
+        : Infinity;
+      const foreignCloser = Number(foreignDistance + 0.02 < ownerGap);
+      const tieDistance = reach?.tieBreakAnchor
+        ? anchorDistance(reach.tieBreakAnchor, printed)
+        : 0;
       return {
         box,
-        distance: locality
-          ? anchorDistance(locality.anchorMm, printed)
-          : boxDistance(owner, box),
+        distance,
+        foreignCloser,
+        foreignDistance,
+        tieDistance,
         priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
       };
     })
     .sort(
       (a, b) =>
         a.priority - b.priority ||
+        a.foreignCloser - b.foreignCloser ||
         a.distance - b.distance ||
+        a.tieDistance - b.tieDistance ||
+        b.foreignDistance - a.foreignDistance ||
         a.box.y - b.box.y ||
         a.box.x - b.box.x,
     )
@@ -193,6 +225,7 @@ export function searchNavigationSlot(
   localityInkMm?: ReadonlyMap<string, Rect>,
   fitPrintedInk = false,
   reach?: (shape: NavigationShape) => SlotReach,
+  preferRoomiest = fitPrintedInk,
 ) {
   const fitArea = fitPrintedInk ? elementDrawingArea(area) : area;
   const textVerticalClearanceMm = fitPrintedInk
@@ -202,6 +235,11 @@ export function searchNavigationSlot(
     shapes.filter((s) => s.mode === mode),
   );
   for (const shape of ordered) {
+    const shapeReach = reach?.(shape);
+    const verticalClearance = Math.max(
+      textVerticalClearanceMm,
+      shapeReach?.textVerticalClearanceMm ?? 0,
+    );
     const ink = localityInkMm?.get(shape.id);
     // Keep a 0.01 mm metric/rounding margin around the final fixed-font ink.
     // Empty emission padding is not printed content or a clearance obstacle.
@@ -222,9 +260,9 @@ export function searchNavigationSlot(
       texts,
       fit ? undefined : ink,
       preferBesideBelow && shape.mode === "local",
-      textVerticalClearanceMm,
+      verticalClearance,
       fitPrintedInk && (shape.mode === "local" || !!locality?.sourceAnchorsMm),
-      reach?.(shape),
+      shapeReach,
     );
     const legal = (b: Rect) =>
       (!families ||
@@ -239,8 +277,8 @@ export function searchNavigationSlot(
       inside(b, fitArea) &&
       laneLocal(shape, envelope(b), ink, locality) &&
       obstacles.every((o) => separated(b, o, NAVIGATION_CLEARANCE_MM)) &&
-      texts.every((t) => textSeparated(b, t, textVerticalClearanceMm));
-    const box = fitPrintedInk
+      texts.every((t) => textSeparated(b, t, verticalClearance));
+    const box = preferRoomiest
       ? roomiestElementSlot(candidates.filter(legal), fitArea, obstacles, texts)
       : candidates.find(legal);
     if (box) return { box: envelope(box), protectedBox: box, shape };

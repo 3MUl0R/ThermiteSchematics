@@ -6,7 +6,12 @@ import type {
 } from "@thermite/compiler";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
 import { authoredTerminalIncidence } from "../off-view/incidence.js";
-import { functionIdKey, terminalIdKey } from "../ordering.js";
+import {
+  cardRowKey,
+  formatPeerDestination,
+  injectOffViewCardDestinations,
+} from "../off-view/card-destinations.js";
+import { compareText, functionIdKey, terminalIdKey } from "../ordering.js";
 import { required } from "../presentation/util.js";
 import { record } from "./errors.js";
 import { inside, project, type Rect } from "../device-legend/geometry.js";
@@ -149,12 +154,23 @@ function markCard(
   return { rect, text: rows.join(" ").replace(/\s+/gu, " ") };
 }
 
+type ConductorPeerRecord = {
+  from: TerminalId;
+  to: TerminalId;
+  connection: { elementId: ConductiveElementId; designation: string };
+  owner: Rect;
+  hasCard: boolean;
+  targets: Map<string, Landing>;
+};
+
 type TerminalSheet = {
   sheet: RenderedSheet;
   field: Rect;
   geometry: readonly NavigationGeometry[];
   landings: ReadonlyMap<string, Landing>;
   entries: PeerReference[];
+  conductorPeers: Map<string, ConductorPeerRecord>;
+  cardDestinations: Map<string, string[]>;
   route: ReturnType<typeof peerRouteIndex>;
 };
 function conductorCaptions(part: TerminalSheet, element: ConductiveElementId) {
@@ -179,39 +195,90 @@ function conductorCaptions(part: TerminalSheet, element: ConductiveElementId) {
   });
 }
 
-function conductorNote(
+function foreignTerminalOwners(part: TerminalSheet, own: TerminalId): Rect[] {
+  const ownKey = terminalIdKey(own);
+  const out: Rect[] = [];
+  for (const [key, landing] of part.landings)
+    if (key !== ownKey) out.push(...landing.marks);
+  return out;
+}
+
+function recordConductorPeer(
   part: TerminalSheet,
   from: TerminalId,
   to: TerminalId,
   connection: { elementId: ConductiveElementId; designation: string },
   owner: Rect,
   target: Landing,
+  hasCard: boolean,
+) {
+  const key = JSON.stringify([from, connection.elementId, to]);
+  const token = destinationToken(target);
+  const existing = part.conductorPeers.get(key);
+  if (existing) {
+    if (hasCard) {
+      existing.hasCard = true;
+      existing.owner = owner;
+    }
+    if (!existing.targets.has(token)) existing.targets.set(token, target);
+    return;
+  }
+  part.conductorPeers.set(key, {
+    from,
+    to,
+    connection,
+    owner,
+    hasCard,
+    targets: new Map([[token, target]]),
+  });
+}
+
+function sortedDestinationTokens(targets: ReadonlyMap<string, Landing>) {
+  return [...targets.values()]
+    .sort((a, b) => a.sheet - b.sheet || compareText(a.zone, b.zone))
+    .map(destinationToken);
+}
+
+function finalizeConductorPeers(
+  parts: readonly TerminalSheet[],
   name: (t: TerminalId) => string,
 ) {
-  const { elementId, designation } = connection;
-  const route = part.route(elementId);
-  const marks = part.landings.get(terminalIdKey(from))?.marks;
-  const opposite = part.landings.get(terminalIdKey(to))?.marks;
-  if (landsOnMarks(route, marks) && landsOnMarks(route, opposite)) return;
-  const destination = destinationToken(target);
-  part.entries.push({
-    kind: "conductor-peer",
-    identity: [from, elementId, to],
-    owner,
-    along: route.runs,
-    captions: conductorCaptions(part, elementId),
-    ownerLabel: name(from),
-    value: `${designation} · ${name(from)} → ${name(to)} ${destination}`,
-    compact: `→ ${name(to)} ${destination}`,
-    destination,
-  });
+  for (const part of parts) {
+    for (const peer of part.conductorPeers.values()) {
+      const { from, to, connection, owner, hasCard, targets } = peer;
+      const { elementId, designation } = connection;
+      const route = part.route(elementId);
+      const marks = part.landings.get(terminalIdKey(from))?.marks;
+      const opposite = part.landings.get(terminalIdKey(to))?.marks;
+      if (landsOnMarks(route, marks) && landsOnMarks(route, opposite)) continue;
+      const destinations = sortedDestinationTokens(targets);
+      if (!destinations.length) continue;
+      if (hasCard) {
+        part.cardDestinations.set(cardRowKey(from, elementId), destinations);
+        continue;
+      }
+      const destination = formatPeerDestination(destinations);
+      part.entries.push({
+        kind: "conductor-peer",
+        identity: [from, elementId, to],
+        owner,
+        foreignOwners: foreignTerminalOwners(part, from),
+        along: route.runs,
+        captions: conductorCaptions(part, elementId),
+        ownerLabel: name(from),
+        value: `${designation} · ${name(from)} → ${name(to)} ${destination}`,
+        compact: `→ ${name(to)} ${destination}`,
+        destination,
+      });
+    }
+  }
 }
 
 function cardPeers(
   parts: readonly TerminalSheet[],
   ir: Readonly<ElectricalIr>,
+  byTerminal: ReturnType<typeof authoredTerminalIncidence>,
 ) {
-  const byTerminal = authoredTerminalIncidence(ir);
   const deviceNames = new Map(ir.devices.map((d) => [d.uid, d.designation]));
   const name = (t: TerminalId) =>
     `${deviceNames.get(t.deviceUid)}.${t.terminalKey}`;
@@ -252,18 +319,27 @@ function cardPeers(
         );
         const target = receiver?.landings.get(terminalIdKey(other));
         if (!receiver || !target) continue;
-        conductorNote(part, owner, other, connection, ink.rect, target, name);
-        conductorNote(
+        recordConductorPeer(
+          part,
+          owner,
+          other,
+          connection,
+          ink.rect,
+          target,
+          true,
+        );
+        recordConductorPeer(
           receiver,
           other,
           owner,
           connection,
           target.owner,
           origin,
-          name,
+          false,
         );
       }
     }
+  finalizeConductorPeers(parts, name);
 }
 
 function interfaceAppearances(
@@ -322,6 +398,7 @@ function interfacePeers(
           kind: "terminal-interface",
           identity: [origin.terminal, target.terminal],
           owner: origin.landing.owner,
+          foreignOwners: foreignTerminalOwners(origin.part, origin.terminal),
           ownerLabel: `${names.get(relay.deviceUid)} ${origin.terminal.terminalKey}`,
           value: `${names.get(relay.deviceUid)} · ${origin.kind} terminal ${origin.terminal.terminalKey} → ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
           compact: `→ ${names.get(relay.deviceUid)} ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
@@ -332,9 +409,7 @@ function interfacePeers(
 }
 
 function peerNoteField(draft: Draft, page: PaperPage) {
-  const field = bounds(draft.title, page);
-  const x = page.marginMm + 6;
-  return { ...field, x, w: page.widthMm - 2 * x };
+  return draft.drawingBounds ?? bounds(draft.title, page);
 }
 
 export function terminalPeerReferences(
@@ -351,6 +426,7 @@ export function terminalPeerReferences(
     )
   )
     return [...sheets];
+  const byTerminal = authoredTerminalIncidence(ir);
   const parts = sheets.flatMap((sheet, i): TerminalSheet[] => {
     const draft = required(drafts[i], "Missing peer reference source");
     if (draft.documentationTable) return [];
@@ -363,24 +439,38 @@ export function terminalPeerReferences(
         geometry,
         landings: terminalLandings(ir, draft, sheet, field, geometry),
         entries: [],
+        conductorPeers: new Map(),
+        cardDestinations: new Map(),
         route: peerRouteIndex(geometry),
       },
     ];
   });
-  cardPeers(parts, ir);
+  cardPeers(parts, ir, byTerminal);
   interfacePeers(parts, ir);
   const changes = new Map(
-    parts.map(({ sheet, entries }) => [
-      sheet.number,
-      emitPeerReferences(
-        sheet,
-        peerNoteField(
-          required(drafts[sheet.number - 1], "Missing peer note drawing"),
-          page,
+    parts.map(({ sheet, field, geometry, entries, cardDestinations }) => {
+      const updated = {
+        ...sheet,
+        svg: injectOffViewCardDestinations(
+          sheet.svg,
+          field,
+          geometry,
+          byTerminal,
+          cardDestinations,
         ),
-        [...new Map(entries.map((entry) => [entry.value, entry])).values()],
-      ),
-    ]),
+      };
+      return [
+        sheet.number,
+        emitPeerReferences(
+          updated,
+          peerNoteField(
+            required(drafts[sheet.number - 1], "Missing peer note drawing"),
+            page,
+          ),
+          [...new Map(entries.map((entry) => [entry.value, entry])).values()],
+        ),
+      ];
+    }),
   );
   return sheets.map((sheet) => changes.get(sheet.number) ?? sheet);
 }

@@ -56,7 +56,31 @@ function conductorName(ir, row) {
     : row.name;
 }
 
-function conductorNote(src, dest, wire, a, b, label, name, card) {
+function foreignTerminalBoxes(part, ownTerminal) {
+  const ownKey = terminalKey(ownTerminal);
+  const out = [];
+  for (const [key, region] of part.terminals)
+    if (key !== ownKey) out.push(...region.boxes);
+  return out;
+}
+
+function destinationCombinations(targets) {
+  const sorted = [...targets.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([sheet, zones]) => [...zones].sort().map((z) => loc(sheet, z)));
+  let combos = [[]];
+  for (const options of sorted)
+    combos = combos.flatMap((prefix) => options.map((opt) => [...prefix, opt]));
+  return combos;
+}
+
+function formatDestinationCombo([primary, ...alternates]) {
+  return alternates.length
+    ? `${primary} (also shown ${alternates.join(", ")})`
+    : primary;
+}
+
+function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
   const marks = src.terminals.get(terminalKey(a)).boxes;
   const opposite = src.terminals.get(terminalKey(b))?.boxes;
   const ink = conductorInk(src.geometry, wire.element);
@@ -67,18 +91,17 @@ function conductorNote(src, dest, wire, a, b, label, name, card) {
     sheet: src.sheet.number,
     kind: "conductor-peer",
     source: [a, wire.element, b],
+    label,
+    peerName: name(b),
     ownerLabel: name(a),
-    owners: card ? [card] : marks,
+    owners: cardInfo ? [cardInfo.bbox] : marks,
+    foreignOwners: foreignTerminalBoxes(src, a),
     supports: [
       ...runs.map(extent),
       ...continuationInk(src.sheet, src.geometry, wire.element, runs),
     ],
-    values: [...zones].map(
-      (z) => `${label} · ${name(a)} → ${name(b)} ${loc(dest.sheet.number, z)}`,
-    ),
-    compactValues: [...zones].map(
-      (z) => `→ ${name(b)} ${loc(dest.sheet.number, z)}`,
-    ),
+    card: cardInfo,
+    targets: new Map([[dest.sheet.number, new Set(zones)]]),
   };
 }
 
@@ -119,7 +142,7 @@ function cardObligations(ir, parts, wires, name) {
           mate,
           label,
           name,
-          card.bbox,
+          { element: card.element, bbox: card.bbox, text },
         );
         const reverse = conductorNote(
           destination,
@@ -136,14 +159,44 @@ function cardObligations(ir, parts, wires, name) {
     }
   const unique = new Map();
   for (const r of records) {
-    const key = JSON.stringify([r.sheet, r.source, r.values]);
+    const key = JSON.stringify([r.sheet, r.source]);
     const previous = unique.get(key);
     if (previous) {
+      if (r.card && !previous.card) previous.card = r.card;
       previous.owners.push(...r.owners);
       previous.supports.push(...r.supports);
+      for (const [sheet, zones] of r.targets) {
+        if (!previous.targets.has(sheet)) previous.targets.set(sheet, new Set());
+        for (const z of zones) previous.targets.get(sheet).add(z);
+      }
     } else unique.set(key, r);
   }
-  return [...unique.values()];
+  return [...unique.values()].map((r) => {
+    const combos = destinationCombinations(r.targets);
+    const destinations = [...r.targets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([sheet, zones]) => ({ sheet, zones: [...zones].sort() }));
+    return {
+      sheet: r.sheet,
+      kind: r.kind,
+      source: r.source,
+      label: r.label,
+      peerName: r.peerName,
+      ownerLabel: r.ownerLabel,
+      owners: r.owners,
+      foreignOwners: r.foreignOwners,
+      supports: r.supports,
+      card: r.card,
+      destinations,
+      values: combos.map(
+        (c) =>
+          `${r.label} · ${r.ownerLabel} → ${r.peerName} ${formatDestinationCombo(c)}`,
+      ),
+      compactValues: combos.map(
+        (c) => `→ ${r.peerName} ${formatDestinationCombo(c)}`,
+      ),
+    };
+  });
 }
 
 function functionTerminals(ir, parts, fn) {
@@ -193,6 +246,7 @@ function interfaceObligations(ir, parts, names) {
             source: [p.terminal, q.terminal],
             ownerLabel: `${names.get(r.deviceUid)} ${p.terminal.terminalKey}`,
             owners: p.part.terminals.get(terminalKey(p.terminal)).boxes,
+            foreignOwners: foreignTerminalBoxes(p.part, p.terminal),
             values: [...zones].map(
               (z) =>
                 `${names.get(r.deviceUid)} · ${p.kind} terminal ${p.terminal.terminalKey} → ${q.kind} terminal ${q.terminal.terminalKey} ${loc(q.part.sheet.number, z)}`,

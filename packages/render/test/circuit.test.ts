@@ -845,4 +845,90 @@ describe("source-selected circuit views", () => {
     expect(texts.length).toBeGreaterThan(2);
     expect(Math.max(...texts.map((t) => t.length))).toBeLessThan(120);
   });
+
+  it("keeps TTB coil relation captions clear of the coil conductor and A2 terminal (#32)", async () => {
+    const k1 = ir.devices.find((d) => d.designation === "K1")!;
+    const coilFn = ir.functions.find(
+      (f) => f.id.deviceUid === k1.uid && f.kind === "coil",
+    )!;
+    const baseContacts = ir.functions.filter(
+      (f) => f.id.deviceUid === k1.uid && f.kind === "contact",
+    );
+    for (const contactCount of [1, 4, 6]) {
+      const cloned = structuredClone(ir);
+      const contacts = cloned.functions.filter(
+        (f) => f.id.deviceUid === k1.uid && f.kind === "contact",
+      );
+      while (contacts.length < contactCount) {
+        const idx = contacts.length + 1;
+        const key = `aux_${idx}`;
+        const t1 = `${idx * 10 + 3}`;
+        const t2 = `${idx * 10 + 4}`;
+        const fn = {
+          ...structuredClone(baseContacts[0]!),
+          id: { deviceUid: k1.uid, functionKey: key },
+          terminals: [
+            { deviceUid: k1.uid, terminalKey: t1 },
+            { deviceUid: k1.uid, terminalKey: t2 },
+          ],
+        };
+        cloned.functions.push(fn);
+        contacts.push(fn);
+        cloned.internalRelations.push({
+          ...structuredClone(
+            cloned.internalRelations.find(
+              (r) => r.deviceUid === k1.uid && r.verb === "actuates",
+            )!,
+          ),
+          to: fn.id,
+        });
+      }
+      const selectedContacts = contacts.slice(0, contactCount);
+      const { groups } = await prepareCircuitView(cloned, {
+        format: "circuit-view-request/0.1",
+        title: "TTB coil relation caption #32",
+        flow: "top-to-bottom",
+        groups: [
+          {
+            id: "coil-group",
+            label: "Coil",
+            lineReference: "200",
+            conductors: [],
+            functions: [
+              { device: { by: "uid", value: k1.uid }, key: coilFn.id.functionKey },
+            ],
+          },
+          {
+            id: "contact-group",
+            label: "Contacts",
+            lineReference: "300",
+            conductors: [],
+            functions: selectedContacts.map((c) => ({
+              device: { by: "uid", value: k1.uid },
+              key: c.id.functionKey,
+            })),
+          },
+        ],
+      });
+      const doc = parseHTML(groups[0]!.content).document;
+      const a2Circle = doc.querySelector(
+        `[data-terminal-id='${JSON.stringify([k1.uid, "A2"])}'] circle`,
+      )!;
+      const coilX = Number(a2Circle.getAttribute("cx"));
+      const a2Y = Number(a2Circle.getAttribute("cy"));
+      const relTexts = [...doc.querySelectorAll("text")].filter((t) =>
+        (t.textContent ?? "").includes(": 300"),
+      );
+      expect(relTexts.length, `contacts=${contactCount}`).toBeGreaterThan(0);
+      for (const rel of relTexts) {
+        const x = Number(rel.getAttribute("x"));
+        const y = Number(rel.getAttribute("y"));
+        expect(rel.getAttribute("text-anchor")).toBe("start");
+        // Positioned clear to the right of the vertical coil conductor (x=10.5 -> 13.5)
+        // and above the A2 terminal (y < a2Y).
+        expect(x - coilX, `contacts=${contactCount}`).toBeGreaterThanOrEqual(2.5);
+        expect(a2Y - y, `contacts=${contactCount}`).toBeGreaterThanOrEqual(2.0);
+      }
+    }
+  });
 });
