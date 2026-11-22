@@ -119,28 +119,66 @@ function prepareReport(
       "unprintable-layout",
       "Insufficient report area. Shorten title lines or select a larger sheet.",
     );
-  let measured: ReturnType<typeof paginatedReportCells>, header: string[][];
-  let strip: ReturnType<typeof terminalStrip>;
-  let stripColW = 0;
-  let tableBounds = b;
+  let measured: ReturnType<typeof paginatedReportCells>,
+    header: string[][],
+    strip: ReturnType<typeof terminalStrip>,
+    stripColW = 0,
+    tableBounds = b;
   try {
     strip = projectStrip ? terminalStrip(ir, table, fullBounds) : undefined;
     stripColW = strip ? stripReferenceColumnWidth(strip) : 0;
-    tableBounds = strip
-      ? { ...b, x: b.x + stripColW, w: b.w - stripColW }
-      : b;
-    measured = paginatedReportCells(
-      ir,
-      table,
-      tableBounds.w,
-      b.h,
-      page,
-      b.y,
-    );
+    tableBounds = strip ? { ...b, x: b.x + stripColW, w: b.w - stripColW } : b;
+    measured = paginatedReportCells(ir, table, tableBounds.w, b.h, page, b.y);
     header = measured.split(table.columns, "header");
   } catch (error) {
     return failure("unprintable-layout", (error as Error).message);
   }
+  return buildPreparedReport(
+    ir,
+    table,
+    presentation,
+    view,
+    title,
+    fullBounds,
+    b,
+    tableBounds,
+    strip,
+    stripColW,
+    measured,
+    header,
+  );
+}
+function buildPreparedReport(
+  ir: Readonly<ElectricalIr>,
+  table: DocumentationTable,
+  presentation: CompiledProjectPresentation | undefined,
+  view: NormalizedDocumentationView,
+  title: SchematicTitleContext,
+  fullBounds: ReturnType<typeof bounds>,
+  b: ReturnType<typeof bounds>,
+  tableBounds: ReturnType<typeof bounds>,
+  strip: ReturnType<typeof terminalStrip>,
+  stripColW: number,
+  measured: ReturnType<typeof paginatedReportCells>,
+  header: string[][],
+) {
+  const stripCol = stripReportColumn(
+    strip,
+    stripColW,
+    b.x,
+    measured.cellSize,
+    header,
+    measured.geometry,
+  );
+  const documents = reportDocumentContext(
+    ir,
+    table,
+    presentation,
+    b,
+    header,
+    stripCol.headerH,
+    tableBounds,
+  );
   return {
     ok: true as const,
     value: {
@@ -149,10 +187,11 @@ function prepareReport(
       fullBounds,
       b,
       tableBounds,
-      stripColW,
       strip,
       measured,
       header,
+      stripCol,
+      documents,
     },
   };
 }
@@ -209,8 +248,18 @@ export function tableDrafts(
   table = reserveWireLocations(table);
   const prepared = prepareReport(ir, table, presentation, page, projectStrip);
   if (!prepared.ok) return prepared;
-  const { view, title, fullBounds, b, tableBounds, stripColW, strip, measured, header } =
-    prepared.value;
+  const {
+    view,
+    title,
+    fullBounds,
+    b,
+    tableBounds,
+    strip,
+    measured,
+    header,
+    stripCol,
+    documents,
+  } = prepared.value;
   const drafts: Draft[] = [];
   const {
     widths,
@@ -223,23 +272,7 @@ export function tableDrafts(
     geometry,
     inlineLocations,
   } = measured;
-  const stripCol = stripReportColumn(
-    strip,
-    stripColW,
-    b.x,
-    cellSize,
-    header,
-    geometry,
-  );
   const { headerH } = stripCol;
-  const documents = reportDocumentContext(
-    ir,
-    table,
-    presentation,
-    b,
-    header,
-    headerH,
-  );
   const notes = reportNotes(table, fullBounds.w, measured.allocationFallback);
   const bottom = b.y + b.h - notes.length * 3.5 - 5;
   const paginator = reportPaginator(b.y, b.h, headerH, notes.length);
@@ -334,7 +367,10 @@ export function tableDrafts(
     );
     documentRows.push(documents.row(i, cells, y, height, rowDesignation(i)));
     row(cells, height);
-    content.push("</g>", stripCol.rowSvg(source.key, rowY, height, rowGeo.baseline));
+    content.push(
+      "</g>",
+      stripCol.rowSvg(source.key, rowY, height, rowGeo.baseline),
+    );
     if (drafts.length > 100)
       return failure(
         "unprintable-layout",

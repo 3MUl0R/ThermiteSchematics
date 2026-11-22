@@ -41,7 +41,8 @@ export function textInZoneGutter(g) {
       !t.row &&
       !t.continuation &&
       t.tagField == null &&
-      ((/^[1-9]\d*$/.test(t.text) && t.bbox.y >= fieldBottom - INK_ACCURACY_MM) ||
+      ((/^[1-9]\d*$/.test(t.text) &&
+        t.bbox.y >= fieldBottom - INK_ACCURACY_MM) ||
         (/^[A-Z]+$/.test(t.text) && t.bbox.x >= fieldRight - INK_ACCURACY_MM)));
   const out = [];
   for (const t of g.texts) {

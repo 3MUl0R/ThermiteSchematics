@@ -1,5 +1,11 @@
 import { hasLegibleEm } from "./text-legibility.mjs";
 // Independent oracle: never import the renderer's tag resolver or source strings.
+const RAIL_TAG_MAX_DISTANCE_MM = 6;
+const boxDistance = (a, b) =>
+  Math.hypot(
+    Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w), 0),
+    Math.max(a.y - (b.y + b.h), b.y - (a.y + a.h), 0),
+  );
 const normalized = (s) => s.replace(/\s+/gu, " ").trim();
 const value = (s) => (typeof s === "string" && s.trim() ? s : undefined);
 const rowText = (t) => t.renderedString ?? t.text;
@@ -446,6 +452,49 @@ export function deviceTagFindings(g, ir, references, issue, view) {
           ),
         );
     }
+  }
+  return [...out, ...railDeviceTagFindings(g, ir, issue)];
+}
+
+function railDeviceTagFindings(g, ir, issue) {
+  const out = [];
+  for (const rail of g.potentialRails ?? []) {
+    if (!rail.deviceUid || !rail.bbox) continue;
+    const device = ir.devices?.find((d) => d.uid === rail.deviceUid);
+    if (!device) {
+      out.push(issue("invalid-device-tag-owner", rail));
+      continue;
+    }
+    const localTag = (g.texts ?? []).some(
+      (t) =>
+        t.painted !== false &&
+        hasLegibleEm(t) &&
+        !t.inDeviceLegend &&
+        !t.inOffViewCard &&
+        t.tagKind !== "legend" &&
+        !t.tagReferenceEntry &&
+        t.role !== "off-view" &&
+        rowText(t).trim() === device.designation &&
+        t.bbox &&
+        boxDistance(t.bbox, rail.bbox) <= RAIL_TAG_MAX_DISTANCE_MM,
+    );
+    if (!localTag)
+      out.push(
+        issue(
+          "missing-rail-device-tag",
+          {
+            element: rail.element,
+            deviceUid: device.uid,
+            designation: device.designation,
+            bbox: rail.bbox,
+          },
+          {
+            deviceUid: device.uid,
+            expectedDesignation: device.designation,
+            potentialName: rail.potentialName ?? null,
+          },
+        ),
+      );
   }
   return out;
 }

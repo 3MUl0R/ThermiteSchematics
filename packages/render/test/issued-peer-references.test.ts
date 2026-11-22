@@ -523,9 +523,8 @@ it("parses printed peer destinations structurally when conductor designations re
 });
 
 it("enforces owner-nearest reach on terminal-label-anchor fallback", async () => {
-  const { searchNavigationSlot } = await import(
-    "../src/packet/navigation-slot-search.js"
-  );
+  const { searchNavigationSlot } =
+    await import("../src/packet/navigation-slot-search.js");
   const field = { x: 28, y: 24, w: 360, h: 240 };
   const owner = { x: 50, y: 68, w: 1.3, h: 1.3 };
   const foreign = { x: 50, y: 75, w: 1.3, h: 1.3 };
@@ -579,9 +578,8 @@ it("enforces owner-nearest reach on terminal-label-anchor fallback", async () =>
 });
 
 it("keeps rm3 PLC1.AI0+ and AI0- peer notes owner-associated inside the drawing field", async () => {
-  const { rm3CircuitViews, rm3LoopView } = await import(
-    "../../core-library/test/rm3-drawings.js"
-  );
+  const { rm3CircuitViews, rm3LoopView } =
+    await import("../../core-library/test/rm3-drawings.js");
   const compiled = await compileProject(
     "packages/core-library/test/fixtures/rm3",
   );

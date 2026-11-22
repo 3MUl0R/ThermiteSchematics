@@ -9,6 +9,7 @@ import type {
 import { CARD_GAP } from "./card.js";
 import { cardInkFits } from "./ink.js";
 import { gangReservationBand } from "../symbols/gang-geometry.js";
+import { railDeviceTagNodeBox } from "../symbols/rail-device-tag.js";
 import {
   LABEL_PORT_HORIZONTAL_SPACING as H,
   LABEL_PORT_VERTICAL_SPACING as V,
@@ -134,6 +135,13 @@ function enclosingBox(a: Box, b: Box): Box {
   };
 }
 
+const railTagExclusion = (node: Owner): Box | undefined => {
+  const b = node.kind === "rail" ? railDeviceTagNodeBox(node) : undefined;
+  return (
+    b && { x: b.x - 4, y: b.y - 4, width: b.width + 8, height: b.height + 8 }
+  );
+};
+
 function cardBoxes(
   node: Owner,
   card: PresentationLabel,
@@ -146,6 +154,7 @@ function cardBoxes(
     "Missing off-view port",
   );
   const anchor = annotationPortPosition(node, port);
+  const railTag = railTagExclusion(node);
   const candidates: { box: Box; cost: number; distance: number }[] = [];
   for (const gap of [CARD_GAP, CARD_GAP + 8, CARD_GAP + 16]) {
     for (const x of [
@@ -173,6 +182,7 @@ function cardBoxes(
             : undefined;
         if (
           (band && intersects(box, band)) ||
+          (railTag && intersects(box, railTag)) ||
           forbidden.some((other) => intersects(box, other)) ||
           !orderedStack(node, card, box, placed)
         )

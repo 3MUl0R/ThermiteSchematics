@@ -78,6 +78,30 @@ export async function circuitDrafts(
   }
 }
 
+function circuitCellRefs(
+  group: {
+    readonly references: readonly {
+      readonly deviceUid: string;
+      readonly designation: string;
+      readonly functions: readonly string[];
+      readonly x: number;
+      readonly y: number;
+    }[];
+  },
+  x: number,
+  top: number,
+  b: DrawingBounds,
+) {
+  return group.references.map((r) => ({
+    deviceUid: r.deviceUid,
+    designation: r.designation,
+    functions: r.functions,
+    xMm: x + r.x,
+    yMm: top + r.y,
+    zone: zone(x + r.x, top + r.y, b),
+  }));
+}
+
 async function circuitDraftsUnchecked(
   ir: Readonly<ElectricalIr>,
   request: CircuitViewRequest,
@@ -196,7 +220,10 @@ async function circuitDraftsUnchecked(
     const rowX = b.x + (spanning ? 0 : column * (columnWidth + 8));
     const y = b.y + headerHeight + offset;
     for (const { group, width, x: dx } of row.cells) {
-      const x = rowX + dx + circuitPeerLeftMargin(request.flow, row.cells.length, group, width);
+      const x =
+        rowX +
+        dx +
+        circuitPeerLeftMargin(request.flow, row.cells.length, group, width);
       const { headings, headHeight } = circuitGroupFootprint(group, width);
       if (group.diagnostics?.length)
         (draft.diagnostics ??= []).push(...group.diagnostics);
@@ -222,16 +249,7 @@ async function circuitDraftsUnchecked(
           width,
         });
       }
-      draft.references!.push(
-        ...group.references.map((r) => ({
-          deviceUid: r.deviceUid,
-          designation: r.designation,
-          functions: r.functions,
-          xMm: x + r.x,
-          yMm: y + headHeight + r.y,
-          zone: zone(x + r.x, y + headHeight + r.y, b),
-        })),
-      );
+      draft.references!.push(...circuitCellRefs(group, x, y + headHeight, b));
     }
     if (spanning) {
       cursors = [offset + height, offset + height];

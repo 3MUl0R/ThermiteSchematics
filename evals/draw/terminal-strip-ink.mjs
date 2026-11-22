@@ -314,7 +314,11 @@ function stripDetails(h) {
     .filter((e) => e.matches("rect") && stroke(e))
     .map(box)
     .find((b) => b.w >= vb.width * 0.8 && b.h >= vb.height * 0.8);
-  const value = (e) => texts(e).filter((t) => t.painted).map((t) => t.text).join(" ");
+  const value = (e) =>
+    texts(e)
+      .filter((t) => t.painted)
+      .map((t) => t.text)
+      .join(" ");
   return {
     frames: frameRect ? [{ sheet, bbox: frameRect }] : [],
     bridgeTags: all("[data-strip-jumper]:not([data-strip-jumper-end])").flatMap(

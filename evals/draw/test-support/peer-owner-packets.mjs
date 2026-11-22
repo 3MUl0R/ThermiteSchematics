@@ -14,8 +14,9 @@ const papers = {
   "conveyor-line": [
     ["left-to-right", "letter", "portrait", "standard", 10, 20],
     ["left-to-right", "letter", "portrait", "compact", 10, 20],
-    ["left-to-right", "a4", "portrait", "standard", 10, 21],
-    ["left-to-right", "a4", "portrait", "compact", 10, 19],
+    // Exterior legend placement (V5-CLEAR) adds 1 sheet on A4 portrait standard/compact vs 5c2914a (21/19).
+    ["left-to-right", "a4", "portrait", "standard", 10, 22],
+    ["left-to-right", "a4", "portrait", "compact", 10, 20],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 22],
     ["top-to-bottom", "letter", "portrait", "compact", 5, 20],
     ["top-to-bottom", "a4", "landscape", "standard", 5, 24],
@@ -27,10 +28,10 @@ const papers = {
     ["left-to-right", "a4", "portrait", "standard", 10, 32],
     ["left-to-right", "a4", "portrait", "compact", 10, 32],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 36],
-    // In-frame return placement saves 2 sheets on compact letter portrait and 1 on compact A4 portrait vs 5c2914a (34/31).
-    ["top-to-bottom", "letter", "portrait", "compact", 5, 32],
+    // Exterior legend placement (V5-CLEAR) uses 36/31 sheets on compact letter/A4 portrait vs 5c2914a (34/31).
+    ["top-to-bottom", "letter", "portrait", "compact", 5, 36],
     ["top-to-bottom", "a4", "landscape", "standard", 5, 31],
-    ["top-to-bottom", "a4", "portrait", "compact", 5, 30],
+    ["top-to-bottom", "a4", "portrait", "compact", 5, 31],
   ],
 };
 

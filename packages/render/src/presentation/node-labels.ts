@@ -65,6 +65,7 @@ export function leafGeometry(
   label: PresentationLabel,
   caption = label,
   compactEmptyCaption = false,
+  railTagWidth = 0,
 ): Readonly<{
   symbolSize: Readonly<{ width: number; height: number }>;
   width: number;
@@ -79,8 +80,14 @@ export function leafGeometry(
   const width = emptyPower
     ? symbolSize.width + 8
     : vertical
-      ? label.width + symbolSize.width + 24
-      : Math.max(symbolSize.width + 16, label.width + 16);
+      ? label.width +
+        Math.max(symbolSize.width, railTagWidth ? railTagWidth + 8 : 0) +
+        24
+      : Math.max(
+          symbolSize.width + 16,
+          label.width + 16,
+          railTagWidth ? 2 * railTagWidth - 8 : 0,
+        );
   const height = 22 + symbolSize.height + 8;
   const geometry = {
     symbolSize,

@@ -187,7 +187,8 @@ function slotCandidates(
         (!reach ||
           !Number.isFinite(reach.gap) ||
           reach.anchors.some((a) => boxDistance(box, a) <= reach.gap)) &&
-        (!reach?.maxOwnerGapMm || boxDistance(box, owner) <= reach.maxOwnerGapMm),
+        (!reach?.maxOwnerGapMm ||
+          boxDistance(box, owner) <= reach.maxOwnerGapMm),
     )
     .map((box) =>
       scoreSlotCandidate(box, owner, locality, ink, preferBesideBelow, reach),

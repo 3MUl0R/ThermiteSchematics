@@ -35,7 +35,10 @@ describe("V5-CLEAR headings, locations, legend and ownership checks", () => {
   });
 
   it("kills inline document heading crowding against assembly label plates", () => {
-    const plate = { element: "plate-1", bbox: { x: 70, y: 62.7, w: 34, h: 15.4 } };
+    const plate = {
+      element: "plate-1",
+      bbox: { x: 70, y: 62.7, w: 34, h: 15.4 },
+    };
     const tightHeading = text(
       "assembly inventory",
       { x: 28, y: 78.67, w: 38, h: 3.1 },
@@ -103,7 +106,9 @@ describe("V5-CLEAR headings, locations, legend and ownership checks", () => {
     const labeled = { ...unlabeled, hasLocalCaption: true };
     const unoccupied = { ...unlabeled, occupied: false };
     expect(
-      locationFragmentCaptionFindings({ locationFrames: [labeled, unoccupied] }),
+      locationFragmentCaptionFindings({
+        locationFrames: [labeled, unoccupied],
+      }),
     ).toEqual([]);
     expect(
       locationFragmentCaptionFindings({ locationFrames: [unlabeled] }).map(

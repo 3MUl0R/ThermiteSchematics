@@ -15,6 +15,7 @@ import * as preparation from "./measurement/prepare.mjs";
 import * as tranche3 from "./measurement/tranche3.mjs";
 import * as tranche4 from "./measurement/tranche4.mjs";
 import * as wirePlates from "./measurement/wire-plates.mjs";
+import * as wireOccluderSpans from "./measurement/wire-occluder-spans.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
 import * as circuitMarks from "./measurement/circuit-marks.mjs";
 import * as layoutRegions from "./measurement/layout-regions.mjs";
@@ -24,6 +25,7 @@ export const measurementHelpers = Object.freeze({
   cableCaptionMarks,
   ...faceStrokes,
   ...wirePlates,
+  ...wireOccluderSpans,
   ...terminalLabels,
   ...circuitMarks,
   ...layoutRegions,

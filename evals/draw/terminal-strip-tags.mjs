@@ -61,18 +61,16 @@ function inspectBridgeTag(b, localBridges, ink, findings) {
     return;
   }
   const tag = tags[0];
-  const ownDist = Math.max(
-    0,
-    boxToPolylineDistance(tag.bbox, b.points) - 0.25,
-  );
+  const ownDist = Math.max(0, boxToPolylineDistance(tag.bbox, b.points) - 0.25);
   const stubs = ink.incidences.filter(
     (s) => s.sheet === b.sheet && s.painted && s.points?.length > 1,
   );
   const stubDist = stubs.length
     ? Math.max(
         0,
-        Math.min(...stubs.map((s) => boxToPolylineDistance(tag.bbox, s.points))) -
-          0.2,
+        Math.min(
+          ...stubs.map((s) => boxToPolylineDistance(tag.bbox, s.points)),
+        ) - 0.2,
       )
     : Infinity;
   const others = localBridges.filter(
@@ -81,8 +79,9 @@ function inspectBridgeTag(b, localBridges, ink, findings) {
   const foreignDist = others.length
     ? Math.max(
         0,
-        Math.min(...others.map((o) => boxToPolylineDistance(tag.bbox, o.points))) -
-          0.25,
+        Math.min(
+          ...others.map((o) => boxToPolylineDistance(tag.bbox, o.points)),
+        ) - 0.25,
       )
     : Infinity;
   if (stubDist < 0.5 - INK_ACCURACY_MM)
@@ -149,8 +148,7 @@ export function stripFrameCheck(ink, findings) {
         ...detail,
       });
   };
-  for (const t of ink.terminals)
-    checkBox(t.sheet, t.rect, { terminal: t.key });
+  for (const t of ink.terminals) checkBox(t.sheet, t.rect, { terminal: t.key });
   for (const b of ink.bridges)
     if (b.painted) checkBox(b.sheet, pointsBox(b.points), { uid: b.uid });
   for (const i of ink.incidences)

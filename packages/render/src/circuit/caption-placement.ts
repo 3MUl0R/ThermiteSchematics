@@ -74,7 +74,7 @@ export function circuitCaptionPlacement(
     stroke,
   )
     ? { ink: original.ink, needsLeader: false }
-    : besideCaption(original.ink, reservation, own, context, 1, stroke);
+    : besideCaption(original.ink, reservation, own, context, 1, stroke, 0.5);
   let points = placement?.needsLeader
     ? ownedLabelLeader(placement.ink, reservation, own, context, 2, 0.25)
     : undefined;

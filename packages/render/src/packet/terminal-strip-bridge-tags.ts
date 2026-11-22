@@ -84,11 +84,7 @@ function scoreTagCandidate(
   },
 ) {
   const boxX =
-    anchor === "end"
-      ? tx - size.w
-      : anchor === "middle"
-        ? tx - size.w / 2
-        : tx;
+    anchor === "end" ? tx - size.w : anchor === "middle" ? tx - size.w / 2 : tx;
   const box: StripRect = {
     x: boxX,
     y: baseline - size.ascent,
@@ -139,6 +135,102 @@ function scoreTagCandidate(
   return { tx, baseline, anchor, box, score };
 }
 
+function tagCandidates(
+  item: BridgeGeometry,
+  offset: number,
+  ascent: number,
+  descent: number,
+  size: { w: number; h: number; ascent: number },
+  obstacles: {
+    stubs: readonly StripSegment[];
+    foreign: readonly StripSegment[];
+    terminals: readonly StripRect[];
+    placed: readonly StripRect[];
+  },
+) {
+  const ys = [(item.yLo + item.yHi) / 2];
+  for (
+    let cy = item.yLo + 0.25 + size.h / 2 + 0.45;
+    cy <= item.yHi - 0.25 - size.h / 2 - 0.45 + 1e-6;
+    cy += 0.25
+  )
+    ys.push(cy);
+  return [
+    ...ys.flatMap((cy) => {
+      const base = cy + (ascent - descent) / 2;
+      return [
+        scoreTagCandidate(
+          item,
+          item.x - offset,
+          base,
+          "end",
+          0,
+          size,
+          obstacles,
+        ),
+        scoreTagCandidate(
+          item,
+          item.x + offset,
+          base,
+          "start",
+          0.5,
+          size,
+          obstacles,
+        ),
+      ];
+    }),
+    scoreTagCandidate(
+      item,
+      item.x - offset,
+      item.yLo - 0.85 - descent,
+      "end",
+      5,
+      size,
+      obstacles,
+    ),
+    scoreTagCandidate(
+      item,
+      item.x - offset,
+      item.yHi + 0.85 + ascent,
+      "end",
+      5,
+      size,
+      obstacles,
+    ),
+  ];
+}
+
+function placeOneBridgeTag(
+  item: BridgeGeometry,
+  geometries: readonly BridgeGeometry[],
+  step: number,
+  stubs: readonly StripSegment[],
+  terminals: readonly StripRect[],
+  placed: StripRect[],
+): BridgeTagPlacement {
+  const tag = `B${item.bridge.number}`;
+  const metrics = printableTextMetrics(tag, 2.5);
+  const w = Math.max(measureText(tag, 2.5).width, metrics.advance);
+  const ascent = Math.max(metrics.top, 1.85);
+  const descent = Math.max(-metrics.bottom, 0.15);
+  const offset = Math.min(0.85, Math.max(0.55, (step - 0.5 - w) * 0.35 + 0.25));
+  const foreign = geometries
+    .filter((g) => g.bridge.uid !== item.bridge.uid)
+    .flatMap((g) => g.segments);
+  const candidates = tagCandidates(
+    item,
+    offset,
+    ascent,
+    descent,
+    { w, h: ascent + descent, ascent },
+    { stubs, foreign, terminals, placed },
+  );
+  candidates.sort((a, b) => b.score - a.score);
+  const chosen = required(candidates[0], "Missing bridge tag candidate");
+  placed.push(chosen.box);
+  return { tx: chosen.tx, baseline: chosen.baseline, anchor: chosen.anchor };
+}
+
 export function placeStripBridgeTags(
   geometries: readonly BridgeGeometry[],
   step: number,
@@ -148,48 +240,14 @@ export function placeStripBridgeTags(
   const placed: StripRect[] = [];
   const placements = new Map<string, BridgeTagPlacement>();
   const order = [...geometries].sort(
-    (a, b) => a.yHi - a.yLo - (b.yHi - b.yLo) || a.bridge.number - b.bridge.number,
+    (a, b) =>
+      a.yHi - a.yLo - (b.yHi - b.yLo) || a.bridge.number - b.bridge.number,
   );
   for (const item of order) {
-    const tag = `B${item.bridge.number}`;
-    const metrics = printableTextMetrics(tag, 2.5);
-    const w = Math.max(measureText(tag, 2.5).width, metrics.advance);
-    const ascent = Math.max(metrics.top, 1.85);
-    const descent = Math.max(-metrics.bottom, 0.15);
-    const h = ascent + descent;
-    const midY = (item.yLo + item.yHi) / 2;
-    const offset = Math.min(
-      0.85,
-      Math.max(0.55, (step - 0.5 - w) * 0.35 + 0.25),
+    placements.set(
+      item.bridge.uid,
+      placeOneBridgeTag(item, geometries, step, stubs, terminals, placed),
     );
-    const foreign = geometries
-      .filter((g) => g.bridge.uid !== item.bridge.uid)
-      .flatMap((g) => g.segments);
-    const obstacles = { stubs, foreign, terminals, placed };
-    const size = { w, h, ascent };
-    const yStart = item.yLo + 0.25 + h / 2 + 0.45;
-    const yEnd = item.yHi - 0.25 - h / 2 - 0.45;
-    const ys = [midY];
-    for (let cy = yStart; cy <= yEnd + 1e-6; cy += 0.25) ys.push(cy);
-    const candidates = ys.flatMap((cy) => {
-      const baseline = cy + (ascent - descent) / 2;
-      return [
-        scoreTagCandidate(item, item.x - offset, baseline, "end", 0, size, obstacles),
-        scoreTagCandidate(item, item.x + offset, baseline, "start", 0.5, size, obstacles),
-      ];
-    });
-    candidates.push(
-      scoreTagCandidate(item, item.x - offset, item.yLo - 0.85 - descent, "end", 5, size, obstacles),
-      scoreTagCandidate(item, item.x - offset, item.yHi + 0.85 + ascent, "end", 5, size, obstacles),
-    );
-    candidates.sort((a, b) => b.score - a.score);
-    const chosen = required(candidates[0], "Missing bridge tag candidate");
-    placed.push(chosen.box);
-    placements.set(item.bridge.uid, {
-      tx: chosen.tx,
-      baseline: chosen.baseline,
-      anchor: chosen.anchor,
-    });
   }
   return placements;
 }

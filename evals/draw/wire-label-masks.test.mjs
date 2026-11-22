@@ -345,3 +345,28 @@ it("DQ-16 rejects plain non-label rects occluding or splitting a conductor appro
     ),
   ).toEqual([]);
 });
+
+it("DQ-16 uses painted fill coverage for later occluders (#529)", async () => {
+  // Control 1: bbox-only two-island fill straddling y=30 leaves the wire unbroken.
+  const twoIslands =
+    '<path d="M19 10 h10 v6 h-10 z M19 44 h10 v6 h-10 z" fill="white"/>';
+  expect(await audit(straight + label("A", 30, 26) + twoIslands)).toEqual([]);
+  expect(await audit(straight + offsetPlate + landing + twoIslands)).toEqual(
+    [],
+  );
+
+  // Control 2: grazing rect touching only one edge of the stroke (y=30.05 vs centerline y=30, half=0.175) does not split the wire.
+  const grazing = '<rect x="19" y="30.05" width="10" height="8" fill="white"/>';
+  expect(await audit(straight + label("A", 30, 26) + grazing)).toEqual([]);
+  expect(await audit(straight + offsetPlate + landing + grazing)).toEqual([]);
+
+  // Control 3: solid cover crossing the wire stroke still fails.
+  const solidSplit = '<path d="M19 26 h10 v8 h-10 z" fill="white"/>';
+  expect(
+    masks(await audit(straight + label("A", 30, 26) + solidSplit)),
+  ).toContainEqual(expect.objectContaining({ wire: "A", reason: "approach" }));
+  const solidApproach = '<path d="M10 26 h10 v8 h-10 z" fill="white"/>';
+  expect(
+    masks(await audit(straight + offsetPlate + landing + solidApproach)),
+  ).toContainEqual(expect.objectContaining({ wire: "A", reason: "approach" }));
+});

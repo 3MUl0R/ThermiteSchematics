@@ -197,8 +197,8 @@ const witnesses = [
   ["landscape", "compact", "left-to-right", false],
   ["landscape", "compact", "top-to-bottom", true],
   ["landscape", "standard", "left-to-right", false],
-  ["portrait", "compact", "top-to-bottom", true],
-  ["portrait", "standard", "top-to-bottom", true],
+  ["portrait", "compact", "top-to-bottom", false],
+  ["portrait", "standard", "top-to-bottom", false],
 ] as const;
 for (const witness of witnesses)
   it.each([witness])(

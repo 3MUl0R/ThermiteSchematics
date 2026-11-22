@@ -48,7 +48,7 @@ export function continuedCaptionY(
   view: NormalizedSchematicView,
   native = false,
 ) {
-  const preferred = originalY - 9.75;
+  const preferred = originalY - 10.035;
   if (native) return preferred;
   const notices = rootedNoticeLines(
     view,
@@ -77,7 +77,7 @@ export function captionConstraint(
   page: PaperPage,
   view: NormalizedSchematicView,
   links: readonly Link[],
-  captionY = b.y - 9.75,
+  captionY = b.y - 10.035,
 ) {
   if (!caption) return undefined;
   return captionInkConstraint(
@@ -117,7 +117,7 @@ function captionInkConstraint(
       inkWithinGap(ink, other, HEADING_CLEARANCE_MM),
     )
   )
-    return "Continued-location caption ink lacks 1.5 mm clearance from the notice or a continuation. Use a larger sheet or landscape.";
+    return "Continued-location caption ink overlaps or lacks 1.5 mm clearance from the notice or a continuation. Use a larger sheet or landscape.";
   return undefined;
 }
 

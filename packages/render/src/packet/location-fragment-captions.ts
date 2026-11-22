@@ -185,7 +185,14 @@ export function locationFragmentCaptions(
     inks.push(...placed.boxes);
     for (const [i, line] of placed.lines.entries())
       svg.push(
-        text(placed.x, placed.baseline + i * placed.pitch, line, 2.5, "start", 700)
+        text(
+          placed.x,
+          placed.baseline + i * placed.pitch,
+          line,
+          2.5,
+          "start",
+          700,
+        )
           .replace('fill="#18212b"', 'fill="#475569"')
           .replace(
             "<text ",

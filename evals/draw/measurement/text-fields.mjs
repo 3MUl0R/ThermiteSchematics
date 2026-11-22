@@ -147,5 +147,9 @@ export function textFields3(c) {
     capReferenceEmMm: parseFloat(css.fontSize) * scaleX * lengthScale,
     angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
     advance: e.getComputedTextLength() * Math.hypot(m.a * sx, m.b * sy),
+    inDeviceLegend: !!e.closest(
+      "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
+    ),
+    inOffViewCard: !!e.closest(".off-view-annotation"),
   };
 }

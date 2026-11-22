@@ -133,6 +133,17 @@ function markerInk(markers, run, end, minOrder = -Infinity) {
   return hidden;
 }
 
+function occluderSpans(occ, run, half) {
+  if (occ.spans !== undefined)
+    return (occ.spans[run.element] ?? []).filter(
+      (sp) =>
+        sp.horizontal === run.horizontal &&
+        Math.abs(sp.across - run.across) <= COINCIDENCE_MM,
+    );
+  const p = span(occ.bbox, run.horizontal);
+  return run.across + half <= p.bottom || run.across - half >= p.top ? [] : [p];
+}
+
 function connectedVisibleLength(
   occluders,
   run,
@@ -149,12 +160,12 @@ function connectedVisibleLength(
   for (const occ of occluders) {
     if (occ.order <= stroke.order) continue;
     if (!finiteBox(occ.clip)) return null;
-    const p = span(occ.bbox, run.horizontal);
-    if (run.across + half <= p.bottom || run.across - half >= p.top) continue;
-    const lo = Math.max(from, p.lo),
-      hi = Math.min(to, p.hi);
-    if (hi <= lo + PRINT_EPSILON_MM) continue;
-    bound = end === "before" ? Math.max(bound, hi) : Math.min(bound, lo);
+    for (const p of occluderSpans(occ, run, half)) {
+      const lo = Math.max(from, p.lo),
+        hi = Math.min(to, p.hi);
+      if (hi <= lo + PRINT_EPSILON_MM) continue;
+      bound = end === "before" ? Math.max(bound, hi) : Math.min(bound, lo);
+    }
   }
   return end === "before" ? to - bound : bound - from;
 }
@@ -178,16 +189,16 @@ function visibleBend(
   const bx = run.horizontal ? rawBoundary : run.across;
   const by = run.horizontal ? run.across : rawBoundary;
   if (
-    occluders?.some((occ) => {
-      if (occ.order <= stroke.order || !finiteBox(occ.clip)) return false;
-      const p = span(occ.bbox, run.horizontal);
-      return (
-        run.across + half > p.bottom &&
-        run.across - half < p.top &&
-        p.lo <= rawBoundary + COINCIDENCE_MM &&
-        p.hi >= rawBoundary - COINCIDENCE_MM
-      );
-    })
+    occluders?.some(
+      (occ) =>
+        occ.order > stroke.order &&
+        finiteBox(occ.clip) &&
+        occluderSpans(occ, run, half).some(
+          (p) =>
+            p.lo <= rawBoundary + COINCIDENCE_MM &&
+            p.hi >= rawBoundary - COINCIDENCE_MM,
+        ),
+    )
   )
     return false;
   for (const neighbor of [runs[segmentIndex - 1], runs[segmentIndex + 1]]) {
@@ -285,13 +296,13 @@ function ownedRuns(route, plate, stroke, markers, occluders) {
   if (runs.some((s) => !axis(s))) return null;
   const strokeInfo = { ...stroke, width: route.stroke };
   return runs.flatMap((segment, segmentIndex) => {
-    const run = coveredRun(segment, plate.bbox, stroke.clip, route.stroke);
-    if (!run) return [];
+    const covered = coveredRun(segment, plate.bbox, stroke.clip, route.stroke);
+    if (!covered) return [];
+    const run = { ...covered, element: route.element };
     return [
       {
         ...run,
         wire: route.wire,
-        element: route.element,
         before: clearance(
           run,
           ends,
@@ -409,6 +420,20 @@ function occludesApproach(run, markers, order) {
   );
 }
 
+function occludedApproachRun(r, occ, stroke, markers) {
+  const runs =
+    occ.spans === undefined
+      ? (ownedRuns(r, occ, stroke, markers, []) ?? [])
+      : (occ.spans[r.element] ?? []).flatMap((sp) => {
+          const half = r.stroke / 2;
+          const bbox = sp.horizontal
+            ? { x: sp.lo, y: sp.across - half, w: sp.hi - sp.lo, h: r.stroke }
+            : { x: sp.across - half, y: sp.lo, w: r.stroke, h: sp.hi - sp.lo };
+          return ownedRuns(r, { ...occ, bbox }, stroke, markers, []) ?? [];
+        });
+  return runs.find((run) => occludesApproach(run, markers, occ.order));
+}
+
 export function conductorApproachOcclusionFindings(g, routes) {
   const m = g.tranche3?.wirePlatePaint,
     out = [];
@@ -444,10 +469,7 @@ export function conductorApproachOcclusionFindings(g, routes) {
         continue;
       }
       if (!stroke.painted || stroke.order >= occ.order) continue;
-      const runs = ownedRuns(r, occ, stroke, m.markers, []);
-      const masked = runs?.find((run) =>
-        occludesApproach(run, m.markers, occ.order),
-      );
+      const masked = occludedApproachRun(r, occ, stroke, m.markers);
       if (masked)
         out.push(
           finding("wire-label-plate-masks-conductor", occ, {

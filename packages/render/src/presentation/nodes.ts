@@ -2,6 +2,7 @@ import {
   contactCaptionWidth,
   verticalContactCaption,
 } from "./contact-caption.js";
+import { railDeviceTagWidth } from "../symbols/rail-device-tag.js";
 import type {
   PresentationContext,
   SymbolRepresentation,
@@ -446,7 +447,18 @@ function buildRailPort(
       ),
     ],
   );
-  const geometry = leafGeometry(symbol, orientation, railLabel);
+  const railTagReserve =
+    boundary.kind === "potential" && device.designation.trim()
+      ? railDeviceTagWidth(device.designation)
+      : 0;
+  const geometry = leafGeometry(
+    symbol,
+    orientation,
+    railLabel,
+    railLabel,
+    false,
+    railTagReserve,
+  );
   const port: PresentationPort = {
     id: portId,
     symbolPortId: definition.id,

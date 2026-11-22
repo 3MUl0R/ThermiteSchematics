@@ -41,7 +41,10 @@ it("DQ-02 kills non-zone text in the zone gutter while passing field text and zo
   });
   const base = { width: 279, height: 215, frame, headerRule, titleBlock };
   expect(
-    textInZoneGutter({ ...base, texts: [...zoneNums, ...zoneLetters, fieldText] }),
+    textInZoneGutter({
+      ...base,
+      texts: [...zoneNums, ...zoneLetters, fieldText],
+    }),
   ).toEqual([]);
   const findings = textInZoneGutter({
     ...base,

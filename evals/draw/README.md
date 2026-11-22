@@ -23,7 +23,29 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.40** applies.
+the budget and the remaining headroom. Checker protocol **5.41** applies.
+
+Version **5.41** updates **DQ-02**, **DQ-06**, **DQ-16** and **DQ-23**
+(V5-CLEAR, #416, #418 item 1, #432, #529). DQ-02 adds a general
+text-in-zone-gutter check (`text-in-zone-gutter`) measuring actual painted
+glyph ink against the measured drawing-field left boundary across all views
+(0.17 mm glyph-measurement tolerance), enforces a 1.5 mm clearance between
+inline document or `CONTINUED LOCATION` headings and nearby drawing ink or
+plates (`heading-clearance`), rejects device legends intersecting a
+`location-frame` (`legend-inside-location-frame`), requires a local caption on
+every visible occupied location-frame fragment (`unlabeled-location-fragment`),
+and requires a 0.5 mm ownership margin on non-inline circuit captions
+(`foreign-wire-ownership-margin`). DQ-23 checks terminal-strip bridge tags for
+note definitions (`strip-bridge-note-missing`), painted `Bn` tags
+(`strip-bridge-tag-missing`), stub overlap (`strip-bridge-tag-stub-overlap`),
+nearest-bridge ownership (`strip-bridge-tag-ownership`), and strip ink inside
+the sheet frame (`strip-ink-outside-frame`). DQ-06 requires a compact local
+native device designation tag beside every source-backed potential reference
+bar (`missing-rail-device-tag`, #432) that a sheet-level legend or off-view
+card does not satisfy. DQ-16 measures actual painted fill coverage along
+straight conductor runs for later occluders (#529) rather than treating a
+non-solid fill's bounding box as opaque. Complete 5.40 summaries remain
+readable.
 
 Version **5.40** updates **DQ-07** and **DQ-08** (V5-PEER, #450, #483, #507,
 #409, #430). DQ-08 requires one owned annotation per `(terminal, conductor,

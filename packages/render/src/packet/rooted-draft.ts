@@ -113,7 +113,6 @@ export function rootedDraft(
     scale,
     shapes,
   );
-  shapes.push(...fragments.inks);
   const ink = unionInk(shapes);
   const navigationSeeds = nativeOccurrenceSeeds(p);
   return {

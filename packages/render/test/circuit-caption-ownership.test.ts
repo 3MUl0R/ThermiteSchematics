@@ -24,10 +24,13 @@ it("places Murr 28501 FIXED1 and FIXED2 captions unambiguously on their own jump
     ["FIXED1", "W6"],
     ["FIXED2", "W4"],
   ] as const) {
-    const jumper = compiled.ir.jumpers.find((j) => j.designation === jumperName)!;
+    const jumper = compiled.ir.jumpers.find(
+      (j) => j.designation === jumperName,
+    )!;
     const wire = compiled.ir.wires.find((w) => w.designation === wireName)!;
-    const labelRect = doc
-      .querySelector(`[data-wire-label="${jumper.uid}"] > rect`)!;
+    const labelRect = doc.querySelector(
+      `[data-wire-label="${jumper.uid}"] > rect`,
+    )!;
     const labelTop = Number(labelRect.getAttribute("y"));
     const wirePath = doc
       .querySelector(`[data-circuit-conductor="${wire.uid}"] > path`)!
