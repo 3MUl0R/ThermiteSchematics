@@ -29,23 +29,33 @@ Version **5.41** updates **DQ-02**, **DQ-06**, **DQ-16** and **DQ-23**
 (V5-CLEAR, #416, #418 item 1, #432, #529). DQ-02 adds a general
 text-in-zone-gutter check (`text-in-zone-gutter`) measuring actual painted
 glyph ink against the measured drawing-field left boundary across all views
-(0.17 mm glyph-measurement tolerance), enforces a 1.5 mm clearance between
-inline document or `CONTINUED LOCATION` headings and nearby drawing ink or
-plates (`heading-clearance`), rejects device legends intersecting a
-`location-frame` (`legend-inside-location-frame`), requires a local caption on
-every visible occupied location-frame fragment (`unlabeled-location-fragment`),
-and requires a 0.5 mm ownership margin on non-inline circuit captions
-(`foreign-wire-ownership-margin`). DQ-23 checks terminal-strip bridge tags for
-note definitions (`strip-bridge-note-missing`), painted `Bn` tags
+(`0.01 mm` numerical noise only, with zero exemption for legends, notices,
+tables, strip keys, peer notes, or top/bottom continuations; only
+model/IR-verified left-edge continuation references sitting `>= 1.5 mm` right
+of the zone-letter column's inner rule, inside the frame, vertically aligned
+with their own edge conductor, and collision-free are admitted under the
+bounded `leftContinuationGutter` contract and counted in `summary.md` and
+`report.contracts`), enforces a `1.5 mm` clearance (`0.01 mm` numerical noise
+only) between inline document or `CONTINUED LOCATION` headings and nearby
+drawing ink or plates (`heading-clearance-violation`), rejects any device
+legend plate or ink intersecting a `location-frame` interior (`0 mm` overlap,
+`legend-inside-location-frame`), requires a local caption naming the frame's
+own location identity on every visible occupied location-frame fragment
+(`unlabeled-location-fragment`) while recording and counting every
+`locationFragmentFallbacks` use, and requires a `0.5 mm` ownership margin on
+non-inline circuit captions (`foreign-wire-ownership-margin`). DQ-23 checks
+terminal-strip bridge tags against authored bridge keys (`B1`, `B2`, ...) for
+note definitions (`strip-bridge-note-missing`), painted unclipped `Bn` tags
 (`strip-bridge-tag-missing`), stub overlap (`strip-bridge-tag-stub-overlap`),
-nearest-bridge ownership (`strip-bridge-tag-ownership`), and strip ink inside
-the sheet frame (`strip-ink-outside-frame`). DQ-06 requires a compact local
-native device designation tag beside every source-backed potential reference
-bar (`missing-rail-device-tag`, #432) that a sheet-level legend or off-view
-card does not satisfy. DQ-16 measures actual painted fill coverage along
-straight conductor runs for later occluders (#529) rather than treating a
-non-solid fill's bounding box as opaque. Complete 5.40 summaries remain
-readable.
+nearest-bridge ownership (`strip-bridge-tag-ownership`), and strip stroke ink
+extents inside the sheet frame (`strip-ink-outside-frame`, `0.01 mm` numerical
+epsilon). DQ-06 validates every source-backed potential reference bar against
+its authored potential source device in the IR (rejecting missing or mismatched
+owner UIDs) and requires a compact local native device designation tag beside
+it (`missing-rail-device-tag`, #432) that a sheet-level legend or off-view card
+does not satisfy. DQ-16 measures actual painted fill coverage along straight
+conductor runs for later occluders (#529) rather than treating a non-solid
+fill's bounding box as opaque. Complete 5.40 summaries remain readable.
 
 Version **5.40** updates **DQ-07** and **DQ-08** (V5-PEER, #450, #483, #507,
 #409, #430). DQ-08 requires one owned annotation per `(terminal, conductor,

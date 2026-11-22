@@ -456,14 +456,61 @@ export function deviceTagFindings(g, ir, references, issue, view) {
   return [...out, ...railDeviceTagFindings(g, ir, issue)];
 }
 
+function authoredPotentialForRail(rail, ir) {
+  const potentials = ir.potentials ?? [];
+  const matches = potentials.filter((p) => {
+    if (rail.potentialUid && p.uid !== rail.potentialUid) return false;
+    if (rail.netId && p.netId !== rail.netId) return false;
+    if (rail.potentialName && p.name !== rail.potentialName) return false;
+    return !!(rail.potentialUid || rail.netId || rail.potentialName);
+  });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function railOwnerIssue(rail, potential, device, issue) {
+  if (!potential || !device)
+    return issue("invalid-device-tag-owner", rail, {
+      reason: "unresolved-rail-potential",
+      potentialUid: rail.potentialUid ?? null,
+      potentialName: rail.potentialName ?? null,
+      netId: rail.netId ?? null,
+    });
+  if (!rail.deviceUid || rail.deviceUid !== device.uid)
+    return issue(
+      "invalid-device-tag-owner",
+      {
+        element: rail.element,
+        deviceUid: rail.deviceUid ?? null,
+        designation: device.designation,
+        bbox: rail.bbox,
+      },
+      {
+        reason: rail.deviceUid ? "rail-owner-mismatch" : "rail-owner-missing",
+        declaredDeviceUid: rail.deviceUid ?? null,
+        expectedDeviceUid: device.uid,
+        expectedDesignation: device.designation,
+        potentialUid: potential.uid,
+        potentialName: potential.name,
+      },
+    );
+  return null;
+}
+
 function railDeviceTagFindings(g, ir, issue) {
   const out = [];
   for (const rail of g.potentialRails ?? []) {
-    if (!rail.deviceUid || !rail.bbox) continue;
-    const device = ir.devices?.find((d) => d.uid === rail.deviceUid);
-    if (!device) {
-      out.push(issue("invalid-device-tag-owner", rail));
-      continue;
+    if (!rail.bbox) continue;
+    // Resolve the source device from the authored potential in the IR, never
+    // trusting the SVG rail's own data-device-uid attribute.
+    const potential = authoredPotentialForRail(rail, ir);
+    const authoredUid = potential?.terminal?.deviceUid;
+    const device = authoredUid
+      ? ir.devices?.find((d) => d.uid === authoredUid)
+      : undefined;
+    const ownerIssue = railOwnerIssue(rail, potential, device, issue);
+    if (ownerIssue) {
+      out.push(ownerIssue);
+      if (!potential || !device) continue;
     }
     const localTag = (g.texts ?? []).some(
       (t) =>
@@ -491,7 +538,8 @@ function railDeviceTagFindings(g, ir, issue) {
           {
             deviceUid: device.uid,
             expectedDesignation: device.designation,
-            potentialName: rail.potentialName ?? null,
+            potentialUid: potential.uid,
+            potentialName: potential.name,
           },
         ),
       );

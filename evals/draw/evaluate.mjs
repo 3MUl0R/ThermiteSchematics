@@ -52,10 +52,10 @@ export function observation(c, s, dq, issues = [], extra = {}) {
     ...extra,
   };
 }
-export function textGeometryIssues(g) {
+export function textGeometryIssues(g, context) {
   return [
     ...checks.textBounds(g),
-    ...checks.textInZoneGutter(g),
+    ...checks.textInZoneGutter(g, context),
     ...headingClearanceFindings(g),
     ...legendOutsideLocationFindings(g),
     ...locationFragmentCaptionFindings(g),
@@ -69,6 +69,43 @@ function symbolGeometryIssues(g, ir, symbols, interference) {
     ...interference.filter((f) => f.kind === "conductor-through-symbol"),
   ];
 }
+function dq02Observation(g, s, ir, vocabularyContext, interference, obs) {
+  const gutter = checks.zoneGutterAudit(g, {
+    sheet: s,
+    packet: vocabularyContext.packet,
+    geometries: vocabularyContext.geometries,
+    ir,
+  });
+  const dq02Issues = [
+    ...checks.textBounds(g),
+    ...gutter.findings,
+    ...headingClearanceFindings(g),
+    ...legendOutsideLocationFindings(g),
+    ...locationFragmentCaptionFindings(g),
+    ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
+    ...interference.filter((f) =>
+      ["text-across-conductor", "plate-over-foreign-conductor"].includes(
+        f.kind,
+      ),
+    ),
+    ...checks.plateOcclusion(g),
+    ...captionMarkFindings(g),
+    ...terminalLabelFindings(g),
+  ];
+  return obs("DQ-02", dq02Issues, {
+    evidence: {
+      findingCount: dq02Issues.length,
+      findings: dq02Issues,
+      ...(gutter.contracted.length
+        ? { leftContinuationGutter: gutter.contracted }
+        : {}),
+      ...(g.locationFragmentFallbacks?.length
+        ? { locationFragmentFallbacks: g.locationFragmentFallbacks }
+        : {}),
+    },
+  });
+}
+
 function evaluateTextAndSymbols(
   c,
   s,
@@ -97,19 +134,7 @@ function evaluateTextAndSymbols(
         "Visible SVG labels: pdf.js raster regions, with optional Apple PDFKit cross-check. Ink loss threshold 18%; historical scaled-mask compatibility is audited separately from actual raster loss.",
     }),
   );
-  out.push(
-    obs("DQ-02", [
-      ...textGeometryIssues(g),
-      ...interference.filter((f) =>
-        ["text-across-conductor", "plate-over-foreign-conductor"].includes(
-          f.kind,
-        ),
-      ),
-      ...checks.plateOcclusion(g),
-      ...captionMarkFindings(g),
-      ...terminalLabelFindings(g),
-    ]),
-  );
+  out.push(dq02Observation(g, s, ir, vocabularyContext, interference, obs));
   out.push(
     obs(
       "DQ-02",

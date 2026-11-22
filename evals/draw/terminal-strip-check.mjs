@@ -164,7 +164,7 @@ export function checkTerminalStrip(native, ink) {
   bridgeCoverage(native, ink, findings);
   incidenceCoverage(native, ink, findings);
   continuationCoverage(native, ink, findings);
-  bridgeTagCheck(ink, findings);
+  bridgeTagCheck(native, ink, findings);
   stripFrameCheck(ink, findings);
   for (const s of ink.unclaimed)
     findings.push({ kind: "strip-invented-hardware-or-bridge", shape: s });

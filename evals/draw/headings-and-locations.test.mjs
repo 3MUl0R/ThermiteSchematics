@@ -25,10 +25,18 @@ describe("V5-CLEAR headings, locations, legend and ownership checks", () => {
       h: 1.84,
     });
     const tightCont = text("1A", { x: 40, y: 39.06, w: 6, h: 1.8 });
+    const mutant1p40 = text("1A", { x: 40, y: 39.44, w: 6, h: 1.8 });
+    const clear1p51 = text("1A", { x: 40, y: 39.55, w: 6, h: 1.8 });
     const clearCont = text("1A", { x: 40, y: 39.8, w: 6, h: 1.8 });
     expect(headingClearanceFindings({ texts: [header, clearCont] })).toEqual(
       [],
     );
+    expect(headingClearanceFindings({ texts: [header, clear1p51] })).toEqual(
+      [],
+    );
+    const bad1p40 = headingClearanceFindings({ texts: [header, mutant1p40] });
+    expect(bad1p40.map((f) => f.kind)).toEqual(["heading-clearance-violation"]);
+    expect(bad1p40[0].gapMm).toBeCloseTo(1.4, 2);
     const bad = headingClearanceFindings({ texts: [header, tightCont] });
     expect(bad.map((f) => f.kind)).toEqual(["heading-clearance-violation"]);
     expect(bad[0].gapMm).toBeCloseTo(1.02, 2);
@@ -78,6 +86,15 @@ describe("V5-CLEAR headings, locations, legend and ownership checks", () => {
       element: "leg-1",
       bbox: { x: 100, y: 60, w: 40, h: 30 },
     };
+    const overlap0p10Legend = {
+      element: "leg-1",
+      bbox: { x: 149.9, y: 60, w: 40, h: 30 },
+    };
+    const overlapLegendInk = text(
+      "Devices on this sheet",
+      { x: 149.9, y: 62, w: 28, h: 2.5 },
+      { inDeviceLegend: true, tagKind: "legend" },
+    );
     const outsideLegend = {
       element: "leg-1",
       bbox: { x: 160, y: 60, w: 40, h: 30 },
@@ -94,27 +111,58 @@ describe("V5-CLEAR headings, locations, legend and ownership checks", () => {
         locationFrames: [loc],
       }).map((f) => f.kind),
     ).toEqual(["legend-inside-location-frame"]);
+    expect(
+      legendOutsideLocationFindings({
+        legendBoxes: [overlap0p10Legend],
+        locationFrames: [loc],
+      }).map((f) => f.kind),
+    ).toEqual(["legend-inside-location-frame"]);
+    expect(
+      legendOutsideLocationFindings({
+        legendBoxes: [],
+        texts: [overlapLegendInk],
+        locationFrames: [loc],
+      }).map((f) => f.kind),
+    ).toEqual(["legend-inside-location-frame"]);
   });
 
-  it("kills an occupied clipped location fragment without a local caption", () => {
+  it("kills an occupied clipped location fragment without a matching local caption", () => {
     const unlabeled = {
       element: "loc-1",
       bbox: { x: 30, y: 40, w: 80, h: 60 },
       occupied: true,
+      locationName: "FIELD",
+      foundCaptions: [],
       hasLocalCaption: false,
     };
-    const labeled = { ...unlabeled, hasLocalCaption: true };
+    const wrongName = {
+      element: "loc-2",
+      bbox: { x: 30, y: 40, w: 80, h: 60 },
+      occupied: true,
+      locationName: "FIELD",
+      foundCaptions: ["WRONG-LOCATION"],
+      hasLocalCaption: false,
+    };
+    const labeled = {
+      ...unlabeled,
+      foundCaptions: ["FIELD"],
+      hasLocalCaption: true,
+    };
     const unoccupied = { ...unlabeled, occupied: false };
     expect(
       locationFragmentCaptionFindings({
         locationFrames: [labeled, unoccupied],
       }),
     ).toEqual([]);
+    const findings = locationFragmentCaptionFindings({
+      locationFrames: [unlabeled, wrongName],
+    });
     expect(
-      locationFragmentCaptionFindings({ locationFrames: [unlabeled] }).map(
-        (f) => f.kind,
-      ),
-    ).toEqual(["unlabeled-location-fragment"]);
+      findings.map((f) => [f.kind, f.locationName, f.foundCaptions]),
+    ).toEqual([
+      ["unlabeled-location-fragment", "FIELD", []],
+      ["unlabeled-location-fragment", "FIELD", ["WRONG-LOCATION"]],
+    ]);
   });
 
   it("kills ambiguous wire/jumper caption ownership near a foreign junction (Murr 28501 FIXED2)", () => {

@@ -15,7 +15,7 @@ import {
   continuationPdfRows,
   requirePdfFont,
 } from "./continuation-labels.mjs";
-export { textInZoneGutter } from "./zone-gutter.mjs";
+export { textInZoneGutter, zoneGutterAudit } from "./zone-gutter.mjs";
 import { wireOwnershipReason } from "./headings-and-locations.mjs";
 import { straightPath } from "./path.mjs";
 import { measuredPlateLeader, wireLabelBlock } from "./wire-plate-leader.mjs";

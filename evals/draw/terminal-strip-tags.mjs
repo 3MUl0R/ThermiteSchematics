@@ -1,5 +1,8 @@
 import { INK_ACCURACY_MM, distance, inside } from "./checks.mjs";
 
+// Numerical/serialization epsilon only (<= 0.01 mm; stroke ink extent is measured directly).
+export const STRIP_FRAME_EPSILON_MM = 0.01;
+
 function pointGapToBox(p, box) {
   return Math.hypot(
     Math.max(box.x - p.x, 0, p.x - box.x - box.w),
@@ -48,19 +51,52 @@ function boxToPolylineDistance(box, points) {
   return best;
 }
 
-function inspectBridgeTag(b, localBridges, ink, findings) {
+function expectedBridgeKeys(native) {
+  const keys = new Map();
+  const counts = new Map();
+  for (const j of native?.bridges ?? []) {
+    let deviceUid = "";
+    try {
+      deviceUid = JSON.parse(j.ends[0])[0] ?? "";
+    } catch {
+      deviceUid = "";
+    }
+    const number = (counts.get(deviceUid) ?? 0) + 1;
+    counts.set(deviceUid, number);
+    keys.set(j.uid, `B${number}`);
+  }
+  return keys;
+}
+
+function resolveBridgeTag(b, expectedKey, ink, findings) {
   const tags = ink.bridgeTags.filter(
-    (t) => t.uid === b.uid && t.sheet === b.sheet && t.painted,
+    (t) =>
+      t.uid === b.uid &&
+      t.sheet === b.sheet &&
+      t.painted &&
+      t.inkVisible !== false,
   );
-  if (tags.length !== 1 || !/^B\d+$/u.test(tags[0].text.trim())) {
+  if (
+    tags.length !== 1 ||
+    (expectedKey
+      ? tags[0].text.trim() !== expectedKey
+      : !/^B\d+$/u.test(tags[0].text.trim()))
+  ) {
     findings.push({
       kind: "strip-bridge-tag-missing",
       uid: b.uid,
       sourceSheet: b.sheet,
+      ...(expectedKey ? { expected: expectedKey } : {}),
+      ...(tags[0] ? { printed: tags[0].text.trim() } : {}),
     });
-    return;
+    return null;
   }
-  const tag = tags[0];
+  return tags[0];
+}
+
+function inspectBridgeTag(b, expectedKey, localBridges, ink, findings) {
+  const tag = resolveBridgeTag(b, expectedKey, ink, findings);
+  if (!tag) return;
   const ownDist = Math.max(0, boxToPolylineDistance(tag.bbox, b.points) - 0.25);
   const stubs = ink.incidences.filter(
     (s) => s.sheet === b.sheet && s.painted && s.points?.length > 1,
@@ -110,7 +146,7 @@ function inspectBridgeTag(b, localBridges, ink, findings) {
     });
 }
 
-export function bridgeTagCheck(ink, findings) {
+export function bridgeTagCheck(native, ink, findings) {
   const localBridges = ink.bridges.filter((b) => !b.end && b.painted);
   if (!localBridges.length) return;
   if (
@@ -120,26 +156,42 @@ export function bridgeTagCheck(ink, findings) {
   )
     findings.push({ kind: "strip-bridge-note-missing" });
   if (!Array.isArray(ink.bridgeTags)) return;
+  const keys = expectedBridgeKeys(native);
   for (const b of localBridges)
-    inspectBridgeTag(b, localBridges, ink, findings);
+    inspectBridgeTag(b, keys.get(b.uid), localBridges, ink, findings);
 }
 
-function pointsBox(points) {
+function expandStroke(box, strokeWidth) {
+  if (!box) return null;
+  const half = (strokeWidth ?? 0) / 2;
+  if (!(half > 0)) return box;
+  return {
+    x: box.x - half,
+    y: box.y - half,
+    w: box.w + 2 * half,
+    h: box.h + 2 * half,
+  };
+}
+
+function pointsBox(points, strokeWidth = 0) {
   if (!points?.length) return null;
   const xs = points.map((p) => p.x),
     ys = points.map((p) => p.y);
   const x = Math.min(...xs),
     y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  return expandStroke(
+    { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
+    strokeWidth,
+  );
 }
 
 export function stripFrameCheck(ink, findings) {
   const frames = new Map((ink.frames ?? []).map((f) => [f.sheet, f.bbox]));
-  if (!frames.size) return;
   const checkBox = (sheet, box, detail) => {
+    if (sheet === undefined || !box) return;
     const frame = frames.get(sheet);
-    if (!frame || !box) return;
-    if (!inside(box, frame, INK_ACCURACY_MM))
+    if (!frame) return;
+    if (!inside(box, frame, STRIP_FRAME_EPSILON_MM))
       findings.push({
         kind: "strip-ink-outside-frame",
         sourceSheet: sheet,
@@ -148,12 +200,17 @@ export function stripFrameCheck(ink, findings) {
         ...detail,
       });
   };
-  for (const t of ink.terminals) checkBox(t.sheet, t.rect, { terminal: t.key });
+  for (const t of ink.terminals)
+    checkBox(t.sheet, expandStroke(t.rect, t.strokeWidth), { terminal: t.key });
   for (const b of ink.bridges)
-    if (b.painted) checkBox(b.sheet, pointsBox(b.points), { uid: b.uid });
+    if (b.painted)
+      checkBox(b.sheet, pointsBox(b.points, b.strokeWidth), { uid: b.uid });
   for (const i of ink.incidences)
     if (i.painted)
-      checkBox(i.sheet, pointsBox(i.points), { id: i.id, terminal: i.at });
+      checkBox(i.sheet, pointsBox(i.points, i.strokeWidth), {
+        id: i.id,
+        terminal: i.at,
+      });
   for (const c of ink.continuations)
     if (c.painted) checkBox(c.sheet, c.bbox, { terminal: c.at });
   for (const t of ink.bridgeTags ?? [])

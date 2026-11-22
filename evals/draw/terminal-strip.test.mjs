@@ -124,6 +124,32 @@ it.each([
     "strip-bridge-tag-ownership",
   ],
   [
+    "clipped-away Bn tag",
+    (x) => {
+      x.bridgeTags[0].inkVisible = false;
+    },
+    "strip-bridge-tag-missing",
+  ],
+  [
+    "wrong Bn bridge key (B99)",
+    (x) => {
+      x.bridgeTags[0].text = "B99";
+    },
+    "strip-bridge-tag-missing",
+  ],
+  [
+    "strip stroke ink extending outside outer sheet frame while centerline is near edge (#418)",
+    (x) => {
+      const frame = x.frames[0].bbox;
+      x.bridges[0].strokeWidth = 0.5;
+      x.bridges[0].points = [
+        { x: frame.x + 0.1, y: frame.y + 40 },
+        { x: frame.x + 0.1, y: frame.y + 50 },
+      ];
+    },
+    "strip-ink-outside-frame",
+  ],
+  [
     "strip ink extending outside outer sheet frame (#418)",
     (x) => {
       const frame = x.frames[0].bbox;

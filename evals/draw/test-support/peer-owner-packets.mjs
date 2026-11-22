@@ -24,7 +24,8 @@ const papers = {
   ],
   "machine-demo": [
     ["left-to-right", "letter", "portrait", "standard", 10, 37],
-    ["left-to-right", "letter", "portrait", "compact", 10, 35],
+    // Left-continuation 1.5 mm zone-rule clearance (V5-CLEAR) adds 1 sheet on compact letter portrait (10 mm margins) vs 5c2914a (35).
+    ["left-to-right", "letter", "portrait", "compact", 10, 36],
     ["left-to-right", "a4", "portrait", "standard", 10, 32],
     ["left-to-right", "a4", "portrait", "compact", 10, 32],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 36],

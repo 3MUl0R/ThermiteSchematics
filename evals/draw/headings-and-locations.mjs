@@ -2,6 +2,8 @@ import { INK_ACCURACY_MM, overlap } from "./checks.mjs";
 import { reportIssue as issue } from "./report-checks.mjs";
 
 export const HEADING_CLEARANCE_MM = 1.5;
+// Numerical & SVG-to-mm serialization epsilon only (<= 0.01 mm; never a drafting allowance).
+export const HEADING_CLEARANCE_EPSILON_MM = 0.01;
 
 function horizontalOverlap(a, b) {
   return Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x);
@@ -15,7 +17,7 @@ function checkHeadingAgainst(heading, others, out) {
   for (const other of others) {
     if (!other.bbox || !horizontalOverlap(heading.bbox, other.bbox)) continue;
     const gap = verticalGap(heading.bbox, other.bbox);
-    if (gap < HEADING_CLEARANCE_MM - INK_ACCURACY_MM)
+    if (gap < HEADING_CLEARANCE_MM - HEADING_CLEARANCE_EPSILON_MM)
       out.push(
         issue("heading-clearance-violation", heading, {
           text: heading.text,
@@ -23,7 +25,7 @@ function checkHeadingAgainst(heading, others, out) {
           ...(other.text ? { otherText: other.text } : {}),
           gapMm: gap,
           minimumMm: HEADING_CLEARANCE_MM,
-          toleranceMm: INK_ACCURACY_MM,
+          toleranceMm: HEADING_CLEARANCE_EPSILON_MM,
         }),
       );
   }
@@ -49,15 +51,34 @@ export function headingClearanceFindings(g) {
 
 export function legendOutsideLocationFindings(g) {
   const out = [];
-  for (const legend of g.legendBoxes ?? []) {
-    for (const loc of g.locationFrames ?? []) {
-      if (overlap(legend.bbox, loc.bbox, INK_ACCURACY_MM))
+  const frames = g.locationFrames ?? [];
+  if (!frames.length) return out;
+  const legendItems = [
+    ...(g.legendBoxes ?? []).map((b) => ({ item: b, kind: "plate" })),
+    ...(g.texts ?? [])
+      .filter(
+        (t) =>
+          t.painted !== false &&
+          t.bbox &&
+          (t.inDeviceLegend || t.tagKind === "legend"),
+      )
+      .map((t) => ({ item: t, kind: "ink" })),
+  ];
+  const seen = new Set();
+  for (const { item, kind } of legendItems) {
+    for (const loc of frames) {
+      if (overlap(item.bbox, loc.bbox, 0)) {
+        const key = `${item.element}:${loc.element}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         out.push(
-          issue("legend-inside-location-frame", legend, {
+          issue("legend-inside-location-frame", item, {
+            overlapKind: kind,
             locationElement: loc.element,
             locationBbox: loc.bbox,
           }),
         );
+      }
     }
   }
   return out;
@@ -70,6 +91,12 @@ export function locationFragmentCaptionFindings(g) {
       out.push(
         issue("unlabeled-location-fragment", loc, {
           locationElement: loc.element,
+          ...(loc.locationName !== undefined
+            ? { locationName: loc.locationName }
+            : {}),
+          ...(loc.foundCaptions !== undefined
+            ? { foundCaptions: loc.foundCaptions }
+            : {}),
         }),
       );
   }

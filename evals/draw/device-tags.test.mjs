@@ -516,10 +516,22 @@ it("checks trimmed wrap rows against complete independent source spans, includin
 });
 
 describe("DQ-06 local source-device tag on potential reference bars (#432)", () => {
-  const ir = data([device("ps1", "PS1")]);
+  const ir = {
+    ...data([device("ps1", "PS1"), device("src1", "SRC1")]),
+    potentials: [
+      {
+        uid: "pot-24v",
+        name: "+24VDC",
+        netId: "net-24v",
+        terminal: { deviceUid: "ps1", terminalKey: "2" },
+      },
+    ],
+  };
   const rail = {
     element: "rail-1",
     deviceUid: "ps1",
+    potentialUid: "pot-24v",
+    netId: "net-24v",
     potentialName: "+24VDC",
     bbox: { x: 160, y: 130, w: 3, h: 6 },
   };

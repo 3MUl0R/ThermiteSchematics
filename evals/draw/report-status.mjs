@@ -23,6 +23,39 @@ export function policyStatusCounts(rows) {
     ]),
   );
 }
+export function contractSummary(rows) {
+  const gutterRows = rows.filter(
+    (r) => r.evidence?.leftContinuationGutter?.length,
+  );
+  const gutterEntries = gutterRows.flatMap(
+    (r) => r.evidence.leftContinuationGutter,
+  );
+  const fallbackRows = rows.filter(
+    (r) => r.evidence?.locationFragmentFallbacks?.length,
+  );
+  const fallbackEntries = fallbackRows.flatMap(
+    (r) => r.evidence.locationFragmentFallbacks,
+  );
+  const byKind = {};
+  for (const f of fallbackEntries) byKind[f.kind] = (byKind[f.kind] ?? 0) + 1;
+  return {
+    leftContinuationGutter: {
+      count: gutterEntries.length,
+      sheets: gutterRows.length,
+      minRuleClearanceMm: gutterEntries.length
+        ? Math.min(...gutterEntries.map((e) => e.clearanceMm))
+        : null,
+      maxVerticalOffsetMm: gutterEntries.length
+        ? Math.max(...gutterEntries.map((e) => e.verticalOffsetMm))
+        : null,
+    },
+    locationFragmentFallbacks: {
+      count: fallbackEntries.length,
+      sheets: fallbackRows.length,
+      byKind,
+    },
+  };
+}
 export function statusTable(counts) {
   return [
     "| DQ | Pass | Fail | Xfail | Xpass | Manual | Not applicable | Not measured | Not implemented |",
