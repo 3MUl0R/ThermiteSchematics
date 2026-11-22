@@ -4,6 +4,7 @@ import {
   mkdir,
   link,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   symlink,
@@ -11,6 +12,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { isMainModule } from "../../../scripts/entrypoint.mjs";
 import { createRuntimeZip } from "../../../scripts/runtime-package/zip.mjs";
 import {
   readSafeZipArchive,
@@ -412,4 +415,367 @@ it("includes both core versions in the public release-package file boundary", as
       ),
     ).toMatchObject({ name: "core", version });
   }
+});
+
+describe("pack script entrypoints", () => {
+  const packScriptPaths = [
+    "scripts/pack-alpha.mjs",
+    "scripts/runtime-package/pack.mjs",
+  ];
+  const nodeImportEvalScript =
+    "import { pathToFileURL } from 'node:url'; await import(pathToFileURL(process.argv[1]).href);";
+  const nodeProbe = spawnSync(
+    "node",
+    [
+      "-e",
+      "process.stdout.write(JSON.stringify({ version: process.version, typescript: Boolean(process.features?.typescript) }))",
+    ],
+    { encoding: "utf8" },
+  );
+  function nodeTypeStrippingSkipReason(probe: {
+    status: number | null;
+    stdout?: string | Buffer | null;
+  }): string | null {
+    if (probe.status !== 0) {
+      return "Node with default TypeScript stripping is not available on PATH";
+    }
+    try {
+      const info: unknown = JSON.parse(String(probe.stdout ?? ""));
+      if (
+        typeof info === "object" &&
+        info !== null &&
+        "typescript" in info &&
+        info.typescript === true
+      ) {
+        return null;
+      }
+      const version =
+        typeof info === "object" &&
+        info !== null &&
+        "version" in info &&
+        typeof info.version === "string"
+          ? info.version
+          : "unknown";
+      return `Node ${version} on PATH does not enable process.features.typescript by default`;
+    } catch {
+      return "Node capability probe returned unreadable output";
+    }
+  }
+  function stripNodeTypeStrippingWarning(stderr: string): string {
+    let sawTypeStrippingWarning = false;
+    const kept: string[] = [];
+    for (const line of stderr.split(/\r?\n/)) {
+      if (
+        /^\(node:\d+\) ExperimentalWarning: Type Stripping is an experimental feature\b/.test(
+          line,
+        )
+      ) {
+        sawTypeStrippingWarning = true;
+        continue;
+      }
+      if (
+        sawTypeStrippingWarning &&
+        line ===
+          "(Use `node --trace-warnings ...` to show where the warning was created)"
+      ) {
+        continue;
+      }
+      kept.push(line);
+    }
+    return sawTypeStrippingWarning ? kept.join("\n") : stderr;
+  }
+  const nodeSkipReason = nodeTypeStrippingSkipReason(nodeProbe);
+
+  async function tryFileSymlink(
+    target: string,
+    linkPath: string,
+  ): Promise<string | null> {
+    try {
+      await symlink(target, linkPath, "file");
+      return linkPath;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EPERM")
+        return null;
+      throw error;
+    }
+  }
+
+  async function alphaPackFixture(dirty = false): Promise<string> {
+    const root = await directory();
+    for (const rel of [
+      "scripts/pack-alpha.mjs",
+      "scripts/entrypoint.mjs",
+      "packages/schema/src/release-version.ts",
+    ]) {
+      const dest = join(root, rel);
+      await mkdir(join(dest, ".."), { recursive: true });
+      await cp(resolve(rel), dest);
+    }
+    const pkg = JSON.parse(await readFile(resolve("package.json"), "utf8"));
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        type: "module",
+        scripts: { "alpha:pack": pkg.scripts["alpha:pack"] },
+      }) + "\n",
+    );
+    const git = (args: string[]) => {
+      const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+    };
+    git(["init", "-q"]);
+    git(["add", "."]);
+    git([
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-qm",
+      "fixture",
+    ]);
+    if (dirty) {
+      await writeFile(
+        join(root, "package.json"),
+        JSON.stringify({
+          type: "module",
+          scripts: { "alpha:pack": pkg.scripts["alpha:pack"] },
+          dirty: true,
+        }) + "\n",
+      );
+    }
+    return root;
+  }
+
+  it("imports both pack scripts without side effects in Bun", async () => {
+    for (const name of packScriptPaths) {
+      const target = resolve(name);
+      await expect(import(pathToFileURL(target).href)).resolves.toBeDefined();
+    }
+  });
+
+  it("imports both pack scripts without side effects in Node", async () => {
+    if (nodeSkipReason) {
+      // scripts/health-ratchet.mjs enforces a monotonic global skippedTests ceiling,
+      // so skip with an explicit log message instead of a Vitest skip call.
+      console.info(
+        `Skipped Node pack entrypoint import test: ${nodeSkipReason}`,
+      );
+      return;
+    }
+    const dir = await directory();
+    for (const name of packScriptPaths) {
+      const target = resolve(name);
+      const linkPath = await tryFileSymlink(
+        target,
+        join(dir, `link#${name.replace(/[/\\]/g, "-")}`),
+      );
+      for (const entry of linkPath ? [target, linkPath] : [target]) {
+        const result = spawnSync(
+          "node",
+          ["--input-type=module", "-e", nodeImportEvalScript, entry],
+          { encoding: "utf8" },
+        );
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toBe("");
+        expect(stripNodeTypeStrippingWarning(result.stderr)).toBe("");
+      }
+    }
+  });
+
+  it("gates Node subprocess tests on process.features.typescript and filters only type-stripping warnings", () => {
+    expect(nodeTypeStrippingSkipReason({ status: null, stdout: "" })).toMatch(
+      /not available/,
+    );
+    expect(
+      nodeTypeStrippingSkipReason({
+        status: 0,
+        stdout: JSON.stringify({ version: "v20.19.5", typescript: false }),
+      }),
+    ).toMatch(/v20\.19\.5/);
+    expect(
+      nodeTypeStrippingSkipReason({
+        status: 0,
+        stdout: JSON.stringify({ version: "v23.5.0", typescript: false }),
+      }),
+    ).toMatch(/v23\.5\.0/);
+    expect(
+      nodeTypeStrippingSkipReason({
+        status: 0,
+        stdout: JSON.stringify({ version: "v24.2.0", typescript: true }),
+      }),
+    ).toBeNull();
+    expect(stripNodeTypeStrippingWarning("")).toBe("");
+    expect(
+      stripNodeTypeStrippingWarning(
+        "(node:44965) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+      ),
+    ).toBe("");
+    expect(
+      stripNodeTypeStrippingWarning(
+        "(node:44965) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+      ),
+    ).toContain("SQLite");
+    expect(
+      stripNodeTypeStrippingWarning(
+        "(node:44965) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\nunexpected stderr\n",
+      ),
+    ).toBe("unexpected stderr\n");
+  });
+
+  it("evaluates import.meta.main and falls back to realpath equality except under eval/print", async () => {
+    const dir = await directory();
+    const real = resolve("scripts/pack-alpha.mjs");
+    const other = resolve("scripts/runtime-package/pack.mjs");
+    const url = pathToFileURL(real).href;
+    expect(isMainModule({ main: true, url }, other, ["-e", "1"])).toBe(true);
+    expect(isMainModule({ main: false, url }, real, [])).toBe(false);
+    expect(isMainModule({ main: "yes", url }, real, [])).toBe(false);
+    expect(isMainModule({ url }, real, [])).toBe(true);
+    expect(isMainModule({ url }, real, ["--experimental-strip-types"])).toBe(
+      true,
+    );
+    expect(isMainModule({ url }, other, [])).toBe(false);
+    expect(isMainModule({ url }, undefined, [])).toBe(false);
+    expect(isMainModule({ url }, join(dir, "missing.mjs"), [])).toBe(false);
+    for (const evalArgv of [
+      ["-e", "await import(process.argv[1])"],
+      ["--eval", "await import(process.argv[1])"],
+      ["--eval=await import(process.argv[1])"],
+      ["-p", "1"],
+      ["--print", "1"],
+      ["--print=1"],
+      ["-pe", "1"],
+      [
+        "--experimental-strip-types",
+        "--input-type=module",
+        "-e",
+        nodeImportEvalScript,
+      ],
+    ]) {
+      expect(isMainModule({ url }, real, evalArgv), evalArgv.join(" ")).toBe(
+        false,
+      );
+    }
+    const linkPath = await tryFileSymlink(
+      real,
+      join(dir, "pack-alpha-link.mjs"),
+    );
+    if (!linkPath) return;
+    expect(isMainModule({ url }, linkPath, [])).toBe(true);
+    expect(
+      isMainModule({ url }, linkPath, [
+        "--experimental-strip-types",
+        "--input-type=module",
+        "-e",
+        nodeImportEvalScript,
+      ]),
+    ).toBe(false);
+  });
+
+  it("creates the source archive and both sidecars when pack-alpha is invoked with --extra", async () => {
+    const fixtureRoot = await alphaPackFixture(false);
+    const result = spawnSync(
+      process.execPath,
+      [join(fixtureRoot, "scripts/pack-alpha.mjs"), "--extra"],
+      { cwd: fixtureRoot, encoding: "utf8" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    const files = (await readdir(join(fixtureRoot, "alpha-out"))).sort();
+    expect(files).toHaveLength(3);
+    const archive = files.find((file) => file.endsWith(".zip"));
+    expect(archive).toBeDefined();
+    expect(files).toEqual([archive, `${archive}.json`, `${archive}.sha256`]);
+  });
+
+  it("reaches main via direct, bun-run, and symlinked invocation in Bun", async () => {
+    const dir = await directory();
+    const alphaRoot = await alphaPackFixture(true);
+    const alphaTarget = join(alphaRoot, "scripts/pack-alpha.mjs");
+    const alphaLink = await tryFileSymlink(
+      alphaTarget,
+      join(dir, "alpha-pack.mjs"),
+    );
+    const alphaBunRun = spawnSync(process.execPath, ["run", "alpha:pack"], {
+      cwd: alphaRoot,
+      encoding: "utf8",
+    });
+    expect(alphaBunRun.status).not.toBe(0);
+    expect(alphaBunRun.stderr).toMatch(/Commit tracked alpha changes/);
+    for (const entry of alphaLink ? [alphaTarget, alphaLink] : [alphaTarget]) {
+      const result = spawnSync(process.execPath, [entry], {
+        cwd: alphaRoot,
+        encoding: "utf8",
+      });
+      expect(result.status, `bun ${entry}`).not.toBe(0);
+      expect(result.stderr, `bun ${entry}`).toMatch(
+        /Commit tracked alpha changes/,
+      );
+    }
+
+    const packTarget = resolve("scripts/runtime-package/pack.mjs");
+    const packLink = await tryFileSymlink(
+      packTarget,
+      join(dir, "package-pack.mjs"),
+    );
+    const packUsage = /Usage: bun run package:pack \[--preview\]/;
+    const packBunRun = spawnSync(
+      process.execPath,
+      ["run", "package:pack", "--invalid-entrypoint-probe"],
+      { encoding: "utf8" },
+    );
+    expect(packBunRun.status).not.toBe(0);
+    expect(packBunRun.stderr).toMatch(packUsage);
+    for (const entry of packLink ? [packTarget, packLink] : [packTarget]) {
+      const result = spawnSync(
+        process.execPath,
+        [entry, "--invalid-entrypoint-probe"],
+        { encoding: "utf8" },
+      );
+      expect(result.status, `bun ${entry}`).not.toBe(0);
+      expect(result.stderr, `bun ${entry}`).toMatch(packUsage);
+    }
+  });
+
+  it("reaches main via direct and symlinked invocation in Node", async () => {
+    if (nodeSkipReason) {
+      console.info(
+        `Skipped Node pack entrypoint invocation test: ${nodeSkipReason}`,
+      );
+      return;
+    }
+    const dir = await directory();
+    const alphaRoot = await alphaPackFixture(true);
+    const alphaTarget = join(alphaRoot, "scripts/pack-alpha.mjs");
+    const alphaLink = await tryFileSymlink(
+      alphaTarget,
+      join(dir, "alpha-pack-node.mjs"),
+    );
+    for (const entry of alphaLink ? [alphaTarget, alphaLink] : [alphaTarget]) {
+      const result = spawnSync("node", [entry], {
+        cwd: alphaRoot,
+        encoding: "utf8",
+      });
+      expect(result.status, `node ${entry}`).not.toBe(0);
+      expect(result.stderr, `node ${entry}`).toMatch(
+        /Commit tracked alpha changes/,
+      );
+    }
+
+    const packTarget = resolve("scripts/runtime-package/pack.mjs");
+    const packLink = await tryFileSymlink(
+      packTarget,
+      join(dir, "package-pack-node.mjs"),
+    );
+    const packUsage = /Usage: bun run package:pack \[--preview\]/;
+    for (const entry of packLink ? [packTarget, packLink] : [packTarget]) {
+      const result = spawnSync("node", [entry, "--invalid-entrypoint-probe"], {
+        encoding: "utf8",
+      });
+      expect(result.status, `node ${entry}`).not.toBe(0);
+      expect(result.stderr, `node ${entry}`).toMatch(packUsage);
+    }
+  });
 });

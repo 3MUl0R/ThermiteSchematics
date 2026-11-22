@@ -22,6 +22,33 @@ const stat = (path) => lstatSync(path, { bigint: true, throwIfNoEntry: false });
 const fdStat = (fd) => fstatSync(fd, { bigint: true });
 const sameFile = (a, b) =>
   a != null && b != null && a.dev === b.dev && a.ino === b.ino;
+const hasTimestamp = (value) => typeof value === "bigint" && value !== 0n;
+const sameTimestamp = (a, b) => !hasTimestamp(a) || !hasTimestamp(b) || a === b;
+const sameLinkStat = (actual, expected) =>
+  sameFile(actual, expected) &&
+  (expected.type === undefined || actual.type === expected.type) &&
+  sameTimestamp(actual.ctimeNs, expected.ctimeNs) &&
+  sameTimestamp(actual.birthtimeNs, expected.birthtimeNs);
+const targetBytesOf = (value) =>
+  Buffer.isBuffer(value)
+    ? value
+    : typeof value === "string"
+      ? Buffer.from(value, "utf8")
+      : null;
+const hasExpectedTarget = (expected) =>
+  expected?.targetBytes !== undefined || expected?.target !== undefined;
+const sameLinkTarget = (actual, expected) => {
+  if (!hasExpectedTarget(expected)) return true;
+  const expectedBytes =
+    expected.targetBytes !== undefined
+      ? targetBytesOf(expected.targetBytes)
+      : targetBytesOf(expected.target);
+  return (
+    Buffer.isBuffer(actual) &&
+    expectedBytes !== null &&
+    actual.equals(expectedBytes)
+  );
+};
 const errnoName = (number) =>
   Object.entries(osConstants.errno).find(([, value]) => value === number)?.[0];
 function syscallError(syscall, number, path) {
@@ -42,6 +69,15 @@ export const windowsError =
 // Native openat does not apply Node's close-on-exec default.
 const closeOnExec = process.platform === "darwin" ? 0x1000000 : 0x80000;
 const readFlags = O_RDONLY | O_NOFOLLOW | O_NONBLOCK | closeOnExec;
+// Open a directory entry itself without following a final symlink so fstatSync
+// reports the entry's own dev, ino, and type relative to an open directory fd.
+// macOS O_SYMLINK (0x200000) opens symlinks directly (O_NOFOLLOW would reject
+// them); Linux O_PATH (0x200000 on x86_64/arm64) + O_NOFOLLOW opens any entry
+// without following symlinks or blocking on FIFOs.
+const linkStatFlags =
+  process.platform === "darwin"
+    ? O_RDONLY | 0x200000 | O_NONBLOCK | closeOnExec
+    : (constants.O_PATH ?? 0x200000) | O_NOFOLLOW | closeOnExec;
 
 function directoryIdentity(path, expected) {
   const current = stat(path);
@@ -55,8 +91,56 @@ function directoryIdentity(path, expected) {
 
 let libc;
 const darwin = process.platform === "darwin";
-// Intel macOS names the 64-bit-inode directory calls with a suffix.
+// Intel macOS names the 64-bit-inode directory/stat calls with a suffix.
 const inode64 = darwin && process.arch === "x64" ? "$INODE64" : "";
+const AT_SYMLINK_NOFOLLOW = darwin ? 0x20 : 0x100;
+const S_IFMT = 0o170000;
+const S_IFLNK = 0o120000;
+// struct stat offsets for fstatat(AT_SYMLINK_NOFOLLOW):
+// - macOS (arm64 and x64 via fstatat$INODE64): 144 B; st_dev i32 @ 0,
+//   st_mode u16 @ 4, st_ino u64 @ 8, st_ctimespec @ 64, st_birthtimespec @ 80.
+// - Linux x64: 144 B; st_dev u64 @ 0, st_ino u64 @ 8, st_mode u32 @ 24,
+//   st_ctim @ 104 (no birthtime in struct stat).
+// - Linux arm64: 128 B; st_dev u64 @ 0, st_ino u64 @ 8, st_mode u32 @ 16,
+//   st_ctim @ 104 (no birthtime in struct stat).
+const fstatatLayout = darwin
+  ? {
+      size: 144,
+      devOffset: 0,
+      devSize: 4,
+      modeOffset: 4,
+      modeSize: 2,
+      inoOffset: 8,
+      ctimeOffset: 64,
+      birthtimeOffset: 80,
+    }
+  : process.arch === "x64"
+    ? {
+        size: 144,
+        devOffset: 0,
+        devSize: 8,
+        modeOffset: 24,
+        modeSize: 4,
+        inoOffset: 8,
+        ctimeOffset: 104,
+        birthtimeOffset: null,
+      }
+    : process.arch === "arm64"
+      ? {
+          size: 128,
+          devOffset: 0,
+          devSize: 8,
+          modeOffset: 16,
+          modeSize: 4,
+          inoOffset: 8,
+          ctimeOffset: 104,
+          birthtimeOffset: null,
+        }
+      : null;
+const fstatatSymbol = "fstatat" + inode64;
+const statBuffer = fstatatLayout ? new ArrayBuffer(fstatatLayout.size) : null;
+const statBytes = statBuffer ? new Uint8Array(statBuffer) : null;
+const statView = statBuffer ? new DataView(statBuffer) : null;
 function lib() {
   // This read-only openat call does not take its optional creation mode.
   libc ??= dlopen(darwin ? "libSystem.B.dylib" : "libc.so.6", {
@@ -64,6 +148,14 @@ function lib() {
       args: [FFIType.i32, FFIType.ptr, FFIType.i32],
       returns: FFIType.i32,
     },
+    ...(fstatatLayout
+      ? {
+          [fstatatSymbol]: {
+            args: [FFIType.i32, FFIType.ptr, FFIType.ptr, FFIType.i32],
+            returns: FFIType.i32,
+          },
+        }
+      : {}),
     ["fdopendir" + inode64]: { args: [FFIType.i32], returns: FFIType.ptr },
     ["readdir" + inode64]: { args: [FFIType.ptr], returns: FFIType.ptr },
     closedir: { args: [FFIType.ptr], returns: FFIType.i32 },
@@ -182,16 +274,67 @@ function components(rel) {
 }
 
 function readLinkAt(dir, name) {
-  const path = Buffer.from(name + "\0");
+  const path = Buffer.isBuffer(name) ? name : Buffer.from(name + "\0");
   let size = 1024;
   for (;;) {
     const buffer = Buffer.alloc(size);
     const length = Number(lib().readlinkat(dir, path, buffer, buffer.length));
     if (length < 0) return null;
-    if (length < buffer.length)
-      return buffer.subarray(0, length).toString("utf8");
+    if (length < buffer.length) return Buffer.from(buffer.subarray(0, length));
     size *= 2;
     assert(size <= 65536, "Symbolic link target is too long");
+  }
+}
+function readTimespecNs(view, offset) {
+  if (offset == null) return 0n;
+  const sec = view.getBigInt64(offset, true);
+  const nsec = view.getBigInt64(offset + 8, true);
+  if (sec <= 0n && nsec <= 0n) return 0n;
+  return sec * 1_000_000_000n + nsec;
+}
+function statEntryAt(dir, name) {
+  if (fstatatLayout) {
+    const path = Buffer.isBuffer(name) ? name : Buffer.from(name + "\0");
+    if (lib()[fstatatSymbol](dir, path, statBytes, AT_SYMLINK_NOFOLLOW) !== 0)
+      return null;
+    const dev =
+      fstatatLayout.devSize === 4
+        ? BigInt(statView.getInt32(fstatatLayout.devOffset, true))
+        : statView.getBigUint64(fstatatLayout.devOffset, true);
+    const mode =
+      fstatatLayout.modeSize === 2
+        ? statView.getUint16(fstatatLayout.modeOffset, true)
+        : statView.getUint32(fstatatLayout.modeOffset, true);
+    const ino = statView.getBigUint64(fstatatLayout.inoOffset, true);
+    const type = mode & S_IFMT;
+    return {
+      dev,
+      ino,
+      type,
+      ctimeNs: readTimespecNs(statView, fstatatLayout.ctimeOffset),
+      birthtimeNs: readTimespecNs(statView, fstatatLayout.birthtimeOffset),
+      isSymbolicLink: () => type === S_IFLNK,
+    };
+  }
+  const entryName = Buffer.isBuffer(name)
+    ? name.subarray(0, -1).toString("utf8")
+    : name;
+  const { fd } = tryOpen(dir, entryName, linkStatFlags);
+  if (fd < 0) return null;
+  try {
+    const entry = fdStat(fd);
+    const type = Number(entry.mode & BigInt(S_IFMT));
+    return {
+      dev: entry.dev,
+      ino: entry.ino,
+      type,
+      ctimeNs: typeof entry.ctimeNs === "bigint" ? entry.ctimeNs : 0n,
+      birthtimeNs:
+        typeof entry.birthtimeNs === "bigint" ? entry.birthtimeNs : 0n,
+      isSymbolicLink: () => entry.isSymbolicLink(),
+    };
+  } finally {
+    closeSync(fd);
   }
 }
 function statLinkedDirectory(dir, name) {
@@ -353,37 +496,100 @@ export function projectReader(project, expected) {
       },
       symlinkLink(name, target) {
         assert(components(name).length === 1);
-        assert(typeof target === "string" && target && !target.includes("\0"));
+        const targetBytes = Buffer.isBuffer(target)
+          ? Buffer.from(target)
+          : typeof target === "string"
+            ? Buffer.from(target, "utf8")
+            : null;
+        assert(
+          targetBytes !== null &&
+            targetBytes.length > 0 &&
+            !targetBytes.includes(0),
+        );
         directoryIdentity(root, identity);
+        const targetBuf = Buffer.concat([targetBytes, Buffer.from([0])]);
+        const nameBuf = Buffer.from(name + "\0");
         const errno = nativeErrno();
         errno[0] = 0;
-        const created = lib().symlinkat(
-          Buffer.from(target + "\0"),
-          rootFd,
-          Buffer.from(name + "\0"),
-        );
+        const created = lib().symlinkat(targetBuf, rootFd, nameBuf);
         if (created !== 0) throw syscallError("symlinkat", errno[0], name);
+        // Take the identity snapshot via fstatat(AT_SYMLINK_NOFOLLOW) on the
+        // same pinned dirfd right after symlinkat, before any other operation.
+        // Residual accepted POSIX limit: symlinkat returns no fd or inode, so
+        // a concurrent swap in the narrow window between symlinkat and fstatat
+        // cannot be prevented in user space. Verifying the raw link target
+        // bytes and re-checking dev/ino rejects any replacement pointing
+        // elsewhere before claiming ownership, so setup rollback will not
+        // unlink it.
+        const entry = statEntryAt(rootFd, nameBuf);
+        assert(
+          entry?.isSymbolicLink(),
+          "Symbolic link identity could not be verified after creation",
+        );
+        const linkTarget = readLinkAt(rootFd, nameBuf);
+        const confirmed = statEntryAt(rootFd, nameBuf);
+        assert(
+          linkTarget !== null &&
+            linkTarget.equals(targetBytes) &&
+            confirmed?.isSymbolicLink() &&
+            sameLinkStat(confirmed, entry),
+          "Symbolic link changed during creation",
+        );
+        return {
+          dev: entry.dev,
+          ino: entry.ino,
+          type: entry.type,
+          ctimeNs: entry.ctimeNs,
+          birthtimeNs: entry.birthtimeNs,
+          ...(typeof target === "string" ? { target } : {}),
+          targetBytes,
+        };
       },
-      linkedDirectory(name, expectedIdentity) {
+      linkedDirectory(name, expectedIdentity, expectedLinkIdentity) {
         assert(components(name).length === 1);
-        if (readLinkAt(rootFd, name) === null) return false;
+        const nameBuf = Buffer.from(name + "\0");
+        const entry = statEntryAt(rootFd, nameBuf);
+        if (!entry?.isSymbolicLink()) return false;
+        if (expectedLinkIdentity && !sameLinkStat(entry, expectedLinkIdentity))
+          return false;
+        const linkTarget = readLinkAt(rootFd, nameBuf);
+        if (linkTarget === null) return false;
+        if (!sameLinkTarget(linkTarget, expectedLinkIdentity)) return false;
         const actual = statLinkedDirectory(rootFd, name);
         return !!actual && sameFile(actual, expectedIdentity);
       },
-      unlinkLink(name, target, expectedIdentity) {
+      unlinkLink(name, expectedLinkIdentity) {
         assert(components(name).length === 1);
-        const found = readLinkAt(rootFd, name);
-        if (found === null) return;
-        const targetExists = statSync(target, {
-          bigint: true,
-          throwIfNoEntry: false,
-        });
-        const expected = expectedIdentity ?? targetExists;
-        const actual = statLinkedDirectory(rootFd, name);
-        const matches = actual
-          ? sameFile(actual, expected)
-          : !targetExists && found === target;
-        if (matches) lib().unlinkat(rootFd, Buffer.from(name + "\0"), 0);
+        if (!expectedLinkIdentity) return false;
+        const nameBuf = Buffer.from(name + "\0");
+        // Verify the exact raw symlink target bytes via readlinkat, then
+        // immediately re-verify entry type, dev/ino, and nonzero
+        // ctime/birthtime via fstatat(AT_SYMLINK_NOFOLLOW) on the pinned dirfd
+        // right before unlinkat, with no intervening syscalls (only
+        // statEntryAt's small result object and closure).
+        // Ambiguous inode-reuse note: on filesystems that immediately reuse
+        // freed inode numbers (e.g. Linux ext4), a replacement symlink created
+        // in the same timestamp tick with the same dev/ino, entry type,
+        // timestamps, and exact target bytes is indistinguishable in user
+        // space. Unlinking an entry that is byte-for-byte equivalent and
+        // points to the broker's exact target is acceptable because it carries
+        // no distinct target or user content.
+        // Residual accepted POSIX limit: POSIX has no atomic
+        // unlink-by-fd/inode syscall, so a concurrent swap in the narrow
+        // window between readlinkat/fstatat and unlinkat cannot be eliminated
+        // in user space.
+        if (
+          hasExpectedTarget(expectedLinkIdentity) &&
+          !sameLinkTarget(readLinkAt(rootFd, nameBuf), expectedLinkIdentity)
+        )
+          return false;
+        const current = statEntryAt(rootFd, nameBuf);
+        if (
+          !current?.isSymbolicLink() ||
+          !sameLinkStat(current, expectedLinkIdentity)
+        )
+          return false;
+        return lib().unlinkat(rootFd, nameBuf, 0) === 0;
       },
       remove(name) {
         assert(components(name).length === 1);

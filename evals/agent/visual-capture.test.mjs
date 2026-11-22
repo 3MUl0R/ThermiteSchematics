@@ -34,7 +34,13 @@ import { sha256 } from "./snapshot.mjs";
 // - A read race replaces an input after the reader checks its pinned root
 //   and before it opens the descendant.
 const race = vi.hoisted(() => {
-  const state = { pending: null, swapped: false, fired: 0, fds: new Map() };
+  const state = {
+    pending: null,
+    swapped: false,
+    fired: 0,
+    fds: new Map(),
+    lstatOverride: null,
+  };
   const matches = (op, path) =>
     state.pending?.op === op &&
     (typeof state.pending.path === "function"
@@ -88,6 +94,13 @@ vi.mock("node:fs", async (importOriginal) => {
     { native: fs.realpathSync.native },
   );
   const hooked = {
+    lstatSync(path, ...rest) {
+      const entry = fs.lstatSync(path, ...rest);
+      if (entry && race.state.lstatOverride) {
+        return race.state.lstatOverride(String(path), entry, ...rest) ?? entry;
+      }
+      return entry;
+    },
     realpathSync,
     mkdirSync(path, ...rest) {
       const result = fs.mkdirSync(path, ...rest);
@@ -126,6 +139,7 @@ const work = [];
 afterEach(() => {
   race.state.pending = null;
   race.state.closeError = false;
+  race.state.lstatOverride = null;
   vi.restoreAllMocks();
   for (const root of work.splice(0))
     rmSync(root, { recursive: true, force: true });
@@ -276,70 +290,229 @@ const darwinTmpAlias =
   process.platform === "darwin" &&
   !!lstatSync("/tmp", { throwIfNoEntry: false })?.isSymbolicLink() &&
   realpathSync("/tmp") === "/private/tmp";
-const canExpressAlternatePath = process.platform === "win32" || darwinTmpAlias;
 
-if (canExpressAlternatePath) {
-  it("cleans up the sibling link by target identity across alternate path spellings", async () => {
-    const base = darwinTmpAlias ? "/private/tmp" : tmpdir();
-    const { project, evidence, outside, link: linkPath } = fixture(red, base);
-    const outputs = join(evidence, "visual-captures");
-    const alternateSpelling = (canonicalPath) => {
-      if (process.platform === "win32") {
-        const parent = dirname(canonicalPath);
-        const dirName = basename(parent);
-        const toggled =
-          dirName === dirName.toUpperCase()
-            ? dirName.toLowerCase()
-            : dirName.toUpperCase();
-        return join(dirname(parent), toggled, basename(canonicalPath));
-      }
-      return canonicalPath.replace(/^\/private\/tmp(?=\/)/, "/tmp");
-    };
+function caseToggledOutputs(canonicalPath) {
+  const parent = dirname(canonicalPath);
+  const dirName = basename(parent);
+  const toggled =
+    dirName === dirName.toUpperCase()
+      ? dirName.toLowerCase()
+      : dirName.toUpperCase();
+  return join(dirname(parent), toggled, basename(canonicalPath));
+}
 
-    // Windows fallback path (native on Windows, simulated via asWindows on macOS).
-    await asWindows(async () => {
-      const stop = await visualBroker(
-        { visualCapture: true },
-        project,
-        evidence,
-      );
-      try {
-        const altOutputs = alternateSpelling(outputs);
-        expect(altOutputs).not.toBe(outputs);
-        expect(statSync(altOutputs, { bigint: true }).ino).toBe(
-          statSync(outputs, { bigint: true }).ino,
-        );
+function sameEntry(a, b) {
+  return a != null && b != null && a.dev === b.dev && a.ino === b.ino;
+}
+
+it("only unlinks the exact link identity it created during Windows fallback and POSIX cleanup", async () => {
+  const base = darwinTmpAlias ? "/private/tmp" : tmpdir();
+  const {
+    workspace,
+    project,
+    evidence,
+    outside,
+    sentinel,
+    link: linkPath,
+  } = fixture(red, base);
+  const outputs = join(evidence, "visual-captures");
+
+  // 1. Simulated Windows: replacing the broker's link with a new link pointing
+  //    to the same outputs directory via an alternate target path must leave
+  //    the replacement alone, even if the filesystem reuses the freed inode.
+  //    (Fails on pre-E2LINK 5dab585c and target-identity-only cleanup.)
+  const outputsAlias = join(dirname(evidence), "outputs-alias");
+  await asWindows(async () => {
+    const stop = await visualBroker({ visualCapture: true }, project, evidence);
+    let replacementStat;
+    let replacementTarget;
+    try {
+      const originalTarget = readlinkSync(linkPath);
+      link(outputs, outputsAlias);
+      unlinkSync(linkPath);
+      link(outputsAlias, linkPath);
+      replacementTarget = readlinkSync(linkPath);
+      replacementStat = lstatSync(linkPath, { bigint: true });
+      expect(replacementTarget).not.toBe(originalTarget);
+      expect(
+        sameEntry(
+          statSync(linkPath, { bigint: true }),
+          statSync(outputs, { bigint: true }),
+        ),
+      ).toBe(true);
+    } finally {
+      await stop();
+    }
+    const after = lstatSync(linkPath, {
+      bigint: true,
+      throwIfNoEntry: false,
+    });
+    expect(after?.isSymbolicLink()).toBe(true);
+    expect(sameEntry(after, replacementStat)).toBe(true);
+    expect(readlinkSync(linkPath)).toBe(replacementTarget);
+    unlinkSync(linkPath);
+    unlinkSync(outputsAlias);
+  });
+
+  // 2. Simulated Windows: case-toggled alternate spelling replacement must also
+  //    be left untouched. Skip cleanly on case-sensitive volumes where the
+  //    toggled spelling does not resolve to the same directory.
+  const evidenceCase = join(dirname(evidence), "evidence-case");
+  mkdirSync(evidenceCase);
+  const caseOutputs = join(evidenceCase, "visual-captures");
+  await asWindows(async () => {
+    const stop = await visualBroker(
+      { visualCapture: true },
+      project,
+      evidenceCase,
+    );
+    const altOutputs = caseToggledOutputs(caseOutputs);
+    const outputsStat = statSync(caseOutputs, { bigint: true });
+    const altStat = statSync(altOutputs, {
+      bigint: true,
+      throwIfNoEntry: false,
+    });
+    const caseInsensitiveVolume =
+      altOutputs !== caseOutputs && sameEntry(altStat, outputsStat);
+    let replacementStat = null;
+    try {
+      if (caseInsensitiveVolume) {
         unlinkSync(linkPath);
         link(altOutputs, linkPath);
-        expect(resolve(readlinkSync(linkPath))).not.toBe(resolve(outputs));
-      } finally {
-        await stop();
+        expect(resolve(readlinkSync(linkPath))).not.toBe(resolve(caseOutputs));
+        replacementStat = lstatSync(linkPath, { bigint: true });
       }
+    } finally {
+      await stop();
+    }
+    if (caseInsensitiveVolume) {
+      const after = lstatSync(linkPath, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      expect(after?.isSymbolicLink()).toBe(true);
+      expect(sameEntry(after, replacementStat)).toBe(true);
+      unlinkSync(linkPath);
+    } else {
       expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
-    });
+    }
+  });
 
-    // Negative control: a link repointed to a different directory is left alone.
-    const evidenceOther = join(dirname(evidence), "evidence-other");
-    mkdirSync(evidenceOther);
+  // 3. Simulated Windows: replacing the link with a link to another directory
+  //    or with a regular file must leave the replacement untouched.
+  for (const kind of ["other-link", "regular-file"]) {
+    const evidenceReplacement = join(dirname(evidence), `evidence-${kind}`);
+    mkdirSync(evidenceReplacement);
     await asWindows(async () => {
       const stop = await visualBroker(
         { visualCapture: true },
         project,
-        evidenceOther,
+        evidenceReplacement,
       );
       try {
         unlinkSync(linkPath);
-        link(outside, linkPath);
+        if (kind === "other-link") link(outside, linkPath);
+        else writeFileSync(linkPath, "keep-regular-file");
       } finally {
         await stop();
       }
-      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      const after = lstatSync(linkPath, { throwIfNoEntry: false });
+      if (kind === "other-link") {
+        expect(after?.isSymbolicLink()).toBe(true);
+      } else {
+        expect(after?.isFile()).toBe(true);
+        expect(readFileSync(linkPath, "utf8")).toBe("keep-regular-file");
+      }
       unlinkSync(linkPath);
     });
+  }
 
-    // POSIX descriptor-relative cleanup also matches target identity across /tmp vs /private/tmp.
-    if (process.platform !== "win32") {
-      const evidencePosix = join(dirname(evidence), "evidence-posix");
+  // 4. Simulated Windows: swapping the workspace parent before cleanup must
+  //    leave the replacement workspace's entry untouched. (Fails on 5dab585c,
+  //    which follows the replaced workspace path and unlinks outside.)
+  const evidenceSwap = join(dirname(evidence), "evidence-swap");
+  mkdirSync(evidenceSwap);
+  await asWindows(async () => {
+    const stop = await visualBroker(
+      { visualCapture: true },
+      project,
+      evidenceSwap,
+    );
+    const original = workspace + "-original";
+    const replacementLink = join(outside, "visual-captures");
+    try {
+      renameSync(workspace, original);
+      link(outside, workspace);
+      link(join(evidenceSwap, "visual-captures"), replacementLink);
+    } finally {
+      await stop();
+      unlinkSync(workspace);
+      renameSync(original, workspace);
+    }
+    expect(lstatSync(replacementLink).isSymbolicLink()).toBe(true);
+    unlinkSync(replacementLink);
+    // The original link remained inside the moved-aside workspace because
+    // Windows has no open directory descriptor to unlink relative to.
+    expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    unlinkSync(linkPath);
+  });
+
+  // 5. Simulated Windows: a mid-setup parent swap after evidence creation must
+  //    be caught before junction creation so nothing is linked in `outside`.
+  const evidenceMidSwap = join(dirname(evidence), "evidence-mid-swap");
+  mkdirSync(evidenceMidSwap);
+  const midSwapOutputs = join(evidenceMidSwap, "visual-captures");
+  await asWindows(async () => {
+    const original = workspace + "-original";
+    race.arm("mkdir", midSwapOutputs, () => {
+      mkdirSync(join(outside, "project"));
+      renameSync(workspace, original);
+      link(outside, workspace);
+    });
+    try {
+      await expect(
+        visualBroker({ visualCapture: true }, project, evidenceMidSwap),
+      ).rejects.toThrow(/changed during setup/i);
+      expect(race.state.fired).toBe(1);
+      expect(
+        lstatSync(join(outside, "visual-captures"), { throwIfNoEntry: false }),
+      ).toBeUndefined();
+      expect(
+        lstatSync(join(original, "visual-captures"), { throwIfNoEntry: false }),
+      ).toBeUndefined();
+      expect(
+        lstatSync(midSwapOutputs, { throwIfNoEntry: false }),
+      ).toBeUndefined();
+    } finally {
+      unlinkSync(workspace);
+      renameSync(original, workspace);
+      rmSync(join(outside, "project"), { recursive: true, force: true });
+    }
+  });
+
+  // 6. POSIX descriptor-relative cleanup verifies entry type, dev/ino,
+  //    timestamps, and exact readlinkat target text, leaving replaced symlinks
+  //    (alternate path spelling, /tmp alias, or different target), regular
+  //    files, and hard links untouched even under Linux inode reuse.
+  if (process.platform !== "win32") {
+    const posixAlias = join(dirname(evidence), "outputs-alias-posix");
+    const posixCases = [
+      [
+        "alias-target",
+        (out) => {
+          link(out, posixAlias);
+          return posixAlias;
+        },
+      ],
+      ["different-target", () => outside],
+      ...(darwinTmpAlias
+        ? [["tmp-alias", (out) => out.replace(/^\/private\/tmp(?=\/)/, "/tmp")]]
+        : []),
+      ["regular-file", null],
+      ["hard-link", "hard-link"],
+    ];
+    for (const [label, targetFor] of posixCases) {
+      const evidencePosix = join(dirname(evidence), `evidence-posix-${label}`);
       mkdirSync(evidencePosix);
       const posixOutputs = join(evidencePosix, "visual-captures");
       const stop = await visualBroker(
@@ -347,19 +520,250 @@ if (canExpressAlternatePath) {
         project,
         evidencePosix,
       );
+      let replacementStat;
+      let replacementTarget = null;
       try {
-        const altOutputs = alternateSpelling(posixOutputs);
-        expect(altOutputs).not.toBe(posixOutputs);
         unlinkSync(linkPath);
-        link(altOutputs, linkPath);
-        expect(resolve(readlinkSync(linkPath))).not.toBe(resolve(posixOutputs));
+        if (typeof targetFor === "function") {
+          replacementTarget = targetFor(posixOutputs);
+          expect(replacementTarget).not.toBe(posixOutputs);
+          link(replacementTarget, linkPath);
+        } else if (targetFor === "hard-link") {
+          linkSync(sentinel, linkPath);
+        } else {
+          writeFileSync(linkPath, "keep-posix-file");
+        }
+        replacementStat = lstatSync(linkPath, { bigint: true });
       } finally {
         await stop();
       }
-      expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+      const after = lstatSync(linkPath, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      if (typeof targetFor === "function") {
+        expect(after?.isSymbolicLink()).toBe(true);
+        expect(sameEntry(after, replacementStat)).toBe(true);
+        expect(readlinkSync(linkPath)).toBe(replacementTarget);
+      } else if (targetFor === "hard-link") {
+        expect(after?.isFile()).toBe(true);
+        expect(sameEntry(after, replacementStat)).toBe(true);
+        expect(readFileSync(linkPath, "utf8")).toBe("untouched");
+        expect(readFileSync(sentinel, "utf8")).toBe("untouched");
+      } else {
+        expect(after?.isFile()).toBe(true);
+        expect(readFileSync(linkPath, "utf8")).toBe("keep-posix-file");
+      }
+      unlinkSync(linkPath);
+      if (label === "alias-target") unlinkSync(posixAlias);
     }
+  }
+});
+
+it("detects symlink replacements whose distinct invalid-UTF-8 targets decode to the same string", async () => {
+  if (process.platform !== "darwin" && process.platform !== "linux") {
+    // scripts/health-ratchet.mjs enforces a monotonic global skippedTests ceiling,
+    // so skip with an explicit log message instead of a Vitest skip call.
+    console.info(
+      `Skipped raw-byte symlink target test on ${process.platform}: distinct invalid-UTF-8 symlink target byte sequences are a POSIX filename-bytes property (Windows reparse targets are UTF-16).`,
+    );
+    return;
+  }
+  const { workspace, project, evidence, link: linkPath } = fixture();
+  const root = dirname(evidence);
+  const outputs = join(evidence, "visual-captures");
+  mkdirSync(outputs);
+  const outputsIdentity = statSync(outputs, { bigint: true });
+  const prefix = Buffer.from(join(root, "target-"), "utf8");
+  const invalidFirst = Buffer.concat([prefix, Buffer.from([0xfe])]);
+  const invalidSecond = Buffer.concat([prefix, Buffer.from([0xff])]);
+  expect(invalidFirst.equals(invalidSecond)).toBe(false);
+  expect(invalidFirst.toString("utf8")).toBe(invalidSecond.toString("utf8"));
+
+  const workSource = projectReader(workspace);
+  try {
+    // 1. Two distinct invalid-UTF-8 target byte sequences that decode to the
+    //    same UTF-8 string must be distinguished by capture-files.mjs even if
+    //    dev/ino and timestamps match (simulated inode reuse).
+    const rawSnapshot = workSource.symlinkLink("visual-captures", invalidFirst);
+    expect(rawSnapshot.targetBytes.equals(invalidFirst)).toBe(true);
+    unlinkSync(linkPath);
+    symlinkSync(invalidSecond, linkPath);
+    const secondStat = lstatSync(linkPath, { bigint: true });
+    const reusedRawSnapshot = {
+      dev: secondStat.dev,
+      ino: secondStat.ino,
+      type: Number(secondStat.mode & 0o170000n),
+      ctimeNs: secondStat.ctimeNs,
+      birthtimeNs: secondStat.birthtimeNs,
+      targetBytes: rawSnapshot.targetBytes,
+    };
+    expect(
+      workSource.linkedDirectory(
+        "visual-captures",
+        outputsIdentity,
+        reusedRawSnapshot,
+      ),
+    ).toBe(false);
+    expect(workSource.unlinkLink("visual-captures", reusedRawSnapshot)).toBe(
+      false,
+    );
+    expect(
+      readlinkSync(linkPath, { encoding: "buffer" }).equals(invalidSecond),
+    ).toBe(true);
+    expect(
+      workSource.unlinkLink("visual-captures", {
+        ...reusedRawSnapshot,
+        targetBytes: invalidSecond,
+      }),
+    ).toBe(true);
+    expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+
+    // 2. Broker-created UTF-8 target containing U+FFFD (\xef\xbf\xbd) vs a
+    //    replacement symlink with invalid byte \xff decoding to the same string.
+    const utf8Evidence = join(root, "evidence-\ufffd");
+    mkdirSync(utf8Evidence);
+    const utf8Outputs = join(utf8Evidence, "visual-captures");
+    mkdirSync(utf8Outputs);
+    const utf8OutputsIdentity = statSync(utf8Outputs, { bigint: true });
+    const utf8Snapshot = workSource.symlinkLink("visual-captures", utf8Outputs);
+    const invalidReplacement = Buffer.concat([
+      Buffer.from(join(root, "evidence-"), "utf8"),
+      Buffer.from([0xff]),
+      Buffer.from("/visual-captures", "utf8"),
+    ]);
+    expect(utf8Snapshot.targetBytes.equals(invalidReplacement)).toBe(false);
+    expect(utf8Snapshot.targetBytes.toString("utf8")).toBe(
+      invalidReplacement.toString("utf8"),
+    );
+    unlinkSync(linkPath);
+    symlinkSync(invalidReplacement, linkPath);
+    const utf8ReplacementStat = lstatSync(linkPath, { bigint: true });
+    const reusedUtf8Snapshot = {
+      dev: utf8ReplacementStat.dev,
+      ino: utf8ReplacementStat.ino,
+      type: Number(utf8ReplacementStat.mode & 0o170000n),
+      ctimeNs: utf8ReplacementStat.ctimeNs,
+      birthtimeNs: utf8ReplacementStat.birthtimeNs,
+      targetBytes: utf8Snapshot.targetBytes,
+    };
+    expect(
+      workSource.linkedDirectory(
+        "visual-captures",
+        utf8OutputsIdentity,
+        reusedUtf8Snapshot,
+      ),
+    ).toBe(false);
+    expect(workSource.unlinkLink("visual-captures", reusedUtf8Snapshot)).toBe(
+      false,
+    );
+    expect(
+      readlinkSync(linkPath, { encoding: "buffer" }).equals(invalidReplacement),
+    ).toBe(true);
+    unlinkSync(linkPath);
+  } finally {
+    workSource.close();
+  }
+
+  // 3. visual-capture.mjs Windows fallback also compares raw readlink bytes,
+  //    leaving a replacement whose invalid-UTF-8 bytes decode to the same
+  //    string untouched even when stat identity and timestamps match.
+  const fallbackEvidence = join(root, "fallback-\ufffd");
+  mkdirSync(fallbackEvidence);
+  const fallbackInvalid = Buffer.concat([
+    Buffer.from(join(root, "fallback-"), "utf8"),
+    Buffer.from([0xff]),
+    Buffer.from("/visual-captures", "utf8"),
+  ]);
+  const pinnedStat = {
+    dev: 42n,
+    ino: 4242n,
+    ctimeNs: 1_000_000_000n,
+    birthtimeNs: 1_000_000_000n,
+  };
+  race.state.lstatOverride = (path, entry) => {
+    if (path === linkPath && typeof entry.ino === "bigint")
+      return Object.assign(entry, pinnedStat);
+  };
+  await asWindows(async () => {
+    const stop = await visualBroker(
+      { visualCapture: true },
+      project,
+      fallbackEvidence,
+    );
+    try {
+      const createdBytes = readlinkSync(linkPath, { encoding: "buffer" });
+      expect(createdBytes.equals(fallbackInvalid)).toBe(false);
+      expect(createdBytes.toString("utf8")).toBe(
+        fallbackInvalid.toString("utf8"),
+      );
+      unlinkSync(linkPath);
+      symlinkSync(fallbackInvalid, linkPath);
+    } finally {
+      await stop();
+    }
+    expect(
+      readlinkSync(linkPath, { encoding: "buffer" }).equals(fallbackInvalid),
+    ).toBe(true);
+    unlinkSync(linkPath);
   });
-}
+});
+
+it("compares available nonzero timestamps in the Windows fallback when file IDs are zero", async () => {
+  const { project, evidence, link: linkPath } = fixture();
+  const root = dirname(evidence);
+  const cases = [
+    {
+      label: "ctime-diff",
+      initial: { ctimeNs: 1_000_000_000n, birthtimeNs: 0n },
+      after: { ctimeNs: 1_000_000_001n, birthtimeNs: 0n },
+      expectUnlinked: false,
+    },
+    {
+      label: "birthtime-diff",
+      initial: { ctimeNs: 0n, birthtimeNs: 2_000_000_000n },
+      after: { ctimeNs: 0n, birthtimeNs: 2_000_000_001n },
+      expectUnlinked: false,
+    },
+    {
+      label: "timestamps-match",
+      initial: { ctimeNs: 3_000_000_000n, birthtimeNs: 3_000_000_000n },
+      after: { ctimeNs: 3_000_000_000n, birthtimeNs: 3_000_000_000n },
+      expectUnlinked: true,
+    },
+  ];
+  for (const { label, initial, after, expectUnlinked } of cases) {
+    const caseEvidence = join(root, `evidence-zero-id-${label}`);
+    mkdirSync(caseEvidence);
+    let currentTimes = initial;
+    race.state.lstatOverride = (path, entry) => {
+      if (path === linkPath && typeof entry.ino === "bigint") {
+        return Object.assign(entry, {
+          dev: 0n,
+          ino: 0n,
+          ctimeNs: currentTimes.ctimeNs,
+          birthtimeNs: currentTimes.birthtimeNs,
+        });
+      }
+    };
+    await asWindows(async () => {
+      const stop = await visualBroker(
+        { visualCapture: true },
+        project,
+        caseEvidence,
+      );
+      currentTimes = after;
+      await stop();
+      const remaining = lstatSync(linkPath, { throwIfNoEntry: false });
+      if (expectUnlinked) {
+        expect(remaining).toBeUndefined();
+      } else {
+        expect(remaining?.isSymbolicLink()).toBe(true);
+        unlinkSync(linkPath);
+      }
+    });
+  }
+});
 
 // The remaining cases exercise capture itself, which Windows refuses.
 if (process.platform !== "win32") {
@@ -651,6 +1055,11 @@ if (process.platform !== "win32") {
     stubScreenshot();
     const workSource = projectReader(workspace);
     const projectSource = projectReader(project);
+    const symlinkSpy = vi.spyOn(workSource, "symlinkLink");
+    const unlinkSpy = vi.spyOn(workSource, "unlinkLink");
+    const workCloseSpy = vi.spyOn(workSource, "close");
+    const projectReadSpy = vi.spyOn(projectSource, "read");
+    const projectCloseSpy = vi.spyOn(projectSource, "close");
     try {
       const stop = await visualBroker(
         { visualCapture: true },
@@ -660,15 +1069,20 @@ if (process.platform !== "win32") {
         { workspace: workSource, project: projectSource },
       );
       try {
+        expect(symlinkSpy).toHaveBeenCalledTimes(1);
         expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
         request(project, { html: ["index.html"] });
         const receipt = await readReceipt(join(linkPath, "result.json"));
         expect(receipt.files[0].sha256).toBe(sha256("synthetic PNG bytes"));
+        expect(projectReadSpy).toHaveBeenCalledWith("index.html");
       } finally {
         await stop();
       }
+      expect(unlinkSpy).toHaveBeenCalledTimes(1);
       expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
       // Caller-owned pins remain open for post-agent staging and cleanup.
+      expect(workCloseSpy).not.toHaveBeenCalled();
+      expect(projectCloseSpy).not.toHaveBeenCalled();
       expect(workSource.intact()).toBe(true);
       expect(projectSource.intact()).toBe(true);
       expect(projectSource.has("index.html")).toBe(true);
@@ -718,6 +1132,187 @@ if (process.platform !== "win32") {
       await stop();
     }
     expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+  });
+
+  it("preserves a replacement symlink during POSIX setup rollback", async () => {
+    const { workspace, project, evidence, outside, link: linkPath } = fixture();
+    const outputs = join(evidence, "visual-captures");
+    const workSource = projectReader(workspace);
+    const projectSource = projectReader(project);
+    try {
+      const realSymlinkLink = workSource.symlinkLink.bind(workSource);
+      let replacementStat;
+      vi.spyOn(workSource, "symlinkLink").mockImplementation((name, target) => {
+        const snapshot = realSymlinkLink(name, target);
+        const created = lstatSync(linkPath, { bigint: true });
+        expect(sameEntry(snapshot, created)).toBe(true);
+        expect(snapshot.target).toBe(outputs);
+        unlinkSync(linkPath);
+        link(outside, linkPath);
+        replacementStat = lstatSync(linkPath, { bigint: true });
+        expect(readlinkSync(linkPath)).toBe(outside);
+        expect(readlinkSync(linkPath)).not.toBe(snapshot.target);
+        return snapshot;
+      });
+      await expect(
+        visualBroker({ visualCapture: true }, project, evidence, undefined, {
+          workspace: workSource,
+          project: projectSource,
+        }),
+      ).rejects.toThrow(/target changed during setup/i);
+      expect(lstatSync(outputs, { throwIfNoEntry: false })).toBeUndefined();
+      const after = lstatSync(linkPath, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      expect(after?.isSymbolicLink()).toBe(true);
+      expect(sameEntry(after, replacementStat)).toBe(true);
+      expect(readlinkSync(linkPath)).toBe(outside);
+    } finally {
+      projectSource.close();
+      workSource.close();
+    }
+  });
+
+  it("detects an inode-reusing replacement with the same dev/ino and different target", async () => {
+    const { workspace, project, evidence, outside, link: linkPath } = fixture();
+    const outputs = join(evidence, "visual-captures");
+    mkdirSync(outputs);
+    const outputsIdentity = statSync(outputs, { bigint: true });
+    const outputsAlias = join(dirname(evidence), "outputs-alias-reuse");
+    link(outputs, outputsAlias);
+    const workSource = projectReader(workspace);
+    const projectSource = projectReader(project);
+    try {
+      // Verify symlinkLink snapshots dev/ino, type, timestamps, and target bytes.
+      const snapshot = workSource.symlinkLink("visual-captures", outputs);
+      const created = lstatSync(linkPath, { bigint: true });
+      expect(sameEntry(snapshot, created)).toBe(true);
+      expect(snapshot.type).toBe(Number(created.mode & 0o170000n));
+      expect(snapshot.target).toBe(outputs);
+      expect(snapshot.targetBytes.equals(Buffer.from(outputs, "utf8"))).toBe(
+        true,
+      );
+      expect(created.ctimeNs).toBeGreaterThan(0n);
+      expect(snapshot.ctimeNs).toBe(created.ctimeNs);
+      if (process.platform === "darwin") {
+        // macOS struct stat provides st_birthtimespec; assert unconditionally
+        // so a wrong or null birthtimeOffset fails rather than skipping.
+        expect(created.birthtimeNs).toBeGreaterThan(0n);
+        expect(snapshot.birthtimeNs).toBe(created.birthtimeNs);
+      } else if (process.arch === "x64" || process.arch === "arm64") {
+        expect(snapshot.birthtimeNs).toBe(0n);
+      }
+
+      // A timestamp mismatch on the same dev/ino/target is refused.
+      const shiftedCtime = { ...snapshot, ctimeNs: snapshot.ctimeNs + 1n };
+      expect(
+        workSource.linkedDirectory(
+          "visual-captures",
+          outputsIdentity,
+          shiftedCtime,
+        ),
+      ).toBe(false);
+      expect(workSource.unlinkLink("visual-captures", shiftedCtime)).toBe(
+        false,
+      );
+      if (process.platform === "darwin" || snapshot.birthtimeNs > 0n) {
+        const shiftedBirth = {
+          ...snapshot,
+          birthtimeNs: snapshot.birthtimeNs + 1n,
+        };
+        expect(workSource.unlinkLink("visual-captures", shiftedBirth)).toBe(
+          false,
+        );
+      }
+      expect(workSource.unlinkLink("visual-captures", snapshot)).toBe(true);
+      expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+
+      // Simulate ext4 reusing the exact dev/ino and timestamps for a symlink
+      // pointing elsewhere (`outside`) and for an alias resolving to `outputs`.
+      for (const replacementTarget of [outside, outputsAlias]) {
+        link(replacementTarget, linkPath);
+        const replacement = lstatSync(linkPath, { bigint: true });
+        const reusedInodeSnapshot = {
+          dev: replacement.dev,
+          ino: replacement.ino,
+          type: Number(replacement.mode & 0o170000n),
+          ctimeNs: replacement.ctimeNs,
+          birthtimeNs: replacement.birthtimeNs,
+          target: outputs,
+        };
+        expect(
+          workSource.linkedDirectory(
+            "visual-captures",
+            outputsIdentity,
+            reusedInodeSnapshot,
+          ),
+        ).toBe(false);
+        expect(
+          workSource.unlinkLink("visual-captures", reusedInodeSnapshot),
+        ).toBe(false);
+        const after = lstatSync(linkPath, {
+          bigint: true,
+          throwIfNoEntry: false,
+        });
+        expect(after?.isSymbolicLink()).toBe(true);
+        expect(sameEntry(after, replacement)).toBe(true);
+        expect(readlinkSync(linkPath)).toBe(replacementTarget);
+        // Proves only the target mismatch caused refusal above: matching target
+        // on the same stat snapshot is accepted and unlinked.
+        expect(
+          workSource.unlinkLink("visual-captures", {
+            ...reusedInodeSnapshot,
+            target: replacementTarget,
+          }),
+        ).toBe(true);
+        expect(lstatSync(linkPath, { throwIfNoEntry: false })).toBeUndefined();
+      }
+
+      // End-to-end setup rollback under simulated inode + timestamp reuse:
+      // the broker must reject setup and leave the replacement link intact.
+      const evidenceRollback = join(dirname(evidence), "evidence-reuse-rb");
+      mkdirSync(evidenceRollback);
+      const rollbackOutputs = join(evidenceRollback, "visual-captures");
+      const realSymlinkLink = workSource.symlinkLink.bind(workSource);
+      let replacementStat;
+      vi.spyOn(workSource, "symlinkLink").mockImplementation((name, target) => {
+        realSymlinkLink(name, target);
+        unlinkSync(linkPath);
+        link(outside, linkPath);
+        replacementStat = lstatSync(linkPath, { bigint: true });
+        return {
+          dev: replacementStat.dev,
+          ino: replacementStat.ino,
+          type: Number(replacementStat.mode & 0o170000n),
+          ctimeNs: replacementStat.ctimeNs,
+          birthtimeNs: replacementStat.birthtimeNs,
+          target,
+        };
+      });
+      await expect(
+        visualBroker(
+          { visualCapture: true },
+          project,
+          evidenceRollback,
+          undefined,
+          { workspace: workSource, project: projectSource },
+        ),
+      ).rejects.toThrow(/target changed during setup/i);
+      expect(
+        lstatSync(rollbackOutputs, { throwIfNoEntry: false }),
+      ).toBeUndefined();
+      const afterRollback = lstatSync(linkPath, {
+        bigint: true,
+        throwIfNoEntry: false,
+      });
+      expect(afterRollback?.isSymbolicLink()).toBe(true);
+      expect(sameEntry(afterRollback, replacementStat)).toBe(true);
+      expect(readlinkSync(linkPath)).toBe(outside);
+    } finally {
+      projectSource.close();
+      workSource.close();
+    }
   });
 
   // M1: the receipt is written only after every PNG matches it.
