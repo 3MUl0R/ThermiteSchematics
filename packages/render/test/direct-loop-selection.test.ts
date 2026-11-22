@@ -38,7 +38,7 @@ it("selects the unique longest vertical segment among two equal shorter segments
     new Map([["wire", [{ text: "W1", width: 6, height: 4 }]]]),
   );
   expect(graph.edges?.[0]?.labels).toEqual([
-    { text: "W1", width: 6, height: 4, x: 7, y: 14 },
+    { text: "W1", width: 6, height: 4, x: 10.5, y: 14 },
   ]);
   expect(edge.sections).toEqual(routes);
 });

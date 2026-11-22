@@ -132,7 +132,7 @@ export function checkLabels(graph: ElkNode) {
     )
       throw new Collision("Signal loop labels overlap other drawing content.");
     for (const edge of graph.edges ?? []) {
-      if (edge.id === label.edge) continue;
+      const own = edge.id === label.edge;
       for (const section of edge.sections ?? []) {
         const points = [
           section.startPoint,
@@ -142,16 +142,19 @@ export function checkLabels(graph: ElkNode) {
         for (let i = 1; i < points.length; i++) {
           const a = points[i - 1]!,
             b = points[i]!;
+          if (own && Math.abs(a.x - b.x) >= 1e-6) continue;
           if (
             overlap(label, {
-              x: Math.min(a.x, b.x),
-              y: Math.min(a.y, b.y),
-              width: Math.abs(a.x - b.x),
-              height: Math.abs(a.y - b.y),
+              x: Math.min(a.x, b.x) - (own ? 0.2 : 0),
+              y: Math.min(a.y, b.y) - (own ? 0.2 : 0),
+              width: Math.abs(a.x - b.x) + (own ? 0.4 : 0),
+              height: Math.abs(a.y - b.y) + (own ? 0.4 : 0),
             })
           )
             throw new Collision(
-              "A signal loop label conceals another conductor.",
+              own
+                ? "A signal loop label interrupts its vertical conductor."
+                : "A signal loop label conceals another conductor.",
             );
         }
       }

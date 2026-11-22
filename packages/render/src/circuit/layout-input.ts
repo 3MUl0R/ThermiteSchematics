@@ -103,6 +103,60 @@ export function circuitGraphEdge(
   };
 }
 
+function nestedSameSideSelfLoopGaps(
+  children: readonly ElkNode[],
+  edges: readonly ElkExtendedEdge[],
+  selfLoops: ReadonlySet<number>,
+) {
+  const gaps = new Map<string, number>();
+  if (selfLoops.size < 2) return gaps;
+  const ports = new Map<string, { nodeId: string; side: string; x: number }>();
+  for (const child of children)
+    for (const port of child.ports ?? [])
+      ports.set(port.id, {
+        nodeId: child.id,
+        side: port.layoutOptions?.["elk.port.side"] ?? "",
+        x: port.x ?? 0,
+      });
+  const loops = edges
+    .filter((_, i) => selfLoops.has(i))
+    .flatMap((edge) => {
+      const a = ports.get(edge.sources[0] ?? ""),
+        b = ports.get(edge.targets[0] ?? "");
+      if (
+        !a ||
+        !b ||
+        a.nodeId !== b.nodeId ||
+        a.side !== b.side ||
+        (a.side !== "NORTH" && a.side !== "SOUTH")
+      )
+        return [];
+      const lo = Math.min(a.x, b.x),
+        hi = Math.max(a.x, b.x);
+      return [{ edge, nodeId: a.nodeId, side: a.side, lo, hi, span: hi - lo }];
+    });
+  for (const loop of loops) {
+    if (
+      !loops.some(
+        (o) =>
+          o !== loop &&
+          o.nodeId === loop.nodeId &&
+          o.side === loop.side &&
+          o.lo < loop.hi &&
+          loop.lo < o.hi,
+      )
+    )
+      continue;
+    for (const label of loop.edge.labels ?? []) {
+      const w = label.width ?? 0,
+        h = label.height ?? 0;
+      if (loop.span < w + 2 * Math.max(2, h))
+        gaps.set(loop.nodeId, Math.max(gaps.get(loop.nodeId) ?? 3, h + 2.2));
+    }
+  }
+  return gaps;
+}
+
 export function circuitGraphInput(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
@@ -110,6 +164,23 @@ export function circuitGraphInput(
   vertical: boolean,
   conductors: readonly PhysicalConductor[],
 ) {
+  const nestedSelfLoopGaps = vertical
+    ? nestedSameSideSelfLoopGaps(children, edges, selfLoops)
+    : new Map<string, number>();
+  const spacedChildren = nestedSelfLoopGaps.size
+    ? children.map((child) => {
+        const gap = nestedSelfLoopGaps.get(child.id);
+        return gap !== undefined
+          ? {
+              ...child,
+              layoutOptions: {
+                ...child.layoutOptions,
+                "elk.spacing.individual": `spacing.edgeEdge:${gap}`,
+              },
+            }
+          : child;
+      })
+    : children;
   const input: ElkNode = {
     id: "circuit",
     layoutOptions: {
@@ -148,7 +219,7 @@ export function circuitGraphInput(
       "elk.layered.crossingMinimization.forceNodeModelOrder": "true",
       "elk.layered.mergeEdges": "false",
     },
-    children,
+    children: spacedChildren,
     edges,
   };
   return independentCircuitLandings(

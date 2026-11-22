@@ -40,10 +40,9 @@ function captureNative() {
 }
 const routes = (g: ElkNode) => g.edges!.map(({ labels: _, ...edge }) => edge);
 
-function expectInlineLabelsOnSegments(graph: ElkNode, wireIds: string[]) {
+function expectBesideLabelsOnSegments(graph: ElkNode, wireIds: string[]) {
   for (const edge of graph.edges!.filter((e) => wireIds.includes(e.id)))
     for (const label of edge.labels!) {
-      const center = label.x! + label.width! / 2;
       const sections = edge.sections!.flatMap((s) => {
         const points = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
         return points.slice(1).map((b, i) => [points[i]!, b] as const);
@@ -51,8 +50,9 @@ function expectInlineLabelsOnSegments(graph: ElkNode, wireIds: string[]) {
       expect(
         sections.some(
           ([a, b]) =>
-            Math.abs(a.x - center) < 1e-6 &&
-            Math.abs(b.x - center) < 1e-6 &&
+            Math.abs(a.x - b.x) < 1e-6 &&
+            (Math.abs(label.x! - (a.x + 0.5)) < 1e-6 ||
+              Math.abs(label.x! + label.width! - (a.x - 0.5)) < 1e-6) &&
             label.y! >= Math.min(a.y, b.y) &&
             label.y! + label.height! <= Math.max(a.y, b.y),
         ),
@@ -144,7 +144,7 @@ it.each(flows)(
             ] ?? "8";
           if (!first.has(gap)) first.set(gap, routes(graph));
           expect(routes(graph)).toEqual(first.get(gap));
-          expectInlineLabelsOnSegments(graph, wireIds);
+          expectBesideLabelsOnSegments(graph, wireIds);
         } else expect(input.edges).toEqual(edges);
       }
   },

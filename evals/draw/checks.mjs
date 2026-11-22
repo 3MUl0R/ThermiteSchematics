@@ -349,7 +349,8 @@ export function terminalText(g, ir) {
     if (caption(a) && /^(\S+)\s+\1$/.test(a.text))
       out.push(issue("duplicate-terminal-caption", a, { text: a.text }));
     for (let j = i + 1; j < ts.length; j++) {
-      const b = ts[j];
+      const b = ts[j],
+        s = a.nativeFunctionScope;
       if (
         overlap(a.bbox, b.bbox) ||
         (caption(a) &&
@@ -358,10 +359,11 @@ export function terminalText(g, ir) {
           a.terminal &&
           a.deviceUid === b.deviceUid &&
           a.terminal === b.terminal &&
-          a.text === b.text &&
-          (a.terminalAppearance && b.terminalAppearance
-            ? a.terminalAppearance === b.terminalAppearance
-            : Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))
+          ((s && s === b.nativeFunctionScope) ||
+            (a.text === b.text &&
+              (a.terminalAppearance && b.terminalAppearance
+                ? a.terminalAppearance === b.terminalAppearance
+                : Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))))
       )
         out.push(
           issue("duplicate-or-overlapping-terminal-text", a, {

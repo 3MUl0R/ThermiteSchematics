@@ -73,7 +73,7 @@ it.each([
           'x="36" y="10.02" width="8" height="28"',
         )
         .replace('x="11" y="31"', 'x="37" y="15.02"'),
-    "approach",
+    "vertical-cut",
   ],
   [
     "translucent plate",
@@ -227,4 +227,121 @@ it.each([
   expect(wirePlacement(g)).toContainEqual(
     expect.objectContaining({ kind: "ambiguous-wire-label", wire: "A" }),
   );
+});
+
+it("DQ-16 catches an old-engine signal-loop plate masking an 8 mm vertical span and accepts beside placement", async () => {
+  const ends = JSON.stringify(ir.wires[0].endpoints.map((e) => e.terminal));
+  const loopWire = (plateX) =>
+    `<g data-loop-conductor="A" data-terminal-ends='${ends}' data-net-id="NET-1">` +
+    `<path d="M 40 20 L 40 28" fill="none" stroke="#23566d" stroke-width="0.4" stroke-linecap="round"/>` +
+    `<rect x="${plateX}" y="21.6" width="7" height="4.8" fill="white"/>` +
+    `<text x="${plateX + 1}" y="24.6" font-size="2.7">A</text>` +
+    `</g>` +
+    `<circle cx="40" cy="20" r="0.8" fill="white" stroke="#23566d" stroke-width="0.3"/>` +
+    `<circle cx="40" cy="28" r="0.8" fill="white" stroke="#23566d" stroke-width="0.3"/>`;
+  // Old-engine failing witness: 4.8 mm plate centered across an 8 mm vertical loop span.
+  expect(masks(await audit(loopWire(36.5)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "vertical-cut" }),
+  ]);
+  // Passing control: plate sits beside the vertical loop span with the wire unbroken.
+  const clear = await openSheet(page, svg(loopWire(40.5)));
+  expect(wireLabelSupportAudit(clear, ir).findings).toEqual([]);
+  expect(wirePlacement(clear)).toEqual([]);
+});
+
+it("DQ-16 rejects a horizontal plate interrupting a vertical circuit riser even with wide margins", async () => {
+  // Old-engine BRIDGE witness: 20+ mm margins above and below, yet cuts vertical riser.
+  expect(masks(await audit(vertical + label("A", 26, 46)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "vertical-cut" }),
+  ]);
+  // Passing control: plate placed beside the vertical riser.
+  const clear = await openSheet(page, svg(vertical + label("A", 41, 46)));
+  expect(wireLabelSupportAudit(clear, ir).findings).toEqual([]);
+  expect(wirePlacement(clear)).toEqual([]);
+});
+
+it("DQ-16 measures clip-cut terminal ends and clip-hidden bends as full approaches (#447 item 1)", async () => {
+  const clip =
+    '<defs><clipPath id="tile"><rect x="10.5" y="0" width="130" height="100"/></clipPath></defs>';
+  const clipped =
+    clip + straight.replace("<path", '<path clip-path="url(#tile)"');
+  // Plate 0.5 mm past clip cut (> 0.35 mm bend floor, < 8 mm terminal floor) must fail.
+  expect(masks(await audit(clipped + label("A", 11, 26)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Passing control: plate clears >= max(2, plate height) past the clipped terminal end.
+  expect(await audit(clipped + label("A", 20, 26))).toEqual([]);
+
+  // Clipping hides the first bend at (10, 30); only 0.5 mm of visible approach remains.
+  const clipHiddenBend =
+    clip +
+    route("A", "M 10 15 L 10 30 L 110 30").replace(
+      "<path",
+      '<path clip-path="url(#tile)"',
+    );
+  expect(masks(await audit(clipHiddenBend + label("A", 11, 26)))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Passing control: plate clears >= max(2, plate height) past the clip-hidden bend.
+  expect(await audit(clipHiddenBend + label("A", 20, 26))).toEqual([]);
+});
+
+it("DQ-16 rejects plain non-label rects occluding or splitting a conductor approach (#447 item 2)", async () => {
+  // Plain rect beside an otherwise valid inline plate hides the terminal approach.
+  const plainBesidePlate =
+    straight +
+    label("A", 30, 26) +
+    '<rect x="10" y="26" width="18" height="8" fill="white"/>';
+  expect(masks(await audit(plainBesidePlate))).toContainEqual(
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  );
+  // Disconnected stubs: 9 mm [10,19] + 1 mm [29,30] sum to 10 mm >= 8 mm, but the
+  // single connected visible run from the plate is only 1 mm and must fail.
+  const disconnectedStubs =
+    straight +
+    label("A", 30, 26) +
+    '<rect x="19" y="26" width="10" height="8" fill="white"/>';
+  expect(masks(await audit(disconnectedStubs))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Standalone plain rect over the terminal approach when the wire label is offset clear.
+  const plainWithOffset =
+    straight +
+    offsetPlate +
+    landing +
+    '<rect x="10" y="26" width="10" height="8" fill="white"/>';
+  expect(masks(await audit(plainWithOffset))).toEqual([
+    expect.objectContaining({ wire: "A", reason: "approach" }),
+  ]);
+  // Passing controls: rect underneath the wire, unfilled rect, or rect away from the wire.
+  expect(
+    await audit(
+      '<rect x="10" y="26" width="18" height="8" fill="white"/>' +
+        straight +
+        label("A", 30, 26),
+    ),
+  ).toEqual([]);
+  expect(
+    await audit(
+      straight +
+        label("A", 30, 26) +
+        '<rect x="10" y="26" width="18" height="8" fill="none"/>',
+    ),
+  ).toEqual([]);
+  expect(
+    await audit(
+      straight +
+        label("A", 30, 26) +
+        '<rect x="10" y="5" width="18" height="8" fill="white"/>',
+    ),
+  ).toEqual([]);
+  // Device box meeting a terminal endpoint behind its painted terminal ring is not an approach occlusion.
+  expect(
+    await audit(
+      straight +
+        label("A", 30, 26) +
+        '<rect x="0" y="20" width="10.1" height="20" fill="white"/>' +
+        ring(10, 30),
+    ),
+  ).toEqual([]);
 });

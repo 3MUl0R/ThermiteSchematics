@@ -12,7 +12,10 @@ import {
 import { measureText, printableTextMetrics } from "../text-metrics.js";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "../symbols/profiles.js";
-import { lateralPinClearanceWidth } from "./pin-clearance.js";
+import {
+  lateralPinClearanceWidth,
+  verticalPinClearanceHeight,
+} from "./pin-clearance.js";
 import type {
   ElectricalIr,
   IrDevice,
@@ -263,6 +266,7 @@ function appendNodePin(terminal: TerminalId, i: number, state: PinState) {
       side: "EAST",
       label: terminal.terminalKey,
       outside,
+      omitLabel: true,
     });
 }
 
@@ -473,7 +477,7 @@ function nodeVerticalScale(state: GeometryState) {
   // keep the fallback envelope. Standalone symbols fit the exact print face.
   for (const side of ["WEST", "EAST"] as const) {
     const baseline = pins
-      .filter((p) => p.side === side)
+      .filter((p) => p.side === side && !p.omitLabel)
       .sort((a, b) => a.y - b.y);
     for (let i = 1; i < baseline.length; i++) {
       const left = baseline[i - 1]!,
@@ -518,12 +522,14 @@ function nodeVerticalBounds(state: GeometryState) {
   const rightBound = Math.max(
     bodyHeight * verticalScaleX,
     ...spans.map((s) => s.right),
-    ...pins.map(
-      (p) =>
-        verticalLaneX(p.y, state) +
-        1 +
-        measure(pinLabel(p), TERMINAL_TEXT_SIZE),
-    ),
+    ...pins
+      .filter((p) => !p.omitLabel)
+      .map(
+        (p) =>
+          verticalLaneX(p.y, state) +
+          1 +
+          measure(pinLabel(p), TERMINAL_TEXT_SIZE),
+      ),
   );
   const verticalOffsetX = 1 - leftBound;
   const coilRow = rows.find((row) => row.f.kind === "coil");
@@ -559,7 +565,10 @@ function nodeVerticalSize(
         Math.max(4, designationLeft + 1),
     ),
   );
-  height =
+  const verticalFooter =
+    printableRelated.length * 3.1 +
+    (boundary || printableRelated.length ? 5 : 0);
+  height = Math.max(
     Math.max(
       priorWidth + 6,
       ...rows.map(
@@ -571,9 +580,17 @@ function nodeVerticalSize(
       ...rows
         .filter((row) => row.mark === "motor")
         .map((row) => row.slots * pitch * verticalScaleX + 12),
-    ) +
-    printableRelated.length * 3.1 +
-    (boundary || printableRelated.length ? 5 : 0);
+    ) + verticalFooter,
+    verticalPinClearanceHeight(
+      state.pins,
+      rows,
+      pitch,
+      state.coupled,
+      state.pinLabel,
+      state,
+      verticalFooter,
+    ),
+  );
   return { width, height };
 }
 

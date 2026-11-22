@@ -14,7 +14,26 @@ import { flows } from "./direct-loop-fixture.js";
 import { lengths, points } from "./helpers/route-quality.js";
 import { elkWorkLedger, elkWorkScope } from "../src/layout/elk-work.js";
 
-const names = ["W1XXXXXXX", "W2XXXXXX", "W3XXXXX", "W4XXX", "W5XXXXX", "W6"];
+const names = ["W1XXXXXXX", "W2XXXXXX", "W3XXX", "W4XXX", "W5XXXXX", "W6"];
+const sharedNames = ["W1XXXXXXX", "W2XX", "W3XXXXX", "W4XXX", "W5XXX", "W6"];
+const wideInterior = [
+  "W1XXXXXXX",
+  "W2XXXXXX",
+  "W3XXXXX",
+  "W4XXX",
+  "W5XXXXX",
+  "W6",
+];
+
+function sharedCorridorFixture() {
+  const { children, edges } = structuredClone(graphFixture);
+  for (const node of children)
+    node.width = Math.max(...node.ports.map((port) => port.x)) + 2;
+  for (const [index, edge] of edges.slice(0, 6).entries())
+    edge.labels[0].width = measureText(sharedNames[index] ?? "", 2.7).width + 2;
+  return { children, edges };
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   await removeFixtures();
@@ -84,9 +103,7 @@ it.each(flows)(
 );
 
 it("bounds rejected staggers and returns the complete native fallback graph", async () => {
-  const { children, edges } = structuredClone(graphFixture);
-  for (const [index, edge] of edges.slice(0, 6).entries())
-    edge.labels[0].width = measureText(names[index] ?? "", 2.7).width + 2;
+  const { children, edges } = sharedCorridorFixture();
   const native: ElkNode[] = [];
   const factory = runtime.createElkEngine;
   vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
@@ -122,9 +139,7 @@ it("bounds rejected staggers and returns the complete native fallback graph", as
 });
 
 it("retains every native route and fixed port in an accepted stagger", async () => {
-  const { children, edges } = structuredClone(graphFixture);
-  for (const [index, edge] of edges.slice(0, 6).entries())
-    edge.labels[0].width = measureText(names[index] ?? "", 2.7).width + 2;
+  const { children, edges } = sharedCorridorFixture();
   const fixed = structuredClone(children);
   const native: ElkNode[] = [];
   const factory = runtime.createElkEngine;
@@ -198,10 +213,37 @@ it("retains native fallback when a stagger would shave a neighbouring wire strok
   expect(graph).toEqual(native[1]);
 });
 
-it("retains native fallback when an alternative grows the drawing envelope", async () => {
+it("retains native fallback when an interior wire label exceeds the 14 mm lane pitch", async () => {
   const { children, edges } = structuredClone(graphFixture);
   for (const [index, edge] of edges.slice(0, 6).entries())
-    edge.labels[0].width = measureText(names[index] ?? "", 2.7).width + 2;
+    edge.labels[0].width =
+      measureText(wideInterior[index] ?? "", 2.7).width + 2;
+  const native: ElkNode[] = [];
+  const factory = runtime.createElkEngine;
+  vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
+    const engine = factory(),
+      layout = engine.layout.bind(engine);
+    engine.layout = async (input, options) => {
+      const graph = await layout(input, options);
+      native.push(structuredClone(graph));
+      return graph;
+    };
+    return engine;
+  });
+  const graph = await layoutDirectLoop(
+    children,
+    edges,
+    true,
+    edges.slice(0, 6).map((edge) => edge.id),
+    checkLabels,
+  );
+  expect(native).toHaveLength(3);
+  expect(graph).toEqual(native[1]);
+  checkLabels(graph);
+});
+
+it("retains native fallback when an alternative grows the drawing envelope", async () => {
+  const { children, edges } = sharedCorridorFixture();
   const native: ElkNode[] = [];
   const factory = runtime.createElkEngine;
   vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
@@ -232,9 +274,7 @@ it("retains native fallback when an alternative grows the drawing envelope", asy
 });
 
 it("retains native fallback when the optional candidate exhausts the work budget", async () => {
-  const { children, edges } = structuredClone(graphFixture);
-  for (const [index, edge] of edges.slice(0, 6).entries())
-    edge.labels[0].width = measureText(names[index] ?? "", 2.7).width + 2;
+  const { children, edges } = sharedCorridorFixture();
   const native: ElkNode[] = [];
   const factory = runtime.createElkEngine;
   vi.spyOn(runtime, "createElkEngine").mockImplementation(() => {
@@ -268,9 +308,7 @@ it("retains native fallback when the optional candidate exhausts the work budget
 });
 
 it("propagates an unexpected optional-candidate layout error by identity", async () => {
-  const { children, edges } = structuredClone(graphFixture);
-  for (const [index, edge] of edges.slice(0, 6).entries())
-    edge.labels[0].width = measureText(names[index] ?? "", 2.7).width + 2;
+  const { children, edges } = sharedCorridorFixture();
   const failure = new TypeError("synthetic optional layout failure");
   let layouts = 0;
   const factory = runtime.createElkEngine;

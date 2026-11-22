@@ -16,40 +16,44 @@ import { circuitLandingCaptionNeedsMove } from "./landing-captions.js";
 /** Feed the final, already recovered label reservations to the shared physical
  * segment planner. Native route arrays and fixed terminal geometry never change. */
 export function supportedCircuitLabels(state: CircuitLabelState) {
-  const input = circuitCaptionGraph(state);
-  const graph = ownedWiringLabels(
-      input,
-      (id, l) =>
-        fullyCoincidentCaption(Number(id.slice(1)), state.segments) ||
-        !circuitLabelNeedsMove(
-          {
-            index: Number(id.slice(1)),
-            x: required(l.x, "Missing label x"),
-            y: required(l.y, "Missing label y"),
-            width: required(l.width, "Missing label width"),
-            height: required(l.height, "Missing label height"),
-            text: required(l.text, "Missing label text"),
-          },
-          state,
-        ),
-      circuitCaptionPositions,
-    ),
-    occurrences = new Map<number, number>();
-  const labels = state.labels.map((label) => {
-    if (fullyCoincidentCaption(label.index, state.segments)) return label;
-    const i = occurrences.get(label.index) ?? 0;
-    occurrences.set(label.index, i + 1);
-    const p = required(
-      graph.edges?.find((e) => e.id === `e${label.index}`)?.labels?.[i],
-      "Missing circuit label reservation",
-    );
-    return {
-      ...label,
-      x: required(p.x, "Missing circuit label x"),
-      y: required(p.y, "Missing circuit label y"),
-    };
-  });
-  return recoverLeaderCaptionBlocks({ ...state, labels }, state.labels);
+  let current = state;
+  for (let pass = 0; pass < Math.max(1, state.labels.length); pass++) {
+    const graph = ownedWiringLabels(
+        circuitCaptionGraph(current),
+        (id, l) =>
+          fullyCoincidentCaption(Number(id.slice(1)), current.segments) ||
+          !circuitLabelNeedsMove(
+            {
+              index: Number(id.slice(1)),
+              x: required(l.x, "Missing label x"),
+              y: required(l.y, "Missing label y"),
+              width: required(l.width, "Missing label width"),
+              height: required(l.height, "Missing label height"),
+              text: required(l.text, "Missing label text"),
+            },
+            current,
+          ),
+        circuitCaptionPositions,
+      ),
+      occurrences = new Map<number, number>();
+    let moved = false;
+    const labels = current.labels.map((label) => {
+      if (fullyCoincidentCaption(label.index, current.segments)) return label;
+      const i = occurrences.get(label.index) ?? 0;
+      occurrences.set(label.index, i + 1);
+      const p = required(
+        graph.edges?.find((e) => e.id === `e${label.index}`)?.labels?.[i],
+        "Missing circuit label reservation",
+      );
+      const x = required(p.x, "Missing circuit label x"),
+        y = required(p.y, "Missing circuit label y");
+      if (x !== label.x || y !== label.y) moved = true;
+      return { ...label, x, y };
+    });
+    current = { ...current, labels };
+    if (!moved) break;
+  }
+  return recoverLeaderCaptionBlocks(current, state.labels);
 }
 
 function circuitLabelNeedsMove(

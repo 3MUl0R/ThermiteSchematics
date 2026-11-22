@@ -15,7 +15,10 @@ import {
   conductorIdentity,
 } from "./tranche3-identities.mjs";
 import { nativeLabelIdentity } from "./wire-label-source.mjs";
-import { wireLabelMaskFinding } from "./wire-label-mask.mjs";
+import {
+  wireLabelMaskFinding,
+  conductorApproachOcclusionFindings,
+} from "./wire-label-mask.mjs";
 function supportSegments(s, g, inline) {
   return inline
     ? segments(routePoints(s))
@@ -184,6 +187,7 @@ export function wireLabelSupportAudit(input, ir) {
         reason: "Printed conductor label has no native identity",
       }),
     );
+  findings.push(...conductorApproachOcclusionFindings(g, maskRoutes));
   return {
     findings,
     reviewCandidates,

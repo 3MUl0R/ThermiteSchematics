@@ -295,7 +295,9 @@ export function circuitLabelChecks(state: CircuitTopologyState) {
       (other) => other.index !== label.index && intersects(label, other),
     ) ||
     segments.some(
-      (s) => s.index !== label.index && intersects(label, segmentBox(s)),
+      (s) =>
+        (s.index !== label.index || Math.abs(s.a.x - s.b.x) < 1e-7) &&
+        intersects(label, segmentBox(s)),
     );
   return { ...state, intersects, segmentBox, labelObstructed };
 }

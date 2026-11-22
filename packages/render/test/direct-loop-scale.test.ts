@@ -14,7 +14,13 @@ import { fixture, removeFixtures } from "../../cli/test/analog-output.cases.js";
 import { lengths, points } from "./helpers/route-quality.js";
 import { assertTopologyRouteEndpoints } from "../src/layout/topology-conservation.js";
 
-const names = ["W1XXXXXXX", "W2XXXXXX", "W3XXXXX", "W4XXX", "W5XXXXX", "W6"];
+const names = ["W1XXXXXXX", "W2XXXXX", "W3XX", "W4XXX", "W5XXX", "W6"];
+function tightenNodes(children: ElkNode[]) {
+  return children.map((node) => ({
+    ...node,
+    width: Math.max(...(node.ports ?? []).map((port) => port.x ?? 0)) + 2,
+  }));
+}
 afterEach(async () => {
   vi.restoreAllMocks();
   await removeFixtures();
@@ -31,7 +37,7 @@ async function mixedLoop() {
   const forced = vi
     .spyOn(layouts, "layoutDirectLoop")
     .mockImplementation((children, edges, vertical, ids) =>
-      native(children, edges, vertical, ids, () => {
+      native(tightenNodes(children), edges, vertical, ids, () => {
         throw new InlineLabelFitError("synthetic native-only fit veto");
       }),
     );
@@ -62,10 +68,12 @@ function captureNativeGraphs(
     };
     return engine;
   });
-  vi.spyOn(layouts, "layoutDirectLoop").mockImplementation(async (...args) => {
-    chosen = await layout(...args);
-    return chosen;
-  });
+  vi.spyOn(layouts, "layoutDirectLoop").mockImplementation(
+    async (children, ...rest) => {
+      chosen = await layout(tightenNodes(children), ...rest);
+      return chosen;
+    },
+  );
   return () => ({ outputs, chosen });
 }
 
@@ -74,7 +82,7 @@ it.each([141, 132])(
   async (usableWidth) => {
     const { ir, request, fallback } = await mixedLoop();
     // A synthetic tall page isolates the width constraint in the real composer.
-    // 141 lies between the 140 mm fallback and 144 mm stagger; 132 straddles
+    // 141 lies between the fallback and widened candidate; 132 straddles
     // their readable-size thresholds. This adds no public paper size.
     const page: PaperPage = {
       size: "tabloid",
@@ -90,7 +98,9 @@ it.each([141, 132])(
     force.mockRestore();
     expect(baseline.ok).toBe(true);
     if (!baseline.ok) throw new Error(baseline.error.message);
-    const captured = captureNativeGraphs();
+    const captured = captureNativeGraphs((graph, index) => {
+      if (index === 2) graph.width = 144;
+    });
     const after = await topologyDrafts(ir, request, undefined, page);
     expect(after.ok, JSON.stringify(after)).toBe(true);
     if (!after.ok) throw new Error(after.error.message);
@@ -179,7 +189,7 @@ it.each(["collision", "fit"])(
 
 it("issues the candidate when the page is too short for the native fallback", async () => {
   const { ir, request, fallback } = await mixedLoop();
-  const page = { ...roomyPage(), heightMm: 380 };
+  const page = { ...roomyPage(), heightMm: 375 };
   const force = vi
     .spyOn(loops, "prepareSignalLoopDrawing")
     .mockResolvedValueOnce(fallback);
@@ -228,7 +238,9 @@ it("projects and composes the fallback once across rejected phases and final iss
   const page = { ...roomyPage(), widthMm: 197, heightMm: 500 };
   const projection = vi.spyOn(enclosures, "drawEnclosures");
   const composition = vi.spyOn(pages, "bounds");
-  const captured = captureNativeGraphs();
+  const captured = captureNativeGraphs((graph, index) => {
+    if (index === 2) graph.width = 144;
+  });
   const result = await topologyDrafts(ir, request, undefined, page);
   expect(result.ok, JSON.stringify(result)).toBe(true);
   const { outputs, chosen } = captured();

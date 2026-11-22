@@ -8,7 +8,7 @@ import {
 import { TERMINAL_TEXT_SIZE } from "../symbols/circuit-text.js";
 import { PRINTABLE_SYMBOL_POLICY } from "../symbols/printable-policy.js";
 import { strokeMiters } from "../symbols/stroke-join.js";
-import type { FunctionRow, Pin } from "./types.js";
+import type { DeviceNode, FunctionRow, Pin } from "./types.js";
 
 export const LATERAL_PIN_INSET_MM = 1.5;
 // Half a millimetre plus room for the emitted stroke and glyph coordinates to
@@ -122,6 +122,7 @@ export function lateralPinClearanceWidth(
   const bodies = rows.flatMap((row) => lateralBody(row, pins, pitch, coupled));
   let width = 0;
   for (const pin of pins) {
+    if (pin.omitLabel) continue;
     const west = pin.side === "WEST";
     const ink = captionInk(
       label(pin),
@@ -141,4 +142,113 @@ export function lateralPinClearanceWidth(
     }
   }
   return Math.ceil(width * 1000) / 1000;
+}
+
+const VERTICAL_BOX_MARKS = new Set([
+  "level-sensor",
+  "conductivity-probe",
+  "receptacle",
+  "sensor-3wire",
+]);
+
+function verticalBody(
+  row: FunctionRow,
+  pins: readonly Pin[],
+  pitch: number,
+  coupled: boolean,
+  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
+): CaptionBox[] {
+  const { mark, f, center, slots, channelLines } = row;
+  const laneX = (y: number) => y * frame.verticalScaleX + frame.verticalOffsetX;
+  const cx = laneX(center);
+  const rowPins = f.terminals.flatMap((t) => {
+    const pin = pins.find((p) => p.terminal.terminalKey === t.terminalKey);
+    return pin ? [pin] : [];
+  });
+  const portXs = rowPins.map((pin) => laneX(pin.y));
+  const [first, last] = rowPins;
+  if (mark === "winding" && first && last) {
+    const edge = (pin: Pin) => (pin.side === "WEST" ? -10 : 10);
+    const pts = circuitWindingPoints(
+      0,
+      laneX(first.y),
+      laneX(last.y),
+      f.kind === "source",
+      coupled,
+      [edge(first), edge(last)],
+    );
+    const b = windingBody(pts, coupled);
+    return [{ left: b.top, right: b.bottom, top: b.left, bottom: b.right }];
+  }
+  if (mark === "motor") {
+    const r =
+      Math.max(5, (slots * pitch * frame.verticalScaleX) / 2 - 2) + HALF_STROKE;
+    return [{ left: cx - r, right: cx + r, top: -r, bottom: r }];
+  }
+  const specialized = mark === "level-sensor" || mark === "sensor-3wire";
+  if (channelLines && !specialized) return [];
+  const offY = channelLines ? -(9 + channelLines.length * 3.1) / 2 + 4 : 0;
+  const ink = circuitMarkInkBounds(mark, true, true);
+  const boxes: CaptionBox[] = [
+    {
+      left: ink.left + cx,
+      right: ink.right + cx,
+      top: ink.top + offY,
+      bottom: ink.bottom + offY,
+    },
+  ];
+  if (
+    portXs.length &&
+    VERTICAL_BOX_MARKS.has(circuitMarkName(mark)) &&
+    f.kind !== "source" &&
+    (mark !== "sensor-3wire" || portXs.length > 1) &&
+    (!channelLines || mark === "sensor-3wire")
+  )
+    boxes.push({
+      left: Math.min(...portXs) - 2.175,
+      right: Math.max(...portXs) + 2.175,
+      top: -5.175,
+      bottom: 5.175,
+    });
+  return boxes;
+}
+
+/** Reserve vertical (TTB) terminal-label lanes clear of centered symbol ink. */
+export function verticalPinClearanceHeight(
+  pins: readonly Pin[],
+  rows: readonly FunctionRow[],
+  pitch: number,
+  coupled: boolean,
+  label: (p: Pin) => string,
+  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
+  verticalFooter: number,
+) {
+  const bodies = rows.flatMap((row) =>
+    verticalBody(row, pins, pitch, coupled, frame),
+  );
+  let height = 0;
+  for (const pin of pins) {
+    if (pin.omitLabel) continue;
+    const north = pin.side === "WEST";
+    const pinX = pin.y * frame.verticalScaleX + frame.verticalOffsetX;
+    const ink = captionInk(
+      label(pin),
+      pinX + 1,
+      north ? 6 : -1.5,
+      TERMINAL_TEXT_SIZE,
+      "start",
+    );
+    for (const body of bodies) {
+      if (
+        ink.right + CLEARANCE_MM <= body.left ||
+        body.right + CLEARANCE_MM <= ink.left
+      )
+        continue;
+      const requiredHeight = north
+        ? 2 * (ink.bottom + CLEARANCE_MM - body.top + 0.002) + verticalFooter
+        : 2 * (body.bottom + CLEARANCE_MM - ink.top + 0.002) - verticalFooter;
+      height = Math.max(height, requiredHeight);
+    }
+  }
+  return Math.ceil(height * 1000) / 1000;
 }
