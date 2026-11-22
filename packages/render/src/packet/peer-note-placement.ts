@@ -144,58 +144,62 @@ function placePeerGroup(
   drawingTexts: ReadonlySet<Rect>,
 ) {
   let firstFailed = required(group[0], "Missing peer group").entry;
-  const passes = [
-    { source: ink, textGap: NAVIGATION_CLEARANCE_MM },
+  const fullPass = { source: ink, textGap: NAVIGATION_CLEARANCE_MM };
+  const tightPass = {
+    source: withoutDrawingTextInk(ink, drawingTexts),
+    textGap: TIGHT_TEXT_CLEARANCE_MM,
+  };
+  const namedFamilies = WORDING_FAMILIES.slice(0, 3);
+  const qualifiedFamily = WORDING_FAMILIES.slice(3);
+  const attempts = [
+    ...namedFamilies.map((family) => ({ ...fullPass, family })),
     {
-      source: withoutDrawingTextInk(ink, drawingTexts),
-      textGap: TIGHT_TEXT_CLEARANCE_MM,
+      ...tightPass,
+      family: required(WORDING_FAMILIES[0], "Missing full family"),
     },
+    ...qualifiedFamily.map((family) => ({ ...fullPass, family })),
+    ...WORDING_FAMILIES.slice(1).map((family) => ({ ...tightPass, family })),
   ];
-  for (const { source, textGap } of passes) {
-    for (const family of WORDING_FAMILIES) {
-      const allowed = new Set(family);
-      const forward = tryPeerOrder(group, allowed, field, source, textGap);
-      if (forward.placed) {
+  for (const { source, textGap, family } of attempts) {
+    const allowed = new Set(family);
+    const forward = tryPeerOrder(group, allowed, field, source, textGap);
+    if (forward.placed) {
+      return {
+        placed: forward.placed,
+        ink: {
+          ink: [...ink.ink, ...[...forward.placed.values()].map((p) => p.box)],
+          texts: [
+            ...ink.texts,
+            ...[...forward.placed.values()].map((p) => p.box),
+          ],
+        },
+      };
+    }
+    firstFailed = forward.failed;
+    // Nearby captions can compete for the same slot. Retry in reverse order
+    // within the same wording family before stepping down to a shorter family.
+    if (group.length > 1) {
+      const backward = tryPeerOrder(
+        [...group].reverse(),
+        allowed,
+        field,
+        source,
+        textGap,
+      );
+      if (backward.placed) {
         return {
-          placed: forward.placed,
+          placed: backward.placed,
           ink: {
             ink: [
               ...ink.ink,
-              ...[...forward.placed.values()].map((p) => p.box),
+              ...[...backward.placed.values()].map((p) => p.box),
             ],
             texts: [
               ...ink.texts,
-              ...[...forward.placed.values()].map((p) => p.box),
+              ...[...backward.placed.values()].map((p) => p.box),
             ],
           },
         };
-      }
-      firstFailed = forward.failed;
-      // Nearby captions can compete for the same slot. Retry in reverse order
-      // within the same wording family before stepping down to a shorter family.
-      if (group.length > 1) {
-        const backward = tryPeerOrder(
-          [...group].reverse(),
-          allowed,
-          field,
-          source,
-          textGap,
-        );
-        if (backward.placed) {
-          return {
-            placed: backward.placed,
-            ink: {
-              ink: [
-                ...ink.ink,
-                ...[...backward.placed.values()].map((p) => p.box),
-              ],
-              texts: [
-                ...ink.texts,
-                ...[...backward.placed.values()].map((p) => p.box),
-              ],
-            },
-          };
-        }
       }
     }
   }

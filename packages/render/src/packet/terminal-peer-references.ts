@@ -276,6 +276,54 @@ function finalizeConductorPeers(
   }
 }
 
+function recordCardConnection(
+  part: TerminalSheet,
+  parts: readonly TerminalSheet[],
+  owner: TerminalId,
+  origin: Landing,
+  inkRect: Rect,
+  connection: {
+    other?: TerminalId | null;
+    elementId: ConductiveElementId;
+    designation: string;
+    destination: string;
+  },
+) {
+  const { other } = connection;
+  if (!other) return;
+  const receiver = parts.find(
+    (p) => p !== part && p.landings.has(terminalIdKey(other)),
+  );
+  const target = receiver?.landings.get(terminalIdKey(other));
+  if (!receiver || !target) return;
+  recordConductorPeer(part, owner, other, connection, inkRect, target, true);
+  recordConductorPeer(
+    receiver,
+    other,
+    owner,
+    connection,
+    target.owner,
+    origin,
+    false,
+  );
+  const coOwner = receiver.landings.get(terminalIdKey(owner));
+  if (!coOwner) return;
+  const coTargetPart =
+    parts.find((p) => p !== receiver && p.landings.has(terminalIdKey(other))) ??
+    receiver;
+  const coTarget = coTargetPart.landings.get(terminalIdKey(other));
+  if (coTarget)
+    recordConductorPeer(
+      receiver,
+      owner,
+      other,
+      connection,
+      coOwner.owner,
+      coTarget,
+      false,
+    );
+}
+
 function cardPeers(
   parts: readonly TerminalSheet[],
   ir: Readonly<ElectricalIr>,
@@ -307,38 +355,16 @@ function cardPeers(
       );
       if (!Array.isArray(source)) continue;
       const ids = new Set(source.map((item) => JSON.stringify(item)));
-      const peers = byTerminal.get(terminalIdKey(owner)) ?? [];
-      for (const connection of peers) {
-        const { other, elementId, designation } = connection;
+      for (const connection of byTerminal.get(terminalIdKey(owner)) ?? []) {
         if (
-          !other ||
-          !ids.has(JSON.stringify(elementId)) ||
-          !ink.text.includes(`${designation} → ${connection.destination}`)
+          !connection.other ||
+          !ids.has(JSON.stringify(connection.elementId)) ||
+          !ink.text.includes(
+            `${connection.designation} → ${connection.destination}`,
+          )
         )
           continue;
-        const receiver = parts.find(
-          (p) => p !== part && p.landings.has(terminalIdKey(other)),
-        );
-        const target = receiver?.landings.get(terminalIdKey(other));
-        if (!receiver || !target) continue;
-        recordConductorPeer(
-          part,
-          owner,
-          other,
-          connection,
-          ink.rect,
-          target,
-          true,
-        );
-        recordConductorPeer(
-          receiver,
-          other,
-          owner,
-          connection,
-          target.owner,
-          origin,
-          false,
-        );
+        recordCardConnection(part, parts, owner, origin, ink.rect, connection);
       }
     }
   finalizeConductorPeers(parts, name);
@@ -440,6 +466,208 @@ function collectTerminalSheets(
   });
 }
 
+function extractDestinationTokens(text: string): string[] {
+  return [...text.matchAll(/\b\d{2,}\.[A-D][1-6]\b/gu)].map((m) => m[0]);
+}
+
+function cardRowDestinationSlice(
+  cardText: string,
+  rowPrefixes: readonly string[],
+  rowIndex: number,
+): string | undefined {
+  const prefix = rowPrefixes[rowIndex];
+  if (!prefix) return undefined;
+  let cursor = 0;
+  for (let i = 0; i <= rowIndex; i++) {
+    const p = rowPrefixes[i];
+    if (!p) return undefined;
+    const at = cardText.indexOf(p, cursor);
+    if (at < 0) return undefined;
+    cursor = at + p.length;
+  }
+  const nextPrefix = rowPrefixes[rowIndex + 1];
+  if (!nextPrefix) return cardText.slice(cursor);
+  const nextAt = cardText.indexOf(nextPrefix, cursor);
+  return nextAt < 0 ? cardText.slice(cursor) : cardText.slice(cursor, nextAt);
+}
+
+function assertTokenMultiplicity(
+  sheetNumber: number,
+  subject: string,
+  expected: readonly string[],
+  printed: readonly string[],
+) {
+  const counts = new Map<string, number>();
+  for (const token of printed) counts.set(token, (counts.get(token) ?? 0) + 1);
+  for (const token of expected) {
+    const n = counts.get(token) ?? 0;
+    if (n !== 1)
+      throw new Error(
+        `Peer destination invariant violated on sheet ${sheetNumber} (${subject}): expected ${token} once, printed ${n} time(s) in [${printed.join(", ")}].`,
+      );
+  }
+  if (printed.length !== expected.length)
+    throw new Error(
+      `Peer destination invariant violated on sheet ${sheetNumber} (${subject}): expected [${expected.join(", ")}], printed [${printed.join(", ")}].`,
+    );
+}
+
+function verifyCardDestinationsPrinted(
+  sheetNumber: number,
+  geometry: readonly NavigationGeometry[],
+  cardDestinations: ReadonlyMap<string, readonly string[]>,
+  byTerminal: ReturnType<typeof authoredTerminalIncidence>,
+) {
+  const verifiedRows = new Set<string>();
+  for (const card of geometry) {
+    const key = card.node.attrs["data-off-view-terminal-id"];
+    if (!key || !card.visible) continue;
+    const ink = markCard(geometry, card);
+    if (!ink) continue;
+    const native: unknown = JSON.parse(key);
+    if (
+      !record(native) ||
+      typeof native.deviceUid !== "string" ||
+      typeof native.terminalKey !== "string"
+    )
+      continue;
+    const owner = {
+      deviceUid: native.deviceUid,
+      terminalKey: native.terminalKey,
+    };
+    const source: unknown = JSON.parse(
+      card.node.attrs["data-off-view-conductors"] ?? "[]",
+    );
+    if (!Array.isArray(source)) continue;
+    const peers = byTerminal.get(terminalIdKey(owner)) ?? [];
+    const rows = source.flatMap((id) => {
+      const idKey = JSON.stringify(id);
+      const conn = peers.find((p) => JSON.stringify(p.elementId) === idKey);
+      return conn ? [{ conn, rowKey: cardRowKey(owner, conn.elementId) }] : [];
+    });
+    const prefixes = rows.map(
+      ({ conn }) => `${conn.designation} → ${conn.destination}`,
+    );
+    for (const [i, { rowKey, conn }] of rows.entries()) {
+      const expected = cardDestinations.get(rowKey);
+      if (!expected?.length) continue;
+      const slice = cardRowDestinationSlice(ink.text, prefixes, i);
+      if (slice === undefined)
+        throw new Error(
+          `Peer destination invariant violated on sheet ${sheetNumber} (card ${conn.designation}): row missing from card ink.`,
+        );
+      assertTokenMultiplicity(
+        sheetNumber,
+        `card ${conn.designation} → ${conn.destination}`,
+        expected,
+        extractDestinationTokens(slice),
+      );
+      verifiedRows.add(rowKey);
+    }
+  }
+  for (const [rowKey, expected] of cardDestinations) {
+    if (expected.length && !verifiedRows.has(rowKey))
+      throw new Error(
+        `Peer destination invariant violated on sheet ${sheetNumber}: resolved card destinations [${expected.join(", ")}] for ${rowKey} have no visible owning card.`,
+      );
+  }
+}
+
+function verifyFreePeerDestinationsPrinted(
+  sheetNumber: number,
+  geometry: readonly NavigationGeometry[],
+  entries: readonly PeerReference[],
+) {
+  const byClaim = new Map<string, string[]>();
+  for (const g of geometry) {
+    const kind = g.node.attrs["data-peer-reference"];
+    const source = g.node.attrs["data-peer-source"];
+    if (!kind || !source || !g.visible) continue;
+    const claim = JSON.stringify([kind, source]);
+    const text =
+      g.node.name === "g"
+        ? g.node.children
+            .filter((c) => c.name === "text")
+            .map((c) => c.text)
+            .join(" ")
+        : g.node.text;
+    const list = byClaim.get(claim) ?? [];
+    list.push(text);
+    byClaim.set(claim, list);
+  }
+  for (const entry of entries) {
+    const claim = JSON.stringify([entry.kind, JSON.stringify(entry.identity)]);
+    const printedNotes = byClaim.get(claim) ?? [];
+    if (printedNotes.length !== 1)
+      throw new Error(
+        `Peer destination invariant violated on sheet ${sheetNumber} (${entry.value}): expected 1 owning note, found ${printedNotes.length}.`,
+      );
+    assertTokenMultiplicity(
+      sheetNumber,
+      entry.value,
+      extractDestinationTokens(entry.destination),
+      extractDestinationTokens(
+        required(printedNotes[0], "Missing printed peer note"),
+      ),
+    );
+  }
+}
+
+export function verifyPrintedPeerDestinations(
+  sheet: RenderedSheet,
+  cardDestinations: ReadonlyMap<string, readonly string[]>,
+  entries: readonly PeerReference[],
+  byTerminal: ReturnType<typeof authoredTerminalIncidence>,
+) {
+  if (!cardDestinations.size && !entries.length) return;
+  const geometry = navigationGeometry(sheet.svg);
+  if (cardDestinations.size)
+    verifyCardDestinationsPrinted(
+      sheet.number,
+      geometry,
+      cardDestinations,
+      byTerminal,
+    );
+  if (entries.length)
+    verifyFreePeerDestinationsPrinted(sheet.number, geometry, entries);
+}
+
+function rewriteSheetCards(
+  parts: readonly TerminalSheet[],
+  drafts: readonly Draft[],
+  byTerminal: ReturnType<typeof authoredTerminalIncidence>,
+) {
+  const viewRewrites = new Map<string, Map<string, string>>();
+  const withCards = parts.map((part) => {
+    const draft = required(
+      drafts[part.sheet.number - 1],
+      "Missing peer note drawing",
+    );
+    const viewInstanceId =
+      draft.navigationView?.key ?? `sheet:${part.sheet.number}`;
+    const rewrites =
+      viewRewrites.get(viewInstanceId) ?? new Map<string, string>();
+    viewRewrites.set(viewInstanceId, rewrites);
+    const localRewritten = new Set<string>();
+    const svg = injectOffViewCardDestinations(
+      part.sheet.svg,
+      part.field,
+      part.geometry,
+      byTerminal,
+      part.cardDestinations,
+      rewrites,
+      localRewritten,
+    );
+    return {
+      ...part,
+      sheet: { ...part.sheet, svg },
+      viewInstanceId,
+      localRewritten,
+    };
+  });
+  return { viewRewrites, withCards };
+}
+
 export function terminalPeerReferences(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
@@ -458,42 +686,49 @@ export function terminalPeerReferences(
   const parts = collectTerminalSheets(ir, drafts, sheets, page);
   cardPeers(parts, ir, byTerminal);
   interfacePeers(parts, ir);
-  const viewRewrites = new Map<string, Map<string, string>>();
-  const withCards = parts.map((part) => {
-    const viewId = JSON.stringify(part.sheet.view);
-    const rewrites = viewRewrites.get(viewId) ?? new Map<string, string>();
-    viewRewrites.set(viewId, rewrites);
-    const svg = injectOffViewCardDestinations(
-      part.sheet.svg,
-      part.field,
-      part.geometry,
-      byTerminal,
-      part.cardDestinations,
-      rewrites,
-    );
-    return { ...part, sheet: { ...part.sheet, svg }, viewId };
-  });
+  const { viewRewrites, withCards } = rewriteSheetCards(
+    parts,
+    drafts,
+    byTerminal,
+  );
   const changes = new Map(
-    withCards.map(({ sheet, entries, viewId }) => {
-      const synced = {
-        ...sheet,
-        svg: syncRewrittenOffViewCards(
-          sheet.svg,
-          viewRewrites.get(viewId) ?? new Map(),
-        ),
-      };
-      const draft = required(
-        drafts[sheet.number - 1],
-        "Missing peer note drawing",
-      );
-      const uniqueEntries = [
-        ...new Map(entries.map((entry) => [entry.value, entry])).values(),
-      ];
-      return [
-        sheet.number,
-        emitPeerReferences(synced, peerNoteField(draft, page), uniqueEntries),
-      ];
-    }),
+    withCards.map(
+      ({
+        sheet,
+        entries,
+        cardDestinations,
+        viewInstanceId,
+        localRewritten,
+      }) => {
+        const synced = {
+          ...sheet,
+          svg: syncRewrittenOffViewCards(
+            sheet.svg,
+            viewRewrites.get(viewInstanceId) ?? new Map(),
+            localRewritten,
+          ),
+        };
+        const draft = required(
+          drafts[sheet.number - 1],
+          "Missing peer note drawing",
+        );
+        const uniqueEntries = [
+          ...new Map(entries.map((entry) => [entry.value, entry])).values(),
+        ];
+        const emitted = emitPeerReferences(
+          synced,
+          peerNoteField(draft, page),
+          uniqueEntries,
+        );
+        verifyPrintedPeerDestinations(
+          emitted,
+          cardDestinations,
+          uniqueEntries,
+          byTerminal,
+        );
+        return [sheet.number, emitted];
+      },
+    ),
   );
   return sheets.map((sheet) => changes.get(sheet.number) ?? sheet);
 }

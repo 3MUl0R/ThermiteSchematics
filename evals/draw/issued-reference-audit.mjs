@@ -129,16 +129,6 @@ const noteAddress = (value) =>
     value,
   )?.[1];
 
-function addressUses(expected, named = false) {
-  const counts = new Map();
-  for (const { values, ownerLabel } of expected)
-    for (const addr of new Set(values.map(noteAddress).filter(Boolean))) {
-      const key = named ? JSON.stringify([ownerLabel, addr]) : addr;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-  return counts;
-}
-
 function measuredNote(lines) {
   if (lines.some((t) => !painted(t) || (t.fontSize ?? 2.5) < 2.499)) return;
   const [first, second] = lines;
@@ -156,67 +146,213 @@ function measuredNote(lines) {
   return top.text + " " + bottom.text;
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+function parseSheetZoneToken(token) {
+  const m = /^(\d{2,})\.([A-D][1-6])$/u.exec(token);
+  return m ? { sheet: Number(m[1]), zone: m[2] } : null;
+}
+
+function matchesDestinationText(raw, destinations, allowCardWrap = false) {
+  if (!destinations?.length) return false;
+  const text = raw.trim();
+  if (destinations.length === 1) {
+    const parsed = parseSheetZoneToken(text);
+    const [only] = destinations;
+    return (
+      parsed !== null &&
+      parsed.sheet === only.sheet &&
+      only.zones.includes(parsed.zone)
+    );
+  }
+  const altPattern = allowCardWrap
+    ? /^(\d{2,}\.[A-D][1-6])\s+(?:\(\s*)?also shown\s+((?:\d{2,}\.[A-D][1-6])(?:\s*,\s*\d{2,}\.[A-D][1-6])*)\s*\)?$/u
+    : /^(\d{2,}\.[A-D][1-6]) \(also shown (\d{2,}\.[A-D][1-6](?:, \d{2,}\.[A-D][1-6])*)\)$/u;
+  const match = altPattern.exec(text);
+  if (!match) return false;
+  const tokens = [
+    match[1],
+    ...match[2].split(/\s*,\s*/u).map((part) => part.trim()),
+  ];
+  if (tokens.length !== destinations.length) return false;
+  return tokens.every((token, i) => {
+    const parsed = parseSheetZoneToken(token);
+    const expected = destinations[i];
+    return (
+      parsed !== null &&
+      parsed.sheet === expected.sheet &&
+      expected.zones.includes(parsed.zone)
+    );
+  });
+}
+
+function obligationMatchesAddress(obligation, addr) {
+  if (obligation.destinations?.length)
+    return matchesDestinationText(addr, obligation.destinations);
+  return (obligation.values ?? []).some((v) => noteAddress(v) === addr);
+}
+
+function uniqueQualifiedOwnerAddress(obligations, ownerLabel, addr) {
+  let matches = 0;
+  for (const o of obligations) {
+    if (o.ownerLabel === ownerLabel && obligationMatchesAddress(o, addr))
+      matches++;
+    if (matches > 1) return false;
+  }
+  return matches === 1;
+}
+
+function cardDestinationSlice(card, prefix) {
+  const { text, rowPrefixes, rowIndex } = card;
+  if (Array.isArray(rowPrefixes) && Number.isInteger(rowIndex)) {
+    let cursor = 0;
+    for (let i = 0; i <= rowIndex; i++) {
+      const p = rowPrefixes[i];
+      if (!p) return null;
+      const at = text.indexOf(p, cursor);
+      if (at < 0) return null;
+      cursor = at + p.length;
+    }
+    const nextPrefix = rowPrefixes[rowIndex + 1];
+    if (!nextPrefix) return text.slice(cursor);
+    const nextAt = text.indexOf(nextPrefix, cursor);
+    return nextAt < 0 ? text.slice(cursor) : text.slice(cursor, nextAt);
+  }
+  const idx = text.indexOf(prefix);
+  if (idx < 0) return null;
+  const after = text.slice(idx + prefix.length);
+  const nextRow = /\s+\S+\s+(?:→|->)\s+/u.exec(after);
+  return nextRow ? after.slice(0, nextRow.index) : after;
 }
 
 function cardCarriesDestination(obligation) {
   const { card, label, peerName, destinations = [] } = obligation;
   if (!card || !destinations.length) return false;
-  const prefix = `${label} → ${peerName}`;
-  const idx = card.text.indexOf(prefix);
-  if (idx < 0) return false;
-  const tail = card.text.slice(idx + prefix.length);
-  const [primary, ...alternates] = destinations;
-  const primaryPattern = primary.zones
-    .map((z) => escapeRegExp(at(primary.sheet, z)))
-    .join("|");
-  if (!alternates.length)
-    return new RegExp(`^\\s+(?:${primaryPattern})(?:\\s|$)`, "u").test(tail);
-  const altPatterns = alternates.map(
-    (alt) =>
-      `(?:${alt.zones.map((z) => escapeRegExp(at(alt.sheet, z))).join("|")})`,
-  );
-  const pattern = new RegExp(
-    `^\\s+(?:${primaryPattern})\\s+(?:\\(\\s*)?also shown\\s+${altPatterns.join("\\s*,\\s*")}\\)?(?:\\s|$)`,
-    "u",
-  );
-  return pattern.test(tail);
+  const slice = cardDestinationSlice(card, `${label} → ${peerName}`);
+  return slice !== null && matchesDestinationText(slice, destinations, true);
 }
 
-function nameForm(obligation, note, value, namedCounts) {
+function auditCardUnsupportedDestinations(sheet, g, expected, result) {
+  const cards = g?.tranche4?.cards ?? [];
+  if (!cards.length) return;
+  const supportedByCard = new Map();
+  for (const o of expected) {
+    if (!o.card?.element || !o.destinations?.length) continue;
+    const set = supportedByCard.get(o.card.element) ?? new Set();
+    for (const d of o.destinations)
+      for (const z of d.zones) set.add(at(d.sheet, z));
+    supportedByCard.set(o.card.element, set);
+  }
+  for (const card of cards) {
+    const supported = supportedByCard.get(card.element) ?? new Set();
+    const text = (card.texts ?? [])
+      .filter(
+        (t) => painted(t) && !(card.headingElements ?? []).includes(t.element),
+      )
+      .map((t) => t.text)
+      .join(" ");
+    const unsupported = [...text.matchAll(/\b(\d{2,}\.[A-Z]+\d+)\b/gu)]
+      .map((m) => m[1])
+      .filter((token) => !supported.has(token));
+    if (unsupported.length)
+      result.push(
+        finding("issued-peer-reference-unsupported-destination", card, {
+          sheet,
+          unsupported,
+          supported: [...supported].sort(),
+          cardText: text,
+        }),
+      );
+  }
+}
+
+function nameForm(obligation, note, value, allObligations) {
   if (
     !value ||
     obligation.kind !== note.peerReference ||
     JSON.stringify(obligation.source) !== note.peerSource
   )
     return;
-  const { ownerLabel, values, compactValues = [] } = obligation;
+  const {
+    ownerLabel,
+    values = [],
+    compactValues = [],
+    destinations,
+  } = obligation;
+  if (destinations?.length && obligation.label && obligation.peerName) {
+    const fullPrefix = `${obligation.label} · ${ownerLabel} → ${obligation.peerName} `;
+    if (
+      value.startsWith(fullPrefix) &&
+      matchesDestinationText(value.slice(fullPrefix.length), destinations)
+    )
+      return "full";
+    const namedCompactPrefix = `${ownerLabel} → ${obligation.peerName} `;
+    if (
+      ownerLabel &&
+      value.startsWith(namedCompactPrefix) &&
+      matchesDestinationText(
+        value.slice(namedCompactPrefix.length),
+        destinations,
+      )
+    )
+      return "named-compact";
+    const bareCompactPrefix = `→ ${obligation.peerName} `;
+    if (
+      value.startsWith(bareCompactPrefix) &&
+      matchesDestinationText(
+        value.slice(bareCompactPrefix.length),
+        destinations,
+      )
+    )
+      return "bare-compact";
+    const qualifiedPrefix = `${ownerLabel} → `;
+    if (
+      ownerLabel &&
+      value.startsWith(qualifiedPrefix) &&
+      matchesDestinationText(
+        value.slice(qualifiedPrefix.length),
+        destinations,
+      ) &&
+      uniqueQualifiedOwnerAddress(
+        allObligations,
+        ownerLabel,
+        value.slice(qualifiedPrefix.length),
+      )
+    )
+      return "qualified";
+    return;
+  }
   if (values.includes(value)) return "full";
   if (ownerLabel && compactValues.some((v) => value === `${ownerLabel} ${v}`))
     return "named-compact";
-  if (!note.peerGroup && compactValues.includes(value)) return "bare-compact";
+  if (compactValues.includes(value)) return "bare-compact";
   const addr = noteAddress(value);
   if (
     addr &&
     ownerLabel &&
     values.some((v) => noteAddress(v) === addr) &&
-    namedCounts.get(JSON.stringify([ownerLabel, addr])) === 1 &&
+    uniqueQualifiedOwnerAddress(allObligations, ownerLabel, addr) &&
     value === `${ownerLabel} → ${addr}`
   )
     return "qualified";
 }
 
-function measuredFieldHorizontalBounds(g) {
+function measuredFieldBounds(g) {
   if (!g?.frame || !g?.headerRule) return;
-  const { numbers } = printedZones(g);
+  const { numbers, letters } = printedZones(g);
   if (numbers.length < 2) return;
   const colW = numbers[1].anchor.x - numbers[0].anchor.x;
   if (!(colW > 0)) return;
-  return {
+  const bounds = {
     left: numbers[0].anchor.x - colW / 2,
     right: numbers.at(-1).anchor.x + colW / 2,
   };
+  if (letters.length >= 2) {
+    const rowH = letters[1].anchor.y - letters[0].anchor.y;
+    if (rowH > 0) {
+      bounds.top = letters[0].anchor.y - rowH / 2;
+      bounds.bottom = letters.at(-1).anchor.y + rowH / 2;
+    }
+  }
+  return bounds;
 }
 
 function noteRegion(lines) {
@@ -240,7 +376,7 @@ function checkPeerStackGaps(sheet, regions, result) {
         a.box.y - (b.box.y + b.box.h),
         b.box.y - (a.box.y + a.box.h),
       );
-      if (dy < PEER_STACK_GAP_MM - INK_ACCURACY_MM)
+      if (dy < PEER_STACK_GAP_MM - 1e-6)
         result.push(
           finding("issued-peer-reference-stack-gap", a.first, {
             sheet,
@@ -279,15 +415,24 @@ function auditNoteGeometry(
   if (
     fieldBounds &&
     (box.x < fieldBounds.left - INK_ACCURACY_MM ||
-      box.x + box.w > fieldBounds.right + INK_ACCURACY_MM)
+      box.x + box.w > fieldBounds.right + INK_ACCURACY_MM ||
+      (fieldBounds.top !== undefined &&
+        box.y < fieldBounds.top - INK_ACCURACY_MM) ||
+      (fieldBounds.bottom !== undefined &&
+        box.y + box.h > fieldBounds.bottom + INK_ACCURACY_MM))
   )
     result.push(
       finding("issued-peer-reference-outside-drawing-bounds", first, {
         sheet,
         printed,
         noteLeftMm: box.x,
+        noteTopMm: box.y,
+        noteBottomMm: box.y + box.h,
         fieldLeftMm: fieldBounds.left,
         fieldRightMm: fieldBounds.right,
+        ...(fieldBounds.top !== undefined
+          ? { fieldTopMm: fieldBounds.top, fieldBottomMm: fieldBounds.bottom }
+          : {}),
       }),
     );
 }
@@ -378,7 +523,7 @@ function auditFreePeerNote(sheet, lines, state, result) {
   }
   let form;
   const index = state.obligations.findIndex(
-    (o) => (form = nameForm(o, first, value, state.namedCounts)),
+    (o) => (form = nameForm(o, first, value, state.allObligations)),
   );
   if (index === -1) {
     result.push(
@@ -414,11 +559,12 @@ export function peerReferenceFindings(sheet, g, expected) {
         });
     } else obligations.push(o);
   }
+  auditCardUnsupportedDestinations(sheet, g, expected, result);
   const state = {
     cardOwnedSources,
     obligations,
-    namedCounts: addressUses(obligations, true),
-    fieldBounds: measuredFieldHorizontalBounds(g),
+    allObligations: [...obligations],
+    fieldBounds: measuredFieldBounds(g),
     seenFreeSources: new Set(),
     formsByKind: new Map(),
     paintedRegions: [],

@@ -307,7 +307,7 @@ it("5.40 rejects repeated-body and qualified port pointers on the same baseline 
   expect(
     portNavigationAudit(x.packet, x.geometries, x.ir, x.request).findings,
   ).toEqual([]);
-  // Old-engine witness (network-pagination s03 N05): same baseline fails.
+  // Old-engine witness (network-pagination s03 N05): same baseline two runs fails.
   ref.texts[0].anchor.y = portY;
   ref.texts[0].bbox.y = portY - 2;
   expect(
@@ -315,4 +315,18 @@ it("5.40 rejects repeated-body and qualified port pointers on the same baseline 
       (f) => f.kind,
     ),
   ).toContain("port-navigation-same-line-as-body-pointer");
+  // Joining N05's repeated-body pointer and port pointer into ONE text run must also fail #430.
+  for (const sep of ["  ", "; "]) {
+    const joined = portFixture();
+    const joinedRef = joined.geometries[0].tranche4.partRefs[0];
+    joinedRef.texts[0].text = `N05 -> P2/S02.A1, P3/S03.A1${sep}${joinedRef.texts[0].text}`;
+    expect(
+      portNavigationAudit(
+        joined.packet,
+        joined.geometries,
+        joined.ir,
+        joined.request,
+      ).findings.map((f) => f.kind),
+    ).toContain("port-navigation-same-line-as-body-pointer");
+  }
 });

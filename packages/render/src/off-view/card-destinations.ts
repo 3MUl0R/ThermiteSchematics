@@ -261,6 +261,37 @@ function cardFitsClear(
   return true;
 }
 
+function cardCandidatePositions(
+  rect: Rect,
+  layout: CardLayout,
+  visibleCard: NavigationGeometry,
+) {
+  const base = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x, y: rect.y + rect.h - layout.height },
+    { x: rect.x + rect.w - layout.width, y: rect.y },
+    { x: rect.x + rect.w - layout.width, y: rect.y + rect.h - layout.height },
+  ];
+  const shifted: { x: number; y: number }[] = [];
+  const pageScale = Math.hypot(visibleCard.matrix[0], visibleCard.matrix[1]);
+  if (!(pageScale > 0)) return { base, shifted };
+  const oldPage = project(rect, visibleCard.matrix);
+  const clipBottom = visibleCard.clip.y + visibleCard.clip.h;
+  const maxY =
+    rect.y + (clipBottom - (oldPage.y + layout.height * pageScale)) / pageScale;
+  const clampedY = Math.min(rect.y, maxY);
+  if (clampedY < rect.y - 0.01) shifted.push({ x: rect.x, y: clampedY });
+  for (const dxMm of [2, 4, 6]) {
+    const dx = dxMm / pageScale;
+    shifted.push(
+      { x: rect.x + dx, y: rect.y },
+      { x: rect.x + dx, y: rect.y + rect.h - layout.height },
+      ...(clampedY < rect.y - 0.01 ? [{ x: rect.x + dx, y: clampedY }] : []),
+    );
+  }
+  return { base, shifted };
+}
+
 function tryCardBoxes(
   rect: Rect,
   layout: CardLayout,
@@ -269,13 +300,10 @@ function tryCardBoxes(
   field: Rect,
   obstacles: CardObstacles,
   gaps: readonly (readonly [number, number])[],
+  allowShifted = false,
 ): CardPlacement | undefined {
-  const positions = [
-    { x: rect.x, y: rect.y },
-    { x: rect.x, y: rect.y + rect.h - layout.height },
-    { x: rect.x + rect.w - layout.width, y: rect.y },
-    { x: rect.x + rect.w - layout.width, y: rect.y + rect.h - layout.height },
-  ];
+  const { base, shifted } = cardCandidatePositions(rect, layout, visibleCard);
+  const positions = allowShifted ? shifted : base;
   for (const [inkGap, textGap] of gaps) {
     for (const pos of positions) {
       const candidate = project(
@@ -343,6 +371,7 @@ function tryCardBox(
   ctx: CardBoxContext,
   layout: CardLayout,
   gaps: readonly (readonly [number, number])[],
+  allowShifted = false,
 ): CardPlacement | undefined {
   return tryCardBoxes(
     ctx.rect,
@@ -352,6 +381,7 @@ function tryCardBox(
     ctx.field,
     ctx.obstacles,
     gaps,
+    allowShifted,
   );
 }
 
@@ -462,7 +492,12 @@ function chooseCardBox(
     CARD_PAD,
   );
   const wideFull = layoutCard(headingLines, rowSpecs, wideW, CARD_FONT, scale);
-  return tryCardBox(ctx, wideFull, fullGaps) ?? tryCompactCardBox(ctx);
+  return (
+    tryCardBox(ctx, wideFull, fullGaps) ??
+    tryCompactCardBox(ctx) ??
+    tryCardBox(ctx, sameWidthFull, fullGaps, true) ??
+    tryCardBox(ctx, wideFull, fullGaps, true)
+  );
 }
 
 function collectVisibleCards(geometry: readonly NavigationGeometry[]) {
@@ -594,6 +629,7 @@ export function injectOffViewCardDestinations(
   byTerminal: ReadonlyMap<string, readonly OffViewConnection[]>,
   destinationsByRow: ReadonlyMap<string, readonly string[]>,
   rewrites?: Map<string, string>,
+  localRewritten?: Set<string>,
 ): string {
   if (!destinationsByRow.size || !svg.includes('class="off-view-annotation"'))
     return svg;
@@ -638,6 +674,7 @@ export function injectOffViewCardDestinations(
         chosen,
       );
       rewrites?.set(parsed.cardKey, rewritten);
+      localRewritten?.add(parsed.cardKey);
       return rewritten;
     },
   );
@@ -648,6 +685,7 @@ export function injectOffViewCardDestinations(
 export function syncRewrittenOffViewCards(
   svg: string,
   rewrites: ReadonlyMap<string, string>,
+  skipKeys?: ReadonlySet<string>,
 ): string {
   if (!rewrites.size || !svg.includes('class="off-view-annotation"'))
     return svg;
@@ -660,6 +698,7 @@ export function syncRewrittenOffViewCards(
       const conductorsRaw = attrValue(openTag, "data-off-view-conductors");
       if (!terminalRaw || !conductorsRaw) return block;
       const cardKey = JSON.stringify([terminalRaw, conductorsRaw]);
+      if (skipKeys?.has(cardKey)) return block;
       return rewrites.get(cardKey) ?? block;
     },
   );

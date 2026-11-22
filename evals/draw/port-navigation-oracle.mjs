@@ -28,6 +28,26 @@ function portClauses(part, source, ir, selected) {
       namedPortSubjects(r.text, selected, ir, part.view).includes(source),
     );
 }
+const LEADING_DESTINATIONS =
+  /^\s*(?:(?:P\d+\s*\/\s*)?S?\d+[. :][A-Z]+\d+\s*(?:,\s*)?)+/u;
+
+function classifyRunPointers(text, selected, ir, view) {
+  let hasBody = false;
+  let hasPort = false;
+  for (const segment of text.split(/;|\n/u)) {
+    const parts = segment.split(/(?:→|->)/u);
+    if (parts.length < 2) continue;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const subject =
+        i === 0 ? parts[i] : parts[i].replace(LEADING_DESTINATIONS, "");
+      if (namedPortSubjects(`${subject} →`, selected, ir, view).length > 0)
+        hasPort = true;
+      else hasBody = true;
+    }
+  }
+  return { hasBody, hasPort };
+}
+
 function checkBodyAndPortLineSeparation(part, ir, selected, findings) {
   const refs = (part.geometry.tranche4?.partRefs ?? []).filter(
     (r) =>
@@ -36,15 +56,28 @@ function checkBodyAndPortLineSeparation(part, ir, selected, findings) {
       r.view === part.view + 1,
   );
   for (const r of refs) {
-    const paintedRuns = (r.texts ?? []).filter(painted);
-    const bodyRuns = paintedRuns.filter(
-      (t) =>
-        /(?:->|→)/u.test(t.text) &&
-        namedPortSubjects(t.text, selected, ir, part.view).length === 0,
-    );
-    const portRuns = paintedRuns.filter(
-      (t) => namedPortSubjects(t.text, selected, ir, part.view).length > 0,
-    );
+    const classified = (r.texts ?? []).filter(painted).map((t) => ({
+      run: t,
+      ...classifyRunPointers(t.text, selected, ir, part.view),
+    }));
+    for (const { run, hasBody, hasPort } of classified) {
+      if (hasBody && hasPort)
+        findings.push({
+          ...finding("port-navigation-same-line-as-body-pointer", run, {
+            deviceUid: r.uid,
+            bodyText: run.text,
+            portText: run.text,
+            deltaYMm: 0,
+          }),
+          sheet: part.sheet,
+        });
+    }
+    const bodyRuns = classified
+      .filter((c) => c.hasBody && !c.hasPort)
+      .map((c) => c.run);
+    const portRuns = classified
+      .filter((c) => c.hasPort && !c.hasBody)
+      .map((c) => c.run);
     for (const body of bodyRuns) {
       const bodyY = body.anchor?.y ?? body.bbox?.y;
       if (!Number.isFinite(bodyY)) continue;

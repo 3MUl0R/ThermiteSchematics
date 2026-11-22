@@ -502,3 +502,210 @@ it("5.40 rejects split arrows across wrapped peer-note lines (#409)", () => {
     ).map((f) => f.kind),
   ).toContain("issued-peer-reference-arrow-split");
 });
+
+it("5.40 rejects invented card alternates and unsupported sheet.zone tokens", () => {
+  const mkCardObl = (cardText) => ({
+    kind: "conductor-peer",
+    source: [
+      { deviceUid: "SRC1", terminalKey: "L3" },
+      { kind: "wire", uid: "W-PWR-003-M2" },
+      { deviceUid: "CB2", terminalKey: "5/L3" },
+    ],
+    label: "W-PWR-003-M2",
+    peerName: "CB2.5/L3",
+    ownerLabel: "SRC1.L3",
+    destinations: [{ sheet: 2, zones: ["A4"] }],
+    values: ["W-PWR-003-M2 · SRC1.L3 → CB2.5/L3 02.A4"],
+    card: {
+      element: "card-src1-l3",
+      bbox: { x: 30, y: 40, w: 48, h: 10 },
+      text: cardText,
+      rowPrefixes: ["W-PWR-003-M2 → CB2.5/L3"],
+      rowIndex: 0,
+    },
+  });
+  const mkGeom = (cardText) => ({
+    texts: [],
+    tranche4: {
+      cards: [
+        {
+          element: "card-src1-l3",
+          headingElements: [],
+          texts: [{ element: "row-1", painted: true, text: cardText }],
+        },
+      ],
+    },
+  });
+  const valid = "W-PWR-003-M2 → CB2.5/L3 02.A4";
+  expect(peerReferenceFindings(1, mkGeom(valid), [mkCardObl(valid)])).toEqual(
+    [],
+  );
+  const invented = "W-PWR-003-M2 → CB2.5/L3 02.A4 (also shown 99.D6)";
+  expect(
+    peerReferenceFindings(1, mkGeom(invented), [mkCardObl(invented)]).map(
+      (f) => f.kind,
+    ),
+  ).toEqual(
+    expect.arrayContaining([
+      "issued-peer-reference-missing",
+      "issued-peer-reference-unsupported-destination",
+    ]),
+  );
+  // Unsupported destination on a card with no peer obligation must also fail.
+  expect(
+    peerReferenceFindings(1, mkGeom("W-X → Y.1 99.D6"), []).map((f) => f.kind),
+  ).toContain("issued-peer-reference-unsupported-destination");
+});
+
+it("5.40 fails a 1.40 mm peer stack gap and passes 1.50 mm (#450)", () => {
+  const mkPeer = (key, y) => ({
+    kind: "conductor-peer",
+    source: ["S", key, "T"],
+    ownerLabel: `R1.${key}`,
+    owners: [{ x: 40, y, w: 4, h: 2 }],
+    values: [`W${key} · R1.${key} → S2.${key} 01.A3`],
+    compactValues: [`→ S2.${key} 01.A3`],
+  });
+  const mkNote = (key, y) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(["S", key, "T"]),
+    text: `W${key} · R1.${key} → S2.${key} 01.A3`,
+    painted: true,
+    fontSize: 2.5,
+    bbox: { x: 46, y, w: 28, h: 2 },
+  });
+  expect(
+    peerReferenceFindings(5, { texts: [mkNote("1", 50), mkNote("2", 53.4)] }, [
+      mkPeer("1", 50),
+      mkPeer("2", 53.4),
+    ]).map((f) => f.kind),
+  ).toContain("issued-peer-reference-stack-gap");
+  expect(
+    peerReferenceFindings(5, { texts: [mkNote("1", 50), mkNote("2", 53.5)] }, [
+      mkPeer("1", 50),
+      mkPeer("2", 53.5),
+    ]),
+  ).toEqual([]);
+});
+
+it("5.40 fails peer notes above or below the measured drawing field", () => {
+  const fieldSheet = (noteY) => ({
+    frame: { x: 10, y: 10, w: 259, h: 196 },
+    headerRule: { y: 12 },
+    texts: [
+      {
+        sheetText: true,
+        painted: true,
+        text: "1",
+        anchor: { x: 42, y: 15 },
+        bbox: { x: 41, y: 13, w: 2, h: 2 },
+      },
+      {
+        sheetText: true,
+        painted: true,
+        text: "2",
+        anchor: { x: 84, y: 15 },
+        bbox: { x: 83, y: 13, w: 2, h: 2 },
+      },
+      {
+        sheetText: true,
+        painted: true,
+        text: "A",
+        anchor: { x: 13, y: 40 },
+        bbox: { x: 12, y: 38, w: 2, h: 2 },
+      },
+      {
+        sheetText: true,
+        painted: true,
+        text: "B",
+        anchor: { x: 13, y: 80 },
+        bbox: { x: 12, y: 78, w: 2, h: 2 },
+      },
+      { ...marker(reference.text), bbox: { x: 40, y: noteY, w: 30, h: 2 } },
+    ],
+  });
+  // Vertical drawing field spans [20, 100] from A@40, B@80 (rowH=40).
+  expect(peerReferenceFindings(1, fieldSheet(50), [shortReference])).toEqual(
+    [],
+  );
+  expect(
+    peerReferenceFindings(1, fieldSheet(102), [shortReference]).map(
+      (f) => f.kind,
+    ),
+  ).toContain("issued-peer-reference-outside-drawing-bounds");
+  expect(
+    peerReferenceFindings(1, fieldSheet(17), [shortReference]).map(
+      (f) => f.kind,
+    ),
+  ).toContain("issued-peer-reference-outside-drawing-bounds");
+});
+
+it("5.40 accepts valid owner-bound two-line compact wrap and rejects displaced or misaligned wraps", () => {
+  const compactObl = {
+    ...shortReference,
+    ownerLabel: "R1.X2",
+    owners: [{ x: 40, y: 40, w: 3, h: 3 }],
+  };
+  const twoLineCompact = (x, y, line2OffsetY = 3.5) => [
+    {
+      ...marker("→ CAP-X2"),
+      peerGroup: "cw1",
+      anchor: { x, y: y + 2 },
+      bbox: { x, y, w: 18, h: 2 },
+    },
+    {
+      ...marker("02.B4"),
+      peerGroup: "cw1",
+      anchor: { x, y: y + 2 + line2OffsetY },
+      bbox: { x, y: y + line2OffsetY, w: 10, h: 2 },
+    },
+  ];
+  expect(
+    peerReferenceFindings(1, { texts: twoLineCompact(44, 40) }, [compactObl]),
+  ).toEqual([]);
+  expect(
+    peerReferenceFindings(1, { texts: twoLineCompact(48, 40) }, [
+      compactObl,
+    ]).map((f) => f.kind),
+  ).toContain("issued-peer-reference-owner-distance");
+  expect(
+    peerReferenceFindings(1, { texts: twoLineCompact(44, 40, 5.0) }, [
+      compactObl,
+    ]).map((f) => f.kind),
+  ).toContain("issued-peer-reference-unbound");
+});
+
+it("5.40 validates multi-sheet destination sets in linear time without exponential expansion", () => {
+  const destinations = Array.from({ length: 30 }, (_, i) => ({
+    sheet: i + 2,
+    zones: ["A1", "A2", "B1", "B2"],
+  }));
+  const printedDest = `${String(destinations[0].sheet).padStart(2, "0")}.B2 (also shown ${destinations
+    .slice(1)
+    .map((d) => `${String(d.sheet).padStart(2, "0")}.A2`)
+    .join(", ")})`;
+  const obl = {
+    kind: "conductor-peer",
+    source: ["SRC", "W1", "DST"],
+    label: "W1",
+    ownerLabel: "SRC.1",
+    peerName: "DST.1",
+    destinations,
+    values: [`W1 · SRC.1 → DST.1 ${printedDest}`],
+  };
+  const validNote = {
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(obl.source),
+    text: `W1 · SRC.1 → DST.1 ${printedDest}`,
+    painted: true,
+    fontSize: 2.5,
+  };
+  expect(peerReferenceFindings(1, { texts: [validNote] }, [obl])).toEqual([]);
+  const badNote = {
+    ...validNote,
+    text: validNote.text.replace("31.A2", "31.D6"),
+  };
+  expect(
+    peerReferenceFindings(1, { texts: [badNote] }, [obl]).map((f) => f.kind),
+  ).toContain("issued-peer-reference-unbound");
+});

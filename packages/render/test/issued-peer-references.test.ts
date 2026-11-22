@@ -3,6 +3,9 @@ import { compileProject } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/sheets.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
+import { authoredTerminalIncidence } from "../src/off-view/incidence.js";
+import { cardRowKey } from "../src/off-view/card-destinations.js";
+import { verifyPrintedPeerDestinations } from "../src/packet/terminal-peer-references.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { createTerminalIr } from "../../query/test/fixtures.js";
 
@@ -396,4 +399,65 @@ it("only names device and function references after they are issued (#434)", asy
       } else expect(ink).not.toContain("Device and function references");
     }
   }
+});
+
+it("preserves all destinations on repeated views and enforces printed destination invariant", async () => {
+  const source = await compileProject("examples/motor-starter");
+  if (!source.ok) throw Error(JSON.stringify(source.diagnostics));
+  const baseRequest: SchematicPacketRequest = JSON.parse(
+    await readFile("examples/alpha/motor-starter.packet.json", "utf8"),
+  );
+  // Duplicate the CBL1 conductors view (reproduces Codex repeated-view probe).
+  const repeatedRequest: SchematicPacketRequest = {
+    ...baseRequest,
+    views: [...baseRequest.views, baseRequest.views.at(-1)!],
+  };
+  const result = await renderSchematicPacket(
+    source.ir,
+    repeatedRequest,
+    source.presentation,
+  );
+  if (!result.ok) throw Error(JSON.stringify(result.error));
+  expect(result.value.sheets).toHaveLength(8);
+  const cardTexts = (sheetNumber: number) =>
+    [
+      ...parseSvg(result.value.sheets[sheetNumber - 1]!.svg).querySelectorAll(
+        "g.off-view-annotation",
+      ),
+    ].map((g) => g.textContent?.replace(/\s+/gu, " ").trim() ?? "");
+  // Sheet 7 must retain BOTH 03.C5 and 04.B2 (not overwritten by sheet 8's rewrite).
+  expect(cardTexts(7)).toContainEqual(
+    expect.stringMatching(/W-CTL-004 → PS1\.- 03\.C5 \(also shown 04\.B2\)/u),
+  );
+  expect(cardTexts(8)).toContainEqual(
+    expect.stringMatching(/W-CTL-004 → PS1\.- 03\.C5/u),
+  );
+  // Renderer-side invariant accepts valid output and throws on dropped or duplicated destinations.
+  const tb1 = source.ir.devices.find((d) => d.designation === "TB1")!;
+  const wCtl004 = source.ir.wires.find((w) => w.designation === "W-CTL-004")!;
+  const byTerminal = authoredTerminalIncidence(source.ir);
+  const expected = new Map([
+    [
+      cardRowKey(
+        { deviceUid: tb1.uid, terminalKey: "4" },
+        { kind: "wire", uid: wCtl004.uid },
+      ),
+      ["03.C5", "04.B2"],
+    ],
+  ]);
+  const s7 = result.value.sheets[6]!;
+  expect(() =>
+    verifyPrintedPeerDestinations(s7, expected, [], byTerminal),
+  ).not.toThrow();
+  const dropped = { ...s7, svg: s7.svg.replace(" (also shown 04.B2)", "") };
+  expect(() =>
+    verifyPrintedPeerDestinations(dropped, expected, [], byTerminal),
+  ).toThrow(/Peer destination invariant violated/u);
+  const duplicated = {
+    ...s7,
+    svg: s7.svg.replace("04.B2", "03.C5, 04.B2"),
+  };
+  expect(() =>
+    verifyPrintedPeerDestinations(duplicated, expected, [], byTerminal),
+  ).toThrow(/Peer destination invariant violated/u);
 });

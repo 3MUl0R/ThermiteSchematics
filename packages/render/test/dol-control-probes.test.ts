@@ -138,7 +138,28 @@ it("fits the named W35 peer beside its grouped circuit route", async () => {
   }
 });
 
-it("places W37 nearest R1.14 rather than R1.12 in DOL P6 TTB (#507)", async () => {
+function circuitTerminalBox(svg: string, deviceUid: string, key: string) {
+  const geom = navigationGeometry(svg);
+  const byNode = new Map(geom.map((g) => [g.node, g]));
+  const id = JSON.stringify([deviceUid, key]);
+  const port = required(
+    geom.find((g) => g.visible && g.node.attrs["data-terminal-id"] === id),
+  );
+  const circle = required(port.node.children.find((n) => n.name === "circle"));
+  const mark = required(byNode.get(circle));
+  const r = Number(circle.attrs.r);
+  return project(
+    {
+      x: Number(circle.attrs.cx ?? 0) - r,
+      y: Number(circle.attrs.cy ?? 0) - r,
+      w: 2 * r,
+      h: 2 * r,
+    },
+    mark.matrix,
+  );
+}
+
+it("places W37 at both R1.14 and S2.14 nearest their own terminals in DOL P6 TTB (#507)", async () => {
   const fixture = await dolProbeFixture("p6");
   try {
     const w37 = required(
@@ -146,6 +167,9 @@ it("places W37 nearest R1.14 rather than R1.12 in DOL P6 TTB (#507)", async () =
     );
     const r1 = required(
       fixture.ir.devices.find((device) => device.designation === "R1"),
+    );
+    const s2 = required(
+      fixture.ir.devices.find((device) => device.designation === "S2"),
     );
     const outcome = await renderSchematicPacket(
       fixture.ir,
@@ -157,38 +181,37 @@ it("places W37 nearest R1.14 rather than R1.12 in DOL P6 TTB (#507)", async () =
     const notes = [
       ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
     ].filter((el) => el.getAttribute("data-peer-source")?.includes(w37.uid));
-    expect(notes).toHaveLength(1);
-    expect(notes[0]!.textContent).toMatch(
+    expect(notes).toHaveLength(2);
+    const r1Note = required(
+      notes.find((el) => el.textContent?.includes("R1.14 → S2.14")),
+    );
+    const s2Note = required(
+      notes.find((el) => el.textContent?.includes("S2.14 → R1.14")),
+    );
+    expect(r1Note.textContent).toMatch(
       /^W37 · R1\.14 → S2\.14 01\.[A-D][1-6] \(also shown 02\.[A-D][1-6]\)$/u,
     );
-    const noteX = Number(notes[0]!.getAttribute("x"));
-    const noteY = Number(notes[0]!.getAttribute("y"));
-    const noteBox = { x: noteX, y: noteY - 2, w: 50, h: 2.5 };
-    const geom = navigationGeometry(svg);
-    const byNode = new Map(geom.map((g) => [g.node, g]));
-    const terminalBox = (key: string) => {
-      const id = JSON.stringify([r1.uid, key]);
-      const port = required(
-        geom.find((g) => g.visible && g.node.attrs["data-terminal-id"] === id),
-      );
-      const circle = required(
-        port.node.children.find((n) => n.name === "circle"),
-      );
-      const mark = required(byNode.get(circle));
-      const r = Number(circle.attrs.r);
-      return project(
-        {
-          x: Number(circle.attrs.cx ?? 0) - r,
-          y: Number(circle.attrs.cy ?? 0) - r,
-          w: 2 * r,
-          h: 2 * r,
-        },
-        mark.matrix,
-      );
+    expect(s2Note.textContent).toMatch(
+      /^W37 · S2\.14 → R1\.14 06\.[A-D][1-6]$/u,
+    );
+    const r1Box = {
+      x: Number(r1Note.getAttribute("x")),
+      y: Number(r1Note.getAttribute("y")) - 2,
+      w: 50,
+      h: 2.5,
     };
-    const d14 = boxDistance(noteBox, terminalBox("14"));
-    const d12 = boxDistance(noteBox, terminalBox("12"));
-    expect(d14).toBeLessThan(d12);
+    expect(
+      boxDistance(r1Box, circuitTerminalBox(svg, r1.uid, "14")),
+    ).toBeLessThan(boxDistance(r1Box, circuitTerminalBox(svg, r1.uid, "12")));
+    const s2Box = {
+      x: Number(s2Note.getAttribute("x")),
+      y: Number(s2Note.getAttribute("y")) - 2,
+      w: 34,
+      h: 2.5,
+    };
+    expect(
+      boxDistance(s2Box, circuitTerminalBox(svg, s2.uid, "14")),
+    ).toBeLessThan(boxDistance(s2Box, circuitTerminalBox(svg, s2.uid, "13")));
   } finally {
     await fixture.dispose();
   }

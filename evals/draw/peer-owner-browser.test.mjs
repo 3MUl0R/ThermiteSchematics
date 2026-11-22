@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import { DOMParser } from "linkedom";
 import { compileProject } from "../../packages/compiler/dist/index.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { renderSchematicPacket } from "../../packages/render/dist/index.js";
 import { conveyorRequest } from "../../packages/render/test/packet-navigation-review-fixture.ts";
+import {
+  dolPackets,
+  dolProbeFixture,
+} from "../../packages/render/test/dol-control-probes-fixture.ts";
 import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { peerReferenceFindings } from "./issued-reference-audit.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
@@ -120,3 +125,77 @@ it.each([
   },
   120_000,
 );
+
+it("audits DOL P6 TTB s05 W37 at S2.14 in Chromium", async () => {
+  const dol = await dolProbeFixture("p6");
+  try {
+    const pkt = await renderSchematicPacket(
+      dol.ir,
+      dolPackets("p6", "top-to-bottom").combined,
+    );
+    if (!pkt.ok) throw Error(pkt.error.message);
+    const geoms = [];
+    for (const s of pkt.value.sheets) geoms.push(await measure(s.svg));
+    const obls = terminalPeerObligations(
+      pkt.value,
+      geoms,
+      dol.ir,
+      nativeRows(dol.ir),
+    );
+    const s2 = dol.ir.devices.find((d) => d.designation === "S2");
+    const w37 = dol.ir.wires.find((w) => w.designation === "W37");
+    const s5Obls = obls.filter((o) => o.sheet === 5);
+    expect(
+      s5Obls.some(
+        (o) =>
+          o.source[0]?.deviceUid === s2.uid && o.source[1]?.uid === w37.uid,
+      ),
+    ).toBe(true);
+    expect(peerReferenceFindings(5, geoms[4], s5Obls)).toEqual([]);
+    // Removing the S2.14 W37 peer note (leaving only the generic repeat pointer) must fail.
+    const doc = new DOMParser().parseFromString(
+      pkt.value.sheets[4].svg,
+      "image/svg+xml",
+    );
+    for (const el of doc.querySelectorAll(
+      '[data-peer-reference="conductor-peer"]',
+    ))
+      if (el.textContent?.includes("S2.14 → R1.14")) el.remove();
+    const erasedS5 = await measure(doc.toString());
+    expect(
+      peerReferenceFindings(5, erasedS5, s5Obls).map((f) => f.kind),
+    ).toContain("issued-peer-reference-missing");
+  } finally {
+    await dol.dispose();
+  }
+}, 120_000);
+
+it("audits repeated motor-starter CBL1 views in Chromium without destination loss", async () => {
+  const ms = await compileProject("examples/motor-starter");
+  if (!ms.ok) throw Error(JSON.stringify(ms.diagnostics));
+  const baseReq = JSON.parse(
+    await readFile("examples/alpha/motor-starter.packet.json", "utf8"),
+  );
+  const repPkt = await renderSchematicPacket(
+    ms.ir,
+    { ...baseReq, views: [...baseReq.views, baseReq.views.at(-1)] },
+    ms.presentation,
+  );
+  if (!repPkt.ok) throw Error(repPkt.error.message);
+  const repGeoms = [];
+  for (const s of repPkt.value.sheets) repGeoms.push(await measure(s.svg));
+  const repObls = terminalPeerObligations(
+    repPkt.value,
+    repGeoms,
+    ms.ir,
+    nativeRows(ms.ir),
+  );
+  for (const [i, s] of repPkt.value.sheets.entries())
+    expect(
+      peerReferenceFindings(
+        s.number,
+        repGeoms[i],
+        repObls.filter((o) => o.sheet === s.number),
+      ),
+    ).toEqual([]);
+}, 120_000);
