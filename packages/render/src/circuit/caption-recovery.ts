@@ -29,7 +29,7 @@ export function circuitCaptionPositions(
           ),
         );
       return [
-        ...new Set([y, top, bottom - height, (top + bottom - height) / 2]),
+        ...new Set([(top + bottom - height) / 2, y, top, bottom - height]),
       ].flatMap((y) =>
         [a.x - width - 0.275, a.x + 0.275].map((x) => ({
           x,

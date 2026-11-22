@@ -15,7 +15,12 @@ export function existingCircuitCaption(
   // Preserve the existing conductor-facing anchors of already clear circuit
   // captions inside the established 2 mm association reach. Repairs prefer
   // 0.75 mm; a legal old anchor is not moved merely to tighten its spacing.
-  if (association.owner >= 0.5 && !association.needsLeader) return true;
+  if (
+    association.owner >= 0.5 &&
+    !association.needsLeader &&
+    association.foreign >= association.owner + 0.5
+  )
+    return true;
   return (
     horizontalLabelSupport(ink, own, 0, foreign) && association.foreign > 0
   );

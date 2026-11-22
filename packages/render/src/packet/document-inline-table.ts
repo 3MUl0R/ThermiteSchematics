@@ -33,7 +33,7 @@ export function inlineTablePlan(
     notes,
     width,
     height:
-      9 +
+      9.5 +
       headerHeight +
       heights.reduce((a, b) => a + b, 0) +
       5 +
@@ -48,11 +48,12 @@ export function inlineTableContent(
 ) {
   const { measured, table, header, headerHeight } = plan;
   const label = { ...table, title: "assembly inventory" };
+  const shiftedBox = { ...box, y: box.y + 0.5, h: box.h - 0.5 };
   const context = reportDocumentContext(
     ir,
     label,
     presentation,
-    box,
+    shiftedBox,
     header,
     headerHeight,
   );
@@ -65,7 +66,7 @@ export function inlineTableContent(
       measured.widths,
       table.columns,
       box.x,
-      box.y + 9,
+      box.y + 9.5,
       measured.geometry,
       true,
       measured.inlineLocations,
@@ -73,7 +74,7 @@ export function inlineTableContent(
     "</g>",
   ];
   const documentRows = [];
-  let y = box.y + 9 + headerHeight;
+  let y = box.y + 9.5 + headerHeight;
   for (const [i, cells] of plan.rows.entries()) {
     const height = required(plan.heights[i], "Missing inline row height");
     const native = required(table.rows[i], "Missing inline native row");

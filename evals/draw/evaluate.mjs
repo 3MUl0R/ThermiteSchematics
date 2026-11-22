@@ -26,6 +26,11 @@ import {
   terminalLabelFindings,
 } from "./caption-mark-clearance.mjs";
 import { faceStubFindings } from "./symbol-face-isolation.mjs";
+import {
+  headingClearanceFindings,
+  legendOutsideLocationFindings,
+  locationFragmentCaptionFindings,
+} from "./headings-and-locations.mjs";
 import * as checks from "./checks.mjs";
 import {
   terminalPlanObservation,
@@ -51,6 +56,9 @@ export function textGeometryIssues(g) {
   return [
     ...checks.textBounds(g),
     ...checks.textInZoneGutter(g),
+    ...headingClearanceFindings(g),
+    ...legendOutsideLocationFindings(g),
+    ...locationFragmentCaptionFindings(g),
     ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
   ];
 }

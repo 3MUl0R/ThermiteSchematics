@@ -89,11 +89,13 @@ export function placeLegend(
         area.x,
         area.x + area.w - w,
         ...ink.flatMap((b) => [b.x + b.w + 3.13, b.x - w - 3.13]),
+        ...regions.flatMap((r) => [r.x + r.w + 3.13, r.x - w - 3.13]),
       ],
       ys = [
         area.y,
         area.y + area.h - h,
         ...ink.flatMap((b) => [b.y + b.h + 3.13, b.y - h - 3.13]),
+        ...regions.flatMap((r) => [r.y + r.h + 3.13, r.y - h - 3.13]),
       ];
     for (const y of [...new Set(ys)].sort((a, b) => a - b))
       for (const x of [...new Set(xs)].sort((a, b) => b - a)) {

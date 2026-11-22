@@ -34,7 +34,10 @@ import {
   previewFrameFields,
   type FoldGroups,
 } from "./frame-fold-groups.js";
-import { postTrimCaptionConstraint } from "./rooted-caption.js";
+import {
+  continuedCaptionY,
+  postTrimCaptionConstraint,
+} from "./rooted-caption.js";
 import { foldDrawingDrafts } from "./folding.js";
 import { emitSchematicSvg } from "../svg/emitter.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
@@ -111,7 +114,7 @@ function makeDrafts(
     scale,
     inner,
     profile,
-    original.y - 9,
+    continuedCaptionY(original.y, page, p.view, native),
   );
   for (const d of drafts) d.rootedScoreBounds = original;
   if (!gridLinks(p, grid, b, scale, drafts))

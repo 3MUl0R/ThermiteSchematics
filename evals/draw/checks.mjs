@@ -16,6 +16,7 @@ import {
   requirePdfFont,
 } from "./continuation-labels.mjs";
 export { textInZoneGutter } from "./zone-gutter.mjs";
+import { wireOwnershipReason } from "./headings-and-locations.mjs";
 import { straightPath } from "./path.mjs";
 import { measuredPlateLeader, wireLabelBlock } from "./wire-plate-leader.mjs";
 export { wirePlacementCoverage } from "./wire-plate-leader.mjs";
@@ -731,17 +732,12 @@ export function wirePlacement(g) {
     // Rooted-label offsets near 2.17 mm are threshold-sensitive: 2.147 passes,
     // 2.195 fails. These distance-only hits do not establish visual ambiguity.
     // See README; keep the calibrated uncertainty rather than moving the limit.
-    if (
-      (d > 2 + INK_ACCURACY_MM || other + INK_ACCURACY_MM < d) &&
-      !measuredPlateLeader(g, block, own, others, distance)
-    )
+    const reason = wireOwnershipReason(d, other, inline);
+    if (reason && !measuredPlateLeader(g, block, own, others, distance))
       out.push(
         issue("ambiguous-wire-label", t, {
           ownDistanceMm: d,
-          reason:
-            other + INK_ACCURACY_MM < d
-              ? "nearer-foreign-wire"
-              : "own-wire-distance",
+          reason,
           nearestOtherMm: Number.isFinite(other) ? other : null,
           wire: t.wire,
           text: t.text,

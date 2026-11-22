@@ -114,9 +114,10 @@ export function besideCaption(
     association.owner >= 0.5 / mmPerUnit - 1e-7 &&
     association.owner <= 1 / mmPerUnit + 1e-7 &&
     !association.needsLeader &&
-    association.foreign > 0
+    association.foreign >= association.owner + 0.5 / mmPerUnit - 1e-7
   )
     return { ink, inline: false, needsLeader: false };
+  const margin = 0.5 / mmPerUnit;
   const options = proposals(ink, own, 0.75 / mmPerUnit + stroke / 2)
     .filter((p) => clear(p, reservation, context))
     .map((p) => ({
@@ -135,6 +136,8 @@ export function besideCaption(
     .sort(
       (a, b) =>
         Number(a.needsLeader) - Number(b.needsLeader) ||
+        Number(a.foreign < a.owner + margin) -
+          Number(b.foreign < b.owner + margin) ||
         Math.hypot(a.ink.left - ink.left, a.ink.top - ink.top) -
           Math.hypot(b.ink.left - ink.left, b.ink.top - ink.top),
     );
