@@ -35,7 +35,10 @@ import { reportDocumentContext } from "./document-report.js";
 import type { DocumentRowDraft } from "./document-types.js";
 import {
   terminalStrip,
-  stripRowReference,
+  stripColumnHeaderLines,
+  stripColumnHeaderSvg,
+  stripReferenceColumnWidth,
+  stripRowCellSvg,
   stripDrawing,
 } from "./terminal-strip.js";
 
@@ -118,16 +121,82 @@ function prepareReport(
     );
   let measured: ReturnType<typeof paginatedReportCells>, header: string[][];
   let strip: ReturnType<typeof terminalStrip>;
+  let stripColW = 0;
+  let tableBounds = b;
   try {
     strip = projectStrip ? terminalStrip(ir, table, fullBounds) : undefined;
-    measured = paginatedReportCells(ir, table, b.w, b.h, page, b.y);
+    stripColW = strip ? stripReferenceColumnWidth(strip) : 0;
+    tableBounds = strip
+      ? { ...b, x: b.x + stripColW, w: b.w - stripColW }
+      : b;
+    measured = paginatedReportCells(
+      ir,
+      table,
+      tableBounds.w,
+      b.h,
+      page,
+      b.y,
+    );
     header = measured.split(table.columns, "header");
   } catch (error) {
     return failure("unprintable-layout", (error as Error).message);
   }
   return {
     ok: true as const,
-    value: { view, title, fullBounds, b, strip, measured, header },
+    value: {
+      view,
+      title,
+      fullBounds,
+      b,
+      tableBounds,
+      stripColW,
+      strip,
+      measured,
+      header,
+    },
+  };
+}
+function stripReportColumn(
+  strip: ReturnType<typeof terminalStrip>,
+  stripColW: number,
+  x: number,
+  cellSize: number,
+  header: string[][],
+  geometry: ReturnType<typeof paginatedReportCells>["geometry"],
+) {
+  const headerGeo = geometry(header, true);
+  if (!strip)
+    return {
+      headerH: headerGeo.height,
+      headerSvg: (_y: number) => "",
+      rowSvg: (_key: string, _y: number, _h: number, _baseline: number) => "",
+    };
+  const lines = stripColumnHeaderLines(stripColW, cellSize);
+  const headerH = Math.max(headerGeo.height, geometry([lines], true).height);
+  return {
+    headerH,
+    headerSvg: (y: number) =>
+      stripColumnHeaderSvg(
+        lines,
+        x,
+        y,
+        stripColW,
+        headerH,
+        cellSize,
+        headerGeo.baseline,
+        headerGeo.lineHeight,
+      ),
+    rowSvg: (key: string, y: number, h: number, baseline: number) =>
+      stripRowCellSvg(
+        strip.facts.terminals.get(key)?.ref,
+        key,
+        x,
+        y,
+        stripColW,
+        h,
+        cellSize,
+        baseline,
+      ),
   };
 }
 export function tableDrafts(
@@ -140,7 +209,7 @@ export function tableDrafts(
   table = reserveWireLocations(table);
   const prepared = prepareReport(ir, table, presentation, page, projectStrip);
   if (!prepared.ok) return prepared;
-  const { view, title, fullBounds, b, strip, measured, header } =
+  const { view, title, fullBounds, b, tableBounds, stripColW, strip, measured, header } =
     prepared.value;
   const drafts: Draft[] = [];
   const {
@@ -154,7 +223,15 @@ export function tableDrafts(
     geometry,
     inlineLocations,
   } = measured;
-  const headerH = geometry(header, true).height;
+  const stripCol = stripReportColumn(
+    strip,
+    stripColW,
+    b.x,
+    cellSize,
+    header,
+    geometry,
+  );
+  const { headerH } = stripCol;
   const documents = reportDocumentContext(
     ir,
     table,
@@ -188,7 +265,7 @@ export function tableDrafts(
         height,
         widths,
         table.columns,
-        b.x,
+        tableBounds.x,
         y,
         geometry,
         heading,
@@ -204,12 +281,7 @@ export function tableDrafts(
     y = b.y + 9;
     content.push('<g id="document-header">');
     row(header, headerH, true);
-    content.push("</g>");
-    if (strip)
-      content.push(
-        text(b.x - 9, b.y + 12, "Strip", 2.5),
-        text(b.x - 9, b.y + 15.5, "row", 2.5),
-      );
+    content.push("</g>", stripCol.headerSvg(b.y + 9));
   }
   function finish(end: number) {
     content.push(...reportNoteSvg(notes, b));
@@ -236,7 +308,8 @@ export function tableDrafts(
     } catch (error) {
       return failure("unprintable-layout", (error as Error).message);
     }
-    const height = geometry(cells).height;
+    const rowGeo = geometry(cells),
+      height = rowGeo.height;
     const placement = paginator.place(height);
     if (placement.kind === "overflow") {
       const column = cells.reduce(
@@ -255,20 +328,13 @@ export function tableDrafts(
       start();
     }
     refs.push(...documents.references(i, y, height));
+    const rowY = y;
     content.push(
       `<g id="document-row-${i}" data-report-row="${attr(source.key)}" data-row-designation="${attr(rowDesignation(i))}"${strip ? ` data-strip-ref="${attr(strip.facts.terminals.get(source.key)?.ref ?? "")}"` : ""}>`,
     );
     documentRows.push(documents.row(i, cells, y, height, rowDesignation(i)));
     row(cells, height);
-    content.push("</g>");
-    content.push(
-      stripRowReference(
-        strip?.facts.terminals.get(source.key)?.ref,
-        source.key,
-        b.x,
-        y - height / 2 + 1,
-      ),
-    );
+    content.push("</g>", stripCol.rowSvg(source.key, rowY, height, rowGeo.baseline));
     if (drafts.length > 100)
       return failure(
         "unprintable-layout",

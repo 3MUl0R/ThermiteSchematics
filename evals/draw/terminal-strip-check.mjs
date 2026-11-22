@@ -5,6 +5,7 @@ import {
   continuationCoverage,
 } from "./terminal-strip-continuations.mjs";
 import { stripApproachAudit } from "./terminal-strip-approaches.mjs";
+import { bridgeTagCheck, stripFrameCheck } from "./terminal-strip-tags.mjs";
 // Attributes locate ink. Native IR defines obligations; measured shapes discharge them.
 const pointAt = (p, b) =>
   p &&
@@ -163,6 +164,8 @@ export function checkTerminalStrip(native, ink) {
   bridgeCoverage(native, ink, findings);
   incidenceCoverage(native, ink, findings);
   continuationCoverage(native, ink, findings);
+  bridgeTagCheck(ink, findings);
+  stripFrameCheck(ink, findings);
   for (const s of ink.unclaimed)
     findings.push({ kind: "strip-invented-hardware-or-bridge", shape: s });
   if (!ink.notes.some((t) => t.includes("hardware unspecified")))

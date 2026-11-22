@@ -16,6 +16,8 @@ function headerEnd(svg: string) {
 }
 function inventoryOnly(svg: string) {
   const withoutLinks = svg
+    .replace(/<g\b[^>]*\bdata-strip-column-header="true"[^>]*>[\s\S]*?<\/g>/gu, "")
+    .replace(/<g\b[^>]*\bdata-strip-row-cell="[^"]*"[^>]*>[\s\S]*?<\/g>/gu, "")
     .replace(/<text\b[^>]*\bdata-strip-row="[^"]*"[^>]*>[\s\S]*?<\/text>/gu, "")
     .replace(/<g\b[^>]*\bdata-report-row="[^"]*"[^>]*>/gu, (group) =>
       group.replace(/\sdata-strip-ref="[^"]*"/gu, ""),

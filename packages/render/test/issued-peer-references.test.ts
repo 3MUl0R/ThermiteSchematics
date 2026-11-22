@@ -521,3 +521,113 @@ it("parses printed peer destinations structurally when conductor designations re
       ),
     ).toThrow(/Peer destination invariant violated/u);
 });
+
+it("enforces owner-nearest reach on terminal-label-anchor fallback", async () => {
+  const { searchNavigationSlot } = await import(
+    "../src/packet/navigation-slot-search.js"
+  );
+  const field = { x: 28, y: 24, w: 360, h: 240 };
+  const owner = { x: 50, y: 68, w: 1.3, h: 1.3 };
+  const foreign = { x: 50, y: 75, w: 1.3, h: 1.3 };
+  const shape = {
+    id: "terminal-label-anchor",
+    mode: "local" as const,
+    inkMm: { x: 0, y: 0, w: 20, h: 2.5 },
+    render: () => "",
+  };
+  const blocked = [{ x: 28, y: 24, w: 360, h: 50 }];
+  const rejected = searchNavigationSlot(
+    [shape],
+    field,
+    owner,
+    blocked,
+    undefined,
+    [],
+    false,
+    undefined,
+    undefined,
+    false,
+    () => ({
+      anchors: [{ x: 50, y: 78, w: 10, h: 2.5 }],
+      gap: 10,
+      foreignOwners: [foreign],
+      requireOwnerNearest: true,
+      maxOwnerGapMm: 10,
+    }),
+  );
+  expect(rejected).toBeUndefined();
+  const accepted = searchNavigationSlot(
+    [shape],
+    field,
+    owner,
+    [],
+    undefined,
+    [],
+    false,
+    undefined,
+    undefined,
+    false,
+    () => ({
+      anchors: [owner],
+      gap: 10,
+      foreignOwners: [foreign],
+      requireOwnerNearest: true,
+      maxOwnerGapMm: 10,
+    }),
+  );
+  expect(accepted).toBeDefined();
+});
+
+it("keeps rm3 PLC1.AI0+ and AI0- peer notes owner-associated inside the drawing field", async () => {
+  const { rm3CircuitViews, rm3LoopView } = await import(
+    "../../core-library/test/rm3-drawings.js"
+  );
+  const compiled = await compileProject(
+    "packages/core-library/test/fixtures/rm3",
+  );
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const circuit = await rm3CircuitViews(compiled.ir, "left-to-right");
+  const loop = await rm3LoopView(
+    compiled.ir,
+    "packages/core-library/test/fixtures/rm3",
+    "left-to-right",
+  );
+  const net = JSON.parse(
+    await readFile(
+      "packages/core-library/test/fixtures/rm3/network.request.json",
+      "utf8",
+    ),
+  );
+  const packet = await renderSchematicPacket(compiled.ir, {
+    format: "schematic-packet-request/0.1",
+    page: { size: "a3", orientation: "landscape", marginMm: 10 },
+    views: [
+      ...circuit.views,
+      loop,
+      net,
+      ...compiled.ir.cables.map((c) => ({
+        format: "schematic-view-request/0.2" as const,
+        root: { by: "designation" as const, value: c.designation },
+        intent: { kind: "conductors" as const },
+        flow: "left-to-right" as const,
+      })),
+    ],
+  });
+  if (!packet.ok) throw Error(packet.error.message);
+  const s1 = packet.value.sheets[0]!;
+  expect(s1.peerNoteFallbacks ?? []).toEqual([]);
+  const doc = parseSvg(s1.svg);
+  const peers = [
+    ...doc.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+  ];
+  expect(peers.map((el) => el.textContent)).toEqual([
+    expect.stringContaining("PLC1.AI0+"),
+    expect.stringContaining("PLC1.AI0-"),
+  ]);
+  for (const el of peers) {
+    const x = Number(el.getAttribute("x"));
+    expect(x).toBeGreaterThanOrEqual(28);
+  }
+  const [aiPlus, aiMinus] = peers.map((el) => Number(el.getAttribute("y")));
+  expect(aiMinus! - aiPlus!).toBeGreaterThanOrEqual(5);
+});

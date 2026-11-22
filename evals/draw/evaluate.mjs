@@ -50,6 +50,7 @@ export function observation(c, s, dq, issues = [], extra = {}) {
 export function textGeometryIssues(g) {
   return [
     ...checks.textBounds(g),
+    ...checks.textInZoneGutter(g),
     ...cohort(checks.legibility(g), (f) => [f.kind, f.font, f.role]),
   ];
 }

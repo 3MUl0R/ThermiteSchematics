@@ -60,6 +60,9 @@ function searchPeerSlot(
       anchors,
       gap: reachMm(shape),
       textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
+      ...(fallback === "terminal-label-anchor"
+        ? { requireOwnerNearest: true, maxOwnerGapMm: PEER_REACH_MM }
+        : {}),
       ...(entry.foreignOwners?.length
         ? { foreignOwners: entry.foreignOwners }
         : {}),

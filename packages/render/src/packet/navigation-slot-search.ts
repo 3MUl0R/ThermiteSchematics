@@ -84,6 +84,8 @@ export interface SlotReach {
   textVerticalClearanceMm?: number;
   foreignOwners?: readonly Rect[];
   tieBreakAnchor?: { x: number; y: number };
+  requireOwnerNearest?: boolean;
+  maxOwnerGapMm?: number;
 }
 
 function reachableAxes(
@@ -118,11 +120,13 @@ function scoreSlotCandidate(
     ? Math.min(...(foreignOwners ?? []).map((f) => boxDistance(f, box)))
     : Infinity;
   const ownerGap = hasForeign
-    ? reach?.anchors.length
-      ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
-      : locality
-        ? boxDistance(owner, box)
-        : distance
+    ? reach?.requireOwnerNearest
+      ? boxDistance(owner, box)
+      : reach?.anchors.length
+        ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+        : locality
+          ? boxDistance(owner, box)
+          : distance
     : 0;
   return {
     box,
@@ -180,13 +184,15 @@ function slotCandidates(
     )
     .filter(
       (box) =>
-        !reach ||
-        !Number.isFinite(reach.gap) ||
-        reach.anchors.some((a) => boxDistance(box, a) <= reach.gap),
+        (!reach ||
+          !Number.isFinite(reach.gap) ||
+          reach.anchors.some((a) => boxDistance(box, a) <= reach.gap)) &&
+        (!reach?.maxOwnerGapMm || boxDistance(box, owner) <= reach.maxOwnerGapMm),
     )
     .map((box) =>
       scoreSlotCandidate(box, owner, locality, ink, preferBesideBelow, reach),
     )
+    .filter((item) => !reach?.requireOwnerNearest || item.foreignCloser === 0)
     .sort(
       (a, b) =>
         a.priority - b.priority ||

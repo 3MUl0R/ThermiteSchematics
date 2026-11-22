@@ -1,7 +1,7 @@
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { DocumentationTable } from "@thermite/query";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
-import { measureText } from "../text-metrics.js";
+import { measureText, printableTextMetrics } from "../text-metrics.js";
 import { required } from "../presentation/util.js";
 import { stripFacts, stripTerminalKey } from "./terminal-strip-facts.js";
 import {
@@ -9,6 +9,12 @@ import {
   stripStubElbow,
   type StripApproaches,
 } from "./terminal-strip-approaches.js";
+import {
+  placeStripBridgeTags,
+  type BridgeGeometry,
+  type StripRect,
+  type StripSegment,
+} from "./terminal-strip-bridge-tags.js";
 import {
   fragmentAnchors,
   paginateStrip,
@@ -45,6 +51,7 @@ function rowLabels(
   y: number,
   locate: Locate,
   approaches: StripApproaches,
+  rightStubSegments: StripSegment[],
 ) {
   const m = part.model,
     out: string[] = [];
@@ -77,10 +84,17 @@ function rowLabels(
             (i === 0 ? -1 : 1) * (2 + (3 * (index + 1)) / (side.length + 1))
           : stripStubElbow(end, index, side.length, anchor, baseline - 1);
       out.push(labelGroup(label, row.terminal.key, !!remote));
-      if (!label.bridge || remote)
+      if (!label.bridge || remote) {
         out.push(
           `<path d="M ${n(start)} ${n(anchor)} H ${n(elbow)} V ${n(baseline - 1)} H ${n(end)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
         );
+        if (i === 1)
+          rightStubSegments.push(
+            { x1: start, y1: anchor, x2: elbow, y2: anchor },
+            { x1: elbow, y1: anchor, x2: elbow, y2: baseline - 1 },
+            { x1: elbow, y1: baseline - 1, x2: end, y2: baseline - 1 },
+          );
+      }
       lines.forEach((line, j) =>
         out.push(
           text(
@@ -109,11 +123,14 @@ function terminalSvg(
   y: number,
   locate: Locate,
   approaches: StripApproaches,
+  rightStubSegments: StripSegment[],
+  terminalRects: StripRect[],
 ) {
   const m = part.model,
     t = row.terminal,
     x = part.x + m.labelW + 8,
     cy = y + row.height / 2;
+  terminalRects.push({ x, y: cy - 4, w: m.terminalW, h: 8 });
   return [
     `<g data-strip-terminal="${attr(t.key)}" data-device-uid="${attr(t.id.deviceUid)}" data-terminal-key="${attr(t.id.terminalKey)}" data-strip-ref="${attr(t.ref)}" data-inventory-row="${attr(t.key)}">`,
     `<rect x="${n(x)}" y="${n(cy - 4)}" width="${n(m.terminalW)}" height="8" fill="#fff" stroke="#344054" stroke-width="0.35"/>`,
@@ -123,23 +140,54 @@ function terminalSvg(
       `<text data-strip-inventory-label="${attr(t.key)}" `,
     ),
     "</g>",
-    ...rowLabels(part, row, x, cy, y, locate, approaches),
+    ...rowLabels(part, row, x, cy, y, locate, approaches, rightStubSegments),
   ].join("\n");
 }
-function bridgeSvg(part: StripFragment, { bridges }: StripApproaches) {
+function bridgeSvg(
+  part: StripFragment,
+  { bridges }: StripApproaches,
+  rightStubSegments: readonly StripSegment[],
+  terminalRects: readonly StripRect[],
+) {
   const edge = part.x + part.model.labelW + 8 + part.model.terminalW;
-  return bridges
-    .map(({ uid, number, lane, from, to }) => {
-      const x = edge + 6 * lane;
+  const step = part.model.laneStep;
+  const geometries: BridgeGeometry[] = bridges.map((bridge) => {
+    const x = edge + step * bridge.lane;
+    const yLo = Math.min(bridge.from.y, bridge.to.y);
+    const yHi = Math.max(bridge.from.y, bridge.to.y);
+    return {
+      bridge,
+      x,
+      yLo,
+      yHi,
+      segments: [
+        { x1: edge, y1: bridge.from.y, x2: x, y2: bridge.from.y },
+        { x1: x, y1: yLo, x2: x, y2: yHi },
+        { x1: edge, y1: bridge.to.y, x2: x, y2: bridge.to.y },
+      ],
+    };
+  });
+  const placements = placeStripBridgeTags(
+    geometries,
+    step,
+    rightStubSegments,
+    terminalRects,
+  );
+  return geometries
+    .map(({ bridge: { uid, number, from, to }, x }) => {
+      const placement = required(
+        placements.get(uid),
+        "Missing bridge tag placement",
+      );
       return [
         `<g data-strip-jumper="${attr(uid)}"><path d="M ${n(edge)} ${n(from.y)} H ${n(x)} V ${n(to.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
         text(
-          x,
-          Math.min(from.centreY, to.centreY) - 5,
+          placement.tx,
+          placement.baseline,
           `B${number}`,
           2.5,
-          "middle",
-        ),
+          placement.anchor,
+        ).replace("<text ", `<text data-strip-bridge-tag="${attr(uid)}" `),
         "</g>",
       ].join("\n");
     })
@@ -186,15 +234,27 @@ function fragmentSvg(part: StripFragment, locate: Locate) {
     ),
   );
   const approaches = stripApproaches(part);
+  const rightStubSegments: StripSegment[] = [];
+  const terminalRects: StripRect[] = [];
   let y = part.y + m.headerH;
   out.push(...orderMarker(part, "from", y, locate));
   if (part.from) y += m.markerH;
   for (const row of part.rows) {
-    out.push(terminalSvg(part, row, y, locate, approaches));
+    out.push(
+      terminalSvg(
+        part,
+        row,
+        y,
+        locate,
+        approaches,
+        rightStubSegments,
+        terminalRects,
+      ),
+    );
     y += row.height;
   }
   out.push(
-    bridgeSvg(part, approaches),
+    bridgeSvg(part, approaches, rightStubSegments, terminalRects),
     ...orderMarker(part, "on", y + 1, locate),
     "</g>",
   );
@@ -209,10 +269,10 @@ function stripContent(
   const b = plan.bounds;
   return [
     `<g data-sheet-kind="terminal-strip">`,
-    text(b.x, b.y + 3, `${title} — graphical strip`, 4, "start", 700),
+    text(b.x + 0.5, b.y + 3, `${title} — graphical strip`, 4, "start", 700),
     ...(plan.pages[page] ?? []).map((part) => fragmentSvg(part, locate)),
     ...plan.notes.map((line, i) =>
-      text(b.x, b.y + b.h - (plan.notes.length - 1 - i) * 3.5, line, 2.5),
+      text(b.x + 0.5, b.y + b.h - (plan.notes.length - 1 - i) * 3.5, line, 2.5),
     ),
     "</g>",
   ].join("\n");
@@ -225,6 +285,69 @@ export function terminalStrip(
   return table.kind === "terminals" && table.rows.length
     ? paginateStrip(stripFacts(ir, table), b)
     : undefined;
+}
+export function stripReferenceColumnWidth(strip: StripPlan, size = 2.6) {
+  const widthOf = (value: string, bold = false) =>
+    Math.max(
+      measureText(value, size).width,
+      printableTextMetrics(value, size, bold).advance,
+    );
+  const headerW = Math.max(widthOf("Strip", true), widthOf("row", true));
+  const refW = Math.max(
+    0,
+    ...[...strip.facts.terminals.values()].map((t) => widthOf(t.ref)),
+  );
+  return Math.max(10.5, Math.ceil((Math.max(headerW, refW) + 3.2) * 2) / 2);
+}
+export function stripColumnHeaderLines(width: number, size: number) {
+  const single = Math.max(
+    measureText("Strip row", size).width,
+    printableTextMetrics("Strip row", size, true).advance,
+  );
+  return single + 3.2 <= width ? ["Strip row"] : ["Strip", "row"];
+}
+export function stripColumnHeaderSvg(
+  lines: readonly string[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  size: number,
+  baseline: number,
+  lineHeight: number,
+) {
+  return [
+    '<g data-strip-column-header="true">',
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="#e9eef4" stroke="#9ba6b4" stroke-width="0.2"/>`,
+    ...lines.map((line, j) =>
+      text(x + 1.4, y + baseline + j * lineHeight, line, size, "start", 700),
+    ),
+    "</g>",
+  ].join("\n");
+}
+export function stripRowCellSvg(
+  ref: string | undefined,
+  key: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  size: number,
+  baseline: number,
+) {
+  return [
+    `<g data-strip-row-cell="${attr(key)}">`,
+    `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="white" stroke="#9ba6b4" stroke-width="0.2"/>`,
+    ...(ref
+      ? [
+          text(x + 1.4, y + baseline, ref, size).replace(
+            "<text ",
+            `<text data-strip-row="${attr(key)}" data-strip-ref="${attr(ref)}" `,
+          ),
+        ]
+      : []),
+    "</g>",
+  ].join("\n");
 }
 export function stripRowReference(
   ref: string | undefined,
@@ -264,7 +387,7 @@ export function stripDraft(
     content: "",
     links: [],
     references: [],
-    note: "Graphical strip · Tn/Rn: inventory row · Snn: inventory sheet",
+    note: "Graphical strip · Tn/Rn: inventory row · Bn: bridge · Snn: inventory sheet",
     documentationTable: true,
   };
 }

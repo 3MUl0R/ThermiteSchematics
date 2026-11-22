@@ -196,7 +196,7 @@ async function circuitDraftsUnchecked(
     const rowX = b.x + (spanning ? 0 : column * (columnWidth + 8));
     const y = b.y + headerHeight + offset;
     for (const { group, width, x: dx } of row.cells) {
-      const x = rowX + dx;
+      const x = rowX + dx + circuitPeerLeftMargin(request.flow, row.cells.length, group, width);
       const { headings, headHeight } = circuitGroupFootprint(group, width);
       if (group.diagnostics?.length)
         (draft.diagnostics ??= []).push(...group.diagnostics);
@@ -250,6 +250,21 @@ async function circuitDraftsUnchecked(
   }
   resolveCircuitContinuations(drafts, request.flow === "top-to-bottom");
   return { ok: true, value: drafts };
+}
+
+function circuitPeerLeftMargin(
+  flow: CircuitViewRequest["flow"],
+  cellCount: number,
+  group: CircuitDrawing,
+  width: number,
+) {
+  return flow !== "top-to-bottom" &&
+    cellCount === 1 &&
+    group.coverage.conductorIds.length === 0 &&
+    group.content.includes("data-outside-connections=") &&
+    width > group.width
+    ? Math.min(44, width - group.width)
+    : 0;
 }
 
 export function circuitSelectionContext(

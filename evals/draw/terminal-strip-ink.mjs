@@ -142,6 +142,7 @@ function stripInkHelpers(straight, clipGeometry, paintGeometry, pathGeometry) {
         painted: painted(t),
         inkVisible:
           painted(t) && visible(t, [b, { x: b.x + b.w, y: b.y + b.h }]),
+        sheet,
       };
     });
   const path = pathGeometry(straight, { point, stroke, visible });
@@ -307,13 +308,26 @@ function stripShapes(h, terminalsFromInk) {
   return { terminals, bridges, incidences, unclaimed };
 }
 function stripDetails(h) {
-  const { root, all, attr, painted, texts, box, chunk, sheet } = h;
-  const value = (e) =>
-    texts(e)
-      .filter((t) => t.painted)
-      .map((t) => t.text)
-      .join(" ");
+  const { root, all, attr, painted, stroke, texts, box, chunk, sheet } = h;
+  const vb = root.viewBox.baseVal;
+  const frameRect = [...root.children]
+    .filter((e) => e.matches("rect") && stroke(e))
+    .map(box)
+    .find((b) => b.w >= vb.width * 0.8 && b.h >= vb.height * 0.8);
+  const value = (e) => texts(e).filter((t) => t.painted).map((t) => t.text).join(" ");
   return {
+    frames: frameRect ? [{ sheet, bbox: frameRect }] : [],
+    bridgeTags: all("[data-strip-jumper]:not([data-strip-jumper-end])").flatMap(
+      (e) =>
+        texts(e).map((t) => ({
+          uid: attr(e, "data-strip-jumper"),
+          text: t.text,
+          bbox: t.bbox,
+          painted: t.painted,
+          inkVisible: t.inkVisible,
+          sheet,
+        })),
+    ),
     viewKeys: all("[data-navigation-view]").map((e) =>
       attr(e, "data-navigation-view"),
     ),

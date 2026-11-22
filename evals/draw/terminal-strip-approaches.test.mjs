@@ -36,10 +36,10 @@ function svg(stub, second) {
       viewBox="0 0 160 120" data-sheet="2">
      <g data-sheet-kind="terminal-strip"><g data-terminal-strip="strip">
       ${text(15, 15, "TB — authored order")}
-      ${text(15, 20, "hardware unspecified")}
+      ${text(15, 20, "hardware unspecified; Bn: jumper bridge")}
       ${terminal("1", 40)}${terminal("2", 64)}${terminal("3", 88)}
-      <g data-strip-jumper="j1">${path("M72 42 H88 V66 H72")}</g>
-      <g data-strip-jumper="j2">${path(second)}</g>
+      <g data-strip-jumper="j1">${path("M72 42 H88 V66 H72")}${text(83, 55, "B1")}</g>
+      <g data-strip-jumper="j2">${path(second)}${text(43, 69, "B2")}</g>
       <g data-strip-incidence="w" data-strip-at="${key("1")}">
        ${path(stub)}${text(15, 40, "W → PE.1")}</g>
       ${label("j1", "1", "2", 40)}${label("j1", "2", "1", 64)}
