@@ -63,6 +63,7 @@ export interface NodeContext {
     printable?: boolean,
   ) => string[];
   pinLabel: (p: Pin) => string;
+  conductorLabelLines: (c: PhysicalConductor) => string[];
   selectedSourceTerminals: (
     ir: Readonly<ElectricalIr>,
     uid: string,
@@ -467,6 +468,86 @@ export function verticalLaneX(
   return lateralY * frame.verticalScaleX + frame.verticalOffsetX;
 }
 
+function disjointSelfJumpers(
+  conductors: readonly PhysicalConductor[],
+  deviceUid: string,
+  key: NodeContext["key"],
+) {
+  const selfJumpers = conductors.filter(
+    (c) =>
+      c.jumper &&
+      c.ends.length === 2 &&
+      c.ends[0]?.deviceUid === deviceUid &&
+      c.ends[1]?.deviceUid === deviceUid,
+  );
+  const degree = new Map<string, number>();
+  for (const c of selfJumpers)
+    for (const end of c.ends) {
+      const k = key(end);
+      degree.set(k, (degree.get(k) ?? 0) + 1);
+    }
+  // Shared-endpoint jumper fan-ins are separated by separateCoincidentLoops
+  // without widening the device node.
+  return selfJumpers.filter((c) =>
+    c.ends.every((end) => (degree.get(key(end)) ?? 0) === 1),
+  );
+}
+
+function selfLoopSubSpanScale(state: GeometryState, current: number) {
+  const { pins, device, conductors, key, conductorLabelLines } = state;
+  let scale = current;
+  const pinsByKey = new Map<string, Pin[]>();
+  for (const p of pins) {
+    const k = key(p.terminal);
+    pinsByKey.set(k, [...(pinsByKey.get(k) ?? []), p]);
+  }
+  const routedKeys = new Set(
+    conductors.flatMap((c) => c.ends.map((t) => key(t))),
+  );
+  for (const c of disjointSelfJumpers(conductors, device.uid, key)) {
+    const end0 = c.ends[0],
+      end1 = c.ends[1];
+    if (!end0 || !end1) continue;
+    const pinsA = pinsByKey.get(key(end0)) ?? [],
+      pinsB = pinsByKey.get(key(end1)) ?? [];
+    for (const side of ["WEST", "EAST"] as const) {
+      const a = pinsA.find((p) => p.side === side),
+        b = pinsB.find((p) => p.side === side);
+      if (!a || !b) continue;
+      const lo = Math.min(a.y, b.y),
+        hi = Math.max(a.y, b.y);
+      const cuts = [
+        lo,
+        ...pins
+          .filter(
+            (p) =>
+              p.side === side &&
+              p.y > lo + 1e-7 &&
+              p.y < hi - 1e-7 &&
+              routedKeys.has(key(p.terminal)),
+          )
+          .map((p) => p.y),
+        hi,
+      ].sort((x, y) => x - y);
+      // Only widen when an intervening routed pin splits the jumper's horizontal
+      // run into sub-spans too narrow for its inline caption.
+      if (cuts.length < 3) continue;
+      let maxSubGap = 0;
+      for (let i = 1; i < cuts.length; i++) {
+        const prev = cuts[i - 1],
+          curr = cuts[i];
+        if (prev !== undefined && curr !== undefined)
+          maxSubGap = Math.max(maxSubGap, curr - prev);
+      }
+      if (maxSubGap <= 0) continue;
+      const lines = conductorLabelLines(c);
+      const labelWidth = Math.max(...lines.map((line) => measure(line))) + 1.5;
+      scale = Math.max(scale, (labelWidth + 2) / maxSubGap);
+    }
+  }
+  return scale;
+}
+
 function nodeVerticalScale(state: GeometryState) {
   const { pins, device, pinLabel, conductors } = state;
   let { verticalScaleX } = state;
@@ -494,7 +575,7 @@ function nodeVerticalScale(state: GeometryState) {
       verticalScaleX = Math.max(verticalScaleX, (width + 2) / gap);
     }
   }
-  return verticalScaleX;
+  return selfLoopSubSpanScale(state, verticalScaleX);
 }
 
 function nodeVerticalBounds(state: GeometryState) {

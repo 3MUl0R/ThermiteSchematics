@@ -83,10 +83,17 @@ export interface NormalizedDocumentationView {
     | "terminal-strip";
   readonly title: string;
 }
+export interface LocationFragmentFallback {
+  readonly locationId: string;
+  readonly locationName: string;
+  readonly kind: "plain-name" | "wrapped-continued" | "wrapped-plain-name";
+  readonly lines: readonly string[];
+}
 export interface RenderedSheet {
   readonly sheetKey?: string;
   readonly occurrenceIds?: readonly string[];
   readonly annotationIds?: readonly string[];
+  readonly locationFragmentFallbacks?: readonly LocationFragmentFallback[];
   readonly number: number;
   readonly view: NormalizedSchematicView | NormalizedDocumentationView;
   readonly references: readonly SheetReference[];
@@ -201,6 +208,8 @@ export interface Draft {
   rootedContent?: import("./rooted-content.js").RootedContent;
   continuedCaption?: string;
   continuedCaptionY?: number;
+  locationFragmentFallbacks?: LocationFragmentFallback[];
+  locationFragmentFailure?: string;
   rootedCaptionInk?: import("./rooted-ink.js").InkBox[];
   rootedShapes?: import("./rooted-ink.js").InkBox[];
   rootedInk?: import("./rooted-ink.js").InkBox;

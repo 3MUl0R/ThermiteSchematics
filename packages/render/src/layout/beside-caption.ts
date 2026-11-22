@@ -84,6 +84,32 @@ function proposals(
     }),
   );
 }
+function evaluateCandidate(
+  p: InkBox,
+  own: readonly (readonly LayoutPoint[])[],
+  context: LabelSupportContext,
+  stroke: number,
+  reach: number,
+  margin: number,
+) {
+  const a = captionAssociation(
+    p,
+    own,
+    context.foreign,
+    stroke,
+    reach,
+    context.foreignStrokes,
+  );
+  const marginOk =
+    margin > 0 ? a.foreign >= a.owner + margin - 1e-7 : a.foreign > 0;
+  return {
+    ink: p,
+    inline: false,
+    ...a,
+    needsLeader: a.needsLeader || !marginOk,
+  };
+}
+
 /** Keep valid inline plates and already clear nearby captions. Otherwise choose
  * a clear beside-run position inside the existing clip. Distances use glyph
  * bounds and conductor ink, not owner tags or a text anchor's closest corner. */
@@ -98,63 +124,41 @@ export function besideCaption(
 ) {
   const reach = 2 / mmPerUnit,
     margin = ownershipMarginMm / mmPerUnit,
-    marginOk = (a: { owner: number; foreign: number }) =>
-      margin > 0 ? a.foreign >= a.owner + margin - 1e-7 : a.foreign > 0,
-    association = captionAssociation(
-      ink,
-      own,
-      context.foreign,
-      stroke,
-      reach,
-      context.foreignStrokes,
-    );
+    current = evaluateCandidate(ink, own, context, stroke, reach, margin);
   if (
     horizontalLabelSupport(ink, own, 0, context.foreign) &&
     clearOwnedPlate(ink, own, stroke / 2 + 0.01 / mmPerUnit, true) &&
-    association.foreign > 0
+    current.foreign > 0
   )
     return { ink, inline: true, needsLeader: false };
   if (
-    association.owner >= 0.5 / mmPerUnit - 1e-7 &&
-    association.owner <= 1 / mmPerUnit + 1e-7 &&
-    !association.needsLeader &&
-    marginOk(association)
+    current.owner >= 0.5 / mmPerUnit - 1e-7 &&
+    current.owner <= 1 / mmPerUnit + 1e-7 &&
+    !current.needsLeader
   )
     return { ink, inline: false, needsLeader: false };
   const options = proposals(ink, own, 0.75 / mmPerUnit + stroke / 2)
     .filter((p) => clear(p, reservation, context))
-    .map((p) => ({
-      ink: p,
-      inline: false,
-      ...captionAssociation(
-        p,
-        own,
-        context.foreign,
-        stroke,
-        reach,
-        context.foreignStrokes,
-      ),
-    }))
+    .map((p) => evaluateCandidate(p, own, context, stroke, reach, margin))
     .filter((p) => p.owner > 1e-7 && p.foreign > 1e-7)
     .sort(
       (a, b) =>
         Number(a.needsLeader) - Number(b.needsLeader) ||
-        Number(!marginOk(a)) - Number(!marginOk(b)) ||
         Math.hypot(a.ink.left - ink.left, a.ink.top - ink.top) -
           Math.hypot(b.ink.left - ink.left, b.ink.top - ink.top),
     );
   const found = options[0];
   if (found) return found;
   if (
-    association.owner > 0 &&
-    association.foreign > 0 &&
+    current.owner > 0 &&
+    current.foreign > 0 &&
     clear(ink, reservation, context)
   )
-    return { ink, inline: false, ...association };
+    return current;
   // Last, try the fixed nine corners/edge-centres of the existing clip. This
   // handles a foreign corner crossing without enlarging the reservation. A
   // remote or ambiguous result still requires a checked leader at emission.
-  return clippedCaption(ink, reservation, own, context, stroke, reach);
+  return clippedCaption(ink, reservation, own, context, stroke, reach, margin);
 }
 function clippedCaption(
   ink: InkBox,
@@ -163,6 +167,7 @@ function clippedCaption(
   context: LabelSupportContext,
   stroke: number,
   reach: number,
+  margin = 0,
 ) {
   const right = reservation.right - (ink.right - ink.left),
     bottom = reservation.bottom - (ink.bottom - ink.top);
@@ -174,18 +179,24 @@ function clippedCaption(
       ),
     )
     .filter((p) => clear(p, reservation, context))
-    .map((p) => ({
-      ink: p,
-      inline: false,
-      ...captionAssociation(
+    .map((p) => {
+      const a = captionAssociation(
         p,
         own,
         context.foreign,
         stroke,
         reach,
         context.foreignStrokes,
-      ),
-    }))
+      );
+      return {
+        ink: p,
+        inline: false,
+        ...a,
+        needsLeader:
+          a.needsLeader ||
+          (margin > 0 ? a.foreign < a.owner + margin - 1e-7 : a.foreign <= 0),
+      };
+    })
     .filter((p) => p.owner > 0 && p.foreign > 0)
     .sort(
       (a, b) =>

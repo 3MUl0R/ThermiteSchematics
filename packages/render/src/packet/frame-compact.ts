@@ -55,7 +55,7 @@ export function compactFrame(
     ...frameHeader(page, number, total),
     namespaceSheetContent(draft.content, number),
   ];
-  const notice = rootedSheetNoticeSvg(draft.view, page);
+  const notice = rootedSheetNoticeSvg(draft.view, page, plan.drawing.x);
   if (notice) out.push(notice);
   out.push(...gridMarks(plan, page));
   for (const link of draft.links) {

@@ -88,17 +88,28 @@ export function rootedSheetView(
     : undefined;
 }
 
+export function rootedSheetNoticeWidth(
+  page: import("../packet/types.js").PaperPage,
+  leftX = page.marginMm + 18,
+) {
+  const defaultWidth = page.widthMm - 2 * page.marginMm - 36;
+  const available = page.widthMm - page.marginMm - 4 - leftX;
+  return Math.max(40, Math.min(defaultWidth, available));
+}
+
 export function rootedSheetNoticeSvg(
   view: import("../packet/types.js").RenderedSheet["view"],
   page: import("../packet/types.js").PaperPage,
+  leftX = page.marginMm + 18,
 ) {
   const rooted = rootedSheetView(view);
+  const x = Math.max(page.marginMm + 18, leftX);
   return rooted
     ? rootedNoticeSvg(
         rooted,
-        page.marginMm + 18,
+        x,
         page.marginMm + 19,
-        page.widthMm - 2 * page.marginMm - 36,
+        rootedSheetNoticeWidth(page, x),
         2.7,
         4,
       )

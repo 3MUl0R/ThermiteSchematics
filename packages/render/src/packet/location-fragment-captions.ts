@@ -2,7 +2,7 @@ import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { required } from "../presentation/util.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { LocationGroup } from "../types.js";
-import type { DrawingBounds } from "./types.js";
+import type { DrawingBounds, LocationFragmentFallback } from "./types.js";
 import { inkOverlaps, textInk } from "./rooted-caption.js";
 import { intersectInk, type InkBox } from "./rooted-ink.js";
 import { text } from "./svg.js";
@@ -135,17 +135,52 @@ function placeFragmentLines(
   return undefined;
 }
 
-function captionCandidates(labelText: string): string[][] {
+function captionCandidates(
+  labelText: string,
+): { lines: string[]; fallback?: LocationFragmentFallback["kind"] }[] {
   const words = labelText.split(/\s+/u).filter(Boolean);
   return [
-    [`${labelText} (CONT.)`],
-    [labelText],
-    ...(words.length > 1 ? [[...words, "(CONT.)"], words] : []),
+    { lines: [`${labelText} (CONT.)`] },
+    { lines: [labelText], fallback: "plain-name" },
+    ...(words.length > 1
+      ? [
+          {
+            lines: [...words, "(CONT.)"],
+            fallback: "wrapped-continued" as const,
+          },
+          { lines: words, fallback: "wrapped-plain-name" as const },
+        ]
+      : []),
   ];
 }
 
+function emitFragmentLines(
+  group: LocationGroup,
+  placed: {
+    lines: string[];
+    x: number;
+    baseline: number;
+    pitch: number;
+    fallback?: LocationFragmentFallback["kind"];
+  },
+) {
+  const fallbackAttr = placed.fallback
+    ? ` data-location-fragment-fallback="${attr(placed.fallback)}"`
+    : "";
+  return placed.lines.map((line, i) =>
+    text(placed.x, placed.baseline + i * placed.pitch, line, 2.5, "start", 700)
+      .replace('fill="#18212b"', 'fill="#475569"')
+      .replace(
+        "<text ",
+        `<text class="location-fragment-caption" data-location-fragment-caption="${attr(group.id)}" data-location-name="${attr(group.label.text)}"${fallbackAttr} `,
+      ),
+  );
+}
+
 /** Emit a compact local caption inside each visible occupied clipped location
- * fragment whose native ELK location heading was clipped outside the viewport. */
+ * fragment whose native ELK location heading was clipped outside the viewport.
+ * Every fallback wording is recorded and marked; if no slot fits, return a
+ * visible failure instead of silently skipping the fragment. */
 export function locationFragmentCaptions(
   p: PreparedSchematicDrawing,
   continued: readonly LocationGroup[],
@@ -156,7 +191,9 @@ export function locationFragmentCaptions(
 ) {
   const svg: string[] = [];
   const inks: InkBox[] = [];
-  if (!continued.length) return { svg: "", inks };
+  const fallbacks: LocationFragmentFallback[] = [];
+  let failure: string | undefined;
+  if (!continued.length) return { svg: "", inks, fallbacks, failure };
   const obstacles = viewportDetailObstacles(p, viewport, b, scale);
   for (const group of continued) {
     const box = required(
@@ -175,30 +212,25 @@ export function locationFragmentCaptions(
       h: (y2 - y1) * scale,
     };
     const placed = captionCandidates(group.label.text)
-      .map((lines) => {
-        const slot = placeFragmentLines(lines, frag, obstacles);
-        return slot ? { lines, ...slot } : undefined;
+      .map((candidate) => {
+        const slot = placeFragmentLines(candidate.lines, frag, obstacles);
+        return slot ? { ...candidate, ...slot } : undefined;
       })
       .find(Boolean);
-    if (!placed) continue;
+    if (!placed) {
+      failure ??= `Continued location fragment ${group.label.text} has no clear interior slot for its local caption. Use larger paper, another flow, or split the view.`;
+      continue;
+    }
+    if (placed.fallback)
+      fallbacks.push({
+        locationId: group.id,
+        locationName: group.label.text,
+        kind: placed.fallback,
+        lines: placed.lines,
+      });
     obstacles.push(...placed.boxes);
     inks.push(...placed.boxes);
-    for (const [i, line] of placed.lines.entries())
-      svg.push(
-        text(
-          placed.x,
-          placed.baseline + i * placed.pitch,
-          line,
-          2.5,
-          "start",
-          700,
-        )
-          .replace('fill="#18212b"', 'fill="#475569"')
-          .replace(
-            "<text ",
-            `<text class="location-fragment-caption" data-location-fragment-caption="${attr(group.id)}" data-location-name="${attr(group.label.text)}" `,
-          ),
-      );
+    svg.push(...emitFragmentLines(group, placed));
   }
-  return { svg: svg.join(""), inks };
+  return { svg: svg.join(""), inks, fallbacks, failure };
 }

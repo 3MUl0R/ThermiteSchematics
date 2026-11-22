@@ -153,7 +153,7 @@ export function frame(
   ];
   const rooted = rootedSheetView(draft.view);
   const area = draft.drawingBounds ?? bounds(draft.title, page, rooted);
-  const notice = rootedSheetNoticeSvg(draft.view, page);
+  const notice = rootedSheetNoticeSvg(draft.view, page, area.x);
   if (notice) out.push(notice);
   for (let col = 0; col < 6; col++)
     out.push(

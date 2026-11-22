@@ -11,6 +11,62 @@ import { shiftRootedInk, clipRootedInk, type InkBox } from "./rooted-ink.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import { n } from "./svg.js";
 
+function buildTrimmedStrip(
+  context: {
+    prepared: PreparedSchematicDrawing;
+    inner: string;
+    profile?: "compact" | "dense";
+  },
+  source: Draft,
+  x0: number,
+  x1: number,
+  envelope: InkBox,
+  b: DrawingBounds,
+  scale: number,
+) {
+  const pad = OUTER_SVG_PADDING;
+  const make = (env: InkBox) =>
+    rootedDraft(
+      context.prepared,
+      { xs: [x0 + pad, x1 + pad], ys: [env.y + pad, env.y + env.h + pad] },
+      0,
+      0,
+      source.drawingBounds ?? b,
+      scale,
+      context.inner,
+      context.profile,
+      source.continuedCaptionY,
+    );
+  let env = envelope;
+  let next = make(env);
+  // If tight vertical trimming pinched a continued location's interior margin,
+  // expand upward within the location's own box to host the fragment caption.
+  if (next.locationFragmentFailure) {
+    const locTop = Math.min(
+      ...context.prepared.layout.nodes
+        .filter(
+          (node) =>
+            node.kind === "location" && node.x < x1 && node.x + node.width > x0,
+        )
+        .map((node) => node.y),
+    );
+    const expandedY = Math.max(-pad, Math.max(locTop, env.y - 24));
+    if (expandedY < env.y) {
+      env = { ...env, y: expandedY, h: env.h + (env.y - expandedY) };
+      next = make(env);
+    }
+  }
+  if (source.rootedScoreBounds)
+    next.rootedScoreBounds = source.rootedScoreBounds;
+  const oldY = required(source.rootedSections?.[0], "Missing strip viewport")
+    .viewport.y;
+  next.links = source.links.map((l) => ({
+    ...l,
+    y: l.y + (oldY - env.y) * scale,
+  }));
+  return { next, height: env.h * scale };
+}
+
 /** Pack existing horizontal sections without changing ELK geometry or endpoints. */
 export function foldDrawingDrafts(
   drafts: Draft[],
@@ -37,32 +93,17 @@ export function foldDrawingDrafts(
       const envelope = stripEnvelope(context.prepared, x0, x1, fullH - pad);
       if (!envelope) return untrimmed;
       const source = required(drafts[col], "Missing strip");
-      const next = rootedDraft(
-        context.prepared,
-        {
-          xs: [x0 + pad, x1 + pad],
-          ys: [envelope.y + pad, envelope.y + envelope.h + pad],
-        },
-        0,
-        0,
-        source.drawingBounds ?? b,
+      const trimmed = buildTrimmedStrip(
+        context,
+        source,
+        x0,
+        x1,
+        envelope,
+        b,
         scale,
-        context.inner,
-        context.profile,
-        source.continuedCaptionY,
       );
-      if (source.rootedScoreBounds)
-        next.rootedScoreBounds = source.rootedScoreBounds;
-      const oldY = required(
-        source.rootedSections?.[0],
-        "Missing strip viewport",
-      ).viewport.y;
-      next.links = source.links.map((l) => ({
-        ...l,
-        y: l.y + (oldY - envelope.y) * scale,
-      }));
-      drafts[col] = next;
-      heights.push(envelope.h * scale);
+      drafts[col] = trimmed.next;
+      heights.push(trimmed.height);
       continue;
     }
     // Layout-only test callers retain this crop; production supplies context.

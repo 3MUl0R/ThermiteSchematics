@@ -68,6 +68,7 @@ export function continuationLabel(
   width: number,
   headerWidth: number,
   single = false,
+  minLeft?: number,
 ): ContinuationLabel {
   const header = continuationHeader(link);
   const values =
@@ -91,7 +92,9 @@ export function continuationLabel(
       ? link.x - STROKE_GAP - w
       : link.side === "right"
         ? link.x + STROKE_GAP
-        : link.x - w / 2;
+        : minLeft !== undefined && link.x >= minLeft
+          ? Math.max(minLeft, link.x - w / 2)
+          : link.x - w / 2;
   const top =
     link.side === "top"
       ? link.y - STROKE_GAP - h

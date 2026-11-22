@@ -251,3 +251,33 @@ it.each(["left", "right", "top", "bottom"] as const)(
     expect(links.map((l) => l[axis])).toEqual(anchors);
   },
 );
+
+it("top/bottom continuation packing respects a left field boundary without pushing labels into the zone gutter", () => {
+  const headerWidth = continuationHeaderWidth(100);
+  const fieldLeft = 28.1;
+  const links = [38.4, 56.6, 74.8].map((x, i) => {
+    const link: Link = {
+      id: `C00${i + 6}`,
+      to: 1,
+      toZone: "C4",
+      conductor: `L${i + 1}-OL1-M1`,
+      netId: `N${i}`,
+      x,
+      y: 47.5,
+      side: "top",
+    };
+    return {
+      ...link,
+      label: continuationLabel(link, 20, headerWidth, false),
+    };
+  });
+  expect(packContinuationLabels(draft(links), fieldLeft)).toBe(true);
+  for (const link of links) {
+    expect(link.label.bounds.x).toBeGreaterThanOrEqual(fieldLeft - 0.000001);
+  }
+  for (let i = 1; i < links.length; i++) {
+    const prev = links[i - 1]!.label.bounds;
+    const next = links[i]!.label.bounds;
+    expect(next.x - (prev.x + prev.w)).toBeGreaterThanOrEqual(2.5 - 0.000001);
+  }
+});

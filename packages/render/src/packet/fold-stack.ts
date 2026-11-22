@@ -86,6 +86,16 @@ function append(
     })),
   );
 }
+function foldedFragmentFields(sources: readonly Draft[]) {
+  const fallbacks = sources.flatMap((s) => s.locationFragmentFallbacks ?? []);
+  const failure = sources.find(
+    (s) => s.locationFragmentFailure !== undefined,
+  )?.locationFragmentFailure;
+  return {
+    ...(fallbacks.length ? { locationFragmentFallbacks: fallbacks } : {}),
+    ...(failure !== undefined ? { locationFragmentFailure: failure } : {}),
+  };
+}
 export function stackSections(
   drafts: readonly Draft[],
   heights: readonly number[],
@@ -121,6 +131,7 @@ export function stackSections(
         required(heights[i], "Missing source strip size"),
       ),
       rootedSections: sources.flatMap((s) => s.rootedSections ?? []),
+      ...foldedFragmentFields(sources),
       content: "",
       links: [],
       references: [],

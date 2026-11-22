@@ -157,6 +157,15 @@ function frameIssuedSheet(
   }
 }
 
+function draftSheetHeader(draft: Draft) {
+  return {
+    ...(draft.resolvedTitle ? { sheetKey: draft.resolvedTitle.sheetKey } : {}),
+    ...(draft.locationFragmentFallbacks?.length
+      ? { locationFragmentFallbacks: draft.locationFragmentFallbacks }
+      : {}),
+  };
+}
+
 /** Final packet sheet numbers also namespace SVG IDs and continuation metadata. */
 export function assembleSheets(
   ir: Readonly<ElectricalIr>,
@@ -183,7 +192,7 @@ export function assembleSheets(
         d.view.kind === "references",
     ) + 1;
   const sheets = drafts.map((draft, index) => ({
-    ...(draft.resolvedTitle ? { sheetKey: draft.resolvedTitle.sheetKey } : {}),
+    ...draftSheetHeader(draft),
     number: index + 1,
     view: draft.view,
     references: draft.references ?? [],

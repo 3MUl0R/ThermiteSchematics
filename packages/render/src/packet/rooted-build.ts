@@ -4,7 +4,6 @@ import {
   recordFrameAttempt,
   recordFrameBanks,
 } from "./frame-budget.js";
-import { hasCompactFrame } from "./frame-profile.js";
 import { cardDistances, CARD_LOCALITY_AIM_MM } from "./rooted-locality.js";
 import {
   continuationBanks,
@@ -142,7 +141,11 @@ function makeDrafts(
   applyFinalBankBounds(pages, b, bank);
   const visible = contentPages(pages);
   if (typeof visible === "string") return visible;
+  const fragmentFailure = visible.find(
+    (d) => d.locationFragmentFailure,
+  )?.locationFragmentFailure;
   const failure =
+    fragmentFailure ??
     fitContinuations(visible, page, bank, native) ??
     postTrimCaptionConstraint(visible, page, native);
   if (!failure) return visible;
@@ -162,6 +165,7 @@ function unfoldedFallback(
   if (typeof fallback === "string") return fallback;
   applyFinalBankBounds(fallback, b, bank);
   return (
+    fallback.find((d) => d.locationFragmentFailure)?.locationFragmentFailure ??
     fitContinuations(fallback, page, bank, native) ??
     postTrimCaptionConstraint(fallback, page, native) ??
     fallback
@@ -257,7 +261,7 @@ export function buildRootedCandidates(
       extraReservations,
     );
   if (candidates.length) return { ok: true, value: candidates, constraint };
-  if (hasCompactFrame(page) && !extraReservations && !context)
+  if (!extraReservations && !context)
     return buildRootedCandidates(
       ir,
       p,

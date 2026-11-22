@@ -79,6 +79,18 @@ function references(
     return [{ ...nodeReference(node), xMm, yMm, zone: zone(xMm, yMm, b) }];
   });
 }
+function fragmentDraftFields(
+  fragments: ReturnType<typeof locationFragmentCaptions>,
+) {
+  return {
+    ...(fragments.fallbacks.length
+      ? { locationFragmentFallbacks: fragments.fallbacks }
+      : {}),
+    ...(fragments.failure
+      ? { locationFragmentFailure: fragments.failure }
+      : {}),
+  };
+}
 export function rootedDraft(
   p: PreparedSchematicDrawing,
   grid: RootedGrid,
@@ -131,6 +143,7 @@ export function rootedDraft(
     drawingBounds: b,
     continuedCaption: caption,
     continuedCaptionY: captionY,
+    ...fragmentDraftFields(fragments),
     rootedCaptionInk: caption ? [textInk(caption, b.x, captionY, 2.5)] : [],
     ...(ink ? { rootedInk: ink } : {}),
     references: references(p, x, y, w, h, b, scale),
