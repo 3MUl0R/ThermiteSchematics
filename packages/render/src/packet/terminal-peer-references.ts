@@ -204,6 +204,30 @@ function foreignTerminalOwners(part: TerminalSheet, own: TerminalId): Rect[] {
   return out;
 }
 
+function terminalLabelBoxes(part: TerminalSheet, own: TerminalId): Rect[] {
+  const ownKey = terminalIdKey(own);
+  const byNode = new Map(part.geometry.map((g) => [g.node, g]));
+  const out: Rect[] = [];
+  for (const g of part.geometry) {
+    if (
+      g.node.name !== "g" ||
+      !g.visible ||
+      g.node.attrs["data-terminal-id"] !== ownKey
+    )
+      continue;
+    for (const child of g.node.children) {
+      if (child.name !== "text") continue;
+      const cg = byNode.get(child);
+      if (!cg || !paintedFill(cg) || !cg.style) continue;
+      const ink = textInk(child, cg.style);
+      if (!ink) continue;
+      const box = project(ink, cg.matrix);
+      if (inside(box, cg.clip)) out.push(box);
+    }
+  }
+  return out;
+}
+
 function recordConductorPeer(
   part: TerminalSheet,
   from: TerminalId,
@@ -259,6 +283,7 @@ function finalizeConductorPeers(
         continue;
       }
       const destination = formatPeerDestination(destinations);
+      const terminalLabels = terminalLabelBoxes(part, from);
       part.entries.push({
         kind: "conductor-peer",
         identity: [from, elementId, to],
@@ -267,6 +292,7 @@ function finalizeConductorPeers(
         foreignOwners: foreignTerminalOwners(part, from),
         along: route.runs,
         captions: conductorCaptions(part, elementId),
+        ...(terminalLabels.length ? { terminalLabels } : {}),
         ownerLabel: name(from),
         value: `${designation} · ${name(from)} → ${name(to)} ${destination}`,
         compact: `→ ${name(to)} ${destination}`,
@@ -466,8 +492,49 @@ function collectTerminalSheets(
   });
 }
 
-function extractDestinationTokens(text: string): string[] {
-  return [...text.matchAll(/\b\d{2,}\.[A-D][1-6]\b/gu)].map((m) => m[0]);
+function parseDestinationSlotTokens(
+  raw: string,
+  allowCardWrap = false,
+): string[] | undefined {
+  const text = raw.trim().replace(/\s+/gu, " ");
+  const single = /^(\d{2,}\.[A-D][1-6])$/u.exec(text);
+  if (single?.[1]) return [single[1]];
+  const multi = (
+    allowCardWrap
+      ? /^(\d{2,}\.[A-D][1-6])\s+(?:\(\s*)?also shown\s+((?:\d{2,}\.[A-D][1-6])(?:\s*,\s*\d{2,}\.[A-D][1-6])*)\s*\)?$/u
+      : /^(\d{2,}\.[A-D][1-6]) \(also shown (\d{2,}\.[A-D][1-6](?:, \d{2,}\.[A-D][1-6])*)\)$/u
+  ).exec(text);
+  if (!multi?.[1] || !multi[2]) return undefined;
+  return [multi[1], ...multi[2].split(/\s*,\s*/u).map((part) => part.trim())];
+}
+
+function stripTrailingDestination(value: string, destination: string): string {
+  const suffix = ` ${destination}`;
+  return value.endsWith(suffix)
+    ? value.slice(0, value.length - destination.length)
+    : value;
+}
+
+function extractNoteDestinationSlice(
+  printed: string,
+  entry: PeerReference,
+): string | undefined {
+  const text = printed.trim().replace(/\s+/gu, " ");
+  const fullPrefix = stripTrailingDestination(entry.value, entry.destination);
+  const compactPrefix = stripTrailingDestination(
+    entry.compact,
+    entry.destination,
+  );
+  const prefixes = [
+    fullPrefix,
+    ...(entry.ownerLabel ? [`${entry.ownerLabel} ${compactPrefix}`] : []),
+    compactPrefix,
+    ...(entry.ownerLabel ? [`${entry.ownerLabel} → `] : []),
+  ].sort((a, b) => b.length - a.length);
+  for (const prefix of prefixes) {
+    if (text.startsWith(prefix)) return text.slice(prefix.length).trim();
+  }
+  return undefined;
 }
 
 function cardRowDestinationSlice(
@@ -556,11 +623,16 @@ function verifyCardDestinationsPrinted(
         throw new Error(
           `Peer destination invariant violated on sheet ${sheetNumber} (card ${conn.designation}): row missing from card ink.`,
         );
+      const tokens = parseDestinationSlotTokens(slice, true);
+      if (!tokens)
+        throw new Error(
+          `Peer destination invariant violated on sheet ${sheetNumber} (card ${conn.designation} → ${conn.destination}): malformed destination slot ${JSON.stringify(slice.trim())}.`,
+        );
       assertTokenMultiplicity(
         sheetNumber,
         `card ${conn.designation} → ${conn.destination}`,
         expected,
-        extractDestinationTokens(slice),
+        tokens,
       );
       verifiedRows.add(rowKey);
     }
@@ -602,13 +674,23 @@ function verifyFreePeerDestinationsPrinted(
       throw new Error(
         `Peer destination invariant violated on sheet ${sheetNumber} (${entry.value}): expected 1 owning note, found ${printedNotes.length}.`,
       );
+    const printedText = required(printedNotes[0], "Missing printed peer note");
+    const slice = extractNoteDestinationSlice(printedText, entry);
+    if (slice === undefined)
+      throw new Error(
+        `Peer destination invariant violated on sheet ${sheetNumber} (${entry.value}): note subject does not match ${JSON.stringify(printedText)}.`,
+      );
+    const expectedTokens = parseDestinationSlotTokens(entry.destination);
+    const printedTokens = parseDestinationSlotTokens(slice);
+    if (!expectedTokens || !printedTokens)
+      throw new Error(
+        `Peer destination invariant violated on sheet ${sheetNumber} (${entry.value}): malformed destination slot ${JSON.stringify(slice)}.`,
+      );
     assertTokenMultiplicity(
       sheetNumber,
       entry.value,
-      extractDestinationTokens(entry.destination),
-      extractDestinationTokens(
-        required(printedNotes[0], "Missing printed peer note"),
-      ),
+      expectedTokens,
+      printedTokens,
     );
   }
 }
@@ -692,43 +774,29 @@ export function terminalPeerReferences(
     byTerminal,
   );
   const changes = new Map(
-    withCards.map(
-      ({
-        sheet,
-        entries,
-        cardDestinations,
-        viewInstanceId,
-        localRewritten,
-      }) => {
-        const synced = {
-          ...sheet,
-          svg: syncRewrittenOffViewCards(
-            sheet.svg,
-            viewRewrites.get(viewInstanceId) ?? new Map(),
-            localRewritten,
-          ),
-        };
-        const draft = required(
-          drafts[sheet.number - 1],
-          "Missing peer note drawing",
-        );
-        const uniqueEntries = [
-          ...new Map(entries.map((entry) => [entry.value, entry])).values(),
-        ];
-        const emitted = emitPeerReferences(
-          synced,
-          peerNoteField(draft, page),
-          uniqueEntries,
-        );
-        verifyPrintedPeerDestinations(
-          emitted,
-          cardDestinations,
-          uniqueEntries,
-          byTerminal,
-        );
-        return [sheet.number, emitted];
-      },
-    ),
+    withCards.map(({ sheet, entries, viewInstanceId, localRewritten }) => {
+      const synced = {
+        ...sheet,
+        svg: syncRewrittenOffViewCards(
+          sheet.svg,
+          viewRewrites.get(viewInstanceId) ?? new Map(),
+          localRewritten,
+        ),
+      };
+      const draft = required(
+        drafts[sheet.number - 1],
+        "Missing peer note drawing",
+      );
+      const uniqueEntries = [
+        ...new Map(entries.map((entry) => [entry.value, entry])).values(),
+      ];
+      const emitted = emitPeerReferences(
+        synced,
+        peerNoteField(draft, page),
+        uniqueEntries,
+      );
+      return [sheet.number, emitted];
+    }),
   );
   return sheets.map((sheet) => changes.get(sheet.number) ?? sheet);
 }

@@ -29,6 +29,7 @@ export interface PeerReference {
   foreignOwners?: readonly Rect[];
   along?: readonly Rect[];
   captions?: readonly Rect[];
+  terminalLabels?: readonly Rect[];
   ownerLabel?: string;
 }
 
@@ -106,9 +107,17 @@ function noteShapes(
 
 function noteInk(
   { kind, identity }: PeerReference,
-  { lines, box }: PeerNotePlacement,
+  { lines, box, shapeId, fallback }: PeerNotePlacement,
 ) {
-  const claims = `data-peer-reference="${kind}" data-peer-source="${attr(JSON.stringify(identity))}"`;
+  const reported =
+    fallback ??
+    (shapeId === "qualified" || shapeId === "qualified-wrapped"
+      ? "qualified"
+      : undefined);
+  const marker = reported
+    ? ` data-peer-reference-fallback="${attr(reported)}"`
+    : "";
+  const claims = `data-peer-reference="${kind}" data-peer-source="${attr(JSON.stringify(identity))}"${marker}`;
   const printed = printedBounds(lines);
   const ink = lines.map((line, i) =>
     text(

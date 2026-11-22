@@ -1,11 +1,17 @@
 // Replays shared authored-source patches and packet requests in both flows.
 // Exact semantic inventories/disclosures are gates; pagination and route shape are not.
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { compileProject } from "@thermite/compiler";
 import { beforeAll, expect, it } from "vitest";
 import { renderSchematic } from "../src/renderer.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { navigationGeometry } from "../src/packet/navigation-walk.js";
 import { project } from "../src/device-legend/geometry.js";
+import { textInk } from "../src/device-legend/svg-ink.js";
 import { boxDistance } from "../src/packet/navigation-symbols.js";
+import { verifyPrintedPeerDestinations } from "../src/packet/terminal-peer-references.js";
+import { authoredTerminalIncidence } from "../src/off-view/incidence.js";
 import type { SchematicViewRequest } from "../src/types.js";
 import {
   dolControlInventory,
@@ -159,7 +165,49 @@ function circuitTerminalBox(svg: string, deviceUid: string, key: string) {
   );
 }
 
-it("places W37 at both R1.14 and S2.14 nearest their own terminals in DOL P6 TTB (#507)", async () => {
+function peerNoteTextBoxes(svg: string) {
+  const geom = navigationGeometry(svg);
+  const peerGroups = new Map<object, { group: object; kind: string }>();
+  for (const g of geom) {
+    const kind = g.node.attrs["data-peer-reference"];
+    if (!kind || !g.visible) continue;
+    if (g.node.name === "g") {
+      for (const child of g.node.children)
+        if (child.name === "text")
+          peerGroups.set(child, { group: g.node, kind });
+    } else if (g.node.name === "text") {
+      peerGroups.set(g.node, { group: g.node, kind });
+    }
+  }
+  return geom.flatMap((g) => {
+    if (g.node.name !== "text" || !g.visible || !g.style) return [];
+    const ink = textInk(g.node, g.style);
+    if (!ink) return [];
+    const box = project(ink, g.matrix);
+    const peer = peerGroups.get(g.node);
+    return [{ node: g.node, text: g.node.text, box, peer }];
+  });
+}
+
+function assertMinPeerTextClearance(svg: string, minMm: number) {
+  const boxes = peerNoteTextBoxes(svg);
+  const peers = boxes.filter((b) => b.peer);
+  expect(peers.length).toBeGreaterThanOrEqual(2);
+  for (const p of peers) {
+    for (const other of boxes) {
+      if (other.node === p.node || other.peer?.group === p.peer?.group)
+        continue;
+      const a = p.box,
+        b = other.box;
+      if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) <= 0) continue;
+      const gap = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+      expect(gap).toBeGreaterThanOrEqual(minMm - 1e-6);
+    }
+  }
+  return peers;
+}
+
+it("places W37 at both R1.14 and S2.14 nearest their own terminals with >=1.5 mm text clearance in DOL P6 TTB (#507)", async () => {
   const fixture = await dolProbeFixture("p6");
   try {
     const w37 = required(
@@ -182,36 +230,127 @@ it("places W37 at both R1.14 and S2.14 nearest their own terminals in DOL P6 TTB
       ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
     ].filter((el) => el.getAttribute("data-peer-source")?.includes(w37.uid));
     expect(notes).toHaveLength(2);
-    const r1Note = required(
-      notes.find((el) => el.textContent?.includes("R1.14 → S2.14")),
+    const noteText = (el: Element) =>
+      el.tagName.toLowerCase() === "g"
+        ? [...el.querySelectorAll("text")]
+            .map((t) => t.textContent ?? "")
+            .join(" ")
+        : (el.textContent ?? "");
+    const byOwner = (uid: string) =>
+      required(
+        notes.find((el) => {
+          const src = JSON.parse(el.getAttribute("data-peer-source") ?? "[]");
+          return src[0]?.deviceUid === uid && src[0]?.terminalKey === "14";
+        }),
+      );
+    const r1Note = byOwner(r1.uid),
+      s2Note = byOwner(s2.uid);
+    expect(noteText(r1Note)).toMatch(
+      /^R1\.14 → 01\.[A-D][1-6] \(also shown 02\.[A-D][1-6]\)$/u,
     );
-    const s2Note = required(
-      notes.find((el) => el.textContent?.includes("S2.14 → R1.14")),
+    expect(noteText(s2Note)).toMatch(/^S2\.14 → 06\.[A-D][1-6]$/u);
+    expect(r1Note.getAttribute("data-peer-reference-fallback")).toBe(
+      "qualified",
     );
-    expect(r1Note.textContent).toMatch(
-      /^W37 · R1\.14 → S2\.14 01\.[A-D][1-6] \(also shown 02\.[A-D][1-6]\)$/u,
+    expect(s2Note.getAttribute("data-peer-reference-fallback")).toBe(
+      "qualified",
     );
-    expect(s2Note.textContent).toMatch(
-      /^W37 · S2\.14 → R1\.14 06\.[A-D][1-6]$/u,
-    );
-    const r1Box = {
-      x: Number(r1Note.getAttribute("x")),
-      y: Number(r1Note.getAttribute("y")) - 2,
-      w: 50,
-      h: 2.5,
-    };
+    const peers = assertMinPeerTextClearance(svg, 1.5);
+    const r1Box = required(peers.find((p) => p.text.includes("R1.14"))).box;
     expect(
       boxDistance(r1Box, circuitTerminalBox(svg, r1.uid, "14")),
     ).toBeLessThan(boxDistance(r1Box, circuitTerminalBox(svg, r1.uid, "12")));
-    const s2Box = {
-      x: Number(s2Note.getAttribute("x")),
-      y: Number(s2Note.getAttribute("y")) - 2,
-      w: 34,
-      h: 2.5,
-    };
+    const s2Box = required(peers.find((p) => p.text.includes("S2.14"))).box;
     expect(
       boxDistance(s2Box, circuitTerminalBox(svg, s2.uid, "14")),
     ).toBeLessThan(boxDistance(s2Box, circuitTerminalBox(svg, s2.uid, "13")));
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+function renamedW37PeerEntry(
+  svg: string,
+  wireUid: string,
+  from: { uid: string; label: string },
+  to: { uid: string; label: string },
+  destination: string,
+) {
+  return {
+    kind: "conductor-peer" as const,
+    identity: [
+      { deviceUid: from.uid, terminalKey: "14" },
+      { kind: "wire" as const, uid: wireUid },
+      { deviceUid: to.uid, terminalKey: "14" },
+    ],
+    owner: circuitTerminalBox(svg, from.uid, "14"),
+    ownerLabel: from.label,
+    value: `37.D6 · ${from.label} → ${to.label} ${destination}`,
+    compact: `→ ${to.label} ${destination}`,
+    destination,
+  };
+}
+
+it("issues DOL P6 TTB without R006 when W37 is renamed to a sheet.zone-shaped designation (37.D6)", async () => {
+  const fixture = await dolProbeFixture("p6");
+  try {
+    const objects = fixture.source.objects.map((o) =>
+      o.designation === "W37" ? { ...o, designation: "37.D6" } : o,
+    );
+    await writeFile(
+      join(fixture.root, "source.json"),
+      JSON.stringify({ objects }),
+    );
+    const compiled = await compileProject(fixture.root);
+    if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+    const req = JSON.parse(
+      JSON.stringify(dolPackets("p6", "top-to-bottom").combined).replaceAll(
+        '"W37"',
+        '"37.D6"',
+      ),
+    );
+    const outcome = await renderSchematicPacket(compiled.ir, req);
+    if (!outcome.ok) throw Error(outcome.error.message);
+    expect(outcome.value.sheets).toHaveLength(9);
+    const s1Cards = cards(required(outcome.value.sheets[0]).svg);
+    expect(
+      s1Cards.some((c) =>
+        c.rows.some((row) => row.startsWith("37.D6 → R1.14")),
+      ),
+    ).toBe(true);
+    const s5 = required(outcome.value.sheets[4]);
+    const w37 = required(
+      compiled.ir.wires.find((wire) => wire.designation === "37.D6"),
+    );
+    const r1 = required(
+      compiled.ir.devices.find((d) => d.designation === "R1"),
+    );
+    const s2 = required(
+      compiled.ir.devices.find((d) => d.designation === "S2"),
+    );
+    expect(() =>
+      verifyPrintedPeerDestinations(
+        s5,
+        new Map(),
+        [
+          renamedW37PeerEntry(
+            s5.svg,
+            w37.uid,
+            { uid: r1.uid, label: "R1.14" },
+            { uid: s2.uid, label: "S2.14" },
+            "01.A3 (also shown 02.A3)",
+          ),
+          renamedW37PeerEntry(
+            s5.svg,
+            w37.uid,
+            { uid: s2.uid, label: "S2.14" },
+            { uid: r1.uid, label: "R1.14" },
+            "06.C1",
+          ),
+        ],
+        authoredTerminalIncidence(compiled.ir),
+      ),
+    ).not.toThrow();
   } finally {
     await fixture.dispose();
   }

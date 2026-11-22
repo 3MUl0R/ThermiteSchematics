@@ -230,12 +230,69 @@ function cardCarriesDestination(obligation) {
   return slice !== null && matchesDestinationText(slice, destinations, true);
 }
 
+function stripCardRowEndpoint(segment) {
+  const trimmed = segment.trimStart();
+  if (/^unterminated\s+\(spare\)\b/u.test(trimmed))
+    return trimmed.replace(/^unterminated\s+\(spare\)\b/u, "").trim();
+  return trimmed.replace(/^\S+/u, "").trim();
+}
+
+function cardDestinationSlices(text, rowPrefixes) {
+  const normalized = text.replace(/\s+/gu, " ").trim();
+  if (!normalized) return [];
+  const arrows = [...normalized.matchAll(/(?:→|->)/gu)];
+  if (
+    Array.isArray(rowPrefixes) &&
+    rowPrefixes.length > 0 &&
+    rowPrefixes.length === arrows.length
+  ) {
+    const slices = [];
+    let allMatched = true;
+    for (let i = 0; i < rowPrefixes.length; i++) {
+      const slice = cardDestinationSlice(
+        { text: normalized, rowPrefixes, rowIndex: i },
+        rowPrefixes[i],
+      );
+      if (slice === null) {
+        allMatched = false;
+        break;
+      }
+      slices.push(slice.trim());
+    }
+    if (allMatched) return slices;
+  }
+  if (!arrows.length) return [normalized];
+  const parts = normalized.split(/\s*(?:→|->)\s*/u);
+  const knownLabels = (rowPrefixes ?? [])
+    .map((p) => p.split(/\s*(?:→|->)\s*/u)[0]?.trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const slices = [];
+  for (let i = 1; i < parts.length; i++) {
+    let slice = stripCardRowEndpoint(parts[i]);
+    if (i < parts.length - 1) {
+      const matchedLabel = knownLabels.find(
+        (label) => slice === label || slice.endsWith(` ${label}`),
+      );
+      slice = matchedLabel
+        ? slice.slice(0, slice.length - matchedLabel.length).trim()
+        : slice.replace(/(?:^|\s)\S+$/u, "").trim();
+    }
+    if (slice) slices.push(slice);
+  }
+  return slices;
+}
+
 function auditCardUnsupportedDestinations(sheet, g, expected, result) {
   const cards = g?.tranche4?.cards ?? [];
   if (!cards.length) return;
   const supportedByCard = new Map();
+  const prefixesByCard = new Map();
   for (const o of expected) {
-    if (!o.card?.element || !o.destinations?.length) continue;
+    if (!o.card?.element) continue;
+    if (o.card.rowPrefixes?.length && !prefixesByCard.has(o.card.element))
+      prefixesByCard.set(o.card.element, o.card.rowPrefixes);
+    if (!o.destinations?.length) continue;
     const set = supportedByCard.get(o.card.element) ?? new Set();
     for (const d of o.destinations)
       for (const z of d.zones) set.add(at(d.sheet, z));
@@ -249,9 +306,15 @@ function auditCardUnsupportedDestinations(sheet, g, expected, result) {
       )
       .map((t) => t.text)
       .join(" ");
-    const unsupported = [...text.matchAll(/\b(\d{2,}\.[A-Z]+\d+)\b/gu)]
-      .map((m) => m[1])
-      .filter((token) => !supported.has(token));
+    const slices = cardDestinationSlices(
+      text,
+      prefixesByCard.get(card.element),
+    );
+    const unsupported = slices.flatMap((slice) =>
+      [...slice.matchAll(/\b(\d{2,}\.[A-Z]+\d+)\b/gu)]
+        .map((m) => m[1])
+        .filter((token) => !supported.has(token)),
+    );
     if (unsupported.length)
       result.push(
         finding("issued-peer-reference-unsupported-destination", card, {

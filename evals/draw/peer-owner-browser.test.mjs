@@ -152,6 +152,23 @@ it("audits DOL P6 TTB s05 W37 at S2.14 in Chromium", async () => {
       ),
     ).toBe(true);
     expect(peerReferenceFindings(5, geoms[4], s5Obls)).toEqual([]);
+    // Every peer note on DOL P6 TTB s05 must maintain >= 1.5 mm vertical clearance from overlapping text.
+    const paintedTexts = geoms[4].texts.filter(
+      (t) => t.painted !== false && t.bbox?.w > 0 && t.bbox?.h > 0,
+    );
+    const peerTexts = paintedTexts.filter((t) => t.peerReference);
+    expect(peerTexts.length).toBeGreaterThanOrEqual(2);
+    for (const p of peerTexts) {
+      for (const other of paintedTexts) {
+        if (other === p || (other.peerGroup && other.peerGroup === p.peerGroup))
+          continue;
+        const a = p.bbox,
+          b = other.bbox;
+        if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) <= 0) continue;
+        const gap = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+        expect(gap).toBeGreaterThanOrEqual(1.5 - 1e-6);
+      }
+    }
     // Removing the S2.14 W37 peer note (leaving only the generic repeat pointer) must fail.
     const doc = new DOMParser().parseFromString(
       pkt.value.sheets[4].svg,
@@ -159,8 +176,10 @@ it("audits DOL P6 TTB s05 W37 at S2.14 in Chromium", async () => {
     );
     for (const el of doc.querySelectorAll(
       '[data-peer-reference="conductor-peer"]',
-    ))
-      if (el.textContent?.includes("S2.14 → R1.14")) el.remove();
+    )) {
+      const src = JSON.parse(el.getAttribute("data-peer-source") ?? "[]");
+      if (src[0]?.deviceUid === s2.uid && src[1]?.uid === w37.uid) el.remove();
+    }
     const erasedS5 = await measure(doc.toString());
     expect(
       peerReferenceFindings(5, erasedS5, s5Obls).map((f) => f.kind),

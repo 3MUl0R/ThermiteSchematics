@@ -6,6 +6,7 @@ import type { SchematicPacketRequest } from "../src/packet/types.js";
 import { authoredTerminalIncidence } from "../src/off-view/incidence.js";
 import { cardRowKey } from "../src/off-view/card-destinations.js";
 import { verifyPrintedPeerDestinations } from "../src/packet/terminal-peer-references.js";
+import { escapeXmlAttribute as attr } from "../src/svg/escape.js";
 import { parseSvg } from "./off-view-fixtures.js";
 import { createTerminalIr } from "../../query/test/fixtures.js";
 
@@ -460,4 +461,63 @@ it("preserves all destinations on repeated views and enforces printed destinatio
   expect(() =>
     verifyPrintedPeerDestinations(duplicated, expected, [], byTerminal),
   ).toThrow(/Peer destination invariant violated/u);
+});
+
+it("parses printed peer destinations structurally when conductor designations resemble sheet.zone", () => {
+  const entry = {
+    kind: "conductor-peer" as const,
+    identity: [
+      { deviceUid: "R1", terminalKey: "14" },
+      { kind: "wire" as const, uid: "W37" },
+      { deviceUid: "S2", terminalKey: "14" },
+    ],
+    owner: { x: 108, y: 184, w: 1.3, h: 1.3 },
+    ownerLabel: "R1.14",
+    value: "37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3)",
+    compact: "→ S2.14 01.A3 (also shown 02.A3)",
+    destination: "01.A3 (also shown 02.A3)",
+  };
+  const mkSheet = (text: string) => ({
+    number: 5,
+    view: {
+      format: "documentation-view/0.1" as const,
+      kind: "circuit" as const,
+      title: "DOL control",
+    },
+    references: [],
+    continuations: [],
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="215.9mm" height="279.4mm" viewBox="0 0 215.9 279.4"><text x="110" y="188" font-size="2.5" data-peer-reference="conductor-peer" data-peer-source="${attr(JSON.stringify(entry.identity))}">${text}</text></svg>`,
+  });
+  const emptyIncidence = new Map();
+  // Designation "37.D6" is never counted as a destination token.
+  expect(() =>
+    verifyPrintedPeerDestinations(
+      mkSheet("37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3)"),
+      new Map(),
+      [entry],
+      emptyIncidence,
+    ),
+  ).not.toThrow();
+  expect(() =>
+    verifyPrintedPeerDestinations(
+      mkSheet("R1.14 → 01.A3 (also shown 02.A3)"),
+      new Map(),
+      [entry],
+      emptyIncidence,
+    ),
+  ).not.toThrow();
+  // Real dropped, duplicated, or invented destinations still fail.
+  for (const bad of [
+    "37.D6 · R1.14 → S2.14 01.A3",
+    "37.D6 · R1.14 → S2.14 01.A3 (also shown 01.A3, 02.A3)",
+    "37.D6 · R1.14 → S2.14 01.A3 (also shown 02.A3, 99.D6)",
+  ])
+    expect(() =>
+      verifyPrintedPeerDestinations(
+        mkSheet(bad),
+        new Map(),
+        [entry],
+        emptyIncidence,
+      ),
+    ).toThrow(/Peer destination invariant violated/u);
 });

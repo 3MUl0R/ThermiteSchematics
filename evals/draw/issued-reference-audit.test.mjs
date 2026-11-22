@@ -557,6 +557,65 @@ it("5.40 rejects invented card alternates and unsupported sheet.zone tokens", ()
   ).toContain("issued-peer-reference-unsupported-destination");
 });
 
+it("5.40 ignores sheet.zone-shaped conductor designations on cards while still rejecting invented destinations", () => {
+  const mkCardObl = (cardText) => ({
+    kind: "conductor-peer",
+    source: [
+      { deviceUid: "SRC1", terminalKey: "L3" },
+      { kind: "wire", uid: "W-PWR-003-M2" },
+      { deviceUid: "CB2", terminalKey: "5/L3" },
+    ],
+    label: "77.A2",
+    peerName: "CB2.5/L3",
+    ownerLabel: "SRC1.L3",
+    destinations: [{ sheet: 2, zones: ["A4"] }],
+    values: ["77.A2 · SRC1.L3 → CB2.5/L3 02.A4"],
+    card: {
+      element: "card-src1-l3",
+      bbox: { x: 30, y: 40, w: 48, h: 10 },
+      text: cardText,
+      rowPrefixes: ["77.A2 → CB2.5/L3"],
+      rowIndex: 0,
+    },
+  });
+  const mkGeom = (cardText) => ({
+    texts: [],
+    tranche4: {
+      cards: [
+        {
+          element: "card-src1-l3",
+          headingElements: [],
+          texts: [{ element: "row-1", painted: true, text: cardText }],
+        },
+      ],
+    },
+  });
+  // Passing control: 77.A2 is the conductor designation, 02.A4 is the supported destination.
+  const valid = "77.A2 → CB2.5/L3 02.A4";
+  expect(peerReferenceFindings(1, mkGeom(valid), [mkCardObl(valid)])).toEqual(
+    [],
+  );
+  // Passing control with no peer obligation: 77.A2 designation alone is not a destination.
+  expect(peerReferenceFindings(1, mkGeom("77.A2 → CB2.5/L3"), [])).toEqual([]);
+  // Failing witnesses: an invented destination in the destination slot still fails.
+  const invented = "77.A2 → CB2.5/L3 02.A4 (also shown 99.D6)";
+  expect(
+    peerReferenceFindings(1, mkGeom(invented), [mkCardObl(invented)]).map(
+      (f) => f.kind,
+    ),
+  ).toEqual(
+    expect.arrayContaining([
+      "issued-peer-reference-missing",
+      "issued-peer-reference-unsupported-destination",
+    ]),
+  );
+  expect(
+    peerReferenceFindings(1, mkGeom("77.A2 → CB2.5/L3 99.D6"), []).map(
+      (f) => f.kind,
+    ),
+  ).toContain("issued-peer-reference-unsupported-destination");
+});
+
 it("5.40 fails a 1.40 mm peer stack gap and passes 1.50 mm (#450)", () => {
   const mkPeer = (key, y) => ({
     kind: "conductor-peer",
