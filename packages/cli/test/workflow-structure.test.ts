@@ -89,44 +89,12 @@ describe("Runtime CI and ZIP boundaries", () => {
     expect(text).toContain("pull_request:\n    branches: [release]");
     expect(text).toContain("push:\n    branches: [release]");
     expect(text).not.toContain("branches: [dev]");
-    expect(text).toContain(
-      "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
-    );
     expect(text).toContain("permissions:\n  contents: read");
-    expect(text).toContain("persist-credentials: false");
     expect(text).toContain("runs-on: ${{ matrix.os }}");
-    expect(text).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
     expect(text).toContain("oven-sh/setup-bun@v2");
     expect(text).toContain("bun-version-file: .bun-version");
-    expect(text).toContain("run: bun install --frozen-lockfile");
-    expect(text).toContain("run: bun run check");
+    expect(text).toContain("run: bun run check:static");
     expect(text).toContain("run: bun run package:pack");
-    // The linked-worktree full check runs as its own matrix job, in
-    // parallel with the clone check, so neither exceeds the job time limit.
-    const jobs = block(text, "jobs", 0);
-    expect(mappingKeys(jobs, 2)).toEqual(["check", "worktree"]);
-    const clone = block(jobs, "check", 2);
-    const worktree = block(jobs, "worktree", 2);
-    expect(clone).toContain("run: bun run check");
-    expect(clone).not.toContain("check-worktree");
-    for (const job of [clone, worktree]) {
-      expect(job).toContain(
-        "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
-      );
-      expect(job).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
-      expect(job).toContain("timeout-minutes: 90");
-      expect(job).toContain(
-        "THERMITE_CI_MAX_WORKERS: ${{ matrix.os == 'ubuntu-24.04' && '2' || '3' }}",
-      );
-      expect(job).toContain('THERMITE_REQUIRE_BROWSER: "1"');
-      expect(job).toContain("persist-credentials: false");
-      expect(job).toContain('python-version: "3.12"');
-      expect(job).toContain("run: bun install --frozen-lockfile");
-      expect(job).toContain("THERMITE_RESEARCH_PYTHON: python");
-    }
-    expect(worktree).toContain("run: bun scripts/check-worktree.mjs");
-    expect(worktree).not.toContain("run: bun run check");
-    expect(worktree).not.toContain("package:pack");
     expect(text).toContain("--network=none");
     expect(text).toContain("if: runner.os == 'Linux'");
     expect(text).toContain(
@@ -137,6 +105,56 @@ describe("Runtime CI and ZIP boundaries", () => {
     expect(text).not.toContain("pull_request_target");
     expect(text).not.toContain("run-vitest-and-audit");
     expect(text).not.toContain("THERMITE_SCHEMATICS_RELEASE_");
+  });
+
+  it("shards clone and linked-worktree tests behind a release aggregate gate", async () => {
+    const text = await readFile(
+      join(repositoryRoot, ".github", "workflows", "ci.yml"),
+      "utf8",
+    );
+    const jobs = block(text, "jobs", 0);
+    expect(mappingKeys(jobs, 2)).toEqual([
+      "check-static",
+      "check-test",
+      "worktree",
+      "ci-result",
+    ]);
+    const checkStatic = block(jobs, "check-static", 2);
+    const checkTest = block(jobs, "check-test", 2);
+    const worktree = block(jobs, "worktree", 2);
+    const result = block(jobs, "ci-result", 2);
+    for (const job of [checkStatic, checkTest, worktree]) {
+      expect(job).toContain(
+        "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
+      );
+      expect(job).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
+      expect(job).toContain("persist-credentials: false");
+      expect(job).toContain('python-version: "3.12"');
+      expect(job).toContain("run: bun install --frozen-lockfile");
+      expect(job).toContain("THERMITE_RESEARCH_PYTHON: python");
+    }
+    expect(checkStatic).toContain("run: bun run check:static");
+    expect(checkStatic).toContain("run: bun run package:pack");
+    expect(checkStatic).not.toContain("check-worktree");
+    for (const sharded of [checkTest, worktree]) {
+      expect(sharded).toContain("shard: [1, 2]");
+      expect(sharded).toContain("timeout-minutes: 90");
+      expect(sharded).toContain("timeout-minutes: 15");
+      expect(sharded).toContain(
+        "THERMITE_CI_MAX_WORKERS: ${{ matrix.os == 'ubuntu-24.04' && '2' || '3' }}",
+      );
+      expect(sharded).toContain('THERMITE_REQUIRE_BROWSER: "1"');
+      expect(sharded).toContain("shard-${{ matrix.shard }}-of-2");
+    }
+    expect(checkTest).toContain(
+      "run: bun run test -- --shard=${{ matrix.shard }}/2",
+    );
+    expect(worktree).toContain(
+      "run: bun scripts/check-worktree.mjs --shard=${{ matrix.shard }}/2",
+    );
+    expect(worktree).not.toContain("package:pack");
+    expect(result).toContain("needs: [check-static, check-test, worktree]");
+    expect(result).toContain("always()");
   });
 
   it("rejects escaping, duplicate, extra, and link ZIP entries", async () => {

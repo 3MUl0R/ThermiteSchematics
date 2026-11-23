@@ -1,7 +1,10 @@
 import { join, resolve } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { expect, it, vi } from "vitest";
-import { checkWorktree } from "../../../scripts/check-worktree.mjs";
+import {
+  checkWorktree,
+  parseWorktreeArgs,
+} from "../../../scripts/check-worktree.mjs";
 
 vi.mock("node:fs", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs")>();
@@ -138,4 +141,45 @@ it("preserves an add failure without trying to unregister an unattached checkout
   expect(h.calls[0].args[1]).toBe("add");
   expect(h.warnings).toEqual([]);
   expect(h.removals).toHaveLength(1);
+});
+
+it("runs static checks on shard 1 and build plus sharded tests on later shards", async () => {
+  const shard1Calls: string[][] = [];
+  await checkWorktree({
+    shard: "1/2",
+    makeTemporary: () => scratch,
+    run: (_command: string, args: string[]) => {
+      shard1Calls.push(args);
+    },
+    remove: () => {},
+  });
+  expect(shard1Calls.map((args) => args.join(" "))).toEqual([
+    `worktree add --detach ${join(scratch, "linked checkout")} HEAD`,
+    "install --frozen-lockfile",
+    "run check:static",
+    "run test -- --shard=1/2",
+    `worktree remove --force ${join(scratch, "linked checkout")}`,
+  ]);
+
+  const shard2Calls: string[][] = [];
+  await checkWorktree({
+    shard: "2/2",
+    makeTemporary: () => scratch,
+    run: (_command: string, args: string[]) => {
+      shard2Calls.push(args);
+    },
+    remove: () => {},
+  });
+  expect(shard2Calls.map((args) => args.join(" "))).toEqual([
+    `worktree add --detach ${join(scratch, "linked checkout")} HEAD`,
+    "install --frozen-lockfile",
+    "run build",
+    "run test -- --shard=2/2",
+    `worktree remove --force ${join(scratch, "linked checkout")}`,
+  ]);
+  expect(parseWorktreeArgs([])).toEqual({});
+  expect(parseWorktreeArgs(["--shard=1/2"])).toEqual({ shard: "1/2" });
+  expect(parseWorktreeArgs(["--shard", "2/2"])).toEqual({ shard: "2/2" });
+  expect(() => parseWorktreeArgs(["--shard=3/2"])).toThrow(/Invalid --shard/);
+  expect(() => parseWorktreeArgs(["--unknown"])).toThrow(/Usage:/);
 });

@@ -20,25 +20,29 @@ for the commit, test counts, skips and downloaded-asset evidence.
 | Linux x64 | Native ubuntu-24.04 CI | Verified | Verified with network disabled |
 | macOS x64 | No local test host | Not verified | Not verified |
 
-The [ordinary CI workflow](../.github/workflows/ci.yml) runs the complete check
-and runtime packaging on `macos-15`, `ubuntu-24.04`, and `windows-2022` for
-pull requests targeting `release` and pushes to `release`. A parallel
-`worktree` job repeats the complete check from a linked worktree on the same
-three systems. Manual runs also
-require the `release` branch. Pull requests and merges into `dev` skip this
-workflow; contributors still run the local checks before submitting changes.
-Both CI jobs upload a Vitest JSON report with per-test durations when the suite
-finishes. Set `THERMITE_TEST_TIMINGS=1` with a local check to write the same
-report to `coverage/test-timings.json`.
-Both jobs run Vitest with up to three workers on Windows and two on macOS and
-Linux.
+The [ordinary CI workflow](../.github/workflows/ci.yml) runs on `macos-15`,
+`ubuntu-24.04`, and `windows-2022` for pull requests targeting `release` and
+pushes to `release`: `check-static` runs the non-test static checks and runtime
+packaging once per OS, `check-test` runs the Vitest suite across two
+duration-balanced shards per OS, `worktree` repeats static checks (on shard 1)
+and the two test shards from a linked worktree on the same three systems, and
+`ci-result` aggregates all jobs into one required release status check. Manual
+runs also require the `release` branch. Pull requests and merges into `dev`
+skip this workflow; contributors still run the local checks before submitting
+changes.
+Each test shard uploads a Vitest JSON report with per-test durations when the
+shard finishes. Set `THERMITE_TEST_TIMINGS=1` with a local check to write the
+same report to `coverage/test-timings.json`.
+Both test job matrices run Vitest with up to three workers on Windows and two
+on macOS and Linux.
 Windows and macOS reserve a two-worker phase for the offline reference
 pipeline, its executable docs fence, and short-deadline fit and artifact
 checks. macOS also runs the largest Chromium and nested test workloads in
 that phase.
-On fresh CI checkouts, the sequencer starts expensive files early using
-`vitest.config.mjs`. Refresh those entries from the latest native timing
-artifacts as suites move or their costs change.
+On fresh CI checkouts, `CiSequencer` in `vitest.config.mjs` starts expensive
+files early and balances `--shard` partitions using `scripts/test-durations.json`.
+Refresh those entries from the latest native timing artifacts as suites move or
+their costs change.
 Linux network-disabled acceptance uses a matching-architecture container;
 Windows ARM64 and non-glibc Linux systems have not been validated. The packer
 builds for its current OS and architecture; it does not cross-compile.

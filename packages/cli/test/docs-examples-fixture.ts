@@ -43,8 +43,8 @@ export function registerDocsExampleTests(
     const timeoutMs =
       group === "workspace"
         ? recipe === "workspace-shell"
-          ? 300_000 // Three commands can each use up to 90 s on native CI.
-          : 240_000
+          ? 300_000 // Three commands can each use up to 120 s on native CI.
+          : 360_000 // docs/machine-demo.md timed out at 240 s on macOS CI (#562).
         : 120_000;
     it(
       recipes[recipe].testName(file, recipe),

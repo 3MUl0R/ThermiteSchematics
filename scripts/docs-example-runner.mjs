@@ -89,7 +89,7 @@ export async function workspaceShell(c, fence) {
   // Windows and macOS CI exceeded 30 s per command even with shared setup.
   const nativeCi =
     process.env.CI && ["win32", "darwin"].includes(process.platform);
-  const timeoutMs = nativeCi ? 90_000 : 60_000;
+  const timeoutMs = nativeCi ? 120_000 : 60_000;
   let command = 0;
   return shell(
     {

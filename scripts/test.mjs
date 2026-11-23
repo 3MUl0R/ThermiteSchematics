@@ -54,12 +54,20 @@ function runTests(selected, { cwd = process.cwd(), env = process.env } = {}) {
 }
 
 // The contributor harness also observes this entry point when Bun bypasses PATH.
-const observer = process.env.THERMITE_CONTRIBUTOR_BUN;
-const result = observer
-  ? (await import(pathToFileURL(observer).href)).observeContributorTest(
-      process.argv.slice(1),
-      runTests,
-    )
-  : runTests(process.argv.slice(2));
-if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
+const args = process.argv.slice(2);
+if (args.includes("--list-files")) {
+  const { listTestFiles } = await import("./test-shards.mjs");
+  const files = await listTestFiles(args);
+  for (const file of files) process.stdout.write(`${file}\n`);
+  process.exitCode = 0;
+} else {
+  const observer = process.env.THERMITE_CONTRIBUTOR_BUN;
+  const result = observer
+    ? (await import(pathToFileURL(observer).href)).observeContributorTest(
+        process.argv.slice(1),
+        runTests,
+      )
+    : runTests(args);
+  if (result.error) throw result.error;
+  process.exitCode = result.status ?? 1;
+}
