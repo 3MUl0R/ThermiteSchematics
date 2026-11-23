@@ -338,15 +338,15 @@ export const workflowAdvice: [string, string][] = [
     "Authoring prohibition shared with the starter recipe.",
   ],
   [
-    "After the last edit, validate, export a bundle, inspect drawings and run `export check`.",
+    "After the last edit, validate, export a bundle, inspect the drawings, and run `export check` before handoff.",
     "Workflow ordering and human inspection; the offline topic's delivery fence executes validation, bundle and freshness check.",
   ],
   [
-    "For exact shapes use `thermite guide schema`.",
+    "Shapes: `thermite guide schema`.",
     "The CLI guide suite compares exact schemas.",
   ],
   [
-    "Use `thermite guide drawing-frames` before changing paper frames or title data.",
+    "Read `thermite guide drawing-frames` before frame/title edits.",
     "Read-before policy; the topic is resolved offline.",
   ],
 ];

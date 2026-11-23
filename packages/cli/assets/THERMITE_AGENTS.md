@@ -15,7 +15,7 @@ thermite init ../cabinets --template cabinets
 
 When using a runtime package, check existing issues at
 https://github.com/BlackettApplied/ThermiteSchematics/issues.
-Draft bug/gap/doc issues locally unless asked to file them (search/GET examples: `thermite guide libraries`).
+Draft bug/gap/doc issues locally unless asked to file (search/GET: `thermite guide libraries`).
 Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths. Never patch runtimes.
 
 Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.
@@ -27,13 +27,13 @@ Only humans accept the CLA.
 
 Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**. Guard existing files from inspection through dry-run and apply, including any undo. Never use git checkout or rm to undo an edit to a registered source.
 
-Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer engineering repairs or suppress diagnostics. Functions never automatically join physical nets.
+Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer repairs or suppress diagnostics. Functions never automatically join physical nets.
 
 Invent no pins, ratings, spares or title/revision data. Mark terminals unused
 or deferred only with explicit user intent. After library edits, run `thermite lock .`
 before validation. Snapshot before edits with `thermite snapshot -o drawings/before.json`.
 
-To edit existing source/presentation files:
+Edit existing source/presentation files:
 
 `validate → resolve/inspect/query → dry-run patch → apply patch → validate → create-view`
 
@@ -96,13 +96,13 @@ Use a short group `lineReference` for circuit captions.
 `thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
 
 Keep captions clear of wires.
-Net labels stay at route source; top-down sources widen on overlap.
+Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
 Top-down can try tighter spacing once after a label or span refusal.
 Single control views can reflow at the same print scale.
 See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 ## Offline project workflows
 
-After the last edit, validate, export a bundle, inspect drawings and run `export check`. See `thermite guide project-workflows`.
-For exact shapes use `thermite guide schema`. Use `thermite guide drawing-frames`
-before changing paper frames or title data.
+After the last edit, validate, export a bundle, inspect the drawings, and run
+`export check` before handoff. See `thermite guide project-workflows`.
+Shapes: `thermite guide schema`. Read `thermite guide drawing-frames` before frame/title edits.

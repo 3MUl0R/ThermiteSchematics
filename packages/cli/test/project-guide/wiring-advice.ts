@@ -4,8 +4,8 @@ export const wiringAdvice = new Map([
     "Manual print review. The terminal-label clearance, wire-label mask and face-clearance browser tests check painted geometry.",
   ],
   [
-    "Net labels stay at route source; top-down sources widen on overlap.",
-    "Checked by ttb-net-label-source.test.ts and the DQ-17 browser regression in evals/draw/checker-net-browser.test.mjs.",
+    "Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.",
+    "Checked by ttb-net-label-source.test.ts, ttb-net-label-variants.test.ts and the DQ-17 browser regression in evals/draw/checker-net-browser.test.mjs.",
   ],
   [
     "See `thermite guide circuit-views` for rail crossings and terminal marks.",
