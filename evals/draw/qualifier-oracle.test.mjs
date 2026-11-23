@@ -559,3 +559,214 @@ it.each([
     });
   },
 );
+
+it.each([
+  ["protectiveEarth", "thermite:dc-supply"],
+  ["ProtectiveEarth", "iec:dc-power-supply"],
+  ["functionalEarth", "thermite:dc-supply"],
+  ["chassisGround", "iec:dc-power-supply"],
+])(
+  "DQ-10 5.42 (#553 round 3): camelCase earth role %s (%s) never supplies the second AC rating or dc-output",
+  (role, symbol) => {
+    const loadTerminals = [
+      { key: "A", rating: { voltage_type: "AC" } },
+      { key: "B", role, rating: { voltage_type: "AC" } },
+    ];
+    const unmarked = psuCase({
+      symbol,
+      inputTerminals: loadTerminals,
+      renderedMarks: [],
+    });
+    expect(
+      conversionQualifierAudit(unmarked.g, unmarked.ir, unmarked.sheet),
+    ).toEqual({ findings: [], eligible: 0 });
+
+    const marked = psuCase({
+      symbol,
+      inputTerminals: loadTerminals,
+      renderedMarks: ["ac-input"],
+    });
+    const audit = conversionQualifierAudit(marked.g, marked.ir, marked.sheet);
+    expect(audit.eligible).toBe(0);
+    expect(kinds(audit)).toEqual([
+      "conversion-qualifier-native-owner-unavailable",
+    ]);
+
+    const srcMarked = psuCase({
+      symbol,
+      functionKey: "dc_output",
+      functionKind: "source",
+      inputTerminals: [
+        { key: "+", role: "dc_positive_output" },
+        { key: "PE", role },
+      ],
+      extraTerminals: [],
+      renderedMarks: ["dc-output"],
+    });
+    const srcAudit = conversionQualifierAudit(
+      srcMarked.g,
+      srcMarked.ir,
+      srcMarked.sheet,
+    );
+    expect(srcAudit.eligible).toBe(0);
+    expect(kinds(srcAudit)).toEqual([
+      "conversion-qualifier-native-owner-unavailable",
+    ]);
+  },
+);
+
+it("DQ-10 5.42 (#553 round 3): canonical IR earth identification excludes unroled earth terminals", () => {
+  const loadTerminals = [
+    { key: "A", rating: { voltage_type: "AC" } },
+    { key: "B", rating: { voltage_type: "AC" } },
+  ];
+
+  // 1. ir.protectiveEarthTerminals
+  const viaField = psuCase({
+    inputTerminals: loadTerminals,
+    renderedMarks: ["ac-input"],
+  });
+  viaField.ir.protectiveEarthTerminals = [{ deviceUid: "D", terminalKey: "B" }];
+  expect(
+    conversionQualifierAudit(viaField.g, viaField.ir, viaField.sheet),
+  ).toMatchObject({
+    eligible: 0,
+    findings: [
+      expect.objectContaining({
+        kind: "conversion-qualifier-native-owner-unavailable",
+      }),
+    ],
+  });
+
+  // 2. ir.potentials with electrical.polarity === "protective_earth" anchored at terminal
+  const viaPotential = psuCase({
+    inputTerminals: loadTerminals,
+    renderedMarks: ["ac-input"],
+  });
+  viaPotential.ir.potentials = [
+    {
+      uid: "p-pe",
+      name: "PE",
+      electrical: { polarity: "protective_earth" },
+      terminal: { deviceUid: "D", terminalKey: "B" },
+      netId: "net:pe",
+    },
+  ];
+  expect(
+    conversionQualifierAudit(
+      viaPotential.g,
+      viaPotential.ir,
+      viaPotential.sheet,
+    ),
+  ).toMatchObject({
+    eligible: 0,
+    findings: [
+      expect.objectContaining({
+        kind: "conversion-qualifier-native-owner-unavailable",
+      }),
+    ],
+  });
+
+  // 3. Device type single-terminal earth bus binding in circuitSymbols
+  const viaBus = psuCase({
+    inputTerminals: loadTerminals,
+    circuitSymbols: { pe_bus: "earth" },
+    renderedMarks: ["ac-input"],
+  });
+  viaBus.ir.deviceTypes[0].functions = [
+    { key: "pe_bus", kind: "bus", terminalKeys: ["B"] },
+  ];
+  expect(
+    conversionQualifierAudit(viaBus.g, viaBus.ir, viaBus.sheet),
+  ).toMatchObject({
+    eligible: 0,
+    findings: [
+      expect.objectContaining({
+        kind: "conversion-qualifier-native-owner-unavailable",
+      }),
+    ],
+  });
+
+  // 4. Canonical earth also suppresses dc-output on 2-terminal sources
+  const srcViaField = psuCase({
+    functionKey: "dc_output",
+    functionKind: "source",
+    inputTerminals: [{ key: "A" }, { key: "B" }],
+    extraTerminals: [],
+    renderedMarks: ["dc-output"],
+  });
+  srcViaField.ir.protectiveEarthTerminals = [
+    { deviceUid: "D", terminalKey: "B" },
+  ];
+  expect(
+    conversionQualifierAudit(srcViaField.g, srcViaField.ir, srcViaField.sheet),
+  ).toMatchObject({
+    eligible: 0,
+    findings: [
+      expect.objectContaining({
+        kind: "conversion-qualifier-native-owner-unavailable",
+      }),
+    ],
+  });
+});
+
+it("DQ-10 5.42 (#553 round 3): earth terminals are ignored in both directions (never veto AC)", () => {
+  // Complete AC role pair + DC-rated protective_earth (reviewer's dc-rated-earth).
+  const dcRatedPe = psuCase({
+    inputTerminals: [
+      { key: "L", role: "ac_line_input" },
+      { key: "N", role: "ac_input_return" },
+      { key: "PE", role: "protective_earth", rating: { voltage_type: "DC" } },
+    ],
+    renderedMarks: ["ac-input"],
+  });
+  expect(
+    conversionQualifierAudit(dcRatedPe.g, dcRatedPe.ir, dcRatedPe.sheet),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  // AC-rated pair + DC-rated camelCase protectiveEarth.
+  const dcRatedCamel = psuCase({
+    inputTerminals: [
+      { key: "L", rating: { voltage_type: "AC" } },
+      { key: "N", rating: { voltage_type: "AC" } },
+      { key: "PE", role: "protectiveEarth", rating: { voltage_type: "DC" } },
+    ],
+    renderedMarks: ["ac-input"],
+  });
+  expect(
+    conversionQualifierAudit(
+      dcRatedCamel.g,
+      dcRatedCamel.ir,
+      dcRatedCamel.sheet,
+    ),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  // Complete AC role pair + DC-token earth role (dc_earth).
+  const dcEarthRole = psuCase({
+    inputTerminals: [
+      { key: "L", role: "ac_line_input" },
+      { key: "N", role: "ac_input_return" },
+      { key: "PE", role: "dc_earth", rating: { voltage_type: "DC" } },
+    ],
+    renderedMarks: ["ac-input"],
+  });
+  expect(
+    conversionQualifierAudit(dcEarthRole.g, dcEarthRole.ir, dcEarthRole.sheet),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  // Complete AC role pair + unroled DC-rated terminal in ir.protectiveEarthTerminals.
+  const canonicalPe = psuCase({
+    inputTerminals: [
+      { key: "L", role: "ac_line_input" },
+      { key: "N", role: "ac_input_return" },
+      { key: "E", rating: { voltage_type: "DC" } },
+    ],
+    renderedMarks: ["ac-input"],
+  });
+  canonicalPe.ir.protectiveEarthTerminals = [
+    { deviceUid: "D", terminalKey: "E" },
+  ];
+  expect(
+    conversionQualifierAudit(canonicalPe.g, canonicalPe.ir, canonicalPe.sheet),
+  ).toEqual({ findings: [], eligible: 1 });
+});

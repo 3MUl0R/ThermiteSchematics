@@ -127,7 +127,8 @@ function nodeEmissionBase(
       (f) =>
         ["source", "load", "channel", "other"].includes(f.kind) &&
         !["motor", "heater", "lamp", "thermocouple", "fuse"].includes(
-          circuitMark(node.type, f),
+          node.rows.find((row) => row.f.id.functionKey === f.id.functionKey)
+            ?.mark ?? circuitMark(node.type, f),
         ),
     );
   if (block)

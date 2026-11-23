@@ -593,7 +593,7 @@ export async function prepareCircuitView(
       const device = ir.devices.find((d) => d.uid === f.id.deviceUid)!;
       const type = ir.deviceTypes.find((t) => t.id === device.typeId)!;
       try {
-        const mark = circuitMark(type, f);
+        const mark = circuitMark(type, f, { ir });
         if (
           symbolProfile(type) === "thermite:sensor-3wire" &&
           mark === "sensor-3wire" &&

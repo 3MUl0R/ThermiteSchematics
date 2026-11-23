@@ -75,14 +75,22 @@ Pressure and float contact marks depict an actuator together with the authored
 normal contact state. The sensor/probe and receptacle marks identify an interface;
 they do not infer pin roles, probe technology, float behavior or GFCI protection.
 A two-terminal `thermite:dc-supply` source uses the DC output mark unless its
-terminals declare AC, earth/ground or auxiliary roles. A two- or three-terminal
-`thermite:dc-supply` load uses `ac-input` when its current-carrying (non-earth,
-non-auxiliary) terminals establish an AC input without DC conflicts — either by
-native AC input roles or by every non-earth input terminal declaring
-`rating.voltage_type: "AC"` (or when explicitly bound via `circuitSymbols`) —
-and otherwise retains the generic power mark (`load`). Earth/ground roles
-(`protective_earth`, `pe`, `functional_earth`, `ground`, `gnd`) never contribute
-AC evidence or count toward the terminal count needed for rating-based AC.
+terminals declare AC, earth/ground or auxiliary facts (including canonical
+protective-earth terminal/role identification). A two- or three-terminal
+`thermite:dc-supply` load ignores earth/ground terminals completely in both
+directions — an earth terminal neither establishes AC nor vetoes it (a DC rating
+on an earth terminal does not suppress a complete AC role pair or AC-rated pair
+on the current-carrying terminals), nor counts toward the terminal count needed
+for rating-based AC. The load uses `ac-input` when its remaining current-carrying
+(non-earth, non-auxiliary) terminals (at least two) establish an AC input without
+DC conflicts — either by native AC input roles or by every non-earth input
+terminal declaring `rating.voltage_type: "AC"` (or when explicitly bound via
+`circuitSymbols`) — and otherwise retains the generic power mark (`load`). Earth
+identification honors canonical protective-earth terminal/role facts
+(`protectiveEarthTerminals`, `protective-earth-source` role mappings,
+`protective_earth` potential anchors and explicit `earth` bus bindings) alongside
+earth/ground role names (`protective_earth`, `protectiveEarth`, `pe`,
+`functional_earth`, `ground`, `gnd`).
 
 A `thermite:transformer` circuit block places its primary load windings opposite
 its secondary source windings on one shared magnetic core. Each winding retains

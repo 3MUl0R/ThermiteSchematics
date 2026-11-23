@@ -752,6 +752,20 @@ export function findDeviceTypeSymbolMapping(
   return mappings.find((mapping) => mapping.typeId === typeId);
 }
 
+export function protectiveEarthRoles(
+  mappings: readonly DeviceTypeSymbolMapping[] = CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
+): ReadonlySet<string> {
+  return new Set(
+    mappings.flatMap((mapping) =>
+      mapping.boundaryTerminals
+        .filter(
+          ({ boundaryKind }) => boundaryKind === "protective-earth-source",
+        )
+        .map(({ requiredRole }) => requiredRole),
+    ),
+  );
+}
+
 /** Cataloged rooted capabilities. Traversal remains the selection engine's job. */
 export const ROOTED_SYMBOL_PROFILES = Object.freeze(
   SYMBOL_PROFILES.filter((p) =>

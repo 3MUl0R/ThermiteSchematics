@@ -93,7 +93,7 @@ at PS1; declare potentials at added sources.
 Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
 Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Use a short group `lineReference` for circuit captions.
-`thermite:dc-supply` defaults: 2-terminal sources mark `dc-output` unless AC; 2/3-terminal loads mark `ac-input` only from non-earth AC roles or all-AC ratings, else `load`.
+`thermite:dc-supply` defaults: 2-terminal sources `dc-output` unless AC/earth/aux; 2/3-terminal loads ignore earth; `ac-input`: AC roles or 2+ non-earth all rated AC, else `load`.
 
 Keep captions clear of wires.
 Top-down can try tighter spacing once after a label or span refusal.
