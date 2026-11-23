@@ -185,13 +185,13 @@ function functionTerminalFacts(
 }
 
 const AC_SINGLE_PHASE_ROLES = new Set([
-  "ac_line_input",
-  "ac_input_return",
-  "ac_neutral",
+  "aclineinput",
+  "acinputreturn",
+  "acneutral",
 ]);
 const AC_THREE_PHASE_ROLE_SETS = [
-  ["phase_1_input", "phase_2_input", "phase_3_input"],
-  ["phase_u_input", "phase_v_input", "phase_w_input"],
+  ["phase1input", "phase2input", "phase3input"],
+  ["phaseuinput", "phasevinput", "phasewinput"],
 ] as const;
 /**
  * Closed set of normalized earth roles for `thermite:dc-supply` qualifier
@@ -210,17 +210,9 @@ const DC_SUPPLY_EARTH_ROLES = Object.freeze([
   "chassisground",
   "chassisearth",
 ] as const);
-const AUXILIARY_ROLE_TOKENS = new Set(["aux", "auxiliary", "shield"]);
 
-function normalizeEarthRole(role: string | undefined): string {
+function normalizeDcSupplyRole(role: string | undefined): string {
   return (role ?? "").toLowerCase().replace(/[^a-z0-9]+/gu, "");
-}
-
-function roleTokens(role: string | undefined): string[] {
-  return (role ?? "")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/u)
-    .filter(Boolean);
 }
 
 function closedEarthRoles(context?: CircuitMarkContext): ReadonlySet<string> {
@@ -233,8 +225,39 @@ function closedEarthRoles(context?: CircuitMarkContext): ReadonlySet<string> {
       : CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   );
   const roles = new Set<string>(DC_SUPPLY_EARTH_ROLES);
-  for (const role of canonical) roles.add(normalizeEarthRole(role));
+  for (const role of canonical) roles.add(normalizeDcSupplyRole(role));
   return roles;
+}
+
+function isAuxiliaryOrNonPowerRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  return (
+    normalized.startsWith("aux") ||
+    normalized.startsWith("shield") ||
+    normalized === "noconnection"
+  );
+}
+
+function isDcRole(role: string | undefined): boolean {
+  return normalizeDcSupplyRole(role).startsWith("dc");
+}
+
+function isAcRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  return normalized.startsWith("ac") || normalized.startsWith("phase");
+}
+
+function isCurrentCarryingRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  if (!normalized || isAuxiliaryOrNonPowerRole(role)) return false;
+  return (
+    isAcRole(role) ||
+    isDcRole(role) ||
+    normalized.startsWith("neutral") ||
+    normalized.endsWith("neutral") ||
+    normalized.startsWith("return") ||
+    normalized.endsWith("return")
+  );
 }
 
 function isEarthTerminal(
@@ -243,30 +266,17 @@ function isEarthTerminal(
   context?: CircuitMarkContext,
 ): boolean {
   if (
+    terminal.roles.some((role) => earthRoles.has(normalizeDcSupplyRole(role)))
+  )
+    return true;
+  if (terminal.roles.some((role) => isCurrentCarryingRole(role))) return false;
+  return Boolean(
     context?.ir?.potentials.some(
       (p) =>
         p.electrical.polarity === "protective_earth" &&
         sameTerminalId(p.terminal, terminal.id),
-    )
-  )
-    return true;
-  return terminal.roles.some((role) =>
-    earthRoles.has(normalizeEarthRole(role)),
+    ),
   );
-}
-
-function isAuxiliaryOrNonPowerRole(role: string | undefined): boolean {
-  const tokens = roleTokens(role);
-  if (tokens.join("_") === "no_connection") return true;
-  return tokens.some((token) => AUXILIARY_ROLE_TOKENS.has(token));
-}
-
-function isDcRole(role: string | undefined): boolean {
-  return roleTokens(role).includes("dc");
-}
-
-function isAcRole(role: string | undefined): boolean {
-  return roleTokens(role).some((token) => token === "ac" || token === "phase");
 }
 
 function dcSupplyInputMark(
@@ -290,12 +300,13 @@ function dcSupplyInputMark(
     )
   )
     return "load";
-  const currentRoles = currentTerminals.map((t) => t.role);
+  const currentRoles = currentTerminals.map((t) =>
+    normalizeDcSupplyRole(t.role),
+  );
   const acByRole =
     currentTerminals.length === 2
-      ? currentRoles.every(
-          (r) => r !== undefined && AC_SINGLE_PHASE_ROLES.has(r),
-        ) && currentRoles.includes("ac_line_input")
+      ? currentRoles.every((r) => AC_SINGLE_PHASE_ROLES.has(r)) &&
+        currentRoles.includes("aclineinput")
       : currentTerminals.length === 3 &&
         AC_THREE_PHASE_ROLE_SETS.some((set) =>
           set.every((role) => currentRoles.includes(role)),

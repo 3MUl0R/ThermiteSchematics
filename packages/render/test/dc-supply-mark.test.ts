@@ -1010,6 +1010,711 @@ describe("thermite:dc-supply circuit mark selection (#553)", () => {
     }
   });
 
+  it("normalizes every dc-supply role class identically across snake, camel, Pascal, kebab and spaced spellings (#553 round 5)", async () => {
+    const { type, ps1 } = await corePsuFixture();
+    delete type.circuitSymbols;
+
+    const ac = { rating: { voltage_type: "AC" as const } };
+    const evalMark = (
+      kind: "load" | "source",
+      terminals: Array<{
+        key: string;
+        role?: string;
+        rating?: { voltage_type?: "AC" | "DC" };
+      }>,
+    ) => {
+      const t = structuredClone(type);
+      t.symbol = "thermite:dc-supply";
+      t.terminals = terminals;
+      return circuitMark(t, {
+        id: { deviceUid: ps1.uid, functionKey: "face" },
+        kind,
+        terminals: terminals.map((p) => ({
+          deviceUid: ps1.uid,
+          terminalKey: p.key,
+        })),
+      });
+    };
+
+    type RoleSpellingRow = {
+      roleClass: string;
+      kind: "load" | "source";
+      expected: string;
+      snake: Array<{
+        key: string;
+        role?: string;
+        rating?: { voltage_type?: "AC" | "DC" };
+      }>;
+      variants: Record<
+        "camel" | "pascal" | "kebab" | "spaced",
+        Array<{
+          key: string;
+          role?: string;
+          rating?: { voltage_type?: "AC" | "DC" };
+        }>
+      >;
+    };
+
+    const table: RoleSpellingRow[] = [
+      {
+        roleClass: "ac single-phase pair (line + input_return)",
+        kind: "load",
+        expected: "ac-input",
+        snake: [
+          { key: "L", role: "ac_line_input" },
+          { key: "N", role: "ac_input_return" },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "acLineInput" },
+            { key: "N", role: "acInputReturn" },
+          ],
+          pascal: [
+            { key: "L", role: "AcLineInput" },
+            { key: "N", role: "AcInputReturn" },
+          ],
+          kebab: [
+            { key: "L", role: "ac-line-input" },
+            { key: "N", role: "ac-input-return" },
+          ],
+          spaced: [
+            { key: "L", role: "AC Line Input" },
+            { key: "N", role: "AC Input Return" },
+          ],
+        },
+      },
+      {
+        roleClass: "ac single-phase pair (line + ac_neutral)",
+        kind: "load",
+        expected: "ac-input",
+        snake: [
+          { key: "L", role: "ac_line_input" },
+          { key: "N", role: "ac_neutral" },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "acLineInput" },
+            { key: "N", role: "acNeutral" },
+          ],
+          pascal: [
+            { key: "L", role: "AcLineInput" },
+            { key: "N", role: "AcNeutral" },
+          ],
+          kebab: [
+            { key: "L", role: "ac-line-input" },
+            { key: "N", role: "ac-neutral" },
+          ],
+          spaced: [
+            { key: "L", role: "AC Line Input" },
+            { key: "N", role: "AC Neutral" },
+          ],
+        },
+      },
+      {
+        roleClass: "three-phase numeric input (phase_1/2/3_input)",
+        kind: "load",
+        expected: "ac-input",
+        snake: [
+          { key: "L1", role: "phase_1_input" },
+          { key: "L2", role: "phase_2_input" },
+          { key: "L3", role: "phase_3_input" },
+        ],
+        variants: {
+          camel: [
+            { key: "L1", role: "phase1Input" },
+            { key: "L2", role: "phase2Input" },
+            { key: "L3", role: "phase3Input" },
+          ],
+          pascal: [
+            { key: "L1", role: "Phase1Input" },
+            { key: "L2", role: "Phase2Input" },
+            { key: "L3", role: "Phase3Input" },
+          ],
+          kebab: [
+            { key: "L1", role: "phase-1-input" },
+            { key: "L2", role: "phase-2-input" },
+            { key: "L3", role: "phase-3-input" },
+          ],
+          spaced: [
+            { key: "L1", role: "Phase 1 Input" },
+            { key: "L2", role: "Phase 2 Input" },
+            { key: "L3", role: "Phase 3 Input" },
+          ],
+        },
+      },
+      {
+        roleClass: "three-phase u/v/w input (phase_u/v/w_input)",
+        kind: "load",
+        expected: "ac-input",
+        snake: [
+          { key: "U", role: "phase_u_input" },
+          { key: "V", role: "phase_v_input" },
+          { key: "W", role: "phase_w_input" },
+        ],
+        variants: {
+          camel: [
+            { key: "U", role: "phaseUInput" },
+            { key: "V", role: "phaseVInput" },
+            { key: "W", role: "phaseWInput" },
+          ],
+          pascal: [
+            { key: "U", role: "PhaseUInput" },
+            { key: "V", role: "PhaseVInput" },
+            { key: "W", role: "PhaseWInput" },
+          ],
+          kebab: [
+            { key: "U", role: "phase-u-input" },
+            { key: "V", role: "phase-v-input" },
+            { key: "W", role: "phase-w-input" },
+          ],
+          spaced: [
+            { key: "U", role: "Phase U Input" },
+            { key: "V", role: "Phase V Input" },
+            { key: "W", role: "Phase W Input" },
+          ],
+        },
+      },
+      {
+        roleClass: "dc veto on AC-rated load (dc_return / dcReturn)",
+        kind: "load",
+        expected: "load",
+        snake: [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "dc_return", ...ac },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "dcReturn", ...ac },
+          ],
+          pascal: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "DcReturn", ...ac },
+          ],
+          kebab: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "dc-return", ...ac },
+          ],
+          spaced: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "DC Return", ...ac },
+          ],
+        },
+      },
+      {
+        roleClass: "aux veto on AC-rated load (aux_input / auxInput)",
+        kind: "load",
+        expected: "load",
+        snake: [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "ac_input_return", ...ac },
+          { key: "A", role: "aux_input", ...ac },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "A", role: "auxInput", ...ac },
+          ],
+          pascal: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "A", role: "AuxInput", ...ac },
+          ],
+          kebab: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "A", role: "aux-input", ...ac },
+          ],
+          spaced: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "A", role: "Aux Input", ...ac },
+          ],
+        },
+      },
+      {
+        roleClass: "non-power no_connection veto on AC-rated load",
+        kind: "load",
+        expected: "load",
+        snake: [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "ac_input_return", ...ac },
+          { key: "NC", role: "no_connection", ...ac },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "NC", role: "noConnection", ...ac },
+          ],
+          pascal: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "NC", role: "NoConnection", ...ac },
+          ],
+          kebab: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "NC", role: "no-connection", ...ac },
+          ],
+          spaced: [
+            { key: "L", role: "ac_line_input", ...ac },
+            { key: "N", role: "ac_input_return", ...ac },
+            { key: "NC", role: "No Connection", ...ac },
+          ],
+        },
+      },
+      {
+        roleClass: "ac role veto on 2-pin source (ac_line_input / acLineInput)",
+        kind: "source",
+        expected: "source",
+        snake: [
+          { key: "A", role: "dc_positive_output" },
+          { key: "B", role: "ac_line_input" },
+        ],
+        variants: {
+          camel: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "acLineInput" },
+          ],
+          pascal: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "AcLineInput" },
+          ],
+          kebab: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "ac-line-input" },
+          ],
+          spaced: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "AC Line Input" },
+          ],
+        },
+      },
+      {
+        roleClass: "phase role veto on 2-pin source (phase_1_source)",
+        kind: "source",
+        expected: "source",
+        snake: [
+          { key: "A", role: "dc_positive_output" },
+          { key: "B", role: "phase_1_source" },
+        ],
+        variants: {
+          camel: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "phase1Source" },
+          ],
+          pascal: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "Phase1Source" },
+          ],
+          kebab: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "phase-1-source" },
+          ],
+          spaced: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "Phase 1 Source" },
+          ],
+        },
+      },
+      {
+        roleClass: "aux role veto on 2-pin source (auxiliary_potential)",
+        kind: "source",
+        expected: "source",
+        snake: [
+          { key: "A", role: "dc_positive_output" },
+          { key: "B", role: "auxiliary_potential" },
+        ],
+        variants: {
+          camel: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "auxiliaryPotential" },
+          ],
+          pascal: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "AuxiliaryPotential" },
+          ],
+          kebab: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "auxiliary-potential" },
+          ],
+          spaced: [
+            { key: "A", role: "dc_positive_output" },
+            { key: "B", role: "Auxiliary Potential" },
+          ],
+        },
+      },
+      {
+        roleClass: "earth exclusion on 2-pin AC-rated load (protective_earth)",
+        kind: "load",
+        expected: "load",
+        snake: [
+          { key: "A", ...ac },
+          { key: "B", role: "protective_earth", ...ac },
+        ],
+        variants: {
+          camel: [
+            { key: "A", ...ac },
+            { key: "B", role: "protectiveEarth", ...ac },
+          ],
+          pascal: [
+            { key: "A", ...ac },
+            { key: "B", role: "ProtectiveEarth", ...ac },
+          ],
+          kebab: [
+            { key: "A", ...ac },
+            { key: "B", role: "protective-earth", ...ac },
+          ],
+          spaced: [
+            { key: "A", ...ac },
+            { key: "B", role: "Protective Earth", ...ac },
+          ],
+        },
+      },
+      {
+        roleClass: "earth skip on 3-pin AC load (chassis_ground)",
+        kind: "load",
+        expected: "ac-input",
+        snake: [
+          { key: "L", role: "ac_line_input" },
+          { key: "N", role: "ac_input_return" },
+          { key: "PE", role: "chassis_ground" },
+        ],
+        variants: {
+          camel: [
+            { key: "L", role: "acLineInput" },
+            { key: "N", role: "acInputReturn" },
+            { key: "PE", role: "chassisGround" },
+          ],
+          pascal: [
+            { key: "L", role: "AcLineInput" },
+            { key: "N", role: "AcInputReturn" },
+            { key: "PE", role: "ChassisGround" },
+          ],
+          kebab: [
+            { key: "L", role: "ac-line-input" },
+            { key: "N", role: "ac-input-return" },
+            { key: "PE", role: "chassis-ground" },
+          ],
+          spaced: [
+            { key: "L", role: "AC Line Input" },
+            { key: "N", role: "AC Input Return" },
+            { key: "PE", role: "Chassis Ground" },
+          ],
+        },
+      },
+    ];
+
+    for (const row of table) {
+      const baseline = evalMark(row.kind, row.snake);
+      expect(baseline, `${row.roleClass} snake_case`).toBe(row.expected);
+      for (const [style, terminals] of Object.entries(row.variants)) {
+        expect(evalMark(row.kind, terminals), `${row.roleClass} ${style}`).toBe(
+          baseline,
+        );
+      }
+    }
+  });
+
+  it("gives authored current-carrying roles precedence over protective_earth potential anchors (PEN, #553 round 5)", async () => {
+    const { ir, type, ps1 } = await corePsuFixture();
+    delete type.circuitSymbols;
+
+    // 1. Unit checks: authored AC/DC/neutral/return roles outrank a direct PE potential anchor.
+    const withPeAnchor = (
+      kind: "load" | "source",
+      terminals: Array<{
+        key: string;
+        role?: string;
+        rating?: { voltage_type?: "AC" | "DC" };
+      }>,
+      anchorKey: string,
+    ) => {
+      const potIr = structuredClone(ir);
+      const t = potIr.deviceTypes.find((d) => d.id === type.id)!;
+      t.symbol = "thermite:dc-supply";
+      delete t.circuitSymbols;
+      t.terminals = terminals;
+      potIr.terminals = potIr.terminals.filter(
+        (x) => x.id.deviceUid !== ps1.uid,
+      );
+      for (const p of terminals) {
+        potIr.terminals.push({
+          id: { deviceUid: ps1.uid, terminalKey: p.key },
+          ...(p.role ? { role: p.role } : {}),
+          ...(p.rating ? { rating: p.rating } : {}),
+          source: t.source,
+        });
+      }
+      potIr.potentials.push({
+        uid: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        name: "PEN",
+        electrical: { polarity: "protective_earth" },
+        aliases: [],
+        terminal: { deviceUid: ps1.uid, terminalKey: anchorKey },
+        netId: "net:pen",
+        terminalSource: t.source,
+        source: t.source,
+      });
+      const fn = {
+        id: { deviceUid: ps1.uid, functionKey: "face" },
+        kind,
+        terminals: terminals.map((p) => ({
+          deviceUid: ps1.uid,
+          terminalKey: p.key,
+        })),
+      };
+      return circuitMark(t, fn, { ir: potIr });
+    };
+
+    const ac = { rating: { voltage_type: "AC" as const } };
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "ac_input_return", ...ac },
+        ],
+        "N",
+      ),
+      "ac_input_return with PE anchor",
+    ).toBe("ac-input");
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", role: "acLineInput" },
+          { key: "N", role: "acInputReturn" },
+        ],
+        "N",
+      ),
+      "camelCase acInputReturn with PE anchor",
+    ).toBe("ac-input");
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "neutral", ...ac },
+        ],
+        "N",
+      ),
+      "neutral with PE anchor",
+    ).toBe("ac-input");
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", role: "ac_line_input", ...ac },
+          { key: "N", role: "return", ...ac },
+        ],
+        "N",
+      ),
+      "return with PE anchor",
+    ).toBe("ac-input");
+    expect(
+      withPeAnchor(
+        "source",
+        [
+          { key: "+", role: "dc_positive_output" },
+          { key: "-", role: "dc_return_output" },
+        ],
+        "-",
+      ),
+      "dc_return_output with PE anchor keeps dc-output",
+    ).toBe("dc-output");
+    // Unroled or earth-set role keeps earth behavior under a PE potential anchor.
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", ...ac },
+          { key: "N", ...ac },
+        ],
+        "N",
+      ),
+      "unroled terminal with PE anchor stays earth",
+    ).toBe("load");
+    expect(
+      withPeAnchor(
+        "load",
+        [
+          { key: "L", ...ac },
+          { key: "N", role: "ProtectiveEarth", ...ac },
+        ],
+        "N",
+      ),
+      "earth-set role with PE anchor stays earth",
+    ).toBe("load");
+
+    // 2. Compiled project reproducing the reviewer's round-4 PEN and camelCase edge probes in both flows.
+    const dir = await mkdtemp(join(tmpdir(), "thermite-ps1mark-r5-"));
+    try {
+      const uid = (i: number) =>
+        `f8000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      const ratedAc = (role: string) => ({
+        role,
+        rating: { voltage_type: "AC" },
+      });
+      const line = ratedAc("ac_line_input");
+      const neutral = ratedAc("ac_input_return");
+      const cases = [
+        {
+          name: "aux-camel",
+          kind: "load",
+          terminals: { L: line, N: neutral, A: ratedAc("auxInput") },
+          expected: "load",
+        },
+        {
+          name: "dc-camel",
+          kind: "load",
+          terminals: { L: line, N: ratedAc("dcReturn") },
+          expected: "load",
+        },
+        {
+          name: "ac-camel-source",
+          kind: "source",
+          terminals: {
+            A: { role: "dc_positive_output" },
+            B: { role: "acLineInput" },
+          },
+          expected: "source",
+        },
+        {
+          name: "pen-direct-anchor",
+          kind: "load",
+          terminals: { L: line, N: neutral },
+          expected: "ac-input",
+        },
+        {
+          name: "pen-remote-anchor",
+          kind: "load",
+          terminals: { L: line, N: neutral },
+          expected: "ac-input",
+        },
+      ] as const;
+
+      await mkdir(join(dir, "library"), { recursive: true });
+      await writeFile(
+        join(dir, "system.json"),
+        JSON.stringify({
+          format: "electrical-system/0.1",
+          project: { name: "PS1MARK Round 5 Edge Probes" },
+          sources: ["source.json"],
+          libraries: [{ name: "r5-edges", version: "0.1.0", path: "library" }],
+        }),
+      );
+      await writeFile(
+        join(dir, "library/library.json"),
+        JSON.stringify({
+          name: "r5-edges",
+          version: "0.1.0",
+          sources: ["types.json"],
+        }),
+      );
+      await writeFile(
+        join(dir, "library/types.json"),
+        JSON.stringify({
+          types: [
+            ...cases.map((c) => ({
+              kind: "device_type",
+              id: `r5-edges:${c.name}`,
+              symbol: "thermite:dc-supply",
+              terminals: c.terminals,
+              functions: {
+                face: { kind: c.kind, terminals: Object.keys(c.terminals) },
+              },
+            })),
+            {
+              kind: "device_type",
+              id: "r5-edges:bond-point",
+              terminals: { PE: { role: "protective_earth" } },
+              functions: { bond: { kind: "bus", terminals: ["PE"] } },
+            },
+          ],
+        }),
+      );
+      const objects: unknown[] = cases.map((c, i) => ({
+        kind: "device",
+        uid: uid(i + 1),
+        designation: `P${i + 1}`,
+        type: `r5-edges:${c.name}`,
+      }));
+      for (const [idx, anchorOnReturn] of [true, false].entries()) {
+        const serial = idx + 1;
+        const devDesig = `P${cases.length - 1 + idx}`;
+        const returnTerminal = { device: devDesig, terminal: "N" };
+        const peTerminal = { device: `PE${serial}`, terminal: "PE" };
+        objects.push(
+          {
+            kind: "device",
+            uid: uid(10 + serial),
+            designation: peTerminal.device,
+            type: "r5-edges:bond-point",
+          },
+          {
+            kind: "wire",
+            uid: uid(20 + serial),
+            designation: `BOND${serial}`,
+            endpoints: [returnTerminal, peTerminal],
+          },
+          {
+            kind: "potential",
+            uid: uid(30 + serial),
+            name: `PEN${serial}`,
+            at: anchorOnReturn ? returnTerminal : peTerminal,
+            electrical: { polarity: "protective_earth" },
+          },
+        );
+      }
+      await writeFile(join(dir, "source.json"), JSON.stringify({ objects }));
+      expect((await lockProject(dir)).ok).toBe(true);
+      const compiled = await compileProject(dir);
+      expect(compiled.ok, JSON.stringify(compiled)).toBe(true);
+      if (!compiled.ok) return;
+
+      for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+        const rendered = await renderSchematicPacket(compiled.ir, {
+          format: "schematic-packet-request/0.1",
+          views: [
+            {
+              format: "circuit-view-request/0.1",
+              title: `PS1MARK round-5 edges (${flow})`,
+              flow,
+              groups: cases.map((c, i) => ({
+                id: c.name,
+                label: c.name,
+                functions: [
+                  {
+                    device: { by: "uid" as const, value: uid(i + 1) },
+                    key: "face",
+                  },
+                ],
+                conductors: [],
+              })),
+            },
+          ],
+        });
+        expect(rendered.ok, JSON.stringify(rendered)).toBe(true);
+        if (!rendered.ok) return;
+        const doc = parseHTML(rendered.value.html).document;
+        for (const c of cases) {
+          const group = doc.querySelector(
+            `[data-circuit-group="${c.name}"] [data-function-key="face"]`,
+          );
+          const marks = [...group!.querySelectorAll("[data-circuit-mark]")].map(
+            (el) => el.getAttribute("data-circuit-mark"),
+          );
+          expect(marks, `${flow} ${c.name}`).toEqual([c.expected]);
+        }
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps wrapped related-function footer lines in top-to-bottom reading order inside framed LTR blocks", async () => {
     const { ir, ps1, type } = await corePsuFixture();
     type.symbol = "thermite:dc-supply";

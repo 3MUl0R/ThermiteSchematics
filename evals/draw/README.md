@@ -31,14 +31,19 @@ Version **5.42** updates **DQ-10** (`qualifier-oracle.mjs`, #553). On
 terminals completely in both directions: an earth terminal neither establishes
 AC nor vetoes it (a DC rating on an earth terminal does not suppress a complete
 AC role pair or AC-rated pair on the current-carrying terminals), and never
-counts toward rating-based terminal count. Earth terminals are identified solely
-from compiled IR facts: a terminal anchored to a `protective_earth` potential,
-or a terminal whose role lowercased with all non-alphanumeric characters removed
-(no tokenization or substring matching) exactly equals a member of the closed
-earth role set (`protectiveearth`, `pe`, `functionalearth`, `fe`, `earth`,
-`chassisground`, `chassisearth`; `"ground"` and `"gnd"` are excluded because a
-supply ground can be a return). Drawing marks such as an `earth` bus binding
-never classify earth. The load expects `"ac-input"` only when its remaining
+counts toward rating-based terminal count. Every `thermite:dc-supply` role
+check (AC single-phase and three-phase sets, `ac`/`phase`/`dc`/`aux` prefixes,
+non-power roles, and earth) compares normalized roles (lowercased with all
+non-alphanumeric characters removed). Earth terminals are identified solely
+from compiled IR facts: a terminal whose normalized role exactly equals a
+member of the closed earth role set (`protectiveearth`, `pe`, `functionalearth`,
+`fe`, `earth`, `chassisground`, `chassisearth`; `"ground"` and `"gnd"` are
+excluded because a supply ground can be a return), or a terminal anchored to a
+`protective_earth` potential without an authored current-carrying role (an
+authored AC, DC, phase, neutral or return role takes precedence over a
+`protective_earth` potential anchor, so a PEN-style return stays
+current-carrying). Drawing marks such as an `earth` bus binding never classify
+earth. The load expects `"ac-input"` only when its remaining
 current-carrying (non-earth, non-auxiliary) native IR terminals (at least 2)
 establish AC input without a conflicting DC role, `rating.voltage_type: "DC"`,
 or auxiliary pin — either via complete native AC input roles (`ac_line_input`
