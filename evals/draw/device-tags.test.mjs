@@ -514,3 +514,175 @@ it("checks trimmed wrap rows against complete independent source spans, includin
       check(rows.map(mutation), ir).flatMap((f) => f.missing ?? []),
     ).toContain("authored part P-  1");
 });
+
+describe("DQ-06 local source-device tag on potential reference bars (#432)", () => {
+  const ir = {
+    ...data([device("ps1", "PS1"), device("src1", "SRC1")]),
+    potentials: [
+      {
+        uid: "pot-24v",
+        name: "+24VDC",
+        netId: "net-24v",
+        terminal: { deviceUid: "ps1", terminalKey: "2" },
+      },
+    ],
+  };
+  const rail = {
+    element: "rail-1",
+    deviceUid: "ps1",
+    potentialUid: "pot-24v",
+    netId: "net-24v",
+    potentialName: "+24VDC",
+    bbox: { x: 160, y: 130, w: 3, h: 6 },
+  };
+  const legendEntry = [
+    ...complete({
+      tagOwnerUid: "ps1",
+      tagKind: "reference",
+      tagBlock: "entry",
+      tagContainer: "legend-1",
+      tagKey: "PS1.2",
+      tagReferenceEntry: true,
+      inDeviceLegend: true,
+      bbox: { x: 161, y: 137, w: 5, h: 2.5 },
+    }).map((r) =>
+      r.tagField === "designation"
+        ? { ...r, text: "PS1", renderedString: "PS1" }
+        : r,
+    ),
+    row("designation", "Off-view at PS1.2", {
+      tagOwnerUid: "ps1",
+      tagKind: "reference",
+      tagBlock: "card",
+      tagTerminal: { deviceUid: "ps1", terminalKey: "2" },
+      inOffViewCard: true,
+      bbox: { x: 120, y: 130, w: 35, h: 3 },
+    }),
+  ];
+
+  it("rejects a potential rail backed only by a sheet legend or off-view card", () => {
+    const findings = check(legendEntry, ir, [], { potentialRails: [rail] });
+    expect(findings).toContainEqual(
+      expect.objectContaining({
+        kind: "missing-rail-device-tag",
+        deviceUid: "ps1",
+        expectedDesignation: "PS1",
+      }),
+    );
+  });
+
+  it("accepts a painted legible local source designation tag bound to the rail bar", () => {
+    const localTag = {
+      text: "PS1",
+      renderedString: "PS1",
+      painted: true,
+      reviewPainted: true,
+      railDeviceTag: true,
+      railOwnerElement: "rail-1",
+      railDeviceUid: "ps1",
+      fontSize: 2.5,
+      bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+    };
+    expect(
+      check([...legendEntry, localTag], ir, [], { potentialRails: [rail] }),
+    ).toEqual([]);
+  });
+
+  it("rejects wrong designation, detached local text, distant text, or sub-legible text", () => {
+    for (const bad of [
+      {
+        text: "PS2",
+        renderedString: "PS2",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+      {
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
+        fontSize: 2.5,
+        bbox: { x: 180, y: 137.5, w: 4.5, h: 2.5 },
+      },
+      {
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
+        fontSize: 1.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 1.5 },
+      },
+      {
+        // Detached local PS1 text not bound to the rail glyph
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: false,
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+      {
+        // Bound tag with wrong railDeviceUid
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "src1",
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+    ]) {
+      expect(
+        check([...legendEntry, bad], ir, [], { potentialRails: [rail] }),
+      ).toContainEqual(
+        expect.objectContaining({ kind: "missing-rail-device-tag" }),
+      );
+    }
+  });
+
+  it("rejects a wrong SRC1 tag on the rail even with detached PS1 text nearby", () => {
+    const wrongBoundPlusDetached = [
+      {
+        text: "SRC1",
+        renderedString: "SRC1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: true,
+        railOwnerElement: "rail-1",
+        railDeviceUid: "ps1",
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 6, h: 2.5 },
+      },
+      {
+        text: "PS1",
+        renderedString: "PS1",
+        painted: true,
+        reviewPainted: true,
+        railDeviceTag: false,
+        fontSize: 2.5,
+        bbox: { x: 160, y: 137.5, w: 4.5, h: 2.5 },
+      },
+    ];
+    expect(
+      check([...legendEntry, ...wrongBoundPlusDetached], ir, [], {
+        potentialRails: [rail],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({ kind: "missing-rail-device-tag" }),
+    );
+  });
+});

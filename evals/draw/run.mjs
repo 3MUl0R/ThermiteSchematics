@@ -3,6 +3,7 @@ import { renderCase } from "./run-case.mjs";
 import {
   strictCoverageReason,
   policyStatusCounts,
+  contractSummary,
   statusTable,
 } from "./report-status.mjs";
 import { SOURCE_HASH_FORMAT } from "./source-hashes.mjs";
@@ -347,6 +348,7 @@ for (const row of rows.filter((r) => r.status === "infrastructure-error"))
 let code = exitCode(rows, values["report-only"]);
 const counts = summary(rows);
 const policyCounts = policyStatusCounts(rows);
+const contracts = contractSummary(rows);
 const coverageReason = strictCoverageReason(rows, values["report-only"]);
 const report = {
   ...metadata,
@@ -358,6 +360,7 @@ const report = {
   exitReason: coverageReason,
   summary: counts,
   policySummary: policyCounts,
+  contracts,
   ...assessment,
   results: rows,
 };
@@ -378,6 +381,11 @@ await writeFile(
       (d) =>
         `- ${d.marker}: ${JSON.stringify(d.changes)}${d.partialScope ? " (partial selected scope)" : ""}${d.withinBand ? "" : " (band violation; fails above)"}`,
     ),
+    "",
+    "## Bounded contracts and reported fallbacks",
+    "",
+    `- \`leftContinuationGutter\`: ${contracts.leftContinuationGutter.count} reference(s) across ${contracts.leftContinuationGutter.sheets} sheet(s) (min rule clearance ${contracts.leftContinuationGutter.minRuleClearanceMm === null ? "n/a" : `${contracts.leftContinuationGutter.minRuleClearanceMm.toFixed(3)} mm`}; max vertical offset ${contracts.leftContinuationGutter.maxVerticalOffsetMm === null ? "n/a" : `${contracts.leftContinuationGutter.maxVerticalOffsetMm.toFixed(3)} mm`})`,
+    `- \`locationFragmentFallbacks\`: ${contracts.locationFragmentFallbacks.count} fallback(s) across ${contracts.locationFragmentFallbacks.sheets} sheet(s) (${JSON.stringify(contracts.locationFragmentFallbacks.byKind)})`,
     "",
     "## ISO cap-height policy gaps (separate from geometry)",
     "",

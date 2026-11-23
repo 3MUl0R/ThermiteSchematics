@@ -94,7 +94,7 @@ export function recoverLeaderCaptionBlocks(
         );
       },
       (l, routes) => [
-        ...circuitCaptionPositions(l, routes),
+        ...circuitCaptionPositions(l, routes, current),
         ...leaderCaptionPositions(label.index, l, current),
       ],
     );

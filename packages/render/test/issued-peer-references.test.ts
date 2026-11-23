@@ -521,3 +521,207 @@ it("parses printed peer destinations structurally when conductor designations re
       ),
     ).toThrow(/Peer destination invariant violated/u);
 });
+
+it("enforces owner-nearest reach on terminal-label-anchor fallback", async () => {
+  const { searchNavigationSlot } =
+    await import("../src/packet/navigation-slot-search.js");
+  const field = { x: 28, y: 24, w: 360, h: 240 };
+  const owner = { x: 50, y: 68, w: 1.3, h: 1.3 };
+  const foreign = { x: 50, y: 75, w: 1.3, h: 1.3 };
+  const shape = {
+    id: "terminal-label-anchor",
+    mode: "local" as const,
+    inkMm: { x: 0, y: 0, w: 20, h: 2.5 },
+    render: () => "",
+  };
+  const blocked = [{ x: 28, y: 24, w: 360, h: 50 }];
+  const rejected = searchNavigationSlot(
+    [shape],
+    field,
+    owner,
+    blocked,
+    undefined,
+    [],
+    false,
+    undefined,
+    undefined,
+    false,
+    () => ({
+      anchors: [{ x: 50, y: 78, w: 10, h: 2.5 }],
+      gap: 10,
+      foreignOwners: [foreign],
+      requireOwnerNearest: true,
+      maxOwnerGapMm: 10,
+    }),
+  );
+  expect(rejected).toBeUndefined();
+  const accepted = searchNavigationSlot(
+    [shape],
+    field,
+    owner,
+    [],
+    undefined,
+    [],
+    false,
+    undefined,
+    undefined,
+    false,
+    () => ({
+      anchors: [owner],
+      gap: 10,
+      foreignOwners: [foreign],
+      requireOwnerNearest: true,
+      maxOwnerGapMm: 10,
+    }),
+  );
+  expect(accepted).toBeDefined();
+});
+
+function rectGap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+) {
+  return Math.hypot(
+    Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w)),
+    Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h)),
+  );
+}
+
+function parsePeerSourceEntry(el: Element) {
+  const parsed: unknown = JSON.parse(el.getAttribute("data-peer-source")!);
+  const first = Array.isArray(parsed) ? parsed[0] : null;
+  if (
+    !first ||
+    typeof first !== "object" ||
+    typeof first.deviceUid !== "string" ||
+    typeof first.terminalKey !== "string"
+  )
+    throw Error("Invalid data-peer-source");
+  return { deviceUid: first.deviceUid, terminalKey: first.terminalKey };
+}
+
+async function buildRm3OwnerAudit(svg: string, peers: readonly Element[]) {
+  const { navigationGeometry } =
+    await import("../src/packet/navigation-walk.js");
+  const { project } = await import("../src/device-legend/geometry.js");
+  const { printableTextMetrics } = await import("../src/text-metrics.js");
+  const terminals = navigationGeometry(svg)
+    .filter(
+      (g) =>
+        g.visible &&
+        g.node.name === "circle" &&
+        g.node.attrs["data-device-uid"] &&
+        g.node.attrs["data-terminal-key"],
+    )
+    .map((g) => {
+      const cx = Number(g.node.attrs.cx),
+        cy = Number(g.node.attrs.cy),
+        r = Number(g.node.attrs.r ?? 0);
+      return {
+        deviceUid: g.node.attrs["data-device-uid"]!,
+        terminalKey: g.node.attrs["data-terminal-key"]!,
+        box: project({ x: cx - r, y: cy - r, w: 2 * r, h: 2 * r }, g.matrix),
+      };
+    });
+  expect(terminals.length).toBeGreaterThan(2);
+  const peerBoxes = peers.map((el) => {
+    const x = Number(el.getAttribute("x")),
+      y = Number(el.getAttribute("y")),
+      m = printableTextMetrics(el.textContent ?? "", 2.5);
+    return {
+      from: parsePeerSourceEntry(el),
+      box: {
+        x: x + m.left,
+        y: y - m.top,
+        w: m.right - m.left,
+        h: m.top - m.bottom,
+      },
+    };
+  });
+  return (shiftXMm = 0) =>
+    peerBoxes.map(({ from, box }) => {
+      const shifted = { ...box, x: box.x + shiftXMm };
+      const isOwn = (t: (typeof terminals)[number]) =>
+        t.deviceUid === from.deviceUid && t.terminalKey === from.terminalKey;
+      const ownerGap = Math.min(
+        ...terminals.filter(isOwn).map((t) => rectGap(shifted, t.box)),
+      );
+      const foreignGap = Math.min(
+        ...terminals
+          .filter((t) => !isOwn(t))
+          .map((t) => rectGap(shifted, t.box)),
+      );
+      return {
+        ownerGap,
+        foreignGap,
+        ok: ownerGap <= 6.1 && ownerGap < foreignGap,
+      };
+    });
+}
+
+it("keeps rm3 PLC1.AI0+ and AI0- peer notes owner-associated inside the drawing field", async () => {
+  const { rm3CircuitViews, rm3LoopView } =
+    await import("../../core-library/test/rm3-drawings.js");
+  const compiled = await compileProject(
+    "packages/core-library/test/fixtures/rm3",
+  );
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const circuit = await rm3CircuitViews(compiled.ir, "left-to-right");
+  const loop = await rm3LoopView(
+    compiled.ir,
+    "packages/core-library/test/fixtures/rm3",
+    "left-to-right",
+  );
+  const net = JSON.parse(
+    await readFile(
+      "packages/core-library/test/fixtures/rm3/network.request.json",
+      "utf8",
+    ),
+  );
+  const packet = await renderSchematicPacket(compiled.ir, {
+    format: "schematic-packet-request/0.1",
+    page: { size: "a3", orientation: "landscape", marginMm: 10 },
+    views: [
+      ...circuit.views,
+      loop,
+      net,
+      ...compiled.ir.cables.map((c) => ({
+        format: "schematic-view-request/0.2" as const,
+        root: { by: "designation" as const, value: c.designation },
+        intent: { kind: "conductors" as const },
+        flow: "left-to-right" as const,
+      })),
+    ],
+  });
+  if (!packet.ok) throw Error(packet.error.message);
+  const s1 = packet.value.sheets[0]!;
+  const doc = parseSvg(s1.svg);
+  expect([...doc.querySelectorAll("[data-peer-reference-fallback]")]).toEqual(
+    [],
+  );
+  const peers = [
+    ...doc.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+  ];
+  expect(peers.map((el) => el.textContent)).toEqual([
+    expect.stringContaining("PLC1.AI0+"),
+    expect.stringContaining("PLC1.AI0-"),
+  ]);
+  for (const el of peers) {
+    const x = Number(el.getAttribute("x"));
+    expect(x).toBeGreaterThanOrEqual(28);
+  }
+  const [aiPlus, aiMinus] = peers.map((el) => Number(el.getAttribute("y")));
+  expect(aiMinus! - aiPlus!).toBeGreaterThanOrEqual(5);
+
+  // Guard bounded owner distance (<= 6.1 mm) and owner-nearest against foreign
+  // terminals so shifting notes far from their owners (e.g. +80 mm) must fail.
+  const ownerAudit = await buildRm3OwnerAudit(s1.svg, peers);
+  for (const row of ownerAudit(0)) {
+    expect(row.ownerGap).toBeLessThanOrEqual(6.1);
+    expect(row.ownerGap).toBeLessThan(row.foreignGap);
+  }
+  // Mutant control: shifting both notes 80 mm right must violate owner distance / nearest-owner.
+  const shiftedFar = ownerAudit(80);
+  expect(shiftedFar.every((r) => !r.ok)).toBe(true);
+  expect(shiftedFar.every((r) => r.ownerGap > 30)).toBe(true);
+});

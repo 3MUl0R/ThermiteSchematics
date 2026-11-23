@@ -46,6 +46,10 @@ export function navigationObstacles(svg: string, openDeviceFrames = false) {
     ...navigationGeometry(svg).flatMap((g) => {
       const a = g.node.attrs;
       if (!g.visible) return [];
+      const plateRect =
+        g.node.name === "g" && a["data-assembly-label"]
+          ? g.node.children.find((c) => c.name === "rect")?.attrs
+          : undefined;
       const rect =
         g.node.name === "g" && a["data-report-column"]
           ? {
@@ -54,18 +58,25 @@ export function navigationObstacles(svg: string, openDeviceFrames = false) {
               w: Number(a["data-cell-width"]),
               h: Number(a["data-cell-height"]),
             }
-          : g.node.name === "rect" &&
-              (openDeviceFrames
-                ? /off-view-card|device-legend-frame/
-                : /device-frame|assembly-device-frame|off-view-card|device-legend-frame/
-              ).test(a.class ?? "")
+          : plateRect
             ? {
-                x: Number(a.x ?? 0),
-                y: Number(a.y ?? 0),
-                w: Number(a.width),
-                h: Number(a.height),
+                x: Number(plateRect.x ?? 0),
+                y: Number(plateRect.y ?? 0),
+                w: Number(plateRect.width),
+                h: Number(plateRect.height),
               }
-            : undefined;
+            : g.node.name === "rect" &&
+                (openDeviceFrames
+                  ? /off-view-card|device-legend-frame/
+                  : /device-frame|assembly-device-frame|off-view-card|device-legend-frame/
+                ).test(a.class ?? "")
+              ? {
+                  x: Number(a.x ?? 0),
+                  y: Number(a.y ?? 0),
+                  w: Number(a.width),
+                  h: Number(a.height),
+                }
+              : undefined;
       const visible = rect && intersection(project(rect, g.matrix), g.clip);
       return visible && visible.w > 0 && visible.h > 0 ? [visible] : [];
     }),

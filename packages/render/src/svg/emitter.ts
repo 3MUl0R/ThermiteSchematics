@@ -1,5 +1,6 @@
 import { emitMechanicalGangs } from "./mechanical-gangs.js";
 import { tagLabelAttributes } from "./tag-label-attributes.js";
+import { emitSymbolAnnotations } from "../symbols/rail-device-tag.js";
 import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
@@ -809,21 +810,7 @@ function emitSymbols(
       node.orientation === "top-to-bottom"
         ? { x: node.symbolSize.width - center.y, y: center.x }
         : center;
-    for (const [i, word] of legends.entries())
-      writer.element(
-        2,
-        "text",
-        {
-          x: anchor.x,
-          y: anchor.y + (legends.length > 1 ? (i === 0 ? -2 : 10) : 3),
-          "font-family": "Thermite Sans, Thermite Math, sans-serif",
-          "font-size": word === "M" ? 12 : 10,
-          "text-anchor": "middle",
-          fill: "#17212b",
-          stroke: "none",
-        },
-        word,
-      );
+    emitSymbolAnnotations(writer, node, legends, anchor, registry);
     for (const port of node.ports) {
       const portLayout = required(
         portLayouts.get(port.id),

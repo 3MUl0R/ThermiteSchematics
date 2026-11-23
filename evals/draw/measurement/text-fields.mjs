@@ -121,6 +121,15 @@ export function textFields2(c) {
     font: css.fontFamily,
     fontSize: parseFloat(css.fontSize) * scaleY,
     tagNativeAdvanceMm: nativeSvgAdvance * scaleX,
+    railDeviceTag:
+      e.getAttribute("data-rail-device-tag") === "true" ||
+      e.classList.contains("rail-device-tag"),
+    railOwnerElement: ids.get(
+      e.closest(
+        '[data-symbol-id^="ais:rail-"][data-boundary-kind="potential"]',
+      ),
+    ),
+    railDeviceUid: e.getAttribute("data-rail-device-uid") ?? undefined,
   };
 }
 
@@ -147,5 +156,9 @@ export function textFields3(c) {
     capReferenceEmMm: parseFloat(css.fontSize) * scaleX * lengthScale,
     angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
     advance: e.getComputedTextLength() * Math.hypot(m.a * sx, m.b * sy),
+    inDeviceLegend: !!e.closest(
+      "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
+    ),
+    inOffViewCard: !!e.closest(".off-view-annotation"),
   };
 }

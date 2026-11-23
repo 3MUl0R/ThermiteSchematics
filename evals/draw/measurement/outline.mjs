@@ -20,13 +20,31 @@ export function collectConnectors(c) {
       );
       if (!line || typeof line.getPointAtLength !== "function") return [];
       const p = line.getPointAtLength(0),
+        endP = line.getPointAtLength(line.getTotalLength()),
         m = line.getScreenCTM(),
-        q = new DOMPoint(p.x, p.y).matrixTransform(m);
+        q = new DOMPoint(p.x, p.y).matrixTransform(m),
+        endQ = new DOMPoint(endP.x, endP.y).matrixTransform(m);
+      const anchor = point(q.x, q.y),
+        stubEnd = point(endQ.x, endQ.y);
+      const dx = stubEnd.x - anchor.x,
+        dy = stubEnd.y - anchor.y;
+      const side =
+        Math.abs(dy) <= 0.05 && dx < -0.5
+          ? "left"
+          : Math.abs(dy) <= 0.05 && dx > 0.5
+            ? "right"
+            : Math.abs(dx) <= 0.05 && dy < -0.5
+              ? "top"
+              : Math.abs(dx) <= 0.05 && dy > 0.5
+                ? "bottom"
+                : null;
       return idsForLink.map((id) => ({
         id,
         element: ids.get(a),
         toSheet: Number(a.getAttribute("href").slice(7)),
-        anchor: point(q.x, q.y),
+        anchor,
+        stubEnd,
+        side,
       }));
     },
   );

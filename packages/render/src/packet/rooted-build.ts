@@ -4,7 +4,6 @@ import {
   recordFrameAttempt,
   recordFrameBanks,
 } from "./frame-budget.js";
-import { hasCompactFrame } from "./frame-profile.js";
 import { cardDistances, CARD_LOCALITY_AIM_MM } from "./rooted-locality.js";
 import {
   continuationBanks,
@@ -34,7 +33,10 @@ import {
   previewFrameFields,
   type FoldGroups,
 } from "./frame-fold-groups.js";
-import { postTrimCaptionConstraint } from "./rooted-caption.js";
+import {
+  continuedCaptionY,
+  postTrimCaptionConstraint,
+} from "./rooted-caption.js";
 import { foldDrawingDrafts } from "./folding.js";
 import { emitSchematicSvg } from "../svg/emitter.js";
 import { offViewPacketFailure } from "../off-view/presentation.js";
@@ -111,7 +113,7 @@ function makeDrafts(
     scale,
     inner,
     profile,
-    original.y - 9,
+    continuedCaptionY(original.y, page, p.view, native),
   );
   for (const d of drafts) d.rootedScoreBounds = original;
   if (!gridLinks(p, grid, b, scale, drafts))
@@ -139,7 +141,11 @@ function makeDrafts(
   applyFinalBankBounds(pages, b, bank);
   const visible = contentPages(pages);
   if (typeof visible === "string") return visible;
+  const fragmentFailure = visible.find(
+    (d) => d.locationFragmentFailure,
+  )?.locationFragmentFailure;
   const failure =
+    fragmentFailure ??
     fitContinuations(visible, page, bank, native) ??
     postTrimCaptionConstraint(visible, page, native);
   if (!failure) return visible;
@@ -159,6 +165,7 @@ function unfoldedFallback(
   if (typeof fallback === "string") return fallback;
   applyFinalBankBounds(fallback, b, bank);
   return (
+    fallback.find((d) => d.locationFragmentFailure)?.locationFragmentFailure ??
     fitContinuations(fallback, page, bank, native) ??
     postTrimCaptionConstraint(fallback, page, native) ??
     fallback
@@ -254,7 +261,7 @@ export function buildRootedCandidates(
       extraReservations,
     );
   if (candidates.length) return { ok: true, value: candidates, constraint };
-  if (hasCompactFrame(page) && !extraReservations && !context)
+  if (!extraReservations && !context)
     return buildRootedCandidates(
       ir,
       p,

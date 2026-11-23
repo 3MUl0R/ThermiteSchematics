@@ -50,9 +50,19 @@ export async function captureSheets(packet, env, local, sheetEvidence) {
   }
 }
 
-async function readSheetEvidence(
-  s,
-  {
+function readSheetHtmlIssues(s, env, g) {
+  const { packet, htmlGeometry, ir } = env;
+  return textGeometryIssues(htmlGeometry[s.number - 1], {
+    sheet: s,
+    packet,
+    geometries: htmlGeometry,
+    ir,
+    shapeGeometry: g,
+  });
+}
+
+async function readSheetEvidence(s, env) {
+  const {
     directory,
     page,
     geometries,
@@ -64,9 +74,7 @@ async function readSheetEvidence(
     pdf,
     pdfSource,
     native,
-    c,
-  },
-) {
+  } = env;
   const prefix = `sheet-${String(s.number).padStart(3, "0")}`,
     svgPath = join(directory, `${prefix}.svg`);
   await writeFile(svgPath, s.svg);
@@ -89,7 +97,7 @@ async function readSheetEvidence(
     g.texts.filter((t) => t.painted !== false).length,
     "HTML/SVG visible label inventory differs",
   );
-  const htmlIssues = textGeometryIssues(htmlGeometry[s.number - 1]);
+  const htmlIssues = readSheetHtmlIssues(s, env, g);
   prepareOracleHtml(g, htmlGeometry[s.number - 1]);
   const pngPath = join(directory, `${prefix}.png`);
   if (values.artifacts)

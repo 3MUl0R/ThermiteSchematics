@@ -84,6 +84,7 @@ function legendSpan(c: BandContext, start: number, end: number) {
       return true;
     if (!d.rootedContent?.figures)
       return !d.rootedContent?.conductors && !d.links.length;
+    if (d.locationFragmentFailure) return false;
     // A probe reserves the existing caption bank at the alpha's largest sheet
     // address. Final assembly still resolves and validates the real reciprocal ends.
     for (const link of d.links) {
@@ -91,19 +92,25 @@ function legendSpan(c: BandContext, start: number, end: number) {
       link.toZone = "D6";
     }
     if (fitContinuations([d], c.page, bank)) return false;
+    const fieldLeft = Math.max(area.x, d.drawingBounds?.x ?? area.x);
+    const legendArea = {
+      ...area,
+      x: fieldLeft,
+      w: area.x + area.w - fieldLeft,
+    };
     const result = addDeviceLegend(
       c.ir,
       frame(d, c.page, 99, 100),
       hasCompactFrame(c.page)
         ? compactLegendBounds(
-            area,
+            legendArea,
             compactFramePlan(p.titleContext, c.page, p.view),
             c.page,
           )
         : {
-            ...area,
-            w: c.page.widthMm - c.page.marginMm - 3.34 - area.x,
-            h: area.h + 10.66,
+            ...legendArea,
+            w: c.page.widthMm - c.page.marginMm - 3.34 - legendArea.x,
+            h: legendArea.h + 10.66,
           },
       1,
       false,

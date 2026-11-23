@@ -44,8 +44,9 @@ export function addDeviceLegend(
   const plans = plannedTags(ir, measured, uids, area, view);
   if (!plans.ok) return plans;
   const tags = plans.value,
-    variants = [tags];
-  let layout = placeLegend(tags, area, measured.ink, measured.regions);
+    variants = [tags],
+    legendRegions = [...measured.regions, ...measured.locationFrames];
+  let layout = placeLegend(tags, area, measured.ink, legendRegions);
   // 50 mm is a cap. Legal rewrapping can fit an existing narrower free lane;
   // these bounded font plans add no electrical/layout/routing search attempts.
   for (const width of [46, 42, 38, 34]) {
@@ -53,7 +54,7 @@ export function addDeviceLegend(
     const wrapped = plannedTags(ir, measured, uids, area, view, width);
     if (wrapped.ok) {
       variants.push(wrapped.value);
-      layout = placeLegend(wrapped.value, area, measured.ink, measured.regions);
+      layout = placeLegend(wrapped.value, area, measured.ink, legendRegions);
     }
   }
   if (!layout && continuous) {
@@ -69,13 +70,10 @@ export function addDeviceLegend(
     };
   }
   if (!layout) {
-    const free = legendFreeRegions(area, [
-      ...measured.ink,
-      ...measured.regions,
-    ]);
+    const free = legendFreeRegions(area, [...measured.ink, ...legendRegions]);
     for (const region of free)
       for (const variant of variants)
-        layout ??= placeLegend(variant, region, measured.ink, measured.regions);
+        layout ??= placeLegend(variant, region, measured.ink, legendRegions);
     if (!layout)
       return unfitLegend(
         variants,

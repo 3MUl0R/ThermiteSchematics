@@ -29,6 +29,19 @@ export interface LegendViewDrafts {
   viewIndex: number;
   context: PacketViewContext;
 }
+function sheetLegendArea(draft: Draft, page: PaperPage) {
+  const view = draft.view as import("../types.js").NormalizedSchematicView;
+  const base = bounds(draft.title, page, view);
+  const fieldLeft = Math.max(base.x, draft.drawingBounds?.x ?? base.x);
+  const area = { ...base, x: fieldLeft, w: base.x + base.w - fieldLeft };
+  return hasCompactFrame(page)
+    ? compactLegendBounds(area, compactFramePlan(draft.title, page, view), page)
+    : {
+        ...area,
+        w: page.widthMm - page.marginMm - 3.34 - area.x,
+        h: area.h + 10.66,
+      };
+}
 export function legendSheets(
   ir: Readonly<ElectricalIr>,
   drafts: Draft[],
@@ -46,32 +59,13 @@ export function legendSheets(
   const sheets = assembleSheets(ir, structuredClone(drafts), page);
   for (const [i, sheet] of sheets.entries()) {
     if (!rootedLegendView(sheet.view)) continue;
-    const draft = required(drafts[i], "Missing legend geometry"),
-      area = bounds(
-        draft.title,
-        page,
-        draft.view as import("../types.js").NormalizedSchematicView,
-      );
+    const draft = required(drafts[i], "Missing legend geometry");
     // The routed area leaves 14 mm above the title rule for bank labels. Free
     // final-sheet space there is available when actual ink still clears by 3 mm.
     const legend = addDeviceLegend(
       ir,
       sheet.svg,
-      hasCompactFrame(page)
-        ? compactLegendBounds(
-            area,
-            compactFramePlan(
-              draft.title,
-              page,
-              draft.view as import("../types.js").NormalizedSchematicView,
-            ),
-            page,
-          )
-        : {
-            ...area,
-            w: page.widthMm - page.marginMm - 3.34 - area.x,
-            h: area.h + 10.66,
-          },
+      sheetLegendArea(draft, page),
       1,
       false,
       draft.view as import("../types.js").NormalizedSchematicView,

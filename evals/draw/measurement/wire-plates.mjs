@@ -56,8 +56,16 @@ export function wirePlateOccluders(c, plateShapes, conductorShapes, strokes) {
           y < b.y + b.h + pad &&
           y + h > b.y - pad,
       )
-    )
-      out.push(paint);
+    ) {
+      const spans = c.h.wirePlateOccluderSpans(
+        c,
+        e,
+        paint,
+        conductorShapes,
+        strokes,
+      );
+      out.push(spans === undefined ? paint : { ...paint, spans });
+    }
   }
   return out;
 }

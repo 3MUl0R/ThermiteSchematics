@@ -30,6 +30,7 @@ export interface SvgInk {
   /** Visible text only, in the same sheet-space/clip convention as ink. */
   texts: Rect[];
   regions: Rect[];
+  locationFrames: Rect[];
   bodies: Map<string, Rect>;
   keys: Map<string, string[]>;
   references: Map<string, LegendReference[]>;
@@ -185,6 +186,7 @@ function emptyInk(): SvgInk {
     ink: [],
     texts: [],
     regions: [],
+    locationFrames: [],
     bodies: new Map(),
     keys: new Map(),
     references: new Map(),
@@ -311,9 +313,10 @@ function collectNode(node: SvgNode, state: State, out: SvgInk) {
       visible &&
       visible.w > 0 &&
       visible.h > 0
-    )
+    ) {
       out.regions.push(...rectangleInk(visible, 0.001));
-    else if (state.uid && visible && visible.w > 0.001 && visible.h > 0.001) {
+      out.locationFrames.push(visible);
+    } else if (state.uid && visible && visible.w > 0.001 && visible.h > 0.001) {
       const old = out.bodies.get(state.uid);
       if (
         !old ||

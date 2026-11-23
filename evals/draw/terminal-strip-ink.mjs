@@ -69,7 +69,7 @@ function stripPaint(root, screenPoint, clipGeometry) {
   return { painted, visible, stroke };
 }
 
-function stripPath(straight, { point, stroke, visible }) {
+function stripPath(straight, { point, stroke, visible, strokeWidth }) {
   const linearVertices = (e, style) => {
     if (e instanceof SVGLineElement)
       return [
@@ -95,13 +95,22 @@ function stripPath(straight, { point, stroke, visible }) {
       ),
       length,
       painted: drawn,
+      strokeWidth: drawn ? strokeWidth(e) : 0,
       vertices: vertices?.length >= 2 && visible(e, vertices) ? vertices : null,
     };
   };
   return path;
 }
 
-function stripInkHelpers(straight, clipGeometry, paintGeometry, pathGeometry) {
+function stripStrokeWidth(inverse, e) {
+  const sw = parseFloat(getComputedStyle(e).strokeWidth);
+  if (!(sw > 0)) return 0;
+  const m = inverse.multiply(e.getScreenCTM());
+  return sw * Math.max(Math.hypot(m.a, m.b), Math.hypot(m.c, m.d));
+}
+
+function stripInkHelpers(d) {
+  const { straight, clipGeometry, paintGeometry, pathGeometry } = d;
   const root = document.querySelector("svg"),
     inverse = root.getScreenCTM().inverse();
   const all = (s) => [...root.querySelectorAll(s)],
@@ -113,6 +122,7 @@ function stripInkHelpers(straight, clipGeometry, paintGeometry, pathGeometry) {
     const m = inverse.multiply(e.getScreenCTM());
     return Math.abs(m.b) <= 1e-6 && Math.abs(m.c) <= 1e-6;
   };
+  const strokeWidth = (e) => d.measureStrokeWidth(inverse, e);
   const { painted, visible, stroke } = paintGeometry(
     root,
     screenPoint,
@@ -142,9 +152,10 @@ function stripInkHelpers(straight, clipGeometry, paintGeometry, pathGeometry) {
         painted: painted(t),
         inkVisible:
           painted(t) && visible(t, [b, { x: b.x + b.w, y: b.y + b.h }]),
+        sheet,
       };
     });
-  const path = pathGeometry(straight, { point, stroke, visible });
+  const path = pathGeometry(straight, { point, stroke, visible, strokeWidth });
   const chunk = (e) => {
     const owner = e.closest("[data-terminal-strip]");
     return owner ? box(owner) : null;
@@ -163,6 +174,7 @@ function stripInkHelpers(straight, clipGeometry, paintGeometry, pathGeometry) {
     sheet,
     visible,
     stroke,
+    strokeWidth,
     axisAligned,
   };
 }
@@ -246,6 +258,7 @@ function stripTerminals(h) {
       ref: h.attr(e, "data-strip-ref"),
       inventory: h.attr(e, "data-inventory-row"),
       rect,
+      strokeWidth: rect ? h.strokeWidth(r) : 0,
       texts: h.texts(e),
       deviceHeading: headings.get(e.closest("[data-terminal-strip]")),
       chunk: h.chunk(e),
@@ -306,14 +319,38 @@ function stripShapes(h, terminalsFromInk) {
     .map((e) => ({ tag: e.tagName, bbox: box(e), sheet }));
   return { terminals, bridges, incidences, unclaimed };
 }
-function stripDetails(h) {
+function stripFrameRect({ root, stroke, box }) {
+  const vb = root.viewBox.baseVal;
+  const strokedRects = [...root.children]
+    .filter((e) => e.matches("rect") && stroke(e))
+    .map(box)
+    .sort((a, b) => b.w * b.h - a.w * a.h);
+  return (
+    strokedRects.find((b) => b.w >= vb.width * 0.5 && b.h >= vb.height * 0.5) ??
+    strokedRects[0]
+  );
+}
+function stripDetails(h, findFrame) {
   const { root, all, attr, painted, texts, box, chunk, sheet } = h;
+  const frameRect = findFrame(h);
   const value = (e) =>
     texts(e)
       .filter((t) => t.painted)
       .map((t) => t.text)
       .join(" ");
   return {
+    frames: frameRect ? [{ sheet, bbox: frameRect }] : [],
+    bridgeTags: all("[data-strip-jumper]:not([data-strip-jumper-end])").flatMap(
+      (e) =>
+        texts(e).map((t) => ({
+          uid: attr(e, "data-strip-jumper"),
+          text: t.text,
+          bbox: t.bbox,
+          painted: t.painted,
+          inkVisible: t.inkVisible,
+          sheet,
+        })),
+    ),
     viewKeys: all("[data-navigation-view]").map((e) =>
       attr(e, "data-navigation-view"),
     ),
@@ -360,10 +397,10 @@ function stripDetails(h) {
   };
 }
 export const stripInkScript = `(()=>{
-  const h=(${stripInkHelpers})(${straightPath},(${geometry.shapeClips}),(${stripPaint}),(${stripPath}));
+  const h=(${stripInkHelpers})({straight:${straightPath},clipGeometry:(${geometry.shapeClips}),paintGeometry:(${stripPaint}),pathGeometry:(${stripPath}),measureStrokeWidth:(${stripStrokeWidth})});
   const zone=(${stripGrid})(h);
   const shapes=(${stripShapes})(h,(${stripTerminals}));
   for(const t of shapes.terminals)
     t.zone=t.rect ? zone({x:t.rect.x+t.rect.w/2,y:t.rect.y+t.rect.h/2}) : null;
-  return {...shapes,...(${stripDetails})(h)};
+  return {...shapes,...(${stripDetails})(h,(${stripFrameRect}))};
 })()`;

@@ -17,6 +17,8 @@ const inkFields = [
   "texts",
   "continuations",
   "bridgeLabels",
+  "frames",
+  "bridgeTags",
 ];
 function viewSheets(packet, geometries, index, table) {
   // The registry/attribute pair locates a request's pages only. It proves no ink.

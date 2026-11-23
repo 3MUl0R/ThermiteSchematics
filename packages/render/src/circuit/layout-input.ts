@@ -107,6 +107,7 @@ function nestedSameSideSelfLoopGaps(
   children: readonly ElkNode[],
   edges: readonly ElkExtendedEdge[],
   selfLoops: ReadonlySet<number>,
+  conductors: readonly PhysicalConductor[],
 ) {
   const gaps = new Map<string, number>();
   if (selfLoops.size < 2) return gaps;
@@ -118,23 +119,32 @@ function nestedSameSideSelfLoopGaps(
         side: port.layoutOptions?.["elk.port.side"] ?? "",
         x: port.x ?? 0,
       });
-  const loops = edges
-    .filter((_, i) => selfLoops.has(i))
-    .flatMap((edge) => {
-      const a = ports.get(edge.sources[0] ?? ""),
-        b = ports.get(edge.targets[0] ?? "");
-      if (
-        !a ||
-        !b ||
-        a.nodeId !== b.nodeId ||
-        a.side !== b.side ||
-        (a.side !== "NORTH" && a.side !== "SOUTH")
-      )
-        return [];
-      const lo = Math.min(a.x, b.x),
-        hi = Math.max(a.x, b.x);
-      return [{ edge, nodeId: a.nodeId, side: a.side, lo, hi, span: hi - lo }];
-    });
+  const loops = edges.flatMap((edge, i) => {
+    if (!selfLoops.has(i)) return [];
+    const a = ports.get(edge.sources[0] ?? ""),
+      b = ports.get(edge.targets[0] ?? "");
+    if (
+      !a ||
+      !b ||
+      a.nodeId !== b.nodeId ||
+      a.side !== b.side ||
+      (a.side !== "NORTH" && a.side !== "SOUTH")
+    )
+      return [];
+    const lo = Math.min(a.x, b.x),
+      hi = Math.max(a.x, b.x);
+    return [
+      {
+        edge,
+        nodeId: a.nodeId,
+        side: a.side,
+        lo,
+        hi,
+        span: hi - lo,
+        jumper: !!conductors[i]?.jumper,
+      },
+    ];
+  });
   for (const loop of loops) {
     if (
       !loops.some(
@@ -150,7 +160,7 @@ function nestedSameSideSelfLoopGaps(
     for (const label of loop.edge.labels ?? []) {
       const w = label.width ?? 0,
         h = label.height ?? 0;
-      if (loop.span < w + 2 * Math.max(2, h))
+      if (loop.span < w + 2 * Math.max(2, h) || loop.jumper)
         gaps.set(loop.nodeId, Math.max(gaps.get(loop.nodeId) ?? 3, h + 2.2));
     }
   }
@@ -165,7 +175,7 @@ export function circuitGraphInput(
   conductors: readonly PhysicalConductor[],
 ) {
   const nestedSelfLoopGaps = vertical
-    ? nestedSameSideSelfLoopGaps(children, edges, selfLoops)
+    ? nestedSameSideSelfLoopGaps(children, edges, selfLoops, conductors)
     : new Map<string, number>();
   const spacedChildren = nestedSelfLoopGaps.size
     ? children.map((child) => {

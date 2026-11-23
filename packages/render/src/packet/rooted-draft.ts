@@ -10,6 +10,7 @@ import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 import { LAYOUT_CONFIG_VERSION } from "../types.js";
 import { viewportShapes, unionInk } from "./rooted-ink.js";
 import { zone } from "./page.js";
+import { locationFragmentCaptions } from "./location-fragment-captions.js";
 import { n, text } from "./svg.js";
 import {
   nativeOccurrenceSeeds,
@@ -78,6 +79,18 @@ function references(
     return [{ ...nodeReference(node), xMm, yMm, zone: zone(xMm, yMm, b) }];
   });
 }
+function fragmentDraftFields(
+  fragments: ReturnType<typeof locationFragmentCaptions>,
+) {
+  return {
+    ...(fragments.fallbacks.length
+      ? { locationFragmentFallbacks: fragments.fallbacks }
+      : {}),
+    ...(fragments.failure
+      ? { locationFragmentFailure: fragments.failure }
+      : {}),
+  };
+}
 export function rootedDraft(
   p: PreparedSchematicDrawing,
   grid: RootedGrid,
@@ -104,6 +117,14 @@ export function rootedDraft(
     b.x,
     b.y,
   );
+  const fragments = locationFragmentCaptions(
+    p,
+    continued,
+    { x: x - pad, y: y - pad, w, h },
+    b,
+    scale,
+    shapes,
+  );
   const ink = unionInk(shapes);
   const navigationSeeds = nativeOccurrenceSeeds(p);
   return {
@@ -122,12 +143,19 @@ export function rootedDraft(
     drawingBounds: b,
     continuedCaption: caption,
     continuedCaptionY: captionY,
+    ...fragmentDraftFields(fragments),
     rootedCaptionInk: caption ? [textInk(caption, b.x, captionY, 2.5)] : [],
     ...(ink ? { rootedInk: ink } : {}),
     references: references(p, x, y, w, h, b, scale),
     note: `Layout: ${profile ?? "standard"}. Drawing scale: ${n(scale)} mm/unit. Continuations: reference / destination sheet.`,
     content:
       `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${viewportSize(w, scale)}" height="${viewportSize(h, scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${markNativeOccurrences(inner, navigationSeeds)}</svg>` +
-      (caption ? text(b.x, captionY, caption, 2.5) : ""),
+      fragments.svg +
+      (caption
+        ? text(b.x, captionY, caption, 2.5).replace(
+            "<text ",
+            `<text data-continued-location-header="true" `,
+          )
+        : ""),
   };
 }

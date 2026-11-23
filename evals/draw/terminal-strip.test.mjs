@@ -19,6 +19,8 @@ const empty = () => ({
   texts: [],
   continuations: [],
   bridgeLabels: [],
+  frames: [],
+  bridgeTags: [],
 });
 beforeAll(async () => {
   const c = await compileProject("examples/motor-starter");
@@ -86,6 +88,77 @@ it.each([
     "wrong peer",
     (x) => (x.incidences[0].text = "W1 → invented.99"),
     "strip-conductor-incidence",
+  ],
+  [
+    "missing Bn note definition",
+    (x) => {
+      x.notes = x.notes.map((t) => t.replace(/Bn[^.]*/gu, ""));
+    },
+    "strip-bridge-note-missing",
+  ],
+  [
+    "Bn tag colliding with wire stub",
+    (x) => {
+      const stub = x.incidences.find(
+        (i) => i.sheet === x.bridges[0].sheet && i.points?.length > 1,
+      );
+      x.bridgeTags[0].bbox = {
+        x: stub.points[0].x,
+        y: stub.points[0].y - 1,
+        w: 3.1,
+        h: 2.2,
+      };
+    },
+    "strip-bridge-tag-stub-overlap",
+  ],
+  [
+    "Bn tag floating far above its bridge",
+    (x) => {
+      x.bridgeTags[0].bbox = {
+        x: x.bridgeTags[0].bbox.x,
+        y: Math.min(...x.bridges[0].points.map((p) => p.y)) - 8,
+        w: 3.1,
+        h: 2.2,
+      };
+    },
+    "strip-bridge-tag-ownership",
+  ],
+  [
+    "clipped-away Bn tag",
+    (x) => {
+      x.bridgeTags[0].inkVisible = false;
+    },
+    "strip-bridge-tag-missing",
+  ],
+  [
+    "wrong Bn bridge key (B99)",
+    (x) => {
+      x.bridgeTags[0].text = "B99";
+    },
+    "strip-bridge-tag-missing",
+  ],
+  [
+    "strip stroke ink extending outside outer sheet frame while centerline is near edge (#418)",
+    (x) => {
+      const frame = x.frames[0].bbox;
+      x.bridges[0].strokeWidth = 0.5;
+      x.bridges[0].points = [
+        { x: frame.x + 0.1, y: frame.y + 40 },
+        { x: frame.x + 0.1, y: frame.y + 50 },
+      ];
+    },
+    "strip-ink-outside-frame",
+  ],
+  [
+    "strip ink extending outside outer sheet frame (#418)",
+    (x) => {
+      const frame = x.frames[0].bbox;
+      x.terminals[0].rect = {
+        ...x.terminals[0].rect,
+        x: frame.x + frame.w - 2,
+      };
+    },
+    "strip-ink-outside-frame",
   ],
 ])("rejects %s", (name, mutate, kind) => {
   const changed = structuredClone(ink);

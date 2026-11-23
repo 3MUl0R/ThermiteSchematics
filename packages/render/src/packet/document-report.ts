@@ -27,6 +27,7 @@ export function reportDocumentContext(
   b: DrawingBounds,
   header: string[][],
   headerH: number,
+  tableBounds: DrawingBounds = b,
 ) {
   const facts = indexedRowFacts(ir);
   const issuedDocument = {
@@ -38,7 +39,7 @@ export function reportDocumentContext(
     cells: table.columns,
     printedCells: header,
     primitiveId: "document-header",
-    rectMm: { x: b.x, y: b.y + 9, w: b.w, h: headerH },
+    rectMm: { x: tableBounds.x, y: b.y + 9, w: tableBounds.w, h: headerH },
   };
   return {
     titleSvg: () =>
@@ -52,11 +53,10 @@ export function reportDocumentContext(
       documentRows,
     }),
     references(index: number, y: number, height: number) {
-      return [
-        ...new Set(
-          required(table.rows[index], "Missing native document row").deviceUids,
-        ),
-      ].flatMap((uid) => {
+      const uids = new Set(
+        required(table.rows[index], "Missing native document row").deviceUids,
+      );
+      return [...uids].flatMap((uid) => {
         const device = ir.devices.find((d) => d.uid === uid);
         return device
           ? [
@@ -85,7 +85,7 @@ export function reportDocumentContext(
         cells: source.cells,
         printedCells: cells,
         primitiveId: `document-row-${index}`,
-        rectMm: { x: b.x, y, w: b.w, h: height },
+        rectMm: { x: tableBounds.x, y, w: tableBounds.w, h: height },
       };
     },
   };

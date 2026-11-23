@@ -25,6 +25,7 @@ export interface StripModel {
   group: StripGroup;
   width: number;
   terminalW: number;
+  laneStep: number;
   gutter: number;
   bridgeCapacity: number;
   labelW: number;
@@ -113,11 +114,12 @@ function measuredModel(
     16,
     ...group.terminals.map((t) => measureText(t.id.terminalKey, 2.5).width + 4),
   );
+  const laneStep = 6;
   const bridgeCapacity = Math.max(
     0,
-    Math.floor((width - terminalW - 20 - 24 - 4) / 6),
+    Math.floor((width - terminalW - 20 - 24 - 4) / laneStep),
   );
-  const gutter = Math.min(bridges.length, bridgeCapacity) * 6 + 4,
+  const gutter = Math.min(bridges.length, bridgeCapacity) * laneStep + 4,
     labelW = (width - terminalW - gutter - 20) / 2;
   if (labelW < 12) throw Error("Strip labels do not fit this column width.");
   const heading = stripLines(
@@ -150,6 +152,7 @@ function measuredModel(
     group,
     width,
     terminalW,
+    laneStep,
     gutter,
     bridgeCapacity,
     labelW,
@@ -269,10 +272,16 @@ function packModels(
 }
 export function paginateStrip(facts: StripFacts, b: DrawingBounds): StripPlan {
   const notes = stripLines(
-    "Schematic projection; hardware unspecified; dimensions unspecified. Location groups do not assign installation sides. Tn/Rn links each strip terminal to its inventory row.",
-    b.w,
+    "Schematic projection; hardware unspecified; dimensions unspecified. Location groups do not assign installation sides. Tn/Rn: inventory row; Bn: jumper bridge.",
+    b.w - 0.5,
   );
-  const area = { ...b, y: b.y + 9, h: b.h - 13 - notes.length * 3.5 };
+  const area = {
+    ...b,
+    x: b.x + 0.5,
+    w: b.w - 0.5,
+    y: b.y + 9,
+    h: b.h - 13 - notes.length * 3.5,
+  };
   let best: StripPlan | undefined, failure: unknown;
   for (const columns of [1, 2, 3, 4]) {
     try {

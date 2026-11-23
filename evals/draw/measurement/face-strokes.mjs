@@ -57,6 +57,8 @@ export function sheetWithClearanceGeometry(c, shapes) {
   const { h } = c;
   return {
     ...h.trancheSheetFields(c),
+    ...h.layoutRegionFields(c),
+    ...h.potentialRailFields(c),
     circuitCaptionFallbacks: h.circuitCaptionFallbacks(c),
     ...(c.options.textOnly
       ? {}
