@@ -13,12 +13,23 @@ import {
   createNetLabelCollisionReport,
   recordNetLabelCollision,
 } from "../src/layout/label-overlaps.js";
-import { prepareSchematicDrawing } from "../src/renderer.js";
+import {
+  createSchematicRendererWithDependencies,
+  prepareSchematicDrawing,
+} from "../src/renderer.js";
+import { textInk } from "../src/packet/rooted-caption.js";
+import { OUTER_SVG_PADDING } from "../src/symbols/catalog.js";
+import { printableLabelGeometry } from "../src/symbols/printable-label.js";
 import type {
   NormalizedSchematicLayout,
   PresentationGraph,
 } from "../src/types.js";
 import { observedRecoveryEngine } from "./helpers/agent-recovery.js";
+import { parseSvg } from "./off-view-fixtures.js";
+import {
+  byDesignation,
+  robustnessFixture,
+} from "./render-robustness-fixture.js";
 
 function paintedNetLabelTexts(svg: string): string[] {
   return [
@@ -388,3 +399,316 @@ it("retains distinct retry failure diagnostic context when widened TTB retry als
     await fixture.dispose();
   }
 });
+
+function numericAttr(el: Element, name: string): number {
+  const raw = el.getAttribute(name);
+  assert.ok(raw !== null, `Missing attribute ${name}`);
+  const value = Number(raw);
+  assert.ok(Number.isFinite(value), `Non-numeric ${name}=${raw}`);
+  return value;
+}
+
+interface Rect2D {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+interface LocationRegionGeometry {
+  name: string;
+  frame: Rect2D;
+  heading: Rect2D;
+}
+
+function boxesOverlap(a: Rect2D, b: Rect2D): boolean {
+  return (
+    a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom
+  );
+}
+
+function extractLocationRegions(
+  graph: Readonly<PresentationGraph>,
+  layout: Readonly<NormalizedSchematicLayout>,
+): LocationRegionGeometry[] {
+  return graph.locationGroups.map((group) => {
+    const box = layout.nodes.find((n) => n.id === group.id);
+    const label = layout.labels.find((l) => l.id === group.label.id);
+    assert.ok(box && label);
+    const ink = printableLabelGeometry(
+      label,
+      group.label.printableText ?? group.label.text,
+      group.label.textLength,
+    ).ink;
+    return {
+      name: group.label.text,
+      frame: {
+        left: box.x + OUTER_SVG_PADDING,
+        right: box.x + box.width + OUTER_SVG_PADDING,
+        top: box.y + OUTER_SVG_PADDING,
+        bottom: box.y + box.height + OUTER_SVG_PADDING,
+      },
+      heading: {
+        left: Math.min(label.x, ink.left) + OUTER_SVG_PADDING,
+        right: Math.max(label.x + label.width, ink.right) + OUTER_SVG_PADDING,
+        top: Math.min(label.y, ink.top) + OUTER_SVG_PADDING,
+        bottom:
+          Math.max(label.y + label.height, ink.bottom) + OUTER_SVG_PADDING,
+      },
+    };
+  });
+}
+
+function parseSheetViewports(doc: ParentNode) {
+  const viewports = [
+    ...doc.querySelectorAll("svg[data-layout-config-version]"),
+  ];
+  expect(viewports.length).toBeGreaterThan(0);
+  return viewports.map((svg) => {
+    const vb = (svg.getAttribute("viewBox") ?? "")
+      .trim()
+      .split(/\s+/u)
+      .map(Number);
+    assert.equal(vb.length, 4);
+    const [vx, vy, vw, vh] = vb;
+    assert.ok(
+      vx !== undefined &&
+        vy !== undefined &&
+        vw !== undefined &&
+        vh !== undefined,
+    );
+    const sx = numericAttr(svg, "x");
+    const sy = numericAttr(svg, "y");
+    const sw = numericAttr(svg, "width");
+    const sh = numericAttr(svg, "height");
+    return {
+      svg,
+      inner: { left: vx, right: vx + vw, top: vy, bottom: vy + vh },
+      outer: { left: sx, right: sx + sw, top: sy, bottom: sy + sh },
+    };
+  });
+}
+
+function countCompleteNativeHeadings(
+  sheetNumber: number,
+  region: LocationRegionGeometry,
+  visibleViewports: readonly { svg: Element; inner: Rect2D }[],
+): number {
+  let paintedNative = 0;
+  for (const { svg, inner } of visibleViewports) {
+    for (const el of svg.querySelectorAll("text.label-location")) {
+      if (el.textContent !== region.name) continue;
+      const tx = numericAttr(el, "x");
+      const ty = numericAttr(el, "y");
+      const tl = Number(el.getAttribute("textLength") ?? "0");
+      const fs = numericAttr(el, "font-size");
+      const textBox: Rect2D = {
+        left: Math.min(tx, region.heading.left),
+        right: Math.max(tx + tl, region.heading.right),
+        top: Math.min(ty - fs, region.heading.top),
+        bottom: Math.max(ty, region.heading.bottom),
+      };
+      if (!boxesOverlap(textBox, inner)) continue;
+      paintedNative++;
+      expect(
+        textBox.left,
+        `Sheet ${sheetNumber} ${region.name} heading clipped on left`,
+      ).toBeGreaterThanOrEqual(inner.left - 0.002);
+      expect(
+        textBox.right,
+        `Sheet ${sheetNumber} ${region.name} heading clipped on right`,
+      ).toBeLessThanOrEqual(inner.right + 0.002);
+      expect(
+        textBox.top,
+        `Sheet ${sheetNumber} ${region.name} heading clipped on top`,
+      ).toBeGreaterThanOrEqual(inner.top - 0.002);
+      expect(
+        textBox.bottom,
+        `Sheet ${sheetNumber} ${region.name} heading clipped on bottom`,
+      ).toBeLessThanOrEqual(inner.bottom + 0.002);
+    }
+  }
+  return paintedNative;
+}
+
+function assertSheetLocationHeadings(
+  sheetNumber: number,
+  svgText: string,
+  regions: readonly LocationRegionGeometry[],
+) {
+  const doc = parseSvg(svgText);
+  const viewportBoxes = parseSheetViewports(doc);
+  const fragmentCaptions = [
+    ...doc.querySelectorAll("text.location-fragment-caption"),
+  ];
+  for (const caption of fragmentCaptions) {
+    const ink = textInk(
+      caption.textContent ?? "",
+      numericAttr(caption, "x"),
+      numericAttr(caption, "y"),
+      numericAttr(caption, "font-size"),
+      true,
+    );
+    const inside = viewportBoxes.some(
+      ({ outer }) =>
+        ink.x >= outer.left - 0.01 &&
+        ink.x + ink.w <= outer.right + 0.01 &&
+        ink.y >= outer.top - 0.01 &&
+        ink.y + ink.h <= outer.bottom + 0.01,
+    );
+    expect(
+      inside,
+      `Sheet ${sheetNumber} fragment caption ${caption.textContent} extends beyond viewport`,
+    ).toBe(true);
+  }
+  for (const region of regions) {
+    const visibleViewports = viewportBoxes.filter(({ inner }) =>
+      boxesOverlap(region.frame, inner),
+    );
+    if (!visibleViewports.length) continue;
+    const paintedNative = countCompleteNativeHeadings(
+      sheetNumber,
+      region,
+      visibleViewports,
+    );
+    const matchingFragments = fragmentCaptions.filter(
+      (el) => el.getAttribute("data-location-name") === region.name,
+    ).length;
+    expect(
+      paintedNative + matchingFragments,
+      `Sheet ${sheetNumber} region ${region.name} heading count (native=${paintedNative}, fragment=${matchingFragments})`,
+    ).toBe(1);
+  }
+}
+
+it("keeps one complete location heading per region inside its viewport on MAIN-PANEL-480VAC-BUS Letter sheets (#570 review)", async () => {
+  const phaseNames = [
+    "MAIN-PANEL-480VAC-BUS-L1",
+    "MAIN-PANEL-480VAC-BUS-L2",
+    "MAIN-PANEL-480VAC-BUS-L3",
+  ] as const;
+  const fixture = await compileVariantFixture(
+    "main-panel-bus-headings",
+    phaseNames,
+  );
+  try {
+    const request = {
+      format: "schematic-view-request/0.1" as const,
+      root: { by: "designation" as const, value: "M1" },
+      family: "power" as const,
+      flow: "top-to-bottom" as const,
+    };
+    const prepared = await prepareSchematicDrawing(fixture.ir, request);
+    assert.ok(prepared.ok, JSON.stringify(prepared));
+    const packet = await renderSchematicPacket(fixture.ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "letter", orientation: "landscape" },
+      views: [request],
+    });
+    assert.ok(packet.ok, JSON.stringify(packet));
+    expect(packet.value.sheets).toHaveLength(4);
+    const regions = extractLocationRegions(
+      prepared.value.graph,
+      prepared.value.layout,
+    );
+    for (const sheet of packet.value.sheets) {
+      assertSheetLocationHeadings(sheet.number, sheet.svg, regions);
+    }
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+async function rewriteLoadPotentials(root: string, length: number) {
+  const file = resolve(root, "potentials/potentials.json");
+  const rawPotentials: unknown = JSON.parse(await readFile(file, "utf8"));
+  assert.ok(
+    typeof rawPotentials === "object" &&
+      rawPotentials !== null &&
+      "objects" in rawPotentials &&
+      Array.isArray(rawPotentials.objects),
+  );
+  for (const obj of rawPotentials.objects) {
+    if (typeof obj !== "object" || obj === null || !("name" in obj)) continue;
+    if (obj.name === "+24VDC") {
+      obj.name = "DC" + "MAIN".repeat(8).slice(0, length - 2);
+    }
+    if (obj.name === "0VDC") {
+      obj.name = "RETURN" + "BUS".repeat(10).slice(0, length - 6);
+    }
+  }
+  await writeFile(file, JSON.stringify(rawPotentials));
+}
+
+function collectDcOutputWidths(node: ElkNode): [string, number | undefined][] {
+  const collected: [string, number | undefined][] = (
+    node.children ?? []
+  ).flatMap(collectDcOutputWidths);
+  if (node.id.includes("dc_output")) collected.push([node.id, node.width]);
+  return collected;
+}
+
+function createWideningFaultLoadsEngine() {
+  const engine = createElkEngine();
+  const baseLayout = engine.layout.bind(engine);
+  const dcOutputWidths: [string, number | undefined][][] = [];
+  engine.layout = async (input, ...args) => {
+    dcOutputWidths.push(collectDcOutputWidths(input));
+    const out = await baseLayout(input, ...args);
+    if (dcOutputWidths.length === 1) {
+      const edge = out.edges?.find((e) =>
+        e.labels?.some(
+          (l) => l.id?.endsWith(',"net"]') && l.text?.startsWith("RETURN"),
+        ),
+      );
+      const label = edge?.labels?.find((l) => l.id?.endsWith(',"net"]'));
+      const section = edge?.sections?.[0];
+      assert.ok(label && section);
+      const a = section.startPoint;
+      const b = section.bendPoints?.[0] ?? section.endPoint;
+      label.x = (a.x + b.x) / 2 - (label.width ?? 0) / 2;
+      label.y = (a.y + b.y) / 2 - (label.height ?? 0) / 2;
+    }
+    if (
+      dcOutputWidths.length === 2 &&
+      JSON.stringify(dcOutputWidths[0]) !== JSON.stringify(dcOutputWidths[1])
+    ) {
+      out.id = "fault-injected-return-root";
+    }
+    return out;
+  };
+  return { engine, dcOutputWidths };
+}
+
+it.each([12, 21])(
+  "falls through to loads route search after a failed TTB widening retry (length %i) (#570 review)",
+  async (length) => {
+    const fixture = await robustnessFixture();
+    try {
+      await fixture.compile("minimal", 0, { plc2Location: "FIELD" });
+      await rewriteLoadPotentials(fixture.root, length);
+      const compiled = await compileProject(fixture.root);
+      assert.ok(compiled.ok, JSON.stringify(compiled));
+      const { engine, dcOutputWidths } = createWideningFaultLoadsEngine();
+      const result = await createSchematicRendererWithDependencies({
+        layoutEngine: engine,
+      }).render(
+        compiled.ir,
+        {
+          format: "schematic-view-request/0.2",
+          root: byDesignation("PS1"),
+          intent: { kind: "loads" },
+          flow: "top-to-bottom",
+        },
+        compiled.presentation,
+      );
+      expect(JSON.stringify(dcOutputWidths[1])).not.toBe(
+        JSON.stringify(dcOutputWidths[0]),
+      );
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      expect(dcOutputWidths.length).toBe(5);
+    } finally {
+      await fixture.close();
+    }
+  },
+);

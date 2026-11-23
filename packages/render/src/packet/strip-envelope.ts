@@ -124,6 +124,38 @@ function locationBoxes(p: PreparedSchematicDrawing, axis: FoldAxis) {
     );
   });
 }
+/** Apply the whole-heading rule along `axis` to a strip box in unpadded layout
+ * coordinates so every location heading reservation is wholly inside or outside. */
+export function expandStripHeadings(
+  p: PreparedSchematicDrawing,
+  box: InkBox,
+  maximum: number,
+  minimum = -OUTER_SVG_PADDING,
+  axis: FoldAxis = "y",
+): InkBox {
+  return expandHeadings(box, locationBoxes(p, "y"), maximum, minimum, axis);
+}
+/** Clamp a horizontal padding expansion around `envelope` so it never enters a
+ * location heading reservation that lay strictly outside `envelope`. */
+export function clampHorizontalPaddingOutsideHeadings(
+  p: PreparedSchematicDrawing,
+  envelope: { x: number; w: number },
+  padded: InkBox,
+): InkBox {
+  let left = padded.x;
+  let right = padded.x + padded.w;
+  const envLeft = envelope.x;
+  const envRight = envelope.x + envelope.w;
+  for (const h of locationBoxes(p, "y")) {
+    if (h.y > padded.y + padded.h + ROUNDING || h.y + h.h < padded.y - ROUNDING)
+      continue;
+    if (h.x + h.w < envLeft - ROUNDING && left <= h.x + h.w + ROUNDING)
+      left = Math.max(left, Math.min(envLeft, h.x + h.w + 1));
+    if (h.x > envRight + ROUNDING && right >= h.x - ROUNDING)
+      right = Math.min(right, Math.max(envRight, h.x - 1));
+  }
+  return { ...padded, x: left, w: right - left };
+}
 export function stripEnvelope(
   p: PreparedSchematicDrawing,
   x0: number,

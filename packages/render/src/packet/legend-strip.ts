@@ -2,7 +2,7 @@ import { required } from "../presentation/util.js";
 import type { ContinuationBank } from "./continuation-bank.js";
 import { fitContinuations } from "./continuation-fit.js";
 import { rootedDraft } from "./rooted-draft.js";
-import { stripEnvelope } from "./strip-envelope.js";
+import { expandStripHeadings, stripEnvelope } from "./strip-envelope.js";
 import type { Draft, PaperPage, RootedLegendSource } from "./types.js";
 import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 
@@ -23,7 +23,13 @@ function horizontalLinkMarginCrop(
   }
   left = Math.max(v.x, left);
   if (left >= crop.x - 0.001) return undefined;
-  return { ...crop, x: left, w: crop.x + crop.w - left };
+  return expandStripHeadings(
+    source.prepared,
+    { ...crop, x: left, w: crop.x + crop.w - left },
+    v.x + v.w,
+    v.x,
+    "x",
+  );
 }
 
 function buildTrimmedStrip(

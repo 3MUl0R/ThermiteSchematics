@@ -1,6 +1,9 @@
 import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 import { required } from "../presentation/util.js";
-import { stripEnvelope } from "./strip-envelope.js";
+import {
+  clampHorizontalPaddingOutsideHeadings,
+  stripEnvelope,
+} from "./strip-envelope.js";
 import { sectionGroups, stackSections } from "./fold-stack.js";
 import { rootedDraft } from "./rooted-draft.js";
 import type { RootedCandidate } from "./rooted-build.js";
@@ -9,7 +12,7 @@ import type { Draft, DrawingBounds } from "./types.js";
 function stripHorizontalSpan(
   c: RootedCandidate,
   source: Draft,
-  viewport: { x: number; w: number },
+  viewport: { x: number; y: number; w: number; h: number },
   envelope: { x: number; w: number },
   b: DrawingBounds,
   reserveLinks: boolean,
@@ -26,7 +29,12 @@ function stripHorizontalSpan(
   }
   left = Math.max(viewport.x, left);
   right = Math.min(viewport.x + viewport.w, right);
-  return { x: left, w: right - left };
+  return clampHorizontalPaddingOutsideHeadings(c.prepared, envelope, {
+    x: left,
+    y: viewport.y,
+    w: right - left,
+    h: viewport.h,
+  });
 }
 
 function trimStrip(
