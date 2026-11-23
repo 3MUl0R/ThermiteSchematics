@@ -256,6 +256,85 @@ it("DQ-17 flags pass-through twin labels on one circuit body and accepts single-
   ]);
 });
 
+const directLoopStrip = (repeatLabel, vertical, secondText = "1") => {
+  const term = JSON.stringify(["xt1", "1"]).replaceAll('"', "&quot;");
+  const aux = JSON.stringify(["xt1", "3"]).replaceAll('"', "&quot;");
+  const inCircle = vertical
+    ? `<circle data-layout-port="n1_in_1" data-loop-terminal="${term}" cx="67" cy="0" r="0.8" fill="white" stroke="black"/>`
+    : `<circle data-layout-port="n1_in_1" data-loop-terminal="${term}" cx="0" cy="37" r="0.8" fill="white" stroke="black"/>`;
+  const inLabel = vertical
+    ? `<text x="68.5" y="4" font-size="2.7">1</text>`
+    : `<text x="2" y="35.5" font-size="2.7">1</text>`;
+  const outCircle = vertical
+    ? `<circle data-layout-port="n1_out_1" data-loop-terminal="${term}" cx="67" cy="35" r="0.8" fill="white" stroke="black"/>`
+    : `<circle data-layout-port="n1_out_1" data-loop-terminal="${term}" cx="44" cy="37" r="0.8" fill="white" stroke="black"/>`;
+  const outLabel = repeatLabel
+    ? vertical
+      ? `<text x="68.5" y="33" font-size="2.7">${secondText}</text>`
+      : `<text x="42" y="35.5" text-anchor="end" font-size="2.7">${secondText}</text>`
+    : "";
+  const singlePort = vertical
+    ? `<circle data-layout-port="n1_out_0" data-loop-terminal="${aux}" cx="53" cy="35" r="0.8" fill="white" stroke="black"/><text x="54.5" y="33" font-size="2.7">3</text><text x="53" y="15" text-anchor="middle" font-size="2.7">+24 V feed TBD</text>`
+    : `<circle data-layout-port="n1_out_0" data-loop-terminal="${aux}" cx="44" cy="27" r="0.8" fill="white" stroke="black"/><text x="42" y="25.5" text-anchor="end" font-size="2.7">3</text><text x="22" y="28" text-anchor="middle" font-size="2.7">+24 V feed TBD</text>`;
+  return `<g data-device-uid="xt1" transform="translate(20 20)"><rect width="${vertical ? 110 : 44}" height="${vertical ? 35 : 68}" fill="white" stroke="black"/>${singlePort}${inCircle}${inLabel}${outCircle}${outLabel}</g>`;
+};
+
+const seriesLoopStrip = (repeatLabel, vertical, secondText = "1") => {
+  const term = JSON.stringify(["tb1", "1"]).replaceAll('"', "&quot;");
+  const inPort = vertical
+    ? `<g data-layout-port="p1_0_in" data-loop-terminal="${term}"><circle cx="48" cy="0" r="0.8" fill="white" stroke="black"/><text x="49.5" y="4" font-size="2.7">1</text></g>`
+    : `<g data-layout-port="p1_0_in" data-loop-terminal="${term}"><circle cx="0" cy="24" r="0.8" fill="white" stroke="black"/><text x="2" y="22.5" font-size="2.7">1</text></g>`;
+  const outLabel = repeatLabel
+    ? vertical
+      ? `<text x="49.5" y="28" font-size="2.7">${secondText}</text>`
+      : `<text x="34" y="22.5" text-anchor="end" font-size="2.7">${secondText}</text>`
+    : "";
+  const outPort = vertical
+    ? `<g data-layout-port="p1_0_out" data-loop-terminal="${term}"><circle cx="48" cy="30" r="0.8" fill="white" stroke="black"/>${outLabel}</g>`
+    : `<g data-layout-port="p1_0_out" data-loop-terminal="${term}"><circle cx="36" cy="24" r="0.8" fill="white" stroke="black"/>${outLabel}</g>`;
+  return `<g data-device-uid="tb1" data-body-width="${vertical ? 80 : 36}" data-body-height="${vertical ? 30 : 44}" transform="translate(20 20)"><rect width="${vertical ? 80 : 36}" height="${vertical ? 30 : 44}" fill="white" stroke="black"/>${inPort}${outPort}</g>`;
+};
+
+it.each([
+  ["direct-loop", false, directLoopStrip],
+  ["direct-loop", true, directLoopStrip],
+  ["series-loop", false, seriesLoopStrip],
+  ["series-loop", true, seriesLoopStrip],
+])(
+  "DQ-17 flags pre-fix %s pass-through twin labels (vertical=%s) and accepts single-label dual-port bodies",
+  async (_kind, vertical, strip) => {
+    const twin = await openSheet(page, svg(strip(true, vertical)));
+    expect(terminalText(twin)).toEqual([
+      expect.objectContaining({
+        kind: "duplicate-or-overlapping-terminal-text",
+        text: "1",
+      }),
+    ]);
+    const twinSuffix = await openSheet(
+      page,
+      svg(strip(true, vertical, "1 [+1]")),
+    );
+    expect(terminalText(twinSuffix)).toEqual([
+      expect.objectContaining({
+        kind: "duplicate-or-overlapping-terminal-text",
+      }),
+    ]);
+    const single = await openSheet(page, svg(strip(false, vertical)));
+    expect(terminalText(single)).toEqual([]);
+    const splitBodies = await openSheet(
+      page,
+      svg(
+        strip(false, vertical) +
+          strip(false, vertical).replace(
+            'transform="translate(20 20)"',
+            'transform="translate(140 20)"',
+          ),
+      ),
+    );
+    expect(terminalText(splitBodies)).toEqual([]);
+  },
+);
+
 it("V5 resolves net repetition through its own wire and exact landing appearance", async () => {
   const port = JSON.stringify([
     "port",
