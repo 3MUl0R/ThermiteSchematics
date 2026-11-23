@@ -101,7 +101,7 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
     ownerLabel: name(a),
     owners: cardInfo ? [cardInfo.bbox] : marks,
     foreignOwners: foreignTerminalBoxes(src, a),
-    foreignConductors: foreignConductorBoxes(src.geometry, wire.element),
+    foreignConductors: foreignConductorBoxes(src.geometry, wire.element, runs),
     supports: [
       ...runs.map(extent),
       ...continuationInk(src.sheet, src.geometry, wire.element, runs),

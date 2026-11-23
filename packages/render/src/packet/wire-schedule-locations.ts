@@ -3,7 +3,10 @@ import type { NavigationGeometry } from "./navigation-walk.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { ScheduleReferences, EndpointSheetZones } from "@thermite/query";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
-import { wireScheduleTerminalKeys } from "./wire-schedule-terminals.js";
+import {
+  isPaintedMarkerCircle,
+  wireScheduleTerminalKeys,
+} from "./wire-schedule-terminals.js";
 import { incidenceKey, sourceIncidences } from "./navigation-incidence.js";
 import { scheduleConductorKey } from "./terminal-strip-landings.js";
 import { navigationGeometry } from "./navigation-walk.js";
@@ -38,6 +41,7 @@ export function wireScheduleLocations(
     for (const g of geometry) {
       const key = keys.get(g.node);
       if (!g.visible || key === undefined || !needed.has(key)) continue;
+      if (g.node.name === "circle" && !isPaintedMarkerCircle(g)) continue;
       const point = drawnTerminalAnchor(g);
       if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
         throw Error("Invalid drawn endpoint landing");

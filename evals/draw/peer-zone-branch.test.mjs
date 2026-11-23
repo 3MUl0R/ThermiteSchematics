@@ -4,6 +4,7 @@ import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { fixture } from "./m3-fixture.mjs";
 import { nativeRows } from "./m3-native.mjs";
 import { peerReferenceFindings } from "./issued-reference-audit.mjs";
+import { boxGap, foreignConductorBoxes } from "./peer-owner-ink.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 
@@ -315,6 +316,7 @@ function foreignConductorFixture() {
         `<g data-device-uid="s2"><g data-layout-port="p2" data-terminal-id='["s2","11"]' data-terminal-key="11"><circle cx="103" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
         `<g data-circuit-conductor="w1"><path d="M 72 96 H 75 V 65 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
         `<g data-circuit-conductor="w2"><path d="M 72 96 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+        `<circle data-circuit-junction="true" data-device-uid="ps1" data-terminal-key="+" cx="75" cy="96" r="0.55" fill="#17212b"/>` +
         text(
           104,
           100,
@@ -366,4 +368,135 @@ it("DQ-08 rejects a peer note sitting nearer a foreign conductor run than its ow
     sources,
   ).filter((o) => o.sheet === 2);
   expect(peerReferenceFindings(2, g2Good, goodObls)).toEqual([]);
+
+  // Coincident shared stem [72, 75] at y=96 must be excluded from foreignConductorBoxes(w2),
+  // leaving w1's distinct vertical run at x=75 (~4.05 mm from goodNote, strictly > own gap ~3.46 mm).
+  const noteBox = g2Good.texts.find((t) =>
+    t.text.includes("W-CTL-012 · PS1.+ → S2.11"),
+  ).bbox;
+  const w2Foreign = foreignConductorBoxes(g2Good, { kind: "wire", uid: "w2" });
+  const w2OwnGap = Math.min(
+    ...goodObls
+      .find((o) => o.ownerLabel === "PS1.+")
+      .supports.map((b) => boxGap(noteBox, b)),
+  );
+  const w2ForeignGap = Math.min(...w2Foreign.map((b) => boxGap(noteBox, b)));
+  expect(w2OwnGap).toBeLessThan(w2ForeignGap - 0.3);
+
+  // Relative to w1, the shared stem [72, 74.4] is excluded while w2's non-coincident [75.6, 103] remains.
+  const w1Foreign = foreignConductorBoxes(g2Good, { kind: "wire", uid: "w1" });
+  const stemProbe = { x: 72.0, y: 99.5, w: 1, h: 1 };
+  const contProbe = { x: 85, y: 99.5, w: 2, h: 1 };
+  expect(
+    Math.min(...w1Foreign.map((b) => boxGap(stemProbe, b))),
+  ).toBeGreaterThan(4.0);
+  expect(Math.min(...w1Foreign.map((b) => boxGap(contProbe, b)))).toBeLessThan(
+    3.6,
+  );
+}, 60_000);
+
+it.each([
+  [
+    "extra painted circle before marker",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+  [
+    "extra painted circle after marker",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+  [
+    "unpainted-only circle (fill none, stroke-width 0)",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="none" stroke="#17212b" stroke-width="0"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+])(
+  "DQ-19 rejects ambiguous or unpainted port-group fallback (%s)",
+  async (_label, ps1Port, claimedLoc) => {
+    const ir = twoDeviceIr();
+    const circuitSheet = svg(
+      zoneGrid() +
+        ps1Port +
+        `<g data-device-uid="s1"><g data-layout-port="n1p0" data-terminal-id='["s1","13"]' data-terminal-key="13">` +
+        `<circle cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+        `</g></g>`,
+    );
+    const circuitPacket = {
+      sheets: [
+        {
+          number: 1,
+          view: { kind: "circuit", format: "documentation-view/0.1" },
+        },
+        {
+          number: 2,
+          view: { kind: "wires", format: "documentation-view/0.1" },
+        },
+      ],
+    };
+    const gCircuit = await openSheet(page, circuitSheet);
+    const gForged = await openSheet(page, wireScheduleSvg(claimedLoc, "01.B4"));
+    const gRealZone = await openSheet(page, wireScheduleSvg("01.B2", "01.B4"));
+    const gNotDrawn = await openSheet(
+      page,
+      wireScheduleSvg("not drawn", "01.B4"),
+    );
+    expect(
+      gCircuit.wireTerminals.filter(
+        (m) => JSON.stringify(m.terminal) === '["ps1","+"]',
+      ),
+    ).toEqual([]);
+    expect(
+      wireLocatorAudit(circuitPacket, [gCircuit, gForged], ir).findings.map(
+        (f) => f.kind,
+      ),
+    ).toContain("wire-locator-without-appearance");
+    expect(
+      wireLocatorAudit(circuitPacket, [gCircuit, gRealZone], ir).findings.map(
+        (f) => f.kind,
+      ),
+    ).toContain("wire-locator-without-appearance");
+    expect(
+      wireLocatorAudit(circuitPacket, [gCircuit, gNotDrawn], ir).findings,
+    ).toEqual([]);
+  },
+  60_000,
+);
+
+it("DQ-19 keeps a conflicting explicit child identity separate from its parent port group", async () => {
+  const ir = twoDeviceIr();
+  const circuitSheet = svg(
+    zoneGrid() +
+      `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-device-uid="s1" data-terminal-key="13" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+  );
+  const circuitPacket = {
+    sheets: [
+      {
+        number: 1,
+        view: { kind: "circuit", format: "documentation-view/0.1" },
+      },
+      { number: 2, view: { kind: "wires", format: "documentation-view/0.1" } },
+    ],
+  };
+  const gCircuit = await openSheet(page, circuitSheet);
+  const gSchedule = await openSheet(
+    page,
+    wireScheduleSvg("not drawn", "01.B4"),
+  );
+  expect(gCircuit.wireTerminals.map((m) => JSON.stringify(m.terminal))).toEqual(
+    ['["s1","13"]'],
+  );
+  expect(
+    wireLocatorAudit(circuitPacket, [gCircuit, gSchedule], ir).findings,
+  ).toEqual([]);
 }, 60_000);

@@ -806,3 +806,44 @@ it("5.44 flags a conductor peer note sitting nearer a foreign conductor segment 
     ),
   ).toEqual([]);
 });
+
+it("5.44 excludes coincident shared-stem foreign runs while flagging distinct nearer runs", () => {
+  const base = {
+    kind: "conductor-peer",
+    source: ["PS1.+", "W-CTL-012", "S2.11"],
+    ownerLabel: "PS1.+",
+    owners: [{ x: 70, y: 95.35, w: 1.3, h: 1.3 }],
+    supports: [{ x: 72, y: 96, w: 31, h: 0 }],
+    foreignConductors: [
+      { x: 72, y: 96, w: 4, h: 0 },
+      { x: 76, y: 65, w: 0, h: 31 },
+    ],
+    values: ["W-CTL-012 · PS1.+ → S2.11 07.B2"],
+    compactValues: ["→ S2.11 07.B2"],
+  };
+  const compact = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(base.source),
+    text: base.compactValues[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Bare-compact note 1.74 mm from owner terminal and 1.0 mm from the shared stem [72, 76]:
+  // shared stem is excluded, while distinct vertical run at x=76 is 1.80 mm away -> passes.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [compact({ x: 73.0, y: 97.0, w: 1.5, h: 1.8 })] },
+      [base],
+    ),
+  ).toEqual([]);
+  // Moving beside the distinct foreign vertical run (0.5 mm away) still flags foreign owner.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [compact({ x: 76.5, y: 94.0, w: 4.0, h: 1.8 })] },
+      [base],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+});

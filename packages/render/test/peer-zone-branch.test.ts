@@ -2,6 +2,9 @@ import { expect, it } from "vitest";
 import type { ElectricalIr } from "@thermite/compiler";
 import { normalizePaperPage } from "../src/packet/page.js";
 import { wireScheduleLocations } from "../src/packet/wire-schedule-locations.js";
+import { wireScheduleTerminalKeys } from "../src/packet/wire-schedule-terminals.js";
+import { navigationGeometry } from "../src/packet/navigation-walk.js";
+import { peerRouteIndex } from "../src/packet/peer-route-ink.js";
 import { terminalPeerReferences } from "../src/packet/terminal-peer-references.js";
 import {
   emitPeerReferences,
@@ -481,7 +484,6 @@ it("terminalPeerReferences keeps a co-occurring circuit peer note nearer its own
       { x: 66, y: 56, w: 7, h: 0 },
     ];
     const foreignConductors = [
-      { x: 42, y: 56, w: 3, h: 0 },
       { x: 45, y: 25, w: 0, h: 31 },
       { x: 45, y: 25, w: 28, h: 0 },
     ];
@@ -489,8 +491,117 @@ it("terminalPeerReferences keeps a co-occurring circuit peer note nearer its own
     const foreignConductorGap = Math.min(
       ...foreignConductors.map((b) => boxDistance(region, b)),
     );
-    expect(ownerGap).toBeLessThanOrEqual(foreignConductorGap + 0.02);
+    expect(ownerGap).toBeLessThan(foreignConductorGap);
   } finally {
     await fixture.dispose();
   }
+});
+
+it.each([
+  [
+    "extra painted circle before marker",
+    (ps1: string) =>
+      `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
+      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `</g></g>`,
+  ],
+  [
+    "extra painted circle after marker",
+    (ps1: string) =>
+      `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
+      `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `</g></g>`,
+  ],
+  [
+    "unpainted-only circle (fill none, stroke-width 0)",
+    (ps1: string) =>
+      `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
+      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="none" stroke="#17212b" stroke-width="0"/>` +
+      `</g></g>`,
+  ],
+])(
+  "wireScheduleLocations refuses ambiguous or unpainted port-group fallback (%s)",
+  async (_label, portGroup) => {
+    const fixture = await offViewFixture();
+    try {
+      const page = normalizePaperPage();
+      if (!page.ok) throw Error("paper");
+      const { ps1, k1, w1 } = findFixtures(fixture.ir);
+      const physicalK1 = `<circle class="terminal-marker" data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r="1" fill="white" stroke="#101828"/>`;
+      const sheet = makeSheet(1, "circuit", portGroup(ps1) + physicalK1);
+      const geometry = navigationGeometry(sheet.svg);
+      const keys = wireScheduleTerminalKeys(
+        fixture.ir,
+        makeDraft("circuit"),
+        geometry,
+      );
+      const ps1Key = JSON.stringify([ps1, "+"]);
+      expect([...keys.values()].filter((v) => v === ps1Key)).toEqual([]);
+      const result = wireScheduleLocations(
+        fixture.ir,
+        [makeDraft("circuit")],
+        [sheet],
+        page.value,
+      );
+      expect(result.get(w1)).toEqual([undefined, "01.B5"]);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);
+
+it("wireScheduleTerminalKeys keeps a conflicting explicit child identity separate from its parent port group", async () => {
+  const fixture = await offViewFixture();
+  try {
+    const page = normalizePaperPage();
+    if (!page.ok) throw Error("paper");
+    const { ps1, k1, w1 } = findFixtures(fixture.ir);
+    const body =
+      `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
+      `<circle data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `</g></g>`;
+    const result = wireScheduleLocations(
+      fixture.ir,
+      [makeDraft("circuit")],
+      [makeSheet(1, "circuit", body)],
+      page.value,
+    );
+    expect(result.get(w1)).toEqual([undefined, "01.B5"]);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+it("peerRouteIndex.foreignRuns excludes coincident shared stems while retaining distinct foreign runs", () => {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" viewBox="0 0 120 80">` +
+    `<g data-circuit-conductor="w10"><path d="M 42 56 H 45 V 25 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `<g data-circuit-conductor="w12"><path d="M 42 56 H 50 M 66 56 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `</svg>`;
+  const idx = peerRouteIndex(navigationGeometry(svg));
+  const stemProbe = { x: 42, y: 59.45, w: 1, h: 1.8 };
+  const vertProbe = { x: 46.5, y: 40, w: 4, h: 2 };
+
+  // Relative to w12: w10's horizontal stem [42, 45] at y=56 is coincident and excluded;
+  // w10's vertical run at x=45 remains foreign.
+  const foreignForW12 = idx.foreignRuns({ kind: "wire", uid: "w12" });
+  expect(
+    Math.min(...foreignForW12.map((b) => boxDistance(stemProbe, b))),
+  ).toBeGreaterThan(3.8);
+  expect(
+    Math.min(...foreignForW12.map((b) => boxDistance(vertProbe, b))),
+  ).toBeLessThan(2.0);
+
+  // Relative to w10: the coincident [42, 45] part of w12 is excluded,
+  // while the non-coincident [45, 50] continuation of w12 remains foreign.
+  const foreignForW10 = idx.foreignRuns({ kind: "wire", uid: "w10" });
+  const contProbe = { x: 47, y: 59.45, w: 2, h: 1.8 };
+  expect(
+    Math.min(...foreignForW10.map((b) => boxDistance(stemProbe, b))),
+  ).toBeGreaterThan(3.8);
+  expect(
+    Math.min(...foreignForW10.map((b) => boxDistance(contProbe, b))),
+  ).toBeLessThan(3.55);
 });
