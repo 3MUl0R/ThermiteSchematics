@@ -30,7 +30,9 @@ export async function recoverCardLayout(
     if (!annotated.ok) continue;
     validatePresentationGraph(ir, selected, annotated.value, mappings);
     const result = await layoutPresentationGraph(annotated.value, options);
-    if (result.ok && rootedGangSegments(ir, annotated.value, result.value).ok)
-      return { graph: annotated.value, layout: result };
+    const nextGraph =
+      result.ok && result.graph ? result.graph : annotated.value;
+    if (result.ok && rootedGangSegments(ir, nextGraph, result.value).ok)
+      return { graph: nextGraph, layout: result };
   }
 }

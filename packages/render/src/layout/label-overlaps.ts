@@ -14,6 +14,29 @@ export interface Segment {
   readonly horizontal: boolean;
 }
 
+export interface NetLabelCollisionReport {
+  firstMessage?: string | undefined;
+  firstNetId?: string | undefined;
+  readonly labelIds: Set<string>;
+}
+
+export function createNetLabelCollisionReport(): NetLabelCollisionReport {
+  return { labelIds: new Set<string>() };
+}
+
+export function recordNetLabelCollision(
+  report: NetLabelCollisionReport,
+  labelId: string,
+  message: string,
+  netId?: string,
+): void {
+  if (report.firstMessage === undefined) {
+    report.firstMessage = message;
+    report.firstNetId = netId;
+  }
+  report.labelIds.add(labelId);
+}
+
 export function segmentIntersectsInterior(segment: Segment, bounds: Bounds) {
   if (segment.horizontal) {
     const left = Math.min(segment.start.x, segment.end.x);
@@ -34,12 +57,13 @@ export function segmentIntersectsInterior(segment: Segment, bounds: Bounds) {
 }
 
 /** A painted edge net label may sit at its route source device, never inside a non-owner device frame. */
-export function assertLabelClearOfDevicesAndEdges(
+export function checkLabelClearOfDevicesAndEdges(
   graph: Readonly<PresentationGraph>,
   label: LayoutLabel,
   labelBounds: Bounds,
   layoutNodes: ReadonlyMap<string, LayoutNode>,
   segments: readonly Segment[],
+  netCollisions: NetLabelCollisionReport,
   reject: (
     message: string,
     netId?: string,
@@ -62,10 +86,11 @@ export function assertLabelClearOfDevicesAndEdges(
           Math.min(labelBounds.bottom, node.y + node.height) >
             Math.max(labelBounds.top, node.y)
         ) {
-          reject(
+          recordNetLabelCollision(
+            netCollisions,
+            label.id,
             `label ${label.id} overlaps non-owner device ${node.id}`,
             edge.netId,
-            "net-label-intersection",
           );
         }
       }
@@ -73,10 +98,83 @@ export function assertLabelClearOfDevicesAndEdges(
   }
   for (const segment of segments) {
     if (!segmentIntersectsInterior(segment, labelBounds)) continue;
+    if (label.role === "net") {
+      recordNetLabelCollision(
+        netCollisions,
+        label.id,
+        `label ${label.id} overlaps edge ${segment.edge.id}`,
+        segment.edge.netId,
+      );
+      continue;
+    }
     reject(
       `label ${label.id} overlaps edge ${segment.edge.id}`,
       segment.edge.netId,
-      label.role === "net" ? "net-label-intersection" : undefined,
     );
   }
+}
+
+export function checkLabelPairOverlap(
+  graph: Readonly<PresentationGraph>,
+  left: LayoutLabel,
+  right: LayoutLabel,
+  netCollisions: NetLabelCollisionReport,
+  reject: (message: string) => never,
+): void {
+  const netLabel =
+    left.role === "net" && left.ownerKind === "edge"
+      ? left
+      : right.role === "net" && right.ownerKind === "edge"
+        ? right
+        : undefined;
+  const other = netLabel === left ? right : left;
+  if (
+    netLabel !== undefined &&
+    (other.role === "terminal" || netCollisions.firstMessage !== undefined)
+  ) {
+    const edge = graph.edges.find((e) => e.id === netLabel.ownerId);
+    recordNetLabelCollision(
+      netCollisions,
+      netLabel.id,
+      `labels ${left.id} and ${right.id} overlap`,
+      edge?.netId,
+    );
+    return;
+  }
+  reject(`labels ${left.id} and ${right.id} overlap`);
+}
+
+export function checkAllLabelPairOverlaps(
+  graph: Readonly<PresentationGraph>,
+  labels: readonly LayoutLabel[],
+  inkBounds: (label: LayoutLabel) => Bounds,
+  overlaps: (left: Bounds, right: Bounds) => boolean,
+  netCollisions: NetLabelCollisionReport,
+  reject: (
+    message: string,
+    netId?: string,
+    failureKind?: "net-label-intersection",
+    collidingNetLabelIds?: readonly string[],
+  ) => never,
+): void {
+  for (let leftIndex = 0; leftIndex < labels.length; leftIndex++) {
+    const left = labels[leftIndex];
+    if (left === undefined) continue;
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < labels.length;
+      rightIndex++
+    ) {
+      const right = labels[rightIndex];
+      if (right !== undefined && overlaps(inkBounds(left), inkBounds(right)))
+        checkLabelPairOverlap(graph, left, right, netCollisions, reject);
+    }
+  }
+  if (netCollisions.firstMessage !== undefined)
+    reject(
+      netCollisions.firstMessage,
+      netCollisions.firstNetId,
+      "net-label-intersection",
+      [...netCollisions.labelIds],
+    );
 }

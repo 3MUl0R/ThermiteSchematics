@@ -6,6 +6,7 @@ import type {
 } from "../types.js";
 import type { SymbolDefinition } from "../symbols/types.js";
 import { SYMBOL_CATALOG } from "../symbols/catalog.js";
+import { widenCollidingVerticalSources } from "../presentation/vertical-source-spacing.js";
 import { required } from "../presentation/util.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { buildElkAdapterGraph } from "./elk-adapter.js";
@@ -54,6 +55,29 @@ function keepPacketInput(
   );
 }
 
+async function retryWidenedSources(
+  graph: Readonly<PresentationGraph>,
+  first: Extract<LayoutValidationOutcome, { readonly ok: false }>,
+  catalog: readonly SymbolDefinition[],
+  run: (
+    candidate: Readonly<PresentationGraph>,
+  ) => Promise<LayoutValidationOutcome>,
+): Promise<LayoutValidationOutcome | undefined> {
+  if (
+    first.failureKind !== "net-label-intersection" ||
+    !first.collidingNetLabelIds?.length
+  )
+    return undefined;
+  const widened = widenCollidingVerticalSources(
+    graph,
+    new Set(first.collidingNetLabelIds),
+    catalog,
+  );
+  if (widened === undefined) return undefined;
+  const retried = await run(widened);
+  return retried.ok ? { ...retried, graph: widened } : undefined;
+}
+
 export async function layoutPresentationGraph(
   graph: Readonly<PresentationGraph>,
   options: Readonly<ElkLayoutRequestOptions> = {},
@@ -99,6 +123,8 @@ export async function layoutPresentationGraph(
   }
   const first = await run(graph);
   if (first.ok) return first;
+  const widened = await retryWidenedSources(graph, first, catalog, run);
+  if (widened !== undefined) return widened;
   if (
     (graph.view.format === "schematic-view/0.2" &&
       graph.view.intent === "loads") ||

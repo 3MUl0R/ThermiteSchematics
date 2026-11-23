@@ -682,10 +682,14 @@ export function verticalSourcePortSpacing(
         widthForPitch: (pitch) => Math.ceil((pitch * 4) / 8) * 8,
       };
     case "ais:power-source-dc":
-    case "ais:source-winding":
       return {
         defaultPitch: 48,
         widthForPitch: (pitch) => Math.ceil((pitch * 4) / 3 / 8) * 8,
+      };
+    case "ais:source-winding":
+      return {
+        defaultPitch: 48,
+        widthForPitch: (pitch) => Math.ceil((pitch * 4) / 3 / 32) * 32,
       };
     default:
       return undefined;

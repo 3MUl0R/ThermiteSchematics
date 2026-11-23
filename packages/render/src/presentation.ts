@@ -39,7 +39,6 @@ import {
   attachNetLabels,
   comparePresentationEdge,
 } from "./presentation/conductors.js";
-import { widenVerticalSourceNodes } from "./presentation/vertical-source-spacing.js";
 import { labelTerminalContextReferences } from "./terminal-context-reference.js";
 import { cloneView, immutableEdge } from "./presentation/util.js";
 import { deepFreeze } from "./internal.js";
@@ -178,15 +177,13 @@ export function buildPresentationGraph(
   );
   const mutableEdges = [...conductors.edges, ...inserted.boundaryEdges];
   attachNetLabels(context, mutableEdges);
-  const adjustedNodes = [...visible.value.nodes];
-  widenVerticalSourceNodes(adjustedNodes, mutableEdges, context.symbolById);
   const original: PresentationGraph = labelTerminalContextReferences({
     format: "schematic-presentation/0.1",
     directLoadPair: context.directLoadPair,
     view: cloneView(context.selected),
     locationGroups: [...visible.value.groups.locationGroups],
     deviceGroups: [...visible.value.groups.deviceGroups],
-    nodes: [...adjustedNodes, ...inserted.junctions].sort((a, b) =>
+    nodes: [...visible.value.nodes, ...inserted.junctions].sort((a, b) =>
       comparePresentationNode(a, b, context.order.key),
     ),
     edges: mutableEdges
@@ -194,7 +191,7 @@ export function buildPresentationGraph(
       .map(immutableEdge),
     metadataTextSources: metadataTextSources(
       context,
-      adjustedNodes,
+      visible.value.nodes,
       mutableEdges,
     ),
   });

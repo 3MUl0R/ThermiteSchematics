@@ -12,7 +12,9 @@ import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { layoutLabelInk } from "./label-bounds.js";
 import {
-  assertLabelClearOfDevicesAndEdges,
+  checkAllLabelPairOverlaps,
+  checkLabelClearOfDevicesAndEdges,
+  createNetLabelCollisionReport,
   segmentIntersectsInterior,
   type Segment,
 } from "./label-overlaps.js";
@@ -60,6 +62,7 @@ class LayoutContractViolation extends Error {
     message: string,
     netId?: string,
     readonly failureKind: LayoutFailureKind = "contract-violation",
+    readonly collidingNetLabelIds?: readonly string[],
   ) {
     super(message);
     this.name = "LayoutContractViolation";
@@ -131,19 +134,30 @@ export type LayoutFailureKind =
   | "collinear-overlap"
   | "symbol-intersection";
 export type LayoutValidationOutcome =
-  | { readonly ok: true; readonly value: NormalizedSchematicLayout }
+  | {
+      readonly ok: true;
+      readonly value: NormalizedSchematicLayout;
+      readonly graph?: Readonly<PresentationGraph>;
+    }
   | {
       readonly ok: false;
       readonly error: InvalidLayoutError;
       readonly failureKind: LayoutFailureKind;
+      readonly collidingNetLabelIds?: readonly string[];
     };
 
 function reject(
   message: string,
   netId?: string,
   failureKind?: LayoutFailureKind,
+  collidingNetLabelIds?: readonly string[],
 ): never {
-  throw new LayoutContractViolation(message, netId, failureKind);
+  throw new LayoutContractViolation(
+    message,
+    netId,
+    failureKind,
+    collidingNetLabelIds,
+  );
 }
 
 function invalidLayoutError(
@@ -1080,25 +1094,22 @@ function validateNodeAndLabelCollisions(
     }
   }
   const labels = [...geometry.labels.values()];
+  const netCollisions = createNetLabelCollisionReport();
   const inkBounds = (label: LayoutLabel) =>
     layoutLabelInk(label, captions, geometry.edges, reject);
   for (const label of labels) {
     const labelBounds = inkBounds(label);
     for (const [nodeId, boundsList] of primitiveBounds) {
-      if (
-        boundsList.some((bounds) =>
-          positiveAreaIntersection(labelBounds, bounds),
-        )
-      ) {
+      if (boundsList.some((b) => positiveAreaIntersection(labelBounds, b)))
         reject(`label ${label.id} overlaps symbol ${nodeId}`);
-      }
     }
-    assertLabelClearOfDevicesAndEdges(
+    checkLabelClearOfDevicesAndEdges(
       graph,
       label,
       labelBounds,
       geometry.nodes,
       segments,
+      netCollisions,
       reject,
     );
   }
@@ -1112,18 +1123,14 @@ function validateNodeAndLabelCollisions(
       inkBounds,
       reject,
     );
-  for (let leftIndex = 0; leftIndex < labels.length; leftIndex++) {
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < labels.length;
-      rightIndex++
-    ) {
-      const left = labels[leftIndex]!;
-      const right = labels[rightIndex]!;
-      if (positiveAreaIntersection(inkBounds(left), inkBounds(right)))
-        reject(`labels ${left.id} and ${right.id} overlap`);
-    }
-  }
+  checkAllLabelPairOverlaps(
+    graph,
+    labels,
+    inkBounds,
+    positiveAreaIntersection,
+    netCollisions,
+    reject,
+  );
 }
 
 function between(value: number, first: number, second: number): boolean {
@@ -1569,12 +1576,15 @@ export function normalizeAndValidateLayout(
 }
 
 function layoutFailure(
-  violation: LayoutContractViolation,
+  v: LayoutContractViolation,
   error: InvalidLayoutError,
 ): LayoutValidationOutcome {
   return {
     ok: false,
     error,
-    failureKind: violation.failureKind,
+    failureKind: v.failureKind,
+    ...(v.collidingNetLabelIds
+      ? { collidingNetLabelIds: v.collidingNetLabelIds }
+      : {}),
   };
 }
