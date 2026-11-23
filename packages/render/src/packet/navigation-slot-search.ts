@@ -86,6 +86,7 @@ export interface SlotReach {
   foreignOwners?: readonly Rect[];
   tieBreakAnchor?: { x: number; y: number };
   requireOwnerNearest?: boolean;
+  preferAnchorDistance?: boolean;
   maxOwnerGapMm?: number;
 }
 
@@ -112,9 +113,13 @@ function scoreSlotCandidate(
   reach: SlotReach | undefined,
 ) {
   const printed = navigationPlacementInk(box, ink);
+  const anchorGap =
+    reach?.preferAnchorDistance && reach.anchors.length
+      ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+      : undefined;
   const distance = locality
     ? anchorDistance(locality.anchorMm, printed)
-    : boxDistance(owner, box);
+    : (anchorGap ?? boxDistance(owner, box));
   const foreignOwners = reach?.foreignOwners;
   const hasForeign = Boolean(foreignOwners?.length);
   const foreignDistance = hasForeign
@@ -138,7 +143,9 @@ function scoreSlotCandidate(
     foreignDistance,
     tieDistance: reach?.tieBreakAnchor
       ? anchorDistance(reach.tieBreakAnchor, printed)
-      : 0,
+      : anchorGap !== undefined
+        ? boxDistance(owner, box)
+        : 0,
     priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
   };
 }

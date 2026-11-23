@@ -55,35 +55,6 @@ function paintedFill(g: NavigationGeometry) {
   );
 }
 
-function peerTerminalKeys(
-  ir: Readonly<ElectricalIr>,
-  draft: Draft,
-  geometry: readonly NavigationGeometry[],
-) {
-  const base = wireScheduleTerminalKeys(ir, draft, geometry);
-  if (!("kind" in draft.view) || draft.view.kind !== "circuit") return base;
-  const keys = new Map(base);
-  const native = new Map(
-    ir.terminals.map(({ id }) => [terminalIdKey(id), id.deviceUid]),
-  );
-  for (const port of geometry) {
-    const a = port.node.attrs;
-    const key = a["data-terminal-id"];
-    if (
-      port.node.name !== "g" ||
-      !a["data-layout-port"] ||
-      !key ||
-      !port.deviceUid ||
-      native.get(key) !== port.deviceUid
-    )
-      continue;
-    // A circuit boundary can carry native identity on the port group.
-    const circle = port.node.children.find((n) => n.name === "circle");
-    if (circle && !keys.has(circle)) keys.set(circle, key);
-  }
-  return keys;
-}
-
 function markerRegion(mark: NavigationGeometry) {
   const { cx, cy, r } = mark.node.attrs;
   const radius = Number(r);
@@ -105,7 +76,7 @@ function terminalLandings(
   field: Rect,
   geometry: readonly NavigationGeometry[],
 ) {
-  const keys = peerTerminalKeys(ir, draft, geometry);
+  const keys = wireScheduleTerminalKeys(ir, draft, geometry);
   const terminals = new Map<string, Landing>();
   for (const mark of geometry) {
     const key = keys.get(mark.node);
@@ -307,7 +278,7 @@ function finalizeConductorPeers(
     for (const peer of part.conductorPeers.values()) {
       const { from, to, connection, owner, hasCard, targets } = peer;
       const { elementId, designation } = connection;
-      const route = part.route(elementId);
+      const route = part.route.route(elementId);
       const fromLanding = part.landings.get(terminalIdKey(from));
       const toLanding = part.landings.get(terminalIdKey(to));
       const marks = fromLanding?.marks;
@@ -329,7 +300,10 @@ function finalizeConductorPeers(
         identity: [from, elementId, to],
         owner,
         ...(marks && marks.length > 1 ? { owners: marks } : {}),
-        foreignOwners: foreignTerminalOwners(part, from),
+        foreignOwners: [
+          ...foreignTerminalOwners(part, from),
+          ...part.route.foreignRuns(elementId),
+        ],
         along: route.runs,
         captions: conductorCaptions(part, elementId),
         ...(terminalLabels.length ? { terminalLabels } : {}),

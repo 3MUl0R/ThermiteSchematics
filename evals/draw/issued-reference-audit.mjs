@@ -522,11 +522,13 @@ function auditMatchedOwnerProximity(
         named,
       }),
     );
-  if (!obligation.foreignOwners?.length || !lines.every((t) => t.bbox)) return;
+  const foreign = [
+    ...(obligation.foreignOwners ?? []),
+    ...(obligation.foreignConductors ?? []),
+  ];
+  if (!foreign.length || !lines.every((t) => t.bbox)) return;
   const box = noteRegion(lines);
-  const foreignGap = Math.min(
-    ...obligation.foreignOwners.map((owner) => boxGap(box, owner)),
-  );
+  const foreignGap = Math.min(...foreign.map((owner) => boxGap(box, owner)));
   if (foreignGap + INK_ACCURACY_MM < gap)
     result.push(
       finding("issued-peer-reference-foreign-owner", first, {

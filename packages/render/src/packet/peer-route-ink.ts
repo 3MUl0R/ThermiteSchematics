@@ -55,15 +55,23 @@ function routeKey(id: ConductiveElementId) {
 function paintedRouteKey(geometry: NavigationGeometry) {
   const native = pathElement(geometry);
   if (native) return routeKey(native);
-  // Circuit and wiring drawing paths inherit the native conductor from a
-  // route group. White halos are filtered before looking up this binding.
+  // Circuit, wiring, and signal-loop drawing paths inherit the native conductor
+  // from a route group. White halos are filtered before looking up this binding.
   return (
     geometry.style?.["data-circuit-conductor"] ??
-    geometry.style?.["data-wiring-conductor"]
+    geometry.style?.["data-wiring-conductor"] ??
+    geometry.style?.["data-loop-conductor"]
   );
 }
 
-export function peerRouteIndex(geometry: readonly NavigationGeometry[]) {
+export interface PeerRouteIndex {
+  route(element: ConductiveElementId): RouteInk;
+  foreignRuns(element: ConductiveElementId): Rect[];
+}
+
+export function peerRouteIndex(
+  geometry: readonly NavigationGeometry[],
+): PeerRouteIndex {
   const masks = geometry.flatMap((g, index) => {
     const cover = documentCoverRectangle(g, index);
     return cover ? [cover] : [];
@@ -77,23 +85,44 @@ export function peerRouteIndex(geometry: readonly NavigationGeometry[]) {
     paths.push({ g, i });
     index.set(key, paths);
   });
-  const cache = new Map<string, RouteInk>();
-  return (element: ConductiveElementId): RouteInk => {
-    const key = routeKey(element);
-    const found = cache.get(key);
+  const runCache = new Map<string, Rect[]>();
+  const tipCache = new Map<string, Rect[]>();
+  const runsForKey = (key: string): Rect[] => {
+    const found = runCache.get(key);
     if (found) return found;
-    const ink: RouteInk = { runs: [], tips: [] };
+    const runs: Rect[] = [];
     for (const { g, i } of index.get(key) ?? []) {
       const covers = masks.filter((m) => m.index > i).map((m) => m.box);
-      ink.runs.push(...paintedRuns(g, covers));
-      ink.tips.push(
+      runs.push(...paintedRuns(g, covers));
+    }
+    runCache.set(key, runs);
+    return runs;
+  };
+  const tipsForKey = (key: string): Rect[] => {
+    const found = tipCache.get(key);
+    if (found) return found;
+    const tips: Rect[] = [];
+    for (const { g } of index.get(key) ?? [])
+      tips.push(
         ...conductorEndpoints(g.node.attrs.d ?? "")
           .map((p) => project({ ...p, w: 0, h: 0 }, g.matrix))
           .filter((p) => inside(p, g.clip)),
       );
-    }
-    cache.set(key, ink);
-    return ink;
+    tipCache.set(key, tips);
+    return tips;
+  };
+  return {
+    route: (element: ConductiveElementId): RouteInk => {
+      const key = routeKey(element);
+      return { runs: runsForKey(key), tips: tipsForKey(key) };
+    },
+    foreignRuns: (element: ConductiveElementId): Rect[] => {
+      const ownKey = routeKey(element);
+      const out: Rect[] = [];
+      for (const key of index.keys())
+        if (key !== ownKey) out.push(...runsForKey(key));
+      return out;
+    },
   };
 }
 

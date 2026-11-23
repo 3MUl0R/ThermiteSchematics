@@ -6,6 +6,7 @@ import { elementKey } from "./tranche4-source.mjs";
 import {
   conductorInk,
   continuationInk,
+  foreignConductorBoxes,
   paintedToBothEnds,
 } from "./peer-owner-ink.mjs";
 
@@ -100,6 +101,7 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
     ownerLabel: name(a),
     owners: cardInfo ? [cardInfo.bbox] : marks,
     foreignOwners: foreignTerminalBoxes(src, a),
+    foreignConductors: foreignConductorBoxes(src.geometry, wire.element),
     supports: [
       ...runs.map(extent),
       ...continuationInk(src.sheet, src.geometry, wire.element, runs),
@@ -139,6 +141,7 @@ function mergeCardRecords(records) {
       ownerLabel: r.ownerLabel,
       owners: r.owners,
       foreignOwners: r.foreignOwners,
+      foreignConductors: r.foreignConductors,
       supports: r.supports,
       card: r.card,
       destinations,

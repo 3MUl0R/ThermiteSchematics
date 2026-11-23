@@ -30,14 +30,57 @@ export function collectTerminals(c) {
   Object.assign(c, { terminals });
 }
 
+export function wireTerminalIdentity(e, attr) {
+  const parseTuple = (raw) => {
+    try {
+      const value = JSON.parse(raw);
+      return Array.isArray(value) &&
+        value.length === 2 &&
+        value.every((s) => typeof s === "string")
+        ? value
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  if (e.hasAttribute("data-loop-terminal"))
+    return parseTuple(e.getAttribute("data-loop-terminal"));
+  if (e.hasAttribute("data-terminal-key"))
+    return [attr(e, "data-device-uid"), e.getAttribute("data-terminal-key")];
+  const parent = e.parentElement;
+  if (!parent || parent.tagName.toLowerCase() !== "g") return undefined;
+  if (parent.hasAttribute("data-loop-terminal"))
+    return parseTuple(parent.getAttribute("data-loop-terminal"));
+  if (parent.hasAttribute("data-terminal-id")) {
+    const tuple = parseTuple(parent.getAttribute("data-terminal-id"));
+    if (!tuple) return null;
+    const ownerUid = attr(parent, "data-device-uid");
+    const portKey = parent.getAttribute("data-terminal-key");
+    return (!ownerUid || ownerUid === tuple[0]) &&
+      (!portKey || portKey === tuple[1])
+      ? tuple
+      : null;
+  }
+  if (
+    parent.hasAttribute("data-layout-port") &&
+    parent.hasAttribute("data-terminal-key")
+  )
+    return [
+      attr(parent, "data-device-uid"),
+      parent.getAttribute("data-terminal-key"),
+    ];
+  return undefined;
+}
+
 export function collectWireTerminals(c) {
-  const { attr, identity, ids, root, shapeClips, visible } = c;
+  const { attr, h, identity, ids, root, shapeClips, visible } = c;
   const wireTerminals = Array.from(
     root.querySelectorAll(
-      "circle[data-terminal-key],circle[data-loop-terminal],g[data-cable-uid][data-conductor-id] > circle",
+      "circle[data-terminal-key],circle[data-loop-terminal],g[data-terminal-id] > circle,g[data-loop-terminal] > circle,g[data-layout-port][data-terminal-key] > circle,g[data-cable-uid][data-conductor-id] > circle",
     ),
   ).flatMap((e) => {
     if (
+      e.closest('[data-tag-kind="reference"],.off-view-annotation') ||
       e.classList.contains("junction-dot") ||
       e.hasAttribute("data-circuit-junction") ||
       e.hasAttribute("data-wiring-junction") ||
@@ -63,18 +106,8 @@ export function collectWireTerminals(c) {
       )
     )
       return [];
-    let terminal;
-    if (e.hasAttribute("data-loop-terminal")) {
-      try {
-        terminal = JSON.parse(e.getAttribute("data-loop-terminal"));
-      } catch {
-        return [];
-      }
-    } else if (e.hasAttribute("data-terminal-key"))
-      terminal = [
-        attr(e, "data-device-uid"),
-        e.getAttribute("data-terminal-key"),
-      ];
+    const terminal = h.wireTerminalIdentity(e, attr);
+    if (terminal === null) return [];
     const cable = e.parentElement;
     const circles = Array.from(cable.children).filter(
       (n) => n.tagName.toLowerCase() === "circle",

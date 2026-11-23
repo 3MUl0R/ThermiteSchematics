@@ -768,3 +768,41 @@ it("5.40 validates multi-sheet destination sets in linear time without exponenti
     peerReferenceFindings(1, { texts: [badNote] }, [obl]).map((f) => f.kind),
   ).toContain("issued-peer-reference-unbound");
 });
+
+it("5.44 flags a conductor peer note sitting nearer a foreign conductor segment than its owner", () => {
+  const obl = {
+    kind: "conductor-peer",
+    source: ["PS1.+", "W-CTL-012", "S2.11"],
+    ownerLabel: "PS1.+",
+    owners: [{ x: 53.35, y: 95.35, w: 1.3, h: 1.3 }],
+    supports: [{ x: 72, y: 96, w: 31, h: 0 }],
+    foreignOwners: [{ x: 102.35, y: 95.35, w: 1.3, h: 1.3 }],
+    foreignConductors: [{ x: 75, y: 65, w: 0, h: 31 }],
+    values: ["W-CTL-012 · PS1.+ → S2.11 07.B2"],
+    compactValues: ["→ S2.11 07.B2"],
+  };
+  const note = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(obl.source),
+    text: obl.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Nearer foreign vertical run (1.7 mm) than own horizontal run (4.2 mm).
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 76.7, y: 89.8, w: 20, h: 2 })] },
+      [obl],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+  // Nearer own terminal/run (2.9 mm) than foreign conductor (3.4 mm).
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 55.6, y: 99.4, w: 30, h: 2 })] },
+      [obl],
+    ),
+  ).toEqual([]);
+});

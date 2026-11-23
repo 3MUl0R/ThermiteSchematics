@@ -220,3 +220,150 @@ it.each([
   },
   60_000,
 );
+
+it("DQ-19 detects circuit boundary port-group terminals and rejects not drawn or junction zones", async () => {
+  const ir = twoDeviceIr();
+  // PS1.+ appears ONLY as a circuit boundary port group (unkeyed circle inside g[data-terminal-id])
+  // at zone B2 (x=60, y=82), preceded by a circuit junction dot in zone B3 (x=90, y=82).
+  const circuitSheet = svg(
+    zoneGrid() +
+      `<circle data-circuit-junction="true" data-device-uid="ps1" data-terminal-key="+" cx="90" cy="82" r="0.55" fill="#17212b"/>` +
+      `<g data-device-uid="ps1">` +
+      `<g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>` +
+      `<g data-device-uid="s1">` +
+      `<g data-layout-port="n1p0" data-terminal-id='["s1","13"]' data-terminal-key="13">` +
+      `<circle cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+  );
+  const circuitPacket = {
+    sheets: [
+      {
+        number: 1,
+        view: { kind: "circuit", format: "documentation-view/0.1" },
+      },
+      { number: 2, view: { kind: "wires", format: "documentation-view/0.1" } },
+    ],
+  };
+  const gCircuit = await openSheet(page, circuitSheet);
+  const gNotDrawn = await openSheet(
+    page,
+    wireScheduleSvg("not drawn", "01.B4"),
+  );
+  const gJunctionZone = await openSheet(
+    page,
+    wireScheduleSvg("01.B3", "01.B4"),
+  );
+  const gPhysicalZone = await openSheet(
+    page,
+    wireScheduleSvg("01.B2", "01.B4"),
+  );
+
+  expect(
+    wireLocatorAudit(circuitPacket, [gCircuit, gNotDrawn], ir).findings.map(
+      (f) => f.kind,
+    ),
+  ).toContain("wire-locator-undrawn-claim");
+  expect(
+    wireLocatorAudit(circuitPacket, [gCircuit, gJunctionZone], ir).findings.map(
+      (f) => f.kind,
+    ),
+  ).toContain("wire-locator-mismatch");
+  expect(
+    wireLocatorAudit(circuitPacket, [gCircuit, gPhysicalZone], ir).findings,
+  ).toEqual([]);
+}, 60_000);
+
+function foreignConductorFixture() {
+  const ir = twoDeviceIr();
+  ir.devices.push({ uid: "s2", designation: "S2", typeId: "t" });
+  ir.deviceTypes[0].terminals.push({ key: "11", description: "NC" });
+  ir.terminals.push({ id: { deviceUid: "s2", terminalKey: "11" } });
+  ir.wires.push({
+    uid: "w2",
+    designation: "W-CTL-012",
+    endpoints: [
+      { terminal: { deviceUid: "ps1", terminalKey: "+" } },
+      { terminal: { deviceUid: "s2", terminalKey: "11" } },
+    ],
+  });
+  const s1Card = svg(
+    zoneGrid() +
+      `<circle class="terminal-marker" data-device-uid="ps1" data-terminal-key="+" cx="60" cy="82" r="1.2" fill="white" stroke="#101828"/>` +
+      `<g class="off-view-annotation" data-off-view-terminal-id='{"deviceUid":"ps1","terminalKey":"+"}' data-off-view-conductors='[{"kind":"wire","uid":"w2"}]'>` +
+      `<rect x="130" y="30" width="60" height="16" fill="white" stroke="#101828"/>` +
+      `<text class="off-view-heading" x="132" y="35" font-size="2.5">Off-view at PS1.+</text>` +
+      `<text class="off-view-row" x="132" y="42" font-size="2.5">W-CTL-012 → S2.11 02.B3</text>` +
+      `</g>`,
+  );
+  const peerSourceW2 = JSON.stringify([
+    { deviceUid: "ps1", terminalKey: "+" },
+    { kind: "wire", uid: "w2" },
+    { deviceUid: "s2", terminalKey: "11" },
+  ]).replaceAll('"', "&quot;");
+  const peerSourceRev = JSON.stringify([
+    { deviceUid: "s2", terminalKey: "11" },
+    { kind: "wire", uid: "w2" },
+    { deviceUid: "ps1", terminalKey: "+" },
+  ]).replaceAll('"', "&quot;");
+  const makeS2 = (noteMarkup) =>
+    svg(
+      zoneGrid() +
+        `<g data-device-uid="ps1"><g data-layout-port="p0" data-terminal-id='["ps1","+"]' data-terminal-key="+"><circle cx="54" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-device-uid="s1"><g data-layout-port="p1" data-terminal-id='["s1","13"]' data-terminal-key="13"><circle cx="103" cy="65" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-device-uid="s2"><g data-layout-port="p2" data-terminal-id='["s2","11"]' data-terminal-key="11"><circle cx="103" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-circuit-conductor="w1"><path d="M 72 96 H 75 V 65 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+        `<g data-circuit-conductor="w2"><path d="M 72 96 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+        text(
+          104,
+          100,
+          "W-CTL-012 · S2.11 → PS1.+ 01.B2",
+          ` data-peer-reference="conductor-peer" data-peer-source="${peerSourceRev}"`,
+        ) +
+        noteMarkup,
+    );
+  return { ir, s1Card, makeS2, peerSourceW2 };
+}
+
+it("DQ-08 rejects a peer note sitting nearer a foreign conductor run than its own terminal or conductor", async () => {
+  const { ir, s1Card, makeS2, peerSourceW2 } = foreignConductorFixture();
+  const badNote =
+    `<g data-peer-reference="conductor-peer" data-peer-source="${peerSourceW2}">` +
+    text(76.7, 88.2, "W-CTL-012 · PS1.+") +
+    text(76.7, 91.7, "→ S2.11 02.B3") +
+    `</g>`;
+  const goodNote = text(
+    55.5,
+    101.0,
+    "W-CTL-012 · PS1.+ → S2.11 02.B3",
+    ` data-peer-reference="conductor-peer" data-peer-source="${peerSourceW2}"`,
+  );
+  const pkt = {
+    sheets: [
+      { number: 1, view: { kind: "wiring", format: "documentation-view/0.1" } },
+      {
+        number: 2,
+        view: { kind: "circuit", format: "documentation-view/0.1" },
+      },
+    ],
+  };
+  const g1 = await openSheet(page, s1Card);
+  const g2Bad = await openSheet(page, makeS2(badNote));
+  const g2Good = await openSheet(page, makeS2(goodNote));
+  const sources = nativeRows(ir);
+
+  const badObls = terminalPeerObligations(pkt, [g1, g2Bad], ir, sources).filter(
+    (o) => o.sheet === 2,
+  );
+  expect(peerReferenceFindings(2, g2Bad, badObls).map((f) => f.kind)).toContain(
+    "issued-peer-reference-foreign-owner",
+  );
+  const goodObls = terminalPeerObligations(
+    pkt,
+    [g1, g2Good],
+    ir,
+    sources,
+  ).filter((o) => o.sheet === 2);
+  expect(peerReferenceFindings(2, g2Good, goodObls)).toEqual([]);
+}, 60_000);

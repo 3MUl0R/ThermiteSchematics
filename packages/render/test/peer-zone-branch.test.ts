@@ -7,6 +7,7 @@ import {
   emitPeerReferences,
   type PeerReference,
 } from "../src/packet/peer-reference-ink.js";
+import { renderSchematicPacket } from "../src/sheets.js";
 import type { Draft, RenderedSheet } from "../src/packet/types.js";
 import { escapeXmlAttribute as attr } from "../src/svg/escape.js";
 import { boxDistance } from "../src/packet/navigation-symbols.js";
@@ -262,4 +263,234 @@ it("emitPeerReferences never places a peer note nearer a foreign terminal than i
   );
   const foreignGap = boxDistance(region, foreign);
   expect(ownerGap).toBeLessThanOrEqual(foreignGap);
+});
+
+it("wireScheduleLocations resolves circuit boundary port groups carrying terminal identity on the parent group", async () => {
+  const fixture = await offViewFixture();
+  try {
+    const page = normalizePaperPage();
+    if (!page.ok) throw Error("paper");
+    const { ps1, k1, w1 } = findFixtures(fixture.ir);
+    const termId = attr(JSON.stringify([ps1, "+"]));
+    // Circuit junction dot sits in B3 (50, 30); physical boundary port circle sits in B2 (30, 30)
+    // with terminal identity on the parent <g> and an unkeyed child <circle>.
+    const junction = `<circle data-circuit-junction="true" data-device-uid="${ps1}" data-terminal-key="+" cx="50" cy="30" r=".55" fill="#17212b"/>`;
+    const boundaryPort =
+      `<g data-device-uid="${ps1}">` +
+      `<g data-layout-port="n0p0" data-terminal-id="${termId}" data-terminal-key="+">` +
+      `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `</g></g>`;
+    const physicalK1 = `<circle class="terminal-marker" data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r="1" fill="white" stroke="#101828"/>`;
+
+    const result = wireScheduleLocations(
+      fixture.ir,
+      [makeDraft("circuit")],
+      [makeSheet(1, "circuit", junction + boundaryPort + physicalK1)],
+      page.value,
+    );
+    expect(result.get(w1)).toEqual(["01.B2", "01.B5"]);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+function noteBoundingBox(group: Element) {
+  const texts =
+    group.tagName.toLowerCase() === "text"
+      ? [group]
+      : [...group.querySelectorAll("text")];
+  const boxes = texts.map((t) => {
+    const x = Number(t.getAttribute("x"));
+    const y = Number(t.getAttribute("y"));
+    const m = printableTextMetrics(t.textContent ?? "", 2.5);
+    return {
+      x: x + m.left,
+      y: y - m.top,
+      w: m.right - m.left,
+      h: m.top - m.bottom,
+    };
+  });
+  return {
+    x: Math.min(...boxes.map((b) => b.x)),
+    y: Math.min(...boxes.map((b) => b.y)),
+    w:
+      Math.max(...boxes.map((b) => b.x + b.w)) -
+      Math.min(...boxes.map((b) => b.x)),
+    h:
+      Math.max(...boxes.map((b) => b.y + b.h)) -
+      Math.min(...boxes.map((b) => b.y)),
+  };
+}
+
+it.each(["left-to-right", "top-to-bottom"] as const)(
+  "circuit-only packet prints physical boundary terminal locators in wire schedules (%s)",
+  async (flow) => {
+    const included = new Set(["PS1", "K1", "H1", "W1", "W2", "W3", "W4"]);
+    const fixture = await offViewFixture((objects) => {
+      for (let i = objects.length - 1; i >= 0; i--)
+        if (!included.has(objects[i].designation)) objects.splice(i, 1);
+    });
+    try {
+      const devices = new Map(
+        fixture.ir.devices.map((d) => [d.uid, d.designation]),
+      );
+      const rendered = await renderSchematicPacket(fixture.ir, {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "circuit-view-request/0.1",
+            title: "Two 24 V loads",
+            flow,
+            groups: [
+              {
+                id: "two-loads",
+                label: "Two 24 V loads",
+                functions: fixture.ir.functions
+                  .filter(
+                    (f) =>
+                      ["K1", "H1"].includes(
+                        devices.get(f.id.deviceUid) ?? "",
+                      ) && ["coil", "load"].includes(f.kind),
+                  )
+                  .map((f) => ({
+                    device: {
+                      by: "designation" as const,
+                      value: required(devices.get(f.id.deviceUid)),
+                    },
+                    key: f.id.functionKey,
+                  })),
+                conductors: ["W1", "W2", "W3", "W4"],
+              },
+            ],
+          },
+          { format: "documentation-view-request/0.1", kind: "wires" },
+        ],
+      });
+      expect(rendered.ok, JSON.stringify(rendered)).toBe(true);
+      if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
+      const scheduleSheet = required(
+        rendered.value.sheets.find((s) => s.view.kind === "wires"),
+      );
+      const doc = parseSvg(scheduleSheet.svg);
+      for (const name of ["W1", "W2", "W3", "W4"]) {
+        const wire = required(
+          fixture.ir.wires.find((w) => w.designation === name),
+        );
+        const row = required(
+          [...doc.querySelectorAll("[data-report-row]")].find(
+            (r) => r.getAttribute("data-report-row") === wire.uid,
+          ),
+        );
+        for (const col of [6, 7]) {
+          const cell = row
+            .querySelector(`[data-report-column="${col}"]`)!
+            .textContent!.trim();
+          expect(cell, `${name} col ${col}`).toMatch(/^\d{2,3}\.[A-D][1-6]$/u);
+        }
+      }
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);
+
+function s07BranchCircuitSheets(
+  ps1: string,
+  k1: string,
+  h1: string,
+  w1: string,
+  w3: string,
+) {
+  const cardConductors = attr(
+    JSON.stringify([
+      { kind: "wire", uid: w1 },
+      { kind: "wire", uid: w3 },
+    ]),
+  );
+  const s1Body =
+    `<circle class="terminal-marker" data-device-uid="${ps1}" data-terminal-key="+" cx="30" cy="30" r="1" fill="white" stroke="#101828"/>` +
+    `<g class="off-view-annotation" data-off-view-terminal-id="${attr(JSON.stringify({ deviceUid: ps1, terminalKey: "+" }))}" data-off-view-conductors="${cardConductors}">` +
+    `<rect x="2" y="2" width="46" height="18" fill="white" stroke="#101828" stroke-width="0.3"/>` +
+    `<text class="off-view-heading" x="4" y="6" font-size="2.5" fill="#101828">Off-view at PS1.+</text>` +
+    `<text class="off-view-row" x="4" y="11" font-size="2.5" fill="#101828">W-CTL-010 → K1.A1</text>` +
+    `<text class="off-view-row" x="4" y="16" font-size="2.5" fill="#101828">W-CTL-012 → H1.X1</text>` +
+    `</g>`;
+  const s2Body =
+    `<g data-device-uid="${ps1}"><g data-layout-port="n3p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
+    `<circle cx="24" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `</g></g>` +
+    `<path d="M 24 56 H 42" fill="none" stroke="#17212b" stroke-width=".35"/>` +
+    `<circle data-circuit-junction="true" data-device-uid="${ps1}" data-terminal-key="+" cx="45" cy="56" r=".55" fill="#17212b"/>` +
+    `<g data-circuit-conductor="${w1}"><path d="M 42 56 H 45 V 25 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `<g data-circuit-conductor="${w3}"><path d="M 42 56 H 50 M 66 56 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `<text x="53" y="55" font-size="2.5" fill="#17212b">+24V-S2</text>` +
+    `<text x="50" y="57.9" font-size="2.5" fill="#17212b">18AWG / blue</text>` +
+    `<g data-device-uid="${k1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([k1, "A1"]))}" data-terminal-key="A1">` +
+    `<circle cx="73" cy="25" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `</g></g>` +
+    `<g data-device-uid="${h1}"><g data-layout-port="n1p0" data-terminal-id="${attr(JSON.stringify([h1, "X1"]))}" data-terminal-key="X1">` +
+    `<circle cx="73" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `</g></g>` +
+    `<rect x="4" y="50.5" width="20" height="11" fill="none" stroke="#17212b"/>` +
+    `<rect x="4" y="37" width="38" height="10" fill="#17212b"/>` +
+    `<rect x="4" y="67" width="90" height="3" fill="#17212b"/>`;
+  return [makeSheet(1, "wiring", s1Body), makeSheet(2, "circuit", s2Body)];
+}
+
+it("terminalPeerReferences keeps a co-occurring circuit peer note nearer its owner than foreign conductor runs", async () => {
+  const fixture = await offViewFixture((objects) => {
+    required(objects.find((o) => o.designation === "W1")).designation =
+      "W-CTL-010";
+    required(objects.find((o) => o.designation === "W3")).designation =
+      "W-CTL-012";
+  });
+  try {
+    const page = normalizePaperPage();
+    if (!page.ok) throw Error("paper");
+    const ps1 = required(
+      fixture.ir.devices.find((d) => d.designation === "PS1"),
+    ).uid;
+    const k1 = required(
+      fixture.ir.devices.find((d) => d.designation === "K1"),
+    ).uid;
+    const w1 = required(
+      fixture.ir.wires.find((w) => w.designation === "W-CTL-010"),
+    ).uid;
+    const w3 = required(
+      fixture.ir.wires.find((w) => w.designation === "W-CTL-012"),
+    );
+    const h1 = required(fixture.ir.devices.find((d) => d.designation === "H1"));
+    const updated = terminalPeerReferences(
+      fixture.ir,
+      [makeDraft("wiring"), makeDraft("circuit")],
+      s07BranchCircuitSheets(ps1, k1, h1.uid, w1, w3.uid),
+      page.value,
+    );
+    const doc = parseSvg(updated[1]!.svg);
+    const w3Note = [
+      ...doc.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+    ].find((el) => {
+      const src = JSON.parse(el.getAttribute("data-peer-source") ?? "[]");
+      return src[0]?.deviceUid === ps1 && src[1]?.uid === w3.uid;
+    });
+    expect(w3Note).toBeDefined();
+    const region = noteBoundingBox(w3Note!);
+    const ownTargets = [
+      { x: 23.35, y: 55.35, w: 1.3, h: 1.3 },
+      { x: 42, y: 56, w: 8, h: 0 },
+      { x: 66, y: 56, w: 7, h: 0 },
+    ];
+    const foreignConductors = [
+      { x: 42, y: 56, w: 3, h: 0 },
+      { x: 45, y: 25, w: 0, h: 31 },
+      { x: 45, y: 25, w: 28, h: 0 },
+    ];
+    const ownerGap = Math.min(...ownTargets.map((b) => boxDistance(region, b)));
+    const foreignConductorGap = Math.min(
+      ...foreignConductors.map((b) => boxDistance(region, b)),
+    );
+    expect(ownerGap).toBeLessThanOrEqual(foreignConductorGap + 0.02);
+  } finally {
+    await fixture.dispose();
+  }
 });

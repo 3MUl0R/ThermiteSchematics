@@ -25,21 +25,30 @@ Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
 the budget and the remaining headroom. Checker protocol **5.44** applies.
 
-Version **5.44** closes a **DQ-08 / DQ-19** terminal-zone measurement gap
-(`measurement/tranche4.mjs`, `measurement/terminals.mjs`,
-`terminal-peer-oracle.mjs`, #569). Previously `tranche4Markers` collected
+Version **5.44** closes **DQ-08 / DQ-19** terminal-zone and peer-ownership
+measurement gaps (`measurement/tranche4.mjs`, `measurement/terminals.mjs`,
+`terminal-peer-oracle.mjs`, `peer-owner-ink.mjs`,
+`issued-reference-audit.mjs`, #569). Previously `tranche4Markers` collected
 branch/junction dots (`circle.junction-dot`, `circle[data-circuit-junction]`,
 `circle[data-wiring-junction]`) alongside physical terminal markers without
 distinguishing them, so `observedTerminals` in `terminal-peer-oracle.mjs`
 admitted junction-dot zones as valid printed peer-reference destinations and
-owner coordinates, and `collectWireTerminals` excluded junction circles only
-incidentally via `stroke: none`. Measurement now tags junction markers with
-`junction: true` (preserving DQ-13 N14 ray auditing) while excluding them from
-`observedTerminals`, and explicitly excludes junction dots and hidden landing
-anchors (`data-circuit-landing-for`, `data-wiring-landing-for`) from
-`collectWireTerminals`, so both peer-reference and wire-schedule audits enforce
-that every printed `SS.ZZ` address resolves to a physically drawn terminal.
-Complete 5.43 summaries remain readable.
+owner coordinates; `collectWireTerminals` excluded junction circles only
+incidentally via `stroke: none` and missed physical terminal circles whose
+identity lives on a parent port group (`g[data-terminal-id] > circle`,
+`g[data-loop-terminal] > circle`, `g[data-layout-port][data-terminal-key] >
+circle`); and `issued-reference-audit.mjs` compared conductor-peer note
+proximity only against foreign terminal boxes rather than foreign conductor
+runs. Measurement now tags junction markers with `junction: true` (preserving
+DQ-13 N14 ray auditing) while excluding them from `observedTerminals`,
+explicitly excludes junction dots and hidden landing anchors
+(`data-circuit-landing-for`, `data-wiring-landing-for`) while resolving
+parent port-group terminal identities in `collectWireTerminals`, and includes
+foreign conductor segment boxes (`foreignConductorBoxes`) in the DQ-08
+nearest-owner check (`issued-peer-reference-foreign-owner`) so every printed
+`SS.ZZ` address resolves to a physically drawn terminal and every conductor
+peer note sits nearer its own terminal or conductor than any foreign terminal
+or conductor. Complete 5.43 summaries remain readable.
 
 Version **5.43** closes a **DQ-17** gap for signal-loop and non-circuit
 pass-through terminal captions (`measurement/text-layout.mjs`, `checks.mjs`,

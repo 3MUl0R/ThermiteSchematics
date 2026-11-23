@@ -8,7 +8,7 @@ export function boxGap(a, b) {
   );
 }
 
-function boundRoute(s, key) {
+function routeIdentity(s) {
   const [kind, ...ids] = s.edgeOwnerKey ?? [];
   const edge =
     kind === "cable-conductor"
@@ -17,10 +17,12 @@ function boundRoute(s, key) {
         ? ids[0]
         : undefined;
   const declaration = routeKey(s);
-  return (
-    (declaration ?? edge) === key &&
-    (!declaration || !edge || declaration === edge)
-  );
+  if (declaration && edge && declaration !== edge) return undefined;
+  return declaration ?? edge;
+}
+
+function boundRoute(s, key) {
+  return routeIdentity(s) === key;
 }
 
 export function conductorInk(g, element) {
@@ -34,6 +36,19 @@ export function conductorInk(g, element) {
       s.points?.length ? [s.points[0], s.points.at(-1)] : [],
     ),
   };
+}
+
+export function foreignConductorBoxes(g, element) {
+  const ownKey = elementKey(element);
+  const boxes = [];
+  for (const s of g.shapes ?? []) {
+    const runs = g.tranche3?.routeInk?.[s.element];
+    if (!runs?.length) continue;
+    const id = routeIdentity(s);
+    if (!id || id === ownKey) continue;
+    for (const run of runs) boxes.push(extent(run));
+  }
+  return boxes;
 }
 
 export function paintedToBothEnds({ runs, tips }, a, b) {
