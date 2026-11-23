@@ -141,7 +141,7 @@ const coreAdvice: [string, string][] = [
     "The command runs separately and the workflow facts test snapshots.",
   ],
   [
-    "To undo registration of a new file, remove it from `sources` in `system.json`, confirm no source glob still matches it, then delete the unregistered file.",
+    "To unregister a new file, remove it from `sources`, confirm no glob matches, then delete it.",
     "The guarded starter recipe exercises removal in that order.",
   ],
 ];
@@ -338,7 +338,7 @@ export const workflowAdvice: [string, string][] = [
     "Authoring prohibition shared with the starter recipe.",
   ],
   [
-    "After the last edit, validate, export a bundle, inspect the drawings, and run `export check` before handoff.",
+    "After the last edit, validate, export a bundle, inspect drawings and run `export check`.",
     "Workflow ordering and human inspection; the offline topic's delivery fence executes validation, bundle and freshness check.",
   ],
   [
