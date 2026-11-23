@@ -9,25 +9,45 @@ function relativeSpec(root, moduleId) {
 }
 
 const shardHelpers = new Map();
-async function loadTestShards(root) {
-  if (!shardHelpers.has(root)) {
-    const file = resolve(root, "scripts/test-shards.mjs");
+async function loadTestShards(root, { required = false } = {}) {
+  const file = resolve(root, "scripts/test-shards.mjs");
+  if (!existsSync(file)) {
+    if (required) {
+      throw new Error(`Sharded Vitest run requires ${file}, which is missing.`);
+    }
     // Minimal contributor/mutation scratch fixtures copy vitest.config.mjs alone.
+    return null;
+  }
+  if (!shardHelpers.has(file)) {
     shardHelpers.set(
-      root,
-      existsSync(file)
-        ? import(/* @vite-ignore */ pathToFileURL(file).href)
-        : Promise.resolve(null),
+      file,
+      import(/* @vite-ignore */ pathToFileURL(file).href)
+        .then((mod) => {
+          if (
+            typeof mod?.partitionShard !== "function" ||
+            typeof mod?.shardWeight !== "function" ||
+            typeof mod?.sortDuration !== "function"
+          ) {
+            throw new Error("missing required shard helper exports");
+          }
+          return mod;
+        })
+        .catch((error) => {
+          shardHelpers.delete(file);
+          throw new Error(
+            `Failed to load Vitest shard helper ${file}: ${error.message}`,
+            { cause: error },
+          );
+        }),
     );
   }
-  return shardHelpers.get(root);
+  return shardHelpers.get(file);
 }
 
 class CiSequencer extends BaseSequencer {
   async shard(files) {
     const root = this.ctx.config.root;
-    const shards = await loadTestShards(root);
-    if (!shards) return super.shard(files);
+    const shards = await loadTestShards(root, { required: true });
     const { index, count } = this.ctx.config.shard;
     return shards.partitionShard(files, index, count, {
       key: ({ moduleId }) => relativeSpec(root, moduleId),
@@ -40,7 +60,9 @@ class CiSequencer extends BaseSequencer {
   async sort(files) {
     const ordered = await super.sort(files);
     const root = this.ctx.config.root;
-    const shards = await loadTestShards(root);
+    const shards = await loadTestShards(root, {
+      required: Boolean(this.ctx.config.shard),
+    });
     if (!shards) return ordered;
     return ordered.sort(
       (a, b) =>
@@ -94,11 +116,16 @@ const ciWorkers =
 // three-vCPU macOS runners. Keep the two phases with a two-worker ceiling.
 const ciMainWorkers =
   ciWorkers === 3 && process.platform === "darwin" ? 2 : ciWorkers;
+const shardRequested = process.argv.some(
+  (arg) => arg === "--shard" || arg.startsWith("--shard="),
+);
 
 export default defineConfig({
   test: {
     ...testDefaults,
-    ...(process.env.CI ? { sequence: { sequencer: CiSequencer } } : {}),
+    ...(process.env.CI || shardRequested
+      ? { sequence: { sequencer: CiSequencer } }
+      : {}),
     maxWorkers: ciMainWorkers,
     include,
     ...(ciWorkers === 3

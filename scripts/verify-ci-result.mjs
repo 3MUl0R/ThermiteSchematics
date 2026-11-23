@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -146,60 +147,98 @@ export function evaluateCiResult({
   return { ok: failures.length === 0, failures, summary };
 }
 
-async function fetchJsonWithRetry(url, headers, { fetchImpl, pause }) {
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const response = await fetchImpl(url, { headers });
-      if (response.ok) return await response.json();
-      const body = await response.text();
-      const message = `GitHub API ${response.status} for ${url}: ${body.slice(0, 300)}`;
-      if (response.status < 500) throw new Error(message);
-      lastError = new Error(message);
-    } catch (error) {
-      if (error.message?.startsWith("GitHub API 4")) throw error;
-      lastError = error;
-    }
-    if (attempt < 3) await pause(2_000 * attempt);
+function parseJobsPages(stdout) {
+  let pages;
+  try {
+    pages = JSON.parse(stdout || "");
+  } catch {
+    throw new Error("GitHub Jobs API returned invalid JSON.");
   }
-  throw lastError;
+  if (!Array.isArray(pages) || pages.length === 0) {
+    throw new Error(
+      "Unexpected Jobs API response: expected non-empty page array.",
+    );
+  }
+  const totalCount = pages[0]?.total_count;
+  if (!Number.isInteger(totalCount) || totalCount < 0) {
+    throw new Error(
+      "Unexpected Jobs API response: missing integer total_count.",
+    );
+  }
+  const jobs = [];
+  for (let i = 0; i < pages.length; i++) {
+    if (!Array.isArray(pages[i]?.jobs)) {
+      throw new Error(`Unexpected Jobs API response on page ${i + 1}.`);
+    }
+    jobs.push(...pages[i].jobs);
+  }
+  if (jobs.length !== totalCount) {
+    throw new Error(
+      `Incomplete Jobs API response: collected ${jobs.length} jobs, expected total_count=${totalCount}.`,
+    );
+  }
+  return jobs;
 }
 
+function ghFailure(result) {
+  if (result.error) {
+    const code =
+      typeof result.error.code === "string" ? result.error.code : "unknown";
+    return {
+      retryable: false,
+      message: `gh api execution failed (code ${code}).`,
+    };
+  }
+  const httpMatch = /\bHTTP (\d{3})\b/.exec(result.stderr ?? "");
+  const httpCode = httpMatch ? Number(httpMatch[1]) : null;
+  if (httpCode !== null) {
+    return {
+      retryable: httpCode >= 500,
+      message: `GitHub Jobs API request failed (HTTP ${httpCode}).`,
+    };
+  }
+  return {
+    retryable: true,
+    message: `GitHub Jobs API request failed (exit ${result.status ?? "null"}).`,
+  };
+}
+
+// Query the full run job history (filter=all) rather than attempts/N/jobs:
+// on "Re-run failed jobs", attempts/N/jobs returns only the re-run subset,
+// omitting earlier-attempt successes that selectLatestJobs needs to keep
+// every expected job accountable across partial reruns.
 export async function fetchWorkflowRunJobs({
-  apiUrl = "https://api.github.com",
   repository,
   runId,
   token,
-  fetchImpl = fetch,
+  env = process.env,
+  spawnSyncImpl = spawnSync,
   pause = delay,
 }) {
   if (!repository || !runId || !token) {
     throw new Error(
-      "Missing GITHUB_REPOSITORY, GITHUB_RUN_ID, or GITHUB_TOKEN.",
+      "Missing GITHUB_REPOSITORY, GITHUB_RUN_ID, or GH_TOKEN/GITHUB_TOKEN.",
     );
   }
-  const headers = {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
-    "X-GitHub-Api-Version": "2022-11-28",
+  const endpoint = `repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100`;
+  const args = ["api", "--paginate", "--slurp", endpoint];
+  const options = {
+    encoding: "utf8",
+    env: { ...env, GH_TOKEN: token },
+    maxBuffer: 32 * 1024 * 1024,
   };
-  const perPage = 100;
-  const all = [];
-  for (let page = 1; page <= 20; page++) {
-    const url = `${apiUrl.replace(/\/$/, "")}/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=${perPage}&page=${page}`;
-    const data = await fetchJsonWithRetry(url, headers, { fetchImpl, pause });
-    if (!Array.isArray(data?.jobs)) {
-      throw new Error(`Unexpected Jobs API response on page ${page}.`);
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = spawnSyncImpl("gh", args, options);
+    if (!result.error && result.status === 0) {
+      return parseJobsPages(result.stdout);
     }
-    all.push(...data.jobs);
-    if (
-      data.jobs.length < perPage ||
-      (typeof data.total_count === "number" && all.length >= data.total_count)
-    ) {
-      break;
-    }
+    const { retryable, message } = ghFailure(result);
+    lastError = new Error(message);
+    if (!retryable) throw lastError;
+    if (attempt < 3) await pause(2_000 * attempt);
   }
-  return all;
+  throw lastError;
 }
 
 async function main() {
@@ -209,10 +248,9 @@ async function main() {
     ? Number(process.env.GITHUB_RUN_ATTEMPT)
     : null;
   const jobs = await fetchWorkflowRunJobs({
-    apiUrl: process.env.GITHUB_API_URL || "https://api.github.com",
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,
-    token: process.env.GITHUB_TOKEN,
+    token: process.env.GH_TOKEN || process.env.GITHUB_TOKEN,
   });
   const verdict = evaluateCiResult({
     expectedNames,

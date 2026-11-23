@@ -29,6 +29,24 @@ async function resolveProjects(workers) {
   }
 }
 
+function createStandaloneFixture() {
+  const scratch = mkdtempSync(join(tmpdir(), "thermite-vitest-standalone-"));
+  cpSync("vitest.config.mjs", join(scratch, "vitest.config.mjs"));
+  const deps = join(scratch, "node_modules");
+  mkdirSync(deps);
+  for (const entry of readdirSync(resolve("node_modules"))) {
+    if (entry.startsWith(".")) continue;
+    symlinkSync(
+      resolve("node_modules", entry),
+      join(deps, entry),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+  writeFileSync(join(scratch, "a.test.mjs"), "export {};\n");
+  writeFileSync(join(scratch, "b.test.mjs"), "export {};\n");
+  return scratch;
+}
+
 it("preserves Vitest defaults and caps workers in both CI projects", async () => {
   vi.stubEnv("CI", "1");
   vi.stubEnv("VITEST_MAX_WORKERS", undefined);
@@ -91,39 +109,52 @@ it("keeps default local sequencers and scopes CiSequencer to CI", async () => {
   }
 });
 
-it("loads vitest.config.mjs standalone without scripts/test-shards.mjs in CI", async () => {
-  const scratch = mkdtempSync(join(tmpdir(), "thermite-vitest-standalone-"));
+it("loads vitest.config.mjs standalone without sharding and throws when a shard is requested", async () => {
+  const scratch = createStandaloneFixture();
   vi.stubEnv("CI", "1");
   try {
-    cpSync("vitest.config.mjs", join(scratch, "vitest.config.mjs"));
-    const deps = join(scratch, "node_modules");
-    mkdirSync(deps);
-    for (const entry of readdirSync(resolve("node_modules"))) {
-      if (entry.startsWith(".")) continue;
-      symlinkSync(
-        resolve("node_modules", entry),
-        join(deps, entry),
-        process.platform === "win32" ? "junction" : "dir",
-      );
+    const unsharded = await createVitest("test", {
+      root: scratch,
+      config: join(scratch, "vitest.config.mjs"),
+      watch: false,
+    });
+    try {
+      const specs = await unsharded.globTestSpecifications([]);
+      expect(specs).toHaveLength(2);
+      const Sequencer = unsharded.config.sequence.sequencer;
+      const sorted = await new Sequencer(unsharded).sort(Array.from(specs));
+      expect(sorted).toHaveLength(2);
+    } finally {
+      await unsharded.close();
     }
-    writeFileSync(join(scratch, "a.test.mjs"), "export {};\n");
-    writeFileSync(join(scratch, "b.test.mjs"), "export {};\n");
-    const runner = await createVitest("test", {
+
+    const sharded = await createVitest("test", {
       root: scratch,
       config: join(scratch, "vitest.config.mjs"),
       watch: false,
       shard: "1/2",
     });
     try {
-      const specs = await runner.globTestSpecifications([]);
-      expect(specs).toHaveLength(2);
-      const Sequencer = runner.config.sequence.sequencer;
-      const sequencer = new Sequencer(runner);
-      const sharded = await sequencer.shard(Array.from(specs));
-      const sorted = await sequencer.sort(sharded);
-      expect(sorted).toHaveLength(1);
+      const specs = Array.from(await sharded.globTestSpecifications([]));
+      const Sequencer = sharded.config.sequence.sequencer;
+      const sequencer = new Sequencer(sharded);
+      await expect(sequencer.shard(specs)).rejects.toThrow(
+        /Sharded Vitest run requires .*test-shards\.mjs, which is missing/,
+      );
+      await expect(sequencer.sort(specs)).rejects.toThrow(
+        /Sharded Vitest run requires .*test-shards\.mjs, which is missing/,
+      );
+
+      mkdirSync(join(scratch, "scripts"));
+      writeFileSync(
+        join(scratch, "scripts", "test-shards.mjs"),
+        "export const broken = (;\n",
+      );
+      await expect(sequencer.shard(specs)).rejects.toThrow(
+        /Failed to load Vitest shard helper/,
+      );
     } finally {
-      await runner.close();
+      await sharded.close();
     }
   } finally {
     vi.unstubAllEnvs();

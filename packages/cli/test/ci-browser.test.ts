@@ -1,19 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import {
-  BROWSER_INSTALL_BUDGET,
-  worstCaseBudgetMs,
+  INSTALL_BUDGET,
+  worstCaseSeconds,
 } from "../../../scripts/install-ci-browser.mjs";
 
 it("provisions the pinned browser for both sharded test jobs on every OS", async () => {
   const workflow = await readFile(".github/workflows/ci.yml", "utf8");
   const jobs = workflow.split(/^  (?:check-test|worktree):$/m).slice(1);
-  const stepMinutes = BROWSER_INSTALL_BUDGET.stepTimeoutMs / 60_000;
-  expect(
-    worstCaseBudgetMs(BROWSER_INSTALL_BUDGET, { platform: "linux" }),
-  ).toBeLessThanOrEqual(BROWSER_INSTALL_BUDGET.overallDeadlineMs);
-  expect(BROWSER_INSTALL_BUDGET.overallDeadlineMs).toBeLessThan(
-    BROWSER_INSTALL_BUDGET.stepTimeoutMs,
+  const stepMinutes = INSTALL_BUDGET.stepTimeoutSeconds / 60;
+  expect(worstCaseSeconds(INSTALL_BUDGET)).toBeLessThan(
+    INSTALL_BUDGET.stepTimeoutSeconds,
   );
   expect(jobs).toHaveLength(2);
   for (const job of jobs) {

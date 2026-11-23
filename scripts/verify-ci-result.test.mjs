@@ -152,60 +152,132 @@ describe("ci-result Jobs API verifier", () => {
     expect(verdict.failures[0]).toContain("attempt 2");
   });
 
-  it("paginates Jobs API responses and retries transient 5xx failures", async () => {
-    const calls = [];
-    const waits = [];
-    let page1Tries = 0;
-    const page1 = Array.from({ length: 100 }, (_, i) => ({
-      id: i + 1,
-      name: `job-${i + 1}`,
-      run_attempt: 1,
-      status: "completed",
-      conclusion: "success",
-    }));
+  it("paginates via gh api, retries transient 5xx, and catches a cancelled job on a later page", async () => {
+    const expected = expectedJobNames(workflowText);
+    const page1 = allSucceededJobs(expected, 1);
     const page2 = [
       {
-        id: 101,
-        name: "job-101",
-        run_attempt: 1,
+        id: 2004,
+        name: expected[4],
+        run_attempt: 2,
         status: "completed",
-        conclusion: "success",
+        conclusion: "cancelled",
       },
     ];
+    const calls = [];
+    const waits = [];
     const jobs = await fetchWorkflowRunJobs({
       repository: "owner/repo",
       runId: "42",
       token: "test-token",
+      env: {},
       pause: async (ms) => {
         waits.push(ms);
       },
-      fetchImpl: async (url) => {
-        calls.push(url);
-        if (new URL(url).searchParams.get("page") === "1") {
-          page1Tries++;
-          if (page1Tries === 1) {
-            return {
-              ok: false,
-              status: 502,
-              text: async () => "bad gateway",
-            };
-          }
+      spawnSyncImpl: (cmd, args, options) => {
+        calls.push({ cmd, args, env: options.env });
+        if (calls.length === 1) {
           return {
-            ok: true,
-            status: 200,
-            json: async () => ({ total_count: 101, jobs: page1 }),
+            status: 1,
+            stdout: "",
+            stderr: "gh: Bad Gateway (HTTP 502)",
           };
         }
         return {
-          ok: true,
-          status: 200,
-          json: async () => ({ total_count: 101, jobs: page2 }),
+          status: 0,
+          stdout: JSON.stringify([
+            { total_count: 16, jobs: page1 },
+            { total_count: 16, jobs: page2 },
+          ]),
+          stderr: "",
         };
       },
     });
-    expect(jobs).toHaveLength(101);
-    expect(calls).toHaveLength(3);
-    expect(calls[0]).toContain("filter=all&per_page=100&page=1");
+    expect(calls).toHaveLength(2);
+    expect(calls[0].cmd).toBe("gh");
+    expect(calls[0].args).toEqual([
+      "api",
+      "--paginate",
+      "--slurp",
+      "repos/owner/repo/actions/runs/42/jobs?filter=all&per_page=100",
+    ]);
+    expect(calls[0].env.GH_TOKEN).toBe("test-token");
     expect(waits).toEqual([2_000]);
+    expect(jobs).toHaveLength(16);
+
+    const verdict = evaluateCiResult({
+      expectedNames: expected,
+      jobs,
+      needsResults: allNeedsOk,
+      maxAttempt: 2,
+    });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.failures[0]).toContain("attempt 2");
+    expect(verdict.failures[0]).toContain("cancelled");
+  });
+
+  it("fails closed when collected jobs differ from total_count", async () => {
+    const expected = expectedJobNames(workflowText);
+    await expect(
+      fetchWorkflowRunJobs({
+        repository: "owner/repo",
+        runId: "42",
+        token: "test-token",
+        spawnSyncImpl: () => ({
+          status: 0,
+          stdout: JSON.stringify([
+            { total_count: 16, jobs: allSucceededJobs(expected, 1) },
+          ]),
+          stderr: "",
+        }),
+      }),
+    ).rejects.toThrow(
+      /Incomplete Jobs API response: collected 15 jobs, expected total_count=16/,
+    );
+  });
+
+  it("never echoes raw API error bodies, headers, or token-like strings", async () => {
+    const fakeToken = "ghs_FAKE1234567890SECRETTOKEN";
+    let calls = 0;
+    let caught;
+    try {
+      await fetchWorkflowRunJobs({
+        repository: "owner/repo",
+        runId: "42",
+        token: fakeToken,
+        spawnSyncImpl: () => {
+          calls++;
+          return {
+            status: 1,
+            stdout: `{"message":"echo Authorization: Bearer ${fakeToken}"}`,
+            stderr: `gh: Bad credentials Authorization: Bearer ${fakeToken} (HTTP 401)`,
+          };
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(calls).toBe(1);
+    expect(caught?.message).toBe("GitHub Jobs API request failed (HTTP 401).");
+    expect(caught?.message).not.toContain(fakeToken);
+    expect(caught?.message).not.toContain("Authorization");
+
+    let jsonCaught;
+    try {
+      await fetchWorkflowRunJobs({
+        repository: "owner/repo",
+        runId: "42",
+        token: fakeToken,
+        spawnSyncImpl: () => ({
+          status: 0,
+          stdout: `not-json-${fakeToken}`,
+          stderr: "",
+        }),
+      });
+    } catch (error) {
+      jsonCaught = error;
+    }
+    expect(jsonCaught?.message).toBe("GitHub Jobs API returned invalid JSON.");
+    expect(jsonCaught?.message).not.toContain(fakeToken);
   });
 });
