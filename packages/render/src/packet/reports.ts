@@ -29,7 +29,7 @@ import type {
 } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds } from "./page.js";
-import { n, text } from "./svg.js";
+import { fieldTextLeft, n, text } from "./svg.js";
 import { reportNoteLines } from "./report-note-wrapping.js";
 import { reportDocumentContext } from "./document-report.js";
 import type { DocumentRowDraft } from "./document-types.js";
@@ -445,7 +445,7 @@ function reportNoteSvg(
 ): string[] {
   return notes.map((note, i) =>
     text(
-      b.x,
+      fieldTextLeft(b.x, note.value, 2.5),
       b.y + b.h - (notes.length - 1 - i) * 3.5,
       note.value,
       2.5,

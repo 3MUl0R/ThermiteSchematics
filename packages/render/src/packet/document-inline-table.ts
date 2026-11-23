@@ -7,7 +7,7 @@ import type { PaperPage, DrawingBounds } from "./types.js";
 import { reportCells, emitReportRow } from "./report-cells.js";
 import { reportNoteLines } from "./report-note-wrapping.js";
 import { reportDocumentContext } from "./document-report.js";
-import { text } from "./svg.js";
+import { fieldTextLeft, text } from "./svg.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { required } from "../presentation/util.js";
 
@@ -99,6 +99,8 @@ export function inlineTableContent(
     y += height;
   }
   for (const [i, line] of plan.notes.entries())
-    content.push(text(box.x, y + 4 + i * 3.5, line, 2.5));
+    content.push(
+      text(fieldTextLeft(box.x, line, 2.5), y + 4 + i * 3.5, line, 2.5),
+    );
   return { content: content.join(""), ...context.metadata(documentRows) };
 }

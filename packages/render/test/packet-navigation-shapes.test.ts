@@ -96,7 +96,8 @@ import {
   wrapNavigationText,
 } from "../src/packet/navigation-labels.js";
 import { communicationRowLayout } from "../src/packet/native-part-labels.js";
-import { printableTextMetrics } from "../src/text-metrics.js";
+import { fieldTextLeftShift } from "../src/packet/svg.js";
+import { measureText, printableTextMetrics } from "../src/text-metrics.js";
 it("reserves fixed maximum tokens and multiplicity in every mode and shape", () => {
   const r = maximumRepeatForms("SRC1", "functions", [3, 2], "100.D1");
   expect(
@@ -163,4 +164,66 @@ it("puts qualified port pointers on a separate line below repeated-body pointers
   expect(layout.lines[0]).toBe("N05 -> P1/S02.D2, P3/S04.A2");
   expect(layout.entries.every((e) => e.line === 1)).toBe(true);
   expect(layout.entries[0]!.x).toBe(0);
+});
+
+it("counts the first negative-bearing port entry left shift once so two JB1 references fit on one row (#551)", () => {
+  const target = { part: 3, sheet: 100, zone: "D6" };
+  const keys = [
+    "Ethernet uplink to remote panel A",
+    "Ethernet uplink to remote panel B",
+  ];
+  const [first, last] = keys.map((key) => `JB1 port ${key} → 100.D6`);
+  const m = printableTextMetrics(first!, 2.5);
+  const z = printableTextMetrics(last!, 2.5);
+  const startShift = fieldTextLeftShift(first!, 2.5);
+  const fitWidth =
+    startShift +
+    Math.max(m.advance, m.right) +
+    2 +
+    Math.max(z.advance, z.right) -
+    Math.min(0, z.left);
+  const width = fitWidth + 0.04;
+  const layout = communicationRowLayout(
+    {
+      deviceUid: "jb1",
+      label: "JB1",
+      targets: [target],
+      ports: keys.map((key) => ({ key, targets: [target] })),
+    },
+    width,
+    ["JB1 -> P3/S100.D6"],
+  );
+  expect(layout.lines).toHaveLength(2);
+  expect(layout.entries.map((e) => e.line)).toEqual([1, 1]);
+  expect(layout.entries[0]!.x).toBe(startShift);
+  expect(
+    layout.entries[1]!.x + Math.max(z.advance, z.right),
+  ).toBeLessThanOrEqual(width);
+});
+
+it("applies the measureText fallback budget to native port entries containing uncovered clusters (#551)", () => {
+  const target = { part: 3, sheet: 100, zone: "D6" };
+  const key = "🌐🌐🌐 uplink";
+  const value = `𝒿B1 port ${key} → 100.D6`;
+  const startShift = fieldTextLeftShift(value, 2.5);
+  const bundled = printableTextMetrics(value, 2.5);
+  const budget = measureText(value, 2.5).width;
+  expect(budget).toBeGreaterThan(bundled.advance);
+  const narrow = startShift + Math.max(bundled.advance, bundled.right) + 1;
+  expect(narrow).toBeLessThan(startShift + budget);
+  const row = {
+    deviceUid: "jb1",
+    label: "𝒿B1",
+    targets: [target],
+    ports: [{ key, targets: [target] }],
+  };
+  expect(() =>
+    communicationRowLayout(row, narrow, ["𝒿B1 -> P3/S100.D6"]),
+  ).toThrow("Native port entry cannot fit the reserved reference width");
+  const layout = communicationRowLayout(row, startShift + budget + 0.1, [
+    "𝒿B1 -> P3/S100.D6",
+  ]);
+  expect(layout.entries).toEqual([
+    { key, text: value, x: startShift, line: 1 },
+  ]);
 });

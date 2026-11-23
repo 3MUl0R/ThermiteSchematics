@@ -33,7 +33,13 @@ import type { RenderOutcome } from "../types.js";
 import type { Draft, PaperPage, DrawingBounds } from "./types.js";
 import { failure, record } from "./errors.js";
 import { bounds, zone } from "./page.js";
-import { n, text, requestNoteText } from "./svg.js";
+import {
+  fieldTextLeft,
+  fieldTextRightExtent,
+  n,
+  text,
+  requestNoteText,
+} from "./svg.js";
 import { resolveCircuitContinuations } from "./continuations.js";
 
 export async function circuitDrafts(
@@ -102,6 +108,24 @@ function circuitCellRefs(
   }));
 }
 
+const regularFieldWidth = (line: string, size: number) =>
+  fieldTextRightExtent(line, size, false);
+
+function circuitHeadingSvg(lines: readonly string[], x: number, y: number) {
+  return lines
+    .map((s, i) =>
+      text(
+        fieldTextLeft(x, s, 3.5, true),
+        y + 3.5 + i * 4.5,
+        s,
+        3.5,
+        "start",
+        700,
+      ),
+    )
+    .join("");
+}
+
 async function circuitDraftsUnchecked(
   ir: Readonly<ElectricalIr>,
   request: CircuitViewRequest,
@@ -114,7 +138,9 @@ async function circuitDraftsUnchecked(
   const capacity = headingCapacity(title, presentation);
   if (capacity) return capacity;
   const b = bounds(title, page);
-  const notes = prepared.notes.flatMap((s) => circuitTextLines(s, b.w));
+  const notes = prepared.notes.flatMap((s) =>
+    circuitTextLines(s, b.w, 2.5, regularFieldWidth),
+  );
   const { headingLines, headerHeight, available } = circuitViewFootprint(
     prepared.title,
     b.w,
@@ -141,9 +167,7 @@ async function circuitDraftsUnchecked(
     links: [],
     note: "Source-selected circuits · [+N]: connections outside group",
     coverage: [],
-    content: headingLines
-      .map((s, i) => text(b.x, b.y + 3.5 + i * 4.5, s, 3.5, "start", 700))
-      .join(""),
+    content: circuitHeadingSvg(headingLines, b.x, b.y),
   });
   drafts.push(newDraft());
   const fits = (group: CircuitDrawing) => {
@@ -336,7 +360,9 @@ function appendCircuitNotes(
     noteHeight = 5 + notes.length * 3.5;
   if (noteOffset + noteHeight > available && prepared.columns === 2) {
     const narrow = prepared.notes.flatMap((s) =>
-      circuitTextLines(s, columnWidth),
+      circuitTextLines(s, columnWidth, 2.5, (line, size) =>
+        fieldTextRightExtent(line, size, false),
+      ),
     );
     if (cursors[1]! + 5 + narrow.length * 3.5 <= available) {
       printedNotes = narrow;
@@ -355,12 +381,21 @@ function appendCircuitNotes(
     noteColumn = 0;
     noteOffset = 0;
   }
-  const x = b.x + noteColumn * (columnWidth + gap),
+  const baseX = b.x + noteColumn * (columnWidth + gap),
     y = b.y + headerHeight + noteOffset;
   drafts.at(-1)!.content +=
-    text(x, y + 3, "View notes", 2.7, "start", 700) +
+    text(
+      fieldTextLeft(baseX, "View notes", 2.7, true),
+      y + 3,
+      "View notes",
+      2.7,
+      "start",
+      700,
+    ) +
     printedNotes
-      .map((s, i) => requestNoteText(x, y + 7 + i * 3.5, s, 2.5))
+      .map((s, i) =>
+        requestNoteText(fieldTextLeft(baseX, s, 2.5), y + 7 + i * 3.5, s, 2.5),
+      )
       .join("");
   return { ok: true, value: undefined };
 }
@@ -375,8 +410,12 @@ interface CircuitNoteLayout {
 }
 
 function groupHeading(x: number, y: number, label: string, id: string): string {
-  return text(x, y, label, 2.7, "start", 700).replace(
-    "<text ",
-    `<text data-circuit-source-heading="${attr(id)}" `,
-  );
+  return text(
+    fieldTextLeft(x, label, 2.7, true),
+    y,
+    label,
+    2.7,
+    "start",
+    700,
+  ).replace("<text ", `<text data-circuit-source-heading="${attr(id)}" `);
 }
