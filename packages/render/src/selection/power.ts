@@ -4,7 +4,7 @@ import type { NetResult } from "@thermite/query";
 import { incompletePowerPathError } from "../errors.js";
 import { withStoppedTerminals, cloneFunction } from "../internal.js";
 import { functionIdKey, terminalIdKey } from "../ordering.js";
-import type { DeviceTypeSymbolMapping } from "../symbols/mappings.js";
+import { protectiveEarthRoles } from "../symbols/mappings.js";
 import {
   exactPotentialCandidates,
   mappedBoundaryCandidates,
@@ -24,20 +24,6 @@ interface RootLane {
   readonly terminal: TerminalId;
   readonly protectiveEarth: boolean;
   readonly authoredProtectiveEarth: boolean;
-}
-
-function protectiveEarthRoles(
-  mappings: readonly DeviceTypeSymbolMapping[],
-): ReadonlySet<string> {
-  return new Set(
-    mappings.flatMap((mapping) =>
-      mapping.boundaryTerminals
-        .filter(
-          ({ boundaryKind }) => boundaryKind === "protective-earth-source",
-        )
-        .map(({ requiredRole }) => requiredRole),
-    ),
-  );
 }
 
 function rootLane(

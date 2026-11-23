@@ -1,6 +1,18 @@
 import { UNSELECTED_ATTACHMENT_STROKE_MM } from "./attachment-stroke.js";
+import {
+  CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
+  projectDeviceTypeSymbolMappings,
+  protectiveEarthRoles,
+} from "./mappings.js";
 import { symbolProfile } from "./profiles.js";
-import type { IrDeviceType, IrFunction } from "@thermite/compiler";
+import type {
+  ElectricalIr,
+  IrDeviceType,
+  IrDeviceTypeTerminal,
+  IrFunction,
+  IrTerminal,
+  TerminalId,
+} from "@thermite/compiler";
 import { symbolFunctionStateMismatch } from "@thermite/compiler";
 import {
   COUPLED_WINDING_AMPLITUDE_MM,
@@ -119,7 +131,229 @@ function receptacleMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   return earth.length === 1 ? "receptacle-with-earth" : "receptacle";
 }
 
-export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
+export interface CircuitMarkContext {
+  readonly ir?: Readonly<ElectricalIr>;
+}
+
+interface FunctionTerminalFact {
+  readonly id: TerminalId;
+  readonly spec: IrDeviceTypeTerminal | undefined;
+  readonly irTerminal: IrTerminal | undefined;
+  readonly role: string | undefined;
+  readonly roles: readonly string[];
+  readonly rating: IrDeviceTypeTerminal["rating"];
+}
+
+function sameTerminalId(
+  a: TerminalId | undefined,
+  b: TerminalId | undefined,
+): boolean {
+  return (
+    a !== undefined &&
+    b !== undefined &&
+    a.deviceUid === b.deviceUid &&
+    a.terminalKey === b.terminalKey
+  );
+}
+
+function functionTerminalFacts(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): FunctionTerminalFact[] {
+  return f.terminals.map((id) => {
+    const spec = type.terminals.find((t) => t.key === id.terminalKey);
+    const irTerminal = context?.ir?.terminals.find((t) =>
+      sameTerminalId(t.id, id),
+    );
+    const roles = [
+      ...new Set(
+        [spec?.role, irTerminal?.role].filter(
+          (role): role is string => typeof role === "string",
+        ),
+      ),
+    ];
+    return {
+      id,
+      spec,
+      irTerminal,
+      role: spec?.role ?? irTerminal?.role,
+      roles,
+      rating: spec?.rating ?? irTerminal?.rating,
+    };
+  });
+}
+
+const AC_SINGLE_PHASE_ROLES = new Set([
+  "aclineinput",
+  "acinputreturn",
+  "acneutral",
+]);
+const AC_THREE_PHASE_ROLE_SETS = [
+  ["phase1input", "phase2input", "phase3input"],
+  ["phaseuinput", "phasevinput", "phasewinput"],
+] as const;
+/**
+ * Closed set of normalized earth roles for `thermite:dc-supply` qualifier
+ * classification (exact match after lowercasing and stripping non-alphanumeric
+ * characters; never tokenized or substring-matched). Combined with normalized
+ * `protectiveEarthRoles()` from the symbol mappings. Intentionally maintained
+ * as an independent copy from `evals/draw/qualifier-oracle.mjs`.
+ * Do not add "ground" or "gnd": a supply ground can be a return.
+ */
+const DC_SUPPLY_EARTH_ROLES = Object.freeze([
+  "protectiveearth",
+  "pe",
+  "functionalearth",
+  "fe",
+  "earth",
+  "chassisground",
+  "chassisearth",
+] as const);
+
+function normalizeDcSupplyRole(role: string | undefined): string {
+  return (role ?? "").toLowerCase().replace(/[^a-z0-9]+/gu, "");
+}
+
+function closedEarthRoles(context?: CircuitMarkContext): ReadonlySet<string> {
+  const canonical = protectiveEarthRoles(
+    context?.ir
+      ? [
+          ...CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
+          ...projectDeviceTypeSymbolMappings(context.ir),
+        ]
+      : CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
+  );
+  const roles = new Set<string>(DC_SUPPLY_EARTH_ROLES);
+  for (const role of canonical) roles.add(normalizeDcSupplyRole(role));
+  return roles;
+}
+
+function isAuxiliaryOrNonPowerRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  return (
+    normalized.startsWith("aux") ||
+    normalized.startsWith("shield") ||
+    normalized === "noconnection"
+  );
+}
+
+function isDcRole(role: string | undefined): boolean {
+  return normalizeDcSupplyRole(role).startsWith("dc");
+}
+
+function isAcRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  return normalized.startsWith("ac") || normalized.startsWith("phase");
+}
+
+function isCurrentCarryingRole(role: string | undefined): boolean {
+  const normalized = normalizeDcSupplyRole(role);
+  if (!normalized || isAuxiliaryOrNonPowerRole(role)) return false;
+  return (
+    isAcRole(role) ||
+    isDcRole(role) ||
+    normalized.startsWith("neutral") ||
+    normalized.endsWith("neutral") ||
+    normalized.startsWith("return") ||
+    normalized.endsWith("return")
+  );
+}
+
+function isEarthTerminal(
+  terminal: FunctionTerminalFact,
+  earthRoles: ReadonlySet<string>,
+  context?: CircuitMarkContext,
+): boolean {
+  if (
+    terminal.roles.some((role) => earthRoles.has(normalizeDcSupplyRole(role)))
+  )
+    return true;
+  if (terminal.roles.some((role) => isCurrentCarryingRole(role))) return false;
+  return Boolean(
+    context?.ir?.potentials.some(
+      (p) =>
+        p.electrical.polarity === "protective_earth" &&
+        sameTerminalId(p.terminal, terminal.id),
+    ),
+  );
+}
+
+function dcSupplyInputMark(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): CircuitMark {
+  const terminals = functionTerminalFacts(type, f, context);
+  const earthRoles = closedEarthRoles(context);
+  const currentTerminals = terminals.filter(
+    (t) => !isEarthTerminal(t, earthRoles, context),
+  );
+  if (currentTerminals.length < 2) return "load";
+  if (
+    currentTerminals.some(
+      (t) =>
+        t.rating?.voltage_type === "DC" ||
+        t.roles.some(
+          (role) => isDcRole(role) || isAuxiliaryOrNonPowerRole(role),
+        ),
+    )
+  )
+    return "load";
+  const currentRoles = currentTerminals.map((t) =>
+    normalizeDcSupplyRole(t.role),
+  );
+  const acByRole =
+    currentTerminals.length === 2
+      ? currentRoles.every((r) => AC_SINGLE_PHASE_ROLES.has(r)) &&
+        currentRoles.includes("aclineinput")
+      : currentTerminals.length === 3 &&
+        AC_THREE_PHASE_ROLE_SETS.some((set) =>
+          set.every((role) => currentRoles.includes(role)),
+        );
+  if (acByRole) return "ac-input";
+  if (currentTerminals.every((t) => t.rating?.voltage_type === "AC"))
+    return "ac-input";
+  return "load";
+}
+
+function dcSupplyOutputMark(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): CircuitMark {
+  const terminals = functionTerminalFacts(type, f, context);
+  const earthRoles = closedEarthRoles(context);
+  const nonDcOrAc = terminals.some(
+    (t) =>
+      isEarthTerminal(t, earthRoles, context) ||
+      t.roles.some(
+        (role) => isAuxiliaryOrNonPowerRole(role) || isAcRole(role),
+      ) ||
+      t.rating?.voltage_type === "AC",
+  );
+  return nonDcOrAc ? "source" : "dc-output";
+}
+
+function dcSupplyMark(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): CircuitMark | undefined {
+  const count = f.terminals.length;
+  if (f.kind === "load" && (count === 2 || count === 3))
+    return dcSupplyInputMark(type, f, context);
+  if (f.kind === "source") {
+    if (count === 2) return dcSupplyOutputMark(type, f, context);
+    if (count >= 1 && count <= 4) return "source";
+  }
+}
+
+export function circuitMark(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): CircuitMark {
   const count = f.terminals.length;
   const explicit =
     type.circuitSymbols && Object.hasOwn(type.circuitSymbols, f.id.functionKey)
@@ -215,6 +449,10 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
       (f.kind === "channel" && f.direction === "output" && count === 1))
   )
     return "sensor-3wire";
+  if (profile === "thermite:dc-supply") {
+    const dcSupply = dcSupplyMark(type, f, context);
+    if (dcSupply) return dcSupply;
+  }
   if (f.kind === "load") {
     if (profile === "thermite:motor-3ph" && count === 3) return "motor";
     if (profile === "thermite:motor" && count === 2) return "motor";
@@ -224,24 +462,16 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
     if (profile === "thermite:receptacle" && [2, 3].includes(count))
       return receptacleMark(type, f);
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && count === 2) return "dc-output";
     if (
-      ["thermite:dc-supply", "thermite:relay", "thermite:io-module"].includes(
-        profile,
-      ) &&
+      ["thermite:relay", "thermite:io-module"].includes(profile) &&
       [2, 3].includes(count)
     )
       return "load";
   }
   if (f.kind === "source") {
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && count === 2) return "dc-output";
     if (
-      [
-        "thermite:dc-supply",
-        "thermite:power-source",
-        "thermite:io-module",
-      ].includes(profile) &&
+      ["thermite:power-source", "thermite:io-module"].includes(profile) &&
       count >= 1 &&
       count <= 4
     )

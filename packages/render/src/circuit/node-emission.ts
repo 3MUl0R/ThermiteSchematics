@@ -127,7 +127,8 @@ function nodeEmissionBase(
       (f) =>
         ["source", "load", "channel", "other"].includes(f.kind) &&
         !["motor", "heater", "lamp", "thermocouple", "fuse"].includes(
-          circuitMark(node.type, f),
+          node.rows.find((row) => row.f.id.functionKey === f.id.functionKey)
+            ?.mark ?? circuitMark(node.type, f),
         ),
     );
   if (block)
@@ -355,10 +356,12 @@ function nodeFooters(state: EmissionState) {
     obstacles,
     captionBoxes,
   } = state;
+  const multiLine = node.relationLabels.length > 1;
+  let minTop = bounds.top;
   const footers = node.relationLabels.map((value, i) => {
     const y =
       node.height -
-      (vertical ? 7 : 1) -
+      (vertical ? 7 : multiLine ? 2 : 1) -
       (node.relationLabels.length - 1 - i) * 3.1;
     const p = ownerCaption(
       value,
@@ -367,10 +370,11 @@ function nodeFooters(state: EmissionState) {
       2.5,
       vertical && coilRow ? designationAnchor : "middle",
       false,
-      bounds,
+      multiLine ? { ...bounds, top: minTop } : bounds,
       obstacles,
       captionBoxes,
     );
+    if (multiLine) minTop = Math.max(minTop, p.box.bottom + 0.3);
     captionBoxes.push(p.box);
     return { ...p, value };
   });

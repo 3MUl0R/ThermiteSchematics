@@ -74,9 +74,31 @@ same diagnostics. Old types without the map acquire neither field.
 Pressure and float contact marks depict an actuator together with the authored
 normal contact state. The sensor/probe and receptacle marks identify an interface;
 they do not infer pin roles, probe technology, float behavior or GFCI protection.
-`ac-input` must be explicitly chosen when AC conversion is known. A two-terminal
-`thermite:dc-supply` source uses the DC output mark; the input retains the generic
-power mark unless explicitly bound to `ac-input`.
+A two-terminal `thermite:dc-supply` source uses the DC output mark unless its
+terminals declare AC, earth or auxiliary facts. A two- or three-terminal
+`thermite:dc-supply` load ignores earth terminals completely in both directions
+— an earth terminal neither establishes AC nor vetoes it (a DC rating on an
+earth terminal does not suppress a complete AC role pair or AC-rated pair on
+the current-carrying terminals), nor counts toward the terminal count needed for
+rating-based AC. The load uses `ac-input` when its remaining current-carrying
+(non-earth, non-auxiliary) terminals (at least two) establish an AC input
+without DC or auxiliary conflicts — either by complete native AC input roles or
+by every non-earth input terminal declaring `rating.voltage_type: "AC"` (or when
+explicitly bound via `circuitSymbols`) — and otherwise retains the generic power
+mark (`load`). Every `thermite:dc-supply` role check (AC single-phase and
+three-phase pairs, `ac`/`phase`/`dc`/`aux` prefixes, non-power roles, and earth)
+compares normalized roles (lowercased with all non-alphanumeric characters
+removed). Earth classification uses only compiled IR facts: a terminal is
+earth if its normalized role exactly equals a member of the closed earth
+role set (the canonical `protective-earth-source` mapping roles plus
+`protectiveearth`, `pe`, `functionalearth`, `fe`, `earth`, `chassisground`, and
+`chassisearth`; `"ground"` and `"gnd"` are intentionally excluded because a
+supply ground can be a return), or if it is anchored to a `protective_earth`
+potential in the IR without an authored current-carrying role (an authored AC,
+DC, phase, neutral or return role takes precedence over a `protective_earth`
+potential anchor, so a PEN-style return remains current-carrying). Drawing marks
+— including an `earth` mark on a separate bus function — never classify a
+terminal as earth.
 
 A `thermite:transformer` circuit block places its primary load windings opposite
 its secondary source windings on one shared magnetic core. Each winding retains

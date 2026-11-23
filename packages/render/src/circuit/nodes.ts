@@ -154,16 +154,16 @@ function nodeInitial(spec: NodeSpec, index: number, context: NodeContext) {
 }
 
 function nodeDrawingFunctions(state: BuildState) {
-  const { functions, coupled, type } = state;
+  const { ir, functions, coupled, type } = state;
   const drawingFunctions = coupled
     ? [
-        ...functions.filter((f) => circuitMark(type, f) === "winding"),
-        ...functions.filter((f) => circuitMark(type, f) !== "winding"),
+        ...functions.filter((f) => circuitMark(type, f, { ir }) === "winding"),
+        ...functions.filter((f) => circuitMark(type, f, { ir }) !== "winding"),
       ]
     : symbolProfile(type) === "thermite:sensor-3wire"
       ? functions.map((f) => {
           if (f.kind !== "load" || f.terminals.length !== 2) return f;
-          if (circuitMark(type, f) !== "sensor-3wire") return f;
+          if (circuitMark(type, f, { ir }) !== "sensor-3wire") return f;
           const supplied = resolveSensorSupply(
             f.terminals.map((t) => ({
               key: t.terminalKey,
@@ -188,6 +188,7 @@ function nodeDrawingFunctions(state: BuildState) {
 
 function nodeFunctionRow(f: IrFunction, state: BuildState) {
   const {
+    ir,
     type,
     device,
     vertical,
@@ -199,7 +200,7 @@ function nodeFunctionRow(f: IrFunction, state: BuildState) {
     oneSidedFunction,
   } = state;
   let { slot } = state;
-  const mark = circuitMark(type, f);
+  const mark = circuitMark(type, f, { ir });
   const oneSided = oneSidedFunction(f, mark);
   const channelLines =
     f.kind === "channel" ? channelLabelLines(device, f, type) : undefined;

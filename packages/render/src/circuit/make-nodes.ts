@@ -138,7 +138,7 @@ function boundaryTerminalSide(
           (v) =>
             v.id === ir.devices.find((d) => d.uid === f.id.deviceUid)!.typeId,
         )!;
-        return oneSidedFunction(f, circuitMark(owner, f))
+        return oneSidedFunction(f, circuitMark(owner, f, { ir }))
           ? f.kind === "source" ||
             (f.kind === "channel" && f.direction === "output")
             ? "EAST"
@@ -180,7 +180,7 @@ function nodeOwnerSpec(uid: string, state: SelectionState): NodeSpec[] {
       if (
         f.kind !== "bus" ||
         f.terminals.length !== 1 ||
-        !["terminal", "earth"].includes(circuitMark(type, f))
+        !["terminal", "earth"].includes(circuitMark(type, f, { ir }))
       )
         throw new Error(
           `Distributed terminal layout requires single-terminal bus/earth functions on ${device.designation}.`,

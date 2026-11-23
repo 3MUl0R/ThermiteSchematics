@@ -402,7 +402,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths.",
+        "Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths.",
       async check() {
         // Why redaction is needed: these reports carry this machine's host
         // name and absolute paths.
@@ -1551,11 +1551,11 @@ const module: FactModule = {
   ],
   unexecuted: new Map([
     [
-      "Never install/build in a downloaded runtime.",
+      "Never install/build a runtime.",
       "Instruction about runtime packages, which this source-checkout suite does not use.",
     ],
     [
-      "In source run `bun install --frozen-lockfile && bun run build` before use and after changes.",
+      "In source run `bun install --frozen-lockfile && bun run build` before/after edits.",
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
     [
@@ -1563,15 +1563,12 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it (search and public library GET examples in `thermite guide libraries`).",
+      "Draft bug/gap/doc issues locally unless asked to file them (search/GET examples: `thermite guide libraries`).",
       "Contribution process; no runtime behavior.",
     ],
+    ["Never patch runtimes.", "Contribution process; no runtime behavior."],
     [
-      "Never patch downloaded runtimes.",
-      "Contribution process; no runtime behavior.",
-    ],
-    [
-      "Fix a separate engine checkout; follow its AGENTS.md/CONTRIBUTING.md for PRs.",
+      "Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.",
       "Contribution process; no runtime behavior.",
     ],
     [
@@ -1579,7 +1576,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Humans accept the CLA; agents never sign it.",
+      "Only humans accept the CLA.",
       "Contribution policy; no runtime behavior.",
     ],
     [
@@ -1595,7 +1592,7 @@ const module: FactModule = {
       "Authoring principle; the printing facts show these are generated.",
     ],
     [
-      "Never hand-author schematic geometry, infer engineering repairs or suppress compiler diagnostics.",
+      "Never hand-author geometry, infer engineering repairs or suppress diagnostics.",
       "Authoring prohibition; no runtime behavior.",
     ],
     [

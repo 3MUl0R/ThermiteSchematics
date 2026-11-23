@@ -65,8 +65,8 @@ import wiring from "./project-guide/wiring-circuits.js";
 import continuations from "./project-guide/continuations.js";
 import drawingFrames from "./project-guide/drawing-frames.js";
 import documentCompanions from "./project-guide/document-companions.js";
+import dcSupplyMarks from "./project-guide/dc-supply-marks.js";
 import { repairControls } from "./project-guide/repair-controls.js";
-
 import {
   guideBytes,
   projectGuide,
@@ -95,6 +95,7 @@ const MODULES: Record<string, FactModule> = {
   continuations,
   "document-companions": documentCompanions,
   "drawing-frames": drawingFrames,
+  "dc-supply-marks": dcSupplyMarks,
   "project-workflows": { facts: workflowFacts, unexecuted: new Map() },
 };
 const FACTS = Object.entries(MODULES).flatMap(([module, { facts }]) =>
