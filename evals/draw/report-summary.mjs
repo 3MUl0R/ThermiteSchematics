@@ -49,6 +49,7 @@ const completeVersions = new Set([
   "5.41",
   "5.42",
   "5.43",
+  "5.44",
   EVALS_VERSION,
 ]);
 
