@@ -115,21 +115,6 @@ export function emitDirectLoopPorts(context: LoopEmissionContext) {
     context;
   for (const p of list) {
     if (emitDirectLoopSpecialPort(p, context)) continue;
-    out.push(
-      `<circle ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key({ deviceUid: uid, terminalKey: p.terminal }))}" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
-    );
-    out.push(
-      vertical
-        ? text(p.x + 1.5, p.side === "in" ? 4 : node.height! - 2, p.terminal)
-        : text(
-            p.side === "in" ? 2 : node.width! - 2,
-            p.y - 1.5,
-            p.terminal,
-            2.7,
-            p.side === "in" ? "start" : "end",
-          ),
-    );
-    emitDirectLoopRole(p, context);
     const twin = list.find(
       (q) =>
         !q.suppressed &&
@@ -137,6 +122,28 @@ export function emitDirectLoopPorts(context: LoopEmissionContext) {
         q.terminal === p.terminal &&
         q.side !== p.side,
     );
+    out.push(
+      `<circle ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key({ deviceUid: uid, terminalKey: p.terminal }))}" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>`,
+    );
+    // Pass-through terminals keep both routing ports but print one terminal
+    // number per physical terminal per body. Label the entry ("in": WEST in
+    // left-to-right, NORTH in top-to-bottom) port so the caption sits inside
+    // the body clear of both conductors and the feed-through stroke, matching
+    // reading order and circuit-view terminal strips; single-port terminals
+    // (no visible twin, including assembly-opposite ports) stay unchanged.
+    if (!twin || p.side === "in")
+      out.push(
+        vertical
+          ? text(p.x + 1.5, p.side === "in" ? 4 : node.height! - 2, p.terminal)
+          : text(
+              p.side === "in" ? 2 : node.width! - 2,
+              p.y - 1.5,
+              p.terminal,
+              2.7,
+              p.side === "in" ? "start" : "end",
+            ),
+      );
+    emitDirectLoopRole(p, context);
     if (twin && p.side === "in")
       out.push(
         `<path d="M ${n(p.x)} ${n(p.y)} L ${n(twin.x)} ${n(twin.y)}" stroke="#344054" stroke-width="0.3" fill="none"/>`,

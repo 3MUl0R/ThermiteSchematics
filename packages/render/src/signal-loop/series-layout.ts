@@ -507,6 +507,28 @@ function feedThroughLinks(info: ReturnType<typeof deviceNode>) {
     .join("");
 }
 
+// Pass-through terminals keep both routing ports but print one terminal number
+// per physical terminal per body. Prefer the entry face (WEST in left-to-right,
+// NORTH in top-to-bottom) deterministically by port side then port ID so the
+// label sits inside the body clear of both conductors and the feed-through
+// stroke, regardless of edge traversal order; single-port terminals stay as-is.
+function labelledSeriesPortIds(ports: readonly Port[]): ReadonlySet<string> {
+  const chosen = new Map<string, Port>();
+  const rank = (side: Port["side"]) =>
+    side === "WEST" || side === "NORTH" ? 0 : 1;
+  for (const port of ports) {
+    const k = key(port.terminal);
+    const prev = chosen.get(k);
+    if (
+      !prev ||
+      rank(port.side) < rank(prev.side) ||
+      (rank(port.side) === rank(prev.side) && compare(port.id, prev.id) < 0)
+    )
+      chosen.set(k, port);
+  }
+  return new Set([...chosen.values()].map((p) => p.id));
+}
+
 function emitNode(
   info: ReturnType<typeof deviceNode>,
   placed: ElkNode,
@@ -530,10 +552,28 @@ function emitNode(
     info.caption,
     info.pressure ? 21 : info.source ? 15 : 0,
   );
+  const labelled = labelledSeriesPortIds(info.ports);
   const ports = info.ports
     .map(
       (p) =>
-        `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${vertical ? text(p.x + 1.5, p.y === 0 ? 4 : h - 2, p.terminal.terminalKey, 2.7) : text(p.x === 0 ? 2 : w - 2, p.y - 1.5, p.terminal.terminalKey, 2.7, p.x === 0 ? "start" : "end")}</g>`,
+        `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${
+          labelled.has(p.id)
+            ? vertical
+              ? text(
+                  p.x + 1.5,
+                  p.y === 0 ? 4 : h - 2,
+                  p.terminal.terminalKey,
+                  2.7,
+                )
+              : text(
+                  p.x === 0 ? 2 : w - 2,
+                  p.y - 1.5,
+                  p.terminal.terminalKey,
+                  2.7,
+                  p.x === 0 ? "start" : "end",
+                )
+            : ""
+        }</g>`,
     )
     .join("");
   return `<g data-device-uid="${attr(info.uid)}" data-body-width="${n(w)}" data-body-height="${n(h)}" transform="translate(${n(need(placed.x))} ${n(need(placed.y))})">${body}${mark}${caption}${feedThroughLinks(info)}${ports}</g>`;
