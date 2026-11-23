@@ -1,6 +1,7 @@
 export { requireReportCells } from "./identifier-errors.mjs";
 export { internalVocabulary } from "./printed-vocabulary.mjs";
 import { netLabelFindings } from "./net-label-oracle.mjs";
+import { duplicateTerminalCaption } from "./terminal-caption-duplicate.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { circuitFanInJogs, shortRouteJogs } from "./circuit-fan-in.mjs";
@@ -348,7 +349,7 @@ export function terminalText(g, ir) {
     const a = ts[i];
     const ownership = captionOwnershipFinding(a);
     if (ownership) out.push(ownership);
-    if (caption(a) && /^(\S+)\s+\1$/.test(a.text))
+    if (caption(a) && duplicateTerminalCaption(a))
       out.push(issue("duplicate-terminal-caption", a, { text: a.text }));
     for (let j = i + 1; j < ts.length; j++) {
       const b = ts[j],

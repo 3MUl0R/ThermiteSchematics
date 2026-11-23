@@ -32,12 +32,30 @@ export function textClipAndOwner(c) {
 }
 
 export function loopTerminalOwner(e, deviceUid) {
+  const text = e.closest("text");
+  if (
+    !text ||
+    e.closest(
+      '[data-tag-field],[data-pin-terminal],[data-tag-kind="legend"],[data-tag-kind="reference"],[data-device-legend],[data-device-legend-entry],[data-device-reference-entry],.off-view-annotation',
+    )
+  )
+    return undefined;
+  const roles = [e, text]
+    .flatMap((n) => [
+      n.getAttribute("class"),
+      n.getAttribute("role"),
+      n.getAttribute("data-role"),
+      n.getAttribute("data-label-role"),
+      n.getAttribute("data-circuit-role"),
+    ])
+    .filter(Boolean)
+    .join(" ");
+  if (/(?:^|[\s_-])(?:description|legend)(?:$|[\s_-])/i.test(roles))
+    return undefined;
   const wrapped = e.closest("[data-loop-terminal]");
   const sibling =
     !wrapped &&
     e.matches("text") &&
-    !e.hasAttribute("data-tag-field") &&
-    !e.hasAttribute("data-pin-terminal") &&
     e.previousElementSibling?.matches("circle[data-loop-terminal]")
       ? e.previousElementSibling
       : null;
@@ -91,7 +109,7 @@ export function textSemanticOwner(c) {
   }
   const role =
     e.getAttribute("class") ?? e.closest("text")?.getAttribute("class") ?? "";
-  if (!id.terminal) {
+  if (!id.terminal && (!id.labelRole || id.labelRole === "terminal")) {
     const loopOwner = h.loopTerminalOwner(e, id.deviceUid);
     if (loopOwner) {
       id.deviceUid ??= loopOwner.deviceUid;
