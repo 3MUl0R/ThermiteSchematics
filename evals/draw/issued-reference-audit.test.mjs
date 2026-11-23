@@ -768,3 +768,82 @@ it("5.40 validates multi-sheet destination sets in linear time without exponenti
     peerReferenceFindings(1, { texts: [badNote] }, [obl]).map((f) => f.kind),
   ).toContain("issued-peer-reference-unbound");
 });
+
+it("5.44 flags a conductor peer note sitting nearer a foreign conductor segment than its owner", () => {
+  const obl = {
+    kind: "conductor-peer",
+    source: ["PS1.+", "W-CTL-012", "S2.11"],
+    ownerLabel: "PS1.+",
+    owners: [{ x: 53.35, y: 95.35, w: 1.3, h: 1.3 }],
+    supports: [{ x: 72, y: 96, w: 31, h: 0 }],
+    foreignOwners: [{ x: 102.35, y: 95.35, w: 1.3, h: 1.3 }],
+    foreignConductors: [{ x: 75, y: 65, w: 0, h: 31 }],
+    values: ["W-CTL-012 · PS1.+ → S2.11 07.B2"],
+    compactValues: ["→ S2.11 07.B2"],
+  };
+  const note = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(obl.source),
+    text: obl.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Nearer foreign vertical run (1.7 mm) than own horizontal run (4.2 mm).
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 76.7, y: 89.8, w: 20, h: 2 })] },
+      [obl],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+  // Nearer own terminal/run (2.9 mm) than foreign conductor (3.4 mm).
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 55.6, y: 99.4, w: 30, h: 2 })] },
+      [obl],
+    ),
+  ).toEqual([]);
+});
+
+it("5.44 excludes coincident shared-stem foreign runs while flagging distinct nearer runs", () => {
+  const base = {
+    kind: "conductor-peer",
+    source: ["PS1.+", "W-CTL-012", "S2.11"],
+    ownerLabel: "PS1.+",
+    owners: [{ x: 70, y: 95.35, w: 1.3, h: 1.3 }],
+    supports: [{ x: 72, y: 96, w: 31, h: 0 }],
+    foreignConductors: [
+      { x: 72, y: 96, w: 4, h: 0 },
+      { x: 76, y: 65, w: 0, h: 31 },
+    ],
+    values: ["W-CTL-012 · PS1.+ → S2.11 07.B2"],
+    compactValues: ["→ S2.11 07.B2"],
+  };
+  const compact = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(base.source),
+    text: base.compactValues[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Bare-compact note 1.74 mm from owner terminal and 1.0 mm from the shared stem [72, 76]:
+  // shared stem is excluded, while distinct vertical run at x=76 is 1.80 mm away -> passes.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [compact({ x: 73.0, y: 97.0, w: 1.5, h: 1.8 })] },
+      [base],
+    ),
+  ).toEqual([]);
+  // Moving beside the distinct foreign vertical run (0.5 mm away) still flags foreign owner.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [compact({ x: 76.5, y: 94.0, w: 4.0, h: 1.8 })] },
+      [base],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+});

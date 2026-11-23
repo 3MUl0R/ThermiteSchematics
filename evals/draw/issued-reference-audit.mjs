@@ -6,7 +6,12 @@ import { nativeRows } from "./m3-native.mjs";
 import { sufficient } from "./document-dependencies.mjs";
 import { extent, finding, groupBy, painted } from "./review-geometry.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
-import { boxGap, inOwnerReach, noteOwnerGap } from "./peer-owner-ink.mjs";
+import {
+  boxGap,
+  excludeCoincidentBoxes,
+  inOwnerReach,
+  noteOwnerGap,
+} from "./peer-owner-ink.mjs";
 import { measuredZone } from "./repeat-appearances.mjs";
 import { printedZones } from "./printed-zones.mjs";
 import { INK_ACCURACY_MM } from "./checks.mjs";
@@ -522,11 +527,16 @@ function auditMatchedOwnerProximity(
         named,
       }),
     );
-  if (!obligation.foreignOwners?.length || !lines.every((t) => t.bbox)) return;
+  const foreign = [
+    ...(obligation.foreignOwners ?? []),
+    ...excludeCoincidentBoxes(
+      obligation.foreignConductors ?? [],
+      obligation.supports ?? [],
+    ),
+  ];
+  if (!foreign.length || !lines.every((t) => t.bbox)) return;
   const box = noteRegion(lines);
-  const foreignGap = Math.min(
-    ...obligation.foreignOwners.map((owner) => boxGap(box, owner)),
-  );
+  const foreignGap = Math.min(...foreign.map((owner) => boxGap(box, owner)));
   if (foreignGap + INK_ACCURACY_MM < gap)
     result.push(
       finding("issued-peer-reference-foreign-owner", first, {

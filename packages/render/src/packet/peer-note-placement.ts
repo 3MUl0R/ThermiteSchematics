@@ -8,6 +8,7 @@ import {
   NAVIGATION_CLEARANCE_MM,
   searchNavigationSlot,
 } from "./navigation-slot-search.js";
+import { boxDistance } from "./navigation-symbols.js";
 import type { PeerReference } from "./peer-reference-ink.js";
 import type { NavigationShape } from "./navigation-types.js";
 import type { RenderedSheet } from "./types.js";
@@ -42,9 +43,12 @@ function searchPeerSlot(
   field: Rect,
   ink: ReturnType<typeof navigationObstacles>,
   anchors: readonly Rect[],
+  ownerTargetsFor: (shape: NavigationShape) => readonly Rect[],
   reachMm: (shape: NavigationShape) => number,
   fallback?: PeerNotePlacement["fallback"],
+  preferAnchorDistance = false,
 ): PeerNotePlacement | undefined {
+  const hasForeign = Boolean(entry.foreignOwners?.length);
   const found = searchNavigationSlot(
     forms,
     field,
@@ -58,14 +62,15 @@ function searchPeerSlot(
     false,
     (shape) => ({
       anchors,
+      ownerTargets: ownerTargetsFor(shape),
       gap: reachMm(shape),
       textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
+      ...(hasForeign ? { requireOwnerNearest: true } : {}),
+      ...(preferAnchorDistance ? { preferAnchorDistance: true } : {}),
       ...(fallback === "terminal-label-anchor"
         ? { requireOwnerNearest: true, maxOwnerGapMm: PEER_REACH_MM }
         : {}),
-      ...(entry.foreignOwners?.length
-        ? { foreignOwners: entry.foreignOwners }
-        : {}),
+      ...(hasForeign ? { foreignOwners: entry.foreignOwners } : {}),
     }),
   );
   return (
@@ -87,24 +92,34 @@ function place(
 ): PeerNotePlacement | undefined {
   const reachFor = (form: NavigationShape) =>
     unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM;
+  const ownMarks = entry.owners?.length ? entry.owners : [entry.owner];
+  const supports = [...(entry.along ?? []), ...(entry.captions ?? [])];
+  const namedTargets = [...ownMarks, ...supports];
+  const ownerTargetsFor = (form: NavigationShape) =>
+    unnamed.has(form.id) ? ownMarks : namedTargets;
   const near = searchPeerSlot(
     entry,
     shapes,
     field,
     ink,
     [entry.owner],
+    ownerTargetsFor,
     reachFor,
   );
   if (near) return near;
   const alternates = entry.owners?.filter((o) => o !== entry.owner) ?? [];
-  if (alternates.length) {
-    const alt = searchPeerSlot(entry, shapes, field, ink, alternates, reachFor);
-    if (alt) return alt;
-  }
-
-  // In a tight drawing the same conductor's painted stroke or existing
-  // continuation caption supplies a second anchor, always with the source named.
-  const supports = [...(entry.along ?? []), ...(entry.captions ?? [])];
+  const alt = alternates.length
+    ? searchPeerSlot(
+        entry,
+        shapes,
+        field,
+        ink,
+        alternates,
+        ownerTargetsFor,
+        reachFor,
+      )
+    : undefined;
+  if (alt) return alt;
   if (supports.length) {
     const named = alongPreference.flatMap((id) =>
       shapes.filter((s) => s.id === id),
@@ -115,7 +130,10 @@ function place(
       field,
       ink,
       supports,
+      () => namedTargets,
       () => PEER_REACH_MM,
+      undefined,
+      true,
     );
     if (alongHit) return alongHit;
   }
@@ -128,6 +146,7 @@ function place(
         field,
         ink,
         entry.terminalLabels,
+        () => namedTargets,
         () => FALLBACK_LABEL_REACH_MM,
         "terminal-label-anchor",
       )
@@ -186,6 +205,83 @@ function withPlacedInk(
   return { ink: [...ink.ink, ...boxes], texts: [...ink.texts, ...boxes] };
 }
 
+const COMFORTABLE_FOREIGN_MARGIN_MM = 0.5;
+
+function entryScore(entry: PeerReference, placed: PeerNotePlacement) {
+  const ownMarks = entry.owners?.length ? entry.owners : [entry.owner];
+  const supports = [...(entry.along ?? []), ...(entry.captions ?? [])];
+  const targets = unnamed.has(placed.shapeId)
+    ? ownMarks
+    : [...ownMarks, ...supports];
+  const ownerGap = Math.min(...targets.map((t) => boxDistance(placed.box, t)));
+  const margin = entry.foreignOwners?.length
+    ? Math.min(...entry.foreignOwners.map((f) => boxDistance(placed.box, f))) -
+      ownerGap
+    : Infinity;
+  return { margin, ownerGap };
+}
+
+function sharedOwnerReorders(
+  group: readonly PeerCandidate[],
+  placed: ReadonlyMap<number, PeerNotePlacement>,
+): PeerCandidate[][] {
+  const byOwner = new Map<string, number[]>();
+  group.forEach((c, pos) => {
+    const key = c.entry.ownerLabel ?? JSON.stringify(c.entry.owner);
+    const list = byOwner.get(key) ?? [];
+    list.push(pos);
+    byOwner.set(key, list);
+  });
+  const orders: PeerCandidate[][] = [];
+  for (const positions of byOwner.values()) {
+    if (positions.length < 2) continue;
+    const tight = positions.some((pos) => {
+      const c = required(group[pos], "Missing peer candidate");
+      const p = placed.get(c.index);
+      return (
+        p !== undefined &&
+        entryScore(c.entry, p).margin < COMFORTABLE_FOREIGN_MARGIN_MM
+      );
+    });
+    if (!tight) continue;
+    const reordered = [...group];
+    const reversed = [...positions].reverse();
+    positions.forEach((pos, i) => {
+      const from = required(reversed[i], "Missing peer index");
+      reordered[pos] = required(group[from], "Missing peer candidate");
+    });
+    orders.push(reordered);
+  }
+  return orders;
+}
+
+function betterSharedOrder(
+  group: readonly PeerCandidate[],
+  candidate: ReadonlyMap<number, PeerNotePlacement>,
+  baseline: ReadonlyMap<number, PeerNotePlacement>,
+) {
+  const score = (map: ReadonlyMap<number, PeerNotePlacement>) =>
+    group.map(({ index, entry }) =>
+      entryScore(entry, required(map.get(index), "Missing peer placement")),
+    );
+  const cand = score(candidate);
+  const base = score(baseline);
+  // Reject any reorder that introduces a worse minimum foreign margin.
+  const candMin = Math.min(...cand.map((s) => s.margin));
+  const baseMin = Math.min(...base.map((s) => s.margin));
+  if (candMin + 0.05 < baseMin) return false;
+  const candSorted = cand.map((s) => s.margin).sort((a, b) => a - b);
+  const baseSorted = base.map((s) => s.margin).sort((a, b) => a - b);
+  for (let i = 0; i < candSorted.length; i++) {
+    const diff = (candSorted[i] ?? 0) - (baseSorted[i] ?? 0);
+    if (Math.abs(diff) > 0.05) return diff > 0;
+  }
+  return (
+    Math.max(0, ...cand.map((s) => s.ownerGap)) + 0.05 <
+    Math.max(0, ...base.map((s) => s.ownerGap))
+  );
+}
+
 function tryPeerFamily(
   group: readonly PeerCandidate[],
   family: readonly string[],
@@ -201,11 +297,23 @@ function tryPeerFamily(
     ink,
     allowTerminalLabelFallback,
   );
-  if (forward.placed)
-    return {
-      placed: forward.placed,
-      ink: withPlacedInk(ink, forward.placed),
-    };
+  if (forward.placed) {
+    let best = forward.placed;
+    if (group.length > 1) {
+      for (const order of sharedOwnerReorders(group, best)) {
+        const attempt = tryPeerOrder(
+          order,
+          allowed,
+          field,
+          ink,
+          allowTerminalLabelFallback,
+        );
+        if (attempt.placed && betterSharedOrder(group, attempt.placed, best))
+          best = attempt.placed;
+      }
+    }
+    return { placed: best, ink: withPlacedInk(ink, best) };
+  }
   if (group.length > 1) {
     // Nearby captions can compete for the same slot. Retry in reverse order
     // within the same wording family before stepping down to a shorter family.
@@ -222,7 +330,7 @@ function tryPeerFamily(
         ink: withPlacedInk(ink, backward.placed),
       };
   }
-  return { failed: forward.failed };
+  return { failed: required(forward.failed, "Missing failed peer reference") };
 }
 
 function placePeerGroup(

@@ -8,7 +8,7 @@ export function boxGap(a, b) {
   );
 }
 
-function boundRoute(s, key) {
+function routeIdentity(s) {
   const [kind, ...ids] = s.edgeOwnerKey ?? [];
   const edge =
     kind === "cable-conductor"
@@ -17,10 +17,12 @@ function boundRoute(s, key) {
         ? ids[0]
         : undefined;
   const declaration = routeKey(s);
-  return (
-    (declaration ?? edge) === key &&
-    (!declaration || !edge || declaration === edge)
-  );
+  if (declaration && edge && declaration !== edge) return undefined;
+  return declaration ?? edge;
+}
+
+function boundRoute(s, key) {
+  return routeIdentity(s) === key;
 }
 
 export function conductorInk(g, element) {
@@ -34,6 +36,281 @@ export function conductorInk(g, element) {
       s.points?.length ? [s.points[0], s.points.at(-1)] : [],
     ),
   };
+}
+
+const ANGLE_SIN_TOL = 0.02;
+const FLOAT_TOL = 1e-3;
+const EPS = 1e-4;
+const ROUTE_INK_STEP_MM = 0.21;
+
+function subtractSpan(spans, cut0, cut1) {
+  const next = [];
+  for (const [a, b] of spans) {
+    if (cut1 <= a || cut0 >= b) {
+      next.push([a, b]);
+      continue;
+    }
+    if (cut0 > a) next.push([a, cut0]);
+    if (cut1 < b) next.push([cut1, b]);
+  }
+  return next;
+}
+
+function clipSegmentToRect(a, b, rect) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  let t0 = 0,
+    t1 = 1;
+  const clip = (p, q) => {
+    if (Math.abs(p) <= 1e-12) return q >= 0;
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  };
+  if (
+    !clip(-dx, a.x - rect.x) ||
+    !clip(dx, rect.x + rect.w - a.x) ||
+    !clip(-dy, a.y - rect.y) ||
+    !clip(dy, rect.y + rect.h - a.y)
+  )
+    return null;
+  return [
+    { x: a.x + dx * t0, y: a.y + dy * t0 },
+    { x: a.x + dx * t1, y: a.y + dy * t1 },
+  ];
+}
+
+function parseRouteSegments(d, m, clips) {
+  const tokens =
+    d.match(/[A-Za-z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g) ?? [];
+  const raw = [];
+  let i = 0,
+    cmd = "",
+    x = 0,
+    y = 0,
+    sx = 0,
+    sy = 0;
+  const num = () => Number(tokens[i++]);
+  while (i < tokens.length) {
+    if (/^[a-z]$/i.test(tokens[i])) cmd = tokens[i++];
+    const rel = cmd === cmd.toLowerCase(),
+      kind = cmd.toUpperCase(),
+      ox = x,
+      oy = y;
+    const px = () => num() + (rel ? ox : 0),
+      py = () => num() + (rel ? oy : 0);
+    if (kind === "Z") {
+      raw.push([
+        { x, y },
+        { x: sx, y: sy },
+      ]);
+      x = sx;
+      y = sy;
+      cmd = "";
+    } else if (kind === "M" || kind === "L") {
+      x = px();
+      y = py();
+      if (kind === "M") {
+        sx = x;
+        sy = y;
+        cmd = rel ? "l" : "L";
+      } else
+        raw.push([
+          { x: ox, y: oy },
+          { x, y },
+        ]);
+    } else if (kind === "H") {
+      x = px();
+      raw.push([
+        { x: ox, y: oy },
+        { x, y },
+      ]);
+    } else if (kind === "V") {
+      y = py();
+      raw.push([
+        { x: ox, y: oy },
+        { x, y },
+      ]);
+    } else break;
+  }
+  const project = (p) => ({
+    x: m[0] * p.x + m[2] * p.y + m[4],
+    y: m[1] * p.x + m[3] * p.y + m[5],
+  });
+  return raw.flatMap(([a, b]) => {
+    let seg = [project(a), project(b)];
+    for (const clip of clips) {
+      if (!clip) continue;
+      seg = clipSegmentToRect(seg[0], seg[1], clip);
+      if (!seg) return [];
+    }
+    return [seg];
+  });
+}
+
+function clampRunToPath(run, pathSegs, strokeWidth) {
+  const [a, b] = run;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len <= EPS || !pathSegs.length) return { a, b, strokeWidth };
+  const ux = (b.x - a.x) / len,
+    uy = (b.y - a.y) / len;
+  for (const [p0, p1] of pathSegs) {
+    const pLen = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+    if (pLen <= EPS) continue;
+    const px = (p1.x - p0.x) / pLen,
+      py = (p1.y - p0.y) / pLen;
+    if (Math.abs(ux * py - uy * px) > ANGLE_SIN_TOL) continue;
+    const perpA = Math.abs((a.x - p0.x) * py - (a.y - p0.y) * px);
+    const perpB = Math.abs((b.x - p0.x) * py - (b.y - p0.y) * px);
+    if (perpA > 0.01 || perpB > 0.01) continue;
+    const tA = (a.x - p0.x) * px + (a.y - p0.y) * py;
+    const tB = (b.x - p0.x) * px + (b.y - p0.y) * py;
+    const r0 = Math.min(tA, tB),
+      r1 = Math.max(tA, tB);
+    if (r1 < -0.01 || r0 > pLen + 0.01) continue;
+    // Absorb at most one strokeInk sampling step at an interior occluder edge,
+    // clamped strictly to the true path endpoints (zero expansion at real ends).
+    const c0 = Math.max(0, r0 - ROUTE_INK_STEP_MM);
+    const c1 = Math.min(pLen, r1 + ROUTE_INK_STEP_MM);
+    return {
+      a: { x: p0.x + px * c0, y: p0.y + py * c0 },
+      b: { x: p0.x + px * c1, y: p0.y + py * c1 },
+      strokeWidth,
+    };
+  }
+  return { a, b, strokeWidth };
+}
+
+function ownRouteSegments(g, ownKey, ownRuns) {
+  const shapes = (g.shapes ?? []).filter(
+    (s) => boundRoute(s, ownKey) && g.tranche3?.routeInk?.[s.element]?.length,
+  );
+  if (!shapes.length)
+    return (ownRuns ?? []).map(([a, b]) => ({ a, b, strokeWidth: 0 }));
+  const segs = [];
+  for (const s of shapes) {
+    const strokeWidth = s.stroke > 0 ? s.stroke : 0;
+    const clips = [s.viewport, ...(s.clips ?? [])].filter(Boolean);
+    const pathSegs =
+      s.routePath && s.routeMatrix
+        ? parseRouteSegments(s.routePath, s.routeMatrix, clips)
+        : [];
+    for (const run of g.tranche3.routeInk[s.element])
+      segs.push(clampRunToPath(run, pathSegs, strokeWidth));
+  }
+  return segs;
+}
+
+/** Subtract only collinear ink within half a stroke width over the exact overlapping span. */
+function nonCoincidentRunPieces(run, foreignStrokeWidth, ownSegments) {
+  if (!ownSegments.length) return [run];
+  const [a, b] = run;
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len <= EPS) return [run];
+  const ux = (b.x - a.x) / len;
+  const uy = (b.y - a.y) / len;
+  let spans = [[0, len]];
+  let hadOverlap = false;
+  for (const o of ownSegments) {
+    const oLen = Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y);
+    if (oLen <= EPS) continue;
+    const ox = (o.b.x - o.a.x) / oLen;
+    const oy = (o.b.y - o.a.y) / oLen;
+    if (Math.abs(ux * oy - uy * ox) > ANGLE_SIN_TOL) continue;
+    const t1 = (o.a.x - a.x) * ux + (o.a.y - a.y) * uy;
+    const t2 = (o.b.x - a.x) * ux + (o.b.y - a.y) * uy;
+    const ov0 = Math.max(0, Math.min(t1, t2));
+    const ov1 = Math.min(len, Math.max(t1, t2));
+    if (ov1 - ov0 <= EPS) continue;
+    const halfStroke =
+      (foreignStrokeWidth > 0 && o.strokeWidth > 0
+        ? Math.min(foreignStrokeWidth, o.strokeWidth)
+        : Math.max(foreignStrokeWidth, o.strokeWidth)) / 2;
+    const perpTol = halfStroke + FLOAT_TOL;
+    const perpAt = (u) => {
+      const px = a.x + ux * u - o.a.x;
+      const py = a.y + uy * u - o.a.y;
+      return Math.abs(px * oy - py * ox);
+    };
+    if (perpAt(ov0) > perpTol || perpAt(ov1) > perpTol) continue;
+    hadOverlap = true;
+    spans = subtractSpan(spans, ov0, ov1);
+    if (!spans.length) return [];
+  }
+  if (!hadOverlap) return [run];
+  return spans
+    .filter(([u0, u1]) => u1 - u0 > EPS)
+    .map(([u0, u1]) => [
+      { x: a.x + ux * u0, y: a.y + uy * u0 },
+      { x: a.x + ux * u1, y: a.y + uy * u1 },
+    ]);
+}
+
+function subtractCoincidentBox(foreign, ownBoxes) {
+  const horiz = foreign.h <= FLOAT_TOL && foreign.w > foreign.h;
+  const vert = !horiz && foreign.w <= FLOAT_TOL && foreign.h > foreign.w;
+  if (!horiz && !vert) return [foreign];
+  const center = horiz ? foreign.y + foreign.h / 2 : foreign.x + foreign.w / 2;
+  const f0 = horiz ? foreign.x : foreign.y;
+  const f1 = f0 + (horiz ? foreign.w : foreign.h);
+  let spans = [[f0, f1]];
+  let hadOverlap = false;
+  for (const o of ownBoxes) {
+    const oMatch = horiz
+      ? o.h <= FLOAT_TOL && o.w > o.h
+      : o.w <= FLOAT_TOL && o.h > o.w;
+    if (!oMatch) continue;
+    const oCenter = horiz ? o.y + o.h / 2 : o.x + o.w / 2;
+    if (Math.abs(oCenter - center) > FLOAT_TOL) continue;
+    const o0 = horiz ? o.x : o.y;
+    const o1 = o0 + (horiz ? o.w : o.h);
+    const ov0 = Math.max(f0, o0);
+    const ov1 = Math.min(f1, o1);
+    if (ov1 - ov0 <= EPS) continue;
+    hadOverlap = true;
+    spans = subtractSpan(spans, ov0, ov1);
+    if (!spans.length) return [];
+  }
+  if (!hadOverlap) return [foreign];
+  return spans
+    .filter(([a, b]) => b - a > EPS)
+    .map(([a, b]) =>
+      horiz
+        ? { x: a, y: foreign.y, w: b - a, h: foreign.h }
+        : { x: foreign.x, y: a, w: foreign.w, h: b - a },
+    );
+}
+
+export function excludeCoincidentBoxes(foreignBoxes, ownBoxes) {
+  if (!foreignBoxes.length || !ownBoxes.length) return foreignBoxes;
+  return foreignBoxes.flatMap((box) => subtractCoincidentBox(box, ownBoxes));
+}
+
+export function foreignConductorBoxes(
+  g,
+  element,
+  ownRuns = conductorInk(g, element).runs,
+) {
+  const ownKey = elementKey(element);
+  const ownSegs = ownRouteSegments(g, ownKey, ownRuns);
+  const boxes = [];
+  for (const s of g.shapes ?? []) {
+    const runs = g.tranche3?.routeInk?.[s.element];
+    if (!runs?.length) continue;
+    const id = routeIdentity(s);
+    if (!id || id === ownKey) continue;
+    const wf = s.stroke > 0 ? s.stroke : 0;
+    for (const run of runs)
+      for (const piece of nonCoincidentRunPieces(run, wf, ownSegs))
+        boxes.push(extent(piece));
+  }
+  return boxes;
 }
 
 export function paintedToBothEnds({ runs, tips }, a, b) {

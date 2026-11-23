@@ -80,11 +80,13 @@ function slotAxes(
 }
 export interface SlotReach {
   anchors: readonly Rect[];
+  ownerTargets?: readonly Rect[];
   gap: number;
   textVerticalClearanceMm?: number;
   foreignOwners?: readonly Rect[];
   tieBreakAnchor?: { x: number; y: number };
   requireOwnerNearest?: boolean;
+  preferAnchorDistance?: boolean;
   maxOwnerGapMm?: number;
 }
 
@@ -111,22 +113,28 @@ function scoreSlotCandidate(
   reach: SlotReach | undefined,
 ) {
   const printed = navigationPlacementInk(box, ink);
+  const anchorGap =
+    reach?.preferAnchorDistance && reach.anchors.length
+      ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+      : undefined;
   const distance = locality
     ? anchorDistance(locality.anchorMm, printed)
-    : boxDistance(owner, box);
+    : (anchorGap ?? boxDistance(owner, box));
   const foreignOwners = reach?.foreignOwners;
   const hasForeign = Boolean(foreignOwners?.length);
   const foreignDistance = hasForeign
     ? Math.min(...(foreignOwners ?? []).map((f) => boxDistance(f, box)))
     : Infinity;
   const ownerGap = hasForeign
-    ? reach?.requireOwnerNearest
-      ? boxDistance(owner, box)
-      : reach?.anchors.length
-        ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
-        : locality
-          ? boxDistance(owner, box)
-          : distance
+    ? reach?.ownerTargets?.length
+      ? Math.min(...reach.ownerTargets.map((a) => boxDistance(box, a)))
+      : reach?.requireOwnerNearest
+        ? boxDistance(owner, box)
+        : reach?.anchors.length
+          ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+          : locality
+            ? boxDistance(owner, box)
+            : distance
     : 0;
   return {
     box,
@@ -135,7 +143,9 @@ function scoreSlotCandidate(
     foreignDistance,
     tieDistance: reach?.tieBreakAnchor
       ? anchorDistance(reach.tieBreakAnchor, printed)
-      : 0,
+      : anchorGap !== undefined
+        ? boxDistance(owner, box)
+        : 0,
     priority: preferBesideBelow ? Number(!besideBelow(printed, owner)) : 0,
   };
 }

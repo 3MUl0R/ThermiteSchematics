@@ -3,7 +3,89 @@ import type { SvgNode } from "../device-legend/svg-tree.js";
 import type { NavigationGeometry } from "./navigation-walk.js";
 import type { Draft } from "./types.js";
 import { sourceIncidences } from "./navigation-incidence.js";
+import { terminalIdKey } from "../ordering.js";
 import { required } from "../presentation/util.js";
+
+/** Branch/junction dots and zero-paint routing stubs carry terminal provenance
+ * for ray/landing audits, not physical terminal locations. */
+export function isNonTerminalCircle(
+  attrs: Readonly<Record<string, string>>,
+): boolean {
+  return (
+    /\bjunction-dot\b/u.test(attrs.class ?? "") ||
+    attrs["data-circuit-junction"] !== undefined ||
+    attrs["data-wiring-junction"] !== undefined ||
+    attrs["data-circuit-landing-for"] !== undefined ||
+    attrs["data-wiring-landing-for"] !== undefined
+  );
+}
+
+function parseTerminalTuple(raw: string, label: string): [string, string] {
+  const terminal: unknown = JSON.parse(raw);
+  if (
+    !Array.isArray(terminal) ||
+    terminal.length !== 2 ||
+    terminal.some((s) => typeof s !== "string")
+  )
+    throw Error(`Invalid native ${label} terminal identity`);
+  return [terminal[0], terminal[1]];
+}
+
+function portGroupTerminalKey(
+  port: NavigationGeometry,
+  native: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  const a = port.node.attrs;
+  if (a["data-terminal-id"]) {
+    const [uid, key] = parseTerminalTuple(a["data-terminal-id"], "port-group");
+    const serialized = JSON.stringify([uid, key]);
+    if (
+      (port.deviceUid && port.deviceUid !== uid) ||
+      (a["data-terminal-key"] && a["data-terminal-key"] !== key) ||
+      (native && native.get(serialized) !== uid)
+    )
+      return undefined;
+    return serialized;
+  }
+  if (a["data-loop-terminal"])
+    return JSON.stringify(
+      parseTerminalTuple(a["data-loop-terminal"], "loop port-group"),
+    );
+  if (a["data-layout-port"] && port.deviceUid && a["data-terminal-key"])
+    return JSON.stringify([port.deviceUid, a["data-terminal-key"]]);
+  return undefined;
+}
+
+function portGroupTerminalKeys(
+  ir: Readonly<ElectricalIr>,
+  geometry: readonly NavigationGeometry[],
+  keys: Map<SvgNode, string>,
+) {
+  const native = Array.isArray(ir.terminals)
+    ? new Map(ir.terminals.map(({ id }) => [terminalIdKey(id), id.deviceUid]))
+    : undefined;
+  const byNode = new Map(geometry.map((g) => [g.node, g]));
+  for (const g of geometry) {
+    if (g.node.name !== "g" || !g.visible) continue;
+    const key = portGroupTerminalKey(g, native);
+    if (!key) continue;
+    const marked = g.node.children.filter(
+      (n) => n.attrs["data-terminal-marker"] !== undefined,
+    );
+    if (marked.length !== 1) continue;
+    const [circle] = marked;
+    const child = circle ? byNode.get(circle) : undefined;
+    if (
+      !circle ||
+      circle.name !== "circle" ||
+      circle.attrs["data-terminal-marker"] !== "true" ||
+      !child?.visible ||
+      isNonTerminalCircle(circle.attrs)
+    )
+      continue;
+    if (!keys.has(circle)) keys.set(circle, key);
+  }
+}
 
 /** Adapter-owned native identities, never a designation inferred from ink. */
 export function wireScheduleTerminalKeys(
@@ -19,28 +101,22 @@ export function wireScheduleTerminalKeys(
     )
       continue;
     const a = g.node.attrs;
+    if (g.node.name === "circle" && isNonTerminalCircle(a)) continue;
     if (a["data-pin-terminal"]) {
-      const terminal: unknown = JSON.parse(a["data-pin-terminal"]);
-      if (
-        !Array.isArray(terminal) ||
-        terminal.length !== 2 ||
-        terminal.some((s) => typeof s !== "string")
-      )
-        throw Error("Invalid native pin-list terminal identity");
-      keys.set(g.node, JSON.stringify(terminal));
+      keys.set(
+        g.node,
+        JSON.stringify(parseTerminalTuple(a["data-pin-terminal"], "pin-list")),
+      );
     } else if (a["data-loop-terminal"]) {
-      const terminal: unknown = JSON.parse(a["data-loop-terminal"]);
-      if (
-        !Array.isArray(terminal) ||
-        terminal.length !== 2 ||
-        terminal.some((s) => typeof s !== "string")
-      )
-        throw Error("Invalid native loop terminal identity");
-      keys.set(g.node, JSON.stringify(terminal));
+      keys.set(
+        g.node,
+        JSON.stringify(parseTerminalTuple(a["data-loop-terminal"], "loop")),
+      );
     } else if (g.deviceUid && a["data-terminal-key"]) {
       keys.set(g.node, JSON.stringify([g.deviceUid, a["data-terminal-key"]]));
     }
   }
+  portGroupTerminalKeys(ir, geometry, keys);
   if (
     draft.view.format === "schematic-view/0.2" &&
     draft.view.intent === "conductors"

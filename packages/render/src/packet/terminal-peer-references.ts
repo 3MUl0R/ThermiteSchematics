@@ -16,7 +16,10 @@ import { compareText, functionIdKey, terminalIdKey } from "../ordering.js";
 import { required } from "../presentation/util.js";
 import { record } from "./errors.js";
 import { inside, project, type Rect } from "../device-legend/geometry.js";
-import { wireScheduleTerminalKeys } from "./wire-schedule-terminals.js";
+import {
+  isNonTerminalCircle,
+  wireScheduleTerminalKeys,
+} from "./wire-schedule-terminals.js";
 import { drawnTerminalAnchor } from "./wire-schedule-locations.js";
 import {
   navigationGeometry,
@@ -38,6 +41,7 @@ interface Landing {
   point: Rect;
   owner: Rect;
   marks: Rect[];
+  routeMarks: Rect[];
 }
 function paintedFill(g: NavigationGeometry) {
   const s = g.style ?? g.node.attrs;
@@ -49,35 +53,6 @@ function paintedFill(g: NavigationGeometry) {
       s.fill ?? "black",
     )
   );
-}
-
-function peerTerminalKeys(
-  ir: Readonly<ElectricalIr>,
-  draft: Draft,
-  geometry: readonly NavigationGeometry[],
-) {
-  const base = wireScheduleTerminalKeys(ir, draft, geometry);
-  if (!("kind" in draft.view) || draft.view.kind !== "circuit") return base;
-  const keys = new Map(base);
-  const native = new Map(
-    ir.terminals.map(({ id }) => [terminalIdKey(id), id.deviceUid]),
-  );
-  for (const port of geometry) {
-    const a = port.node.attrs;
-    const key = a["data-terminal-id"];
-    if (
-      port.node.name !== "g" ||
-      !a["data-layout-port"] ||
-      !key ||
-      !port.deviceUid ||
-      native.get(key) !== port.deviceUid
-    )
-      continue;
-    // A circuit boundary can carry native identity on the port group.
-    const circle = port.node.children.find((n) => n.name === "circle");
-    if (circle && !keys.has(circle)) keys.set(circle, key);
-  }
-  return keys;
 }
 
 function markerRegion(mark: NavigationGeometry) {
@@ -101,7 +76,7 @@ function terminalLandings(
   field: Rect,
   geometry: readonly NavigationGeometry[],
 ) {
-  const keys = peerTerminalKeys(ir, draft, geometry);
+  const keys = wireScheduleTerminalKeys(ir, draft, geometry);
   const terminals = new Map<string, Landing>();
   for (const mark of geometry) {
     const key = keys.get(mark.node);
@@ -115,6 +90,7 @@ function terminalLandings(
     const existing = terminals.get(key);
     if (existing) {
       existing.marks.push(owner);
+      existing.routeMarks.push(owner);
       continue;
     }
     terminals.set(key, {
@@ -123,9 +99,39 @@ function terminalLandings(
       point,
       owner,
       marks: [owner],
+      routeMarks: [owner],
     });
   }
+  addBranchRouteMarks(geometry, field, terminals);
   return terminals;
+}
+
+/** Branch dots on a sheet that already draws the physical terminal carry
+ * fan-out route endpoints for connectivity checks, never zones or owners. */
+function addBranchRouteMarks(
+  geometry: readonly NavigationGeometry[],
+  field: Rect,
+  terminals: ReadonlyMap<string, Landing>,
+) {
+  for (const mark of geometry) {
+    const a = mark.node.attrs;
+    if (
+      mark.node.name !== "circle" ||
+      !mark.deviceUid ||
+      !a["data-terminal-key"] ||
+      !isNonTerminalCircle(a) ||
+      Number(a.r) <= 0 ||
+      (!paintedFill(mark) && !paintedStroke(mark))
+    )
+      continue;
+    const existing = terminals.get(
+      JSON.stringify([mark.deviceUid, a["data-terminal-key"]]),
+    );
+    if (!existing) continue;
+    const point = drawnTerminalAnchor(mark);
+    if (!inside(point, mark.clip) || !inside(point, field)) continue;
+    existing.routeMarks.push(markerRegion(mark));
+  }
 }
 
 function markCard(
@@ -272,10 +278,15 @@ function finalizeConductorPeers(
     for (const peer of part.conductorPeers.values()) {
       const { from, to, connection, owner, hasCard, targets } = peer;
       const { elementId, designation } = connection;
-      const route = part.route(elementId);
-      const marks = part.landings.get(terminalIdKey(from))?.marks;
-      const opposite = part.landings.get(terminalIdKey(to))?.marks;
-      if (landsOnMarks(route, marks) && landsOnMarks(route, opposite)) continue;
+      const route = part.route.route(elementId);
+      const fromLanding = part.landings.get(terminalIdKey(from));
+      const toLanding = part.landings.get(terminalIdKey(to));
+      const marks = fromLanding?.marks;
+      if (
+        landsOnMarks(route, fromLanding?.routeMarks) &&
+        landsOnMarks(route, toLanding?.routeMarks)
+      )
+        continue;
       const destinations = sortedDestinationTokens(targets);
       if (!destinations.length) continue;
       if (hasCard) {
@@ -289,7 +300,10 @@ function finalizeConductorPeers(
         identity: [from, elementId, to],
         owner,
         ...(marks && marks.length > 1 ? { owners: marks } : {}),
-        foreignOwners: foreignTerminalOwners(part, from),
+        foreignOwners: [
+          ...foreignTerminalOwners(part, from),
+          ...part.route.foreignRuns(elementId),
+        ],
         along: route.runs,
         captions: conductorCaptions(part, elementId),
         ...(terminalLabels.length ? { terminalLabels } : {}),

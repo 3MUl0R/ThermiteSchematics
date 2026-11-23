@@ -6,6 +6,7 @@ import { elementKey } from "./tranche4-source.mjs";
 import {
   conductorInk,
   continuationInk,
+  foreignConductorBoxes,
   paintedToBothEnds,
 } from "./peer-owner-ink.mjs";
 
@@ -17,7 +18,7 @@ const center = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 function observedTerminals(ir, g, cableOwners) {
   const real = new Set(ir.terminals.map((t) => terminalKey(t.id)));
   const markers = (g.tranche4?.markers ?? [])
-    .filter((m) => m.painted || m.filled)
+    .filter((m) => !m.junction && (m.painted || m.filled))
     .map((m) => ({
       key: JSON.stringify([m.deviceUid, m.terminal]),
       p: m.point,
@@ -39,10 +40,20 @@ function observedTerminals(ir, g, cableOwners) {
     if (!real.has(key) || !p) continue;
     const zone = measuredZone(g, p);
     if (!zone) continue;
-    if (!result.has(key)) result.set(key, { zones: new Set(), boxes: [] });
+    if (!result.has(key))
+      result.set(key, { zones: new Set(), boxes: [], routeBoxes: [] });
     const region = result.get(key);
+    const box = bbox ?? { ...p, w: 0, h: 0 };
     region.zones.add(zone);
-    region.boxes.push(bbox ?? { ...p, w: 0, h: 0 });
+    region.boxes.push(box);
+    region.routeBoxes.push(box);
+  }
+  // Branch dots on sheets that also draw the physical terminal receive fanned-out
+  // wire endpoints for connectivity checks without supplying zones or owners.
+  for (const m of g.tranche4?.markers ?? []) {
+    if (!m.junction || !(m.painted || m.filled) || !m.point) continue;
+    const region = result.get(JSON.stringify([m.deviceUid, m.terminal]));
+    if (region) region.routeBoxes.push(m.bbox ?? { ...m.point, w: 0, h: 0 });
   }
   return result;
 }
@@ -74,10 +85,11 @@ function canonicalDestination(destinations) {
 }
 
 function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
-  const marks = src.terminals.get(terminalKey(a)).boxes;
-  const opposite = src.terminals.get(terminalKey(b))?.boxes;
+  const from = src.terminals.get(terminalKey(a));
+  const to = src.terminals.get(terminalKey(b));
+  const marks = from.boxes;
   const ink = conductorInk(src.geometry, wire.element);
-  if (paintedToBothEnds(ink, marks, opposite)) return;
+  if (paintedToBothEnds(ink, from.routeBoxes, to?.routeBoxes)) return;
   const { runs } = ink;
   const { zones } = dest.terminals.get(terminalKey(b));
   return {
@@ -89,6 +101,7 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
     ownerLabel: name(a),
     owners: cardInfo ? [cardInfo.bbox] : marks,
     foreignOwners: foreignTerminalBoxes(src, a),
+    foreignConductors: foreignConductorBoxes(src.geometry, wire.element, runs),
     supports: [
       ...runs.map(extent),
       ...continuationInk(src.sheet, src.geometry, wire.element, runs),
@@ -128,6 +141,7 @@ function mergeCardRecords(records) {
       ownerLabel: r.ownerLabel,
       owners: r.owners,
       foreignOwners: r.foreignOwners,
+      foreignConductors: r.foreignConductors,
       supports: r.supports,
       card: r.card,
       destinations,
