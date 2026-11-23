@@ -17,6 +17,7 @@ const directory = join(
   dirname(resolve(v.output)),
   basename(v.output) + ".captures",
 );
+await mkdir(dirname(resolve(v.output)), { recursive: true });
 await mkdir(directory);
 const launches = [];
 for (let run = 1; run <= 10; run++) {

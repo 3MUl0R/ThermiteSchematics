@@ -88,6 +88,7 @@ if (v.capture) {
 const removed = [...new Set(picked.map((m) => m.id))],
   registry = structuredClone(expectations);
 registry.markers = registry.markers.filter((m) => !removed.includes(m.id));
+await mkdir(join(root, "evals/out"), { recursive: true });
 const scratch = await mkdtemp(join(root, "evals/out/pipeline-accept-")),
   copyKit = join(scratch, "evals/draw"),
   out = join(scratch, "evals/out");
@@ -350,6 +351,7 @@ try {
   assert.equal(receipt.expected.exitCode, 0);
   assert.deepEqual(receipt.expected.drift, []);
   const index = JSON.parse(await readFile(join(out, "index.json")));
+  await mkdir(dirname(resolve(v.output)), { recursive: true });
   await writeFile(
     resolve(v.output),
     json({

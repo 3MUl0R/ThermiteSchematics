@@ -1,7 +1,7 @@
 // Opt-in PDF calibration, not a C1 or signed evidence migration.
 import assert from "node:assert/strict";
 import { writeFile, mkdir } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { parseArgs } from "node:util";
 import { pdfCalibration } from "./pdf-calibration.mjs";
 import { pinnedSource } from "./source-hashes.mjs";
@@ -30,7 +30,10 @@ assert(
   v.report && v.output,
   "Use --report <retained-summary.json> --output <pdf-audit.json>",
 );
-if (v.samples) await mkdir(resolve(v.samples));
+if (v.samples) {
+  await mkdir(dirname(resolve(v.samples)), { recursive: true });
+  await mkdir(resolve(v.samples));
+}
 const c = await pdfCalibration(v.report),
   results = [];
 for (const [i, t] of c.samples.entries()) {
@@ -132,6 +135,7 @@ const data = {
     .length,
   results,
 };
+await mkdir(dirname(resolve(v.output)), { recursive: true });
 await writeFile(resolve(v.output), JSON.stringify(data, null, 2) + "\n", {
   flag: "wx",
 });

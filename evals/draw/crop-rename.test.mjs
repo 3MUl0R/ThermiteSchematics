@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -118,6 +118,7 @@ it.each(["repin-crop-index.mjs", "repin-bind-crops.mjs"])(
   "%s refuses missing maps before creating evidence or reading crop pixels",
   async (script) => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
+    await mkdir(join(root, "evals/out"), { recursive: true });
     const dir = await mkdtemp(join(root, "evals/out/rename-guard-"));
     try {
       const c = mixedCropFixture();
