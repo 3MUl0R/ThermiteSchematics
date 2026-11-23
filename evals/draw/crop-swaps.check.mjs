@@ -1,7 +1,7 @@
 import { parseReportBytes } from "./report-file.mjs";
 // Browser-required character sensitivity acceptance on actual checkpoint crops.
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
@@ -167,7 +167,9 @@ try {
 } finally {
   await browser.close();
 }
-await writeFile(resolve(v.output), json({ reportSha256: hash(raw), results }), {
+const output = resolve(v.output);
+await mkdir(dirname(output), { recursive: true });
+await writeFile(output, json({ reportSha256: hash(raw), results }), {
   flag: "wx",
 });
 const accepted = results.filter((r) => !r.refused);

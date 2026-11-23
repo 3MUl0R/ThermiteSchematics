@@ -46,32 +46,73 @@ export function worstCaseSeconds(b = INSTALL_BUDGET) {
 }
 
 const fmt = (r) => (r.error ? r.error.message : `exit ${r.status ?? r.signal}`);
+const stderrText = (r) =>
+  typeof r.stderr === "string"
+    ? r.stderr.trim()
+    : Buffer.isBuffer(r.stderr)
+      ? r.stderr.toString("utf8").trim()
+      : "";
+const probeFailure = (r, err) => {
+  const base = r.error
+    ? r.error.message
+    : r.signal
+      ? `signal ${r.signal}`
+      : `exit ${r.status}`;
+  return err ? `${base}: ${err}` : base;
+};
 
-async function waitForAptLocks(run, pause, hasFile, log, b) {
+async function waitForAptLocks(run, pause, hasFile, log, now, b) {
   const locks = APT_LOCKS.filter((f) => hasFile(f));
   if (!locks.length) return;
-  let waited = 0;
+  const start = now();
+  const deadline = start + b.lockWaitSeconds * 1_000;
+  const elapsed = () => Math.round((now() - start) / 1_000);
+  let sawInUse = false;
   while (true) {
-    const res = run("sudo", ["fuser", "-s", ...locks], { stdio: "ignore" });
-    if (res.error || (res.status !== 0 && res.status !== 1)) {
-      log(`Warning: apt lock check failed (${fmt(res)}); continuing.`);
+    const remaining = Math.floor(deadline - now());
+    if (remaining <= 0) {
+      if (sawInUse)
+        log(
+          `Warning: apt/dpkg lock files still in use after ${elapsed()}s; proceeding with retry.`,
+        );
       return;
     }
-    if (res.status === 1) {
-      if (waited > 0) log(`apt/dpkg locks released after ${waited}s.`);
-      return;
-    }
-    if (waited >= b.lockWaitSeconds) {
+    const res = run("sudo", ["-n", "fuser", "-s", ...locks], {
+      stdio: ["ignore", "ignore", "pipe"],
+      encoding: "utf8",
+      timeout: remaining,
+    });
+    const err = stderrText(res);
+    if (
+      res.error ||
+      res.signal ||
+      (res.status !== 0 && res.status !== 1) ||
+      (res.status === 1 && err)
+    ) {
       log(
-        `Warning: apt/dpkg locks still held after ${waited}s; proceeding with retry.`,
+        `Warning: apt/dpkg lock file check failed (${probeFailure(res, err)}); continuing.`,
       );
       return;
     }
-    if (waited === 0)
-      log(`Waiting up to ${b.lockWaitSeconds}s for apt/dpkg locks to clear...`);
-    const step = Math.min(b.lockPollSeconds, b.lockWaitSeconds - waited);
-    await pause(step * 1_000);
-    waited += step;
+    if (res.status === 1) {
+      if (sawInUse)
+        log(`apt/dpkg lock files no longer in use after ${elapsed()}s.`);
+      return;
+    }
+    if (!sawInUse) {
+      sawInUse = true;
+      log(
+        `apt/dpkg lock files in use; waiting up to ${b.lockWaitSeconds}s for them to clear...`,
+      );
+    }
+    const left = Math.floor(deadline - now());
+    if (left <= 0) {
+      log(
+        `Warning: apt/dpkg lock files still in use after ${elapsed()}s; proceeding with retry.`,
+      );
+      return;
+    }
+    await pause(Math.min(b.lockPollSeconds * 1_000, left));
   }
 }
 
@@ -82,6 +123,7 @@ export async function installCiBrowser(opts = {}) {
   const pause = opts.pause ?? delay;
   const hasFile = opts.hasFile ?? existsSync;
   const log = opts.log ?? ((msg) => process.stderr.write(`${msg}\n`));
+  const now = opts.now ?? (() => performance.now());
   const b = INSTALL_BUDGET;
   const linux = platform === "linux";
   const inherit = { stdio: "inherit" };
@@ -106,7 +148,7 @@ export async function installCiBrowser(opts = {}) {
         for (const f of SOURCES)
           if (hasFile(f)) run("sudo", ["sed", "-i", "-E", REWRITE, f], inherit);
       await pause(b.backoffBaseSeconds * i * 1_000);
-      if (linux) await waitForAptLocks(run, pause, hasFile, log, b);
+      if (linux) await waitForAptLocks(run, pause, hasFile, log, now, b);
     }
   }
   throw new Error(
