@@ -3,8 +3,8 @@
 TypeScript + ELK alpha; Bun 1.4.2. `thermite` means
 `bun <thermite>/thermite.mjs`; use one absolute runtime/source path outside this
 project (ask if unknown). No `thermite` is on PATH.
-Never install/build in a downloaded runtime. In source run
-`bun install --frozen-lockfile && bun run build` before use and after changes.
+Never install/build a runtime. In source run
+`bun install --frozen-lockfile && bun run build` before/after edits.
 
 ```sh
 thermite init ../conveyor --name "Conveyor 1"
@@ -15,19 +15,19 @@ thermite init ../cabinets --template cabinets
 
 When using a runtime package, check existing issues at
 https://github.com/BlackettApplied/ThermiteSchematics/issues.
-For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it (search and public library GET examples in `thermite guide libraries`).
-Include use case, expected/actual behavior, minimal repro, diagnostics, Thermite/Bun versions and OS; redact A005/W801 hostnames and absolute paths. Never patch downloaded runtimes.
+Draft bug/gap/doc issues locally unless asked to file them (search/GET examples: `thermite guide libraries`).
+Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths. Never patch runtimes.
 
-Fix a separate engine checkout; follow its AGENTS.md/CONTRIBUTING.md for PRs.
+Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.
 No private data/credentials in issues/PRs.
-Humans accept the CLA; agents never sign it.
+Only humans accept the CLA.
 `thermite guide` lists topics, schemas and diagnostic codes.
 
 ## Authority and workflow
 
 Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**. Guard existing files from inspection through dry-run and apply, including any undo. Never use git checkout or rm to undo an edit to a registered source.
 
-Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author schematic geometry, infer engineering repairs or suppress compiler diagnostics. Functions never automatically join physical nets.
+Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer engineering repairs or suppress diagnostics. Functions never automatically join physical nets.
 
 Invent no pins, ratings, spares or title/revision data. Mark terminals unused
 or deferred only with explicit user intent. After library edits, run `thermite lock .`
@@ -93,6 +93,7 @@ at PS1; declare potentials at added sources.
 Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
 Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Use a short group `lineReference` for circuit captions.
+`thermite:dc-supply` defaults: 2-terminal sources mark `dc-output` unless AC; 2/3-terminal loads mark `ac-input` only from non-earth AC roles or all-AC ratings, else `load`.
 
 Keep captions clear of wires.
 Top-down can try tighter spacing once after a label or span refusal.

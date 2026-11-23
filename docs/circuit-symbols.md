@@ -75,9 +75,14 @@ Pressure and float contact marks depict an actuator together with the authored
 normal contact state. The sensor/probe and receptacle marks identify an interface;
 they do not infer pin roles, probe technology, float behavior or GFCI protection.
 A two-terminal `thermite:dc-supply` source uses the DC output mark unless its
-terminals declare AC. A `thermite:dc-supply` load uses `ac-input` when its
-native terminal roles or ratings establish an AC input (or when explicitly bound
-via `circuitSymbols`), and otherwise retains the generic power mark (`load`).
+terminals declare AC, earth/ground or auxiliary roles. A two- or three-terminal
+`thermite:dc-supply` load uses `ac-input` when its current-carrying (non-earth,
+non-auxiliary) terminals establish an AC input without DC conflicts — either by
+native AC input roles or by every non-earth input terminal declaring
+`rating.voltage_type: "AC"` (or when explicitly bound via `circuitSymbols`) —
+and otherwise retains the generic power mark (`load`). Earth/ground roles
+(`protective_earth`, `pe`, `functional_earth`, `ground`, `gnd`) never contribute
+AC evidence or count toward the terminal count needed for rating-based AC.
 
 A `thermite:transformer` circuit block places its primary load windings opposite
 its secondary source windings on one shared magnetic core. Each winding retains

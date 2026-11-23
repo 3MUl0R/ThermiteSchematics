@@ -28,16 +28,19 @@ the budget and the remaining headroom. Checker protocol **5.42** applies.
 Version **5.42** updates **DQ-10** (`qualifier-oracle.mjs`, #553). On
 `thermite:dc-supply` (and its `iec:dc-power-supply` alias), a 2- or 3-terminal
 `load` function without an explicit `circuitSymbols` entry expects `"ac-input"`
-when its own native IR terminal facts establish AC input without a conflicting
-DC role (`dc_*`) or `rating.voltage_type: "DC"` — either via native AC input
-roles (`ac_line_input` with `ac_input_return` / `ac_neutral` / `ac_line_input`
-for 2 terminals; three-phase `phase_1..3_input` / `phase_u..w_input` or
-`ac_line_input` + `ac_input_return`/`ac_neutral` + `protective_earth` for 3
-terminals) or via `rating.voltage_type: "AC"`. Explicit `circuitSymbols` still
-takes precedence, a load without AC facts or with conflicting DC facts still
-expects nothing, `"dc-output"` on a load stays unowned, and 2-terminal
-`dc-supply` `source` functions expect `"dc-output"` unless their own terminals
-declare AC. Complete 5.41 summaries remain readable.
+only when its current-carrying (non-earth, non-auxiliary) native IR terminals
+establish AC input without a conflicting DC role or `rating.voltage_type: "DC"`
+— either via native AC input roles (`ac_line_input` with `ac_input_return` /
+`ac_neutral` / `ac_line_input` for 2 current-carrying terminals, optionally with
+1 earth/ground terminal; or three-phase `phase_1..3_input` / `phase_u..w_input`)
+or via every non-earth input terminal (at least 2) declaring
+`rating.voltage_type: "AC"`. Earth/ground and auxiliary terminals never
+contribute AC evidence or count toward rating-based terminal count. Explicit
+`circuitSymbols` still takes precedence, a load with missing, partial or
+conflicting facts still expects nothing, `"dc-output"` on a load stays unowned,
+and 2-terminal `dc-supply` `source` functions expect `"dc-output"` unless their
+own terminals declare AC, earth/ground or auxiliary roles. Complete 5.41
+summaries remain readable.
 
 Version **5.41** updates **DQ-02**, **DQ-06**, **DQ-16** and **DQ-23**
 (V5-CLEAR, #416, #418 item 1, #432, #529). DQ-02 adds a general

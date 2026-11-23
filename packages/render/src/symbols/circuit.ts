@@ -134,43 +134,75 @@ const AC_THREE_PHASE_ROLE_SETS = [
   ["phase_1_input", "phase_2_input", "phase_3_input"],
   ["phase_u_input", "phase_v_input", "phase_w_input"],
 ] as const;
+const EARTH_ROLE_TOKENS = new Set(["earth", "ground", "pe", "fe", "gnd"]);
+const AUXILIARY_ROLE_TOKENS = new Set(["aux", "auxiliary", "shield"]);
+
+function roleTokens(role: string | undefined): string[] {
+  return (role ?? "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/u)
+    .filter(Boolean);
+}
+
+function isEarthRole(role: string | undefined): boolean {
+  return roleTokens(role).some((token) => EARTH_ROLE_TOKENS.has(token));
+}
+
+function isAuxiliaryOrNonPowerRole(role: string | undefined): boolean {
+  if (!role) return false;
+  if (role.toLowerCase() === "no_connection") return true;
+  return roleTokens(role).some((token) => AUXILIARY_ROLE_TOKENS.has(token));
+}
+
+function isDcRole(role: string | undefined): boolean {
+  return roleTokens(role).includes("dc");
+}
+
+function isAcRole(role: string | undefined): boolean {
+  return roleTokens(role).some((token) => token === "ac" || token === "phase");
+}
 
 function dcSupplyInputMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   const terminals = functionTerminalSpecs(type, f);
-  const voltageTypes = new Set(
-    terminals.flatMap((t) =>
-      t?.rating?.voltage_type ? [t.rating.voltage_type] : [],
-    ),
-  );
-  if (voltageTypes.has("DC")) return "load";
-  const roles = terminals.map((t) => t?.role);
-  if (roles.some((r) => r?.startsWith("dc_"))) return "load";
+  const earthTerminals = terminals.filter((t) => isEarthRole(t?.role));
+  const currentTerminals = terminals.filter((t) => !isEarthRole(t?.role));
+  if (currentTerminals.length < 2) return "load";
+  if (
+    earthTerminals.some((t) => isDcRole(t?.role)) ||
+    currentTerminals.some(
+      (t) =>
+        t?.rating?.voltage_type === "DC" ||
+        isDcRole(t?.role) ||
+        isAuxiliaryOrNonPowerRole(t?.role),
+    )
+  )
+    return "load";
+  const currentRoles = currentTerminals.map((t) => t?.role);
   const acByRole =
-    f.terminals.length === 2
-      ? roles.every((r) => r !== undefined && AC_SINGLE_PHASE_ROLES.has(r)) &&
-        roles.includes("ac_line_input")
-      : f.terminals.length === 3 &&
-        (AC_THREE_PHASE_ROLE_SETS.some((set) =>
-          set.every((role) => roles.includes(role)),
-        ) ||
-          (roles.includes("ac_line_input") &&
-            (roles.includes("ac_input_return") ||
-              roles.includes("ac_neutral")) &&
-            roles.includes("protective_earth")));
+    currentTerminals.length === 2
+      ? currentRoles.every(
+          (r) => r !== undefined && AC_SINGLE_PHASE_ROLES.has(r),
+        ) && currentRoles.includes("ac_line_input")
+      : currentTerminals.length === 3 &&
+        AC_THREE_PHASE_ROLE_SETS.some((set) =>
+          set.every((role) => currentRoles.includes(role)),
+        );
   if (acByRole) return "ac-input";
-  if (voltageTypes.size === 1 && voltageTypes.has("AC")) return "ac-input";
+  if (currentTerminals.every((t) => t?.rating?.voltage_type === "AC"))
+    return "ac-input";
   return "load";
 }
 
 function dcSupplyOutputMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   const terminals = functionTerminalSpecs(type, f);
-  const declaresAc = terminals.some(
+  const nonDcOrAc = terminals.some(
     (t) =>
+      isEarthRole(t?.role) ||
+      isAuxiliaryOrNonPowerRole(t?.role) ||
       t?.rating?.voltage_type === "AC" ||
-      t?.role?.startsWith("ac_") ||
-      t?.role?.startsWith("phase_"),
+      isAcRole(t?.role),
   );
-  return declaresAc ? "source" : "dc-output";
+  return nonDcOrAc ? "source" : "dc-output";
 }
 
 export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {

@@ -7,6 +7,7 @@ import {
 } from "@thermite/query";
 import { renderSchematicPacket } from "../../../render/src/sheets.js";
 import { printedFunction } from "../../../render/src/print-projection.js";
+import { circuitMark } from "../../../render/src/symbols/circuit.js";
 // Terminal wiring views and function-based circuit drawings. Every case runs
 // a packet against one shared cabinets project extended with a few wires, a
 // jumper, a single-ended core, a PLC and an overload relay, or against the
@@ -23,6 +24,7 @@ import {
   describeRun,
   editJson,
   makeProject,
+  noteJson,
   ok,
   once,
   packet,
@@ -1010,6 +1012,51 @@ const module: FactModule = {
         const net = nets(mappedSheet.svg);
         expect(net).toEqual(before);
         expect(net.W3).not.toBe(net.W4);
+      },
+    },
+    {
+      claim:
+        "`thermite:dc-supply` defaults: 2-terminal sources mark `dc-output` unless AC; 2/3-terminal loads mark `ac-input` only from non-earth AC roles or all-AC ratings, else `load`.",
+      async check() {
+        const compiled = await compileProject(ctx.pristine.starter);
+        if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+        const ps1 = compiled.ir.devices.find((d) => d.designation === "PS1")!;
+        const type = structuredClone(
+          compiled.ir.deviceTypes.find((t) => t.id === ps1.typeId)!,
+        );
+        const acInput = compiled.ir.functions.find(
+          (f) => f.id.deviceUid === ps1.uid && f.id.functionKey === "ac_input",
+        )!;
+        const dcOutput = compiled.ir.functions.find(
+          (f) => f.id.deviceUid === ps1.uid && f.id.functionKey === "dc_output",
+        )!;
+        expect(type.symbol).toBe("thermite:dc-supply");
+        const acMark = circuitMark(type, acInput);
+        const dcMark = circuitMark(type, dcOutput);
+        expect(acMark).toBe("ac-input");
+        expect(dcMark).toBe("dc-output");
+        const ratedEarth = structuredClone(type);
+        ratedEarth.terminals = [
+          { key: "1" },
+          { key: "2" },
+          {
+            key: "3",
+            role: "protective_earth",
+            rating: { voltage_type: "AC" },
+          },
+        ];
+        const fallbackMark = circuitMark(ratedEarth, {
+          ...acInput,
+          terminals: ["1", "2", "3"].map((terminalKey) => ({
+            deviceUid: ps1.uid,
+            terminalKey,
+          })),
+        });
+        expect(fallbackMark).toBe("load");
+        noteJson({
+          symbol: type.symbol,
+          marks: [acMark, dcMark, fallbackMark],
+        });
       },
     },
   ],

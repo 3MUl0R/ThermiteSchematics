@@ -223,6 +223,181 @@ describe("thermite:dc-supply circuit mark selection (#553)", () => {
       nominal_voltage: 24,
     };
     expect(circuitMark(acSource, dcOutput)).toBe("source");
+
+    // Earth or auxiliary terminals on a 2-port source fall back to generic "source".
+    const peSource = structuredClone(unroledSource);
+    peSource.terminals.find((t) => t.key === "+")!.role = "dc_positive_output";
+    peSource.terminals.find((t) => t.key === "-")!.role = "protective_earth";
+    expect(circuitMark(peSource, dcOutput)).toBe("source");
+
+    const auxSource = structuredClone(unroledSource);
+    auxSource.terminals.find((t) => t.key === "+")!.role = "aux";
+    auxSource.terminals.find((t) => t.key === "-")!.role = "aux";
+    expect(circuitMark(auxSource, dcOutput)).toBe("source");
+  });
+
+  it("never derives AC input from earth/ground, auxiliary, or partial terminal ratings (#553 review)", async () => {
+    const { ir, type, ps1, acInput } = await corePsuFixture();
+    delete type.circuitSymbols;
+
+    const makeLoad = (
+      symbol: "thermite:dc-supply" | "iec:dc-power-supply",
+      terminals: Array<{
+        key: string;
+        role?: string;
+        rating?: { voltage_type?: "AC" | "DC"; nominal_voltage?: number };
+      }>,
+    ) => {
+      const t = structuredClone(type);
+      t.symbol = symbol;
+      t.terminals = terminals;
+      const fn = {
+        id: { deviceUid: ps1.uid, functionKey: "face" },
+        kind: "load" as const,
+        terminals: terminals.map((p) => ({
+          deviceUid: ps1.uid,
+          terminalKey: p.key,
+        })),
+      };
+      return { t, fn };
+    };
+
+    // Reviewer 3-terminal probe: two unrated pins + AC-rated protective_earth -> "load".
+    for (const earthRole of [
+      "protective_earth",
+      "pe",
+      "PE",
+      "functional_earth",
+      "ground",
+      "gnd",
+      "chassis_ground",
+    ]) {
+      const probe = makeLoad("iec:dc-power-supply", [
+        { key: "1" },
+        { key: "2" },
+        { key: "3", role: earthRole, rating: { voltage_type: "AC" } },
+      ]);
+      expect(circuitMark(probe.t, probe.fn)).toBe("load");
+    }
+
+    // Reviewer one-rated 3-terminal probe: one AC-rated phase input + two unspecified pins -> "load".
+    const oneRated = makeLoad("thermite:dc-supply", [
+      { key: "1", role: "phase_1_input", rating: { voltage_type: "AC" } },
+      { key: "2" },
+      { key: "3" },
+    ]);
+    expect(circuitMark(oneRated.t, oneRated.fn)).toBe("load");
+
+    // Partial ratings (2-terminal or 3-terminal without earth role) stay "load".
+    const partialTwo = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2" },
+    ]);
+    expect(circuitMark(partialTwo.t, partialTwo.fn)).toBe("load");
+
+    const partialThree = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3" },
+    ]);
+    expect(circuitMark(partialThree.t, partialThree.fn)).toBe("load");
+
+    // Earth terminal never counts toward the terminal count needed for rating-based AC.
+    const oneLineAndPe = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", role: "protective_earth", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(oneLineAndPe.t, oneLineAndPe.fn)).toBe("load");
+
+    const oneLineTwoEarths = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", role: "protective_earth", rating: { voltage_type: "AC" } },
+      { key: "3", role: "functional_earth", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(oneLineTwoEarths.t, oneLineTwoEarths.fn)).toBe("load");
+
+    // Auxiliary / non-power terminals never contribute AC evidence.
+    const withAux2 = makeLoad("thermite:dc-supply", [
+      { key: "1", role: "ac_line_input", rating: { voltage_type: "AC" } },
+      { key: "2", role: "aux", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(withAux2.t, withAux2.fn)).toBe("load");
+
+    const withAux3 = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3", role: "auxiliary", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(withAux3.t, withAux3.fn)).toBe("load");
+
+    const withShield = makeLoad("thermite:dc-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", role: "shield", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(withShield.t, withShield.fn)).toBe("load");
+
+    // Valid: all current-carrying terminals AC-rated with a separate PE -> "ac-input".
+    const twoRatedAndPe = makeLoad("iec:dc-power-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3", role: "protective_earth" },
+    ]);
+    expect(circuitMark(twoRatedAndPe.t, twoRatedAndPe.fn)).toBe("ac-input");
+
+    const twoRatedAndRatedPe = makeLoad("iec:dc-power-supply", [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3", role: "pe", rating: { voltage_type: "AC" } },
+    ]);
+    expect(circuitMark(twoRatedAndRatedPe.t, twoRatedAndRatedPe.fn)).toBe(
+      "ac-input",
+    );
+
+    // End-to-end render of the reviewer's 3-terminal probe prints no AC wave in either flow.
+    const probeIr = structuredClone(ir);
+    const probeType = probeIr.deviceTypes.find((t) => t.id === type.id)!;
+    probeType.symbol = "iec:dc-power-supply";
+    delete probeType.circuitSymbols;
+    probeType.terminals = [
+      { key: "1" },
+      { key: "2" },
+      { key: "3", role: "protective_earth", rating: { voltage_type: "AC" } },
+    ];
+    const probeFn = probeIr.functions.find(
+      (f) =>
+        f.id.deviceUid === ps1.uid &&
+        f.id.functionKey === acInput.id.functionKey,
+    )!;
+    probeFn.terminals = ["1", "2", "3"].map((terminalKey) => ({
+      deviceUid: ps1.uid,
+      terminalKey,
+    }));
+    for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+      const rendered = await renderSchematicPacket(probeIr, {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "circuit-view-request/0.1",
+            title: "Rated-earth probe",
+            flow,
+            groups: [
+              {
+                id: "rated-earth",
+                label: "Rated earth",
+                functions: [
+                  { device: { by: "uid", value: ps1.uid }, key: "ac_input" },
+                ],
+                conductors: [],
+              },
+            ],
+          },
+        ],
+      });
+      if (!rendered.ok) throw new Error(rendered.error.message);
+      const doc = parseHTML(rendered.value.html).document;
+      expect(doc.querySelector('[data-circuit-mark="ac-input"]')).toBeNull();
+      expect(doc.querySelector('[data-circuit-mark="load"]')).not.toBeNull();
+    }
   });
 
   it("keeps wrapped related-function footer lines in top-to-bottom reading order inside framed LTR blocks", async () => {

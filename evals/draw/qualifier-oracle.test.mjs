@@ -402,4 +402,160 @@ it("DQ-10 5.42: dc-supply 2-terminal source expects dc-output unless terminals d
   expect(
     conversionQualifierAudit(acSource.g, acSource.ir, acSource.sheet),
   ).toEqual({ findings: [], eligible: 0 });
+
+  // Earth or auxiliary terminals on a 2-terminal source do not expect dc-output.
+  for (const inputTerminals of [
+    [
+      { key: "+", role: "dc_positive_output" },
+      { key: "PE", role: "protective_earth" },
+    ],
+    [
+      { key: "1", role: "aux" },
+      { key: "2", role: "aux" },
+    ],
+  ]) {
+    const marked = psuCase({
+      functionKey: "dc_output",
+      functionKind: "source",
+      inputTerminals,
+      extraTerminals: [],
+      renderedMarks: ["dc-output"],
+    });
+    const audit = conversionQualifierAudit(marked.g, marked.ir, marked.sheet);
+    expect(audit.eligible).toBe(0);
+    expect(kinds(audit)).toEqual([
+      "conversion-qualifier-native-owner-unavailable",
+    ]);
+  }
 });
+
+it.each([
+  [
+    "two unrated pins + AC-rated protective_earth (reviewer probe)",
+    "iec:dc-power-supply",
+    [
+      { key: "1" },
+      { key: "2" },
+      { key: "3", role: "protective_earth", rating: { voltage_type: "AC" } },
+    ],
+  ],
+  [
+    "two unrated pins + AC-rated pe role",
+    "iec:dc-power-supply",
+    [
+      { key: "1" },
+      { key: "2" },
+      { key: "PE", role: "pe", rating: { voltage_type: "AC" } },
+    ],
+  ],
+  [
+    "two unrated pins + AC-rated functional_earth",
+    "thermite:dc-supply",
+    [
+      { key: "1" },
+      { key: "2" },
+      { key: "FE", role: "functional_earth", rating: { voltage_type: "AC" } },
+    ],
+  ],
+  [
+    "two unrated pins + AC-rated ground role",
+    "thermite:dc-supply",
+    [
+      { key: "1" },
+      { key: "2" },
+      { key: "GND", role: "chassis_ground", rating: { voltage_type: "AC" } },
+    ],
+  ],
+  [
+    "one AC-rated phase input + two unspecified pins (reviewer probe)",
+    "thermite:dc-supply",
+    [
+      { key: "1", role: "phase_1_input", rating: { voltage_type: "AC" } },
+      { key: "2" },
+      { key: "3" },
+    ],
+  ],
+  [
+    "one AC-rated pin + one AC-rated PE (earth excluded from terminal count)",
+    "thermite:dc-supply",
+    [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", role: "protective_earth", rating: { voltage_type: "AC" } },
+    ],
+  ],
+  [
+    "one AC-rated pin + one unrated pin",
+    "thermite:dc-supply",
+    [{ key: "1", rating: { voltage_type: "AC" } }, { key: "2" }],
+  ],
+  [
+    "two AC-rated pins + one unrated non-earth pin",
+    "thermite:dc-supply",
+    [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3" },
+    ],
+  ],
+  [
+    "AC-rated line + AC-rated auxiliary terminal",
+    "thermite:dc-supply",
+    [
+      { key: "1", role: "ac_line_input", rating: { voltage_type: "AC" } },
+      { key: "2", role: "aux", rating: { voltage_type: "AC" } },
+    ],
+  ],
+])(
+  "DQ-10 5.42 (#553 review): %s treats ac-input mark as unowned",
+  (_label, symbol, inputTerminals) => {
+    const unmarked = psuCase({ symbol, inputTerminals, renderedMarks: [] });
+    expect(
+      conversionQualifierAudit(unmarked.g, unmarked.ir, unmarked.sheet),
+    ).toEqual({ findings: [], eligible: 0 });
+
+    const marked = psuCase({
+      symbol,
+      inputTerminals,
+      renderedMarks: ["ac-input"],
+    });
+    const audit = conversionQualifierAudit(marked.g, marked.ir, marked.sheet);
+    expect(audit.eligible).toBe(0);
+    expect(kinds(audit)).toEqual([
+      "conversion-qualifier-native-owner-unavailable",
+    ]);
+  },
+);
+
+it.each([
+  [
+    "two AC-rated inputs + unrated protective_earth",
+    "iec:dc-power-supply",
+    [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "3", role: "protective_earth" },
+    ],
+  ],
+  [
+    "two AC-rated inputs + AC-rated PE",
+    "thermite:dc-supply",
+    [
+      { key: "1", rating: { voltage_type: "AC" } },
+      { key: "2", rating: { voltage_type: "AC" } },
+      { key: "PE", role: "pe", rating: { voltage_type: "AC" } },
+    ],
+  ],
+])(
+  "DQ-10 5.42 (#553 review): %s qualifies for ac-input",
+  (_label, symbol, inputTerminals) => {
+    const { g, ir, sheet } = psuCase({
+      symbol,
+      inputTerminals,
+      renderedMarks: ["ac-input"],
+    });
+    expect(conversionQualifierAudit(g, ir, sheet)).toEqual({
+      findings: [],
+      eligible: 1,
+    });
+  },
+);
