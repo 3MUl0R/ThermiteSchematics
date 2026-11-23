@@ -80,6 +80,7 @@ function slotAxes(
 }
 export interface SlotReach {
   anchors: readonly Rect[];
+  ownerTargets?: readonly Rect[];
   gap: number;
   textVerticalClearanceMm?: number;
   foreignOwners?: readonly Rect[];
@@ -120,13 +121,15 @@ function scoreSlotCandidate(
     ? Math.min(...(foreignOwners ?? []).map((f) => boxDistance(f, box)))
     : Infinity;
   const ownerGap = hasForeign
-    ? reach?.requireOwnerNearest
-      ? boxDistance(owner, box)
-      : reach?.anchors.length
-        ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
-        : locality
-          ? boxDistance(owner, box)
-          : distance
+    ? reach?.ownerTargets?.length
+      ? Math.min(...reach.ownerTargets.map((a) => boxDistance(box, a)))
+      : reach?.requireOwnerNearest
+        ? boxDistance(owner, box)
+        : reach?.anchors.length
+          ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+          : locality
+            ? boxDistance(owner, box)
+            : distance
     : 0;
   return {
     box,

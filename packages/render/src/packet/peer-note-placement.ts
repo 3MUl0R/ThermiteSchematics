@@ -42,9 +42,11 @@ function searchPeerSlot(
   field: Rect,
   ink: ReturnType<typeof navigationObstacles>,
   anchors: readonly Rect[],
+  ownerTargets: readonly Rect[],
   reachMm: (shape: NavigationShape) => number,
   fallback?: PeerNotePlacement["fallback"],
 ): PeerNotePlacement | undefined {
+  const hasForeign = Boolean(entry.foreignOwners?.length);
   const found = searchNavigationSlot(
     forms,
     field,
@@ -58,14 +60,14 @@ function searchPeerSlot(
     false,
     (shape) => ({
       anchors,
+      ownerTargets,
       gap: reachMm(shape),
       textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
+      ...(hasForeign ? { requireOwnerNearest: true } : {}),
       ...(fallback === "terminal-label-anchor"
         ? { requireOwnerNearest: true, maxOwnerGapMm: PEER_REACH_MM }
         : {}),
-      ...(entry.foreignOwners?.length
-        ? { foreignOwners: entry.foreignOwners }
-        : {}),
+      ...(hasForeign ? { foreignOwners: entry.foreignOwners } : {}),
     }),
   );
   return (
@@ -87,18 +89,28 @@ function place(
 ): PeerNotePlacement | undefined {
   const reachFor = (form: NavigationShape) =>
     unnamed.has(form.id) ? UNNAMED_REACH_MM : PEER_REACH_MM;
+  const ownMarks = entry.owners?.length ? entry.owners : [entry.owner];
   const near = searchPeerSlot(
     entry,
     shapes,
     field,
     ink,
     [entry.owner],
+    ownMarks,
     reachFor,
   );
   if (near) return near;
   const alternates = entry.owners?.filter((o) => o !== entry.owner) ?? [];
   if (alternates.length) {
-    const alt = searchPeerSlot(entry, shapes, field, ink, alternates, reachFor);
+    const alt = searchPeerSlot(
+      entry,
+      shapes,
+      field,
+      ink,
+      alternates,
+      ownMarks,
+      reachFor,
+    );
     if (alt) return alt;
   }
 
@@ -115,6 +127,7 @@ function place(
       field,
       ink,
       supports,
+      [...ownMarks, ...supports],
       () => PEER_REACH_MM,
     );
     if (alongHit) return alongHit;
@@ -128,6 +141,7 @@ function place(
         field,
         ink,
         entry.terminalLabels,
+        ownMarks,
         () => FALLBACK_LABEL_REACH_MM,
         "terminal-label-anchor",
       )

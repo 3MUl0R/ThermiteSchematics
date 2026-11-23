@@ -5,6 +5,20 @@ import type { Draft } from "./types.js";
 import { sourceIncidences } from "./navigation-incidence.js";
 import { required } from "../presentation/util.js";
 
+/** Branch/junction dots and zero-paint routing stubs carry terminal provenance
+ * for ray/landing audits, not physical terminal locations. */
+export function isNonTerminalCircle(
+  attrs: Readonly<Record<string, string>>,
+): boolean {
+  return (
+    /\bjunction-dot\b/u.test(attrs.class ?? "") ||
+    attrs["data-circuit-junction"] !== undefined ||
+    attrs["data-wiring-junction"] !== undefined ||
+    attrs["data-circuit-landing-for"] !== undefined ||
+    attrs["data-wiring-landing-for"] !== undefined
+  );
+}
+
 /** Adapter-owned native identities, never a designation inferred from ink. */
 export function wireScheduleTerminalKeys(
   ir: Readonly<ElectricalIr>,
@@ -19,6 +33,7 @@ export function wireScheduleTerminalKeys(
     )
       continue;
     const a = g.node.attrs;
+    if (g.node.name === "circle" && isNonTerminalCircle(a)) continue;
     if (a["data-pin-terminal"]) {
       const terminal: unknown = JSON.parse(a["data-pin-terminal"]);
       if (
