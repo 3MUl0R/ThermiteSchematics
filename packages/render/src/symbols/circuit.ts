@@ -335,6 +335,20 @@ function dcSupplyOutputMark(
   return nonDcOrAc ? "source" : "dc-output";
 }
 
+function dcSupplyMark(
+  type: IrDeviceType,
+  f: IrFunction,
+  context?: CircuitMarkContext,
+): CircuitMark | undefined {
+  const count = f.terminals.length;
+  if (f.kind === "load" && (count === 2 || count === 3))
+    return dcSupplyInputMark(type, f, context);
+  if (f.kind === "source") {
+    if (count === 2) return dcSupplyOutputMark(type, f, context);
+    if (count >= 1 && count <= 4) return "source";
+  }
+}
+
 export function circuitMark(
   type: IrDeviceType,
   f: IrFunction,
@@ -435,6 +449,10 @@ export function circuitMark(
       (f.kind === "channel" && f.direction === "output" && count === 1))
   )
     return "sensor-3wire";
+  if (profile === "thermite:dc-supply") {
+    const dcSupply = dcSupplyMark(type, f, context);
+    if (dcSupply) return dcSupply;
+  }
   if (f.kind === "load") {
     if (profile === "thermite:motor-3ph" && count === 3) return "motor";
     if (profile === "thermite:motor" && count === 2) return "motor";
@@ -444,8 +462,6 @@ export function circuitMark(
     if (profile === "thermite:receptacle" && [2, 3].includes(count))
       return receptacleMark(type, f);
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && [2, 3].includes(count))
-      return dcSupplyInputMark(type, f, context);
     if (
       ["thermite:relay", "thermite:io-module"].includes(profile) &&
       [2, 3].includes(count)
@@ -454,14 +470,8 @@ export function circuitMark(
   }
   if (f.kind === "source") {
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && count === 2)
-      return dcSupplyOutputMark(type, f, context);
     if (
-      [
-        "thermite:dc-supply",
-        "thermite:power-source",
-        "thermite:io-module",
-      ].includes(profile) &&
+      ["thermite:power-source", "thermite:io-module"].includes(profile) &&
       count >= 1 &&
       count <= 4
     )
