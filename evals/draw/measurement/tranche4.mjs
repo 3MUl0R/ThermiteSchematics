@@ -148,6 +148,10 @@ export function tranche4Markers(c) {
       ink = c.strokeInk(e, v.clip, e.getScreenCTM(), true);
     result.push({
       ...c.identity(e),
+      junction:
+        e.classList.contains("junction-dot") ||
+        e.hasAttribute("data-circuit-junction") ||
+        e.hasAttribute("data-wiring-junction"),
       bbox: v.b,
       point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
       filled: fill.alpha >= 0.2 && !fill.background,

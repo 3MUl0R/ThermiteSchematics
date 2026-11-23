@@ -37,6 +37,14 @@ export function collectWireTerminals(c) {
       "circle[data-terminal-key],circle[data-loop-terminal],g[data-cable-uid][data-conductor-id] > circle",
     ),
   ).flatMap((e) => {
+    if (
+      e.classList.contains("junction-dot") ||
+      e.hasAttribute("data-circuit-junction") ||
+      e.hasAttribute("data-wiring-junction") ||
+      e.hasAttribute("data-circuit-landing-for") ||
+      e.hasAttribute("data-wiring-landing-for")
+    )
+      return [];
     const v = visible(e),
       css = getComputedStyle(e);
     let alpha = Number(css.strokeOpacity);

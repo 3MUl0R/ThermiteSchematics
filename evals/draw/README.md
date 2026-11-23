@@ -23,7 +23,23 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.43** applies.
+the budget and the remaining headroom. Checker protocol **5.44** applies.
+
+Version **5.44** closes a **DQ-08 / DQ-19** terminal-zone measurement gap
+(`measurement/tranche4.mjs`, `measurement/terminals.mjs`,
+`terminal-peer-oracle.mjs`, #569). Previously `tranche4Markers` collected
+branch/junction dots (`circle.junction-dot`, `circle[data-circuit-junction]`,
+`circle[data-wiring-junction]`) alongside physical terminal markers without
+distinguishing them, so `observedTerminals` in `terminal-peer-oracle.mjs`
+admitted junction-dot zones as valid printed peer-reference destinations and
+owner coordinates, and `collectWireTerminals` excluded junction circles only
+incidentally via `stroke: none`. Measurement now tags junction markers with
+`junction: true` (preserving DQ-13 N14 ray auditing) while excluding them from
+`observedTerminals`, and explicitly excludes junction dots and hidden landing
+anchors (`data-circuit-landing-for`, `data-wiring-landing-for`) from
+`collectWireTerminals`, so both peer-reference and wire-schedule audits enforce
+that every printed `SS.ZZ` address resolves to a physically drawn terminal.
+Complete 5.43 summaries remain readable.
 
 Version **5.43** closes a **DQ-17** gap for signal-loop and non-circuit
 pass-through terminal captions (`measurement/text-layout.mjs`, `checks.mjs`,
