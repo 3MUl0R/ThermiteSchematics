@@ -538,13 +538,13 @@ const module: FactModule = {
         const labels = [...body.querySelectorAll("text")].map(
           (t) => t.textContent,
         );
-        // Active pins 1 and 2 show both faces joined by one contact line; the
-        // spare pins 3 and 4 end at the bulkhead and show an unused rear face.
+        // Active pins 1 and 2 show both faces joined by one contact line but one
+        // number each (#554); spare pins 3 and 4 show an unused rear face.
         expect(body.querySelectorAll("circle")).toHaveLength(6);
         expect(body.querySelectorAll("path")).toHaveLength(2);
         for (const [label, n] of [
-          ["1", 2],
-          ["2", 2],
+          ["1", 1],
+          ["2", 1],
           ["3", 1],
           ["4", 1],
           ["unused", 2],
