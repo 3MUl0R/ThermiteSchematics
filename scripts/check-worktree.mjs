@@ -4,6 +4,23 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { parseShard } from "./test-shards.mjs";
+
+export function parseWorktreeArgs(args) {
+  if (!args.length) return {};
+  if (args.length === 1 && args[0].startsWith("--shard=")) {
+    const shard = args[0].slice("--shard=".length);
+    parseShard(shard);
+    return { shard };
+  }
+  if (args.length === 2 && args[0] === "--shard") {
+    parseShard(args[1]);
+    return { shard: args[1] };
+  }
+  throw new Error(
+    "Usage: bun scripts/check-worktree.mjs [--shard=<index>/<count>]",
+  );
+}
 
 function runCommand(command, args, cwd) {
   const result = spawnSync(command, args, {
@@ -70,6 +87,7 @@ async function cleanup(
 // Checks committed HEAD, not local modifications. The injected operations let
 // tests exercise busy handles and cleanup failures without changing a checkout.
 export async function checkWorktree({
+  shard,
   makeTemporary = () =>
     mkdtempSync(join(realpathSync.native(tmpdir()), "thermite-worktree-")),
   run = runCommand,
@@ -77,6 +95,7 @@ export async function checkWorktree({
   pause = delay,
   warn = console.warn,
 } = {}) {
+  const parsedShard = shard ? parseShard(shard) : undefined;
   const temporary = makeTemporary(),
     checkout = join(temporary, "linked checkout");
   let attached = false;
@@ -84,7 +103,17 @@ export async function checkWorktree({
     run("git", ["worktree", "add", "--detach", checkout, "HEAD"]);
     attached = true;
     run(process.execPath, ["install", "--frozen-lockfile"], checkout);
-    run(process.execPath, ["run", "check"], checkout);
+    if (parsedShard) {
+      const setupScript = parsedShard.index === 1 ? "check:static" : "build";
+      run(process.execPath, ["run", setupScript], checkout);
+      run(
+        process.execPath,
+        ["run", "test", "--", `--shard=${shard}`],
+        checkout,
+      );
+    } else {
+      run(process.execPath, ["run", "check"], checkout);
+    }
   } finally {
     try {
       await cleanup(temporary, checkout, attached, {
@@ -103,7 +132,7 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
-    await checkWorktree();
+    await checkWorktree(parseWorktreeArgs(process.argv.slice(2)));
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = error.exitCode ?? 1;

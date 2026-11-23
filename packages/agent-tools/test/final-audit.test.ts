@@ -217,7 +217,8 @@ describe("M7 Task 9 final inventories", () => {
 
     expect(workflow).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
     expect(workflow).toContain("runs-on: ${{ matrix.os }}");
-    expect(workflow).toContain("- run: bun run check");
+    expect(workflow).toContain("- run: bun run check:static");
+    expect(workflow).toContain("bun run test -- --shard=");
     expect(rootPackage.scripts.check).toContain("bun run test");
     expect(rootPackage.scripts.test).toBe("bun scripts/test.mjs");
   });

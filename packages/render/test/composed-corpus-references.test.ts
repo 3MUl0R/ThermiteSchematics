@@ -119,14 +119,12 @@ for (const entry of corpus) {
         }
       }
     },
-    // Compact-frame cases still perform a complete ELK render. One took
-    // 30.13 s on macOS CI, and the letter-landscape motor sweep took 22.36 s.
-    entry.recipe === "compact-frame" ||
-      (entry.sweep?.project === "motor-starter" &&
-        entry.sweep.size === "letter" &&
-        entry.sweep.orientation === "landscape")
-      ? 60_000
-      : 30_000,
+    // Compact-frame and motor-starter sweep cases perform full ELK renders that
+    // reached 41.7 s (compact-frame) and 29.6–39.0 s (motor-starter sweeps) on
+    // Windows CI, where 30 s deadlines flaked (#562).
+    entry.recipe === "compact-frame" || entry.sweep?.project === "motor-starter"
+      ? 90_000
+      : 60_000,
   );
   if (!entry.sweep) registerFontBudget(entry);
 }

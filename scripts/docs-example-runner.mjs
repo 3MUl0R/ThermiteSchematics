@@ -83,13 +83,24 @@ export async function runtimeShell(c, fence) {
   return shell({ ...c, entry }, fence.body);
 }
 
+export const WORKSPACE_SHELL_NATIVE_CI_TIMEOUT_MS = 120_000;
+export const WORKSPACE_SHELL_DEFAULT_TIMEOUT_MS = 60_000;
+export const WORKSPACE_SHELL_OVERHEAD_MS = 30_000;
+
+export function workspaceShellCommandTimeoutMs(
+  env = process.env,
+  platform = process.platform,
+) {
+  return env.CI && ["win32", "darwin"].includes(platform)
+    ? WORKSPACE_SHELL_NATIVE_CI_TIMEOUT_MS
+    : WORKSPACE_SHELL_DEFAULT_TIMEOUT_MS;
+}
+
 export async function workspaceShell(c, fence) {
   await (c.workspaceReady ??= prepareWorkspace(c, fence.file));
   // Workspace commands can launch builds and nested Vitest workers. Native
   // Windows and macOS CI exceeded 30 s per command even with shared setup.
-  const nativeCi =
-    process.env.CI && ["win32", "darwin"].includes(process.platform);
-  const timeoutMs = nativeCi ? 90_000 : 60_000;
+  const timeoutMs = workspaceShellCommandTimeoutMs();
   let command = 0;
   return shell(
     {

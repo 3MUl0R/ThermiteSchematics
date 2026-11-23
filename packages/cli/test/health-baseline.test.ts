@@ -110,13 +110,13 @@ it("a missing PR target fails closed with a fetch instruction", () => {
   );
   expect(result.stderr).toContain("fetch-depth: 0");
 });
-it("CI fetches complete base history in both jobs", () => {
+it("CI fetches complete base history in every checkout job", () => {
   const yaml = readFileSync(
     new URL("../../../.github/workflows/ci.yml", import.meta.url),
     "utf8",
   );
-  expect(yaml.match(/fetch-depth: 0/g)).toHaveLength(2);
-  expect(yaml.match(/Verify fetched health baseline/g)).toHaveLength(2);
+  expect(yaml.match(/fetch-depth: 0/g)).toHaveLength(3);
+  expect(yaml.match(/Verify fetched health baseline/g)).toHaveLength(3);
   expect(
     readFileSync(
       new URL("../../../scripts/ordinary-ci.authority.yml", import.meta.url),

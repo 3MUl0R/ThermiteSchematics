@@ -17,6 +17,7 @@
     "format": "bun --bun prettier --write .",
     "format:check": "bun --bun prettier --check .",
     "check:committed-json": "bun scripts/assert-prettier-stable-json.mjs",
+    "check:static": "bun run generate:types:check && bun run build && bun run check:text-metrics && bun run check:health && bun run check:docs && bun run format:check && bun run check:committed-json",
     "check": "bun run generate:types:check && bun run build && bun run check:text-metrics && bun run check:health && bun run check:docs && bun run test && bun run format:check && bun run check:committed-json",
     "generate:types": "bun run --cwd packages/schema generate:types",
     "generate:types:check": "bun run --cwd packages/schema generate:types:check",

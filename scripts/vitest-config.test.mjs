@@ -1,5 +1,16 @@
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
-import { createVitest } from "vitest/node";
+import { BaseSequencer, createVitest } from "vitest/node";
 
 async function resolveProjects(workers) {
   vi.stubEnv("THERMITE_CI_MAX_WORKERS", workers);
@@ -16,6 +27,24 @@ async function resolveProjects(workers) {
   } finally {
     await runner.close();
   }
+}
+
+function createStandaloneFixture() {
+  const scratch = mkdtempSync(join(tmpdir(), "thermite-vitest-standalone-"));
+  cpSync("vitest.config.mjs", join(scratch, "vitest.config.mjs"));
+  const deps = join(scratch, "node_modules");
+  mkdirSync(deps);
+  for (const entry of readdirSync(resolve("node_modules"))) {
+    if (entry.startsWith(".")) continue;
+    symlinkSync(
+      resolve("node_modules", entry),
+      join(deps, entry),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+  writeFileSync(join(scratch, "a.test.mjs"), "export {};\n");
+  writeFileSync(join(scratch, "b.test.mjs"), "export {};\n");
+  return scratch;
 }
 
 it("preserves Vitest defaults and caps workers in both CI projects", async () => {
@@ -45,6 +74,91 @@ it("preserves Vitest defaults and caps workers in both CI projects", async () =>
     expect(main.exclude).toEqual([...root.exclude, ...limited.include]);
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+it("keeps default local sequencers and scopes CiSequencer to CI", async () => {
+  vi.stubEnv("CI", "");
+  try {
+    const localDefault = await createVitest("test", { watch: false });
+    try {
+      expect(localDefault.config.sequence.sequencer).toBe(BaseSequencer);
+    } finally {
+      await localDefault.close();
+    }
+    const localShuffle = await createVitest("test", {
+      watch: false,
+      sequence: { shuffle: { files: true } },
+    });
+    try {
+      expect(localShuffle.config.sequence.sequencer.name).toBe(
+        "RandomSequencer",
+      );
+    } finally {
+      await localShuffle.close();
+    }
+    vi.stubEnv("CI", "1");
+    const ciRunner = await createVitest("test", { watch: false });
+    try {
+      expect(ciRunner.config.sequence.sequencer.name).toBe("CiSequencer");
+    } finally {
+      await ciRunner.close();
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("loads vitest.config.mjs standalone without sharding and throws when a shard is requested", async () => {
+  const scratch = createStandaloneFixture();
+  vi.stubEnv("CI", "1");
+  try {
+    const unsharded = await createVitest("test", {
+      root: scratch,
+      config: join(scratch, "vitest.config.mjs"),
+      watch: false,
+    });
+    try {
+      const specs = await unsharded.globTestSpecifications([]);
+      expect(specs).toHaveLength(2);
+      const Sequencer = unsharded.config.sequence.sequencer;
+      const sorted = await new Sequencer(unsharded).sort(Array.from(specs));
+      expect(sorted).toHaveLength(2);
+    } finally {
+      await unsharded.close();
+    }
+
+    const sharded = await createVitest("test", {
+      root: scratch,
+      config: join(scratch, "vitest.config.mjs"),
+      watch: false,
+      shard: "1/2",
+    });
+    try {
+      const specs = Array.from(await sharded.globTestSpecifications([]));
+      const Sequencer = sharded.config.sequence.sequencer;
+      const sequencer = new Sequencer(sharded);
+      await expect(sequencer.shard(specs)).rejects.toThrow(
+        /Sharded Vitest run requires .*test-shards\.mjs, which is missing/,
+      );
+      await expect(sequencer.sort(specs)).rejects.toThrow(
+        /Sharded Vitest run requires .*test-shards\.mjs, which is missing/,
+      );
+
+      mkdirSync(join(scratch, "scripts"));
+      writeFileSync(
+        join(scratch, "scripts", "test-shards.mjs"),
+        "export const broken = (;\n",
+      );
+      await expect(sequencer.shard(specs)).rejects.toThrow(
+        /Failed to load Vitest shard helper/,
+      );
+    } finally {
+      await sharded.close();
+    }
+  } finally {
+    vi.unstubAllEnvs();
+    rmSync(scratch, { recursive: true, force: true });
   }
 });
 

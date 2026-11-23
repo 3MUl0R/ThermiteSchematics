@@ -7,6 +7,10 @@ import {
 } from "../../../scripts/docs-examples-lib.mjs";
 import { recipes } from "../../../scripts/docs-example-recipes.mjs";
 import { context } from "../../../scripts/docs-example-context.mjs";
+import {
+  WORKSPACE_SHELL_NATIVE_CI_TIMEOUT_MS,
+  WORKSPACE_SHELL_OVERHEAD_MS,
+} from "../../../scripts/docs-example-runner.mjs";
 import { repositoryRoot } from "./project-guide/harness.js";
 
 export const corpus = await loadCorpus(repositoryRoot);
@@ -40,12 +44,23 @@ export function registerDocsExampleTests(
           ? "workspace"
           : "other";
     if (parts !== group) continue;
+    const workspaceCommands = entries.reduce((sum, entry) => {
+      const fence = fences.find((f) => exampleKey(f) === exampleKey(entry));
+      return (
+        sum +
+        (fence
+          ? fence.body.split(/(?<!\\)\n/).filter((line) => line.trim()).length
+          : 1)
+      );
+    }, 0);
+    // Whole-test budget must cover all per-command maxima plus workspace setup.
     const timeoutMs =
-      group === "workspace"
-        ? recipe === "workspace-shell"
-          ? 300_000 // Three commands can each use up to 90 s on native CI.
-          : 240_000
-        : 120_000;
+      recipe === "workspace-shell"
+        ? workspaceCommands * WORKSPACE_SHELL_NATIVE_CI_TIMEOUT_MS +
+          WORKSPACE_SHELL_OVERHEAD_MS
+        : group === "workspace"
+          ? 360_000 // docs/machine-demo.md timed out at 240 s on macOS CI (#562).
+          : 120_000;
     it(
       recipes[recipe].testName(file, recipe),
       async () => {
