@@ -75,7 +75,7 @@ async function retryWidenedSources(
   );
   if (widened === undefined) return undefined;
   const retried = await run(widened);
-  if (retried.ok) return { ...retried, graph: widened };
+  if (retried.ok === true) return { ...retried, graph: widened };
   return {
     ...first,
     error: {
