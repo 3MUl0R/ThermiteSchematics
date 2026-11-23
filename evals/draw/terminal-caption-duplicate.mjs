@@ -32,5 +32,12 @@ export function duplicateTerminalCaption(a) {
   )
     return false;
   const base = text.replace(/\s+\[\+\d+\]$/, "");
-  return repeatsKey(text, key) || repeatsKey(base, key);
+  // Any other repeated-token caption (e.g. "2 2" owned by terminal "1") is
+  // still a duplicate, exactly as the unresolved-terminal rule judges it.
+  return (
+    repeatsKey(text, key) ||
+    repeatsKey(base, key) ||
+    /^(\S+)\s+\1$/.test(text) ||
+    (base !== key && /^(\S+)\s+\1$/.test(base))
+  );
 }
