@@ -7,8 +7,10 @@ import { fileURLToPath } from "node:url";
 const CLI = "node_modules/playwright-core/cli.js";
 const ARGS = [CLI, "install", "--with-deps", "--no-shell", "chromium"];
 const APT_FILE = "/etc/apt/apt.conf.d/99thermite-timeouts";
+// DPkg::Lock::Timeout lets a retry wait for a just-killed apt/dpkg process to
+// release its lock instead of failing immediately (#562 review).
 const APT_CONF =
-  'Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "3";\n';
+  'Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "3";\nDPkg::Lock::Timeout "120";\n';
 const SOURCES = [
   "/etc/apt/sources.list.d/ubuntu.sources",
   "/etc/apt/sources.list",

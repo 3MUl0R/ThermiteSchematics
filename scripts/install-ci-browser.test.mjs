@@ -46,6 +46,7 @@ describe("CI browser installer", () => {
     expect(calls[0].options.input).toContain('Acquire::http::Timeout "30";');
     expect(calls[0].options.input).toContain('Acquire::https::Timeout "30";');
     expect(calls[0].options.input).toContain('Acquire::Retries "3";');
+    expect(calls[0].options.input).toContain('DPkg::Lock::Timeout "120";');
 
     const timeoutCall = calls.find((call) => call.command === "timeout");
     expect(timeoutCall.args).toEqual([
