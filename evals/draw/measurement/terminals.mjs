@@ -42,28 +42,98 @@ export function isEligibleWireTerminalCircle(e) {
   );
 }
 
-export function wireTerminalCirclePainted(e, visible, shapeClips) {
+export function parseCssOpacity(raw) {
+  if (raw === undefined || raw === null) return 1;
+  const text = String(raw).trim();
+  if (!text) return 1;
+  const pct = text.endsWith("%");
+  const value = Number(pct ? text.slice(0, -1) : text);
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, pct ? value / 100 : value));
+}
+
+export function paintColorAlpha(raw) {
+  if (!raw) return 0;
+  const text = String(raw).trim().toLowerCase();
+  if (!text || text === "none" || text === "transparent" || text === "white")
+    return 0;
+  const alpha = (token) => {
+    const t = token.trim();
+    if (t === "none") return 0;
+    const pct = t.endsWith("%");
+    const v = Number(pct ? t.slice(0, -1) : t);
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, pct ? v / 100 : v)) : 0;
+  };
+  const hex = text.match(
+    /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/,
+  );
+  if (hex) {
+    const d = hex[1];
+    const byte = (i) =>
+      d.length <= 4
+        ? parseInt(d[i] + d[i], 16)
+        : parseInt(d.slice(i * 2, i * 2 + 2), 16);
+    const a = d.length === 4 || d.length === 8 ? byte(3) / 255 : 1;
+    return byte(0) === 255 && byte(1) === 255 && byte(2) === 255 ? 0 : a;
+  }
+  const fn = text.match(/^([a-z][a-z0-9-]*)\(([^)]+)\)$/);
+  if (!fn) return 0;
+  const [, name, body] = fn;
+  const [head, slash] = body.split("/");
+  const parts = head.trim().split(/[\s,]+/);
+  const ch = (s, scale) =>
+    s === "none"
+      ? 0
+      : s.endsWith("%")
+        ? (Number(s.slice(0, -1)) * scale) / 100
+        : Number(s);
+  if (name === "rgb" || name === "rgba") {
+    if (parts.length < 3) return 0;
+    const [r, g, b] = parts.slice(0, 3).map((s) => ch(s, 255));
+    if (![r, g, b].every(Number.isFinite)) return 0;
+    const a =
+      slash !== undefined ? alpha(slash) : parts[3] ? alpha(parts[3]) : 1;
+    return r >= 255 && g >= 255 && b >= 255 ? 0 : a;
+  }
+  const a =
+    slash !== undefined
+      ? alpha(slash)
+      : (name === "hsl" || name === "hsla") && parts[3]
+        ? alpha(parts[3])
+        : 1;
+  if (name === "color" && parts.length >= 4) {
+    const rgb = parts.slice(1, 4).map((s) => ch(s, 1));
+    if (!rgb.every(Number.isFinite)) return 0;
+    const spaces = [
+      "srgb",
+      "srgb-linear",
+      "display-p3",
+      "a98-rgb",
+      "prophoto-rgb",
+      "rec2020",
+    ];
+    if (spaces.includes(parts[0]) && rgb.every((v) => v >= 1)) return 0;
+  }
+  return a;
+}
+
+export function wireTerminalCirclePainted(e, visible, shapeClips, h) {
   const v = visible(e);
   if (!v || !(v.b.w > 0 && v.b.h > 0)) return null;
-  const colorAlpha = (raw) => {
-    if (!raw || raw === "none" || raw === "transparent") return 0;
-    const m = raw.match(
-      /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/,
-    );
-    if (!m) return 1;
-    if (Number(m[1]) === 255 && Number(m[2]) === 255 && Number(m[3]) === 255)
-      return 0;
-    return m[4] === undefined ? 1 : Number(m[4]);
-  };
   const css = getComputedStyle(e);
   let opacity = 1;
   for (let p = e; p; p = p.parentElement)
-    opacity *= Number(getComputedStyle(p).opacity);
+    opacity *= h.parseCssOpacity(getComputedStyle(p).opacity);
   const strokePainted =
-    colorAlpha(css.stroke) * Number(css.strokeOpacity) * opacity >= 0.2 &&
-    parseFloat(css.strokeWidth) > 0;
+    h.paintColorAlpha(css.stroke) *
+      h.parseCssOpacity(css.strokeOpacity) *
+      opacity >=
+      0.2 && parseFloat(css.strokeWidth) > 0;
   const fillPainted =
-    colorAlpha(css.fill) * Number(css.fillOpacity) * opacity >= 0.2;
+    h.paintColorAlpha(css.fill) *
+      h.parseCssOpacity(css.fillOpacity) *
+      opacity >=
+    0.2;
   if (!strokePainted && !fillPainted) return null;
   const clips = shapeClips(e);
   if (
@@ -80,7 +150,7 @@ export function wireTerminalCirclePainted(e, visible, shapeClips) {
   return v;
 }
 
-export function wireTerminalIdentity(e, attr, h, visible, shapeClips) {
+export function wireTerminalIdentity(e, attr, h) {
   const parseTuple = (raw) => {
     try {
       const value = JSON.parse(raw);
@@ -105,12 +175,16 @@ export function wireTerminalIdentity(e, attr, h, visible, shapeClips) {
     (parent.hasAttribute("data-layout-port") &&
       parent.hasAttribute("data-terminal-key"));
   if (!hasPortIdentity) return undefined;
-  const paintedMarkers = Array.from(parent.children).filter(
-    (n) =>
-      h.isEligibleWireTerminalCircle(n) &&
-      Boolean(h.wireTerminalCirclePainted(n, visible, shapeClips)),
+  if (e.getAttribute("data-terminal-marker") !== "true") return null;
+  const marked = Array.from(parent.children).filter((n) =>
+    n.hasAttribute("data-terminal-marker"),
   );
-  if (paintedMarkers.length !== 1) return null;
+  if (
+    marked.length !== 1 ||
+    marked[0] !== e ||
+    !h.isEligibleWireTerminalCircle(e)
+  )
+    return null;
   if (parent.hasAttribute("data-loop-terminal"))
     return parseTuple(parent.getAttribute("data-loop-terminal"));
   if (parent.hasAttribute("data-terminal-id")) {
@@ -133,13 +207,13 @@ export function collectWireTerminals(c) {
   const { attr, h, identity, ids, root, shapeClips, visible } = c;
   const wireTerminals = Array.from(
     root.querySelectorAll(
-      "circle[data-terminal-key],circle[data-loop-terminal],g[data-terminal-id] > circle,g[data-loop-terminal] > circle,g[data-layout-port][data-terminal-key] > circle,g[data-cable-uid][data-conductor-id] > circle",
+      "circle[data-terminal-key],circle[data-loop-terminal],g[data-terminal-id] > circle[data-terminal-marker],g[data-loop-terminal] > circle[data-terminal-marker],g[data-layout-port][data-terminal-key] > circle[data-terminal-marker],g[data-cable-uid][data-conductor-id] > circle",
     ),
   ).flatMap((e) => {
     if (!h.isEligibleWireTerminalCircle(e)) return [];
-    const v = h.wireTerminalCirclePainted(e, visible, shapeClips);
+    const v = h.wireTerminalCirclePainted(e, visible, shapeClips, h);
     if (!v) return [];
-    const terminal = h.wireTerminalIdentity(e, attr, h, visible, shapeClips);
+    const terminal = h.wireTerminalIdentity(e, attr, h);
     if (terminal === null) return [];
     const cable = e.parentElement;
     const circles = Array.from(cable.children).filter(

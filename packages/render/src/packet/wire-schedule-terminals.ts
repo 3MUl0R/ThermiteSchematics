@@ -56,48 +56,6 @@ function portGroupTerminalKey(
   return undefined;
 }
 
-const UNPAINTED_COLORS = new Set([
-  "none",
-  "transparent",
-  "white",
-  "#fff",
-  "#ffffff",
-  "rgb(255,255,255)",
-  "rgba(0,0,0,0)",
-]);
-
-function isVisiblePaintColor(
-  raw: string | undefined,
-  fallback?: string,
-): boolean {
-  const value = (raw ?? fallback ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/gu, "");
-  if (!value || UNPAINTED_COLORS.has(value)) return false;
-  return !/^rgba\([^,]+,[^,]+,[^,]+,0(?:\.0+)?\)$/u.test(value);
-}
-
-/** A physical marker circle must be visible with positive radius and a visible fill or non-zero stroke. */
-export function isPaintedMarkerCircle(g: NavigationGeometry): boolean {
-  if (
-    g.node.name !== "circle" ||
-    !g.visible ||
-    isNonTerminalCircle(g.node.attrs)
-  )
-    return false;
-  if (!(Number(g.node.attrs.r) > 0)) return false;
-  const s = g.style ?? g.node.attrs;
-  if (!(Number(s.opacity ?? 1) > 0)) return false;
-  const filled =
-    Number(s["fill-opacity"] ?? 1) > 0 && isVisiblePaintColor(s.fill, "black");
-  const stroked =
-    Number(s["stroke-opacity"] ?? 1) > 0 &&
-    parseFloat(s["stroke-width"] ?? "1") > 0 &&
-    isVisiblePaintColor(s.stroke);
-  return filled || stroked;
-}
-
 function portGroupTerminalKeys(
   ir: Readonly<ElectricalIr>,
   geometry: readonly NavigationGeometry[],
@@ -111,13 +69,21 @@ function portGroupTerminalKeys(
     if (g.node.name !== "g" || !g.visible) continue;
     const key = portGroupTerminalKey(g, native);
     if (!key) continue;
-    const paintedCircles = g.node.children.filter((n) => {
-      const child = byNode.get(n);
-      return child !== undefined && isPaintedMarkerCircle(child);
-    });
-    if (paintedCircles.length !== 1) continue;
-    const circle = paintedCircles[0];
-    if (circle && !keys.has(circle)) keys.set(circle, key);
+    const marked = g.node.children.filter(
+      (n) => n.attrs["data-terminal-marker"] !== undefined,
+    );
+    if (marked.length !== 1) continue;
+    const [circle] = marked;
+    const child = circle ? byNode.get(circle) : undefined;
+    if (
+      !circle ||
+      circle.name !== "circle" ||
+      circle.attrs["data-terminal-marker"] !== "true" ||
+      !child?.visible ||
+      isNonTerminalCircle(circle.attrs)
+    )
+      continue;
+    if (!keys.has(circle)) keys.set(circle, key);
   }
 }
 

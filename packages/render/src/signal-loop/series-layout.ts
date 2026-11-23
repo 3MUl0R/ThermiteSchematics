@@ -556,7 +556,7 @@ function emitNode(
   const ports = info.ports
     .map(
       (p) =>
-        `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${
+        `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle data-terminal-marker="true" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${
           labelled.has(p.id)
             ? vertical
               ? text(

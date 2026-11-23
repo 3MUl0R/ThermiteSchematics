@@ -565,7 +565,7 @@ export function circuitTerminal(
   y: number,
   connected: boolean,
 ): string {
-  return `<circle cx="${n(x)}" cy="${n(y)}" r=".65" fill="${connected ? "#17212b" : "white"}" stroke="#17212b" stroke-width=".3"/>`;
+  return `<circle data-terminal-marker="true" cx="${n(x)}" cy="${n(y)}" r=".65" fill="${connected ? "#17212b" : "white"}" stroke="#17212b" stroke-width=".3"/>`;
 }
 
 /** The motor face stays clear of the independent incoming leads. */

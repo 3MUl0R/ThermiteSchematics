@@ -44,17 +44,21 @@ DQ-13 N14 ray auditing) while excluding them from `observedTerminals`,
 explicitly excludes junction dots and hidden landing anchors
 (`data-circuit-landing-for`, `data-wiring-landing-for`) while resolving
 parent port-group terminal identities in `collectWireTerminals` only when the
-group contains exactly one eligible painted physical marker circle (visible fill
-or non-zero stroke, rejecting ambiguous multi-circle or unpainted port groups
-with `wire-locator-without-appearance` while keeping children with their own
-conflicting identity separate), and includes foreign conductor segment boxes
-(`foreignConductorBoxes`) in the DQ-08 nearest-owner check
-(`issued-peer-reference-foreign-owner`) while excluding painted foreign ink that
-collinearly coincides with the owner's own conductor route (common shared-stem
-ownership; only the non-coincident parts of a foreign conductor count) so every
-printed `SS.ZZ` address resolves to a physically drawn terminal and every
-conductor peer note sits nearer its own terminal or conductor than any foreign
-terminal or distinct foreign conductor. Complete 5.43 summaries remain readable.
+group contains a single physical marker circle explicitly tagged
+`data-terminal-marker="true"` (rejecting missing, duplicated, invalid or
+transparent markers with `wire-locator-without-appearance` while parsing alpha
+across `rgba()`, `color(...)`, `transparent`, `#rrggbbaa`, `fill-opacity`,
+`stroke-opacity`, and ancestor percentage `opacity`, and keeping children with
+their own conflicting identity separate), and includes foreign conductor
+segment boxes (`foreignConductorBoxes`) in the DQ-08 nearest-owner check
+(`issued-peer-reference-foreign-owner`) while subtracting only foreign ink
+that is collinear within half a stroke width over the exact overlapping span
+with the owner's own conductor route (no cut expansion and no residual-sliver
+discard, preserving disjoint parallel runs, short perpendicular spurs,
+crossing diagonals, and distinct continuations) so every printed `SS.ZZ`
+address resolves to a physically drawn terminal and every conductor peer note
+sits nearer its own terminal or conductor than any foreign terminal or
+distinct foreign conductor. Complete 5.43 summaries remain readable.
 
 Version **5.43** closes a **DQ-17** gap for signal-loop and non-circuit
 pass-through terminal captions (`measurement/text-layout.mjs`, `checks.mjs`,

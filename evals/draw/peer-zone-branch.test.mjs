@@ -4,7 +4,13 @@ import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { fixture } from "./m3-fixture.mjs";
 import { nativeRows } from "./m3-native.mjs";
 import { peerReferenceFindings } from "./issued-reference-audit.mjs";
-import { boxGap, foreignConductorBoxes } from "./peer-owner-ink.mjs";
+import { paintColorAlpha, parseCssOpacity } from "./measurement/terminals.mjs";
+import {
+  boxGap,
+  conductorInk,
+  foreignConductorBoxes,
+} from "./peer-owner-ink.mjs";
+import { extent } from "./review-geometry.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 import { wireLocatorAudit } from "./wire-locators.mjs";
 
@@ -231,11 +237,11 @@ it("DQ-19 detects circuit boundary port-group terminals and rejects not drawn or
       `<circle data-circuit-junction="true" data-device-uid="ps1" data-terminal-key="+" cx="90" cy="82" r="0.55" fill="#17212b"/>` +
       `<g data-device-uid="ps1">` +
       `<g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
-      `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle data-terminal-marker="true" cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `</g></g>` +
       `<g data-device-uid="s1">` +
       `<g data-layout-port="n1p0" data-terminal-id='["s1","13"]' data-terminal-key="13">` +
-      `<circle cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle data-terminal-marker="true" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `</g></g>`,
   );
   const circuitPacket = {
@@ -311,9 +317,9 @@ function foreignConductorFixture() {
   const makeS2 = (noteMarkup) =>
     svg(
       zoneGrid() +
-        `<g data-device-uid="ps1"><g data-layout-port="p0" data-terminal-id='["ps1","+"]' data-terminal-key="+"><circle cx="54" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
-        `<g data-device-uid="s1"><g data-layout-port="p1" data-terminal-id='["s1","13"]' data-terminal-key="13"><circle cx="103" cy="65" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
-        `<g data-device-uid="s2"><g data-layout-port="p2" data-terminal-id='["s2","11"]' data-terminal-key="11"><circle cx="103" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-device-uid="ps1"><g data-layout-port="p0" data-terminal-id='["ps1","+"]' data-terminal-key="+"><circle data-terminal-marker="true" cx="54" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-device-uid="s1"><g data-layout-port="p1" data-terminal-id='["s1","13"]' data-terminal-key="13"><circle data-terminal-marker="true" cx="103" cy="65" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
+        `<g data-device-uid="s2"><g data-layout-port="p2" data-terminal-id='["s2","11"]' data-terminal-key="11"><circle data-terminal-marker="true" cx="103" cy="96" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/></g></g>` +
         `<g data-circuit-conductor="w1"><path d="M 72 96 H 75 V 65 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
         `<g data-circuit-conductor="w2"><path d="M 72 96 H 103" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
         `<circle data-circuit-junction="true" data-device-uid="ps1" data-terminal-key="+" cx="75" cy="96" r="0.55" fill="#17212b"/>` +
@@ -397,37 +403,57 @@ it("DQ-08 rejects a peer note sitting nearer a foreign conductor run than its ow
 
 it.each([
   [
-    "extra painted circle before marker",
+    "missing marker attribute",
     `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
-      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `</g></g>`,
     "01.C2",
   ],
   [
-    "extra painted circle after marker",
+    "duplicated marker attribute",
     `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
-      `<circle cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
-      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle data-terminal-marker="true" class="unrelated-ring" cx="60" cy="122" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle data-terminal-marker="true" cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `</g></g>`,
     "01.C2",
   ],
   [
-    "unpainted-only circle (fill none, stroke-width 0)",
+    "invalid marker attribute value",
     `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
-      `<circle class="unrelated-ring" cx="60" cy="122" r="0.65" fill="none" stroke="#17212b" stroke-width="0"/>` +
+      `<circle data-terminal-marker="false" cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+  [
+    "unpainted-only marked circle (fill none, stroke-width 0)",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" class="unrelated-ring" cx="60" cy="122" r="0.65" fill="none" stroke="#17212b" stroke-width="0"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+  [
+    "zero-alpha color(srgb 0 0 0 / 0) fill forgery",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" cx="60" cy="122" r="0.65" fill="color(srgb 0 0 0 / 0)" stroke="none"/>` +
+      `</g></g>`,
+    "01.C2",
+  ],
+  [
+    "zero-alpha rgba() / transparent / #rrggbbaa / percent opacity",
+    `<g data-device-uid="ps1" opacity="0%"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" cx="60" cy="122" r="0.65" fill="#17212b00" stroke="rgba(23, 33, 43, 0)" stroke-width="0.3"/>` +
       `</g></g>`,
     "01.C2",
   ],
 ])(
-  "DQ-19 rejects ambiguous or unpainted port-group fallback (%s)",
+  "DQ-19 rejects missing, duplicated, invalid or transparent port-group markers (%s)",
   async (_label, ps1Port, claimedLoc) => {
     const ir = twoDeviceIr();
     const circuitSheet = svg(
       zoneGrid() +
         ps1Port +
         `<g data-device-uid="s1"><g data-layout-port="n1p0" data-terminal-id='["s1","13"]' data-terminal-key="13">` +
-        `<circle cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+        `<circle data-terminal-marker="true" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
         `</g></g>`,
     );
     const circuitPacket = {
@@ -471,12 +497,76 @@ it.each([
   60_000,
 );
 
+it.each([
+  [
+    "white fill with dark stroke",
+    `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+  ],
+  [
+    "percentage ancestor opacity 50%",
+    `<g data-device-uid="ps1" opacity="50%"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" cx="60" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `</g></g>`,
+  ],
+  [
+    "CSS-class stroke",
+    `<style>.review-marker{fill:white;stroke:#17212b;stroke-width:.3}</style>` +
+      `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" class="review-marker" cx="60" cy="82" r="0.65"/>` +
+      `</g></g>`,
+  ],
+  [
+    "compound CSS selector stroke",
+    `<style>.review-port > .review-marker{stroke:#17212b;stroke-width:.3}</style>` +
+      `<g data-device-uid="ps1"><g class="review-port" data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
+      `<circle data-terminal-marker="true" class="review-marker" cx="60" cy="82" r="0.65" fill="white"/>` +
+      `</g></g>`,
+  ],
+])(
+  "DQ-19 accepts painted marked terminal markers (%s)",
+  async (_label, ps1Port) => {
+    const ir = twoDeviceIr();
+    const circuitSheet = svg(
+      zoneGrid() +
+        ps1Port +
+        `<g data-device-uid="s1"><g data-layout-port="n1p0" data-terminal-id='["s1","13"]' data-terminal-key="13">` +
+        `<circle data-terminal-marker="true" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+        `</g></g>`,
+    );
+    const circuitPacket = {
+      sheets: [
+        {
+          number: 1,
+          view: { kind: "circuit", format: "documentation-view/0.1" },
+        },
+        {
+          number: 2,
+          view: { kind: "wires", format: "documentation-view/0.1" },
+        },
+      ],
+    };
+    const gCircuit = await openSheet(page, circuitSheet);
+    const gSchedule = await openSheet(page, wireScheduleSvg("01.B2", "01.B4"));
+    expect(
+      gCircuit.wireTerminals.filter(
+        (m) => JSON.stringify(m.terminal) === '["ps1","+"]',
+      ),
+    ).toHaveLength(1);
+    expect(
+      wireLocatorAudit(circuitPacket, [gCircuit, gSchedule], ir).findings,
+    ).toEqual([]);
+  },
+  60_000,
+);
+
 it("DQ-19 keeps a conflicting explicit child identity separate from its parent port group", async () => {
   const ir = twoDeviceIr();
   const circuitSheet = svg(
     zoneGrid() +
       `<g data-device-uid="ps1"><g data-layout-port="n0p0" data-terminal-id='["ps1","+"]' data-terminal-key="+">` +
-      `<circle data-device-uid="s1" data-terminal-key="13" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
+      `<circle data-terminal-marker="true" data-device-uid="s1" data-terminal-key="13" cx="120" cy="82" r="0.65" fill="white" stroke="#17212b" stroke-width="0.3"/>` +
       `</g></g>`,
   );
   const circuitPacket = {
@@ -500,3 +590,93 @@ it("DQ-19 keeps a conflicting explicit child identity separate from its parent p
     wireLocatorAudit(circuitPacket, [gCircuit, gSchedule], ir).findings,
   ).toEqual([]);
 }, 60_000);
+
+it("DQ-19 paint helpers parse alpha across all computed-colour and percentage-opacity forms", () => {
+  expect(paintColorAlpha("none")).toBe(0);
+  expect(paintColorAlpha("transparent")).toBe(0);
+  expect(paintColorAlpha("white")).toBe(0);
+  expect(paintColorAlpha("rgb(255, 255, 255)")).toBe(0);
+  expect(paintColorAlpha("#ffffffff")).toBe(0);
+  expect(paintColorAlpha("#17212b00")).toBe(0);
+  expect(paintColorAlpha("#17212b80")).toBeCloseTo(128 / 255, 4);
+  expect(paintColorAlpha("rgba(23, 33, 43, 0)")).toBe(0);
+  expect(paintColorAlpha("rgba(23, 33, 43, 0.5)")).toBe(0.5);
+  expect(paintColorAlpha("rgb(23 33 43 / 50%)")).toBe(0.5);
+  expect(paintColorAlpha("color(srgb 0 0 0 / 0)")).toBe(0);
+  expect(paintColorAlpha("color(srgb 0 0 0 / 0.5)")).toBe(0.5);
+  expect(paintColorAlpha("color(srgb 0 0 0 / 50%)")).toBe(0.5);
+  expect(paintColorAlpha("color(srgb 1 1 1 / 1)")).toBe(0);
+  expect(paintColorAlpha("rgb(23, 33, 43)")).toBe(1);
+  expect(parseCssOpacity("50%")).toBe(0.5);
+  expect(parseCssOpacity("0%")).toBe(0);
+  expect(parseCssOpacity(".5")).toBe(0.5);
+  expect(parseCssOpacity("1")).toBe(1);
+});
+
+it.each([
+  ["parallel-0.1", "M 20 30 H 40", "M 20 30.1 H 40", true, false],
+  ["parallel-0.06", "M 20 30 H 40", "M 20 30.06 H 40", true, false],
+  [
+    "parallel-0.04-disjoint-ink",
+    "M 20 30 H 40",
+    "M 20 30.04 H 40",
+    true,
+    false,
+  ],
+  ["coincident-0.04-short", "M 20 30 H 40", "M 24 30 H 24.04", false, false],
+  [
+    "adjacent-perpendicular-0.05",
+    "M 20 30 H 40",
+    "M 30 30 V 30.05",
+    true,
+    false,
+  ],
+  ["collinear-tail-0.29", "M 20 30 H 40", "M 20 30 H 40.29", true, true],
+  ["collinear-tail-0.31", "M 20 30 H 40", "M 20 30 H 40.31", true, true],
+  [
+    "crossing-diagonal-equal-hulls",
+    "M 20 30 L 40 40",
+    "M 20 40 L 40 30",
+    true,
+    true,
+  ],
+])(
+  "DQ-08 foreignConductorBoxes applies exact coincident-ink subtraction (%s)",
+  async (_variant, a, b, expectForeign, expectFlag) => {
+    const sheetSvg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" viewBox="0 0 120 80">` +
+      `<g data-circuit-conductor="w1"><path d="${a}" fill="none" stroke="#17212b" stroke-width=".025"/></g>` +
+      `<g data-circuit-conductor="w2"><path d="${b}" fill="none" stroke="#17212b" stroke-width=".025"/></g>` +
+      `</svg>`;
+    const g = await openSheet(page, sheetSvg);
+    const owner = { kind: "wire", uid: "w1" };
+    const supports = conductorInk(g, owner).runs.map(extent);
+    const distinct = foreignConductorBoxes(g, owner);
+    expect(distinct.length > 0).toBe(expectForeign);
+    const source = ["PS1.+", "W-CTL-012", "S2.11"];
+    const label = "W-CTL-012 · PS1.+ → S2.11 07.B2";
+    const note = {
+      peerReference: "conductor-peer",
+      peerSource: JSON.stringify(source),
+      text: label,
+      painted: true,
+      fontSize: 2.5,
+      bbox: { x: 41, y: 31, w: 3, h: 1.8 },
+    };
+    const obligation = {
+      kind: "conductor-peer",
+      source,
+      owners: [{ x: 20, y: 30, w: 1, h: 1 }],
+      supports,
+      foreignConductors: distinct,
+      values: [label],
+    };
+    const kinds = peerReferenceFindings(7, { texts: [note] }, [obligation]).map(
+      (f) => f.kind,
+    );
+    expect(kinds.includes("issued-peer-reference-foreign-owner")).toBe(
+      expectFlag,
+    );
+  },
+  60_000,
+);

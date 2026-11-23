@@ -281,7 +281,7 @@ it("wireScheduleLocations resolves circuit boundary port groups carrying termina
     const boundaryPort =
       `<g data-device-uid="${ps1}">` +
       `<g data-layout-port="n0p0" data-terminal-id="${termId}" data-terminal-key="+">` +
-      `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle data-terminal-marker="true" cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `</g></g>`;
     const physicalK1 = `<circle class="terminal-marker" data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r="1" fill="white" stroke="#101828"/>`;
 
@@ -323,6 +323,39 @@ function noteBoundingBox(group: Element) {
       Math.max(...boxes.map((b) => b.y + b.h)) -
       Math.min(...boxes.map((b) => b.y)),
   };
+}
+
+function assertMarkedPortGroups(svg: string) {
+  const groups = [
+    ...parseSvg(svg).querySelectorAll("g[data-layout-port][data-terminal-id]"),
+  ];
+  expect(groups.length).toBeGreaterThan(0);
+  for (const group of groups)
+    expect(
+      group.querySelectorAll(':scope > circle[data-terminal-marker="true"]')
+        .length,
+    ).toBe(1);
+}
+
+function assertScheduleLocators(
+  ir: Readonly<ElectricalIr>,
+  svg: string,
+  names: readonly string[],
+) {
+  const doc = parseSvg(svg);
+  for (const name of names) {
+    const wire = required(ir.wires.find((w) => w.designation === name));
+    const row = required(
+      [...doc.querySelectorAll("[data-report-row]")].find(
+        (r) => r.getAttribute("data-report-row") === wire.uid,
+      ),
+    );
+    for (const col of [6, 7])
+      expect(
+        row.querySelector(`[data-report-column="${col}"]`)!.textContent!.trim(),
+        `${name} col ${col}`,
+      ).toMatch(/^\d{2,3}\.[A-D][1-6]$/u);
+  }
 }
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
@@ -371,26 +404,19 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       });
       expect(rendered.ok, JSON.stringify(rendered)).toBe(true);
       if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
+      const circuitSheet = required(
+        rendered.value.sheets.find((s) => s.view.kind === "circuit"),
+      );
+      assertMarkedPortGroups(circuitSheet.svg);
       const scheduleSheet = required(
         rendered.value.sheets.find((s) => s.view.kind === "wires"),
       );
-      const doc = parseSvg(scheduleSheet.svg);
-      for (const name of ["W1", "W2", "W3", "W4"]) {
-        const wire = required(
-          fixture.ir.wires.find((w) => w.designation === name),
-        );
-        const row = required(
-          [...doc.querySelectorAll("[data-report-row]")].find(
-            (r) => r.getAttribute("data-report-row") === wire.uid,
-          ),
-        );
-        for (const col of [6, 7]) {
-          const cell = row
-            .querySelector(`[data-report-column="${col}"]`)!
-            .textContent!.trim();
-          expect(cell, `${name} col ${col}`).toMatch(/^\d{2,3}\.[A-D][1-6]$/u);
-        }
-      }
+      assertScheduleLocators(fixture.ir, scheduleSheet.svg, [
+        "W1",
+        "W2",
+        "W3",
+        "W4",
+      ]);
     } finally {
       await fixture.dispose();
     }
@@ -420,19 +446,19 @@ function s07BranchCircuitSheets(
     `</g>`;
   const s2Body =
     `<g data-device-uid="${ps1}"><g data-layout-port="n3p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
-    `<circle cx="24" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `<circle data-terminal-marker="true" cx="24" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
     `</g></g>` +
     `<path d="M 24 56 H 42" fill="none" stroke="#17212b" stroke-width=".35"/>` +
-    `<circle data-circuit-junction="true" data-device-uid="${ps1}" data-terminal-key="+" cx="45" cy="56" r=".55" fill="#17212b"/>` +
     `<g data-circuit-conductor="${w1}"><path d="M 42 56 H 45 V 25 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
     `<g data-circuit-conductor="${w3}"><path d="M 42 56 H 50 M 66 56 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `<circle data-circuit-junction="true" data-device-uid="${ps1}" data-terminal-key="+" cx="45" cy="56" r=".55" fill="#17212b"/>` +
     `<text x="53" y="55" font-size="2.5" fill="#17212b">+24V-S2</text>` +
     `<text x="50" y="57.9" font-size="2.5" fill="#17212b">18AWG / blue</text>` +
     `<g data-device-uid="${k1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([k1, "A1"]))}" data-terminal-key="A1">` +
-    `<circle cx="73" cy="25" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `<circle data-terminal-marker="true" cx="73" cy="25" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
     `</g></g>` +
     `<g data-device-uid="${h1}"><g data-layout-port="n1p0" data-terminal-id="${attr(JSON.stringify([h1, "X1"]))}" data-terminal-key="X1">` +
-    `<circle cx="73" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+    `<circle data-terminal-marker="true" cx="73" cy="56" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
     `</g></g>` +
     `<rect x="4" y="50.5" width="20" height="11" fill="none" stroke="#17212b"/>` +
     `<rect x="4" y="37" width="38" height="10" fill="#17212b"/>` +
@@ -499,30 +525,29 @@ it("terminalPeerReferences keeps a co-occurring circuit peer note nearer its own
 
 it.each([
   [
-    "extra painted circle before marker",
+    "missing marker attribute",
     (ps1: string) =>
       `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
-      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `</g></g>`,
   ],
   [
-    "extra painted circle after marker",
+    "duplicated marker attribute",
     (ps1: string) =>
       `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
-      `<circle cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
-      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle data-terminal-marker="true" class="unrelated-ring" cx="30" cy="70" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle data-terminal-marker="true" cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `</g></g>`,
   ],
   [
-    "unpainted-only circle (fill none, stroke-width 0)",
+    "invalid marker attribute value",
     (ps1: string) =>
       `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
-      `<circle class="unrelated-ring" cx="30" cy="70" r=".65" fill="none" stroke="#17212b" stroke-width="0"/>` +
+      `<circle data-terminal-marker="false" cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `</g></g>`,
   ],
 ])(
-  "wireScheduleLocations refuses ambiguous or unpainted port-group fallback (%s)",
+  "wireScheduleLocations requires a unique valid data-terminal-marker on port groups (%s)",
   async (_label, portGroup) => {
     const fixture = await offViewFixture();
     try {
@@ -552,6 +577,32 @@ it.each([
   },
 );
 
+it("wireScheduleLocations preserves non-port-group circles with percentage opacity or compound CSS selectors", async () => {
+  const fixture = await offViewFixture();
+  try {
+    const page = normalizePaperPage();
+    if (!page.ok) throw Error("paper");
+    const { ps1, k1, w1 } = findFixtures(fixture.ir);
+    const key = attr(JSON.stringify([ps1, "+"]));
+    const physicalK1 = `<circle class="terminal-marker" data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r="1" fill="white" stroke="#101828"/>`;
+    for (const body of [
+      `<g opacity="50%"><circle data-loop-terminal="${key}" cx="30" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/></g>`,
+      `<style>.review-port > .review-marker{stroke:#17212b;stroke-width:.3}</style><g class="review-port"><circle class="review-marker" data-loop-terminal="${key}" cx="30" cy="30" r=".65" fill="white"/></g>`,
+      `<g><rect x="28" y="28" width="4" height="4" fill="#17212b"/><circle data-loop-terminal="${key}" cx="30" cy="30" r=".65" fill="none" stroke="white" stroke-width=".3"/></g>`,
+    ]) {
+      const result = wireScheduleLocations(
+        fixture.ir,
+        [makeDraft("circuit")],
+        [makeSheet(1, "circuit", body + physicalK1)],
+        page.value,
+      );
+      expect(result.get(w1)).toEqual(["01.B2", "01.B5"]);
+    }
+  } finally {
+    await fixture.dispose();
+  }
+});
+
 it("wireScheduleTerminalKeys keeps a conflicting explicit child identity separate from its parent port group", async () => {
   const fixture = await offViewFixture();
   try {
@@ -560,7 +611,7 @@ it("wireScheduleTerminalKeys keeps a conflicting explicit child identity separat
     const { ps1, k1, w1 } = findFixtures(fixture.ir);
     const body =
       `<g data-device-uid="${ps1}"><g data-layout-port="n0p0" data-terminal-id="${attr(JSON.stringify([ps1, "+"]))}" data-terminal-key="+">` +
-      `<circle data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
+      `<circle data-terminal-marker="true" data-device-uid="${k1}" data-terminal-key="A1" cx="90" cy="30" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>` +
       `</g></g>`;
     const result = wireScheduleLocations(
       fixture.ir,
@@ -574,34 +625,66 @@ it("wireScheduleTerminalKeys keeps a conflicting explicit child identity separat
   }
 });
 
-it("peerRouteIndex.foreignRuns excludes coincident shared stems while retaining distinct foreign runs", () => {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" viewBox="0 0 120 80">` +
-    `<g data-circuit-conductor="w10"><path d="M 42 56 H 45 V 25 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
-    `<g data-circuit-conductor="w12"><path d="M 42 56 H 50 M 66 56 H 73" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
-    `</svg>`;
-  const idx = peerRouteIndex(navigationGeometry(svg));
-  const stemProbe = { x: 42, y: 59.45, w: 1, h: 1.8 };
-  const vertProbe = { x: 46.5, y: 40, w: 4, h: 2 };
+it.each([
+  ["parallel-0.1", "M 20 30 H 40", "M 20 30.1 H 40", true],
+  ["parallel-0.06", "M 20 30 H 40", "M 20 30.06 H 40", true],
+  ["parallel-0.04-disjoint-ink", "M 20 30 H 40", "M 20 30.04 H 40", true],
+  ["coincident-0.04-short", "M 20 30 H 40", "M 24 30 H 24.04", false],
+  ["adjacent-perpendicular-0.05", "M 20 30 H 40", "M 30 30 V 30.05", true],
+  ["collinear-tail-0.29", "M 20 30 H 40", "M 20 30 H 40.29", true],
+  ["collinear-tail-0.31", "M 20 30 H 40", "M 20 30 H 40.31", true],
+  ["crossing-diagonal-equal-hulls", "M 20 30 L 40 40", "M 20 40 L 40 30", true],
+])(
+  "peerRouteIndex.foreignRuns applies exact coincident-ink subtraction (%s)",
+  (variant, a, b, expectForeign) => {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="80mm" viewBox="0 0 120 80">` +
+      `<g data-circuit-conductor="w1"><path d="${a}" fill="none" stroke="#17212b" stroke-width=".025"/></g>` +
+      `<g data-circuit-conductor="w2"><path d="${b}" fill="none" stroke="#17212b" stroke-width=".025"/></g>` +
+      `</svg>`;
+    const foreign = peerRouteIndex(navigationGeometry(svg)).foreignRuns({
+      kind: "wire",
+      uid: "w1",
+    });
+    expect(foreign.length > 0).toBe(expectForeign);
+    if (variant === "collinear-tail-0.29") {
+      const note = { x: 41, y: 31, w: 3, h: 1.8 };
+      const ownGap = Math.min(
+        ...peerRouteIndex(navigationGeometry(svg))
+          .route({ kind: "wire", uid: "w1" })
+          .runs.map((r) => boxDistance(note, r)),
+      );
+      const foreignGap = Math.min(...foreign.map((r) => boxDistance(note, r)));
+      expect(foreignGap).toBeLessThan(ownGap - 0.17);
+    }
+  },
+);
 
-  // Relative to w12: w10's horizontal stem [42, 45] at y=56 is coincident and excluded;
-  // w10's vertical run at x=45 remains foreign.
-  const foreignForW12 = idx.foreignRuns({ kind: "wire", uid: "w12" });
-  expect(
-    Math.min(...foreignForW12.map((b) => boxDistance(stemProbe, b))),
-  ).toBeGreaterThan(3.8);
-  expect(
-    Math.min(...foreignForW12.map((b) => boxDistance(vertProbe, b))),
-  ).toBeLessThan(2.0);
+it("peerRouteIndex.foreignRuns stops at painted junction dots to remove the s07 PS1.+ tie", () => {
+  const routes =
+    `<g data-circuit-conductor="w10"><path d="M 72 96 H 75 V 65.25 H 79.675" fill="none" stroke="#17212b" stroke-width=".35"/></g>` +
+    `<g data-circuit-conductor="w12"><path d="M 72 96 H 79.675" fill="none" stroke="#17212b" stroke-width=".35"/></g>`;
+  const dot = `<circle data-circuit-junction="true" data-device-uid="ps1" data-terminal-key="+" cx="75" cy="96" r=".55" fill="#17212b"/>`;
+  const wrap = (body: string) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="120mm" viewBox="0 0 120 120">${body}</svg>`;
+  const note = { x: 55.6, y: 99.457, w: 32, h: 1.8 };
+  const w12 = { kind: "wire" as const, uid: "w12" };
 
-  // Relative to w10: the coincident [42, 45] part of w12 is excluded,
-  // while the non-coincident [45, 50] continuation of w12 remains foreign.
-  const foreignForW10 = idx.foreignRuns({ kind: "wire", uid: "w10" });
-  const contProbe = { x: 47, y: 59.45, w: 2, h: 1.8 };
-  expect(
-    Math.min(...foreignForW10.map((b) => boxDistance(stemProbe, b))),
-  ).toBeGreaterThan(3.8);
-  expect(
-    Math.min(...foreignForW10.map((b) => boxDistance(contProbe, b))),
-  ).toBeLessThan(3.55);
+  const withDot = peerRouteIndex(navigationGeometry(wrap(routes + dot)));
+  const ownGap = Math.min(
+    ...withDot.route(w12).runs.map((r) => boxDistance(note, r)),
+  );
+  const foreignGap = Math.min(
+    ...withDot.foreignRuns(w12).map((r) => boxDistance(note, r)),
+  );
+  expect(foreignGap - ownGap).toBeGreaterThan(0.5);
+
+  const withoutDot = peerRouteIndex(navigationGeometry(wrap(routes)));
+  const noDotOwnGap = Math.min(
+    ...withoutDot.route(w12).runs.map((r) => boxDistance(note, r)),
+  );
+  const noDotForeignGap = Math.min(
+    ...withoutDot.foreignRuns(w12).map((r) => boxDistance(note, r)),
+  );
+  expect(noDotForeignGap - noDotOwnGap).toBeCloseTo(0, 3);
 });
