@@ -1016,7 +1016,7 @@ const module: FactModule = {
     },
     {
       claim:
-        "`thermite:dc-supply` defaults: 2-terminal sources `dc-output` unless AC/earth/aux; 2/3-terminal loads ignore earth; `ac-input`: AC roles or 2+ non-earth all rated AC, else `load`.",
+        "`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.",
       async check() {
         const compiled = await compileProject(ctx.pristine.starter);
         if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
@@ -1035,7 +1035,7 @@ const module: FactModule = {
         const dcMark = circuitMark(type, dcOutput);
         expect(acMark).toBe("ac-input");
         expect(dcMark).toBe("dc-output");
-        // Earth terminals are ignored in both directions; rating-based ac-input needs 2+ non-earth AC-rated inputs.
+        // Earth terminals are ignored in both directions; rating-based ac-input needs 2+ non-earth AC-rated pins.
         const oneNonEarthAndPe = structuredClone(type);
         oneNonEarthAndPe.terminals = [
           { key: "A", rating: { voltage_type: "AC" } },
@@ -1072,6 +1072,43 @@ const module: FactModule = {
             })),
           }),
         ).toBe("ac-input");
+        // Incomplete AC roles, DC-rated return conflict, or AC-rated aux pin stay generic load.
+        const partialRole = structuredClone(type);
+        partialRole.terminals = [
+          { key: "L", role: "ac_line_input" },
+          { key: "N", role: "neutral", rating: { voltage_type: "AC" } },
+          { key: "PE", role: "protective_earth" },
+        ];
+        expect(
+          circuitMark(partialRole, {
+            ...acInput,
+            terminals: ["L", "N", "PE"].map((terminalKey) => ({
+              deviceUid: ps1.uid,
+              terminalKey,
+            })),
+          }),
+        ).toBe("load");
+        const dcConflict = structuredClone(type);
+        dcConflict.terminals = [
+          { key: "L", role: "ac_line_input", rating: { voltage_type: "AC" } },
+          { key: "N", role: "ac_input_return", rating: { voltage_type: "DC" } },
+        ];
+        expect(circuitMark(dcConflict, acInput)).toBe("load");
+        const auxConflict = structuredClone(type);
+        auxConflict.terminals = [
+          { key: "L", role: "ac_line_input", rating: { voltage_type: "AC" } },
+          { key: "N", role: "ac_input_return", rating: { voltage_type: "AC" } },
+          { key: "A", role: "aux", rating: { voltage_type: "AC" } },
+        ];
+        expect(
+          circuitMark(auxConflict, {
+            ...acInput,
+            terminals: ["L", "N", "A"].map((terminalKey) => ({
+              deviceUid: ps1.uid,
+              terminalKey,
+            })),
+          }),
+        ).toBe("load");
         // 2-terminal sources fall back to generic source when terminals include earth or auxiliary roles.
         const peSource = structuredClone(type);
         peSource.terminals = [

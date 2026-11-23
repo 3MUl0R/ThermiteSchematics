@@ -132,10 +132,7 @@ function receptacleMark(type: IrDeviceType, f: IrFunction): CircuitMark {
 }
 
 export interface CircuitMarkContext {
-  readonly ir?: Readonly<ElectricalIr> & {
-    readonly protectiveEarthTerminals?: readonly TerminalId[];
-  };
-  readonly protectiveEarthTerminals?: readonly TerminalId[];
+  readonly ir?: Readonly<ElectricalIr>;
 }
 
 interface FunctionTerminalFact {
@@ -196,26 +193,38 @@ const AC_THREE_PHASE_ROLE_SETS = [
   ["phase_1_input", "phase_2_input", "phase_3_input"],
   ["phase_u_input", "phase_v_input", "phase_w_input"],
 ] as const;
-const EARTH_ROLE_TOKENS = new Set(["earth", "ground", "pe", "fe", "gnd"]);
+/**
+ * Closed set of normalized earth roles for `thermite:dc-supply` qualifier
+ * classification (exact match after lowercasing and stripping non-alphanumeric
+ * characters; never tokenized or substring-matched). Combined with normalized
+ * `protectiveEarthRoles()` from the symbol mappings. Intentionally maintained
+ * as an independent copy from `evals/draw/qualifier-oracle.mjs`.
+ * Do not add "ground" or "gnd": a supply ground can be a return.
+ */
+const DC_SUPPLY_EARTH_ROLES = Object.freeze([
+  "protectiveearth",
+  "pe",
+  "functionalearth",
+  "fe",
+  "earth",
+  "chassisground",
+  "chassisearth",
+] as const);
 const AUXILIARY_ROLE_TOKENS = new Set(["aux", "auxiliary", "shield"]);
+
+function normalizeEarthRole(role: string | undefined): string {
+  return (role ?? "").toLowerCase().replace(/[^a-z0-9]+/gu, "");
+}
 
 function roleTokens(role: string | undefined): string[] {
   return (role ?? "")
-    .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/gu, "$1 $2")
     .toLowerCase()
     .split(/[^a-z0-9]+/u)
     .filter(Boolean);
 }
 
-function isEarthRole(role: string | undefined): boolean {
-  return roleTokens(role).some((token) => EARTH_ROLE_TOKENS.has(token));
-}
-
-function canonicalEarthRoles(
-  context?: CircuitMarkContext,
-): ReadonlySet<string> {
-  return protectiveEarthRoles(
+function closedEarthRoles(context?: CircuitMarkContext): ReadonlySet<string> {
+  const canonical = protectiveEarthRoles(
     context?.ir
       ? [
           ...CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
@@ -223,23 +232,16 @@ function canonicalEarthRoles(
         ]
       : CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   );
+  const roles = new Set<string>(DC_SUPPLY_EARTH_ROLES);
+  for (const role of canonical) roles.add(normalizeEarthRole(role));
+  return roles;
 }
 
 function isEarthTerminal(
-  type: IrDeviceType,
   terminal: FunctionTerminalFact,
   earthRoles: ReadonlySet<string>,
   context?: CircuitMarkContext,
 ): boolean {
-  if (
-    context?.protectiveEarthTerminals?.some((pe) =>
-      sameTerminalId(pe, terminal.id),
-    ) ||
-    context?.ir?.protectiveEarthTerminals?.some((pe) =>
-      sameTerminalId(pe, terminal.id),
-    )
-  )
-    return true;
   if (
     context?.ir?.potentials.some(
       (p) =>
@@ -248,18 +250,8 @@ function isEarthTerminal(
     )
   )
     return true;
-  if (
-    type.functions.some(
-      (fn) =>
-        fn.kind === "bus" &&
-        fn.terminalKeys.length === 1 &&
-        fn.terminalKeys[0] === terminal.id.terminalKey &&
-        type.circuitSymbols?.[fn.key] === "earth",
-    )
-  )
-    return true;
-  return terminal.roles.some(
-    (role) => earthRoles.has(role) || isEarthRole(role),
+  return terminal.roles.some((role) =>
+    earthRoles.has(normalizeEarthRole(role)),
   );
 }
 
@@ -283,9 +275,9 @@ function dcSupplyInputMark(
   context?: CircuitMarkContext,
 ): CircuitMark {
   const terminals = functionTerminalFacts(type, f, context);
-  const earthRoles = canonicalEarthRoles(context);
+  const earthRoles = closedEarthRoles(context);
   const currentTerminals = terminals.filter(
-    (t) => !isEarthTerminal(type, t, earthRoles, context),
+    (t) => !isEarthTerminal(t, earthRoles, context),
   );
   if (currentTerminals.length < 2) return "load";
   if (
@@ -320,10 +312,10 @@ function dcSupplyOutputMark(
   context?: CircuitMarkContext,
 ): CircuitMark {
   const terminals = functionTerminalFacts(type, f, context);
-  const earthRoles = canonicalEarthRoles(context);
+  const earthRoles = closedEarthRoles(context);
   const nonDcOrAc = terminals.some(
     (t) =>
-      isEarthTerminal(type, t, earthRoles, context) ||
+      isEarthTerminal(t, earthRoles, context) ||
       t.roles.some(
         (role) => isAuxiliaryOrNonPowerRole(role) || isAcRole(role),
       ) ||

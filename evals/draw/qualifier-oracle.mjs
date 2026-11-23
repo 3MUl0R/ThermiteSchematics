@@ -17,14 +17,33 @@ const AC_THREE_PHASE_ROLE_SETS = [
   ["phase_1_input", "phase_2_input", "phase_3_input"],
   ["phase_u_input", "phase_v_input", "phase_w_input"],
 ];
-const CANONICAL_PROTECTIVE_EARTH_ROLES = new Set(["protective_earth"]);
-const EARTH_ROLE_TOKENS = new Set(["earth", "ground", "pe", "fe", "gnd"]);
+/**
+ * Closed set of normalized earth roles for `thermite:dc-supply` qualifier
+ * classification (exact match after lowercasing and stripping non-alphanumeric
+ * characters; never tokenized or substring-matched). Combines the canonical
+ * protective-earth boundary role (`protective_earth` -> `protectiveearth`) with
+ * the explicit earth role aliases. Intentionally maintained as an independent
+ * copy from `packages/render/src/symbols/circuit.ts` (zero renderer imports).
+ * Do not add "ground" or "gnd": a supply ground can be a return.
+ */
+const DC_SUPPLY_EARTH_ROLES = new Set([
+  "protectiveearth",
+  "pe",
+  "functionalearth",
+  "fe",
+  "earth",
+  "chassisground",
+  "chassisearth",
+]);
 const AUXILIARY_ROLE_TOKENS = new Set(["aux", "auxiliary", "shield"]);
+function normalizeEarthRole(role) {
+  return typeof role === "string"
+    ? role.toLowerCase().replace(/[^a-z0-9]+/gu, "")
+    : "";
+}
 function roleTokens(role) {
   return typeof role === "string"
     ? role
-        .replace(/([a-z0-9])([A-Z])/gu, "$1 $2")
-        .replace(/([A-Z]+)([A-Z][a-z])/gu, "$1 $2")
         .toLowerCase()
         .split(/[^a-z0-9]+/u)
         .filter(Boolean)
@@ -34,10 +53,7 @@ function sameTerminal(a, b) {
   return a?.deviceUid === b?.deviceUid && a?.terminalKey === b?.terminalKey;
 }
 function isEarthRole(role) {
-  return (
-    (typeof role === "string" && CANONICAL_PROTECTIVE_EARTH_ROLES.has(role)) ||
-    roleTokens(role).some((token) => EARTH_ROLE_TOKENS.has(token))
-  );
+  return DC_SUPPLY_EARTH_ROLES.has(normalizeEarthRole(role));
 }
 function isAuxiliaryOrNonPowerRole(role) {
   const tokens = roleTokens(role);
@@ -69,39 +85,12 @@ function functionTerminalFacts(ir, t, f) {
     };
   });
 }
-function isEarthTerminal(ir, t, terminal) {
-  if (
-    (ir?.protectiveEarthTerminals ?? []).some((pe) =>
-      sameTerminal(pe, terminal.id),
-    )
-  )
-    return true;
+function isEarthTerminal(ir, terminal) {
   if (
     (ir?.potentials ?? []).some(
       (p) =>
         p?.electrical?.polarity === "protective_earth" &&
         sameTerminal(p.terminal, terminal.id),
-    )
-  )
-    return true;
-  if (
-    (t?.functions ?? []).some(
-      (fn) =>
-        fn.kind === "bus" &&
-        fn.terminalKeys?.length === 1 &&
-        fn.terminalKeys[0] === terminal.id.terminalKey &&
-        t?.circuitSymbols?.[fn.key] === "earth",
-    )
-  )
-    return true;
-  if (
-    (ir?.functions ?? []).some(
-      (fn) =>
-        fn.id?.deviceUid === terminal.id.deviceUid &&
-        fn.kind === "bus" &&
-        fn.terminals?.length === 1 &&
-        fn.terminals[0]?.terminalKey === terminal.id.terminalKey &&
-        t?.circuitSymbols?.[fn.id.functionKey] === "earth",
     )
   )
     return true;
@@ -111,7 +100,7 @@ function nativeAcInput(ir, t, f) {
   const count = f.terminals?.length ?? 0;
   if (count !== 2 && count !== 3) return false;
   const terminals = functionTerminalFacts(ir, t, f);
-  const currentTerminals = terminals.filter((p) => !isEarthTerminal(ir, t, p));
+  const currentTerminals = terminals.filter((p) => !isEarthTerminal(ir, p));
   if (currentTerminals.length < 2) return false;
   if (
     currentTerminals.some(
@@ -139,7 +128,7 @@ function nativeDcOutput(ir, t, f) {
   const terminals = functionTerminalFacts(ir, t, f);
   return !terminals.some(
     (p) =>
-      isEarthTerminal(ir, t, p) ||
+      isEarthTerminal(ir, p) ||
       p.roles.some((r) => isAuxiliaryOrNonPowerRole(r) || isAcRole(r)) ||
       p.rating?.voltage_type === "AC",
   );

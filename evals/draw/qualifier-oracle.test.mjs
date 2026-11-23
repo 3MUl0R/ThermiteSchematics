@@ -1,4 +1,11 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "vitest";
+import {
+  compileProject,
+  lockProject,
+} from "../../packages/compiler/dist/index.js";
 import { conversionQualifierAudit } from "./qualifier-oracle.mjs";
 import { segments } from "./tranche3-geometry.mjs";
 import { end, nativeIr } from "./tranche3-fixtures.mjs";
@@ -563,10 +570,18 @@ it.each([
 it.each([
   ["protectiveEarth", "thermite:dc-supply"],
   ["ProtectiveEarth", "iec:dc-power-supply"],
+  ["Protective Earth", "iec:dc-power-supply"],
+  ["PE", "iec:dc-power-supply"],
+  ["pE", "thermite:dc-supply"],
+  ["functional_earth", "thermite:dc-supply"],
   ["functionalEarth", "thermite:dc-supply"],
+  ["fe", "thermite:dc-supply"],
+  ["earth", "thermite:dc-supply"],
+  ["chassis-ground", "thermite:dc-supply"],
   ["chassisGround", "iec:dc-power-supply"],
+  ["chassis-earth", "thermite:dc-supply"],
 ])(
-  "DQ-10 5.42 (#553 round 3): camelCase earth role %s (%s) never supplies the second AC rating or dc-output",
+  "DQ-10 5.42 (#553 round 4): closed earth role %s (%s) never supplies the second AC rating or dc-output",
   (role, symbol) => {
     const loadTerminals = [
       { key: "A", rating: { voltage_type: "AC" } },
@@ -615,30 +630,13 @@ it.each([
   },
 );
 
-it("DQ-10 5.42 (#553 round 3): canonical IR earth identification excludes unroled earth terminals", () => {
+it("DQ-10 5.42 (#553 round 4): only IR protective_earth potential (never drawing marks or synthetic lists) classifies unroled earth", () => {
   const loadTerminals = [
     { key: "A", rating: { voltage_type: "AC" } },
     { key: "B", rating: { voltage_type: "AC" } },
   ];
 
-  // 1. ir.protectiveEarthTerminals
-  const viaField = psuCase({
-    inputTerminals: loadTerminals,
-    renderedMarks: ["ac-input"],
-  });
-  viaField.ir.protectiveEarthTerminals = [{ deviceUid: "D", terminalKey: "B" }];
-  expect(
-    conversionQualifierAudit(viaField.g, viaField.ir, viaField.sheet),
-  ).toMatchObject({
-    eligible: 0,
-    findings: [
-      expect.objectContaining({
-        kind: "conversion-qualifier-native-owner-unavailable",
-      }),
-    ],
-  });
-
-  // 2. ir.potentials with electrical.polarity === "protective_earth" anchored at terminal
+  // 1. Compiled IR protective_earth potential anchor excludes unroled earth terminal on loads and sources.
   const viaPotential = psuCase({
     inputTerminals: loadTerminals,
     renderedMarks: ["ac-input"],
@@ -667,39 +665,28 @@ it("DQ-10 5.42 (#553 round 3): canonical IR earth identification excludes unrole
     ],
   });
 
-  // 3. Device type single-terminal earth bus binding in circuitSymbols
-  const viaBus = psuCase({
-    inputTerminals: loadTerminals,
-    circuitSymbols: { pe_bus: "earth" },
-    renderedMarks: ["ac-input"],
-  });
-  viaBus.ir.deviceTypes[0].functions = [
-    { key: "pe_bus", kind: "bus", terminalKeys: ["B"] },
-  ];
-  expect(
-    conversionQualifierAudit(viaBus.g, viaBus.ir, viaBus.sheet),
-  ).toMatchObject({
-    eligible: 0,
-    findings: [
-      expect.objectContaining({
-        kind: "conversion-qualifier-native-owner-unavailable",
-      }),
-    ],
-  });
-
-  // 4. Canonical earth also suppresses dc-output on 2-terminal sources
-  const srcViaField = psuCase({
+  const srcViaPotential = psuCase({
     functionKey: "dc_output",
     functionKind: "source",
     inputTerminals: [{ key: "A" }, { key: "B" }],
     extraTerminals: [],
     renderedMarks: ["dc-output"],
   });
-  srcViaField.ir.protectiveEarthTerminals = [
-    { deviceUid: "D", terminalKey: "B" },
+  srcViaPotential.ir.potentials = [
+    {
+      uid: "p-pe-src",
+      name: "PE",
+      electrical: { polarity: "protective_earth" },
+      terminal: { deviceUid: "D", terminalKey: "B" },
+      netId: "net:pe-src",
+    },
   ];
   expect(
-    conversionQualifierAudit(srcViaField.g, srcViaField.ir, srcViaField.sheet),
+    conversionQualifierAudit(
+      srcViaPotential.g,
+      srcViaPotential.ir,
+      srcViaPotential.sheet,
+    ),
   ).toMatchObject({
     eligible: 0,
     findings: [
@@ -708,9 +695,80 @@ it("DQ-10 5.42 (#553 round 3): canonical IR earth identification excludes unrole
       }),
     ],
   });
+
+  // 2. Drawing marks NEVER classify earth: an "earth" bus mark on a separate function
+  // leaves unroled AC-rated loads, AC-return loads, and DC-return sources eligible.
+  const viaBusUnroled = psuCase({
+    inputTerminals: loadTerminals,
+    circuitSymbols: { bond: "earth" },
+    renderedMarks: ["ac-input"],
+  });
+  viaBusUnroled.ir.deviceTypes[0].functions = [
+    { key: "bond", kind: "bus", terminalKeys: ["B"] },
+  ];
+  expect(
+    conversionQualifierAudit(
+      viaBusUnroled.g,
+      viaBusUnroled.ir,
+      viaBusUnroled.sheet,
+    ),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  const viaBusAcReturn = psuCase({
+    inputTerminals: [
+      { key: "A", role: "ac_line_input", rating: { voltage_type: "AC" } },
+      { key: "B", role: "ac_input_return", rating: { voltage_type: "AC" } },
+    ],
+    circuitSymbols: { bond: "earth" },
+    renderedMarks: ["ac-input"],
+  });
+  viaBusAcReturn.ir.deviceTypes[0].functions = [
+    { key: "bond", kind: "bus", terminalKeys: ["B"] },
+  ];
+  expect(
+    conversionQualifierAudit(
+      viaBusAcReturn.g,
+      viaBusAcReturn.ir,
+      viaBusAcReturn.sheet,
+    ),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  const viaBusDcReturn = psuCase({
+    functionKey: "dc_output",
+    functionKind: "source",
+    inputTerminals: [
+      { key: "A", role: "dc_positive_output", rating: { voltage_type: "DC" } },
+      { key: "B", role: "dc_return_output", rating: { voltage_type: "DC" } },
+    ],
+    extraTerminals: [],
+    circuitSymbols: { bond: "earth" },
+    renderedMarks: ["dc-output"],
+  });
+  viaBusDcReturn.ir.deviceTypes[0].functions = [
+    { key: "bond", kind: "bus", terminalKeys: ["B"] },
+  ];
+  expect(
+    conversionQualifierAudit(
+      viaBusDcReturn.g,
+      viaBusDcReturn.ir,
+      viaBusDcReturn.sheet,
+    ),
+  ).toEqual({ findings: [], eligible: 1 });
+
+  // 3. Oracle relies only on compiled IR facts (roles and potentials), ignoring non-IR protectiveEarthTerminals.
+  const nonIrField = psuCase({
+    inputTerminals: loadTerminals,
+    renderedMarks: ["ac-input"],
+  });
+  nonIrField.ir.protectiveEarthTerminals = [
+    { deviceUid: "D", terminalKey: "B" },
+  ];
+  expect(
+    conversionQualifierAudit(nonIrField.g, nonIrField.ir, nonIrField.sheet),
+  ).toEqual({ findings: [], eligible: 1 });
 });
 
-it("DQ-10 5.42 (#553 round 3): earth terminals are ignored in both directions (never veto AC)", () => {
+it("DQ-10 5.42 (#553 round 4): earth terminals are ignored in both directions (never veto AC)", () => {
   // Complete AC role pair + DC-rated protective_earth (reviewer's dc-rated-earth).
   const dcRatedPe = psuCase({
     inputTerminals: [
@@ -741,8 +799,8 @@ it("DQ-10 5.42 (#553 round 3): earth terminals are ignored in both directions (n
     ),
   ).toEqual({ findings: [], eligible: 1 });
 
-  // Complete AC role pair + DC-token earth role (dc_earth).
-  const dcEarthRole = psuCase({
+  // Closed set: "dc_earth" is not in the closed earth set, so its DC role/rating vetoes AC.
+  const dcEarthNotInSet = psuCase({
     inputTerminals: [
       { key: "L", role: "ac_line_input" },
       { key: "N", role: "ac_input_return" },
@@ -751,10 +809,21 @@ it("DQ-10 5.42 (#553 round 3): earth terminals are ignored in both directions (n
     renderedMarks: ["ac-input"],
   });
   expect(
-    conversionQualifierAudit(dcEarthRole.g, dcEarthRole.ir, dcEarthRole.sheet),
-  ).toEqual({ findings: [], eligible: 1 });
+    conversionQualifierAudit(
+      dcEarthNotInSet.g,
+      dcEarthNotInSet.ir,
+      dcEarthNotInSet.sheet,
+    ),
+  ).toMatchObject({
+    eligible: 0,
+    findings: [
+      expect.objectContaining({
+        kind: "conversion-qualifier-native-owner-unavailable",
+      }),
+    ],
+  });
 
-  // Complete AC role pair + unroled DC-rated terminal in ir.protectiveEarthTerminals.
+  // Complete AC role pair + unroled DC-rated terminal anchored to a protective_earth potential.
   const canonicalPe = psuCase({
     inputTerminals: [
       { key: "L", role: "ac_line_input" },
@@ -763,10 +832,402 @@ it("DQ-10 5.42 (#553 round 3): earth terminals are ignored in both directions (n
     ],
     renderedMarks: ["ac-input"],
   });
-  canonicalPe.ir.protectiveEarthTerminals = [
-    { deviceUid: "D", terminalKey: "E" },
+  canonicalPe.ir.potentials = [
+    {
+      uid: "p-pe-dc",
+      name: "PE",
+      electrical: { polarity: "protective_earth" },
+      terminal: { deviceUid: "D", terminalKey: "E" },
+      netId: "net:pe-dc",
+    },
   ];
   expect(
     conversionQualifierAudit(canonicalPe.g, canonicalPe.ir, canonicalPe.sheet),
   ).toEqual({ findings: [], eligible: 1 });
+});
+
+it("DQ-10 5.42 (#553 round 4): compiled reviewer probes match the closed earth rule", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "thermite-oracle-r4-"));
+  try {
+    const ac = { rating: { voltage_type: "AC" } };
+    const dc = { rating: { voltage_type: "DC" } };
+    const line = { ...ac, role: "ac_line_input" };
+    const neutral = { ...ac, role: "ac_input_return" };
+    const positive = { ...dc, role: "dc_positive_output" };
+    const negative = { ...dc, role: "dc_return_output" };
+    const earthBus = {
+      extraFunctions: { bond: { kind: "bus", terminals: ["B"] } },
+      circuitSymbols: { bond: "earth" },
+    };
+
+    const probes = [
+      {
+        id: "earth-alias-1",
+        terminals: { A: ac, B: { ...ac, role: "functional_earth" } },
+        expectedMark: null,
+      },
+      {
+        id: "earth-alias-2",
+        symbol: "iec:dc-power-supply",
+        terminals: { A: ac, B: { ...ac, role: "PE" } },
+        expectedMark: null,
+      },
+      {
+        id: "earth-alias-3",
+        terminals: { A: ac, B: { ...ac, role: "chassis-ground" } },
+        expectedMark: null,
+      },
+      {
+        id: "earth-alias-4",
+        symbol: "iec:dc-power-supply",
+        terminals: { A: ac, B: { ...ac, role: "Protective Earth" } },
+        expectedMark: null,
+      },
+      {
+        id: "earth-alias-5",
+        terminals: { A: ac, B: { ...ac, role: "protectiveEarth" } },
+        expectedMark: null,
+      },
+      {
+        id: "neutral-only-ac-rated",
+        symbol: "iec:dc-power-supply",
+        terminals: {
+          L: { role: "ac_line_input" },
+          N: { role: "neutral", rating: { voltage_type: "AC" } },
+          PE: { role: "protective_earth" },
+        },
+        expectedMark: null,
+      },
+      {
+        id: "complete-ac-roles",
+        terminals: {
+          L: { role: "ac_line_input" },
+          N: { role: "ac_neutral", rating: { voltage_type: "AC" } },
+          PE: { role: "protective_earth" },
+        },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "all-ac-alternate-pe",
+        symbol: "iec:dc-power-supply",
+        terminals: { L: ac, N: ac, PE: { role: "Functional Earth" } },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "dc-rated-earth",
+        terminals: {
+          L: { role: "ac_line_input" },
+          N: { role: "ac_input_return" },
+          PE: { role: "protective_earth", rating: { voltage_type: "DC" } },
+        },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "three-phase-separate-pe",
+        symbol: "iec:dc-power-supply",
+        terminals: {
+          A: { role: "phase_1_input" },
+          B: { role: "phase_2_input" },
+          C: { role: "phase_3_input" },
+          PE: { role: "protective_earth" },
+        },
+        functionTerminals: ["A", "B", "C"],
+        expectedMark: "ac-input",
+      },
+      {
+        id: "two-terminal-pe-source",
+        symbol: "iec:dc-power-supply",
+        kind: "source",
+        terminals: {
+          D: { role: "dc_positive_output" },
+          PE: { role: "protective_earth" },
+        },
+        expectedMark: null,
+      },
+      {
+        id: "two-terminal-aux-source",
+        kind: "source",
+        terminals: {
+          D: { role: "dc_positive_output" },
+          A: { role: "aux" },
+        },
+        expectedMark: null,
+      },
+      {
+        id: "camel-functional-earth",
+        terminals: { A: ac, B: { ...ac, role: "functionalEarth" } },
+        expectedMark: null,
+      },
+      {
+        id: "camel-chassis-ground",
+        terminals: { A: ac, B: { ...ac, role: "chassisGround" } },
+        expectedMark: null,
+      },
+      {
+        id: "camel-supply-ground-return",
+        terminals: {
+          A: line,
+          B: {
+            ...ac,
+            role: "supplyGroundReturn",
+            description: "Supply ground return",
+          },
+        },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "supply-ground-description-control",
+        terminals: {
+          A: line,
+          B: { ...ac, role: "return", description: "Supply ground return" },
+        },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "ground-return-ac-rated",
+        terminals: { A: line, B: { ...ac, role: "ground" } },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "gnd-return-ac-rated",
+        terminals: { A: line, B: { ...ac, role: "gnd" } },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "earth-bus-unroled",
+        terminals: { A: ac, B: ac },
+        ...earthBus,
+        expectedMark: "ac-input",
+      },
+      {
+        id: "earth-bus-ac-return",
+        terminals: { A: line, B: neutral },
+        ...earthBus,
+        expectedMark: "ac-input",
+      },
+      {
+        id: "earth-bus-dc-return",
+        kind: "source",
+        terminals: { A: positive, B: negative },
+        ...earthBus,
+        expectedMark: "dc-output",
+      },
+      {
+        id: "explicit-ac-binding",
+        terminals: { A: line, B: neutral },
+        ...earthBus,
+        circuitSymbols: { bond: "earth", face: "ac-input" },
+        expectedMark: "ac-input",
+      },
+      {
+        id: "mixed-case-pe-source",
+        kind: "source",
+        terminals: { A: positive, B: { role: "pE" } },
+        expectedMark: null,
+      },
+      {
+        id: "mixed-case-pe-load",
+        terminals: { A: ac, B: { ...ac, role: "pE" } },
+        expectedMark: null,
+      },
+      {
+        id: "ac-with-rated-aux",
+        terminals: { A: line, B: neutral, C: { ...ac, role: "aux" } },
+        expectedMark: null,
+      },
+      {
+        id: "ac-with-dc-conflict",
+        terminals: { A: line, B: { ...dc, role: "ac_input_return" } },
+        expectedMark: null,
+      },
+      {
+        id: "pe-potential-anchored",
+        terminals: { A: ac, B: ac },
+        pePotentialTerminal: "B",
+        expectedMark: null,
+      },
+    ];
+
+    await mkdir(join(dir, "library"), { recursive: true });
+    await writeFile(
+      join(dir, "system.json"),
+      JSON.stringify({
+        format: "electrical-system/0.1",
+        project: { name: "Oracle Round 4 Probes" },
+        sources: ["source.json"],
+        libraries: [{ name: "r4-oracle", version: "0.1.0", path: "library" }],
+      }),
+    );
+    await writeFile(
+      join(dir, "library/library.json"),
+      JSON.stringify({
+        name: "r4-oracle",
+        version: "0.1.0",
+        sources: ["types.json"],
+      }),
+    );
+    await writeFile(
+      join(dir, "library/types.json"),
+      JSON.stringify({
+        types: probes.map((p) => ({
+          kind: "device_type",
+          id: `r4-oracle:${p.id}`,
+          symbol: p.symbol ?? "thermite:dc-supply",
+          terminals: p.terminals,
+          functions: {
+            face: {
+              kind: p.kind ?? "load",
+              terminals: p.functionTerminals ?? Object.keys(p.terminals),
+            },
+            ...(p.extraFunctions ?? {}),
+          },
+          ...(p.circuitSymbols ? { circuitSymbols: p.circuitSymbols } : {}),
+        })),
+      }),
+    );
+    const objects = probes.map((p, idx) => ({
+      kind: "device",
+      uid: `f6000000-0000-4000-8000-${String(idx + 1).padStart(12, "0")}`,
+      designation: `Q${idx + 1}`,
+      type: `r4-oracle:${p.id}`,
+    }));
+    for (const [idx, p] of probes.entries()) {
+      if (p.pePotentialTerminal) {
+        objects.push({
+          kind: "potential",
+          uid: `f7000000-0000-4000-8000-${String(idx + 1).padStart(12, "0")}`,
+          name: `PE_${idx + 1}`,
+          at: { device: `Q${idx + 1}`, terminal: p.pePotentialTerminal },
+          electrical: { polarity: "protective_earth" },
+        });
+      }
+    }
+    await writeFile(join(dir, "source.json"), JSON.stringify({ objects }));
+    const locked = await lockProject(dir);
+    expect(locked.ok, JSON.stringify(locked)).toBe(true);
+    const compiled = await compileProject(dir);
+    expect(compiled.ok, JSON.stringify(compiled)).toBe(true);
+
+    const makeGeometry = (deviceUid, fn, mark) => {
+      const shapes = [
+        {
+          deviceUid,
+          outline: true,
+          circuitFunctions: [fn.id],
+          bbox: { x: 0, y: 0, w: 50, h: 30 },
+        },
+      ];
+      if (mark) {
+        const base = {
+          deviceUid,
+          functionKey: fn.id.functionKey,
+          mark,
+          markGroup: "glyph",
+          circuitFunctions: [fn.id],
+        };
+        const shape = (tag, points, idx) => ({
+          ...base,
+          element: `${mark}-${tag}-${idx}`,
+          shapeTag: tag,
+          points,
+          inkSegments: segments(points),
+          bbox: { x: 8, y: 11, w: 8, h: 8 },
+        });
+        shapes.push(
+          shape(
+            "rect",
+            [
+              { x: 8, y: 11 },
+              { x: 16, y: 19 },
+            ],
+            0,
+          ),
+        );
+        if (mark === "ac-input") {
+          shapes.push(
+            shape(
+              "polyline",
+              [
+                { x: 10, y: 15 },
+                { x: 11, y: 14 },
+                { x: 12, y: 16 },
+                { x: 14, y: 15 },
+              ],
+              1,
+            ),
+          );
+        } else {
+          [
+            [9, 15, 12],
+            [9, 10, 16],
+            [11, 12, 16],
+            [13, 15, 16],
+          ].forEach(([x1, x2, y], idx) =>
+            shapes.push(
+              shape(
+                "line",
+                [
+                  { x: x1, y },
+                  { x: x2, y },
+                ],
+                idx + 1,
+              ),
+            ),
+          );
+        }
+      }
+      return {
+        shapes,
+        terminals: fn.terminals.map((t, i) => ({
+          deviceUid,
+          terminal: t.terminalKey,
+          point: { x: 0, y: i * 10 },
+        })),
+      };
+    };
+
+    for (const [idx, p] of probes.entries()) {
+      const uid = `f6000000-0000-4000-8000-${String(idx + 1).padStart(12, "0")}`;
+      const fn = compiled.ir.functions.find(
+        (f) => f.id.deviceUid === uid && f.id.functionKey === "face",
+      );
+      const sheet = {
+        view: { kind: "circuit" },
+        references: [{ deviceUid: uid, functions: ["face"] }],
+      };
+      if (p.expectedMark) {
+        const pass = conversionQualifierAudit(
+          makeGeometry(uid, fn, p.expectedMark),
+          compiled.ir,
+          sheet,
+        );
+        expect(pass, `${p.id} expected ${p.expectedMark}`).toEqual({
+          findings: [],
+          eligible: 1,
+        });
+      } else {
+        const unmarked = conversionQualifierAudit(
+          makeGeometry(uid, fn, null),
+          compiled.ir,
+          sheet,
+        );
+        expect(unmarked, `${p.id} unmarked`).toEqual({
+          findings: [],
+          eligible: 0,
+        });
+        const spuriousMark = p.kind === "source" ? "dc-output" : "ac-input";
+        const spurious = conversionQualifierAudit(
+          makeGeometry(uid, fn, spuriousMark),
+          compiled.ir,
+          sheet,
+        );
+        expect(spurious.eligible, `${p.id} spurious ${spuriousMark}`).toBe(0);
+        expect(kinds(spurious), `${p.id} spurious findings`).toEqual([
+          "conversion-qualifier-native-owner-unavailable",
+        ]);
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
