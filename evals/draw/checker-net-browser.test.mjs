@@ -23,6 +23,42 @@ it("222.3 painted label at the target fails with coherent false source claims", 
     "net-label-source-geometry-mismatch",
   ]);
 });
+function addWideThreePhasePotentials(potentials) {
+  const l1 = potentials.objects.find(
+    (o) =>
+      o.kind === "potential" &&
+      o.at?.device === "SRC1" &&
+      o.at?.terminal === "L1",
+  );
+  if (l1) l1.name = "480VAC-L1";
+  potentials.objects.push(
+    {
+      uid: "8c28fde4-d3a2-4ee3-8cfc-b1323845f39e",
+      kind: "potential",
+      name: "480VAC-L2",
+      at: { device: "SRC1", terminal: "L2" },
+      electrical: {
+        nominal_voltage: 480,
+        voltage_type: "AC",
+        polarity: "line_2",
+        frequency: 60,
+      },
+    },
+    {
+      uid: "8c28fde4-d3a2-4ee3-8cfc-b1323845f39f",
+      kind: "potential",
+      name: "480VAC-L3",
+      at: { device: "SRC1", terminal: "L3" },
+      electrical: {
+        nominal_voltage: 480,
+        voltage_type: "AC",
+        polarity: "line_3",
+        frequency: 60,
+      },
+    },
+  );
+}
+
 it("DQ-17 accepts TTB three-phase source net labels anchored at route source (#570)", async () => {
   const root = process.cwd();
   const dest = await mkdtemp(join(tmpdir(), "draw-netlabel-ttb-"));
@@ -33,39 +69,7 @@ it("DQ-17 accepts TTB three-phase source net labels anchored at route source (#5
     });
     const potPath = join(project, "potentials/potentials.json");
     const potentials = await readJson(potPath);
-    const l1 = potentials.objects.find(
-      (o) =>
-        o.kind === "potential" &&
-        o.at?.device === "SRC1" &&
-        o.at?.terminal === "L1",
-    );
-    if (l1) l1.name = "480VAC-L1";
-    potentials.objects.push(
-      {
-        uid: "8c28fde4-d3a2-4ee3-8cfc-b1323845f39e",
-        kind: "potential",
-        name: "480VAC-L2",
-        at: { device: "SRC1", terminal: "L2" },
-        electrical: {
-          nominal_voltage: 480,
-          voltage_type: "AC",
-          polarity: "line_2",
-          frequency: 60,
-        },
-      },
-      {
-        uid: "8c28fde4-d3a2-4ee3-8cfc-b1323845f39f",
-        kind: "potential",
-        name: "480VAC-L3",
-        at: { device: "SRC1", terminal: "L3" },
-        electrical: {
-          nominal_voltage: 480,
-          voltage_type: "AC",
-          polarity: "line_3",
-          frequency: 60,
-        },
-      },
-    );
+    addWideThreePhasePotentials(potentials);
     await writeFile(potPath, json(potentials));
     const lock = await command(root, process.execPath, [
       join(root, "thermite.mjs"),
@@ -83,6 +87,16 @@ it("DQ-17 accepts TTB three-phase source net labels anchored at route source (#5
     });
     expect(rendered.ok).toBe(true);
     const g = await openSheet(page, rendered.value.svg);
+    const paintedNetLabels = g.texts
+      .filter(
+        (t) =>
+          t.labelRole === "net" &&
+          t.labelOwnerKind === "edge" &&
+          t.painted !== false,
+      )
+      .map((t) => t.text)
+      .sort();
+    expect(paintedNetLabels).toEqual(["480VAC-L1", "480VAC-L2", "480VAC-L3"]);
     expect(terminalText(g, compiled.ir)).toEqual([]);
     expect(netLabelRepetition(g, compiled.ir)).toEqual([]);
   } finally {

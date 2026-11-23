@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { compileProject, lockProject } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import {
+  createSchematicRenderer,
   createSchematicRendererWithDependencies,
   prepareSchematicDrawing,
 } from "../src/renderer.js";
+import { renderSchematicPacket } from "../src/index.js";
 import { ELK_OPTIONS } from "../src/layout/options.js";
 import { observedRecoveryEngine } from "./helpers/agent-recovery.js";
 import type {
@@ -17,6 +21,20 @@ import type {
   NormalizedSchematicLayout,
   PresentationGraph,
 } from "../src/types.js";
+
+const execFileAsync = promisify(execFile);
+const REPO_ROOT = resolve(import.meta.dirname, "../../..");
+
+function paintedNetLabelTexts(svg: string): string[] {
+  return [
+    ...svg.matchAll(
+      /<text\b[^>]*\bclass="label-text label-net"[^>]*>([^<]*)<\/text>/gu,
+    ),
+  ]
+    .map((m) => m[1]!)
+    .filter((text) => text.length > 0)
+    .sort();
+}
 
 function systemJson(name: string) {
   return {
@@ -203,7 +221,11 @@ async function compileMinimalFixture(
     assert.ok(locked.ok, JSON.stringify(locked.diagnostics));
     const compiled = await compileProject(root);
     assert.ok(compiled.ok, JSON.stringify(compiled.diagnostics));
-    return { ir: compiled.ir, dispose: () => rm(root, { recursive: true }) };
+    return {
+      root,
+      ir: compiled.ir,
+      dispose: () => rm(root, { recursive: true }),
+    };
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;
@@ -315,16 +337,18 @@ it.each([
         { layoutEngine: observed.engine },
       );
       assert.ok(prepared.ok, JSON.stringify(prepared));
-      expect(observed.inputs).toHaveLength(1);
-      const netInputLabels =
-        observed.inputs[0]?.edges
-          ?.flatMap((e) => e.labels ?? [])
-          .filter((l) => l.id?.endsWith(',"net"]')) ?? [];
-      expect(netInputLabels).toHaveLength(4);
-      for (const inputLabel of netInputLabels) {
-        expect(
-          inputLabel.layoutOptions?.[ELK_OPTIONS.edgeLabelsPlacement],
-        ).toBe("TAIL");
+      expect(observed.inputs).toHaveLength(flow === "top-to-bottom" ? 2 : 1);
+      for (const input of observed.inputs) {
+        const netInputLabels =
+          input.edges
+            ?.flatMap((e) => e.labels ?? [])
+            .filter((l) => l.id?.endsWith(',"net"]')) ?? [];
+        expect(netInputLabels).toHaveLength(4);
+        for (const inputLabel of netInputLabels) {
+          expect(
+            inputLabel.layoutOptions?.[ELK_OPTIONS.edgeLabelsPlacement],
+          ).toBe("TAIL");
+        }
       }
       assertNetLabelsAtRouteSource(
         prepared.value.graph,
@@ -336,9 +360,11 @@ it.each([
         request,
       );
       assert.ok(rendered.ok, JSON.stringify(rendered));
-      for (const name of ["480VAC-L1", "480VAC-L2", "480VAC-L3"]) {
-        expect(rendered.value.svg).toContain(name);
-      }
+      expect(paintedNetLabelTexts(rendered.value.svg)).toEqual([
+        "480VAC-L1",
+        "480VAC-L2",
+        "480VAC-L3",
+      ]);
     } finally {
       await fixture.dispose();
     }
@@ -364,7 +390,7 @@ it("widens a TTB DC source symbol when a source net label exceeds default port p
       { layoutEngine: observed.engine },
     );
     assert.ok(prepared.ok, JSON.stringify(prepared));
-    expect(observed.inputs).toHaveLength(1);
+    expect(observed.inputs).toHaveLength(2);
     assertNetLabelsAtRouteSource(prepared.value.graph, prepared.value.layout, [
       "0VDC-COMMON-BUS",
       "24VDC-CONTROL-BUS",
@@ -417,6 +443,242 @@ it("rejects a net label placed inside a non-owner device frame", async () => {
       failureKind: "net-label-intersection",
       error: { code: "R004" },
     });
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+function transformerSecondaryObjects(potentialName: string) {
+  const unused = (keys: readonly string[], reason: string) => ({
+    terminals: Object.fromEntries(
+      keys.map((k) => [k, { status: "intentionally-unused", reason }]),
+    ),
+  });
+  const wire = (n: number, a: [string, string], b: [string, string]) => ({
+    uid: `62000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+    kind: "wire",
+    designation: `W${n - 4}`,
+    endpoints: [
+      { device: a[0], terminal: a[1] },
+      { device: b[0], terminal: b[1] },
+    ],
+  });
+  return {
+    objects: [
+      {
+        uid: "62000000-0000-4000-8000-000000000001",
+        kind: "device",
+        designation: "XT1",
+        type: "core:terminal-block-8",
+        connectionReview: unused(
+          ["3", "4", "5", "6", "7", "8"],
+          "Outside this synthetic two-terminal primary interface.",
+        ),
+      },
+      {
+        uid: "62000000-0000-4000-8000-000000000002",
+        kind: "device",
+        designation: "T1",
+        type: "core:control-transformer",
+      },
+      {
+        uid: "62000000-0000-4000-8000-000000000003",
+        kind: "device",
+        designation: "R1",
+        type: "core:relay-1co",
+        connectionReview: unused(
+          ["11", "12", "14"],
+          "Only the unrated coil is used by this synthetic drawing fixture.",
+        ),
+      },
+      {
+        uid: "62000000-0000-4000-8000-000000000004",
+        kind: "device",
+        designation: "H1",
+        type: "core:pilot-light",
+      },
+      wire(5, ["XT1", "1"], ["T1", "H1"]),
+      wire(6, ["XT1", "2"], ["T1", "H2"]),
+      wire(7, ["T1", "X1"], ["R1", "A1"]),
+      wire(8, ["T1", "X2"], ["R1", "A2"]),
+      wire(9, ["T1", "X1"], ["H1", "X1"]),
+      wire(10, ["T1", "X2"], ["H1", "X2"]),
+      {
+        uid: "62000000-0000-4000-8000-000000000099",
+        kind: "potential",
+        name: potentialName,
+        at: { device: "T1", terminal: "X2" },
+        electrical: { nominal_voltage: 24, voltage_type: "AC" },
+      },
+    ],
+  };
+}
+
+async function pumpVariantObjects(
+  phaseNames?: readonly [string, string, string],
+): Promise<Record<string, unknown>> {
+  const raw: unknown = JSON.parse(
+    await readFile(
+      resolve(import.meta.dirname, "fixtures/agent-refusals/pump.json"),
+      "utf8",
+    ),
+  );
+  if (typeof raw !== "object" || raw === null || !("objects" in raw)) {
+    throw new Error("Invalid pump fixture");
+  }
+  const { objects } = raw;
+  if (!Array.isArray(objects)) throw new Error("Invalid pump fixture objects");
+  if (phaseNames) {
+    const byTerm = new Map([
+      ["L1", phaseNames[0]],
+      ["L2", phaseNames[1]],
+      ["L3", phaseNames[2]],
+    ]);
+    for (const obj of objects) {
+      if (
+        typeof obj !== "object" ||
+        obj === null ||
+        !("kind" in obj) ||
+        obj.kind !== "potential" ||
+        !("at" in obj) ||
+        typeof obj.at !== "object" ||
+        obj.at === null ||
+        !("device" in obj.at) ||
+        obj.at.device !== "SUP1" ||
+        !("terminal" in obj.at) ||
+        typeof obj.at.terminal !== "string"
+      ) {
+        continue;
+      }
+      const next = byTerm.get(obj.at.terminal);
+      if (next !== undefined && "name" in obj) obj.name = next;
+    }
+  }
+  return { objects };
+}
+
+it.each(["24V-RET", "24VAC-CONTROL-RETURN"] as const)(
+  "renders TTB rooted control transformer winding with secondary potential %s (#570)",
+  async (potentialName) => {
+    const fixture = await compileMinimalFixture(
+      `transformer-${potentialName}`,
+      transformerSecondaryObjects(potentialName),
+    );
+    try {
+      const request = {
+        format: "schematic-view-request/0.1" as const,
+        root: { by: "designation" as const, value: "R1" },
+        family: "control" as const,
+        flow: "top-to-bottom" as const,
+      };
+      const rendered = await createSchematicRenderer().render(
+        fixture.ir,
+        request,
+      );
+      assert.ok(rendered.ok, JSON.stringify(rendered));
+      expect(paintedNetLabelTexts(rendered.value.svg)).toEqual([potentialName]);
+      const cli = await execFileAsync(process.execPath, [
+        join(REPO_ROOT, "thermite.mjs"),
+        "view",
+        "R1",
+        "--project",
+        fixture.root,
+        "--actuation",
+        "--flow",
+        "top-to-bottom",
+        "--json",
+      ]).catch(
+        (error: { code?: number; stdout?: string; stderr?: string }) => ({
+          exitCode: error.code,
+          stdout: error.stdout ?? "",
+          stderr: error.stderr ?? "",
+        }),
+      );
+      expect("exitCode" in cli ? cli.exitCode : 0).toBe(0);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);
+
+it.each([
+  ["pump-original", undefined, 2, ["L1 480VAC", "L2 480VAC", "L3 480VAC"]],
+  [
+    "pump-mcc1-panel",
+    ["MCC1-PANEL-480VAC-L1", "MCC1-PANEL-480VAC-L2", "MCC1-PANEL-480VAC-L3"],
+    4,
+    ["MCC1-PANEL-480VAC-L1", "MCC1-PANEL-480VAC-L2", "MCC1-PANEL-480VAC-L3"],
+  ],
+] as const)(
+  "issues TTB Letter landscape power packet without sheet regression (%s) (#570)",
+  async (tag, names, maxSheets, expectedPainted) => {
+    const fixture = await compileMinimalFixture(
+      tag,
+      await pumpVariantObjects(names),
+    );
+    try {
+      const request = {
+        format: "schematic-view-request/0.1" as const,
+        root: { by: "designation" as const, value: "M1" },
+        family: "power" as const,
+        flow: "top-to-bottom" as const,
+      };
+      const prepared = await prepareSchematicDrawing(fixture.ir, request);
+      assert.ok(prepared.ok, JSON.stringify(prepared));
+      assertNetLabelsAtRouteSource(
+        prepared.value.graph,
+        prepared.value.layout,
+        [...expectedPainted, "PE"].sort(),
+      );
+      const packet = await renderSchematicPacket(fixture.ir, {
+        format: "schematic-packet-request/0.1",
+        page: { size: "letter", orientation: "landscape" },
+        views: [request],
+      });
+      assert.ok(packet.ok, JSON.stringify(packet));
+      expect(packet.value.sheets.length).toBeLessThanOrEqual(maxSheets);
+      const painted = packet.value.sheets.flatMap((s) =>
+        paintedNetLabelTexts(s.svg),
+      );
+      for (const name of expectedPainted) expect(painted).toContain(name);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);
+
+it("preserves native 96-unit TTB source geometry when L01/L02/L03 labels already fit (#570)", async () => {
+  const fixture = await compileMinimalFixture(
+    "pump-l01-l02-l03",
+    await pumpVariantObjects(["L01", "L02", "L03"]),
+  );
+  try {
+    const observed = observedRecoveryEngine();
+    const request = {
+      format: "schematic-view-request/0.1" as const,
+      root: { by: "designation" as const, value: "M1" },
+      family: "power" as const,
+      flow: "top-to-bottom" as const,
+    };
+    const prepared = await prepareSchematicDrawing(
+      fixture.ir,
+      request,
+      undefined,
+      { layoutEngine: observed.engine },
+    );
+    assert.ok(prepared.ok, JSON.stringify(prepared));
+    expect(observed.inputs).toHaveLength(1);
+    const source = prepared.value.graph.nodes.find(
+      (n) => n.kind === "symbol" && n.symbolId === "ais:power-source-3ph",
+    );
+    assert.ok(source && source.kind === "symbol");
+    expect(source.symbolSize).toEqual({ width: 96, height: 36 });
+    assertNetLabelsAtRouteSource(prepared.value.graph, prepared.value.layout, [
+      "L01",
+      "L02",
+      "L03",
+      "PE",
+    ]);
   } finally {
     await fixture.dispose();
   }

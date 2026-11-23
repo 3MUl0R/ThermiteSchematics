@@ -11,6 +11,7 @@ import {
   ROOT_LOCATION_SIDE_PADDING,
   SYMBOL_CATALOG,
   TERMINAL_JUNCTION_RADIUS,
+  verticalSourcePortSpacing,
 } from "../src/symbols/catalog.js";
 import type {
   SymbolDefinition,
@@ -678,5 +679,32 @@ describe("D3 original symbol catalog", () => {
     ],
   ] as const)("rejects %s", (_name, mutate) => {
     expectCatalogFailure(mutate as (catalog: SymbolDefinition[]) => void);
+  });
+
+  it("keeps every widened vertical source width on the integer catalog grid (#570)", () => {
+    const ids = [
+      "ais:power-source-3ph",
+      "ais:power-source-3wire",
+      "ais:power-source-dc",
+      "ais:source-winding",
+    ] as const;
+    for (const id of ids) {
+      const definition = SYMBOL_CATALOG.find((s) => s.id === id)!;
+      const spec = verticalSourcePortSpacing(id)!;
+      const widths = new Set<number>();
+      for (let pitch = spec.defaultPitch; pitch <= 300; pitch += 2) {
+        widths.add(spec.widthForPitch(pitch));
+      }
+      expect(widths.size).toBeGreaterThan(10);
+      for (const width of widths) {
+        const oriented = orientSymbolDefinition(
+          definition,
+          "top-to-bottom",
+          width,
+        );
+        expect(oriented.size.width).toBe(width);
+        expect(() => validateSymbolCatalog([oriented])).not.toThrow();
+      }
+    }
   });
 });

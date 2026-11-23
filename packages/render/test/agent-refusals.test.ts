@@ -44,16 +44,18 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
       expect(result.value.summary.conductiveElementIds).toHaveLength(13);
       for (const text of ["L1 480VAC", "L2 480VAC", "L3 480VAC", "PE"])
         expect(result.value.svg).toContain(text);
-      expect(observed.inputs).toHaveLength(1);
-      const netLabels = observed.inputs[0]?.edges
-        ?.flatMap((e) => e.labels ?? [])
-        .filter((l) => l.id?.endsWith(',"net"]'));
-      expect(netLabels).toHaveLength(4);
-      expect(
-        netLabels?.map(
-          (l) => l.layoutOptions?.["org.eclipse.elk.edgeLabels.placement"],
-        ),
-      ).toEqual(["TAIL", "TAIL", "TAIL", "TAIL"]);
+      expect(observed.inputs).toHaveLength(flow === "top-to-bottom" ? 2 : 1);
+      for (const input of observed.inputs) {
+        const netLabels = input.edges
+          ?.flatMap((e) => e.labels ?? [])
+          .filter((l) => l.id?.endsWith(',"net"]'));
+        expect(netLabels).toHaveLength(4);
+        expect(
+          netLabels?.map(
+            (l) => l.layoutOptions?.["org.eclipse.elk.edgeLabels.placement"],
+          ),
+        ).toEqual(["TAIL", "TAIL", "TAIL", "TAIL"]);
+      }
     } finally {
       await fixture.dispose();
     }
