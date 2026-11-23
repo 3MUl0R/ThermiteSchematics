@@ -5,6 +5,7 @@ import { circuitMark } from "../src/symbols/circuit.js";
 import { printableTextMetrics } from "../src/text-metrics.js";
 import { paintedShape } from "./circuit-fidelity-oracle.js";
 import {
+  cloneSupplyWithTerminalEdits,
   corePsuFixture,
   makeSupplyFace,
   renderCircuitGroupsHtml,
@@ -122,6 +123,8 @@ const REVIEW_RATING_CASES: ReadonlyArray<{
   },
 ];
 
+const UNROLED_DESCRIPTION = "480 VAC to 24 VDC power supply";
+
 const NATIVE_FACT_CASES: ReadonlyArray<{
   readonly label: string;
   readonly description?: string;
@@ -131,12 +134,13 @@ const NATIVE_FACT_CASES: ReadonlyArray<{
 }> = [
   {
     label: "names/keys/description alone never establish AC",
-    description: "480 VAC to 24 VDC power supply",
+    description: UNROLED_DESCRIPTION,
     terminals: [{ key: "L" }, { key: "N" }],
     expected: "load",
   },
   {
     label: "DC-DC converter input roles stay unqualified",
+    description: UNROLED_DESCRIPTION,
     terminals: [
       { key: "L", role: "dc_positive_input" },
       { key: "N", role: "dc_return_input" },
@@ -145,6 +149,7 @@ const NATIVE_FACT_CASES: ReadonlyArray<{
   },
   {
     label: "DC-DC converter input ratings stay unqualified",
+    description: UNROLED_DESCRIPTION,
     terminals: [
       { key: "L", rating: { voltage_type: "DC", nominal_voltage: 48 } },
       { key: "N", rating: { voltage_type: "DC", nominal_voltage: 48 } },
@@ -173,6 +178,7 @@ const NATIVE_FACT_CASES: ReadonlyArray<{
   },
   {
     label: "explicit AC rating establishes ac-input",
+    description: UNROLED_DESCRIPTION,
     terminals: [
       { key: "L", rating: { voltage_type: "AC", nominal_voltage: 120 } },
       { key: "N", rating: { voltage_type: "AC", nominal_voltage: 120 } },
@@ -181,6 +187,7 @@ const NATIVE_FACT_CASES: ReadonlyArray<{
   },
   {
     label: "line-to-line AC roles establish ac-input",
+    description: UNROLED_DESCRIPTION,
     terminals: [
       { key: "L", role: "ac_line_input" },
       { key: "N", role: "ac_line_input" },
@@ -198,6 +205,7 @@ const NATIVE_FACT_CASES: ReadonlyArray<{
   },
   {
     label: "explicit circuitSymbols ac-input overrides unroled terminals",
+    description: UNROLED_DESCRIPTION,
     terminals: [{ key: "L" }, { key: "N" }],
     circuitSymbols: { ac_input: "ac-input" },
     expected: "ac-input",
@@ -280,14 +288,13 @@ describe("thermite:dc-supply circuit mark selection (#553)", () => {
   );
 
   it("leaves a dc-supply load unqualified when native port facts do not establish AC", async () => {
-    const { type, ps1 } = await corePsuFixture();
+    const { type, acInput } = await corePsuFixture();
     for (const row of NATIVE_FACT_CASES) {
-      const { t, fn } = makeSupplyFace(type, ps1.uid, "load", row.terminals, {
-        functionKey: "ac_input",
+      const t = cloneSupplyWithTerminalEdits(type, row.terminals, {
+        description: row.description,
         circuitSymbols: row.circuitSymbols,
       });
-      if (row.description) t.description = row.description;
-      expect(circuitMark(t, fn), row.label).toBe(row.expected);
+      expect(circuitMark(t, acInput), row.label).toBe(row.expected);
     }
   });
 
@@ -343,8 +350,7 @@ describe("thermite:dc-supply circuit mark selection (#553)", () => {
       ],
     ];
     for (const [label, terminals, expected] of sourceCases) {
-      const copy = structuredClone(type);
-      copy.terminals = terminals;
+      const copy = cloneSupplyWithTerminalEdits(type, terminals);
       expect(circuitMark(copy, dcOutput), label).toBe(expected);
     }
   });

@@ -30,6 +30,38 @@ export async function corePsuFixture() {
   return { ir, ps1, type, acInput, dcOutput };
 }
 
+export function cloneSupplyWithTerminalEdits(
+  baseType: IrDeviceType,
+  edits: ReadonlyArray<SupplyTerminalSpec>,
+  options: {
+    symbol?: string;
+    description?: string;
+    circuitSymbols?: Record<string, string>;
+  } = {},
+): IrDeviceType {
+  const t = structuredClone(baseType);
+  t.symbol = options.symbol ?? "thermite:dc-supply";
+  if (options.description !== undefined) t.description = options.description;
+  if (options.circuitSymbols) t.circuitSymbols = options.circuitSymbols;
+  else delete t.circuitSymbols;
+  for (const edit of edits) {
+    const existing = t.terminals.find((p) => p.key === edit.key);
+    if (!existing) {
+      t.terminals.push(structuredClone(edit));
+      continue;
+    }
+    if (edit.role !== undefined) existing.role = edit.role;
+    else delete existing.role;
+    if (edit.rating !== undefined) {
+      existing.rating = structuredClone(edit.rating);
+    } else {
+      delete existing.rating;
+    }
+    if (edit.description !== undefined) existing.description = edit.description;
+  }
+  return t;
+}
+
 export function makeSupplyFace(
   baseType: IrDeviceType,
   deviceUid: string,
