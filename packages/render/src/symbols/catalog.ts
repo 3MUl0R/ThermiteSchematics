@@ -666,25 +666,109 @@ function verticalPort(
   }
 }
 
+export interface VerticalSourcePortSpec {
+  readonly defaultPitch: number;
+  readonly widthForPitch: (pitch: number) => number;
+}
+
+export function verticalSourcePortSpacing(
+  id: SymbolDefinition["id"] | undefined,
+): VerticalSourcePortSpec | undefined {
+  switch (id) {
+    case "ais:power-source-3ph":
+    case "ais:power-source-3wire":
+      return {
+        defaultPitch: 24,
+        widthForPitch: (pitch) => Math.ceil((pitch * 4) / 8) * 8,
+      };
+    case "ais:power-source-dc":
+      return {
+        defaultPitch: 48,
+        widthForPitch: (pitch) => Math.ceil((pitch * 4) / 3 / 8) * 8,
+      };
+    case "ais:source-winding":
+      return {
+        defaultPitch: 48,
+        widthForPitch: (pitch) => Math.ceil((pitch * 4) / 3 / 32) * 32,
+      };
+    default:
+      return undefined;
+  }
+}
+
+function widenedCanonicalSource(
+  definition: SymbolDefinition,
+  targetHeight: number,
+): SymbolDefinition {
+  const w = definition.size.width;
+  const ys = definition.ports.map((p) => p.offset * targetHeight);
+  const firstY = ys[0];
+  const lastY = ys[ys.length - 1];
+  if (firstY === undefined || lastY === undefined) return definition;
+  if (
+    definition.id === "ais:power-source-3ph" ||
+    definition.id === "ais:power-source-3wire"
+  ) {
+    const hasPe = definition.id === "ais:power-source-3ph";
+    return symbol(definition.id, w, targetHeight, definition.ports, [
+      ...sourceEnclosure(
+        { x: 2, y: firstY - 11, width: 28, height: lastY - firstY + 22 },
+        ys.map((at) => ({ side: "east" as const, at })),
+        3,
+      ),
+      ...ys.flatMap((y, i) => [
+        line(8, y, 11, y, "body"),
+        circle(14, y, 3, hasPe && i === 3 ? "terminal" : "operator"),
+        line(17, y, 36, y, "body"),
+      ]),
+    ]);
+  }
+  if (definition.id === "ais:power-source-dc") {
+    return symbol(definition.id, w, targetHeight, definition.ports, [
+      ...sourceEnclosure(
+        { x: 2, y: firstY - 7, width: 28, height: lastY - firstY + 14 },
+        ys.map((at) => ({ side: "east" as const, at })),
+        3,
+      ),
+      line(8, firstY, 36, firstY, "body"),
+      line(8, lastY, 36, lastY, "body"),
+      ...polarityQualifier("positive", "positive", 17, firstY + 10, 4),
+      ...polarityQualifier("negative", "return", 17, lastY - 10, 4),
+    ]);
+  }
+  if (definition.id === "ais:source-winding") {
+    return symbol(definition.id, w, targetHeight, definition.ports, [
+      polyline(windingPolyline(12, firstY, lastY, 36, 6), "body"),
+      line(24, firstY + 4, 24, lastY - 4, "body"),
+    ]);
+  }
+  return definition;
+}
+
 export function orientSymbolDefinition(
   definition: SymbolDefinition,
   orientation: SymbolOrientation,
+  verticalWidth?: number,
 ): SymbolDefinition {
   if (orientation === "left-to-right") {
     return deepFreeze(structuredClone(definition));
   }
 
-  const preserveLanes = preservesVerticalPowerLaneOrder(definition.id);
+  const source =
+    verticalWidth !== undefined && verticalWidth > definition.size.height
+      ? widenedCanonicalSource(definition, verticalWidth)
+      : definition;
+  const preserveLanes = preservesVerticalPowerLaneOrder(source.id);
   const rotated: SymbolDefinition = {
-    format: definition.format,
-    id: definition.id,
+    format: source.format,
+    id: source.id,
     size: {
-      width: definition.size.height,
-      height: definition.size.width,
+      width: source.size.height,
+      height: source.size.width,
     },
-    ports: definition.ports.map((value) => verticalPort(value, preserveLanes)),
-    primitives: definition.primitives.map((primitive) =>
-      verticalPrimitive(primitive, definition.size.height, preserveLanes),
+    ports: source.ports.map((value) => verticalPort(value, preserveLanes)),
+    primitives: source.primitives.map((primitive) =>
+      verticalPrimitive(primitive, source.size.height, preserveLanes),
     ),
   };
   validateSymbolCatalog([rotated]);

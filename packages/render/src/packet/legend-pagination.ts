@@ -63,7 +63,8 @@ function bandDrafts(c: BandContext, points: number[], inner: string) {
         ),
       );
   if (!gridLinks(p, grid, b, c.source.scale, drafts)) return undefined;
-  return drafts.map((d) => trimLegendStrip(c.source, d, inner));
+  const bank = c.original[0]?.rootedBank;
+  return drafts.map((d) => trimLegendStrip(c.source, d, inner, bank, c.page));
 }
 function legendSpan(c: BandContext, start: number, end: number) {
   const p = c.source.prepared,

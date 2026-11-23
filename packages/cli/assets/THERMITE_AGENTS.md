@@ -15,7 +15,7 @@ thermite init ../cabinets --template cabinets
 
 When using a runtime package, check existing issues at
 https://github.com/BlackettApplied/ThermiteSchematics/issues.
-Draft bug/gap/doc issues locally unless asked to file them (search/GET examples: `thermite guide libraries`).
+Draft bug/gap/doc issues locally unless asked to file (search/GET: `thermite guide libraries`).
 Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths. Never patch runtimes.
 
 Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.
@@ -27,13 +27,13 @@ Only humans accept the CLA.
 
 Before extending a starter, run `thermite guide agent-requests` and follow **Extend a starter**. Guard existing files from inspection through dry-run and apply, including any undo. Never use git checkout or rm to undo an edit to a registered source.
 
-Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer engineering repairs or suppress diagnostics. Functions never automatically join physical nets.
+Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer repairs or suppress diagnostics. Functions never automatically join physical nets.
 
 Invent no pins, ratings, spares or title/revision data. Mark terminals unused
 or deferred only with explicit user intent. After library edits, run `thermite lock .`
 before validation. Snapshot before edits with `thermite snapshot -o drawings/before.json`.
 
-To edit existing source/presentation files:
+Edit existing source/presentation files:
 
 `validate → resolve/inspect/query → dry-run patch → apply patch → validate → create-view`
 
@@ -72,7 +72,7 @@ bun -e "console.log(crypto.randomUUID())"
 ```
 
 Write new files completely before listing them in `sources` in `system.json`. Once listed, use guarded patches for every edit, including E011 repairs, except for JSON syntax repair. Then run `thermite validate .`.
-To undo registration of a new file, remove it from `sources` in `system.json`, confirm no source glob still matches it, then delete the unregistered file.
+To unregister a new file, remove it from `sources`, confirm no glob matches, then delete it.
 
 Every new object needs a fresh
 lowercase UUID `uid` (uppercase fails E013). Wire, jumper and cable-core
@@ -96,6 +96,7 @@ Use a short group `lineReference` for circuit captions.
 `thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
 
 Keep captions clear of wires.
+Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
 Top-down can try tighter spacing once after a label or span refusal.
 Single control views can reflow at the same print scale.
 See `thermite guide circuit-views` for rail crossings and terminal marks.
@@ -104,5 +105,4 @@ See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 After the last edit, validate, export a bundle, inspect the drawings, and run
 `export check` before handoff. See `thermite guide project-workflows`.
-For exact shapes use `thermite guide schema`. Use `thermite guide drawing-frames`
-before changing paper frames or title data.
+Shapes: `thermite guide schema`. Read `thermite guide drawing-frames` before frame/title edits.

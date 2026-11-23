@@ -50,9 +50,16 @@ export async function relayoutDrawing(
   });
   if (!layout.ok)
     return { ok: false, error: offViewLayoutFailure(p.graph, layout.error) };
-  const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
+  const nextGraph = layout.graph ?? p.graph;
+  const gangs = rootedGangSegments(c.ir, nextGraph, layout.value);
   return gangs.ok
-    ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }
+    ? {
+        ok: true,
+        value: rememberDrawing(
+          { ...p, graph: nextGraph, layout: layout.value },
+          c,
+        ),
+      }
     : gangs;
 }
 
@@ -68,9 +75,16 @@ export async function repaginateDrawing(
     paginationRetry: { original: p.layout, spacing, ...(join ? { join } : {}) },
   });
   if (!layout.ok) return layout;
-  const gangs = rootedGangSegments(c.ir, p.graph, layout.value);
+  const nextGraph = layout.graph ?? p.graph;
+  const gangs = rootedGangSegments(c.ir, nextGraph, layout.value);
   return gangs.ok
-    ? { ok: true, value: rememberDrawing({ ...p, layout: layout.value }, c) }
+    ? {
+        ok: true,
+        value: rememberDrawing(
+          { ...p, graph: nextGraph, layout: layout.value },
+          c,
+        ),
+      }
     : gangs;
 }
 export async function initialCardLayout(
@@ -79,8 +93,9 @@ export async function initialCardLayout(
   repair: boolean,
 ) {
   const layout = await layoutPresentationGraph(graph, c.options);
+  const nextGraph = layout.ok && layout.graph ? layout.graph : graph;
   const gangs = layout.ok
-    ? rootedGangSegments(c.ir, graph, layout.value)
+    ? rootedGangSegments(c.ir, nextGraph, layout.value)
     : undefined;
   if (
     repair &&
@@ -89,7 +104,7 @@ export async function initialCardLayout(
   ) {
     const recovered = await recoverCardLayout(
       c.ir,
-      graph,
+      nextGraph,
       c.selected,
       c.mappings,
       c.options,
@@ -98,10 +113,10 @@ export async function initialCardLayout(
   }
   if (gangs && !gangs.ok)
     return {
-      graph,
+      graph: nextGraph,
       layout: { ...gangs, failureKind: "mechanical-gang" as const },
     };
-  return { graph, layout };
+  return { graph: nextGraph, layout };
 }
 
 /** Same selected graph and source context, fresh reservations and ELK. Avoid
@@ -128,14 +143,12 @@ export async function repositionDrawing(
       ok: false,
       error: offViewLayoutFailure(annotated.value, layout.error),
     };
-  const gangs = rootedGangSegments(c.ir, annotated.value, layout.value);
+  const nextGraph = layout.graph ?? annotated.value;
+  const gangs = rootedGangSegments(c.ir, nextGraph, layout.value);
   if (!gangs.ok) return gangs;
   return {
     ok: true,
-    value: rememberDrawing(
-      { ...p, graph: annotated.value, layout: layout.value },
-      c,
-    ),
+    value: rememberDrawing({ ...p, graph: nextGraph, layout: layout.value }, c),
   };
 }
 
@@ -146,11 +159,12 @@ export async function nativeDrawing(
   const c = required(contexts.get(p), "Missing prepared source context"),
     graph = nativeReservations(p.graph);
   const layout = await layoutPresentationGraph(graph, c.options);
+  const nextGraph = layout.ok && layout.graph ? layout.graph : graph;
   if (layout.ok) {
-    const gangs = rootedGangSegments(c.ir, graph, layout.value);
+    const gangs = rootedGangSegments(c.ir, nextGraph, layout.value);
     if (!gangs.ok) return gangs;
   }
   return layout.ok
-    ? { ok: true, value: { ...p, graph, layout: layout.value } }
+    ? { ok: true, value: { ...p, graph: nextGraph, layout: layout.value } }
     : { ok: false, error: layout.error };
 }

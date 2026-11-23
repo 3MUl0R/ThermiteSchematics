@@ -1,62 +1,17 @@
-import { terminalIdKey } from "../ordering.js";
-import { conductorKey } from "../presentation/util.js";
-import type { PresentationGraph, SelectedSubgraph } from "../types.js";
+import type { PresentationGraph } from "../types.js";
 import type { LayoutValidationOutcome } from "./validate-output.js";
 
-export type RootedRecovery = "trace-order" | ReadonlySet<string>;
-
-function netLabelRecovery(
-  graph: Readonly<PresentationGraph>,
-  selected: Readonly<SelectedSubgraph> | undefined,
-  overlaps: readonly { labelId: string; edgeId: string }[],
-) {
-  const peTerminals = new Set(
-    selected?.protectiveEarthTerminals?.map(terminalIdKey),
-  );
-  const nonPeConductors = new Set(
-    selected?.paths
-      .filter((path) => path.powerRole === "non-pe")
-      .flatMap((path) =>
-        path.steps.flatMap((step) =>
-          step.kind === "conductor" &&
-          !peTerminals.has(terminalIdKey(step.from)) &&
-          !peTerminals.has(terminalIdKey(step.to))
-            ? [conductorKey(step.elementId)]
-            : [],
-        ),
-      ),
-  );
-  const crossedEdges = new Set(overlaps.map(({ edgeId }) => edgeId));
-  // A non-PE crossing admits the retry. Resolve every measured net-label
-  // overlap together, including a non-PE label that crosses protective earth.
-  if (
-    graph.edges.some(
-      (edge) =>
-        crossedEdges.has(edge.id) &&
-        !edge.endpoints.some((terminal) =>
-          peTerminals.has(terminalIdKey(terminal)),
-        ) &&
-        edge.elementIds.some((id) => nonPeConductors.has(conductorKey(id))),
-    )
-  )
-    return new Set(overlaps.map(({ labelId }) => labelId));
-}
+export type RootedRecovery = "trace-order";
 
 /** One additional native request, only after the corresponding layout refusal.
  * Fixed ports, source inventories, text and all final geometry guards remain
- * unchanged. Successful base layouts never enter this recovery. */
+ * unchanged. Successful base layouts never enter this recovery. Net labels
+ * never move from TAIL (route source) to HEAD (route destination). */
 export function rootedRecovery(
   graph: Readonly<PresentationGraph>,
   failure: LayoutValidationOutcome,
-  selected?: Readonly<SelectedSubgraph>,
 ): RootedRecovery | undefined {
   if (failure.ok) return;
-  if (
-    graph.view.family === "power" &&
-    graph.view.flow === "top-to-bottom" &&
-    failure.netLabelOverlaps
-  )
-    return netLabelRecovery(graph, selected, failure.netLabelOverlaps);
   if (
     graph.view.format !== "schematic-view/0.2" ||
     graph.view.intent !== "trace" ||

@@ -1,16 +1,48 @@
 import { OUTER_SVG_PADDING as pad } from "../symbols/catalog.js";
 import { required } from "../presentation/util.js";
-import { stripEnvelope } from "./strip-envelope.js";
+import {
+  clampHorizontalPaddingOutsideHeadings,
+  stripEnvelope,
+} from "./strip-envelope.js";
 import { sectionGroups, stackSections } from "./fold-stack.js";
 import { rootedDraft } from "./rooted-draft.js";
 import type { RootedCandidate } from "./rooted-build.js";
 import type { Draft, DrawingBounds } from "./types.js";
+
+function stripHorizontalSpan(
+  c: RootedCandidate,
+  source: Draft,
+  viewport: { x: number; y: number; w: number; h: number },
+  envelope: { x: number; w: number },
+  b: DrawingBounds,
+  reserveLinks: boolean,
+): { x: number; w: number } {
+  if (!reserveLinks) return envelope;
+  const halfBankUnits = (c.bank.width / 2 + 0.1) / c.scale;
+  let left = envelope.x;
+  let right = envelope.x + envelope.w;
+  for (const link of source.links) {
+    if (link.side !== "top" && link.side !== "bottom") continue;
+    const linkX = viewport.x + (link.x - b.x) / c.scale;
+    left = Math.min(left, linkX - halfBankUnits);
+    right = Math.max(right, linkX + halfBankUnits);
+  }
+  left = Math.max(viewport.x, left);
+  right = Math.min(viewport.x + viewport.w, right);
+  return clampHorizontalPaddingOutsideHeadings(c.prepared, envelope, {
+    x: left,
+    y: viewport.y,
+    w: right - left,
+    h: viewport.h,
+  });
+}
 
 function trimStrip(
   c: RootedCandidate,
   source: Draft,
   b: DrawingBounds,
   inner: string,
+  reserveLinks: boolean,
 ) {
   const viewport = required(
     source.rootedSections?.[0],
@@ -24,10 +56,18 @@ function trimStrip(
     "x",
   );
   if (!envelope) return undefined;
+  const span = stripHorizontalSpan(
+    c,
+    source,
+    viewport,
+    envelope,
+    b,
+    reserveLinks,
+  );
   const next = rootedDraft(
     c.prepared,
     {
-      xs: [envelope.x + pad, envelope.x + envelope.w + pad],
+      xs: [span.x + pad, span.x + span.w + pad],
       ys: [viewport.y + pad, viewport.y + viewport.h + pad],
     },
     0,
@@ -42,9 +82,9 @@ function trimStrip(
     next.rootedScoreBounds = source.rootedScoreBounds;
   next.links = source.links.map((link) => ({
     ...link,
-    x: link.x + (viewport.x - envelope.x) * c.scale,
+    x: link.x + (viewport.x - span.x) * c.scale,
   }));
-  return { draft: next, width: envelope.w * c.scale };
+  return { draft: next, width: span.w * c.scale };
 }
 
 /** One deterministic composition of a selected TB winner's existing strips.
@@ -52,6 +92,7 @@ function trimStrip(
 export function sideSections(
   c: RootedCandidate,
   inner: string,
+  reserveLinks = false,
 ): Draft[] | undefined {
   if (
     c.prepared.view.flow !== "top-to-bottom" ||
@@ -65,7 +106,7 @@ export function sideSections(
   )
     return undefined;
   const b = required(c.drafts[0]?.drawingBounds, "Missing composition bounds");
-  const strips = c.drafts.map((d) => trimStrip(c, d, b, inner));
+  const strips = c.drafts.map((d) => trimStrip(c, d, b, inner, reserveLinks));
   // A merged page's figures cannot hide an empty/enclosure-only or tail strip.
   if (
     strips.some((s) => !s || !s.draft.rootedContent?.figures || s.width > b.w)

@@ -7,19 +7,46 @@ import { routeGrowth } from "./rooted-clipped-routes.js";
 import { compareCandidates } from "./rooted-score.js";
 import type { ElectricalIr } from "@thermite/compiler";
 import type { RootedCandidate } from "./rooted-build.js";
-import type { PaperPage } from "./types.js";
+import type { Draft, PaperPage } from "./types.js";
 
-/** Compare only the original materialized winner and one symmetric alternative.
- * This runs after search, including its early exit, and cannot add ELK work. */
+function acceptedAlternative(
+  original: RootedCandidate,
+  native: RootedCandidate,
+  page: PaperPage,
+  drafts: Draft[],
+): RootedCandidate | undefined {
+  const alternative: RootedCandidate = { ...original, drafts };
+  delete alternative.printableDrafts;
+  if (
+    routeGrowth(alternative, original, false).some((n) => n > 0) ||
+    routeGrowth(alternative, original).some((n) => n > 0) ||
+    compareCandidates(
+      alternative,
+      original,
+      native.jogs,
+      page,
+      native.detours,
+      native,
+      original,
+    ) >= 0 ||
+    !compositionFits(alternative, native, page)
+  )
+    return undefined;
+  return alternative;
+}
+
+/** Compare the original materialized winner against side-folded strip
+ * compositions (tight trim first, then reserving continuation-bank clearance
+ * around top/bottom links only if tight trim fails fit). No ELK work. */
 export function composeRootedWinner(
   ir: Readonly<ElectricalIr>,
   original: RootedCandidate,
   native: RootedCandidate,
   page: PaperPage,
 ): RootedCandidate {
-  // Discover final viewports before filtering original location headings.
-  const geometry = sideSections(original, "");
-  if (!geometry) return original;
+  const tightGeometry = sideSections(original, "", false);
+  const paddedGeometry = sideSections(original, "", true);
+  if (!tightGeometry && !paddedGeometry) return original;
   const p = original.prepared;
   const emitted = emitSchematicSvg(
     p.graph,
@@ -39,27 +66,19 @@ export function composeRootedWinner(
     .replace(/^<\?xml[^>]*>\s*/, "")
     .replace(/^<svg[^>]*>\s*/, "")
     .replace(/<\/svg>\s*$/, "");
-  const drafts = sideSections(
-    original,
-    rootedLocationContent(inner, p, geometry),
-  );
-  if (!drafts) return original;
-  const alternative: RootedCandidate = { ...original, drafts };
-  delete alternative.printableDrafts;
-  if (
-    routeGrowth(alternative, original, false).some((n) => n > 0) ||
-    routeGrowth(alternative, original).some((n) => n > 0) ||
-    compareCandidates(
-      alternative,
+  for (const [geometry, reserveLinks] of [
+    [tightGeometry, false],
+    [paddedGeometry, true],
+  ] as const) {
+    if (!geometry) continue;
+    const drafts = sideSections(
       original,
-      native.jogs,
-      page,
-      native.detours,
-      native,
-      original,
-    ) >= 0 ||
-    !compositionFits(alternative, native, page)
-  )
-    return original;
-  return alternative;
+      rootedLocationContent(inner, p, geometry),
+      reserveLinks,
+    );
+    if (!drafts) continue;
+    const accepted = acceptedAlternative(original, native, page, drafts);
+    if (accepted) return accepted;
+  }
+  return original;
 }

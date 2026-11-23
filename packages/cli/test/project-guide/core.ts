@@ -1563,7 +1563,7 @@ const module: FactModule = {
       "Contribution process; no runtime behavior.",
     ],
     [
-      "Draft bug/gap/doc issues locally unless asked to file them (search/GET examples: `thermite guide libraries`).",
+      "Draft bug/gap/doc issues locally unless asked to file (search/GET: `thermite guide libraries`).",
       "Contribution process; no runtime behavior.",
     ],
     ["Never patch runtimes.", "Contribution process; no runtime behavior."],
@@ -1592,11 +1592,11 @@ const module: FactModule = {
       "Authoring principle; the printing facts show these are generated.",
     ],
     [
-      "Never hand-author geometry, infer engineering repairs or suppress diagnostics.",
+      "Never hand-author geometry, infer repairs or suppress diagnostics.",
       "Authoring prohibition; no runtime behavior.",
     ],
     [
-      "To edit existing source/presentation files:",
+      "Edit existing source/presentation files:",
       "Introduces the workflow line below.",
     ],
     [

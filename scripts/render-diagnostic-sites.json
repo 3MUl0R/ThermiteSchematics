@@ -386,6 +386,28 @@
       "codes": ["R004"]
     },
     {
+      "id": "packages/render/src/layout/elk-layout.ts:layoutPresentationGraph:factory-call:1",
+      "path": "packages/render/src/layout/elk-layout.ts",
+      "owner": "layoutPresentationGraph",
+      "kind": "factory-call",
+      "factory": "packages/render/src/layout/elk-layout.ts:retryWidenedSources",
+      "codes": ["R004"]
+    },
+    {
+      "id": "packages/render/src/layout/elk-layout.ts:retryWidenedSources:constructor:1",
+      "path": "packages/render/src/layout/elk-layout.ts",
+      "owner": "retryWidenedSources",
+      "kind": "constructor",
+      "codes": ["R004"]
+    },
+    {
+      "id": "packages/render/src/layout/elk-layout.ts:retryWidenedSources:constructor:2",
+      "path": "packages/render/src/layout/elk-layout.ts",
+      "owner": "retryWidenedSources",
+      "kind": "constructor",
+      "codes": ["R004"]
+    },
+    {
       "id": "packages/render/src/layout/validate-output.ts:invalidLayoutError:constructor:1",
       "path": "packages/render/src/layout/validate-output.ts",
       "owner": "invalidLayoutError",
@@ -1695,6 +1717,10 @@
       "owner": "withStoppedTerminals"
     },
     {
+      "path": "packages/render/src/layout/elk-layout.ts",
+      "owner": "retryWidenedSources"
+    },
+    {
       "path": "packages/render/src/packet/circuit.ts",
       "owner": "circuitDrafts"
     },
@@ -1826,6 +1852,10 @@
     },
     "packages/render/src/internal/title-data/validation.ts": {
       "category": "public-boundary"
+    },
+    "packages/render/src/layout/elk-layout.ts": {
+      "category": "public-boundary",
+      "facts": "Preserves the original R004 layout failure while recording the widened-source retry outcome in details; transports the R004 code already produced by layout validation without minting a new refusal."
     },
     "packages/render/src/layout/validate-output.ts": {
       "category": "public-boundary"

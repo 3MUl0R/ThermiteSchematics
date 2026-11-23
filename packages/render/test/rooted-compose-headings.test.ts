@@ -46,3 +46,18 @@ it("expands a partly intersected X heading and retains the original text", () =>
   expect(selected.drafts[0]!.rootedSections![0]!.viewport.x).toBeLessThan(90);
   expect(selected.drafts[0]!.content).toContain('class="label-location"');
 });
+it("never partly reveals an outside heading when side-fold continuation link padding widens a strip (#570 review)", () => {
+  // Heading spans x=20..85, wholly outside tight envelope x=95.25..144.75,
+  // while raw link padding would move left to ~84.11 (cutting through FIELD).
+  const { candidate: c, inner } = sideLocation(1, 20, 300, 40);
+  const tight = sideSections(c, inner, false)!;
+  expect(tight[0]!.rootedSections![0]!.viewport.x).toBeGreaterThan(85 + 0.002);
+  expect(tight[0]!.continuedCaption).toContain("FIELD");
+
+  const padded = sideSections(c, inner, true)!;
+  const view = padded[0]!.rootedSections![0]!.viewport;
+  // Whole-heading rule: FIELD [20, 85] must be either wholly inside or wholly outside.
+  const whollyInside = view.x <= 20 && view.x + view.w >= 85;
+  const whollyOutside = view.x > 85 + 0.002 || view.x + view.w < 20 - 0.002;
+  expect(whollyInside || whollyOutside).toBe(true);
+});

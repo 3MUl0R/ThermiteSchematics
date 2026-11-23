@@ -23,7 +23,15 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.44** applies.
+the budget and the remaining headroom. Checker protocol **5.45** applies.
+
+Version **5.45** adds a Chromium-backed **DQ-17** regression test
+(`checker-net-browser.test.mjs`, #570) covering wide three-phase source net
+labels (`480VAC-L1`, `480VAC-L2`, `480VAC-L3`) in top-to-bottom power flow.
+Previously, every strict-corpus power case used only short `L1`/`PE` source
+potentials that fit within the default 24-unit vertical source port pitch and
+were suppressed as redundant with terminal captions, leaving the top-to-bottom
+route-source net label path uncovered. Complete 5.44 summaries remain readable.
 
 Version **5.44** closes **DQ-08 / DQ-19** terminal-zone and peer-ownership
 measurement gaps (`measurement/tranche4.mjs`, `measurement/terminals.mjs`,

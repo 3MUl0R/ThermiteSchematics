@@ -6,6 +6,7 @@ import type {
 } from "../types.js";
 import type { SymbolDefinition } from "../symbols/types.js";
 import { SYMBOL_CATALOG } from "../symbols/catalog.js";
+import { widenCollidingVerticalSources } from "../presentation/vertical-source-spacing.js";
 import { required } from "../presentation/util.js";
 import { reserveContinuationSources } from "../packet/continuation-source.js";
 import { buildElkAdapterGraph } from "./elk-adapter.js";
@@ -54,6 +55,72 @@ function keepPacketInput(
   );
 }
 
+async function retryWidenedSources(
+  graph: Readonly<PresentationGraph>,
+  first: Extract<LayoutValidationOutcome, { readonly ok: false }>,
+  catalog: readonly SymbolDefinition[],
+  run: (
+    candidate: Readonly<PresentationGraph>,
+  ) => Promise<LayoutValidationOutcome>,
+): Promise<LayoutValidationOutcome | undefined> {
+  if (
+    first.failureKind !== "net-label-intersection" ||
+    !first.collidingNetLabelIds?.length
+  )
+    return undefined;
+  const widened = widenCollidingVerticalSources(
+    graph,
+    new Set(first.collidingNetLabelIds),
+    catalog,
+  );
+  if (widened === undefined) return undefined;
+  const retried = await run(widened);
+  if (retried.ok === true) return { ...retried, graph: widened };
+  return {
+    ...first,
+    error: {
+      ...first.error,
+      message: `${first.error.message} Widened source retry failed: ${retried.error.message}`,
+      details: {
+        ...first.error.details,
+        widenedRetryFailure: {
+          code: retried.error.code,
+          failureKind: retried.failureKind,
+          message: retried.error.message,
+        },
+      },
+    },
+  };
+}
+
+async function searchLoadsAlternatives(
+  graph: Readonly<PresentationGraph>,
+  first: Extract<LayoutValidationOutcome, { readonly ok: false }>,
+  run: (
+    candidate: Readonly<PresentationGraph>,
+  ) => Promise<LayoutValidationOutcome>,
+): Promise<LayoutValidationOutcome | undefined> {
+  if (
+    !(
+      graph.view.format === "schematic-view/0.2" &&
+      graph.view.intent === "loads"
+    ) &&
+    first.failureKind !== "ambiguous-intersection" &&
+    first.failureKind !== "collinear-overlap"
+  )
+    return undefined;
+  // Preserve the existing fork and route search before changing model order.
+  for (const alternatives of [
+    contextForkOrderAlternatives(graph),
+    rootedRouteAlternatives(graph),
+  ])
+    for (const candidate of alternatives) {
+      const result = await run(candidate);
+      if (result.ok) return result;
+    }
+  return undefined;
+}
+
 export async function layoutPresentationGraph(
   graph: Readonly<PresentationGraph>,
   options: Readonly<ElkLayoutRequestOptions> = {},
@@ -99,26 +166,14 @@ export async function layoutPresentationGraph(
   }
   const first = await run(graph);
   if (first.ok) return first;
-  if (
-    (graph.view.format === "schematic-view/0.2" &&
-      graph.view.intent === "loads") ||
-    first.failureKind === "ambiguous-intersection" ||
-    first.failureKind === "collinear-overlap"
-  ) {
-    // Preserve the existing fork and route search before changing model order.
-    for (const alternatives of [
-      contextForkOrderAlternatives(graph),
-      rootedRouteAlternatives(graph),
-    ])
-      for (const candidate of alternatives) {
-        const result = await run(candidate);
-        if (result.ok) return result;
-      }
-  }
-  const recovery = rootedRecovery(graph, first, options.selected);
+  const widened = await retryWidenedSources(graph, first, catalog, run);
+  if (widened?.ok) return widened;
+  const searched = await searchLoadsAlternatives(graph, first, run);
+  if (searched?.ok) return searched;
+  const recovery = rootedRecovery(graph, first);
   if (recovery !== undefined) {
     const recovered = await run(graph, recovery);
     if (recovered.ok) return recovered;
   }
-  return first;
+  return widened ?? first;
 }
