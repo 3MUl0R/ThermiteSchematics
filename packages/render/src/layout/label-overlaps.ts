@@ -98,7 +98,7 @@ export function checkLabelClearOfDevicesAndEdges(
   }
   for (const segment of segments) {
     if (!segmentIntersectsInterior(segment, labelBounds)) continue;
-    if (label.role === "net") {
+    if (label.role === "net" && label.ownerKind === "edge") {
       recordNetLabelCollision(
         netCollisions,
         label.id,
@@ -114,6 +114,14 @@ export function checkLabelClearOfDevicesAndEdges(
   }
 }
 
+/**
+ * Only edge net-label vs terminal-marking overlaps are recorded as recoverable
+ * `net-label-intersection` collisions (deliberate: wide TTB source net labels
+ * can encroach on a sibling port's terminal marking and are resolved by pitch
+ * widening; LTR never widens and still refuses with R004). Any other pair is a
+ * `contract-violation`, except we do not mask an already-recorded collision on
+ * the same edge net label (and never add unrelated labels to `labelIds`).
+ */
 export function checkLabelPairOverlap(
   graph: Readonly<PresentationGraph>,
   left: LayoutLabel,
@@ -121,17 +129,11 @@ export function checkLabelPairOverlap(
   netCollisions: NetLabelCollisionReport,
   reject: (message: string) => never,
 ): void {
-  const netLabel =
-    left.role === "net" && left.ownerKind === "edge"
-      ? left
-      : right.role === "net" && right.ownerKind === "edge"
-        ? right
-        : undefined;
+  const leftIsEdgeNet = left.role === "net" && left.ownerKind === "edge";
+  const rightIsEdgeNet = right.role === "net" && right.ownerKind === "edge";
+  const netLabel = leftIsEdgeNet ? left : rightIsEdgeNet ? right : undefined;
   const other = netLabel === left ? right : left;
-  if (
-    netLabel !== undefined &&
-    (other.role === "terminal" || netCollisions.firstMessage !== undefined)
-  ) {
+  if (netLabel !== undefined && other.role === "terminal") {
     const edge = graph.edges.find((e) => e.id === netLabel.ownerId);
     recordNetLabelCollision(
       netCollisions,
@@ -139,6 +141,13 @@ export function checkLabelPairOverlap(
       `labels ${left.id} and ${right.id} overlap`,
       edge?.netId,
     );
+    return;
+  }
+  if (
+    netLabel !== undefined &&
+    netCollisions.labelIds.has(netLabel.id) &&
+    (!(leftIsEdgeNet && rightIsEdgeNet) || netCollisions.labelIds.has(other.id))
+  ) {
     return;
   }
   reject(`labels ${left.id} and ${right.id} overlap`);

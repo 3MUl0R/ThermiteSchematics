@@ -14,7 +14,7 @@ import type {
   SymbolPresentationNode,
 } from "../types.js";
 
-// Own-wire label offset (~3-4 units) plus DQ-18 foreign-wire ownership margin (>0.5 mm at 0.25 mm/unit).
+// Own-wire label offset (~3-4 units) plus DQ-16 foreign-wire ownership margin (>0.5 mm at 0.25 mm/unit).
 const MIN_PITCH_CLEARANCE = 12;
 const COMPACT_HEADER_MARGIN = 8;
 

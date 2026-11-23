@@ -75,7 +75,22 @@ async function retryWidenedSources(
   );
   if (widened === undefined) return undefined;
   const retried = await run(widened);
-  return retried.ok ? { ...retried, graph: widened } : undefined;
+  if (retried.ok) return { ...retried, graph: widened };
+  return {
+    ...first,
+    error: {
+      ...first.error,
+      message: `${first.error.message} Widened source retry failed: ${retried.error.message}`,
+      details: {
+        ...first.error.details,
+        widenedRetryFailure: {
+          code: retried.error.code,
+          failureKind: retried.failureKind,
+          message: retried.error.message,
+        },
+      },
+    },
+  };
 }
 
 export async function layoutPresentationGraph(
