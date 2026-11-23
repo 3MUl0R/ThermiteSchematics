@@ -119,6 +119,60 @@ function receptacleMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   return earth.length === 1 ? "receptacle-with-earth" : "receptacle";
 }
 
+function functionTerminalSpecs(type: IrDeviceType, f: IrFunction) {
+  return f.terminals.map(({ terminalKey }) =>
+    type.terminals.find((t) => t.key === terminalKey),
+  );
+}
+
+const AC_SINGLE_PHASE_ROLES = new Set([
+  "ac_line_input",
+  "ac_input_return",
+  "ac_neutral",
+]);
+const AC_THREE_PHASE_ROLE_SETS = [
+  ["phase_1_input", "phase_2_input", "phase_3_input"],
+  ["phase_u_input", "phase_v_input", "phase_w_input"],
+] as const;
+
+function dcSupplyInputMark(type: IrDeviceType, f: IrFunction): CircuitMark {
+  const terminals = functionTerminalSpecs(type, f);
+  const voltageTypes = new Set(
+    terminals.flatMap((t) =>
+      t?.rating?.voltage_type ? [t.rating.voltage_type] : [],
+    ),
+  );
+  if (voltageTypes.has("DC")) return "load";
+  const roles = terminals.map((t) => t?.role);
+  if (roles.some((r) => r?.startsWith("dc_"))) return "load";
+  const acByRole =
+    f.terminals.length === 2
+      ? roles.every((r) => r !== undefined && AC_SINGLE_PHASE_ROLES.has(r)) &&
+        roles.includes("ac_line_input")
+      : f.terminals.length === 3 &&
+        (AC_THREE_PHASE_ROLE_SETS.some((set) =>
+          set.every((role) => roles.includes(role)),
+        ) ||
+          (roles.includes("ac_line_input") &&
+            (roles.includes("ac_input_return") ||
+              roles.includes("ac_neutral")) &&
+            roles.includes("protective_earth")));
+  if (acByRole) return "ac-input";
+  if (voltageTypes.size === 1 && voltageTypes.has("AC")) return "ac-input";
+  return "load";
+}
+
+function dcSupplyOutputMark(type: IrDeviceType, f: IrFunction): CircuitMark {
+  const terminals = functionTerminalSpecs(type, f);
+  const declaresAc = terminals.some(
+    (t) =>
+      t?.rating?.voltage_type === "AC" ||
+      t?.role?.startsWith("ac_") ||
+      t?.role?.startsWith("phase_"),
+  );
+  return declaresAc ? "source" : "dc-output";
+}
+
 export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
   const count = f.terminals.length;
   const explicit =
@@ -224,18 +278,18 @@ export function circuitMark(type: IrDeviceType, f: IrFunction): CircuitMark {
     if (profile === "thermite:receptacle" && [2, 3].includes(count))
       return receptacleMark(type, f);
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && count === 2) return "dc-output";
+    if (profile === "thermite:dc-supply" && [2, 3].includes(count))
+      return dcSupplyInputMark(type, f);
     if (
-      ["thermite:dc-supply", "thermite:relay", "thermite:io-module"].includes(
-        profile,
-      ) &&
+      ["thermite:relay", "thermite:io-module"].includes(profile) &&
       [2, 3].includes(count)
     )
       return "load";
   }
   if (f.kind === "source") {
     if (profile === "thermite:transformer" && count === 2) return "winding";
-    if (profile === "thermite:dc-supply" && count === 2) return "dc-output";
+    if (profile === "thermite:dc-supply" && count === 2)
+      return dcSupplyOutputMark(type, f);
     if (
       [
         "thermite:dc-supply",

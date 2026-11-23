@@ -74,9 +74,10 @@ same diagnostics. Old types without the map acquire neither field.
 Pressure and float contact marks depict an actuator together with the authored
 normal contact state. The sensor/probe and receptacle marks identify an interface;
 they do not infer pin roles, probe technology, float behavior or GFCI protection.
-`ac-input` must be explicitly chosen when AC conversion is known. A two-terminal
-`thermite:dc-supply` source uses the DC output mark; the input retains the generic
-power mark unless explicitly bound to `ac-input`.
+A two-terminal `thermite:dc-supply` source uses the DC output mark unless its
+terminals declare AC. A `thermite:dc-supply` load uses `ac-input` when its
+native terminal roles or ratings establish an AC input (or when explicitly bound
+via `circuitSymbols`), and otherwise retains the generic power mark (`load`).
 
 A `thermite:transformer` circuit block places its primary load windings opposite
 its secondary source windings on one shared magnetic core. Each winding retains
