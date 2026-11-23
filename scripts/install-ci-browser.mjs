@@ -23,7 +23,9 @@ const APT_LOCKS = [
   "/var/cache/apt/archives/lock",
   "/var/lib/apt/lists/lock",
 ];
-// Worst case: 3 * (240s + 30s) + (5s + 10s) + 2 * 120s = 1065s < 1200s (20 min).
+export const PROBE_GRACE_MS = 2_000;
+// Worst case: 3 * (240s + 30s) + (5s + 10s) + 2 * 120s = 1065s
+// (+ at most 2s probe grace per lock wait = 1069s) < 1200s (20 min).
 export const INSTALL_BUDGET = Object.freeze({
   stepTimeoutSeconds: 20 * 60,
   attempts: 3,
@@ -52,14 +54,39 @@ const stderrText = (r) =>
     : Buffer.isBuffer(r.stderr)
       ? r.stderr.toString("utf8").trim()
       : "";
+const probeSeconds = (ms) =>
+  `${(ms / 1_000).toFixed(3).replace(/\.?0+$/, "")}s`;
 const probeFailure = (r, err) => {
   const base = r.error
     ? r.error.message
     : r.signal
       ? `signal ${r.signal}`
-      : `exit ${r.status}`;
+      : r.status === 124 || r.status === 137
+        ? `timed out (exit ${r.status})`
+        : `exit ${r.status}`;
   return err ? `${base}: ${err}` : base;
 };
+// Enforce the deadline inside sudo so SIGKILL reaches the elevated fuser child;
+// keep an outer SIGKILL backstop in case sudo itself hangs.
+const runLockProbe = (run, locks, remaining) =>
+  run(
+    "sudo",
+    [
+      "-n",
+      "timeout",
+      "--signal=KILL",
+      probeSeconds(remaining),
+      "fuser",
+      "-s",
+      ...locks,
+    ],
+    {
+      stdio: ["ignore", "ignore", "pipe"],
+      encoding: "utf8",
+      timeout: remaining + PROBE_GRACE_MS,
+      killSignal: "SIGKILL",
+    },
+  );
 
 async function waitForAptLocks(run, pause, hasFile, log, now, b) {
   const locks = APT_LOCKS.filter((f) => hasFile(f));
@@ -77,11 +104,7 @@ async function waitForAptLocks(run, pause, hasFile, log, now, b) {
         );
       return;
     }
-    const res = run("sudo", ["-n", "fuser", "-s", ...locks], {
-      stdio: ["ignore", "ignore", "pipe"],
-      encoding: "utf8",
-      timeout: remaining,
-    });
+    const res = runLockProbe(run, locks, remaining);
     const err = stderrText(res);
     if (
       res.error ||
