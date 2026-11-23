@@ -33,7 +33,7 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
     },
   );
 
-  it(`prints #366's pump phase labels in ${flow}`, async () => {
+  it(`prints #366's pump phase labels at route source in ${flow}`, async () => {
     const fixture = await agentRefusalFixture("pump");
     try {
       const observed = observedRecoveryEngine();
@@ -44,25 +44,16 @@ for (const flow of ["left-to-right", "top-to-bottom"] as const) {
       expect(result.value.summary.conductiveElementIds).toHaveLength(13);
       for (const text of ["L1 480VAC", "L2 480VAC", "L3 480VAC", "PE"])
         expect(result.value.svg).toContain(text);
-      expect(observed.inputs).toHaveLength(flow === "left-to-right" ? 1 : 2);
-      if (flow === "top-to-bottom") {
-        const [before, after] = observed.inputs;
-        assert.ok(before && after);
-        assertRecoveryInputs(before, after, [
-          "L1 480VAC",
-          "L2 480VAC",
-          "L3 480VAC",
-        ]);
-        const netLabels = after.edges
-          ?.flatMap((e) => e.labels ?? [])
-          .filter((l) => l.id?.endsWith(',"net"]'));
-        expect(netLabels).toHaveLength(4);
-        expect(
-          netLabels?.map(
-            (l) => l.layoutOptions?.["org.eclipse.elk.edgeLabels.placement"],
-          ),
-        ).toEqual(["HEAD", "HEAD", "HEAD", "TAIL"]);
-      }
+      expect(observed.inputs).toHaveLength(1);
+      const netLabels = observed.inputs[0]?.edges
+        ?.flatMap((e) => e.labels ?? [])
+        .filter((l) => l.id?.endsWith(',"net"]'));
+      expect(netLabels).toHaveLength(4);
+      expect(
+        netLabels?.map(
+          (l) => l.layoutOptions?.["org.eclipse.elk.edgeLabels.placement"],
+        ),
+      ).toEqual(["TAIL", "TAIL", "TAIL", "TAIL"]);
     } finally {
       await fixture.dispose();
     }

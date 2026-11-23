@@ -93,52 +93,31 @@ it("retries only the measured failure and the same physical pass-through", async
   }
 });
 
-it("requires a non-PE conductor overlap in vertical power views", async () => {
+it("never switches net labels to HEAD on vertical power net-label overlaps", async () => {
   const fixture = await agentRefusalFixture("pump");
   try {
-    const { graph, selected } = agentPresentation(fixture.ir, {
-      ...pumpPower,
-      flow: "top-to-bottom",
-    });
-    const overlap = (designation: string) => {
-      const edge = graph.edges.find(
-        (e) =>
-          e.conductor?.kind === "wire" &&
-          e.conductor.designation === designation,
-      );
-      assert.ok(edge?.netLabel);
-      return { labelId: edge.netLabel.id, edgeId: edge.id };
-    };
-    const nonPe = overlap("W105"),
-      earth = overlap("W113");
-    const failureWithOverlaps = {
-      ...failure(graph, "net-label-intersection"),
-      netLabelOverlaps: [nonPe, earth],
-    };
-    expect(rootedRecovery(graph, failureWithOverlaps, selected)).toEqual(
-      new Set([nonPe.labelId, earth.labelId]),
-    );
-    expect(
-      rootedRecovery(
-        graph,
-        { ...failureWithOverlaps, netLabelOverlaps: [earth] },
-        selected,
-      ),
-    ).toBeUndefined();
-    expect(
-      rootedRecovery(graph, failure(graph, "contract-violation")),
-    ).toBeUndefined();
-    const horizontal = agentPresentation(fixture.ir, {
-      ...pumpPower,
-      flow: "left-to-right",
-    });
-    expect(
-      rootedRecovery(
-        horizontal.graph,
-        failureWithOverlaps,
-        horizontal.selected,
-      ),
-    ).toBeUndefined();
+    for (const flow of ["top-to-bottom", "left-to-right"] as const) {
+      const { graph } = agentPresentation(fixture.ir, {
+        ...pumpPower,
+        flow,
+      });
+      for (const kind of [
+        "net-label-intersection",
+        "contract-violation",
+      ] as const) {
+        expect(rootedRecovery(graph, failure(graph, kind))).toBeUndefined();
+      }
+      const build = buildElkAdapterGraph(graph);
+      const netLabels = build.graph.edges
+        ?.flatMap((edge) => edge.labels ?? [])
+        .filter((label) => label.id?.endsWith(',"net"]'));
+      expect(netLabels).toHaveLength(4);
+      for (const label of netLabels ?? []) {
+        expect(label.layoutOptions).toMatchObject({
+          [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL",
+        });
+      }
+    }
   } finally {
     await fixture.dispose();
   }
@@ -237,9 +216,9 @@ async function runRetryOrder(
   const realRecovery = recoveryModule.rootedRecovery;
   const recoverySpy = vi
     .spyOn(recoveryModule, "rootedRecovery")
-    .mockImplementation((g, outcome, sel) => {
+    .mockImplementation((g, outcome) => {
       sequence.push("rooted-recovery");
-      return realRecovery(g, outcome, sel);
+      return realRecovery(g, outcome);
     });
   const engine = createElkEngine();
   engine.layout = async (input, options) => {
@@ -414,7 +393,7 @@ async function twoTerminalMotorFixture() {
   }
 }
 
-it("admits vertical power HEAD retry by selected power-path conductors regardless of lane names", async () => {
+it("keeps two-terminal motor TTB net labels at TAIL without HEAD recovery", async () => {
   const fixture = await twoTerminalMotorFixture();
   try {
     const { graph, selected } = agentPresentation(fixture.ir, {
@@ -428,40 +407,20 @@ it("admits vertical power HEAD retry by selected power-path conductors regardles
       "non-pe",
       "non-pe",
     ]);
-    const overlapFor = (designation: string) => {
-      const edge = graph.edges.find(
-        (e) =>
-          e.conductor?.kind === "wire" &&
-          e.conductor.designation === designation,
-      );
-      assert.ok(edge?.netLabel);
-      return { labelId: edge.netLabel.id, edgeId: edge.id };
-    };
-    const positive = overlapFor("W101");
-    const ret = overlapFor("W102");
-    for (const [crossed, other] of [
-      [positive, ret],
-      [ret, positive],
-    ] as const) {
-      const recovery = rootedRecovery(
-        graph,
-        {
-          ...failure(graph, "net-label-intersection"),
-          netLabelOverlaps: [crossed],
-        },
-        selected,
-      );
-      expect(recovery).toEqual(new Set([crossed.labelId]));
-      const build = buildElkAdapterGraph(graph, selected, recovery);
-      const netLabels = build.graph.edges
-        ?.flatMap((edge) => edge.labels ?? [])
-        .filter((label) => label.id?.endsWith(',"net"]'));
-      expect(
-        netLabels?.find((label) => label.id === crossed.labelId)?.layoutOptions,
-      ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "HEAD" });
-      expect(
-        netLabels?.find((label) => label.id === other.labelId)?.layoutOptions,
-      ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL" });
+    expect(
+      rootedRecovery(graph, failure(graph, "net-label-intersection")),
+    ).toBeUndefined();
+    const result = await layoutPresentationGraph(graph, { selected });
+    assert.ok(result.ok, JSON.stringify(result));
+    const build = buildElkAdapterGraph(graph, selected);
+    const netLabels = build.graph.edges
+      ?.flatMap((edge) => edge.labels ?? [])
+      .filter((label) => label.id?.endsWith(',"net"]'));
+    expect(netLabels).toHaveLength(2);
+    for (const label of netLabels ?? []) {
+      expect(label.layoutOptions).toMatchObject({
+        [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL",
+      });
     }
   } finally {
     await fixture.dispose();
@@ -695,7 +654,7 @@ function wireEdgeFor(graph: PresentationGraph, designation: string) {
   return edge;
 }
 
-it("excludes authored protective_earth terminals from HEAD retry without a protective-earth-source mapping", async () => {
+it("rejects injected net-label overlaps as R004 without retrying HEAD on PE or non-PE edges", async () => {
   const fixture = await threePhaseMotorPeFixture();
   try {
     const { graph, selected } = peNoSourceMappingPresentation(fixture.ir);
@@ -708,57 +667,20 @@ it("excludes authored protective_earth terminals from HEAD retry without a prote
     expect(
       selected.protectiveEarthTerminals?.some((t) => t.terminalKey === "T4"),
     ).toBe(true);
-    const peEdge = wireEdgeFor(graph, "W104");
-    const nonPeEdge = wireEdgeFor(graph, "W101");
-
-    // Reviewer's case: PE-only overlap without a PE source mapping -> no retry, R004.
-    const peAttempt = await layoutWithInjectedNetLabelOverlap(
-      graph,
-      selected,
-      peEdge.id,
-    );
-    expect(peAttempt.inputs).toHaveLength(1);
-    expect(peAttempt.result).toMatchObject({
-      ok: false,
-      failureKind: "net-label-intersection",
-      error: { code: "R004" },
-    });
-
-    // Landing on an authored protective_earth terminal excludes a conductor even on a non-pe path.
-    const allNonPePaths: SelectedSubgraph = {
-      ...selected,
-      paths: selected.paths.map((p) => ({ ...p, powerRole: "non-pe" })),
-    };
-    expect(
-      rootedRecovery(
+    for (const wire of ["W104", "W101"] as const) {
+      const edge = wireEdgeFor(graph, wire);
+      const attempt = await layoutWithInjectedNetLabelOverlap(
         graph,
-        {
-          ...failure(graph, "net-label-intersection"),
-          netLabelOverlaps: [
-            { labelId: peEdge.netLabel!.id, edgeId: peEdge.id },
-          ],
-        },
-        allNonPePaths,
-      ),
-    ).toBeUndefined();
-
-    // Passing control: non-PE overlap on the same graph still retries with HEAD.
-    const nonPeAttempt = await layoutWithInjectedNetLabelOverlap(
-      graph,
-      selected,
-      nonPeEdge.id,
-    );
-    expect(nonPeAttempt.inputs).toHaveLength(2);
-    expect(nonPeAttempt.result.ok).toBe(true);
-    const retryLabels = nonPeAttempt.inputs[1]?.edges?.flatMap(
-      (e) => e.labels ?? [],
-    );
-    expect(
-      retryLabels?.find((l) => l.id === nonPeEdge.netLabel!.id)?.layoutOptions,
-    ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "HEAD" });
-    expect(
-      retryLabels?.find((l) => l.id === peEdge.netLabel!.id)?.layoutOptions,
-    ).toMatchObject({ [ELK_OPTIONS.edgeLabelsPlacement]: "TAIL" });
+        selected,
+        edge.id,
+      );
+      expect(attempt.inputs).toHaveLength(1);
+      expect(attempt.result).toMatchObject({
+        ok: false,
+        failureKind: "net-label-intersection",
+        error: { code: "R004" },
+      });
+    }
   } finally {
     await fixture.dispose();
   }

@@ -1,8 +1,9 @@
 import type {
   LayoutEdge,
   LayoutLabel,
+  LayoutNode,
   LayoutPoint,
-  NormalizedSchematicView,
+  PresentationGraph,
 } from "../types.js";
 import type { Bounds } from "./validate-output.js";
 
@@ -11,11 +12,6 @@ export interface Segment {
   readonly start: LayoutPoint;
   readonly end: LayoutPoint;
   readonly horizontal: boolean;
-}
-
-export interface NetLabelOverlap {
-  readonly labelId: string;
-  readonly edgeId: string;
 }
 
 export function segmentIntersectsInterior(segment: Segment, bounds: Bounds) {
@@ -37,26 +33,50 @@ export function segmentIntersectsInterior(segment: Segment, bounds: Bounds) {
   );
 }
 
-export function netLabelOverlaps(
-  view: NormalizedSchematicView,
-  first: LayoutLabel,
-  labels: readonly LayoutLabel[],
+/** A painted edge net label may sit at its route source device, never inside a non-owner device frame. */
+export function assertLabelClearOfDevicesAndEdges(
+  graph: Readonly<PresentationGraph>,
+  label: LayoutLabel,
+  labelBounds: Bounds,
+  layoutNodes: ReadonlyMap<string, LayoutNode>,
   segments: readonly Segment[],
-  inkBounds: (label: LayoutLabel) => Bounds,
-): NetLabelOverlap[] | undefined {
-  if (
-    first.role !== "net" ||
-    view.family !== "power" ||
-    view.flow !== "top-to-bottom"
-  )
-    return;
-  const overlaps: NetLabelOverlap[] = [];
-  for (const label of labels) {
-    if (label.role !== "net") continue;
-    const bounds = inkBounds(label);
-    for (const segment of segments)
-      if (segmentIntersectsInterior(segment, bounds))
-        overlaps.push({ labelId: label.id, edgeId: segment.edge.id });
+  reject: (
+    message: string,
+    netId?: string,
+    failureKind?: "net-label-intersection",
+  ) => never,
+): void {
+  if (label.role === "net" && label.ownerKind === "edge") {
+    const edge = graph.edges.find((e) => e.id === label.ownerId);
+    if (edge !== undefined) {
+      const sourceNode = graph.nodes.find((node) =>
+        node.ports.some((port) => port.id === edge.sourcePortId),
+      );
+      const ownerDeviceId =
+        sourceNode?.kind === "symbol" ? sourceNode.deviceGroupId : undefined;
+      for (const node of layoutNodes.values()) {
+        if (node.kind !== "device" || node.id === ownerDeviceId) continue;
+        if (
+          Math.min(labelBounds.right, node.x + node.width) >
+            Math.max(labelBounds.left, node.x) &&
+          Math.min(labelBounds.bottom, node.y + node.height) >
+            Math.max(labelBounds.top, node.y)
+        ) {
+          reject(
+            `label ${label.id} overlaps non-owner device ${node.id}`,
+            edge.netId,
+            "net-label-intersection",
+          );
+        }
+      }
+    }
   }
-  return overlaps;
+  for (const segment of segments) {
+    if (!segmentIntersectsInterior(segment, labelBounds)) continue;
+    reject(
+      `label ${label.id} overlaps edge ${segment.edge.id}`,
+      segment.edge.netId,
+      label.role === "net" ? "net-label-intersection" : undefined,
+    );
+  }
 }

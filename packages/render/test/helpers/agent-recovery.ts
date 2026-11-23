@@ -42,7 +42,7 @@ export function restoreRecoveryOptions(candidate: ElkNode, before: ElkNode) {
 export function assertRecoveryInputs(
   before: ElkNode,
   after: ElkNode,
-  recovery: "trace-order" | readonly string[],
+  recovery: "trace-order",
 ) {
   expect(restoreRecoveryOptions(after, before)).toEqual(before);
   expect(after.layoutOptions).toEqual({
@@ -57,15 +57,7 @@ export function assertRecoveryInputs(
     for (const label of edge.labels ?? []) {
       const old = original.labels?.find((l) => l.id === label.id);
       assert.ok(old);
-      const net = label.id?.endsWith(',"net"]');
-      expect(label.layoutOptions).toEqual({
-        ...old.layoutOptions,
-        ...(net &&
-        recovery !== "trace-order" &&
-        recovery.includes(label.text ?? "")
-          ? { "org.eclipse.elk.edgeLabels.placement": "HEAD" }
-          : {}),
-      });
+      expect(label.layoutOptions).toEqual(old.layoutOptions);
     }
   }
 }

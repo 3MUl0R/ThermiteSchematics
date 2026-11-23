@@ -777,6 +777,7 @@ function emitSymbols(
         `Symbol definition ${node.symbolId} is missing.`,
       ),
       node.orientation,
+      node.symbolSize.width,
     );
     writer.open(1, "g", symbolGroupAttributes(node, origin, registry));
     for (const primitive of definition.primitives)

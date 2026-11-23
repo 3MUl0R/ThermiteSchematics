@@ -12,9 +12,8 @@ import { presentationDeviceNames } from "./topology-conservation.js";
 import { graphSemanticOrder } from "../semantic-order.js";
 import { layoutLabelInk } from "./label-bounds.js";
 import {
-  netLabelOverlaps,
+  assertLabelClearOfDevicesAndEdges,
   segmentIntersectsInterior,
-  type NetLabelOverlap,
   type Segment,
 } from "./label-overlaps.js";
 import type {
@@ -61,7 +60,6 @@ class LayoutContractViolation extends Error {
     message: string,
     netId?: string,
     readonly failureKind: LayoutFailureKind = "contract-violation",
-    readonly netLabelOverlaps?: readonly NetLabelOverlap[],
   ) {
     super(message);
     this.name = "LayoutContractViolation";
@@ -138,21 +136,14 @@ export type LayoutValidationOutcome =
       readonly ok: false;
       readonly error: InvalidLayoutError;
       readonly failureKind: LayoutFailureKind;
-      readonly netLabelOverlaps?: readonly NetLabelOverlap[];
     };
 
 function reject(
   message: string,
   netId?: string,
   failureKind?: LayoutFailureKind,
-  netLabelOverlaps?: readonly NetLabelOverlap[],
 ): never {
-  throw new LayoutContractViolation(
-    message,
-    netId,
-    failureKind,
-    netLabelOverlaps,
-  );
+  throw new LayoutContractViolation(message, netId, failureKind);
 }
 
 function invalidLayoutError(
@@ -1018,7 +1009,11 @@ function translatedPrimitiveBounds(
     if (node.kind === "junction") continue;
     const symbol = symbols.get(node.symbolId);
     invariant(symbol !== undefined, `symbol ${node.symbolId} is missing`);
-    const oriented = orientSymbolDefinition(symbol, node.orientation);
+    const oriented = orientSymbolDefinition(
+      symbol,
+      node.orientation,
+      node.symbolSize.width,
+    );
     const layout = geometry.nodes.get(node.id);
     if (layout?.primitiveOrigin === undefined)
       reject(`node ${node.id} has no primitive origin`);
@@ -1098,15 +1093,14 @@ function validateNodeAndLabelCollisions(
         reject(`label ${label.id} overlaps symbol ${nodeId}`);
       }
     }
-    for (const segment of segments) {
-      if (!segmentIntersectsInterior(segment, labelBounds)) continue;
-      reject(
-        `label ${label.id} overlaps edge ${segment.edge.id}`,
-        segment.edge.netId,
-        label.role === "net" ? "net-label-intersection" : undefined,
-        netLabelOverlaps(graph.view, label, labels, segments, inkBounds),
-      );
-    }
+    assertLabelClearOfDevicesAndEdges(
+      graph,
+      label,
+      labelBounds,
+      geometry.nodes,
+      segments,
+      reject,
+    );
   }
   if (references.length)
     validateContextInk(
@@ -1582,8 +1576,5 @@ function layoutFailure(
     ok: false,
     error,
     failureKind: violation.failureKind,
-    ...(violation.netLabelOverlaps
-      ? { netLabelOverlaps: violation.netLabelOverlaps }
-      : {}),
   };
 }

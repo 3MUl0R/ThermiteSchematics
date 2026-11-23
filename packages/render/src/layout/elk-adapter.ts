@@ -526,7 +526,6 @@ function edgeAdapter(
   edge: PresentationEdge,
   prioritizeDirection: boolean,
   assignments: ElkOptionAssignment[],
-  recovery?: RootedRecovery,
 ): ElkExtendedEdge {
   const labels = [edge.label, edge.netLabel]
     .filter((label): label is PresentationLabel => label !== undefined)
@@ -537,11 +536,7 @@ function edgeAdapter(
         targetKind: "edge-label",
         options: {
           [ELK_OPTIONS.edgeLabelsPlacement]:
-            label.role === "net"
-              ? recovery !== "trace-order" && recovery?.has(label.id)
-                ? "HEAD"
-                : "TAIL"
-              : "CENTER",
+            label.role === "net" ? "TAIL" : "CENTER",
           [ELK_OPTIONS.edgeLabelsInline]: "false",
         },
       }),
@@ -778,7 +773,7 @@ export function buildElkAdapterGraph(
     edges: edges
       .filter((edge) => !terminalContextAttachment(graph, edge))
       .map((edge) =>
-        edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments, recovery),
+        edgeAdapter(edge, edge.id === prioritizedEdgeId, assignments),
       ),
   };
   return Object.freeze({

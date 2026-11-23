@@ -338,13 +338,14 @@ collinear overlap, or `loads` layout failure, recovery tries context-fork order
 and then rooted route alternatives before rooted recovery. Rooted recovery makes
 at most one additional native ELK request with fixed ports, source inventories,
 text and final geometry guards unchanged, preserving the original R004 refusal
-on failure. Only two cases qualify: a `top-to-bottom` power view with a measured
-net-label overlap on a selected non-PE power conductor (excluding conductors
-landing on authored `protective_earth` terminals) retries with `HEAD` placement
-on the overlapping net labels only; and a single-signal-path device-rooted
-`trace` view with a two-port same-terminal pass-through on the signal net that
-fails with an ambiguous intersection or collinear overlap retries with
-`considerModelOrder.strategy` set to `NONE`.
+on failure. Only a single-signal-path device-rooted `trace` view with a two-port
+same-terminal pass-through on the signal net that fails with an ambiguous
+intersection or collinear overlap qualifies; it retries with
+`considerModelOrder.strategy` set to `NONE`. Net labels always stay anchored at
+the route source (`TAIL`) in both flows and never move to `HEAD` or into a
+non-owner device frame; in top-to-bottom flow, multi-port source symbols expand
+their horizontal port pitch when a source net label would otherwise cross an
+adjacent outgoing conductor.
 
 A supported unselected two-terminal coil can contribute an intermediate input-path
 terminal as context only. The mark says “coil outside view”; it does not select

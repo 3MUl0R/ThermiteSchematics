@@ -115,7 +115,7 @@ export async function layoutPresentationGraph(
         if (result.ok) return result;
       }
   }
-  const recovery = rootedRecovery(graph, first, options.selected);
+  const recovery = rootedRecovery(graph, first);
   if (recovery !== undefined) {
     const recovered = await run(graph, recovery);
     if (recovered.ok) return recovered;
