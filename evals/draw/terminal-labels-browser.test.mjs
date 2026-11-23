@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
 import { terminalText, textBounds } from "./checks.mjs";
@@ -256,6 +260,85 @@ it("DQ-17 flags pass-through twin labels on one circuit body and accepts single-
   ]);
 });
 
+const directLoopStrip = (repeatLabel, vertical, secondText = "1") => {
+  const term = JSON.stringify(["xt1", "1"]).replaceAll('"', "&quot;");
+  const aux = JSON.stringify(["xt1", "3"]).replaceAll('"', "&quot;");
+  const inCircle = vertical
+    ? `<circle data-layout-port="n1_in_1" data-loop-terminal="${term}" cx="67" cy="0" r="0.8" fill="white" stroke="black"/>`
+    : `<circle data-layout-port="n1_in_1" data-loop-terminal="${term}" cx="0" cy="37" r="0.8" fill="white" stroke="black"/>`;
+  const inLabel = vertical
+    ? `<text x="68.5" y="4" font-size="2.7">1</text>`
+    : `<text x="2" y="35.5" font-size="2.7">1</text>`;
+  const outCircle = vertical
+    ? `<circle data-layout-port="n1_out_1" data-loop-terminal="${term}" cx="67" cy="35" r="0.8" fill="white" stroke="black"/>`
+    : `<circle data-layout-port="n1_out_1" data-loop-terminal="${term}" cx="44" cy="37" r="0.8" fill="white" stroke="black"/>`;
+  const outLabel = repeatLabel
+    ? vertical
+      ? `<text x="68.5" y="33" font-size="2.7">${secondText}</text>`
+      : `<text x="42" y="35.5" text-anchor="end" font-size="2.7">${secondText}</text>`
+    : "";
+  const singlePort = vertical
+    ? `<circle data-layout-port="n1_out_0" data-loop-terminal="${aux}" cx="53" cy="35" r="0.8" fill="white" stroke="black"/><text x="54.5" y="33" font-size="2.7">3</text><text x="53" y="15" text-anchor="middle" font-size="2.7">+24 V feed TBD</text>`
+    : `<circle data-layout-port="n1_out_0" data-loop-terminal="${aux}" cx="44" cy="27" r="0.8" fill="white" stroke="black"/><text x="42" y="25.5" text-anchor="end" font-size="2.7">3</text><text x="22" y="28" text-anchor="middle" font-size="2.7">+24 V feed TBD</text>`;
+  return `<g data-device-uid="xt1" transform="translate(20 20)"><rect width="${vertical ? 110 : 44}" height="${vertical ? 35 : 68}" fill="white" stroke="black"/>${singlePort}${inCircle}${inLabel}${outCircle}${outLabel}</g>`;
+};
+
+const seriesLoopStrip = (repeatLabel, vertical, secondText = "1") => {
+  const term = JSON.stringify(["tb1", "1"]).replaceAll('"', "&quot;");
+  const inPort = vertical
+    ? `<g data-layout-port="p1_0_in" data-loop-terminal="${term}"><circle cx="48" cy="0" r="0.8" fill="white" stroke="black"/><text x="49.5" y="4" font-size="2.7">1</text></g>`
+    : `<g data-layout-port="p1_0_in" data-loop-terminal="${term}"><circle cx="0" cy="24" r="0.8" fill="white" stroke="black"/><text x="2" y="22.5" font-size="2.7">1</text></g>`;
+  const outLabel = repeatLabel
+    ? vertical
+      ? `<text x="49.5" y="28" font-size="2.7">${secondText}</text>`
+      : `<text x="34" y="22.5" text-anchor="end" font-size="2.7">${secondText}</text>`
+    : "";
+  const outPort = vertical
+    ? `<g data-layout-port="p1_0_out" data-loop-terminal="${term}"><circle cx="48" cy="30" r="0.8" fill="white" stroke="black"/>${outLabel}</g>`
+    : `<g data-layout-port="p1_0_out" data-loop-terminal="${term}"><circle cx="36" cy="24" r="0.8" fill="white" stroke="black"/>${outLabel}</g>`;
+  return `<g data-device-uid="tb1" data-body-width="${vertical ? 80 : 36}" data-body-height="${vertical ? 30 : 44}" transform="translate(20 20)"><rect width="${vertical ? 80 : 36}" height="${vertical ? 30 : 44}" fill="white" stroke="black"/>${inPort}${outPort}</g>`;
+};
+
+it.each([
+  ["direct-loop", false, directLoopStrip],
+  ["direct-loop", true, directLoopStrip],
+  ["series-loop", false, seriesLoopStrip],
+  ["series-loop", true, seriesLoopStrip],
+])(
+  "DQ-17 flags pre-fix %s pass-through twin labels (vertical=%s) and accepts single-label dual-port bodies",
+  async (_kind, vertical, strip) => {
+    const twin = await openSheet(page, svg(strip(true, vertical)));
+    expect(terminalText(twin)).toEqual([
+      expect.objectContaining({
+        kind: "duplicate-or-overlapping-terminal-text",
+        text: "1",
+      }),
+    ]);
+    const twinSuffix = await openSheet(
+      page,
+      svg(strip(true, vertical, "1 [+1]")),
+    );
+    expect(terminalText(twinSuffix)).toEqual([
+      expect.objectContaining({
+        kind: "duplicate-or-overlapping-terminal-text",
+      }),
+    ]);
+    const single = await openSheet(page, svg(strip(false, vertical)));
+    expect(terminalText(single)).toEqual([]);
+    const splitBodies = await openSheet(
+      page,
+      svg(
+        strip(false, vertical) +
+          strip(false, vertical).replace(
+            'transform="translate(20 20)"',
+            'transform="translate(140 20)"',
+          ),
+      ),
+    );
+    expect(terminalText(splitBodies)).toEqual([]);
+  },
+);
+
 it("V5 resolves net repetition through its own wire and exact landing appearance", async () => {
   const port = JSON.stringify([
     "port",
@@ -359,3 +442,185 @@ it.each([
     ).toEqual([]);
   },
 );
+
+const xmlAttr = (s) =>
+  s
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+async function renderAnalogOutputWithTerminalKey(renamedKey) {
+  const dir = await mkdtemp(join(tmpdir(), "thermite-dq17-key-"));
+  try {
+    for (const name of ["field-interfaces", "industrial-pilot"])
+      await cp(resolve("libraries", name), join(dir, name), {
+        recursive: true,
+      });
+    const typesPath = join(dir, "field-interfaces", "types.json");
+    const types = JSON.parse(await readFile(typesPath, "utf8"));
+    const strip = types.types.find(
+      (t) => t.id === "field-interfaces:terminal-strip-8-aux",
+    );
+    strip.terminals[renamedKey] = strip.terminals["3"];
+    delete strip.terminals["3"];
+    strip.terminalOrder = strip.terminalOrder.map((k) =>
+      k === "3" ? renamedKey : k,
+    );
+    strip.functions.aux1.terminals = strip.functions.aux1.terminals.map((k) =>
+      k === "3" ? renamedKey : k,
+    );
+    await writeFile(typesPath, JSON.stringify(types, null, 2));
+    const source = JSON.parse(
+      await readFile(
+        resolve("packages/cli/fixtures/analog-output/source.json"),
+        "utf8",
+      ),
+    );
+    const w5 = source.objects.find((o) => o.designation === "W5");
+    w5.endpoints.find((e) => e.device === "XT1").terminal = renamedKey;
+    await writeFile(join(dir, "source.json"), JSON.stringify(source, null, 2));
+    await cp(
+      resolve("packages/cli/fixtures/analog-output/packet.request.json"),
+      join(dir, "packet.request.json"),
+    );
+    await writeFile(
+      join(dir, "system.json"),
+      JSON.stringify({
+        format: "electrical-system/0.1",
+        project: { name: "Repeated key probe" },
+        sources: ["source.json"],
+        libraries: ["field-interfaces", "industrial-pilot"].map((name) => ({
+          name,
+          version: "0.1.0",
+          path: name,
+        })),
+      }),
+    );
+    const cli = resolve("thermite.mjs");
+    execFileSync("bun", [cli, "lock", "--project", dir], { stdio: "pipe" });
+    const out = join(dir, "packet.json");
+    execFileSync(
+      "bun",
+      [
+        cli,
+        "packet",
+        "--project",
+        dir,
+        "--input",
+        join(dir, "packet.request.json"),
+        "--output",
+        out,
+      ],
+      { stdio: "pipe" },
+    );
+    return JSON.parse(await readFile(out, "utf8")).sheets[0].svg;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+it("DQ-17 accepts a CLI-rendered signal-loop sheet with space-containing terminal key 'A A'", async () => {
+  const renderedSvg = await renderAnalogOutputWithTerminalKey("A A");
+  const g = await openSheet(page, renderedSvg);
+  const owned = g.texts.filter((t) => t.terminal === "A A");
+  expect(owned).toHaveLength(1);
+  expect(owned[0].text).toBe("A A");
+  expect(terminalText(g)).toEqual([]);
+});
+
+it("DQ-17 handles legal schema terminal keys with spaces and punctuation exactly", async () => {
+  const common = JSON.parse(
+    await readFile(
+      resolve("packages/schema/schemas/common.schema.json"),
+      "utf8",
+    ),
+  );
+  const designation = new RegExp(common.$defs.designation.pattern);
+  const legalKeys = [
+    "A A",
+    "A  A",
+    "[1] [1]",
+    "+ +",
+    ". .",
+    "- -",
+    "A[+1].B-2",
+    "A[+1].B-2 A[+1].B-2",
+  ];
+  for (const key of legalKeys) {
+    expect(designation.test(key), key).toBe(true);
+    const pair = xmlAttr(JSON.stringify(["xt1", key]));
+    const directSingle = `<g data-device-uid="xt1"><circle data-layout-port="p1" data-loop-terminal="${pair}" cx="10" cy="40" r="0.8" fill="white" stroke="black"/><text x="14" y="38" font-size="2.7">${xmlAttr(key)}</text></g>`;
+    expect(terminalText(await openSheet(page, svg(directSingle)))).toEqual([]);
+    const seriesSingle = `<g data-device-uid="xt1"><g data-layout-port="p1" data-loop-terminal="${pair}"><circle cx="10" cy="40" r="0.8" fill="white" stroke="black"/><text x="14" y="38" font-size="2.7">${xmlAttr(key)}</text></g></g>`;
+    expect(terminalText(await openSheet(page, svg(seriesSingle)))).toEqual([]);
+    const dupText = `${key} ${key}`;
+    const directDup = `<g data-device-uid="xt1"><circle data-layout-port="p1" data-loop-terminal="${pair}" cx="10" cy="40" r="0.8" fill="white" stroke="black"/><text x="14" y="38" font-size="2.7">${xmlAttr(dupText)}</text></g>`;
+    expect(terminalText(await openSheet(page, svg(directDup)))).toEqual([
+      expect.objectContaining({ kind: "duplicate-terminal-caption" }),
+    ]);
+  }
+  const circuitPin = (outside) =>
+    `<g data-device-uid="tb1" data-circuit-functions='["t1"]'><g data-layout-port="n0p0" data-terminal-id='["tb1","[+1]"]' data-terminal-key="[+1]"${outside ? ' data-outside-connections="1"' : ""}><circle cx="10" cy="20" r="0.65" fill="white" stroke="black"/><text x="14" y="18.5" font-size="2.5">[+1] [+1]</text></g></g>`;
+  expect(terminalText(await openSheet(page, svg(circuitPin(true))))).toEqual(
+    [],
+  );
+  expect(terminalText(await openSheet(page, svg(circuitPin(false))))).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-terminal-caption",
+      text: "[+1] [+1]",
+    }),
+  ]);
+});
+
+it("DQ-17 excludes tagged fields, pin legends, and description or legend roles inside loop ports", async () => {
+  const pair = xmlAttr(JSON.stringify(["strip", "1"]));
+  const seriesWrapped =
+    `<g data-device-uid="strip">` +
+    `<g data-layout-port="p1_0_in" data-loop-terminal="${pair}">` +
+    `<circle cx="10" cy="40" r="0.8" fill="white" stroke="black"/>` +
+    `<text x="12" y="38" font-size="2.7">1</text>` +
+    `<text data-pin-terminal="1" x="22" y="44" font-size="2.7">1: feed</text>` +
+    `<text data-tag-field="description" x="25" y="49" font-size="2.7">Tag text</text>` +
+    `<text class="label-description" x="25" y="55" font-size="2.7">Aux feed</text>` +
+    `<text class="pin-legend" x="25" y="61" font-size="2.7">Pin legend</text>` +
+    `<text data-tag-kind="legend" x="25" y="67" font-size="2.7">Strip legend</text>` +
+    `</g>` +
+    `<g data-layout-port="p1_0_out" data-loop-terminal="${pair}"><circle cx="60" cy="40" r="0.8" fill="white" stroke="black"/></g>` +
+    `</g>`;
+  const gs = await openSheet(page, svg(seriesWrapped));
+  expect(gs.texts.filter((t) => t.terminal).map((t) => t.text)).toEqual(["1"]);
+  expect(terminalText(gs)).toEqual([]);
+
+  const directExcluded =
+    `<g data-device-uid="strip">` +
+    `<circle data-layout-port="n1_in_1" data-loop-terminal="${pair}" cx="10" cy="20" r="0.8" fill="white" stroke="black"/>` +
+    `<text data-pin-terminal="1" x="22" y="20" font-size="2.7">1: feed</text>` +
+    `<circle data-layout-port="n1_out_1" data-loop-terminal="${pair}" cx="60" cy="20" r="0.8" fill="white" stroke="black"/>` +
+    `<text data-tag-field="description" x="72" y="20" font-size="2.7">Tag text</text>` +
+    `<circle data-layout-port="n1_in_2" data-loop-terminal="${pair}" cx="10" cy="45" r="0.8" fill="white" stroke="black"/>` +
+    `<text class="label-description" x="22" y="45" font-size="2.7">Aux feed</text>` +
+    `<circle data-layout-port="n1_out_2" data-loop-terminal="${pair}" cx="60" cy="45" r="0.8" fill="white" stroke="black"/>` +
+    `<text class="pin-legend" x="72" y="45" font-size="2.7">Pin legend</text>` +
+    `<circle data-layout-port="n1_in_3" data-loop-terminal="${pair}" cx="10" cy="70" r="0.8" fill="white" stroke="black"/>` +
+    `<text data-tag-kind="legend" x="22" y="70" font-size="2.7">Strip legend</text>` +
+    `</g>`;
+  const gd = await openSheet(page, svg(directExcluded));
+  expect(gd.texts.filter((t) => t.terminal)).toEqual([]);
+  expect(terminalText(gd)).toEqual([]);
+
+  const seriesSeparateLines =
+    `<g data-device-uid="strip">` +
+    `<g data-layout-port="p1_0_in" data-loop-terminal="${pair}">` +
+    `<circle cx="10" cy="40" r="0.8" fill="white" stroke="black"/>` +
+    `<text x="12" y="38" font-size="2.7">1</text>` +
+    `<text x="22" y="44" font-size="2.7">[+1]</text>` +
+    `</g></g>`;
+  expect(terminalText(await openSheet(page, svg(seriesSeparateLines)))).toEqual(
+    [
+      expect.objectContaining({
+        kind: "duplicate-or-overlapping-terminal-text",
+      }),
+    ],
+  );
+});

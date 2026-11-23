@@ -31,8 +31,54 @@ export function textClipAndOwner(c) {
   Object.assign(c, { id, semantic, clip });
 }
 
+export function loopTerminalOwner(e, deviceUid) {
+  const text = e.closest("text");
+  if (
+    !text ||
+    e.closest(
+      '[data-tag-field],[data-pin-terminal],[data-tag-kind="legend"],[data-tag-kind="reference"],[data-device-legend],[data-device-legend-entry],[data-device-reference-entry],.off-view-annotation',
+    )
+  )
+    return undefined;
+  const roles = [e, text]
+    .flatMap((n) => [
+      n.getAttribute("class"),
+      n.getAttribute("role"),
+      n.getAttribute("data-role"),
+      n.getAttribute("data-label-role"),
+      n.getAttribute("data-circuit-role"),
+    ])
+    .filter(Boolean)
+    .join(" ");
+  if (/(?:^|[\s_-])(?:description|legend)(?:$|[\s_-])/i.test(roles))
+    return undefined;
+  const wrapped = e.closest("[data-loop-terminal]");
+  const sibling =
+    !wrapped &&
+    e.matches("text") &&
+    e.previousElementSibling?.matches("circle[data-loop-terminal]")
+      ? e.previousElementSibling
+      : null;
+  const host = wrapped ?? sibling;
+  if (!host) return undefined;
+  try {
+    const pair = JSON.parse(host.getAttribute("data-loop-terminal"));
+    if (
+      Array.isArray(pair) &&
+      pair.length === 2 &&
+      typeof pair[0] === "string" &&
+      typeof pair[1] === "string" &&
+      pair[0] &&
+      pair[1] &&
+      (!deviceUid || pair[0] === deviceUid)
+    )
+      return { deviceUid: pair[0], terminal: pair[1], host };
+  } catch {}
+  return undefined;
+}
+
 export function textSemanticOwner(c) {
-  const { e, id, ids, semantic, terminalCaptionOwners } = c;
+  const { e, h, id, ids, semantic, terminalCaptionOwners } = c;
   if (semantic) {
     try {
       const key = JSON.parse(
@@ -63,10 +109,24 @@ export function textSemanticOwner(c) {
   }
   const role =
     e.getAttribute("class") ?? e.closest("text")?.getAttribute("class") ?? "";
+  if (!id.terminal && (!id.labelRole || id.labelRole === "terminal")) {
+    const loopOwner = h.loopTerminalOwner(e, id.deviceUid);
+    if (loopOwner) {
+      id.deviceUid ??= loopOwner.deviceUid;
+      id.terminal = loopOwner.terminal;
+      id.terminalAppearance = ids.get(loopOwner.host);
+      id.terminalBodyScope = ids.get(e.closest("[data-device-uid]"));
+    }
+  }
   if (id.terminal && !id.terminalAppearance)
     id.terminalAppearance = ids.get(
       e.closest("[data-terminal-id],[data-loop-terminal]"),
     );
+  if (id.terminal && !id.nativeFunctionScope && !id.terminalBodyScope) {
+    const body =
+      e.closest("[data-terminal-id]") && e.closest("[data-device-uid]");
+    if (body) id.terminalBodyScope = ids.get(body);
+  }
   const nestedRoot = e.parentElement.closest(
     "svg:not(body>svg):not(section>svg)",
   );

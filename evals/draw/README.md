@@ -23,7 +23,28 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.42** applies.
+the budget and the remaining headroom. Checker protocol **5.43** applies.
+
+Version **5.43** closes a **DQ-17** gap for signal-loop and non-circuit
+pass-through terminal captions (`measurement/text-layout.mjs`, `checks.mjs`,
+`terminal-caption-duplicate.mjs`, #554). Previously DQ-17 only read
+`data-terminal-key` and grouped pass-through ports by `nativeFunctionScope`
+(`[data-circuit-functions]`), so signal-loop terminal captions — emitted either
+inside `[data-loop-terminal]` groups in series loops or as bare `<text>`
+siblings immediately following `circle[data-loop-terminal]` in direct loops —
+were dropped before duplicate detection and lacked a shared body scope across
+opposite routing ports. Measurement now resolves terminal ownership from both
+`[data-loop-terminal]` containers and direct-loop `circle[data-loop-terminal]`
+siblings — applying the same exclusions (`data-tag-field`, `data-pin-terminal`,
+device/reference legend containers, description/legend roles, and trailing
+direct-loop descriptions) to both branches — and records the enclosing symbol
+body (`terminalBodyScope`) so DQ-17 enforces at most one terminal caption per
+physical `(deviceUid, terminalKey)` per symbol body across all pass-through
+routing ports and `[+N]` forms, while keeping separate bodies of the same
+device distinct. Single-element `duplicate-terminal-caption` checks match
+against the resolved physical terminal key so legal terminal keys containing
+spaces or punctuation (such as `"A A"`) are handled exactly instead of being
+split on whitespace. Complete 5.42 summaries remain readable.
 
 Version **5.42** updates **DQ-10** (`qualifier-oracle.mjs`, #553). On
 `thermite:dc-supply` (and its `iec:dc-power-supply` alias), a 2- or 3-terminal
