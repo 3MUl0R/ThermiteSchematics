@@ -4,13 +4,74 @@ const inside = (p, b) =>
   p.x <= b.x + b.w + 0.17 &&
   p.y >= b.y - 0.17 &&
   p.y <= b.y + b.h + 0.17;
+const DC_SUPPLY_SYMBOLS = new Set([
+  "thermite:dc-supply",
+  "iec:dc-power-supply",
+]);
+const AC_SINGLE_PHASE_ROLES = new Set([
+  "ac_line_input",
+  "ac_input_return",
+  "ac_neutral",
+]);
+const AC_THREE_PHASE_ROLE_SETS = [
+  ["phase_1_input", "phase_2_input", "phase_3_input"],
+  ["phase_u_input", "phase_v_input", "phase_w_input"],
+];
+function functionTerminalSpecs(t, f) {
+  return (f.terminals ?? []).map(({ terminalKey }) =>
+    t?.terminals?.find((p) => p.key === terminalKey),
+  );
+}
+function nativeAcInput(t, f) {
+  const count = f.terminals?.length ?? 0;
+  if (count !== 2 && count !== 3) return false;
+  const terminals = functionTerminalSpecs(t, f);
+  const voltageTypes = new Set(
+    terminals.flatMap((p) =>
+      p?.rating?.voltage_type ? [p.rating.voltage_type] : [],
+    ),
+  );
+  if (voltageTypes.has("DC")) return false;
+  const roles = terminals.map((p) => p?.role);
+  if (roles.some((r) => typeof r === "string" && r.startsWith("dc_")))
+    return false;
+  const acByRole =
+    count === 2
+      ? roles.every((r) => r !== undefined && AC_SINGLE_PHASE_ROLES.has(r)) &&
+        roles.includes("ac_line_input")
+      : AC_THREE_PHASE_ROLE_SETS.some((set) =>
+          set.every((role) => roles.includes(role)),
+        ) ||
+        (roles.includes("ac_line_input") &&
+          (roles.includes("ac_input_return") || roles.includes("ac_neutral")) &&
+          roles.includes("protective_earth"));
+  if (acByRole) return true;
+  return voltageTypes.size === 1 && voltageTypes.has("AC");
+}
+function nativeDcOutput(t, f) {
+  if (f.terminals?.length !== 2) return false;
+  const terminals = functionTerminalSpecs(t, f);
+  return !terminals.some(
+    (p) =>
+      p?.rating?.voltage_type === "AC" ||
+      (typeof p?.role === "string" &&
+        (p.role.startsWith("ac_") || p.role.startsWith("phase_"))),
+  );
+}
 function expectedQualifier(ir, f) {
   const d = ir.devices?.find((d) => d.uid === f.id.deviceUid),
-    t = ir.deviceTypes?.find((t) => t.id === d?.typeId),
-    mark = t?.circuitSymbols?.[f.id.functionKey];
-  if (mark === "ac-input" || mark === "dc-output") return mark;
-  if (f.kind === "source" && t?.symbol === "thermite:dc-supply")
-    return "dc-output";
+    t = ir.deviceTypes?.find((t) => t.id === d?.typeId);
+  if (
+    t?.circuitSymbols &&
+    Object.hasOwn(t.circuitSymbols, f.id.functionKey) &&
+    t.circuitSymbols[f.id.functionKey] !== undefined
+  ) {
+    const mark = t.circuitSymbols[f.id.functionKey];
+    return mark === "ac-input" || mark === "dc-output" ? mark : undefined;
+  }
+  if (!DC_SUPPLY_SYMBOLS.has(t?.symbol)) return undefined;
+  if (f.kind === "source" && nativeDcOutput(t, f)) return "dc-output";
+  if (f.kind === "load" && nativeAcInput(t, f)) return "ac-input";
 }
 function dcUpright(lines) {
   if (
@@ -124,15 +185,21 @@ export function conversionQualifierAudit(g, ir, sheet) {
   for (const r of sheet.references ?? [])
     for (const key of r.functions ?? [])
       ids.add(JSON.stringify({ deviceUid: r.deviceUid, functionKey: key }));
-  const fs = (ir.functions ?? []).filter(
-    (f) => ids.has(JSON.stringify(f.id)) && expectedQualifier(ir, f),
+  const expected = new Map(
+    (ir.functions ?? [])
+      .filter((f) => ids.has(JSON.stringify(f.id)))
+      .map((f) => [f, expectedQualifier(ir, f)])
+      .filter(([, kind]) => kind),
   );
+  const fs = [...expected.keys()];
   const unresolved = g.shapes.filter(
     (s) =>
       ["ac-input", "dc-output"].includes(s.mark) &&
       !fs.some(
         (f) =>
-          f.id.deviceUid === s.deviceUid && f.id.functionKey === s.functionKey,
+          f.id.deviceUid === s.deviceUid &&
+          f.id.functionKey === s.functionKey &&
+          expected.get(f) === s.mark,
       ),
   );
   return {
@@ -146,7 +213,7 @@ export function conversionQualifierAudit(g, ir, sheet) {
           ]
         : []),
       ...fs
-        .map((f) => qualifierFinding(g, ir, f, expectedQualifier(ir, f)))
+        .map((f) => qualifierFinding(g, ir, f, expected.get(f)))
         .filter(Boolean),
     ],
     eligible: fs.length,
