@@ -211,22 +211,28 @@ jobs:
           retention-days: 7
 
   # Stable aggregate status check for branch protection across all OSes/shards.
+  # Matches the release-only trigger predicate of the upstream jobs (including
+  # workflow_dispatch on release); queries the Jobs API so matrix legs
+  # cancelled before runner assignment cannot pass silently.
   ci-result:
     if: always() && (github.ref == 'refs/heads/release' || github.base_ref == 'release')
     needs: [check-static, check-test, worktree]
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require all static, test, and worktree jobs to succeed
-        shell: bash
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify every expected static, test, and worktree job succeeded
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           CHECK_STATIC_RESULT: ${{ needs.check-static.result }}
           CHECK_TEST_RESULT: ${{ needs.check-test.result }}
           WORKTREE_RESULT: ${{ needs.worktree.result }}
-        run: |
-          echo "check-static: $CHECK_STATIC_RESULT"
-          echo "check-test: $CHECK_TEST_RESULT"
-          echo "worktree: $WORKTREE_RESULT"
-          test "$CHECK_STATIC_RESULT" = "success"
-          test "$CHECK_TEST_RESULT" = "success"
-          test "$WORKTREE_RESULT" = "success"
+        run: node scripts/verify-ci-result.mjs

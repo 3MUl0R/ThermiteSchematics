@@ -1,5 +1,16 @@
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
-import { createVitest } from "vitest/node";
+import { BaseSequencer, createVitest } from "vitest/node";
 
 async function resolveProjects(workers) {
   vi.stubEnv("THERMITE_CI_MAX_WORKERS", workers);
@@ -45,6 +56,78 @@ it("preserves Vitest defaults and caps workers in both CI projects", async () =>
     expect(main.exclude).toEqual([...root.exclude, ...limited.include]);
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+it("keeps default local sequencers and scopes CiSequencer to CI", async () => {
+  vi.stubEnv("CI", "");
+  try {
+    const localDefault = await createVitest("test", { watch: false });
+    try {
+      expect(localDefault.config.sequence.sequencer).toBe(BaseSequencer);
+    } finally {
+      await localDefault.close();
+    }
+    const localShuffle = await createVitest("test", {
+      watch: false,
+      sequence: { shuffle: { files: true } },
+    });
+    try {
+      expect(localShuffle.config.sequence.sequencer.name).toBe(
+        "RandomSequencer",
+      );
+    } finally {
+      await localShuffle.close();
+    }
+    vi.stubEnv("CI", "1");
+    const ciRunner = await createVitest("test", { watch: false });
+    try {
+      expect(ciRunner.config.sequence.sequencer.name).toBe("CiSequencer");
+    } finally {
+      await ciRunner.close();
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("loads vitest.config.mjs standalone without scripts/test-shards.mjs in CI", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "thermite-vitest-standalone-"));
+  vi.stubEnv("CI", "1");
+  try {
+    cpSync("vitest.config.mjs", join(scratch, "vitest.config.mjs"));
+    const deps = join(scratch, "node_modules");
+    mkdirSync(deps);
+    for (const entry of readdirSync(resolve("node_modules"))) {
+      if (entry.startsWith(".")) continue;
+      symlinkSync(
+        resolve("node_modules", entry),
+        join(deps, entry),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+    }
+    writeFileSync(join(scratch, "a.test.mjs"), "export {};\n");
+    writeFileSync(join(scratch, "b.test.mjs"), "export {};\n");
+    const runner = await createVitest("test", {
+      root: scratch,
+      config: join(scratch, "vitest.config.mjs"),
+      watch: false,
+      shard: "1/2",
+    });
+    try {
+      const specs = await runner.globTestSpecifications([]);
+      expect(specs).toHaveLength(2);
+      const Sequencer = runner.config.sequence.sequencer;
+      const sequencer = new Sequencer(runner);
+      const sharded = await sequencer.shard(Array.from(specs));
+      const sorted = await sequencer.sort(sharded);
+      expect(sorted).toHaveLength(1);
+    } finally {
+      await runner.close();
+    }
+  } finally {
+    vi.unstubAllEnvs();
+    rmSync(scratch, { recursive: true, force: true });
   }
 });
 

@@ -17,12 +17,19 @@ describe("test shard partitioning", () => {
     }
     expect(extractShardArg(["--list-files", "--shard=1/2", "foo"])).toEqual({
       shard: "1/2",
+      passWithNoTests: false,
       filters: ["foo"],
     });
-    expect(extractShardArg(["--list-files", "--shard", "2/3"])).toEqual({
+    expect(
+      extractShardArg(["--list-files", "--shard", "2/3", "--passWithNoTests"]),
+    ).toEqual({
       shard: "2/3",
+      passWithNoTests: true,
       filters: [],
     });
+    expect(() => extractShardArg(["--list-files", "--shard"])).toThrow(
+      /Invalid --shard/,
+    );
   });
 
   it("partitions items deterministically without drops or duplicates", () => {
@@ -108,5 +115,22 @@ describe("test shard partitioning", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("mirrors Vitest shard-count rejection when filters match fewer files than shards", async () => {
+    await expect(
+      listTestFiles([
+        "--list-files",
+        "--shard=1/2",
+        "packages/cli/test/ci-browser.test.ts",
+      ]),
+    ).rejects.toThrow(/Resolved 1 test files for --shard=1\/2/);
+    const allowed = await listTestFiles([
+      "--list-files",
+      "--shard=1/2",
+      "--passWithNoTests",
+      "packages/cli/test/ci-browser.test.ts",
+    ]);
+    expect(allowed.length).toBeLessThanOrEqual(1);
   });
 });

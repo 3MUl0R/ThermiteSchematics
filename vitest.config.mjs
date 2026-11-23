@@ -1,35 +1,51 @@
 import { defineConfig, configDefaults } from "vitest/config";
 import { BaseSequencer } from "vitest/node";
-import { relative, sep } from "node:path";
-import {
-  partitionShard,
-  shardWeight,
-  sortDuration,
-} from "./scripts/test-shards.mjs";
+import { existsSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 function relativeSpec(root, moduleId) {
   return relative(root, moduleId).split(sep).join("/");
 }
 
+const shardHelpers = new Map();
+async function loadTestShards(root) {
+  if (!shardHelpers.has(root)) {
+    const file = resolve(root, "scripts/test-shards.mjs");
+    // Minimal contributor/mutation scratch fixtures copy vitest.config.mjs alone.
+    shardHelpers.set(
+      root,
+      existsSync(file)
+        ? import(/* @vite-ignore */ pathToFileURL(file).href)
+        : Promise.resolve(null),
+    );
+  }
+  return shardHelpers.get(root);
+}
+
 class CiSequencer extends BaseSequencer {
   async shard(files) {
-    const { index, count } = this.ctx.config.shard;
     const root = this.ctx.config.root;
-    return partitionShard(files, index, count, {
+    const shards = await loadTestShards(root);
+    if (!shards) return super.shard(files);
+    const { index, count } = this.ctx.config.shard;
+    return shards.partitionShard(files, index, count, {
       key: ({ moduleId }) => relativeSpec(root, moduleId),
-      weight: ({ moduleId }) => shardWeight(relativeSpec(root, moduleId)),
+      weight: ({ moduleId }) =>
+        shards.shardWeight(relativeSpec(root, moduleId)),
       group: ({ project }) => project.name,
     });
   }
 
   async sort(files) {
     const ordered = await super.sort(files);
-    if (!process.env.CI) return ordered;
     const root = this.ctx.config.root;
+    const shards = await loadTestShards(root);
+    if (!shards) return ordered;
     return ordered.sort(
       (a, b) =>
-        sortDuration(relativeSpec(root, b.moduleId)) -
-        sortDuration(relativeSpec(root, a.moduleId)),
+        shards.sortDuration(relativeSpec(root, b.moduleId)) -
+        shards.sortDuration(relativeSpec(root, a.moduleId)),
     );
   }
 }
@@ -82,7 +98,7 @@ const ciMainWorkers =
 export default defineConfig({
   test: {
     ...testDefaults,
-    sequence: { sequencer: CiSequencer },
+    ...(process.env.CI ? { sequence: { sequencer: CiSequencer } } : {}),
     maxWorkers: ciMainWorkers,
     include,
     ...(ciWorkers === 3

@@ -79,35 +79,49 @@ export function partitionShard(
 
 export function extractShardArg(args) {
   let shard;
+  let passWithNoTests = false;
   const rest = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--list-files") continue;
+    if (arg === "--passWithNoTests" || arg === "--pass-with-no-tests") {
+      passWithNoTests = true;
+      continue;
+    }
     if (arg.startsWith("--shard=")) {
       shard = arg.slice("--shard=".length);
       continue;
     }
-    if (arg === "--shard" && i + 1 < args.length) {
-      shard = args[++i];
+    if (arg === "--shard") {
+      shard = args[++i] ?? "";
       continue;
     }
     rest.push(arg);
   }
   if (shard !== undefined) parseShard(shard);
-  return { shard, filters: rest };
+  return { shard, passWithNoTests, filters: rest };
 }
 
 export async function listTestFiles(args, { cwd = process.cwd() } = {}) {
-  const { shard, filters } = extractShardArg(args);
+  const { shard, passWithNoTests, filters } = extractShardArg(args);
   const { createVitest } = await import("vitest/node");
   const runner = await createVitest("test", {
     root: cwd,
     watch: false,
+    ...(passWithNoTests ? { passWithNoTests: true } : {}),
     ...(shard ? { shard } : {}),
   });
   try {
     let specs = await runner.globTestSpecifications(filters);
     if (runner.config.shard) {
+      if (
+        !runner.config.passWithNoTests &&
+        runner.config.shard.count > specs.length
+      ) {
+        throw new Error(
+          `--shard <count> must be smaller than or equal to the count of test files. Resolved ${specs.length} test files for --shard=${runner.config.shard.index}/${runner.config.shard.count}.`,
+        );
+      }
       const Sequencer = runner.config.sequence.sequencer;
       const sequencer = new Sequencer(runner);
       specs = await sequencer.shard(Array.from(specs));

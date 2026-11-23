@@ -7,6 +7,7 @@ import {
   extractSafeZipArchive,
   readSafeZipArchive,
 } from "../../../scripts/safe-zip-reader.mjs";
+import { expectedJobNames } from "../../../scripts/verify-ci-result.mjs";
 const repositoryRoot = join(import.meta.dirname, "..", "..", "..");
 
 function mappingKeys(text: string, spaces: number) {
@@ -155,6 +156,19 @@ describe("Runtime CI and ZIP boundaries", () => {
     expect(worktree).not.toContain("package:pack");
     expect(result).toContain("needs: [check-static, check-test, worktree]");
     expect(result).toContain("always()");
+    expect(result).toContain(
+      "github.ref == 'refs/heads/release' || github.base_ref == 'release'",
+    );
+    expect(result).toContain(
+      "permissions:\n      contents: read\n      actions: read",
+    );
+    expect(result).not.toContain(": write");
+    expect(result).toContain("persist-credentials: false");
+    expect(result).toContain("GITHUB_TOKEN: ${{ github.token }}");
+    expect(result).toContain("GITHUB_RUN_ID: ${{ github.run_id }}");
+    expect(result).toContain("GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}");
+    expect(result).toContain("run: node scripts/verify-ci-result.mjs");
+    expect(expectedJobNames(text)).toHaveLength(15);
   });
 
   it("rejects escaping, duplicate, extra, and link ZIP entries", async () => {
