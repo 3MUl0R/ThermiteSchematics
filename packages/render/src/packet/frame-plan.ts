@@ -1,7 +1,11 @@
 import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type { NormalizedSchematicView } from "../types.js";
-import { printableTextMetrics, wrapPrintableText } from "../text-metrics.js";
+import {
+  printableTextInkMetrics,
+  printableTextMetrics,
+  wrapPrintableText,
+} from "../text-metrics.js";
 import {
   rootedNoticeLines,
   rootedSheetNoticeWidth,
@@ -54,7 +58,7 @@ export function compactTitleRows(
     extent: Math.max(
       ...lines.map(
         (row, i) =>
-          4 * i - printableTextMetrics(row.value, row.size, row.bold).bottom,
+          4 * i - printableTextInkMetrics(row.value, row.size, row.bold).bottom,
       ),
     ),
   }));
@@ -100,7 +104,7 @@ function buildCompactFramePlan(
       (r, i) =>
         5 +
         i * 4 -
-        printableTextMetrics(r.value, r.size, r.bold).bottom +
+        printableTextInkMetrics(r.value, r.size, r.bold).bottom +
         14.125,
     ),
   );
@@ -118,7 +122,7 @@ function buildCompactFramePlan(
     m + 12 - printableTextMetrics("123456", 2.5).bottom,
     ...notice.map(
       (r, i) =>
-        m + 19 + 4 * i - printableTextMetrics(r.text, 2.7, r.bold).bottom,
+        m + 19 + 4 * i - printableTextInkMetrics(r.text, 2.7, r.bold).bottom,
     ),
   );
   const recovery =

@@ -1,4 +1,4 @@
-import { pinnedMetrics } from "../off-view/metrics.js";
+import { printableTextInkMetrics } from "../text-metrics.js";
 import {
   rootedNoticeLines,
   rootedSheetNoticeWidth,
@@ -16,7 +16,7 @@ export function textInk(
   bold = false,
   anchor = "start",
 ) {
-  const m = pinnedMetrics(value, size, bold);
+  const m = printableTextInkMetrics(value, size, bold);
   const start =
     x -
     (anchor === "middle" ? m.advance / 2 : anchor === "end" ? m.advance : 0);

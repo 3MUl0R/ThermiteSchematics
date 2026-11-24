@@ -377,6 +377,10 @@ export function printableFitAttributes(
 }
 
 const MATH_FAUX_BOLD_PAD_EM = 0.03;
+// Unknown clusters reserve 1.5 em width in measureText(): a 1.0 em fullwidth
+// glyph plus 0.5 em (50%) horizontal bearing reserve. Reserve that 0.5 em on
+// the left edge whenever a fallback cluster can overhang x = 0 (#555).
+const FALLBACK_LEFT_BEARING_RESERVE_EM = 0.5;
 
 function printableInkExtents(
   value: string,
@@ -390,11 +394,13 @@ function printableInkExtents(
   const runs = printableRuns(text, primary);
   let hasFallback = runs.some((run) => run.fallback);
   const hasBoldMath = bold && runs.some((run) => run.face === math);
-  if (!hasFallback && !hasBoldMath) return { left: m.left, right: m.right };
+  if (!hasFallback && !hasBoldMath)
+    return { left: m.left, right: m.right, hasFallback: false };
   let advance = 0,
     left = Infinity,
     right = -Infinity;
   const pad = bold ? size * MATH_FAUX_BOLD_PAD_EM : 0;
+  const fallbackLeftBearing = size * FALLBACK_LEFT_BEARING_RESERVE_EM;
   for (const run of runs) {
     const scale = size / run.face.unitsPerEm,
       layout = run.face.layout(run.text);
@@ -405,7 +411,7 @@ function printableInkExtents(
       const step = p.xAdvance * scale;
       if (run.fallback || g.id === 0) {
         hasFallback = true;
-        left = Math.min(left, advance);
+        left = Math.min(left, advance - fallbackLeftBearing);
         right = Math.max(right, advance + step);
       } else {
         const box = g.bbox;
@@ -432,17 +438,20 @@ function printableInkExtents(
           m.advance,
           m.right,
           resolvedRight,
-          measureText(value, size).width,
+          measureText(text, size).width,
         )
       : resolvedRight,
+    hasFallback,
   };
 }
 
 /** Leftward ink overhang past x = 0 for left-anchored printable text (mm),
  * computed deterministically from the bundled Noto Sans and Noto Sans Math
  * glyph bearings (including a 0.03 em faux-bold allowance when bold text falls
- * back to Noto Sans Math, which is embedded only at weight 400). Unknown
- * fallback glyphs receive neither negative-bearing credit nor ink credit. */
+ * back to Noto Sans Math, which is embedded only at weight 400). Fallback-face
+ * clusters reserve the documented 0.5 em horizontal bearing allowance from
+ * measureText's 1.5 em unknown-cluster budget so leading fallback glyphs stay
+ * at or right of field.x. */
 export function printableTextLeftOverhang(
   value: string,
   size = 10,
@@ -465,9 +474,42 @@ export function printableTextRightExtent(
   return printableInkExtents(value, size, bold, literal).right;
 }
 
-/** Natural horizontal extent, including glyph bearings outside the advance. */
-export function printableTextWidth(value: string, size: number, bold = false) {
-  const m = printableTextMetrics(value, size, bold);
+/** Ink and advance metrics for printable text (mm): returns exact bundled
+ * tables when every glyph is covered, and expands horizontal/vertical bounds
+ * to the documented multi-face fallback budget (measureText width/ascent/
+ * descent plus the 0.5 em left bearing reserve) when any cluster is uncovered. */
+export function printableTextInkMetrics(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  const m = printableTextMetrics(value, size, bold, literal);
+  const ext = printableInkExtents(value, size, bold, literal);
+  if (!ext.hasFallback) return m;
+  const text = normalizePrintableText(value, literal);
+  const fallback = measureText(text, size);
+  const right = Math.max(m.advance, ext.right, fallback.width);
+  return {
+    advance: Math.max(m.advance, right),
+    left: ext.left,
+    right,
+    top: Math.max(m.top, fallback.ascent),
+    bottom: Math.min(m.bottom, -fallback.descent),
+    middleBaseline: m.middleBaseline,
+  };
+}
+
+/** Natural horizontal extent, including glyph bearings outside the advance,
+ * and the documented multi-face fallback budget when any cluster is uncovered
+ * by the bundled faces. */
+export function printableTextWidth(
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+) {
+  const m = printableTextInkMetrics(value, size, bold, literal);
   return Math.max(m.advance, m.right) - Math.min(0, m.left);
 }
 
