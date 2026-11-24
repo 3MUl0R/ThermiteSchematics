@@ -3,6 +3,7 @@ import {
   contactCaptionSymbol,
   verticalContactCaption,
 } from "./contact-caption.js";
+import { TWO_LINE_NET_LABEL_HEIGHT } from "./net-label-wrap.js";
 import type {
   PresentationLabel,
   PresentationGraph,
@@ -33,19 +34,37 @@ function validateLabel(
       (owner.mechanicalGangId !== undefined &&
         label.role === "function" &&
         contactCaptionSymbol(owner.symbolId)));
-  invariant(
-    label.width ===
-      (contact
-        ? contactCaptionWidth(label)
-        : owner?.kind === "symbol" && orderedPowerLanes(selected)
-          ? labelWidth(label.printableText ?? label.text)
-          : Math.max(
-              labelWidth(label.text),
-              labelWidth(label.printableText ?? label.text),
-            )),
-    `${label.id} width`,
-  );
-  invariant(label.height === 14, `${label.id} height`);
+  if (label.lines !== undefined) {
+    invariant(
+      label.ownerKind === "edge" && label.role === "net",
+      `${label.id} two-line net label owner`,
+    );
+    invariant(
+      label.lines.length === 2 &&
+        label.lines[0] + label.lines[1] === (label.printableText ?? label.text),
+      `${label.id} two-line verbatim text`,
+    );
+    invariant(
+      label.width ===
+        Math.max(labelWidth(label.lines[0]), labelWidth(label.lines[1])),
+      `${label.id} width`,
+    );
+    invariant(label.height === TWO_LINE_NET_LABEL_HEIGHT, `${label.id} height`);
+  } else {
+    invariant(
+      label.width ===
+        (contact
+          ? contactCaptionWidth(label)
+          : owner?.kind === "symbol" && orderedPowerLanes(selected)
+            ? labelWidth(label.printableText ?? label.text)
+            : Math.max(
+                labelWidth(label.text),
+                labelWidth(label.printableText ?? label.text),
+              )),
+      `${label.id} width`,
+    );
+    invariant(label.height === 14, `${label.id} height`);
+  }
   invariant(
     label.textLength === Number((label.width - 6).toFixed(3)),
     `${label.id} text length`,

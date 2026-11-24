@@ -70,14 +70,17 @@ async function initial(
   page: PaperPage,
   profile: Profile,
   run: RootedSearch,
+  wrapNetLabelIds?: ReadonlySet<string>,
 ) {
   const result = await prepareSchematicDrawing(
     ir,
     request,
     presentation,
-    profile
-      ? { spacingProfile: profile, packetContinuations: true }
-      : { packetContinuations: true },
+    {
+      packetContinuations: true,
+      ...(profile ? { spacingProfile: profile } : {}),
+      ...(wrapNetLabelIds?.size ? { wrapNetLabelIds } : {}),
+    },
   );
   if (!result.ok) {
     run.errors.push(result.error);
@@ -187,6 +190,7 @@ export async function searchRootedCandidates(
   page: PaperPage,
   compact: boolean,
   referenceOffset = 0,
+  wrapNetLabelIds?: ReadonlySet<string>,
 ) {
   const legacy = () =>
     elkWorkScope.exit(() =>
@@ -197,6 +201,7 @@ export async function searchRootedCandidates(
         page,
         compact,
         referenceOffset,
+        wrapNetLabelIds,
       ),
     );
   return withFontMetricCache(async () => {
@@ -246,6 +251,7 @@ async function runRootedSearch(
   page: PaperPage,
   compact: boolean,
   referenceOffset: number,
+  wrapNetLabelIds?: ReadonlySet<string>,
 ) {
   const run: RootedSearch = {
     standardEconomy: !compact,
@@ -260,7 +266,15 @@ async function runRootedSearch(
     tried: new Set(),
   };
   for (const profile of compact ? ROOTED_COMPACT_PROFILES : [undefined]) {
-    await initial(ir, request, presentation, page, profile, run);
+    await initial(
+      ir,
+      request,
+      presentation,
+      page,
+      profile,
+      run,
+      wrapNetLabelIds,
+    );
   }
   const reference =
     run.prepared[0] && frameContext(page, run.prepared[0].p.view)?.reference;

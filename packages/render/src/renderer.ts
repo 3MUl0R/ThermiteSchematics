@@ -13,6 +13,7 @@ import type { QueryEngine } from "@thermite/query";
 
 import { deepFreeze } from "./internal.js";
 import { buildPresentationGraph } from "./presentation.js";
+import { wrapPresentationNetLabels } from "./presentation/net-label-wrap.js";
 import {
   selectCableConductorSubgraph,
   selectLoadsSubgraph,
@@ -48,6 +49,7 @@ export interface SchematicRendererDependencies {
   readonly layoutEngine?: ElkApi;
   readonly spacingProfile?: "compact" | "dense";
   readonly offViewPlacements?: Readonly<Record<string, number>>;
+  readonly wrapNetLabelIds?: ReadonlySet<string>;
 }
 
 function detachedFrozen<Value>(value: Value): Value {
@@ -161,7 +163,7 @@ export async function prepareSchematicDrawing(
   const preflight = preflightRenderText(presented.value.graph);
   if (!preflight.ok) return failed(renderErrorContext(ir, preflight.error));
 
-  let graph = presented.value.graph;
+  let graph = wrapPresentationNetLabels(presented.value.graph, dependencies.wrapNetLabelIds);
   const layoutOptions = {
     ...(dependencies.packetContinuations ? { packetContinuations: true } : {}),
     catalog,

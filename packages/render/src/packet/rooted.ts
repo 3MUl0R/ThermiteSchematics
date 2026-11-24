@@ -13,6 +13,7 @@ import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
 import { rootedDiagnosticError } from "./rooted-constraint.js";
+import { wrappableVerticalSourceNetLabelIds } from "./rooted-source-labels.js";
 import { retryRootedPagination } from "./rooted-pagination-retry.js";
 import type {
   CompiledProjectPresentation,
@@ -216,6 +217,7 @@ async function selectedDrawingDrafts(
   page: PaperPage,
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
+  wrapNetLabelIds?: ReadonlySet<string>,
 ): Promise<RenderOutcome<Draft[]>> {
   const run = await searchRootedCandidates(
     ir,
@@ -224,6 +226,7 @@ async function selectedDrawingDrafts(
     page,
     mode === "compact",
     referenceOffset,
+    wrapNetLabelIds,
   );
   const winner = rootedWinner(run, page),
     native = nativeWinner(run);
@@ -242,6 +245,20 @@ async function selectedDrawingDrafts(
         if (recovered) {
           rootedSearches.set(recovered.winner, run);
           return drawingResult(recovered.winner, recovered.native, original);
+        }
+      }
+      if (!wrapNetLabelIds) {
+        const wrapIds = wrappableVerticalSourceNetLabelIds(run, page);
+        if (wrapIds !== undefined) {
+          return selectedDrawingDrafts(
+            ir,
+            request,
+            presentation,
+            page,
+            mode,
+            referenceOffset,
+            wrapIds,
+          );
         }
       }
       return {

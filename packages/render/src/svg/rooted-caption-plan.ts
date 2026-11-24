@@ -54,11 +54,16 @@ export function rootedCaptionPlan(
       1.5,
     );
   if (!placement) return { ok: false };
+  const dy = placement.ink.top - position.ink.top;
+  const baselines: readonly [number, number] | undefined = position.baselines
+    ? [position.baselines[0] + dy, position.baselines[1] + dy]
+    : undefined;
   const moved = {
     ...position,
     x: position.x + placement.ink.left - position.ink.left,
-    y: position.y + placement.ink.top - position.ink.top,
-    baseline: position.baseline + placement.ink.top - position.ink.top,
+    y: position.y + dy,
+    baseline: position.baseline + dy,
+    ...(baselines ? { baselines } : {}),
     ink: placement.ink,
   };
   if (!placement.needsLeader) return { ok: true, position: moved };
