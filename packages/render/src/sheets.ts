@@ -111,6 +111,11 @@ function packetDiagnostics(
   return diagnostics;
 }
 
+interface PacketRecoveryTracker {
+  readonly paginationFailures: Map<PacketViewContext, RenderFailure>;
+  firstFailure?: RenderFailure;
+}
+
 async function renderPacketPreservingRetry(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
@@ -118,16 +123,16 @@ async function renderPacketPreservingRetry(
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  const paginationFailures = new Map<PacketViewContext, RenderFailure>();
+  const recovery: PacketRecoveryTracker = { paginationFailures: new Map() };
   const result = await renderPacket(
     ir,
     request,
     presentation,
     explicitPacket,
-    paginationFailures,
+    recovery,
     configurePage,
   );
-  const original = paginationFailures.values().next().value;
+  const original = recovery.firstFailure;
   return result.ok || !original ? result : { ok: false, error: original };
 }
 
@@ -136,7 +141,7 @@ async function renderPacket(
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
-  paginationFailures: Map<PacketViewContext, RenderFailure>,
+  recovery: PacketRecoveryTracker,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
   const contextError: typeof withPacketViews = (error, views) =>
@@ -231,17 +236,25 @@ async function renderPacket(
       referenceNumber,
       request.views.length === 1,
     );
-    if (!result.ok || result.value[0]?.rootedPaginationFailure) {
-      const refusal = result.ok
-        ? result.value[0]?.rootedPaginationFailure
-        : result.error;
+    if (
+      !result.ok ||
+      result.value[0]?.rootedPaginationFailure ||
+      result.value[0]?.circuitCaptionFailure
+    ) {
+      const refusal = !result.ok
+        ? result.error
+        : (result.value[0]?.rootedPaginationFailure ??
+          result.value[0]?.circuitCaptionFailure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
-      paginationFailures.set(context, error);
+      if (result.value[0]?.rootedPaginationFailure)
+        recovery.paginationFailures.set(context, error);
+      recovery.firstFailure ??= error;
     }
     const first = result.value[0];
     if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
+    if (first?.circuitCaptionFailure) delete first.circuitCaptionFailure;
     const reportSelection = first?.documentationSelection;
     if (record(view) && view.format === "circuit-view-request/0.1")
       seedCircuitNavigation(ir, result.value);
@@ -332,7 +345,7 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
-    paginationFailures.keys(),
+    recovery.paginationFailures.keys(),
   );
 }
 

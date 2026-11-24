@@ -47,11 +47,16 @@ import { emitCircuitNode } from "./circuit/node-emission.js";
 import { verticalLaneX } from "./circuit/nodes.js";
 import { circuitGraphPins } from "./circuit/layout-input.js";
 import {
+  conserveCircuitParts,
   layoutCircuitGroupWithRetry,
+  qualityRecoveredPartition,
+  recordRecoveredPartition,
   recoveredCaptionCause,
   recoveredCaptionError,
   rememberRecoveredRenderError,
+  replayRecoveredUnits,
   rethrowRecoveredFirstError,
+  throwRecoveredPartitionChange,
 } from "./circuit/caption-retry.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
 import {
@@ -470,15 +475,18 @@ async function layoutGroup(
   ...args: Parameters<typeof layoutGroupUnchecked>
 ): Promise<CircuitDrawing> {
   args[8] ??= circuitInlineContext.getStore()?.currentRun;
+  const inQuality = Boolean(
+    args[8]?.quality || circuitInlineContext.getStore()?.qualityPhase,
+  );
   let cause: unknown;
   let recovered: CircuitDrawing | undefined;
   try {
     const drawing = await layoutGroupUnchecked(...args);
     cause = recoveredCaptionCause(drawing);
-    if (!cause || args[8]?.quality) return drawing;
+    if (!cause || inQuality) return drawing;
     recovered = drawing;
   } catch (error) {
-    if (args[8]?.quality) throw error;
+    if (inQuality) throw error;
     if (error instanceof CircuitRenderError) throw error;
     cause = error;
   }
@@ -661,8 +669,17 @@ export async function paginateCircuitGroup(
   appearances?: Map<string, string[]>,
   fitBounds?: { w: number; h: number },
 ): Promise<CircuitDrawing[]> {
-  if (fits(original)) return [original];
   const group = request.groups[index]!;
+  const replay = qualityRecoveredPartition(group.id);
+  if (replay?.kind === "whole") {
+    if (!fits(original)) throwRecoveredPartitionChange();
+    return [original];
+  }
+  if (!replay && fits(original)) {
+    if (recoveredCaptionError(original))
+      recordRecoveredPartition(group.id, { kind: "whole" });
+    return [original];
+  }
   const all = physicalConductors(ir);
   const fs = selectedFunctions(ir, group),
     cs = selectConductors(all, group);
@@ -674,6 +691,7 @@ export async function paginateCircuitGroup(
     appearances ?? circuitFunctionAppearances(ir, [request]),
   );
   const widest = Number("8".repeat(String(units.length).length));
+  let anyRecovered = Boolean(recoveredCaptionError(original));
   const draw = async (
     items: (typeof units)[number][],
     part: number,
@@ -690,6 +708,7 @@ export async function paginateCircuitGroup(
       references.appearances,
       request.terminalLayout === "distributed",
     );
+    if (recoveredCaptionError(drawing)) anyRecovered = true;
     drawing.label = `${original.label ? original.label + " - " : ""}Part ${part}/${total}`;
     drawing.pagination = {
       part,
@@ -702,31 +721,34 @@ export async function paginateCircuitGroup(
     };
     return drawing;
   };
-  const parts: (typeof units)[number][][] = [];
-  let current: (typeof units)[number][] = [];
   try {
-    for (const u of units) {
-      const candidate = [...current, u];
-      const probe = await draw(candidate, widest, widest);
-      if (fits(probe)) {
-        current = candidate;
-        continue;
+    let parts: (typeof units)[number][][] = [];
+    if (replay?.kind === "parts") parts = replayRecoveredUnits(units, replay);
+    else {
+      let current: (typeof units)[number][] = [];
+      for (const u of units) {
+        const candidate = [...current, u];
+        const probe = await draw(candidate, widest, widest);
+        if (fits(probe)) {
+          current = candidate;
+          continue;
+        }
+        if (!current.length)
+          throw (
+            recoveredCaptionError(probe) ??
+            circuitPartFitError(group.id, original, fitBounds)
+          );
+        parts.push(current);
+        current = [u];
+        const single = await draw(current, widest, widest);
+        if (!fits(single))
+          throw (
+            recoveredCaptionError(single) ??
+            circuitPartFitError(group.id, original, fitBounds)
+          );
       }
-      if (!current.length)
-        throw (
-          recoveredCaptionError(probe) ??
-          circuitPartFitError(group.id, original, fitBounds)
-        );
       parts.push(current);
-      current = [u];
-      const single = await draw(current, widest, widest);
-      if (!fits(single))
-        throw (
-          recoveredCaptionError(single) ??
-          circuitPartFitError(group.id, original, fitBounds)
-        );
     }
-    parts.push(current);
     const drawings: CircuitDrawing[] = [];
     for (const [i, items] of parts.entries())
       drawings.push(await draw(items, i + 1, parts.length));
@@ -739,31 +761,20 @@ export async function paginateCircuitGroup(
             .map((d) => d.pagination!.part),
       );
       drawing.content = `<g data-circuit-part="${drawing.pagination!.part}" data-circuit-parts="${parts.length}">${drawing.content}</g>`;
-      if (!fits(drawing))
+      if (!fits(drawing)) {
+        if (replay) throwRecoveredPartitionChange();
         throw (
           recoveredCaptionError(drawing) ??
           circuitPartFitError(group.id, drawing, fitBounds)
         );
+      }
     }
-    const equal = (a: string[], b: string[]) =>
-      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-    if (
-      !equal(
-        drawings.flatMap((d) => d.coverage.conductorIds),
-        original.coverage.conductorIds,
-      ) ||
-      !equal(
-        [...new Set(drawings.flatMap((d) => d.coverage.functionIds))],
-        original.coverage.functionIds,
-      ) ||
-      !equal(
-        [...new Set(drawings.flatMap((d) => d.coverage.terminalIds))],
-        original.coverage.terminalIds,
-      )
-    )
-      throw new Error(
-        `Circuit ${group.id}: pagination did not conserve the original source selection.`,
-      );
+    conserveCircuitParts(group.id, original.coverage, drawings);
+    if (!replay && anyRecovered)
+      recordRecoveredPartition(group.id, {
+        kind: "parts",
+        unitIndices: parts.map((items) => items.map((u) => units.indexOf(u))),
+      });
     return drawings;
   } catch (error) {
     rethrowRecoveredFirstError(original, error);

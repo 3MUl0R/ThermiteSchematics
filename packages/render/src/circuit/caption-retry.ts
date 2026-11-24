@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { IrFunction } from "@thermite/compiler";
 import { circuitInlineContext } from "../layout/circuit-inline-context.js";
@@ -7,6 +8,8 @@ import {
 } from "../layout/circuit-inline.js";
 import { circuitPortGroups } from "../layout/circuit-port-order.js";
 import { rememberCircuitDrawing } from "../layout/circuit-printed-layouts.js";
+import { InlineLabelFitError } from "../layout/inline-label-error.js";
+import { MAX_PLACEMENT_LAYOUTS } from "../packet/rooted-search.js";
 import type { CircuitRenderError } from "../render-error-context.js";
 import { CircuitCaptionCollisionError } from "./caption-error.js";
 import { renderCircuitLayout } from "./layout-drawing.js";
@@ -21,11 +24,28 @@ import {
 import { circuitRouteState } from "./layout-routes.js";
 import type { DeviceNode, PhysicalConductor } from "./types.js";
 
+export interface CircuitViewRecovery {
+  firstError?: CircuitRenderError;
+  attempts: number;
+}
+
+export type RecoveredPartition =
+  | { readonly kind: "whole" }
+  | {
+      readonly kind: "parts";
+      readonly unitIndices: readonly (readonly number[])[];
+    };
+
+const viewRecoveryScope = new AsyncLocalStorage<CircuitViewRecovery>();
 const recoveredCauses = new WeakMap<object, unknown>();
 const recoveredRenderErrors = new WeakMap<object, CircuitRenderError>();
 const runRecoveredCauses = new WeakMap<
   CircuitLayoutRun,
   Map<string, unknown>
+>();
+const runRecoveredPartitions = new WeakMap<
+  CircuitLayoutRun,
+  Map<string, RecoveredPartition>
 >();
 
 export interface CircuitAttemptParams {
@@ -39,6 +59,13 @@ export interface CircuitAttemptParams {
   run?: CircuitLayoutRun | undefined;
 }
 
+export function withCircuitViewRecovery<T>(
+  recovery: CircuitViewRecovery,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return viewRecoveryScope.run(recovery, fn);
+}
+
 export function recoveredCaptionCause(drawing: object): unknown {
   return recoveredCauses.get(drawing);
 }
@@ -48,6 +75,8 @@ export function rememberRecoveredRenderError(
   error: CircuitRenderError,
 ): void {
   recoveredRenderErrors.set(drawing, error);
+  const view = viewRecoveryScope.getStore();
+  if (view && !view.firstError) view.firstError = error;
 }
 
 export function recoveredCaptionError(
@@ -64,6 +93,98 @@ export function rethrowRecoveredFirstError(
   if (firstError && !circuitInlineContext.getStore()?.qualityPhase)
     throw firstError;
   throw error;
+}
+
+export function recordRecoveredPartition(
+  groupId: string,
+  partition: RecoveredPartition,
+  run = circuitInlineContext.getStore()?.currentRun,
+): void {
+  if (!run || run.quality || circuitInlineContext.getStore()?.qualityPhase)
+    return;
+  const map = runRecoveredPartitions.get(run) ?? new Map();
+  map.set(groupId, partition);
+  runRecoveredPartitions.set(run, map);
+}
+
+export function qualityRecoveredPartition(
+  groupId: string,
+  run = circuitInlineContext.getStore()?.currentRun,
+): RecoveredPartition | undefined {
+  if (!run || (!run.quality && !circuitInlineContext.getStore()?.qualityPhase))
+    return undefined;
+  return runRecoveredPartitions.get(run)?.get(groupId);
+}
+
+export function throwRecoveredPartitionChange(): never {
+  throw new InlineLabelFitError(
+    "Circuit alternative does not preserve the recovered baseline partition.",
+  );
+}
+
+export function replayRecoveredUnits<U>(
+  units: readonly U[],
+  replay: Extract<RecoveredPartition, { kind: "parts" }>,
+): U[][] {
+  return replay.unitIndices.map((indices) => {
+    const items = indices.map((i) => units[i]);
+    if (!items.length || items.some((u) => u === undefined))
+      throwRecoveredPartitionChange();
+    return items.filter((u): u is U => u !== undefined);
+  });
+}
+
+export function conserveCircuitParts(
+  groupId: string,
+  original: {
+    readonly conductorIds: readonly string[];
+    readonly functionIds: readonly string[];
+    readonly terminalIds: readonly string[];
+  },
+  drawings: readonly {
+    readonly coverage: {
+      readonly conductorIds: readonly string[];
+      readonly functionIds: readonly string[];
+      readonly terminalIds: readonly string[];
+    };
+  }[],
+): void {
+  const equal = (a: readonly string[], b: readonly string[]) =>
+    JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  if (
+    !equal(
+      drawings.flatMap((d) => d.coverage.conductorIds),
+      original.conductorIds,
+    ) ||
+    !equal(
+      [...new Set(drawings.flatMap((d) => d.coverage.functionIds))],
+      original.functionIds,
+    ) ||
+    !equal(
+      [...new Set(drawings.flatMap((d) => d.coverage.terminalIds))],
+      original.terminalIds,
+    )
+  )
+    throw new Error(
+      `Circuit ${groupId}: pagination did not conserve the original source selection.`,
+    );
+}
+
+function circuitRecoveryKey(
+  params: CircuitAttemptParams,
+  primaryKey: string,
+): string {
+  const fids = params.fs
+    .map((f) => params.hooks.fkey(f))
+    .sort(params.hooks.compare);
+  const cids = params.cs.map((c) => c.id).sort(params.hooks.compare);
+  return JSON.stringify([params.group.id, fids, cids, primaryKey]);
+}
+
+function canDispatchCaptionRetry(run?: CircuitLayoutRun): boolean {
+  if (run) return run.attempts < MAX_PLACEMENT_LAYOUTS;
+  const view = viewRecoveryScope.getStore();
+  return !view || view.attempts < MAX_PLACEMENT_LAYOUTS;
 }
 
 function buildCircuitAttemptInput(
@@ -106,6 +227,10 @@ async function renderCircuitAttempt(
     new Map(params.cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32])),
     circuitPortGroups(params.nodes),
   );
+  if (!params.run) {
+    const view = viewRecoveryScope.getStore();
+    if (view) view.attempts++;
+  }
   const state = circuitRouteState(
     graph,
     params.nodes,
@@ -128,18 +253,20 @@ async function renderCircuitAttempt(
 
 /** Retry a vertical circuit group once with non-inline ELK edge labels when
  * post-recovery caption association or plate obstruction fails in baseline.
- * Quality recomposition replays the accepted baseline mode without new recovery. */
+ * Recovery mode and first cause stay keyed per logical group or part, and the
+ * added retry obeys the 48-placement ceiling without capping native rendering. */
 export async function layoutCircuitGroupWithRetry(
   params: CircuitAttemptParams,
 ) {
   const primary = buildCircuitAttemptInput(params, true);
   const primaryKey = JSON.stringify(primary.input);
+  const recoveryKey = circuitRecoveryKey(params, primaryKey);
   const inQualityPhase = Boolean(
     params.run?.quality || circuitInlineContext.getStore()?.qualityPhase,
   );
-  if (params.run?.captionFallbacks.has(primaryKey)) {
+  if (params.run?.captionFallbacks.has(recoveryKey)) {
     const drawing = await renderCircuitAttempt(params, false);
-    const savedCause = runRecoveredCauses.get(params.run)?.get(primaryKey);
+    const savedCause = runRecoveredCauses.get(params.run)?.get(recoveryKey);
     if (savedCause && !inQualityPhase) recoveredCauses.set(drawing, savedCause);
     return drawing;
   }
@@ -149,16 +276,17 @@ export async function layoutCircuitGroupWithRetry(
     if (
       !params.vertical ||
       inQualityPhase ||
-      !(error instanceof CircuitCaptionCollisionError)
+      !(error instanceof CircuitCaptionCollisionError) ||
+      !canDispatchCaptionRetry(params.run)
     )
       throw error;
     try {
       const drawing = await renderCircuitAttempt(params, false);
       recoveredCauses.set(drawing, error);
       if (params.run) {
-        params.run.captionFallbacks.add(primaryKey);
+        params.run.captionFallbacks.add(recoveryKey);
         const map = runRecoveredCauses.get(params.run) ?? new Map();
-        map.set(primaryKey, error);
+        map.set(recoveryKey, error);
         runRecoveredCauses.set(params.run, map);
       }
       return drawing;

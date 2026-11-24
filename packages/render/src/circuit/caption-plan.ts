@@ -4,6 +4,7 @@ import { circuitCaptionPlacement } from "./caption-placement.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 import { labelLeaderArrow } from "../layout/wire-label-support.js";
 import { CircuitCaptionCollisionError } from "./caption-error.js";
+import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import { required } from "../presentation/util.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 type Label = CircuitLabelState["labels"][number];
@@ -13,6 +14,7 @@ export function plannedCircuitCaption(
   label: Label,
   state: CircuitLabelState,
   basePlacementFallback = false,
+  vertical = false,
 ) {
   const fallback = basePlacementFallback
     ? "unhostable"
@@ -27,10 +29,12 @@ export function plannedCircuitCaption(
     };
   const placement = circuitCaptionPlacement(line, i, label, state),
     owner = required(state.cs[label.index], "Missing circuit caption owner");
-  if (!placement)
-    throw new CircuitCaptionCollisionError(
-      `Circuit ${state.group.id}: caption ${line} (${owner.id}) cannot be associated with its conductor without obscuring other drawing content.`,
-    );
+  if (!placement) {
+    const message = `Circuit ${state.group.id}: caption ${line} (${owner.id}) cannot be associated with its conductor without obscuring other drawing content.`;
+    throw vertical
+      ? new CircuitCaptionCollisionError(message)
+      : new InlineLabelCollisionError(message);
+  }
   const path = (ps: readonly { x: number; y: number }[]) =>
       ps
         .map((p, j) => `${j ? "L" : "M"} ${state.n(p.x)} ${state.n(p.y)}`)

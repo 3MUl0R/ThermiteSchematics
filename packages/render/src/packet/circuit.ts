@@ -7,6 +7,11 @@ import {
   circuitViewFootprint,
   circuitGroupFootprint,
 } from "./circuit-footprint.js";
+import {
+  withCircuitViewRecovery,
+  type CircuitViewRecovery,
+} from "../circuit/caption-retry.js";
+import { circuitInlineContext } from "../layout/circuit-inline-context.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
 import { recordPrintedCircuitDrawing } from "../layout/circuit-printed-layouts.js";
 import { isInlineLabelFailure } from "../layout/inline-label-error.js";
@@ -50,14 +55,19 @@ export async function circuitDrafts(
   appearances?: Map<string, string[]>,
 ): Promise<RenderOutcome<Draft[]>> {
   const run = nextCircuitLayoutRun();
+  const inQuality = Boolean(
+    run?.quality || circuitInlineContext.getStore()?.qualityPhase,
+  );
+  const recovery: CircuitViewRecovery = { attempts: 0 };
+  const execute = () =>
+    circuitDraftsUnchecked(ir, request, presentation, page, appearances);
+  let outcome: RenderOutcome<Draft[]> | undefined;
   try {
-    return await circuitDraftsUnchecked(
-      ir,
-      request,
-      presentation,
-      page,
-      appearances,
-    );
+    outcome = inQuality
+      ? await execute()
+      : await withCircuitViewRecovery(recovery, execute);
+    if (!inQuality && recovery.firstError) throw recovery.firstError;
+    return outcome;
   } catch (error) {
     if (
       run?.quality &&
@@ -65,20 +75,24 @@ export async function circuitDrafts(
       !(error instanceof CircuitRenderError)
     )
       throw error;
-    if (error instanceof CircuitRenderError) {
+    const effective =
+      !inQuality && recovery.firstError ? recovery.firstError : error;
+    if (effective instanceof CircuitRenderError) {
       const { circuitGroups } = circuitSelectionContext(ir, request);
-      return {
-        ok: false,
-        error: {
-          ...renderErrorContext(ir, error.error),
-          message: `${error.error.message} Selected circuit keys: ${circuitGroups.map((g) => `${g.groupId}: functions ${g.functionKeys.join(", ")}; conductors ${g.conductorKeys.join(", ") || "none"}`).join("; ")}.`,
-          details: { ...error.error.details, circuitGroups },
-        },
+      const rendered = {
+        ...renderErrorContext(ir, effective.error),
+        message: `${effective.error.message} Selected circuit keys: ${circuitGroups.map((g) => `${g.groupId}: functions ${g.functionKeys.join(", ")}; conductors ${g.conductorKeys.join(", ") || "none"}`).join("; ")}.`,
+        details: { ...effective.error.details, circuitGroups },
       };
+      if (outcome?.ok) {
+        if (outcome.value[0]) outcome.value[0].circuitCaptionFailure = rendered;
+        return outcome;
+      }
+      return { ok: false, error: rendered };
     }
     return failure(
       "unprintable-layout",
-      `${error instanceof Error ? error.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${f.device.value}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
+      `${effective instanceof Error ? effective.message : "Circuit view failed."} Selected keys: ${request.groups.map((g) => `${g.id}: functions ${g.functions.map((f) => `${f.device.value}/${f.key}`).join(", ")}; conductors ${g.conductors.join(", ") || "none"}`).join("; ")}.`,
       circuitSelectionContext(ir, request),
     );
   }
