@@ -38,7 +38,10 @@ let browser: Awaited<ReturnType<typeof launch>>;
 let page: Awaited<ReturnType<Awaited<ReturnType<typeof launch>>["newPage"]>>;
 
 beforeAll(async () => {
-  browser = await launch();
+  // Accurate Canvas bounds for small-font textBounds checks (crbug.com/479240778).
+  browser = await launch([
+    "--enable-blink-features=CanvasTextMetricsPreciseBounds",
+  ]);
   page = await (await browser.newContext(drawingContextOptions)).newPage();
   await page.emulateMedia({ media: "print" });
 });
