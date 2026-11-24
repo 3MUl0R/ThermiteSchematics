@@ -324,6 +324,67 @@ export function paintedToBothEnds({ runs, tips }, a, b) {
   );
 }
 
+function parseAttachmentKey(raw) {
+  if (typeof raw !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    )
+      return JSON.stringify([parsed[0], parsed[1]]);
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function inkIntervalConnects(intervals, marker, tip) {
+  return intervals.some(([a, b]) => {
+    const aBox = { ...a, w: 0, h: 0 };
+    const bBox = { ...b, w: 0, h: 0 };
+    return (
+      (boxGap(aBox, marker) <= 0.25 && boxGap(bBox, tip) <= 0.25) ||
+      (boxGap(bBox, marker) <= 0.25 && boxGap(aBox, tip) <= 0.25)
+    );
+  });
+}
+
+/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
+export function attachmentLeadEnds(g, terminals) {
+  const out = new Map();
+  for (const s of g.shapes ?? []) {
+    if (
+      !s.attachment ||
+      !(s.stroke > 0) ||
+      !["path", "line", "polyline"].includes(s.shapeTag) ||
+      !s.points?.length ||
+      !s.inkSegments?.length
+    )
+      continue;
+    const key = parseAttachmentKey(s.attachment);
+    const region = key && terminals.get(key);
+    if (!region?.boxes.length) continue;
+    const ends = [s.points[0], s.points.at(-1)];
+    for (const [markEnd, tipEnd] of [
+      [ends[0], ends[1]],
+      [ends[1], ends[0]],
+    ]) {
+      const markBox = { ...markEnd, w: 0, h: 0 };
+      const tipBox = { ...tipEnd, w: 0, h: 0 };
+      const marker = region.boxes.find((m) => boxGap(markBox, m) <= 0.05);
+      if (!marker || !inkIntervalConnects(s.inkSegments, marker, tipBox))
+        continue;
+      const list = out.get(key) ?? [];
+      list.push(tipBox);
+      out.set(key, list);
+    }
+  }
+  return out;
+}
+
 export function continuationInk(sheet, g, element, runs) {
   const native = new Set(
     (sheet.continuations ?? [])

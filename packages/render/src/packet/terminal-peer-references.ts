@@ -28,7 +28,11 @@ import {
 import { destinationToken, navigationZone } from "./navigation-location.js";
 import { textInk } from "../device-legend/svg-ink.js";
 import { bounds } from "./page.js";
-import { peerRouteIndex, landsOnMarks } from "./peer-route-ink.js";
+import {
+  attachmentRouteEnds,
+  landsOnMarks,
+  peerRouteIndex,
+} from "./peer-route-ink.js";
 import { paintedStroke } from "./document-assembly-geometry.js";
 import {
   emitPeerReferences,
@@ -103,6 +107,11 @@ function terminalLandings(
     });
   }
   addBranchRouteMarks(geometry, field, terminals);
+  const marksByKey = new Map(
+    [...terminals.entries()].map(([key, landing]) => [key, landing.marks]),
+  );
+  for (const [key, ends] of attachmentRouteEnds(geometry, field, marksByKey))
+    terminals.get(key)?.routeMarks.push(...ends);
   return terminals;
 }
 

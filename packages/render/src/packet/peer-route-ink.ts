@@ -1,4 +1,5 @@
 import type { ConductiveElementId } from "@thermite/compiler";
+import { descendants, type SvgNode } from "../device-legend/svg-tree.js";
 import {
   expand,
   inside,
@@ -540,4 +541,145 @@ export function landsOnMarks(route: RouteInk, marks: readonly Rect[] = []) {
       route.tips.some((tip) => inside(tip, expand(marker, 0.05))) &&
       route.runs.some((run) => boxDistance(run, marker) <= 0.25),
   );
+}
+
+function parseAttachmentKey(raw: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length === 2 &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    )
+      return JSON.stringify([parsed[0], parsed[1]]);
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function shapePathData(g: NavigationGeometry): string | undefined {
+  const a = g.node.attrs;
+  if (g.node.name === "path") return a.d;
+  if (g.node.name === "line")
+    return `M ${Number(a.x1 ?? 0)} ${Number(a.y1 ?? 0)} L ${Number(a.x2 ?? 0)} ${Number(a.y2 ?? 0)}`;
+  if (g.node.name === "polyline") {
+    const nums = (a.points ?? "")
+      .match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)
+      ?.map(Number);
+    if (!nums || nums.length < 4) return undefined;
+    const cmds = [`M ${nums[0]} ${nums[1]}`];
+    for (let i = 2; i + 1 < nums.length; i += 2)
+      cmds.push(`L ${nums[i]} ${nums[i + 1]}`);
+    return cmds.join(" ");
+  }
+  return undefined;
+}
+
+function paintedConnects(
+  pieces: readonly RoutePiece[],
+  marker: Rect,
+  tip: Rect,
+): boolean {
+  const segs = pieces.flatMap((p) => (p.segment ? [p.segment] : []));
+  if (!segs.length) return false;
+  const touches = (p: Point, box: Rect) =>
+    boxDistance({ ...p, w: 0, h: 0 }, box) <= 0.25;
+  const reached = new Array<boolean>(segs.length).fill(false);
+  const queue: number[] = [];
+  segs.forEach((seg, idx) => {
+    if (touches(seg.a, marker) || touches(seg.b, marker)) {
+      reached[idx] = true;
+      queue.push(idx);
+    }
+  });
+  while (queue.length) {
+    const idx = queue.pop();
+    if (idx === undefined) continue;
+    const cur = required(segs[idx], "Missing attachment segment");
+    if (touches(cur.a, tip) || touches(cur.b, tip)) return true;
+    for (let j = 0; j < segs.length; j++) {
+      if (reached[j]) continue;
+      const next = required(segs[j], "Missing attachment segment");
+      if (
+        Math.hypot(cur.a.x - next.a.x, cur.a.y - next.a.y) <= 0.05 ||
+        Math.hypot(cur.a.x - next.b.x, cur.a.y - next.b.y) <= 0.05 ||
+        Math.hypot(cur.b.x - next.a.x, cur.b.y - next.a.y) <= 0.05 ||
+        Math.hypot(cur.b.x - next.b.x, cur.b.y - next.b.y) <= 0.05
+      ) {
+        reached[j] = true;
+        queue.push(j);
+      }
+    }
+  }
+  return false;
+}
+
+function collectAttachmentKeys(
+  geometry: readonly NavigationGeometry[],
+): Map<SvgNode, string> {
+  const keys = new Map<SvgNode, string>();
+  for (const g of geometry) {
+    const raw = g.node.attrs["data-terminal-attachment"];
+    if (!raw || !g.visible) continue;
+    const key = parseAttachmentKey(raw);
+    if (!key) continue;
+    for (const node of [g.node, ...descendants(g.node)])
+      if (["path", "line", "polyline"].includes(node.name)) keys.set(node, key);
+  }
+  return keys;
+}
+
+/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
+export function attachmentRouteEnds(
+  geometry: readonly NavigationGeometry[],
+  field: Rect,
+  terminalMarks: ReadonlyMap<string, readonly Rect[]>,
+): Map<string, Rect[]> {
+  const keys = collectAttachmentKeys(geometry);
+  const out = new Map<string, Rect[]>();
+  if (!keys.size) return out;
+  const { rectMasks, dotMasks } = collectRouteState(geometry);
+  geometry.forEach((g, index) => {
+    const key = keys.get(g.node);
+    const marks = key ? terminalMarks.get(key) : undefined;
+    if (!key || !marks?.length || !paintedStroke(g)) return;
+    const d = shapePathData(g);
+    if (!d) return;
+    const rawEnds = conductorEndpoints(d).map((p) =>
+      project({ ...p, w: 0, h: 0 }, g.matrix),
+    );
+    const p0 = rawEnds[0],
+      p1 = rawEnds.at(-1);
+    if (
+      !p0 ||
+      !p1 ||
+      !inside(p0, g.clip) ||
+      !inside(p1, g.clip) ||
+      !inside(p0, field) ||
+      !inside(p1, field)
+    )
+      return;
+    const pathGeom =
+      g.node.name === "path"
+        ? g
+        : { ...g, node: { ...g.node, attrs: { ...g.node.attrs, d } } };
+    const pieces = paintedPieces(
+      pathGeom,
+      rectMasks.filter((m) => m.index > index).map((m) => m.box),
+      dotMasks.filter((m) => m.index > index),
+    );
+    for (const [markEnd, tipEnd] of [
+      [p0, p1],
+      [p1, p0],
+    ] as const) {
+      const marker = marks.find((m) => inside(markEnd, expand(m, 0.05)));
+      if (!marker || !paintedConnects(pieces, marker, tipEnd)) continue;
+      const list = out.get(key) ?? [];
+      list.push(tipEnd);
+      out.set(key, list);
+    }
+  });
+  return out;
 }

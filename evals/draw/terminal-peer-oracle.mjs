@@ -4,6 +4,7 @@ import { cableEndBindings } from "./cable-end-identities.mjs";
 import { extent, painted } from "./review-geometry.mjs";
 import { elementKey } from "./tranche4-source.mjs";
 import {
+  attachmentLeadEnds,
   conductorInk,
   continuationInk,
   foreignConductorBoxes,
@@ -55,6 +56,8 @@ function observedTerminals(ir, g, cableOwners) {
     const region = result.get(JSON.stringify([m.deviceUid, m.terminal]));
     if (region) region.routeBoxes.push(m.bbox ?? { ...m.point, w: 0, h: 0 });
   }
+  for (const [key, ends] of attachmentLeadEnds(g, result))
+    result.get(key)?.routeBoxes.push(...ends);
   return result;
 }
 
