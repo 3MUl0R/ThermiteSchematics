@@ -644,11 +644,15 @@ function emitRoutes(
   return content;
 }
 
+export const SERIES_LOOP_LTR_FALLBACK_NOTICE =
+  "Rendered left-to-right to fit landscape sheet at readable size (top-to-bottom requested).";
+
 /** Series-only layout. Conductive relations come exclusively from selection. */
 export async function prepareSeriesLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
   selected: Selection,
+  extraEngineNotes?: readonly string[],
 ) {
   const vertical = request.flow === "top-to-bottom",
     edges = drawingEdges(selected),
@@ -687,7 +691,7 @@ export async function prepareSeriesLoopDrawing(
       y: need(node.y) + need(node.height) / 2 - enclosure.minY,
     };
   });
-  const notes = engineNotes(selected);
+  const notes = [...engineNotes(selected), ...(extraEngineNotes ?? [])];
   return {
     title: `${selected.from.device.designation} - signal loop`,
     content:

@@ -21,6 +21,7 @@ import {
   prepareSignalLoopDrawing,
   type SignalLoopViewRequest,
 } from "../signal-loop.js";
+import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "../signal-loop/series-layout.js";
 
 import type {
   CompiledProjectPresentation,
@@ -32,6 +33,7 @@ import type { RenderOutcome } from "../types.js";
 
 import type { Draft, PaperPage } from "./types.js";
 import { failure } from "./errors.js";
+import { reportViewRecovery } from "./view-recovery.js";
 import { topologySelectionContext } from "./selection-context.js";
 import { bounds, zone } from "./page.js";
 import {
@@ -47,6 +49,14 @@ import {
   communicationPortSelection,
 } from "./native-part-labels.js";
 import { communicationPartLines } from "./continuations.js";
+
+const READABLE_SCALE_FLOOR = 2.5 / 2.7;
+
+type TopologyViewRequest =
+  | CommunicationViewRequest
+  | ConnectorAssemblyViewRequest
+  | SignalLoopViewRequest
+  | WiringViewRequest;
 
 type NotedDrawing = CommunicationDrawing & {
   paginated?: boolean;
@@ -149,11 +159,7 @@ function loopFitRefusal(
 }
 export async function topologyDrafts(
   ir: Readonly<ElectricalIr>,
-  request:
-    | CommunicationViewRequest
-    | ConnectorAssemblyViewRequest
-    | SignalLoopViewRequest
-    | WiringViewRequest,
+  request: TopologyViewRequest,
   presentation: CompiledProjectPresentation | undefined,
   page: PaperPage,
 ): Promise<RenderOutcome<Draft[]>> {
@@ -165,6 +171,7 @@ export async function topologyDrafts(
     const compose = (
       drawing: NotedDrawing,
       observeScale?: (scale: number) => void,
+      observeHeightBound?: () => void,
     ): RenderOutcome<Draft> => {
       const title = topologyTitle(
         ir.project.name,
@@ -178,7 +185,7 @@ export async function topologyDrafts(
       if (capacity) return capacity;
       const b = bounds(title, page);
       const t = topologyTextLayout(drawing, b, request, selectedPorts(drawing));
-      const { scale, reserveNotes } = topologyScale(
+      const { scale, reserveNotes, heightBound } = topologyScale(
         drawing,
         b,
         t.headingHeight,
@@ -191,7 +198,8 @@ export async function topologyDrafts(
         t.headingHeight,
         reserveNotes ? 4 + t.noteHeight : 6,
       );
-      if (scale < 2.5 / 2.7 || !Number.isFinite(scale))
+      if (scale < READABLE_SCALE_FLOOR || !Number.isFinite(scale)) {
+        if (heightBound) observeHeightBound?.();
         return topologyFitFailure(
           drawing,
           page,
@@ -199,6 +207,7 @@ export async function topologyDrafts(
           { wiring, signalLoop, assembly, reserveNotes },
           tagFit,
         );
+      }
       const x = b.x + (b.w - drawing.width * scale) / 2,
         y = b.y + t.headingHeight;
       const references = drawing.references.map((r) => ({
@@ -264,15 +273,12 @@ export async function topologyDrafts(
             ? { referenceNotes: drawing.engineNotes }
             : {}),
           links: [],
-          note: wiring
-            ? "Selected physical wiring - device internals are not shown"
-            : signalLoop
-              ? "Field-device hookup - verify selected connector pinout before construction"
-              : assembly
-                ? drawing.paginated
-                  ? "Protective caps - pin mapping not applicable; no inferred electrical continuity"
-                  : "Connector assemblies only - unresolved pin mapping; no inferred electrical continuity"
-                : "Selected port connections - diagram is partial",
+          note: topologyDraftNote(
+            wiring,
+            signalLoop,
+            assembly,
+            drawing.paginated,
+          ),
           coverage:
             "coverage" in drawing && drawing.coverage ? [drawing.coverage] : [],
           topologyCoverage: drawing.topologyCoverage
@@ -297,9 +303,21 @@ export async function topologyDrafts(
         : assembly
           ? await prepareConnectorAssemblyPages(ir, request, fits, unfit)
           : await prepareCommunicationPages(ir, request, fits, unfit);
+    const primary =
+      signalLoop && !request.loopPower
+        ? stagger.compose
+        : (drawing: NotedDrawing, onHeightBound?: () => void) =>
+            compose(drawing, undefined, onHeightBound);
     const drafts: Draft[] = [];
     for (const drawing of drawings) {
-      const result = signalLoop ? stagger.compose(drawing) : compose(drawing);
+      const result = await composeTopologyDrawing(
+        ir,
+        request,
+        page,
+        drawing,
+        primary,
+        compose,
+      );
       if (!result.ok) return result;
       drafts.push(result.value);
     }
@@ -444,6 +462,74 @@ function topologyTitle(
   );
 }
 
+function topologyDraftNote(
+  wiring: boolean,
+  signalLoop: boolean,
+  assembly: boolean,
+  paginated: boolean | undefined,
+): string {
+  if (wiring)
+    return "Selected physical wiring - device internals are not shown";
+  if (signalLoop)
+    return "Field-device hookup - verify selected connector pinout before construction";
+  if (assembly)
+    return paginated
+      ? "Protective caps - pin mapping not applicable; no inferred electrical continuity"
+      : "Connector assemblies only - unresolved pin mapping; no inferred electrical continuity";
+  return "Selected port connections - diagram is partial";
+}
+
+async function composeTopologyDrawing(
+  ir: Readonly<ElectricalIr>,
+  request: TopologyViewRequest,
+  page: PaperPage,
+  drawing: NotedDrawing,
+  composePrimary: (
+    drawing: NotedDrawing,
+    onHeightBound?: () => void,
+  ) => RenderOutcome<Draft>,
+  composeRetry: (drawing: NotedDrawing) => RenderOutcome<Draft>,
+): Promise<RenderOutcome<Draft>> {
+  let heightBound = false;
+  const result = composePrimary(drawing, () => {
+    heightBound = true;
+  });
+  if (
+    result.ok ||
+    !heightBound ||
+    request.format !== "signal-loop-view-request/0.1" ||
+    !request.loopPower ||
+    request.flow !== "top-to-bottom" ||
+    page.size !== "tabloid" ||
+    page.orientation !== "landscape"
+  )
+    return result;
+  return retrySeriesLoopLeftToRight(ir, request, composeRetry, result);
+}
+
+async function retrySeriesLoopLeftToRight(
+  ir: Readonly<ElectricalIr>,
+  request: SignalLoopViewRequest,
+  compose: (drawing: NotedDrawing) => RenderOutcome<Draft>,
+  original: Extract<RenderOutcome<Draft>, { ok: false }>,
+): Promise<RenderOutcome<Draft>> {
+  try {
+    const ltrRequest: SignalLoopViewRequest = {
+      ...request,
+      flow: "left-to-right",
+    };
+    const drawing = await prepareSignalLoopDrawing(ir, ltrRequest, undefined, [
+      SERIES_LOOP_LTR_FALLBACK_NOTICE,
+    ]);
+    const composed = compose(drawing);
+    if (!composed.ok) return original;
+    reportViewRecovery("series-loop-fallback", original.error);
+    return composed;
+  } catch {
+    return original;
+  }
+}
+
 function topologyScale(
   drawing: NotedDrawing,
   b: { w: number; h: number },
@@ -451,11 +537,9 @@ function topologyScale(
   noteHeight: number,
   canReserveNotes: boolean,
 ) {
-  let scale = Math.min(
-    1,
-    b.w / drawing.width,
-    (b.h - headingHeight - 6) / drawing.height,
-  );
+  const widthScale = b.w / drawing.width;
+  const preNoteHeightScale = (b.h - headingHeight - 6) / drawing.height;
+  let scale = Math.min(1, widthScale, preNoteHeightScale);
   const reserveNotes =
     canReserveNotes &&
     headingHeight + drawing.height * scale + 4 + noteHeight > b.h;
@@ -469,7 +553,18 @@ function topologyScale(
         ) * 1000,
       ) / 1000;
   }
-  return { scale, reserveNotes };
+  const heightBound =
+    Number.isFinite(scale) &&
+    scale < READABLE_SCALE_FLOOR &&
+    Number.isFinite(drawing.width) &&
+    Number.isFinite(drawing.height) &&
+    drawing.width > 0 &&
+    drawing.height > 0 &&
+    Number.isFinite(widthScale) &&
+    widthScale >= READABLE_SCALE_FLOOR &&
+    Number.isFinite(preNoteHeightScale) &&
+    preNoteHeightScale < READABLE_SCALE_FLOOR;
+  return { scale, reserveNotes, heightBound };
 }
 
 /** Use the full composer, including notes and readable-size refusals. Compare

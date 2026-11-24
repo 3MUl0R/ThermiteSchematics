@@ -15,7 +15,7 @@ import { renderErrorContext } from "./render-error-context.js";
 import { finalReferenceDrafts } from "./packet/references-final.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
-import { captureCaptionRecovery } from "./circuit/caption-retry.js";
+import { captureViewRecovery } from "./packet/view-recovery.js";
 import { appendViewDrafts } from "./packet/assembly.js";
 import { navigationViewKey } from "./packet/navigation-identity.js";
 import { centroidReferences } from "./packet/navigation-occurrences.js";
@@ -82,13 +82,19 @@ export { printPacketHtml } from "./packet/html.js";
 import { hasCompactFrame } from "./packet/frame-profile.js";
 import { controlPrint } from "./packet/rooted-control-print.js";
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
+import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "./signal-loop/series-layout.js";
+
+interface PacketRecoveryNotice {
+  readonly view: PacketViewContext;
+  readonly kind: "rooted-pagination" | "series-loop-fallback";
+}
 
 function packetDiagnostics(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
   sheets: RenderedPacket["sheets"],
   explicitPacket: boolean,
-  reflowedViews: Iterable<PacketViewContext>,
+  notices: Iterable<PacketRecoveryNotice>,
 ) {
   const diagnostics = explicitPacket
     ? packetDeviceCoverageDiagnostics(
@@ -102,20 +108,47 @@ function packetDiagnostics(
       )
     : [];
   diagnostics.push(...drafts.flatMap((draft) => draft.diagnostics ?? []));
-  for (const view of reflowedViews)
-    diagnostics.push({
-      code: "I906",
-      severity: "info",
-      ...ir.project.source,
-      message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
-    });
+  for (const { view, kind } of notices)
+    diagnostics.push(
+      kind === "rooted-pagination"
+        ? {
+            code: "I906",
+            severity: "info",
+            ...ir.project.source,
+            message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
+          }
+        : {
+            code: "I907",
+            severity: "info",
+            ...ir.project.source,
+            message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: ${SERIES_LOOP_LTR_FALLBACK_NOTICE}`,
+          },
+    );
   return diagnostics;
 }
 
 interface PacketRecoveryTracker {
   readonly paginationFailures: Map<PacketViewContext, RenderFailure>;
+  readonly notices: PacketRecoveryNotice[];
   firstPacketFailure?: RenderFailure;
   packetWideFailure?: boolean;
+}
+
+function invalidPacketReferences(request: SchematicPacketRequest): boolean {
+  const references = request.references;
+  if (references === undefined) return false;
+  if (request.index !== true) return true;
+  if (references === false) return false;
+  return (
+    !record(references) ||
+    !Object.keys(references).length ||
+    Object.keys(references).some(
+      (k) => !["filter", "appearances"].includes(k),
+    ) ||
+    (Object.hasOwn(references, "appearances") &&
+      !["all", "drawings"].includes(references.appearances!)) ||
+    (Object.hasOwn(references, "filter") && references.filter === undefined)
+  );
 }
 
 async function renderPacketPreservingRetry(
@@ -125,7 +158,10 @@ async function renderPacketPreservingRetry(
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  const recovery: PacketRecoveryTracker = { paginationFailures: new Map() };
+  const recovery: PacketRecoveryTracker = {
+    paginationFailures: new Map(),
+    notices: [],
+  };
   const result = await renderPacket(
     ir,
     request,
@@ -146,9 +182,10 @@ function inLoopSheetLimitFailure(
     packetWide?: boolean,
   ) => RenderOutcome<never>,
   lastView: boolean,
-  captionError: RenderFailure | undefined,
+  viewRecoveryError: RenderFailure | undefined,
 ): RenderOutcome<never> {
-  if (!lastView && captionError) return { ok: false, error: captionError };
+  if (!lastView && viewRecoveryError)
+    return { ok: false, error: viewRecoveryError };
   return composedFailure(
     "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
     lastView,
@@ -185,20 +222,7 @@ async function renderPacket(
       "invalid-packet",
       "A packet requires format schematic-packet-request/0.1 and 1–40 views, with an optional shared page.",
     );
-  if (
-    request.references !== undefined &&
-    (request.index !== true ||
-      (request.references !== false &&
-        (!record(request.references) ||
-          !Object.keys(request.references).length ||
-          Object.keys(request.references).some(
-            (k) => !["filter", "appearances"].includes(k),
-          ) ||
-          (Object.hasOwn(request.references, "appearances") &&
-            !["all", "drawings"].includes(request.references.appearances!)) ||
-          (Object.hasOwn(request.references, "filter") &&
-            request.references.filter === undefined))))
-  )
+  if (invalidPacketReferences(request))
     return failure(
       "invalid-packet",
       "Reference options require index: true and either false or filter/appearances settings.",
@@ -242,7 +266,7 @@ async function renderPacket(
       if (!failed.ok)
         return { ok: false, error: contextError(failed.error, [context]) };
     }
-    const { result, captionFailure } = await captureCaptionRecovery(() =>
+    const { result, recovery: viewRecovery } = await captureViewRecovery(() =>
       viewDrafts(
         ir,
         view,
@@ -260,14 +284,25 @@ async function renderPacket(
       ),
     );
     const rooted = result.ok ? result.value[0]?.rootedPaginationFailure : null;
-    let captionError: RenderFailure | undefined;
-    if (!result.ok || rooted || captionFailure) {
-      const refusal = !result.ok ? result.error : (rooted ?? captionFailure);
+    let viewRecoveryError: RenderFailure | undefined;
+    if (!result.ok || rooted || viewRecovery) {
+      const refusal = !result.ok
+        ? result.error
+        : (rooted ?? viewRecovery?.failure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
-      if (rooted) recovery.paginationFailures.set(context, error);
-      else captionError = error;
+      if (rooted) {
+        recovery.paginationFailures.set(context, error);
+        recovery.notices.push({ view: context, kind: "rooted-pagination" });
+      } else {
+        viewRecoveryError = error;
+        if (viewRecovery?.kind === "series-loop-fallback")
+          recovery.notices.push({
+            view: context,
+            kind: "series-loop-fallback",
+          });
+      }
       recovery.firstPacketFailure ??= error;
     }
     const first = result.value[0];
@@ -303,7 +338,7 @@ async function renderPacket(
     );
     if (drafts.length > 100) {
       const last = viewIndex === request.views.length - 1;
-      return inLoopSheetLimitFailure(composedFailure, last, captionError);
+      return inLoopSheetLimitFailure(composedFailure, last, viewRecoveryError);
     }
   }
   recovery.packetWideFailure = true;
@@ -363,7 +398,7 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
-    recovery.paginationFailures.keys(),
+    recovery.notices,
   );
 }
 
@@ -532,7 +567,7 @@ function assemblePacket(
   })[],
   referenceSelection: ReferenceSelection | undefined,
   presentation: CompiledProjectPresentation | undefined,
-  reflowedViews: Iterable<PacketViewContext>,
+  notices: Iterable<PacketRecoveryNotice>,
 ): RenderOutcome<RenderedPacket> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
@@ -557,7 +592,7 @@ function assemblePacket(
       drafts,
       sheets,
       explicitPacket,
-      reflowedViews,
+      notices,
     );
     let html: string | undefined;
     return {

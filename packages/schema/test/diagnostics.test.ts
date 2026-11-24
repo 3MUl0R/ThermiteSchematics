@@ -116,6 +116,7 @@ const EXPECTED_CATALOG_CODES = [
   "R007",
   "W907",
   "I906",
+  "I907",
 ];
 
 const exactE1xxFixtureByCode = {
@@ -176,7 +177,7 @@ describe("diagnostic catalog", () => {
       DIAGNOSTIC_CATALOG_CODES.filter(
         (code) => DIAGNOSTIC_CATALOG[code].severity === "error",
       ),
-    ).toHaveLength(DIAGNOSTIC_CATALOG_CODES.length - 18);
+    ).toHaveLength(DIAGNOSTIC_CATALOG_CODES.length - 19);
   });
 
   it("keeps compiler diagnostics separate from the full lookup catalog", () => {
@@ -189,7 +190,7 @@ describe("diagnostic catalog", () => {
     }
   });
 
-  it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, W801 and render W906/W907/I906", async () => {
+  it("covers every code with an invalid-fixture sidecar except unit-tested E001, E032, W801 and render W906/W907/I906/I907", async () => {
     const sidecars = (
       await Promise.all([
         findExpectedSidecars(join(packageRoot, "fixtures/invalid")),
@@ -219,7 +220,8 @@ describe("diagnostic catalog", () => {
           code !== "W801" &&
           code !== "W906" &&
           code !== "W907" &&
-          code !== "I906",
+          code !== "I906" &&
+          code !== "I907",
       ).sort(),
     );
     expect(DIAGNOSTIC_CATALOG.E032).toEqual({

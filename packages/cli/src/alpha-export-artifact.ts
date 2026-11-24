@@ -157,7 +157,10 @@ export function drawingDiagnostics(
   const diagnostics = packet.coverage.diagnostics ?? [];
   return kind === "packet"
     ? diagnostics
-    : diagnostics.filter((diagnostic) => diagnostic.code === "I906");
+    : diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === "I906" || diagnostic.code === "I907",
+      );
 }
 
 export class ArtifactError extends Error {

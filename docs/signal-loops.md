@@ -234,10 +234,11 @@ of them. The series view infers no rating or shunt and does not establish electr
 
 Eight displayed devices, including the supply, is a selection limit, not a fit
 promise. The measured synthetic sweep from three endpoints through five added
-field strips gives these maximum displayed-device counts. `R006` means even the
-three-device specimen did not fit that paper/flow/orientation combination.
+field strips gives these maximum **native** displayed-device counts (without
+any fallback). `R006` means even the three-device specimen did not fit that
+paper/flow/orientation combination natively.
 
-| Paper | Left-to-right landscape | Left-to-right portrait | Top-to-bottom landscape | Top-to-bottom portrait |
+| Paper | Left-to-right landscape | Left-to-right portrait | Top-to-bottom landscape (native) | Top-to-bottom portrait |
 | --- | ---: | ---: | ---: | ---: |
 | Letter | 4 | 3 | R006 | 3 |
 | A4 | 4 | R006 | R006 | 4 |
@@ -250,13 +251,50 @@ notes change fit. Captions wrap at whitespace, widen within the existing 50 mm
 caption limit, and only split an overlong token after a retained hyphen. An
 unbreakable segment that cannot fit refuses; identifiers are never cut mid-token.
 
+#### Disclosed left-to-right recovery on landscape Tabloid
+
+Only for a valid series signal loop (`loopPower`), with authored
+`flow: "top-to-bottom"`, on effective landscape Tabloid (`size: "tabloid"`,
+`orientation: "landscape"`), when the native top-to-bottom drawing fits sheet
+width at the readability floor (`2.5 / 2.7`) but its pre-note diagram height
+exceeds that readable-scale limit, the renderer performs **one** left-to-right
+retry through the full series selection, ELK layout, layout/route/enclosure
+guards and sheet composer.
+
+When that retry fits with all notes at readable size:
+
+- The sheet prints the measured 2.5 mm engine notice outside the diagram scale
+  transform (before any authored notes), in SVG `<desc>`, and in enabled device
+  and function references (with sheet/view attribution when multiple signal
+  loops appear in the packet):
+  `Rendered left-to-right to fit landscape sheet at readable size (top-to-bottom requested).`
+  The notice prints even when packet references are disabled, and never enters
+  title data or the zone gutter.
+- Packet diagnostics and CLI stderr report informational `I907` with source and
+  view context. Informational diagnostics exit 0, even with `--strict`.
+- The authored `top-to-bottom` request stays unchanged for packet dispatch,
+  navigation identity and titles; no continuation markers are emitted.
+
+Direct signal loops, other paper sizes or orientations, and native top-to-bottom
+refusals caused by selection, title capacity, invalid geometry, width, or
+notes-only overflow never trigger this retry. If the left-to-right retry,
+another step in that same view, or that view's own drafts crossing the 100-sheet
+alpha cap while later views remain pending fails, that view's original
+top-to-bottom `R006` refusal is preserved verbatim. An independent refusal in
+another view, or a later unrecovered view crossing the 100-sheet alpha cap while
+views remain pending, keeps that view's own diagnostic or the native cap
+refusal. If packet-wide composition or assembly fails after all views are
+drafted, or the last view crosses the 100-sheet cap, the first captured recovery
+refusal in authored view order (whether from caption retry or loop fallback) is
+preserved.
+
 Measured five-device cases at the unchanged print sizes:
 
 | Loop | Left-to-right diagram, mm | Top-to-bottom diagram, mm | Tabloid result |
 | --- | --- | --- | --- |
-| Frozen 0.1.0 PSU with field strip and junction box | 290.9 × 100.4 | 121.7 × 248.9 | One drawing sheet: landscape horizontal or portrait vertical |
-| Realistic high-side M12/bulkhead/strip/input chain | 338.7 × 120.1 | 152.0 × 301.0 | One drawing sheet: landscape horizontal or portrait vertical |
-| Realistic low-side chain | 278.0 × 207.7 | 237.7 × 251.7 | Horizontal landscape refuses; vertical portrait fits one drawing sheet |
+| Frozen 0.1.0 PSU with field strip and junction box | 290.9 × 100.4 | 121.7 × 248.9 | Native: landscape horizontal or portrait vertical. Landscape vertical recovers left-to-right with notice (`I907`) |
+| Realistic high-side M12/bulkhead/strip/input chain | 338.7 × 120.1 | 152.0 × 301.0 | Native: landscape horizontal or portrait vertical. Landscape vertical recovers left-to-right with notice (`I907`) |
+| Realistic low-side chain | 278.0 × 207.7 | 237.7 × 251.7 | Portrait vertical fits one sheet. Landscape horizontal refuses; landscape vertical refuses after retry and keeps original `R006` |
 
 The frozen and realistic high-side cases refuse on Letter and A4; A3 also fits
 in the same orientations as Tabloid. The low-side horizontal layout no longer

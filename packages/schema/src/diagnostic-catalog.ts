@@ -533,6 +533,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "A top-to-bottom view used a tighter layout during pagination after the ordinary search could not find a printable grid.",
   },
+  I907: {
+    severity: "info",
+    producer: "code",
+    meaning:
+      "A top-to-bottom series signal loop exceeded landscape tabloid diagram height at readable scale and was rendered left-to-right with a printed notice.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCatalogCode = keyof typeof DIAGNOSTIC_CATALOG;

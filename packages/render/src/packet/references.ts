@@ -9,6 +9,7 @@ import type {
 } from "./types.js";
 import { sheetLabel, bounds, normalizePaperPage } from "./page.js";
 import { wrapFieldText } from "./svg.js";
+import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "../signal-loop/series-layout.js";
 
 export const INDEX_TITLE = "Drawing index";
 
@@ -20,7 +21,22 @@ function referenceNotes(
   drafts: readonly ReferenceDraft[],
   request: Pick<SchematicPacketRequest, "page">,
 ) {
-  const notes = [...new Set(drafts.flatMap((d) => d.referenceNotes ?? []))];
+  const signalLoopCount = drafts.filter(
+    (d) =>
+      d.view.format === "documentation-view/0.1" &&
+      d.view.kind === "signal-loop",
+  ).length;
+  const notes = [
+    ...new Set(
+      drafts.flatMap((d, i) =>
+        (d.referenceNotes ?? []).map((note) =>
+          signalLoopCount > 1 && note === SERIES_LOOP_LTR_FALLBACK_NOTICE
+            ? `Sheet ${i + 1} (${sheetLabel(d.view)}): ${note}`
+            : note,
+        ),
+      ),
+    ),
+  ];
   if (!notes.length) return notes;
   const paper = normalizePaperPage(request.page);
   if (!paper.ok) return notes; // Packet validation already reports an invalid page.
