@@ -15,7 +15,7 @@ import { renderErrorContext } from "./render-error-context.js";
 import { finalReferenceDrafts } from "./packet/references-final.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
-import { captureCaptionRecovery } from "./circuit/caption-retry.js";
+import { captureViewRecovery } from "./packet/view-recovery.js";
 import { appendViewDrafts } from "./packet/assembly.js";
 import { navigationViewKey } from "./packet/navigation-identity.js";
 import { centroidReferences } from "./packet/navigation-occurrences.js";
@@ -129,10 +129,26 @@ function packetDiagnostics(
 
 interface PacketRecoveryTracker {
   readonly paginationFailures: Map<PacketViewContext, RenderFailure>;
-  readonly seriesLoopFallbacks: Map<PacketViewContext, RenderFailure>;
   readonly notices: PacketRecoveryNotice[];
   firstPacketFailure?: RenderFailure;
   packetWideFailure?: boolean;
+}
+
+function invalidPacketReferences(request: SchematicPacketRequest): boolean {
+  const references = request.references;
+  if (references === undefined) return false;
+  if (request.index !== true) return true;
+  if (references === false) return false;
+  return (
+    !record(references) ||
+    !Object.keys(references).length ||
+    Object.keys(references).some(
+      (k) => !["filter", "appearances"].includes(k),
+    ) ||
+    (Object.hasOwn(references, "appearances") &&
+      !["all", "drawings"].includes(references.appearances!)) ||
+    (Object.hasOwn(references, "filter") && references.filter === undefined)
+  );
 }
 
 async function renderPacketPreservingRetry(
@@ -144,7 +160,6 @@ async function renderPacketPreservingRetry(
 ): Promise<RenderOutcome<RenderedPacket>> {
   const recovery: PacketRecoveryTracker = {
     paginationFailures: new Map(),
-    seriesLoopFallbacks: new Map(),
     notices: [],
   };
   const result = await renderPacket(
@@ -157,8 +172,7 @@ async function renderPacketPreservingRetry(
   );
   const original = recovery.packetWideFailure
     ? recovery.firstPacketFailure
-    : (recovery.paginationFailures.values().next().value ??
-      recovery.seriesLoopFallbacks.values().next().value);
+    : recovery.paginationFailures.values().next().value;
   return result.ok || !original ? result : { ok: false, error: original };
 }
 
@@ -168,9 +182,10 @@ function inLoopSheetLimitFailure(
     packetWide?: boolean,
   ) => RenderOutcome<never>,
   lastView: boolean,
-  captionError: RenderFailure | undefined,
+  viewRecoveryError: RenderFailure | undefined,
 ): RenderOutcome<never> {
-  if (!lastView && captionError) return { ok: false, error: captionError };
+  if (!lastView && viewRecoveryError)
+    return { ok: false, error: viewRecoveryError };
   return composedFailure(
     "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
     lastView,
@@ -207,20 +222,7 @@ async function renderPacket(
       "invalid-packet",
       "A packet requires format schematic-packet-request/0.1 and 1–40 views, with an optional shared page.",
     );
-  if (
-    request.references !== undefined &&
-    (request.index !== true ||
-      (request.references !== false &&
-        (!record(request.references) ||
-          !Object.keys(request.references).length ||
-          Object.keys(request.references).some(
-            (k) => !["filter", "appearances"].includes(k),
-          ) ||
-          (Object.hasOwn(request.references, "appearances") &&
-            !["all", "drawings"].includes(request.references.appearances!)) ||
-          (Object.hasOwn(request.references, "filter") &&
-            request.references.filter === undefined))))
-  )
+  if (invalidPacketReferences(request))
     return failure(
       "invalid-packet",
       "Reference options require index: true and either false or filter/appearances settings.",
@@ -264,7 +266,7 @@ async function renderPacket(
       if (!failed.ok)
         return { ok: false, error: contextError(failed.error, [context]) };
     }
-    const { result, captionFailure } = await captureCaptionRecovery(() =>
+    const { result, recovery: viewRecovery } = await captureViewRecovery(() =>
       viewDrafts(
         ir,
         view,
@@ -282,30 +284,29 @@ async function renderPacket(
       ),
     );
     const rooted = result.ok ? result.value[0]?.rootedPaginationFailure : null;
-    const seriesLoop = result.ok
-      ? result.value[0]?.seriesLoopFallbackFailure
-      : null;
-    let captionError: RenderFailure | undefined;
-    if (!result.ok || rooted || seriesLoop || captionFailure) {
+    let viewRecoveryError: RenderFailure | undefined;
+    if (!result.ok || rooted || viewRecovery) {
       const refusal = !result.ok
         ? result.error
-        : (rooted ?? seriesLoop ?? captionFailure);
+        : (rooted ?? viewRecovery?.failure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
       if (rooted) {
         recovery.paginationFailures.set(context, error);
         recovery.notices.push({ view: context, kind: "rooted-pagination" });
-      } else if (seriesLoop) {
-        recovery.seriesLoopFallbacks.set(context, error);
-        recovery.notices.push({ view: context, kind: "series-loop-fallback" });
-      } else captionError = error;
+      } else {
+        viewRecoveryError = error;
+        if (viewRecovery?.kind === "series-loop-fallback")
+          recovery.notices.push({
+            view: context,
+            kind: "series-loop-fallback",
+          });
+      }
       recovery.firstPacketFailure ??= error;
     }
     const first = result.value[0];
     if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
-    if (first?.seriesLoopFallbackFailure)
-      delete first.seriesLoopFallbackFailure;
     const reportSelection = first?.documentationSelection;
     if (record(view) && view.format === "circuit-view-request/0.1")
       seedCircuitNavigation(ir, result.value);
@@ -337,7 +338,7 @@ async function renderPacket(
     );
     if (drafts.length > 100) {
       const last = viewIndex === request.views.length - 1;
-      return inLoopSheetLimitFailure(composedFailure, last, captionError);
+      return inLoopSheetLimitFailure(composedFailure, last, viewRecoveryError);
     }
   }
   recovery.packetWideFailure = true;

@@ -180,7 +180,6 @@ export interface RootedLegendSource {
 }
 export interface Draft {
   rootedPaginationFailure?: import("../types.js").RenderFailure;
-  seriesLoopFallbackFailure?: import("../types.js").RenderFailure;
   terminalStrip?: import("./terminal-strip.js").TerminalStripSheet;
   terminalStripPlan?: import("./terminal-strip.js").StripDrawing;
   documentKind?: string;

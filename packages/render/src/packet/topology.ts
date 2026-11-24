@@ -33,6 +33,7 @@ import type { RenderOutcome } from "../types.js";
 
 import type { Draft, PaperPage } from "./types.js";
 import { failure } from "./errors.js";
+import { reportViewRecovery } from "./view-recovery.js";
 import { topologySelectionContext } from "./selection-context.js";
 import { bounds, zone } from "./page.js";
 import {
@@ -522,13 +523,8 @@ async function retrySeriesLoopLeftToRight(
     ]);
     const composed = compose(drawing);
     if (!composed.ok) return original;
-    return {
-      ok: true,
-      value: {
-        ...composed.value,
-        seriesLoopFallbackFailure: original.error,
-      },
-    };
+    reportViewRecovery("series-loop-fallback", original.error);
+    return composed;
   } catch {
     return original;
   }

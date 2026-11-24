@@ -277,9 +277,16 @@ When that retry fits with all notes at readable size:
 
 Direct signal loops, other paper sizes or orientations, and native top-to-bottom
 refusals caused by selection, title capacity, invalid geometry, width, or
-notes-only overflow never trigger this retry. If the left-to-right retry or
-downstream packet assembly fails for any reason, the original top-to-bottom
-`R006` refusal is preserved verbatim.
+notes-only overflow never trigger this retry. If the left-to-right retry,
+another step in that same view, or that view's own drafts crossing the 100-sheet
+alpha cap while later views remain pending fails, that view's original
+top-to-bottom `R006` refusal is preserved verbatim. An independent refusal in
+another view, or a later unrecovered view crossing the 100-sheet alpha cap while
+views remain pending, keeps that view's own diagnostic or the native cap
+refusal. If packet-wide composition or assembly fails after all views are
+drafted, or the last view crosses the 100-sheet cap, the first captured recovery
+refusal in authored view order (whether from caption retry or loop fallback) is
+preserved.
 
 Measured five-device cases at the unchanged print sizes:
 

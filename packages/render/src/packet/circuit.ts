@@ -8,10 +8,10 @@ import {
   circuitGroupFootprint,
 } from "./circuit-footprint.js";
 import {
-  reportRecoveredCaptionFailure,
   withCircuitViewRecovery,
   type CircuitViewRecovery,
 } from "../circuit/caption-retry.js";
+import { reportViewRecovery } from "./view-recovery.js";
 import { circuitInlineContext } from "../layout/circuit-inline-context.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
 import { recordPrintedCircuitDrawing } from "../layout/circuit-printed-layouts.js";
@@ -86,7 +86,7 @@ export async function circuitDrafts(
         details: { ...effective.error.details, circuitGroups },
       };
       if (outcome?.ok) {
-        reportRecoveredCaptionFailure(rendered);
+        reportViewRecovery("circuit-caption", rendered);
         return outcome;
       }
       return { ok: false, error: rendered };
