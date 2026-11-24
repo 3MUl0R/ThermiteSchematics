@@ -106,180 +106,248 @@ export const inside = (a: Box, b: Box) =>
   a.top >= b.top &&
   a.bottom <= b.bottom;
 
-/** Chromium supplies only affine transforms and primitive paths. Never ask it
- * for glyph bounds, advances, character positions or canvas text measurements.
- * Preserve explicit M/L wiring vertices. Coordinates are in the sheet viewBox (mm). */
-export async function svgOutlineGeometry(
-  page: Page,
-  svg: string | undefined,
-  wiringOnly = false,
-  legacyFont = false,
-) {
-  if (svg !== undefined) await page.setContent(svg);
-  const raw = await page.evaluate((wiringOnly) => {
-    const root = document.querySelector("svg")!,
-      inverse = root.getScreenCTM()!.inverse(),
-      marks = [...document.querySelectorAll("[data-circuit-mark]")];
-    const matrix = (e: SVGGraphicsElement) => {
-      const m = inverse.multiply(e.getScreenCTM()!);
-      return [m.a, m.b, m.c, m.d, m.e, m.f] as Matrix;
-    };
-    const project = (p: Point, m: Matrix): Point => ({
-      x: m[0] * p.x + m[2] * p.y + m[4],
-      y: m[1] * p.x + m[3] * p.y + m[5],
+type ElementIdentity = {
+  wire: string | null | undefined;
+  device: string | null | undefined;
+  mark: number;
+};
+type RawBoxTuple = [number, number, number, number, Matrix];
+type RawRectTuple = [number, number, number, number, number, number, number];
+type RawText = ElementIdentity & {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  bold: boolean;
+  family: string;
+  anchor: string;
+  baseline: string;
+  length: number | undefined;
+  lengthAdjust: string | null;
+  matrix: Matrix;
+  clips: RawBoxTuple[];
+  plate: RawBoxTuple | undefined;
+  caption: boolean;
+  owner: number;
+};
+type RawShape = ElementIdentity & {
+  stroke: number;
+  m: Matrix;
+  localPoints?: [number, number][];
+  rect?: RawRectTuple;
+  path?: string;
+};
+
+function collectSvgTexts(wiringOnly: boolean) {
+  const root = document.querySelector("svg")!,
+    inverse = root.getScreenCTM()!.inverse(),
+    marks = [...document.querySelectorAll("[data-circuit-mark]")];
+  const n = (a: SVGAnimatedLength) => a.baseVal.value;
+  const mat = (e: SVGGraphicsElement): Matrix => {
+    const m = inverse.multiply(e.getScreenCTM()!);
+    return [m.a, m.b, m.c, m.d, m.e, m.f];
+  };
+  const attr = (e: Element, k: string) => e.closest(`[${k}]`)?.getAttribute(k);
+  const idOf = (e: Element): ElementIdentity => ({
+    wire: attr(e, "data-wiring-conductor"),
+    device: attr(e, "data-device-uid"),
+    mark: marks.indexOf(e.closest("[data-circuit-mark]")!),
+  });
+  const texts: RawText[] = [];
+  const sel = wiringOnly ? "[data-wiring-conductor] text" : "text";
+  for (const e of document.querySelectorAll<SVGTextElement>(sel)) {
+    if (e.closest("defs") || !e.textContent?.trim()) continue;
+    const css = getComputedStyle(e);
+    if (css.display === "none" || css.visibility === "hidden") continue;
+    if (
+      e.matches("[dx],[dy]") ||
+      e.querySelector("tspan,textPath") ||
+      !["normal", "0px"].includes(css.letterSpacing)
+    )
+      throw Error("Unsupported SVG text positioning in outline test");
+    let prev = e.previousElementSibling;
+    while (prev?.tagName.toLowerCase() === "text")
+      prev = prev.previousElementSibling;
+    const clips: RawBoxTuple[] = [];
+    for (let p = e.parentElement; p; p = p.parentElement) {
+      if (!(p instanceof SVGSVGElement)) continue;
+      if (p !== root && getComputedStyle(p).overflow === "visible") continue;
+      const v = p.viewBox.baseVal;
+      clips.push([v.x, v.y, v.width, v.height, mat(p)]);
+    }
+    const caption = e.closest("[data-contact-caption]"),
+      own = caption?.parentElement?.querySelector("[data-circuit-mark]"),
+      tl = e.getAttribute("textLength"),
+      hasPlate =
+        prev instanceof SVGRectElement &&
+        getComputedStyle(prev).fill === "rgb(255, 255, 255)";
+    const plate: RawBoxTuple | undefined = hasPlate
+      ? [n(prev.x), n(prev.y), n(prev.width), n(prev.height), mat(prev)]
+      : undefined;
+    texts.push({
+      ...idOf(e),
+      text: e.textContent,
+      x: e.x.baseVal[0]?.value ?? 0,
+      y: e.y.baseVal[0]?.value ?? 0,
+      size: parseFloat(css.fontSize),
+      bold: Number(css.fontWeight) >= 600,
+      family: css.fontFamily,
+      anchor: css.textAnchor,
+      baseline: css.dominantBaseline,
+      length: tl !== null ? Number(tl) : undefined,
+      lengthAdjust: e.getAttribute("lengthAdjust"),
+      matrix: mat(e),
+      clips,
+      plate,
+      caption: !!caption,
+      owner: marks.indexOf(own!),
     });
-    const rectangle = (e: SVGRectElement) => {
-      const m = matrix(e),
-        x = e.x.baseVal.value,
-        y = e.y.baseVal.value,
-        w = e.width.baseVal.value,
-        h = e.height.baseVal.value;
-      return [
-        [x, y],
-        [x + w, y],
-        [x + w, y + h],
-        [x, y + h],
-      ].map(([x, y]) => project({ x: x!, y: y! }, m));
-    };
-    const identity = (e: Element) => ({
-      wire: e
-        .closest("[data-wiring-conductor]")
-        ?.getAttribute("data-wiring-conductor"),
-      device: e.closest("[data-device-uid]")?.getAttribute("data-device-uid"),
+  }
+  return { texts, marks: marks.map(idOf) };
+}
+
+function collectSvgShapes(wiringOnly: boolean): string {
+  const root = document.querySelector("svg")!,
+    inverse = root.getScreenCTM()!.inverse(),
+    marks = [...document.querySelectorAll("[data-circuit-mark]")];
+  const n = (a: SVGAnimatedLength) => a.baseVal.value;
+  const straightRe =
+    /^\s*M(?:[\s,]*[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?){2}(?:[\s,]*(?:L(?:(?:[\s,]*[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?){2})+|[HV](?:[\s,]*[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)+))+[\s,]*(?:[Zz]\s*)?$/u;
+  const shapes: RawShape[] = [];
+  const sel = wiringOnly
+    ? "[data-wiring-conductor] path"
+    : "line,path,polyline,rect,circle";
+  for (const e of document.querySelectorAll<SVGGeometryElement>(sel)) {
+    if (e.closest("defs")) continue;
+    const css = getComputedStyle(e);
+    if (css.display === "none" || css.visibility === "hidden") continue;
+    const dm = inverse.multiply(e.getScreenCTM()!),
+      m: Matrix = [dm.a, dm.b, dm.c, dm.d, dm.e, dm.f],
+      scale = Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
+    const attr = (k: string) => e.closest(`[${k}]`)?.getAttribute(k);
+    const shape: RawShape = {
+      wire: attr("data-wiring-conductor"),
+      device: attr("data-device-uid"),
       mark: marks.indexOf(e.closest("[data-circuit-mark]")!),
-    });
-    const visible = (e: Element) =>
-      !e.closest("defs") &&
-      getComputedStyle(e).display !== "none" &&
-      getComputedStyle(e).visibility !== "hidden";
-    const clips = (e: Element) => {
-      const out: Point[][] = [];
-      for (let p = e.parentElement; p; p = p.parentElement) {
-        if (p.tagName.toLowerCase() !== "svg") continue;
-        const s = p as unknown as SVGSVGElement,
-          v = s.viewBox.baseVal;
-        if (s !== root && getComputedStyle(s).overflow === "visible") continue;
-        out.push(
-          [
-            [v.x, v.y],
-            [v.x + v.width, v.y + v.height],
-          ].map(([x, y]) => project({ x: x!, y: y! }, matrix(s))),
-        );
-      }
-      return out;
+      stroke: css.stroke === "none" ? 0 : parseFloat(css.strokeWidth) * scale,
+      m,
     };
-    const texts = [
-      ...document.querySelectorAll<SVGTextElement>(
-        wiringOnly ? "[data-wiring-conductor] text" : "text",
-      ),
-    ]
-      .filter((e) => visible(e) && e.textContent?.trim())
-      .map((e) => {
-        const css = getComputedStyle(e),
-          caption = e.closest("[data-contact-caption]");
-        if (
-          e.querySelector("tspan,textPath") ||
-          e.hasAttribute("dx") ||
-          e.hasAttribute("dy") ||
-          !["normal", "0px"].includes(css.letterSpacing)
-        )
-          throw Error("Unsupported SVG text positioning in outline test");
-        let previous = e.previousElementSibling;
-        while (previous?.tagName.toLowerCase() === "text")
-          previous = previous.previousElementSibling;
-        const plate =
-          previous?.tagName.toLowerCase() === "rect" &&
-          getComputedStyle(previous).fill === "rgb(255, 255, 255)"
-            ? rectangle(previous as SVGRectElement)
-            : undefined;
-        return {
-          ...identity(e),
-          text: e.textContent!,
-          x: e.x.baseVal[0]?.value ?? 0,
-          y: e.y.baseVal[0]?.value ?? 0,
-          size: parseFloat(css.fontSize),
-          bold: Number(css.fontWeight) >= 600,
-          family: css.fontFamily,
-          anchor: css.textAnchor,
-          baseline: css.dominantBaseline,
-          length: e.hasAttribute("textLength")
-            ? Number(e.getAttribute("textLength"))
-            : undefined,
-          lengthAdjust: e.getAttribute("lengthAdjust"),
-          matrix: matrix(e),
-          clips: clips(e),
-          plate,
-          caption: !!caption,
-          owner: marks.indexOf(
-            caption?.parentElement?.querySelector("[data-circuit-mark]")!,
-          ),
-        };
+    if (e instanceof SVGPathElement) {
+      const d = e.getAttribute("d")!.trim();
+      if (wiringOnly || straightRe.test(d)) shape.path = d;
+    } else if (e instanceof SVGLineElement) {
+      shape.localPoints = [
+        [n(e.x1), n(e.y1)],
+        [n(e.x2), n(e.y2)],
+      ];
+    } else if (e instanceof SVGPolylineElement && e.points.numberOfItems > 1) {
+      shape.localPoints = Array.from(e.points, (p) => [p.x, p.y]);
+    } else if (e instanceof SVGRectElement) {
+      shape.rect = [
+        n(e.x),
+        n(e.y),
+        n(e.width),
+        n(e.height),
+        n(e.rx),
+        n(e.ry),
+        scale,
+      ];
+    }
+    if (!shape.path && !shape.localPoints && !shape.rect) {
+      const len = e.getTotalLength(),
+        cnt = Math.max(1, Math.ceil((len * scale) / 0.01));
+      shape.localPoints = Array.from({ length: cnt + 1 }, (_, i) => {
+        const p = e.getPointAtLength((len * i) / cnt);
+        return [p.x, p.y];
       });
-    const shapes = [
-      ...document.querySelectorAll<SVGGeometryElement>(
-        wiringOnly
-          ? "[data-wiring-conductor] path"
-          : "line,path,polyline,rect,circle",
-      ),
-    ]
-      .filter(visible)
-      .map((e) => {
-        const m = matrix(e),
-          css = getComputedStyle(e),
-          scale = Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
-        let points: Point[];
-        const tokens =
-          e.tagName.toLowerCase() === "path"
-            ? e.getAttribute("d")!.trim().split(/\s+/u)
-            : [];
-        const linear =
-          tokens.length > 0 &&
-          tokens.length % 3 === 0 &&
-          tokens.every((v, i) =>
-            i % 3 === 0 ? v === (i ? "L" : "M") : Number.isFinite(Number(v)),
-          );
-        if (wiringOnly && !linear)
-          throw Error("Unsupported wiring path in outline test");
-        if (linear) {
-          points = tokens
-            .filter((_, i) => i % 3 === 0)
-            .map((_, i) =>
-              project(
-                { x: Number(tokens[3 * i + 1]), y: Number(tokens[3 * i + 2]) },
-                m,
-              ),
-            );
-        } else if (e.tagName.toLowerCase() === "line") {
-          const line = e as SVGLineElement;
-          points = [
-            { x: line.x1.baseVal.value, y: line.y1.baseVal.value },
-            { x: line.x2.baseVal.value, y: line.y2.baseVal.value },
-          ].map((p) => project(p, m));
-        } else if (
-          e.tagName.toLowerCase() === "rect" &&
-          !(e as SVGRectElement).rx.baseVal.value &&
-          !(e as SVGRectElement).ry.baseVal.value
-        ) {
-          points = rectangle(e as SVGRectElement);
-          points.push(points[0]!);
-        } else {
-          const length = e.getTotalLength(),
-            count = Math.max(1, Math.ceil((length * scale) / 0.01));
-          points = Array.from({ length: count + 1 }, (_, i) => {
-            const p = e.getPointAtLength((length * i) / count);
-            return project({ x: p.x, y: p.y }, m);
-          });
-        }
-        return {
-          ...identity(e),
-          points,
-          stroke:
-            css.stroke === "none" ? 0 : parseFloat(css.strokeWidth) * scale,
-        };
-      });
-    return { texts, shapes, marks: marks.map((e) => identity(e)) };
-  }, wiringOnly);
-  const texts = raw.texts.map((t) => {
+    }
+    shapes.push(shape);
+  }
+  return JSON.stringify(shapes);
+}
+
+function expandRectPoints(
+  [x, y, w, h, rawRx, rawRy, scale]: RawRectTuple,
+  m: Matrix,
+): Point[] {
+  const rx = Math.min(w / 2, Math.max(0, rawRx || rawRy)),
+    ry = Math.min(h / 2, Math.max(0, rawRy || rawRx));
+  if (!rx || !ry) {
+    return [
+      { x, y },
+      { x: x + w, y },
+      { x: x + w, y: y + h },
+      { x, y: y + h },
+      { x, y },
+    ].map((p) => point(p, m));
+  }
+  const steps = Math.max(
+    1,
+    Math.ceil(((Math.PI / 2) * Math.max(rx, ry) * scale) / 0.01),
+  );
+  const corners: [number, number, number][] = [
+    [x + w - rx, y + ry, -Math.PI / 2],
+    [x + w - rx, y + h - ry, 0],
+    [x + rx, y + h - ry, Math.PI / 2],
+    [x + rx, y + ry, Math.PI],
+  ];
+  const out = corners.flatMap(([cx, cy, start]) =>
+    Array.from({ length: steps + 1 }, (_, i) => {
+      const a = start + (Math.PI / 2) * (i / steps);
+      return point({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) }, m);
+    }),
+  );
+  out.push(out[0]!);
+  return out;
+}
+
+function expandStraightPath(
+  d: string,
+  m: Matrix,
+  wiringOnly: boolean,
+): Point[] {
+  if (wiringOnly) {
+    const tokens = d.split(/\s+/u);
+    const linear =
+      tokens.length > 0 &&
+      tokens.length % 3 === 0 &&
+      tokens.every((v, i) =>
+        i % 3 === 0 ? v === (i ? "L" : "M") : Number.isFinite(Number(v)),
+      );
+    if (!linear) throw Error("Unsupported wiring path in outline test");
+  }
+  const parts = d.match(
+    /[a-zA-Z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/gu,
+  )!;
+  let x = Number(parts[1]),
+    y = Number(parts[2]),
+    i = 3,
+    cmd = "L";
+  const out = [point({ x, y }, m)];
+  while (i < parts.length) {
+    const token = parts[i]!;
+    if (/^[A-Za-z]$/u.test(token)) {
+      if (token === "Z" || token === "z") {
+        out.push(out[0]!);
+        break;
+      }
+      cmd = token;
+      i++;
+      continue;
+    }
+    if (cmd === "L") {
+      x = Number(parts[i]!);
+      y = Number(parts[i + 1]!);
+      i += 2;
+    } else if (cmd === "H") x = Number(parts[i++]!);
+    else y = Number(parts[i++]!);
+    out.push(point({ x, y }, m));
+  }
+  return out;
+}
+
+function measureOutlineTexts(rawTexts: RawText[], legacyFont: boolean) {
+  return rawTexts.map((t) => {
     if (
       !legacyFont &&
       !t.family.startsWith('"Thermite Sans"') &&
@@ -305,17 +373,63 @@ export async function svgOutlineGeometry(
         },
         t.matrix,
       );
-    const painted = t.clips.every((points) => {
+    const clips = t.clips.map(([cx, cy, cw, ch, cm]) => [
+      point({ x: cx, y: cy }, cm),
+      point({ x: cx + cw, y: cy + ch }, cm),
+    ]);
+    const painted = clips.every((points) => {
       const b = bounds(points);
       return (
         Math.min(box.right, b.right) > Math.max(box.left, b.left) &&
         Math.min(box.bottom, b.bottom) > Math.max(box.top, b.top)
       );
     });
-    const [plate] = (t.plate ? [t.plate] : []).map(bounds);
-    return { ...t, box, painted, plate };
+    const plate = t.plate
+      ? bounds(
+          [
+            { x: t.plate[0], y: t.plate[1] },
+            { x: t.plate[0] + t.plate[2], y: t.plate[1] },
+            { x: t.plate[0] + t.plate[2], y: t.plate[1] + t.plate[3] },
+            { x: t.plate[0], y: t.plate[1] + t.plate[3] },
+          ].map((p) => point(p, t.plate![4])),
+        )
+      : undefined;
+    return { ...t, clips, box, painted, plate };
   });
-  return { ...raw, texts };
+}
+
+/** Chromium supplies only affine transforms and primitive paths. Never ask it
+ * for glyph bounds, advances, character positions or canvas text measurements.
+ * Preserve explicit M/L wiring vertices. Coordinates are in the sheet viewBox (mm). */
+export async function svgOutlineGeometry(
+  page: Page,
+  svg: string | undefined,
+  wiringOnly = false,
+  legacyFont = false,
+) {
+  if (svg !== undefined) await page.setContent(svg);
+  const { texts: rawTexts, marks } = await page.evaluate(
+    collectSvgTexts,
+    wiringOnly,
+  );
+  // Return compact JSON over CDP so large sheets stay below Chrome 158's
+  // Runtime.callFunctionOn returnByValue object-size limit (#582).
+  const rawShapes: RawShape[] = JSON.parse(
+    await page.evaluate(collectSvgShapes, wiringOnly),
+  );
+  const shapes = rawShapes.map(({ m, rect, path, localPoints, ...base }) => ({
+    ...base,
+    points: rect
+      ? expandRectPoints(rect, m)
+      : path
+        ? expandStraightPath(path, m, wiringOnly)
+        : localPoints!.map(([x, y]) => point({ x, y }, m)),
+  }));
+  return {
+    texts: measureOutlineTexts(rawTexts, legacyFont),
+    shapes,
+    marks,
+  };
 }
 
 async function wiringLeaderEndpoints(page: Page) {
