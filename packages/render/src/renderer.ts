@@ -72,6 +72,13 @@ export interface PreparedSchematicDrawing {
   readonly view: import("./types.js").NormalizedSchematicView;
 }
 
+function wrapNetLabels(
+  graph: import("./types.js").PresentationGraph,
+  dependencies: Readonly<SchematicRendererDependencies>,
+) {
+  return wrapPresentationNetLabels(graph, dependencies.wrapNetLabelIds);
+}
+
 export async function prepareSchematicDrawing(
   ir: Readonly<ElectricalIr>,
   request: Readonly<SchematicViewRequest>,
@@ -163,7 +170,7 @@ export async function prepareSchematicDrawing(
   const preflight = preflightRenderText(presented.value.graph);
   if (!preflight.ok) return failed(renderErrorContext(ir, preflight.error));
 
-  let graph = wrapPresentationNetLabels(presented.value.graph, dependencies.wrapNetLabelIds);
+  let graph = wrapNetLabels(presented.value.graph, dependencies);
   const layoutOptions = {
     ...(dependencies.packetContinuations ? { packetContinuations: true } : {}),
     catalog,

@@ -72,16 +72,11 @@ async function initial(
   run: RootedSearch,
   wrapNetLabelIds?: ReadonlySet<string>,
 ) {
-  const result = await prepareSchematicDrawing(
-    ir,
-    request,
-    presentation,
-    {
-      packetContinuations: true,
-      ...(profile ? { spacingProfile: profile } : {}),
-      ...(wrapNetLabelIds?.size ? { wrapNetLabelIds } : {}),
-    },
-  );
+  const result = await prepareSchematicDrawing(ir, request, presentation, {
+    packetContinuations: true,
+    ...(profile ? { spacingProfile: profile } : {}),
+    ...(wrapNetLabelIds?.size ? { wrapNetLabelIds } : {}),
+  });
   if (!result.ok) {
     run.errors.push(result.error);
     return;

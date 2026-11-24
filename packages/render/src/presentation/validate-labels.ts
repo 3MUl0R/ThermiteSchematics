@@ -3,7 +3,10 @@ import {
   contactCaptionSymbol,
   verticalContactCaption,
 } from "./contact-caption.js";
-import { TWO_LINE_NET_LABEL_HEIGHT } from "./net-label-wrap.js";
+import {
+  TWO_LINE_NET_LABEL_HEIGHT,
+  twoLineSlotWidth,
+} from "./net-label-wrap.js";
 import type {
   PresentationLabel,
   PresentationGraph,
@@ -46,7 +49,10 @@ function validateLabel(
     );
     invariant(
       label.width ===
-        Math.max(labelWidth(label.lines[0]), labelWidth(label.lines[1])),
+        Math.max(
+          twoLineSlotWidth(label.lines[0]),
+          twoLineSlotWidth(label.lines[1]),
+        ),
       `${label.id} width`,
     );
     invariant(label.height === TWO_LINE_NET_LABEL_HEIGHT, `${label.id} height`);

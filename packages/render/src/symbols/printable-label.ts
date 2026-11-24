@@ -32,7 +32,12 @@ function clampPosition(
 }
 
 function nearestInkOrigin(
-  reserved: Readonly<{ left: number; right: number; top: number; bottom: number }>,
+  reserved: Readonly<{
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  }>,
   width: number,
   height: number,
   leftOffset: number,
@@ -94,13 +99,13 @@ function twoLinePrintableLabelGeometry(
   size: number,
   fit: boolean,
 ): PrintableLabelPlacement {
-  const m0 = printableTextMetrics(lines[0], size),
-    m1 = printableTextMetrics(lines[1], size);
+  const m0 = printableTextMetrics(lines[0].normalize("NFC"), size, false, true),
+    m1 = printableTextMetrics(lines[1].normalize("NFC"), size, false, true);
   const advance0 = fit
-      ? boundedPrintableAdvance(lines[0], size, capacity)
+      ? boundedPrintableAdvance(lines[0], size, capacity, true)
       : m0.advance,
     advance1 = fit
-      ? boundedPrintableAdvance(lines[1], size, capacity)
+      ? boundedPrintableAdvance(lines[1], size, capacity, true)
       : m1.advance;
   const scale0 = m0.advance ? advance0 / m0.advance : 1,
     scale1 = m1.advance ? advance1 / m1.advance : 1;
@@ -108,7 +113,8 @@ function twoLinePrintableLabelGeometry(
     rightOffset = Math.max(m0.right * scale0, m1.right * scale1);
   const width = rightOffset - leftOffset,
     topAboveY0 = m0.top - m0.middleBaseline,
-    height = topAboveY0 + TWO_LINE_NET_LABEL_PITCH + m1.middleBaseline - m1.bottom;
+    height =
+      topAboveY0 + TWO_LINE_NET_LABEL_PITCH + m1.middleBaseline - m1.bottom;
   const emInset = (label.height - size) / 2;
   const reserved = {
     left: label.x + (fit ? 0 : 0.3 * size),
@@ -155,7 +161,14 @@ export function printableLabelGeometry(
   lines?: readonly [string, string],
 ): PrintableLabelPlacement {
   if (lines !== undefined)
-    return twoLinePrintableLabelGeometry(label, lines, capacity, routes, size, fit);
+    return twoLinePrintableLabelGeometry(
+      label,
+      lines,
+      capacity,
+      routes,
+      size,
+      fit,
+    );
   const m = printableTextMetrics(text, size),
     // Circuit captions already print at natural advance; only rooted captions fit.
     advance = fit ? boundedPrintableAdvance(text, size, capacity) : m.advance,

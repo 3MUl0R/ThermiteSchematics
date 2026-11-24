@@ -3,39 +3,14 @@ import {
   verticalSourcePortSpacing,
 } from "../symbols/catalog.js";
 import type { SymbolDefinition } from "../symbols/types.js";
-import { labelInkWidth } from "./net-label-wrap.js";
-import type {
-  PresentationEdge,
-  PresentationGraph,
-  SymbolPresentationNode,
-} from "../types.js";
+import { labelInkWidth, originatingSymbolPortId } from "./net-label-wrap.js";
+import type { PresentationGraph, SymbolPresentationNode } from "../types.js";
+
+export { originatingSymbolPortId };
 
 // Own-wire label offset (~3-4 units) plus DQ-16 foreign-wire ownership margin (>0.5 mm at 0.25 mm/unit).
 export const MIN_PITCH_CLEARANCE = 12;
 const COMPACT_HEADER_MARGIN = 8;
-
-export function originatingSymbolPortId(
-  graph: Readonly<PresentationGraph>,
-  edge: PresentationEdge,
-): string {
-  let portId = edge.sourcePortId;
-  const visited = new Set<string>();
-  while (!visited.has(portId)) {
-    visited.add(portId);
-    const owner = graph.nodes.find((node) =>
-      node.ports.some((port) => port.id === portId),
-    );
-    if (owner === undefined || owner.kind !== "junction") return portId;
-    const incoming = graph.edges.find(
-      (candidate) =>
-        candidate.kind === "boundary-segment" &&
-        owner.ports.some((port) => port.id === candidate.targetPortId),
-    );
-    if (incoming === undefined) return portId;
-    portId = incoming.sourcePortId;
-  }
-  return portId;
-}
 
 function collidingSourceInkWidth(
   graph: Readonly<PresentationGraph>,

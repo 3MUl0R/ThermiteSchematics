@@ -250,7 +250,7 @@ async function selectedDrawingDrafts(
       if (!wrapNetLabelIds) {
         const wrapIds = wrappableVerticalSourceNetLabelIds(run, page);
         if (wrapIds !== undefined) {
-          return selectedDrawingDrafts(
+          const retried = await selectedDrawingDrafts(
             ir,
             request,
             presentation,
@@ -259,6 +259,7 @@ async function selectedDrawingDrafts(
             referenceOffset,
             wrapIds,
           );
+          if (retried.ok) return retried;
         }
       }
       return {

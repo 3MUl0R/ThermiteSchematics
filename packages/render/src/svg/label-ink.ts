@@ -50,6 +50,7 @@ function emitTextLine(
   x: number,
   baseline: number,
   attributes: SvgAttributes,
+  preserveSpace = false,
 ): void {
   writer.element(
     1,
@@ -64,7 +65,8 @@ function emitTextLine(
       "font-size": 10,
       "text-anchor": "start",
       "dominant-baseline": "alphabetic",
-      ...printableFitAttributes(text, 10, capacity),
+      ...(preserveSpace ? { "xml:space": "preserve" } : {}),
+      ...printableFitAttributes(text, 10, capacity, preserveSpace),
     },
     text,
   );
@@ -89,13 +91,22 @@ function emitTwoLineLabelTexts(
     [lines[1], b1],
   ];
   for (const [line, baseline] of pairs) {
-    const m = printableTextMetrics(line, 10);
-    const advance = boundedPrintableAdvance(line, 10, capacity);
+    const m = printableTextMetrics(line.normalize("NFC"), 10, false, true);
+    const advance = boundedPrintableAdvance(line, 10, capacity, true);
     const scale = m.advance ? advance / m.advance : 1;
     const lineX = alignRight
       ? position.ink.right - m.right * scale
       : position.ink.left - m.left * scale;
-    emitTextLine(writer, label, line, capacity, lineX, baseline, attributes);
+    emitTextLine(
+      writer,
+      label,
+      line,
+      capacity,
+      lineX,
+      baseline,
+      attributes,
+      true,
+    );
   }
 }
 

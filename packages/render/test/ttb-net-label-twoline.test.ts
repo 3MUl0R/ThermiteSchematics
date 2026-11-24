@@ -1,15 +1,47 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compileProject, lockProject } from "@thermite/compiler";
 import { expect, it } from "vitest";
 import { renderSchematicPacket } from "../src/index.js";
+import { normalizePaperPage } from "../src/packet/page.js";
+import { rootedDiagnosticError } from "../src/packet/rooted-constraint.js";
+import {
+  nativeWinner,
+  rootedWinner,
+  searchRootedCandidates,
+} from "../src/packet/rooted-search.js";
+import { wrappableVerticalSourceNetLabelIds } from "../src/packet/rooted-source-labels.js";
 import { splitTwoLineNetLabel } from "../src/presentation/net-label-wrap.js";
 import { parseSvg } from "./off-view-fixtures.js";
 
+function replaceStringValues(
+  value: unknown,
+  target: string,
+  replacement: string,
+): void {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (value[i] === target) value[i] = replacement;
+      else replaceStringValues(value[i], target, replacement);
+    }
+    return;
+  }
+  if (typeof value !== "object" || value === null) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === target) {
+      Reflect.set(value, key, replacement);
+    } else {
+      replaceStringValues(entry, target, replacement);
+    }
+  }
+}
+
 async function pumpVariantObjects(
   phaseNames: readonly [string, string, string],
+  renameLocation?: readonly [string, string],
 ): Promise<Record<string, unknown>> {
   const raw: unknown = JSON.parse(
     await readFile(
@@ -23,6 +55,9 @@ async function pumpVariantObjects(
       "objects" in raw &&
       Array.isArray(raw.objects),
   );
+  if (renameLocation !== undefined) {
+    replaceStringValues(raw, renameLocation[0], renameLocation[1]);
+  }
   const byTerm = new Map([
     ["L1", phaseNames[0]],
     ["L2", phaseNames[1]],
@@ -53,20 +88,26 @@ async function pumpVariantObjects(
 async function compilePumpVariant(
   tag: string,
   phaseNames: readonly [string, string, string],
+  options: {
+    readonly projectName?: string;
+    readonly renameLocation?: readonly [string, string];
+  } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), `thermite-ttblong-${tag}-`));
   await writeFile(
     join(root, "system.json"),
     JSON.stringify({
       format: "electrical-system/0.1",
-      project: { name: `Synthetic ${tag}` },
+      project: { name: options.projectName ?? `Synthetic ${tag}` },
       sources: ["source.json"],
       libraries: [{ name: "core", version: "0.2.0" }],
     }),
   );
   await writeFile(
     join(root, "source.json"),
-    JSON.stringify(await pumpVariantObjects(phaseNames)),
+    JSON.stringify(
+      await pumpVariantObjects(phaseNames, options.renameLocation),
+    ),
   );
   const locked = await lockProject(root);
   assert.ok(locked.ok, JSON.stringify(locked));
@@ -132,6 +173,21 @@ it("splits potential names only at existing separators closest to the middle (#5
       "MAINPOWERPANEL480VACBUSFEEDERSECTIONAMAINFEEDERBRANCHL1",
     ),
   ).toBeUndefined();
+  expect(splitTwoLineNetLabel(`${"W".repeat(36)}-L1`, ["L1"])).toBeUndefined();
+  expect(splitTwoLineNetLabel(`${"W".repeat(35)}L1-X`)).toBeUndefined();
+  expect(splitTwoLineNetLabel("-WWWW")).toBeUndefined();
+  expect(splitTwoLineNetLabel("LONG-FEEDER-LINE1", ["line1"])).toEqual([
+    "LONG-",
+    "FEEDER-LINE1",
+  ]);
+  expect(
+    splitTwoLineNetLabel(`${"W".repeat(20)}-LINE1`, ["LINE1"]),
+  ).toBeUndefined();
+  const consec = `${"A".repeat(27)}-${"B".repeat(2)}   ${"C".repeat(28)}`;
+  expect(splitTwoLineNetLabel(consec)).toEqual([
+    `${"A".repeat(27)}-${"B".repeat(2)}   `,
+    "C".repeat(28),
+  ]);
 });
 
 it.each([
@@ -306,13 +362,18 @@ it("breaks space-separated 60-character TTB source net labels verbatim onto two 
   }
 });
 
-it("keeps LTR long names and <=24-char fitting TTB names single-line (#576)", async () => {
+it("keeps LTR long names and <=24-char fitting TTB names single-line with exact base bytes (#576)", async () => {
   const longNames = phaseTriple(
     "MCC1-MAIN-MOTOR-POWER-480VAC-BUS-FEEDER-PANEL-MOD-ALPHA-1-L1",
   );
   const shortNames = phaseTriple("MAIN-PANEL-480VAC-BUS-L1");
-  const longFixture = await compilePumpVariant("ltr-60", longNames);
-  const shortFixture = await compilePumpVariant("ttb-24", shortNames);
+  const longFixture = await compilePumpVariant("ltr-60", longNames, {
+    projectName: "Synthetic #576",
+  });
+  const shortFixture = await compilePumpVariant("ttb-24", shortNames, {
+    projectName: "Synthetic #576",
+  });
+  const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
   try {
     const ltr = await renderSchematicPacket(longFixture.ir, {
       format: "schematic-packet-request/0.1",
@@ -327,11 +388,17 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line (#576)", as
       ],
     });
     assert.ok(ltr.ok, JSON.stringify(ltr));
-    for (const group of ltr.value.sheets.flatMap((s) => netLabelGroups(s.svg))) {
-      if (longNames.includes(group.lines.join(""))) {
-        expect(group.lines).toHaveLength(1);
-      }
-    }
+    const ltrMatches = ltr.value.sheets
+      .flatMap((s) => netLabelGroups(s.svg))
+      .filter((g) => longNames.includes(g.lines.join("")));
+    expect(
+      [...new Set(ltrMatches.map((g) => g.lines.join("")))].sort(),
+    ).toEqual([...longNames].sort());
+    for (const group of ltrMatches) expect(group.lines).toHaveLength(1);
+    expect(ltr.value.sheets.map((s) => sha256(s.svg))).toEqual([
+      "714539c782bad3ed879ceca0a09c4d63206f17ec679ce978128d829674c9311f",
+    ]);
+
     const ttb = await renderSchematicPacket(shortFixture.ir, {
       format: "schematic-packet-request/0.1",
       page: { size: "letter", orientation: "landscape" },
@@ -345,14 +412,122 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line (#576)", as
       ],
     });
     assert.ok(ttb.ok, JSON.stringify(ttb));
-    for (const group of ttb.value.sheets.flatMap((s) => netLabelGroups(s.svg))) {
-      if (shortNames.includes(group.lines.join(""))) {
-        expect(group.lines).toHaveLength(1);
-      }
-    }
+    const ttbMatches = ttb.value.sheets
+      .flatMap((s) => netLabelGroups(s.svg))
+      .filter((g) => shortNames.includes(g.lines.join("")));
+    expect(
+      [...new Set(ttbMatches.map((g) => g.lines.join("")))].sort(),
+    ).toEqual([...shortNames].sort());
+    for (const group of ttbMatches) expect(group.lines).toHaveLength(1);
+    expect(ttb.value.sheets.map((s) => sha256(s.svg))).toEqual([
+      "f560c68baf8132fe472f63f60a1641342f071804be62d257865704a3ebccf3d1",
+      "f39c448956cf7c3ad5f420a5c69e637dc7aafa2d8f56e31518a3c73f72f896a1",
+      "4bf27ddcebe45457234660423959c2388765805d55095f8e1d8d7b885b1ad0a7",
+      "9b1d7c0795fb5fdace6a88783bfe01f9ba126f809ed392a6685f3be526db347a",
+    ]);
   } finally {
     await longFixture.dispose();
     await shortFixture.dispose();
+  }
+});
+
+it("refuses 36-W -L1/L2/L3 instead of emitting a short terminal-duplicate second row (#576)", async () => {
+  const names = phaseTriple(`${"W".repeat(36)}-L1`);
+  const fixture = await compilePumpVariant("short36", names);
+  const view = {
+    format: "schematic-view-request/0.1" as const,
+    root: { by: "designation" as const, value: "M1" },
+    family: "power" as const,
+    flow: "top-to-bottom" as const,
+  };
+  try {
+    const page = normalizePaperPage({
+      size: "tabloid",
+      orientation: "landscape",
+    });
+    assert.ok(page.ok);
+    const run = await searchRootedCandidates(
+      fixture.ir,
+      view,
+      undefined,
+      page.value,
+      false,
+    );
+    expect(wrappableVerticalSourceNetLabelIds(run, page.value)).toBeUndefined();
+    const packet = await renderSchematicPacket(fixture.ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "tabloid", orientation: "landscape" },
+      views: [view],
+    });
+    expect(packet.ok).toBe(false);
+    if (packet.ok) return;
+    expect(packet.error.code).toBe("R006");
+    expect(packet.error.message).toContain(names[0]);
+    expect(packet.error.message).toMatch(/shorter potential name/iu);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+it("preserves original R006 verbatim and selects zero wrap IDs when 180-W location caption binds (#576)", async () => {
+  const names = ["MCC1-480V-L1", "MCC1-480V-L2", "MCC1-480V-L3"] as const;
+  const fixture = await compilePumpVariant("location180", names, {
+    renameLocation: ["PUMP", "W".repeat(180)],
+  });
+  const view = {
+    format: "schematic-view-request/0.1" as const,
+    root: { by: "designation" as const, value: "M1" },
+    family: "power" as const,
+    flow: "top-to-bottom" as const,
+  };
+  try {
+    const page = normalizePaperPage({
+      size: "tabloid",
+      orientation: "landscape",
+    });
+    assert.ok(page.ok);
+    const run = await searchRootedCandidates(
+      fixture.ir,
+      view,
+      undefined,
+      page.value,
+      false,
+    );
+    expect(wrappableVerticalSourceNetLabelIds(run, page.value)).toBeUndefined();
+    const winner = rootedWinner(run, page.value);
+    const native = nativeWinner(run);
+    const rawError =
+      (!native &&
+        run.nativeErrors.get(winner?.profile ?? run.prepared[0]?.profile)) ||
+      run.errors[0];
+    assert.ok(rawError);
+    const expected = rootedDiagnosticError(rawError, run.diagnostics);
+    const packet = await renderSchematicPacket(fixture.ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "tabloid", orientation: "landscape" },
+      views: [view],
+    });
+    expect(packet.ok).toBe(false);
+    if (packet.ok) return;
+    expect(packet.error.code).toBe("R006");
+    expect(packet.error.message).toBe(
+      `Packet view[0] "M1 / power": ${expected.message}`,
+    );
+    expect(packet.error.message).toContain(
+      "protected width 442.45 mm exceeds 375.80 mm by 66.65 mm. Use a larger sheet or landscape.",
+    );
+    expect(packet.error.message).not.toMatch(
+      /potential name|source net label/iu,
+    );
+    expect(expected.details).toBeUndefined();
+    expect(packet.error.details).toEqual({
+      view: { title: "M1 / power", viewIndex: 0 },
+      viewIndex: 0,
+      viewTitle: "M1 / power",
+      views: [{ title: "M1 / power", viewIndex: 0 }],
+    });
+  } finally {
+    await fixture.dispose();
   }
 });
 
@@ -362,13 +537,11 @@ it("enforces two-line box clearance against non-owner frames in validate-output 
   );
   const fixture = await compilePumpVariant("twoline-collision", names);
   try {
-    const { layoutPresentationGraph } = await import(
-      "../src/layout/elk-adapter.js"
-    );
+    const { layoutPresentationGraph } =
+      await import("../src/layout/elk-adapter.js");
     const { createElkEngine } = await import("../src/layout/elk-runtime.js");
-    const { wrapPresentationNetLabels } = await import(
-      "../src/presentation/net-label-wrap.js"
-    );
+    const { wrapPresentationNetLabels } =
+      await import("../src/presentation/net-label-wrap.js");
     const { agentPresentation } = await import("./helpers/agent-recovery.js");
     const { graph: baseGraph, selected } = agentPresentation(fixture.ir, {
       format: "schematic-view-request/0.1",

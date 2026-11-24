@@ -1,0 +1,269 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { compileProject, lockProject } from "@thermite/compiler";
+import { afterAll, beforeAll, expect, it } from "vitest";
+import { OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { packetPdf } from "../../cli/src/alpha-pdf.js";
+import { embedPrintableFont } from "../../cli/src/printable-font.js";
+import { renderSchematicPacket } from "../src/index.js";
+import {
+  drawingContextOptions,
+  launch,
+  openSheet,
+} from "../../../evals/draw/browser.mjs";
+import {
+  conductorInterference,
+  fontMetrics,
+  legibility,
+  netLabelRepetition,
+  pdfGeometryTexts,
+  plateOcclusion,
+  terminalText,
+  textBounds,
+  wirePlacement,
+} from "../../../evals/draw/checks.mjs";
+import {
+  loadPdfBytes,
+  pdfText,
+  pdfTextMeasurements,
+} from "../../../evals/draw/pdf.mjs";
+
+let browser: Awaited<ReturnType<typeof launch>>;
+let page: Awaited<ReturnType<Awaited<ReturnType<typeof launch>>["newPage"]>>;
+
+beforeAll(async () => {
+  browser = await launch();
+  page = await (await browser.newContext(drawingContextOptions)).newPage();
+  await page.emulateMedia({ media: "print" });
+});
+
+afterAll(async () => {
+  await browser?.close();
+});
+
+async function compilePump(
+  tag: string,
+  phaseNames: readonly [string, string, string],
+) {
+  const raw: unknown = JSON.parse(
+    await readFile(
+      resolve(import.meta.dirname, "fixtures/agent-refusals/pump.json"),
+      "utf8",
+    ),
+  );
+  assert.ok(
+    typeof raw === "object" &&
+      raw !== null &&
+      "objects" in raw &&
+      Array.isArray(raw.objects),
+  );
+  const byTerm = new Map([
+    ["L1", phaseNames[0]],
+    ["L2", phaseNames[1]],
+    ["L3", phaseNames[2]],
+  ]);
+  for (const obj of raw.objects) {
+    if (
+      typeof obj !== "object" ||
+      obj === null ||
+      !("kind" in obj) ||
+      obj.kind !== "potential" ||
+      !("at" in obj) ||
+      typeof obj.at !== "object" ||
+      obj.at === null ||
+      !("device" in obj.at) ||
+      obj.at.device !== "SUP1" ||
+      !("terminal" in obj.at) ||
+      typeof obj.at.terminal !== "string"
+    ) {
+      continue;
+    }
+    const next = byTerm.get(obj.at.terminal);
+    if (next !== undefined && "name" in obj) obj.name = next;
+  }
+  const root = await mkdtemp(join(tmpdir(), `thermite-ttblong-pdf-${tag}-`));
+  await writeFile(
+    join(root, "system.json"),
+    JSON.stringify({
+      format: "electrical-system/0.1",
+      project: { name: `Synthetic ${tag}` },
+      sources: ["source.json"],
+      libraries: [{ name: "core", version: "0.2.0" }],
+    }),
+  );
+  await writeFile(
+    join(root, "source.json"),
+    JSON.stringify({ objects: raw.objects }),
+  );
+  const locked = await lockProject(root);
+  assert.ok(locked.ok, JSON.stringify(locked));
+  const compiled = await compileProject(root);
+  assert.ok(compiled.ok, JSON.stringify(compiled));
+  return {
+    ir: compiled.ir,
+    dispose: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+function phaseTriple(sample: string): readonly [string, string, string] {
+  return [
+    sample,
+    sample.replace(/L1$/u, "L2"),
+    sample.replace(/L1$/u, "L3"),
+  ] as const;
+}
+
+async function pdfTextRunBlocks(
+  pdfPage: Awaited<
+    ReturnType<Awaited<ReturnType<typeof loadPdfBytes>>["getPage"]>
+  >,
+): Promise<readonly string[]> {
+  const ops = await pdfPage.getOperatorList();
+  const blocks: string[] = [];
+  let current = "";
+  let inText = false;
+  for (let i = 0; i < ops.fnArray.length; i++) {
+    const op = ops.fnArray[i];
+    if (op === OPS.beginText) {
+      inText = true;
+      current = "";
+    } else if (op === OPS.endText) {
+      if (inText && current.length > 0) blocks.push(current);
+      inText = false;
+      current = "";
+    } else if (op === OPS.showText && inText) {
+      const glyphs = ops.argsArray[i]?.[0];
+      if (!Array.isArray(glyphs)) continue;
+      for (const glyph of glyphs) {
+        if (typeof glyph === "object" && glyph !== null && "unicode" in glyph) {
+          current += String(glyph.unicode);
+        }
+      }
+    }
+  }
+  return blocks;
+}
+
+async function assertSheetStrictChecks(
+  svg: string,
+  ir: Parameters<typeof terminalText>[1],
+  doc: Awaited<ReturnType<typeof loadPdfBytes>>,
+  sheetNumber: number,
+) {
+  const g = await openSheet(page, embedPrintableFont(svg));
+  const pdfPage = await doc.getPage(sheetNumber);
+  const pdf = await pdfText(pdfPage, doc.fontFamilies, doc.fontCaps);
+  const metrics = await pdfTextMeasurements(
+    pdfPage,
+    doc.fontFamilies,
+    doc.fontCaps,
+  );
+  const pdfGeometry = pdfGeometryTexts(g.texts, pdf);
+  expect(textBounds(g)).toEqual([]);
+  expect(legibility(g)).toEqual([]);
+  expect(legibility({ texts: pdfGeometry })).toEqual([]);
+  expect(terminalText(g, ir)).toEqual([]);
+  expect(netLabelRepetition(g, ir)).toEqual([]);
+  expect(fontMetrics(g.texts, metrics.metrics)).toEqual([]);
+  expect(plateOcclusion(g)).toEqual([]);
+  expect(conductorInterference(g)).toEqual([]);
+  expect(wirePlacement(g)).toEqual([]);
+  return pdfPage;
+}
+
+async function verifyPacketStrict(
+  tag: string,
+  names: readonly [string, string, string],
+  expectedRow1: string,
+) {
+  const fixture = await compilePump(tag, names);
+  try {
+    const packet = await renderSchematicPacket(fixture.ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "tabloid", orientation: "landscape" },
+      views: [
+        {
+          format: "schematic-view-request/0.1",
+          root: { by: "designation", value: "M1" },
+          family: "power",
+          flow: "top-to-bottom",
+        },
+      ],
+    });
+    assert.ok(packet.ok, JSON.stringify(packet));
+    const pdfBytes = await packetPdf(packet.value, `Test ${tag}`);
+    const doc = await loadPdfBytes(pdfBytes);
+    try {
+      const joinedPdfNames: string[] = [];
+      for (const sheet of packet.value.sheets) {
+        const pdfPage = await assertSheetStrictChecks(
+          sheet.svg,
+          fixture.ir,
+          doc,
+          sheet.number,
+        );
+        if (sheet.number !== 1) continue;
+        const domRows = await page.evaluate(() =>
+          Array.from(document.querySelectorAll("text.label-net"), (el) => ({
+            text: el.textContent ?? "",
+            chars: el.getNumberOfChars(),
+            whiteSpace: getComputedStyle(el).whiteSpace,
+          })).filter((row) => row.text.length > 0),
+        );
+        const row1Dom = domRows.filter((row) => row.text === expectedRow1);
+        expect(row1Dom).toHaveLength(3);
+        for (const row of row1Dom) {
+          expect(row.chars).toBe([...expectedRow1].length);
+          expect(row.whiteSpace).toBe("pre");
+        }
+        const blocks = await pdfTextRunBlocks(pdfPage);
+        for (let i = 0; i < blocks.length - 1; i++) {
+          if (blocks[i] === expectedRow1) {
+            joinedPdfNames.push(blocks[i]! + blocks[i + 1]!);
+          }
+        }
+      }
+      expect(joinedPdfNames.sort()).toEqual([...names].sort());
+      doc.assertNoExternalResources();
+    } finally {
+      await doc.loadingTask.destroy();
+    }
+  } finally {
+    await fixture.dispose();
+  }
+}
+
+it("preserves single and consecutive boundary spaces verbatim in Chromium and PDF runs (#576)", async () => {
+  const singleSpace = phaseTriple(
+    "MCC1 MAIN MOTOR POWER 480VAC BUS FEEDER PANEL MOD ALPHA 1 L1",
+  );
+  await verifyPacketStrict(
+    "spaces",
+    singleSpace,
+    "MCC1 MAIN MOTOR POWER 480VAC ",
+  );
+
+  const fourSpaces = phaseTriple(
+    "MCC1 MAIN MOTOR POWER 480VAC    BUS FEEDER PANEL MOD ALPHA 1 L1",
+  );
+  await verifyPacketStrict(
+    "four-spaces",
+    fourSpaces,
+    "MCC1 MAIN MOTOR POWER 480VAC    ",
+  );
+});
+
+it("passes strict checker predicates and verbatim PDF joins on 55- and 60-char hyphen cases (#576)", async () => {
+  await verifyPacketStrict(
+    "hyphen-55",
+    phaseTriple("MCC1-MAIN-MOTOR-POWER-480VAC-BUS-FEEDER-PANEL-MOD-01-L1"),
+    "MCC1-MAIN-MOTOR-POWER-480VAC-",
+  );
+  await verifyPacketStrict(
+    "hyphen-60",
+    phaseTriple("MCC1-MAIN-MOTOR-POWER-480VAC-BUS-FEEDER-PANEL-MOD-ALPHA-1-L1"),
+    "MCC1-MAIN-MOTOR-POWER-480VAC-",
+  );
+});
