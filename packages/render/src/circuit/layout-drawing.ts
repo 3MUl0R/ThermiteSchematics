@@ -1,4 +1,5 @@
 import { circuitCaptionPlate } from "./inline-plate.js";
+import { CircuitCaptionCollisionError } from "./caption-error.js";
 import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
@@ -155,7 +156,7 @@ function circuitWireLabel(
     plans.map((p) => p.ink),
   );
   if (!plate)
-    throw new InlineLabelCollisionError(
+    throw new CircuitCaptionCollisionError(
       `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`,
     );
   const fallback = plans[0]?.fallback;

@@ -3,7 +3,7 @@ import { circuitCaptionGeometry } from "./caption-geometry.js";
 import { circuitCaptionPlacement } from "./caption-placement.js";
 import type { CircuitLabelState } from "./layout-routes.js";
 import { labelLeaderArrow } from "../layout/wire-label-support.js";
-import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
+import { CircuitCaptionCollisionError } from "./caption-error.js";
 import { required } from "../presentation/util.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 type Label = CircuitLabelState["labels"][number];
@@ -28,7 +28,7 @@ export function plannedCircuitCaption(
   const placement = circuitCaptionPlacement(line, i, label, state),
     owner = required(state.cs[label.index], "Missing circuit caption owner");
   if (!placement)
-    throw new InlineLabelCollisionError(
+    throw new CircuitCaptionCollisionError(
       `Circuit ${state.group.id}: caption ${line} (${owner.id}) cannot be associated with its conductor without obscuring other drawing content.`,
     );
   const path = (ps: readonly { x: number; y: number }[]) =>

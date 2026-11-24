@@ -40,24 +40,19 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import { printableCaption } from "./symbols/printable-policy.js";
-import { circuitPortGroups } from "./layout/circuit-port-order.js";
 import { circuitInlineContext } from "./layout/circuit-inline-context.js";
-import { rememberCircuitDrawing } from "./layout/circuit-printed-layouts.js";
-import {
-  layoutCircuitGroup,
-  type CircuitLayoutRun,
-} from "./layout/circuit-inline.js";
+import type { CircuitLayoutRun } from "./layout/circuit-inline.js";
 import { circuitMark, type CircuitMark } from "./symbols/circuit.js";
 import { emitCircuitNode } from "./circuit/node-emission.js";
 import { verticalLaneX } from "./circuit/nodes.js";
+import { circuitGraphPins } from "./circuit/layout-input.js";
 import {
-  circuitGraphPins,
-  circuitGraphChildren,
-  circuitGraphEdge,
-  circuitGraphInput,
-} from "./circuit/layout-input.js";
-import { circuitRouteState } from "./circuit/layout-routes.js";
-import { renderCircuitLayout } from "./circuit/layout-drawing.js";
+  layoutCircuitGroupWithRetry,
+  recoveredCaptionCause,
+  recoveredCaptionError,
+  rememberRecoveredRenderError,
+  rethrowRecoveredFirstError,
+} from "./circuit/caption-retry.js";
 import { makeCircuitNodes } from "./circuit/make-nodes.js";
 import {
   circuitGroupPrintReference,
@@ -475,27 +470,38 @@ async function layoutGroup(
   ...args: Parameters<typeof layoutGroupUnchecked>
 ): Promise<CircuitDrawing> {
   args[8] ??= circuitInlineContext.getStore()?.currentRun;
+  let cause: unknown;
+  let recovered: CircuitDrawing | undefined;
   try {
-    return await layoutGroupUnchecked(...args);
+    const drawing = await layoutGroupUnchecked(...args);
+    cause = recoveredCaptionCause(drawing);
+    if (!cause || args[8]?.quality) return drawing;
+    recovered = drawing;
   } catch (error) {
     if (args[8]?.quality) throw error;
     if (error instanceof CircuitRenderError) throw error;
-    const [ir, group, fs, cs] = args;
-    const functionKeys = fs.map(
-      (f) =>
-        `${ir.devices.find((d) => d.uid === f.id.deviceUid)!.designation}/${f.id.functionKey}`,
-    );
-    const conductorKeys = cs.map((c) => c.name);
-    const message =
-      error instanceof Error ? error.message : "Circuit layout failed.";
-    throw new CircuitRenderError({
-      code: "R006",
-      root: "packet",
-      reason: "unprintable-layout",
-      message: `${message} Selected keys: functions ${functionKeys.join(", ")}; conductors ${conductorKeys.join(", ") || "none"}.`,
-      details: { groupId: group.id, functionKeys, conductorKeys },
-    });
+    cause = error;
   }
+  const [ir, group, fs, cs] = args;
+  const functionKeys = fs.map(
+    (f) =>
+      `${ir.devices.find((d) => d.uid === f.id.deviceUid)!.designation}/${f.id.functionKey}`,
+  );
+  const conductorKeys = cs.map((c) => c.name);
+  const message =
+    cause instanceof Error ? cause.message : "Circuit layout failed.";
+  const renderError = new CircuitRenderError({
+    code: "R006",
+    root: "packet",
+    reason: "unprintable-layout",
+    message: `${message} Selected keys: functions ${functionKeys.join(", ")}; conductors ${conductorKeys.join(", ") || "none"}.`,
+    details: { groupId: group.id, functionKeys, conductorKeys },
+  });
+  if (recovered) {
+    rememberRecoveredRenderError(recovered, renderError);
+    return recovered;
+  }
+  throw renderError;
 }
 
 async function layoutGroupUnchecked(
@@ -530,24 +536,16 @@ async function layoutGroupUnchecked(
     circuitNodeHooks,
   );
   const pins = circuitGraphPins(nodes, key);
-  const children = circuitGraphChildren(nodes);
-  const selfLoops = new Set<number>();
-  const edges = cs.map((c, i) =>
-    circuitGraphEdge(c, i, group, pins, selfLoops, hooks),
-  );
-  const input = circuitGraphInput(children, edges, selfLoops, vertical, cs);
-  const graph = await layoutCircuitGroup(
-    input,
+  return layoutCircuitGroupWithRetry({
+    group,
+    fs,
+    cs,
+    nodes,
+    pins,
+    vertical,
+    hooks,
     run,
-    new Map(cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32])),
-    circuitPortGroups(nodes),
-  );
-  const state = circuitRouteState(graph, nodes, cs, group, hooks);
-  return rememberCircuitDrawing(
-    renderCircuitLayout(state, fs, pins, selfLoops, vertical),
-    input,
-    run,
-  );
+  });
 }
 
 /** All geometry is derived from compiled source and closed catalog profiles; no source mutation. */
@@ -668,6 +666,115 @@ export async function paginateCircuitGroup(
   const all = physicalConductors(ir);
   const fs = selectedFunctions(ir, group),
     cs = selectConductors(all, group);
+  const units = circuitPaginationUnits(ir, fs, cs);
+  const references = circuitPartReferences(
+    ir,
+    request,
+    fs.map(fkey),
+    appearances ?? circuitFunctionAppearances(ir, [request]),
+  );
+  const widest = Number("8".repeat(String(units.length).length));
+  const draw = async (
+    items: (typeof units)[number][],
+    part: number,
+    total: number,
+  ) => {
+    const chosen = new Set(items.flatMap((u) => u.fs.map(fkey)));
+    const drawing = await layoutGroup(
+      ir,
+      group,
+      fs.filter((f) => chosen.has(fkey(f))),
+      items.flatMap((u) => u.cs),
+      all,
+      request.flow === "top-to-bottom",
+      references.appearances,
+      request.terminalLayout === "distributed",
+    );
+    drawing.label = `${original.label ? original.label + " - " : ""}Part ${part}/${total}`;
+    drawing.pagination = {
+      part,
+      total,
+      terminals: references.terminals(drawing.coverage.terminalIds, (id) =>
+        units
+          .filter((u) => !items.includes(u) && u.terminals.has(id))
+          .map(() => widest),
+      ),
+    };
+    return drawing;
+  };
+  const parts: (typeof units)[number][][] = [];
+  let current: (typeof units)[number][] = [];
+  try {
+    for (const u of units) {
+      const candidate = [...current, u];
+      const probe = await draw(candidate, widest, widest);
+      if (fits(probe)) {
+        current = candidate;
+        continue;
+      }
+      if (!current.length)
+        throw (
+          recoveredCaptionError(probe) ??
+          circuitPartFitError(group.id, original, fitBounds)
+        );
+      parts.push(current);
+      current = [u];
+      const single = await draw(current, widest, widest);
+      if (!fits(single))
+        throw (
+          recoveredCaptionError(single) ??
+          circuitPartFitError(group.id, original, fitBounds)
+        );
+    }
+    parts.push(current);
+    const drawings: CircuitDrawing[] = [];
+    for (const [i, items] of parts.entries())
+      drawings.push(await draw(items, i + 1, parts.length));
+    for (const drawing of drawings) {
+      drawing.pagination!.terminals = references.terminals(
+        drawing.coverage.terminalIds,
+        (id) =>
+          drawings
+            .filter((d) => d !== drawing && d.coverage.terminalIds.includes(id))
+            .map((d) => d.pagination!.part),
+      );
+      drawing.content = `<g data-circuit-part="${drawing.pagination!.part}" data-circuit-parts="${parts.length}">${drawing.content}</g>`;
+      if (!fits(drawing))
+        throw (
+          recoveredCaptionError(drawing) ??
+          circuitPartFitError(group.id, drawing, fitBounds)
+        );
+    }
+    const equal = (a: string[], b: string[]) =>
+      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+    if (
+      !equal(
+        drawings.flatMap((d) => d.coverage.conductorIds),
+        original.coverage.conductorIds,
+      ) ||
+      !equal(
+        [...new Set(drawings.flatMap((d) => d.coverage.functionIds))],
+        original.coverage.functionIds,
+      ) ||
+      !equal(
+        [...new Set(drawings.flatMap((d) => d.coverage.terminalIds))],
+        original.coverage.terminalIds,
+      )
+    )
+      throw new Error(
+        `Circuit ${group.id}: pagination did not conserve the original source selection.`,
+      );
+    return drawings;
+  } catch (error) {
+    rethrowRecoveredFirstError(original, error);
+  }
+}
+
+function circuitPaginationUnits(
+  ir: Readonly<ElectricalIr>,
+  fs: IrFunction[],
+  cs: PhysicalConductor[],
+) {
   // Keep selected mechanical gangs and a transformer's shared core together.
   const clusters = fs.map((f) => new Set([fkey(f)]));
   const merge = (ids: string[]) => {
@@ -686,15 +793,7 @@ export async function paginateCircuitGroup(
     if (type.symbol === "thermite:transformer")
       merge(fs.filter((f) => f.id.deviceUid === device.uid).map(fkey));
   }
-  type Unit = {
-    cs: PhysicalConductor[];
-    fs: IrFunction[];
-    terminals: Set<string>;
-  };
-  const unit = (
-    conductors: PhysicalConductor[],
-    functions: IrFunction[],
-  ): Unit => ({
+  const unit = (conductors: PhysicalConductor[], functions: IrFunction[]) => ({
     cs: conductors,
     fs: functions,
     terminals: new Set([
@@ -723,87 +822,7 @@ export async function paginateCircuitGroup(
           fs.filter((f) => cluster.has(fkey(f))),
         ),
       );
-  const references = circuitPartReferences(
-    ir,
-    request,
-    fs.map(fkey),
-    appearances ?? circuitFunctionAppearances(ir, [request]),
-  );
-  const widest = Number("8".repeat(String(units.length).length));
-  const draw = async (items: Unit[], part: number, total: number) => {
-    const chosen = new Set(items.flatMap((u) => u.fs.map(fkey)));
-    const drawing = await layoutGroup(
-      ir,
-      group,
-      fs.filter((f) => chosen.has(fkey(f))),
-      items.flatMap((u) => u.cs),
-      all,
-      request.flow === "top-to-bottom",
-      references.appearances,
-      request.terminalLayout === "distributed",
-    );
-    drawing.label = `${original.label ? original.label + " - " : ""}Part ${part}/${total}`;
-    drawing.pagination = {
-      part,
-      total,
-      terminals: references.terminals(drawing.coverage.terminalIds, (id) =>
-        units
-          .filter((u) => !items.includes(u) && u.terminals.has(id))
-          .map(() => widest),
-      ),
-    };
-    return drawing;
-  };
-  const parts: Unit[][] = [];
-  let current: Unit[] = [];
-  for (const u of units) {
-    const candidate = [...current, u];
-    if (fits(await draw(candidate, widest, widest))) {
-      current = candidate;
-      continue;
-    }
-    if (!current.length)
-      throw circuitPartFitError(group.id, original, fitBounds);
-    parts.push(current);
-    current = [u];
-    if (!fits(await draw(current, widest, widest)))
-      throw circuitPartFitError(group.id, original, fitBounds);
-  }
-  parts.push(current);
-  const drawings: CircuitDrawing[] = [];
-  for (const [i, items] of parts.entries())
-    drawings.push(await draw(items, i + 1, parts.length));
-  for (const drawing of drawings) {
-    drawing.pagination!.terminals = references.terminals(
-      drawing.coverage.terminalIds,
-      (id) =>
-        drawings
-          .filter((d) => d !== drawing && d.coverage.terminalIds.includes(id))
-          .map((d) => d.pagination!.part),
-    );
-    drawing.content = `<g data-circuit-part="${drawing.pagination!.part}" data-circuit-parts="${parts.length}">${drawing.content}</g>`;
-    if (!fits(drawing)) throw circuitPartFitError(group.id, drawing, fitBounds);
-  }
-  const equal = (a: string[], b: string[]) =>
-    JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-  if (
-    !equal(
-      drawings.flatMap((d) => d.coverage.conductorIds),
-      original.coverage.conductorIds,
-    ) ||
-    !equal(
-      [...new Set(drawings.flatMap((d) => d.coverage.functionIds))],
-      original.coverage.functionIds,
-    ) ||
-    !equal(
-      [...new Set(drawings.flatMap((d) => d.coverage.terminalIds))],
-      original.coverage.terminalIds,
-    )
-  )
-    throw new Error(
-      `Circuit ${group.id}: pagination did not conserve the original source selection.`,
-    );
-  return drawings;
+  return units;
 }
 
 function circuitPartFitError(
