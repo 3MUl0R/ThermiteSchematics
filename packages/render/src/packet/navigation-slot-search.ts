@@ -24,6 +24,11 @@ import {
   navigationPlacementInk,
   type NavigationPlacementFamily,
 } from "./navigation-placement.js";
+
+// Shared with evals/draw/peer-owner-ink.mjs (OWNER_MARGIN_MM = 0.5).
+export const OWNER_MARGIN_MM = 0.5;
+const COMFORTABLE_FOREIGN_MARGIN_MM = 2.0;
+
 function slotAxes(
   size: Rect,
   area: Rect,
@@ -32,6 +37,7 @@ function slotAxes(
   texts: readonly Rect[],
   textVerticalClearanceMm = 0,
   tieBreakAnchor?: { x: number; y: number },
+  requireOwnerNearest = false,
 ) {
   const { w, h } = size;
   const xs = [
@@ -40,6 +46,9 @@ function slotAxes(
       area.x + area.w - w,
       owner.x,
       owner.x + owner.w - w,
+      ...(requireOwnerNearest
+        ? [owner.x + owner.w / 2 - w / 2, owner.x - w, owner.x + owner.w]
+        : []),
       ...(tieBreakAnchor
         ? [
             owner.x + 1.51,
@@ -136,10 +145,21 @@ function scoreSlotCandidate(
             ? boxDistance(owner, box)
             : distance
     : 0;
+  const requireNearest = Boolean(reach?.requireOwnerNearest);
+  const margin = requireNearest ? OWNER_MARGIN_MM : -0.02;
   return {
     box,
     distance,
-    foreignCloser: hasForeign ? Number(foreignDistance + 0.02 < ownerGap) : 0,
+    foreignCloser: hasForeign
+      ? Number(foreignDistance + 1e-6 < ownerGap + margin)
+      : 0,
+    comfortableForeign:
+      requireNearest && hasForeign
+        ? Math.min(foreignDistance, ownerGap + COMFORTABLE_FOREIGN_MARGIN_MM)
+        : foreignDistance,
+    ownerAnchorOffset: requireNearest
+      ? Math.abs(box.x + box.w / 2 - (owner.x + owner.w / 2))
+      : 0,
     foreignDistance,
     tieDistance: reach?.tieBreakAnchor
       ? anchorDistance(reach.tieBreakAnchor, printed)
@@ -172,6 +192,7 @@ function slotCandidates(
     texts,
     textVerticalClearanceMm,
     reach?.tieBreakAnchor,
+    Boolean(reach?.requireOwnerNearest),
   );
   const localAxes =
     withinLocalSources && locality
@@ -210,6 +231,8 @@ function slotCandidates(
         a.foreignCloser - b.foreignCloser ||
         a.distance - b.distance ||
         a.tieDistance - b.tieDistance ||
+        b.comfortableForeign - a.comfortableForeign ||
+        a.ownerAnchorOffset - b.ownerAnchorOffset ||
         b.foreignDistance - a.foreignDistance ||
         a.box.y - b.box.y ||
         a.box.x - b.box.x,

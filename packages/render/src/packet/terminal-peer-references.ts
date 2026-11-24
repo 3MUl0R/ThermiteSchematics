@@ -211,11 +211,15 @@ function conductorCaptions(part: TerminalSheet, element: ConductiveElementId) {
   });
 }
 
-function foreignTerminalOwners(part: TerminalSheet, own: TerminalId): Rect[] {
+function foreignTerminalOwners(
+  part: TerminalSheet,
+  own: TerminalId,
+  sameFunction?: ReadonlySet<string>,
+): Rect[] {
   const ownKey = terminalIdKey(own);
   const out: Rect[] = [];
   for (const [key, landing] of part.landings)
-    if (key !== ownKey) out.push(...landing.marks);
+    if (key !== ownKey && !sameFunction?.has(key)) out.push(...landing.marks);
   return out;
 }
 
@@ -434,12 +438,23 @@ function interfaceAppearances(
       )
       .flatMap((other) => other.terminals.map(terminalIdKey)),
   );
+  const shared = new Set(
+    ir.functions
+      .filter(
+        (other) => other !== fn && other.id.deviceUid === fn.id.deviceUid,
+      )
+      .flatMap((other) => other.terminals.map(terminalIdKey)),
+  );
+  const ownKeys = new Set(
+    fn.terminals.map(terminalIdKey).filter((k) => !shared.has(k)),
+  );
   return wiring.flatMap((part) => {
     for (const terminal of fn.terminals) {
       const key = terminalIdKey(terminal);
       if (others.has(key)) continue;
       const landing = part.landings.get(key);
-      if (landing) return [{ part, terminal, landing, kind: fn.kind }];
+      if (landing)
+        return [{ part, terminal, landing, kind: fn.kind, ownKeys }];
     }
     return [];
   });
@@ -475,7 +490,11 @@ function interfacePeers(
           kind: "terminal-interface",
           identity: [origin.terminal, target.terminal],
           owner: origin.landing.owner,
-          foreignOwners: foreignTerminalOwners(origin.part, origin.terminal),
+          foreignOwners: foreignTerminalOwners(
+            origin.part,
+            origin.terminal,
+            origin.ownKeys,
+          ),
           ownerLabel: `${names.get(relay.deviceUid)} ${origin.terminal.terminalKey}`,
           value: `${names.get(relay.deviceUid)} · ${origin.kind} terminal ${origin.terminal.terminalKey} → ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,
           compact: `→ ${names.get(relay.deviceUid)} ${target.kind} terminal ${target.terminal.terminalKey} ${destinationToken(target.landing)}`,

@@ -6,6 +6,7 @@ import {
 } from "./navigation-slots.js";
 import {
   NAVIGATION_CLEARANCE_MM,
+  OWNER_MARGIN_MM,
   searchNavigationSlot,
 } from "./navigation-slot-search.js";
 import { boxDistance } from "./navigation-symbols.js";
@@ -65,10 +66,10 @@ function searchPeerSlot(
       ownerTargets: ownerTargetsFor(shape),
       gap: reachMm(shape),
       textVerticalClearanceMm: NAVIGATION_CLEARANCE_MM,
-      ...(hasForeign ? { requireOwnerNearest: true } : {}),
+      requireOwnerNearest: true,
       ...(preferAnchorDistance ? { preferAnchorDistance: true } : {}),
       ...(fallback === "terminal-label-anchor"
-        ? { requireOwnerNearest: true, maxOwnerGapMm: PEER_REACH_MM }
+        ? { maxOwnerGapMm: PEER_REACH_MM }
         : {}),
       ...(hasForeign ? { foreignOwners: entry.foreignOwners } : {}),
     }),
@@ -205,7 +206,7 @@ function withPlacedInk(
   return { ink: [...ink.ink, ...boxes], texts: [...ink.texts, ...boxes] };
 }
 
-const COMFORTABLE_FOREIGN_MARGIN_MM = 0.5;
+const COMFORTABLE_FOREIGN_MARGIN_MM = OWNER_MARGIN_MM;
 
 function entryScore(entry: PeerReference, placed: PeerNotePlacement) {
   const ownMarks = entry.owners?.length ? entry.owners : [entry.owner];

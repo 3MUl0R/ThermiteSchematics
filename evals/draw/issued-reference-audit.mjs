@@ -7,6 +7,7 @@ import { sufficient } from "./document-dependencies.mjs";
 import { extent, finding, groupBy, painted } from "./review-geometry.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 import {
+  OWNER_MARGIN_MM,
   boxGap,
   excludeCoincidentBoxes,
   inOwnerReach,
@@ -537,7 +538,7 @@ function auditMatchedOwnerProximity(
   if (!foreign.length || !lines.every((t) => t.bbox)) return;
   const box = noteRegion(lines);
   const foreignGap = Math.min(...foreign.map((owner) => boxGap(box, owner)));
-  if (foreignGap + INK_ACCURACY_MM < gap)
+  if (foreignGap + INK_ACCURACY_MM < gap + OWNER_MARGIN_MM)
     result.push(
       finding("issued-peer-reference-foreign-owner", first, {
         sheet,
@@ -545,6 +546,7 @@ function auditMatchedOwnerProximity(
         source: obligation.source,
         ownerGapMm: gap,
         foreignGapMm: foreignGap,
+        minimumMarginMm: OWNER_MARGIN_MM,
       }),
     );
 }

@@ -70,11 +70,11 @@ function conductorName(ir, row) {
     : row.name;
 }
 
-function foreignTerminalBoxes(part, ownTerminal) {
+function foreignTerminalBoxes(part, ownTerminal, sameFunction) {
   const ownKey = terminalKey(ownTerminal);
   const out = [];
   for (const [key, region] of part.terminals)
-    if (key !== ownKey) out.push(...region.boxes);
+    if (key !== ownKey && !sameFunction?.has(key)) out.push(...region.boxes);
   return out;
 }
 
@@ -257,12 +257,20 @@ function functionTerminals(ir, parts, fn) {
       )
       .flatMap((f) => f.terminals.map(terminalKey)),
   );
+  const shared = new Set(
+    ir.functions
+      .filter((f) => f !== fn && f.id.deviceUid === fn.id.deviceUid)
+      .flatMap((f) => f.terminals.map(terminalKey)),
+  );
+  const ownKeys = new Set(
+    fn.terminals.map(terminalKey).filter((k) => !shared.has(k)),
+  );
   return parts.flatMap((part) => {
     const terminal = fn.terminals.find(
       (t) =>
         !ambiguous.has(terminalKey(t)) && part.terminals.has(terminalKey(t)),
     );
-    return terminal ? [{ part, terminal, kind: fn.kind }] : [];
+    return terminal ? [{ part, terminal, kind: fn.kind, ownKeys }] : [];
   });
 }
 
@@ -295,7 +303,11 @@ function interfaceObligations(ir, parts, names) {
             source: [p.terminal, q.terminal],
             ownerLabel: `${names.get(r.deviceUid)} ${p.terminal.terminalKey}`,
             owners: p.part.terminals.get(terminalKey(p.terminal)).boxes,
-            foreignOwners: foreignTerminalBoxes(p.part, p.terminal),
+            foreignOwners: foreignTerminalBoxes(
+              p.part,
+              p.terminal,
+              p.ownKeys,
+            ),
             values: [...zones].map(
               (z) =>
                 `${names.get(r.deviceUid)} · ${p.kind} terminal ${p.terminal.terminalKey} → ${q.kind} terminal ${q.terminal.terminalKey} ${loc(q.part.sheet.number, z)}`,

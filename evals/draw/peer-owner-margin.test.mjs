@@ -1,0 +1,101 @@
+import { expect, it } from "vitest";
+import { peerReferenceFindings } from "./issued-reference-audit.mjs";
+import { OWNER_MARGIN_MM } from "./peer-owner-ink.mjs";
+import { readReportSummary } from "./report-summary.mjs";
+import { EVALS_VERSION } from "./version.mjs";
+
+it("#573 exports OWNER_MARGIN_MM = 0.5 and bumps checker protocol to 5.46 with 5.45 readability", () => {
+  expect(OWNER_MARGIN_MM).toBe(0.5);
+  expect(EVALS_VERSION).toBe("5.46");
+  const sample = { evalsVersion: "5.45", summary: { "DQ-08": { pass: 1 } } };
+  expect(readReportSummary(sample)).toEqual(sample.summary);
+});
+
+it("#573 DQ-08 flags equidistant ties and sub-margin notes while passing >= 0.5 mm margins", () => {
+  const obl = {
+    kind: "conductor-peer",
+    source: ["S2.11", "W-CTL-012", "PS1.+"],
+    ownerLabel: "S2.11",
+    owners: [{ x: 102.82, y: 95.35, w: 1.3, h: 1.3 }],
+    supports: [{ x: 72, y: 96, w: 31.47, h: 0 }],
+    foreignOwners: [{ x: 128.82, y: 95.35, w: 1.3, h: 1.3 }],
+    foreignConductors: [{ x: 145.47, y: 96, w: 20, h: 0 }],
+    values: ["W-CTL-012 · S2.11 → PS1.+ 04.B2 (also shown 05.B2)"],
+    compactValues: ["→ PS1.+ 04.B2 (also shown 05.B2)"],
+  };
+  const note = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(obl.source),
+    text: obl.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Exact D-conveyor s07 tie: 2.808 mm from both S2.11 and S2.12, 3.458 mm from both wires.
+  const tied = peerReferenceFindings(
+    7,
+    { texts: [note({ x: 97.255, y: 99.458, w: 60.17, h: 2.295 })] },
+    [obl],
+  );
+  expect(tied.map((f) => f.kind)).toContain(
+    "issued-peer-reference-foreign-owner",
+  );
+  expect(tied[0].minimumMarginMm).toBe(OWNER_MARGIN_MM);
+  // Insufficient margin (~0.20 mm): owner gap = 2.808 mm, foreign gap = 3.008 mm.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 97.74, y: 99.458, w: 30, h: 2.295 })] },
+      [obl],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+  // Sufficient margin (>= 0.50 mm): owner gap = 2.808 mm, foreign gap = 3.760 mm.
+  expect(
+    peerReferenceFindings(
+      7,
+      { texts: [note({ x: 96.32, y: 99.458, w: 30, h: 2.295 })] },
+      [obl],
+    ),
+  ).toEqual([]);
+});
+
+it("#573 DQ-08 flags a tie against a distinct foreign conductor run and passes >= 0.5 mm margin", () => {
+  const obl = {
+    kind: "conductor-peer",
+    source: ["PS1.-", "W-CTL-031", "H1.X2"],
+    ownerLabel: "PS1.-",
+    owners: [{ x: 280, y: 65.46, w: 1, h: 1 }],
+    supports: [{ x: 202.44, y: 91.09, w: 83.86, h: 0 }],
+    foreignConductors: [{ x: 251.44, y: 65.46, w: 35, h: 0 }],
+    values: ["W-CTL-031 · PS1.- → H1.X2 08.B3"],
+    compactValues: ["→ H1.X2 08.B3"],
+  };
+  const note = (bbox) => ({
+    peerReference: "conductor-peer",
+    peerSource: JSON.stringify(obl.source),
+    text: obl.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Tie: both owner and foreign conductor at y=65.46 are 4.22 mm away.
+  expect(
+    peerReferenceFindings(
+      8,
+      { texts: [note({ x: 250.41, y: 59.39, w: 37.46, h: 1.85 })] },
+      [obl],
+    ).map((f) => f.kind),
+  ).toContain("issued-peer-reference-foreign-owner");
+  // Shifting right so foreign conductor ends 4 mm left of note: owner gap 4.22 mm, foreign gap 5.81 mm (+1.59 mm).
+  const shifted = {
+    ...obl,
+    owners: [{ x: 292, y: 65.46, w: 1, h: 1 }],
+  };
+  expect(
+    peerReferenceFindings(
+      8,
+      { texts: [note({ x: 290.44, y: 59.39, w: 20, h: 1.85 })] },
+      [shifted],
+    ),
+  ).toEqual([]);
+});

@@ -1,6 +1,9 @@
 import { extent, painted } from "./review-geometry.mjs";
 import { elementKey, routeKey } from "./tranche4-source.mjs";
 
+// Shared with packages/render/src/packet/navigation-slot-search.ts (OWNER_MARGIN_MM = 0.5).
+export const OWNER_MARGIN_MM = 0.5;
+
 export function boxGap(a, b) {
   return Math.hypot(
     Math.max(0, b.x - a.x - a.w, a.x - b.x - b.w),
