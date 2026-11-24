@@ -348,7 +348,16 @@ widths; only in top-to-bottom flow when measured edge net-label ink collides
 with an adjacent conductor, non-owner device frame or terminal marking does the
 owning registered multi-port source symbol expand its horizontal port pitch by
 the minimum catalog-grid width needed for glyph ink clearance and retry once
-with all net labels still at `TAIL`.
+with all net labels still at `TAIL`. In paged top-to-bottom packets, when a
+single-line source net label would force a widened vertical source beyond the
+drawing field width, that label splits onto two lines stacked beside its
+conductor at the route source, breaking only at an existing authored separator
+(`-`, `_`, `.`, `/`, or space) closest to the middle and keeping the separator
+at the end of the first line without shrinking text, abbreviating, or changing
+net identity; labels that fit on one line stay single-line and unchanged. If no
+separator exists or the two-line form still exceeds the field width, rendering
+refuses with R006 naming the potential, the required and available width, and
+suggesting a shorter potential name or a larger sheet.
 
 A supported unselected two-terminal coil can contribute an intermediate input-path
 terminal as context only. The mark says “coil outside view”; it does not select
