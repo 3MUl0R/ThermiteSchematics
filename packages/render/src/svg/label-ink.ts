@@ -1,6 +1,9 @@
 import { labelLeaderArrow } from "../layout/wire-label-support.js";
 import { captionPlacementDiagnostic } from "../layout/caption-diagnostic.js";
-import { rootedCaptionPlan } from "./rooted-caption-plan.js";
+import {
+  isConductorToRight,
+  rootedCaptionPlan,
+} from "./rooted-caption-plan.js";
 import type {
   LayoutLabel,
   NormalizedSchematicLayout,
@@ -18,29 +21,6 @@ import {
 import { TWO_LINE_NET_LABEL_PITCH } from "../presentation/net-label-wrap.js";
 import { svgSemanticId } from "./escape.js";
 const global = (value: number) => value + OUTER_SVG_PADDING;
-
-function isConductorToRight(
-  ink: Readonly<{ left: number; right: number; top: number; bottom: number }>,
-  points: readonly { x: number; y: number }[],
-): boolean {
-  let bestDistance = Infinity;
-  let rightSide = false;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1],
-      b = points[i];
-    if (!a || !b || Math.abs(a.x - b.x) >= 1e-7) continue;
-    const segTop = Math.min(a.y, b.y),
-      segBottom = Math.max(a.y, b.y);
-    const dy = Math.max(segTop - ink.bottom, ink.top - segBottom, 0);
-    const dx = Math.max(ink.left - a.x, a.x - ink.right, 0);
-    const distance = Math.hypot(dx, dy);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      rightSide = a.x >= ink.right - 0.01;
-    }
-  }
-  return rightSide;
-}
 
 function emitTextLine(
   writer: SvgWriter,
@@ -125,6 +105,7 @@ export function emitLabelInk(
     label.ownerKind === "edge"
       ? (layout.edges.find((e) => e.id === label.ownerId)?.points ?? [])
       : [];
+  const twoLine = lines !== undefined ? { lines, capacity } : undefined;
   const original = printableLabelGeometry(
       label,
       printed,
@@ -134,7 +115,7 @@ export function emitLabelInk(
       true,
       lines,
     ),
-    plan = rootedCaptionPlan(label, original, layout, mmPerUnit);
+    plan = rootedCaptionPlan(label, original, layout, mmPerUnit, twoLine);
   if (!plan.ok)
     return {
       ok: false,

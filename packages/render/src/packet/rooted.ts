@@ -13,7 +13,7 @@ import { composeRootedWinner } from "./rooted-compose.js";
 import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
 import { rootedDiagnosticError } from "./rooted-constraint.js";
-import { wrappableVerticalSourceNetLabelIds } from "./rooted-source-labels.js";
+import { attributeVerticalSourceNetLabels } from "./rooted-source-labels.js";
 import { retryRootedPagination } from "./rooted-pagination-retry.js";
 import type {
   CompiledProjectPresentation,
@@ -29,6 +29,8 @@ import {
   searchRootedCandidates,
   rootedWinner,
   nativeWinner,
+  type RootedNetLabelOptions,
+  type RootedSearch,
 } from "./rooted-search.js";
 import { nextCircuitLayoutRun } from "../layout/circuit-inline.js";
 import { rememberPowerPlacement } from "../layout/power-placement.js";
@@ -217,7 +219,7 @@ async function selectedDrawingDrafts(
   page: PaperPage,
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
-  wrapNetLabelIds?: ReadonlySet<string>,
+  netLabelOptions?: RootedNetLabelOptions,
 ): Promise<RenderOutcome<Draft[]>> {
   const run = await searchRootedCandidates(
     ir,
@@ -226,7 +228,7 @@ async function selectedDrawingDrafts(
     page,
     mode === "compact",
     referenceOffset,
-    wrapNetLabelIds,
+    netLabelOptions,
   );
   const winner = rootedWinner(run, page),
     native = nativeWinner(run);
@@ -234,38 +236,38 @@ async function selectedDrawingDrafts(
     const profile = winner ? winner.profile : run.prepared[0]?.profile;
     const error = (!native && run.nativeErrors.get(profile)) || run.errors[0];
     if (error) {
-      const original = rootedDiagnosticError(error, run.diagnostics);
-      if (run.paginationRetry && !hasCompactFrame(page)) {
-        const recovered = await retryRootedPagination(
-          ir,
-          run.paginationRetry,
-          page,
-          referenceOffset,
-        );
-        if (recovered) {
-          rootedSearches.set(recovered.winner, run);
-          return drawingResult(recovered.winner, recovered.native, original);
-        }
+      const recovered =
+        run.paginationRetry && !hasCompactFrame(page)
+          ? await retryRootedPagination(
+              ir,
+              run.paginationRetry,
+              page,
+              referenceOffset,
+            )
+          : undefined;
+      const retry =
+        !recovered && !netLabelOptions
+          ? await retryOversizedSourceNetLabels(
+              ir,
+              request,
+              presentation,
+              run,
+              page,
+              mode,
+              referenceOffset,
+            )
+          : undefined;
+      if (retry?.drafts) return retry.drafts;
+      const diagnostic = rootedDiagnosticError(
+        error,
+        run.diagnostics,
+        retry?.sourcePotentials,
+      );
+      if (recovered) {
+        rootedSearches.set(recovered.winner, run);
+        return drawingResult(recovered.winner, recovered.native, diagnostic);
       }
-      if (!wrapNetLabelIds) {
-        const wrapIds = wrappableVerticalSourceNetLabelIds(run, page);
-        if (wrapIds !== undefined) {
-          const retried = await selectedDrawingDrafts(
-            ir,
-            request,
-            presentation,
-            page,
-            mode,
-            referenceOffset,
-            wrapIds,
-          );
-          if (retried.ok) return retried;
-        }
-      }
-      return {
-        ok: false,
-        error: original,
-      };
+      return { ok: false, error: diagnostic };
     }
     throw Error("Rooted search returned neither drawing nor error");
   }
@@ -279,6 +281,52 @@ async function selectedDrawingDrafts(
   rootedSearches.set(selected, run);
   offerControlPrint(ir, selected, native, page, referenceOffset);
   return drawingResult(selected, native);
+}
+
+async function retryOversizedSourceNetLabels(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  run: RootedSearch,
+  page: PaperPage,
+  mode: "standard" | "compact",
+  referenceOffset: number,
+): Promise<
+  | {
+      readonly drafts?: RenderOutcome<Draft[]>;
+      readonly sourcePotentials?: readonly string[];
+    }
+  | undefined
+> {
+  const attribution = await attributeVerticalSourceNetLabels(
+    ir,
+    request,
+    presentation,
+    run,
+    page,
+    mode,
+    referenceOffset,
+  );
+  if (attribution === undefined) return undefined;
+  if (attribution.wrappableLabelIds.size > 0) {
+    const retried = await selectedDrawingDrafts(
+      ir,
+      request,
+      presentation,
+      page,
+      mode,
+      referenceOffset,
+      { wrapNetLabelIds: attribution.wrappableLabelIds },
+    );
+    if (retried.ok) return { drafts: retried };
+    if (
+      retried.error.code === "R004" &&
+      retried.error.details?.reason === "ambiguous-conductor-caption"
+    ) {
+      return undefined;
+    }
+  }
+  return { sourcePotentials: attribution.potentialNames };
 }
 
 function offerControlPrint(

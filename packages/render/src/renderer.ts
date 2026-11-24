@@ -13,7 +13,10 @@ import type { QueryEngine } from "@thermite/query";
 
 import { deepFreeze } from "./internal.js";
 import { buildPresentationGraph } from "./presentation.js";
-import { wrapPresentationNetLabels } from "./presentation/net-label-wrap.js";
+import {
+  omitPresentationNetLabels,
+  wrapPresentationNetLabels,
+} from "./presentation/net-label-wrap.js";
 import {
   selectCableConductorSubgraph,
   selectLoadsSubgraph,
@@ -50,6 +53,7 @@ export interface SchematicRendererDependencies {
   readonly spacingProfile?: "compact" | "dense";
   readonly offViewPlacements?: Readonly<Record<string, number>>;
   readonly wrapNetLabelIds?: ReadonlySet<string>;
+  readonly omitNetLabelIds?: ReadonlySet<string>;
 }
 
 function detachedFrozen<Value>(value: Value): Value {
@@ -76,7 +80,14 @@ function wrapNetLabels(
   graph: import("./types.js").PresentationGraph,
   dependencies: Readonly<SchematicRendererDependencies>,
 ) {
-  return wrapPresentationNetLabels(graph, dependencies.wrapNetLabelIds);
+  const withoutOmitted = omitPresentationNetLabels(
+    graph,
+    dependencies.omitNetLabelIds,
+  );
+  return wrapPresentationNetLabels(
+    withoutOmitted,
+    dependencies.wrapNetLabelIds,
+  );
 }
 
 export async function prepareSchematicDrawing(

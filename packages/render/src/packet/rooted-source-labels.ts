@@ -1,3 +1,7 @@
+import type {
+  CompiledProjectPresentation,
+  ElectricalIr,
+} from "@thermite/compiler";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import {
   OUTER_SVG_PADDING,
@@ -16,22 +20,37 @@ import type {
   LayoutLabel,
   LayoutNode,
   PresentationLabel,
+  SchematicViewRequest,
   SymbolPresentationNode,
 } from "../types.js";
-import { protectedDrawingIntervals } from "./rooted-geometry.js";
-import type { Interval } from "./rooted-cuts.js";
-import { mergedIntervals } from "./safe-cuts.js";
 import { bankBounds, continuationBanks } from "./continuation-bank.js";
-import { rootedSpace } from "./rooted-build.js";
-import type { RootedSearch } from "./rooted-search.js";
-import type { PaperPage } from "./types.js";
+import {
+  ContinuationLabelError,
+  continuationLabelSvg,
+} from "./continuation-label.js";
+import { resolveRootedContinuations } from "./continuation-resolve.js";
+import { PacketDraftError } from "./errors.js";
+import { hasCompactFrame } from "./frame-profile.js";
+import { rootedPageBudget } from "./rooted-bound.js";
+import {
+  materializeRootedCandidate,
+  rootedSpace,
+  type RootedCandidate,
+} from "./rooted-build.js";
+import { protectedDrawingIntervals } from "./rooted-geometry.js";
+import { retryRootedPagination } from "./rooted-pagination-retry.js";
+import {
+  nativeWinner,
+  rootedWinner,
+  searchRootedCandidates,
+  type RootedSearch,
+} from "./rooted-search.js";
+import { mergedIntervals } from "./safe-cuts.js";
+import type { Draft, PaperPage } from "./types.js";
 
-const COMPACT_HEADER_MARGIN = 8;
-
-export interface OversizedVerticalSourceNetLabels {
+export interface VerticalSourceLabelAttribution {
   readonly potentialNames: readonly string[];
   readonly wrappableLabelIds: ReadonlySet<string>;
-  readonly fitsWithTwoLine: boolean;
 }
 
 interface SourceNetLabelEntry {
@@ -45,57 +64,13 @@ interface SourceInSpan {
   readonly spec: VerticalSourcePortSpec;
   readonly southCount: number;
   readonly box: LayoutNode;
-  readonly deviceBox: LayoutNode | undefined;
   readonly entries: readonly SourceNetLabelEntry[];
 }
 
-function sourceNodeWidthForSymbol(
-  node: SymbolPresentationNode,
-  symbolWidth: number,
-): number {
-  if (node.contentBox === undefined) {
-    const headerWidth = Math.max(
-      0,
-      ...node.labels
-        .filter(
-          (label) =>
-            label.ownerKind === "symbol" &&
-            (label.role === "function" || label.role === "aggregate"),
-        )
-        .map((label) => label.width),
-    );
-    return Number(
-      (Math.max(symbolWidth, headerWidth) + COMPACT_HEADER_MARGIN * 2).toFixed(
-        3,
-      ),
-    );
-  }
-  return Number(
-    Math.max(0, node.width - (node.symbolSize.width - symbolWidth)).toFixed(3),
-  );
-}
-
-function symbolWidthForLabels(
-  source: SourceInSpan,
-  inkWidthOf: (label: PresentationLabel) => number,
-): number {
-  const baseWidth = source.spec.widthForPitch(source.spec.defaultPitch);
-  if (source.node.symbolSize.width <= baseWidth) {
-    return source.node.symbolSize.width;
-  }
-  let maxInk = 0;
-  for (const entry of source.entries) {
-    if (entry.portIndex >= source.southCount - 1) continue;
-    maxInk = Math.max(maxInk, inkWidthOf(entry.netLabel));
-  }
-  const pitch = Math.max(
-    source.spec.defaultPitch,
-    Math.ceil((maxInk + MIN_PITCH_CLEARANCE) / 2) * 2,
-  );
-  return Math.max(
-    baseWidth,
-    Math.min(source.node.symbolSize.width, source.spec.widthForPitch(pitch)),
-  );
+interface CandidateSourceNetLabels {
+  readonly labelIds: ReadonlySet<string>;
+  readonly potentialNames: readonly string[];
+  readonly wrappableLabelIds: ReadonlySet<string>;
 }
 
 function sourceEntriesForNode(
@@ -122,194 +97,6 @@ function sourceEntriesForNode(
   return { southCount: southPorts.length, entries };
 }
 
-function fixedSpanUnitsInside(
-  p: PreparedSchematicDrawing,
-  enclosing: Interval,
-  sources: readonly SourceInSpan[],
-): number {
-  const excludedNodeIds = new Set<string>();
-  const excludedPortIds = new Set<string>();
-  const excludedLabelIds = new Set<string>();
-  for (const source of sources) {
-    excludedNodeIds.add(source.node.id);
-    excludedNodeIds.add(source.node.deviceGroupId);
-    for (const port of source.node.ports) excludedPortIds.add(port.id);
-    for (const entry of source.entries) excludedLabelIds.add(entry.netLabel.id);
-  }
-  const excludedEdgeIds = new Set(
-    p.graph.edges
-      .filter((edge) =>
-        excludedPortIds.has(originatingSymbolPortId(p.graph, edge)),
-      )
-      .map((edge) => edge.id),
-  );
-  const fixed: Interval[] = [];
-  const inside = (start: number, end: number) =>
-    start >= enclosing.start - 0.001 && end <= enclosing.end + 0.001;
-  for (const node of p.layout.nodes) {
-    if (node.kind === "location" || excludedNodeIds.has(node.id)) continue;
-    const start = node.x + OUTER_SVG_PADDING - 12;
-    const end = node.x + node.width + OUTER_SVG_PADDING + 12;
-    if (inside(start, end)) fixed.push({ start, end });
-  }
-  for (const label of p.layout.labels) {
-    if (
-      excludedLabelIds.has(label.id) ||
-      (label.ownerKind === "port" && excludedPortIds.has(label.ownerId))
-    ) {
-      continue;
-    }
-    const start = label.x + OUTER_SVG_PADDING - 12;
-    const end = label.x + label.width + OUTER_SVG_PADDING + 12;
-    if (inside(start, end)) fixed.push({ start, end });
-  }
-  for (const edge of p.layout.edges) {
-    if (excludedEdgeIds.has(edge.id)) continue;
-    for (const point of edge.points) {
-      const start = point.x + OUTER_SVG_PADDING - 6;
-      const end = point.x + OUTER_SVG_PADDING + 6;
-      if (inside(start, end)) fixed.push({ start, end });
-    }
-  }
-  return Math.max(0, ...mergedIntervals(fixed).map((i) => i.end - i.start));
-}
-
-function labelOverhangShrink(
-  container: LayoutNode,
-  entries: readonly SourceNetLabelEntry[],
-  widthOf: (label: PresentationLabel) => number,
-): number {
-  let curLeft = 0;
-  let simLeft = 0;
-  let curRight = 0;
-  let simRight = 0;
-  for (const entry of entries) {
-    if (entry.box === undefined) continue;
-    const shrink = Math.max(0, entry.box.width - widthOf(entry.netLabel));
-    const left = Math.max(0, container.x - entry.box.x);
-    const right = Math.max(
-      0,
-      entry.box.x + entry.box.width - (container.x + container.width),
-    );
-    curLeft = Math.max(curLeft, left);
-    simLeft = Math.max(simLeft, Math.max(0, left - shrink));
-    curRight = Math.max(curRight, right);
-    simRight = Math.max(simRight, Math.max(0, right - shrink));
-  }
-  return curLeft - simLeft + (curRight - simRight);
-}
-
-function counterfactualSpanUnits(
-  enclosing: Interval,
-  fixedUnits: number,
-  sources: readonly SourceInSpan[],
-  symbolWidthOf: (source: SourceInSpan) => number,
-  labelWidthOf: (label: PresentationLabel) => number,
-): number {
-  let totalShrink = 0;
-  let minRequired = fixedUnits;
-  for (const source of sources) {
-    const simNodeWidth = sourceNodeWidthForSymbol(
-      source.node,
-      symbolWidthOf(source),
-    );
-    totalShrink += Math.max(0, source.box.width - simNodeWidth);
-    totalShrink += labelOverhangShrink(
-      source.deviceBox ?? source.box,
-      source.entries,
-      labelWidthOf,
-    );
-    minRequired = Math.max(minRequired, simNodeWidth + 24);
-    for (const entry of source.entries) {
-      minRequired = Math.max(minRequired, labelWidthOf(entry.netLabel) + 24);
-    }
-  }
-  return Math.max(minRequired, enclosing.end - enclosing.start - totalShrink);
-}
-
-function collectBlockingLabels(
-  sources: readonly SourceInSpan[],
-  excessUnits: number,
-  availableWidthMm: number,
-  scale: number,
-) {
-  const potentialNames = new Set<string>();
-  const wrappedById = new Map<string, PresentationLabel>();
-  for (const source of sources) {
-    const maxSymbolWidth = source.node.symbolSize.width - excessUnits;
-    const forbidden = sourceTerminalCaptions(source.node);
-    for (const entry of source.entries) {
-      const inkWidth = labelInkWidth(entry.netLabel);
-      const pitch = Math.ceil((inkWidth + MIN_PITCH_CLEARANCE) / 2) * 2;
-      const forcesWidth =
-        entry.portIndex < source.southCount - 1 &&
-        source.spec.widthForPitch(pitch) > maxSymbolWidth + 0.001;
-      const boxOverflows =
-        entry.box !== undefined &&
-        (entry.box.width + 24) * scale > availableWidthMm + 0.001;
-      if (!forcesWidth && !boxOverflows) continue;
-      potentialNames.add(entry.netLabel.text);
-      if (entry.netLabel.lines !== undefined) continue;
-      const lines = splitTwoLineNetLabel(
-        entry.netLabel.printableText ?? entry.netLabel.text,
-        forbidden,
-      );
-      if (lines === undefined) continue;
-      const candidate = twoLineNetLabel(entry.netLabel, lines);
-      if (labelInkWidth(candidate) < inkWidth) {
-        wrappedById.set(entry.netLabel.id, candidate);
-      }
-    }
-  }
-  return { potentialNames, wrappedById };
-}
-
-function evaluateOverflowingSpan(
-  p: PreparedSchematicDrawing,
-  enclosing: Interval,
-  sources: readonly SourceInSpan[],
-  availableWidthMm: number,
-  scale: number,
-) {
-  const fixedUnits = fixedSpanUnitsInside(p, enclosing, sources);
-  const baseSpanUnits = counterfactualSpanUnits(
-    enclosing,
-    fixedUnits,
-    sources,
-    (source) => source.spec.widthForPitch(source.spec.defaultPitch),
-    () => 0,
-  );
-  if (baseSpanUnits * scale > availableWidthMm + 0.001) return undefined;
-
-  const spanMm = (enclosing.end - enclosing.start) * scale;
-  const { potentialNames, wrappedById } = collectBlockingLabels(
-    sources,
-    (spanMm - availableWidthMm) / scale,
-    availableWidthMm,
-    scale,
-  );
-  if (potentialNames.size === 0) return undefined;
-
-  const twoLineSpanUnits = counterfactualSpanUnits(
-    enclosing,
-    fixedUnits,
-    sources,
-    (source) =>
-      symbolWidthForLabels(source, (label) =>
-        labelInkWidth(wrappedById.get(label.id) ?? label),
-      ),
-    (label) => (wrappedById.get(label.id) ?? label).width,
-  );
-  const fitsWithTwoLine =
-    wrappedById.size > 0 &&
-    twoLineSpanUnits * scale <= availableWidthMm + 0.001;
-  return {
-    potentialNames: [...potentialNames],
-    wrappableLabelIds: fitsWithTwoLine ? [...wrappedById.keys()] : [],
-    fitsWithTwoLine,
-  };
-}
-
 function verticalSourcesInDrawing(p: PreparedSchematicDrawing): SourceInSpan[] {
   const layoutNodes = new Map(p.layout.nodes.map((node) => [node.id, node]));
   const layoutLabels = new Map(
@@ -323,45 +110,68 @@ function verticalSourcesInDrawing(p: PreparedSchematicDrawing): SourceInSpan[] {
     const box = layoutNodes.get(node.id);
     if (spec === undefined || box === undefined) continue;
     const { southCount, entries } = sourceEntriesForNode(p, node, layoutLabels);
-    sources.push({
-      node,
-      spec,
-      southCount,
-      box,
-      deviceBox: layoutNodes.get(node.deviceGroupId),
-      entries,
-    });
+    sources.push({ node, spec, southCount, box, entries });
   }
   return sources;
 }
 
-/**
- * Identify TTB vertical source net labels when single-line source-label
- * widening is the binding cause of a protected-width overflow. Returns the
- * authored potential names for actionable R006 diagnostics and whether wrapping
- * the selected labels onto two lines makes every overflowing span fit.
- */
-export function oversizedVerticalSourceNetLabels(
+function collectBlockingLabels(
+  sources: readonly SourceInSpan[],
+  excessUnits: number,
+  availableWidthMm: number,
+  scale: number,
+) {
+  const labelIds = new Set<string>();
+  const potentialNames = new Set<string>();
+  const wrappableLabelIds = new Set<string>();
+  for (const source of sources) {
+    const baseWidth = source.spec.widthForPitch(source.spec.defaultPitch);
+    const maxSymbolWidth = source.node.symbolSize.width - excessUnits;
+    const forbidden = sourceTerminalCaptions(source.node);
+    for (const entry of source.entries) {
+      const inkWidth = labelInkWidth(entry.netLabel);
+      const pitch = Math.ceil((inkWidth + MIN_PITCH_CLEARANCE) / 2) * 2;
+      const forcesWidth =
+        entry.portIndex < source.southCount - 1 &&
+        source.node.symbolSize.width > baseWidth + 0.001 &&
+        pitch > source.spec.defaultPitch &&
+        source.spec.widthForPitch(pitch) > maxSymbolWidth + 0.001;
+      const boxOverflows =
+        entry.box !== undefined &&
+        (entry.box.width + 24) * scale > availableWidthMm + 0.001;
+      if (!forcesWidth && !boxOverflows) continue;
+      labelIds.add(entry.netLabel.id);
+      potentialNames.add(entry.netLabel.text);
+      if (entry.netLabel.lines !== undefined) continue;
+      const lines = splitTwoLineNetLabel(
+        entry.netLabel.printableText ?? entry.netLabel.text,
+        forbidden,
+      );
+      if (lines === undefined) continue;
+      const candidate = twoLineNetLabel(entry.netLabel, lines);
+      if (labelInkWidth(candidate) < inkWidth) {
+        wrappableLabelIds.add(entry.netLabel.id);
+      }
+    }
+  }
+  return { labelIds, potentialNames, wrappableLabelIds };
+}
+
+function candidatesInPrepared(
   p: PreparedSchematicDrawing,
   availableWidthMm: number,
   scale: number,
-  availableHeightMm?: number,
-): OversizedVerticalSourceNetLabels | undefined {
-  if (p.view.flow !== "top-to-bottom") return undefined;
-  const { protectedX, protectedY } = protectedDrawingIntervals(
-    p.layout,
-    OUTER_SVG_PADDING,
-  );
+): CandidateSourceNetLabels | undefined {
+  const { protectedX } = protectedDrawingIntervals(p.layout, OUTER_SVG_PADDING);
   const overflowing = mergedIntervals(protectedX).filter(
     (interval) =>
       (interval.end - interval.start) * scale > availableWidthMm + 0.001,
   );
   if (overflowing.length === 0) return undefined;
-
   const allSources = verticalSourcesInDrawing(p);
+  const labelIds = new Set<string>();
   const potentialNames = new Set<string>();
   const wrappableLabelIds = new Set<string>();
-  let fitsWithTwoLine = true;
   for (const enclosing of overflowing) {
     const inSpan = allSources.filter((source) => {
       const left = source.box.x + OUTER_SVG_PADDING;
@@ -369,39 +179,30 @@ export function oversizedVerticalSourceNetLabels(
       return enclosing.start <= left && enclosing.end >= right;
     });
     if (inSpan.length === 0) return undefined;
-    const evaluated = evaluateOverflowingSpan(
-      p,
-      enclosing,
+    const spanMm = (enclosing.end - enclosing.start) * scale;
+    const found = collectBlockingLabels(
       inSpan,
+      (spanMm - availableWidthMm) / scale,
       availableWidthMm,
       scale,
     );
-    if (evaluated === undefined) return undefined;
-    for (const name of evaluated.potentialNames) potentialNames.add(name);
-    if (!evaluated.fitsWithTwoLine) fitsWithTwoLine = false;
-    for (const id of evaluated.wrappableLabelIds) wrappableLabelIds.add(id);
+    if (found.labelIds.size === 0) return undefined;
+    for (const id of found.labelIds) labelIds.add(id);
+    for (const name of found.potentialNames) potentialNames.add(name);
+    for (const id of found.wrappableLabelIds) wrappableLabelIds.add(id);
   }
-  if (availableHeightMm !== undefined) {
-    const maxHeightMm = Math.max(
-      0,
-      ...mergedIntervals(protectedY).map((i) => (i.end - i.start) * scale),
-    );
-    if (maxHeightMm > availableHeightMm + 0.001) fitsWithTwoLine = false;
-  }
-  return potentialNames.size > 0
-    ? {
-        potentialNames: [...potentialNames],
-        wrappableLabelIds: fitsWithTwoLine ? wrappableLabelIds : new Set(),
-        fitsWithTwoLine,
-      }
+  return labelIds.size > 0
+    ? { labelIds, potentialNames: [...potentialNames], wrappableLabelIds }
     : undefined;
 }
 
-export function wrappableVerticalSourceNetLabelIds(
+function candidateVerticalSourceNetLabels(
   run: RootedSearch,
   page: PaperPage,
-): ReadonlySet<string> | undefined {
-  const ids = new Set<string>();
+): CandidateSourceNetLabels | undefined {
+  const labelIds = new Set<string>();
+  const potentialNames = new Set<string>();
+  const wrappableLabelIds = new Set<string>();
   for (const { p, profile } of run.prepared) {
     if (p.view.flow !== "top-to-bottom") continue;
     const { b, scale } = rootedSpace(p, page, !!profile);
@@ -416,18 +217,146 @@ export function wrappableVerticalSourceNetLabelIds(
       b.w,
       ...banks.map((bank) => bankBounds(b, bank).w),
     );
-    const maxAvailableHeight = Math.max(
-      b.h,
-      ...banks.map((bank) => bankBounds(b, bank).h),
-    );
-    const found = oversizedVerticalSourceNetLabels(
-      p,
-      maxAvailableWidth,
-      scale,
-      maxAvailableHeight,
-    );
-    if (found === undefined || !found.fitsWithTwoLine) continue;
-    for (const id of found.wrappableLabelIds) ids.add(id);
+    const found = candidatesInPrepared(p, maxAvailableWidth, scale);
+    if (found === undefined) continue;
+    for (const id of found.labelIds) labelIds.add(id);
+    for (const name of found.potentialNames) potentialNames.add(name);
+    for (const id of found.wrappableLabelIds) wrappableLabelIds.add(id);
   }
-  return ids.size > 0 ? ids : undefined;
+  return labelIds.size > 0
+    ? { labelIds, potentialNames: [...potentialNames], wrappableLabelIds }
+    : undefined;
+}
+
+function printableDraftsFit(
+  drafts: readonly Draft[],
+  native: RootedCandidate,
+  page: PaperPage,
+): boolean {
+  const probe = structuredClone([...drafts]);
+  const first = probe[0];
+  if (!first) return false;
+  first.rootedFit = {
+    basePages: native.drafts.length,
+    actualPages: probe.length,
+    context: "counterfactual source-label check",
+  };
+  const { fits, limit } = rootedPageBudget(probe);
+  if (fits.length > 0 && probe.length > limit) return false;
+  try {
+    resolveRootedContinuations(probe, page);
+    for (const draft of probe)
+      for (const link of draft.links) continuationLabelSvg(link);
+  } catch (error) {
+    if (
+      error instanceof PacketDraftError ||
+      error instanceof ContinuationLabelError
+    ) {
+      return false;
+    }
+    throw error;
+  }
+  return true;
+}
+
+async function counterfactualRootedFits(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  page: PaperPage,
+  mode: "standard" | "compact",
+  referenceOffset: number,
+  omitNetLabelIds: ReadonlySet<string>,
+): Promise<boolean> {
+  const probePage = hasCompactFrame(page) ? { ...page } : page;
+  const run = await searchRootedCandidates(
+    ir,
+    request,
+    presentation,
+    probePage,
+    mode === "compact",
+    referenceOffset,
+    { omitNetLabelIds },
+  );
+  const winner = rootedWinner(run, probePage);
+  const native = nativeWinner(run);
+  if (winner && native) {
+    if (winner.printableDrafts) return true;
+    const materialized = materializeRootedCandidate(ir, winner, probePage);
+    return (
+      materialized.ok &&
+      printableDraftsFit(materialized.value, native, probePage)
+    );
+  }
+  if (run.paginationRetry) {
+    const recovered = await retryRootedPagination(
+      ir,
+      run.paginationRetry,
+      probePage,
+      referenceOffset,
+    );
+    if (recovered) {
+      return printableDraftsFit(
+        recovered.winner.drafts,
+        recovered.native,
+        probePage,
+      );
+    }
+  }
+  return false;
+}
+
+/**
+ * Attribute a failed TTB rooted layout to oversized vertical source net labels
+ * only when a real counterfactual layout/pagination with those labels omitted
+ * actually fits the requested page.
+ */
+export async function attributeVerticalSourceNetLabels(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  run: RootedSearch,
+  page: PaperPage,
+  mode: "standard" | "compact" = "standard",
+  referenceOffset = 0,
+): Promise<VerticalSourceLabelAttribution | undefined> {
+  const candidates = candidateVerticalSourceNetLabels(run, page);
+  if (candidates === undefined) return undefined;
+  const fitsWithoutLabels = await counterfactualRootedFits(
+    ir,
+    request,
+    presentation,
+    page,
+    mode,
+    referenceOffset,
+    candidates.labelIds,
+  );
+  if (!fitsWithoutLabels) return undefined;
+  return {
+    potentialNames: candidates.potentialNames,
+    wrappableLabelIds: candidates.wrappableLabelIds,
+  };
+}
+
+export async function wrappableVerticalSourceNetLabelIds(
+  ir: Readonly<ElectricalIr>,
+  request: SchematicViewRequest,
+  presentation: CompiledProjectPresentation | undefined,
+  run: RootedSearch,
+  page: PaperPage,
+  mode: "standard" | "compact" = "standard",
+  referenceOffset = 0,
+): Promise<ReadonlySet<string> | undefined> {
+  const attributed = await attributeVerticalSourceNetLabels(
+    ir,
+    request,
+    presentation,
+    run,
+    page,
+    mode,
+    referenceOffset,
+  );
+  return attributed && attributed.wrappableLabelIds.size > 0
+    ? attributed.wrappableLabelIds
+    : undefined;
 }

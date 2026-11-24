@@ -267,3 +267,60 @@ it("passes strict checker predicates and verbatim PDF joins on 55- and 60-char h
     "MCC1-MAIN-MOTOR-POWER-480VAC-",
   );
 });
+
+it.each([
+  [
+    "consec-space-std",
+    `${"W".repeat(28)}   ${"W".repeat(27)}L1`,
+    "standard" as const,
+  ],
+  [
+    "consec-space-cmp",
+    `${"W".repeat(28)}   ${"W".repeat(27)}L1`,
+    "compact" as const,
+  ],
+  ["longW-0-std", `${"W".repeat(22)}-${"W".repeat(23)}L1`, "standard" as const],
+] as const)(
+  "never issues a DQ-17 route-source violation on %s (#576)",
+  async (tag, sample, layout) => {
+    const fixture = await compilePump(tag, phaseTriple(sample));
+    try {
+      const packet = await renderSchematicPacket(fixture.ir, {
+        format: "schematic-packet-request/0.1",
+        layout,
+        page: { size: "tabloid", orientation: "landscape" },
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "M1" },
+            family: "power",
+            flow: "top-to-bottom",
+          },
+        ],
+      });
+      if (!packet.ok) {
+        expect(packet.error.code).toBe("R006");
+        expect(packet.error.message).not.toMatch(
+          /potential name|source net label/iu,
+        );
+        return;
+      }
+      const pdfBytes = await packetPdf(packet.value, `Test ${tag}`);
+      const doc = await loadPdfBytes(pdfBytes);
+      try {
+        for (const sheet of packet.value.sheets) {
+          await assertSheetStrictChecks(
+            sheet.svg,
+            fixture.ir,
+            doc,
+            sheet.number,
+          );
+        }
+      } finally {
+        await doc.loadingTask.destroy();
+      }
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);

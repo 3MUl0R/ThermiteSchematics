@@ -453,7 +453,15 @@ it("refuses 36-W -L1/L2/L3 instead of emitting a short terminal-duplicate second
       page.value,
       false,
     );
-    expect(wrappableVerticalSourceNetLabelIds(run, page.value)).toBeUndefined();
+    expect(
+      await wrappableVerticalSourceNetLabelIds(
+        fixture.ir,
+        view,
+        undefined,
+        run,
+        page.value,
+      ),
+    ).toBeUndefined();
     const packet = await renderSchematicPacket(fixture.ir, {
       format: "schematic-packet-request/0.1",
       page: { size: "tabloid", orientation: "landscape" },
@@ -493,7 +501,15 @@ it("preserves original R006 verbatim and selects zero wrap IDs when 180-W locati
       page.value,
       false,
     );
-    expect(wrappableVerticalSourceNetLabelIds(run, page.value)).toBeUndefined();
+    expect(
+      await wrappableVerticalSourceNetLabelIds(
+        fixture.ir,
+        view,
+        undefined,
+        run,
+        page.value,
+      ),
+    ).toBeUndefined();
     const winner = rootedWinner(run, page.value);
     const native = nativeWinner(run);
     const rawError =
@@ -588,3 +604,139 @@ it("enforces two-line box clearance against non-owner frames in validate-output 
     await fixture.dispose();
   }
 });
+
+it("keeps base refusal bytes and zero wrap IDs for 152-W borderline location width (#576)", async () => {
+  const names = ["MCC1-480V-L1", "MCC1-480V-L2", "MCC1-480V-L3"] as const;
+  const fixture = await compilePumpVariant("location152", names, {
+    renameLocation: ["PUMP", "W".repeat(152)],
+  });
+  const view = {
+    format: "schematic-view-request/0.1" as const,
+    root: { by: "designation" as const, value: "M1" },
+    family: "power" as const,
+    flow: "top-to-bottom" as const,
+  };
+  try {
+    const page = normalizePaperPage({
+      size: "tabloid",
+      orientation: "landscape",
+    });
+    assert.ok(page.ok);
+    const run = await searchRootedCandidates(
+      fixture.ir,
+      view,
+      undefined,
+      page.value,
+      false,
+    );
+    expect(
+      await wrappableVerticalSourceNetLabelIds(
+        fixture.ir,
+        view,
+        undefined,
+        run,
+        page.value,
+      ),
+    ).toBeUndefined();
+    const winner = rootedWinner(run, page.value);
+    const native = nativeWinner(run);
+    const rawError =
+      (!native &&
+        run.nativeErrors.get(winner?.profile ?? run.prepared[0]?.profile)) ||
+      run.errors[0];
+    assert.ok(rawError);
+    const expected = rootedDiagnosticError(rawError, run.diagnostics);
+    const packet = await renderSchematicPacket(fixture.ir, {
+      format: "schematic-packet-request/0.1",
+      page: { size: "tabloid", orientation: "landscape" },
+      views: [view],
+    });
+    expect(packet.ok).toBe(false);
+    if (packet.ok) return;
+    expect(packet.error.code).toBe("R006");
+    expect(packet.error.message).toBe(
+      `Packet view[0] "M1 / power": ${expected.message}`,
+    );
+    expect(packet.error.message).toContain(
+      "protected width 383.21 mm exceeds 375.80 mm by 7.41 mm. Use a larger sheet or landscape.",
+    );
+    expect(packet.error.message).not.toMatch(
+      /potential name|source net label/iu,
+    );
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+it.each([
+  [
+    "consecutive-space-break-standard",
+    `${"W".repeat(28)}   ${"W".repeat(27)}L1`,
+    "standard" as const,
+    "protected width 538.70 mm exceeds 375.80 mm by 162.90 mm. Use a larger sheet or landscape.",
+  ],
+  [
+    "consecutive-space-break-compact",
+    `${"W".repeat(28)}   ${"W".repeat(27)}L1`,
+    "compact" as const,
+    "protected width 538.70 mm exceeds 375.80 mm by 162.90 mm. Use a larger sheet or landscape.",
+  ],
+  [
+    "longW-0-standard",
+    `${"W".repeat(22)}-${"W".repeat(23)}L1`,
+    "standard" as const,
+    "protected width 454.70 mm exceeds 375.80 mm by 78.90 mm. Use a larger sheet or landscape.",
+  ],
+] as const)(
+  "falls back to base refusal when wrapped two-line label cannot sit at route source for %s (#576)",
+  async (tag, sample, layout, expectedFragment) => {
+    const names = phaseTriple(sample);
+    const fixture = await compilePumpVariant(tag, names);
+    const view = {
+      format: "schematic-view-request/0.1" as const,
+      root: { by: "designation" as const, value: "M1" },
+      family: "power" as const,
+      flow: "top-to-bottom" as const,
+    };
+    try {
+      const page = normalizePaperPage({
+        size: "tabloid",
+        orientation: "landscape",
+      });
+      assert.ok(page.ok);
+      const run = await searchRootedCandidates(
+        fixture.ir,
+        view,
+        undefined,
+        page.value,
+        layout === "compact",
+      );
+      const winner = rootedWinner(run, page.value);
+      const native = nativeWinner(run);
+      const rawError =
+        (!native &&
+          run.nativeErrors.get(winner?.profile ?? run.prepared[0]?.profile)) ||
+        run.errors[0];
+      assert.ok(rawError);
+      const expected = rootedDiagnosticError(rawError, run.diagnostics);
+      const packet = await renderSchematicPacket(fixture.ir, {
+        format: "schematic-packet-request/0.1",
+        layout,
+        page: { size: "tabloid", orientation: "landscape" },
+        views: [view],
+      });
+      expect(packet.ok).toBe(false);
+      if (packet.ok) return;
+      expect(packet.error.code).toBe("R006");
+      expect(packet.error.message).toBe(
+        `Packet view[0] "M1 / power": ${expected.message}`,
+      );
+      expect(packet.error.message).toContain(expectedFragment);
+      expect(packet.error.message).not.toMatch(
+        /potential name|source net label/iu,
+      );
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);

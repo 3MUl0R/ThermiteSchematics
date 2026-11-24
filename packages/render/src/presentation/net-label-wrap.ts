@@ -197,3 +197,20 @@ export function wrapPresentationNetLabels(
   });
   return changed ? { ...graph, edges } : graph;
 }
+
+export function omitPresentationNetLabels(
+  graph: Readonly<PresentationGraph>,
+  labelIds?: ReadonlySet<string>,
+): PresentationGraph {
+  if (!labelIds?.size) return graph;
+  let changed = false;
+  const edges = graph.edges.map((edge) => {
+    if (edge.netLabel === undefined || !labelIds.has(edge.netLabel.id)) {
+      return edge;
+    }
+    changed = true;
+    const { netLabel: _omitted, ...rest } = edge;
+    return rest;
+  });
+  return changed ? { ...graph, edges } : graph;
+}

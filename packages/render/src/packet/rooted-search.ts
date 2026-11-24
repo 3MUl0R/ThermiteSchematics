@@ -42,6 +42,10 @@ import { withCircuitLayoutCache } from "../layout/circuit-inline-context.js";
 import type { RootedPaginationRetry } from "./rooted-pagination-retry.js";
 
 type Profile = "compact" | "dense" | undefined;
+export interface RootedNetLabelOptions {
+  readonly wrapNetLabelIds?: ReadonlySet<string>;
+  readonly omitNetLabelIds?: ReadonlySet<string>;
+}
 export interface RootedSearch {
   elkWork?: ElkWorkLedger;
   diagnostics?: RootedDiagnostic[];
@@ -70,12 +74,17 @@ async function initial(
   page: PaperPage,
   profile: Profile,
   run: RootedSearch,
-  wrapNetLabelIds?: ReadonlySet<string>,
+  netLabelOptions?: RootedNetLabelOptions,
 ) {
   const result = await prepareSchematicDrawing(ir, request, presentation, {
     packetContinuations: true,
     ...(profile ? { spacingProfile: profile } : {}),
-    ...(wrapNetLabelIds?.size ? { wrapNetLabelIds } : {}),
+    ...(netLabelOptions?.wrapNetLabelIds?.size
+      ? { wrapNetLabelIds: netLabelOptions.wrapNetLabelIds }
+      : {}),
+    ...(netLabelOptions?.omitNetLabelIds?.size
+      ? { omitNetLabelIds: netLabelOptions.omitNetLabelIds }
+      : {}),
   });
   if (!result.ok) {
     run.errors.push(result.error);
@@ -185,7 +194,7 @@ export async function searchRootedCandidates(
   page: PaperPage,
   compact: boolean,
   referenceOffset = 0,
-  wrapNetLabelIds?: ReadonlySet<string>,
+  netLabelOptions?: RootedNetLabelOptions,
 ) {
   const legacy = () =>
     elkWorkScope.exit(() =>
@@ -196,7 +205,7 @@ export async function searchRootedCandidates(
         page,
         compact,
         referenceOffset,
-        wrapNetLabelIds,
+        netLabelOptions,
       ),
     );
   return withFontMetricCache(async () => {
@@ -246,7 +255,7 @@ async function runRootedSearch(
   page: PaperPage,
   compact: boolean,
   referenceOffset: number,
-  wrapNetLabelIds?: ReadonlySet<string>,
+  netLabelOptions?: RootedNetLabelOptions,
 ) {
   const run: RootedSearch = {
     standardEconomy: !compact,
@@ -268,7 +277,7 @@ async function runRootedSearch(
       page,
       profile,
       run,
-      wrapNetLabelIds,
+      netLabelOptions,
     );
   }
   const reference =

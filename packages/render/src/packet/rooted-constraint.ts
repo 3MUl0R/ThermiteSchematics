@@ -3,7 +3,6 @@ import type { PaperPage } from "./types.js";
 import type { PreparedSchematicDrawing } from "../renderer.js";
 import type { DrawingBounds } from "./types.js";
 import { protectedDrawingIntervals } from "./rooted-geometry.js";
-import { oversizedVerticalSourceNetLabels } from "./rooted-source-labels.js";
 import { mergedIntervals } from "./safe-cuts.js";
 import { OUTER_SVG_PADDING } from "../symbols/catalog.js";
 import type { RenderFailure } from "../types.js";
@@ -57,19 +56,50 @@ export function recordRootedDiagnostic(
   });
 }
 
+function withSourcePotentialMessage(
+  message: string,
+  sourcePotentials?: readonly string[],
+): string {
+  if (!sourcePotentials?.length) return message;
+  const note = ` (source net label${sourcePotentials.length > 1 ? "s" : ""} ${sourcePotentials.map((name) => JSON.stringify(name)).join(", ")})`;
+  return message
+    .replace(
+      /(protected width [0-9.]+ mm exceeds [0-9.]+ mm by [0-9.]+ mm)/u,
+      `$1${note}`,
+    )
+    .replace(
+      ". Use a larger sheet or landscape.",
+      ". Use a shorter potential name, a larger sheet, or landscape.",
+    );
+}
+
 export function rootedDiagnosticError(
   error: RenderFailure,
   diagnostics: readonly RootedDiagnostic[] = [],
+  sourcePotentials?: readonly string[],
 ): RenderFailure {
-  const constraint = leastRootedConstraint(
-    diagnostics.map((d) => d.constraint),
-  );
-  if (!constraint) return error;
+  const base = leastRootedConstraint(diagnostics.map((d) => d.constraint));
+  if (!base) return error;
+  const constraint =
+    sourcePotentials?.length &&
+    base.kind === "protected-span" &&
+    base.spans.some((c) => c.axis === "width")
+      ? {
+          ...base,
+          message: withSourcePotentialMessage(base.message, sourcePotentials),
+        }
+      : base;
   const grid = diagnostics.find(
     (d) => d.gridFailure?.error === error,
   )?.gridFailure;
-  return grid
-    ? { ...error, message: constraint.message + grid.suffix }
+  const nextMessage = grid
+    ? constraint.message + grid.suffix
+    : sourcePotentials?.length &&
+        !(error.code === "R006" && error.details?.continuationIdentity)
+      ? withSourcePotentialMessage(error.message, sourcePotentials)
+      : undefined;
+  return nextMessage !== undefined
+    ? { ...error, message: nextMessage }
     : withRootedConstraint(error, constraint);
 }
 
@@ -119,25 +149,17 @@ export function rootedConstraint(
         ]
       : [];
   });
-  const sourcePotentials = constraints.some((c) => c.axis === "width")
-    ? oversizedVerticalSourceNetLabels(p, b.w, scale)?.potentialNames
-    : undefined;
-  const potentialNote = sourcePotentials?.length
-    ? ` (source net label${sourcePotentials.length > 1 ? "s" : ""} ${sourcePotentials.map((name) => JSON.stringify(name)).join(", ")})`
-    : "";
   const message =
     "No safe sheet grid fits: " +
     (constraints.length
       ? constraints
           .map(
             (c) =>
-              `protected ${c.axis} ${c.requiredMm.toFixed(2)} mm exceeds ${c.availableMm.toFixed(2)} mm by ${c.shortfallMm.toFixed(2)} mm${c.axis === "width" ? potentialNote : ""}`,
+              `protected ${c.axis} ${c.requiredMm.toFixed(2)} mm exceeds ${c.availableMm.toFixed(2)} mm by ${c.shortfallMm.toFixed(2)} mm`,
           )
           .join("; ")
       : "no complete grid satisfies protected bounds, 3/18 mm continuation spacing and the 40-cut/80-sheet limits") +
-    (potentialNote
-      ? ". Use a shorter potential name, a larger sheet, or landscape."
-      : ". Use a larger sheet or landscape.");
+    ". Use a larger sheet or landscape.";
   return constraints.length
     ? { kind: "protected-span", spans: constraints, message }
     : { kind: "grid", message };
