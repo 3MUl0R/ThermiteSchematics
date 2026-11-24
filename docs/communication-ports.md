@@ -99,9 +99,20 @@ original selector beyond its incident links or infer internal forwarding,
 electrical continuity or protocol operation. Fitting views keep their output,
 and `prepareCommunicationDrawing` remains a single-drawing API. Invalid
 original or projected layouts fail explicitly; they cannot trigger retries.
-A complete link/device and its reference text that cannot fit with at least
-2.5 mm printed diagram text still return R006; use a smaller selection, shorter
-labels or larger paper. Existing 80-device and 100-sheet packet limits remain.
+When an Ethernet view in a packet cannot fit an atomic link/device or
+paginated part at the 2.5 mm readable floor under the native horizontal layout
+(66 mm preferred device width and 32 mm inter-layer spacing), pagination retries
+once with a compact horizontal Ethernet profile (50 mm preferred device width,
+widened automatically for designations and atomic single-line port keys, and
+12 mm inter-layer spacing per side of the link label). Every view that already
+fits natively keeps its native output unchanged. The compact retry preserves
+whole links, every port, unsplit port keys, the 2.5 mm text floor, and
+reciprocal continuation blocks; it never shrinks text below the floor, drops
+ports or links, or invents hardware. If the compact profile still cannot fit
+(for example, an unbreakable overlong designation or link label), pagination
+returns the original native R006 refusal unchanged; use a smaller selection,
+shorter labels or larger paper. Existing 80-device and 100-sheet packet limits
+remain.
 See the [bounded network example](../examples/network-pagination/README.md).
 These drawings have no electrical junction dots or net highlighting. The legacy
 electrical renderer and its contracts are unchanged.

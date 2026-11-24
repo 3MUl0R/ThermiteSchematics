@@ -27,6 +27,11 @@ import {
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
+import {
+  runCommunicationPagination,
+  type CommunicationLayoutProfile,
+  type CommunicationProjection,
+} from "./communication-pagination.js";
 
 export interface CommunicationViewRequest {
   readonly format: "communication-view-request/0.1";
@@ -67,13 +72,6 @@ export async function prepareCommunicationDrawing(
 ): Promise<CommunicationDrawing> {
   return layoutCommunicationDrawing(ir, request);
 }
-interface CommunicationProjection {
-  relations: Set<string>;
-  devices: Set<string>;
-  part: number;
-  total: number;
-  appearances: Map<string, number[]>;
-}
 type CommunicationLayoutState = ReturnType<typeof communicationLayoutState>;
 type CommunicationRenderState = ReturnType<typeof communicationRoutes>;
 type CommunicationEdge = NonNullable<ElkNode["edges"]>[number];
@@ -90,9 +88,10 @@ async function layoutCommunicationDrawing(
   ir: Readonly<ElectricalIr>,
   request: CommunicationViewRequest,
   projection?: CommunicationProjection,
+  profile?: CommunicationLayoutProfile,
 ): Promise<CommunicationDrawing> {
   validateCommunicationRequest(request);
-  const state = communicationLayoutState(ir, request, projection);
+  const state = communicationLayoutState(ir, request, projection, profile);
   const children = state.ordered.map((uid) => communicationNode(uid, state));
   const elk = createElkEngine();
   const { ordered, links } = state;
@@ -203,6 +202,7 @@ function communicationLayoutState(
   ir: Readonly<ElectricalIr>,
   request: CommunicationViewRequest,
   projection?: CommunicationProjection,
+  profile?: CommunicationLayoutProfile,
 ) {
   const inventory = buildCommunicationInventory(ir);
   const devices = new Map(ir.devices.map((d) => [d.uid, d]));
@@ -228,6 +228,7 @@ function communicationLayoutState(
     ir,
     request,
     projection,
+    profile,
     devices,
     types,
     selected,
@@ -242,18 +243,45 @@ function communicationLayoutState(
   };
 }
 
+function communicationNodePreferredWidth(
+  uid: string,
+  links: CommunicationLayoutState["links"],
+  medium: CommunicationViewRequest["medium"],
+  profile?: CommunicationLayoutProfile,
+): number {
+  if (!profile) return medium === "nrg-bus" ? 44 : 66;
+  if (!profile.clampPortKeys) return profile.preferredWidth;
+  const maxKeyWidth = Math.max(
+    0,
+    ...communicationPorts(links, uid).map((p) => widthOf(p.key)),
+  );
+  return Math.max(
+    profile.preferredWidth,
+    maxKeyWidth > 0 ? maxKeyWidth * 2 + 8.05 : 0,
+  );
+}
+
 function communicationNode(
   uid: string,
   state: CommunicationLayoutState,
 ): ElkNode {
-  const { devices, types, request, tags, links, rows, nodeIds, portIds } =
-    state;
+  const {
+    devices,
+    types,
+    request,
+    profile,
+    tags,
+    links,
+    rows,
+    nodeIds,
+    portIds,
+  } = state;
   const device = devices.get(uid)!,
     type = types.get(device.typeId)!;
   const tag = drawingDeviceTag(
     device,
     type,
-    request.medium === "nrg-bus" ? 44 : 66,
+    communicationNodePreferredWidth(uid, links, request.medium, profile),
   );
   tags.set(uid, tag);
   const nodeWidth = tag.widthMm;
@@ -329,8 +357,9 @@ function communicationGraphInput(
       "elk.direction": "RIGHT",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.spacing.nodeNode": "10",
-      "elk.layered.spacing.nodeNodeBetweenLayers":
-        request.medium === "nrg-bus" ? "6" : "32",
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(
+        state.profile?.layerGap ?? (request.medium === "nrg-bus" ? 6 : 32),
+      ),
       "elk.layered.spacing.edgeNodeBetweenLayers": "4",
       "elk.layered.spacing.edgeEdgeBetweenLayers": "4",
       "elk.spacing.edgeNode": "8",
@@ -574,131 +603,13 @@ export async function prepareCommunicationPages(
   unfit = (_drawing: CommunicationDrawing, message: string): Error =>
     new Error(message),
 ): Promise<CommunicationDrawing[]> {
-  // A malformed original layout must fail before attempting smaller parts.
-  const full = await prepareCommunicationDrawing(ir, request);
-  if (fits(full)) return [full];
-  const original = full.topologyCoverage!;
-  const chosen = new Set(original.relationIds);
-  type Unit = { relations: string[]; devices: string[] };
-  const units: Unit[] = buildCommunicationInventory(ir)
-    .links.filter((l) => chosen.has(l.uid))
-    .map((l) => ({
-      relations: [l.uid],
-      devices: [l.fromDeviceUid, l.toDeviceUid],
-    }));
-  const linked = new Set(units.flatMap((u) => u.devices));
-  for (const uid of original.deviceUids)
-    if (!linked.has(uid)) units.push({ relations: [], devices: [uid] });
-  if (units.length < 2) return [full];
-  const widestPart = Number("8".repeat(String(units.length).length));
-  // Reserve a device reference for every other possible part in trials.
-  // Actual partitions can only require fewer references.
-  const trialAppearances = new Map(
-    original.deviceUids.map((uid) => [
-      uid,
-      Array.from(
-        {
-          length: Math.max(
-            0,
-            units.filter((u) => u.devices.includes(uid)).length - 1,
-          ),
-        },
-        () => widestPart - 1,
-      ),
-    ]),
+  return runCommunicationPagination(
+    layoutCommunicationDrawing,
+    ir,
+    request,
+    fits,
+    unfit,
   );
-  const draw = (
-    items: Unit[],
-    part: number,
-    total: number,
-    appearances: Map<string, number[]>,
-  ) =>
-    layoutCommunicationDrawing(ir, request, {
-      relations: new Set(items.flatMap((u) => u.relations)),
-      devices: new Set(items.flatMap((u) => u.devices)),
-      part,
-      total,
-      appearances,
-    });
-  const parts: Unit[][] = [];
-  let current: Unit[] = [];
-  for (const unit of units) {
-    const candidate = [...current, unit];
-    const trial = await draw(
-      candidate,
-      widestPart,
-      widestPart,
-      trialAppearances,
-    );
-    if (fits(trial)) {
-      current = candidate;
-      continue;
-    }
-    if (!current.length)
-      throw unfit(
-        trial,
-        "A complete communication link or device and its references cannot fit at readable size; use larger paper or shorter labels.",
-      );
-    parts.push(current);
-    current = [unit];
-    const single = await draw(
-      current,
-      widestPart,
-      widestPart,
-      trialAppearances,
-    );
-    if (!fits(single))
-      throw unfit(
-        single,
-        "A complete communication link or device and its references cannot fit at readable size; use larger paper or shorter labels.",
-      );
-  }
-  parts.push(current);
-  const appearances = new Map<string, number[]>();
-  parts.forEach((items, i) => {
-    for (const uid of new Set(items.flatMap((u) => u.devices)))
-      appearances.set(uid, [...(appearances.get(uid) ?? []), i + 1]);
-  });
-  const drawings: CommunicationDrawing[] = [];
-  for (const [i, items] of parts.entries()) {
-    const drawing = await draw(items, i + 1, parts.length, appearances);
-    if (!fits(drawing))
-      throw unfit(
-        drawing,
-        "A communication pagination part exceeds the readable sheet bounds.",
-      );
-    drawings.push(drawing);
-  }
-  assertCommunicationPageCoverage(drawings, original);
-  return drawings;
-}
-
-function assertCommunicationPageCoverage(
-  drawings: CommunicationDrawing[],
-  original: NonNullable<CommunicationDrawing["topologyCoverage"]>,
-) {
-  const equal = (a: readonly string[], b: readonly string[]) =>
-    JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-  const coverage = drawings.map((d) => d.topologyCoverage!);
-  const portId = (p: { deviceUid: string; portKey: string }) =>
-    JSON.stringify([p.deviceUid, p.portKey]);
-  if (
-    !equal(
-      coverage.flatMap((c) => c.relationIds),
-      original.relationIds,
-    ) ||
-    !equal(
-      coverage.flatMap((c) => c.ports.map(portId)),
-      original.ports.map(portId),
-    ) ||
-    !equal(
-      [...new Set(coverage.flatMap((c) => c.deviceUids))],
-      original.deviceUids,
-    )
-  )
-    throw new Error(
-      "Communication pagination did not conserve the original selection.",
-    );
 }
 
 function communicationPorts(

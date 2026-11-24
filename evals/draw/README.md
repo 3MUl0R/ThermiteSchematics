@@ -432,8 +432,10 @@ is not applicable: strict emits no row, while the exposure command retains its
 explicit `not-applicable` row. Missing native data, selected ink, or zone geometry
 is infrastructure, never n/a or pass. Infrastructure gets a separate row and
 cannot mask an independently observed drawing failure on that sheet.
-The four existing R006 cases have no issued sheets and remain not measured for
-these oracles (the runner retains its existing refusal rows):
+The four `sweep-report-filtering-letter-portrait-*` cases listed below
+previously refused with R006 under the native 66 mm / 32 mm Ethernet spacing
+and remained not measured for these oracles. With the single compact horizontal
+Ethernet pagination retry (#572), all four now issue and are measured:
 
 - `sweep-report-filtering-letter-portrait-standard-left-to-right`
 - `sweep-report-filtering-letter-portrait-standard-top-to-bottom`
