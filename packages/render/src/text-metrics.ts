@@ -387,8 +387,10 @@ export function printableFitAttributes(
 const MATH_FAUX_BOLD_PAD_EM = 0.03;
 // Unknown clusters reserve 1.5 em width, 1.2 em ascent and 0.4 em descent in
 // measureText(): a 1.0 em fullwidth glyph plus 0.5 em (50%) horizontal bearing
-// reserve. Apply that 0.5 em reserve on both edges and the 1.2/0.4 em vertical
-// floor to every cluster uncovered by the bundled faces (#555, #556).
+// reserve. Apply that 1.5 em cluster advance budget, the 0.5 em bearing reserve
+// on both edges, and the 1.2/0.4 em vertical floor to every cluster uncovered
+// by the bundled faces (#555, #556).
+const FALLBACK_CLUSTER_ADVANCE_UNITS = 15000;
 const FALLBACK_BEARING_RESERVE_EM = 0.5;
 const FALLBACK_ASCENT_FLOOR_EM = 1.2;
 const FALLBACK_DESCENT_FLOOR_EM = 0.4;
@@ -405,14 +407,26 @@ function clusterHasFallback(cluster: string, primary: typeof regular): boolean {
   return false;
 }
 
-function textHasBoldMath(text: string, primary: typeof regular): boolean {
-  for (const char of text) {
-    if (isDefaultIgnorableCodePoint(char)) continue;
-    const code = char.codePointAt(0) ?? 0;
-    if (!primary.hasGlyphForCodePoint(code) && math.hasGlyphForCodePoint(code))
-      return true;
+function printableFallbackWidth(
+  text: string,
+  size: number,
+  primary: typeof regular,
+): number {
+  let advance = 0;
+  for (const cluster of textClusters(text.normalize("NFC").trimEnd())) {
+    let clusterAdvance = 0,
+      unknown = false;
+    for (const char of cluster) {
+      if (isDefaultIgnorableCodePoint(char)) continue;
+      const row = glyphs.get(char.codePointAt(0) ?? 0);
+      if (!row) unknown = true;
+      else clusterAdvance += row[0] ?? 0;
+    }
+    if (unknown || clusterHasFallback(cluster, primary))
+      clusterAdvance = Math.max(clusterAdvance, FALLBACK_CLUSTER_ADVANCE_UNITS);
+    advance += clusterAdvance;
   }
-  return false;
+  return advance * (size / 10000);
 }
 
 /** True iff the normalized text contains at least one grapheme cluster with a
@@ -427,6 +441,66 @@ export function hasPrintableFallback(
   return textClusters(text).some((cluster) =>
     clusterHasFallback(cluster, primary),
   );
+}
+
+function legacyPrintableInkExtents(
+  value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+) {
+  const m = printableTextMetrics(value, size, bold, literal);
+  const text = normalizePrintableText(value, literal);
+  const primary = bold ? boldFace : regular;
+  const runs = printableRuns(text, primary);
+  let hasFallback = runs.some((run) => run.fallback);
+  const hasBoldMath = bold && runs.some((run) => run.face === math);
+  if (!hasFallback && !hasBoldMath) return { left: m.left, right: m.right };
+  let advance = 0,
+    left = Infinity,
+    right = -Infinity;
+  const pad = bold ? size * MATH_FAUX_BOLD_PAD_EM : 0;
+  for (const run of runs) {
+    const scale = size / run.face.unitsPerEm,
+      layout = run.face.layout(run.text);
+    const fauxBold = run.face === math ? pad : 0;
+    for (const [i, g] of layout.glyphs.entries()) {
+      const p = layout.positions[i];
+      if (!p) throw Error("Missing printable glyph position.");
+      const step = p.xAdvance * scale;
+      if (run.fallback || g.id === 0) {
+        hasFallback = true;
+        left = Math.min(left, advance);
+        right = Math.max(right, advance + step);
+      } else {
+        const box = g.bbox;
+        if (Number.isFinite(box.minX) && box.maxX > box.minX) {
+          left = Math.min(
+            left,
+            advance + (p.xOffset + box.minX) * scale - fauxBold,
+          );
+          right = Math.max(
+            right,
+            advance + (p.xOffset + box.maxX) * scale + fauxBold,
+          );
+        }
+      }
+      advance += step;
+    }
+  }
+  const resolvedLeft = Number.isFinite(left) ? left : 0;
+  const resolvedRight = Number.isFinite(right) ? right : 0;
+  return {
+    left: hasFallback ? Math.min(0, resolvedLeft) : resolvedLeft,
+    right: hasFallback
+      ? Math.max(
+          m.advance,
+          m.right,
+          resolvedRight,
+          measureText(value, size).width,
+        )
+      : resolvedRight,
+  };
 }
 
 function layoutClusterExtents(
@@ -475,16 +549,18 @@ function printableInkExtents(
   bold: boolean,
   literal: boolean,
 ) {
-  const m = printableTextMetrics(value, size, bold, literal);
   const text = normalizePrintableText(value, literal);
   const primary = bold ? boldFace : regular;
   const clusters = textClusters(text);
   const hasFallback = clusters.some((cluster) =>
     clusterHasFallback(cluster, primary),
   );
-  const hasBoldMath = bold && textHasBoldMath(text, primary);
-  if (!hasFallback && !hasBoldMath)
-    return { left: m.left, right: m.right, hasFallback: false };
+  if (!hasFallback)
+    return {
+      ...legacyPrintableInkExtents(value, size, bold, literal),
+      hasFallback: false,
+    };
+  const m = printableTextMetrics(value, size, bold, literal);
   let advance = 0,
     left = Infinity,
     right = -Infinity;
@@ -505,16 +581,14 @@ function printableInkExtents(
   const resolvedLeft = Number.isFinite(left) ? left : 0;
   const resolvedRight = Number.isFinite(right) ? right : 0;
   return {
-    left: hasFallback ? Math.min(0, resolvedLeft) : resolvedLeft,
-    right: hasFallback
-      ? Math.max(
-          m.advance,
-          m.right,
-          resolvedRight,
-          measureText(text, size).width,
-        )
-      : resolvedRight,
-    hasFallback,
+    left: Math.min(0, resolvedLeft),
+    right: Math.max(
+      m.advance,
+      m.right,
+      resolvedRight,
+      printableFallbackWidth(text, size, primary),
+    ),
+    hasFallback: true,
   };
 }
 

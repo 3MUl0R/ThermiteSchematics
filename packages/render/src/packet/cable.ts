@@ -113,9 +113,12 @@ export async function cableDrafts(
     ];
     const a = schedule.fromLocation ?? "END A",
       z = schedule.toLocation ?? "END B";
+    const aExtent = fieldTextRightExtent(a, 3, true),
+      zExtent = fieldTextEndExtent(z, 3, true);
     if (
-      fieldTextRightExtent(a, 3, true) > endWidth ||
-      fieldTextEndExtent(z, 3, true) > endWidth ||
+      aExtent > endWidth ||
+      zExtent > endWidth ||
+      left + aExtent >= right - zExtent ||
       fieldTextRightExtent(typeCaption, 2.6) > b.w
     )
       return false;

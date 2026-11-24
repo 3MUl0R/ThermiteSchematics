@@ -1,6 +1,20 @@
 import { createHash } from "node:crypto";
+import {
+  cp,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { compileProject, type ElectricalIr } from "@thermite/compiler";
+import {
+  compileProject,
+  lockProject,
+  type ElectricalIr,
+} from "@thermite/compiler";
 import {
   hasPrintableFallback,
   isDefaultIgnorableCodePoint,
@@ -45,6 +59,7 @@ import {
   circuitCaptionSlots,
   circuitTextLines,
 } from "../src/symbols/circuit-text.js";
+import { printableLabelGeometry } from "../src/symbols/printable-label.js";
 import { renderSchematicPacket } from "../src/sheets.js";
 import type { NormalizedSchematicView } from "../src/types.js";
 import type { Draft, Link, PaperPage } from "../src/packet/types.js";
@@ -133,6 +148,83 @@ describe("fallback-face cluster, ignorable, and edge metrics (#555, #556)", () =
     expect(printableTextInkMetrics("𝒿 a\uFE0F", 2.7, true)).toStrictEqual(
       printableTextMetrics("𝒿 a", 2.7, true),
     );
+  });
+
+  it("preserves exact dev left-anchored extents for bundled-only text with default ignorables", () => {
+    expect(fieldTextRightExtent("a\uFE0F", 2.7, false, true)).toBeCloseTo(
+      1.82223,
+      6,
+    );
+    expect(fieldTextRightExtent("𝒿\uFE0F", 2.7, false, true)).toBeCloseTo(
+      2.70827,
+      6,
+    );
+    expect(fieldTextRightExtent("𝒿\uFE0F", 2.7, true, true)).toBeCloseTo(
+      2.78927,
+      6,
+    );
+    const endASelector = "a".repeat(20) + "\uFE0F.2";
+    expect(hasPrintableFallback(endASelector, false, true)).toBe(false);
+    expect(fieldTextRightExtent(endASelector, 2.7, false, true)).toBeCloseTo(
+      40.1058,
+      6,
+    );
+  });
+
+  it("budgets every uncovered cluster at max(measureText cluster width, 1.5 em) without changing measureText", () => {
+    // measureText keeps its table-known scalar width for U+26A1 (0.7022 em).
+    expect(measureText("⚡", 3).width).toBeCloseTo(0.7022 * 3, 4);
+    expect(printableTextInkMetrics("⚡", 3, true).advance).toBeCloseTo(4.5, 6);
+    expect(
+      printableTextInkMetrics("⚡".repeat(21), 3, true).advance,
+    ).toBeCloseTo(21 * 4.5, 6);
+    expect(fieldTextRightExtent("⚡".repeat(21), 3, true)).toBeGreaterThan(
+      47.965,
+    );
+    expect(fieldTextEndExtent("⚡".repeat(21), 3, true)).toBeGreaterThan(
+      47.965,
+    );
+    expect(fieldTextEndExtent("⚡".repeat(16), 3, true)).toBeGreaterThan(
+      39.565,
+    );
+    expect(
+      centeredTextExtent("❤️".repeat(12), 2.6, false, true),
+    ).toBeGreaterThanOrEqual(12 * 1.5 * 2.6 + 2.6 - 1e-9);
+  });
+
+  it("keeps exact dev geometry for bundled tall glyphs under useFallbackInk", () => {
+    expect(hasPrintableFallback("18AWG / ∫")).toBe(false);
+    const label = { x: 10, y: 0, width: 30, height: 3.8 };
+    for (const routeY of [-1, 0, 1, 2, 3, 4, 5]) {
+      const routes = [
+        [
+          { x: 10, y: routeY },
+          { x: 40, y: routeY },
+        ],
+      ];
+      const devGeom = printableLabelGeometry(
+        label,
+        "18AWG / ∫",
+        28.5,
+        routes,
+        2.5,
+        false,
+        undefined,
+        false,
+      );
+      const fallbackGeom = printableLabelGeometry(
+        label,
+        "18AWG / ∫",
+        28.5,
+        routes,
+        2.5,
+        false,
+        undefined,
+        true,
+      );
+      expect(fallbackGeom, `routeY=${routeY}`).toStrictEqual(devGeom);
+      if (routeY === 0) expect(fallbackGeom.baseline).toBeCloseTo(2.55, 6);
+    }
   });
 
   it("reserves 0.5 em at cluster start for leading and partially covered clusters (#555)", () => {
@@ -520,6 +612,48 @@ describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", (
         rendered.value.sheets.map((s) => sha256(s.svg)),
         key,
       ).toEqual(PINNED_DEV_HASHES[key]);
+    }
+  });
+
+  it("matches pinned dev sheet-1 SHA-256 for the End A selector-bearing bundled packet", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "thermite-fb-selector-"));
+    try {
+      await cp("examples/motor-starter", dir, { recursive: true });
+      const des = "a".repeat(20) + "\uFE0F";
+      const walk = async (root: string): Promise<string[]> => {
+        const out: string[] = [];
+        for (const entry of await readdir(root, { withFileTypes: true })) {
+          const next = join(root, entry.name);
+          if (entry.isDirectory()) out.push(...(await walk(next)));
+          else if (entry.name.endsWith(".json")) out.push(next);
+        }
+        return out;
+      };
+      for (const file of await walk(dir)) {
+        const raw = await readFile(file, "utf8");
+        const next = raw.replaceAll('"TB1"', JSON.stringify(des));
+        if (next !== raw) await writeFile(file, next);
+      }
+      const locked = await lockProject(dir);
+      expect(locked.ok, JSON.stringify(locked)).toBe(true);
+      const compiled = await compileProject(dir);
+      expect(compiled.ok).toBe(true);
+      if (!compiled.ok) return;
+      const rendered = await renderSchematicPacket(compiled.ir, {
+        ...PINNED_REQUESTS.cable,
+        page: { ...PINNED_REQUESTS.cable.page, marginMm: 22 },
+      });
+      expect(
+        rendered.ok,
+        JSON.stringify(rendered.ok ? null : rendered.error),
+      ).toBe(true);
+      if (!rendered.ok) return;
+      expect(rendered.value.sheets.length).toBe(2);
+      expect(sha256(rendered.value.sheets[0]!.svg)).toBe(
+        "cc9205f78a1a582e9b8f8a52c26a3b02774e79cde876f83df52719bb3a911a60",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

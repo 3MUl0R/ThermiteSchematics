@@ -123,10 +123,13 @@ export function fieldTextMeasureWidth(
   bold = false,
   family: TextFamily = "sans-serif",
 ): number {
-  return (
-    fieldTextLeftShift(value, size, bold) +
-    measureText(value, size, family).width
-  );
+  const width = hasPrintableFallback(value, bold)
+    ? Math.max(
+        measureText(value, size, family).width,
+        printableTextRightExtent(value, size, bold),
+      )
+    : measureText(value, size, family).width;
+  return fieldTextLeftShift(value, size, bold) + width;
 }
 
 export function wrapFieldText(

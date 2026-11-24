@@ -268,6 +268,107 @@ describe("fallback-face browser regressions (#555, #556)", () => {
     if (!refused.ok) expect(refused.error.code).toBe("R006");
   });
 
+  it("prevents table-known fallback End A/End B heading overlaps and keeps fitting headings inside their cells (#556)", async () => {
+    const doubleIr = structuredClone(baseIr);
+    const cable = doubleIr.cables.find((c) => c.designation === "CBL1")!;
+    cable.fromLocation = "⚡".repeat(21);
+    cable.toLocation = "⚡".repeat(21);
+    const doublePacket = await renderSchematicPacket(
+      doubleIr,
+      cableRequest(10),
+    );
+    if (!doublePacket.ok) {
+      expect(doublePacket.error.code).toBe("R006");
+    } else {
+      const g = await measureSheet(doublePacket.value.sheets[0]!.svg);
+      expect(textInZoneGutter(g)).toEqual([]);
+      assertPreciseBounds(g);
+      const headings = g.texts.filter((t) => t.text === "⚡".repeat(21));
+      expect(headings.length).toBe(2);
+      if (process.platform === "darwin") {
+        expect(headings[0]!.bbox.x).toBeGreaterThanOrEqual(28.0);
+        expect(headings[0]!.bbox.x + headings[0]!.bbox.w).toBeLessThanOrEqual(
+          83.965,
+        );
+        expect(headings[1]!.bbox.x).toBeGreaterThanOrEqual(131.935);
+        expect(headings[1]!.bbox.x + headings[1]!.bbox.w).toBeLessThanOrEqual(
+          187.9,
+        );
+        expect(overlap(headings[0]!.bbox, headings[1]!.bbox, 0)).toBe(false);
+      }
+    }
+
+    // Fitting repeated-⚡ double heading issues cleanly inside both End A and End B lanes.
+    const fitIr = structuredClone(baseIr);
+    const fitCable = fitIr.cables.find((c) => c.designation === "CBL1")!;
+    fitCable.fromLocation = "⚡".repeat(9);
+    fitCable.toLocation = "⚡".repeat(9);
+    const fitPacket = await renderSchematicPacket(fitIr, cableRequest(10));
+    expect(
+      fitPacket.ok,
+      JSON.stringify(fitPacket.ok ? null : fitPacket.error),
+    ).toBe(true);
+    if (fitPacket.ok) {
+      const fg = await measureSheet(fitPacket.value.sheets[0]!.svg);
+      expect(textInZoneGutter(fg)).toEqual([]);
+      assertPreciseBounds(fg);
+      const headings = fg.texts.filter((t) => t.text === "⚡".repeat(9));
+      expect(headings.length).toBe(2);
+      const tol = process.platform === "darwin" ? 0 : 0.5;
+      expect(headings[0]!.bbox.x).toBeGreaterThanOrEqual(28.0 - tol);
+      expect(headings[0]!.bbox.x + headings[0]!.bbox.w).toBeLessThanOrEqual(
+        83.965 + tol,
+      );
+      expect(headings[1]!.bbox.x).toBeGreaterThanOrEqual(131.935 - tol);
+      expect(headings[1]!.bbox.x + headings[1]!.bbox.w).toBeLessThanOrEqual(
+        187.9 + tol,
+      );
+      expect(overlap(headings[0]!.bbox, headings[1]!.bbox, 0)).toBe(false);
+    }
+  });
+
+  it("keeps margin-22 16×⚡ End B heading inside its lane or returns clean R006 (#556)", async () => {
+    const endB16 = await renderCableEndB("⚡".repeat(16), 22);
+    if (!endB16.ok) {
+      expect(endB16.error.code).toBe("R006");
+    } else {
+      const g = await measureSheet(endB16.value.sheets[0]!.svg);
+      expect(textInZoneGutter(g)).toEqual([]);
+      assertPreciseBounds(g);
+      const item = g.texts.find((t) => t.text === "⚡".repeat(16));
+      expect(item).toBeDefined();
+      const tol = process.platform === "darwin" ? 0 : 0.5;
+      expect(item!.bbox.x).toBeGreaterThanOrEqual(128.335 - tol);
+      expect(item!.bbox.x + item!.bbox.w).toBeLessThanOrEqual(175.9 + tol);
+    }
+  });
+
+  it.each(["BN " + "⚡".repeat(12), "BN " + "❤️".repeat(12)])(
+    "keeps centered table-known fallback core rows %s inside the margin-22 jacket (#556)",
+    async (color) => {
+      const ir = structuredClone(baseIr);
+      const cable = ir.cables.find((c) => c.designation === "CBL1")!;
+      ir.cableTypes.find((t) => t.id === cable.typeId)!.conductors[0]!.color =
+        color;
+      const packet = await renderSchematicPacket(ir, cableRequest(22));
+      if (!packet.ok) {
+        expect(packet.error.code).toBe("R006");
+        return;
+      }
+      const g = await measureSheet(packet.value.sheets[0]!.svg);
+      expect(textInZoneGutter(g)).toEqual([]);
+      assertPreciseBounds(g);
+      const rows = g.texts.filter((t) => /⚡|❤️/u.test(t.text));
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      const tol = process.platform === "darwin" ? 0 : 0.5;
+      for (const row of rows) {
+        expect(row.anchor.x).toBeCloseTo(107.95, 1);
+        expect(row.bbox.x).toBeGreaterThanOrEqual(87.565 - tol);
+        expect(row.bbox.x + row.bbox.w).toBeLessThanOrEqual(128.335 + tol);
+      }
+    },
+  );
+
   it("wraps margin-22 End B rows and centered core rows inside both edges with zero text-bounds findings (#556)", async () => {
     const variant = await compileEmojiEndBCableIr();
     try {

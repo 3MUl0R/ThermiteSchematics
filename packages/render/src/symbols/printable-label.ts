@@ -1,6 +1,7 @@
 import type { LayoutLabel, LayoutPoint } from "../types.js";
 import {
   boundedPrintableAdvance,
+  hasPrintableFallback,
   printableTextInkMetrics,
   printableTextMetrics,
 } from "../text-metrics.js";
@@ -173,7 +174,8 @@ export function printableLabelGeometry(
       size,
       fit,
     );
-  const m = useFallbackInk
+  const hasFallback = useFallbackInk && hasPrintableFallback(text);
+  const m = hasFallback
       ? printableTextInkMetrics(text, size)
       : printableTextMetrics(text, size),
     // Circuit captions already print at natural advance; only rooted captions fit.
@@ -181,7 +183,7 @@ export function printableLabelGeometry(
     scale = m.advance ? advance / m.advance : 1,
     inkHeight = m.top - m.bottom,
     emInset =
-      useFallbackInk && inkHeight > size
+      hasFallback && inkHeight > size
         ? Math.max(0, (label.height - inkHeight) / 2)
         : (label.height - size) / 2;
   const reserved = {
