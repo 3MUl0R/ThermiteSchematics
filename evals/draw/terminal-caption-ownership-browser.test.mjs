@@ -8,7 +8,10 @@ import {
   lockProject,
 } from "../../packages/compiler/dist/index.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
-import { renderSchematicPacket } from "../../packages/render/dist/index.js";
+import {
+  renderSchematic,
+  renderSchematicPacket,
+} from "../../packages/render/dist/index.js";
 import { layoutPresentationGraph } from "../../packages/render/dist/layout/elk-adapter.js";
 import { buildPresentationGraph } from "../../packages/render/dist/presentation.js";
 import { emitSchematicSvg } from "../../packages/render/dist/svg/emitter.js";
@@ -57,7 +60,7 @@ async function renderRootedPassThrough() {
   return emitted.value;
 }
 
-async function renderDirectLoopSheet() {
+async function renderDirectLoopSheet(mutateProject) {
   const dir = await mkdtemp(join(tmpdir(), "thermite-dq17own-"));
   try {
     for (const name of ["field-interfaces", "industrial-pilot"])
@@ -81,6 +84,7 @@ async function renderDirectLoopSheet() {
         })),
       }),
     );
+    if (mutateProject) await mutateProject(dir);
     expect((await lockProject(dir)).ok).toBe(true);
     const compiled = await compileProject(dir);
     if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
@@ -92,7 +96,7 @@ async function renderDirectLoopSheet() {
     );
     const rendered = await renderSchematicPacket(compiled.ir, req);
     if (!rendered.ok) throw Error(JSON.stringify(rendered.error));
-    return rendered.value.sheets[0].svg;
+    return { svg: rendered.value.sheets[0].svg, ir: compiled.ir };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -181,7 +185,7 @@ it("#565 miss form 2: flags an injected second caption in the wiring view while 
 });
 
 it("#565 miss form 3: flags detached duplicate and standalone [+N] captions in direct signal-loop views", async () => {
-  const clean = await renderDirectLoopSheet();
+  const { svg: clean } = await renderDirectLoopSheet();
   expect(terminalText(await measure(clean))).toEqual([]);
 
   // 3a: non-overlapping duplicate placed after another element (>= 15 mm away).
@@ -226,7 +230,9 @@ it("#565 miss form 3: flags detached duplicate and standalone [+N] captions in d
     }),
   ]);
 
-  // 3b legacy fallback: unattributed standalone [+1] following a direct-loop caption.
+  // Documented pre-5.47 limit: unattributed standalone [+1] following a
+  // direct-loop caption keeps 5.46 behaviour (not bound as a count because
+  // unattributed [+N] text cannot be distinguished from a description).
   const pair = JSON.stringify(["xt1", "1"]).replaceAll('"', "&quot;");
   const legacyStandalone = wrapSvg(
     `<g data-device-uid="xt1" transform="translate(20 20)">` +
@@ -236,11 +242,198 @@ it("#565 miss form 3: flags detached duplicate and standalone [+N] captions in d
       `<text x="12" y="18.5" font-size="2.7">[+1]</text>` +
       `</g>`,
   );
-  expect(terminalText(await measure(legacyStandalone))).toEqual([
+  expect(terminalText(await measure(legacyStandalone))).toEqual([]);
+});
+
+it("#565 review repro: direct-loop authored terminal description '[+7]' on AQ1.4 gives zero DQ-17 findings", async () => {
+  const { svg: issued, ir } = await renderDirectLoopSheet(async (dir) => {
+    const typePath = join(
+      dir,
+      "industrial-pilot/types/siemens-aq4ui-st-2wire.json",
+    );
+    const definition = JSON.parse(await readFile(typePath, "utf8"));
+    definition.types[0].terminals["4"].description = "[+7]";
+    await writeFile(typePath, JSON.stringify(definition, null, 2) + "\n");
+  });
+  const aq1Uid = ir.devices.find((d) => d.designation === "AQ1")?.uid;
+  expect(aq1Uid).toBeTruthy();
+
+  const measured = await measure(issued);
+  const aq1Texts = measured.texts.filter(
+    (t) => t.deviceUid === aq1Uid && (t.text === "4" || t.text === "[+7]"),
+  );
+  expect(aq1Texts.find((t) => t.text === "4")?.terminal).toBe("4");
+  expect(aq1Texts.find((t) => t.text === "[+7]")?.terminal).toBeUndefined();
+  expect(terminalText(measured, ir)).toEqual([]);
+
+  // Pre-5.47 unattributed form of the same sheet also passes with zero findings.
+  const stripped = parseSvg(issued);
+  for (const el of stripped.querySelectorAll("[data-terminal-caption-body]"))
+    for (const a of [
+      "data-terminal-caption-body",
+      "data-terminal-key",
+      "data-outside-connections",
+    ])
+      el.removeAttribute(a);
+  expect(terminalText(await measure(stripped.toString()), ir)).toEqual([]);
+
+  // Unattributed text matching a terminal number placed directly after a
+  // circle[data-loop-terminal] in an attributed body is never bound.
+  const directDescDoc = parseSvg(issued);
+  const circle = directDescDoc.querySelector("circle[data-loop-terminal]");
+  expect(circle).not.toBeNull();
+  const unattributed = directDescDoc.createElement("text");
+  unattributed.setAttribute("x", "22");
+  unattributed.setAttribute("y", "14");
+  unattributed.setAttribute("font-size", "2.7");
+  unattributed.textContent = "4";
+  circle.after(unattributed);
+  const afterMeasured = await measure(directDescDoc.toString());
+  expect(
+    afterMeasured.texts.filter(
+      (t) => t.deviceUid === aq1Uid && t.terminal === "4",
+    ),
+  ).toHaveLength(1);
+  expect(terminalText(afterMeasured, ir)).toEqual([]);
+});
+
+it("#565 authoritative explicit ownership (rooted): unattributed symbol and description text is never bound", async () => {
+  const rootedOut = await renderSchematic(motorIr, {
+    format: "schematic-view-request/0.1",
+    root: { by: "designation", value: "K1" },
+    family: "control",
+    flow: "left-to-right",
+  });
+  if (!rootedOut.ok) throw Error(JSON.stringify(rootedOut.error));
+  const rootedDoc = parseSvg(rootedOut.value.svg);
+  const railGroup = rootedDoc.querySelector("g.rail-symbol[data-terminal-key]");
+  expect(railGroup).not.toBeNull();
+  const railKey = railGroup.getAttribute("data-terminal-key");
+  const railTag = railGroup.querySelector("text.rail-device-tag");
+  expect(railTag).not.toBeNull();
+  railTag.textContent = railKey;
+  const railNote = rootedDoc.createElement("text");
+  railNote.setAttribute("x", "4");
+  railNote.setAttribute("y", "56");
+  railNote.setAttribute("font-size", "10");
+  railNote.textContent = "[+7]";
+  railGroup.appendChild(railNote);
+  const rootedMeasured = await measure(rootedDoc.toString());
+  expect(
+    rootedMeasured.texts.find((t) => t.railDeviceTag)?.terminal,
+  ).toBeUndefined();
+  expect(
+    rootedMeasured.texts.find((t) => t.text === "[+7]")?.terminal,
+  ).toBeUndefined();
+  expect(terminalText(rootedMeasured, motorIr)).toEqual([]);
+});
+
+it("#565 authoritative explicit ownership (wiring): unattributed descriptions looking like '[+N]' or terminal keys are never bound", async () => {
+  const wiringIr = structuredClone(motorIr);
+  for (const d of wiringIr.devices) {
+    if (d.designation === "K1") d.description = "[+7]";
+    if (d.designation === "S1") d.description = "1";
+  }
+  const wiringRendered = await renderSchematicPacket(wiringIr, {
+    format: "schematic-packet-request/0.1",
+    views: [
+      {
+        format: "wiring-view-request/0.1",
+        title: "Wiring description probe",
+        conductors: ["W-CTL-001", "W-CTL-002"],
+      },
+    ],
+  });
+  if (!wiringRendered.ok) throw Error(JSON.stringify(wiringRendered.error));
+  const wiringDoc = parseSvg(wiringRendered.value.sheets[0].svg);
+  const wiringCaption = wiringDoc.querySelector(
+    "text[data-terminal-caption-body]",
+  );
+  expect(wiringCaption).not.toBeNull();
+  const wiringKey = wiringCaption.getAttribute("data-terminal-key");
+  for (const [dy, value] of [
+    [10, "[+7]"],
+    [15, "[ +7 ]"],
+    [20, wiringKey],
+  ]) {
+    const desc = wiringDoc.createElement("text");
+    desc.setAttribute(
+      "x",
+      String(Number(wiringCaption.getAttribute("x")) + 16),
+    );
+    desc.setAttribute(
+      "y",
+      String(Number(wiringCaption.getAttribute("y")) + dy),
+    );
+    desc.setAttribute("font-size", "2.7");
+    desc.textContent = value;
+    wiringCaption.parentElement.appendChild(desc);
+  }
+  const wiringMeasured = await measure(wiringDoc.toString());
+  expect(
+    wiringMeasured.texts.filter((t) => t.text === "[+7]" && t.terminal),
+  ).toEqual([]);
+  expect(
+    wiringMeasured.texts.filter((t) => t.text === "[ +7 ]" && t.terminal),
+  ).toEqual([]);
+  expect(terminalText(wiringMeasured, wiringIr)).toEqual([]);
+});
+
+it("#565 authoritative explicit ownership (series-loop): unattributed descriptions inside loop ports are never bound, while attributed duplicates are caught", async () => {
+  const seriesSvg = await readFile(
+    resolve("packages/render/test/goldens/series-loop/low-left-to-right.svg"),
+    "utf8",
+  );
+  const seriesDoc = parseSvg(seriesSvg);
+  const seriesCaption = seriesDoc.querySelector(
+    "text[data-terminal-caption-body]",
+  );
+  expect(seriesCaption).not.toBeNull();
+  const seriesKey = seriesCaption.getAttribute("data-terminal-key");
+  const seriesWrapper = seriesCaption.closest("[data-loop-terminal]");
+  expect(seriesWrapper).not.toBeNull();
+  for (const [parent, dx, dy, value] of [
+    [seriesWrapper, 18, 8, "[+7]"],
+    [seriesWrapper, 18, 13, seriesKey],
+    [seriesWrapper.parentElement, 26, 8, "[+7]"],
+  ]) {
+    const desc = seriesDoc.createElement("text");
+    desc.setAttribute(
+      "x",
+      String(Number(seriesCaption.getAttribute("x")) + dx),
+    );
+    desc.setAttribute(
+      "y",
+      String(Number(seriesCaption.getAttribute("y")) + dy),
+    );
+    desc.setAttribute("font-size", "2.7");
+    desc.textContent = value;
+    parent.appendChild(desc);
+  }
+  const seriesMeasured = await measure(seriesDoc.toString());
+  expect(
+    seriesMeasured.texts.filter((t) => t.text === "[+7]" && t.terminal),
+  ).toEqual([]);
+  expect(terminalText(seriesMeasured)).toEqual([]);
+
+  const seriesDup = seriesDoc.createElement("text");
+  for (const attr of seriesCaption.attributes)
+    seriesDup.setAttribute(attr.name, attr.value);
+  seriesDup.setAttribute(
+    "x",
+    String(Number(seriesCaption.getAttribute("x")) + 20),
+  );
+  seriesDup.setAttribute(
+    "y",
+    String(Number(seriesCaption.getAttribute("y")) + 18),
+  );
+  seriesDup.textContent = `${seriesKey} [+7]`;
+  seriesWrapper.parentElement.appendChild(seriesDup);
+  expect(terminalText(await measure(seriesDoc.toString()))).toEqual([
     expect.objectContaining({
       kind: "duplicate-or-overlapping-terminal-text",
-      text: "1",
-      otherText: "[+1]",
+      text: seriesKey,
+      otherText: `${seriesKey} [+7]`,
     }),
   ]);
 });

@@ -53,16 +53,12 @@ export function loopTerminalOwner(e, deviceUid) {
   if (/(?:^|[\s_-])(?:description|legend)(?:$|[\s_-])/i.test(roles))
     return undefined;
   const wrapped = e.closest("[data-loop-terminal]");
-  let sibling = null;
-  if (!wrapped && e.matches("text")) {
-    if (e.previousElementSibling?.matches("circle[data-loop-terminal]")) {
-      sibling = e.previousElementSibling;
-    } else if (/^\[\s*\+\d+\s*\]$/.test(e.textContent.trim())) {
-      let prev = e.previousElementSibling;
-      while (prev?.matches("text")) prev = prev.previousElementSibling;
-      if (prev?.matches("circle[data-loop-terminal]")) sibling = prev;
-    }
-  }
+  const sibling =
+    !wrapped &&
+    e.matches("text") &&
+    e.previousElementSibling?.matches("circle[data-loop-terminal]")
+      ? e.previousElementSibling
+      : null;
   const host = wrapped ?? sibling;
   if (!host) return undefined;
   try {
@@ -107,6 +103,59 @@ export function explicitCaptionBodyScope(c) {
   }
 }
 
+export function hasExplicitCaptionOwnership(c) {
+  const { attributedCaptionScopes, e, ids } = c;
+  if (!attributedCaptionScopes?.size) return false;
+  const domBody = e.closest("[data-circuit-functions],[data-device-uid]");
+  if (domBody && attributedCaptionScopes.has(ids.get(domBody))) return true;
+  if (domBody?.hasAttribute("data-circuit-functions")) return false;
+  const svg = e.closest("svg");
+  return !!(svg && attributedCaptionScopes.has(ids.get(svg)));
+}
+
+export function applyTerminalCaptionOwner(c) {
+  const { e, h, id, ids } = c;
+  const explicitCaption = !!e
+    .closest("[data-terminal-caption-body]")
+    ?.getAttribute("data-terminal-caption-body");
+  const explicitOwnership = h.hasExplicitCaptionOwnership(c);
+  if (
+    !explicitCaption &&
+    id.labelOwnerKind !== "port" &&
+    (explicitOwnership ||
+      e.closest("[data-terminal-key]")?.hasAttribute("data-symbol-id"))
+  )
+    id.terminal = undefined;
+  if (
+    !id.terminalBodyScope &&
+    id.labelOwnerKind !== "port" &&
+    id.labelRole !== "net"
+  )
+    h.explicitCaptionBodyScope(c);
+  if (
+    !explicitOwnership &&
+    !id.terminal &&
+    (!id.labelRole || id.labelRole === "terminal")
+  ) {
+    const loopOwner = h.loopTerminalOwner(e, id.deviceUid);
+    if (loopOwner) {
+      id.deviceUid ??= loopOwner.deviceUid;
+      id.terminal = loopOwner.terminal;
+      id.terminalAppearance = ids.get(loopOwner.host);
+      id.terminalBodyScope ??= ids.get(e.closest("[data-device-uid]"));
+    }
+  }
+  if (id.terminal && !id.terminalAppearance)
+    id.terminalAppearance = ids.get(
+      e.closest("[data-terminal-id],[data-loop-terminal]"),
+    );
+  if (id.terminal && !id.nativeFunctionScope && !id.terminalBodyScope) {
+    const body =
+      e.closest("[data-terminal-id]") && e.closest("[data-device-uid]");
+    if (body) id.terminalBodyScope = ids.get(body);
+  }
+}
+
 export function textSemanticOwner(c) {
   const { e, h, id, ids, semantic, terminalCaptionOwners } = c;
   if (semantic) {
@@ -140,30 +189,7 @@ export function textSemanticOwner(c) {
   }
   const role =
     e.getAttribute("class") ?? e.closest("text")?.getAttribute("class") ?? "";
-  if (
-    !id.terminalBodyScope &&
-    id.labelOwnerKind !== "port" &&
-    id.labelRole !== "net"
-  )
-    h.explicitCaptionBodyScope(c);
-  if (!id.terminal && (!id.labelRole || id.labelRole === "terminal")) {
-    const loopOwner = h.loopTerminalOwner(e, id.deviceUid);
-    if (loopOwner) {
-      id.deviceUid ??= loopOwner.deviceUid;
-      id.terminal = loopOwner.terminal;
-      id.terminalAppearance = ids.get(loopOwner.host);
-      id.terminalBodyScope ??= ids.get(e.closest("[data-device-uid]"));
-    }
-  }
-  if (id.terminal && !id.terminalAppearance)
-    id.terminalAppearance = ids.get(
-      e.closest("[data-terminal-id],[data-loop-terminal]"),
-    );
-  if (id.terminal && !id.nativeFunctionScope && !id.terminalBodyScope) {
-    const body =
-      e.closest("[data-terminal-id]") && e.closest("[data-device-uid]");
-    if (body) id.terminalBodyScope = ids.get(body);
-  }
+  h.applyTerminalCaptionOwner(c);
   const nestedRoot = e.parentElement.closest(
     "svg:not(body>svg):not(section>svg)",
   );

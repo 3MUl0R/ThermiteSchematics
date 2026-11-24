@@ -248,9 +248,22 @@ export function collectWireTerminals(c) {
 }
 
 export function captionOwnerIndex(c) {
+  const { ids, root } = c;
   const terminalCaptionOwners = new Map();
   const terminalCaptionBodies = new Map();
-  Object.assign(c, { terminalCaptionOwners, terminalCaptionBodies });
+  const attributedCaptionScopes = new Set();
+  for (const caption of root.querySelectorAll("[data-terminal-caption-body]")) {
+    if (!caption.getAttribute("data-terminal-caption-body")) continue;
+    const svg = caption.closest("svg");
+    if (svg) attributedCaptionScopes.add(ids.get(svg));
+    const body = caption.closest("[data-circuit-functions],[data-device-uid]");
+    if (body) attributedCaptionScopes.add(ids.get(body));
+  }
+  Object.assign(c, {
+    terminalCaptionOwners,
+    terminalCaptionBodies,
+    attributedCaptionScopes,
+  });
 }
 
 export function recordCaptionBody(c, group, uid, key, node) {
