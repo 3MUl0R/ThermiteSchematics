@@ -2,13 +2,14 @@
 import assert from "node:assert/strict";
 import {
   cp,
+  mkdir,
   mkdtemp,
   readFile,
   writeFile,
   symlink,
   rm,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -211,11 +212,11 @@ try {
     await writeFile(path, src);
   }
   assert(process.argv[2], "Supply a fresh output JSON path");
-  await writeFile(
-    resolve(process.argv[2]),
-    JSON.stringify({ results }, null, 2) + "\n",
-    { flag: "wx" },
-  );
+  const output = resolve(process.argv[2]);
+  await mkdir(dirname(output), { recursive: true });
+  await writeFile(output, JSON.stringify({ results }, null, 2) + "\n", {
+    flag: "wx",
+  });
 } finally {
   await rm(copy, { recursive: true, force: true });
 }

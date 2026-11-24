@@ -113,7 +113,7 @@ jobs:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
       - name: Install pinned Chromium and system dependencies
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: bun scripts/install-ci-browser.mjs
       - name: Select pinned Chromium for both browser harnesses
         shell: bash
@@ -181,7 +181,7 @@ jobs:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
       - name: Install pinned Chromium and system dependencies
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: bun scripts/install-ci-browser.mjs
       - name: Select pinned Chromium for both browser harnesses
         shell: bash

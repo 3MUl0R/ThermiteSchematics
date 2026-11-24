@@ -140,7 +140,7 @@ describe("Runtime CI and ZIP boundaries", () => {
     for (const sharded of [checkTest, worktree]) {
       expect(sharded).toContain("shard: [1, 2]");
       expect(sharded).toContain("timeout-minutes: 90");
-      expect(sharded).toContain("timeout-minutes: 15");
+      expect(sharded).toContain("timeout-minutes: 20");
       expect(sharded).toContain(
         "THERMITE_CI_MAX_WORKERS: ${{ matrix.os == 'ubuntu-24.04' && '2' || '3' }}",
       );
