@@ -140,6 +140,21 @@ async function renderPacketPreservingRetry(
   return result.ok || !original ? result : { ok: false, error: original };
 }
 
+function inLoopSheetLimitFailure(
+  composedFailure: (
+    message: string,
+    packetWide?: boolean,
+  ) => RenderOutcome<never>,
+  lastView: boolean,
+  captionError: RenderFailure | undefined,
+): RenderOutcome<never> {
+  if (!lastView && captionError) return { ok: false, error: captionError };
+  return composedFailure(
+    "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
+    lastView,
+  );
+}
+
 async function renderPacket(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
@@ -202,8 +217,8 @@ async function renderPacket(
   if (!paper.ok) return paper;
   let drafts: Draft[] = [];
   const legendViews: LegendViewDrafts[] = [];
-  const composedFailure = (message: string) => {
-    recovery.packetWideFailure = true;
+  const composedFailure = (message: string, packetWide = true) => {
+    if (packetWide) recovery.packetWideFailure = true;
     return composedPacketFailure(message, drafts, contextError);
   };
   const documentationSelections: (DocumentationSelection & { view: number })[] =
@@ -244,15 +259,15 @@ async function renderPacket(
         request.views.length === 1,
       ),
     );
-    const rooted = result.ok
-      ? result.value[0]?.rootedPaginationFailure
-      : undefined;
+    const rooted = result.ok ? result.value[0]?.rootedPaginationFailure : null;
+    let captionError: RenderFailure | undefined;
     if (!result.ok || rooted || captionFailure) {
       const refusal = !result.ok ? result.error : (rooted ?? captionFailure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
       if (rooted) recovery.paginationFailures.set(context, error);
+      else captionError = error;
       recovery.firstPacketFailure ??= error;
     }
     const first = result.value[0];
@@ -286,10 +301,10 @@ async function renderPacket(
       context,
       navigationView,
     );
-    if (drafts.length > 100)
-      return composedFailure(
-        "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
-      );
+    if (drafts.length > 100) {
+      const last = viewIndex === request.views.length - 1;
+      return inLoopSheetLimitFailure(composedFailure, last, captionError);
+    }
   }
   recovery.packetWideFailure = true;
   const legendFit = fitPacketLegends(
