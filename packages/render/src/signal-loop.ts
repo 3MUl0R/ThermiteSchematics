@@ -435,16 +435,20 @@ export function signalLoopTitle(
     : `${selected.from.device.designation} - signal loop`;
 }
 
+type DirectLoopAccept = (
+  candidate: ReturnType<typeof directLoopDrawing>,
+  fallback: ReturnType<typeof directLoopDrawing> | undefined,
+) => boolean;
+
 export async function prepareSignalLoopDrawing(
   ir: Readonly<ElectricalIr>,
   request: SignalLoopViewRequest,
-  acceptCandidate?: (
-    candidate: ReturnType<typeof directLoopDrawing>,
-    fallback: ReturnType<typeof directLoopDrawing> | undefined,
-  ) => boolean,
+  acceptCandidate?: DirectLoopAccept,
+  extraEngineNotes?: readonly string[],
 ) {
   const selected = selectSignalLoop(ir, request);
-  if (selected.series) return prepareSeriesLoopDrawing(ir, request, selected);
+  if (selected.series)
+    return prepareSeriesLoopDrawing(ir, request, selected, extraEngineNotes);
   const { stages, devices, types } = selected;
   const vertical = request.flow === "top-to-bottom";
   const physicalEdges = selected.conductors.map((c) =>

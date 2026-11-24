@@ -82,13 +82,19 @@ export { printPacketHtml } from "./packet/html.js";
 import { hasCompactFrame } from "./packet/frame-profile.js";
 import { controlPrint } from "./packet/rooted-control-print.js";
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
+import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "./signal-loop/series-layout.js";
+
+interface PacketRecoveryNotice {
+  readonly view: PacketViewContext;
+  readonly kind: "rooted-pagination" | "series-loop-fallback";
+}
 
 function packetDiagnostics(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
   sheets: RenderedPacket["sheets"],
   explicitPacket: boolean,
-  reflowedViews: Iterable<PacketViewContext>,
+  notices: Iterable<PacketRecoveryNotice>,
 ) {
   const diagnostics = explicitPacket
     ? packetDeviceCoverageDiagnostics(
@@ -102,18 +108,29 @@ function packetDiagnostics(
       )
     : [];
   diagnostics.push(...drafts.flatMap((draft) => draft.diagnostics ?? []));
-  for (const view of reflowedViews)
-    diagnostics.push({
-      code: "I906",
-      severity: "info",
-      ...ir.project.source,
-      message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
-    });
+  for (const { view, kind } of notices)
+    diagnostics.push(
+      kind === "rooted-pagination"
+        ? {
+            code: "I906",
+            severity: "info",
+            ...ir.project.source,
+            message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: A tighter top-to-bottom placement was used during pagination.`,
+          }
+        : {
+            code: "I907",
+            severity: "info",
+            ...ir.project.source,
+            message: `View ${view.viewIndex + 1} ${JSON.stringify(view.title)}: ${SERIES_LOOP_LTR_FALLBACK_NOTICE}`,
+          },
+    );
   return diagnostics;
 }
 
 interface PacketRecoveryTracker {
   readonly paginationFailures: Map<PacketViewContext, RenderFailure>;
+  readonly seriesLoopFallbacks: Map<PacketViewContext, RenderFailure>;
+  readonly notices: PacketRecoveryNotice[];
   firstPacketFailure?: RenderFailure;
   packetWideFailure?: boolean;
 }
@@ -125,7 +142,11 @@ async function renderPacketPreservingRetry(
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  const recovery: PacketRecoveryTracker = { paginationFailures: new Map() };
+  const recovery: PacketRecoveryTracker = {
+    paginationFailures: new Map(),
+    seriesLoopFallbacks: new Map(),
+    notices: [],
+  };
   const result = await renderPacket(
     ir,
     request,
@@ -136,7 +157,8 @@ async function renderPacketPreservingRetry(
   );
   const original = recovery.packetWideFailure
     ? recovery.firstPacketFailure
-    : recovery.paginationFailures.values().next().value;
+    : (recovery.paginationFailures.values().next().value ??
+      recovery.seriesLoopFallbacks.values().next().value);
   return result.ok || !original ? result : { ok: false, error: original };
 }
 
@@ -260,18 +282,30 @@ async function renderPacket(
       ),
     );
     const rooted = result.ok ? result.value[0]?.rootedPaginationFailure : null;
+    const seriesLoop = result.ok
+      ? result.value[0]?.seriesLoopFallbackFailure
+      : null;
     let captionError: RenderFailure | undefined;
-    if (!result.ok || rooted || captionFailure) {
-      const refusal = !result.ok ? result.error : (rooted ?? captionFailure);
+    if (!result.ok || rooted || seriesLoop || captionFailure) {
+      const refusal = !result.ok
+        ? result.error
+        : (rooted ?? seriesLoop ?? captionFailure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
-      if (rooted) recovery.paginationFailures.set(context, error);
-      else captionError = error;
+      if (rooted) {
+        recovery.paginationFailures.set(context, error);
+        recovery.notices.push({ view: context, kind: "rooted-pagination" });
+      } else if (seriesLoop) {
+        recovery.seriesLoopFallbacks.set(context, error);
+        recovery.notices.push({ view: context, kind: "series-loop-fallback" });
+      } else captionError = error;
       recovery.firstPacketFailure ??= error;
     }
     const first = result.value[0];
     if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
+    if (first?.seriesLoopFallbackFailure)
+      delete first.seriesLoopFallbackFailure;
     const reportSelection = first?.documentationSelection;
     if (record(view) && view.format === "circuit-view-request/0.1")
       seedCircuitNavigation(ir, result.value);
@@ -363,7 +397,7 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
-    recovery.paginationFailures.keys(),
+    recovery.notices,
   );
 }
 
@@ -532,7 +566,7 @@ function assemblePacket(
   })[],
   referenceSelection: ReferenceSelection | undefined,
   presentation: CompiledProjectPresentation | undefined,
-  reflowedViews: Iterable<PacketViewContext>,
+  notices: Iterable<PacketRecoveryNotice>,
 ): RenderOutcome<RenderedPacket> {
   const contextError: typeof withPacketViews = (error, views) =>
     explicitPacket ? withPacketViews(error, views) : error;
@@ -557,7 +591,7 @@ function assemblePacket(
       drafts,
       sheets,
       explicitPacket,
-      reflowedViews,
+      notices,
     );
     let html: string | undefined;
     return {
