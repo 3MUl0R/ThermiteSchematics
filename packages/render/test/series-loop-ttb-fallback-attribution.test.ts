@@ -7,10 +7,12 @@ import {
   it,
   vi,
 } from "vitest";
+import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   compileProject,
   lockProject,
@@ -24,18 +26,25 @@ import {
 } from "../src/index.js";
 import * as inline from "../src/layout/circuit-inline.js";
 import {
+  circuitInlineContext,
   circuitInlineTrace,
   type CircuitInlineContext,
 } from "../src/layout/circuit-inline-context.js";
+import { selectCircuitPacket } from "../src/layout/circuit-packet-selection.js";
 import * as assembly from "../src/packet/assembly.js";
+import { renderSchematicPacket as renderRaw } from "../src/sheets.js";
 import * as signalLoop from "../src/signal-loop.js";
 import type { SignalLoopViewRequest } from "../src/signal-loop.js";
 import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "../src/signal-loop/series-layout.js";
 import { required } from "./fixtures.js";
 import { endpoint, seriesModel } from "./series-loop-fixture.js";
 
+const execFileAsync = promisify(execFile);
 const functionalRoot = fileURLToPath(
   new URL("../../../examples/functional-symbols/", import.meta.url),
+);
+const thermiteBin = fileURLToPath(
+  new URL("../../../thermite.mjs", import.meta.url),
 );
 
 type CircuitView = Extract<
@@ -73,8 +82,10 @@ const loopLtr: SignalLoopViewRequest = { ...loopTtb, flow: "left-to-right" };
 interface AttributionFixture {
   ir: ElectricalIr;
   nativeIr: ElectricalIr;
+  nativeDir: string;
   presentation: CompiledProjectPresentation | undefined;
   captionView: CircuitView;
+  fullCircuit: CircuitView;
   padView: CircuitView;
   bomSheets: number;
   notesMarginMm: number;
@@ -321,6 +332,7 @@ async function loadCircuitViews() {
       flow: "top-to-bottom" as const,
       groups: [level],
     },
+    fullCircuit: { ...base, flow: "top-to-bottom" as const },
     padView: {
       ...base,
       title: "Pad transformer",
@@ -365,11 +377,12 @@ async function findTightNotesMargin(
 }
 
 beforeAll(async () => {
-  const [wide, native, { captionView, padView }] = await Promise.all([
-    compileCombinedProject(true),
-    compileCombinedProject(false),
-    loadCircuitViews(),
-  ]);
+  const [wide, native, { captionView, fullCircuit, padView }] =
+    await Promise.all([
+      compileCombinedProject(true),
+      compileCombinedProject(false),
+      loadCircuitViews(),
+    ]);
   const [bom, notesMarginMm] = await Promise.all([
     renderSchematicPacket(
       wide.compiled.ir,
@@ -382,8 +395,10 @@ beforeAll(async () => {
   fx = {
     ir: wide.compiled.ir,
     nativeIr: native.compiled.ir,
+    nativeDir: native.dir,
     presentation: wide.compiled.presentation,
     captionView,
+    fullCircuit,
     padView,
     bomSheets: bom.value.sheets.length,
     notesMarginMm,
@@ -660,4 +675,156 @@ describe("series loop LTR fallback attribution regressions (#552 review)", () =>
     }
     expect(JSON.stringify(headLater)).toBe(JSON.stringify(nativeLater));
   });
+
+  it("keeps I907 in packet JSON and CLI stderr when a circuit quality alternative is accepted", async () => {
+    for (const [views, viewNumber] of [
+      [[loopTtb, fx.fullCircuit], 1],
+      [[fx.fullCircuit, loopTtb], 2],
+    ] as const) {
+      const trace: CircuitInlineContext[] = [];
+      const result = await circuitInlineTrace.run(trace, () =>
+        renderSchematicPacket(
+          fx.nativeIr,
+          packetFor([...views]),
+          fx.presentation,
+        ),
+      );
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      expect(
+        trace
+          .flatMap((t) => t.viewDecisions)
+          .some((d) => d.reason === "accepted"),
+      ).toBe(true);
+      if (result.ok) {
+        expect(
+          result.value.sheets.some((s) =>
+            s.svg.includes(SERIES_LOOP_LTR_FALLBACK_NOTICE),
+          ),
+        ).toBe(true);
+        const i907 = (result.value.coverage.diagnostics ?? []).filter(
+          (d) => d.code === "I907",
+        );
+        expect(i907).toHaveLength(1);
+        expect(i907[0]?.message).toContain(
+          `View ${viewNumber} "SL_TX1 - signal loop"`,
+        );
+      }
+    }
+
+    const reqPath = join(fx.nativeDir, "quality-cache.request.json");
+    const outPath = join(fx.nativeDir, "quality-cache.packet.json");
+    await writeFile(
+      reqPath,
+      JSON.stringify(packetFor([loopTtb, fx.fullCircuit])),
+    );
+    const res = await execFileAsync(process.execPath, [
+      thermiteBin,
+      "packet",
+      "--project",
+      fx.nativeDir,
+      "--input",
+      reqPath,
+      "--json",
+      "-o",
+      outPath,
+    ]);
+    const packet = JSON.parse(await readFile(outPath, "utf8"));
+    const stderr = JSON.parse(res.stderr);
+    const packetI907 = (packet.coverage.diagnostics ?? []).filter(
+      (d: { code?: string }) => d.code === "I907",
+    );
+    const stderrI907 = (stderr.diagnostics ?? []).filter(
+      (d: { code?: string }) => d.code === "I907",
+    );
+    expect(packet.sheets).toHaveLength(8);
+    expect(packetI907).toHaveLength(1);
+    expect(stderrI907).toHaveLength(1);
+    expect(stderrI907[0]).toEqual(packetI907[0]);
+  });
+
+  it("retains the original loop TTB R006 when a quality recomposition fails at assembly", async () => {
+    const req = packetFor([loopTtb, fx.fullCircuit]);
+    const isolated = await renderNoLoopRetry(
+      fx.nativeIr,
+      packetFor([loopTtb]),
+      fx.presentation,
+    );
+    expect(isolated.ok).toBe(false);
+    const { selected, results } = await renderQualityAssemblyFailure(
+      fx.nativeIr,
+      req,
+      fx.presentation,
+    );
+    expect(selected.ok).toBe(true);
+    expect(results.length).toBeGreaterThan(1);
+    expect(results[0]?.ok).toBe(true);
+    expect(results[1]?.ok).toBe(false);
+    expect(JSON.stringify(results[1])).toBe(JSON.stringify(isolated));
+  });
+
+  it("replays a cached caption recovery across an accepted quality alternative and failed assembly", async () => {
+    const req = packetFor([fx.captionView, fx.fullCircuit]);
+    const trace: CircuitInlineContext[] = [];
+    const okPacket = await circuitInlineTrace.run(trace, () =>
+      renderSchematicPacket(fx.ir, req, fx.presentation),
+    );
+    expect(okPacket.ok, JSON.stringify(okPacket)).toBe(true);
+    expect(trace[0]?.runs[0]?.captionFallbacks.size).toBe(1);
+    expect(
+      trace
+        .flatMap((t) => t.viewDecisions)
+        .some((d) => d.reason === "accepted"),
+    ).toBe(true);
+    if (okPacket.ok)
+      expect(
+        (okPacket.value.coverage.diagnostics ?? []).filter(
+          (d) => d.code === "I907",
+        ),
+      ).toHaveLength(0);
+
+    const isolatedCaption = await renderInlineOnly(
+      fx.ir,
+      packetFor([fx.captionView]),
+      fx.presentation,
+    );
+    expect(isolatedCaption.ok).toBe(false);
+    const { selected, results } = await renderQualityAssemblyFailure(
+      fx.ir,
+      req,
+      fx.presentation,
+    );
+    expect(selected.ok).toBe(true);
+    expect(results.length).toBeGreaterThan(1);
+    expect(results[0]?.ok).toBe(true);
+    expect(results[1]?.ok).toBe(false);
+    expect(JSON.stringify(results[1])).toBe(JSON.stringify(isolatedCaption));
+  });
 });
+
+async function renderQualityAssemblyFailure(
+  ir: ElectricalIr,
+  req: SchematicPacketRequest,
+  presentation: CompiledProjectPresentation | undefined,
+) {
+  const real = assembly.assembleSheets;
+  const results: Awaited<ReturnType<typeof renderRaw>>[] = [];
+  const spy = vi
+    .spyOn(assembly, "assembleSheets")
+    .mockImplementation((...args) => {
+      if (circuitInlineContext.getStore()?.qualityPhase)
+        throw Error(
+          "Forced packet-wide assembly failure during quality recomposition",
+        );
+      return real(...args);
+    });
+  try {
+    const selected = await selectCircuitPacket(req, async () => {
+      const outcome = await renderRaw(ir, req, presentation);
+      results.push(outcome);
+      return outcome;
+    });
+    return { selected, results };
+  } finally {
+    spy.mockRestore();
+  }
+}

@@ -10,6 +10,11 @@ import {
   replayCompactPlanningReceipts,
   type FrameReceipt,
 } from "../packet/frame-budget.js";
+import {
+  recordViewRecoveries,
+  replayViewRecoveries,
+  type ViewRecoveryCause,
+} from "../packet/view-recovery.js";
 import { nextCircuitLayoutRun } from "./circuit-inline.js";
 import {
   circuitInlineContext,
@@ -24,6 +29,7 @@ interface SavedView {
   selected: boolean[];
   result: unknown;
   receipts: readonly FrameReceipt[];
+  recoveries: readonly ViewRecoveryCause[];
 }
 const views = new WeakMap<CircuitInlineContext, SavedView[]>();
 
@@ -65,10 +71,12 @@ export async function cachedCircuitView<T>(
   if (saved) {
     for (const _ of saved.selected) nextCircuitLayoutRun();
     if (page) replayCompactPlanningReceipts(page, saved.receipts);
+    if (saved.recoveries.length)
+      replayViewRecoveries(structuredClone(saved.recoveries));
     return structuredClone(saved.result) as RenderOutcome<T>;
   }
   const receiptStart = page ? compactPlanningReceipts(page).length : 0;
-  const result = await render();
+  const { result, recoveries } = await recordViewRecoveries(render);
   if (result.ok)
     entries.push({
       ir,
@@ -80,6 +88,7 @@ export async function cachedCircuitView<T>(
       ),
       result: structuredClone(result),
       receipts: page ? compactPlanningReceipts(page).slice(receiptStart) : [],
+      recoveries: recoveries.length ? structuredClone(recoveries) : [],
     });
   return result;
 }

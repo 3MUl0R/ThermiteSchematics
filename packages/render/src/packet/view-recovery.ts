@@ -22,6 +22,27 @@ export async function captureViewRecovery<T>(
   return recovery ? { result, recovery } : { result };
 }
 
+export async function recordViewRecoveries<T>(fn: () => Promise<T>): Promise<{
+  readonly result: T;
+  readonly recoveries: readonly ViewRecoveryCause[];
+}> {
+  const outer = viewRecoverySink.getStore();
+  const recoveries: ViewRecoveryCause[] = [];
+  const result = await viewRecoverySink.run((cause) => {
+    recoveries.push(cause);
+    outer?.(cause);
+  }, fn);
+  return { result, recoveries };
+}
+
+export function replayViewRecoveries(
+  recoveries: readonly ViewRecoveryCause[],
+): void {
+  const sink = viewRecoverySink.getStore();
+  if (!sink) return;
+  for (const recovery of recoveries) sink(recovery);
+}
+
 export function reportViewRecovery(
   kind: ViewRecoveryKind,
   failure: RenderFailure,

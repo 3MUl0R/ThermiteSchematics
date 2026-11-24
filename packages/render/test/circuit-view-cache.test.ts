@@ -9,6 +9,10 @@ import * as rooted from "../src/packet/rooted.js";
 import { viewDrafts } from "../src/packet/dispatch.js";
 import { failure } from "../src/packet/errors.js";
 import { normalizePaperPage } from "../src/packet/page.js";
+import {
+  recordViewRecoveries,
+  reportViewRecovery,
+} from "../src/packet/view-recovery.js";
 import { cachedCircuitView } from "../src/layout/circuit-view-cache.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -227,5 +231,33 @@ it("does not retain failed view composition as reusable work", async () => {
     await cachedCircuitView(ir, undefined, [], work);
     await cachedCircuitView(ir, undefined, [], work);
     expect(work).toHaveBeenCalledTimes(2);
+  });
+});
+
+it("records and replays both view recovery kinds in order on cache hits", async () => {
+  const context = circuitLayoutContext(),
+    ir = {};
+  const captionFailure = failure("unprintable-layout", "caption failure");
+  const loopFailure = failure("unprintable-layout", "loop failure");
+  if (captionFailure.ok || loopFailure.ok) throw Error("Expected failures");
+  const work = vi.fn(async () => {
+    reportViewRecovery("circuit-caption", captionFailure.error);
+    reportViewRecovery("series-loop-fallback", loopFailure.error);
+    return { ok: true as const, value: "draft" };
+  });
+  await circuitInlineContext.run(context, async () => {
+    const first = await recordViewRecoveries(() =>
+      cachedCircuitView(ir, undefined, ["v"], work),
+    );
+    expect(first.recoveries).toEqual([
+      { kind: "circuit-caption", failure: captionFailure.error },
+      { kind: "series-loop-fallback", failure: loopFailure.error },
+    ]);
+    context.qualityPhase = true;
+    const second = await recordViewRecoveries(() =>
+      cachedCircuitView(ir, undefined, ["v"], work),
+    );
+    expect(work).toHaveBeenCalledTimes(1);
+    expect(second.recoveries).toEqual(first.recoveries);
   });
 });
