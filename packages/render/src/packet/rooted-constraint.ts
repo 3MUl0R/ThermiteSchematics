@@ -62,15 +62,14 @@ function withSourcePotentialMessage(
 ): string {
   if (!sourcePotentials?.length) return message;
   const note = ` (source net label${sourcePotentials.length > 1 ? "s" : ""} ${sourcePotentials.map((name) => JSON.stringify(name)).join(", ")})`;
-  return message
-    .replace(
-      /(protected width [0-9.]+ mm exceeds [0-9.]+ mm by [0-9.]+ mm)/u,
-      `$1${note}`,
-    )
-    .replace(
-      ". Use a larger sheet or landscape.",
-      ". Use a shorter potential name, a larger sheet, or landscape.",
-    );
+  const withAdvice = message.replace(
+    ". Use a larger sheet or landscape.",
+    () => ". Use a shorter potential name, a larger sheet, or landscape.",
+  );
+  return withAdvice.replace(
+    /protected width [0-9.]+ mm exceeds [0-9.]+ mm by [0-9.]+ mm/u,
+    (match) => `${match}${note}`,
+  );
 }
 
 export function rootedDiagnosticError(

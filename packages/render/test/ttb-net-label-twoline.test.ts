@@ -39,9 +39,53 @@ function replaceStringValues(
   }
 }
 
+function compactPumpChain(objects: unknown[]): unknown[] {
+  const kept = objects.filter((obj) => {
+    if (typeof obj !== "object" || obj === null || !("kind" in obj))
+      return true;
+    if (
+      obj.kind === "device" &&
+      "designation" in obj &&
+      (obj.designation === "K1" || obj.designation === "OL1")
+    )
+      return false;
+    if (
+      obj.kind === "wire" &&
+      "endpoints" in obj &&
+      Array.isArray(obj.endpoints)
+    )
+      return !obj.endpoints.some(
+        (ep: unknown) =>
+          typeof ep === "object" &&
+          ep !== null &&
+          "device" in ep &&
+          (ep.device === "K1" || ep.device === "OL1"),
+      );
+    return true;
+  });
+  for (const [q, m, id] of [
+    ["2/T1", "U", "102"],
+    ["4/T2", "V", "106"],
+    ["6/T3", "W", "110"],
+  ] as const) {
+    kept.push({
+      uid: `00000000-0000-4000-8000-000000000${id}`,
+      kind: "wire",
+      designation: `W${id}`,
+      endpoints: [
+        { device: "Q1", terminal: q },
+        { device: "M1", terminal: m },
+      ],
+      properties: { label: id },
+    });
+  }
+  return kept;
+}
+
 async function pumpVariantObjects(
   phaseNames: readonly [string, string, string],
   renameLocation?: readonly [string, string],
+  compactChain = false,
 ): Promise<Record<string, unknown>> {
   const raw: unknown = JSON.parse(
     await readFile(
@@ -82,7 +126,9 @@ async function pumpVariantObjects(
     const next = byTerm.get(obj.at.terminal);
     if (next !== undefined && "name" in obj) obj.name = next;
   }
-  return { objects: raw.objects };
+  return {
+    objects: compactChain ? compactPumpChain(raw.objects) : raw.objects,
+  };
 }
 
 async function compilePumpVariant(
@@ -91,6 +137,7 @@ async function compilePumpVariant(
   options: {
     readonly projectName?: string;
     readonly renameLocation?: readonly [string, string];
+    readonly compactChain?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), `thermite-ttblong-${tag}-`));
@@ -106,7 +153,11 @@ async function compilePumpVariant(
   await writeFile(
     join(root, "source.json"),
     JSON.stringify(
-      await pumpVariantObjects(phaseNames, options.renameLocation),
+      await pumpVariantObjects(
+        phaseNames,
+        options.renameLocation,
+        options.compactChain,
+      ),
     ),
   );
   const locked = await lockProject(root);
@@ -197,7 +248,9 @@ it.each([
   "issues TTB Tabloid landscape power packet with verbatim two-line source net labels for %s (#576)",
   async (tag, sample) => {
     const names = phaseTriple(sample);
-    const fixture = await compilePumpVariant(tag, names);
+    const fixture = await compilePumpVariant(tag, names, {
+      compactChain: true,
+    });
     try {
       const packet = await renderSchematicPacket(fixture.ir, {
         format: "schematic-packet-request/0.1",
@@ -238,7 +291,9 @@ it("keeps single-line source net labels for short phases alongside wrapped long 
     "MCC1-MAIN-MOTOR-POWER-480VAC-BUS-FEEDER-PANEL-MOD-ALPHA-1-L2",
     "480VAC-L3",
   ] as const;
-  const fixture = await compilePumpVariant("mixed", names);
+  const fixture = await compilePumpVariant("mixed", names, {
+    compactChain: true,
+  });
   try {
     const packet = await renderSchematicPacket(fixture.ir, {
       format: "schematic-packet-request/0.1",
@@ -328,7 +383,9 @@ it("refuses with actionable R006 when even the two-line form still exceeds the f
 it("breaks space-separated 60-character TTB source net labels verbatim onto two lines (#576)", async () => {
   const sample = "MCC1 MAIN MOTOR POWER 480VAC BUS FEEDER PANEL MOD ALPHA 1 L1";
   const names = phaseTriple(sample);
-  const fixture = await compilePumpVariant("space-60", names);
+  const fixture = await compilePumpVariant("space-60", names, {
+    compactChain: true,
+  });
   try {
     const packet = await renderSchematicPacket(fixture.ir, {
       format: "schematic-packet-request/0.1",

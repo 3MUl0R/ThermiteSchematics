@@ -351,9 +351,9 @@ the minimum catalog-grid width needed for glyph ink clearance and retry once
 with all net labels still at `TAIL`. In paged top-to-bottom packets, only when
 single-line source-label widening is the binding cause of a protected-width
 refusal and wrapping the blocking source net labels makes the protected width
-fit, those labels split onto two lines stacked beside their conductors at the
-route source with preserved whitespace (`xml:space="preserve"`), breaking only
-at an existing authored separator (`-`, `_`, `.`, `/`, or space) closest to the
+fit with at least 40% median visible drawing-area utilisation, those labels
+split onto two lines stacked beside their conductors at the route source with
+preserved whitespace (`xml:space="preserve"`), breaking only at an existing authored separator (`-`, `_`, `.`, `/`, or space) closest to the
 middle while keeping whitespace runs attached to the end of the first line
 without shrinking text, abbreviating, or changing net identity; candidate splits
 with fewer than four non-space characters on either row or matching a terminal

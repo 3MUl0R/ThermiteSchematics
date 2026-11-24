@@ -201,15 +201,17 @@ export function rootedCaptionPlan(
       admissible,
     );
   if (!placement) return { ok: false };
-  const dy = placement.ink.top - position.ink.top;
   const baselines: readonly [number, number] | undefined = position.baselines
-    ? [position.baselines[0] + dy, position.baselines[1] + dy]
+    ? [
+        position.baselines[0] + placement.ink.top - position.ink.top,
+        position.baselines[1] + placement.ink.top - position.ink.top,
+      ]
     : undefined;
   const moved = {
     ...position,
     x: position.x + placement.ink.left - position.ink.left,
-    y: position.y + dy,
-    baseline: position.baseline + dy,
+    y: position.y + placement.ink.top - position.ink.top,
+    baseline: position.baseline + placement.ink.top - position.ink.top,
     ...(baselines ? { baselines } : {}),
     ink: placement.ink,
   };

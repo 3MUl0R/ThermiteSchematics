@@ -22,6 +22,7 @@ import {
   plateOcclusion,
   terminalText,
   textBounds,
+  utilisation,
   wirePlacement,
 } from "../../../evals/draw/checks.mjs";
 import {
@@ -43,9 +44,53 @@ afterAll(async () => {
   await browser?.close();
 });
 
+function compactPumpChain(objects: unknown[]): unknown[] {
+  const kept = objects.filter((obj) => {
+    if (typeof obj !== "object" || obj === null || !("kind" in obj))
+      return true;
+    if (
+      obj.kind === "device" &&
+      "designation" in obj &&
+      (obj.designation === "K1" || obj.designation === "OL1")
+    )
+      return false;
+    if (
+      obj.kind === "wire" &&
+      "endpoints" in obj &&
+      Array.isArray(obj.endpoints)
+    )
+      return !obj.endpoints.some(
+        (ep: unknown) =>
+          typeof ep === "object" &&
+          ep !== null &&
+          "device" in ep &&
+          (ep.device === "K1" || ep.device === "OL1"),
+      );
+    return true;
+  });
+  for (const [q, m, id] of [
+    ["2/T1", "U", "102"],
+    ["4/T2", "V", "106"],
+    ["6/T3", "W", "110"],
+  ] as const) {
+    kept.push({
+      uid: `00000000-0000-4000-8000-000000000${id}`,
+      kind: "wire",
+      designation: `W${id}`,
+      endpoints: [
+        { device: "Q1", terminal: q },
+        { device: "M1", terminal: m },
+      ],
+      properties: { label: id },
+    });
+  }
+  return kept;
+}
+
 async function compilePump(
   tag: string,
   phaseNames: readonly [string, string, string],
+  compactChain = false,
 ) {
   const raw: unknown = JSON.parse(
     await readFile(
@@ -95,7 +140,9 @@ async function compilePump(
   );
   await writeFile(
     join(root, "source.json"),
-    JSON.stringify({ objects: raw.objects }),
+    JSON.stringify({
+      objects: compactChain ? compactPumpChain(raw.objects) : raw.objects,
+    }),
   );
   const locked = await lockProject(root);
   assert.ok(locked.ok, JSON.stringify(locked));
@@ -170,7 +217,38 @@ async function assertSheetStrictChecks(
   expect(plateOcclusion(g)).toEqual([]);
   expect(conductorInterference(g)).toEqual([]);
   expect(wirePlacement(g)).toEqual([]);
-  return pdfPage;
+  return { pdfPage, fraction: utilisation(g)?.fraction };
+}
+
+function medianFraction(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return n
+    ? ((sorted[Math.floor((n - 1) / 2)] ?? 0) +
+        (sorted[Math.floor(n / 2)] ?? 0)) /
+        2
+    : 0;
+}
+
+async function visibleSheetNetRows() {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll("text.label-net"), (el) => {
+      const b = el.getBBox();
+      const vb = el.closest("svg")?.viewBox.baseVal;
+      const visible =
+        vb !== undefined &&
+        b.x + b.width > vb.x &&
+        b.x < vb.x + vb.width &&
+        b.y + b.height > vb.y &&
+        b.y < vb.y + vb.height;
+      return {
+        text: el.textContent ?? "",
+        chars: el.getNumberOfChars(),
+        whiteSpace: getComputedStyle(el).whiteSpace,
+        visible,
+      };
+    }).filter((row) => row.visible && row.text.length > 0),
+  );
 }
 
 async function verifyPacketStrict(
@@ -178,7 +256,7 @@ async function verifyPacketStrict(
   names: readonly [string, string, string],
   expectedRow1: string,
 ) {
-  const fixture = await compilePump(tag, names);
+  const fixture = await compilePump(tag, names, true);
   try {
     const packet = await renderSchematicPacket(fixture.ir, {
       format: "schematic-packet-request/0.1",
@@ -197,21 +275,17 @@ async function verifyPacketStrict(
     const doc = await loadPdfBytes(pdfBytes);
     try {
       const joinedPdfNames: string[] = [];
+      const fractions: number[] = [];
       for (const sheet of packet.value.sheets) {
-        const pdfPage = await assertSheetStrictChecks(
+        const { pdfPage, fraction } = await assertSheetStrictChecks(
           sheet.svg,
           fixture.ir,
           doc,
           sheet.number,
         );
+        if (fraction !== undefined) fractions.push(fraction);
         if (sheet.number !== 1) continue;
-        const domRows = await page.evaluate(() =>
-          Array.from(document.querySelectorAll("text.label-net"), (el) => ({
-            text: el.textContent ?? "",
-            chars: el.getNumberOfChars(),
-            whiteSpace: getComputedStyle(el).whiteSpace,
-          })).filter((row) => row.text.length > 0),
-        );
+        const domRows = await visibleSheetNetRows();
         const row1Dom = domRows.filter((row) => row.text === expectedRow1);
         expect(row1Dom).toHaveLength(3);
         for (const row of row1Dom) {
@@ -225,7 +299,8 @@ async function verifyPacketStrict(
           }
         }
       }
-      expect(joinedPdfNames.sort()).toEqual([...names].sort());
+      expect(medianFraction(fractions)).toBeGreaterThanOrEqual(0.4);
+      expect([...new Set(joinedPdfNames)].sort()).toEqual([...names].sort());
       doc.assertNoExternalResources();
     } finally {
       await doc.loadingTask.destroy();

@@ -14,6 +14,10 @@ import { graphCardContext } from "../off-view/context.js";
 import { materializeRootedCandidate } from "./rooted-build.js";
 import { rootedDiagnosticError } from "./rooted-constraint.js";
 import { attributeVerticalSourceNetLabels } from "./rooted-source-labels.js";
+import {
+  WRAPPED_UTILISATION_FLOOR,
+  visibleDrawingAreaUtilisation,
+} from "./rooted-utilisation.js";
 import { retryRootedPagination } from "./rooted-pagination-retry.js";
 import type {
   CompiledProjectPresentation,
@@ -318,7 +322,16 @@ async function retryOversizedSourceNetLabels(
       referenceOffset,
       { wrapNetLabelIds: attribution.wrappableLabelIds },
     );
-    if (retried.ok) return { drafts: retried };
+    if (retried.ok) {
+      const selected = frameCandidate(retried.value);
+      if (
+        visibleDrawingAreaUtilisation(selected, page) >=
+        WRAPPED_UTILISATION_FLOOR
+      ) {
+        return { drafts: retried };
+      }
+      return undefined;
+    }
     if (
       retried.error.code === "R004" &&
       retried.error.details?.reason === "ambiguous-conductor-caption"
