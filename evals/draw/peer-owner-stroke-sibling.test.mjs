@@ -11,7 +11,11 @@ import { printableTextMetrics } from "../../packages/render/dist/text-metrics.js
 import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { peerReferenceFindings } from "./issued-reference-audit.mjs";
 import { nativeRows } from "./m3-native.mjs";
-import { boxGap, foreignConductorBoxes } from "./peer-owner-ink.mjs";
+import {
+  CONDUCTOR_OWNER_MARGIN_MM,
+  boxGap,
+  foreignConductorBoxes,
+} from "./peer-owner-ink.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 
 let browser, page;
@@ -21,7 +25,7 @@ beforeAll(async () => {
 });
 afterAll(async () => browser?.close());
 
-it("#573 measures foreign conductor stroke edge in Chromium DQ-08 and renderer", async () => {
+async function runStrokeMarginProbe(strokeWidth, extraMm) {
   const value = "W1 · A.1 → B.1 02.B2";
   const compact = "→ B.1 02.B2";
   const metric = printableTextMetrics(value, 2.5);
@@ -34,8 +38,7 @@ it("#573 measures foreign conductor stroke edge in Chromium DQ-08 and renderer",
   const owner = { x: 50, y: 46.7, w: 1.3, h: 1.3 };
   const source = ["A.1", "w1", "B.1"];
   const ownWire = { kind: "wire", uid: "w1" };
-  const strokeWidth = 0.4;
-  const y = +(field.y + field.h + boxGap(field, owner) + 0.52).toFixed(4);
+  const y = +(field.y + field.h + boxGap(field, owner) + extraMm).toFixed(4);
   const baseSvg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="200mm" viewBox="0 0 300 200" font-family="Thermite Sans, sans-serif">` +
     `<g data-device-uid="A"><circle class="terminal-marker" data-terminal-marker="true" data-terminal-key="1" cx="50.65" cy="47.35" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/></g>` +
@@ -52,39 +55,64 @@ it("#573 measures foreign conductor stroke edge in Chromium DQ-08 and renderer",
     kind: "conductor-peer",
     identity: source,
     owner,
-    foreignOwners: runs,
+    foreignConductors: runs,
     value,
     compact,
     destination: "02.B2",
     ownerLabel: "A.1",
   };
-  // Renderer rejects the 0.32 mm stroke-edge margin slot.
-  expect(() => emitPeerReferences(sheet, field, [entry])).toThrow(
-    NavigationSlotFailure,
-  );
-
-  // Manually placing the note at the old centerline-passing slot must now be flagged by DQ-08.
-  const oldNote = `<text data-peer-reference="conductor-peer" data-peer-source='${JSON.stringify(source)}' x="${field.x + 0.02 - metric.left}" y="${field.y + 0.02 + metric.top}" font-size="2.5">${value}</text>`;
-  const svgWithOldNote = baseSvg.replace("</svg>", `${oldNote}</svg>`);
-  const g = await openSheet(page, embedPrintableFont(svgWithOldNote));
+  let renderedSvg;
+  let rendererAccepted = true;
+  try {
+    renderedSvg = emitPeerReferences(sheet, field, [entry]).svg;
+  } catch (err) {
+    if (!(err instanceof NavigationSlotFailure)) throw err;
+    rendererAccepted = false;
+  }
+  const probeSvg =
+    renderedSvg ??
+    baseSvg.replace(
+      "</svg>",
+      `<text data-peer-reference="conductor-peer" data-peer-source='${JSON.stringify(source)}' x="${field.x + 0.02 - metric.left}" y="${field.y + 0.02 + metric.top}" font-size="2.5">${value}</text></svg>`,
+    );
+  const g = await openSheet(page, embedPrintableFont(probeSvg));
   const observedOwner = g.tranche4.markers.find(
     (m) => m.deviceUid === "A",
   ).bbox;
   const observedForeign = foreignConductorBoxes(g, ownWire);
-  expect(observedForeign).toHaveLength(1);
-  expect(observedForeign[0].h).toBeCloseTo(strokeWidth, 2);
-  const obligation = {
-    kind: "conductor-peer",
-    source,
-    owners: [observedOwner],
-    foreignConductors: observedForeign,
-    values: [value],
-    compactValues: [compact],
-    ownerLabel: "A.1",
-  };
-  const findings = peerReferenceFindings(1, g, [obligation]);
-  expect(findings.map((f) => f.kind)).toContain(
-    "issued-peer-reference-foreign-owner",
+  const findings = peerReferenceFindings(1, g, [
+    {
+      kind: "conductor-peer",
+      source,
+      owners: [observedOwner],
+      foreignConductors: observedForeign,
+      values: [value],
+      compactValues: [compact],
+      ownerLabel: "A.1",
+    },
+  ]);
+  return { rendererAccepted, observedForeign, findings };
+}
+
+it("#573 measures 0.25 mm foreign conductor stroke-edge margin in Chromium DQ-08 and renderer", async () => {
+  // 0.40 mm stroke at extra = 0.52 mm -> 0.32 mm stroke-edge margin >= 0.25 mm: both accept.
+  const pass = await runStrokeMarginProbe(0.4, 0.52);
+  expect(pass.observedForeign).toHaveLength(1);
+  expect(pass.observedForeign[0].h).toBeCloseTo(0.4, 2);
+  expect(pass.rendererAccepted).toBe(true);
+  expect(pass.findings).toEqual([]);
+
+  // Boundary probe below 0.25 mm: 0.40 mm stroke at extra = 0.26 mm leaves
+  // +0.26 mm centerline (> 0.25 mm) but +0.06 mm stroke-edge (< 0.25 - 0.17 mm): both reject.
+  const reject = await runStrokeMarginProbe(0.4, 0.26);
+  expect(reject.observedForeign).toHaveLength(1);
+  expect(reject.observedForeign[0].h).toBeCloseTo(0.4, 2);
+  expect(reject.rendererAccepted).toBe(false);
+  expect(reject.findings).toContainEqual(
+    expect.objectContaining({
+      kind: "issued-peer-reference-foreign-owner",
+      minimumMarginMm: CONDUCTOR_OWNER_MARGIN_MM,
+    }),
   );
 }, 60_000);
 

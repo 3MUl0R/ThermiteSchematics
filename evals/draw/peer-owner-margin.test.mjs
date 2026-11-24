@@ -1,11 +1,15 @@
 import { expect, it } from "vitest";
 import { peerReferenceFindings } from "./issued-reference-audit.mjs";
-import { OWNER_MARGIN_MM } from "./peer-owner-ink.mjs";
+import {
+  CONDUCTOR_OWNER_MARGIN_MM,
+  OWNER_MARGIN_MM,
+} from "./peer-owner-ink.mjs";
 import { readReportSummary } from "./report-summary.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 
-it("#573 exports OWNER_MARGIN_MM = 0.5 and bumps checker protocol to 5.46 with 5.45 readability", () => {
+it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and bumps checker protocol to 5.46 with 5.45 readability", () => {
   expect(OWNER_MARGIN_MM).toBe(0.5);
+  expect(CONDUCTOR_OWNER_MARGIN_MM).toBe(0.25);
   expect(EVALS_VERSION).toBe("5.46");
   const sample = { evalsVersion: "5.45", summary: { "DQ-08": { pass: 1 } } };
   expect(readReportSummary(sample)).toEqual(sample.summary);
@@ -59,7 +63,7 @@ it("#573 DQ-08 flags equidistant ties and sub-margin notes while passing >= 0.5 
   ).toEqual([]);
 });
 
-it("#573 DQ-08 flags a tie against a distinct foreign conductor run and passes >= 0.5 mm margin", () => {
+it("#573 DQ-08 flags a tie or sub-0.25 mm margin against a foreign conductor and passes >= 0.25 mm", () => {
   const obl = {
     kind: "conductor-peer",
     source: ["PS1.-", "W-CTL-031", "H1.X2"],
@@ -79,13 +83,29 @@ it("#573 DQ-08 flags a tie against a distinct foreign conductor run and passes >
     bbox,
   });
   // Tie: both owner and foreign conductor at y=65.46 are 4.22 mm away.
+  const tied = peerReferenceFindings(
+    8,
+    { texts: [note({ x: 250.41, y: 59.39, w: 37.46, h: 1.85 })] },
+    [obl],
+  );
+  expect(tied).toContainEqual(
+    expect.objectContaining({
+      kind: "issued-peer-reference-foreign-owner",
+      minimumMarginMm: CONDUCTOR_OWNER_MARGIN_MM,
+    }),
+  );
+  // 0.32 mm foreign-conductor margin (>= 0.25 mm) passes.
+  const margin032 = {
+    ...obl,
+    owners: [{ x: 280, y: 65.14, w: 1, h: 1 }],
+  };
   expect(
     peerReferenceFindings(
       8,
-      { texts: [note({ x: 250.41, y: 59.39, w: 37.46, h: 1.85 })] },
-      [obl],
-    ).map((f) => f.kind),
-  ).toContain("issued-peer-reference-foreign-owner");
+      { texts: [note({ x: 270, y: 59.39, w: 20, h: 1.85 })] },
+      [margin032],
+    ),
+  ).toEqual([]);
   // Shifting right so foreign conductor ends 4 mm left of note: owner gap 4.22 mm, foreign gap 5.81 mm (+1.59 mm).
   const shifted = {
     ...obl,

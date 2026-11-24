@@ -36,6 +36,7 @@ interface JunctionCover {
 }
 interface RouteInk {
   runs: Rect[];
+  reachRuns: Rect[];
   tips: Rect[];
 }
 
@@ -474,12 +475,23 @@ function collectRouteState(geometry: readonly NavigationGeometry[]) {
   return { rectMasks, dotMasks, index };
 }
 
+function reachSegmentToBox(seg: RouteSegment, clip: Rect): Rect | undefined {
+  const raw = {
+    x: Math.min(seg.a.x, seg.b.x),
+    y: Math.min(seg.a.y, seg.b.y),
+    w: Math.abs(seg.b.x - seg.a.x),
+    h: Math.abs(seg.b.y - seg.a.y),
+  };
+  return intersection(expand(raw, 0.01), clip);
+}
+
 function boxesFromPieces(
   items: readonly { piece: RoutePiece; clip: Rect }[],
+  boxOf: (seg: RouteSegment, clip: Rect) => Rect | undefined = segmentToBox,
 ): Rect[] {
   return items.flatMap(({ piece, clip }) => {
     if (piece.segment) {
-      const box = segmentToBox(piece.segment, clip);
+      const box = boxOf(piece.segment, clip);
       return box ? [box] : [];
     }
     return piece.hull ? [piece.hull] : [];
@@ -519,8 +531,10 @@ export function peerRouteIndex(
   return {
     route: (element: ConductiveElementId): RouteInk => {
       const key = routeKey(element);
+      const pieces = piecesForKey(key);
       return {
-        runs: boxesFromPieces(piecesForKey(key)),
+        runs: boxesFromPieces(pieces),
+        reachRuns: boxesFromPieces(pieces, reachSegmentToBox),
         tips: tipsForKey(key),
       };
     },

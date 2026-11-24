@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  CONDUCTOR_OWNER_MARGIN_MM,
   OWNER_MARGIN_MM,
   searchNavigationSlot,
 } from "../src/packet/navigation-slot-search.js";
@@ -21,8 +22,9 @@ function sheetSvg(body: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="431.8mm" height="279.4mm" viewBox="0 0 431.8 279.4">${body}</svg>`;
 }
 
-it("#573 exports OWNER_MARGIN_MM = 0.5 and rejects tied or sub-margin slots", () => {
+it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and rejects tied or sub-margin slots", () => {
   expect(OWNER_MARGIN_MM).toBe(0.5);
+  expect(CONDUCTOR_OWNER_MARGIN_MM).toBe(0.25);
   const owner = { x: 102.82, y: 95.35, w: 1.3, h: 1.3 };
   const foreign = { x: 128.82, y: 95.35, w: 1.3, h: 1.3 };
   const shape = {
@@ -203,7 +205,35 @@ it("#573 enforces zero-margin nearest-owner rule on same-function siblingOwners"
   expect(probe({ foreignOwners: [validSibling] })).toBeUndefined();
 });
 
-it("#573 inflates foreign and own conductor segments by half stroke width for edge margins", () => {
+function makeStrokeMarginCase(
+  field: { x: number; y: number; w: number; h: number },
+  owner: { x: number; y: number; w: number; h: number },
+  strokeWidth: number,
+  extraMm: number,
+) {
+  const y = +(field.y + field.h + boxDistance(field, owner) + extraMm).toFixed(
+    4,
+  );
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="200mm" viewBox="0 0 300 200">` +
+    `<g data-device-uid="A"><circle class="terminal-marker" data-terminal-marker="true" data-terminal-key="1" cx="50.65" cy="47.35" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/></g>` +
+    `<g data-circuit-conductor="w2"><path d="M40 ${y} H100" fill="none" stroke="#17212b" stroke-width="${strokeWidth}"/></g>` +
+    `</svg>`;
+  const runs = peerRouteIndex(navigationGeometry(svg)).foreignRuns({
+    kind: "wire",
+    uid: "w1",
+  });
+  const sheet: RenderedSheet = {
+    number: 1,
+    svg,
+    title: "Stroke edge probe",
+    view: { format: "documentation-view/0.1", kind: "wiring" },
+    continuations: [],
+  };
+  return { y, runs, sheet };
+}
+
+it("#573 enforces 0.25 mm stroke-edge conductor margin and 0.5 mm device/terminal margin", () => {
   const value = "W1 · A.1 → B.1 02.B2";
   const compact = "→ B.1 02.B2";
   const metric = printableTextMetrics(value, 2.5);
@@ -215,39 +245,39 @@ it("#573 inflates foreign and own conductor segments by half stroke width for ed
   };
   const owner = { x: 50, y: 46.7, w: 1.3, h: 1.3 };
   const strokeWidth = 0.4;
-  // Centerline leaves 0.52 mm margin over ownerGap (2.0 mm), but stroke edge leaves 0.32 mm < 0.50 mm.
-  const y = +(field.y + field.h + boxDistance(field, owner) + 0.52).toFixed(4);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="200mm" viewBox="0 0 300 200">` +
-    `<g data-device-uid="A"><circle class="terminal-marker" data-terminal-marker="true" data-terminal-key="1" cx="50.65" cy="47.35" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/></g>` +
-    `<g data-circuit-conductor="w2"><path d="M40 ${y} H100" fill="none" stroke="#17212b" stroke-width="${strokeWidth}"/></g>` +
-    `</svg>`;
-  const runs = peerRouteIndex(navigationGeometry(svg)).foreignRuns({
-    kind: "wire",
-    uid: "w1",
-  });
-  expect(runs).toHaveLength(1);
-  expect(runs[0]!.y).toBeCloseTo(y - strokeWidth / 2, 4);
-  expect(runs[0]!.h).toBeCloseTo(strokeWidth, 4);
-  const sheet: RenderedSheet = {
-    number: 1,
-    svg,
-    title: "Stroke edge probe",
-    view: { format: "documentation-view/0.1", kind: "wiring" },
-    continuations: [],
-  };
-  const entry: PeerReference = {
+  // 0.40 mm stroke at extra = 0.52 mm -> 0.32 mm stroke-edge margin:
+  // passes foreignConductors (>= 0.25 mm) but fails foreignOwners (< 0.50 mm).
+  const pass = makeStrokeMarginCase(field, owner, strokeWidth, 0.52);
+  expect(pass.runs).toHaveLength(1);
+  expect(pass.runs[0]!.y).toBeCloseTo(pass.y - strokeWidth / 2, 4);
+  expect(pass.runs[0]!.h).toBeCloseTo(strokeWidth, 4);
+  const baseEntry: PeerReference = {
     kind: "conductor-peer",
     identity: ["A.1", "w1", "B.1"],
     owner,
-    foreignOwners: runs,
     value,
     compact,
     destination: "02.B2",
     ownerLabel: "A.1",
   };
-  // Tight single-line field has no alternate slot, so 0.32 mm stroke-edge margin must fail placement.
-  expect(() => emitPeerReferences(sheet, field, [entry])).toThrow(
-    NavigationSlotFailure,
-  );
+  expect(() =>
+    emitPeerReferences(pass.sheet, field, [
+      { ...baseEntry, foreignConductors: pass.runs },
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    emitPeerReferences(pass.sheet, field, [
+      { ...baseEntry, foreignOwners: pass.runs },
+    ]),
+  ).toThrow(NavigationSlotFailure);
+  // Boundary probes below 0.25 mm stroke-edge margin (centerline > 0.25 mm,
+  // stroke edge 0.20 mm and 0.06 mm < 0.25 mm) must fail placement.
+  for (const extraMm of [0.4, 0.26]) {
+    const tight = makeStrokeMarginCase(field, owner, strokeWidth, extraMm);
+    expect(() =>
+      emitPeerReferences(tight.sheet, field, [
+        { ...baseEntry, foreignConductors: tight.runs },
+      ]),
+    ).toThrow(NavigationSlotFailure);
+  }
 });

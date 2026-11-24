@@ -7,11 +7,13 @@ import { sufficient } from "./document-dependencies.mjs";
 import { extent, finding, groupBy, painted } from "./review-geometry.mjs";
 import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 import {
+  CONDUCTOR_OWNER_MARGIN_MM,
   OWNER_MARGIN_MM,
   boxGap,
   excludeCoincidentBoxes,
   inOwnerReach,
   noteOwnerGap,
+  notePaintedOwnerGap,
 } from "./peer-owner-ink.mjs";
 import { measuredZone } from "./repeat-appearances.mjs";
 import { printedZones } from "./printed-zones.mjs";
@@ -517,52 +519,57 @@ function auditMatchedOwnerProximity(
   if (!obligation.owners) return;
   const first = lines[0];
   const named = form !== "bare-compact";
-  const gap = noteOwnerGap(lines, obligation, named);
-  if (!inOwnerReach(gap, named))
+  const reachGap = noteOwnerGap(lines, obligation, named);
+  if (!inOwnerReach(reachGap, named))
     result.push(
       finding("issued-peer-reference-owner-distance", first, {
         sheet,
         printed: value,
         source: obligation.source,
-        gapMm: gap,
+        gapMm: reachGap,
         named,
       }),
     );
-  const foreign = [
-    ...(obligation.foreignOwners ?? []),
-    ...excludeCoincidentBoxes(
-      obligation.foreignConductors ?? [],
-      obligation.supports ?? [],
-    ),
-  ];
+  const foreignOwners = obligation.foreignOwners ?? [];
+  const foreignConductors = excludeCoincidentBoxes(
+    obligation.foreignConductors ?? [],
+    obligation.supports ?? [],
+  );
   const siblings = obligation.siblingOwners ?? [];
-  if ((!foreign.length && !siblings.length) || !lines.every((t) => t.bbox))
+  if (
+    (!foreignOwners.length && !foreignConductors.length && !siblings.length) ||
+    !lines.every((t) => t.bbox)
+  )
     return;
+  const ownerGap = notePaintedOwnerGap(lines, obligation, named);
   const box = noteRegion(lines);
-  const foreignGap = foreign.length
-    ? Math.min(...foreign.map((owner) => boxGap(box, owner)))
-    : Infinity;
-  const siblingGap = siblings.length
-    ? Math.min(...siblings.map((owner) => boxGap(box, owner)))
-    : Infinity;
-  const siblingCloser = siblingGap + INK_ACCURACY_MM < gap;
-  const foreignTooClose = foreignGap + INK_ACCURACY_MM < gap + OWNER_MARGIN_MM;
-  if (siblingCloser || foreignTooClose) {
-    const useSibling =
-      siblingCloser &&
-      (!foreignTooClose ||
-        gap - siblingGap >= gap + OWNER_MARGIN_MM - foreignGap);
-    result.push(
-      finding("issued-peer-reference-foreign-owner", first, {
-        sheet,
-        printed: value,
-        source: obligation.source,
-        ownerGapMm: gap,
-        foreignGapMm: useSibling ? siblingGap : foreignGap,
-        minimumMarginMm: useSibling ? 0 : OWNER_MARGIN_MM,
-      }),
-    );
-  }
+  const checks = [
+    [foreignOwners, OWNER_MARGIN_MM],
+    [foreignConductors, CONDUCTOR_OWNER_MARGIN_MM],
+    [siblings, 0],
+  ]
+    .filter(([boxes]) => boxes.length)
+    .map(([boxes, minimumMarginMm]) => {
+      const foreignGapMm = Math.min(...boxes.map((o) => boxGap(box, o)));
+      return {
+        foreignGapMm,
+        minimumMarginMm,
+        deficit: ownerGap + minimumMarginMm - foreignGapMm,
+      };
+    })
+    .filter((c) => c.deficit > INK_ACCURACY_MM);
+  if (!checks.length) return;
+  const worst = checks.reduce((a, b) => (b.deficit > a.deficit ? b : a));
+  result.push(
+    finding("issued-peer-reference-foreign-owner", first, {
+      sheet,
+      printed: value,
+      source: obligation.source,
+      ownerGapMm: ownerGap,
+      foreignGapMm: worst.foreignGapMm,
+      minimumMarginMm: worst.minimumMarginMm,
+    }),
+  );
 }
 
 function auditFreePeerNote(sheet, lines, state, result) {

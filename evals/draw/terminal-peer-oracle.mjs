@@ -33,8 +33,8 @@ function observedTerminals(ir, g, cableOwners) {
     .map((m) => ({
       key: JSON.stringify([m.deviceUid, m.terminal]),
       p: m.point,
-      bbox: paintedCircleBox(m.bbox, m.stroke),
-      routeBbox: m.bbox,
+      bbox: m.bbox,
+      paintedBbox: paintedCircleBox(m.bbox, m.stroke),
     }));
   const wire = (g.wireTerminals ?? []).flatMap((m) => {
     const binding = m.cableUid ? cableOwners.get(m) : m.terminal;
@@ -43,8 +43,8 @@ function observedTerminals(ir, g, cableOwners) {
           {
             key: JSON.stringify(binding),
             p: m.point,
-            bbox: paintedCircleBox(m.bbox, m.stroke),
-            routeBbox: m.bbox,
+            bbox: m.bbox,
+            paintedBbox: paintedCircleBox(m.bbox, m.stroke),
           },
         ]
       : [];
@@ -53,20 +53,26 @@ function observedTerminals(ir, g, cableOwners) {
     key: JSON.stringify(p.terminal),
     p: center(p.bbox),
     bbox: p.bbox,
-    routeBbox: p.bbox,
+    paintedBbox: p.bbox,
   }));
   const result = new Map();
-  for (const { key, p, bbox, routeBbox } of [...markers, ...wire, ...pins]) {
+  for (const { key, p, bbox, paintedBbox } of [...markers, ...wire, ...pins]) {
     if (!real.has(key) || !p) continue;
     const zone = measuredZone(g, p);
     if (!zone) continue;
     if (!result.has(key))
-      result.set(key, { zones: new Set(), boxes: [], routeBoxes: [] });
+      result.set(key, {
+        zones: new Set(),
+        boxes: [],
+        paintedBoxes: [],
+        routeBoxes: [],
+      });
     const region = result.get(key);
     const box = bbox ?? { ...p, w: 0, h: 0 };
     region.zones.add(zone);
     region.boxes.push(box);
-    region.routeBoxes.push(routeBbox ?? box);
+    region.paintedBoxes.push(paintedBbox ?? box);
+    region.routeBoxes.push(box);
   }
   const physical = new Map(
     [...result.entries()].map(([k, r]) => [k, { boxes: [...r.routeBoxes] }]),
@@ -96,7 +102,8 @@ function foreignTerminalBoxes(part, ownTerminal, sameFunction) {
   const ownKey = terminalKey(ownTerminal);
   const out = [];
   for (const [key, region] of part.terminals)
-    if (key !== ownKey && !sameFunction?.has(key)) out.push(...region.boxes);
+    if (key !== ownKey && !sameFunction?.has(key))
+      out.push(...region.paintedBoxes);
   return out;
 }
 
@@ -112,11 +119,16 @@ function canonicalDestination(destinations) {
 function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
   const from = src.terminals.get(terminalKey(a));
   const to = src.terminals.get(terminalKey(b));
-  const marks = from.boxes;
   const ink = conductorInk(src.geometry, wire.element);
   if (paintedToBothEnds(ink, from.routeBoxes, to?.routeBoxes)) return;
   const { runs, boxes } = ink;
   const { zones } = dest.terminals.get(terminalKey(b));
+  const continuations = continuationInk(
+    src.sheet,
+    src.geometry,
+    wire.element,
+    runs,
+  );
   return {
     sheet: src.sheet.number,
     kind: "conductor-peer",
@@ -124,13 +136,12 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
     label,
     peerName: name(b),
     ownerLabel: name(a),
-    owners: cardInfo ? [cardInfo.bbox] : marks,
+    owners: cardInfo ? [cardInfo.bbox] : [...from.boxes],
+    paintedOwners: cardInfo ? [cardInfo.bbox] : [...from.paintedBoxes],
     foreignOwners: foreignTerminalBoxes(src, a),
     foreignConductors: foreignConductorBoxes(src.geometry, wire.element, runs),
-    supports: [
-      ...(boxes ?? runs.map(extent)),
-      ...continuationInk(src.sheet, src.geometry, wire.element, runs),
-    ],
+    supports: [...runs.map(extent), ...continuations],
+    paintedSupports: [...(boxes ?? runs.map(extent)), ...continuations],
     card: cardInfo,
     targets: new Map([[dest.sheet.number, new Set(zones)]]),
   };
@@ -144,7 +155,9 @@ function mergeCardRecords(records) {
     if (previous) {
       if (r.card && !previous.card) previous.card = r.card;
       previous.owners.push(...r.owners);
+      previous.paintedOwners.push(...r.paintedOwners);
       previous.supports.push(...r.supports);
+      previous.paintedSupports.push(...r.paintedSupports);
       for (const [sheet, zones] of r.targets) {
         if (!previous.targets.has(sheet))
           previous.targets.set(sheet, new Set());
@@ -165,9 +178,11 @@ function mergeCardRecords(records) {
       peerName: r.peerName,
       ownerLabel: r.ownerLabel,
       owners: r.owners,
+      paintedOwners: r.paintedOwners,
       foreignOwners: r.foreignOwners,
       foreignConductors: r.foreignConductors,
       supports: r.supports,
+      paintedSupports: r.paintedSupports,
       card: r.card,
       destinations,
       values: [
@@ -325,10 +340,12 @@ function interfaceObligations(ir, parts, names) {
             source: [p.terminal, q.terminal],
             ownerLabel: `${names.get(r.deviceUid)} ${p.terminal.terminalKey}`,
             owners: p.part.terminals.get(terminalKey(p.terminal)).boxes,
+            paintedOwners: p.part.terminals.get(terminalKey(p.terminal))
+              .paintedBoxes,
             foreignOwners: foreignTerminalBoxes(p.part, p.terminal, p.ownKeys),
             siblingOwners: [...p.part.terminals].flatMap(([key, region]) =>
               key !== terminalKey(p.terminal) && p.ownKeys.has(key)
-                ? region.boxes
+                ? region.paintedBoxes
                 : [],
             ),
             values: [...zones].map(

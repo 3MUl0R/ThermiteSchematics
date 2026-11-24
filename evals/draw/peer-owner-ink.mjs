@@ -1,8 +1,10 @@
 import { extent, painted } from "./review-geometry.mjs";
 import { elementKey, routeKey } from "./tranche4-source.mjs";
 
-// Shared with packages/render/src/packet/navigation-slot-search.ts (OWNER_MARGIN_MM = 0.5).
+// Shared with packages/render/src/packet/navigation-slot-search.ts
+// (OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25).
 export const OWNER_MARGIN_MM = 0.5;
+export const CONDUCTOR_OWNER_MARGIN_MM = 0.25;
 
 export function boxGap(a, b) {
   return Math.hypot(
@@ -526,6 +528,16 @@ export function noteOwnerGap(lines, obligation, named) {
   const supports = named
     ? [...obligation.owners, ...(obligation.supports ?? [])]
     : obligation.owners;
+  return Math.min(...supports.map((owner) => boxGap(region, owner)));
+}
+
+export function notePaintedOwnerGap(lines, obligation, named) {
+  if (!lines.every((t) => t.bbox)) return Infinity;
+  const region = noteRegion(lines);
+  const owners = obligation.paintedOwners ?? obligation.owners;
+  const supports = named
+    ? [...owners, ...(obligation.paintedSupports ?? obligation.supports ?? [])]
+    : owners;
   return Math.min(...supports.map((owner) => boxGap(region, owner)));
 }
 
