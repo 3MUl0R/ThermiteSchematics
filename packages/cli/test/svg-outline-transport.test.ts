@@ -1,8 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
 import { expect, it } from "vitest";
+import { browserPath, launchBrowser } from "./helpers/pdf-raster.js";
 import {
   decodeOutlineJson,
   encodeOutlineJson,
+  svgOutlineGeometry,
 } from "./helpers/svg-outline-geometry.js";
 
 it("preserves NaN, infinities and negative zero across top-level and nested values", () => {
@@ -64,6 +66,7 @@ it("leaves ordinary numbers, strings, nulls and non-matching objects unchanged",
   };
 
   const encoded = encodeOutlineJson(ordinary);
+  expect(encoded).not.toContain('{"__n":"NaN"}');
   expect(encoded).not.toContain('{"__n":"-0"}');
   expect(encoded).not.toContain('{"__n":"Infinity"}');
   expect(encoded).not.toContain('{"__n":"-Infinity"}');
@@ -71,4 +74,86 @@ it("leaves ordinary numbers, strings, nulls and non-matching objects unchanged",
   const decoded = decodeOutlineJson<typeof ordinary>(encoded);
   expect(isDeepStrictEqual(decoded, ordinary)).toBe(true);
   expect(Object.is(decoded.zero, 0)).toBe(true);
+});
+
+it("escapes authored __n tag objects, nested escapes, and mixed keys while preserving key order", () => {
+  const tags = ["NaN", "Infinity", "-Infinity", "-0"] as const;
+  for (const tag of tags) {
+    const literal = { __n: tag };
+    const encoded = encodeOutlineJson(literal);
+    expect(encoded).toBe(`{"___n":"${tag}"}`);
+    const decoded = decodeOutlineJson(encoded);
+    expect(isDeepStrictEqual(decoded, literal)).toBe(true);
+  }
+
+  const nested = {
+    single: { __n: "-0" },
+    escapedOnce: { ___n: "x" },
+    escapedTwice: { ____n: "y" },
+    withNumericValue: { __n: -0, ___n: NaN, ____n: -Infinity },
+    deep: {
+      __n: {
+        __n: "-0",
+        ___n: { __n: "Infinity", ____n: Infinity },
+      },
+    },
+  };
+  const encodedNested = encodeOutlineJson(nested);
+  expect(encodedNested).toContain('"___n":{"__n":"-0"}');
+  expect(encodedNested).toContain('"____n":{"__n":"NaN"}');
+  const decodedNested = decodeOutlineJson<typeof nested>(encodedNested);
+  expect(isDeepStrictEqual(decodedNested, nested)).toBe(true);
+  expect(Object.is(decodedNested.withNumericValue.__n, -0)).toBe(true);
+
+  const mixed = {
+    first: 1,
+    __n: "NaN",
+    _n: "untouched",
+    ___n: "x",
+    __n2: "untouched",
+    ____n: { before: true, __n: "-Infinity", after: false },
+    extra: 2,
+  };
+  const decodedMixed = decodeOutlineJson<typeof mixed>(
+    encodeOutlineJson(mixed),
+  );
+  expect(isDeepStrictEqual(decodedMixed, mixed)).toBe(true);
+  expect(Object.keys(decodedMixed)).toEqual(Object.keys(mixed));
+  expect(Object.keys(decodedMixed.____n)).toEqual(Object.keys(mixed.____n));
+});
+
+it("preserves a scripted data-wiring-conductor marker object across the browser transport", async () => {
+  if (!browserPath) return;
+  const scriptedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="100" viewBox="0 0 120 100" stroke="black">
+    <g id="authored" data-wiring-conductor='{"__n":"-0"}' data-circuit-mark="m">
+      <line x1="10" y1="11" x2="20" y2="11"/>
+    </g>
+    <script>
+      const group = document.getElementById("authored");
+      const getAttribute = group.getAttribute.bind(group);
+      group.getAttribute = (name) =>
+        name === "data-wiring-conductor"
+          ? JSON.parse(getAttribute(name))
+          : getAttribute(name);
+    </script>
+  </svg>`;
+  const browser = await launchBrowser();
+  try {
+    for (const preloaded of [false, true]) {
+      const page = await browser.newPage();
+      try {
+        if (preloaded) await page.setContent(scriptedSvg);
+        const geometry = await svgOutlineGeometry(
+          page,
+          preloaded ? undefined : scriptedSvg,
+        );
+        expect(geometry.shapes[0]?.wire).toEqual({ __n: "-0" });
+        expect(geometry.marks[0]?.wire).toEqual({ __n: "-0" });
+      } finally {
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
 });

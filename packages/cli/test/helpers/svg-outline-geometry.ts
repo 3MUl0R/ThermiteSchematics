@@ -145,31 +145,47 @@ const withIdentity = <T extends ElementIdentity>(item: T): T => ({
 });
 
 function createOutlineJsonEncoder() {
+  const tagKey = /^_*__n$/;
   return (value: unknown): string =>
-    JSON.stringify(value, (_key, v: unknown) =>
-      typeof v === "number" && (!Number.isFinite(v) || Object.is(v, -0))
-        ? { __n: Object.is(v, -0) ? "-0" : String(v) }
-        : v,
-    );
+    JSON.stringify(value, (_key, v: unknown) => {
+      if (typeof v === "number" && (!Number.isFinite(v) || Object.is(v, -0)))
+        return { __n: Object.is(v, -0) ? "-0" : String(v) };
+      if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+        const keys = Object.keys(v);
+        if (keys.some((k) => tagKey.test(k)))
+          return Object.fromEntries(
+            Object.entries(v).map(([k, item]) => [
+              tagKey.test(k) ? `_${k}` : k,
+              item,
+            ]),
+          );
+      }
+      return v;
+    });
 }
 
 export const encodeOutlineJson = createOutlineJsonEncoder();
 
+const ESCAPED_TAG_KEY = /^_+__n$/;
+
 export function decodeOutlineJson<T = unknown>(serialized: string): T {
   return JSON.parse(serialized, (_key, v: unknown) => {
-    if (
-      typeof v === "object" &&
-      v !== null &&
-      !Array.isArray(v) &&
-      "__n" in v &&
-      Object.hasOwn(v, "__n") &&
-      Object.keys(v).length === 1
-    ) {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) return v;
+    const keys = Object.keys(v);
+    if (keys.length === 1 && keys[0] === "__n" && "__n" in v) {
       if (v.__n === "NaN") return NaN;
       if (v.__n === "Infinity") return Infinity;
       if (v.__n === "-Infinity") return -Infinity;
       if (v.__n === "-0") return -0;
+      return v;
     }
+    if (keys.some((k) => ESCAPED_TAG_KEY.test(k)))
+      return Object.fromEntries(
+        Object.entries(v).map(([k, item]) => [
+          ESCAPED_TAG_KEY.test(k) ? k.slice(1) : k,
+          item,
+        ]),
+      );
     return v;
   });
 }
